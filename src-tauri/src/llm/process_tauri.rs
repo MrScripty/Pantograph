@@ -132,12 +132,8 @@ fn write_managed_runtime_pid_record(
 fn managed_runtime_mode(sidecar_name: &str, args: &[&str]) -> &'static str {
     match sidecar_name {
         "ollama" => "ollama",
-        "llama-server-wrapper" if args.iter().any(|arg| *arg == "--embedding") => {
-            "llama.cpp.embedding"
-        }
-        "llama-server-wrapper" if args.iter().any(|arg| *arg == "--reranking") => {
-            "llama.cpp.reranking"
-        }
+        "llama-server-wrapper" if args.contains(&"--embedding") => "llama.cpp.embedding",
+        "llama-server-wrapper" if args.contains(&"--reranking") => "llama.cpp.reranking",
         "llama-server-wrapper" => "llama.cpp.inference",
         _ => "unknown",
     }

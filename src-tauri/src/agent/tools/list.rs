@@ -68,7 +68,7 @@ impl Tool for ListComponentsTool {
                     let path = entry.path();
                     if path.is_dir() {
                         collect_svelte_files(&path, base, files)?;
-                    } else if path.extension().map_or(false, |ext| ext == "svelte") {
+                    } else if path.extension().is_some_and(|ext| ext == "svelte") {
                         if let Ok(relative) = path.strip_prefix(base) {
                             files.push(relative.to_string_lossy().to_string());
                         }
@@ -138,7 +138,7 @@ impl Tool for ListTemplatesTool {
             let entry = entry.map_err(ToolError::Io)?;
             let path = entry.path();
 
-            if path.extension().map_or(false, |ext| ext == "svelte") {
+            if path.extension().is_some_and(|ext| ext == "svelte") {
                 let name = path
                     .file_stem()
                     .map(|s| s.to_string_lossy().to_string())

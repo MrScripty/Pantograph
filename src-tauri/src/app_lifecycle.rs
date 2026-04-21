@@ -53,7 +53,7 @@ fn shutdown_window_runtime(window: &Window) {
         }
 
         if let Some(gateway) = gateway {
-            invalidate_loaded_session_runtimes(&app);
+            invalidate_loaded_session_runtimes(app);
             if let Some(runtime_registry) = runtime_registry {
                 stop_all_and_sync_runtime_registry(gateway.as_ref(), runtime_registry.as_ref())
                     .await;

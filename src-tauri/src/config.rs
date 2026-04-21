@@ -3,7 +3,7 @@
 //! Handles persistent storage of model paths and connection settings.
 
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tokio::fs;
 
 use crate::constants::defaults;
@@ -57,21 +57,16 @@ pub struct DeviceInfo {
 }
 
 /// Connection mode preference
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(tag = "type")]
 pub enum ConnectionMode {
     /// No connection configured
+    #[default]
     None,
     /// Connect to external server (remote API or local server like LM Studio)
     External { url: String },
     /// Use built-in llama.cpp sidecar
     Sidecar,
-}
-
-impl Default for ConnectionMode {
-    fn default() -> Self {
-        ConnectionMode::None
-    }
 }
 
 /// Memory management mode for embedding model
@@ -185,7 +180,7 @@ pub struct AppConfig {
 
 impl AppConfig {
     /// Load configuration from disk
-    pub async fn load(app_data_dir: &PathBuf) -> Result<Self, ConfigError> {
+    pub async fn load(app_data_dir: &Path) -> Result<Self, ConfigError> {
         let config_path = app_data_dir.join("config.json");
 
         if !config_path.exists() {

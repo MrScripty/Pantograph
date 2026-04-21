@@ -330,7 +330,6 @@ impl RecoveryManager {
     ) -> Result<u16, String> {
         let app_config = app
             .try_state::<SharedAppConfig>()
-            .map(|config| config.clone())
             .ok_or_else(|| "Application config not initialized".to_string())?;
         let app_config = app_config.read().await.clone();
         let restart_plan = build_recovery_restart_plan(
@@ -344,10 +343,7 @@ impl RecoveryManager {
         // Stop existing
         stop_gateway_for_recovery(app, gateway).await;
 
-        if let Some(runtime_registry) = app
-            .try_state::<SharedRuntimeRegistry>()
-            .map(|runtime_registry| runtime_registry.clone())
-        {
+        if let Some(runtime_registry) = app.try_state::<SharedRuntimeRegistry>() {
             run_runtime_transition_and_sync_runtime_registry(
                 gateway.as_ref(),
                 runtime_registry.as_ref(),
@@ -397,10 +393,7 @@ impl RecoveryManager {
 async fn stop_gateway_for_recovery(app: &AppHandle, gateway: &SharedGateway) {
     invalidate_loaded_session_runtimes(app);
 
-    let Some(runtime_registry) = app
-        .try_state::<SharedRuntimeRegistry>()
-        .map(|runtime_registry| runtime_registry.clone())
-    else {
+    let Some(runtime_registry) = app.try_state::<SharedRuntimeRegistry>() else {
         gateway.stop_all().await;
         return;
     };
@@ -434,10 +427,7 @@ async fn restart_dedicated_embedding_runtime(
 }
 
 async fn sync_rag_embedding_url(app: &AppHandle, gateway: &SharedGateway) {
-    let Some(rag_manager) = app
-        .try_state::<SharedRagManager>()
-        .map(|rag_manager| rag_manager.clone())
-    else {
+    let Some(rag_manager) = app.try_state::<SharedRagManager>() else {
         return;
     };
 
@@ -467,6 +457,9 @@ impl Default for RecoveryManager {
     }
 }
 
+/// Shared recovery manager type for Tauri state
+pub type SharedRecoveryManager = Arc<RecoveryManager>;
+
 #[cfg(test)]
 mod tests {
     use super::port_from_base_url;
@@ -479,6 +472,3 @@ mod tests {
         assert_eq!(port_from_base_url("not-a-url"), ports::SERVER);
     }
 }
-
-/// Shared recovery manager type for Tauri state
-pub type SharedRecoveryManager = Arc<RecoveryManager>;

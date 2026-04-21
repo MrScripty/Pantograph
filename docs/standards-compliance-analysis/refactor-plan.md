@@ -646,9 +646,17 @@ Tasks:
   findings are now resolved by restoring test-local executor-extension/lock
   imports to the extracted test harness, simplifying repo-local Python
   discovery, eliding model-dependency helper lifetimes, and grouping workflow
-  diagnostics snapshot inputs. The full workspace audit now reports the next
-  cleanup set in `crates/pantograph-rustler`: one stale workflow-event test
-  constructor, one callback type-complexity alias, and one redundant closure.
+  diagnostics snapshot inputs. `crates/pantograph-rustler` now passes its
+  focused strict clippy check after updating the event-contract test shape,
+  naming pending callback bridge aliases, simplifying callback error mapping,
+  and making frontend-HTTP CWD serialization async-aware. The full workspace
+  audit now reaches the Tauri app crate. The first Tauri pass resolved
+  mechanical agent/config/LLM/workflow helper findings in borrowed generics,
+  stale `map_or` checks, path-reference signatures, string replacement,
+  redundant state clones, and test-module ordering. The remaining active Tauri
+  blockers are argument grouping across workflow model-dependency commands,
+  diagnostics stores/events, headless diagnostics, orchestration, and execution
+  entrypoints, plus workflow-event enum size reduction.
 - Close or update `docs/anti-pattern-remediation-tracker.md` Phase 5 for
   process-node policy controls.
 - Add issue/backlog entries for non-compliance problems intentionally deferred.

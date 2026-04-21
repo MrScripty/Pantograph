@@ -53,6 +53,8 @@ Keep these files as host-facing Tauri adapters over backend services and
 runtime helpers. Use focused helper modules for oversized command surfaces, and
 store generated-component history metadata in `.pantograph/generated-components.git/`
 instead of nesting Git state under `src/generated/`.
+Generated-component history helpers accept borrowed path inputs internally so
+command transport can stay focused on invoke state and payload mapping.
 
 ## Alternatives Rejected
 - Move backend runtime policy into Tauri commands: rejected because backend
@@ -78,6 +80,8 @@ instead of nesting Git state under `src/generated/`.
   must not reinterpret retained-artifact state locally.
 - Generated-component history commands use `.pantograph/generated-components.git/`
   with `src/generated/` as the work tree.
+- Command helper cleanup for strict clippy must not alter public invoke
+  payloads or generated-component history semantics.
 
 ## Revisit Triggers
 - A Tauri command begins deriving workflow/runtime policy that backend services

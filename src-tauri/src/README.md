@@ -56,6 +56,8 @@ task before workflow cleanup and runtime process shutdown.
 `main.rs` no longer registers a Tauri-local workflow execution manager; edit
 session undo/redo and execution state are injected through the backend-owned
 workflow service instead.
+Strict Rust lint cleanup in this tree should prefer narrow type/signature
+improvements and backend-owned grouping DTOs over local adapter exceptions.
 
 ## Alternatives Rejected
 - Put workflow/runtime policy directly in Tauri commands: rejected because
@@ -86,6 +88,8 @@ workflow service instead.
   file IO policy to the service graph store.
 - Desktop composition must not register parallel workflow execution-state
   managers when the workflow service owns the active session state.
+- Mechanical lint fixes must not change command payload shape, runtime
+  ownership, or backend error categories.
 
 ## Cargo Feature Contract
 | Feature | Default | Contract |

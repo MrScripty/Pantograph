@@ -3,10 +3,7 @@ use tauri::{AppHandle, Manager};
 use super::commands::SharedWorkflowService;
 
 pub fn invalidate_loaded_session_runtimes(app: &AppHandle) {
-    let Some(workflow_service) = app
-        .try_state::<SharedWorkflowService>()
-        .map(|workflow_service| workflow_service.clone())
-    else {
+    let Some(workflow_service) = app.try_state::<SharedWorkflowService>() else {
         return;
     };
 

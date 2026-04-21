@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tauri::State;
 
 use super::model_dependencies::SharedModelDependencyResolver;
@@ -306,7 +306,7 @@ fn effective_selected_binding_ids(
     selected_binding_ids: &[String],
     requirements: Option<&node_engine::ModelDependencyRequirements>,
 ) -> Vec<String> {
-    let mut out = sanitize_selected_binding_ids(selected_binding_ids.iter().cloned().collect());
+    let mut out = sanitize_selected_binding_ids(selected_binding_ids.to_vec());
     if out.is_empty() {
         if let Some(requirements) = requirements {
             out = sanitize_selected_binding_ids(requirements.selected_binding_ids.clone());

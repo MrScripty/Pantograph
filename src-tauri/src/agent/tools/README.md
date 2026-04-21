@@ -38,6 +38,8 @@ write-versioning helpers. Higher-level agent code dispatches tools through this
 boundary instead of performing direct filesystem operations. Generated
 component writes commit through the shared Tauri versioning helper so history
 metadata stays outside the source tree.
+Tool validation helpers should accept path slices at their internal boundaries
+so generated-component validation does not require needless owned path values.
 
 ## Alternatives Rejected
 - Let the LLM/agent layer manipulate files directly: rejected because path
@@ -56,6 +58,8 @@ metadata stays outside the source tree.
   with `src/generated/` as the work tree.
 - Tool names and result payloads are compatibility contracts for the agent
   layer.
+- Listing and validation helpers must remain deterministic after mechanical
+  lint cleanup; expression rewrites cannot relax path or import validation.
 
 ## Revisit Triggers
 - Tool execution becomes part of workflow graph runtime.

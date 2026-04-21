@@ -258,6 +258,9 @@ let snapshot = workflow_service
 - Tauri diagnostics collection should pass grouped embedded-runtime diagnostics
   input objects into the backend projection helpers rather than rebuilding long
   positional argument lists locally.
+- Workflow helper lint cleanup should remove needless adapter allocations while
+  leaving model dependency, runtime shutdown, and diagnostics contracts owned by
+  backend services or their existing command DTOs.
 - When a scheduler snapshot includes backend-owned `trace_execution_id`,
   adapters must attribute runtime/scheduler snapshot events to that execution
   instead of falling back to `session_id`. If the field is absent, the adapter

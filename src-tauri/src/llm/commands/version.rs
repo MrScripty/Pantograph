@@ -115,7 +115,7 @@ pub fn migrate_legacy_generated_history(generated_dir: &Path) -> io::Result<()> 
 }
 
 /// Read a tracking file from the generated history Git directory, returning None if not found
-fn read_tracking_file(generated_dir: &PathBuf, filename: &str) -> Option<String> {
+fn read_tracking_file(generated_dir: &Path, filename: &str) -> Option<String> {
     let path = active_history_git_dir(generated_dir).join(filename);
     std::fs::read_to_string(&path)
         .ok()
@@ -124,13 +124,13 @@ fn read_tracking_file(generated_dir: &PathBuf, filename: &str) -> Option<String>
 }
 
 /// Write a tracking file to the generated history Git directory
-fn write_tracking_file(generated_dir: &PathBuf, filename: &str, value: &str) -> Result<(), String> {
+fn write_tracking_file(generated_dir: &Path, filename: &str, value: &str) -> Result<(), String> {
     let path = active_history_git_dir(generated_dir).join(filename);
     std::fs::write(&path, value).map_err(|e| format!("Failed to write {}: {}", filename, e))
 }
 
 /// Get the current HEAD commit hash from git
-fn get_git_head(generated_dir: &PathBuf) -> Result<String, String> {
+fn get_git_head(generated_dir: &Path) -> Result<String, String> {
     let output = git_for_generated_history(generated_dir)
         .args(["rev-parse", "HEAD"])
         .output()
@@ -144,7 +144,7 @@ fn get_git_head(generated_dir: &PathBuf) -> Result<String, String> {
 }
 
 /// Get the current position (PANTOGRAPH_HEAD or fallback to git HEAD)
-fn get_current_position(generated_dir: &PathBuf) -> Result<String, String> {
+fn get_current_position(generated_dir: &Path) -> Result<String, String> {
     // Try PANTOGRAPH_HEAD first, fallback to git HEAD
     if let Some(pos) = read_tracking_file(generated_dir, "PANTOGRAPH_HEAD") {
         return Ok(pos);
@@ -153,7 +153,7 @@ fn get_current_position(generated_dir: &PathBuf) -> Result<String, String> {
 }
 
 /// Get the commit message for a given commit hash
-fn get_commit_message(generated_dir: &PathBuf, commit: &str) -> Option<String> {
+fn get_commit_message(generated_dir: &Path, commit: &str) -> Option<String> {
     let output = git_for_generated_history(generated_dir)
         .args(["log", "-1", "--format=%s", commit])
         .output()
@@ -167,7 +167,7 @@ fn get_commit_message(generated_dir: &PathBuf, commit: &str) -> Option<String> {
 }
 
 /// Get the parent commit of a given commit (returns None if at root)
-fn get_parent_commit(generated_dir: &PathBuf, commit: &str) -> Option<String> {
+fn get_parent_commit(generated_dir: &Path, commit: &str) -> Option<String> {
     let output = git_for_generated_history(generated_dir)
         .args(["rev-parse", &format!("{}^", commit)])
         .output()
@@ -183,7 +183,7 @@ fn get_parent_commit(generated_dir: &PathBuf, commit: &str) -> Option<String> {
 }
 
 /// Checkout files from a specific commit (non-destructive)
-fn checkout_commit_files(generated_dir: &PathBuf, commit: &str) -> Result<(), String> {
+fn checkout_commit_files(generated_dir: &Path, commit: &str) -> Result<(), String> {
     let output = git_for_generated_history(generated_dir)
         .args(["checkout", commit, "--", "."])
         .output()
@@ -215,7 +215,7 @@ fn sync_working_dir_to_commit(generated_dir: &PathBuf, commit: &str) -> Result<(
         .collect();
 
     // Walk the generated directory and delete files not in target commit
-    fn collect_files(dir: &PathBuf, base: &PathBuf, files: &mut Vec<PathBuf>) {
+    fn collect_files(dir: &Path, files: &mut Vec<PathBuf>) {
         if let Ok(entries) = std::fs::read_dir(dir) {
             for entry in entries.filter_map(|e| e.ok()) {
                 let path = entry.path();
@@ -224,7 +224,7 @@ fn sync_working_dir_to_commit(generated_dir: &PathBuf, commit: &str) -> Result<(
                     if path.file_name().map(|n| n == ".git").unwrap_or(false) {
                         continue;
                     }
-                    collect_files(&path, base, files);
+                    collect_files(&path, files);
                 } else if path.is_file() {
                     files.push(path);
                 }
@@ -233,7 +233,7 @@ fn sync_working_dir_to_commit(generated_dir: &PathBuf, commit: &str) -> Result<(
     }
 
     let mut current_files: Vec<PathBuf> = Vec::new();
-    collect_files(generated_dir, generated_dir, &mut current_files);
+    collect_files(generated_dir, &mut current_files);
 
     // Delete files that shouldn't exist at the target commit
     for file_path in current_files {
@@ -525,7 +525,7 @@ pub async fn get_redo_count() -> Result<u32, String> {
 }
 
 /// Update tracking files after a new commit (called from write.rs)
-pub fn update_tracking_after_commit(generated_dir: &PathBuf) {
+pub fn update_tracking_after_commit(generated_dir: &Path) {
     // Get the new HEAD commit
     if let Ok(new_head) = get_git_head(generated_dir) {
         // Update both HEAD and TIP to the new commit

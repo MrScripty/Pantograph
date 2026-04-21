@@ -3,7 +3,7 @@ use rig::completion::ToolDefinition;
 use rig::tool::Tool;
 use serde::Deserialize;
 use serde_json::json;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 #[path = "write_validation.rs"]
@@ -69,19 +69,19 @@ impl WriteGuiFileTool {
     }
 
     /// Validate imports based on the configured validation mode
-    async fn validate_imports(&self, file_path: &PathBuf) -> Result<(), (String, ErrorCategory)> {
+    async fn validate_imports(&self, file_path: &Path) -> Result<(), (String, ErrorCategory)> {
         write_validation::validate_imports(&self.project_root, &self.sandbox_config, file_path)
             .await
     }
 
     /// Validate code quality using ESLint (if enabled)
-    async fn validate_lint(&self, file_path: &PathBuf) -> Result<(), (String, ErrorCategory)> {
+    async fn validate_lint(&self, file_path: &Path) -> Result<(), (String, ErrorCategory)> {
         write_validation::validate_lint(&self.project_root, &self.sandbox_config, file_path).await
     }
 
     /// Validate design system compliance (advisory - returns warnings, not errors)
     /// This checks for non-design-system colors, emoji usage, etc.
-    async fn validate_design_system(&self, file_path: &PathBuf) -> Vec<String> {
+    async fn validate_design_system(&self, file_path: &Path) -> Vec<String> {
         write_validation::validate_design_system(
             &self.project_root,
             &self.sandbox_config,
@@ -100,7 +100,7 @@ impl WriteGuiFileTool {
     /// cause cryptic "Unexpected token" errors from the Svelte compiler.
     async fn validate_jsx_in_template(
         &self,
-        file_path: &PathBuf,
+        file_path: &Path,
     ) -> Result<(), (String, ErrorCategory)> {
         write_validation::validate_jsx_in_template(
             &self.project_root,

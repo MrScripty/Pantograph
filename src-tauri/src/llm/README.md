@@ -64,6 +64,9 @@ it is represented by a backend contract.
 The stale local server-discovery registry module was removed; runtime takeover
 or discovery behavior should be reintroduced only through an active command or
 backend-owned runtime-registry contract.
+Strict clippy cleanup in this layer should preserve the host-adapter role by
+using smaller borrowed helper signatures and direct app-state access rather
+than cloning Tauri state handles without need.
 
 ## Alternatives Rejected
 - Move runtime policy into `gateway.rs`.
@@ -112,6 +115,9 @@ backend-owned runtime-registry contract.
 - Adapter-level registry tests in this directory should pin that shared
   transition helper for both successful and failed host transitions so Tauri
   wrappers cannot silently reintroduce post-transition registry drift.
+- Process-mode classification, recovery restart state access, and generated
+  component history helpers must remain behavior-preserving when mechanical
+  lint cleanup narrows borrowed inputs.
 
 ## Revisit Triggers
 - A non-Tauri app root needs the same runtime composition logic and this

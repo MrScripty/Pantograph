@@ -395,7 +395,7 @@ fn find_chunk_lines(lines: &[&str], title: &str, content: &str) -> (usize, usize
     // Try to find the header line
     if !title.is_empty() {
         for (i, line) in lines.iter().enumerate() {
-            if line.contains(&title) && line.trim().starts_with('#') {
+            if line.contains(title) && line.trim().starts_with('#') {
                 start_line = i;
                 break;
             }

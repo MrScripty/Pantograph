@@ -62,7 +62,7 @@ impl SearchIndex {
 
             if path.is_dir() {
                 Self::collect_entries(&path, base_dir, entries)?;
-            } else if path.extension().map_or(false, |ext| ext == "md") {
+            } else if path.extension().is_some_and(|ext| ext == "md") {
                 if let Ok(index_entry) = Self::parse_doc_file(&path, base_dir) {
                     entries.push(index_entry);
                 }
@@ -185,8 +185,8 @@ impl SearchIndex {
     fn extract_title_from_content(content: &str) -> Option<String> {
         for line in content.lines() {
             let trimmed = line.trim();
-            if trimmed.starts_with("# ") {
-                return Some(trimmed[2..].trim().to_string());
+            if let Some(stripped) = trimmed.strip_prefix("# ") {
+                return Some(stripped.trim().to_string());
             }
         }
         None

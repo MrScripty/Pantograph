@@ -88,7 +88,7 @@ fn check_port_available_linux(port: u16) -> PortStatus {
             let process_info = get_process_info(pid);
             let is_pantograph = process_info
                 .as_ref()
-                .map(|p| is_pantograph_process(p))
+                .map(is_pantograph_process)
                 .unwrap_or(false);
 
             PortStatus {

@@ -265,7 +265,7 @@ impl DocsManager {
         let metadata = self.load_metadata().ok();
         let index_exists = self.index_path().exists();
 
-        let is_stale = metadata.as_ref().map_or(false, |m| {
+        let is_stale = metadata.as_ref().is_some_and(|m| {
             Utc::now().signed_duration_since(m.downloaded_at).num_days() > DOCS_STALENESS_DAYS
         });
 

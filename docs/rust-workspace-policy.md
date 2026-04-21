@@ -62,10 +62,11 @@ Current policy:
   at zero for `cargo check`.
 - `clippy -D warnings` is not a blocking gate until M7 resolves the
   clippy-specific findings exposed after the rustc warning baseline reached
-  zero. The audit has cleared `inference`, `node-engine`, and
-  `workflow-nodes`, `pantograph-workflow-service`, and
-  `pantograph-frontend-http-adapter` and `pantograph-embedded-runtime`; the
-  current workspace run now stops in `pantograph-rustler`.
+  zero. The audit has cleared `inference`, `node-engine`, `workflow-nodes`,
+  `pantograph-workflow-service`, `pantograph-frontend-http-adapter`,
+  `pantograph-embedded-runtime`, and `pantograph-rustler`; the current
+  workspace run now stops in the Tauri app crate on workflow argument-shape and
+  event-size cleanup after the first mechanical Tauri pass.
 - New policy lints may be denied only when they are known not to fail the
   current workspace.
 

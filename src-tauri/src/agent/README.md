@@ -35,6 +35,8 @@ must not become hidden workflow or runtime policy owners.
 Keep desktop assistant support under this Tauri module while preserving clear
 sub-boundaries for RAG and tools. Reusable model/runtime execution remains in
 backend crates.
+Documentation and indexing helpers should stay idiomatic under strict clippy
+without adding local lint exceptions for simple expression or borrow cleanup.
 
 ## Alternatives Rejected
 - Mix assistant tools into workflow-node execution: rejected because assistant
@@ -46,6 +48,8 @@ backend crates.
 - Tool writes must pass validation before modifying files.
 - Retrieval inputs and generated context must remain traceable to sources.
 - Agent helpers should not bypass workflow/runtime service contracts.
+- Indexing/chunking helpers should accept borrowed string/path forms at the
+  narrowest useful boundary so assistant support code remains adapter-only.
 
 ## Revisit Triggers
 - Agent tools become workflow-executable production nodes.

@@ -1,6 +1,6 @@
 //! Agent orchestration and execution commands.
 
-use super::shared::{SharedAppConfig, MAX_IMAGE_BASE64_LEN};
+use super::shared::{MAX_IMAGE_BASE64_LEN, SharedAppConfig};
 use crate::agent;
 use crate::agent::rag::SharedRagManager;
 use crate::agent::tools::WriteGuiFileArgs;
@@ -9,7 +9,7 @@ use crate::agent::{
     FileChange, Position, Size, WriteTracker,
 };
 use crate::llm::types::*;
-use crate::llm::{sync_rag_embedding_url_from_gateway, SharedGateway};
+use crate::llm::{SharedGateway, sync_rag_embedding_url_from_gateway};
 use futures_util::StreamExt;
 use reqwest::Client;
 use rig::agent::MultiTurnStreamItem;
@@ -18,7 +18,7 @@ use rig::streaming::{
 };
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use tauri::{command, ipc::Channel, AppHandle, State};
+use tauri::{AppHandle, State, command, ipc::Channel};
 
 #[command]
 pub async fn run_agent(
@@ -311,8 +311,7 @@ pub async fn run_agent(
                             let id = args
                                 .path
                                 .trim_end_matches(".svelte")
-                                .replace('/', "_")
-                                .replace('\\', "_");
+                                .replace(['/', '\\'], "_");
 
                             let (x, y, width, height) =
                                 if let Some(bounds) = &request.drawing_bounds {
@@ -539,7 +538,7 @@ fn format_agent_prompt_with_analysis(
                 comp.name, comp.path, comp.bounds.x, comp.bounds.y
             ));
         }
-        prompt.push_str("\n");
+        prompt.push('\n');
     }
 
     // Add user's request with appropriate instruction
@@ -622,7 +621,7 @@ fn format_agent_prompt(request: &AgentRequest) -> String {
                 comp.name, comp.path, comp.bounds.x, comp.bounds.y
             ));
         }
-        prompt.push_str("\n");
+        prompt.push('\n');
     }
 
     // Add image reference
@@ -646,8 +645,7 @@ fn create_component_updates(
                 let id = change
                     .path
                     .trim_end_matches(".svelte")
-                    .replace('/', "_")
-                    .replace('\\', "_");
+                    .replace(['/', '\\'], "_");
 
                 // Position based on drawing bounds or default
                 let (x, y, width, height) = if let Some(bounds) = &request.drawing_bounds {
