@@ -408,7 +408,9 @@ Tasks:
   Synchronous built-in node handlers now live in
   `crates/node-engine/src/core_executor/pure_nodes.rs`, separating pure
   payload normalization from file I/O, dependency preflight, and runtime-backed
-  adapters.
+  adapters. File I/O handlers now live in
+  `crates/node-engine/src/core_executor/file_io.rs`, keeping project-root path
+  validation isolated from dispatch and runtime-backed handlers.
 - Split `src/components/WorkflowGraph.svelte` and
   `packages/svelte-graph/src/components/WorkflowGraph.svelte` into graph canvas,
   connection drag, horseshoe insert, edge insert, selection, keyboard, and

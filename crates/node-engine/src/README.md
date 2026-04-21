@@ -72,6 +72,9 @@ locally.
 - Synchronous built-in node handlers stay in `core_executor/pure_nodes.rs` so
   payload normalization for pure nodes remains separate from runtime-backed
   adapters and dispatch wiring.
+- Core executor file I/O handlers stay in `core_executor/file_io.rs` so host
+  path validation remains separate from pure node payload normalization and
+  runtime-backed adapters.
 - Task-type inference must reflect execution semantics, not UI naming.
 - Input normalization may be permissive for additive compatibility, but output
   shapes must stay stable once published.
