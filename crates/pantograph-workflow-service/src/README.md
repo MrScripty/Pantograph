@@ -12,8 +12,8 @@ diagnostics reusable across Tauri, UniFFI, Rustler, and tests.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `lib.rs` | Public module exports for the workflow service crate. |
-| `workflow.rs` | Public workflow contracts, host traits, facade methods, graph/session APIs, and orchestration logic. |
-| `workflow/` | Private runtime preflight and session-runtime helpers extracted from the main facade. |
+| `workflow.rs` | Public workflow facade exports, host traits, facade methods, graph/session APIs, and orchestration logic. |
+| `workflow/` | Private workflow contracts, runtime preflight, and session-runtime helpers extracted from the main facade. |
 | `scheduler/` | Backend-owned workflow-session queue/store contracts used by the workflow facade. |
 | `trace/` | Workflow trace contracts, request validation, in-memory trace state, and runtime/scheduler snapshot merge helpers. |
 | `graph/` | Graph DTOs and session-kind contracts shared by service operations. |
@@ -37,9 +37,9 @@ semantics.
 
 ## Decision
 Keep public workflow orchestration in this source directory. `workflow.rs`
-remains the compatibility facade while cohesive internals move into focused
-private modules. Adapters may translate transport payloads but must delegate
-workflow decisions to this crate.
+remains the compatibility facade while cohesive contracts and internals move
+into focused private modules. Adapters may translate transport payloads but
+must delegate workflow decisions to this crate.
 
 ## Alternatives Rejected
 - Keep workflow behavior in Tauri commands: rejected because native bindings

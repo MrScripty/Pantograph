@@ -1,24 +1,25 @@
 # pantograph-workflow-service/src/workflow
 
-Workflow runtime readiness and session-runtime helper modules.
+Workflow contract, runtime-readiness, and session-runtime helper modules.
 
 ## Purpose
 This directory holds focused helpers extracted from the main workflow service
-facade. These modules evaluate runtime preflight readiness and coordinate
-session runtime loading without moving public workflow contracts out of the
-service crate.
+facade. These modules define host-facing workflow contracts, evaluate runtime
+preflight readiness, and coordinate session runtime loading without moving
+public exports out of the service crate.
 
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
+| `contracts.rs` | Public workflow request/response/error DTO definitions re-exported by the parent facade. |
 | `runtime_preflight.rs` | Runtime requirement matching, issue formatting, and preflight warning collection. |
 | `session_runtime.rs` | Session runtime preflight cache checks, runtime loading, unload-candidate selection, and affinity refresh helpers. |
 
 ## Problem
-`src/workflow.rs` remains a large public facade with many host-facing DTOs and
-service methods. Runtime readiness and session-runtime loading are cohesive
-enough to isolate, but they still depend on the facade's public contracts and
-host trait.
+`src/workflow.rs` remains a large public facade with host traits and service
+methods. Public DTO definitions, runtime readiness, and session-runtime loading
+are cohesive enough to isolate, but they still preserve the parent facade as
+the compatibility export point.
 
 ## Constraints
 - Preserve the public `WorkflowService` API while decomposing internals.
@@ -27,9 +28,10 @@ host trait.
 - Avoid introducing adapter-specific types into service internals.
 
 ## Decision
-Use this directory for private workflow-service helper modules. The parent
-facade remains the public export point while helpers own cohesive internal
-runtime readiness and session-runtime workflows.
+Use this directory for workflow-service helper modules behind the parent
+facade. The parent facade remains the public export point while helpers own
+cohesive contract definitions, runtime readiness, and session-runtime
+workflows.
 
 ## Alternatives Rejected
 - Leave all helpers in `workflow.rs`: rejected because runtime readiness and
@@ -54,17 +56,23 @@ runtime readiness and session-runtime workflows.
   public module structure.
 
 ## Dependencies
-**Internal:** parent workflow facade types, scheduler preflight cache,
+**Internal:** parent workflow facade exports, scheduler preflight cache,
 technical-fit overrides, `WorkflowHost`, and `pantograph-runtime-identity`.
 
 **External:** none beyond parent crate dependencies.
+
+Reason: helper modules inherit the parent crate dependency surface so extracted
+workflow internals do not grow new package-level coupling.
+
+Revisit trigger: add a direct external dependency here only when a helper owns a
+stable reusable policy that cannot remain behind the parent facade.
 
 ## Related ADRs
 - `docs/adr/ADR-001-headless-embedding-service-boundary.md`
 - `docs/adr/ADR-002-runtime-registry-ownership-and-lifecycle.md`
 
 ## Usage Examples
-These helpers are private to the workflow service facade:
+These helpers are reached through the workflow service facade:
 
 ```rust
 service.ensure_session_runtime_loaded(host, session_id).await?;
@@ -73,8 +81,8 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
 ## API Consumer Contract
 - Inputs: workflow runtime requirements, runtime capability DTOs, session ids,
   workflow ids, and host trait methods.
-- Outputs: runtime issues, preflight cache records, and service errors consumed
-  by public workflow operations.
+- Outputs: request/response DTOs, runtime issues, preflight cache records, and
+  service errors consumed by public workflow operations.
 - Lifecycle: helpers run inside public workflow/session operations and do not
   own long-lived runtime resources directly.
 - Errors: capacity exhaustion, missing sessions, runtime-not-ready conditions,
@@ -102,4 +110,5 @@ cargo test -p pantograph-workflow-service session_runtime
 
 ## Notes
 - This directory is part of the staged decomposition of `workflow.rs`; keep new
-  helper modules focused and private unless an explicit public API is accepted.
+  helper modules focused and re-exported through the facade unless an explicit
+  public module API is accepted.

@@ -313,6 +313,10 @@ Tasks:
 - Split `crates/pantograph-workflow-service/src/workflow.rs` by session API,
   graph persistence/editing, diagnostics/trace, scheduler queue, runtime
   capabilities, and facade exports.
+  Progress: public workflow request/response/error DTO definitions now live in
+  `crates/pantograph-workflow-service/src/workflow/contracts.rs` and are
+  re-exported by `workflow.rs`, preserving existing public imports while
+  reducing the facade.
 - Split `crates/pantograph-embedded-runtime/src/lib.rs` into runtime host,
   workflow sessions, registry lifecycle, diagnostics projection, model deps,
   and test modules.
