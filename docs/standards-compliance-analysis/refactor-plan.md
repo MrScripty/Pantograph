@@ -332,7 +332,9 @@ Tasks:
   Workflow capability, I/O discovery, and preflight facade methods now live in
   `workflow/preflight_api.rs`. Session status, queue inspection, scheduler
   snapshot, cancellation, and reprioritization facade methods now live in
-  `workflow/session_queue_api.rs`.
+  `workflow/session_queue_api.rs`. Stale cleanup, stale cleanup worker,
+  keep-alive, and close-session facade methods now live in
+  `workflow/session_lifecycle_api.rs`.
 - Split `crates/pantograph-embedded-runtime/src/lib.rs` into runtime host,
   workflow sessions, registry lifecycle, diagnostics projection, model deps,
   and test modules.
@@ -483,3 +485,8 @@ fully resolved by standards compliance:
 - Resolved: generated-component history metadata moved out of
   `src/generated/.git` into ignored `.pantograph/generated-components.git/`.
 - CI currently verifies important binding/runtime separation paths but does not protect the main frontend and workspace quality gates.
+- `crates/pantograph-workflow-service/src/workflow.rs` test fixture
+  `MockWorkflowHost` stores `runtime_capabilities: vec![ready_runtime_capability()]`
+  but does not override `WorkflowHost::runtime_capabilities`, so
+  `workflow_session_lifecycle_create_run_close` fails its create-session
+  runtime-capability assertion before close-session behavior is exercised.

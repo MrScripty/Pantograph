@@ -17,6 +17,7 @@ public exports out of the service crate.
 | `io_contract.rs` | Workflow input/output surface derivation and host-response validation helpers. |
 | `preflight_api.rs` | Workflow capability, I/O discovery, and preflight facade methods. |
 | `runtime_preflight.rs` | Runtime requirement matching, issue formatting, and preflight warning collection. |
+| `session_lifecycle_api.rs` | Workflow stale cleanup, stale cleanup worker, keep-alive, and close-session facade methods. |
 | `session_queue_api.rs` | Workflow session status, queue inspection, scheduler snapshot, cancel, and reprioritize facade methods. |
 | `session_runtime.rs` | Session runtime preflight cache checks, runtime-capability fingerprinting, runtime loaded-state invalidation, runtime loading, unload-candidate selection, and affinity refresh helpers. |
 | `validation.rs` | Request, binding, output-target, and produced-output validation helpers shared by facade operations. |
@@ -39,8 +40,8 @@ Use this directory for workflow-service helper modules behind the parent
 facade. The parent facade remains the public export point while helpers own
 cohesive contract definitions, host/runtime trait defaults, request
 validation, graph edit-session methods, capability/preflight methods, session
-queue inspection methods, workflow I/O derivation, runtime readiness, and
-session-runtime workflows.
+queue inspection methods, session lifecycle methods, workflow I/O derivation,
+runtime readiness, and session-runtime workflows.
 
 ## Alternatives Rejected
 - Leave all helpers in `workflow.rs`: rejected because runtime readiness and
@@ -55,6 +56,8 @@ session-runtime workflows.
   `pantograph-runtime-identity`.
 - Runtime warning and blocking-issue lists remain deterministic and deduped.
 - Host calls occur outside session-store locks.
+- Session lifecycle APIs keep cleanup, keep-alive, and close-session behavior
+  together so runtime unload side effects remain visible in one helper.
 - Session queue inspection and scheduler snapshot APIs stay behind the public
   facade while delegating their store access to the session queue helper.
 - Session runtime preflight cache fingerprints are derived in the

@@ -13,7 +13,7 @@ diagnostics reusable across Tauri, UniFFI, Rustler, and tests.
 | ----------- | ----------- |
 | `lib.rs` | Public module exports for the workflow service crate. |
 | `workflow.rs` | Public workflow facade exports, execution/session facade methods, and orchestration logic. |
-| `workflow/` | Private workflow contracts, host traits, graph API methods, capability/preflight API methods, session queue API methods, request validation, I/O derivation, runtime preflight, and session-runtime helpers extracted from the main facade. |
+| `workflow/` | Private workflow contracts, host traits, graph API methods, capability/preflight API methods, session queue and lifecycle API methods, request validation, I/O derivation, runtime preflight, and session-runtime helpers extracted from the main facade. |
 | `scheduler/` | Backend-owned workflow-session queue/store contracts used by the workflow facade. |
 | `trace/` | Workflow trace contracts, request validation, in-memory trace state, and runtime/scheduler snapshot merge helpers. |
 | `graph/` | Graph DTOs and session-kind contracts shared by service operations. |
@@ -51,6 +51,8 @@ facade in the workflow preflight API helper.
 Session status, queue inspection, scheduler snapshot, cancellation, and
 reprioritization methods now live behind the facade in the workflow session
 queue API helper.
+Stale cleanup, stale cleanup worker, keep-alive, and close-session methods now
+live behind the facade in the workflow session lifecycle API helper.
 
 ## Alternatives Rejected
 - Keep workflow behavior in Tauri commands: rejected because native bindings
@@ -77,6 +79,8 @@ queue API helper.
 - Scheduler snapshots omit execution attribution when identity is ambiguous.
 - Session queue API methods preserve the public facade while keeping direct
   scheduler-store access in the workflow session queue helper.
+- Session lifecycle API methods preserve the public facade while keeping
+  cleanup, keep-alive, close, and runtime unload side effects together.
 
 ## Revisit Triggers
 - Public workflow DTOs need versioning rather than additive migration.
