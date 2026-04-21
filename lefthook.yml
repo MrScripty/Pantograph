@@ -9,6 +9,9 @@ pre-commit:
       glob: "*.{ts}"
       run: npm run typecheck
 
+    decision-traceability:
+      run: TRACEABILITY_STAGED_ONLY=1 ./scripts/check-decision-traceability.sh
+
 pre-push:
   commands:
     test:

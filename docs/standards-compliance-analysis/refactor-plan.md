@@ -158,7 +158,8 @@ Tasks:
 - Mark structured producer directories, especially templates, saved workflows,
   generated components, schemas, and binding artifacts, with `Structured Producer Contract`.
 - Add a decision-traceability script adapted from the standards template and
-  configure host-facing/structured-producer paths.
+  configure host-facing/structured-producer paths. Status: repo-local script,
+  npm entrypoint, and Lefthook staged-file command are now in place.
 
 Additional issue recorded during implementation:
 - `crates/inference/src/managed_runtime/managed_binaries/` is an empty,

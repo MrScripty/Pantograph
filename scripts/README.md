@@ -9,6 +9,7 @@ main app entrypoint.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `check-runtime-redistributables-smoke.sh` | Verifies a built Pantograph release artifact exists, then runs the bounded managed-runtime contract smoke that covers runtime-manager view projection, workflow preflight blocking, and diagnostics projection. |
+| `check-decision-traceability.sh` | Enforces source-directory README/ADR decision traceability for changed source directories, with repo-specific host-facing and structured-producer paths. |
 | `check-no-python-linkage.sh` | Verifies the runtime-separation guarantee that Pantograph no longer links Python in-process. |
 | `check-packaged-csharp-quickstart.sh` | Compiles the artifact-staged C# quickstart against the generated binding with Roslyn and .NET reference assemblies, then runs the authoring path against the packaged native library; does not restore NuGet packages. |
 | `check-uniffi-csharp-diffusion-smoke.sh` | Opt-in generated-C#/native-runtime session diffusion smoke; requires a local diffusers model directory and Python environment. |
@@ -62,10 +63,19 @@ and repo-local build configuration.
 **External:** Bash, Node.js, Python, and any runtime libraries required by the
 specific script being executed.
 
+## Related ADRs
+None.
+Reason: scripts are developer tooling entrypoints that support documented
+runtime and binding decisions but do not currently own an architecture decision
+record.
+Revisit trigger: a script becomes the authoritative implementation of a release
+or runtime-boundary decision.
+
 ## Usage Examples
 ```bash
 python3 -m py_compile scripts/diffusion_cli_smoketest.py
 ./.venv/bin/python scripts/diffusion_cli_smoketest.py --model-path /path/to/tiny-sd-turbo
+./scripts/check-decision-traceability.sh
 ./scripts/check-no-python-linkage.sh
 ./scripts/check-runtime-redistributables-smoke.sh
 ./scripts/check-uniffi-embedded-runtime-surface.sh
