@@ -2,10 +2,29 @@ use crate::scheduler::WorkflowSessionPreflightCache;
 use crate::technical_fit::WorkflowTechnicalFitOverride;
 
 use super::{
-    compute_runtime_capability_fingerprint, WorkflowHost, WorkflowService, WorkflowServiceError,
+    WorkflowHost, WorkflowRuntimeCapability, WorkflowService, WorkflowServiceError,
     WorkflowSessionRetentionHint, WorkflowSessionRuntimeSelectionTarget,
     WorkflowSessionRuntimeUnloadCandidate, WorkflowSessionUnloadReason,
 };
+
+fn compute_runtime_capability_fingerprint(
+    runtime_capabilities: &[WorkflowRuntimeCapability],
+) -> String {
+    let mut normalized = runtime_capabilities.to_vec();
+    normalized.sort_by(|a, b| a.runtime_id.cmp(&b.runtime_id));
+    for capability in &mut normalized {
+        capability.backend_keys.sort();
+        capability.missing_files.sort();
+    }
+
+    let encoded = serde_json::to_string(&normalized).unwrap_or_default();
+    let mut hash = 0xcbf29ce484222325_u64;
+    for byte in encoded.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("{:016x}", hash)
+}
 
 impl WorkflowService {
     pub(super) async fn ensure_session_runtime_loaded<H: WorkflowHost>(

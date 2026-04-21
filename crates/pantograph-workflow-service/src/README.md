@@ -40,6 +40,8 @@ Keep public workflow orchestration in this source directory. `workflow.rs`
 remains the compatibility facade while cohesive contracts and internals move
 into focused private modules. Adapters may translate transport payloads but
 must delegate workflow decisions to this crate.
+Session runtime preflight cache fingerprinting now lives with the
+session-runtime helper that owns cache lookup and refresh behavior.
 
 ## Alternatives Rejected
 - Keep workflow behavior in Tauri commands: rejected because native bindings

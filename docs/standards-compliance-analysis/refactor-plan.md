@@ -323,7 +323,9 @@ Tasks:
   `workflow/host.rs` and are re-exported by the facade. Request, binding,
   output-target, and produced-output validation helpers now live in
   `workflow/validation.rs`, with `validate_workflow_id` re-exported internally
-  for technical-fit request shaping.
+  for technical-fit request shaping. Session runtime preflight cache
+  fingerprinting now lives in `workflow/session_runtime.rs` with the cache
+  lookup and refresh logic that consumes it.
 - Split `crates/pantograph-embedded-runtime/src/lib.rs` into runtime host,
   workflow sessions, registry lifecycle, diagnostics projection, model deps,
   and test modules.

@@ -15,7 +15,7 @@ public exports out of the service crate.
 | `host.rs` | Host trait defaults and scheduler diagnostics provider contracts re-exported by the parent facade. |
 | `io_contract.rs` | Workflow input/output surface derivation and host-response validation helpers. |
 | `runtime_preflight.rs` | Runtime requirement matching, issue formatting, and preflight warning collection. |
-| `session_runtime.rs` | Session runtime preflight cache checks, runtime loading, unload-candidate selection, and affinity refresh helpers. |
+| `session_runtime.rs` | Session runtime preflight cache checks, runtime-capability fingerprinting, runtime loading, unload-candidate selection, and affinity refresh helpers. |
 | `validation.rs` | Request, binding, output-target, and produced-output validation helpers shared by facade operations. |
 
 ## Problem
@@ -51,6 +51,8 @@ workflows.
   `pantograph-runtime-identity`.
 - Runtime warning and blocking-issue lists remain deterministic and deduped.
 - Host calls occur outside session-store locks.
+- Session runtime preflight cache fingerprints are derived in the
+  session-runtime helper that consumes them.
 - Session runtime loaded state is updated only after host load/unload calls
   succeed or return a service error.
 
