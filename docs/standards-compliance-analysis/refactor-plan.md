@@ -355,7 +355,9 @@ Tasks:
   `crates/pantograph-embedded-runtime/src/lib_tests.rs`; the extracted module
   still needs a later split by behavior area. Embedded-runtime configuration
   and initialization error contracts now live in
-  `crates/pantograph-embedded-runtime/src/runtime_config.rs`.
+  `crates/pantograph-embedded-runtime/src/runtime_config.rs`. Inference-gateway
+  runtime-registry controller trait implementations now live in
+  `crates/pantograph-embedded-runtime/src/runtime_registry_controller.rs`.
 - Split `crates/node-engine/src/core_executor.rs` by execution phases, blocking
   adapters, demand preparation, output handling, and tests.
 - Split `src/components/WorkflowGraph.svelte` and

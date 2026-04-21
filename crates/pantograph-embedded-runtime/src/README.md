@@ -27,6 +27,7 @@ packages.
 | `runtime_health.rs` | Owns backend-side health probe assessment, degraded/unhealthy threshold policy, and failure-count progression. |
 | `runtime_recovery.rs` | Owns backend-side recovery restart planning, retry-strategy selection, retry-attempt sequencing, retry backoff, backend port overrides, clean-restart settle delays, and dedicated-embedding restart policy. |
 | `runtime_registry.rs` | Owns backend-side translation from gateway and producer lifecycle facts into shared runtime-registry observations, active-runtime registration, active/embedding health-aware unhealthy reconciliation, sync, reclaim, stop-all, and restore coordination. |
+| `runtime_registry_controller.rs` | Owns the inference-gateway implementations of embedded runtime-registry controller traits. |
 | `runtime_registry_errors.rs` | Owns workflow-facing runtime-registry and warmup coordination error mapping so adapters keep stable workflow-service error codes. |
 | `runtime_registry_lifecycle.rs` | Owns backend-side runtime-registry sync, snapshot, warmup coordination, reclaim, stop-all, and restore orchestration so lifecycle sequencing stays separate from observation mapping. |
 | `runtime_registry_observations.rs` | Owns backend-side runtime-registry observation builders and health-overlay matching for active, embedding, and execution-observed producer facts. |
@@ -111,6 +112,9 @@ embedded-runtime crate.
 - Any registry interaction from this crate must remain a narrow translation of
   session lifecycle into explicit registry operations, not an alternate policy
   engine.
+- Inference-gateway runtime-registry controller trait implementations stay in
+  `runtime_registry_controller.rs` so lifecycle adapter code does not accrete
+  in the root runtime facade.
 - Technical-fit bridging in this crate must stay a translation layer from
   workflow-service request context into runtime-registry selector input; factor
   scoring and final policy ownership remain outside this crate.

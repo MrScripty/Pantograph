@@ -67,6 +67,7 @@ mod runtime_extensions;
 pub mod runtime_health;
 pub mod runtime_recovery;
 pub mod runtime_registry;
+mod runtime_registry_controller;
 mod runtime_registry_errors;
 mod runtime_registry_lifecycle;
 mod runtime_registry_observations;
@@ -110,39 +111,6 @@ const RUNTIME_WARMUP_WAIT_TIMEOUT_MS: u64 = 5_000;
 
 #[cfg(test)]
 const RUNTIME_WARMUP_WAIT_TIMEOUT_MS: u64 = 250;
-
-#[async_trait]
-impl runtime_registry::HostRuntimeRegistryController for inference::InferenceGateway {
-    async fn mode_info_snapshot(&self) -> HostRuntimeModeSnapshot {
-        HostRuntimeModeSnapshot::from_mode_info(&self.mode_info().await)
-    }
-
-    async fn stop_runtime_producer(&self, producer: runtime_registry::HostRuntimeProducer) {
-        match producer {
-            runtime_registry::HostRuntimeProducer::Active => self.stop().await,
-            runtime_registry::HostRuntimeProducer::Embedding => {
-                debug_assert!(
-                    false,
-                    "embedded inference gateway cannot stop a dedicated embedding producer"
-                );
-            }
-        }
-    }
-}
-
-#[async_trait]
-impl runtime_registry::HostRuntimeRegistryLifecycleController for inference::InferenceGateway {
-    async fn stop_all_runtime_producers(&self) {
-        self.stop().await;
-    }
-
-    async fn restore_runtime(
-        &self,
-        restore_config: Option<inference::BackendConfig>,
-    ) -> Result<(), inference::GatewayError> {
-        self.restore_inference_runtime(restore_config).await
-    }
-}
 
 pub struct EmbeddedRuntime {
     config: EmbeddedRuntimeConfig,
