@@ -27,9 +27,9 @@ The root policy denies repo-owned `unsafe` code by default. Clippy lint policy
 starts as a ratchet: debug macros and TODOs warn, while unsafe documentation
 lints are denied so any future exception must be documented.
 
-Existing Rust warning debt remains tracked in
-`docs/standards-compliance-analysis/rust-warning-baseline.md` until M7 removes
-or scopes each warning.
+Rust warning cleanup history remains tracked in
+`docs/standards-compliance-analysis/rust-warning-baseline.md`; the current M7
+baseline is zero `cargo check` warnings.
 
 ## Dependency Inheritance
 
@@ -58,22 +58,21 @@ Current policy:
 
 - `cargo check --workspace --all-features` and
   `cargo check --workspace --no-default-features` must compile.
-- Existing `unused`, `dead_code`, and dependency macro warnings are allowed
-  temporarily and tracked in the standards plan.
-- `clippy -D warnings` is not a blocking gate until M7 classifies or removes
-  the current warning baseline.
+- `unused`, `dead_code`, and dependency macro warnings are expected to remain
+  at zero for `cargo check`.
+- `clippy -D warnings` is not a blocking gate until M7 resolves the
+  clippy-specific findings exposed after the rustc warning baseline reached
+  zero.
 - New policy lints may be denied only when they are known not to fail the
   current workspace.
 
 Ratchet sequence:
 
 1. Keep `docs/standards-compliance-analysis/rust-warning-baseline.md` current
-   with each warning classified as remove, use, feature-gate,
-   external/dependency exception, or intentionally retained.
-2. Remove or scope exceptions for warnings that belong to inactive or migrated
-   code paths.
-3. Add a non-regression check for the resulting baseline.
-4. Promote clippy to `-D warnings` only after the baseline is zero or
+   as the zero-warning history for `cargo check`.
+2. Add a non-regression check for the zero rustc warning baseline.
+3. Resolve clippy-specific findings separately from rustc warning cleanup.
+4. Promote clippy to `-D warnings` only after the clippy audit is clean or
    explicitly machine-enforced.
 
 ## Unsafe Exceptions

@@ -2,8 +2,6 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-#[cfg(any(test, feature = "standalone"))]
-use node_engine::ExecutorExtensions;
 use pantograph_runtime_registry::SharedRuntimeRegistry;
 use pantograph_workflow_service::{WorkflowRuntimeCapability, WorkflowService};
 #[cfg(test)]
@@ -11,9 +9,6 @@ use pantograph_workflow_service::{
     WorkflowSchedulerDiagnosticsProvider, WorkflowSchedulerRuntimeDiagnosticsRequest,
     WorkflowSchedulerRuntimeRegistryDiagnostics,
 };
-#[cfg(any(test, feature = "standalone"))]
-use tokio::sync::RwLock;
-
 mod embedded_data_graph_execution;
 mod embedded_edit_session_execution;
 mod embedded_runtime_lifecycle;

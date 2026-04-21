@@ -68,9 +68,9 @@ Ratcheted audit jobs:
 - `cargo clippy --workspace --all-targets --all-features -- -D warnings`
 
 The audit jobs are visible in CI but are non-blocking until the documented
-formatting and Rust warning baselines are cleaned up. The summary job fails the
-workflow when any blocking gate fails and reports the audit job status for
-review.
+formatting baseline and clippy-specific findings are cleaned up. The summary
+job fails the workflow when any blocking gate fails and reports the audit job
+status for review.
 
 ## Acceptance Policy
 

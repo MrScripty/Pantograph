@@ -8,10 +8,9 @@ Command used for the baseline:
 cargo check --workspace --all-features --message-format short
 ```
 
-The command completes successfully, but the workspace currently emits 2
-warnings. This document classifies the warning debt required by M7 before
-`cargo clippy --workspace --all-targets --all-features -- -D warnings` can
-become a blocking quality gate.
+The command completes successfully with zero warnings. This document preserves
+the M7 warning cleanup history and the ratchet path for keeping
+`cargo check --workspace --all-features --message-format short` warning-clean.
 
 The classification follows the updated standards expectations:
 
@@ -23,7 +22,7 @@ The classification follows the updated standards expectations:
 
 | Crate/target | Count | Primary category | Resolution path |
 | --- | ---: | --- | --- |
-| `pantograph-embedded-runtime` | 2 | Remove unused imports | Drop unused public imports when the dirty embedded-runtime branch is normalized. |
+| `pantograph-embedded-runtime` | 0 | Complete | Root facade imports are warning-clean. |
 | `pantograph` Tauri binary | 0 | Complete | Tauri-local warning debt has been removed; keep command adapters on backend-owned DTOs and service contracts. |
 | `pantograph_rustler` | 0 | Scoped external macro exception | Keep the narrow `rustler::resource!` lint exception documented until Rustler exposes a warning-clean registration API. |
 
@@ -55,6 +54,13 @@ The classification follows the updated standards expectations:
 | Location | Warning | Classification | Resolution |
 | --- | --- | --- | --- |
 | `src/lib.rs:586` | `task_executor` field never read | Remove | Resolved by deleting the inactive no-op task executor field and helper from `FfiWorkflowEngine`; the binding object does not expose task execution. |
+
+### `crates/pantograph-embedded-runtime`
+
+| Location | Warning | Classification | Resolution |
+| --- | --- | --- | --- |
+| `src/lib.rs:6` | unused `node_engine::ExecutorExtensions` import | Remove | Resolved by deleting the stale root-facade import; the modules and tests that need executor extensions import them locally. |
+| `src/lib.rs:15` | unused `tokio::sync::RwLock` import | Remove | Resolved by deleting the stale root-facade import; the modules and tests that need shared extension locks import them locally. |
 
 ### `src-tauri` Constants
 
@@ -131,12 +137,8 @@ The classification follows the updated standards expectations:
 
 ## Active Warnings
 
-### `crates/pantograph-embedded-runtime`
-
-| Location | Warning | Classification | Next action |
-| --- | --- | --- | --- |
-| `src/lib.rs:6` | unused `node_engine::ExecutorExtensions` import | Remove | Delete after preserving the current dirty embedded-runtime work. |
-| `src/lib.rs:15` | unused `tokio::sync::RwLock` import | Remove | Delete after preserving the current dirty embedded-runtime work. |
+No active `cargo check --workspace --all-features --message-format short`
+warnings remain as of the 2026-04-21 M7 cleanup pass.
 
 ## Ratchet Plan
 
@@ -150,6 +152,6 @@ The classification follows the updated standards expectations:
    and backend-owned contract.
 4. Remove the Rustler macro lint exception when upstream resource registration
    no longer emits `non_local_definitions`.
-5. Re-run all-features and no-default-features checks, record the new warning
-   count, and promote `clippy -D warnings` once the baseline reaches zero or a
-   machine-enforced exception list exists.
+5. Keep all-features and no-default-features checks warning-clean, and track
+   clippy-specific findings separately before promoting
+   `cargo clippy --workspace --all-targets --all-features -- -D warnings`.

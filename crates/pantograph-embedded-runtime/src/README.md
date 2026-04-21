@@ -108,6 +108,9 @@ embedded-runtime crate.
   shutdown sequencing stay in `embedded_runtime_lifecycle.rs` so the root
   facade keeps only type definitions, exports, and remaining workflow API
   forwarding until those surfaces are split.
+- The root `lib.rs` facade should import only items used by facade code; tests
+  and feature-specific constructors should import executor-extension locks in
+  their owning modules instead of keeping stale facade imports.
 - Embedded-runtime data-graph execution stays in
   `embedded_data_graph_execution.rs` so terminal-node demand handling and
   output shaping remain separate from graph persistence and edit-session API

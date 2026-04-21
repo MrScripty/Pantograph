@@ -613,7 +613,9 @@ Tasks:
 - [x] Classify all `cargo check` warnings as remove, use, gate behind feature,
   or document as disabled/experimental. Status:
   `docs/standards-compliance-analysis/rust-warning-baseline.md` records the
-  2026-04-21 all-features warning baseline and ratchet path.
+  2026-04-21 all-features warning cleanup history; the workspace now passes
+  `cargo check --workspace --all-features --message-format short` with zero
+  warnings.
 - [x] Delete unused Tauri-local workflow types, validators, and connection-intent
   helpers superseded by `pantograph-workflow-service`. Status: stale
   connection-intent, validation, effective-definition, graph-policy, and
@@ -621,6 +623,11 @@ Tasks:
   plus the legacy Tauri-local execution manager and type mirror have been
   removed. Tauri command adapters now use backend-owned workflow-service DTOs
   for the active graph, connection, file, and node definition contracts.
+- Resolve clippy-specific findings exposed after the rustc warning baseline
+  reached zero. Status: `cargo clippy --workspace --all-targets --all-features
+  -- -D warnings` now reaches `crates/inference` and reports mechanical issues
+  in streaming prefix parsing, derivable defaults, path joins, lazy option
+  substitution, `&PathBuf` arguments, and a useless registry test assertion.
 - Close or update `docs/anti-pattern-remediation-tracker.md` Phase 5 for
   process-node policy controls.
 - Add issue/backlog entries for non-compliance problems intentionally deferred.

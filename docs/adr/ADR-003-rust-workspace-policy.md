@@ -36,8 +36,8 @@ Adopt a root Rust package and lint policy:
 - Repo-owned unsafe code is denied by default.
 - Clippy policy starts with a narrow ratchet for debug macros, TODOs, and
   unsafe documentation requirements.
-- Existing dead-code and unused warnings remain a documented baseline until M7
-  classifies them.
+- Dead-code and unused warning cleanup history remains documented after M7
+  brought the `cargo check` baseline to zero.
 
 4. Unsafe exceptions require an explicit checklist.
 - The checklist lives in `docs/rust-workspace-policy.md`.
@@ -62,7 +62,8 @@ Adopt a root Rust package and lint policy:
   without hiding which crate owns each import.
 
 ### Negative
-- The workspace still emits known warnings until the M7 cleanup milestone.
+- Clippy-specific findings remain a separate cleanup path after the M7
+  `cargo check` warning baseline reached zero.
 - `cargo fmt --all -- --check` remains a separate cleanup slice because current
   formatting drift spans several modules.
 - Current `rust-version` follows the active project toolchain and may need a
