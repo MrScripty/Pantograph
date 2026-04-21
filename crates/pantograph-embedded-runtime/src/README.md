@@ -21,6 +21,7 @@ packages.
 | `python_runtime_bridge.py` | Bridge script executed by the Python adapter so Pantograph can invoke Python workers without linking Python in-process. |
 | `rag.rs` | Defines the narrow RAG backend contract used by the host executor. |
 | `runtime_capabilities.rs` | Owns backend-side mapping from producer-specific runtime facts into workflow runtime capabilities, including managed-runtime snapshot-to-capability projection, host-runtime, dedicated-embedding, and Python-sidecar capability builders plus capability-to-lifecycle projection. |
+| `runtime_extensions.rs` | Owns shared runtime extension snapshots and executor extension injection for Pumas, KV cache, model dependencies, event sinks, execution ids, and Python runtime execution records. |
 | `runtime_health.rs` | Owns backend-side health probe assessment, degraded/unhealthy threshold policy, and failure-count progression. |
 | `runtime_recovery.rs` | Owns backend-side recovery restart planning, retry-strategy selection, retry-attempt sequencing, retry backoff, backend port overrides, clean-restart settle delays, and dedicated-embedding restart policy. |
 | `runtime_registry.rs` | Owns backend-side translation from gateway and producer lifecycle facts into shared runtime-registry observations, active-runtime registration, active/embedding health-aware unhealthy reconciliation, sync, reclaim, stop-all, and restore coordination. |
@@ -84,6 +85,9 @@ embedded-runtime crate.
 - Pantograph-specific runtime orchestration stays in this crate, not in generic
   node packages.
 - Python-backed nodes execute through the runtime adapter boundary.
+- Shared runtime extension snapshots and executor injection must stay in a
+  backend-owned helper so workflow execution paths do not drift on extension
+  keys or recorder wiring.
 - Python runtime execution metadata and recorder state stay in backend Rust so
   workflow diagnostics and registry projection do not depend on Tauri-local or
   executor-local ad hoc payloads.

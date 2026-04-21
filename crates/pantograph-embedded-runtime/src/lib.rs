@@ -4,9 +4,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use async_trait::async_trait;
-use node_engine::{
-    CoreTaskExecutor, EventSink, ExecutorExtensions, NullEventSink, WorkflowExecutor, WorkflowGraph,
-};
+#[cfg(any(test, feature = "standalone"))]
+use node_engine::ExecutorExtensions;
+use node_engine::{CoreTaskExecutor, EventSink, NullEventSink, WorkflowExecutor, WorkflowGraph};
 use pantograph_runtime_identity::canonical_runtime_backend_key;
 use pantograph_runtime_registry::{
     RuntimeRegistryError, RuntimeReservationRequirements, RuntimeRetentionHint,
@@ -50,6 +50,7 @@ use pantograph_workflow_service::{
     WorkflowSchedulerDiagnosticsProvider, WorkflowSchedulerRuntimeDiagnosticsRequest,
     WorkflowSchedulerRuntimeRegistryDiagnostics,
 };
+#[cfg(any(test, feature = "standalone"))]
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
@@ -61,6 +62,7 @@ pub mod python_runtime;
 mod python_runtime_execution;
 pub mod rag;
 pub mod runtime_capabilities;
+mod runtime_extensions;
 pub mod runtime_health;
 pub mod runtime_recovery;
 pub mod runtime_registry;
@@ -88,10 +90,13 @@ pub use python_runtime::{
     PythonStreamHandler,
 };
 pub use rag::{RagBackend, RagDocument};
+pub use runtime_extensions::{
+    RuntimeExtensionsSnapshot, SharedExtensions, apply_runtime_extensions,
+    apply_runtime_extensions_for_execution,
+};
 pub use task_executor::{TauriTaskExecutor as PantographTaskExecutor, runtime_extension_keys};
 pub(crate) use workflow_scheduler_diagnostics::EmbeddedWorkflowSchedulerDiagnosticsProvider;
 
-pub type SharedExtensions = Arc<RwLock<ExecutorExtensions>>;
 pub type SharedWorkflowService = Arc<WorkflowService>;
 
 const RUNTIME_WARMUP_POLL_INTERVAL_MS: u64 = 25;
@@ -155,45 +160,6 @@ pub enum EmbeddedRuntimeError {
     Initialization { message: String },
 }
 
-#[derive(Clone, Default)]
-pub struct RuntimeExtensionsSnapshot {
-    pub pumas_api: Option<Arc<pumas_library::PumasApi>>,
-    pub kv_cache_store: Option<Arc<inference::kv_cache::KvCacheStore>>,
-    pub dependency_resolver: Option<Arc<dyn node_engine::ModelDependencyResolver>>,
-}
-
-impl RuntimeExtensionsSnapshot {
-    pub async fn from_shared(shared: &SharedExtensions) -> Self {
-        let guard = shared.read().await;
-        Self::from_extensions(&guard)
-    }
-
-    pub fn from_extensions(shared: &ExecutorExtensions) -> Self {
-        Self {
-            pumas_api: shared
-                .get::<Arc<pumas_library::PumasApi>>(node_engine::extension_keys::PUMAS_API)
-                .cloned(),
-            kv_cache_store: shared
-                .get::<Arc<inference::kv_cache::KvCacheStore>>(
-                    node_engine::extension_keys::KV_CACHE_STORE,
-                )
-                .cloned(),
-            dependency_resolver: shared
-                .get::<Arc<dyn node_engine::ModelDependencyResolver>>(
-                    node_engine::extension_keys::MODEL_DEPENDENCY_RESOLVER,
-                )
-                .cloned(),
-        }
-    }
-}
-
-pub fn apply_runtime_extensions(
-    executor: &mut WorkflowExecutor,
-    snapshot: &RuntimeExtensionsSnapshot,
-) {
-    apply_runtime_extensions_for_execution(executor, snapshot, None, None, None);
-}
-
 #[async_trait]
 impl runtime_registry::HostRuntimeRegistryController for inference::InferenceGateway {
     async fn mode_info_snapshot(&self) -> HostRuntimeModeSnapshot {
@@ -224,49 +190,6 @@ impl runtime_registry::HostRuntimeRegistryLifecycleController for inference::Inf
         restore_config: Option<inference::BackendConfig>,
     ) -> Result<(), inference::GatewayError> {
         self.restore_inference_runtime(restore_config).await
-    }
-}
-
-pub fn apply_runtime_extensions_for_execution(
-    executor: &mut WorkflowExecutor,
-    snapshot: &RuntimeExtensionsSnapshot,
-    event_sink: Option<Arc<dyn EventSink>>,
-    execution_id: Option<String>,
-    python_runtime_execution_recorder: Option<Arc<task_executor::PythonRuntimeExecutionRecorder>>,
-) {
-    if let Some(api) = &snapshot.pumas_api {
-        executor
-            .extensions_mut()
-            .set(node_engine::extension_keys::PUMAS_API, api.clone());
-    }
-    if let Some(store) = &snapshot.kv_cache_store {
-        executor
-            .extensions_mut()
-            .set(node_engine::extension_keys::KV_CACHE_STORE, store.clone());
-    }
-    if let Some(resolver) = &snapshot.dependency_resolver {
-        executor.extensions_mut().set(
-            node_engine::extension_keys::MODEL_DEPENDENCY_RESOLVER,
-            resolver.clone(),
-        );
-    }
-    if let Some(event_sink) = event_sink {
-        executor.extensions_mut().set(
-            task_executor::runtime_extension_keys::EVENT_SINK,
-            event_sink,
-        );
-    }
-    if let Some(execution_id) = execution_id {
-        executor.extensions_mut().set(
-            task_executor::runtime_extension_keys::EXECUTION_ID,
-            execution_id,
-        );
-    }
-    if let Some(recorder) = python_runtime_execution_recorder {
-        executor.extensions_mut().set(
-            task_executor::runtime_extension_keys::PYTHON_RUNTIME_EXECUTION_RECORDER,
-            recorder,
-        );
     }
 }
 

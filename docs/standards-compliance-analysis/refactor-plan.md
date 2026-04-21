@@ -349,6 +349,8 @@ Tasks:
   `crates/pantograph-embedded-runtime/src/workflow_scheduler_diagnostics.rs`,
   and workflow-facing runtime-registry/warmup coordination error mapping now
   lives in `crates/pantograph-embedded-runtime/src/runtime_registry_errors.rs`.
+  Shared runtime extension snapshots and executor extension injection now live
+  in `crates/pantograph-embedded-runtime/src/runtime_extensions.rs`.
 - Split `crates/node-engine/src/core_executor.rs` by execution phases, blocking
   adapters, demand preparation, output handling, and tests.
 - Split `src/components/WorkflowGraph.svelte` and
