@@ -1,0 +1,71 @@
+# crates/pantograph-embedded-runtime/src/lib_tests
+
+## Purpose
+This directory contains behavior-focused test modules split out of the legacy
+embedded-runtime root test module. It exists to keep large integration and unit
+test groups reviewable while preserving access to the crate-private embedded
+runtime test harness.
+
+## Problem
+`lib_tests.rs` still contains a large mixed set of embedded-runtime integration
+tests, helper fixtures, and unit tests. Adding more tests to that file makes
+runtime behavior changes harder to review and keeps unrelated test concerns
+coupled.
+
+## Constraints
+- The remaining legacy test harness still lives in `lib_tests.rs` during the
+  iterative split, so focused modules may temporarily import it with
+  `super::*`.
+- Tests in this directory must not create alternate production-only APIs just to
+  make private state easier to inspect.
+- Runtime-registry and workflow-service assertions must keep checking
+  caller-visible error codes where those codes are part of the adapter contract.
+
+## Decision
+Split focused embedded-runtime test groups into this directory as behavior
+boundaries become clear. Start with host-helper and runtime-registry
+error-mapping unit tests because they are independent of the larger integration
+fixtures and provide a safe first boundary.
+
+## Alternatives Rejected
+- Keep all embedded-runtime tests in `lib_tests.rs`.
+  Rejected because the file is already large enough to obscure behavior-specific
+  test ownership.
+- Split every test group in one change.
+  Rejected because the fixture sharing is still broad and a one-shot move would
+  make regressions harder to isolate.
+
+## Contents
+| File | Description |
+| ---- | ----------- |
+| `host_helper_tests.rs` | Unit tests for embedded workflow host helper contracts and workflow-facing runtime-registry error mapping. |
+
+## Invariants
+- Test modules in this directory may use `super::*` to share the legacy
+  embedded-runtime test harness while the remaining root test module is split.
+- New embedded-runtime tests should prefer a focused module in this directory
+  over growing `lib_tests.rs`.
+- Runtime-registry error mapping tests must assert workflow-service error codes
+  as well as variants so adapters do not drift on caller-visible failures.
+
+## Revisit Triggers
+- `lib_tests.rs` stops owning shared fixtures and this directory can switch from
+  `super::*` imports to explicit local fixtures.
+- A test module in this directory grows beyond a single behavior area.
+- Runtime-registry error mapping moves out of embedded-runtime ownership.
+
+## Dependencies
+- `pantograph-workflow-service` for workflow-facing contracts and error codes.
+- `pantograph-runtime-registry` for runtime admission and reservation errors.
+- The legacy embedded-runtime test harness in `lib_tests.rs` until the remaining
+  integration tests are split by behavior area.
+
+## Related ADRs
+- `docs/standards-compliance-analysis/refactor-plan.md`
+- `crates/pantograph-embedded-runtime/src/README.md`
+
+## Usage Examples
+```rust
+#[path = "lib_tests/host_helper_tests.rs"]
+mod host_helper_tests;
+```
