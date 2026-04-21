@@ -658,9 +658,9 @@ Tasks:
   of duplicated positional command/helper argument lists. Tauri diagnostics
   store/event constructors now use named runtime and scheduler snapshot input
   structs, and large workflow event internals are boxed while preserving the
-  serialized event shape. The remaining active Tauri blockers are argument
-  grouping across headless diagnostics, orchestration, and execution
-  entrypoints.
+  serialized event shape. Headless diagnostics projection helpers now accept
+  grouped runtime/projection inputs. The remaining active Tauri blockers are
+  argument grouping across orchestration and workflow execution entrypoints.
 - Close or update `docs/anti-pattern-remediation-tracker.md` Phase 5 for
   process-node policy controls.
 - Add issue/backlog entries for non-compliance problems intentionally deferred.

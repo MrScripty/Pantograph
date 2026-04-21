@@ -22,6 +22,36 @@ pub(crate) fn workflow_error_json(error: WorkflowServiceError) -> String {
     error.to_envelope_json()
 }
 
+pub(crate) struct HeadlessRuntimeSnapshotInput {
+    pub workflow_id: String,
+    pub trace_execution_id: Option<String>,
+    pub capabilities_result: Result<WorkflowCapabilitiesResponse, WorkflowServiceError>,
+    pub trace_runtime_metrics: WorkflowTraceRuntimeMetrics,
+    pub active_model_target: Option<String>,
+    pub embedding_model_target: Option<String>,
+    pub active_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
+    pub embedding_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
+    pub managed_runtimes: Vec<ManagedRuntimeManagerRuntimeView>,
+    pub captured_at_ms: u64,
+}
+
+pub(crate) struct WorkflowDiagnosticsSnapshotProjectionInput {
+    pub session_id: Option<String>,
+    pub workflow_id: Option<String>,
+    pub workflow_name: Option<String>,
+    pub scheduler_snapshot_result:
+        Option<Result<WorkflowSchedulerSnapshotResponse, WorkflowServiceError>>,
+    pub capabilities_result: Option<Result<WorkflowCapabilitiesResponse, WorkflowServiceError>>,
+    pub current_session_state: Option<WorkflowGraphSessionStateView>,
+    pub runtime_trace_metrics: WorkflowTraceRuntimeMetrics,
+    pub active_model_target: Option<String>,
+    pub embedding_model_target: Option<String>,
+    pub active_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
+    pub embedding_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
+    pub managed_runtimes: Vec<ManagedRuntimeManagerRuntimeView>,
+    pub captured_at_ms: u64,
+}
+
 pub(crate) fn record_headless_scheduler_snapshot(
     diagnostics_store: &WorkflowDiagnosticsStore,
     requested_session_id: &str,
@@ -88,72 +118,66 @@ pub(crate) fn record_headless_scheduler_snapshot(
 
 pub(crate) fn record_headless_runtime_snapshot(
     diagnostics_store: &WorkflowDiagnosticsStore,
-    workflow_id: String,
-    trace_execution_id: Option<&str>,
-    capabilities_result: Result<WorkflowCapabilitiesResponse, WorkflowServiceError>,
-    trace_runtime_metrics: WorkflowTraceRuntimeMetrics,
-    active_model_target: Option<String>,
-    embedding_model_target: Option<String>,
-    active_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
-    embedding_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
-    managed_runtimes: Vec<ManagedRuntimeManagerRuntimeView>,
-    captured_at_ms: u64,
+    input: HeadlessRuntimeSnapshotInput,
 ) {
-    match (trace_execution_id, capabilities_result) {
+    match (
+        input.trace_execution_id.as_deref(),
+        input.capabilities_result,
+    ) {
         (Some(trace_execution_id), Ok(capabilities)) => {
             diagnostics_store.record_runtime_snapshot(WorkflowRuntimeSnapshotRecord {
-                workflow_id,
+                workflow_id: input.workflow_id,
                 execution_id: trace_execution_id.to_string(),
-                captured_at_ms,
+                captured_at_ms: input.captured_at_ms,
                 capabilities: Some(capabilities),
-                trace_runtime_metrics,
-                active_model_target: active_model_target.clone(),
-                embedding_model_target: embedding_model_target.clone(),
-                active_runtime_snapshot: active_runtime_snapshot.clone(),
-                embedding_runtime_snapshot: embedding_runtime_snapshot.clone(),
-                managed_runtimes: managed_runtimes.clone(),
+                trace_runtime_metrics: input.trace_runtime_metrics,
+                active_model_target: input.active_model_target.clone(),
+                embedding_model_target: input.embedding_model_target.clone(),
+                active_runtime_snapshot: input.active_runtime_snapshot.clone(),
+                embedding_runtime_snapshot: input.embedding_runtime_snapshot.clone(),
+                managed_runtimes: input.managed_runtimes.clone(),
                 error: None,
             });
         }
         (Some(trace_execution_id), Err(error)) => {
             diagnostics_store.record_runtime_snapshot(WorkflowRuntimeSnapshotRecord {
-                workflow_id,
+                workflow_id: input.workflow_id,
                 execution_id: trace_execution_id.to_string(),
-                captured_at_ms,
+                captured_at_ms: input.captured_at_ms,
                 capabilities: None,
-                trace_runtime_metrics,
-                active_model_target: active_model_target.clone(),
-                embedding_model_target: embedding_model_target.clone(),
-                active_runtime_snapshot: active_runtime_snapshot.clone(),
-                embedding_runtime_snapshot: embedding_runtime_snapshot.clone(),
-                managed_runtimes: managed_runtimes.clone(),
+                trace_runtime_metrics: input.trace_runtime_metrics,
+                active_model_target: input.active_model_target.clone(),
+                embedding_model_target: input.embedding_model_target.clone(),
+                active_runtime_snapshot: input.active_runtime_snapshot.clone(),
+                embedding_runtime_snapshot: input.embedding_runtime_snapshot.clone(),
+                managed_runtimes: input.managed_runtimes.clone(),
                 error: Some(error.to_envelope_json()),
             });
         }
         (None, Ok(capabilities)) => {
             diagnostics_store.update_runtime_snapshot(WorkflowRuntimeSnapshotUpdate {
-                workflow_id: Some(workflow_id),
+                workflow_id: Some(input.workflow_id),
                 capabilities: Some(capabilities),
                 last_error: None,
-                active_model_target,
-                embedding_model_target,
-                active_runtime_snapshot,
-                embedding_runtime_snapshot,
-                managed_runtimes,
-                captured_at_ms,
+                active_model_target: input.active_model_target,
+                embedding_model_target: input.embedding_model_target,
+                active_runtime_snapshot: input.active_runtime_snapshot,
+                embedding_runtime_snapshot: input.embedding_runtime_snapshot,
+                managed_runtimes: input.managed_runtimes,
+                captured_at_ms: input.captured_at_ms,
             });
         }
         (None, Err(error)) => {
             diagnostics_store.update_runtime_snapshot(WorkflowRuntimeSnapshotUpdate {
-                workflow_id: Some(workflow_id),
+                workflow_id: Some(input.workflow_id),
                 capabilities: None,
                 last_error: Some(error.to_envelope_json()),
-                active_model_target,
-                embedding_model_target,
-                active_runtime_snapshot,
-                embedding_runtime_snapshot,
-                managed_runtimes,
-                captured_at_ms,
+                active_model_target: input.active_model_target,
+                embedding_model_target: input.embedding_model_target,
+                active_runtime_snapshot: input.active_runtime_snapshot,
+                embedding_runtime_snapshot: input.embedding_runtime_snapshot,
+                managed_runtimes: input.managed_runtimes,
+                captured_at_ms: input.captured_at_ms,
             });
         }
     }
@@ -247,36 +271,22 @@ pub(crate) fn stored_runtime_model_targets(
 
 pub(crate) fn workflow_diagnostics_snapshot_projection(
     diagnostics_store: &SharedWorkflowDiagnosticsStore,
-    session_id: Option<String>,
-    workflow_id: Option<String>,
-    workflow_name: Option<String>,
-    scheduler_snapshot_result: Option<
-        Result<WorkflowSchedulerSnapshotResponse, WorkflowServiceError>,
-    >,
-    capabilities_result: Option<Result<WorkflowCapabilitiesResponse, WorkflowServiceError>>,
-    current_session_state: Option<WorkflowGraphSessionStateView>,
-    runtime_trace_metrics: WorkflowTraceRuntimeMetrics,
-    active_model_target: Option<String>,
-    embedding_model_target: Option<String>,
-    active_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
-    embedding_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
-    managed_runtimes: Vec<ManagedRuntimeManagerRuntimeView>,
-    captured_at_ms: u64,
+    input: WorkflowDiagnosticsSnapshotProjectionInput,
 ) -> WorkflowDiagnosticsProjection {
     let mut trace_execution_id = None;
 
-    if let Some(session_id) = session_id.as_deref() {
+    if let Some(session_id) = input.session_id.as_deref() {
         trace_execution_id = record_headless_scheduler_snapshot(
             diagnostics_store.as_ref(),
             session_id,
-            workflow_id.clone(),
-            workflow_name.clone(),
-            scheduler_snapshot_result.unwrap_or_else(|| {
+            input.workflow_id.clone(),
+            input.workflow_name.clone(),
+            input.scheduler_snapshot_result.unwrap_or_else(|| {
                 Err(WorkflowServiceError::InvalidRequest(
                     "scheduler snapshot unavailable".to_string(),
                 ))
             }),
-            captured_at_ms,
+            input.captured_at_ms,
         );
     } else {
         diagnostics_store.update_scheduler_snapshot(WorkflowSchedulerSnapshotUpdate {
@@ -286,27 +296,29 @@ pub(crate) fn workflow_diagnostics_snapshot_projection(
             items: Vec::new(),
             diagnostics: None,
             last_error: None,
-            captured_at_ms,
+            captured_at_ms: input.captured_at_ms,
         });
     }
 
-    if let Some(workflow_id) = workflow_id.clone() {
+    if let Some(workflow_id) = input.workflow_id.clone() {
         record_headless_runtime_snapshot(
             diagnostics_store.as_ref(),
-            workflow_id,
-            trace_execution_id.as_deref(),
-            capabilities_result.unwrap_or_else(|| {
-                Err(WorkflowServiceError::InvalidRequest(
-                    "workflow capabilities unavailable".to_string(),
-                ))
-            }),
-            runtime_trace_metrics,
-            active_model_target,
-            embedding_model_target,
-            active_runtime_snapshot,
-            embedding_runtime_snapshot,
-            managed_runtimes,
-            captured_at_ms,
+            HeadlessRuntimeSnapshotInput {
+                workflow_id,
+                trace_execution_id: trace_execution_id.clone(),
+                capabilities_result: input.capabilities_result.unwrap_or_else(|| {
+                    Err(WorkflowServiceError::InvalidRequest(
+                        "workflow capabilities unavailable".to_string(),
+                    ))
+                }),
+                trace_runtime_metrics: input.runtime_trace_metrics,
+                active_model_target: input.active_model_target,
+                embedding_model_target: input.embedding_model_target,
+                active_runtime_snapshot: input.active_runtime_snapshot,
+                embedding_runtime_snapshot: input.embedding_runtime_snapshot,
+                managed_runtimes: input.managed_runtimes,
+                captured_at_ms: input.captured_at_ms,
+            },
         );
     } else {
         diagnostics_store.update_runtime_snapshot(WorkflowRuntimeSnapshotUpdate {
@@ -318,16 +330,16 @@ pub(crate) fn workflow_diagnostics_snapshot_projection(
             active_runtime_snapshot: None,
             embedding_runtime_snapshot: None,
             managed_runtimes: Vec::new(),
-            captured_at_ms,
+            captured_at_ms: input.captured_at_ms,
         });
     }
 
     let mut projection = diagnostics_store.snapshot();
-    projection.current_session_state = current_session_state;
+    projection.current_session_state = input.current_session_state;
     projection.with_context(WorkflowDiagnosticsProjectionContext {
-        requested_session_id: session_id,
-        requested_workflow_id: workflow_id,
-        requested_workflow_name: workflow_name,
+        requested_session_id: input.session_id,
+        requested_workflow_id: input.workflow_id,
+        requested_workflow_name: input.workflow_name,
         source_execution_id: None,
         relevant_execution_id: trace_execution_id,
         relevant: true,
@@ -346,8 +358,52 @@ mod tests {
         graph::{WorkflowGraphSessionStateView, WorkflowSessionKind},
     };
 
-    use super::{stored_runtime_trace_metrics, workflow_diagnostics_snapshot_projection};
+    use super::{
+        WorkflowDiagnosticsSnapshotProjectionInput, stored_runtime_trace_metrics,
+        workflow_diagnostics_snapshot_projection,
+    };
     use crate::workflow::diagnostics::WorkflowDiagnosticsStore;
+
+    macro_rules! workflow_projection {
+        ($store:expr, $input:expr $(,)?) => {
+            workflow_diagnostics_snapshot_projection($store, $input)
+        };
+        (
+            $store:expr,
+            $session_id:expr,
+            $workflow_id:expr,
+            $workflow_name:expr,
+            $scheduler_snapshot_result:expr,
+            $capabilities_result:expr,
+            $current_session_state:expr,
+            $runtime_trace_metrics:expr,
+            $active_model_target:expr,
+            $embedding_model_target:expr,
+            $active_runtime_snapshot:expr,
+            $embedding_runtime_snapshot:expr,
+            $managed_runtimes:expr,
+            $captured_at_ms:expr $(,)?
+        ) => {
+            workflow_diagnostics_snapshot_projection(
+                $store,
+                WorkflowDiagnosticsSnapshotProjectionInput {
+                    session_id: $session_id,
+                    workflow_id: $workflow_id,
+                    workflow_name: $workflow_name,
+                    scheduler_snapshot_result: $scheduler_snapshot_result,
+                    capabilities_result: $capabilities_result,
+                    current_session_state: $current_session_state,
+                    runtime_trace_metrics: $runtime_trace_metrics,
+                    active_model_target: $active_model_target,
+                    embedding_model_target: $embedding_model_target,
+                    active_runtime_snapshot: $active_runtime_snapshot,
+                    embedding_runtime_snapshot: $embedding_runtime_snapshot,
+                    managed_runtimes: $managed_runtimes,
+                    captured_at_ms: $captured_at_ms,
+                },
+            )
+        };
+    }
 
     fn running_session_summary() -> WorkflowSessionSummary {
         WorkflowSessionSummary {
@@ -377,48 +433,50 @@ mod tests {
     fn workflow_diagnostics_snapshot_projection_preserves_ambiguous_scheduler_identity() {
         let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
 
-        let projection = workflow_diagnostics_snapshot_projection(
+        let projection = workflow_projection!(
             &diagnostics_store,
-            Some("session-1".to_string()),
-            Some("wf-1".to_string()),
-            Some("Workflow 1".to_string()),
-            Some(Ok(WorkflowSchedulerSnapshotResponse {
+            WorkflowDiagnosticsSnapshotProjectionInput {
+                session_id: Some("session-1".to_string()),
                 workflow_id: Some("wf-1".to_string()),
-                session_id: "session-1".to_string(),
-                trace_execution_id: None,
-                session: running_session_summary(),
-                items: vec![WorkflowSessionQueueItem {
-                    queue_id: "queue-1".to_string(),
-                    run_id: Some("run-1".to_string()),
-                    enqueued_at_ms: Some(100),
-                    dequeued_at_ms: None,
-                    priority: 5,
-                    queue_position: None,
-                    scheduler_admission_outcome: None,
-                    scheduler_decision_reason: None,
-                    status: WorkflowSessionQueueItemStatus::Pending,
-                }],
-                diagnostics: None,
-            })),
-            Some(Ok(capability_response())),
-            None,
-            WorkflowTraceRuntimeMetrics {
-                runtime_id: Some("llama_cpp".to_string()),
-                observed_runtime_ids: vec!["llama_cpp".to_string()],
-                runtime_instance_id: Some("runtime-1".to_string()),
-                model_target: Some("llava:34b".to_string()),
-                warmup_started_at_ms: Some(90),
-                warmup_completed_at_ms: Some(99),
-                warmup_duration_ms: Some(9),
-                runtime_reused: Some(true),
-                lifecycle_decision_reason: Some("runtime_reused".to_string()),
+                workflow_name: Some("Workflow 1".to_string()),
+                scheduler_snapshot_result: Some(Ok(WorkflowSchedulerSnapshotResponse {
+                    workflow_id: Some("wf-1".to_string()),
+                    session_id: "session-1".to_string(),
+                    trace_execution_id: None,
+                    session: running_session_summary(),
+                    items: vec![WorkflowSessionQueueItem {
+                        queue_id: "queue-1".to_string(),
+                        run_id: Some("run-1".to_string()),
+                        enqueued_at_ms: Some(100),
+                        dequeued_at_ms: None,
+                        priority: 5,
+                        queue_position: None,
+                        scheduler_admission_outcome: None,
+                        scheduler_decision_reason: None,
+                        status: WorkflowSessionQueueItemStatus::Pending,
+                    }],
+                    diagnostics: None,
+                })),
+                capabilities_result: Some(Ok(capability_response())),
+                current_session_state: None,
+                runtime_trace_metrics: WorkflowTraceRuntimeMetrics {
+                    runtime_id: Some("llama_cpp".to_string()),
+                    observed_runtime_ids: vec!["llama_cpp".to_string()],
+                    runtime_instance_id: Some("runtime-1".to_string()),
+                    model_target: Some("llava:34b".to_string()),
+                    warmup_started_at_ms: Some(90),
+                    warmup_completed_at_ms: Some(99),
+                    warmup_duration_ms: Some(9),
+                    runtime_reused: Some(true),
+                    lifecycle_decision_reason: Some("runtime_reused".to_string()),
+                },
+                active_model_target: Some("llava:34b".to_string()),
+                embedding_model_target: None,
+                active_runtime_snapshot: None,
+                embedding_runtime_snapshot: None,
+                managed_runtimes: Vec::new(),
+                captured_at_ms: 120,
             },
-            Some("llava:34b".to_string()),
-            None,
-            None,
-            None,
-            Vec::new(),
-            120,
         );
 
         assert_eq!(
@@ -458,28 +516,30 @@ mod tests {
             None,
         );
 
-        let projection = workflow_diagnostics_snapshot_projection(
+        let projection = workflow_projection!(
             &diagnostics_store,
-            Some("session-1".to_string()),
-            Some("wf-1".to_string()),
-            Some("Workflow 1".to_string()),
-            Some(Ok(WorkflowSchedulerSnapshotResponse {
+            WorkflowDiagnosticsSnapshotProjectionInput {
+                session_id: Some("session-1".to_string()),
                 workflow_id: Some("wf-1".to_string()),
-                session_id: "session-1".to_string(),
-                trace_execution_id: None,
-                session: running_session_summary(),
-                items: Vec::new(),
-                diagnostics: None,
-            })),
-            Some(Ok(capability_response())),
-            Some(current_session_state.clone()),
-            WorkflowTraceRuntimeMetrics::default(),
-            None,
-            None,
-            None,
-            None,
-            Vec::new(),
-            120,
+                workflow_name: Some("Workflow 1".to_string()),
+                scheduler_snapshot_result: Some(Ok(WorkflowSchedulerSnapshotResponse {
+                    workflow_id: Some("wf-1".to_string()),
+                    session_id: "session-1".to_string(),
+                    trace_execution_id: None,
+                    session: running_session_summary(),
+                    items: Vec::new(),
+                    diagnostics: None,
+                })),
+                capabilities_result: Some(Ok(capability_response())),
+                current_session_state: Some(current_session_state.clone()),
+                runtime_trace_metrics: WorkflowTraceRuntimeMetrics::default(),
+                active_model_target: None,
+                embedding_model_target: None,
+                active_runtime_snapshot: None,
+                embedding_runtime_snapshot: None,
+                managed_runtimes: Vec::new(),
+                captured_at_ms: 120,
+            },
         );
 
         assert_eq!(
@@ -496,48 +556,50 @@ mod tests {
             ("run-1", "llama_cpp", 120_u64),
             ("run-2", "llama_cpp.embedding", 220_u64),
         ] {
-            workflow_diagnostics_snapshot_projection(
+            workflow_projection!(
                 &diagnostics_store,
-                Some("session-1".to_string()),
-                Some("wf-1".to_string()),
-                Some("Workflow 1".to_string()),
-                Some(Ok(WorkflowSchedulerSnapshotResponse {
+                WorkflowDiagnosticsSnapshotProjectionInput {
+                    session_id: Some("session-1".to_string()),
                     workflow_id: Some("wf-1".to_string()),
-                    session_id: "session-1".to_string(),
-                    trace_execution_id: Some(execution_id.to_string()),
-                    session: running_session_summary(),
-                    items: vec![WorkflowSessionQueueItem {
-                        queue_id: format!("queue-{execution_id}"),
-                        run_id: Some(execution_id.to_string()),
-                        enqueued_at_ms: Some(captured_at_ms.saturating_sub(10)),
-                        dequeued_at_ms: Some(captured_at_ms),
-                        priority: 5,
-                        queue_position: Some(0),
-                        scheduler_admission_outcome: None,
-                        scheduler_decision_reason: None,
-                        status: WorkflowSessionQueueItemStatus::Running,
-                    }],
-                    diagnostics: None,
-                })),
-                Some(Ok(capability_response())),
-                None,
-                WorkflowTraceRuntimeMetrics {
-                    runtime_id: Some(runtime_id.to_string()),
-                    observed_runtime_ids: vec![runtime_id.to_string()],
-                    runtime_instance_id: Some(format!("{runtime_id}-instance")),
-                    model_target: Some(format!("/models/{runtime_id}.gguf")),
-                    warmup_started_at_ms: Some(captured_at_ms.saturating_sub(9)),
-                    warmup_completed_at_ms: Some(captured_at_ms),
-                    warmup_duration_ms: Some(9),
-                    runtime_reused: Some(false),
-                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                    workflow_name: Some("Workflow 1".to_string()),
+                    scheduler_snapshot_result: Some(Ok(WorkflowSchedulerSnapshotResponse {
+                        workflow_id: Some("wf-1".to_string()),
+                        session_id: "session-1".to_string(),
+                        trace_execution_id: Some(execution_id.to_string()),
+                        session: running_session_summary(),
+                        items: vec![WorkflowSessionQueueItem {
+                            queue_id: format!("queue-{execution_id}"),
+                            run_id: Some(execution_id.to_string()),
+                            enqueued_at_ms: Some(captured_at_ms.saturating_sub(10)),
+                            dequeued_at_ms: Some(captured_at_ms),
+                            priority: 5,
+                            queue_position: Some(0),
+                            scheduler_admission_outcome: None,
+                            scheduler_decision_reason: None,
+                            status: WorkflowSessionQueueItemStatus::Running,
+                        }],
+                        diagnostics: None,
+                    })),
+                    capabilities_result: Some(Ok(capability_response())),
+                    current_session_state: None,
+                    runtime_trace_metrics: WorkflowTraceRuntimeMetrics {
+                        runtime_id: Some(runtime_id.to_string()),
+                        observed_runtime_ids: vec![runtime_id.to_string()],
+                        runtime_instance_id: Some(format!("{runtime_id}-instance")),
+                        model_target: Some(format!("/models/{runtime_id}.gguf")),
+                        warmup_started_at_ms: Some(captured_at_ms.saturating_sub(9)),
+                        warmup_completed_at_ms: Some(captured_at_ms),
+                        warmup_duration_ms: Some(9),
+                        runtime_reused: Some(false),
+                        lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                    },
+                    active_model_target: Some(format!("/models/{runtime_id}.gguf")),
+                    embedding_model_target: None,
+                    active_runtime_snapshot: None,
+                    embedding_runtime_snapshot: None,
+                    managed_runtimes: Vec::new(),
+                    captured_at_ms,
                 },
-                Some(format!("/models/{runtime_id}.gguf")),
-                None,
-                None,
-                None,
-                Vec::new(),
-                captured_at_ms,
             );
         }
 

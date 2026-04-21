@@ -281,6 +281,7 @@ mod tests {
         WorkflowDiagnosticsStore,
     };
     use crate::workflow::headless_diagnostics::{
+        HeadlessRuntimeSnapshotInput, WorkflowDiagnosticsSnapshotProjectionInput,
         record_headless_runtime_snapshot, record_headless_scheduler_snapshot,
         stored_runtime_model_targets, stored_runtime_snapshots, stored_runtime_trace_metrics,
         workflow_clear_diagnostics_history_response, workflow_diagnostics_snapshot_projection,
@@ -298,6 +299,47 @@ mod tests {
         WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus, WorkflowSessionState,
         WorkflowSessionSummary, WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest,
     };
+
+    macro_rules! workflow_projection {
+        ($store:expr, $input:expr $(,)?) => {
+            workflow_diagnostics_snapshot_projection($store, $input)
+        };
+        (
+            $store:expr,
+            $session_id:expr,
+            $workflow_id:expr,
+            $workflow_name:expr,
+            $scheduler_snapshot_result:expr,
+            $capabilities_result:expr,
+            $current_session_state:expr,
+            $runtime_trace_metrics:expr,
+            $active_model_target:expr,
+            $embedding_model_target:expr,
+            $active_runtime_snapshot:expr,
+            $embedding_runtime_snapshot:expr,
+            $managed_runtimes:expr,
+            $captured_at_ms:expr $(,)?
+        ) => {
+            workflow_diagnostics_snapshot_projection(
+                $store,
+                WorkflowDiagnosticsSnapshotProjectionInput {
+                    session_id: $session_id,
+                    workflow_id: $workflow_id,
+                    workflow_name: $workflow_name,
+                    scheduler_snapshot_result: $scheduler_snapshot_result,
+                    capabilities_result: $capabilities_result,
+                    current_session_state: $current_session_state,
+                    runtime_trace_metrics: $runtime_trace_metrics,
+                    active_model_target: $active_model_target,
+                    embedding_model_target: $embedding_model_target,
+                    active_runtime_snapshot: $active_runtime_snapshot,
+                    embedding_runtime_snapshot: $embedding_runtime_snapshot,
+                    managed_runtimes: $managed_runtimes,
+                    captured_at_ms: $captured_at_ms,
+                },
+            )
+        };
+    }
 
     fn running_session_summary() -> WorkflowSessionSummary {
         WorkflowSessionSummary {
@@ -425,26 +467,28 @@ mod tests {
 
         record_headless_runtime_snapshot(
             &diagnostics_store,
-            "wf-1".to_string(),
-            Some("run-1"),
-            Ok(capability_response()),
-            WorkflowTraceRuntimeMetrics {
-                runtime_id: Some("llama_cpp".to_string()),
-                observed_runtime_ids: vec!["llama_cpp".to_string()],
-                runtime_instance_id: Some("runtime-1".to_string()),
-                model_target: Some("llava:13b".to_string()),
-                warmup_started_at_ms: Some(100),
-                warmup_completed_at_ms: Some(110),
-                warmup_duration_ms: Some(10),
-                runtime_reused: Some(false),
-                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+            HeadlessRuntimeSnapshotInput {
+                workflow_id: "wf-1".to_string(),
+                trace_execution_id: Some("run-1".to_string()),
+                capabilities_result: Ok(capability_response()),
+                trace_runtime_metrics: WorkflowTraceRuntimeMetrics {
+                    runtime_id: Some("llama_cpp".to_string()),
+                    observed_runtime_ids: vec!["llama_cpp".to_string()],
+                    runtime_instance_id: Some("runtime-1".to_string()),
+                    model_target: Some("llava:13b".to_string()),
+                    warmup_started_at_ms: Some(100),
+                    warmup_completed_at_ms: Some(110),
+                    warmup_duration_ms: Some(10),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                },
+                active_model_target: Some("llava:13b".to_string()),
+                embedding_model_target: Some("/models/embed.gguf".to_string()),
+                active_runtime_snapshot: None,
+                embedding_runtime_snapshot: None,
+                managed_runtimes: Vec::new(),
+                captured_at_ms: 120,
             },
-            Some("llava:13b".to_string()),
-            Some("/models/embed.gguf".to_string()),
-            None,
-            None,
-            Vec::new(),
-            120,
         );
 
         let trace = diagnostics_store
@@ -488,16 +532,18 @@ mod tests {
 
         record_headless_runtime_snapshot(
             &diagnostics_store,
-            "wf-1".to_string(),
-            None,
-            Ok(capability_response()),
-            WorkflowTraceRuntimeMetrics::default(),
-            Some("llava:7b".to_string()),
-            Some("/models/embed.gguf".to_string()),
-            None,
-            None,
-            Vec::new(),
-            120,
+            HeadlessRuntimeSnapshotInput {
+                workflow_id: "wf-1".to_string(),
+                trace_execution_id: None,
+                capabilities_result: Ok(capability_response()),
+                trace_runtime_metrics: WorkflowTraceRuntimeMetrics::default(),
+                active_model_target: Some("llava:7b".to_string()),
+                embedding_model_target: Some("/models/embed.gguf".to_string()),
+                active_runtime_snapshot: None,
+                embedding_runtime_snapshot: None,
+                managed_runtimes: Vec::new(),
+                captured_at_ms: 120,
+            },
         );
 
         let projection = diagnostics_store.snapshot();
@@ -555,26 +601,28 @@ mod tests {
 
         record_headless_runtime_snapshot(
             &diagnostics_store,
-            "wf-1".to_string(),
-            Some("run-1"),
-            Ok(capability_response()),
-            WorkflowTraceRuntimeMetrics {
-                runtime_id: Some("llama_cpp".to_string()),
-                observed_runtime_ids: vec!["llama_cpp".to_string()],
-                runtime_instance_id: Some("runtime-1".to_string()),
-                model_target: Some("llava:34b".to_string()),
-                warmup_started_at_ms: Some(90),
-                warmup_completed_at_ms: Some(99),
-                warmup_duration_ms: Some(9),
-                runtime_reused: Some(true),
-                lifecycle_decision_reason: Some("runtime_reused".to_string()),
+            HeadlessRuntimeSnapshotInput {
+                workflow_id: "wf-1".to_string(),
+                trace_execution_id: Some("run-1".to_string()),
+                capabilities_result: Ok(capability_response()),
+                trace_runtime_metrics: WorkflowTraceRuntimeMetrics {
+                    runtime_id: Some("llama_cpp".to_string()),
+                    observed_runtime_ids: vec!["llama_cpp".to_string()],
+                    runtime_instance_id: Some("runtime-1".to_string()),
+                    model_target: Some("llava:34b".to_string()),
+                    warmup_started_at_ms: Some(90),
+                    warmup_completed_at_ms: Some(99),
+                    warmup_duration_ms: Some(9),
+                    runtime_reused: Some(true),
+                    lifecycle_decision_reason: Some("runtime_reused".to_string()),
+                },
+                active_model_target: Some("llava:34b".to_string()),
+                embedding_model_target: Some("/models/embed.gguf".to_string()),
+                active_runtime_snapshot: None,
+                embedding_runtime_snapshot: None,
+                managed_runtimes: Vec::new(),
+                captured_at_ms: 130,
             },
-            Some("llava:34b".to_string()),
-            Some("/models/embed.gguf".to_string()),
-            None,
-            None,
-            Vec::new(),
-            130,
         );
 
         let trace = diagnostics_store
@@ -769,8 +817,10 @@ mod tests {
         .expect_err("blank execution id should be rejected");
 
         assert!(error.contains("\"code\":\"invalid_request\""));
-        assert!(error
-            .contains("workflow trace snapshot request field 'execution_id' must not be blank"));
+        assert!(
+            error
+                .contains("workflow trace snapshot request field 'execution_id' must not be blank")
+        );
     }
 
     #[test]
@@ -828,7 +878,7 @@ mod tests {
     fn workflow_diagnostics_snapshot_projection_joins_backend_scheduler_and_runtime_data() {
         let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
 
-        let projection = workflow_diagnostics_snapshot_projection(
+        let projection = workflow_projection!(
             &diagnostics_store,
             Some("session-1".to_string()),
             Some("wf-1".to_string()),
@@ -894,7 +944,7 @@ mod tests {
     fn workflow_diagnostics_snapshot_projection_preserves_scheduler_runtime_registry_diagnostics() {
         let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
 
-        let projection = workflow_diagnostics_snapshot_projection(
+        let projection = workflow_projection!(
             &diagnostics_store,
             Some("session-1".to_string()),
             Some("wf-1".to_string()),
@@ -986,7 +1036,7 @@ mod tests {
     fn stored_runtime_trace_metrics_prefers_latest_recorded_trace() {
         let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
 
-        workflow_diagnostics_snapshot_projection(
+        workflow_projection!(
             &diagnostics_store,
             Some("session-1".to_string()),
             Some("wf-1".to_string()),
@@ -1038,7 +1088,7 @@ mod tests {
     fn stored_runtime_snapshots_return_recorded_active_runtime() {
         let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
 
-        workflow_diagnostics_snapshot_projection(
+        workflow_projection!(
             &diagnostics_store,
             Some("session-1".to_string()),
             Some("wf-1".to_string()),
@@ -1107,7 +1157,7 @@ mod tests {
     fn stored_runtime_snapshots_normalize_missing_lifecycle_reason_from_diagnostics_projection() {
         let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
 
-        workflow_diagnostics_snapshot_projection(
+        workflow_projection!(
             &diagnostics_store,
             Some("session-1".to_string()),
             Some("wf-1".to_string()),
@@ -1168,7 +1218,7 @@ mod tests {
     fn stored_runtime_model_targets_return_recorded_runtime_targets() {
         let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
 
-        workflow_diagnostics_snapshot_projection(
+        workflow_projection!(
             &diagnostics_store,
             Some("session-1".to_string()),
             Some("wf-1".to_string()),
@@ -1229,7 +1279,7 @@ mod tests {
     fn workflow_diagnostics_snapshot_projection_preserves_observed_runtime_ids() {
         let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
 
-        let projection = workflow_diagnostics_snapshot_projection(
+        let projection = workflow_projection!(
             &diagnostics_store,
             Some("session-1".to_string()),
             Some("wf-1".to_string()),
@@ -1273,7 +1323,7 @@ mod tests {
     #[test]
     fn workflow_diagnostics_snapshot_projection_clears_scheduler_and_runtime_without_context() {
         let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
-        workflow_diagnostics_snapshot_projection(
+        workflow_projection!(
             &diagnostics_store,
             Some("session-1".to_string()),
             Some("wf-1".to_string()),
@@ -1307,7 +1357,7 @@ mod tests {
             120,
         );
 
-        let projection = workflow_diagnostics_snapshot_projection(
+        let projection = workflow_projection!(
             &diagnostics_store,
             None,
             None,
@@ -1334,7 +1384,7 @@ mod tests {
     fn workflow_clear_diagnostics_history_response_preserves_backend_snapshots() {
         let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
 
-        workflow_diagnostics_snapshot_projection(
+        workflow_projection!(
             &diagnostics_store,
             Some("session-1".to_string()),
             Some("wf-1".to_string()),

@@ -5,9 +5,8 @@
 //! command adapter.
 
 use pantograph_embedded_runtime::{
-    list_managed_runtime_manager_runtimes,
+    HostRuntimeModeSnapshot, list_managed_runtime_manager_runtimes,
     workflow_runtime::{build_runtime_event_projection_with_registry_sync, unix_timestamp_ms},
-    HostRuntimeModeSnapshot,
 };
 use pantograph_workflow_service::{
     WorkflowCapabilitiesRequest, WorkflowSchedulerSnapshotRequest,
@@ -21,7 +20,8 @@ use super::commands::{SharedExtensions, SharedWorkflowDiagnosticsStore, SharedWo
 use super::diagnostics::{WorkflowDiagnosticsProjection, WorkflowDiagnosticsSnapshotRequest};
 pub(crate) use super::headless_diagnostics::workflow_trace_snapshot_response;
 use super::headless_diagnostics::{
-    stored_runtime_model_targets, stored_runtime_snapshots, stored_runtime_trace_metrics,
+    WorkflowDiagnosticsSnapshotProjectionInput, stored_runtime_model_targets,
+    stored_runtime_snapshots, stored_runtime_trace_metrics,
     workflow_clear_diagnostics_history_response, workflow_diagnostics_snapshot_projection,
     workflow_error_json,
 };
@@ -162,21 +162,23 @@ pub async fn workflow_diagnostics_snapshot_response(
 
     Ok(workflow_diagnostics_snapshot_projection(
         diagnostics_store,
-        session_id,
-        workflow_id,
-        workflow_name,
-        scheduler_snapshot_result,
-        capabilities_result,
-        session_inspection_result
-            .and_then(Result::ok)
-            .and_then(|response| response.workflow_session_state),
-        runtime_projection.trace_runtime_metrics,
-        runtime_projection.active_model_target,
-        runtime_projection.embedding_model_target,
-        Some(runtime_projection.active_runtime_snapshot),
-        runtime_projection.embedding_runtime_snapshot,
-        managed_runtimes,
-        captured_at_ms,
+        WorkflowDiagnosticsSnapshotProjectionInput {
+            session_id,
+            workflow_id,
+            workflow_name,
+            scheduler_snapshot_result,
+            capabilities_result,
+            current_session_state: session_inspection_result
+                .and_then(Result::ok)
+                .and_then(|response| response.workflow_session_state),
+            runtime_trace_metrics: runtime_projection.trace_runtime_metrics,
+            active_model_target: runtime_projection.active_model_target,
+            embedding_model_target: runtime_projection.embedding_model_target,
+            active_runtime_snapshot: Some(runtime_projection.active_runtime_snapshot),
+            embedding_runtime_snapshot: runtime_projection.embedding_runtime_snapshot,
+            managed_runtimes,
+            captured_at_ms,
+        },
     ))
 }
 
