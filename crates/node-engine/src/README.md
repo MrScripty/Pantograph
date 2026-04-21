@@ -82,6 +82,8 @@ locally.
   `core_executor/dependency_preflight.rs` so model-reference construction,
   backend-key normalization, and resolver readiness checks remain separate from
   dispatch and runtime request execution.
+- Standalone Ollama HTTP execution stays in `core_executor/ollama.rs` so direct
+  HTTP generation remains separate from gateway-backed inference adapters.
 - Task-type inference must reflect execution semantics, not UI naming.
 - Input normalization may be permissive for additive compatibility, but output
   shapes must stay stable once published.

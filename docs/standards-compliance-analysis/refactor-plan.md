@@ -417,6 +417,9 @@ Tasks:
   Model dependency preflight and model-reference construction now live in
   `crates/node-engine/src/core_executor/dependency_preflight.rs`, separating
   dependency readiness checks from dispatch and runtime request execution.
+  Standalone Ollama HTTP inference now lives in
+  `crates/node-engine/src/core_executor/ollama.rs`, separating direct HTTP
+  generation from gateway-backed inference adapters.
 - Split `src/components/WorkflowGraph.svelte` and
   `packages/svelte-graph/src/components/WorkflowGraph.svelte` into graph canvas,
   connection drag, horseshoe insert, edge insert, selection, keyboard, and
