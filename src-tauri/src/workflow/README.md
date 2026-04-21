@@ -255,6 +255,9 @@ let snapshot = workflow_service
 - Runtime and scheduler snapshots carried through this directory must preserve
   the distinction between backend/runtime producer facts and future
   RuntimeRegistry policy decisions.
+- Tauri diagnostics collection should pass grouped embedded-runtime diagnostics
+  input objects into the backend projection helpers rather than rebuilding long
+  positional argument lists locally.
 - When a scheduler snapshot includes backend-owned `trace_execution_id`,
   adapters must attribute runtime/scheduler snapshot events to that execution
   instead of falling back to `session_id`. If the field is absent, the adapter
