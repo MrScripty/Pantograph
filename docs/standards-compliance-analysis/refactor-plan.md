@@ -361,6 +361,9 @@ Tasks:
   Embedded-runtime constructors, host projection, registry injection, accessors,
   and shutdown sequencing now live in
   `crates/pantograph-embedded-runtime/src/embedded_runtime_lifecycle.rs`.
+  Embedded workflow host helper logic for runtime reservations, retention
+  hints, workflow I/O binding, and data-graph output shaping now lives in
+  `crates/pantograph-embedded-runtime/src/embedded_workflow_host_helpers.rs`.
 - Split `crates/node-engine/src/core_executor.rs` by execution phases, blocking
   adapters, demand preparation, output handling, and tests.
 - Split `src/components/WorkflowGraph.svelte` and

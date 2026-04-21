@@ -8,15 +8,16 @@ use inference::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 use inference::{RerankRequest, RerankResponse};
 use pantograph_runtime_registry::{
     RuntimeRegistration, RuntimeRegistry, RuntimeRegistrySnapshot, RuntimeRegistryStatus,
-    RuntimeReservationRequest, RuntimeTransition,
+    RuntimeReservationRequest, RuntimeRetentionHint, RuntimeTransition,
 };
 use pantograph_workflow_service::{
     GraphEdge, GraphNode, Position, WorkflowGraph, WorkflowRuntimeInstallState,
-    WorkflowRuntimeSourceKind, WorkflowSchedulerRuntimeWarmupDecision,
-    WorkflowSchedulerRuntimeWarmupReason,
+    WorkflowRuntimeRequirements, WorkflowRuntimeSourceKind, WorkflowSchedulerRuntimeWarmupDecision,
+    WorkflowSchedulerRuntimeWarmupReason, WorkflowSessionState,
 };
 use std::path::Path;
 use std::pin::Pin;
+use std::time::Duration;
 use tempfile::TempDir;
 use tokio::sync::mpsc;
 
