@@ -143,7 +143,9 @@ Tasks:
   the core workflow execution chain. Embedded runtime, frontend HTTP adapter,
   UniFFI, and Rustler crate roots now document host-facing runtime and binding
   contracts. The Tauri runtime-registry command helper boundary now documents
-  its transport-only role; remaining nested source READMEs are pending.
+  its transport-only role. Workflow-service tests, examples, and private
+  workflow helper modules now document their public-contract and decomposition
+  roles; remaining inference nested READMEs are pending.
 - Resolve the `src/generated/` documentation exception by either moving
   generated runtime state outside `src/` or replacing the nested Git repository
   with a backend-owned structured history store that allows a tracked

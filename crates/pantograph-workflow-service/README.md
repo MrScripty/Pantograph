@@ -13,6 +13,7 @@ delegate to one backend service instead of each owning workflow behavior.
 | ----------- | ----------- |
 | `Cargo.toml` | Crate manifest for the workflow application-service package. |
 | `src/` | Workflow service source modules and source-level README. |
+| `examples/` | Runnable public API examples for Rust host consumers. |
 | `tests/` | Public and cross-crate behavior tests for service contracts. |
 
 ## Problem

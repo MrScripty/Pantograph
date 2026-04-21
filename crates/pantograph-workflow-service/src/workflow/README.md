@@ -1,0 +1,105 @@
+# pantograph-workflow-service/src/workflow
+
+Workflow runtime readiness and session-runtime helper modules.
+
+## Purpose
+This directory holds focused helpers extracted from the main workflow service
+facade. These modules evaluate runtime preflight readiness and coordinate
+session runtime loading without moving public workflow contracts out of the
+service crate.
+
+## Contents
+| File/Folder | Description |
+| ----------- | ----------- |
+| `runtime_preflight.rs` | Runtime requirement matching, issue formatting, and preflight warning collection. |
+| `session_runtime.rs` | Session runtime preflight cache checks, runtime loading, unload-candidate selection, and affinity refresh helpers. |
+
+## Problem
+`src/workflow.rs` remains a large public facade with many host-facing DTOs and
+service methods. Runtime readiness and session-runtime loading are cohesive
+enough to isolate, but they still depend on the facade's public contracts and
+host trait.
+
+## Constraints
+- Preserve the public `WorkflowService` API while decomposing internals.
+- Keep runtime capability matching deterministic.
+- Keep scheduler capacity and session runtime decisions backend-owned.
+- Avoid introducing adapter-specific types into service internals.
+
+## Decision
+Use this directory for private workflow-service helper modules. The parent
+facade remains the public export point while helpers own cohesive internal
+runtime readiness and session-runtime workflows.
+
+## Alternatives Rejected
+- Leave all helpers in `workflow.rs`: rejected because runtime readiness and
+  session loading are large enough to obscure the public facade.
+- Move runtime preflight into adapters: rejected because runtime readiness is a
+  service contract consumed by multiple hosts.
+- Move session runtime loading into scheduler modules: rejected because the
+  logic coordinates host runtime calls and session-store state together.
+
+## Invariants
+- Runtime matching uses canonical backend keys from
+  `pantograph-runtime-identity`.
+- Runtime warning and blocking-issue lists remain deterministic and deduped.
+- Host calls occur outside session-store locks.
+- Session runtime loaded state is updated only after host load/unload calls
+  succeed or return a service error.
+
+## Revisit Triggers
+- Runtime preflight becomes a public reusable crate-level policy.
+- Session lifecycle supervision moves to a dedicated backend runtime manager.
+- `workflow.rs` facade decomposition exposes these helpers through a narrower
+  public module structure.
+
+## Dependencies
+**Internal:** parent workflow facade types, scheduler preflight cache,
+technical-fit overrides, `WorkflowHost`, and `pantograph-runtime-identity`.
+
+**External:** none beyond parent crate dependencies.
+
+## Related ADRs
+- `docs/adr/ADR-001-headless-embedding-service-boundary.md`
+- `docs/adr/ADR-002-runtime-registry-ownership-and-lifecycle.md`
+
+## Usage Examples
+These helpers are private to the workflow service facade:
+
+```rust
+service.ensure_session_runtime_loaded(host, session_id).await?;
+```
+
+## API Consumer Contract
+- Inputs: workflow runtime requirements, runtime capability DTOs, session ids,
+  workflow ids, and host trait methods.
+- Outputs: runtime issues, preflight cache records, and service errors consumed
+  by public workflow operations.
+- Lifecycle: helpers run inside public workflow/session operations and do not
+  own long-lived runtime resources directly.
+- Errors: capacity exhaustion, missing sessions, runtime-not-ready conditions,
+  and host failures are returned as `WorkflowServiceError`.
+- Versioning: helper behavior is private, but its observable responses are part
+  of the public workflow service contract.
+
+## Structured Producer Contract
+- Stable fields: runtime issue messages, runtime ids, required backend keys,
+  and preflight cache facts flow into public response DTOs.
+- Defaults: blank required backend keys are ignored during matching.
+- Enums and labels: runtime install/readiness states retain the parent service
+  contract semantics.
+- Ordering: runtime issues are sorted and deduplicated before public exposure.
+- Compatibility: changing matching or issue formatting can affect frontend,
+  adapter, and binding consumers.
+- Regeneration/migration: update public contract tests, frontend runtime
+  diagnostics, adapters, and this README when observable behavior changes.
+
+## Testing
+```bash
+cargo test -p pantograph-workflow-service runtime_preflight
+cargo test -p pantograph-workflow-service session_runtime
+```
+
+## Notes
+- This directory is part of the staged decomposition of `workflow.rs`; keep new
+  helper modules focused and private unless an explicit public API is accepted.
