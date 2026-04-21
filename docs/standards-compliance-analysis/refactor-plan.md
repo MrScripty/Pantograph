@@ -407,7 +407,9 @@ Tasks:
   production dispatch and helper code before further execution-family splits.
   Settings, optional input reader, and file-I/O traversal tests now live in
   `crates/node-engine/src/core_executor/settings_tests.rs`, reducing the core
-  executor test index by behavior family.
+  executor test index by behavior family. Dependency preflight, backend-key,
+  embedding, and reranker parsing tests now live in
+  `crates/node-engine/src/core_executor/inference_tests.rs`.
   Synchronous built-in node handlers now live in
   `crates/node-engine/src/core_executor/pure_nodes.rs`, separating pure
   payload normalization from file I/O, dependency preflight, and runtime-backed

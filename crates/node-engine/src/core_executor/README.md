@@ -16,6 +16,7 @@ into frontend, transport, or descriptor crates.
 | `dependency_preflight.rs` | Model dependency binding, backend-key normalization, task-type inference, model-reference construction, and dependency resolver preflight used before runtime-backed execution. |
 | `file_io.rs` | Async read-file/write-file handlers that resolve paths through the project-root validation boundary before touching the filesystem. |
 | `inference_nodes.rs` | Feature-gated shared inference helpers plus OpenAI-compatible chat, vision, and unload-model handlers. |
+| `inference_tests.rs` | Focused tests for dependency preflight, backend-key normalization, embedding failure behavior, and reranker parsing. |
 | `kv_cache.rs` | Backend-owned execution handlers for KV-cache save/load/truncate nodes plus live llama.cpp/PyTorch restore-capture helpers and structured KV diagnostics emitted by `CoreTaskExecutor`. |
 | `llamacpp_nodes.rs` | Feature-gated llama.cpp completion execution, streaming response parsing, and KV-cache integration. |
 | `model_nodes.rs` | Pure model-provider and Puma library payload projection handlers. |
