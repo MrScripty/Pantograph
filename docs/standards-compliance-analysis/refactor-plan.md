@@ -557,7 +557,11 @@ Tasks:
   tests, crate-local Rust tests, root smoke scripts, cross-layer acceptance
   requirements, and durable state isolation rules.
 - Normalize repeated Rust dependency versions to workspace inheritance.
-- Document or correct package-local dependency ownership for `packages/svelte-graph`.
+- [x] Document or correct package-local dependency ownership for
+  `packages/svelte-graph`. Status: `packages/svelte-graph/README.md` now
+  records that the package owns its peer dependency consumer contract while the
+  repository root owns the current test/lint/typecheck commands, and requires
+  future package-local scripts to declare their own dev dependencies.
 - Add toolchain pinning files after confirming intended Rust, Node, and Python versions.
 - Add release hardening: artifact naming policy, SBOM generation, release CI
   outline, and changelog automation decision.
