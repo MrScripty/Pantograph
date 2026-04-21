@@ -20,6 +20,7 @@ into frontend, transport, or descriptor crates.
 | `kv_cache.rs` | Backend-owned execution handlers for KV-cache save/load/truncate nodes plus live llama.cpp/PyTorch restore-capture helpers and structured KV diagnostics emitted by `CoreTaskExecutor`. |
 | `kv_cache_llamacpp.rs` | llama.cpp KV-cache slot restore/capture helpers and temporary slot-file handling. |
 | `kv_cache_parsing_tests.rs` | Focused tests for KV-cache storage-policy and marker parsing helpers. |
+| `kv_cache_pytorch.rs` | Feature-gated PyTorch live KV snapshot restore/capture helpers and temporary snapshot-file handling. |
 | `kv_cache_test_support.rs` | Mock inference backend and process fixtures shared by KV-cache behavior tests. |
 | `kv_cache_tests.rs` | Focused KV-cache store, handle restore/capture, and backend-owned truncation tests. |
 | `llamacpp_nodes.rs` | Feature-gated llama.cpp completion execution, streaming response parsing, and KV-cache integration. |

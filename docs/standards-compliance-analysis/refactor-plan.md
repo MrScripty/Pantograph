@@ -417,6 +417,9 @@ Tasks:
   Llama.cpp KV-cache slot restore/capture helpers now live in
   `crates/node-engine/src/core_executor/kv_cache_llamacpp.rs`, separating
   backend slot-file handling from generic KV-cache save/load/truncate nodes.
+  PyTorch live KV snapshot restore/capture helpers now live in
+  `crates/node-engine/src/core_executor/kv_cache_pytorch.rs`, keeping the
+  feature-gated snapshot-file workflow out of the generic KV-cache handlers.
   Synchronous built-in node handlers now live in
   `crates/node-engine/src/core_executor/pure_nodes.rs`, separating pure
   payload normalization from file I/O, dependency preflight, and runtime-backed
