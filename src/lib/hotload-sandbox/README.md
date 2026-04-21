@@ -20,8 +20,8 @@ path. Without a sandbox boundary, generated component state can leak into
 ordinary app component ownership.
 
 ## Constraints
-- Generated component state under `src/generated` remains a documented
-  temporary exception.
+- Generated component files under `src/generated` are ignored runtime state,
+  while history metadata lives in `.pantograph/generated-components.git/`.
 - Frontend sandbox components must not bypass backend validation.
 - Runtime imports need explicit error reporting and cache behavior.
 
@@ -38,10 +38,12 @@ Tauri hotload modules.
 ## Invariants
 - Safe rendering components isolate errors from the rest of the app.
 - Import/validation services preserve component identity and diagnostics.
-- Generated-state migration remains tracked in the standards plan.
+- Generated-state marker docs and externalized history metadata stay aligned
+  with Tauri versioning commands.
 
 ## Revisit Triggers
-- Generated component history moves outside `src`.
+- Generated component history moves away from the repo-local `.pantograph`
+  storage path.
 - Sandbox import/validation contracts become generated.
 - Hotload sandbox becomes a plugin system.
 
@@ -86,5 +88,5 @@ npm run lint:full
 ```
 
 ## Notes
-- Do not treat generated component files as normal tracked source until the
-  nested Git state is migrated.
+- Do not treat runtime-authored generated component files as normal tracked
+  source.

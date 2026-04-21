@@ -13,7 +13,7 @@ modify local project files and Tailwind/CSS state.
 | `error.rs` | Tool-specific error categories and conversions. |
 | `validation.rs` | Shared path/input validation helpers. |
 | `write_validation.rs` | Write-specific validation rules. |
-| `write_versioning.rs` | Write backup/versioning support. |
+| `write_versioning.rs` | Generated-component write history support that stores Git metadata in `.pantograph/generated-components.git/`. |
 | `list.rs` | Directory/listing tool behavior. |
 | `read.rs` | File read tool behavior. |
 | `write.rs` | File write tool behavior. |
@@ -29,22 +29,31 @@ ad hoc filesystem operations.
 - Write operations must preserve recoverability where versioning is supported.
 - Tool results must be structured enough for agent consumers.
 - Tool behavior must not bypass repository ownership rules.
+- Generated-component write history must not recreate nested Git metadata under
+  `src/generated/`.
 
 ## Decision
 Keep assistant tools in a focused backend module with shared validation and
 write-versioning helpers. Higher-level agent code dispatches tools through this
-boundary instead of performing direct filesystem operations.
+boundary instead of performing direct filesystem operations. Generated
+component writes commit through the shared Tauri versioning helper so history
+metadata stays outside the source tree.
 
 ## Alternatives Rejected
 - Let the LLM/agent layer manipulate files directly: rejected because path
   validation and write safety must be deterministic.
 - Put filesystem tools in frontend code: rejected because local filesystem
   access belongs in the backend/Tauri layer.
+- Store generated-component history under `src/generated/.git/`: rejected
+  because source-root generated docs now rely on a normal tracked README and
+  ignored runtime files.
 
 ## Invariants
 - Validation runs before filesystem mutation.
 - Tool errors preserve enough detail for agent recovery and user reporting.
 - Write-versioning behavior stays coupled to write operations.
+- Generated-component write versioning uses `.pantograph/generated-components.git/`
+  with `src/generated/` as the work tree.
 - Tool names and result payloads are compatibility contracts for the agent
   layer.
 
@@ -52,13 +61,15 @@ boundary instead of performing direct filesystem operations.
 - Tool execution becomes part of workflow graph runtime.
 - Tools need a permission/sandbox profile system.
 - Tool schemas become generated JSON Schema artifacts.
+- Generated-component history moves into an application data directory or
+  backend-owned non-Git store.
 
 ## Dependencies
-**Internal:** agent types, validation helpers, local filesystem roots, and
-Tailwind/design-system assets.
+**Internal:** agent types, validation helpers, local filesystem roots,
+generated-component versioning commands, and Tailwind/design-system assets.
 
-**External:** filesystem APIs and parser/tooling dependencies used by specific
-tools.
+**External:** filesystem APIs, Git CLI, and parser/tooling dependencies used by
+specific tools.
 
 ## Related ADRs
 - `docs/adr/ADR-001-headless-embedding-service-boundary.md`
@@ -83,8 +94,8 @@ use crate::agent::tools::ToolError;
 - Enums and labels: tool names and error kinds carry behavior.
 - Ordering: listing results should remain deterministic.
 - Compatibility: payload changes affect assistant prompt/tool handling.
-- Regeneration/migration: update tool dispatch, tests, and docs with tool
-  schema changes.
+- Regeneration/migration: update tool dispatch, generated-component versioning,
+  tests, and docs with tool schema or history storage changes.
 
 ## Testing
 ```bash
@@ -93,3 +104,4 @@ cargo test --manifest-path src-tauri/Cargo.toml agent::tools
 
 ## Notes
 - This boundary should inform M2 tool execution hardening.
+- Generated-component versioning is shared with `src-tauri/src/llm/commands/version.rs`.

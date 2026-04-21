@@ -21,10 +21,15 @@ target
 #.idea/
 
 # Generated UI components (agent-created)
-# Ignore the entire directory because it owns a nested runtime Git repo for
-# component undo/redo. The outer repo records this exception in src/README.md
-# until generated runtime state moves outside the source tree.
-/src/generated/
+# Track marker docs but ignore runtime-authored component files. Component
+# undo/redo history is stored outside src/ in .pantograph/generated-components.git.
+/src/generated/*
+!/src/generated/.gitignore
+!/src/generated/.gitkeep
+!/src/generated/README.md
+/src/generated/.git/
+/src/generated/.git
+.pantograph/generated-components.git/
 
 # Claude Code local settings
 .claude/

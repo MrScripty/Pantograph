@@ -115,10 +115,8 @@ Status:
 - Complete: `src/components/nodes/workflow/ImageOutputNode.svelte` no longer appends/removes a temporary anchor for downloads.
 - Complete: `src/components/runtime-manager/ManagedRuntimeSummaryGrid.svelte` no longer uses string-literal mustache spacing.
 - Complete: Vite now defaults to loopback and documents explicit LAN opt-in.
-- Complete: `src/generated/.git` is documented as intentional runtime undo/redo state in tracked parent docs and ignore rules.
-- Added follow-up: move generated runtime state outside `src/` or replace the
-  nested repository with a backend-owned history store so source-root README
-  compliance can be enforced directly.
+- Complete: `src/generated/.git` was documented as intentional runtime
+  undo/redo state before M1 resolved the source-root exception.
 
 Tasks:
 - [x] Fix `src/components/nodes/workflow/ImageOutputNode.svelte` so `npm run lint:critical` passes.
@@ -148,10 +146,13 @@ Tasks:
   roles. Inference Python workers, managed runtime platform adapters, and the
   reserved managed-binaries marker now document their runtime-artifact and
   worker-contract boundaries.
-- [ ] Resolve the `src/generated/` documentation exception by either moving
+- [x] Resolve the `src/generated/` documentation exception by either moving
   generated runtime state outside `src/` or replacing the nested Git repository
   with a backend-owned structured history store that allows a tracked
-  `src/generated/README.md`.
+  `src/generated/README.md`. Status: generated component Git metadata now
+  lives in ignored `.pantograph/generated-components.git/`, while
+  `src/generated/README.md`, `.gitignore`, and `.gitkeep` are trackable marker
+  files for the Vite work tree.
 - [x] Update host-facing READMEs for `pantograph-uniffi`, `pantograph-rustler`,
   `pantograph-workflow-service`, generated components, and Tauri workflow
   command boundaries to include required sections. Status: workflow-service,
@@ -375,7 +376,8 @@ Verification:
 ## Re-Plan Triggers
 - A backend-owned contract cannot represent current frontend behavior without a public API change.
 - Binding smoke tests reveal that exported method names or generated artifacts must change.
-- Generated-component nested Git state is required by runtime behavior in a way that conflicts with source-root policy.
+- Generated-component history cannot be preserved by the external
+  `.pantograph/generated-components.git/` store.
 - A general CI workflow exposes a blocker not represented in passes 01-05.
 - Rust clippy, doc-test, cross-target, or binding-host checks expose blockers
   not visible in `cargo check`.
@@ -399,5 +401,6 @@ fully resolved by standards compliance:
   `rustler::resource!`; resolve, update Rustler, or document a temporary lint exception.
 - The repo currently has no repo-owned Rust `unsafe` blocks, but also lacks the
   workspace lint policy that would preserve that state.
-- `src/generated/.git` may confuse source scanning, editor tooling, or backup/clean scripts.
+- Resolved: generated-component history metadata moved out of
+  `src/generated/.git` into ignored `.pantograph/generated-components.git/`.
 - CI currently verifies important binding/runtime separation paths but does not protect the main frontend and workspace quality gates.

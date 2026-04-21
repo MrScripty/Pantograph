@@ -19,31 +19,31 @@ need validation and sandbox boundaries so generated code does not bypass app
 constraints.
 
 ## Constraints
-- Runtime-generated component state currently lives under the documented
-  `src/generated` exception.
+- Runtime-generated component files live under `src/generated`, while history
+  metadata lives under `.pantograph/generated-components.git/`.
 - Svelte validation must happen before hot-loaded components are trusted by the
   UI.
 - Sandbox behavior belongs in backend helpers, not ad hoc frontend checks.
 
 ## Decision
 Keep hot-load sandbox validation in this Tauri module while tracking the
-generated-state migration in M1/M3. The module validates generated component
-assets but does not own general workflow/runtime policy.
+generated-state storage contract in source docs. The module validates generated
+component assets but does not own general workflow/runtime policy.
 
 ## Alternatives Rejected
 - Trust generated Svelte without backend validation: rejected because runtime
   code needs bounded checks.
-- Move generated component history into this module immediately: rejected
-  because the current nested Git state needs a focused migration.
+- Move generated component history into this module: rejected because version
+  history is owned by the generated-component command boundary.
 
 ## Invariants
 - Hot-loaded components must pass validation before use.
-- Generated component history remains a documented temporary source-root
-  exception until migrated.
+- Generated component history metadata stays outside `src/`.
 - Sandbox helpers should not mutate workflow graph truth.
 
 ## Revisit Triggers
-- `src/generated` history moves outside the source root.
+- Generated component history moves away from the repo-local `.pantograph`
+  storage path.
 - Generated component validation becomes a shared service or CLI.
 - Hot-load sandbox policy changes from validation-only to execution isolation.
 
@@ -85,4 +85,5 @@ cargo test --manifest-path src-tauri/Cargo.toml hotload_sandbox
 ```
 
 ## Notes
-- Generated history migration remains tracked in M1.
+- Generated history metadata is stored outside `src/`; future storage changes
+  should update this README and `src/generated/README.md` together.

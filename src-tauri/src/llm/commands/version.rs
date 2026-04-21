@@ -1,17 +1,20 @@
 //! Component versioning commands for undo/redo functionality.
 //!
-//! Uses an isolated git repository in src/generated/ to track component changes.
-//! This allows undo/redo without affecting the main project's git repository.
+//! Uses an isolated git repository outside src/generated/ to track component
+//! changes. This allows undo/redo without affecting the main project's git
+//! repository or placing nested Git metadata under the source tree.
 //!
 //! Navigation is non-destructive: we use `git checkout` to move between commits
-//! while keeping all commits intact. Two tracking files in .git/ track position:
+//! while keeping all commits intact. Two tracking files in the generated
+//! history Git directory track position:
 //! - PANTOGRAPH_HEAD: Current checkout position (commit hash)
 //! - PANTOGRAPH_TIP: Latest commit in history (for redo limit)
 
 use serde::Serialize;
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::{fs, io};
 use tauri::command;
 
 use super::shared::get_project_root;
@@ -43,26 +46,93 @@ pub struct TimelineCommit {
     pub is_current: bool,
 }
 
-/// Read a tracking file from .git directory, returning None if not found
+const GENERATED_HISTORY_GIT_DIR: &str = "generated-components.git";
+
+/// Canonical Git directory for generated component history.
+pub fn generated_history_git_dir(generated_dir: &Path) -> PathBuf {
+    generated_dir
+        .parent()
+        .and_then(Path::parent)
+        .map(|project_root| {
+            project_root
+                .join(".pantograph")
+                .join(GENERATED_HISTORY_GIT_DIR)
+        })
+        .unwrap_or_else(|| generated_dir.join(".pantograph-generated-components.git"))
+}
+
+fn legacy_generated_history_git_dir(generated_dir: &Path) -> PathBuf {
+    generated_dir.join(".git")
+}
+
+fn active_history_git_dir(generated_dir: &Path) -> PathBuf {
+    let canonical = generated_history_git_dir(generated_dir);
+    if canonical.exists() {
+        canonical
+    } else {
+        legacy_generated_history_git_dir(generated_dir)
+    }
+}
+
+pub fn generated_history_exists(generated_dir: &Path) -> bool {
+    generated_history_git_dir(generated_dir).exists()
+        || legacy_generated_history_git_dir(generated_dir).exists()
+}
+
+pub fn git_for_generated_history(generated_dir: &Path) -> Command {
+    let mut command = Command::new("git");
+    command
+        .arg(format!(
+            "--git-dir={}",
+            active_history_git_dir(generated_dir).display()
+        ))
+        .arg(format!("--work-tree={}", generated_dir.display()))
+        .current_dir(generated_dir);
+    command
+}
+
+pub fn migrate_legacy_generated_history(generated_dir: &Path) -> io::Result<()> {
+    let legacy = legacy_generated_history_git_dir(generated_dir);
+    let canonical = generated_history_git_dir(generated_dir);
+
+    if canonical.exists() {
+        if legacy.is_file() {
+            fs::remove_file(legacy)?;
+        }
+        return Ok(());
+    }
+
+    if legacy.is_dir() {
+        if let Some(parent) = canonical.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::rename(legacy, canonical)?;
+    } else if legacy.is_file() {
+        fs::remove_file(legacy)?;
+    }
+
+    Ok(())
+}
+
+/// Read a tracking file from the generated history Git directory, returning None if not found
 fn read_tracking_file(generated_dir: &PathBuf, filename: &str) -> Option<String> {
-    let path = generated_dir.join(".git").join(filename);
+    let path = active_history_git_dir(generated_dir).join(filename);
     std::fs::read_to_string(&path)
         .ok()
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
 }
 
-/// Write a tracking file to .git directory
+/// Write a tracking file to the generated history Git directory
 fn write_tracking_file(generated_dir: &PathBuf, filename: &str, value: &str) -> Result<(), String> {
-    let path = generated_dir.join(".git").join(filename);
+    let path = active_history_git_dir(generated_dir).join(filename);
     std::fs::write(&path, value).map_err(|e| format!("Failed to write {}: {}", filename, e))
 }
 
 /// Get the current HEAD commit hash from git
 fn get_git_head(generated_dir: &PathBuf) -> Result<String, String> {
-    let output = Command::new("git")
+    let output = git_for_generated_history(generated_dir)
         .args(["rev-parse", "HEAD"])
-        .current_dir(generated_dir)
         .output()
         .map_err(|e| format!("Failed to get HEAD: {}", e))?;
 
@@ -84,9 +154,8 @@ fn get_current_position(generated_dir: &PathBuf) -> Result<String, String> {
 
 /// Get the commit message for a given commit hash
 fn get_commit_message(generated_dir: &PathBuf, commit: &str) -> Option<String> {
-    let output = Command::new("git")
+    let output = git_for_generated_history(generated_dir)
         .args(["log", "-1", "--format=%s", commit])
-        .current_dir(generated_dir)
         .output()
         .ok()?;
 
@@ -99,9 +168,8 @@ fn get_commit_message(generated_dir: &PathBuf, commit: &str) -> Option<String> {
 
 /// Get the parent commit of a given commit (returns None if at root)
 fn get_parent_commit(generated_dir: &PathBuf, commit: &str) -> Option<String> {
-    let output = Command::new("git")
+    let output = git_for_generated_history(generated_dir)
         .args(["rev-parse", &format!("{}^", commit)])
-        .current_dir(generated_dir)
         .output()
         .ok()?;
 
@@ -116,9 +184,8 @@ fn get_parent_commit(generated_dir: &PathBuf, commit: &str) -> Option<String> {
 
 /// Checkout files from a specific commit (non-destructive)
 fn checkout_commit_files(generated_dir: &PathBuf, commit: &str) -> Result<(), String> {
-    let output = Command::new("git")
+    let output = git_for_generated_history(generated_dir)
         .args(["checkout", commit, "--", "."])
-        .current_dir(generated_dir)
         .output()
         .map_err(|e| format!("Failed to checkout: {}", e))?;
 
@@ -137,9 +204,8 @@ fn checkout_commit_files(generated_dir: &PathBuf, commit: &str) -> Result<(), St
 /// git checkout alone doesn't delete files that were added in later commits.
 fn sync_working_dir_to_commit(generated_dir: &PathBuf, commit: &str) -> Result<(), String> {
     // Get list of files that should exist at this commit
-    let output = Command::new("git")
+    let output = git_for_generated_history(generated_dir)
         .args(["ls-tree", "-r", "--name-only", commit])
-        .current_dir(generated_dir)
         .output()
         .map_err(|e| format!("Failed to list files at commit: {}", e))?;
 
@@ -175,7 +241,7 @@ fn sync_working_dir_to_commit(generated_dir: &PathBuf, commit: &str) -> Result<(
             let rel_str = rel_path.to_string_lossy().replace('\\', "/");
 
             // Skip protected files
-            if rel_str == ".gitkeep" || rel_str == ".gitignore" {
+            if rel_str == ".gitkeep" || rel_str == ".gitignore" || rel_str == "README.md" {
                 continue;
             }
 
@@ -233,7 +299,7 @@ pub async fn undo_component_change() -> Result<VersionResult, String> {
     let generated_dir = project_root.join("src").join("generated");
 
     // Check if git repo exists
-    if !generated_dir.join(".git").exists() {
+    if !generated_history_exists(&generated_dir) {
         return Ok(VersionResult {
             success: false,
             message: "No version history available".to_string(),
@@ -288,7 +354,7 @@ pub async fn redo_component_change() -> Result<VersionResult, String> {
     let generated_dir = project_root.join("src").join("generated");
 
     // Check if git repo exists
-    if !generated_dir.join(".git").exists() {
+    if !generated_history_exists(&generated_dir) {
         return Ok(VersionResult {
             success: false,
             message: "No version history available".to_string(),
@@ -322,13 +388,12 @@ pub async fn redo_component_change() -> Result<VersionResult, String> {
     // Find the next commit toward the tip
     // git rev-list --ancestry-path returns commits from current to tip (exclusive of current)
     // The last one in the list is the immediate child (next commit toward tip)
-    let output = Command::new("git")
+    let output = git_for_generated_history(&generated_dir)
         .args([
             "rev-list",
             "--ancestry-path",
             &format!("{}..{}", current, tip),
         ])
-        .current_dir(&generated_dir)
         .output()
         .map_err(|e| format!("Failed to find redo path: {}", e))?;
 
@@ -383,7 +448,7 @@ pub async fn get_component_history(
     let generated_dir = project_root.join("src").join("generated");
 
     // Check if git repo exists
-    if !generated_dir.join(".git").exists() {
+    if !generated_history_exists(&generated_dir) {
         return Ok(vec![]);
     }
 
@@ -398,9 +463,8 @@ pub async fn get_component_history(
         args.push(&path_owned);
     }
 
-    let output = Command::new("git")
+    let output = git_for_generated_history(&generated_dir)
         .args(&args)
-        .current_dir(&generated_dir)
         .output()
         .map_err(|e| format!("Failed to get history: {}", e))?;
 
@@ -429,7 +493,7 @@ pub async fn get_redo_count() -> Result<u32, String> {
     let project_root = get_project_root()?;
     let generated_dir = project_root.join("src").join("generated");
 
-    if !generated_dir.join(".git").exists() {
+    if !generated_history_exists(&generated_dir) {
         return Ok(0);
     }
 
@@ -449,9 +513,8 @@ pub async fn get_redo_count() -> Result<u32, String> {
     }
 
     // Count commits between current and tip
-    let output = Command::new("git")
+    let output = git_for_generated_history(&generated_dir)
         .args(["rev-list", "--count", &format!("{}..{}", current, tip)])
-        .current_dir(&generated_dir)
         .output()
         .map_err(|e| format!("Failed to count redo commits: {}", e))?;
 
@@ -505,7 +568,7 @@ pub async fn get_current_commit_info() -> Result<Option<TimelineCommit>, String>
     let generated_dir = project_root.join("src").join("generated");
 
     // Check if git repo exists
-    if !generated_dir.join(".git").exists() {
+    if !generated_history_exists(&generated_dir) {
         return Ok(None);
     }
 
@@ -516,9 +579,8 @@ pub async fn get_current_commit_info() -> Result<Option<TimelineCommit>, String>
     };
 
     // Get commit details
-    let output = Command::new("git")
+    let output = git_for_generated_history(&generated_dir)
         .args(["log", "-1", "--format=%H|%s|%cr", &current])
-        .current_dir(&generated_dir)
         .output()
         .map_err(|e| format!("Failed to get commit info: {}", e))?;
 
@@ -549,7 +611,7 @@ pub async fn get_timeline_commits(limit: Option<u32>) -> Result<Vec<TimelineComm
     let generated_dir = project_root.join("src").join("generated");
 
     // Check if git repo exists
-    if !generated_dir.join(".git").exists() {
+    if !generated_history_exists(&generated_dir) {
         return Ok(vec![]);
     }
 
@@ -557,9 +619,8 @@ pub async fn get_timeline_commits(limit: Option<u32>) -> Result<Vec<TimelineComm
     let current = get_current_position(&generated_dir).unwrap_or_default();
 
     let limit_str = limit.unwrap_or(50).to_string();
-    let output = Command::new("git")
+    let output = git_for_generated_history(&generated_dir)
         .args(["log", "--oneline", "-n", &limit_str, "--format=%H|%s|%cr"])
-        .current_dir(&generated_dir)
         .output()
         .map_err(|e| format!("Failed to get history: {}", e))?;
 
@@ -593,7 +654,7 @@ pub async fn hard_delete_commit(hash: String) -> Result<VersionResult, String> {
     let generated_dir = project_root.join("src").join("generated");
 
     // Check if git repo exists
-    if !generated_dir.join(".git").exists() {
+    if !generated_history_exists(&generated_dir) {
         return Ok(VersionResult {
             success: false,
             message: "No version history available".to_string(),
@@ -619,9 +680,8 @@ pub async fn hard_delete_commit(hash: String) -> Result<VersionResult, String> {
     };
 
     // Get all commits after target (toward TIP)
-    let output = Command::new("git")
+    let output = git_for_generated_history(&generated_dir)
         .args(["rev-list", "--reverse", &format!("{}..{}", hash, tip)])
-        .current_dir(&generated_dir)
         .output()
         .map_err(|e| format!("Failed to list commits: {}", e))?;
 
@@ -632,9 +692,8 @@ pub async fn hard_delete_commit(hash: String) -> Result<VersionResult, String> {
         .collect();
 
     // Reset to parent of target commit
-    let reset_output = Command::new("git")
+    let reset_output = git_for_generated_history(&generated_dir)
         .args(["reset", "--hard", &parent])
-        .current_dir(&generated_dir)
         .output()
         .map_err(|e| format!("Failed to reset: {}", e))?;
 
@@ -651,17 +710,15 @@ pub async fn hard_delete_commit(hash: String) -> Result<VersionResult, String> {
 
     // Cherry-pick all commits after target
     for commit in &commits_after {
-        let cherry_output = Command::new("git")
+        let cherry_output = git_for_generated_history(&generated_dir)
             .args(["cherry-pick", "--allow-empty", commit])
-            .current_dir(&generated_dir)
             .output()
             .map_err(|e| format!("Failed to cherry-pick: {}", e))?;
 
         if !cherry_output.status.success() {
             // Try to abort and restore
-            let _ = Command::new("git")
+            let _ = git_for_generated_history(&generated_dir)
                 .args(["cherry-pick", "--abort"])
-                .current_dir(&generated_dir)
                 .output();
 
             return Ok(VersionResult {
@@ -700,7 +757,7 @@ pub async fn checkout_commit(hash: String) -> Result<VersionResult, String> {
     let generated_dir = project_root.join("src").join("generated");
 
     // Check if git repo exists
-    if !generated_dir.join(".git").exists() {
+    if !generated_history_exists(&generated_dir) {
         return Ok(VersionResult {
             success: false,
             message: "No version history available".to_string(),
@@ -774,4 +831,40 @@ fn collect_svelte_files(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn generated_history_git_dir_uses_repo_local_pantograph_data_dir() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let generated_dir = temp.path().join("src").join("generated");
+
+        assert_eq!(
+            generated_history_git_dir(&generated_dir),
+            temp.path()
+                .join(".pantograph")
+                .join("generated-components.git")
+        );
+    }
+
+    #[test]
+    fn migrate_legacy_generated_history_moves_nested_git_metadata() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let generated_dir = temp.path().join("src").join("generated");
+        let legacy_git_dir = generated_dir.join(".git");
+        fs::create_dir_all(&legacy_git_dir).expect("legacy git dir");
+        fs::write(legacy_git_dir.join("PANTOGRAPH_HEAD"), "abc123").expect("legacy head");
+
+        migrate_legacy_generated_history(&generated_dir).expect("migrate history");
+
+        let canonical_git_dir = generated_history_git_dir(&generated_dir);
+        assert!(!legacy_git_dir.exists());
+        assert_eq!(
+            fs::read_to_string(canonical_git_dir.join("PANTOGRAPH_HEAD")).expect("migrated head"),
+            "abc123"
+        );
+    }
 }

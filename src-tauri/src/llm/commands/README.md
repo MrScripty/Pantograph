@@ -24,10 +24,16 @@ and forward requests onto backend-owned Rust contracts.
 | `sandbox.rs` | Sandbox configuration transport. |
 | `server.rs` | LLM server lifecycle commands that compose shared gateway and registry state. |
 | `shared.rs` | Shared Tauri-only helper functions and aliases used by multiple command modules. |
-| `version.rs` | Component history/versioning transport. |
+| `version.rs` | Generated-component history/versioning transport using `src/generated/` as the work tree and `.pantograph/generated-components.git/` for Git metadata. |
 | `vision.rs` | Vision/image prompt transport. |
 
-## Boundary Rules
+## Problem
+Tauri invoke commands expose runtime, model, agent, and generated-component
+operations to the frontend. Without a strict adapter boundary these commands
+can accumulate backend policy, duplicate runtime state, or hide local runtime
+metadata inside source directories.
+
+## Constraints
 - Command handlers in this directory are transport adapters, not runtime-policy
   owners.
 - Business logic for workflow execution, runtime readiness, redistributable
@@ -39,8 +45,25 @@ and forward requests onto backend-owned Rust contracts.
 - Tauri-local logic here may normalize request envelopes, acquire app-owned
   state, and translate backend errors into command-level strings or JSON
   envelopes, but it must not derive a second source of truth for runtime state.
+- Generated-component version commands must keep Git history metadata outside
+  `src/` while preserving `/src/generated/` as the Vite work tree.
 
-## Design Decisions
+## Decision
+Keep these files as host-facing Tauri adapters over backend services and
+runtime helpers. Use focused helper modules for oversized command surfaces, and
+store generated-component history metadata in `.pantograph/generated-components.git/`
+instead of nesting Git state under `src/generated/`.
+
+## Alternatives Rejected
+- Move backend runtime policy into Tauri commands: rejected because backend
+  crates own runtime readiness, registry policy, and workflow semantics.
+- Keep generated-component Git metadata under `src/generated/`: rejected
+  because source directories need tracked marker documentation and must not
+  contain nested repository metadata.
+- Put generated-component history into frontend stores: rejected because file
+  mutation and Git operations belong in the desktop/backend layer.
+
+## Invariants
 - Keep files in this directory scoped to one transport boundary each.
 - Prefer explicit helper modules when a command surface grows DTO or test-only
   support logic, as `registry/` already does.
@@ -53,18 +76,51 @@ and forward requests onto backend-owned Rust contracts.
 - Managed-runtime pause, resume, and destructive cancel semantics must remain
   backend-owned. Tauri forwards those requests onto the backend manager and
   must not reinterpret retained-artifact state locally.
+- Generated-component history commands use `.pantograph/generated-components.git/`
+  with `src/generated/` as the work tree.
+
+## Revisit Triggers
+- A Tauri command begins deriving workflow/runtime policy that backend services
+  should return.
+- Generated-component history moves into an application data directory or
+  backend-owned non-Git store.
+- Command payloads become generated schemas shared across host bindings.
 
 ## Dependencies
 **Internal:** `src-tauri/src/main.rs`, neighboring command modules, shared
 gateway/runtime-registry aliases under `src-tauri/src/llm`, and backend crates
-that own the actual runtime/workflow logic.
+that own the actual runtime/workflow logic. Generated-component versioning also
+depends on `src/generated/` marker docs and `.pantograph` runtime data rules.
 
-**External:** Tauri command/runtime APIs plus serde for transport payloads.
+**External:** Tauri command/runtime APIs, serde for transport payloads, local
+filesystem APIs, and the Git CLI for generated-component history.
 
-## Invariants
-- `binary.rs` must remain a thin transport boundary over the backend-owned
-  managed-runtime manager contract.
-- `registry.rs` may aggregate debug facts for inspection, but runtime registry
-  policy must remain owned by backend crates.
-- Commands must not create replacement long-lived services on demand when the
-  app composition root already owns a shared instance.
+## Related ADRs
+- `docs/adr/ADR-001-headless-embedding-service-boundary.md`
+- `docs/adr/ADR-002-runtime-registry-ownership-and-lifecycle.md`
+
+## Usage Examples
+```rust
+use crate::llm::commands::version::git_for_generated_history;
+```
+
+## API Consumer Contract
+- Inputs: Tauri invoke payloads, app state handles, runtime ids, generated
+  component paths, and command-specific DTOs.
+- Outputs: serialized command responses, progress events, generated-component
+  history views, and command-level error strings.
+- Lifecycle: commands execute per invoke request and must reuse app-composed
+  services for long-lived runtime state.
+- Errors: backend error categories should be preserved or mapped explicitly
+  rather than flattened into unrelated transport messages.
+- Versioning: command payload changes require frontend service/store updates
+  and tests in the same slice.
+
+## Testing
+```bash
+cargo test --manifest-path src-tauri/Cargo.toml llm::commands
+```
+
+## Notes
+- `version.rs` may migrate legacy `src/generated/.git/` metadata into
+  `.pantograph/generated-components.git/` when generated-component writes run.

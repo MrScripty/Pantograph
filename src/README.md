@@ -22,7 +22,7 @@ execution identity.
 | `components/` | Reusable and workflow-specific Svelte UI components. |
 | `config/` | Frontend configuration metadata and architecture descriptors. |
 | `features/` | Feature-level frontend module entrypoints. |
-| `generated/` | Runtime-generated Svelte component workspace owned by the hot-load sandbox and ignored by the outer repo because it contains nested undo/redo Git state. |
+| `generated/` | Runtime-generated Svelte component workspace owned by the hot-load sandbox; marker docs are tracked while runtime-authored components are ignored. |
 | `lib/` | Frontend libraries, design-system helpers, and hot-load sandbox support. |
 | `registry/` | Frontend node/component registry wiring. |
 | `services/` | Frontend service adapters for agent, diagnostics, managed runtime, and workflow APIs. |
@@ -42,9 +42,9 @@ state ambiguous under a source root.
   readiness, and diagnostics facts.
 - Frontend services may normalize transport payloads but must not invent second
   sources of truth.
-- Generated component runtime state under `src/generated/` is a temporary
-  source-root exception until it moves outside `src/` or is replaced by a
-  backend-owned history store.
+- Generated component files under `src/generated/` remain runtime state, while
+  undo/redo Git metadata is stored outside `src/` in
+  `.pantograph/generated-components.git/`.
 - Templates and generated component metadata are machine-consumed and require
   explicit producer contracts.
 - UI state must remain responsive and deterministic across workflow reruns.
@@ -52,17 +52,16 @@ state ambiguous under a source root.
 ## Decision
 Keep browser presentation, command invocation, and UI-local interaction state in
 this source tree. Treat backend DTOs as authoritative for durable workflow and
-runtime facts. Record `src/generated/` as a temporary documented exception
-rather than trying to track files inside its nested Git repository from the
-outer repo.
+runtime facts. Keep `src/generated/` as a documented generated-component
+working tree with externalized history metadata and tracked marker docs.
 
 ## Alternatives Rejected
 - Let frontend stores reconstruct canonical graph mutations: rejected because
   backend-owned mutation responses are required for no-optimistic-update
   behavior.
-- Track `src/generated/README.md` in the outer repo: rejected for now because
-  `src/generated/` owns a nested Git repository and the outer repo cannot track
-  files inside it without converting it into an explicit submodule boundary.
+- Track runtime-authored generated Svelte files in the outer repo: rejected
+  because generated components are local runtime/user state, while marker docs
+  are now tracked separately.
 - Move all UI state into backend DTOs: rejected because browser-only
   interaction state and media resources belong in component/store layers.
 
@@ -70,15 +69,16 @@ outer repo.
 - Backend-owned workflow responses drive durable graph and execution state.
 - UI components may own browser resources, transient form state, and display
   affordances only.
-- `src/generated/` remains ignored by the outer repo until the runtime history
-  migration is completed.
+- `src/generated/` tracks marker documentation only; runtime-authored
+  components remain ignored by the outer repo.
 - Template and generated metadata changes must document compatibility and
   regeneration expectations.
 - Transport services should preserve backend error categories and avoid
   genericizing expected workflow rejections.
 
 ## Revisit Triggers
-- Generated component history moves outside `src/`.
+- Generated component history moves away from the repo-local
+  `.pantograph/generated-components.git/` store.
 - Frontend services start owning decisions that should be returned by backend
   workflow/runtime APIs.
 - A plugin/extension system begins consuming frontend components as a public
@@ -126,9 +126,10 @@ import './styles.css';
   must remain deterministic where rendered or replayed.
 - Compatibility: saved templates and generated component state may survive app
   upgrades, so field changes require migration notes.
-- Regeneration/migration: move `src/generated/` history outside the source root
-  or replace it with a backend-owned history store before treating generated
-  component state as a normal tracked source directory.
+- Regeneration/migration: generated component history metadata is stored in
+  `.pantograph/generated-components.git/`; future backend-owned history stores
+  must migrate Tauri commands, frontend hot-load services, and marker docs
+  together.
 
 ## Testing
 ```bash
@@ -138,6 +139,5 @@ npm run test:frontend
 ```
 
 ## Notes
-- `src/generated/` is intentionally blocked from direct README tracking by its
-  nested Git repository; the migration is tracked in the standards refactor
-  plan.
+- `src/generated/` now has tracked marker documentation; generated component
+  source files and history metadata remain ignored runtime state.
