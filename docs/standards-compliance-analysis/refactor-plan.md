@@ -142,7 +142,8 @@ Tasks:
   `workflow-nodes`, and `pantograph-workflow-service` crate roots now document
   the core workflow execution chain. Embedded runtime, frontend HTTP adapter,
   UniFFI, and Rustler crate roots now document host-facing runtime and binding
-  contracts; remaining nested source READMEs are pending.
+  contracts. The Tauri runtime-registry command helper boundary now documents
+  its transport-only role; remaining nested source READMEs are pending.
 - Resolve the `src/generated/` documentation exception by either moving
   generated runtime state outside `src/` or replacing the nested Git repository
   with a backend-owned structured history store that allows a tracked
