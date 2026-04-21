@@ -21,6 +21,7 @@ public exports out of the service crate.
 | `session_lifecycle_api.rs` | Workflow stale cleanup, stale cleanup worker, keep-alive, and close-session facade methods. |
 | `session_queue_api.rs` | Workflow session status, queue inspection, scheduler snapshot, cancel, and reprioritize facade methods. |
 | `session_runtime.rs` | Session runtime preflight cache checks, runtime-capability fingerprinting, runtime loaded-state invalidation, runtime loading, unload-candidate selection, and affinity refresh helpers. |
+| `service_config.rs` | Workflow service construction, capacity-limit configuration, diagnostics-provider setup, and session-store guard helpers. |
 | `validation.rs` | Request, binding, output-target, and produced-output validation helpers shared by facade operations. |
 | `workflow_run_api.rs` | Generic workflow run facade, run timeout handling, output validation, and internal session-run handoff. |
 
@@ -43,8 +44,8 @@ facade. The parent facade remains the public export point while helpers own
 cohesive contract definitions, host/runtime trait defaults, request
 validation, graph edit-session methods, capability/preflight methods, session
 execution methods, session queue inspection methods, session lifecycle methods,
-workflow run execution, workflow I/O derivation, runtime readiness, and
-session-runtime workflows.
+service configuration methods, workflow run execution, workflow I/O derivation,
+runtime readiness, and session-runtime workflows.
 
 ## Alternatives Rejected
 - Leave all helpers in `workflow.rs`: rejected because runtime readiness and
@@ -58,6 +59,8 @@ session-runtime workflows.
 - Runtime matching uses canonical backend keys from
   `pantograph-runtime-identity`.
 - Runtime warning and blocking-issue lists remain deterministic and deduped.
+- Service configuration owns constructor defaults, loaded runtime capacity
+  bounds, and the shared session-store lock error mapping.
 - Host calls occur outside session-store locks.
 - Generic workflow run execution owns timeout cancellation, output validation,
   and direct runtime-not-ready checks behind the public facade.

@@ -21,6 +21,7 @@ mod host;
 mod io_contract;
 mod preflight_api;
 mod runtime_preflight;
+mod service_config;
 mod session_execution_api;
 mod session_lifecycle_api;
 mod session_queue_api;
@@ -60,7 +61,6 @@ pub use crate::scheduler::{
     select_runtime_unload_candidate_by_affinity,
 };
 
-const DEFAULT_MAX_SESSIONS: usize = 8;
 /// Service entrypoint for workflow API operations.
 #[derive(Clone)]
 pub struct WorkflowService {
@@ -68,66 +68,6 @@ pub struct WorkflowService {
     graph_session_store: Arc<GraphSessionStore>,
     scheduler_diagnostics_provider:
         Arc<Mutex<Option<Arc<dyn WorkflowSchedulerDiagnosticsProvider>>>>,
-}
-
-impl Default for WorkflowService {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl WorkflowService {
-    pub fn new() -> Self {
-        Self::with_capacity_limits(DEFAULT_MAX_SESSIONS, DEFAULT_MAX_SESSIONS)
-    }
-
-    pub fn with_max_sessions(max_sessions: usize) -> Self {
-        Self::with_capacity_limits(max_sessions, max_sessions)
-    }
-
-    pub fn with_capacity_limits(max_sessions: usize, max_loaded_sessions: usize) -> Self {
-        Self {
-            session_store: Arc::new(Mutex::new(WorkflowSessionStore::new(
-                max_sessions,
-                max_loaded_sessions,
-            ))),
-            graph_session_store: Arc::new(GraphSessionStore::new()),
-            scheduler_diagnostics_provider: Arc::new(Mutex::new(None)),
-        }
-    }
-
-    pub fn set_scheduler_diagnostics_provider(
-        &self,
-        provider: Option<Arc<dyn WorkflowSchedulerDiagnosticsProvider>>,
-    ) -> Result<(), WorkflowServiceError> {
-        let mut guard = self.scheduler_diagnostics_provider.lock().map_err(|_| {
-            WorkflowServiceError::Internal(
-                "scheduler diagnostics provider lock poisoned".to_string(),
-            )
-        })?;
-        *guard = provider;
-        Ok(())
-    }
-
-    pub fn set_loaded_runtime_capacity_limit(
-        &self,
-        max_loaded_sessions: Option<usize>,
-    ) -> Result<(), WorkflowServiceError> {
-        let mut store = self.session_store_guard()?;
-        store.max_loaded_sessions = max_loaded_sessions
-            .unwrap_or(store.max_sessions)
-            .max(1)
-            .min(store.max_sessions);
-        Ok(())
-    }
-
-    pub(crate) fn session_store_guard(
-        &self,
-    ) -> Result<std::sync::MutexGuard<'_, WorkflowSessionStore>, WorkflowServiceError> {
-        self.session_store
-            .lock()
-            .map_err(|_| WorkflowServiceError::Internal("session store lock poisoned".to_string()))
-    }
 }
 
 #[cfg(test)]

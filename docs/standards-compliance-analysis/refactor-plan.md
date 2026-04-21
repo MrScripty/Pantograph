@@ -331,8 +331,10 @@ Tasks:
   and runtime snapshot facade methods now live in `workflow/graph_api.rs`.
   Workflow capability, I/O discovery, and preflight facade methods now live in
   `workflow/preflight_api.rs`. Generic workflow run facade and internal
-  session-run handoff now live in `workflow/workflow_run_api.rs`. Session
-  creation and queued session run facade methods now live in
+  session-run handoff now live in `workflow/workflow_run_api.rs`. Service
+  construction, capacity-limit configuration, diagnostics-provider setup, and
+  session-store guard helpers now live in `workflow/service_config.rs`.
+  Session creation and queued session run facade methods now live in
   `workflow/session_execution_api.rs`. Session status, queue inspection,
   scheduler snapshot, cancellation, and reprioritization facade methods now
   live in `workflow/session_queue_api.rs`. Stale cleanup, stale cleanup worker,
