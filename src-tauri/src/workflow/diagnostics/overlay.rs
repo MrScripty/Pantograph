@@ -6,7 +6,7 @@ use pantograph_workflow_service::WorkflowTraceSnapshotResponse;
 use super::trace::diagnostics_run_trace;
 use super::types::{
     DiagnosticsEventRecord, DiagnosticsRuntimeSnapshot, DiagnosticsSchedulerSnapshot,
-    WorkflowDiagnosticsProjection,
+    WorkflowDiagnosticsProjection, WorkflowDiagnosticsProjectionContext,
 };
 use crate::workflow::events::WorkflowEvent;
 
@@ -83,6 +83,7 @@ impl WorkflowDiagnosticsState {
             .collect();
 
         WorkflowDiagnosticsProjection {
+            context: WorkflowDiagnosticsProjectionContext::default(),
             runs_by_id,
             run_order,
             runtime: self.runtime.clone(),

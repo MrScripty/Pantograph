@@ -5,12 +5,15 @@
 //! command wiring stays focused on request orchestration.
 
 use super::commands::{SharedWorkflowDiagnosticsStore, SharedWorkflowService};
-use super::diagnostics::{WorkflowDiagnosticsProjection, WorkflowDiagnosticsStore};
+use super::diagnostics::{
+    WorkflowDiagnosticsProjection, WorkflowDiagnosticsProjectionContext, WorkflowDiagnosticsStore,
+};
 use pantograph_embedded_runtime::ManagedRuntimeManagerRuntimeView;
 use pantograph_workflow_service::{
-    graph::WorkflowGraphSessionStateView, WorkflowCapabilitiesResponse,
-    WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse, WorkflowServiceError,
-    WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
+    WorkflowCapabilitiesResponse, WorkflowSchedulerSnapshotRequest,
+    WorkflowSchedulerSnapshotResponse, WorkflowServiceError, WorkflowTraceRuntimeMetrics,
+    WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
+    graph::WorkflowGraphSessionStateView,
 };
 
 pub(crate) fn workflow_error_json(error: WorkflowServiceError) -> String {
@@ -285,7 +288,7 @@ pub(crate) fn workflow_diagnostics_snapshot_projection(
         );
     }
 
-    if let Some(workflow_id) = workflow_id {
+    if let Some(workflow_id) = workflow_id.clone() {
         record_headless_runtime_snapshot(
             diagnostics_store.as_ref(),
             workflow_id,
@@ -319,7 +322,14 @@ pub(crate) fn workflow_diagnostics_snapshot_projection(
 
     let mut projection = diagnostics_store.snapshot();
     projection.current_session_state = current_session_state;
-    projection
+    projection.with_context(WorkflowDiagnosticsProjectionContext {
+        requested_session_id: session_id,
+        requested_workflow_id: workflow_id,
+        requested_workflow_name: workflow_name,
+        source_execution_id: None,
+        relevant_execution_id: trace_execution_id,
+        relevant: true,
+    })
 }
 
 #[cfg(test)]
@@ -327,11 +337,11 @@ mod tests {
     use std::sync::Arc;
 
     use pantograph_workflow_service::{
-        graph::{WorkflowGraphSessionStateView, WorkflowSessionKind},
         WorkflowCapabilitiesResponse, WorkflowRuntimeRequirements,
         WorkflowSchedulerSnapshotResponse, WorkflowSessionQueueItem,
         WorkflowSessionQueueItemStatus, WorkflowSessionState, WorkflowSessionSummary,
         WorkflowTraceRuntimeMetrics,
+        graph::{WorkflowGraphSessionStateView, WorkflowSessionKind},
     };
 
     use super::{stored_runtime_trace_metrics, workflow_diagnostics_snapshot_projection};
@@ -414,6 +424,20 @@ mod tests {
             Some("session-1")
         );
         assert_eq!(projection.scheduler.trace_execution_id, None);
+        assert_eq!(
+            projection.context.requested_session_id.as_deref(),
+            Some("session-1")
+        );
+        assert_eq!(
+            projection.context.requested_workflow_id.as_deref(),
+            Some("wf-1")
+        );
+        assert_eq!(
+            projection.context.requested_workflow_name.as_deref(),
+            Some("Workflow 1")
+        );
+        assert_eq!(projection.context.relevant_execution_id, None);
+        assert!(projection.context.relevant);
         assert!(projection.run_order.is_empty());
         assert_eq!(projection.runtime.workflow_id.as_deref(), Some("wf-1"));
         assert!(

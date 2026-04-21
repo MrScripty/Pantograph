@@ -45,6 +45,9 @@ and legacy consumers can follow ad hoc or session-backed runs without
 overwriting the session id that mutation commands still need. The same service
 boundary now exposes a direct backend-owned trace snapshot read for debugging
 or future metrics surfaces that should not depend on the GUI projection shape.
+Diagnostics snapshot reads and mock fallbacks now include backend-compatible
+projection context so app stores can consume relevance and attribution fields
+without rebuilding them from workflow events.
 
 ## Alternatives Rejected
 - Remove `WorkflowService` and switch every app caller to `TauriWorkflowBackend`
@@ -69,6 +72,8 @@ or future metrics surfaces that should not depend on the GUI projection shape.
   is only allowed through `insertNodeOnEdge`.
 - Mock-mode payload shapes must remain compatible enough for callers to compile
   and branch safely.
+- Mock-mode diagnostics projections must include the same projection context
+  shape as native `workflow_get_diagnostics_snapshot` responses.
 - Starting a transient `executeWorkflow()` run must clear any stale prior run
   execution id before the next execution-scoped event claims the active run
   identity.
@@ -149,3 +154,5 @@ const preview = await workflowService.previewNodeInsertOnEdge(
 - Built-in templates that demonstrate inference-family nodes must stay aligned
   with the backend-owned node registry and port contracts shipped in the same
   build.
+- `WorkflowDiagnosticsProjection.context` fields are passed through from native
+  diagnostics responses and mirrored in mock responses.

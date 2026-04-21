@@ -82,8 +82,7 @@ does not splice stale run events into the current workflow view.
 
 ## Dependencies
 **Internal:** `src/services/workflow/types`, app-level diagnostics store.
-**External:** None beyond the TypeScript runtime and standard structured-clone
-support.
+**External:** TypeScript runtime and standard structured-clone support.
 
 ## Related ADRs
 - None identified as of 2026-04-12.
@@ -130,6 +129,9 @@ service.recordWorkflowEvent({
   first observed; later graph changes do not rewrite that field.
 - Runtime and scheduler snapshots are last-write-wins views over workflow
   service responses keyed by current workflow and current session identity.
+- `WorkflowDiagnosticsProjection.context` mirrors backend-owned requested
+  filters, event source execution id, relevant execution id, and relevance
+  decision for app stores that render diagnostics snapshots.
 - `WorkflowDiagnosticsProjection.currentSessionState` is an additive,
   backend-owned session inspection mirror; producer paths may omit it until the
   backend explicitly forwards the inspection snapshot.

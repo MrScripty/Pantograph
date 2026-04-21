@@ -17,7 +17,7 @@ pub use types::{
     DiagnosticsEventRecord, DiagnosticsNodeStatus, DiagnosticsNodeTrace, DiagnosticsRunStatus,
     DiagnosticsRunTrace, DiagnosticsRuntimeLifecycleSnapshot, DiagnosticsRuntimeSnapshot,
     DiagnosticsSchedulerSnapshot, DiagnosticsTraceRuntimeMetrics, WorkflowDiagnosticsProjection,
-    WorkflowDiagnosticsSnapshotRequest,
+    WorkflowDiagnosticsProjectionContext, WorkflowDiagnosticsSnapshotRequest,
 };
 
 #[cfg(test)]

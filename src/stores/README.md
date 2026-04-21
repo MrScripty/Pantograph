@@ -49,7 +49,9 @@ with execution lifecycle events and suppresses expected `session_not_found`
 noise from the scheduler panel. `diagnosticsProjection.ts` now owns the pure
 projection-normalization step so additive fields like backend-owned
 `currentSessionState` can be preserved across mixed producer paths without
-pushing merge policy into Svelte components.
+pushing merge policy into Svelte components. Diagnostics relevance decisions
+come from the backend projection context; this store only drops snapshots marked
+irrelevant by that context.
 
 ## Alternatives Rejected
 - Keep separate app-only and package-only workflow stores.
@@ -127,6 +129,8 @@ diagnosticsSnapshot.subscribe(({ selectedRun }) => {
 - Workflow-event-driven scheduler fallback and backend-sourced scheduler
   snapshots share this store boundary; components should not attempt to
   distinguish the producer path themselves.
+- `diagnosticsStore.ts` must treat `WorkflowDiagnosticsProjection.context` as
+  the owner of diagnostics snapshot relevance and execution attribution.
 
 ## Structured Producer Contract (Machine-Consumed Modules)
 - `workflowGraph` remains the graph projection consumed by backend/service
@@ -140,3 +144,5 @@ diagnosticsSnapshot.subscribe(({ selectedRun }) => {
 - `currentSessionState` is an additive backend-owned inspection snapshot and
   may be absent from event-driven projections even when a direct diagnostics
   fetch has already populated it.
+- `WorkflowDiagnosticsProjection.context` is backend-authored; missing context
+  may be normalized only for compatibility with older producer paths.

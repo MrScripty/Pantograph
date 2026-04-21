@@ -3,6 +3,7 @@ import type {
   DiagnosticsRunTrace,
   DiagnosticsSnapshot,
   DiagnosticsTab,
+  WorkflowDiagnosticsProjectionContext,
   WorkflowDiagnosticsProjection,
 } from '../services/diagnostics/types';
 import type { WorkflowGraph } from '../services/workflow/types';
@@ -16,6 +17,7 @@ export type DiagnosticsUiState = {
 
 export function createEmptyDiagnosticsProjection(): WorkflowDiagnosticsProjection {
   return {
+    context: createDefaultDiagnosticsProjectionContext(),
     runsById: {},
     runOrder: [],
     runtime: {
@@ -47,17 +49,36 @@ export function createEmptyDiagnosticsProjection(): WorkflowDiagnosticsProjectio
   };
 }
 
+function createDefaultDiagnosticsProjectionContext(
+  previous?: WorkflowDiagnosticsProjection,
+): WorkflowDiagnosticsProjectionContext {
+  return {
+    requestedSessionId: previous?.context?.requestedSessionId ?? null,
+    requestedWorkflowId: previous?.context?.requestedWorkflowId ?? null,
+    requestedWorkflowName: previous?.context?.requestedWorkflowName ?? null,
+    sourceExecutionId: null,
+    relevantExecutionId: previous?.context?.relevantExecutionId ?? null,
+    relevant: true,
+  };
+}
+
 export function normalizeDiagnosticsProjection(
   incoming: WorkflowDiagnosticsProjection,
   previous: WorkflowDiagnosticsProjection,
 ): WorkflowDiagnosticsProjection {
-  if (Object.prototype.hasOwnProperty.call(incoming, 'currentSessionState')) {
-    return incoming;
-  }
+  const projection = {
+    ...incoming,
+    context: incoming.context ?? createDefaultDiagnosticsProjectionContext(previous),
+  };
 
   return {
-    ...incoming,
-    currentSessionState: previous.currentSessionState,
+    ...projection,
+    currentSessionState: Object.prototype.hasOwnProperty.call(
+      incoming,
+      'currentSessionState',
+    )
+      ? incoming.currentSessionState
+      : previous.currentSessionState,
   };
 }
 

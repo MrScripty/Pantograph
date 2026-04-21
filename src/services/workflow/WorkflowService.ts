@@ -360,6 +360,14 @@ export class WorkflowService {
   ): Promise<WorkflowDiagnosticsProjection> {
     if (USE_MOCKS) {
       return {
+        context: {
+          requestedSessionId: sessionId ?? null,
+          requestedWorkflowId: workflowId ?? null,
+          requestedWorkflowName: workflowName ?? null,
+          sourceExecutionId: null,
+          relevantExecutionId: null,
+          relevant: true,
+        },
         runsById: {},
         runOrder: [],
         runtime: {

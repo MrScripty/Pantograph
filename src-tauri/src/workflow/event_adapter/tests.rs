@@ -140,6 +140,15 @@ fn translated_workflow_started_event_preserves_engine_execution_id() {
             snapshot,
         } => {
             assert_eq!(execution_id, "exec-1");
+            assert_eq!(
+                snapshot.context.source_execution_id.as_deref(),
+                Some("exec-1")
+            );
+            assert_eq!(
+                snapshot.context.relevant_execution_id.as_deref(),
+                Some("exec-1")
+            );
+            assert!(snapshot.context.relevant);
             assert_eq!(snapshot.run_order, vec!["exec-1".to_string()]);
             let trace = snapshot.runs_by_id.get("exec-1").expect("trace");
             assert_eq!(trace.started_at_ms, 1_717_171_001);

@@ -1,14 +1,14 @@
 use std::collections::BTreeMap;
 
 use node_engine::GraphMemoryImpactSummary;
+use pantograph_embedded_runtime::ManagedRuntimeManagerRuntimeView;
 use pantograph_embedded_runtime::workflow_runtime::{
     capability_runtime_lifecycle_snapshot, normalized_runtime_lifecycle_snapshot,
 };
-use pantograph_embedded_runtime::ManagedRuntimeManagerRuntimeView;
 use pantograph_workflow_service::{
-    graph::WorkflowGraphSessionStateView, WorkflowSchedulerSnapshotDiagnostics,
-    WorkflowServiceError, WorkflowSessionQueueItem, WorkflowSessionSummary,
-    WorkflowTraceNodeStatus, WorkflowTraceRuntimeMetrics, WorkflowTraceStatus,
+    WorkflowSchedulerSnapshotDiagnostics, WorkflowServiceError, WorkflowSessionQueueItem,
+    WorkflowSessionSummary, WorkflowTraceNodeStatus, WorkflowTraceRuntimeMetrics,
+    WorkflowTraceStatus, graph::WorkflowGraphSessionStateView,
 };
 use serde::{Deserialize, Serialize};
 
@@ -302,6 +302,8 @@ pub struct DiagnosticsSchedulerSnapshot {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkflowDiagnosticsProjection {
+    #[serde(default)]
+    pub context: WorkflowDiagnosticsProjectionContext,
     pub runs_by_id: BTreeMap<String, DiagnosticsRunTrace>,
     pub run_order: Vec<String>,
     pub runtime: DiagnosticsRuntimeSnapshot,
@@ -309,6 +311,54 @@ pub struct WorkflowDiagnosticsProjection {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub current_session_state: Option<WorkflowGraphSessionStateView>,
     pub retained_event_limit: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkflowDiagnosticsProjectionContext {
+    #[serde(default)]
+    pub requested_session_id: Option<String>,
+    #[serde(default)]
+    pub requested_workflow_id: Option<String>,
+    #[serde(default)]
+    pub requested_workflow_name: Option<String>,
+    #[serde(default)]
+    pub source_execution_id: Option<String>,
+    #[serde(default)]
+    pub relevant_execution_id: Option<String>,
+    #[serde(default = "default_projection_relevance")]
+    pub relevant: bool,
+}
+
+fn default_projection_relevance() -> bool {
+    true
+}
+
+impl Default for WorkflowDiagnosticsProjectionContext {
+    fn default() -> Self {
+        Self {
+            requested_session_id: None,
+            requested_workflow_id: None,
+            requested_workflow_name: None,
+            source_execution_id: None,
+            relevant_execution_id: None,
+            relevant: true,
+        }
+    }
+}
+
+impl WorkflowDiagnosticsProjection {
+    pub(crate) fn with_context(mut self, context: WorkflowDiagnosticsProjectionContext) -> Self {
+        self.context = context;
+        self
+    }
+
+    pub(crate) fn with_source_execution_id(mut self, source_execution_id: Option<String>) -> Self {
+        self.context.source_execution_id = source_execution_id.clone();
+        self.context.relevant_execution_id = source_execution_id;
+        self.context.relevant = true;
+        self
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

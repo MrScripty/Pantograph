@@ -207,8 +207,12 @@ Goal: Eliminate frontend and adapter ownership of canonical workflow behavior.
 Tasks:
 - [ ] Move execution-id claiming, stale-event filtering, run/session attribution,
   and diagnostics relevance into backend-owned trace/session projection APIs.
-- [ ] Make `workflow_get_diagnostics_snapshot` provide the exact frontend-ready
+- [x] Make `workflow_get_diagnostics_snapshot` provide the exact frontend-ready
   identity and relevance decisions needed by `diagnosticsStore.ts`.
+  Status: diagnostics projections now carry backend-authored context containing
+  requested snapshot filters, source execution id, relevant execution id, and
+  relevance. `diagnosticsStore.ts` consumes that context instead of claiming or
+  filtering diagnostics snapshot events with frontend-local execution helpers.
 - [x] Convert group create/ungroup/update-port operations to return backend-owned
   graph mutation responses, then remove local graph reconstruction from
   `packages/svelte-graph/src/stores/createWorkflowStores.ts`.

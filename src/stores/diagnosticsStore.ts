@@ -1,8 +1,4 @@
 import { writable, type Readable } from 'svelte/store';
-import {
-  claimWorkflowExecutionIdFromEvent,
-  isWorkflowEventRelevantToExecution,
-} from '@pantograph/svelte-graph';
 
 import type {
   DiagnosticsSnapshot,
@@ -148,14 +144,15 @@ function isDiagnosticsSnapshotEvent(
 
 function bindDiagnosticsStore(): void {
   workflowEventUnsubscribe = workflowService.subscribeEvents((event) => {
-    const currentExecutionId = workflowService.getCurrentRunExecutionId();
-    const expectedExecutionId = claimWorkflowExecutionIdFromEvent(event, currentExecutionId);
-    if (!isWorkflowEventRelevantToExecution(event, expectedExecutionId)) {
-      return;
-    }
-
     if (isDiagnosticsSnapshotEvent(event)) {
-      applyProjection(event.data.snapshot as WorkflowDiagnosticsProjection);
+      const projection = normalizeDiagnosticsProjection(
+        event.data.snapshot as WorkflowDiagnosticsProjection,
+        latestProjection,
+      );
+      if (!projection.context.relevant) {
+        return;
+      }
+      applyProjection(projection);
     }
   });
 

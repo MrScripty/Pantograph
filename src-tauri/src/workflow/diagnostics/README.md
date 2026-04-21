@@ -97,8 +97,8 @@ let trace = diagnostics.trace_snapshot(Default::default())?;
   this directory, but they must treat the returned run/runtime/scheduler facts
   as projections over backend-owned trace and runtime data.
 - `WorkflowDiagnosticsProjection` returns `runs_by_id`, `run_order`, `runtime`,
-  `scheduler`, additive `current_session_state`, and `retained_event_limit`
-  with stable field names.
+  `scheduler`, backend-authored `context`, additive `current_session_state`,
+  and `retained_event_limit` with stable field names.
 - `trace_snapshot()` validates backend-owned trace filters through
   `WorkflowTraceSnapshotRequest` instead of accepting arbitrary adapter-local
   filtering rules.
@@ -117,6 +117,9 @@ let trace = diagnostics.trace_snapshot(Default::default())?;
 - Runtime and scheduler overlays are additive. When canonical backend trace
   identity is absent, this directory may update overlay-only state but must not
   synthesize a canonical execution id locally.
+- `WorkflowDiagnosticsProjectionContext` owns requested snapshot filters, source
+  execution id, relevant execution id, and relevance so GUI stores do not claim
+  or reject diagnostics snapshots with frontend-local rules.
 - `DiagnosticsTraceRuntimeMetrics.observed_runtime_ids` preserves every
   backend-observed producer runtime id from the underlying trace.
 - Omitted optional fields mean the backend did not provide a value; consumers

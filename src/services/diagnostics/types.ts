@@ -131,7 +131,17 @@ export interface DiagnosticsSchedulerSnapshot {
   lastError: string | null;
 }
 
+export interface WorkflowDiagnosticsProjectionContext {
+  requestedSessionId: string | null;
+  requestedWorkflowId: string | null;
+  requestedWorkflowName: string | null;
+  sourceExecutionId: string | null;
+  relevantExecutionId: string | null;
+  relevant: boolean;
+}
+
 export interface WorkflowDiagnosticsProjection {
+  context: WorkflowDiagnosticsProjectionContext;
   runsById: Record<string, DiagnosticsRunTrace>;
   runOrder: string[];
   runtime: DiagnosticsRuntimeSnapshot;

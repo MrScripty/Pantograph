@@ -86,6 +86,8 @@ use crate::workflow::event_adapter::TauriEventAdapter;
   should not be imported directly by downstream callers.
 - Adapter sends continue to emit the translated primary workflow event followed
   by a diagnostics snapshot event for the same execution id.
+- Diagnostics snapshot events must include backend-authored projection context
+  tying the source execution id to the relevant diagnostics projection.
 
 ## Structured Producer Contract
 - Translation preserves the canonical Tauri workflow-event DTO shapes already
@@ -99,3 +101,6 @@ use crate::workflow::event_adapter::TauriEventAdapter;
   event DTOs and diagnostics snapshots.
 - Diagnostics snapshots emitted here must preserve backend-owned execution ids
   and backend trace timing when present.
+- `WorkflowDiagnosticsProjection.context.source_execution_id` and
+  `relevant_execution_id` must be set from the translated backend execution id
+  when this bridge emits a paired diagnostics snapshot.
