@@ -16,6 +16,7 @@ packages.
 | `embedding_workflow.rs` | Owns backend-side embedding workflow graph inspection, embedding model-path resolution, and workflow-specific runtime preparation rules. |
 | `embedded_runtime_lifecycle.rs` | Owns embedded-runtime constructors, host wiring, registry injection, accessors, and shutdown coordination. |
 | `embedded_workflow_graph_api.rs` | Owns embedded-runtime public graph persistence, edit-session, graph mutation, connection, and insert-preview facade methods that forward into the workflow service. |
+| `embedded_workflow_host.rs` | Owns the embedded workflow host implementation that adapts host runtime, model metadata, runtime capabilities, session loading, inspection, technical-fit, and workflow runs into workflow-service contracts. |
 | `embedded_workflow_host_helpers.rs` | Owns embedded workflow host helper logic for runtime reservations, retention hints, workflow I/O binding, and data-graph terminal output shaping. |
 | `embedded_workflow_service_api.rs` | Owns embedded-runtime public workflow, session, queue, inspection, and keep-alive facade methods that forward into the workflow service. |
 | `lib_tests.rs` | Legacy embedded-runtime facade, host, registry, and workflow-session tests extracted from the root facade file. |
@@ -109,6 +110,10 @@ embedded-runtime crate.
   connection, and insert-preview facade methods stay in
   `embedded_workflow_graph_api.rs` so graph API forwarding remains separate
   from graph execution.
+- The `WorkflowHost` implementation for embedded runtime stays in
+  `embedded_workflow_host.rs` so host adaptation, runtime capability exposure,
+  session loading, inspection, technical-fit, and workflow-run execution are
+  separated from root crate composition.
 - Embedded workflow host helper methods stay in
   `embedded_workflow_host_helpers.rs` so reservation shaping, runtime retention
   sync, workflow I/O binding, and data-graph output shaping do not accumulate

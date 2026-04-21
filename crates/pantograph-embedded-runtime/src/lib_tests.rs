@@ -7,16 +7,18 @@ use inference::backend::{
 use inference::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 use inference::{RerankRequest, RerankResponse};
 use pantograph_runtime_registry::{
-    RuntimeRegistration, RuntimeRegistry, RuntimeRegistrySnapshot, RuntimeRegistryStatus,
-    RuntimeReservationRequest, RuntimeRetentionHint, RuntimeTransition,
+    RuntimeRegistration, RuntimeRegistry, RuntimeRegistryError, RuntimeRegistrySnapshot,
+    RuntimeRegistryStatus, RuntimeReservationRequest, RuntimeRetentionHint, RuntimeTransition,
 };
 use pantograph_workflow_service::{
     GraphEdge, GraphNode, Position, WorkflowCapabilitiesRequest, WorkflowGraph,
-    WorkflowGraphEditSessionCreateRequest, WorkflowPreflightRequest, WorkflowRunRequest,
-    WorkflowRuntimeInstallState, WorkflowRuntimeRequirements, WorkflowRuntimeSourceKind,
-    WorkflowSchedulerRuntimeWarmupDecision, WorkflowSchedulerRuntimeWarmupReason,
-    WorkflowSessionCloseRequest, WorkflowSessionCreateRequest, WorkflowSessionKeepAliveRequest,
-    WorkflowSessionRunRequest, WorkflowSessionState, WorkflowSessionStatusRequest,
+    WorkflowGraphEditSessionCreateRequest, WorkflowHost, WorkflowOutputTarget, WorkflowPortBinding,
+    WorkflowPreflightRequest, WorkflowRunOptions, WorkflowRunRequest, WorkflowRuntimeInstallState,
+    WorkflowRuntimeRequirements, WorkflowRuntimeSourceKind, WorkflowSchedulerRuntimeWarmupDecision,
+    WorkflowSchedulerRuntimeWarmupReason, WorkflowServiceError, WorkflowSessionCloseRequest,
+    WorkflowSessionCreateRequest, WorkflowSessionKeepAliveRequest, WorkflowSessionRetentionHint,
+    WorkflowSessionRunRequest, WorkflowSessionRuntimeSelectionTarget,
+    WorkflowSessionRuntimeUnloadCandidate, WorkflowSessionState, WorkflowSessionStatusRequest,
 };
 use std::path::Path;
 use std::pin::Pin;
