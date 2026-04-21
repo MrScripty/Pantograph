@@ -230,10 +230,12 @@ pub struct InferenceGatewayResource {
     pub runtime: Arc<tokio::runtime::Runtime>,
 }
 
+type PendingCallbackSender = oneshot::Sender<Result<String, String>>;
+type PendingCallbackMap = HashMap<String, PendingCallbackSender>;
+
 /// Pending callback channels for bridging node execution to BEAM.
-static PENDING_CALLBACKS: std::sync::LazyLock<
-    Mutex<HashMap<String, oneshot::Sender<Result<String, String>>>>,
-> = std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
+static PENDING_CALLBACKS: std::sync::LazyLock<Mutex<PendingCallbackMap>> =
+    std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// Counter for generating unique callback IDs.
 static CALLBACK_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -318,7 +320,7 @@ impl TaskExecutor for ElixirCallbackTaskExecutor {
         .map_err(|e| {
             node_engine::NodeEngineError::ExecutionFailed(format!("Send thread error: {}", e))
         })?
-        .map_err(|e| node_engine::NodeEngineError::ExecutionFailed(e))?;
+        .map_err(node_engine::NodeEngineError::ExecutionFailed)?;
 
         // Wait for response with timeout
         let result = tokio::time::timeout(std::time::Duration::from_secs(self.timeout_secs), rx)
@@ -2054,8 +2056,8 @@ mod tests {
     }
 
     #[cfg(feature = "frontend-http")]
-    static CWD_LOCK: std::sync::LazyLock<std::sync::Mutex<()>> =
-        std::sync::LazyLock::new(|| std::sync::Mutex::new(()));
+    static CWD_LOCK: std::sync::LazyLock<tokio::sync::Mutex<()>> =
+        std::sync::LazyLock::new(|| tokio::sync::Mutex::new(()));
 
     #[cfg(feature = "frontend-http")]
     fn create_temp_workflow_root(workflow_id: &str) -> std::path::PathBuf {
@@ -2125,7 +2127,7 @@ mod tests {
     #[cfg(feature = "frontend-http")]
     #[ignore = "requires local TCP bind permissions in test environment"]
     async fn test_rustler_workflow_host_contract_success() {
-        let _guard = CWD_LOCK.lock().expect("lock cwd");
+        let _guard = CWD_LOCK.lock().await;
         let workflow_id = "wf_rustler_contract";
         let root = create_temp_workflow_root(workflow_id);
         let original_cwd = std::env::current_dir().expect("cwd");
@@ -2172,7 +2174,7 @@ mod tests {
     #[cfg(feature = "frontend-http")]
     #[ignore = "requires local TCP bind permissions in test environment"]
     async fn test_rustler_workflow_session_host_contract_preserves_cancelled_envelope() {
-        let _guard = CWD_LOCK.lock().expect("lock cwd");
+        let _guard = CWD_LOCK.lock().await;
         let workflow_id = "wf_rustler_session_cancelled";
         let root = create_temp_workflow_root(workflow_id);
         let original_cwd = std::env::current_dir().expect("cwd");
@@ -2238,7 +2240,7 @@ mod tests {
     #[cfg(feature = "frontend-http")]
     #[ignore = "requires local TCP bind permissions in test environment"]
     async fn test_rustler_workflow_session_host_contract_preserves_invalid_request_envelope() {
-        let _guard = CWD_LOCK.lock().expect("lock cwd");
+        let _guard = CWD_LOCK.lock().await;
         let workflow_id = "wf_rustler_session_invalid_request";
         let root = create_temp_workflow_root(workflow_id);
         let original_cwd = std::env::current_dir().expect("cwd");

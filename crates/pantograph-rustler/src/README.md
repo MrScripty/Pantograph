@@ -51,6 +51,14 @@ registration, callback transport, and feature-gated adapter calls.
   semantics.
 - Resource registration stays centralized in `resource_registration.rs`.
 - Callback/event JSON serialization preserves backend event labels and order.
+- Callback bridge state uses local type aliases for pending callback maps so
+  BEAM transport plumbing remains readable under strict clippy checks.
+- Event contract tests must construct the current backend event shape,
+  including additive graph memory-impact fields, even when the BEAM projection
+  only asserts the stable legacy fields.
+- Async frontend-HTTP tests that temporarily change process current-directory
+  state must serialize through an async-aware test mutex instead of holding a
+  synchronous guard across workflow awaits.
 - Frontend HTTP NIFs are unavailable unless the `frontend-http` feature is
   enabled.
 

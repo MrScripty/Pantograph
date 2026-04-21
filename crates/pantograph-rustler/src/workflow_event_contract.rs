@@ -18,6 +18,7 @@ mod tests {
             workflow_id: "wf-1".to_string(),
             execution_id: "exec-1".to_string(),
             dirty_tasks: vec!["node-a".to_string(), "node-b".to_string()],
+            memory_impact: None,
             occurred_at_ms: Some(123),
         })
         .expect("serialize graph-modified event");
