@@ -13,32 +13,12 @@ pub mod ports {
     pub const ALTERNATE_RANGE: u16 = 100;
 }
 
-/// Timeout configuration (in seconds)
-pub mod timeouts {
-    /// Maximum time to wait for server startup
-    pub const SERVER_STARTUP_SECS: u64 = 120;
-}
-
 /// Default values for inference configuration
 pub mod defaults {
-    /// Default context window size
-    pub const CONTEXT_SIZE: u32 = 8192;
     /// Default GPU layers (-1 = all layers on GPU)
     pub const GPU_LAYERS: i32 = -1;
     /// Default device selection
     pub const DEVICE: &str = "auto";
-}
-
-/// Device type identifiers and prefixes
-pub mod device_types {
-    /// Auto-select device identifier
-    pub const AUTO: &str = "auto";
-}
-
-/// Server host configuration
-pub mod hosts {
-    /// Default host for local server binding
-    pub const LOCAL: &str = "127.0.0.1";
 }
 
 /// Data storage paths

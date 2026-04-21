@@ -8,7 +8,7 @@ Command used for the baseline:
 cargo check --workspace --all-features --message-format short
 ```
 
-The command completes successfully, but the workspace currently emits 88
+The command completes successfully, but the workspace currently emits 84
 warnings. This document classifies the warning debt required by M7 before
 `cargo clippy --workspace --all-targets --all-features -- -D warnings` can
 become a blocking quality gate.
@@ -56,6 +56,15 @@ The classification follows the updated standards expectations:
 | --- | --- | --- | --- |
 | `src/lib.rs:586` | `task_executor` field never read | Remove | Resolved by deleting the inactive no-op task executor field and helper from `FfiWorkflowEngine`; the binding object does not expose task execution. |
 
+### `src-tauri` Constants
+
+| Location | Warning | Classification | Resolution |
+| --- | --- | --- | --- |
+| `src/constants.rs:19` | `SERVER_STARTUP_SECS` unused | Remove | Resolved by deleting the unused timeout module. |
+| `src/constants.rs:25` | `CONTEXT_SIZE` unused | Remove | Resolved by deleting the stale default; active inference defaults stay with their owning config/runtime paths. |
+| `src/constants.rs:35` | `AUTO` unused | Remove | Resolved by deleting the unused device-type module. |
+| `src/constants.rs:41` | `LOCAL` unused | Remove | Resolved by deleting the unused host module. |
+
 ### `crates/workflow-nodes` Model Provider
 
 | Location | Warning | Classification | Resolution |
@@ -79,7 +88,6 @@ The classification follows the updated standards expectations:
 | Location | Warning group | Classification | Next action |
 | --- | --- | --- | --- |
 | `src/agent/rag/mod.rs`, `src/agent/rag/manager.rs` | unused `RagManager` re-export and `store_path` | Remove/use | Remove the unused export/method unless a command or diagnostic surface needs it. |
-| `src/constants.rs` | unused inference/server constants | Remove | Delete stale constants after confirming no external config contract references them. |
 | `src/llm/health_monitor.rs` | `consecutive_failures` unused | Remove/use | Expose through diagnostics if still useful; otherwise delete. |
 | `src/llm/server_discovery.rs` | registry file, DTOs, discovery type, helpers, and display function unused | Remove/feature-gate | The module is still exported but has no active consumers. Delete the module or gate it behind a documented local-server-discovery feature. |
 | `src/workflow/connection_intent.rs` | local connection candidate/commit/insert helpers unused | Remove | Superseded by `pantograph-workflow-service::graph::connection_intent`; delete after command imports are confirmed clean. |

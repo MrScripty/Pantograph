@@ -75,6 +75,8 @@ task before workflow cleanup and runtime process shutdown.
   tearing down workflow runtimes and model processes.
 - Tauri-local DTOs should migrate toward shared backend contracts where
   practical.
+- `constants.rs` should contain only shared values with active consumers; stale
+  defaults and one-off literals should be deleted or moved to the owning module.
 - Command registrations for graph edits, including node group mutations, must
   return backend-owned service snapshots instead of adapter-owned graph facts.
 - Workflow persistence command registrations must delegate path validation and
