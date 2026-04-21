@@ -410,7 +410,10 @@ Tasks:
   payload normalization from file I/O, dependency preflight, and runtime-backed
   adapters. Pure validator and JSON-filter processing handlers now live in
   `crates/node-engine/src/core_executor/processing_nodes.rs`, separating helper
-  backed pure processing from direct input/output passthrough. File I/O
+  backed pure processing from direct input/output passthrough. Model provider
+  and Puma library projection handlers now live in
+  `crates/node-engine/src/core_executor/model_nodes.rs`, separating model
+  payload contract projection from generic pure node passthrough. File I/O
   handlers now live in
   `crates/node-engine/src/core_executor/file_io.rs`, keeping project-root path
   validation isolated from dispatch and runtime-backed handlers. Settings

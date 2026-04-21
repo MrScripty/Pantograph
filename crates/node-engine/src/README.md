@@ -75,6 +75,8 @@ locally.
 - Core executor pure processing handlers stay in
   `core_executor/processing_nodes.rs` so validation and JSON path extraction do
   not grow the input/output passthrough module.
+- Core executor model payload handlers stay in `core_executor/model_nodes.rs`
+  so Puma library contract projection remains separate from generic pure nodes.
 - Core executor file I/O handlers stay in `core_executor/file_io.rs` so host
   path validation remains separate from pure node payload normalization and
   runtime-backed adapters.

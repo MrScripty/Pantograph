@@ -27,6 +27,7 @@ mod inference_nodes;
 mod kv_cache;
 #[cfg(feature = "inference-nodes")]
 mod llamacpp_nodes;
+mod model_nodes;
 mod ollama;
 mod processing_nodes;
 mod pure_nodes;
@@ -43,6 +44,7 @@ pub(crate) use file_io::*;
 pub(crate) use inference_nodes::*;
 #[cfg(feature = "inference-nodes")]
 pub(crate) use llamacpp_nodes::*;
+pub(crate) use model_nodes::*;
 pub(crate) use ollama::*;
 pub(crate) use processing_nodes::*;
 pub(crate) use pure_nodes::*;
