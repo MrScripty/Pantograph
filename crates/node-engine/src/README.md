@@ -85,11 +85,14 @@ locally.
 - Standalone Ollama HTTP execution stays in `core_executor/ollama.rs` so direct
   HTTP generation remains separate from gateway-backed inference adapters.
 - Gateway-backed inference execution stays in `core_executor/inference_nodes.rs`
-  so reranking, embedding, OpenAI-compatible chat, vision, and unload-model
-  handlers remain separate from Python-worker adapters.
+  so OpenAI-compatible chat, vision, and unload-model handlers remain separate
+  from Python-worker adapters.
 - Llama.cpp completion execution stays in `core_executor/llamacpp_nodes.rs` so
   completion streaming and KV-cache capture are isolated from the remaining
   gateway-backed inference adapters.
+- Retrieval inference execution stays in `core_executor/retrieval_nodes.rs` so
+  reranking document parsing and embedding compatibility checks remain separate
+  from chat and vision adapters.
 - Python-worker execution stays in `core_executor/pytorch_nodes.rs` and
   `core_executor/audio_nodes.rs` so PyTorch inference and Stable Audio
   generation remain separate feature families.

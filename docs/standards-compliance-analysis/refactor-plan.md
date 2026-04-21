@@ -422,7 +422,11 @@ Tasks:
   generation from gateway-backed inference adapters. Gateway-backed inference
   handlers now live in
   `crates/node-engine/src/core_executor/inference_nodes.rs`, separating
-  reranking/embedding/chat/vision/unload execution from Python-worker adapters.
+  chat/vision/unload execution from Python-worker adapters. Reranking and
+  embedding execution now live in
+  `crates/node-engine/src/core_executor/retrieval_nodes.rs`, separating
+  retrieval-specific parsing and compatibility checks from chat and vision
+  adapters.
   Llama.cpp completion execution now lives in
   `crates/node-engine/src/core_executor/llamacpp_nodes.rs`, separating
   completion streaming and KV-cache capture from the remaining gateway-backed

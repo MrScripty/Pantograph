@@ -31,6 +31,8 @@ mod ollama;
 mod pure_nodes;
 #[cfg(feature = "pytorch-nodes")]
 mod pytorch_nodes;
+#[cfg(feature = "inference-nodes")]
+mod retrieval_nodes;
 mod settings;
 #[cfg(feature = "audio-nodes")]
 pub(crate) use audio_nodes::*;
@@ -44,6 +46,8 @@ pub(crate) use ollama::*;
 pub(crate) use pure_nodes::*;
 #[cfg(feature = "pytorch-nodes")]
 pub(crate) use pytorch_nodes::*;
+#[cfg(feature = "inference-nodes")]
+pub(crate) use retrieval_nodes::*;
 pub(crate) use settings::*;
 
 /// Extract the node type from task inputs or infer from the task ID.

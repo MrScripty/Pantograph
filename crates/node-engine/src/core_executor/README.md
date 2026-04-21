@@ -15,12 +15,13 @@ into frontend, transport, or descriptor crates.
 | `audio_nodes.rs` | Feature-gated Stable Audio Python-worker initialization and text-to-audio execution. |
 | `dependency_preflight.rs` | Model dependency binding, backend-key normalization, task-type inference, model-reference construction, and dependency resolver preflight used before runtime-backed execution. |
 | `file_io.rs` | Async read-file/write-file handlers that resolve paths through the project-root validation boundary before touching the filesystem. |
-| `inference_nodes.rs` | Feature-gated shared inference helpers plus reranking, embeddings, OpenAI-compatible chat, vision, and unload-model handlers. |
+| `inference_nodes.rs` | Feature-gated shared inference helpers plus OpenAI-compatible chat, vision, and unload-model handlers. |
 | `kv_cache.rs` | Backend-owned execution handlers for KV-cache save/load/truncate nodes plus live llama.cpp/PyTorch restore-capture helpers and structured KV diagnostics emitted by `CoreTaskExecutor`. |
 | `llamacpp_nodes.rs` | Feature-gated llama.cpp completion execution, streaming response parsing, and KV-cache integration. |
 | `ollama.rs` | Standalone Ollama HTTP generation handler and response-to-model-reference projection for the `ollama-inference` node. |
 | `pure_nodes.rs` | Synchronous built-in node handlers for input/output passthrough, model provider payloads, control-flow helpers, validation, JSON filtering, human input, and disabled tool execution. |
 | `pytorch_nodes.rs` | Feature-gated PyTorch Python-worker initialization, inference execution, streaming, and KV-cache integration. |
+| `retrieval_nodes.rs` | Feature-gated reranking and embedding execution plus reranker document parsing. |
 | `settings.rs` | Settings-schema expansion and shared optional-input readers used by pure settings nodes and runtime-backed adapters. |
 | `tests.rs` | Behavior tests for core executor node dispatch, input/output normalization, settings expansion, dependency preflight, and feature-gated inference parsing helpers. |
 
@@ -70,8 +71,7 @@ stable public facade and dispatch owner.
 - Gateway-backed inference handlers stay in `inference_nodes.rs`; PyTorch and
   audio Python-worker handlers remain separate feature families.
 - Llama.cpp completion execution stays in `llamacpp_nodes.rs`; reranking and
-  embedding execution stay with the shared inference helpers until they deserve
-  their own module.
+  embedding execution stay in `retrieval_nodes.rs`.
 - PyTorch Python-worker execution stays in `pytorch_nodes.rs`; Stable Audio
   Python-worker execution stays in `audio_nodes.rs`.
 - The public facade remains `CoreTaskExecutor`; helper modules are private
