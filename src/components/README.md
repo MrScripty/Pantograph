@@ -71,6 +71,9 @@ Svelte components. Settings-side server/runtime status rendering is now also
 split into focused `server-status/` and `runtime-manager/` subdirectories so
 the mounted shell can expose the dedicated version-aware runtime-manager view
 without continuing to grow one large component file.
+Toolbar execution-event handling now delegates execution-id claiming and stale
+event filtering to the shared package workflow execution projector so the app
+toolbar does not maintain a second local relevance gate.
 
 ## Alternatives Rejected
 - Replace the app graph entirely with the package component immediately.
@@ -159,6 +162,8 @@ without continuing to grow one large component file.
   explicitly planned surfaces until those roadmap items ship.
 - Horseshoe invocation is drag-session-scoped and uses shared package helpers;
   app code should not reintroduce container-focus-only keyboard assumptions.
+- `workflowToolbarEvents.ts` should consume shared workflow execution projection
+  results rather than importing low-level execution-ownership helpers directly.
 
 ## Structured Producer Contract (Machine-Consumed Modules)
 - None.

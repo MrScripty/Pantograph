@@ -1,9 +1,5 @@
 import type { Edge } from '@xyflow/svelte';
 import { applyWorkflowExecutionEvent } from '../../packages/svelte-graph/src/stores/workflowExecutionEvents.ts';
-import {
-  claimWorkflowExecutionIdFromEvent,
-  isWorkflowEventRelevantToExecution,
-} from '../../packages/svelte-graph/src/workflowEventOwnership.ts';
 
 import {
   buildAudioRuntimeDataFromCompletedOutputs,
@@ -43,19 +39,9 @@ export function applyWorkflowToolbarEvent({
   edges,
   workflow,
 }: WorkflowToolbarEventInput): WorkflowToolbarEventResult {
-  const claimedExecutionId = claimWorkflowExecutionIdFromEvent(event, activeExecutionId);
-  if (!isWorkflowEventRelevantToExecution(event, claimedExecutionId)) {
-    return {
-      activeExecutionId: claimedExecutionId,
-      waitingForInput,
-      handled: false,
-      shouldCleanup: false,
-    };
-  }
-
   const result = applyWorkflowExecutionEvent({
     event,
-    activeExecutionId: claimedExecutionId,
+    activeExecutionId,
     waitingForInput,
     edges,
     workflow: {
