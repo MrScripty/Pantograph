@@ -497,9 +497,13 @@ Tasks:
   behind explicit features where consumers should not always pay the cost.
   Status: READMEs now document the current desktop local-backend defaults and
   keep Python-backed or frontend-HTTP behavior behind explicit opt-in features.
-- [ ] Classify binding exports as `supported`, `experimental`, or `internal-only`;
-  document product-native artifact names and version matching.
-- [ ] Add or document host-visible binding `version()` behavior.
+- [x] Classify binding exports as `supported`, `experimental`, or `internal-only`;
+  document product-native artifact names and version matching. Status:
+  UniFFI and Rustler READMEs now classify binding surfaces and document native
+  artifact names plus version-matching requirements.
+- [x] Add or document host-visible binding `version()` behavior. Status:
+  UniFFI `version()` and Rustler `version()` both return `CARGO_PKG_VERSION`,
+  and the behavior is documented for host consumers.
 - [ ] Review non-test inline Rust platform `cfg` blocks against the thin-platform-module exception rule.
 - [x] Preserve the current no-unsafe state with workspace lint policy; define the
   exception checklist before any future unsafe-owning crate is introduced.

@@ -105,6 +105,19 @@ uniffi-bindgen-cs target/debug/libpantograph_headless.so \
 - Versioning: generated bindings and native library artifacts must come from
   the same release input.
 
+## Binding Support Tiers
+| Tier | Surface | Contract |
+| ---- | ------- | -------- |
+| Supported | `version()`, `validate_workflow_json`, `validate_orchestration_json`, and the `embedded-runtime` `FfiPantographRuntime` workflow/session/graph methods. | Product-native host integrations may rely on these when native library and generated bindings are version-matched. |
+| Experimental | Legacy in-memory graph/executor/orchestration object facade and `frontend-http` exports. | Available for integration work, but method shape or support tier can change with coordinated docs/tests. |
+| Internal-only | Wrapper records, conversion helpers, `runtime-deps`, and bindgen implementation details. | Not a standalone host API; consumers should use generated methods rather than depending on helper layout. |
+
+Product-native artifact names are `libpantograph_headless.so`,
+`libpantograph_headless.dylib`, or `pantograph_headless.dll`, depending on
+platform. Generated bindings must be produced from the same native library build
+and package version. The host-visible `version()` export returns
+`CARGO_PKG_VERSION` for that native library.
+
 ## Structured Producer Contract
 - Stable fields: generated binding files, UniFFI metadata, native library name,
   exported record fields, and feature-gated method names are machine-consumed.

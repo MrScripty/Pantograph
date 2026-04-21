@@ -95,6 +95,18 @@ Pantograph.Native.workflow_validate(graph_json)
 - Versioning: exported NIF names and resource shapes are public binding
   contracts for BEAM consumers.
 
+## Binding Support Tiers
+| Tier | Surface | Contract |
+| ---- | ------- | -------- |
+| Supported | `version()`, workflow JSON graph helpers, executor resources, orchestration store operations, node registry operations, callback response/error NIFs, and Pumas API resource operations. | BEAM hosts may rely on these names and JSON/resource shapes with native NIF and Elixir wrapper versions matched. |
+| Experimental | `frontend-http` feature exports and callback/orchestration paths that still need stronger lifecycle supervision. | Available for integration work; support tier can change with coordinated host smoke tests. |
+| Internal-only | Rust resource wrapper structs, registration helpers, parsing helper modules, and non-NIF implementation functions. | Not part of the BEAM API even when compiled into the native library. |
+
+The native artifact name is `pantograph_rustler` as configured by the Rustler
+crate and loaded by `Elixir.Pantograph.Native`. The host-visible `version()`
+NIF returns `CARGO_PKG_VERSION`; BEAM wrappers and native artifacts must come
+from the same package version.
+
 ## Structured Producer Contract
 - Stable fields: exported NIF names, JSON payload shapes, event message tags,
   and resource handle semantics are machine-consumed by host code.
