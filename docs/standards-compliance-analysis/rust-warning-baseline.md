@@ -8,7 +8,7 @@ Command used for the baseline:
 cargo check --workspace --all-features --message-format short
 ```
 
-The command completes successfully, but the workspace currently emits 8
+The command completes successfully, but the workspace currently emits 2
 warnings. This document classifies the warning debt required by M7 before
 `cargo clippy --workspace --all-targets --all-features -- -D warnings` can
 become a blocking quality gate.
@@ -25,7 +25,7 @@ The classification follows the updated standards expectations:
 | --- | ---: | --- | --- |
 | `pantograph-embedded-runtime` | 2 | Remove unused imports | Drop unused public imports when the dirty embedded-runtime branch is normalized. |
 | `pantograph` Tauri binary | 0 | Complete | Tauri-local warning debt has been removed; keep command adapters on backend-owned DTOs and service contracts. |
-| `pantograph_rustler` | 6 | External macro/dependency exception | Resolve by upgrading/fixing `rustler::resource!`, or add a scoped lint exception with dependency rationale. |
+| `pantograph_rustler` | 0 | Scoped external macro exception | Keep the narrow `rustler::resource!` lint exception documented until Rustler exposes a warning-clean registration API. |
 
 ## Resolved Warnings
 
@@ -123,6 +123,12 @@ The classification follows the updated standards expectations:
 | `src/input/model_provider.rs:170` | `ModelProviderExecutorFactory` never constructed | Remove | Resolved with the inactive executor removal. |
 | `src/input/model_provider.rs:272` and `:277` | `ResolvedModel` and `resolve_with_library` unused | Remove | Resolved by deleting the executor-only library resolver path. Pumas-backed selection remains in `puma-lib` and setup helpers. |
 
+### `crates/pantograph-rustler`
+
+| Location | Warning | Classification | Resolution |
+| --- | --- | --- | --- |
+| `src/resource_registration.rs` | `rustler::resource!` emits `non_local_definitions` under the current Rustler macro expansion | Scoped external macro exception | Resolved by adding a narrow `#[allow(non_local_definitions)]` on the load-time resource registration function with removal guidance in the rustler README files. |
+
 ## Active Warnings
 
 ### `crates/pantograph-embedded-runtime`
@@ -131,12 +137,6 @@ The classification follows the updated standards expectations:
 | --- | --- | --- | --- |
 | `src/lib.rs:6` | unused `node_engine::ExecutorExtensions` import | Remove | Delete after preserving the current dirty embedded-runtime work. |
 | `src/lib.rs:15` | unused `tokio::sync::RwLock` import | Remove | Delete after preserving the current dirty embedded-runtime work. |
-
-### `crates/pantograph-rustler`
-
-| Location | Warning | Classification | Next action |
-| --- | --- | --- | --- |
-| `src/resource_registration.rs:9-14` | `rustler::resource!` emits `non_local_definitions` | External dependency exception | Prefer a `rustler` update or upstream-compatible registration API change. If blocked, add the narrowest lint exception around resource registration with the macro rationale and removal trigger. |
 
 ## Ratchet Plan
 
@@ -148,7 +148,8 @@ The classification follows the updated standards expectations:
 3. Keep desktop-local server discovery, graph policy, and registry mirrors
    deleted unless a future feature reintroduces them through an explicit command
    and backend-owned contract.
-4. Resolve intentional/external exceptions with narrow comments or lint allows.
+4. Remove the Rustler macro lint exception when upstream resource registration
+   no longer emits `non_local_definitions`.
 5. Re-run all-features and no-default-features checks, record the new warning
    count, and promote `clippy -D warnings` once the baseline reaches zero or a
    machine-enforced exception list exists.

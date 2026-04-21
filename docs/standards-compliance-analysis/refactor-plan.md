@@ -673,8 +673,9 @@ fully resolved by standards compliance:
   audio-only dead-code warnings for shared boolean settings readers in
   `crates/node-engine/src/core_executor/settings.rs`; classify them during the
   Rust warning ratchet as remove, feature-gate, or intentionally retained.
-- `pantograph-rustler` currently emits `non_local_definitions` warnings from
-  `rustler::resource!`; resolve, update Rustler, or document a temporary lint exception.
+- `pantograph-rustler` uses a scoped `non_local_definitions` lint exception
+  around `rustler::resource!` registration until Rustler exposes a
+  warning-clean resource registration API.
 - `cargo fmt --all -- --check` currently fails on pre-existing Rust formatting
   drift across inference managed-runtime modules, node-engine executor helpers,
   embedded-runtime modules, workflow-service tests, and Tauri workflow/LLM

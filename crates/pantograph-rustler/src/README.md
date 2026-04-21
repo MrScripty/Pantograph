@@ -108,7 +108,8 @@ cargo test -p pantograph_rustler
 ```
 
 ## Notes
-- Current `rustler::resource!` expansion emits `non_local_definitions`
-  warnings; this remains tracked by the standards compliance issue register.
+- `resource_registration.rs` carries a scoped `non_local_definitions` lint
+  exception for the current `rustler::resource!` expansion; remove it when
+  Rustler exposes a warning-clean registration API.
 - `lib.rs` remains over the decomposition threshold and is tracked in the
   standards compliance plan.
