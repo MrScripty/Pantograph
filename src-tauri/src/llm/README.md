@@ -58,6 +58,10 @@ The health monitor stores its polling task handle and aborts it through
 `HealthMonitor::stop()` so the monitor loop has an explicit owner.
 Automatic recovery launched from health failures is tracked by `RecoveryManager`
 and stopped through the same app shutdown path as the health monitor.
+Product listener paths launched by this layer are managed runtimes bound to
+loopback addresses. Tauri owns startup/shutdown orchestration and health
+timeouts, while max-connection behavior remains a managed-runtime concern until
+it is represented by a backend contract.
 
 ## Alternatives Rejected
 - Move runtime policy into `gateway.rs`.
@@ -165,6 +169,10 @@ app.manage(gateway);
   through the same service API that flips the running flag.
 - Automatic recovery launched from health failures must be owned by
   `RecoveryManager` and stopped during app shutdown.
+- Managed runtime listeners launched by Tauri must remain loopback-bound by
+  default, use bounded readiness/health probes, and shut down through the
+  gateway/process lifecycle. Tauri must not add undocumented listener exposure
+  or connection-limit policy in command handlers.
 - Milestone 6 does not add a new rollout toggle for runtime debug or targeted
   reclaim transport. These command surfaces stay additive and always available
   to the desktop host because they forward already-owned backend state rather

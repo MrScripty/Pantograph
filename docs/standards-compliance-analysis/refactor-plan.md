@@ -291,8 +291,13 @@ Tasks:
   schema version, pid, start time, owner, owner version, runtime mode, and
   executable path. Inference stale-sidecar cleanup still accepts legacy
   plain-PID files while preferring the structured record shape.
-- [ ] Document listener bind address, max connections, timeout/heartbeat strategy,
+- [x] Document listener bind address, max connections, timeout/heartbeat strategy,
   and graceful shutdown for product listener paths.
+  Status: inference and Tauri runtime docs now state that managed runtime
+  listeners are loopback-bound by default, readiness/health probes are bounded
+  by startup and request timeouts, max-connection policy is delegated to the
+  managed runtime until a backend contract exists, and graceful shutdown runs
+  through gateway/process lifecycle owners.
 
 Verification:
 - Targeted Rust tests for startup error paths where feasible.

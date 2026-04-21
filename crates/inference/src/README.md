@@ -88,6 +88,18 @@ than replaces.
 - Stale sidecar cleanup must accept legacy plain-PID files but prefer
   structured PID records containing owner, version, mode, start time, and
   executable facts from the host spawner.
+- Product listener paths in this crate are managed sidecars, not in-process
+  Rust HTTP servers. llama.cpp inference, embedding, and reranking sidecars
+  must bind to the loopback host from `constants::hosts::LOCAL` unless a future
+  ADR accepts LAN exposure.
+- Pantograph does not currently own a sidecar max-connections policy; that
+  remains delegated to the managed runtime. If max-connection limits become a
+  product requirement, they need an explicit backend contract instead of a
+  hidden adapter flag.
+- Listener readiness and health checks are bounded by startup/readiness
+  timeouts and HTTP request timeouts. Graceful shutdown is owned by the
+  process handle and gateway stop paths, which remove PID records and stop
+  managed sidecar processes.
 
 ## Revisit Triggers
 
