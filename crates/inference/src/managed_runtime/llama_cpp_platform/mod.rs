@@ -1,6 +1,6 @@
 use crate::managed_runtime::{
-    extract_pid_file as extract_pid_file_impl, prepend_env_path as prepend_env_path_impl,
-    ArchiveKind, ReleaseAsset, ResolvedCommand,
+    ArchiveKind, ReleaseAsset, ResolvedCommand, extract_pid_file as extract_pid_file_impl,
+    prepend_env_path as prepend_env_path_impl,
 };
 use std::ffi::OsString;
 use std::fs;
@@ -122,7 +122,7 @@ fn copy_relevant_entries(
 
         let destination = if file_name == "llama-server" || file_name == "llama-server.exe" {
             if is_cuda_entry {
-                binaries_dir.join("cuda").join(file_name.as_ref().to_string())
+                binaries_dir.join("cuda").join(file_name.as_ref())
             } else {
                 *installed_server = true;
                 binaries_dir.join(platform.installed_server_name())
@@ -133,7 +133,7 @@ fn copy_relevant_entries(
             } else {
                 binaries_dir.to_path_buf()
             };
-            dest_dir.join(file_name.as_ref().to_string())
+            dest_dir.join(file_name.as_ref())
         } else {
             continue;
         };

@@ -625,9 +625,11 @@ Tasks:
   for the active graph, connection, file, and node definition contracts.
 - Resolve clippy-specific findings exposed after the rustc warning baseline
   reached zero. Status: `cargo clippy --workspace --all-targets --all-features
-  -- -D warnings` now reaches `crates/inference` and reports mechanical issues
+  -- -D warnings` reached `crates/inference`; the mechanical inference findings
   in streaming prefix parsing, derivable defaults, path joins, lazy option
-  substitution, `&PathBuf` arguments, and a useless registry test assertion.
+  substitution, `&PathBuf` arguments, and a useless registry test assertion are
+  resolved. The audit now reports the next clippy-specific cleanup set in
+  `crates/node-engine`.
 - Close or update `docs/anti-pattern-remediation-tracker.md` Phase 5 for
   process-node policy controls.
 - Add issue/backlog entries for non-compliance problems intentionally deferred.

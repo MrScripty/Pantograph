@@ -100,6 +100,9 @@ than replaces.
   timeouts and HTTP request timeouts. Graceful shutdown is owned by the
   process handle and gateway stop paths, which remove PID records and stop
   managed sidecar processes.
+- Backend parsing and managed-runtime path handling should use standard-library
+  helpers such as `strip_prefix`, `Path`, and direct `Path::join` inputs rather
+  than manual slicing or temporary string allocations.
 
 ## Revisit Triggers
 

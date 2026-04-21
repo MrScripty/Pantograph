@@ -94,6 +94,9 @@ launch policy.
 - This directory owns binary-management facts, not higher-level workflow
   readiness policy; workflow-service and runtime-registry layers may consume the
   facts but must not be bypassed by host-local rebuilds.
+- Managed-runtime orchestration should avoid avoidable allocations and lazy
+  option substitutions when standard-library `Path` and `Option` helpers express
+  the same behavior directly.
 
 ## Revisit Triggers
 

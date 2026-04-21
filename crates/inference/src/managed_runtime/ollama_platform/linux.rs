@@ -1,8 +1,8 @@
 use std::path::Path;
 
-use super::{find_executable, OllamaPlatform, OLLAMA_RELEASE_TAG};
+use super::{OLLAMA_RELEASE_TAG, OllamaPlatform, find_executable};
 use crate::managed_runtime::{
-    extract_pid_file, prepend_env_path, ArchiveKind, ReleaseAsset, ResolvedCommand,
+    ArchiveKind, ReleaseAsset, ResolvedCommand, extract_pid_file, prepend_env_path,
 };
 
 pub(crate) struct LinuxPlatform;
@@ -12,7 +12,7 @@ pub(crate) static PLATFORM: LinuxPlatform = LinuxPlatform;
 impl OllamaPlatform for LinuxPlatform {
     fn release_asset(&self, _version: &str) -> ReleaseAsset {
         ReleaseAsset {
-            archive_name: format!("ollama-linux-amd64.tar.zst"),
+            archive_name: "ollama-linux-amd64.tar.zst".to_string(),
             archive_kind: ArchiveKind::TarZst,
         }
     }

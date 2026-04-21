@@ -113,3 +113,6 @@ fn create_backend() {
 - Backend `start()` results own lifecycle reuse facts when a backend can attach
   to an already-loaded runtime. Callers should consume that outcome instead of
   inferring reuse from adapter-local state.
+- Streaming response parsers should use `strip_prefix` for SSE `data:` lines
+  so prefix handling stays explicit and warning-clean under the Rust clippy
+  audit.

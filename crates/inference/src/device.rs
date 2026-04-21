@@ -8,10 +8,10 @@ use tokio::process::Command;
 
 use crate::config::DeviceInfo;
 use crate::constants::device_types;
-use crate::managed_runtime::{resolve_binary_command, ManagedBinaryId};
+use crate::managed_runtime::{ManagedBinaryId, resolve_binary_command};
 
 /// Represents a compute backend for inference
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum DeviceBackend {
     /// CPU-only inference (no GPU acceleration)
     Cpu,
@@ -22,6 +22,7 @@ pub enum DeviceBackend {
     /// Apple Metal device with index
     Metal(u8),
     /// Let llama-server auto-select the best device
+    #[default]
     Auto,
 }
 
@@ -94,12 +95,6 @@ impl DeviceBackend {
     /// Check if this is GPU-accelerated
     pub fn is_gpu(&self) -> bool {
         !matches!(self, Self::Cpu)
-    }
-}
-
-impl Default for DeviceBackend {
-    fn default() -> Self {
-        Self::Auto
     }
 }
 

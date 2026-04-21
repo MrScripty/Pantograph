@@ -928,7 +928,7 @@ async fn resolve_download_source(
                     .active_job
                     .as_ref()
                     .filter(|job| job.state == ManagedRuntimeJobState::Paused)
-                    .and_then(|_| runtime.active_job_artifact.as_ref())
+                    .and(runtime.active_job_artifact.as_ref())
                     .map(|artifact| artifact.version.clone())
             })
         })

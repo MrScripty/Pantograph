@@ -48,6 +48,8 @@ resolution to the current platform adapter.
 - CUDA-specific launch paths remain derived from command arguments and install
   layout, not adapter guesses.
 - Missing binary/library names must be reported through backend validation.
+- Archive copy destinations should pass borrowed path components directly to
+  `Path::join` instead of allocating temporary strings.
 
 ## Revisit Triggers
 - Vendor release asset naming changes.

@@ -49,6 +49,8 @@ to the current platform adapter while preserving system-command support.
   expectations.
 - Platform modules do not own selection, catalog, or user-action policy.
 - System and managed runtime behavior remains explicit in backend facts.
+- Static release asset names should be constructed directly instead of through
+  formatting macros so platform metadata stays clippy-clean.
 
 ## Revisit Triggers
 - Vendor archive layout changes.

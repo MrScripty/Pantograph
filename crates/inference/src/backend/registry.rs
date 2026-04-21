@@ -250,10 +250,8 @@ mod tests {
     #[test]
     fn test_registry_creation() {
         let registry = BackendRegistry::new();
-        // Should have at least one backend if any feature is enabled
         let backends = registry.list();
-        // This test passes even with no backends enabled
-        assert!(backends.len() >= 0);
+        assert_eq!(backends.len(), registry.factories.len());
     }
 
     #[cfg(feature = "backend-llamacpp")]

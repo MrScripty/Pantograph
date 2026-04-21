@@ -7,7 +7,7 @@
 
 use serde::Deserialize;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
 use tokio::sync::RwLock;
@@ -163,7 +163,7 @@ impl LlamaServer {
     }
 
     /// Cleanup any stale sidecar processes from previous runs
-    pub fn cleanup_stale_sidecar(app_data_dir: &PathBuf) -> Result<(), String> {
+    pub fn cleanup_stale_sidecar(app_data_dir: &Path) -> Result<(), String> {
         let pid_path = app_data_dir.join(SIDECAR_PID_FILE);
         if !pid_path.exists() {
             return Ok(());

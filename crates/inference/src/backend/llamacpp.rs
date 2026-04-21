@@ -160,8 +160,7 @@ impl LlamaCppBackend {
 
                     // Parse SSE format: "data: {...}\n\n"
                     for line in text.lines() {
-                        if line.starts_with("data: ") {
-                            let data = &line[6..];
+                        if let Some(data) = line.strip_prefix("data: ") {
                             if data == "[DONE]" {
                                 return Ok(ChatChunk {
                                     content: None,
@@ -765,9 +764,11 @@ mod tests {
 
         assert_eq!(fingerprint.runtime_id, "llama_cpp");
         assert_eq!(fingerprint.backend_key, "llama_cpp");
-        assert!(fingerprint
-            .tokenizer_fingerprint
-            .contains("/models/main.gguf"));
+        assert!(
+            fingerprint
+                .tokenizer_fingerprint
+                .contains("/models/main.gguf")
+        );
         assert_eq!(
             fingerprint.prompt_format_fingerprint.as_deref(),
             Some("llamacpp_completion")
@@ -796,9 +797,11 @@ mod tests {
         assert_eq!(fingerprint.model_id, "/models/main.gguf");
         assert!(fingerprint.config_hash.contains("/models/vision.mmproj"));
         assert!(fingerprint.config_hash.contains("auto"));
-        assert!(fingerprint
-            .config_hash
-            .contains(&defaults::CONTEXT_SIZE.to_string()));
+        assert!(
+            fingerprint
+                .config_hash
+                .contains(&defaults::CONTEXT_SIZE.to_string())
+        );
     }
 
     #[tokio::test]
