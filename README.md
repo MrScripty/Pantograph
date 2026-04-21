@@ -129,6 +129,9 @@ npm run check
 ./launcher.sh --test
 ```
 
+Testing placement, cross-layer acceptance requirements, and release-smoke CI
+strategy are documented in `docs/testing-and-release-strategy.md`.
+
 ### Runtime Separation
 
 Python-backed model execution is intentionally out-of-process and externally provisioned.

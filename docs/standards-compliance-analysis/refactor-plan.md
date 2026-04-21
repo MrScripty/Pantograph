@@ -546,9 +546,16 @@ Tasks:
   `launcher.sh --test` now runs the local quality gate across critical frontend
   lint, TypeScript, frontend tests, Rust workspace checks, and focused Rust unit
   tests.
-- Define the GUI `--release-smoke` CI strategy, including display server,
-  sandbox/GPU/shared-memory constraints, and bounded startup behavior.
-- Document the repo's hybrid test placement and acceptance strategy.
+- [x] Define the GUI `--release-smoke` CI strategy, including display server,
+  sandbox/GPU/shared-memory constraints, and bounded startup behavior. Status:
+  `docs/testing-and-release-strategy.md` now requires clean-runner execution,
+  declared Linux display handling, isolated state, CI-only launch flag
+  containment, explicit GPU/sandbox posture, bounded startup, and retained
+  redistributables checks before GUI launch.
+- [x] Document the repo's hybrid test placement and acceptance strategy.
+  Status: `docs/testing-and-release-strategy.md` defines colocated frontend
+  tests, crate-local Rust tests, root smoke scripts, cross-layer acceptance
+  requirements, and durable state isolation rules.
 - Normalize repeated Rust dependency versions to workspace inheritance.
 - Document or correct package-local dependency ownership for `packages/svelte-graph`.
 - Add toolchain pinning files after confirming intended Rust, Node, and Python versions.
