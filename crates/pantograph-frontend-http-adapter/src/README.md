@@ -39,6 +39,9 @@ implements `WorkflowHost`.
 - The actual `workflow_run` transport path must also preserve backend-owned
   interactive `invalid_request` envelopes as `WorkflowServiceError::InvalidRequest`
   rather than masking them as generic runtime or transport failures.
+- Scheduler error details are the only currently supported envelope detail
+  variant, so adapter projection should map that variant directly without
+  inventing optional fallback branches.
 
 ## Revisit Triggers
 - A second frontend transport needs the same host semantics.
@@ -53,9 +56,10 @@ implements `WorkflowHost`.
 
 ## Usage Examples
 ```rust
+let pumas_api = maybe_pumas_api();
 let host = pantograph_frontend_http_adapter::FrontendHttpWorkflowHost::with_defaults(
     "http://127.0.0.1:8081".to_string(),
-    None,
+    pumas_api,
     std::path::Path::new(env!("CARGO_MANIFEST_DIR")),
 )?;
 ```

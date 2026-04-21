@@ -12,10 +12,10 @@ use pantograph_runtime_identity::{
     backend_key_aliases, normalize_runtime_identifier_with_fallback,
 };
 use pantograph_workflow_service::{
-    capabilities, WorkflowErrorCode, WorkflowErrorDetails, WorkflowErrorEnvelope, WorkflowHost,
+    WorkflowErrorCode, WorkflowErrorDetails, WorkflowErrorEnvelope, WorkflowHost,
     WorkflowHostModelDescriptor, WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunHandle,
     WorkflowRunOptions, WorkflowRuntimeCapability, WorkflowRuntimeInstallState,
-    WorkflowRuntimeSourceKind, WorkflowServiceError,
+    WorkflowRuntimeSourceKind, WorkflowServiceError, capabilities,
 };
 
 pub const DEFAULT_BACKEND_NAME: &str = "openai-compatible";
@@ -245,8 +245,8 @@ async fn workflow_error_from_http_response(
 }
 
 fn map_workflow_error_envelope(envelope: WorkflowErrorEnvelope) -> WorkflowServiceError {
-    let scheduler_details = envelope.details.and_then(|details| match details {
-        WorkflowErrorDetails::Scheduler(details) => Some(details),
+    let scheduler_details = envelope.details.map(|details| match details {
+        WorkflowErrorDetails::Scheduler(details) => details,
     });
     match envelope.code {
         WorkflowErrorCode::InvalidRequest => WorkflowServiceError::InvalidRequest(envelope.message),
@@ -724,9 +724,10 @@ mod tests {
 
         server_thread.join().expect("join server");
         assert!(matches!(err, WorkflowServiceError::Internal(_)));
-        assert!(err
-            .to_string()
-            .contains("expected workflow error envelope JSON"));
+        assert!(
+            err.to_string()
+                .contains("expected workflow error envelope JSON")
+        );
     }
 
     #[tokio::test]
@@ -850,8 +851,10 @@ mod tests {
 
         server_thread.join().expect("join server");
         assert!(matches!(error, WorkflowServiceError::Internal(_)));
-        assert!(error
-            .to_string()
-            .contains("expected workflow error envelope JSON"));
+        assert!(
+            error
+                .to_string()
+                .contains("expected workflow error envelope JSON")
+        );
     }
 }

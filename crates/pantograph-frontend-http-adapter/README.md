@@ -44,6 +44,8 @@ their feature surface explicitly enables frontend HTTP behavior.
 - Non-2xx responses are mapped through backend-owned workflow errors.
 - `cancelled`, `invalid_request`, and runtime timeout envelopes remain
   semantically distinct.
+- Scheduler envelope details map directly into workflow-service scheduler
+  errors; this crate does not reinterpret or broaden the detail vocabulary.
 - The adapter does not own runtime selection, graph mutation, or scheduler
   policy.
 

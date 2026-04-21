@@ -639,8 +639,10 @@ Tasks:
   strict clippy check after resolving graph canonicalization lazy fallback,
   connection revision comparison, graph execution-mode default derivation,
   scheduler queued-run rebinding, trace scheduler unused timestamp arguments,
-  and workflow run-handle default construction. The full workspace audit now
-  reports the next cleanup set in `crates/pantograph-frontend-http-adapter` and
+  and workflow run-handle default construction.
+  `crates/pantograph-frontend-http-adapter` now passes its focused strict
+  clippy check after simplifying scheduler-detail envelope mapping. The full
+  workspace audit now reports the next cleanup set in
   `crates/pantograph-embedded-runtime`; embedded-runtime all-target checks also
   expose missing test-local imports for `ExecutorExtensions` and
   `tokio::sync::RwLock` after the zero-warning root-facade import cleanup.
