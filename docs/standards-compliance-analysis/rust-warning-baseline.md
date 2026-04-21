@@ -8,7 +8,7 @@ Command used for the baseline:
 cargo check --workspace --all-features --message-format short
 ```
 
-The command completes successfully, but the workspace currently emits 94
+The command completes successfully, but the workspace currently emits 93
 warnings. This document classifies the warning debt required by M7 before
 `cargo clippy --workspace --all-targets --all-features -- -D warnings` can
 become a blocking quality gate.
@@ -25,7 +25,6 @@ The classification follows the updated standards expectations:
 | --- | ---: | --- | --- |
 | `workflow-nodes` | 5 | Gate experimental model-provider executor | Either register the model-provider executor or gate it behind an experimental feature. |
 | `pantograph-embedded-runtime` | 2 | Remove unused imports | Drop unused public imports when the dirty embedded-runtime branch is normalized. |
-| `pantograph-uniffi` | 1 | Intentional retained ownership field | Rename/comment the field or add a narrow allow because it holds the executor alive for exported UniFFI resources. |
 | `pantograph` Tauri binary | 80 | Remove migrated/stale local workflow and server-discovery code | Delete superseded workflow local DTO/validation/registry/connection helpers and unused discovery paths after confirming no command references remain. |
 | `pantograph_rustler` | 6 | External macro/dependency exception | Resolve by upgrading/fixing `rustler::resource!`, or add a scoped lint exception with dependency rationale. |
 
@@ -52,6 +51,12 @@ The classification follows the updated standards expectations:
 | --- | --- | --- | --- |
 | `src/graph/session_contract.rs:76` | `build_graph_session_response` unused | Test-scope | Resolved by compiling the compatibility wrapper only for session-contract tests; production response assembly uses the state-aware projection helper. |
 
+### `crates/pantograph-uniffi`
+
+| Location | Warning | Classification | Resolution |
+| --- | --- | --- | --- |
+| `src/lib.rs:586` | `task_executor` field never read | Remove | Resolved by deleting the inactive no-op task executor field and helper from `FfiWorkflowEngine`; the binding object does not expose task execution. |
+
 ## Active Warnings
 
 ### `crates/workflow-nodes`
@@ -69,12 +74,6 @@ The classification follows the updated standards expectations:
 | --- | --- | --- | --- |
 | `src/lib.rs:6` | unused `node_engine::ExecutorExtensions` import | Remove | Delete after preserving the current dirty embedded-runtime work. |
 | `src/lib.rs:15` | unused `tokio::sync::RwLock` import | Remove | Delete after preserving the current dirty embedded-runtime work. |
-
-### `crates/pantograph-uniffi`
-
-| Location | Warning | Classification | Next action |
-| --- | --- | --- | --- |
-| `src/lib.rs:586` | `task_executor` field never read | Intentionally retained/use | This appears to retain executor ownership for exported runtime resources. Make the ownership contract explicit by reading it through a small accessor, renaming to `_task_executor`, or applying a narrow lint allow with a comment. |
 
 ### `src-tauri` / `pantograph` binary
 

@@ -11,7 +11,7 @@ core workflow/runtime crates.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `lib.rs` | UniFFI exports, wrapper DTOs, legacy graph/orchestration surface, and adapter delegation. |
+| `lib.rs` | UniFFI exports, wrapper DTOs, legacy graph/orchestration surface, and adapter delegation. The legacy workflow engine owns graph CRUD, cache inspection, and event buffering only. |
 | `runtime.rs` | Direct `FfiPantographRuntime` wrapper over `pantograph-embedded-runtime`. |
 | `bin/` | Binding generation helper utilities for supported UniFFI generator flows. |
 
@@ -54,6 +54,9 @@ and error projection, while workflow semantics stay in
 - Generated bindings and native library artifacts must be produced from the
   same build input.
 - Public exported methods should map to documented host-language use cases.
+- Binding objects should not retain placeholder runtime executors. If a binding
+  surface exposes execution, it must own a real host/runtime execution contract
+  or delegate to the embedded runtime wrapper.
 
 ## Revisit Triggers
 - A supported host language needs a different binding framework.

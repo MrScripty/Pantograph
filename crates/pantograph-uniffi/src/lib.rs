@@ -20,14 +20,13 @@
 //!     --out-dir ./bindings/python target/release/libpantograph_headless.so
 //! ```
 
-use std::collections::HashMap;
 use std::sync::Arc;
 #[cfg(feature = "frontend-http")]
 use std::sync::LazyLock;
 
 use node_engine::{
-    Context, EventSink, OrchestrationGraph, OrchestrationStore, TaskExecutor, WorkflowEvent,
-    WorkflowExecutor, WorkflowGraph,
+    EventSink, OrchestrationGraph, OrchestrationStore, WorkflowEvent, WorkflowExecutor,
+    WorkflowGraph,
 };
 use tokio::sync::RwLock;
 
@@ -236,30 +235,6 @@ fn ffi_workflow_event_type(event: &WorkflowEvent) -> &'static str {
         WorkflowEvent::TaskStream { .. } => "TaskStream",
         WorkflowEvent::GraphModified { .. } => "GraphModified",
         WorkflowEvent::IncrementalExecutionStarted { .. } => "IncrementalExecutionStarted",
-    }
-}
-
-// ============================================================================
-// Simple TaskExecutor for UniFFI (synchronous JSON-based)
-// ============================================================================
-
-/// A no-op TaskExecutor for use when the host language handles execution
-/// through the graph snapshot mechanism rather than callbacks.
-struct NoopTaskExecutor;
-
-#[async_trait::async_trait]
-impl TaskExecutor for NoopTaskExecutor {
-    async fn execute_task(
-        &self,
-        task_id: &str,
-        _inputs: HashMap<String, serde_json::Value>,
-        _context: &Context,
-        _extensions: &node_engine::ExecutorExtensions,
-    ) -> node_engine::Result<HashMap<String, serde_json::Value>> {
-        Err(node_engine::NodeEngineError::ExecutionFailed(format!(
-            "No executor configured for task '{}'",
-            task_id
-        )))
     }
 }
 
@@ -583,7 +558,6 @@ pub async fn frontend_http_workflow_set_session_keep_alive(
 #[derive(uniffi::Object)]
 pub struct FfiWorkflowEngine {
     executor: Arc<RwLock<WorkflowExecutor>>,
-    task_executor: Arc<dyn TaskExecutor>,
     event_buffer: Arc<RwLock<Vec<FfiWorkflowEvent>>>,
 }
 
@@ -624,7 +598,6 @@ impl FfiWorkflowEngine {
 
         Arc::new(Self {
             executor: Arc::new(RwLock::new(executor)),
-            task_executor: Arc::new(NoopTaskExecutor),
             event_buffer,
         })
     }
@@ -644,7 +617,6 @@ impl FfiWorkflowEngine {
 
         Ok(Arc::new(Self {
             executor: Arc::new(RwLock::new(executor)),
-            task_executor: Arc::new(NoopTaskExecutor),
             event_buffer,
         }))
     }
