@@ -358,6 +358,9 @@ Tasks:
   `crates/pantograph-embedded-runtime/src/runtime_config.rs`. Inference-gateway
   runtime-registry controller trait implementations now live in
   `crates/pantograph-embedded-runtime/src/runtime_registry_controller.rs`.
+  Embedded-runtime constructors, host projection, registry injection, accessors,
+  and shutdown sequencing now live in
+  `crates/pantograph-embedded-runtime/src/embedded_runtime_lifecycle.rs`.
 - Split `crates/node-engine/src/core_executor.rs` by execution phases, blocking
   adapters, demand preparation, output handling, and tests.
 - Split `src/components/WorkflowGraph.svelte` and

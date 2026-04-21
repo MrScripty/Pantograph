@@ -12,6 +12,7 @@ packages.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `embedding_workflow.rs` | Owns backend-side embedding workflow graph inspection, embedding model-path resolution, and workflow-specific runtime preparation rules. |
+| `embedded_runtime_lifecycle.rs` | Owns embedded-runtime constructors, host wiring, registry injection, accessors, and shutdown coordination. |
 | `lib_tests.rs` | Legacy embedded-runtime facade, host, registry, and workflow-session tests extracted from the root facade file. |
 | `lib.rs` | Composes the embedded runtime, workflow service, shared extensions, and public crate exports used by Tauri and standalone hosts. |
 | `model_dependencies.rs` | Resolves Pantograph model dependency requirements and binds workflow requests to Pumas-backed execution facts. |
@@ -87,6 +88,10 @@ embedded-runtime crate.
 ## Invariants
 - Pantograph-specific runtime orchestration stays in this crate, not in generic
   node packages.
+- Embedded-runtime construction, host projection, registry injection, and
+  shutdown sequencing stay in `embedded_runtime_lifecycle.rs` so the root
+  facade keeps only type definitions, exports, and remaining workflow API
+  forwarding until those surfaces are split.
 - Root embedded-runtime facade tests stay outside `lib.rs` so production
   runtime composition remains reviewable; split `lib_tests.rs` further when a
   behavior-focused test module boundary is introduced.
