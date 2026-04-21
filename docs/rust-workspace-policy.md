@@ -30,6 +30,27 @@ lints are denied so any future exception must be documented.
 Existing Rust warning debt remains a tracked baseline until M7 classifies each
 warning as remove, use, feature-gate, or intentionally retained.
 
+## Dependency Inheritance
+
+Dependencies used by two or more Rust workspace members belong in the root
+`[workspace.dependencies]` table. Member crates still declare every dependency
+they directly use, but shared versions are referenced with `.workspace = true`
+or `{ workspace = true }`.
+
+The current shared dependency set includes common async, serialization,
+compression, runtime, testing, and graph crates. Single-owner dependencies stay
+in the owning crate manifest unless another member starts using them.
+
+When adding a dependency:
+
+- Put it in the owning member manifest if only one crate uses it.
+- Move it to `[workspace.dependencies]` once two or more members need the same
+  crate.
+- Keep optional feature ownership in the member manifest, even when the version
+  is inherited from the workspace.
+- Do not use workspace inheritance to hide a dependency that a member actually
+  owns and imports.
+
 ## Warning Ratchet
 
 Current policy:

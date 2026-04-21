@@ -54,6 +54,7 @@ futures-util = "0.3"
 reqwest = { version = "0.12", features = ["json", "stream"] }
 which = "7"
 inventory = "0.3"
+graph-flow = "0.2"
 
 # Candle dependencies (shared for consistency)
 candle-core = { git = "https://github.com/huggingface/candle", branch = "main" }
@@ -73,6 +74,10 @@ zstd = "0.13"
 flate2 = "1"
 tar = "0.4"
 zip = "2"
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "6"
+tempfile = "3"
+env_logger = "0.11"
 once_cell = "1"
 parking_lot = "0.12"
 

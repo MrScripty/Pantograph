@@ -49,8 +49,8 @@ uuid.workspace = true
 once_cell.workspace = true
 pumas-library.workspace = true
 
-chrono = { version = "0.4", features = ["serde"] }
-dirs = "6"
+chrono.workspace = true
+dirs.workspace = true
 
 candle-core = { workspace = true, optional = true }
 candle-nn = { workspace = true, optional = true }
@@ -60,4 +60,4 @@ tokio-stream = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }
 
 [dev-dependencies]
-tempfile = "3"
+tempfile.workspace = true

@@ -1,4 +1,4 @@
-# ADR-003: Rust Workspace Metadata And Lint Policy
+# ADR-003: Rust Workspace Metadata, Lint, And Dependency Policy
 
 ## Status
 Accepted
@@ -13,6 +13,10 @@ repository metadata, no explicit `publish = false`, and no root
 The workspace also has known warning debt. Cargo checks pass, but `clippy -D
 warnings` and `cargo fmt --all -- --check` are not yet appropriate as blocking
 gates without a separate cleanup pass.
+
+The Rust dependency standards also require dependencies used by two or more
+workspace members to inherit a shared version from `[workspace.dependencies]`
+while each member still declares the dependencies it directly imports.
 
 ## Decision
 Adopt a root Rust package and lint policy:
@@ -40,6 +44,13 @@ Adopt a root Rust package and lint policy:
 - Exceptions must be scoped to the smallest possible module or item.
 - Workspace-wide or crate-wide unsafe exceptions are not allowed.
 
+5. Shared Rust dependency versions live in `[workspace.dependencies]`.
+- Dependencies used by two or more workspace members inherit versions from the
+  root manifest.
+- Member manifests continue to declare direct dependency ownership.
+- Optional feature ownership stays in member manifests even when the dependency
+  version is inherited.
+
 ## Consequences
 
 ### Positive
@@ -47,6 +58,8 @@ Adopt a root Rust package and lint policy:
 - Accidental crates.io publishing is blocked for all current local crates.
 - New repo-owned unsafe code fails by default.
 - Future Rust lint hardening can ratchet from a documented baseline.
+- Repeated Rust dependency versions move to a single auditable root table
+  without hiding which crate owns each import.
 
 ### Negative
 - The workspace still emits known warnings until the M7 cleanup milestone.
@@ -58,6 +71,7 @@ Adopt a root Rust package and lint policy:
 ## Compliance Mapping
 - Rust package metadata and publish control.
 - Rust API and release standards for Cargo feature and package contracts.
+- Rust dependency standards for workspace dependency inheritance.
 - Unsafe policy and exception documentation.
 - Decision traceability for cross-crate manifest changes.
 

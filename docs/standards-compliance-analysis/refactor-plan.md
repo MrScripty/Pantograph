@@ -556,7 +556,11 @@ Tasks:
   Status: `docs/testing-and-release-strategy.md` defines colocated frontend
   tests, crate-local Rust tests, root smoke scripts, cross-layer acceptance
   requirements, and durable state isolation rules.
-- Normalize repeated Rust dependency versions to workspace inheritance.
+- [x] Normalize repeated Rust dependency versions to workspace inheritance.
+  Status: root `[workspace.dependencies]` now owns repeated Rust versions for
+  shared graph, time, directory, temp-file, and logger crates, and member
+  manifests now inherit existing shared async, serialization, compression,
+  logging, error, HTTP, UUID, and utility dependencies consistently.
 - [x] Document or correct package-local dependency ownership for
   `packages/svelte-graph`. Status: `packages/svelte-graph/README.md` now
   records that the package owns its peer dependency consumer contract while the

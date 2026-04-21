@@ -18,7 +18,7 @@ serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 uuid.workspace = true
-chrono = { version = "0.4", features = ["serde"] }
+chrono.workspace = true
 parking_lot.workspace = true
 
 # Shared framework/domain crates
@@ -28,4 +28,4 @@ pantograph-runtime-identity = { path = "../pantograph-runtime-identity" }
 
 [dev-dependencies]
 tokio.workspace = true
-tempfile = "3"
+tempfile.workspace = true

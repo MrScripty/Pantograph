@@ -27,18 +27,18 @@ inference = { path = "../inference", default-features = false, optional = true }
 uniffi = { version = "0.28", features = ["tokio"] }
 
 # Async runtime
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }
-async-trait = "0.1"
+tokio.workspace = true
+async-trait.workspace = true
 
 # Graph-flow for Context type
-graph-flow = "0.2"
+graph-flow.workspace = true
 
 # Serialization (JSON marshaling at FFI boundary)
 serde.workspace = true
-serde_json = "1"
+serde_json.workspace = true
 
 # Error handling
-thiserror = "1"
+thiserror.workspace = true
 
 # Model management
 pumas-library = { workspace = true }
