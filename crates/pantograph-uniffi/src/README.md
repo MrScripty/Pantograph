@@ -1,98 +1,118 @@
 # crates/pantograph-uniffi/src
 
+UniFFI source boundary for Pantograph native workflow bindings.
+
 ## Purpose
-UniFFI adapter surface for Pantograph workflow APIs.
+This directory owns the UniFFI-facing wrapper implementation for Pantograph
+workflow and embedded-runtime APIs. It keeps FFI-safe DTO conversion, generated
+binding metadata, async bridging, and host-language error mapping separate from
+core workflow/runtime crates.
 
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `lib.rs` | UniFFI exports and adapter implementation delegating to shared service contracts. |
-| `runtime.rs` | Direct embedded-runtime UniFFI object for workflow/session execution without HTTP. |
-| `bin/` | Binding generation helper utilities. |
+| `lib.rs` | UniFFI exports, wrapper DTOs, legacy graph/orchestration surface, and adapter delegation. |
+| `runtime.rs` | Direct `FfiPantographRuntime` wrapper over `pantograph-embedded-runtime`. |
+| `bin/` | Binding generation helper utilities for supported UniFFI generator flows. |
 
-## Workflow Export Modes
+## Problem
+Native consumers need a stable shared library and generated bindings, but core
+Rust workflow/runtime types are not all FFI-safe. Binding-specific conversion
+and generated-language constraints must not leak into product-native backend
+contracts.
 
-Default:
-- Builds the Pantograph headless native shared library.
-- Exports `FfiPantographRuntime`.
-- `FfiPantographRuntime` wraps `pantograph-embedded-runtime` and calls the Rust workflow service directly.
-- No URL/HTTP workflow exports.
+## Constraints
+- Core crates must compile and test without UniFFI.
+- Exported DTOs and errors must be FFI-safe.
+- Generated bindings must match the native library build.
+- Frontend HTTP exports are optional and feature-gated.
+- Direct embedded-runtime exports delegate to `pantograph-embedded-runtime`.
 
-`no-default-features`:
-- Keeps only the graph CRUD / orchestration / Pumas adapter surface.
-- Does not export workflow/session transport helpers.
+## Decision
+Keep UniFFI exports in this source directory. The binding layer owns conversion
+and error projection, while workflow semantics stay in
+`pantograph-workflow-service` and runtime composition stays in
+`pantograph-embedded-runtime`.
 
-`embedded-runtime` feature:
-- `FfiPantographRuntime::new(config, pumas_api?)`
-- `workflow_run(request_json) -> response_json`
-- `workflow_get_capabilities(request_json) -> response_json`
-- `workflow_get_io(request_json) -> response_json`
-- `workflow_preflight(request_json) -> response_json`
-- `workflow_create_session(request_json) -> response_json`
-- `workflow_run_session(request_json) -> response_json`
-- `workflow_close_session(request_json) -> response_json`
-- `workflow_get_session_status(request_json) -> response_json`
-- `workflow_list_session_queue(request_json) -> response_json`
-- `workflow_cancel_session_queue_item(request_json) -> response_json`
-- `workflow_reprioritize_session_queue_item(request_json) -> response_json`
-- `workflow_set_session_keep_alive(request_json) -> response_json`
-- `workflow_graph_save(request_json) -> response_json`
-- `workflow_graph_load(request_json) -> response_json`
-- `workflow_graph_list() -> response_json`
-- `workflow_graph_create_edit_session(request_json) -> response_json`
-- `workflow_graph_close_edit_session(request_json) -> response_json`
-- `workflow_graph_get_edit_session_graph(request_json) -> response_json`
-- `workflow_graph_get_undo_redo_state(request_json) -> response_json`
-- `workflow_graph_update_node_data(request_json) -> response_json`
-- `workflow_graph_update_node_position(request_json) -> response_json`
-- `workflow_graph_add_node(request_json) -> response_json`
-- `workflow_graph_remove_node(request_json) -> response_json`
-- `workflow_graph_add_edge(request_json) -> response_json`
-- `workflow_graph_remove_edge(request_json) -> response_json`
-- `workflow_graph_undo(request_json) -> response_json`
-- `workflow_graph_redo(request_json) -> response_json`
-- `workflow_graph_get_connection_candidates(request_json) -> response_json`
-- `workflow_graph_connect(request_json) -> response_json`
-- `workflow_graph_insert_node_and_connect(request_json) -> response_json`
-- `workflow_graph_preview_node_insert_on_edge(request_json) -> response_json`
-- `workflow_graph_insert_node_on_edge(request_json) -> response_json`
+## Alternatives Rejected
+- Annotate core workflow types directly for UniFFI: rejected because FFI
+  concerns would leak inward and several types are not binding-safe.
+- Use Tauri IPC as the native embedding API: rejected because non-desktop
+  consumers need a product-native library.
+- Hand-maintain generated host-language bindings: rejected because generated
+  bindings must come from the compiled native artifact.
 
-`frontend-http` feature:
-- `frontend_http_workflow_run(base_url, request_json, pumas_api?) -> response_json`
-- `frontend_http_workflow_get_capabilities(base_url, request_json, pumas_api?) -> response_json`
-- `frontend_http_workflow_preflight(base_url, request_json, pumas_api?) -> response_json`
-- `frontend_http_workflow_create_session(base_url, request_json, pumas_api?) -> response_json`
-- `frontend_http_workflow_run_session(base_url, request_json, pumas_api?) -> response_json`
-- `frontend_http_workflow_close_session(base_url, request_json, pumas_api?) -> response_json`
-- `frontend_http_workflow_get_session_status(request_json) -> response_json`
-- `frontend_http_workflow_list_session_queue(request_json) -> response_json`
-- `frontend_http_workflow_cancel_session_queue_item(request_json) -> response_json`
-- `frontend_http_workflow_reprioritize_session_queue_item(request_json) -> response_json`
-- `frontend_http_workflow_set_session_keep_alive(base_url, request_json, pumas_api?) -> response_json`
+## Invariants
+- `FfiPantographRuntime` wraps the direct embedded runtime when the
+  `embedded-runtime` feature is enabled.
+- Request/response JSON contracts remain backend-owned by
+  `pantograph-workflow-service`.
+- `frontend-http` exports delegate to `pantograph-frontend-http-adapter`.
+- Generated bindings and native library artifacts must be produced from the
+  same build input.
+- Public exported methods should map to documented host-language use cases.
+
+## Revisit Triggers
+- A supported host language needs a different binding framework.
+- Native artifact naming or packaging changes.
+- FFI wrapper conversions become too broad for one facade file.
+- Public binding support tiers change.
 
 ## Dependencies
-- Internal: `pantograph-workflow-service`, `pantograph-embedded-runtime`, `node-engine`.
-- Frontend HTTP (optional): `pantograph-frontend-http-adapter`.
-- Host/runtime: optional `pumas-library`.
+**Internal:** `node-engine`, `pantograph-workflow-service`,
+`pantograph-embedded-runtime`, optional `pantograph-frontend-http-adapter`, and
+optional `inference`.
+
+**External:** `uniffi`, `tokio`, `async-trait`, `graph-flow`, `serde`,
+`serde_json`, `thiserror`, and `pumas-library`.
+
+## Related ADRs
+- `docs/adr/ADR-001-headless-embedding-service-boundary.md`
+- `docs/embedded-runtime-extraction-plan.md`
+- `docs/headless-native-bindings.md`
+
+## Usage Examples
+```rust
+let runtime = FfiPantographRuntime::new(config, optional_pumas_api).await?;
+```
+
+## API Consumer Contract
+- Inputs: FFI-safe records, strings containing workflow JSON, runtime config
+  records, generated host-language method calls, and optional Pumas handles.
+- Outputs: generated binding methods, native shared library exports, response
+  JSON, and FFI-safe error categories.
+- Lifecycle: host code loads the generated binding and native library from the
+  same build, creates runtime objects, and shuts them down through exported
+  lifecycle APIs as those mature.
+- Errors: Rust errors are mapped into binding-safe error values or response
+  envelopes.
+- Versioning: generated bindings and native library artifacts must come from
+  the same release input; exported method changes require host-language smoke
+  updates.
+
+## Structured Producer Contract
+- Stable fields: generated binding metadata, native library name, exported
+  record fields, method names, and feature-gated export sets are
+  machine-consumed.
+- Defaults: default features expose embedded runtime and selected backend
+  families.
+- Enums and labels: FFI enum variants and exported method names are public
+  binding labels.
+- Ordering: generated file ordering is not semantic, but generated metadata
+  must match the compiled library.
+- Compatibility: consumers must not mix generated bindings and native
+  libraries from different builds.
+- Regeneration/migration: every API change requires binding regeneration,
+  native wrapper tests, host-language smoke tests, package scripts, and this
+  README to update together.
+
+## Testing
+```bash
+cargo test -p pantograph-uniffi
+./scripts/check-uniffi-embedded-runtime-surface.sh
+./scripts/check-uniffi-csharp-smoke.sh
+```
 
 ## Notes
-
-- Frontend HTTP behavior is isolated in `pantograph-frontend-http-adapter`.
-- Native embedding behavior is isolated in `pantograph-embedded-runtime`.
-- The request and response JSON contracts are owned by
-  `pantograph-workflow-service`; this UniFFI layer only parses request JSON,
-  delegates to the Rust service/adapter crates, and re-serializes backend-owned
-  responses or error envelopes at the boundary.
-- `scripts/check-uniffi-embedded-runtime-surface.sh` verifies that the direct
-  runtime object is present in the compiled UniFFI metadata.
-- `scripts/check-uniffi-csharp-smoke.sh` uses `uniffi-bindgen-cs` to generate
-  C# into `target/uniffi/csharp/`, compile it, and run a direct-runtime C#
-  workflow/session smoke harness against the Pantograph headless native library.
-- `scripts/package-uniffi-csharp-artifacts.sh` builds the release native
-  library, generates C# from that library, and creates CI-ready C# and native
-  runtime zip artifacts under `target/bindings-package/artifacts/`.
-- `scripts/check-packaged-csharp-quickstart.sh` compiles the packaged C#
-  quickstart against the packaged generated binding without restoring NuGet
-  packages.
-- The checked-in bindgen helper currently supports the official UniFFI 0.28
-  generator set. Use the separate `uniffi-bindgen-cs` CLI for C# generation.
+- `lib.rs` remains over the decomposition threshold and is tracked in the
+  standards compliance plan.

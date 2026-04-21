@@ -1,65 +1,114 @@
 # crates/pantograph-rustler/src
 
+Rustler NIF source boundary for Pantograph workflow APIs.
+
 ## Purpose
-Rustler NIF adapter surface for Pantograph workflow APIs.
+This directory owns the BEAM-facing Rustler implementation for selected
+Pantograph workflow and orchestration APIs. It keeps NIF entrypoints, resource
+wrappers, scheduling annotations, callback bridges, and BEAM-safe error mapping
+outside core workflow crates.
 
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `lib.rs` | NIF entrypoints, resource wrappers, and BEAM-facing adapter composition. |
-| `elixir_data_graph_executor.rs` | Focused orchestration data-graph bridge from Rustler into backend-owned workflow execution. |
-| `resource_registration.rs` | Focused Rustler resource registration boundary used during NIF load. |
-| `type_parsing_contract.rs` | Focused string-to-enum parsing helpers for the public Rustler type-parsing NIFs. |
-| `workflow_event_contract.rs` | Focused workflow-event JSON serialization helpers for the BEAM event channel. |
-| `workflow_graph_contract.rs` | Focused workflow graph JSON CRUD and validation helpers behind the public NIF facade. |
-| `workflow_host_contract.rs` | Focused frontend-HTTP request/response and workflow-error envelope helpers for Rustler. |
+| `lib.rs` | Public NIF facade, resource wrappers, exported entrypoints, and module load wiring. |
+| `elixir_data_graph_executor.rs` | Rustler-specific orchestration data-graph bridge into backend workflow execution. |
+| `resource_registration.rs` | NIF load-time Rustler resource registration boundary. |
+| `type_parsing_contract.rs` | String-to-enum parsing helpers behind public type-parsing NIFs. |
+| `workflow_event_contract.rs` | Workflow-event JSON serialization helpers for the BEAM event channel. |
+| `workflow_graph_contract.rs` | Workflow graph JSON CRUD and validation helpers behind public graph NIFs. |
+| `workflow_host_contract.rs` | Frontend-HTTP request/response and workflow-error envelope helpers. |
 
-## Workflow NIF Modes
+## Problem
+BEAM consumers need native Pantograph workflow behavior without embedding Rust
+implementation details or reimplementing workflow policy in Elixir. Rustler
+adds resource and scheduler constraints that should not leak into core crates.
 
-Default (`no features`):
-- No URL/HTTP workflow NIF surface.
-- Headless Rust hosts should use `pantograph-workflow-service` directly.
+## Constraints
+- Core workflow crates must not depend on Rustler.
+- Long-running work must use appropriate dirty schedulers or owned async
+  resources.
+- Frontend HTTP behavior is optional and isolated behind a feature.
+- Request/response JSON contracts are owned by `pantograph-workflow-service`.
+- BEAM-facing resource and callback behavior must remain explicit.
 
-`frontend-http` feature:
-- `frontend_http_workflow_run/3`
-- `frontend_http_workflow_get_capabilities/3`
-- `frontend_http_workflow_preflight/3`
-- `frontend_http_workflow_create_session/3`
-- `frontend_http_workflow_run_session/3`
-- `frontend_http_workflow_close_session/3`
-- `frontend_http_workflow_get_session_status/1`
-- `frontend_http_workflow_list_session_queue/1`
-- `frontend_http_workflow_cancel_session_queue_item/1`
-- `frontend_http_workflow_reprioritize_session_queue_item/1`
-- `frontend_http_workflow_set_session_keep_alive/3`
+## Decision
+Keep the Rustler source surface as a thin binding facade. It delegates workflow
+behavior to backend crates and owns only BEAM conversion, NIF resource
+registration, callback transport, and feature-gated adapter calls.
+
+## Alternatives Rejected
+- Put Rustler macros in core workflow crates: rejected because BEAM runtime
+  details would leak into reusable Rust APIs.
+- Mirror every internal Rust function as a NIF: rejected because binding
+  surfaces should be curated public contracts.
+- Implement workflow policy in Elixir callbacks: rejected because backend Rust
+  owns workflow semantics and runtime truth.
+
+## Invariants
+- Exported NIF names remain stable unless BEAM consumers migrate together.
+- Workflow JSON responses and error envelopes preserve backend-owned service
+  semantics.
+- Resource registration stays centralized in `resource_registration.rs`.
+- Callback/event JSON serialization preserves backend event labels and order.
+- Frontend HTTP NIFs are unavailable unless the `frontend-http` feature is
+  enabled.
+
+## Revisit Triggers
+- Rustler resource macro behavior changes and removes current warning pressure.
+- BEAM runtime supervision requires a dedicated lifecycle manager.
+- Public NIF support tiers or exported function names change.
+- Direct embedded runtime support is added to Rustler.
 
 ## Dependencies
-- Internal: `pantograph-workflow-service`, `node-engine`.
-- Frontend HTTP (optional): `pantograph-frontend-http-adapter`.
-- Host/runtime: optional `pumas-library`.
+**Internal:** `node-engine`, `pantograph-workflow-service`,
+`pantograph-frontend-http-adapter`, `inference`, and `workflow-nodes`.
+
+**External:** `rustler`, `tokio`, `async-trait`, `graph-flow`, `serde`,
+`serde_json`, `log`, and `pumas-library`.
+
+## Related ADRs
+- `docs/adr/ADR-001-headless-embedding-service-boundary.md`
+
+## Usage Examples
+The Rust crate is loaded by the BEAM module configured in `rustler::init!`:
+
+```elixir
+Pantograph.Native.workflow_validate(graph_json)
+```
+
+## API Consumer Contract
+- Inputs: BEAM terms, JSON strings, resource handles, callback PIDs, and
+  feature-gated frontend HTTP parameters.
+- Outputs: BEAM-safe terms, JSON response strings, resource handles, and
+  callback messages.
+- Lifecycle: BEAM code loads the NIF, creates resources, invokes exported
+  functions, and drops resources when no longer referenced.
+- Errors: Rust errors map to `rustler::Error::Term` values or structured JSON
+  envelopes.
+- Versioning: exported NIF names, atoms, resource shapes, and JSON payload
+  semantics are public binding contracts for BEAM consumers.
+
+## Structured Producer Contract
+- Stable fields: exported NIF names, atoms, JSON payload shapes, callback event
+  tags, and resource handle semantics are machine-consumed by host code.
+- Defaults: default features expose no frontend HTTP workflow surface.
+- Enums and labels: type-parsing labels, atoms, and event tags carry semantic
+  meaning.
+- Ordering: event messages preserve backend workflow event ordering as observed
+  by the bridge.
+- Compatibility: changing exported NIF names or resource shapes is breaking for
+  BEAM consumers.
+- Regeneration/migration: NIF surface changes must update host docs, native
+  tests, BEAM smoke paths, release notes, and this README together.
+
+## Testing
+```bash
+cargo test -p pantograph_rustler
+```
 
 ## Notes
-
-- Frontend HTTP behavior is isolated in `pantograph-frontend-http-adapter`.
-- The request and response JSON contracts are owned by
-  `pantograph-workflow-service`; the Rustler layer only parses boundary JSON,
-  delegates to the Rust service/adapter crates, and returns backend-owned
-  response or error-envelope JSON back to the BEAM.
-- Workflow-event JSON serialization is isolated in
-  `workflow_event_contract.rs`, and frontend-HTTP request/error helpers are
-  isolated in `workflow_host_contract.rs`, so the public NIF surface can stay
-  facade-first while touched boundary logic remains decomposed.
-- Workflow graph JSON CRUD and validation helpers now live in
-  `workflow_graph_contract.rs`, isolating graph-shaping adapter logic from the
-  public NIF facade while preserving the existing exported function names.
-- Rustler type-parsing NIFs now delegate to `type_parsing_contract.rs`,
-  keeping string-to-enum adapter logic out of the main facade while preserving
-  the current exported parsing functions.
-- The orchestration data-graph bridge now lives in
-  `elixir_data_graph_executor.rs`, isolating the Rustler-specific callback
-  bridge from the NIF facade while keeping the actual async execution contract
-  backend-owned.
-- NIF load-time resource registration now lives in
-  `resource_registration.rs`, isolating the Rustler resource macro boundary
-  from the public NIF facade and removing the previous ignored-return warning
-  pattern from `lib.rs`.
+- Current `rustler::resource!` expansion emits `non_local_definitions`
+  warnings; this remains tracked by the standards compliance issue register.
+- `lib.rs` remains over the decomposition threshold and is tracked in the
+  standards compliance plan.

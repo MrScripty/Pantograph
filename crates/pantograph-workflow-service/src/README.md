@@ -1,197 +1,124 @@
 # crates/pantograph-workflow-service/src
 
-## Purpose
-Host-agnostic application service contracts and orchestration entrypoints for Pantograph workflow APIs.
+Host-agnostic workflow service source boundary.
 
-## Boundaries
-- No transport framework dependencies (Tauri/UniFFI/Rustler).
-- No UI concerns.
-- Host/runtime dependencies exposed via traits.
+## Purpose
+This directory owns Pantograph workflow application-service contracts and
+orchestration entrypoints. It keeps workflow execution, graph mutation,
+scheduler queues, runtime preflight, technical-fit request shaping, and trace
+diagnostics reusable across Tauri, UniFFI, Rustler, and tests.
 
 ## Contents
-- `workflow.rs`: headless workflow contracts, host traits, and orchestration logic.
-- `workflow/`: focused backend-owned workflow-session runtime coordination
-  helpers that keep load/preflight/affinity lifecycle logic out of the main
-  `workflow.rs` facade.
-- `scheduler/`: backend-owned workflow-session scheduler contracts and queue
-  store boundary used by `workflow.rs` so queue policy does not stay embedded
-  in the service facade.
-- `technical_fit.rs`: host-agnostic technical-fit request and decision DTOs plus
-  normalization helpers, session queue-pressure/context assembly, and
-  workflow-service request/session entrypoints plus runtime-preflight
-  assessment glue that freeze how workflow and session context is projected
-  into backend runtime selection without owning the selector policy.
-- `capabilities.rs`: shared workflow capability/validation utilities used by all adapters.
-- `trace/`: host-agnostic workflow trace modules that separate backend-owned
-  contracts and request validation, in-memory trace state/store ownership, and
-  runtime/scheduler snapshot merge helpers so diagnostics transport stays
-  additive at adapter boundaries.
+| File/Folder | Description |
+| ----------- | ----------- |
+| `lib.rs` | Public module exports for the workflow service crate. |
+| `workflow.rs` | Public workflow contracts, host traits, facade methods, graph/session APIs, and orchestration logic. |
+| `workflow/` | Private runtime preflight and session-runtime helpers extracted from the main facade. |
+| `scheduler/` | Backend-owned workflow-session queue/store contracts used by the workflow facade. |
+| `trace/` | Workflow trace contracts, request validation, in-memory trace state, and runtime/scheduler snapshot merge helpers. |
+| `graph/` | Graph DTOs and session-kind contracts shared by service operations. |
+| `technical_fit.rs` | Technical-fit request/decision DTOs, normalization helpers, session context assembly, and runtime-preflight integration. |
+| `capabilities.rs` | Shared workflow capability and validation utilities. |
 
-## Headless Workflow API
+## Problem
+Workflow behavior crosses UI, runtime, diagnostics, and binding boundaries.
+Without one host-agnostic source owner, adapters can drift on execution ids,
+session affinity, graph edits, runtime readiness, queue policy, and trace
+semantics.
 
-Primary operations:
+## Constraints
+- No transport-framework dependencies such as Tauri, UniFFI, Rustler, or UI
+  packages.
+- Host and runtime dependencies enter through traits and DTOs.
+- Public response shapes are consumed by frontend stores and generated/native
+  bindings.
+- Runtime install/remove/status mutations remain outside this crate.
+- Runtime preflight and scheduler decisions must stay backend-owned.
 
-- `workflow_run`
-- `workflow_get_capabilities`
-- `workflow_get_io`
-- `workflow_preflight`
-- `create_workflow_session`
-- `run_workflow_session`
-- `close_workflow_session`
-- `workflow_get_session_status`
-- `workflow_get_session_inspection`
-- `workflow_list_session_queue`
-- `workflow_cancel_session_queue_item`
-- `workflow_reprioritize_session_queue_item`
-- `workflow_set_session_keep_alive`
-- `workflow_graph_save`
-- `workflow_graph_load`
-- `workflow_graph_list`
-- `workflow_graph_create_edit_session`
-- `workflow_graph_close_edit_session`
-- `workflow_graph_get_edit_session_graph`
-- `workflow_graph_get_undo_redo_state`
-- `workflow_graph_update_node_data`
-- `workflow_graph_add_node`
-- `workflow_graph_add_edge`
-- `workflow_graph_remove_edge`
-- `workflow_graph_undo`
-- `workflow_graph_redo`
-- `workflow_graph_get_connection_candidates`
-- `workflow_graph_connect`
-- `workflow_graph_insert_node_and_connect`
+## Decision
+Keep public workflow orchestration in this source directory. `workflow.rs`
+remains the compatibility facade while cohesive internals move into focused
+private modules. Adapters may translate transport payloads but must delegate
+workflow decisions to this crate.
 
-`workflow_get_io` strict discovery rule:
-- only nodes marked `definition.category` in `{input, output}` with
-  `definition.io_binding_origin == "client_session"` are externally bindable.
+## Alternatives Rejected
+- Keep workflow behavior in Tauri commands: rejected because native bindings
+  and tests need the same backend behavior without desktop transport.
+- Let frontend stores reconstruct graph mutation or diagnostics truth:
+  rejected because backend-owned responses are the source of truth.
+- Move runtime readiness into runtime adapters: rejected because preflight and
+  runtime-not-ready semantics are workflow service contracts.
 
-Runtime capability rule:
-- hosts expose runtime availability through `runtime_capabilities()`
-- `workflow_get_capabilities` and `create_workflow_session` return those
-  capabilities to clients
-- `workflow_preflight` reports runtime warnings and blocking runtime issues
-- `run_workflow_session` reuses a session-scoped runtime preflight cache keyed
-  by graph fingerprint, runtime capability fingerprint, and normalized
-  technical-fit override selection
-- execution never triggers runtime installation implicitly
-- when the service asks a host to load session runtime resources, it now passes
-  a backend-owned retention hint derived from session `keep_alive` state so
-  adapters can forward intent without becoming retention-policy owners
-- hosts may also tune loaded-runtime residency separately from session count
-  through `WorkflowService::set_loaded_runtime_capacity_limit`, keeping the
-  capacity boundary backend-owned even when the value comes from app config
+## Invariants
+- Workflow execution/session identity is owned here and exposed through public
+  DTOs.
+- `workflow_get_io` exposes only nodes marked as input/output with
+  `io_binding_origin == "client_session"`.
+- Workflow execution never triggers runtime installation implicitly.
+- Session runtime preflight cache keys include graph fingerprint, runtime
+  capability fingerprint, and normalized technical-fit override selection.
+- Host calls that load/unload runtimes occur outside session-store locks.
+- Trace stores own canonical event timestamps, idempotent terminal replay, and
+  retry/reset behavior for repeated execution ids.
+- Scheduler snapshots omit execution attribution when identity is ambiguous.
 
-Primary contract types:
+## Revisit Triggers
+- Public workflow DTOs need versioning rather than additive migration.
+- Scheduler or diagnostics persistence becomes durable across app restarts.
+- The `workflow.rs` facade decomposition requires public module changes.
+- Runtime lifecycle supervision moves into a dedicated backend manager.
 
-- `WorkflowRunRequest`
-- `WorkflowRunResponse`
-- `WorkflowPortBinding`
-- `WorkflowOutputTarget`
-- `WorkflowCapabilitiesRequest`
-- `WorkflowCapabilitiesResponse`
-- `WorkflowIoRequest`
-- `WorkflowIoResponse`
-- `WorkflowPreflightRequest`
-- `WorkflowPreflightResponse`
-- `WorkflowRuntimeCapability`
-- `WorkflowRuntimeIssue`
-- `WorkflowSessionCreateRequest`
-- `WorkflowSessionCreateResponse`
-- `WorkflowSessionRunRequest`
-- `WorkflowSessionCloseRequest`
-- `WorkflowSessionStatusRequest`
-- `WorkflowSessionQueueListRequest`
-- `WorkflowSessionQueueCancelRequest`
-- `WorkflowSessionQueueReprioritizeRequest`
-- `WorkflowSessionKeepAliveRequest`
-- `WorkflowTraceSummary`
-- `WorkflowTraceEvent`
-- `WorkflowTraceGraphContext`
-- `WorkflowTraceNodeRecord`
-- `WorkflowTraceQueueMetrics`
-- `WorkflowTraceRuntimeMetrics`
-- `WorkflowTraceSnapshotRequest`
-- `WorkflowTraceSnapshotResponse`
-- `WorkflowTechnicalFitRequest`
-- `WorkflowTechnicalFitDecision`
-- `WorkflowTraceStore`
+## Dependencies
+**Internal:** `node-engine`, `workflow-nodes`, `pantograph-runtime-identity`,
+and sibling source modules in this crate.
 
-## Capability Ownership
+**External:** `async-trait`, `serde`, `serde_json`, `thiserror`, `tokio`,
+`uuid`, `chrono`, and `parking_lot`.
 
-- Runtime requirement extraction/estimation is backend-owned in this crate.
-- Adapters should provide host dependencies (workflow roots, backend identity,
-  optional model metadata), not duplicate capability business logic.
-- Session `keep_alive` interpretation starts here; adapters may forward the
-  resulting retention hint to lower-level runtime infrastructure, but they must
-  not invent separate retention policy.
-- The workflow-session scheduler queue/store now lives under `scheduler/`,
-  while `workflow.rs` remains the facade and orchestration entrypoint that
-  delegates into that backend-owned scheduler boundary.
-- This crate owns session-idle/runtime-loaded facts, but hosts may consume
-  those facts through an explicit unload-candidate contract so backend runtime
-  registries remain the owner of reservation eviction ordering.
-- Session capacity and loaded-runtime capacity may now diverge here, which
-  makes runtime rebalance reachable without conflating "how many sessions may
-  exist" with "how many runtimes may stay loaded".
-- Technical-fit request normalization also belongs here: this crate may shape
-  workflow and session context into a backend-owned selector request contract,
-  but it must not become the owner of runtime policy or candidate scoring.
-- Additive `override_selection` fields on workflow preflight, direct run, and
-  session-run requests are also owned here so adapters can forward explicit
-  backend/model intent without reconstructing selector policy locally.
-- Workflow preflight and runtime-not-ready reporting may also consume the
-  backend-owned technical-fit decision here so hosts surface one selector
-  result instead of drifting between preflight and execution-time runtime
-  readiness semantics.
-- Workflow runtime capability contracts owned here must carry explicit runtime
-  readiness phase and selected-version context so diagnostics, preflight, and
-  execution all consume one backend-owned readiness contract.
-- Graph edit sessions, graph persistence contracts, revision-aware connection
-  intent, and undo/redo semantics are backend-owned in this crate.
-- Workflow trace and metrics contract ownership is backend-owned in this crate;
-  adapters may project or transport traces but must not invent timing or
-  lifecycle state locally.
-- The in-memory trace store owns retention plus canonical run/node event
-  timestamp capture for ordinary workflow events, so adapters forward events
-  into backend-owned timing rather than stamping trace chronology locally.
-- Scheduler snapshots now expose additive `trace_execution_id` attribution when
-  the backend can unambiguously identify the active or uniquely-visible queued
-  run. Adapters must treat an omitted value as "identity ambiguous" rather than
-  guessing from session-local state.
-- Trace snapshot filter validation belongs here with the request DTOs so Tauri
-  command handlers can reject malformed interop payloads without duplicating
-  request policy in adapter code.
-- The in-memory recent-trace store also belongs here so adapters can forward
-  canonical trace events into one backend-owned owner instead of accumulating
-  lifecycle state locally.
-- Duplicate terminal run/node events are normalized here as idempotent replay,
-  preserving the first terminal timestamps and durations instead of asking
-  adapters to de-duplicate delivery.
-- When the same execution id receives a new terminal-to-running `RunStarted`
-  transition, this crate resets attempt-scoped trace state before recording the
-  new attempt so retry or replay flows do not leak stale node, queue, or
-  runtime facts into the restarted run.
-- That attempt reset applies after explicit cancellation as well as failure or
-  completion, so one execution id can retry cleanly without carrying cancelled
-  node/runtime state into the next attempt.
-- When backend scheduler or runtime snapshots replay for the same execution id
-  during recovery or restore, this crate updates the canonical trace in place
-  instead of materializing duplicate runs, leaving adapters free to reread one
-  backend-owned execution record after reconciliation.
-- Canonical trace summaries can now represent explicit cancelled run and node
-  states when upstream adapters emit a cancellation outcome instead of a
-  generic failure.
-- Canonical trace summaries also retain the originating `session_id` when a
-  queued/run execution id diverges from the session identity, so trace reads
-  can filter by session without adapter-local reconstruction.
-- `workflow_get_capabilities` includes `models[]` inventory with `model_id`,
-  optional `model_revision_or_hash`, optional `model_type`, `node_ids`, and
-  `roles`.
-- Runtime install/remove/status actions remain outside this crate. Clients use
-  the host's inference/runtime facade to change runtime availability, then read
-  updated capability state from workflow contracts.
+## Related ADRs
+- `docs/adr/ADR-001-headless-embedding-service-boundary.md`
+- `docs/adr/ADR-002-runtime-registry-ownership-and-lifecycle.md`
 
-## Verification
+## Usage Examples
+```rust
+use pantograph_workflow_service::{WorkflowRunRequest, WorkflowService};
+```
 
-- Contract tests: `crates/pantograph-workflow-service/tests/contract.rs`
-- CI gate: `.github/workflows/headless-embedding-contract.yml`
+## API Consumer Contract
+- Inputs: public request DTOs, workflow ids, graph edit/session ids,
+  host-trait implementations, runtime capabilities, and technical-fit override
+  selections.
+- Outputs: public response DTOs for runs, capabilities, IO discovery,
+  preflight, sessions, queues, graph mutations, traces, and diagnostics.
+- Lifecycle: hosts create a service, call workflow/session operations, and
+  explicitly close sessions; the service owns scheduler and graph-session state.
+- Errors: invalid requests, missing workflows/sessions, runtime-not-ready
+  conditions, cancellations, capacity exhaustion, and host failures surface as
+  `WorkflowServiceError`.
+- Versioning: DTO changes should be additive unless Tauri, frontend, UniFFI,
+  Rustler, examples, and contract tests migrate together.
+
+## Structured Producer Contract
+- Stable fields: workflow responses, graph mutation responses, queue records,
+  runtime issues, technical-fit decisions, trace snapshots, and scheduler
+  diagnostics are machine-consumed.
+- Defaults: omitted optional fields use service-defined defaults and must be
+  covered by contract tests when observable.
+- Enums and labels: workflow/session states, runtime readiness states, queue
+  statuses, trace statuses, and issue categories carry behavior.
+- Ordering: queue, trace, runtime issue, and diagnostics ordering are part of
+  observable behavior where clients display or compare sequences.
+- Compatibility: saved workflows, frontend stores, and binding consumers may
+  depend on serialized field names and semantics across releases.
+- Regeneration/migration: response-shape changes must update Tauri wire
+  contracts, frontend stores, binding wrappers, examples, and contract tests in
+  the same slice.
+
+## Testing
+```bash
+cargo test -p pantograph-workflow-service
+```
+
+## Notes
+- `workflow.rs` remains over the decomposition threshold and is tracked in the
+  standards compliance plan.

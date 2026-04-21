@@ -154,7 +154,9 @@ Tasks:
   `src/generated/README.md`.
 - Update host-facing READMEs for `pantograph-uniffi`, `pantograph-rustler`,
   `pantograph-workflow-service`, generated components, and Tauri workflow
-  command boundaries to include required sections.
+  command boundaries to include required sections. Status: workflow-service,
+  UniFFI, and Rustler source READMEs now use the required decision,
+  host-facing, and structured-producer sections.
 - Mark structured producer directories, especially templates, saved workflows,
   generated components, schemas, and binding artifacts, with `Structured Producer Contract`.
 - Add a decision-traceability script adapted from the standards template and
