@@ -15,16 +15,15 @@ use pantograph_runtime_registry::{
 use pantograph_workflow_service::capabilities;
 use pantograph_workflow_service::graph::WorkflowGraphSessionStateView;
 use pantograph_workflow_service::{
-    convert_graph_to_node_engine, ConnectionCandidatesResponse, ConnectionCommitResponse,
-    EdgeInsertionPreviewResponse, FileSystemWorkflowGraphStore, InsertNodeConnectionResponse,
-    InsertNodeOnEdgeResponse, WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse,
-    WorkflowFile, WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest,
-    WorkflowGraphConnectRequest, WorkflowGraphEditSessionCloseRequest,
-    WorkflowGraphEditSessionCloseResponse, WorkflowGraphEditSessionCreateRequest,
-    WorkflowGraphEditSessionCreateResponse, WorkflowGraphEditSessionGraphRequest,
-    WorkflowGraphEditSessionGraphResponse, WorkflowGraphGetConnectionCandidatesRequest,
-    WorkflowGraphInsertNodeAndConnectRequest, WorkflowGraphInsertNodeOnEdgeRequest,
-    WorkflowGraphListResponse, WorkflowGraphLoadRequest,
+    ConnectionCandidatesResponse, ConnectionCommitResponse, EdgeInsertionPreviewResponse,
+    FileSystemWorkflowGraphStore, InsertNodeConnectionResponse, InsertNodeOnEdgeResponse,
+    WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse, WorkflowFile,
+    WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest,
+    WorkflowGraphEditSessionCloseRequest, WorkflowGraphEditSessionCloseResponse,
+    WorkflowGraphEditSessionCreateRequest, WorkflowGraphEditSessionCreateResponse,
+    WorkflowGraphEditSessionGraphRequest, WorkflowGraphEditSessionGraphResponse,
+    WorkflowGraphGetConnectionCandidatesRequest, WorkflowGraphInsertNodeAndConnectRequest,
+    WorkflowGraphInsertNodeOnEdgeRequest, WorkflowGraphListResponse, WorkflowGraphLoadRequest,
     WorkflowGraphPreviewNodeInsertOnEdgeRequest, WorkflowGraphRemoveEdgeRequest,
     WorkflowGraphRemoveNodeRequest, WorkflowGraphSaveRequest, WorkflowGraphSaveResponse,
     WorkflowGraphUndoRedoStateRequest, WorkflowGraphUndoRedoStateResponse,
@@ -32,20 +31,24 @@ use pantograph_workflow_service::{
     WorkflowHostModelDescriptor, WorkflowIoRequest, WorkflowIoResponse, WorkflowOutputTarget,
     WorkflowPortBinding, WorkflowPreflightRequest, WorkflowPreflightResponse, WorkflowRunOptions,
     WorkflowRunRequest, WorkflowRunResponse, WorkflowRuntimeCapability,
-    WorkflowRuntimeRequirements, WorkflowSchedulerDiagnosticsProvider,
-    WorkflowSchedulerRuntimeDiagnosticsRequest, WorkflowSchedulerRuntimeRegistryDiagnostics,
-    WorkflowService, WorkflowServiceError, WorkflowSessionCloseRequest,
-    WorkflowSessionCloseResponse, WorkflowSessionCreateRequest, WorkflowSessionCreateResponse,
-    WorkflowSessionInspectionRequest, WorkflowSessionInspectionResponse,
-    WorkflowSessionKeepAliveRequest, WorkflowSessionKeepAliveResponse,
-    WorkflowSessionQueueCancelRequest, WorkflowSessionQueueCancelResponse,
-    WorkflowSessionQueueListRequest, WorkflowSessionQueueListResponse,
-    WorkflowSessionQueueReprioritizeRequest, WorkflowSessionQueueReprioritizeResponse,
-    WorkflowSessionRetentionHint, WorkflowSessionRunRequest, WorkflowSessionRuntimeSelectionTarget,
+    WorkflowRuntimeRequirements, WorkflowService, WorkflowServiceError,
+    WorkflowSessionCloseRequest, WorkflowSessionCloseResponse, WorkflowSessionCreateRequest,
+    WorkflowSessionCreateResponse, WorkflowSessionInspectionRequest,
+    WorkflowSessionInspectionResponse, WorkflowSessionKeepAliveRequest,
+    WorkflowSessionKeepAliveResponse, WorkflowSessionQueueCancelRequest,
+    WorkflowSessionQueueCancelResponse, WorkflowSessionQueueListRequest,
+    WorkflowSessionQueueListResponse, WorkflowSessionQueueReprioritizeRequest,
+    WorkflowSessionQueueReprioritizeResponse, WorkflowSessionRetentionHint,
+    WorkflowSessionRunRequest, WorkflowSessionRuntimeSelectionTarget,
     WorkflowSessionRuntimeUnloadCandidate, WorkflowSessionStaleCleanupRequest,
     WorkflowSessionStaleCleanupResponse, WorkflowSessionState, WorkflowSessionStatusRequest,
     WorkflowSessionStatusResponse, WorkflowTechnicalFitDecision, WorkflowTechnicalFitRequest,
-    WorkflowTraceRuntimeMetrics,
+    WorkflowTraceRuntimeMetrics, convert_graph_to_node_engine,
+};
+#[cfg(test)]
+use pantograph_workflow_service::{
+    WorkflowSchedulerDiagnosticsProvider, WorkflowSchedulerRuntimeDiagnosticsRequest,
+    WorkflowSchedulerRuntimeRegistryDiagnostics,
 };
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -61,21 +64,23 @@ pub mod runtime_capabilities;
 pub mod runtime_health;
 pub mod runtime_recovery;
 pub mod runtime_registry;
+mod runtime_registry_errors;
 mod runtime_registry_lifecycle;
 mod runtime_registry_observations;
 pub mod task_executor;
 pub mod technical_fit;
 pub mod workflow_runtime;
+mod workflow_scheduler_diagnostics;
 mod workflow_session_execution;
 
 pub use host_runtime::HostRuntimeModeSnapshot;
 pub use managed_runtime_manager::{
+    ManagedRuntimeManagerProgress, ManagedRuntimeManagerRuntimeView,
     cancel_managed_runtime_manager_job, inspect_managed_runtime_manager_runtime,
     install_managed_runtime_manager_runtime, list_managed_runtime_manager_runtimes,
     pause_managed_runtime_manager_job, refresh_managed_runtime_manager_catalog_views,
     remove_managed_runtime_manager_runtime, select_managed_runtime_manager_version,
-    set_default_managed_runtime_manager_version_view, ManagedRuntimeManagerProgress,
-    ManagedRuntimeManagerRuntimeView,
+    set_default_managed_runtime_manager_version_view,
 };
 pub use model_dependencies::{SharedModelDependencyResolver, TauriModelDependencyResolver};
 pub use python_runtime::{
@@ -83,7 +88,8 @@ pub use python_runtime::{
     PythonStreamHandler,
 };
 pub use rag::{RagBackend, RagDocument};
-pub use task_executor::{runtime_extension_keys, TauriTaskExecutor as PantographTaskExecutor};
+pub use task_executor::{TauriTaskExecutor as PantographTaskExecutor, runtime_extension_keys};
+pub(crate) use workflow_scheduler_diagnostics::EmbeddedWorkflowSchedulerDiagnosticsProvider;
 
 pub type SharedExtensions = Arc<RwLock<ExecutorExtensions>>;
 pub type SharedWorkflowService = Arc<WorkflowService>;
@@ -186,43 +192,6 @@ pub fn apply_runtime_extensions(
     snapshot: &RuntimeExtensionsSnapshot,
 ) {
     apply_runtime_extensions_for_execution(executor, snapshot, None, None, None);
-}
-
-#[derive(Clone)]
-struct EmbeddedWorkflowSchedulerDiagnosticsProvider {
-    gateway: Arc<inference::InferenceGateway>,
-    runtime_registry: SharedRuntimeRegistry,
-}
-
-impl EmbeddedWorkflowSchedulerDiagnosticsProvider {
-    fn new(
-        gateway: Arc<inference::InferenceGateway>,
-        runtime_registry: SharedRuntimeRegistry,
-    ) -> Self {
-        Self {
-            gateway,
-            runtime_registry,
-        }
-    }
-}
-
-#[async_trait]
-impl WorkflowSchedulerDiagnosticsProvider for EmbeddedWorkflowSchedulerDiagnosticsProvider {
-    async fn scheduler_runtime_registry_diagnostics(
-        &self,
-        request: &WorkflowSchedulerRuntimeDiagnosticsRequest,
-    ) -> Result<Option<WorkflowSchedulerRuntimeRegistryDiagnostics>, WorkflowServiceError> {
-        let mode_info = self.gateway.mode_info().await;
-        let host_runtime_mode_info = HostRuntimeModeSnapshot::from_mode_info(&mode_info);
-        Ok(Some(
-            runtime_registry::scheduler_runtime_registry_diagnostics(
-                &self.runtime_registry,
-                &host_runtime_mode_info,
-                request,
-            )
-            .map_err(EmbeddedWorkflowHost::workflow_service_error_from_runtime_registry)?,
-        ))
-    }
 }
 
 #[async_trait]
@@ -1212,41 +1181,6 @@ impl EmbeddedWorkflowHost {
         }
     }
 
-    fn workflow_service_error_from_runtime_registry(
-        error: RuntimeRegistryError,
-    ) -> WorkflowServiceError {
-        match error {
-            RuntimeRegistryError::RuntimeNotFound(_)
-            | RuntimeRegistryError::ReservationRejected(_)
-            | RuntimeRegistryError::AdmissionRejected { .. } => {
-                WorkflowServiceError::RuntimeNotReady(error.to_string())
-            }
-            RuntimeRegistryError::ReservationOwnerConflict { .. } => {
-                WorkflowServiceError::InvalidRequest(error.to_string())
-            }
-            RuntimeRegistryError::ReservationNotFound(_)
-            | RuntimeRegistryError::InvalidTransition { .. } => {
-                WorkflowServiceError::Internal(error.to_string())
-            }
-        }
-    }
-
-    fn workflow_service_error_from_runtime_warmup_coordination(
-        error: runtime_registry::RuntimeWarmupCoordinationError,
-    ) -> WorkflowServiceError {
-        match error {
-            runtime_registry::RuntimeWarmupCoordinationError::Registry(error) => {
-                Self::workflow_service_error_from_runtime_registry(error)
-            }
-            runtime_registry::RuntimeWarmupCoordinationError::Timeout { runtime_id } => {
-                WorkflowServiceError::RuntimeTimeout(format!(
-                    "timed out waiting for runtime '{}' to finish warmup or shutdown transition",
-                    runtime_id
-                ))
-            }
-        }
-    }
-
     async fn ensure_workflow_runtime_ready_for_session_load(
         &self,
         workflow_id: &str,
@@ -1332,7 +1266,7 @@ impl EmbeddedWorkflowHost {
                 WorkflowSessionRetentionHint::Ephemeral
             }),
         )
-        .map_err(Self::workflow_service_error_from_runtime_registry)?;
+        .map_err(runtime_registry_errors::workflow_service_error_from_runtime_registry)?;
 
         Ok(())
     }
@@ -1350,7 +1284,7 @@ impl EmbeddedWorkflowHost {
             Duration::from_millis(RUNTIME_WARMUP_WAIT_TIMEOUT_MS),
         )
         .await
-        .map_err(Self::workflow_service_error_from_runtime_warmup_coordination)
+        .map_err(runtime_registry_errors::workflow_service_error_from_runtime_warmup_coordination)
     }
 
     async fn reserve_loaded_session_runtime(
@@ -1384,7 +1318,7 @@ impl EmbeddedWorkflowHost {
         let descriptor = runtime_registry::active_runtime_descriptor(&host_runtime_mode_info);
         let lease = runtime_registry
             .acquire_reservation(reservation_request)
-            .map_err(Self::workflow_service_error_from_runtime_registry)?;
+            .map_err(runtime_registry_errors::workflow_service_error_from_runtime_registry)?;
 
         let previous_reservation_id =
             self.record_session_runtime_reservation(session_id, lease.reservation_id)?;
@@ -1400,7 +1334,7 @@ impl EmbeddedWorkflowHost {
                     lease.reservation_id,
                 )
                 .await
-                .map_err(Self::workflow_service_error_from_runtime_registry)?;
+                .map_err(runtime_registry_errors::workflow_service_error_from_runtime_registry)?;
             }
             return Err(error);
         }
@@ -1432,7 +1366,7 @@ impl EmbeddedWorkflowHost {
                 reservation_id,
             )
             .await
-            .map_err(Self::workflow_service_error_from_runtime_registry)?;
+            .map_err(runtime_registry_errors::workflow_service_error_from_runtime_registry)?;
         }
 
         Ok(())
@@ -1753,7 +1687,9 @@ impl WorkflowHost for EmbeddedWorkflowHost {
             Ok(()) => Ok(true),
             Err(RuntimeRegistryError::AdmissionRejected { .. })
             | Err(RuntimeRegistryError::ReservationRejected(_)) => Ok(false),
-            Err(error) => Err(Self::workflow_service_error_from_runtime_registry(error)),
+            Err(error) => {
+                Err(runtime_registry_errors::workflow_service_error_from_runtime_registry(error))
+            }
         }
     }
 
@@ -3465,9 +3401,11 @@ mod tests {
                 ..
             } if task_id == "approval" && prompt == "Approve deployment?"
         )));
-        assert!(!events
-            .iter()
-            .any(|event| matches!(event, node_engine::WorkflowEvent::WorkflowFailed { .. })));
+        assert!(
+            !events
+                .iter()
+                .any(|event| matches!(event, node_engine::WorkflowEvent::WorkflowFailed { .. }))
+        );
         assert!(!events.iter().any(|event| matches!(
             event,
             node_engine::WorkflowEvent::WorkflowCompleted { .. }
@@ -3541,9 +3479,11 @@ mod tests {
 
         let released_snapshot = runtime_registry.snapshot();
         assert!(released_snapshot.reservations.is_empty());
-        assert!(released_snapshot.runtimes[0]
-            .active_reservation_ids
-            .is_empty());
+        assert!(
+            released_snapshot.runtimes[0]
+                .active_reservation_ids
+                .is_empty()
+        );
         assert_eq!(
             released_snapshot.runtimes[0].status,
             RuntimeRegistryStatus::Stopped
@@ -3551,8 +3491,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn keep_alive_disable_reclaim_flips_scheduler_runtime_registry_diagnostics_to_start_runtime(
-    ) {
+    async fn keep_alive_disable_reclaim_flips_scheduler_runtime_registry_diagnostics_to_start_runtime()
+     {
         let temp = TempDir::new().expect("temp dir");
         write_test_workflow(temp.path(), "runtime-text");
 
@@ -3982,10 +3922,12 @@ mod tests {
 
         let snapshot = runtime_registry.snapshot();
         assert!(snapshot.reservations.is_empty());
-        assert!(snapshot
-            .runtimes
-            .iter()
-            .all(|runtime| runtime.active_reservation_ids.is_empty()));
+        assert!(
+            snapshot
+                .runtimes
+                .iter()
+                .all(|runtime| runtime.active_reservation_ids.is_empty())
+        );
         assert_eq!(snapshot.runtimes[0].status, RuntimeRegistryStatus::Stopped);
     }
 
@@ -4050,15 +3992,19 @@ mod tests {
 
         let snapshot = runtime_registry.snapshot();
         assert!(snapshot.reservations.is_empty());
-        assert!(snapshot
-            .runtimes
-            .iter()
-            .all(|runtime| runtime.active_reservation_ids.is_empty()));
-        assert!(runtime
-            .session_executions
-            .handle(&created.session_id)
-            .expect("session execution lookup should succeed")
-            .is_none());
+        assert!(
+            snapshot
+                .runtimes
+                .iter()
+                .all(|runtime| runtime.active_reservation_ids.is_empty())
+        );
+        assert!(
+            runtime
+                .session_executions
+                .handle(&created.session_id)
+                .expect("session execution lookup should succeed")
+                .is_none()
+        );
     }
 
     #[tokio::test]
@@ -4126,12 +4072,16 @@ mod tests {
                 .await
         };
         assert_eq!(first_snapshots.len(), 2);
-        assert!(first_snapshots
-            .iter()
-            .any(|snapshot| snapshot.identity.node_id == "text-input-1"));
-        assert!(first_snapshots
-            .iter()
-            .any(|snapshot| snapshot.identity.node_id == "text-output-1"));
+        assert!(
+            first_snapshots
+                .iter()
+                .any(|snapshot| snapshot.identity.node_id == "text-input-1")
+        );
+        assert!(
+            first_snapshots
+                .iter()
+                .any(|snapshot| snapshot.identity.node_id == "text-output-1")
+        );
 
         let second_run = runtime
             .run_workflow_session(WorkflowSessionRunRequest {
@@ -4191,11 +4141,13 @@ mod tests {
             })
             .await
             .expect("close keep-alive session");
-        assert!(runtime
-            .session_executions
-            .handle(&session_id)
-            .expect("session execution lookup should succeed")
-            .is_none());
+        assert!(
+            runtime
+                .session_executions
+                .handle(&session_id)
+                .expect("session execution lookup should succeed")
+                .is_none()
+        );
     }
 
     #[tokio::test]
@@ -4294,9 +4246,11 @@ mod tests {
                 .await
         };
         assert_eq!(snapshots.len(), 2);
-        assert!(snapshots
-            .iter()
-            .all(|snapshot| snapshot.status == node_engine::NodeMemoryStatus::Ready));
+        assert!(
+            snapshots
+                .iter()
+                .all(|snapshot| snapshot.status == node_engine::NodeMemoryStatus::Ready)
+        );
     }
 
     #[tokio::test]
@@ -4731,11 +4685,13 @@ mod tests {
             .await
             .expect("disable keep-alive after checkpoint");
 
-        assert!(runtime
-            .session_executions
-            .handle(&session.session_id)
-            .expect("session execution lookup should succeed")
-            .is_none());
+        assert!(
+            runtime
+                .session_executions
+                .handle(&session.session_id)
+                .expect("session execution lookup should succeed")
+                .is_none()
+        );
     }
 
     #[tokio::test]
@@ -5552,10 +5508,12 @@ mod tests {
             .await
             .expect("workflow preflight");
         assert!(!preflight.can_run);
-        assert!(preflight
-            .blocking_runtime_issues
-            .iter()
-            .any(|issue| issue.message.contains("validation failed")));
+        assert!(
+            preflight
+                .blocking_runtime_issues
+                .iter()
+                .any(|issue| issue.message.contains("validation failed"))
+        );
 
         let error = runtime
             .workflow_run(WorkflowRunRequest {
@@ -5618,10 +5576,12 @@ mod tests {
             Some(pantograph_workflow_service::WorkflowRuntimeReadinessState::Failed)
         );
         assert!(!runtime_capability.configured);
-        assert!(runtime_capability
-            .unavailable_reason
-            .as_deref()
-            .is_some_and(|reason| reason.contains("reconciled during startup")));
+        assert!(
+            runtime_capability
+                .unavailable_reason
+                .as_deref()
+                .is_some_and(|reason| reason.contains("reconciled during startup"))
+        );
 
         let preflight = runtime
             .workflow_preflight(WorkflowPreflightRequest {
@@ -5633,10 +5593,12 @@ mod tests {
             .await
             .expect("workflow preflight");
         assert!(!preflight.can_run);
-        assert!(preflight
-            .blocking_runtime_issues
-            .iter()
-            .any(|issue| issue.message.contains("reconciled during startup")));
+        assert!(
+            preflight
+                .blocking_runtime_issues
+                .iter()
+                .any(|issue| issue.message.contains("reconciled during startup"))
+        );
 
         let error = runtime
             .workflow_run(WorkflowRunRequest {
@@ -5737,10 +5699,12 @@ mod tests {
             })
             .await
             .expect("workflow capabilities");
-        assert!(capabilities
-            .runtime_capabilities
-            .iter()
-            .any(|capability| capability.runtime_id == "llama.cpp.embedding"));
+        assert!(
+            capabilities
+                .runtime_capabilities
+                .iter()
+                .any(|capability| capability.runtime_id == "llama.cpp.embedding")
+        );
     }
 
     #[tokio::test]
@@ -6499,9 +6463,11 @@ mod tests {
                 ..
             } if task_id == "approval" && prompt == "Approve deployment?"
         )));
-        assert!(!events
-            .iter()
-            .any(|event| matches!(event, node_engine::WorkflowEvent::WorkflowFailed { .. })));
+        assert!(
+            !events
+                .iter()
+                .any(|event| matches!(event, node_engine::WorkflowEvent::WorkflowFailed { .. }))
+        );
         assert!(!events.iter().any(|event| matches!(
             event,
             node_engine::WorkflowEvent::WorkflowCompleted { .. }
@@ -6601,7 +6567,7 @@ mod tests {
 
     #[test]
     fn runtime_registry_admission_errors_map_to_runtime_not_ready() {
-        let error = EmbeddedWorkflowHost::workflow_service_error_from_runtime_registry(
+        let error = runtime_registry_errors::workflow_service_error_from_runtime_registry(
             RuntimeRegistryError::AdmissionRejected {
                 runtime_id: "pytorch".to_string(),
                 failure: pantograph_runtime_registry::RuntimeAdmissionFailure::InsufficientRam {
@@ -6623,7 +6589,7 @@ mod tests {
 
     #[test]
     fn runtime_registry_owner_conflicts_map_to_invalid_request() {
-        let error = EmbeddedWorkflowHost::workflow_service_error_from_runtime_registry(
+        let error = runtime_registry_errors::workflow_service_error_from_runtime_registry(
             RuntimeRegistryError::ReservationOwnerConflict {
                 owner_id: "session-a".to_string(),
                 existing_runtime_id: "llama_cpp".to_string(),

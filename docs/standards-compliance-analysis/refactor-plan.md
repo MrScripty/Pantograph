@@ -345,6 +345,10 @@ Tasks:
 - Split `crates/pantograph-embedded-runtime/src/lib.rs` into runtime host,
   workflow sessions, registry lifecycle, diagnostics projection, model deps,
   and test modules.
+  Progress: workflow scheduler diagnostics provider projection now lives in
+  `crates/pantograph-embedded-runtime/src/workflow_scheduler_diagnostics.rs`,
+  and workflow-facing runtime-registry/warmup coordination error mapping now
+  lives in `crates/pantograph-embedded-runtime/src/runtime_registry_errors.rs`.
 - Split `crates/node-engine/src/core_executor.rs` by execution phases, blocking
   adapters, demand preparation, output handling, and tests.
 - Split `src/components/WorkflowGraph.svelte` and

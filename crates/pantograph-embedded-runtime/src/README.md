@@ -24,8 +24,10 @@ packages.
 | `runtime_health.rs` | Owns backend-side health probe assessment, degraded/unhealthy threshold policy, and failure-count progression. |
 | `runtime_recovery.rs` | Owns backend-side recovery restart planning, retry-strategy selection, retry-attempt sequencing, retry backoff, backend port overrides, clean-restart settle delays, and dedicated-embedding restart policy. |
 | `runtime_registry.rs` | Owns backend-side translation from gateway and producer lifecycle facts into shared runtime-registry observations, active-runtime registration, active/embedding health-aware unhealthy reconciliation, sync, reclaim, stop-all, and restore coordination. |
+| `runtime_registry_errors.rs` | Owns workflow-facing runtime-registry and warmup coordination error mapping so adapters keep stable workflow-service error codes. |
 | `runtime_registry_lifecycle.rs` | Owns backend-side runtime-registry sync, snapshot, warmup coordination, reclaim, stop-all, and restore orchestration so lifecycle sequencing stays separate from observation mapping. |
 | `runtime_registry_observations.rs` | Owns backend-side runtime-registry observation builders and health-overlay matching for active, embedding, and execution-observed producer facts. |
+| `workflow_scheduler_diagnostics.rs` | Owns workflow scheduler diagnostics provider projection from host runtime mode and shared runtime-registry state. |
 | `workflow_runtime.rs` | Owns backend-side workflow execution helpers for embedding metadata flag projection, runtime trace/model-target shaping, runtime diagnostics projection, and execution-path or stored-snapshot runtime-registry reconciliation used by workflow diagnostics transport. |
 | `workflow_session_execution.rs` | Owns backend-side keep-alive workflow-session executor storage, graph-change reuse/reconciliation, and unload-transition application so scheduler-driven reclaim and direct capacity rebalance share one logical-session path. |
 
@@ -208,6 +210,9 @@ embedded-runtime crate.
   backend Rust onto stable workflow-service error codes so adapters do not
   collapse admission or runtime-unavailable decisions into generic internal
   failures.
+- Scheduler diagnostics provider projection and runtime-registry error mapping
+  must stay in focused backend helpers instead of being embedded in the public
+  runtime facade.
 - The concrete embedded workflow host must preserve backend-owned
   non-streaming cancellation semantics at the runtime boundary itself, so a
   pre-cancelled `WorkflowRunHandle` returns `WorkflowServiceError::Cancelled`
@@ -284,7 +289,7 @@ let runtime = EmbeddedRuntime::with_default_python_runtime(
     gateway,
     extensions,
     workflow_service,
-    None,
+    rag_backend,
 );
 ```
 
