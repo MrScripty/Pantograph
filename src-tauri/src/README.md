@@ -41,6 +41,8 @@ let Tauri inject app state and translate command payloads.
 Session-scoped node group commands are registered here only as transport
 entrypoints; collapsed group mutation policy lives in
 `pantograph-workflow-service`.
+Workflow save/load/list commands likewise delegate to the service graph store;
+Tauri no longer keeps a parallel workflow persistence/path-validation module.
 
 ## Alternatives Rejected
 - Put workflow/runtime policy directly in Tauri commands: rejected because
@@ -57,6 +59,8 @@ entrypoints; collapsed group mutation policy lives in
   practical.
 - Command registrations for graph edits, including node group mutations, must
   return backend-owned service snapshots instead of adapter-owned graph facts.
+- Workflow persistence command registrations must delegate path validation and
+  file IO policy to the service graph store.
 
 ## Revisit Triggers
 - `main.rs` composition extraction changes module ownership.

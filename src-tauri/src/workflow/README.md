@@ -109,6 +109,9 @@ Workflow execution diagnostics emission must likewise route through a backend
 helper that synchronizes the shared runtime registry before projecting the
 execution snapshot, so `workflow_execution_runtime.rs` does not own a second
 sync-before-snapshot sequence.
+The legacy Tauri-local workflow persistence module has been removed; path
+boundary tests now live with `FileSystemWorkflowGraphStore` in the workflow
+service crate, which is the active owner for save/load/list behavior.
 
 ## Alternatives Rejected
 - Extend `workflow_get_io` to cover graph-editing intent.
@@ -121,6 +124,8 @@ sync-before-snapshot sequence.
 ## Invariants
 - Core workflow service is the canonical source of graph mutation and connection
   eligibility.
+- Core workflow service is the canonical source of workflow persistence and
+  filesystem path validation.
 - Candidate discovery is source-anchor scoped and must not mutate the session.
 - Commit commands must reject stale revisions and return structured rejection
   data for expected incompatibility cases.

@@ -284,6 +284,59 @@ mod tests {
     }
 
     #[test]
+    fn load_workflow_rejects_parent_traversal() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let store = FileSystemWorkflowGraphStore::new(temp.path());
+
+        let err = store
+            .load_workflow("../Cargo.toml".to_string())
+            .expect_err("must reject traversal");
+
+        assert!(matches!(err, WorkflowServiceError::InvalidRequest(_)));
+    }
+
+    #[test]
+    fn load_workflow_rejects_absolute_path_outside_project_root() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let store = FileSystemWorkflowGraphStore::new(temp.path());
+        let temp_file = tempfile::NamedTempFile::new().expect("temp file");
+
+        let err = store
+            .load_workflow(temp_file.path().to_string_lossy().to_string())
+            .expect_err("must reject absolute path outside project root");
+
+        assert!(matches!(err, WorkflowServiceError::InvalidRequest(_)));
+    }
+
+    #[test]
+    fn load_workflow_accepts_file_inside_project_root() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let store = FileSystemWorkflowGraphStore::new(temp.path());
+        let workflows_dir = temp.path().join(".pantograph").join("workflows");
+        fs::create_dir_all(&workflows_dir).expect("create workflows dir");
+        let workflow_path = workflows_dir.join("Inside.json");
+        let workflow = WorkflowFile::new(
+            "Inside".to_string(),
+            WorkflowGraph {
+                nodes: Vec::new(),
+                edges: Vec::new(),
+                derived_graph: None,
+            },
+        );
+        fs::write(
+            &workflow_path,
+            serde_json::to_string_pretty(&workflow).expect("serialize workflow"),
+        )
+        .expect("write workflow");
+
+        let loaded = store
+            .load_workflow(".pantograph/workflows/Inside.json".to_string())
+            .expect("load workflow");
+
+        assert_eq!(loaded.metadata.name, "Inside");
+    }
+
+    #[test]
     fn save_workflow_strips_puma_lib_derived_data() {
         let temp = tempfile::tempdir().expect("tempdir");
         let store = FileSystemWorkflowGraphStore::new(temp.path());

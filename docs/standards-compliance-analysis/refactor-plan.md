@@ -227,8 +227,11 @@ Tasks:
   descriptors remain registered for saved workflow compatibility, while
   `tool-executor` and tool-call continuation in `tool-loop` now fail explicitly
   until backend-owned tool execution contracts exist.
-- [ ] Consolidate active workflow persistence/path validation around the service
+- [x] Consolidate active workflow persistence/path validation around the service
   store and delete or archive superseded Tauri-local paths.
+  Status: `FileSystemWorkflowGraphStore` now owns the external workflow path
+  validation tests, and the unused Tauri-local `workflow_persistence_commands.rs`
+  module has been removed so command wiring uses the service-backed store only.
 
 Verification:
 - Rust contract tests for workflow service diagnostics, group mutations, and

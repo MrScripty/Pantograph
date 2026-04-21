@@ -92,6 +92,8 @@ when the node type matches.
   clients do not need a second read to observe mutation impact facts.
 - Connection candidate lookup never mutates session state.
 - Persisted derived graph metadata is advisory and must be recomputed when stale.
+- Filesystem workflow load path validation is tested at `FileSystemWorkflowGraphStore`;
+  transport adapters must not keep parallel path-boundary implementations.
 - Dynamic `node.data.definition` overlays may add ports for a specific node
   instance, but they must not invalidate the registry node type or silently
   remove unrelated static ports.
