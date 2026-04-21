@@ -14,6 +14,7 @@ into frontend, transport, or descriptor crates.
 | --- | --- |
 | `dependency_preflight.rs` | Model dependency binding, backend-key normalization, task-type inference, model-reference construction, and dependency resolver preflight used before runtime-backed execution. |
 | `file_io.rs` | Async read-file/write-file handlers that resolve paths through the project-root validation boundary before touching the filesystem. |
+| `inference_nodes.rs` | Feature-gated gateway-backed inference handlers for llama.cpp completion, reranking, embeddings, OpenAI-compatible chat, vision, and unload-model nodes. |
 | `kv_cache.rs` | Backend-owned execution handlers for KV-cache save/load/truncate nodes plus live llama.cpp/PyTorch restore-capture helpers and structured KV diagnostics emitted by `CoreTaskExecutor`. |
 | `ollama.rs` | Standalone Ollama HTTP generation handler and response-to-model-reference projection for the `ollama-inference` node. |
 | `pure_nodes.rs` | Synchronous built-in node handlers for input/output passthrough, model provider payloads, control-flow helpers, validation, JSON filtering, human input, and disabled tool execution. |
@@ -63,6 +64,8 @@ stable public facade and dispatch owner.
   dependency-state validation without growing dispatch code.
 - The standalone Ollama HTTP handler stays in `ollama.rs`; gateway-backed
   inference handlers should not be added there.
+- Gateway-backed inference handlers stay in `inference_nodes.rs`; PyTorch and
+  audio Python-worker handlers remain separate feature families.
 - The public facade remains `CoreTaskExecutor`; helper modules are private
   implementation details unless a separate public contract is explicitly
   introduced.

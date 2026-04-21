@@ -84,6 +84,9 @@ locally.
   dispatch and runtime request execution.
 - Standalone Ollama HTTP execution stays in `core_executor/ollama.rs` so direct
   HTTP generation remains separate from gateway-backed inference adapters.
+- Gateway-backed inference execution stays in `core_executor/inference_nodes.rs`
+  so llama.cpp, reranking, embedding, OpenAI-compatible chat, vision, and
+  unload-model handlers remain separate from Python-worker adapters.
 - Task-type inference must reflect execution semantics, not UI naming.
 - Input normalization may be permissive for additive compatibility, but output
   shapes must stay stable once published.
