@@ -136,7 +136,9 @@ Verification:
 Goal: Make source ownership and architectural intent navigable before moving large code.
 
 Tasks:
-- Add missing READMEs identified in pass 01.
+- Add missing READMEs identified in pass 01. Status: `crates/README.md` now
+  documents the Rust workspace package-role boundary; per-crate and nested
+  source READMEs remain pending.
 - Resolve the `src/generated/` documentation exception by either moving
   generated runtime state outside `src/` or replacing the nested Git repository
   with a backend-owned structured history store that allows a tracked
