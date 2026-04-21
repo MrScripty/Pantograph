@@ -261,6 +261,9 @@ let snapshot = workflow_service
 - Workflow helper lint cleanup should remove needless adapter allocations while
   leaving model dependency, runtime shutdown, and diagnostics contracts owned by
   backend services or their existing command DTOs.
+- Model dependency commands accept the backend-owned
+  `ModelDependencyRequest` DTO as one request envelope and sanitize it at the
+  helper boundary, rather than keeping parallel Tauri-only argument lists.
 - When a scheduler snapshot includes backend-owned `trace_execution_id`,
   adapters must attribute runtime/scheduler snapshot events to that execution
   instead of falling back to `session_id`. If the field is absent, the adapter

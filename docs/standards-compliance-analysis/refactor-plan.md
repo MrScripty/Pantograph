@@ -653,10 +653,12 @@ Tasks:
   audit now reaches the Tauri app crate. The first Tauri pass resolved
   mechanical agent/config/LLM/workflow helper findings in borrowed generics,
   stale `map_or` checks, path-reference signatures, string replacement,
-  redundant state clones, and test-module ordering. The remaining active Tauri
-  blockers are argument grouping across workflow model-dependency commands,
-  diagnostics stores/events, headless diagnostics, orchestration, and execution
-  entrypoints, plus workflow-event enum size reduction.
+  redundant state clones, and test-module ordering. Tauri model-dependency
+  commands now use the backend-owned `ModelDependencyRequest` envelope instead
+  of duplicated positional command/helper argument lists. The remaining active
+  Tauri blockers are argument grouping across diagnostics stores/events,
+  headless diagnostics, orchestration, and execution entrypoints, plus
+  workflow-event enum size reduction.
 - Close or update `docs/anti-pattern-remediation-tracker.md` Phase 5 for
   process-node policy controls.
 - Add issue/backlog entries for non-compliance problems intentionally deferred.

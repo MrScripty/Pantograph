@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use tauri::{command, AppHandle, State};
+use tauri::{AppHandle, State, command};
 use tokio::sync::RwLock;
 
 use crate::agent::rag::SharedRagManager;
@@ -449,113 +449,33 @@ pub async fn run_dependency_environment_action(
 #[command]
 pub async fn resolve_model_dependency_requirements(
     resolver: State<'_, super::model_dependencies::SharedModelDependencyResolver>,
-    node_type: String,
-    model_path: String,
-    model_id: Option<String>,
-    model_type: Option<String>,
-    task_type_primary: Option<String>,
-    backend_key: Option<String>,
-    platform_context: Option<serde_json::Value>,
-    selected_binding_ids: Option<Vec<String>>,
-    dependency_override_patches: Option<Vec<node_engine::DependencyOverridePatchV1>>,
+    request: node_engine::ModelDependencyRequest,
 ) -> Result<node_engine::ModelDependencyRequirements, String> {
-    super::model_dependency_commands::resolve_model_dependency_requirements(
-        resolver,
-        node_type,
-        model_path,
-        model_id,
-        model_type,
-        task_type_primary,
-        backend_key,
-        platform_context,
-        selected_binding_ids,
-        dependency_override_patches,
-    )
-    .await
+    super::model_dependency_commands::resolve_model_dependency_requirements(resolver, request).await
 }
 
 #[command]
 pub async fn check_model_dependencies(
     resolver: State<'_, super::model_dependencies::SharedModelDependencyResolver>,
-    node_type: String,
-    model_path: String,
-    model_id: Option<String>,
-    model_type: Option<String>,
-    task_type_primary: Option<String>,
-    backend_key: Option<String>,
-    platform_context: Option<serde_json::Value>,
-    selected_binding_ids: Option<Vec<String>>,
-    dependency_override_patches: Option<Vec<node_engine::DependencyOverridePatchV1>>,
+    request: node_engine::ModelDependencyRequest,
 ) -> Result<node_engine::ModelDependencyStatus, String> {
-    super::model_dependency_commands::check_model_dependencies(
-        resolver,
-        node_type,
-        model_path,
-        model_id,
-        model_type,
-        task_type_primary,
-        backend_key,
-        platform_context,
-        selected_binding_ids,
-        dependency_override_patches,
-    )
-    .await
+    super::model_dependency_commands::check_model_dependencies(resolver, request).await
 }
 
 #[command]
 pub async fn install_model_dependencies(
     resolver: State<'_, super::model_dependencies::SharedModelDependencyResolver>,
-    node_type: String,
-    model_path: String,
-    model_id: Option<String>,
-    model_type: Option<String>,
-    task_type_primary: Option<String>,
-    backend_key: Option<String>,
-    platform_context: Option<serde_json::Value>,
-    selected_binding_ids: Option<Vec<String>>,
-    dependency_override_patches: Option<Vec<node_engine::DependencyOverridePatchV1>>,
+    request: node_engine::ModelDependencyRequest,
 ) -> Result<node_engine::ModelDependencyInstallResult, String> {
-    super::model_dependency_commands::install_model_dependencies(
-        resolver,
-        node_type,
-        model_path,
-        model_id,
-        model_type,
-        task_type_primary,
-        backend_key,
-        platform_context,
-        selected_binding_ids,
-        dependency_override_patches,
-    )
-    .await
+    super::model_dependency_commands::install_model_dependencies(resolver, request).await
 }
 
 #[command]
 pub async fn get_model_dependency_status(
     resolver: State<'_, super::model_dependencies::SharedModelDependencyResolver>,
-    node_type: String,
-    model_path: String,
-    model_id: Option<String>,
-    model_type: Option<String>,
-    task_type_primary: Option<String>,
-    backend_key: Option<String>,
-    platform_context: Option<serde_json::Value>,
-    selected_binding_ids: Option<Vec<String>>,
-    dependency_override_patches: Option<Vec<node_engine::DependencyOverridePatchV1>>,
+    request: node_engine::ModelDependencyRequest,
 ) -> Result<node_engine::ModelDependencyStatus, String> {
-    super::model_dependency_commands::get_model_dependency_status(
-        resolver,
-        node_type,
-        model_path,
-        model_id,
-        model_type,
-        task_type_primary,
-        backend_key,
-        platform_context,
-        selected_binding_ids,
-        dependency_override_patches,
-    )
-    .await
+    super::model_dependency_commands::get_model_dependency_status(resolver, request).await
 }
 
 #[command]

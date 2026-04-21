@@ -5,15 +5,7 @@ use tauri::State;
 use super::commands::SharedExtensions;
 
 fn build_model_dependency_request(
-    node_type: String,
-    model_path: String,
-    model_id: Option<String>,
-    model_type: Option<String>,
-    task_type_primary: Option<String>,
-    backend_key: Option<String>,
-    platform_context: Option<serde_json::Value>,
-    selected_binding_ids: Option<Vec<String>>,
-    dependency_override_patches: Option<Vec<node_engine::DependencyOverridePatchV1>>,
+    request: node_engine::ModelDependencyRequest,
 ) -> Result<node_engine::ModelDependencyRequest, String> {
     fn clean_optional(value: Option<String>) -> Option<String> {
         value.and_then(|raw| {
@@ -26,19 +18,19 @@ fn build_model_dependency_request(
         })
     }
 
-    let node_type = node_type.trim().to_string();
+    let node_type = request.node_type.trim().to_string();
     if node_type.is_empty() {
         return Err("node_type is required".to_string());
     }
 
-    let model_path = model_path.trim().to_string();
+    let model_path = request.model_path.trim().to_string();
     if model_path.is_empty() {
         return Err("model_path is required".to_string());
     }
 
     let mut selected_out = Vec::new();
     let mut seen = std::collections::HashSet::new();
-    for binding_id in selected_binding_ids.unwrap_or_default() {
+    for binding_id in request.selected_binding_ids {
         let trimmed = binding_id.trim();
         if trimmed.is_empty() {
             continue;
@@ -52,121 +44,49 @@ fn build_model_dependency_request(
     Ok(node_engine::ModelDependencyRequest {
         node_type,
         model_path,
-        model_id: clean_optional(model_id),
-        model_type: clean_optional(model_type),
-        task_type_primary: clean_optional(task_type_primary),
-        backend_key: clean_optional(backend_key),
-        platform_context,
+        model_id: clean_optional(request.model_id),
+        model_type: clean_optional(request.model_type),
+        task_type_primary: clean_optional(request.task_type_primary),
+        backend_key: clean_optional(request.backend_key),
+        platform_context: request.platform_context,
         selected_binding_ids: selected_out,
-        dependency_override_patches: dependency_override_patches.unwrap_or_default(),
+        dependency_override_patches: request.dependency_override_patches,
     })
 }
 
 /// Resolve model dependency requirements for a model-backed workflow node.
 pub async fn resolve_model_dependency_requirements(
     resolver: State<'_, SharedModelDependencyResolver>,
-    node_type: String,
-    model_path: String,
-    model_id: Option<String>,
-    model_type: Option<String>,
-    task_type_primary: Option<String>,
-    backend_key: Option<String>,
-    platform_context: Option<serde_json::Value>,
-    selected_binding_ids: Option<Vec<String>>,
-    dependency_override_patches: Option<Vec<node_engine::DependencyOverridePatchV1>>,
+    request: node_engine::ModelDependencyRequest,
 ) -> Result<node_engine::ModelDependencyRequirements, String> {
-    let request = build_model_dependency_request(
-        node_type,
-        model_path,
-        model_id,
-        model_type,
-        task_type_primary,
-        backend_key,
-        platform_context,
-        selected_binding_ids,
-        dependency_override_patches,
-    )?;
+    let request = build_model_dependency_request(request)?;
     resolver.resolve_requirements_request(request).await
 }
 
 /// Check model dependencies for a model-backed workflow node.
 pub async fn check_model_dependencies(
     resolver: State<'_, SharedModelDependencyResolver>,
-    node_type: String,
-    model_path: String,
-    model_id: Option<String>,
-    model_type: Option<String>,
-    task_type_primary: Option<String>,
-    backend_key: Option<String>,
-    platform_context: Option<serde_json::Value>,
-    selected_binding_ids: Option<Vec<String>>,
-    dependency_override_patches: Option<Vec<node_engine::DependencyOverridePatchV1>>,
+    request: node_engine::ModelDependencyRequest,
 ) -> Result<node_engine::ModelDependencyStatus, String> {
-    let request = build_model_dependency_request(
-        node_type,
-        model_path,
-        model_id,
-        model_type,
-        task_type_primary,
-        backend_key,
-        platform_context,
-        selected_binding_ids,
-        dependency_override_patches,
-    )?;
+    let request = build_model_dependency_request(request)?;
     resolver.check_request(request).await
 }
 
 /// Install dependencies for a model-backed workflow node.
 pub async fn install_model_dependencies(
     resolver: State<'_, SharedModelDependencyResolver>,
-    node_type: String,
-    model_path: String,
-    model_id: Option<String>,
-    model_type: Option<String>,
-    task_type_primary: Option<String>,
-    backend_key: Option<String>,
-    platform_context: Option<serde_json::Value>,
-    selected_binding_ids: Option<Vec<String>>,
-    dependency_override_patches: Option<Vec<node_engine::DependencyOverridePatchV1>>,
+    request: node_engine::ModelDependencyRequest,
 ) -> Result<node_engine::ModelDependencyInstallResult, String> {
-    let request = build_model_dependency_request(
-        node_type,
-        model_path,
-        model_id,
-        model_type,
-        task_type_primary,
-        backend_key,
-        platform_context,
-        selected_binding_ids,
-        dependency_override_patches,
-    )?;
+    let request = build_model_dependency_request(request)?;
     resolver.install_request(request).await
 }
 
 /// Read the latest cached dependency status, or run a fresh check if absent.
 pub async fn get_model_dependency_status(
     resolver: State<'_, SharedModelDependencyResolver>,
-    node_type: String,
-    model_path: String,
-    model_id: Option<String>,
-    model_type: Option<String>,
-    task_type_primary: Option<String>,
-    backend_key: Option<String>,
-    platform_context: Option<serde_json::Value>,
-    selected_binding_ids: Option<Vec<String>>,
-    dependency_override_patches: Option<Vec<node_engine::DependencyOverridePatchV1>>,
+    request: node_engine::ModelDependencyRequest,
 ) -> Result<node_engine::ModelDependencyStatus, String> {
-    let request = build_model_dependency_request(
-        node_type,
-        model_path,
-        model_id,
-        model_type,
-        task_type_primary,
-        backend_key,
-        platform_context,
-        selected_binding_ids,
-        dependency_override_patches,
-    )?;
+    let request = build_model_dependency_request(request)?;
     if let Some(cached) = resolver.cached_status(&request).await {
         Ok(cached)
     } else {
@@ -199,53 +119,40 @@ mod tests {
 
     #[test]
     fn test_build_model_dependency_request_rejects_empty_required_fields() {
-        let err = build_model_dependency_request(
-            "  ".to_string(),
-            "/tmp/model".to_string(),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        )
+        let err = build_model_dependency_request(node_engine::ModelDependencyRequest {
+            node_type: "  ".to_string(),
+            model_path: "/tmp/model".to_string(),
+            ..Default::default()
+        })
         .unwrap_err();
         assert!(err.contains("node_type"));
 
-        let err = build_model_dependency_request(
-            "pytorch-inference".to_string(),
-            " ".to_string(),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        )
+        let err = build_model_dependency_request(node_engine::ModelDependencyRequest {
+            node_type: "pytorch-inference".to_string(),
+            model_path: " ".to_string(),
+            ..Default::default()
+        })
         .unwrap_err();
         assert!(err.contains("model_path"));
     }
 
     #[test]
     fn test_build_model_dependency_request_normalizes_optional_and_bindings() {
-        let request = build_model_dependency_request(
-            " pytorch-inference ".to_string(),
-            " /tmp/model ".to_string(),
-            Some(" ".to_string()),
-            Some(" diffusion ".to_string()),
-            Some(" text-to-image ".to_string()),
-            Some(" pytorch ".to_string()),
-            None,
-            Some(vec![
+        let request = build_model_dependency_request(node_engine::ModelDependencyRequest {
+            node_type: " pytorch-inference ".to_string(),
+            model_path: " /tmp/model ".to_string(),
+            model_id: Some(" ".to_string()),
+            model_type: Some(" diffusion ".to_string()),
+            task_type_primary: Some(" text-to-image ".to_string()),
+            backend_key: Some(" pytorch ".to_string()),
+            selected_binding_ids: vec![
                 " binding-a ".to_string(),
                 "".to_string(),
                 "binding-a".to_string(),
                 "binding-b".to_string(),
-            ]),
-            None,
-        )
+            ],
+            ..Default::default()
+        })
         .unwrap();
 
         assert_eq!(request.node_type, "pytorch-inference");
