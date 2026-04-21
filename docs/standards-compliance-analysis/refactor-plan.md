@@ -180,6 +180,8 @@ Tasks:
   normalized.
   Tauri root, agent/RAG/tools, helper binary, hotload sandbox, and LLM backend
   READMEs are normalized.
+  App component edge, architecture-node, orchestration, and side-panel READMEs
+  are normalized.
 
 Additional issue recorded during implementation:
 - `crates/inference/src/managed_runtime/managed_binaries/` is an empty,
