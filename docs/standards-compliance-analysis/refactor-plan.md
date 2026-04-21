@@ -642,10 +642,13 @@ Tasks:
   and workflow run-handle default construction.
   `crates/pantograph-frontend-http-adapter` now passes its focused strict
   clippy check after simplifying scheduler-detail envelope mapping. The full
-  workspace audit now reports the next cleanup set in
-  `crates/pantograph-embedded-runtime`; embedded-runtime all-target checks also
-  expose missing test-local imports for `ExecutorExtensions` and
-  `tokio::sync::RwLock` after the zero-warning root-facade import cleanup.
+  workspace audit then reached `crates/pantograph-embedded-runtime`; those
+  findings are now resolved by restoring test-local executor-extension/lock
+  imports to the extracted test harness, simplifying repo-local Python
+  discovery, eliding model-dependency helper lifetimes, and grouping workflow
+  diagnostics snapshot inputs. The full workspace audit now reports the next
+  cleanup set in `crates/pantograph-rustler`: one stale workflow-event test
+  constructor, one callback type-complexity alias, and one redundant closure.
 - Close or update `docs/anti-pattern-remediation-tracker.md` Phase 5 for
   process-node policy controls.
 - Add issue/backlog entries for non-compliance problems intentionally deferred.

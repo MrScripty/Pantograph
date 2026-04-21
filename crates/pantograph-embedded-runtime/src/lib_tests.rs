@@ -6,6 +6,7 @@ use inference::backend::{
 };
 use inference::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 use inference::{RerankRequest, RerankResponse};
+use node_engine::ExecutorExtensions;
 use pantograph_runtime_registry::{
     RuntimeRegistration, RuntimeRegistry, RuntimeRegistryError, RuntimeRegistrySnapshot,
     RuntimeRegistryStatus, RuntimeReservationRequest, RuntimeRetentionHint, RuntimeTransition,
@@ -24,7 +25,7 @@ use std::path::Path;
 use std::pin::Pin;
 use std::time::Duration;
 use tempfile::TempDir;
-use tokio::sync::mpsc;
+use tokio::sync::{RwLock, mpsc};
 
 #[path = "lib_tests/data_graph_execution_tests.rs"]
 mod data_graph_execution_tests;

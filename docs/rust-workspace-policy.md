@@ -64,8 +64,8 @@ Current policy:
   clippy-specific findings exposed after the rustc warning baseline reached
   zero. The audit has cleared `inference`, `node-engine`, and
   `workflow-nodes`, `pantograph-workflow-service`, and
-  `pantograph-frontend-http-adapter`; the current workspace run now stops in
-  `pantograph-embedded-runtime`.
+  `pantograph-frontend-http-adapter` and `pantograph-embedded-runtime`; the
+  current workspace run now stops in `pantograph-rustler`.
 - New policy lints may be denied only when they are known not to fail the
   current workspace.
 

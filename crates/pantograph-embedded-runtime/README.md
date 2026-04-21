@@ -48,6 +48,8 @@ binding behavior.
 - The runtime facade composes existing backend-owned contracts rather than
   redefining workflow or registry policy.
 - Python worker execution remains isolated from the Rust process.
+- Python interpreter discovery should use explicit candidate iteration helpers
+  so process-backed startup remains readable and clippy-clean.
 - Runtime feature flags document which backend families are compiled.
 - Shutdown and task lifecycle ownership must become explicit as M3 proceeds.
 

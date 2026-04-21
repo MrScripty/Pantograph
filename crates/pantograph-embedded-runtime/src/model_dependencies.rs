@@ -1561,9 +1561,9 @@ impl TauriModelDependencyResolver {
             .clone()
     }
 
-    fn pick_bindings_for_execution<'a>(
-        requirements: &'a ModelDependencyRequirements,
-    ) -> Vec<&'a ModelDependencyBinding> {
+    fn pick_bindings_for_execution(
+        requirements: &ModelDependencyRequirements,
+    ) -> Vec<&ModelDependencyBinding> {
         let selected = requirements
             .selected_binding_ids
             .iter()

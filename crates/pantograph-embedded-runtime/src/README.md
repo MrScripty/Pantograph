@@ -49,7 +49,7 @@ packages.
 | `runtime_registry_lifecycle.rs` | Owns backend-side runtime-registry sync, snapshot, warmup coordination, reclaim, stop-all, and restore orchestration so lifecycle sequencing stays separate from observation mapping. |
 | `runtime_registry_observations.rs` | Owns backend-side runtime-registry observation builders and health-overlay matching for active, embedding, and execution-observed producer facts. |
 | `workflow_scheduler_diagnostics.rs` | Owns workflow scheduler diagnostics provider projection from host runtime mode and shared runtime-registry state. |
-| `workflow_runtime.rs` | Owns backend-side workflow execution helpers for embedding metadata flag projection, runtime trace/model-target shaping, runtime diagnostics projection, and execution-path or stored-snapshot runtime-registry reconciliation used by workflow diagnostics transport. |
+| `workflow_runtime.rs` | Owns backend-side workflow execution helpers for embedding metadata flag projection, runtime trace/model-target shaping, runtime diagnostics input grouping, and execution-path or stored-snapshot runtime-registry reconciliation used by workflow diagnostics transport. |
 | `workflow_session_execution.rs` | Owns backend-side keep-alive workflow-session executor storage, graph-change reuse/reconciliation, and unload-transition application so scheduler-driven reclaim and direct capacity rebalance share one logical-session path. |
 
 ## Problem
@@ -111,6 +111,9 @@ embedded-runtime crate.
 - The root `lib.rs` facade should import only items used by facade code; tests
   and feature-specific constructors should import executor-extension locks in
   their owning modules instead of keeping stale facade imports.
+- Extracted root-facade tests should import shared executor-extension and async
+  lock helpers from `lib_tests.rs` so production facade imports remain warning
+  clean while all-target checks still compile test modules.
 - Embedded-runtime data-graph execution stays in
   `embedded_data_graph_execution.rs` so terminal-node demand handling and
   output shaping remain separate from graph persistence and edit-session API
@@ -137,6 +140,9 @@ embedded-runtime crate.
 - Root embedded-runtime facade tests stay outside `lib.rs` so production
   runtime composition remains reviewable; split `lib_tests.rs` further when a
   behavior-focused test module boundary is introduced.
+- Workflow diagnostics snapshot builders group scheduler/runtime inputs into
+  explicit input structs so registry synchronization and projection helpers do
+  not grow long positional argument lists.
 - Host helper and runtime-registry error-mapping unit tests stay in
   `lib_tests/host_helper_tests.rs`; continue splitting the remaining legacy
   integration tests by behavior area rather than growing `lib_tests.rs`.

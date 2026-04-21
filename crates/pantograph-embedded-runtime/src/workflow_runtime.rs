@@ -60,6 +60,31 @@ pub struct WorkflowExecutionDiagnosticsSnapshot {
     pub runtime: WorkflowExecutionRuntimeSnapshot,
 }
 
+pub struct WorkflowExecutionDiagnosticsInput<'a> {
+    pub runtime_registry: Option<&'a RuntimeRegistry>,
+    pub scheduler_snapshot: &'a WorkflowSchedulerSnapshotResponse,
+    pub captured_at_ms: u64,
+    pub runtime_capabilities: Option<WorkflowCapabilitiesResponse>,
+    pub runtime_error: Option<String>,
+    pub trace_runtime_metrics_override: Option<WorkflowTraceRuntimeMetrics>,
+    pub runtime_snapshot_override: Option<&'a inference::RuntimeLifecycleSnapshot>,
+    pub gateway_snapshot: &'a inference::RuntimeLifecycleSnapshot,
+    pub embedding_runtime_snapshot: Option<&'a inference::RuntimeLifecycleSnapshot>,
+    pub gateway_mode_info: &'a HostRuntimeModeSnapshot,
+    pub runtime_model_target_override: Option<&'a str>,
+}
+
+pub struct WorkflowExecutionDiagnosticsSyncInput<'a> {
+    pub runtime_registry: Option<&'a RuntimeRegistry>,
+    pub scheduler_snapshot: &'a WorkflowSchedulerSnapshotResponse,
+    pub captured_at_ms: u64,
+    pub runtime_capabilities: Option<WorkflowCapabilitiesResponse>,
+    pub runtime_error: Option<String>,
+    pub trace_runtime_metrics_override: Option<WorkflowTraceRuntimeMetrics>,
+    pub runtime_snapshot_override: Option<&'a inference::RuntimeLifecycleSnapshot>,
+    pub runtime_model_target_override: Option<&'a str>,
+}
+
 #[async_trait]
 pub trait WorkflowExecutionDiagnosticsController:
     crate::runtime_registry::HostRuntimeRegistryController
@@ -79,18 +104,21 @@ pub fn unix_timestamp_ms() -> u64 {
 }
 
 pub fn build_workflow_execution_diagnostics_snapshot(
-    runtime_registry: Option<&RuntimeRegistry>,
-    scheduler_snapshot: &WorkflowSchedulerSnapshotResponse,
-    captured_at_ms: u64,
-    runtime_capabilities: Option<WorkflowCapabilitiesResponse>,
-    runtime_error: Option<String>,
-    trace_runtime_metrics_override: Option<WorkflowTraceRuntimeMetrics>,
-    runtime_snapshot_override: Option<&inference::RuntimeLifecycleSnapshot>,
-    gateway_snapshot: &inference::RuntimeLifecycleSnapshot,
-    embedding_runtime_snapshot: Option<&inference::RuntimeLifecycleSnapshot>,
-    gateway_mode_info: &HostRuntimeModeSnapshot,
-    runtime_model_target_override: Option<&str>,
+    input: WorkflowExecutionDiagnosticsInput<'_>,
 ) -> WorkflowExecutionDiagnosticsSnapshot {
+    let WorkflowExecutionDiagnosticsInput {
+        runtime_registry,
+        scheduler_snapshot,
+        captured_at_ms,
+        runtime_capabilities,
+        runtime_error,
+        trace_runtime_metrics_override,
+        runtime_snapshot_override,
+        gateway_snapshot,
+        embedding_runtime_snapshot,
+        gateway_mode_info,
+        runtime_model_target_override,
+    } = input;
     let workflow_id = scheduler_snapshot.workflow_id.clone();
     let runtime_workflow_id = workflow_id
         .clone()
@@ -140,18 +168,21 @@ pub fn build_workflow_execution_diagnostics_snapshot(
 
 pub async fn build_workflow_execution_diagnostics_snapshot_with_registry_sync<C>(
     controller: &C,
-    runtime_registry: Option<&RuntimeRegistry>,
-    scheduler_snapshot: &WorkflowSchedulerSnapshotResponse,
-    captured_at_ms: u64,
-    runtime_capabilities: Option<WorkflowCapabilitiesResponse>,
-    runtime_error: Option<String>,
-    trace_runtime_metrics_override: Option<WorkflowTraceRuntimeMetrics>,
-    runtime_snapshot_override: Option<&inference::RuntimeLifecycleSnapshot>,
-    runtime_model_target_override: Option<&str>,
+    input: WorkflowExecutionDiagnosticsSyncInput<'_>,
 ) -> WorkflowExecutionDiagnosticsSnapshot
 where
     C: WorkflowExecutionDiagnosticsController + Sync,
 {
+    let WorkflowExecutionDiagnosticsSyncInput {
+        runtime_registry,
+        scheduler_snapshot,
+        captured_at_ms,
+        runtime_capabilities,
+        runtime_error,
+        trace_runtime_metrics_override,
+        runtime_snapshot_override,
+        runtime_model_target_override,
+    } = input;
     if let Some(registry) = runtime_registry {
         crate::runtime_registry::sync_runtime_registry(controller, registry).await;
     }
@@ -160,7 +191,7 @@ where
     let embedding_runtime_snapshot = controller.embedding_runtime_lifecycle_snapshot().await;
     let gateway_mode_info = controller.mode_info_snapshot().await;
 
-    build_workflow_execution_diagnostics_snapshot(
+    build_workflow_execution_diagnostics_snapshot(WorkflowExecutionDiagnosticsInput {
         runtime_registry,
         scheduler_snapshot,
         captured_at_ms,
@@ -168,11 +199,11 @@ where
         runtime_error,
         trace_runtime_metrics_override,
         runtime_snapshot_override,
-        &gateway_snapshot,
-        embedding_runtime_snapshot.as_ref(),
-        &gateway_mode_info,
+        gateway_snapshot: &gateway_snapshot,
+        embedding_runtime_snapshot: embedding_runtime_snapshot.as_ref(),
+        gateway_mode_info: &gateway_mode_info,
         runtime_model_target_override,
-    )
+    })
 }
 
 pub async fn sync_embedding_emit_metadata_flags(
@@ -538,6 +569,8 @@ mod tests {
     };
 
     use super::{
+        WorkflowExecutionDiagnosticsInput,
+        WorkflowExecutionDiagnosticsSyncInput,
         build_runtime_diagnostics_projection, build_runtime_event_projection,
         build_runtime_event_projection_with_registry_override,
         build_runtime_event_projection_with_registry_reconciliation,
@@ -772,50 +805,52 @@ mod tests {
                 active_runtime_snapshot: active_runtime_snapshot.clone(),
                 embedding_runtime_snapshot: Some(embedding_runtime_snapshot.clone()),
             },
-            Some(&registry),
-            &WorkflowSchedulerSnapshotResponse {
-                workflow_id: Some("wf-123".to_string()),
-                session_id: "session-123".to_string(),
-                trace_execution_id: Some("exec-456".to_string()),
-                session: WorkflowSessionSummary {
+            WorkflowExecutionDiagnosticsSyncInput {
+                runtime_registry: Some(&registry),
+                scheduler_snapshot: &WorkflowSchedulerSnapshotResponse {
+                    workflow_id: Some("wf-123".to_string()),
                     session_id: "session-123".to_string(),
-                    workflow_id: "wf-123".to_string(),
-                    session_kind: WorkflowSessionKind::Workflow,
-                    usage_profile: Some("interactive".to_string()),
-                    keep_alive: false,
-                    state: WorkflowSessionState::Running,
-                    queued_runs: 0,
-                    run_count: 1,
+                    trace_execution_id: Some("exec-456".to_string()),
+                    session: WorkflowSessionSummary {
+                        session_id: "session-123".to_string(),
+                        workflow_id: "wf-123".to_string(),
+                        session_kind: WorkflowSessionKind::Workflow,
+                        usage_profile: Some("interactive".to_string()),
+                        keep_alive: false,
+                        state: WorkflowSessionState::Running,
+                        queued_runs: 0,
+                        run_count: 1,
+                    },
+                    items: Vec::new(),
+                    diagnostics: None,
                 },
-                items: Vec::new(),
-                diagnostics: None,
+                captured_at_ms: 999,
+                runtime_capabilities: None,
+                runtime_error: None,
+                trace_runtime_metrics_override: Some(WorkflowTraceRuntimeMetrics {
+                    runtime_id: Some("pytorch".to_string()),
+                    observed_runtime_ids: vec!["pytorch".to_string()],
+                    runtime_instance_id: Some("python-runtime:pytorch:default".to_string()),
+                    model_target: Some("/models/sidecar.safetensors".to_string()),
+                    warmup_started_at_ms: Some(5),
+                    warmup_completed_at_ms: Some(9),
+                    warmup_duration_ms: Some(4),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                }),
+                runtime_snapshot_override: Some(&inference::RuntimeLifecycleSnapshot {
+                    runtime_id: Some("PyTorch".to_string()),
+                    runtime_instance_id: Some("python-runtime:pytorch:default".to_string()),
+                    warmup_started_at_ms: Some(5),
+                    warmup_completed_at_ms: Some(9),
+                    warmup_duration_ms: Some(4),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                    active: true,
+                    last_error: None,
+                }),
+                runtime_model_target_override: Some("/models/sidecar.safetensors"),
             },
-            999,
-            None,
-            None,
-            Some(WorkflowTraceRuntimeMetrics {
-                runtime_id: Some("pytorch".to_string()),
-                observed_runtime_ids: vec!["pytorch".to_string()],
-                runtime_instance_id: Some("python-runtime:pytorch:default".to_string()),
-                model_target: Some("/models/sidecar.safetensors".to_string()),
-                warmup_started_at_ms: Some(5),
-                warmup_completed_at_ms: Some(9),
-                warmup_duration_ms: Some(4),
-                runtime_reused: Some(false),
-                lifecycle_decision_reason: Some("runtime_ready".to_string()),
-            }),
-            Some(&inference::RuntimeLifecycleSnapshot {
-                runtime_id: Some("PyTorch".to_string()),
-                runtime_instance_id: Some("python-runtime:pytorch:default".to_string()),
-                warmup_started_at_ms: Some(5),
-                warmup_completed_at_ms: Some(9),
-                warmup_duration_ms: Some(4),
-                runtime_reused: Some(false),
-                lifecycle_decision_reason: Some("runtime_ready".to_string()),
-                active: true,
-                last_error: None,
-            }),
-            Some("/models/sidecar.safetensors"),
         )
         .await;
 
@@ -1150,108 +1185,111 @@ mod tests {
     fn build_workflow_execution_diagnostics_snapshot_uses_backend_owned_scheduler_and_runtime_facts(
     ) {
         let registry = RuntimeRegistry::new();
-        let snapshot = build_workflow_execution_diagnostics_snapshot(
-            Some(&registry),
-            &WorkflowSchedulerSnapshotResponse {
-                workflow_id: Some("wf-123".to_string()),
-                session_id: "session-123".to_string(),
-                trace_execution_id: Some("exec-456".to_string()),
-                session: WorkflowSessionSummary {
+        let snapshot =
+            build_workflow_execution_diagnostics_snapshot(WorkflowExecutionDiagnosticsInput {
+                runtime_registry: Some(&registry),
+                scheduler_snapshot: &WorkflowSchedulerSnapshotResponse {
+                    workflow_id: Some("wf-123".to_string()),
                     session_id: "session-123".to_string(),
-                    workflow_id: "wf-123".to_string(),
-                    session_kind: WorkflowSessionKind::Workflow,
-                    usage_profile: Some("interactive".to_string()),
-                    keep_alive: false,
-                    state: WorkflowSessionState::Running,
-                    queued_runs: 0,
-                    run_count: 1,
+                    trace_execution_id: Some("exec-456".to_string()),
+                    session: WorkflowSessionSummary {
+                        session_id: "session-123".to_string(),
+                        workflow_id: "wf-123".to_string(),
+                        session_kind: WorkflowSessionKind::Workflow,
+                        usage_profile: Some("interactive".to_string()),
+                        keep_alive: false,
+                        state: WorkflowSessionState::Running,
+                        queued_runs: 0,
+                        run_count: 1,
+                    },
+                    items: vec![WorkflowSessionQueueItem {
+                        queue_id: "queue-1".to_string(),
+                        run_id: Some("exec-456".to_string()),
+                        enqueued_at_ms: Some(11),
+                        dequeued_at_ms: Some(12),
+                        priority: 0,
+                        queue_position: None,
+                        scheduler_admission_outcome: None,
+                        scheduler_decision_reason: None,
+                        status:
+                            pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
+                    }],
+                    diagnostics: None,
                 },
-                items: vec![WorkflowSessionQueueItem {
-                    queue_id: "queue-1".to_string(),
-                    run_id: Some("exec-456".to_string()),
-                    enqueued_at_ms: Some(11),
-                    dequeued_at_ms: Some(12),
-                    priority: 0,
-                    queue_position: None,
-                    scheduler_admission_outcome: None,
-                    scheduler_decision_reason: None,
-                    status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
-                }],
-                diagnostics: None,
-            },
-            999,
-            Some(WorkflowCapabilitiesResponse {
-                max_input_bindings: 4,
-                max_output_targets: 2,
-                max_value_bytes: 1000,
-                runtime_requirements: pantograph_workflow_service::WorkflowRuntimeRequirements {
-                    estimated_peak_vram_mb: None,
-                    estimated_peak_ram_mb: None,
-                    estimated_min_vram_mb: None,
-                    estimated_min_ram_mb: None,
-                    estimation_confidence: "high".to_string(),
-                    required_models: vec!["model-a".to_string()],
-                    required_backends: vec!["pytorch".to_string()],
-                    required_extensions: Vec::new(),
+                captured_at_ms: 999,
+                runtime_capabilities: Some(WorkflowCapabilitiesResponse {
+                    max_input_bindings: 4,
+                    max_output_targets: 2,
+                    max_value_bytes: 1000,
+                    runtime_requirements:
+                        pantograph_workflow_service::WorkflowRuntimeRequirements {
+                            estimated_peak_vram_mb: None,
+                            estimated_peak_ram_mb: None,
+                            estimated_min_vram_mb: None,
+                            estimated_min_ram_mb: None,
+                            estimation_confidence: "high".to_string(),
+                            required_models: vec!["model-a".to_string()],
+                            required_backends: vec!["pytorch".to_string()],
+                            required_extensions: Vec::new(),
+                        },
+                    models: Vec::new(),
+                    runtime_capabilities: Vec::new(),
+                }),
+                runtime_error: Some("runtime capability probe failed".to_string()),
+                trace_runtime_metrics_override: Some(WorkflowTraceRuntimeMetrics {
+                    runtime_id: Some("pytorch".to_string()),
+                    observed_runtime_ids: vec!["pytorch".to_string(), "diffusers".to_string()],
+                    runtime_instance_id: Some("python-runtime:pytorch:default".to_string()),
+                    model_target: Some("/models/sidecar.safetensors".to_string()),
+                    warmup_started_at_ms: Some(5),
+                    warmup_completed_at_ms: Some(9),
+                    warmup_duration_ms: Some(4),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                }),
+                runtime_snapshot_override: Some(&inference::RuntimeLifecycleSnapshot {
+                    runtime_id: Some("PyTorch".to_string()),
+                    runtime_instance_id: Some("python-runtime:pytorch:default".to_string()),
+                    warmup_started_at_ms: Some(5),
+                    warmup_completed_at_ms: Some(9),
+                    warmup_duration_ms: Some(4),
+                    runtime_reused: Some(false),
+                    lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                    active: true,
+                    last_error: None,
+                }),
+                gateway_snapshot: &inference::RuntimeLifecycleSnapshot {
+                    runtime_id: Some("llama.cpp".to_string()),
+                    runtime_instance_id: Some("llama-main-1".to_string()),
+                    warmup_started_at_ms: None,
+                    warmup_completed_at_ms: None,
+                    warmup_duration_ms: None,
+                    runtime_reused: Some(true),
+                    lifecycle_decision_reason: Some("runtime_reused".to_string()),
+                    active: true,
+                    last_error: None,
                 },
-                models: Vec::new(),
-                runtime_capabilities: Vec::new(),
-            }),
-            Some("runtime capability probe failed".to_string()),
-            Some(WorkflowTraceRuntimeMetrics {
-                runtime_id: Some("pytorch".to_string()),
-                observed_runtime_ids: vec!["pytorch".to_string(), "diffusers".to_string()],
-                runtime_instance_id: Some("python-runtime:pytorch:default".to_string()),
-                model_target: Some("/models/sidecar.safetensors".to_string()),
-                warmup_started_at_ms: Some(5),
-                warmup_completed_at_ms: Some(9),
-                warmup_duration_ms: Some(4),
-                runtime_reused: Some(false),
-                lifecycle_decision_reason: Some("runtime_ready".to_string()),
-            }),
-            Some(&inference::RuntimeLifecycleSnapshot {
-                runtime_id: Some("PyTorch".to_string()),
-                runtime_instance_id: Some("python-runtime:pytorch:default".to_string()),
-                warmup_started_at_ms: Some(5),
-                warmup_completed_at_ms: Some(9),
-                warmup_duration_ms: Some(4),
-                runtime_reused: Some(false),
-                lifecycle_decision_reason: Some("runtime_ready".to_string()),
-                active: true,
-                last_error: None,
-            }),
-            &inference::RuntimeLifecycleSnapshot {
-                runtime_id: Some("llama.cpp".to_string()),
-                runtime_instance_id: Some("llama-main-1".to_string()),
-                warmup_started_at_ms: None,
-                warmup_completed_at_ms: None,
-                warmup_duration_ms: None,
-                runtime_reused: Some(true),
-                lifecycle_decision_reason: Some("runtime_reused".to_string()),
-                active: true,
-                last_error: None,
-            },
-            Some(&inference::RuntimeLifecycleSnapshot {
-                runtime_id: Some("llama_cpp_embedding".to_string()),
-                runtime_instance_id: Some("embed-1".to_string()),
-                warmup_started_at_ms: None,
-                warmup_completed_at_ms: None,
-                warmup_duration_ms: None,
-                runtime_reused: Some(true),
-                lifecycle_decision_reason: Some("runtime_reused".to_string()),
-                active: true,
-                last_error: None,
-            }),
-            &HostRuntimeModeSnapshot {
-                backend_name: Some("llama.cpp".to_string()),
-                backend_key: Some("llama_cpp".to_string()),
-                active_model_target: Some("/models/main.gguf".to_string()),
-                embedding_model_target: Some("/models/embed.gguf".to_string()),
-                active_runtime: None,
-                embedding_runtime: None,
-            },
-            Some("/models/sidecar.safetensors"),
-        );
+                embedding_runtime_snapshot: Some(&inference::RuntimeLifecycleSnapshot {
+                    runtime_id: Some("llama_cpp_embedding".to_string()),
+                    runtime_instance_id: Some("embed-1".to_string()),
+                    warmup_started_at_ms: None,
+                    warmup_completed_at_ms: None,
+                    warmup_duration_ms: None,
+                    runtime_reused: Some(true),
+                    lifecycle_decision_reason: Some("runtime_reused".to_string()),
+                    active: true,
+                    last_error: None,
+                }),
+                gateway_mode_info: &HostRuntimeModeSnapshot {
+                    backend_name: Some("llama.cpp".to_string()),
+                    backend_key: Some("llama_cpp".to_string()),
+                    active_model_target: Some("/models/main.gguf".to_string()),
+                    embedding_model_target: Some("/models/embed.gguf".to_string()),
+                    active_runtime: None,
+                    embedding_runtime: None,
+                },
+                runtime_model_target_override: Some("/models/sidecar.safetensors"),
+            });
 
         assert_eq!(snapshot.scheduler.workflow_id.as_deref(), Some("wf-123"));
         assert_eq!(snapshot.scheduler.trace_execution_id, "exec-456");

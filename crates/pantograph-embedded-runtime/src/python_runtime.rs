@@ -251,16 +251,13 @@ impl ProcessPythonRuntimeAdapter {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let repo_root = manifest_dir.parent()?.parent()?;
 
-        for candidate in [
+        [
             repo_root.join(".venv").join("bin").join("python3"),
             repo_root.join(".venv").join("bin").join("python"),
             repo_root.join(".venv").join("Scripts").join("python.exe"),
-        ] {
-            if candidate.exists() {
-                return Some(candidate);
-            }
-        }
-        None
+        ]
+        .into_iter()
+        .find(|candidate| candidate.exists())
     }
 
     fn resolve_worker_paths() -> Result<BridgeWorkerPaths, String> {
