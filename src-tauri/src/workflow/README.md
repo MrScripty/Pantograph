@@ -181,7 +181,7 @@ let snapshot = workflow_service
     .await?;
 ```
 
-## API Consumer Contract (Host-Facing Modules)
+## API Consumer Contract
 - Frontend callers must create or load an execution session before calling the
   session-scoped editing commands in this directory.
 - `get_connection_candidates` accepts a source anchor and optional graph
@@ -200,7 +200,7 @@ let snapshot = workflow_service
 - Workflow dependency resolution and execution treat Pumas as the source of
   truth for executable model asset paths when bundle metadata requires it.
 
-## Structured Producer Contract (Machine-Consumed Modules)
+## Structured Producer Contract
 - `ConnectionCandidatesResponse` always includes `graph_revision`,
   `revision_matches`, `source_anchor`, `compatible_nodes`, and
   `insertable_node_types`.
