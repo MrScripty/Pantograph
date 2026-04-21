@@ -39,10 +39,10 @@ Keep reusable interaction policy in small top-level helpers such as
 and the app graph wrapper. Export those helpers through `index.ts` so the app
 layer can consume the same connect/reconnect rules instead of copying them.
 Keep workflow execution event identity in `workflowEventOwnership.ts` as an
-explicit projection object until the backend-owned trace/session projection API
-can replace that frontend seam. The helper prefers backend-authored event
-`ownership` payloads from Tauri before falling back to legacy `execution_id`
-fields.
+explicit projection object. Backend-authored event `ownership` payloads from
+Tauri are authoritative for event identity, active run identity, and relevance;
+the helper only falls back to legacy `execution_id` fields for events that do
+not yet carry that backend projection.
 
 ## Alternatives Rejected
 - Keep connect/reconnect state management inline in both graph components.
@@ -68,7 +68,8 @@ fields.
 - Helpers in this directory do not perform backend mutations directly; they
   compute state and decisions for callers that own side effects.
 - `workflowEventOwnership.ts` must only project backend-supplied execution ids
-  and active-run relevance; it must not synthesize canonical run identity.
+  and active-run relevance; when backend `ownership` is present, it must not
+  override relevance with package-local current-run comparisons.
 - Backend-authored workflow event `ownership` payloads take precedence over
   legacy raw `execution_id` fields.
 

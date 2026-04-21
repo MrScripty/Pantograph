@@ -66,7 +66,8 @@ consumers. That reducer now consumes the explicit execution ownership projection
 from `workflowEventOwnership.ts` so active-run identity and stale-event
 relevance are evaluated once before node overlays or runtime-data mirrors are
 updated. When Tauri emits backend-authored event `ownership`, that payload is
-the source for the shared projection.
+the authoritative source for the shared projection and is not filtered again
+against package-local active-run state.
 Collapsed node group create, ungroup, and port-mapping edits now follow the
 same backend-session rule as other structural graph mutations:
 `createWorkflowStores.ts` applies the returned graph mutation snapshot and

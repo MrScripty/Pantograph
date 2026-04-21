@@ -51,14 +51,7 @@ export function projectWorkflowEventOwnership(
 ): WorkflowEventOwnershipProjection {
   const backendOwnership = normalizeBackendOwnership(event.data.ownership);
   if (backendOwnership !== null) {
-    const activeExecutionId = currentExecutionId ?? backendOwnership.activeExecutionId;
-    return {
-      eventExecutionId: backendOwnership.eventExecutionId,
-      activeExecutionId,
-      relevant:
-        backendOwnership.relevant &&
-        (currentExecutionId === null || backendOwnership.activeExecutionId === currentExecutionId),
-    };
+    return backendOwnership;
   }
 
   const eventExecutionId = getWorkflowEventExecutionId(event);

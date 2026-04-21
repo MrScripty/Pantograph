@@ -78,7 +78,7 @@ test('projectWorkflowEventOwnership prefers backend-authored ownership', () => {
   );
 });
 
-test('projectWorkflowEventOwnership applies current run filtering to backend ownership', () => {
+test('projectWorkflowEventOwnership trusts backend ownership relevance', () => {
   assert.deepEqual(
     projectWorkflowEventOwnership(
       {
@@ -94,8 +94,8 @@ test('projectWorkflowEventOwnership applies current run filtering to backend own
     ),
     {
       eventExecutionId: 'run-2',
-      activeExecutionId: 'run-1',
-      relevant: false,
+      activeExecutionId: 'run-2',
+      relevant: true,
     },
   );
 });

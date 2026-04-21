@@ -205,7 +205,7 @@ Verification:
 Goal: Eliminate frontend and adapter ownership of canonical workflow behavior.
 
 Tasks:
-- [ ] Move execution-id claiming, stale-event filtering, run/session attribution,
+- [x] Move execution-id claiming, stale-event filtering, run/session attribution,
   and diagnostics relevance into backend-owned trace/session projection APIs.
   Progress: app toolbar event handling now delegates execution-id claiming and
   stale-event filtering to the shared workflow execution event projector instead
@@ -213,9 +213,10 @@ Tasks:
   explicit ownership projection consumed by `WorkflowService.ts` and workflow
   execution event reducers. Tauri workflow-event serialization now emits a
   backend-authored `ownership` projection, and the shared frontend projector
-  prefers that payload when present. The remaining work is to replace the last
-  consumer-local current-run comparison with a backend-owned trace/session
-  relevance query.
+  treats that payload as authoritative when present, without re-filtering it
+  through a consumer-local current-run comparison. Legacy events without
+  backend-authored ownership still use the package fallback projection until
+  those producers are retired.
 - [x] Make `workflow_get_diagnostics_snapshot` provide the exact frontend-ready
   identity and relevance decisions needed by `diagnosticsStore.ts`.
   Status: diagnostics projections now carry backend-authored context containing
