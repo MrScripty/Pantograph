@@ -27,8 +27,9 @@ The root policy denies repo-owned `unsafe` code by default. Clippy lint policy
 starts as a ratchet: debug macros and TODOs warn, while unsafe documentation
 lints are denied so any future exception must be documented.
 
-Existing Rust warning debt remains a tracked baseline until M7 classifies each
-warning as remove, use, feature-gate, or intentionally retained.
+Existing Rust warning debt remains tracked in
+`docs/standards-compliance-analysis/rust-warning-baseline.md` until M7 removes
+or scopes each warning.
 
 ## Dependency Inheritance
 
@@ -66,8 +67,9 @@ Current policy:
 
 Ratchet sequence:
 
-1. Classify each warning as remove, use, feature-gate, external/dependency
-   exception, or intentionally retained.
+1. Keep `docs/standards-compliance-analysis/rust-warning-baseline.md` current
+   with each warning classified as remove, use, feature-gate,
+   external/dependency exception, or intentionally retained.
 2. Remove or scope exceptions for warnings that belong to inactive or migrated
    code paths.
 3. Add a non-regression check for the resulting baseline.

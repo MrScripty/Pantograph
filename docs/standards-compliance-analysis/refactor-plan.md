@@ -610,8 +610,10 @@ Verification:
 Goal: Remove stale implementations after ownership moves settle.
 
 Tasks:
-- Classify all `cargo check` warnings as remove, use, gate behind feature, or
-  document as disabled/experimental.
+- [x] Classify all `cargo check` warnings as remove, use, gate behind feature,
+  or document as disabled/experimental. Status:
+  `docs/standards-compliance-analysis/rust-warning-baseline.md` records the
+  2026-04-21 all-features warning baseline and ratchet path.
 - Delete unused Tauri-local workflow types, validators, and connection-intent
   helpers superseded by `pantograph-workflow-service`.
 - Close or update `docs/anti-pattern-remediation-tracker.md` Phase 5 for
@@ -619,7 +621,8 @@ Tasks:
 - Add issue/backlog entries for non-compliance problems intentionally deferred.
 
 Verification:
-- `cargo check` warning count is reduced to zero or a documented baseline.
+- `cargo check` warning count is reduced to zero or the documented baseline in
+  `docs/standards-compliance-analysis/rust-warning-baseline.md`.
 - No duplicate active implementation remains for workflow business logic.
 
 ## Risks and Mitigations
@@ -658,7 +661,9 @@ fully resolved by standards compliance:
 - Resolved: `tool-loop` and `tool-executor` no longer produce successful
   placeholder tool outputs; they fail until backend-owned tool execution
   contracts exist.
-- Many Rust dead-code warnings suggest stale workflow and server-discovery paths.
+- Many Rust dead-code warnings suggest stale workflow and server-discovery paths;
+  the current baseline and removal order are classified in
+  `docs/standards-compliance-analysis/rust-warning-baseline.md`.
 - `cargo check -p node-engine --features audio-nodes` compiles but emits
   audio-only dead-code warnings for shared boolean settings readers in
   `crates/node-engine/src/core_executor/settings.rs`; classify them during the
