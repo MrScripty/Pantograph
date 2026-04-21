@@ -663,8 +663,11 @@ Tasks:
   entrypoints that must preserve framework-injected state signatures carry
   scoped `#[expect]` annotations with boundary reasons. The full workspace
   strict clippy gate now passes.
-- Close or update `docs/anti-pattern-remediation-tracker.md` Phase 5 for
-  process-node policy controls.
+- [x] Close or update `docs/anti-pattern-remediation-tracker.md` Phase 5 for
+  process-node policy controls. Status: `ProcessTask` now defaults to a
+  disabled backend-owned `ProcessExecutionPolicy`; allowed process commands
+  require explicit host policy, and the anti-pattern tracker records Phase 5 as
+  complete.
 - Add issue/backlog entries for non-compliance problems intentionally deferred.
 
 Verification:
@@ -741,3 +744,6 @@ fully resolved by standards compliance:
   but does not override `WorkflowHost::runtime_capabilities`, so
   `workflow_session_lifecycle_create_run_close` fails its create-session
   runtime-capability assertion before close-session behavior is exercised.
+- Resolved: arbitrary `process` node execution is no longer enabled by default;
+  backend hosts must provide an explicit `ProcessExecutionPolicy` command
+  allowlist before process-backed workflows can spawn host commands.

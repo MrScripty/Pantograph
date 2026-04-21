@@ -1,6 +1,6 @@
 # Anti-Pattern Remediation Tracker
 
-Last updated: 2026-02-27 (Phase 4 complete)
+Last updated: 2026-04-21 (Phase 5 complete)
 
 ## Objective
 
@@ -15,7 +15,7 @@ Track remediation of repo anti-pattern findings with phased, testable changes.
 | 2 | Svelte DOM manipulation cleanup | Complete | Codex | `svelte/no-dom-manipulating` resolved without regressing generated-component HMR/state |
 | 3 | Quality gate realignment | Complete | Codex | `check` blocks critical anti-patterns in app/package code |
 | 4 | Store/service efficiency + retention | Complete | Codex | Link sync no longer global 100ms polling; logger bounded |
-| 5 | Deferred process-node hardening | Backlog | Codex | Capability gating + policy controls for untrusted workflows |
+| 5 | Deferred process-node hardening | Complete | Codex | Capability gating + policy controls for untrusted workflows |
 
 ## Finding-to-Phase Mapping
 
@@ -155,3 +155,41 @@ Potential standards improvement identified during Phase 3 work:
 Potential standards improvement identified during Phase 4 work:
 
 - Add an explicit frontend/runtime rule to **forbid global high-frequency polling loops for UI state synchronization** when event-driven hooks are feasible, and require explicit retention limits for in-memory observability buffers.
+
+## Phase 5 Plan
+
+### Scope
+
+- `crates/workflow-nodes/src/system/process.rs`
+- `crates/workflow-nodes/src/system/README.md`
+
+### Work Items
+
+1. Make process-node execution default-deny unless a backend host opts in.
+2. Add a host-owned command allowlist so workflow context cannot authorize
+   arbitrary commands by itself.
+3. Keep process node descriptors available for saved workflow compatibility.
+4. Add tests covering default denial and explicit host policy opt-in.
+
+### Validation
+
+- `cargo test -p workflow-nodes process -- --nocapture`
+- `cargo clippy -p workflow-nodes --all-targets --all-features -- -D warnings`
+
+### Phase 5 Completion Notes
+
+- `ProcessTask::new` now uses a disabled `ProcessExecutionPolicy`, so process
+  execution is denied unless the backend host constructs the task with an
+  explicit policy.
+- `ProcessExecutionPolicy::allow_commands` provides exact command allowlisting,
+  and `from_environment_values` documents the supported environment-derived
+  host policy shape without requiring tests to mutate process-global
+  environment variables.
+- Process node tests now use explicit host policies for allowed command cases
+  and cover the default-deny error path.
+
+Potential standards improvement identified during Phase 5 work:
+
+- Add a runtime standard requiring host-side-effect nodes to be default-deny
+  and authorized through backend-owned policy objects, not through graph or
+  frontend-supplied fields.

@@ -4,6 +4,7 @@
 //! Uses `tokio::process::Command` for async execution with timeout support.
 
 use std::collections::HashMap;
+use std::env;
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -17,6 +18,72 @@ use tokio::process::Command;
 
 /// Default timeout in seconds for process execution
 const DEFAULT_TIMEOUT_SECS: u64 = 300;
+const ENABLE_PROCESS_NODE_ENV: &str = "PANTOGRAPH_ENABLE_PROCESS_NODE";
+const PROCESS_NODE_ALLOWLIST_ENV: &str = "PANTOGRAPH_PROCESS_NODE_ALLOWLIST";
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ProcessExecutionPolicy {
+    allowed_commands: Vec<String>,
+}
+
+impl ProcessExecutionPolicy {
+    pub fn disabled() -> Self {
+        Self::default()
+    }
+
+    pub fn allow_commands<I, S>(commands: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        let mut allowed_commands: Vec<String> = commands
+            .into_iter()
+            .map(Into::into)
+            .map(|command| command.trim().to_string())
+            .filter(|command| !command.is_empty())
+            .collect();
+        allowed_commands.sort();
+        allowed_commands.dedup();
+        Self { allowed_commands }
+    }
+
+    pub fn from_environment() -> Self {
+        let enabled = env::var(ENABLE_PROCESS_NODE_ENV).ok();
+        let allowlist = env::var(PROCESS_NODE_ALLOWLIST_ENV).ok();
+        Self::from_environment_values(enabled.as_deref(), allowlist.as_deref())
+    }
+
+    pub fn from_environment_values(enabled: Option<&str>, allowlist: Option<&str>) -> Self {
+        if !enabled.is_some_and(is_truthy) {
+            return Self::disabled();
+        }
+        let Some(allowlist) = allowlist else {
+            return Self::disabled();
+        };
+        Self::allow_commands(allowlist.split(','))
+    }
+
+    fn authorize(&self, command: &str) -> graph_flow::Result<()> {
+        if self
+            .allowed_commands
+            .iter()
+            .any(|allowed| allowed == command)
+        {
+            return Ok(());
+        }
+        Err(GraphError::TaskExecutionFailed(format!(
+            "Process execution for '{}' is not allowed by host policy",
+            command
+        )))
+    }
+}
+
+fn is_truthy(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "1" | "true" | "yes" | "on"
+    )
+}
 
 async fn collect_pipe_output(handle: tokio::task::JoinHandle<Vec<u8>>) -> Vec<u8> {
     match tokio::time::timeout(Duration::from_secs(1), handle).await {
@@ -50,6 +117,7 @@ async fn collect_pipe_output(handle: tokio::task::JoinHandle<Vec<u8>>) -> Vec<u8
 #[derive(Clone)]
 pub struct ProcessTask {
     task_id: String,
+    execution_policy: ProcessExecutionPolicy,
 }
 
 impl ProcessTask {
@@ -70,6 +138,17 @@ impl ProcessTask {
     pub fn new(task_id: impl Into<String>) -> Self {
         Self {
             task_id: task_id.into(),
+            execution_policy: ProcessExecutionPolicy::disabled(),
+        }
+    }
+
+    pub fn new_with_policy(
+        task_id: impl Into<String>,
+        execution_policy: ProcessExecutionPolicy,
+    ) -> Self {
+        Self {
+            task_id: task_id.into(),
+            execution_policy,
         }
     }
 
@@ -121,6 +200,7 @@ impl Task for ProcessTask {
                 cmd_key
             ))
         })?;
+        self.execution_policy.authorize(&command)?;
 
         // Get optional args
         let args_key = ContextKeys::input(&self.task_id, Self::PORT_ARGS);
@@ -315,6 +395,13 @@ mod tests {
     use super::*;
     use tempfile::tempdir;
 
+    fn allowed_process_task(task_id: &str, commands: &[&str]) -> ProcessTask {
+        ProcessTask::new_with_policy(
+            task_id,
+            ProcessExecutionPolicy::allow_commands(commands.iter().copied()),
+        )
+    }
+
     #[test]
     fn test_descriptor() {
         let meta = ProcessTask::descriptor();
@@ -348,8 +435,42 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_default_policy_denies_process_execution() {
+        let task = ProcessTask::new("test_denied");
+        let context = Context::new();
+
+        let cmd_key = ContextKeys::input("test_denied", ProcessTask::PORT_COMMAND);
+        context.set(&cmd_key, "echo".to_string()).await;
+
+        let result = task.run(context).await;
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("not allowed by host policy")
+        );
+    }
+
+    #[test]
+    fn test_environment_policy_requires_enable_and_allowlist() {
+        assert_eq!(
+            ProcessExecutionPolicy::from_environment_values(None, Some("echo")),
+            ProcessExecutionPolicy::disabled()
+        );
+        assert_eq!(
+            ProcessExecutionPolicy::from_environment_values(Some("true"), None),
+            ProcessExecutionPolicy::disabled()
+        );
+        assert_eq!(
+            ProcessExecutionPolicy::from_environment_values(Some("true"), Some("echo, pwd")),
+            ProcessExecutionPolicy::allow_commands(["echo", "pwd"])
+        );
+    }
+
+    #[tokio::test]
     async fn test_echo_command() {
-        let task = ProcessTask::new("test_echo");
+        let task = allowed_process_task("test_echo", &["echo"]);
         let context = Context::new();
 
         // Set command input
@@ -380,7 +501,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_failing_command() {
-        let task = ProcessTask::new("test_fail");
+        let task = allowed_process_task("test_fail", &["false"]);
         let context = Context::new();
 
         let cmd_key = ContextKeys::input("test_fail", ProcessTask::PORT_COMMAND);
@@ -399,7 +520,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_stdin_pipe() {
-        let task = ProcessTask::new("test_stdin");
+        let task = allowed_process_task("test_stdin", &["cat"]);
         let context = Context::new();
 
         let cmd_key = ContextKeys::input("test_stdin", ProcessTask::PORT_COMMAND);
@@ -417,7 +538,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_env_vars() {
-        let task = ProcessTask::new("test_env");
+        let task = allowed_process_task("test_env", &["env"]);
         let context = Context::new();
 
         let cmd_key = ContextKeys::input("test_env", ProcessTask::PORT_COMMAND);
@@ -437,7 +558,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_cwd() {
-        let task = ProcessTask::new("test_cwd");
+        let task = allowed_process_task("test_cwd", &["pwd"]);
         let context = Context::new();
 
         let cmd_key = ContextKeys::input("test_cwd", ProcessTask::PORT_COMMAND);
@@ -460,7 +581,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let marker = dir.path().join("should_not_exist.txt");
 
-        let task = ProcessTask::new("test_timeout");
+        let task = allowed_process_task("test_timeout", &["sh"]);
         let context = Context::new();
 
         let cmd_key = ContextKeys::input("test_timeout", ProcessTask::PORT_COMMAND);
