@@ -43,3 +43,49 @@ exception with:
 - A lint exception scoped to the smallest possible module or item.
 
 Do not add crate-wide or workspace-wide unsafe exceptions.
+
+## Platform Cfg Policy
+
+Non-test platform `cfg` blocks are allowed only when they stay in one of these
+categories:
+
+- Thin platform adapter modules such as managed-runtime `llama.cpp` and Ollama
+  platform selectors.
+- Small platform filesystem/process affordances, for example Unix symlink,
+  permission, PID, or port-inspection helpers.
+- Compile-time native artifact naming for binding packaging.
+- Cargo feature gates that do not branch on operating system or architecture.
+
+The April 21 review found current non-test platform `cfg` usage in:
+
+- `crates/inference/src/managed_runtime/llama_cpp_platform/`
+- `crates/inference/src/managed_runtime/ollama_platform/`
+- `crates/inference/src/managed_runtime/archive.rs`
+- `src-tauri/src/llm/port_manager.rs`
+- `src-tauri/src/llm/server_discovery.rs`
+- `crates/workflow-nodes/src/system/process.rs`
+- `crates/node-engine/src/path_validation.rs`
+- `crates/pantograph-uniffi/src/runtime.rs`
+
+Those fit the exception rule today. If any platform branch grows into business
+logic, move it behind a named platform module or adapter before adding new
+behavior.
+
+## Benchmark Policy
+
+Performance claims and hot-path changes must include Criterion evidence unless
+the change is explicitly documentation-only or the performance impact is not a
+goal.
+
+Benchmark requirements:
+
+- Place benchmarks under the owning crate's `benches/` directory.
+- Use Criterion for timing and report the baseline command and comparison
+  target.
+- Benchmark the smallest stable public or crate-private boundary that reflects
+  the claim.
+- Keep generated benchmark output out of source control.
+- Record any hardware, runtime feature, model, or dataset assumption needed to
+  interpret the result.
+
+Do not use ad hoc wall-clock logs as the only evidence for a performance claim.

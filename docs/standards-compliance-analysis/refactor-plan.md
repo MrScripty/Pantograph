@@ -504,10 +504,16 @@ Tasks:
 - [x] Add or document host-visible binding `version()` behavior. Status:
   UniFFI `version()` and Rustler `version()` both return `CARGO_PKG_VERSION`,
   and the behavior is documented for host consumers.
-- [ ] Review non-test inline Rust platform `cfg` blocks against the thin-platform-module exception rule.
+- [x] Review non-test inline Rust platform `cfg` blocks against the thin-platform-module exception rule.
+  Status: `docs/rust-workspace-policy.md` records the April 21 non-test
+  platform `cfg` scan and classifies current uses as thin adapter selection,
+  small filesystem/process affordances, native artifact naming, or feature
+  gates.
 - [x] Preserve the current no-unsafe state with workspace lint policy; define the
   exception checklist before any future unsafe-owning crate is introduced.
-- [ ] Add Criterion benchmark policy for Rust performance claims and hot-path changes.
+- [x] Add Criterion benchmark policy for Rust performance claims and hot-path changes.
+  Status: `docs/rust-workspace-policy.md` now requires Criterion evidence for
+  Rust performance claims and hot-path changes.
 
 Verification:
 - `cargo fmt --all -- --check`
