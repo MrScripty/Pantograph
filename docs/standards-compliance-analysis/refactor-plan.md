@@ -422,8 +422,11 @@ Tasks:
   generation from gateway-backed inference adapters. Gateway-backed inference
   handlers now live in
   `crates/node-engine/src/core_executor/inference_nodes.rs`, separating
-  llama.cpp/reranking/embedding/chat/vision/unload execution from Python-worker
-  adapters. PyTorch and Stable Audio Python-worker handlers now live in
+  reranking/embedding/chat/vision/unload execution from Python-worker adapters.
+  Llama.cpp completion execution now lives in
+  `crates/node-engine/src/core_executor/llamacpp_nodes.rs`, separating
+  completion streaming and KV-cache capture from the remaining gateway-backed
+  inference adapters. PyTorch and Stable Audio Python-worker handlers now live in
   `crates/node-engine/src/core_executor/pytorch_nodes.rs` and
   `crates/node-engine/src/core_executor/audio_nodes.rs`, keeping feature-family
   worker initialization and execution separate from dispatch.
