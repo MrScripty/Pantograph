@@ -4,7 +4,7 @@
 //! handling control flow between data graphs.
 
 use super::nodes::{
-    execute_node, prepare_data_graph_execution, NodeExecutionResult, OrchestrationContext,
+    NodeExecutionResult, OrchestrationContext, execute_node, prepare_data_graph_execution,
 };
 use super::types::{OrchestrationGraph, OrchestrationNodeType, OrchestrationResult};
 use crate::events::{EventSink, WorkflowEvent};
@@ -262,7 +262,7 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
         // Get the data graph ID (from config or from graph's data_graphs map)
         let data_graph_id = orchestration_graph
             .get_data_graph_id(&node.id)
-            .map(|s| s.clone())
+            .cloned()
             .unwrap_or(config.data_graph_id.clone());
 
         // Emit data graph started progress
@@ -417,7 +417,7 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
         let _ = event_sink.send(WorkflowEvent::TaskCompleted {
             task_id: task_id.to_string(),
             execution_id: self.execution_id.clone(),
-            output: output.map(|s| Value::String(s)),
+            output: output.map(Value::String),
             occurred_at_ms: Some(crate::events::unix_timestamp_ms()),
         });
     }
@@ -788,15 +788,21 @@ mod tests {
         assert!(!events.iter().any(
             |event| matches!(event, WorkflowEvent::TaskFailed { task_id, .. } if task_id == "data")
         ));
-        assert!(!events
-            .iter()
-            .any(|event| matches!(event, WorkflowEvent::WorkflowFailed { .. })));
-        assert!(!events
-            .iter()
-            .any(|event| matches!(event, WorkflowEvent::WorkflowCompleted { .. })));
-        assert!(!events
-            .iter()
-            .any(|event| matches!(event, WorkflowEvent::WorkflowCancelled { .. })));
+        assert!(
+            !events
+                .iter()
+                .any(|event| matches!(event, WorkflowEvent::WorkflowFailed { .. }))
+        );
+        assert!(
+            !events
+                .iter()
+                .any(|event| matches!(event, WorkflowEvent::WorkflowCompleted { .. }))
+        );
+        assert!(
+            !events
+                .iter()
+                .any(|event| matches!(event, WorkflowEvent::WorkflowCancelled { .. }))
+        );
     }
 
     #[tokio::test]
@@ -852,12 +858,16 @@ mod tests {
         assert!(!events.iter().any(
             |event| matches!(event, WorkflowEvent::TaskFailed { task_id, .. } if task_id == "data")
         ));
-        assert!(!events
-            .iter()
-            .any(|event| matches!(event, WorkflowEvent::WorkflowFailed { .. })));
-        assert!(!events
-            .iter()
-            .any(|event| matches!(event, WorkflowEvent::WorkflowCompleted { .. })));
+        assert!(
+            !events
+                .iter()
+                .any(|event| matches!(event, WorkflowEvent::WorkflowFailed { .. }))
+        );
+        assert!(
+            !events
+                .iter()
+                .any(|event| matches!(event, WorkflowEvent::WorkflowCompleted { .. }))
+        );
     }
 
     #[tokio::test]

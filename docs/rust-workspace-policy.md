@@ -62,7 +62,8 @@ Current policy:
   at zero for `cargo check`.
 - `clippy -D warnings` is not a blocking gate until M7 resolves the
   clippy-specific findings exposed after the rustc warning baseline reached
-  zero.
+  zero. The audit has cleared `inference` and `node-engine`; the current
+  workspace run now stops in `workflow-nodes`.
 - New policy lints may be denied only when they are known not to fail the
   current workspace.
 

@@ -25,7 +25,7 @@ and keeps execution dispatch aligned with the contracts published by
 | `orchestration/` | Orchestration-specific execution and state modules. |
 | `path_validation.rs` | Validation helpers for file and model-path inputs. |
 | `port_options.rs` | Port metadata helpers used by graph editing and execution. |
-| `registry.rs` | Built-in node registration and descriptor inventory. |
+| `registry.rs` | Built-in node registration, descriptor inventory, and callback-executor type boundaries. |
 | `tasks/` | Task metadata and task-oriented helpers. |
 | `types.rs` | Shared workflow graph and runtime DTOs. |
 | `undo.rs` | Undo/redo support for workflow graph editing. |
@@ -109,6 +109,9 @@ locally.
 - Execution events may carry additive `occurred_at_ms` timestamps, and adapter
   layers must preserve those backend-owned producer times when projecting trace
   or diagnostics state instead of restamping them locally.
+- Registry callback executors should keep async and sync callback signatures
+  behind local type aliases so FFI-facing registration stays reviewable without
+  growing complex inline function types.
 - `tool-executor` dispatch is disabled until backend-owned tool execution
   contracts exist.
 

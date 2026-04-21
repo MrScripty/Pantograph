@@ -623,13 +623,19 @@ Tasks:
   plus the legacy Tauri-local execution manager and type mirror have been
   removed. Tauri command adapters now use backend-owned workflow-service DTOs
   for the active graph, connection, file, and node definition contracts.
-- Resolve clippy-specific findings exposed after the rustc warning baseline
+- [ ] Resolve clippy-specific findings exposed after the rustc warning baseline
   reached zero. Status: `cargo clippy --workspace --all-targets --all-features
   -- -D warnings` reached `crates/inference`; the mechanical inference findings
   in streaming prefix parsing, derivable defaults, path joins, lazy option
   substitution, `&PathBuf` arguments, and a useless registry test assertion are
-  resolved. The audit now reports the next clippy-specific cleanup set in
-  `crates/node-engine`.
+  resolved. `crates/node-engine` now passes its focused strict clippy check
+  after grouping recursive demand execution inputs into a borrowed runtime
+  context, adding callback/output/future aliases, and applying mechanical
+  PyTorch, orchestration, registry, and persistence cleanups. The full
+  workspace audit now reaches `crates/workflow-nodes`, where the next cleanup
+  set is `control/tool_loop.rs` `never_loop`, `input/puma_lib.rs`
+  `unnecessary_map_or` and `needless_borrow`, and
+  `processing/json_filter.rs` `derivable_impls`.
 - Close or update `docs/anti-pattern-remediation-tracker.md` Phase 5 for
   process-node policy controls.
 - Add issue/backlog entries for non-compliance problems intentionally deferred.

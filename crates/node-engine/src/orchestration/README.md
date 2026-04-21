@@ -27,6 +27,8 @@ adapters.
 - Control-flow behavior must remain deterministic and backend-owned.
 - Event payloads must stay compatible with workflow service and binding
   projections.
+- Event/output projections should use direct typed constructors where possible
+  so orchestration glue does not accumulate closure-only lint debt.
 
 ## Decision
 Keep orchestration graph contracts and execution in this focused module tree.
@@ -43,6 +45,8 @@ injected dependency.
 - Orchestration graphs must have valid node/edge references before execution.
 - DataGraph nodes call the injected data-graph executor.
 - Orchestration events preserve backend execution order.
+- Orchestration storage filters should use explicit option predicates for file
+  extensions so saved-graph discovery remains easy to audit.
 - Saved orchestration DTO changes require migration of tracked examples.
 
 ## Revisit Triggers

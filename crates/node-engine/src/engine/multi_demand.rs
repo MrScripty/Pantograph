@@ -1,14 +1,10 @@
 use std::collections::{HashMap, HashSet};
-use std::future::{poll_fn, Future};
+use std::future::{Future, poll_fn};
 use std::pin::Pin;
 use std::task::Poll;
 
-use graph_flow::Context;
-
 use super::{DemandEngine, TaskExecutor, WorkflowExecutor};
 use crate::error::{NodeEngineError, Result};
-use crate::events::EventSink;
-use crate::extensions::ExecutorExtensions;
 use crate::types::{NodeId, WorkflowGraph};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -75,12 +71,7 @@ struct DemandMultipleCoordinator<'a> {
 
 struct DemandWindowRunner<'a> {
     engine: &'a mut DemandEngine,
-    graph: &'a WorkflowGraph,
-    executor: &'a dyn TaskExecutor,
-    context: &'a Context,
-    event_sink: &'a dyn EventSink,
-    extensions: &'a ExecutorExtensions,
-    node_memories: Option<&'a HashMap<NodeId, super::NodeMemorySnapshot>>,
+    runtime: super::DemandRuntimeContext<'a>,
 }
 
 struct DemandIsolatedTargetRun {
@@ -309,25 +300,12 @@ impl<'a> DemandMultipleCoordinator<'a> {
         engine: &'a mut DemandEngine,
         plan: &'a DemandMultiplePlan,
         budget: DemandExecutionBudget,
-        graph: &'a WorkflowGraph,
-        executor: &'a dyn TaskExecutor,
-        context: &'a Context,
-        event_sink: &'a dyn EventSink,
-        extensions: &'a ExecutorExtensions,
-        node_memories: Option<&'a HashMap<NodeId, super::NodeMemorySnapshot>>,
+        runtime: super::DemandRuntimeContext<'a>,
     ) -> Self {
         Self {
             budget,
             plan,
-            window_runner: DemandWindowRunner::new(
-                engine,
-                graph,
-                executor,
-                context,
-                event_sink,
-                extensions,
-                node_memories,
-            ),
+            window_runner: DemandWindowRunner::new(engine, runtime),
             results: DemandMultipleResults::default(),
         }
     }
@@ -450,48 +428,18 @@ impl<'a> DemandMultipleCoordinator<'a> {
 }
 
 impl<'a> DemandWindowRunner<'a> {
-    fn new(
-        engine: &'a mut DemandEngine,
-        graph: &'a WorkflowGraph,
-        executor: &'a dyn TaskExecutor,
-        context: &'a Context,
-        event_sink: &'a dyn EventSink,
-        extensions: &'a ExecutorExtensions,
-        node_memories: Option<&'a HashMap<NodeId, super::NodeMemorySnapshot>>,
-    ) -> Self {
-        Self {
-            engine,
-            graph,
-            executor,
-            context,
-            event_sink,
-            extensions,
-            node_memories,
-        }
+    fn new(engine: &'a mut DemandEngine, runtime: super::DemandRuntimeContext<'a>) -> Self {
+        Self { engine, runtime }
     }
 
     async fn demand_target(
         &mut self,
         node_id: &NodeId,
     ) -> Result<HashMap<String, serde_json::Value>> {
-        let graph = self.graph;
-        let executor = self.executor;
-        let context = self.context;
-        let event_sink = self.event_sink;
-        let extensions = self.extensions;
+        let runtime = self.runtime;
         let engine = &mut *self.engine;
 
-        Self::demand_target_with_engine(
-            engine,
-            node_id,
-            graph,
-            executor,
-            context,
-            event_sink,
-            extensions,
-            self.node_memories,
-        )
-        .await
+        Self::demand_target_with_engine(engine, node_id, runtime).await
     }
 
     fn clone_engine(&self) -> DemandEngine {
@@ -513,17 +461,8 @@ impl<'a> DemandWindowRunner<'a> {
         node_id: &NodeId,
     ) -> Result<DemandIsolatedTargetRun> {
         let mut isolated_engine = base_engine.clone();
-        let outputs = Self::demand_target_with_engine(
-            &mut isolated_engine,
-            node_id,
-            self.graph,
-            self.executor,
-            self.context,
-            self.event_sink,
-            self.extensions,
-            self.node_memories,
-        )
-        .await?;
+        let outputs =
+            Self::demand_target_with_engine(&mut isolated_engine, node_id, self.runtime).await?;
 
         Ok(DemandIsolatedTargetRun {
             node_id: node_id.clone(),
@@ -557,31 +496,16 @@ impl<'a> DemandWindowRunner<'a> {
     async fn demand_target_with_engine(
         engine: &mut DemandEngine,
         node_id: &NodeId,
-        graph: &WorkflowGraph,
-        executor: &dyn TaskExecutor,
-        context: &Context,
-        event_sink: &dyn EventSink,
-        extensions: &ExecutorExtensions,
-        node_memories: Option<&HashMap<NodeId, super::NodeMemorySnapshot>>,
+        runtime: super::DemandRuntimeContext<'_>,
     ) -> Result<HashMap<String, serde_json::Value>> {
-        engine
-            .demand_with_node_memory(
-                node_id,
-                graph,
-                executor,
-                context,
-                event_sink,
-                extensions,
-                node_memories,
-            )
-            .await
+        engine.demand_with_context(runtime, node_id).await
     }
 
     async fn load_requested_outputs(
         &mut self,
         node_id: &NodeId,
     ) -> Result<HashMap<String, serde_json::Value>> {
-        if let Some(outputs) = self.engine.get_cached(node_id, self.graph) {
+        if let Some(outputs) = self.engine.get_cached(node_id, self.runtime.graph) {
             serde_json::from_value(outputs.clone()).map_err(Into::into)
         } else {
             self.demand_target(node_id).await
@@ -651,19 +575,16 @@ async fn demand_multiple_with_budget(
     workflow_executor
         .emit_incremental_execution_started(graph.id.clone(), plan.requested_targets().to_vec());
     let mut demand_engine = workflow_executor.demand_engine.write().await;
-
-    let outputs = execute_plan_with_budget(
-        &mut demand_engine,
-        &plan,
-        budget,
+    let runtime = super::DemandRuntimeContext::new(
         &graph,
         executor,
         &workflow_executor.context,
         workflow_executor.event_sink.as_ref(),
         &workflow_executor.extensions,
         node_memories.as_ref(),
-    )
-    .await?;
+    );
+
+    let outputs = execute_plan_with_budget(&mut demand_engine, &plan, budget, runtime).await?;
     drop(demand_engine);
     drop(graph);
 
@@ -674,23 +595,13 @@ async fn demand_multiple_with_budget(
 pub(super) async fn demand_multiple_with_default_budget(
     engine: &mut DemandEngine,
     node_ids: &[NodeId],
-    graph: &WorkflowGraph,
-    executor: &dyn TaskExecutor,
-    context: &Context,
-    event_sink: &dyn EventSink,
-    extensions: &ExecutorExtensions,
-    node_memories: Option<&HashMap<NodeId, super::NodeMemorySnapshot>>,
+    runtime: super::DemandRuntimeContext<'_>,
 ) -> Result<HashMap<NodeId, HashMap<String, serde_json::Value>>> {
     demand_multiple_with_explicit_budget(
         engine,
         node_ids,
         DemandExecutionBudget::default_parallel(),
-        graph,
-        executor,
-        context,
-        event_sink,
-        extensions,
-        node_memories,
+        runtime,
     )
     .await
 }
@@ -699,79 +610,58 @@ async fn demand_multiple_with_explicit_budget(
     engine: &mut DemandEngine,
     node_ids: &[NodeId],
     budget: DemandExecutionBudget,
-    graph: &WorkflowGraph,
-    executor: &dyn TaskExecutor,
-    context: &Context,
-    event_sink: &dyn EventSink,
-    extensions: &ExecutorExtensions,
-    node_memories: Option<&HashMap<NodeId, super::NodeMemorySnapshot>>,
+    runtime: super::DemandRuntimeContext<'_>,
 ) -> Result<HashMap<NodeId, HashMap<String, serde_json::Value>>> {
-    let plan = DemandMultiplePlan::from_requested_targets(node_ids, graph);
+    let plan = DemandMultiplePlan::from_requested_targets(node_ids, runtime.graph);
 
-    execute_plan_with_budget(
-        engine,
-        &plan,
-        budget,
-        graph,
-        executor,
-        context,
-        event_sink,
-        extensions,
-        node_memories,
-    )
-    .await
+    execute_plan_with_budget(engine, &plan, budget, runtime).await
 }
 
 async fn execute_plan_with_budget(
     engine: &mut DemandEngine,
     plan: &DemandMultiplePlan,
     budget: DemandExecutionBudget,
-    graph: &WorkflowGraph,
-    executor: &dyn TaskExecutor,
-    context: &Context,
-    event_sink: &dyn EventSink,
-    extensions: &ExecutorExtensions,
-    node_memories: Option<&HashMap<NodeId, super::NodeMemorySnapshot>>,
+    runtime: super::DemandRuntimeContext<'_>,
 ) -> Result<HashMap<NodeId, HashMap<String, serde_json::Value>>> {
-    DemandMultipleCoordinator::new(
-        engine,
-        plan,
-        budget,
-        graph,
-        executor,
-        context,
-        event_sink,
-        extensions,
-        node_memories,
-    )
-    .run()
-    .await
+    DemandMultipleCoordinator::new(engine, plan, budget, runtime)
+        .run()
+        .await
 }
 
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
     use std::future::Future;
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::{Duration, Instant};
 
     use async_trait::async_trait;
     use graph_flow::Context;
 
-    use crate::engine::WorkflowExecutor;
+    use crate::engine::{DemandRuntimeContext, WorkflowExecutor};
     use crate::error::NodeEngineError;
-    use crate::events::NullEventSink;
+    use crate::events::{EventSink, NullEventSink};
     use crate::extensions::ExecutorExtensions;
     use crate::types::{GraphEdge, GraphNode, WorkflowGraph};
 
     use super::{
-        demand_multiple_with_default_budget, demand_multiple_with_explicit_budget,
         DemandBatchDispatchPlan, DemandBatchExecutionOutcome, DemandBatchExecutionResult,
         DemandDispatchWindowExecutionMode, DemandDispatchWindowOutcome, DemandDispatchWindowPlan,
         DemandDispatchWindowResult, DemandEngine, DemandExecutionBudget, DemandMultiplePlan,
         DemandMultipleResults, DemandWindowRunner, TaskExecutor,
+        demand_multiple_with_default_budget, demand_multiple_with_explicit_budget,
     };
+
+    fn demand_runtime<'a>(
+        graph: &'a WorkflowGraph,
+        executor: &'a dyn TaskExecutor,
+        context: &'a Context,
+        event_sink: &'a dyn EventSink,
+        extensions: &'a ExecutorExtensions,
+    ) -> DemandRuntimeContext<'a> {
+        DemandRuntimeContext::new(graph, executor, context, event_sink, extensions, None)
+    }
 
     fn make_linear_graph() -> WorkflowGraph {
         WorkflowGraph {
@@ -1085,16 +975,12 @@ mod tests {
         let extensions = ExecutorExtensions::new();
 
         let started_at = Instant::now();
+        let runtime = demand_runtime(&graph, &executor, &context, &event_sink, &extensions);
         let outputs = demand_multiple_with_explicit_budget(
             &mut engine,
             &["left".to_string(), "right".to_string()],
             DemandExecutionBudget::new(budget),
-            &graph,
-            &executor,
-            &context,
-            &event_sink,
-            &extensions,
-            None,
+            runtime,
         )
         .await
         .expect("demand harness should succeed");
@@ -1159,15 +1045,8 @@ mod tests {
         let context = Context::new();
         let event_sink = NullEventSink;
         let extensions = ExecutorExtensions::new();
-        let runner = DemandWindowRunner::new(
-            &mut engine,
-            &graph,
-            &executor,
-            &context,
-            &event_sink,
-            &extensions,
-            None,
-        );
+        let runtime = demand_runtime(&graph, &executor, &context, &event_sink, &extensions);
+        let runner = DemandWindowRunner::new(&mut engine, runtime);
         let base_engine = runner.clone_engine();
         let future = runner.demand_target_in_isolation_future(&base_engine, "left".to_string());
 
@@ -1422,16 +1301,12 @@ mod tests {
         let event_sink = NullEventSink;
         let extensions = ExecutorExtensions::new();
 
+        let runtime = demand_runtime(&graph, &executor, &context, &event_sink, &extensions);
         let outputs = demand_multiple_with_explicit_budget(
             &mut engine,
             &["left".to_string(), "right".to_string()],
             DemandExecutionBudget::new(2),
-            &graph,
-            &executor,
-            &context,
-            &event_sink,
-            &extensions,
-            None,
+            runtime,
         )
         .await
         .expect("parallel demand should succeed");
@@ -1451,15 +1326,11 @@ mod tests {
         let event_sink = NullEventSink;
         let extensions = ExecutorExtensions::new();
 
+        let runtime = demand_runtime(&graph, &executor, &context, &event_sink, &extensions);
         let outputs = demand_multiple_with_default_budget(
             &mut engine,
             &["left".to_string(), "right".to_string()],
-            &graph,
-            &executor,
-            &context,
-            &event_sink,
-            &extensions,
-            None,
+            runtime,
         )
         .await
         .expect("default parallel demand should succeed");
@@ -1526,9 +1397,11 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["left", "right"]
         );
-        assert!(snapshots
-            .iter()
-            .all(|snapshot| snapshot.input_fingerprint.as_deref() == Some("{\"_data\":{}}")));
+        assert!(
+            snapshots
+                .iter()
+                .all(|snapshot| snapshot.input_fingerprint.as_deref() == Some("{\"_data\":{}}"))
+        );
         assert!(snapshots.iter().all(|snapshot| {
             snapshot.inspection_metadata
                 == Some(serde_json::json!({

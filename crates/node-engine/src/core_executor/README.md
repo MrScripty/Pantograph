@@ -28,7 +28,7 @@ into frontend, transport, or descriptor crates.
 | `ollama.rs` | Standalone Ollama HTTP generation handler and response-to-model-reference projection for the `ollama-inference` node. |
 | `processing_nodes.rs` | Pure processing handlers for code validation and JSON path extraction. |
 | `pure_nodes.rs` | Synchronous built-in node handlers for input/output passthrough, model provider payloads, control-flow helpers, validation, JSON filtering, human input, and disabled tool execution. |
-| `pytorch_nodes.rs` | Feature-gated PyTorch Python-worker initialization, inference execution, streaming, and KV-cache integration. |
+| `pytorch_nodes.rs` | Feature-gated PyTorch Python-worker initialization, inference execution, streaming, KV-cache integration, and task-join error projection. |
 | `retrieval_nodes.rs` | Feature-gated reranking and embedding execution plus reranker document parsing. |
 | `settings.rs` | Settings-schema expansion and shared optional-input readers used by pure settings nodes and runtime-backed adapters. |
 | `settings_tests.rs` | Focused tests for settings expansion, optional input readers, and file-I/O traversal rejection. |
@@ -87,6 +87,9 @@ stable public facade and dispatch owner.
   embedding execution stay in `retrieval_nodes.rs`.
 - PyTorch Python-worker execution stays in `pytorch_nodes.rs`; Stable Audio
   Python-worker execution stays in `audio_nodes.rs`.
+- Python-worker handlers should pass worker parameters directly into their
+  blocking closures and avoid redundant rebinding so the feature-gated path
+  stays clippy-clean without changing runtime behavior.
 - The public facade remains `CoreTaskExecutor`; helper modules are private
   implementation details unless a separate public contract is explicitly
   introduced.

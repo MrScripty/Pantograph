@@ -17,6 +17,7 @@
 //! ```
 
 use std::collections::HashMap;
+use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -28,6 +29,11 @@ use crate::error::{NodeEngineError, Result};
 use crate::extensions::ExecutorExtensions;
 use crate::port_options::{PortOptionsProvider, PortOptionsQuery, PortOptionsResult, PortQueryFn};
 use crate::types::NodeCategory;
+
+type NodeOutputs = HashMap<String, serde_json::Value>;
+type AsyncNodeCallbackFuture = Pin<Box<dyn Future<Output = Result<NodeOutputs>> + Send>>;
+type AsyncNodeCallback = dyn Fn(String, NodeOutputs) -> AsyncNodeCallbackFuture + Send + Sync;
+type SyncNodeCallback = dyn Fn(&str, NodeOutputs) -> Result<NodeOutputs> + Send + Sync;
 
 /// Per-node-type executor
 ///
@@ -212,7 +218,7 @@ impl NodeRegistry {
         let mut grouped: HashMap<NodeCategory, Vec<&TaskMetadata>> = HashMap::new();
         for entry in self.entries.values() {
             grouped
-                .entry(entry.metadata.category.clone())
+                .entry(entry.metadata.category)
                 .or_default()
                 .push(&entry.metadata);
         }
@@ -257,18 +263,7 @@ impl Default for NodeRegistry {
 /// Wraps an async closure as a NodeExecutor. Critical for Rustler NIFs
 /// where each node type is backed by an Elixir callback.
 pub struct CallbackNodeExecutor {
-    callback: Box<
-        dyn Fn(
-                String,
-                HashMap<String, serde_json::Value>,
-            ) -> Pin<
-                Box<
-                    dyn std::future::Future<Output = Result<HashMap<String, serde_json::Value>>>
-                        + Send,
-                >,
-            > + Send
-            + Sync,
-    >,
+    callback: Box<AsyncNodeCallback>,
 }
 
 #[async_trait]
@@ -288,25 +283,18 @@ impl NodeExecutor for CallbackNodeExecutor {
 ///
 /// Wraps a synchronous closure for simpler FFI scenarios.
 pub struct SyncCallbackNodeExecutor {
-    callback: Box<
-        dyn Fn(
-                &str,
-                HashMap<String, serde_json::Value>,
-            ) -> Result<HashMap<String, serde_json::Value>>
-            + Send
-            + Sync,
-    >,
+    callback: Box<SyncNodeCallback>,
 }
 
 impl SyncCallbackNodeExecutor {
     pub fn new(
         callback: impl Fn(
-                &str,
-                HashMap<String, serde_json::Value>,
-            ) -> Result<HashMap<String, serde_json::Value>>
-            + Send
-            + Sync
-            + 'static,
+            &str,
+            HashMap<String, serde_json::Value>,
+        ) -> Result<HashMap<String, serde_json::Value>>
+        + Send
+        + Sync
+        + 'static,
     ) -> Self {
         Self {
             callback: Box::new(callback),

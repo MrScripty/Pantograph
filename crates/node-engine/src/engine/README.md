@@ -10,12 +10,12 @@ entrypoint while preserving the current public API.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `dependency_inputs.rs` | Dependency-output to node-input mapping helpers, including Puma-Lib model-path context propagation. |
-| `execution_core.rs` | Private recursive demand-orchestration owner that coordinates dependency recursion, cache reuse, node preparation, event emission, and completed-output finalization. |
+| `execution_core.rs` | Private recursive demand-orchestration owner that coordinates dependency recursion, cache reuse, node preparation, event emission, and completed-output finalization through the borrowed runtime context. |
 | `execution_events.rs` | Backend-owned task event emission helpers for started, waiting, and completed demand states. |
 | `graph_state.rs` | Workflow graph mutation, snapshot, and restore helpers behind the public executor facade. |
 | `graph_events.rs` | Dirty-subgraph collection and incremental graph-event helpers. |
 | `inflight_tracking.rs` | In-flight node bookkeeping helpers for cycle detection and cleanup around recursive demand. |
-| `multi_demand.rs` | Current multi-demand execution helpers, including the executor-facing facade path, request-plan contract, root-target planning, execution-batch schedule, result-merge contract, execution-budget contract, coordinator owner, bounded-parallel coordination, and bound-session node-memory projection after successful runs. |
+| `multi_demand.rs` | Current multi-demand execution helpers, including the executor-facing facade path, borrowed runtime context wiring, request-plan contract, root-target planning, execution-batch schedule, result-merge contract, execution-budget contract, coordinator owner, bounded-parallel coordination, and bound-session node-memory projection after successful runs. |
 | `node_preparation.rs` | Static node-data injection and human-input pause preparation for demand execution. |
 | `output_cache.rs` | Fresh-cache resolution and completed-output cache/version finalization helpers. |
 | `session_state.rs` | Phase 6 workflow-session residency, bound workflow-session identity, node-memory, graph-memory-impact, and checkpoint contract types plus the private executor-owned per-session node-memory store, compatibility-reconciliation helper, checkpoint-availability tracking, and checkpoint-summary helper. |
@@ -244,6 +244,10 @@ planning split, plus the private execution-batch schedule derived from it.
   backend-owned and deterministic while mixing bounded-parallel execution for
   overlap-safe windows with explicit sequential fallback for the remaining
   demand shapes.
+- Single-demand, recursive demand, and multi-demand helpers now share a
+  borrowed `DemandRuntimeContext` so graph, executor, context, event sink,
+  extension, and node-memory inputs stay explicit without repeating long
+  argument lists across every private helper.
 - Test-only multi-demand inspection helpers remain compiled only for tests so
   production engine builds do not carry warning debt for helpers whose only
   consumers are contract assertions.

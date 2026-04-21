@@ -193,7 +193,7 @@ pub(crate) async fn execute_pytorch_inference(
         })
         .await
         .map_err(|e| NodeEngineError::ExecutionFailed(format!("Task join error: {}", e)))?
-        .map_err(|e| NodeEngineError::ExecutionFailed(e))?;
+        .map_err(NodeEngineError::ExecutionFailed)?;
     }
 
     let _restored_kv_cache = kv_cache::restore_pytorch_input_handle(
@@ -224,7 +224,6 @@ pub(crate) async fn execute_pytorch_inference(
         let sp = system_prompt.clone();
         let mpj = masked_prompt_json.clone();
         let extra = extra_settings.clone();
-        let top_p = top_p;
 
         tokio::task::spawn_blocking(move || {
             pyo3::Python::with_gil(|py| {
@@ -350,7 +349,6 @@ pub(crate) async fn execute_pytorch_inference(
         let sp = system_prompt.clone();
         let mpj = masked_prompt_json.clone();
         let extra = extra_settings;
-        let top_p = top_p;
 
         tokio::task::spawn_blocking(move || {
             pyo3::Python::with_gil(|py| -> std::result::Result<String, String> {
@@ -397,7 +395,7 @@ pub(crate) async fn execute_pytorch_inference(
         })
         .await
         .map_err(|e| NodeEngineError::ExecutionFailed(format!("Task join error: {}", e)))?
-        .map_err(|e| NodeEngineError::ExecutionFailed(e))?
+        .map_err(NodeEngineError::ExecutionFailed)?
     };
 
     let mut outputs = HashMap::new();

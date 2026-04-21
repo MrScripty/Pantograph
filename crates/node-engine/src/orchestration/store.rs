@@ -82,7 +82,7 @@ impl OrchestrationStore {
             let entry = entry?;
             let file_path = entry.path();
 
-            if file_path.extension().map_or(false, |e| e == "json") {
+            if file_path.extension().is_some_and(|e| e == "json") {
                 let content = std::fs::read_to_string(&file_path)?;
                 match serde_json::from_str::<OrchestrationGraph>(&content) {
                     Ok(graph) => {

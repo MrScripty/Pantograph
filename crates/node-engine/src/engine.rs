@@ -31,6 +31,8 @@
 //! ```
 
 use std::collections::{HashMap, HashSet};
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -41,6 +43,40 @@ use crate::error::Result;
 use crate::events::{EventSink, WorkflowEvent};
 use crate::extensions::ExecutorExtensions;
 use crate::types::{NodeId, WorkflowGraph};
+
+pub(super) type NodeOutputMap = HashMap<String, serde_json::Value>;
+pub(super) type MultiNodeOutputMap = HashMap<NodeId, NodeOutputMap>;
+pub(super) type DemandFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>;
+
+#[derive(Clone, Copy)]
+pub(super) struct DemandRuntimeContext<'a> {
+    graph: &'a WorkflowGraph,
+    executor: &'a dyn TaskExecutor,
+    context: &'a Context,
+    event_sink: &'a dyn EventSink,
+    extensions: &'a ExecutorExtensions,
+    node_memories: Option<&'a HashMap<NodeId, NodeMemorySnapshot>>,
+}
+
+impl<'a> DemandRuntimeContext<'a> {
+    fn new(
+        graph: &'a WorkflowGraph,
+        executor: &'a dyn TaskExecutor,
+        context: &'a Context,
+        event_sink: &'a dyn EventSink,
+        extensions: &'a ExecutorExtensions,
+        node_memories: Option<&'a HashMap<NodeId, NodeMemorySnapshot>>,
+    ) -> Self {
+        Self {
+            graph,
+            executor,
+            context,
+            event_sink,
+            extensions,
+            node_memories,
+        }
+    }
+}
 
 mod dependency_inputs;
 mod execution_core;
@@ -246,36 +282,22 @@ impl DemandEngine {
         context: &Context,
         event_sink: &dyn EventSink,
         extensions: &ExecutorExtensions,
-    ) -> Result<HashMap<String, serde_json::Value>> {
-        self.demand_with_node_memory(
-            node_id, graph, executor, context, event_sink, extensions, None,
+    ) -> Result<NodeOutputMap> {
+        self.demand_with_context(
+            DemandRuntimeContext::new(graph, executor, context, event_sink, extensions, None),
+            node_id,
         )
         .await
     }
 
-    pub(crate) async fn demand_with_node_memory(
+    pub(crate) async fn demand_with_context(
         &mut self,
+        runtime: DemandRuntimeContext<'_>,
         node_id: &NodeId,
-        graph: &WorkflowGraph,
-        executor: &dyn TaskExecutor,
-        context: &Context,
-        event_sink: &dyn EventSink,
-        extensions: &ExecutorExtensions,
-        node_memories: Option<&HashMap<NodeId, NodeMemorySnapshot>>,
-    ) -> Result<HashMap<String, serde_json::Value>> {
+    ) -> Result<NodeOutputMap> {
         // Track which nodes we're currently computing to detect cycles
         let mut computing = HashSet::new();
-        self.demand_internal(
-            node_id,
-            graph,
-            executor,
-            context,
-            event_sink,
-            extensions,
-            node_memories,
-            &mut computing,
-        )
-        .await
+        self.demand_internal(node_id, runtime, &mut computing).await
     }
 
     /// Internal demand method with cycle detection
@@ -285,33 +307,13 @@ impl DemandEngine {
     fn demand_internal<'a>(
         &'a mut self,
         node_id: &'a NodeId,
-        graph: &'a WorkflowGraph,
-        executor: &'a dyn TaskExecutor,
-        context: &'a Context,
-        event_sink: &'a dyn EventSink,
-        extensions: &'a ExecutorExtensions,
-        node_memories: Option<&'a HashMap<NodeId, NodeMemorySnapshot>>,
+        runtime: DemandRuntimeContext<'a>,
         computing: &'a mut HashSet<NodeId>,
-    ) -> std::pin::Pin<
-        Box<
-            dyn std::future::Future<Output = Result<HashMap<String, serde_json::Value>>>
-                + Send
-                + 'a,
-        >,
-    > {
+    ) -> DemandFuture<'a, NodeOutputMap> {
         Box::pin(async move {
-            execution_core::DemandExecutionCore::new(
-                self,
-                graph,
-                executor,
-                context,
-                event_sink,
-                extensions,
-                node_memories,
-                computing,
-            )
-            .run_node(node_id)
-            .await
+            execution_core::DemandExecutionCore::new(self, runtime, computing)
+                .run_node(node_id)
+                .await
         })
     }
 
@@ -328,10 +330,9 @@ impl DemandEngine {
         event_sink: &dyn EventSink,
         extensions: &ExecutorExtensions,
     ) -> Result<HashMap<NodeId, HashMap<String, serde_json::Value>>> {
-        multi_demand::demand_multiple_with_default_budget(
-            self, node_ids, graph, executor, context, event_sink, extensions, None,
-        )
-        .await
+        let runtime =
+            DemandRuntimeContext::new(graph, executor, context, event_sink, extensions, None);
+        multi_demand::demand_multiple_with_default_budget(self, node_ids, runtime).await
     }
 
     /// Invalidate cache for a node and all its downstream dependents
@@ -699,8 +700,8 @@ mod tests {
     use crate::error::NodeEngineError;
     use crate::events::{NullEventSink, VecEventSink};
     use crate::types::{GraphEdge, GraphNode};
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Mutex;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     fn make_linear_graph() -> WorkflowGraph {
         let mut graph = WorkflowGraph::new("test", "Test");
