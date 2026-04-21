@@ -8,7 +8,7 @@ Command used for the baseline:
 cargo check --workspace --all-features --message-format short
 ```
 
-The command completes successfully, but the workspace currently emits 95
+The command completes successfully, but the workspace currently emits 94
 warnings. This document classifies the warning debt required by M7 before
 `cargo clippy --workspace --all-targets --all-features -- -D warnings` can
 become a blocking quality gate.
@@ -24,7 +24,6 @@ The classification follows the updated standards expectations:
 | Crate/target | Count | Primary category | Resolution path |
 | --- | ---: | --- | --- |
 | `workflow-nodes` | 5 | Gate experimental model-provider executor | Either register the model-provider executor or gate it behind an experimental feature. |
-| `pantograph-workflow-service` | 1 | Remove or test-scope helper | Remove the unused wrapper or move it behind `#[cfg(test)]`. |
 | `pantograph-embedded-runtime` | 2 | Remove unused imports | Drop unused public imports when the dirty embedded-runtime branch is normalized. |
 | `pantograph-uniffi` | 1 | Intentional retained ownership field | Rename/comment the field or add a narrow allow because it holds the executor alive for exported UniFFI resources. |
 | `pantograph` Tauri binary | 80 | Remove migrated/stale local workflow and server-discovery code | Delete superseded workflow local DTO/validation/registry/connection helpers and unused discovery paths after confirming no command references remain. |
@@ -47,6 +46,12 @@ The classification follows the updated standards expectations:
 | `src/processing/ollama_inference.rs:19` | `OllamaResponse.done` never read | Remove | Resolved by omitting the unconsumed response field; serde ignores unknown Ollama fields. |
 | `src/processing/ollama_inference.rs:21` | `OllamaResponse.context` never read | Remove | Resolved by omitting the unconsumed response field; context-token reuse is not part of this node contract. |
 
+### `crates/pantograph-workflow-service`
+
+| Location | Warning | Classification | Resolution |
+| --- | --- | --- | --- |
+| `src/graph/session_contract.rs:76` | `build_graph_session_response` unused | Test-scope | Resolved by compiling the compatibility wrapper only for session-contract tests; production response assembly uses the state-aware projection helper. |
+
 ## Active Warnings
 
 ### `crates/workflow-nodes`
@@ -57,12 +62,6 @@ The classification follows the updated standards expectations:
 | `src/input/model_provider.rs:165` | `ModelProviderExecutor::factory` unused | Gate/use | Same as the executor: register, feature-gate, or delete the inactive implementation. |
 | `src/input/model_provider.rs:170` | `ModelProviderExecutorFactory` never constructed | Gate/use | Same as the executor. |
 | `src/input/model_provider.rs:272` and `:277` | `ResolvedModel` and `resolve_with_library` unused | Gate/use | These are only reachable through the inactive executor; resolve with the executor decision. |
-
-### `crates/pantograph-workflow-service`
-
-| Location | Warning | Classification | Next action |
-| --- | --- | --- | --- |
-| `src/graph/session_contract.rs:76` | `build_graph_session_response` unused | Remove/test-scope | Delete the wrapper if all callers use state-aware projection; otherwise make it test-only. |
 
 ### `crates/pantograph-embedded-runtime`
 

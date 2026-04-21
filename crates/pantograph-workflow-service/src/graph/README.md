@@ -90,6 +90,9 @@ when the node type matches.
   the same additive backend-owned `workflow_event` and
   `workflow_session_state` projection as graph snapshot mutations so transport
   clients do not need a second read to observe mutation impact facts.
+- Graph session response helpers that exist only to support contract tests stay
+  test-scoped; production response assembly should use the state-aware
+  projection path.
 - Connection candidate lookup never mutates session state.
 - Persisted derived graph metadata is advisory and must be recomputed when stale.
 - Filesystem workflow load path validation is tested at `FileSystemWorkflowGraphStore`;

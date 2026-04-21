@@ -73,7 +73,8 @@ pub struct WorkflowGraphEditSessionGraphResponse {
     pub workflow_session_state: Option<WorkflowGraphSessionStateView>,
 }
 
-pub(crate) fn build_graph_session_response(
+#[cfg(test)]
+fn build_graph_session_response(
     session_id: &str,
     graph: &super::types::WorkflowGraph,
     workflow_event: Option<WorkflowEvent>,
