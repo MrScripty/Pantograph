@@ -414,6 +414,9 @@ Tasks:
   expansion and shared optional-input readers now live in
   `crates/node-engine/src/core_executor/settings.rs`, keeping schema
   default/override normalization reusable across pure and runtime-backed nodes.
+  Model dependency preflight and model-reference construction now live in
+  `crates/node-engine/src/core_executor/dependency_preflight.rs`, separating
+  dependency readiness checks from dispatch and runtime request execution.
 - Split `src/components/WorkflowGraph.svelte` and
   `packages/svelte-graph/src/components/WorkflowGraph.svelte` into graph canvas,
   connection drag, horseshoe insert, edge insert, selection, keyboard, and

@@ -12,6 +12,7 @@ into frontend, transport, or descriptor crates.
 ## Contents
 | File | Responsibility |
 | --- | --- |
+| `dependency_preflight.rs` | Model dependency binding, backend-key normalization, task-type inference, model-reference construction, and dependency resolver preflight used before runtime-backed execution. |
 | `file_io.rs` | Async read-file/write-file handlers that resolve paths through the project-root validation boundary before touching the filesystem. |
 | `kv_cache.rs` | Backend-owned execution handlers for KV-cache save/load/truncate nodes plus live llama.cpp/PyTorch restore-capture helpers and structured KV diagnostics emitted by `CoreTaskExecutor`. |
 | `pure_nodes.rs` | Synchronous built-in node handlers for input/output passthrough, model provider payloads, control-flow helpers, validation, JSON filtering, human input, and disabled tool execution. |
@@ -56,6 +57,9 @@ stable public facade and dispatch owner.
 - Settings expansion and optional-input readers stay in `settings.rs` so
   runtime adapters can share one normalization contract for schema defaults,
   connected port overrides, aliases, and boolean coercion.
+- Dependency preflight and model-reference construction stay in
+  `dependency_preflight.rs` so runtime adapters share backend-key and
+  dependency-state validation without growing dispatch code.
 - The public facade remains `CoreTaskExecutor`; helper modules are private
   implementation details unless a separate public contract is explicitly
   introduced.

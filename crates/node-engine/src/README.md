@@ -78,6 +78,10 @@ locally.
 - Core executor settings expansion and optional-input readers stay in
   `core_executor/settings.rs` so runtime-backed adapters share one schema
   default and port-override normalization path.
+- Core executor dependency preflight stays in
+  `core_executor/dependency_preflight.rs` so model-reference construction,
+  backend-key normalization, and resolver readiness checks remain separate from
+  dispatch and runtime request execution.
 - Task-type inference must reflect execution semantics, not UI naming.
 - Input normalization may be permissive for additive compatibility, but output
   shapes must stay stable once published.
