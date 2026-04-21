@@ -364,6 +364,9 @@ Tasks:
   Embedded workflow host helper logic for runtime reservations, retention
   hints, workflow I/O binding, and data-graph output shaping now lives in
   `crates/pantograph-embedded-runtime/src/embedded_workflow_host_helpers.rs`.
+  Public embedded-runtime workflow, session, queue, inspection, and keep-alive
+  facade methods now live in
+  `crates/pantograph-embedded-runtime/src/embedded_workflow_service_api.rs`.
 - Split `crates/node-engine/src/core_executor.rs` by execution phases, blocking
   adapters, demand preparation, output handling, and tests.
 - Split `src/components/WorkflowGraph.svelte` and

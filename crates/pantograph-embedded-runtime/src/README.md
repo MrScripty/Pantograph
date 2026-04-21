@@ -14,6 +14,7 @@ packages.
 | `embedding_workflow.rs` | Owns backend-side embedding workflow graph inspection, embedding model-path resolution, and workflow-specific runtime preparation rules. |
 | `embedded_runtime_lifecycle.rs` | Owns embedded-runtime constructors, host wiring, registry injection, accessors, and shutdown coordination. |
 | `embedded_workflow_host_helpers.rs` | Owns embedded workflow host helper logic for runtime reservations, retention hints, workflow I/O binding, and data-graph terminal output shaping. |
+| `embedded_workflow_service_api.rs` | Owns embedded-runtime public workflow, session, queue, inspection, and keep-alive facade methods that forward into the workflow service. |
 | `lib_tests.rs` | Legacy embedded-runtime facade, host, registry, and workflow-session tests extracted from the root facade file. |
 | `lib.rs` | Composes the embedded runtime, workflow service, shared extensions, and public crate exports used by Tauri and standalone hosts. |
 | `model_dependencies.rs` | Resolves Pantograph model dependency requirements and binds workflow requests to Pumas-backed execution facts. |
@@ -97,6 +98,9 @@ embedded-runtime crate.
   `embedded_workflow_host_helpers.rs` so reservation shaping, runtime retention
   sync, workflow I/O binding, and data-graph output shaping do not accumulate
   inside the trait implementation facade.
+- Public embedded-runtime workflow, session, queue, inspection, and keep-alive
+  facade methods stay in `embedded_workflow_service_api.rs` so root composition
+  remains separate from workflow-service API forwarding.
 - Root embedded-runtime facade tests stay outside `lib.rs` so production
   runtime composition remains reviewable; split `lib_tests.rs` further when a
   behavior-focused test module boundary is introduced.

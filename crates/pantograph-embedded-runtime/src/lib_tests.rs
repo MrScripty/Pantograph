@@ -11,9 +11,12 @@ use pantograph_runtime_registry::{
     RuntimeReservationRequest, RuntimeRetentionHint, RuntimeTransition,
 };
 use pantograph_workflow_service::{
-    GraphEdge, GraphNode, Position, WorkflowGraph, WorkflowRuntimeInstallState,
+    GraphEdge, GraphNode, Position, WorkflowCapabilitiesRequest, WorkflowGraph,
+    WorkflowPreflightRequest, WorkflowRunRequest, WorkflowRuntimeInstallState,
     WorkflowRuntimeRequirements, WorkflowRuntimeSourceKind, WorkflowSchedulerRuntimeWarmupDecision,
-    WorkflowSchedulerRuntimeWarmupReason, WorkflowSessionState,
+    WorkflowSchedulerRuntimeWarmupReason, WorkflowSessionCloseRequest,
+    WorkflowSessionCreateRequest, WorkflowSessionKeepAliveRequest, WorkflowSessionRunRequest,
+    WorkflowSessionState, WorkflowSessionStatusRequest,
 };
 use std::path::Path;
 use std::pin::Pin;
