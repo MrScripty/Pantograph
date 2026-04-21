@@ -13,7 +13,7 @@ diagnostics reusable across Tauri, UniFFI, Rustler, and tests.
 | ----------- | ----------- |
 | `lib.rs` | Public module exports for the workflow service crate. |
 | `workflow.rs` | Public workflow facade exports, execution/session facade methods, and orchestration logic. |
-| `workflow/` | Private workflow contracts, host traits, graph API methods, capability/preflight API methods, session execution, queue, and lifecycle API methods, request validation, I/O derivation, runtime preflight, and session-runtime helpers extracted from the main facade. |
+| `workflow/` | Private workflow contracts, host traits, graph API methods, capability/preflight API methods, workflow run and session execution API methods, queue and lifecycle API methods, request validation, I/O derivation, runtime preflight, and session-runtime helpers extracted from the main facade. |
 | `scheduler/` | Backend-owned workflow-session queue/store contracts used by the workflow facade. |
 | `trace/` | Workflow trace contracts, request validation, in-memory trace state, and runtime/scheduler snapshot merge helpers. |
 | `graph/` | Graph DTOs and session-kind contracts shared by service operations. |
@@ -48,6 +48,8 @@ Graph edit-session and persistence methods now live behind the facade in the
 workflow graph API helper.
 Workflow capability, I/O discovery, and preflight methods now live behind the
 facade in the workflow preflight API helper.
+Generic workflow run execution now lives behind the facade in the workflow run
+API helper.
 Session creation and queued session run methods now live behind the facade in
 the workflow session execution API helper.
 Session status, queue inspection, scheduler snapshot, cancellation, and
@@ -79,6 +81,8 @@ live behind the facade in the workflow session lifecycle API helper.
 - Trace stores own canonical event timestamps, idempotent terminal replay, and
   retry/reset behavior for repeated execution ids.
 - Scheduler snapshots omit execution attribution when identity is ambiguous.
+- Workflow run API methods preserve timeout cancellation, output validation,
+  and runtime-readiness checks as backend-owned behavior.
 - Session execution API methods preserve queue admission, runtime preflight,
   runtime load, and run finalization as one backend-owned workflow.
 - Session queue API methods preserve the public facade while keeping direct
