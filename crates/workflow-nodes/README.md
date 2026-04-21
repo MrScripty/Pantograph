@@ -24,7 +24,7 @@ can disagree about what a node means.
 - Node metadata must stay aligned with executor behavior in `node-engine`.
 - Optional model-library behavior must remain feature-gated.
 - Host-specific execution should not leak into generic node descriptors.
-- Placeholder or experimental node behavior must not report successful output
+- Disabled or experimental node behavior must not report successful output
   unless it really executed.
 
 ## Decision
@@ -52,7 +52,7 @@ owning node truth.
 
 ## Revisit Triggers
 - A second product wants a different built-in node catalog.
-- Placeholder tool execution is replaced by a real host/tool contract.
+- Disabled tool execution is replaced by a real backend tool contract.
 - Node registration moves from link-time inventory to generated descriptors.
 
 ## Dependencies
@@ -101,5 +101,5 @@ cargo test -p workflow-nodes
 ```
 
 ## Notes
-- The standards plan tracks placeholder tool execution as a separate
-  remediation item because it can currently mislead workflow outputs.
+- Tool execution nodes currently fail explicitly until backend-owned tool
+  runtime contracts exist.

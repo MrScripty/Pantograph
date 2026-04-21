@@ -1,11 +1,12 @@
 //! Tool Executor Task
 //!
-//! Executes tool calls returned by an LLM inference node.
-//! This task takes tool call definitions and tool implementations,
-//! executes each tool call, and returns the results.
+//! Disabled tool execution boundary.
+//!
+//! The descriptor remains registered for saved workflow compatibility, but
+//! invocation fails until a backend-owned tool runtime is available.
 
 use async_trait::async_trait;
-use graph_flow::{Context, GraphError, NextAction, Task, TaskResult};
+use graph_flow::{Context, GraphError, Task, TaskResult};
 use node_engine::{
     ContextKeys, ExecutionMode, NodeCategory, PortDataType, PortMetadata, TaskDescriptor,
     TaskMetadata,
@@ -38,10 +39,8 @@ pub struct ToolCallResult {
 
 /// Tool Executor Task
 ///
-/// Executes tool calls from an LLM and returns the results.
-/// In the context of a workflow, this task receives tool calls
-/// from an inference node and executes them using the provided
-/// tool definitions.
+/// Represents tool calls from an LLM. Runtime execution is disabled until
+/// backend-owned tool execution contracts are implemented.
 ///
 /// # Inputs (from context)
 /// - `{task_id}.input.tool_calls` (required) - Array of ToolCallRequest
@@ -85,7 +84,8 @@ impl TaskDescriptor for ToolExecutorTask {
             node_type: "tool-executor".to_string(),
             category: NodeCategory::Control,
             label: "Tool Executor".to_string(),
-            description: "Executes tool calls from LLM and returns results".to_string(),
+            description: "Disabled until backend-owned tool execution contracts are implemented"
+                .to_string(),
             inputs: vec![
                 PortMetadata::required(Self::PORT_TOOL_CALLS, "Tool Calls", PortDataType::Json),
                 PortMetadata::required(Self::PORT_TOOLS, "Tools", PortDataType::Tools),
@@ -131,64 +131,10 @@ impl Task for ToolExecutorTask {
             ))
         })?;
 
-        log::debug!(
-            "ToolExecutorTask {}: executing {} tool calls",
-            self.task_id,
+        Err(GraphError::TaskExecutionFailed(format!(
+            "tool-executor is disabled until backend-owned tool execution is implemented; received {} tool call(s)",
             tool_calls.len()
-        );
-
-        let mut results: Vec<ToolCallResult> = Vec::new();
-        let all_success = true;
-
-        for call in &tool_calls {
-            log::debug!(
-                "ToolExecutorTask {}: executing tool '{}' with id '{}'",
-                self.task_id,
-                call.name,
-                call.id
-            );
-
-            // For now, tool execution is a placeholder.
-            // In a full implementation, this would:
-            // 1. Look up the tool definition by name
-            // 2. Validate arguments against the tool's parameter schema
-            // 3. Execute the tool's implementation
-            // 4. Capture the result or error
-            //
-            // Currently, we return a placeholder result indicating
-            // that actual tool execution requires external implementation.
-            let result = ToolCallResult {
-                tool_call_id: call.id.clone(),
-                result: serde_json::json!({
-                    "status": "pending",
-                    "message": format!("Tool '{}' execution requires external implementation", call.name),
-                    "arguments_received": call.arguments
-                }),
-                success: true,
-                error: None,
-            };
-
-            results.push(result);
-        }
-
-        // Store outputs in context
-        let results_key = ContextKeys::output(&self.task_id, Self::PORT_RESULTS);
-        context.set(&results_key, results.clone()).await;
-
-        let all_success_key = ContextKeys::output(&self.task_id, Self::PORT_ALL_SUCCESS);
-        context.set(&all_success_key, all_success).await;
-
-        log::debug!(
-            "ToolExecutorTask {}: completed with {} results, all_success={}",
-            self.task_id,
-            results.len(),
-            all_success
-        );
-
-        Ok(TaskResult::new(
-            Some(serde_json::to_string(&results).unwrap_or_default()),
-            NextAction::Continue,
-        ))
+        )))
     }
 }
 
@@ -247,5 +193,33 @@ mod tests {
         // Run without setting tool_calls - should error
         let result = task.run(context).await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_tool_execution_is_disabled() {
+        let task = ToolExecutorTask::new("test_executor");
+        let context = Context::new();
+        context
+            .set(
+                &ContextKeys::input("test_executor", ToolExecutorTask::PORT_TOOL_CALLS),
+                vec![ToolCallRequest {
+                    id: "call_1".to_string(),
+                    name: "get_weather".to_string(),
+                    arguments: serde_json::json!({"location": "San Francisco"}),
+                }],
+            )
+            .await;
+        context
+            .set(
+                &ContextKeys::input("test_executor", ToolExecutorTask::PORT_TOOLS),
+                serde_json::json!([]),
+            )
+            .await;
+
+        let result = task.run(context).await;
+
+        assert!(result.is_err());
+        let message = result.unwrap_err().to_string();
+        assert!(message.contains("tool-executor is disabled"));
     }
 }

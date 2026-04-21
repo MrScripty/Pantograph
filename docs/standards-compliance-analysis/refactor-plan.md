@@ -205,18 +205,21 @@ Verification:
 Goal: Eliminate frontend and adapter ownership of canonical workflow behavior.
 
 Tasks:
-- Move execution-id claiming, stale-event filtering, run/session attribution,
+- [ ] Move execution-id claiming, stale-event filtering, run/session attribution,
   and diagnostics relevance into backend-owned trace/session projection APIs.
-- Make `workflow_get_diagnostics_snapshot` provide the exact frontend-ready
+- [ ] Make `workflow_get_diagnostics_snapshot` provide the exact frontend-ready
   identity and relevance decisions needed by `diagnosticsStore.ts`.
-- Convert group create/ungroup/update-port operations to return backend-owned
+- [ ] Convert group create/ungroup/update-port operations to return backend-owned
   graph mutation responses, then remove local graph reconstruction from
   `packages/svelte-graph/src/stores/createWorkflowStores.ts`.
-- Collapse duplicate Tauri wire normalizers into one executable contract module
+- [ ] Collapse duplicate Tauri wire normalizers into one executable contract module
   consumed by both `WorkflowService.ts` and `TauriWorkflowBackend.ts`.
-- Decide whether `tool-loop` and `tool-executor` are disabled/experimental or
-  real. Remove successful placeholder behavior either way.
-- Consolidate active workflow persistence/path validation around the service
+- [x] Decide whether `tool-loop` and `tool-executor` are disabled/experimental
+  or real. Remove successful placeholder behavior either way. Status:
+  descriptors remain registered for saved workflow compatibility, while
+  `tool-executor` and tool-call continuation in `tool-loop` now fail explicitly
+  until backend-owned tool execution contracts exist.
+- [ ] Consolidate active workflow persistence/path validation around the service
   store and delete or archive superseded Tauri-local paths.
 
 Verification:
@@ -395,7 +398,9 @@ Verification:
 ## Additional Issue Register
 These were discovered during the audit and should remain tracked even if not
 fully resolved by standards compliance:
-- Placeholder `tool-loop` and `tool-executor` behavior can produce misleading successful workflow outputs.
+- Resolved: `tool-loop` and `tool-executor` no longer produce successful
+  placeholder tool outputs; they fail until backend-owned tool execution
+  contracts exist.
 - Many Rust dead-code warnings suggest stale workflow and server-discovery paths.
 - `pantograph-rustler` currently emits `non_local_definitions` warnings from
   `rustler::resource!`; resolve, update Rustler, or document a temporary lint exception.

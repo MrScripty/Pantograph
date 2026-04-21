@@ -43,6 +43,8 @@ boundaries instead of forcing new workloads through incompatible legacy paths.
   normalizing them into typed backend requests.
 - Task-type inference drives dependency/runtime selection, so incorrect
   classification can start the wrong engine mode.
+- Built-in dispatch must fail explicitly for disabled node behavior instead of
+  synthesizing successful placeholder outputs.
 
 ## Decision
 Keep `core_executor.rs` as the single dispatch boundary for built-in node types
@@ -72,6 +74,8 @@ locally.
 - Execution events may carry additive `occurred_at_ms` timestamps, and adapter
   layers must preserve those backend-owned producer times when projecting trace
   or diagnostics state instead of restamping them locally.
+- `tool-executor` dispatch is disabled until backend-owned tool execution
+  contracts exist.
 
 ## Revisit Triggers
 - A second reranker family requires materially different request normalization.
@@ -86,6 +90,9 @@ graph/task modules in this crate.
 **External:** `serde_json`, async runtime support, and dependencies declared in
 the crate manifest.
 
+## Related ADRs
+- `docs/adr/ADR-001-headless-embedding-service-boundary.md`
+
 ## Usage Examples
 ```rust
 use node_engine::core_executor::CoreNodeExecutor;
@@ -96,6 +103,8 @@ use node_engine::core_executor::CoreNodeExecutor;
   types and port IDs match descriptor inventory.
 - Execution errors distinguish invalid workflow input from backend/runtime
   failures where possible.
+- Disabled node behavior, including `tool-executor`, must surface as execution
+  errors rather than successful placeholder outputs.
 - Additive node inputs may be accepted for compatibility, but callers should
   prefer the canonical descriptor fields when constructing new workflows.
 

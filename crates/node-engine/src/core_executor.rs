@@ -831,32 +831,11 @@ pub(crate) fn human_input_value(
 }
 
 fn execute_tool_executor(
-    inputs: &HashMap<String, serde_json::Value>,
+    _inputs: &HashMap<String, serde_json::Value>,
 ) -> Result<HashMap<String, serde_json::Value>> {
-    let tool_calls = inputs
-        .get("tool_calls")
-        .cloned()
-        .unwrap_or(serde_json::json!([]));
-
-    let results: Vec<serde_json::Value> = tool_calls
-        .as_array()
-        .unwrap_or(&vec![])
-        .iter()
-        .map(|call| {
-            let id = call.get("id").and_then(|v| v.as_str()).unwrap_or("unknown");
-            serde_json::json!({
-                "tool_call_id": id,
-                "result": {"status": "pending", "message": "Tool execution requires external implementation"},
-                "success": true,
-                "error": null
-            })
-        })
-        .collect();
-
-    let mut outputs = HashMap::new();
-    outputs.insert("results".to_string(), serde_json::json!(results));
-    outputs.insert("all_success".to_string(), serde_json::json!(true));
-    Ok(outputs)
+    Err(NodeEngineError::ExecutionFailed(
+        "tool-executor is disabled until backend-owned tool execution is implemented".to_string(),
+    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -3730,16 +3709,14 @@ mod tests {
     }
 
     #[test]
-    fn test_tool_executor_stub() {
+    fn test_tool_executor_is_disabled() {
         let mut inputs = HashMap::new();
         inputs.insert(
             "tool_calls".to_string(),
             serde_json::json!([{"id": "call_1"}, {"id": "call_2"}]),
         );
-        let result = execute_tool_executor(&inputs).unwrap();
-        assert_eq!(result["all_success"], true);
-        let results = result["results"].as_array().unwrap();
-        assert_eq!(results.len(), 2);
+        let error = execute_tool_executor(&inputs).expect_err("tool execution should be disabled");
+        assert!(error.to_string().contains("tool-executor is disabled"));
     }
 
     #[test]

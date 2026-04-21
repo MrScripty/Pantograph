@@ -1,7 +1,9 @@
 //! Tool Loop Task
 //!
-//! Runs an LLM in a multi-turn loop with tool calling capability.
-//! This is the composable replacement for monolithic agent loops.
+//! Runs an LLM in a multi-turn loop.
+//!
+//! Tool-call continuation is disabled until backend-owned tool execution
+//! contracts are available.
 
 use async_trait::async_trait;
 use graph_flow::{Context, GraphError, NextAction, Task, TaskResult};
@@ -59,9 +61,9 @@ pub struct ToolCall {
 
 /// Tool Loop Task
 ///
-/// Runs an LLM in a loop, allowing it to call tools until it produces
-/// a final response. This is the composable replacement for the
-/// monolithic agent loop.
+/// Runs an LLM in a loop until it produces a final response. Tool-call
+/// continuation fails explicitly until backend-owned tool execution is
+/// implemented.
 ///
 /// # Inputs (from context)
 /// - `{task_id}.input.prompt` (required) - The initial user prompt
@@ -131,7 +133,7 @@ impl TaskDescriptor for ToolLoopTask {
             node_type: "tool-loop".to_string(),
             category: NodeCategory::Control,
             label: "Tool Loop".to_string(),
-            description: "Runs an LLM with tool calling in a loop".to_string(),
+            description: "Runs an LLM loop and fails on tool calls until backend-owned tool execution is implemented".to_string(),
             inputs: vec![
                 PortMetadata::required(Self::PORT_PROMPT, "Prompt", PortDataType::Prompt),
                 PortMetadata::optional(
@@ -355,24 +357,10 @@ impl Task for ToolLoopTask {
                 }
             }
 
-            // Add assistant message to conversation
-            messages.push(message.clone());
-
-            // Note: In a full implementation, we would:
-            // 1. Execute the tools (via separate tool executor tasks)
-            // 2. Add tool results to messages
-            // 3. Continue the loop
-            //
-            // For now, we simulate tool execution by adding a placeholder response
-            // and break after first tool call since we don't have actual tool execution
-            messages.push(serde_json::json!({
-                "role": "tool",
-                "tool_call_id": all_tool_calls.last().and_then(|c| c.id.clone()).unwrap_or_default(),
-                "content": "Tool execution not implemented in this task. Please provide a final response."
-            }));
-
-            // Continue loop to get final response after tool call
-            // In production, this would have actual tool results
+            return Err(GraphError::TaskExecutionFailed(format!(
+                "tool-loop received {} tool call(s), but backend-owned tool execution is disabled",
+                all_tool_calls.len()
+            )));
         }
 
         // If we hit max turns without a final response, use the last content

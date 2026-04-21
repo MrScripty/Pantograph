@@ -29,8 +29,8 @@ saved workflows, and backend execution can drift.
 - Node type ids and port ids are serialized in saved workflows and templates.
 - Task behavior must use backend-owned context keys and `node-engine` metadata.
 - Runtime-family-specific behavior should stay in focused node families.
-- Placeholder or experimental nodes must be explicitly documented until removed
-  or completed.
+- Disabled or experimental nodes must be explicitly documented until removed or
+  completed.
 
 ## Decision
 Group built-in nodes by workflow role and expose them through crate-level
@@ -49,12 +49,13 @@ other so graph metadata and runtime behavior can be reviewed together.
   contracts.
 - Saved templates must not rely on frontend-only aliases for backend ports.
 - Experimental control/tool nodes must not be presented as complete execution
-  behavior until M2 resolves their placeholder path.
+  behavior while tool execution is disabled.
 
 ## Revisit Triggers
 - Node definitions move to a generated registry format.
 - Built-in node families need separate crates.
-- Tool-loop/tool-executor behavior is either completed or removed.
+- Tool-loop/tool-executor behavior gains a backend-owned tool runtime or is
+  removed from the descriptor set.
 
 ## Dependencies
 **Internal:** `node-engine`, `graph-flow`, backend inference/runtime crates, and
@@ -103,4 +104,5 @@ cargo test -p workflow-nodes --lib
 ```
 
 ## Notes
-- Tool-loop and tool-executor completion remains tracked under M2.
+- Tool-loop and tool-executor now fail explicitly when tool execution is
+  required; backend-owned tool runtime implementation remains future work.
