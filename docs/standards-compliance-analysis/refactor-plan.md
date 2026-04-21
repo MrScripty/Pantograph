@@ -168,12 +168,22 @@ Tasks:
 - Add a decision-traceability script adapted from the standards template and
   configure host-facing/structured-producer paths. Status: repo-local script,
   npm entrypoint, and Lefthook staged-file command are now in place.
+- Normalize the remaining template-generated README files that still contain
+  banned placeholder language before enabling broad full-branch traceability as
+  a hard gate. Current scan found 40 README files across older frontend,
+  Tauri, `workflow-nodes`, `node-engine`, and `packages/svelte-graph`
+  subdirectories that need focused ownership text.
 
 Additional issue recorded during implementation:
 - `crates/inference/src/managed_runtime/managed_binaries/` is an empty,
   unreferenced source-tree directory. It is now documented as a no-artifacts
   marker, but M3 managed-runtime cleanup should remove it unless a real
   source-owned fixture role is accepted.
+- The placeholder README sweep is broader than the original pass-01 examples:
+  40 existing README files still contain generated placeholder descriptions or
+  placeholder import examples. This does not block compilation, but it must be
+  resolved during M1 before treating full-repo documentation traceability as
+  complete.
 
 Verification:
 - Run the new decision-traceability script against changed directories.
