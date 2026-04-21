@@ -379,6 +379,8 @@ Tasks:
   Embedded workflow host helper and runtime-registry error-mapping unit tests
   now live in
   `crates/pantograph-embedded-runtime/src/lib_tests/host_helper_tests.rs`;
+  embedded data-graph execution integration tests now live in
+  `crates/pantograph-embedded-runtime/src/lib_tests/data_graph_execution_tests.rs`;
   the remaining legacy integration tests still need behavior-area splits.
 - Split `crates/node-engine/src/core_executor.rs` by execution phases, blocking
   adapters, demand preparation, output handling, and tests.

@@ -38,6 +38,7 @@ fixtures and provide a safe first boundary.
 ## Contents
 | File | Description |
 | ---- | ----------- |
+| `data_graph_execution_tests.rs` | Integration tests for embedded data-graph execution, Python sidecar runtime observation, multi-runtime registry projection, and waiting-for-input propagation. |
 | `host_helper_tests.rs` | Unit tests for embedded workflow host helper contracts and workflow-facing runtime-registry error mapping. |
 
 ## Invariants
