@@ -423,7 +423,10 @@ Tasks:
   handlers now live in
   `crates/node-engine/src/core_executor/inference_nodes.rs`, separating
   llama.cpp/reranking/embedding/chat/vision/unload execution from Python-worker
-  adapters.
+  adapters. PyTorch and Stable Audio Python-worker handlers now live in
+  `crates/node-engine/src/core_executor/pytorch_nodes.rs` and
+  `crates/node-engine/src/core_executor/audio_nodes.rs`, keeping feature-family
+  worker initialization and execution separate from dispatch.
 - Split `src/components/WorkflowGraph.svelte` and
   `packages/svelte-graph/src/components/WorkflowGraph.svelte` into graph canvas,
   connection drag, horseshoe insert, edge insert, selection, keyboard, and
@@ -562,6 +565,10 @@ fully resolved by standards compliance:
   placeholder tool outputs; they fail until backend-owned tool execution
   contracts exist.
 - Many Rust dead-code warnings suggest stale workflow and server-discovery paths.
+- `cargo check -p node-engine --features audio-nodes` compiles but emits
+  audio-only dead-code warnings for shared boolean settings readers in
+  `crates/node-engine/src/core_executor/settings.rs`; classify them during the
+  Rust warning ratchet as remove, feature-gate, or intentionally retained.
 - `pantograph-rustler` currently emits `non_local_definitions` warnings from
   `rustler::resource!`; resolve, update Rustler, or document a temporary lint exception.
 - The repo currently has no repo-owned Rust `unsafe` blocks, but also lacks the

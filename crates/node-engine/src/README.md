@@ -87,6 +87,9 @@ locally.
 - Gateway-backed inference execution stays in `core_executor/inference_nodes.rs`
   so llama.cpp, reranking, embedding, OpenAI-compatible chat, vision, and
   unload-model handlers remain separate from Python-worker adapters.
+- Python-worker execution stays in `core_executor/pytorch_nodes.rs` and
+  `core_executor/audio_nodes.rs` so PyTorch inference and Stable Audio
+  generation remain separate feature families.
 - Task-type inference must reflect execution semantics, not UI naming.
 - Input normalization may be permissive for additive compatibility, but output
   shapes must stay stable once published.
