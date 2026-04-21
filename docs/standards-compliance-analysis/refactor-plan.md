@@ -140,8 +140,9 @@ Tasks:
   documents the Rust workspace package-role boundary, and runtime identity plus
   registry crate roots now document their public contracts. `node-engine`,
   `workflow-nodes`, and `pantograph-workflow-service` crate roots now document
-  the core workflow execution chain; remaining per-crate and nested source
-  READMEs are pending.
+  the core workflow execution chain. Embedded runtime, frontend HTTP adapter,
+  UniFFI, and Rustler crate roots now document host-facing runtime and binding
+  contracts; remaining nested source READMEs are pending.
 - Resolve the `src/generated/` documentation exception by either moving
   generated runtime state outside `src/` or replacing the nested Git repository
   with a backend-owned structured history store that allows a tracked
