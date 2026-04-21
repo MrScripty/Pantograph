@@ -11,8 +11,10 @@ packages.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
+| `embedded_data_graph_execution.rs` | Owns embedded-runtime data-graph execution, terminal-node demand handling, runtime extension injection, and data-graph output collection. |
 | `embedding_workflow.rs` | Owns backend-side embedding workflow graph inspection, embedding model-path resolution, and workflow-specific runtime preparation rules. |
 | `embedded_runtime_lifecycle.rs` | Owns embedded-runtime constructors, host wiring, registry injection, accessors, and shutdown coordination. |
+| `embedded_workflow_graph_api.rs` | Owns embedded-runtime public graph persistence, edit-session, graph mutation, connection, and insert-preview facade methods that forward into the workflow service. |
 | `embedded_workflow_host_helpers.rs` | Owns embedded workflow host helper logic for runtime reservations, retention hints, workflow I/O binding, and data-graph terminal output shaping. |
 | `embedded_workflow_service_api.rs` | Owns embedded-runtime public workflow, session, queue, inspection, and keep-alive facade methods that forward into the workflow service. |
 | `lib_tests.rs` | Legacy embedded-runtime facade, host, registry, and workflow-session tests extracted from the root facade file. |
@@ -94,6 +96,14 @@ embedded-runtime crate.
   shutdown sequencing stay in `embedded_runtime_lifecycle.rs` so the root
   facade keeps only type definitions, exports, and remaining workflow API
   forwarding until those surfaces are split.
+- Embedded-runtime data-graph execution stays in
+  `embedded_data_graph_execution.rs` so terminal-node demand handling and
+  output shaping remain separate from graph persistence and edit-session API
+  forwarding.
+- Public embedded-runtime graph persistence, edit-session, mutation,
+  connection, and insert-preview facade methods stay in
+  `embedded_workflow_graph_api.rs` so graph API forwarding remains separate
+  from graph execution.
 - Embedded workflow host helper methods stay in
   `embedded_workflow_host_helpers.rs` so reservation shaping, runtime retention
   sync, workflow I/O binding, and data-graph output shaping do not accumulate

@@ -367,6 +367,11 @@ Tasks:
   Public embedded-runtime workflow, session, queue, inspection, and keep-alive
   facade methods now live in
   `crates/pantograph-embedded-runtime/src/embedded_workflow_service_api.rs`.
+  Public embedded-runtime graph persistence, edit-session, mutation,
+  connection, and insert-preview facade methods now live in
+  `crates/pantograph-embedded-runtime/src/embedded_workflow_graph_api.rs`.
+  Embedded-runtime data-graph execution now lives in
+  `crates/pantograph-embedded-runtime/src/embedded_data_graph_execution.rs`.
 - Split `crates/node-engine/src/core_executor.rs` by execution phases, blocking
   adapters, demand preparation, output handling, and tests.
 - Split `src/components/WorkflowGraph.svelte` and

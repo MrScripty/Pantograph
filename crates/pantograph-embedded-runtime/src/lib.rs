@@ -5,30 +5,17 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 #[cfg(any(test, feature = "standalone"))]
 use node_engine::ExecutorExtensions;
-use node_engine::{CoreTaskExecutor, EventSink, NullEventSink, WorkflowExecutor, WorkflowGraph};
+use node_engine::{CoreTaskExecutor, EventSink, NullEventSink, WorkflowExecutor};
 use pantograph_runtime_identity::canonical_runtime_backend_key;
 use pantograph_runtime_registry::{RuntimeRegistryError, SharedRuntimeRegistry};
 use pantograph_workflow_service::capabilities;
 use pantograph_workflow_service::graph::WorkflowGraphSessionStateView;
 use pantograph_workflow_service::{
-    ConnectionCandidatesResponse, ConnectionCommitResponse, EdgeInsertionPreviewResponse,
-    FileSystemWorkflowGraphStore, InsertNodeConnectionResponse, InsertNodeOnEdgeResponse,
-    WorkflowFile, WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest,
-    WorkflowGraphConnectRequest, WorkflowGraphEditSessionCloseRequest,
-    WorkflowGraphEditSessionCloseResponse, WorkflowGraphEditSessionCreateRequest,
-    WorkflowGraphEditSessionCreateResponse, WorkflowGraphEditSessionGraphRequest,
-    WorkflowGraphEditSessionGraphResponse, WorkflowGraphGetConnectionCandidatesRequest,
-    WorkflowGraphInsertNodeAndConnectRequest, WorkflowGraphInsertNodeOnEdgeRequest,
-    WorkflowGraphListResponse, WorkflowGraphLoadRequest,
-    WorkflowGraphPreviewNodeInsertOnEdgeRequest, WorkflowGraphRemoveEdgeRequest,
-    WorkflowGraphRemoveNodeRequest, WorkflowGraphSaveRequest, WorkflowGraphSaveResponse,
-    WorkflowGraphUndoRedoStateRequest, WorkflowGraphUndoRedoStateResponse,
-    WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest, WorkflowHost,
-    WorkflowHostModelDescriptor, WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunOptions,
-    WorkflowRuntimeCapability, WorkflowService, WorkflowServiceError, WorkflowSessionRetentionHint,
-    WorkflowSessionRuntimeSelectionTarget, WorkflowSessionRuntimeUnloadCandidate,
-    WorkflowTechnicalFitDecision, WorkflowTechnicalFitRequest, WorkflowTraceRuntimeMetrics,
-    convert_graph_to_node_engine,
+    WorkflowHost, WorkflowHostModelDescriptor, WorkflowOutputTarget, WorkflowPortBinding,
+    WorkflowRunOptions, WorkflowRuntimeCapability, WorkflowService, WorkflowServiceError,
+    WorkflowSessionRetentionHint, WorkflowSessionRuntimeSelectionTarget,
+    WorkflowSessionRuntimeUnloadCandidate, WorkflowTechnicalFitDecision,
+    WorkflowTechnicalFitRequest, WorkflowTraceRuntimeMetrics, convert_graph_to_node_engine,
 };
 #[cfg(test)]
 use pantograph_workflow_service::{
@@ -39,7 +26,9 @@ use pantograph_workflow_service::{
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
+mod embedded_data_graph_execution;
 mod embedded_runtime_lifecycle;
+mod embedded_workflow_graph_api;
 mod embedded_workflow_host_helpers;
 mod embedded_workflow_service_api;
 pub mod embedding_workflow;
@@ -123,138 +112,6 @@ pub struct EditSessionGraphExecutionOutcome {
 }
 
 impl EmbeddedRuntime {
-    fn graph_store(&self) -> FileSystemWorkflowGraphStore {
-        FileSystemWorkflowGraphStore::new(self.config.project_root.clone())
-    }
-
-    pub async fn execute_data_graph(
-        &self,
-        graph_id: &str,
-        graph: &WorkflowGraph,
-        inputs: &HashMap<String, serde_json::Value>,
-        event_sink: Arc<dyn EventSink>,
-    ) -> node_engine::Result<HashMap<String, serde_json::Value>> {
-        let runtime_ext = RuntimeExtensionsSnapshot::from_shared(&self.extensions).await;
-        let execution_id = format!("data-graph-{}-{}", graph_id, Uuid::new_v4());
-        let workflow_event_sink = event_sink.clone();
-        let core = Arc::new(
-            CoreTaskExecutor::new()
-                .with_project_root(self.config.project_root.clone())
-                .with_gateway(self.gateway.clone())
-                .with_event_sink(event_sink.clone())
-                .with_execution_id(execution_id.clone()),
-        );
-        let host = Arc::new(task_executor::TauriTaskExecutor::with_python_runtime(
-            self.rag_backend.clone(),
-            self.python_runtime.clone(),
-        ));
-        let task_executor = node_engine::CompositeTaskExecutor::new(
-            Some(host as Arc<dyn node_engine::TaskExecutor>),
-            core,
-        );
-        let python_runtime_execution_recorder =
-            Arc::new(task_executor::PythonRuntimeExecutionRecorder::default());
-        let mut graph = graph.clone();
-        let terminal_nodes = EmbeddedWorkflowHost::terminal_data_graph_node_ids(&graph);
-        EmbeddedWorkflowHost::apply_data_graph_inputs(&mut graph, inputs);
-
-        let mut executor = WorkflowExecutor::new(execution_id.clone(), graph, event_sink);
-        apply_runtime_extensions_for_execution(
-            &mut executor,
-            &runtime_ext,
-            Some(workflow_event_sink),
-            Some(execution_id),
-            Some(python_runtime_execution_recorder.clone()),
-        );
-
-        let mut node_outputs = HashMap::new();
-        let mut terminal_errors = HashMap::new();
-        let mut terminal_outcome_error = None;
-        for terminal_id in &terminal_nodes {
-            match executor.demand(terminal_id, &task_executor).await {
-                Ok(outputs) => {
-                    node_outputs.insert(terminal_id.clone(), outputs);
-                }
-                Err(error) => {
-                    if matches!(
-                        error,
-                        node_engine::NodeEngineError::WaitingForInput { .. }
-                            | node_engine::NodeEngineError::Cancelled
-                    ) {
-                        terminal_outcome_error = Some(error);
-                        break;
-                    }
-                    log::error!(
-                        "Error executing terminal node '{}' in data graph '{}': {}",
-                        terminal_id,
-                        graph_id,
-                        error
-                    );
-                    terminal_errors.insert(
-                        format!("{}.error", terminal_id),
-                        serde_json::Value::String(error.to_string()),
-                    );
-                }
-            }
-        }
-
-        let python_runtime_execution_metadata = python_runtime_execution_recorder.snapshots();
-        self.host()
-            .observe_python_runtime_execution_metadata(&python_runtime_execution_metadata)
-            .map_err(|error| node_engine::NodeEngineError::failed(error.to_string()))?;
-
-        if let Some(error) = terminal_outcome_error {
-            return Err(error);
-        }
-
-        let mut outputs = EmbeddedWorkflowHost::collect_data_graph_outputs(
-            graph_id,
-            &terminal_nodes,
-            &node_outputs,
-        );
-        outputs.extend(terminal_errors);
-        Ok(outputs)
-    }
-
-    pub fn workflow_graph_save(
-        &self,
-        request: WorkflowGraphSaveRequest,
-    ) -> Result<WorkflowGraphSaveResponse, WorkflowServiceError> {
-        self.workflow_service
-            .workflow_graph_save(&self.graph_store(), request)
-    }
-
-    pub fn workflow_graph_load(
-        &self,
-        request: WorkflowGraphLoadRequest,
-    ) -> Result<WorkflowFile, WorkflowServiceError> {
-        self.workflow_service
-            .workflow_graph_load(&self.graph_store(), request)
-    }
-
-    pub fn workflow_graph_list(&self) -> Result<WorkflowGraphListResponse, WorkflowServiceError> {
-        self.workflow_service
-            .workflow_graph_list(&self.graph_store())
-    }
-
-    pub async fn workflow_graph_create_edit_session(
-        &self,
-        request: WorkflowGraphEditSessionCreateRequest,
-    ) -> Result<WorkflowGraphEditSessionCreateResponse, WorkflowServiceError> {
-        self.workflow_service
-            .workflow_graph_create_edit_session(request)
-            .await
-    }
-
-    pub async fn workflow_graph_close_edit_session(
-        &self,
-        request: WorkflowGraphEditSessionCloseRequest,
-    ) -> Result<WorkflowGraphEditSessionCloseResponse, WorkflowServiceError> {
-        self.workflow_service
-            .workflow_graph_close_edit_session(request)
-            .await
-    }
-
     pub async fn execute_edit_session_graph(
         &self,
         session_id: &str,
@@ -450,131 +307,6 @@ impl EmbeddedRuntime {
             waiting_for_input,
             error: workflow_result.err().map(|error| error.to_string()),
         })
-    }
-
-    pub async fn workflow_graph_get_edit_session_graph(
-        &self,
-        request: WorkflowGraphEditSessionGraphRequest,
-    ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
-        self.workflow_service
-            .workflow_graph_get_edit_session_graph(request)
-            .await
-    }
-
-    pub async fn workflow_graph_get_undo_redo_state(
-        &self,
-        request: WorkflowGraphUndoRedoStateRequest,
-    ) -> Result<WorkflowGraphUndoRedoStateResponse, WorkflowServiceError> {
-        self.workflow_service
-            .workflow_graph_get_undo_redo_state(request)
-            .await
-    }
-
-    pub async fn workflow_graph_update_node_data(
-        &self,
-        request: WorkflowGraphUpdateNodeDataRequest,
-    ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
-        self.workflow_service
-            .workflow_graph_update_node_data(request)
-            .await
-    }
-
-    pub async fn workflow_graph_update_node_position(
-        &self,
-        request: WorkflowGraphUpdateNodePositionRequest,
-    ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
-        self.workflow_service
-            .workflow_graph_update_node_position(request)
-            .await
-    }
-
-    pub async fn workflow_graph_add_node(
-        &self,
-        request: WorkflowGraphAddNodeRequest,
-    ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
-        self.workflow_service.workflow_graph_add_node(request).await
-    }
-
-    pub async fn workflow_graph_remove_node(
-        &self,
-        request: WorkflowGraphRemoveNodeRequest,
-    ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
-        self.workflow_service
-            .workflow_graph_remove_node(request)
-            .await
-    }
-
-    pub async fn workflow_graph_add_edge(
-        &self,
-        request: WorkflowGraphAddEdgeRequest,
-    ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
-        self.workflow_service.workflow_graph_add_edge(request).await
-    }
-
-    pub async fn workflow_graph_remove_edge(
-        &self,
-        request: WorkflowGraphRemoveEdgeRequest,
-    ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
-        self.workflow_service
-            .workflow_graph_remove_edge(request)
-            .await
-    }
-
-    pub async fn workflow_graph_undo(
-        &self,
-        request: WorkflowGraphEditSessionGraphRequest,
-    ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
-        self.workflow_service.workflow_graph_undo(request).await
-    }
-
-    pub async fn workflow_graph_redo(
-        &self,
-        request: WorkflowGraphEditSessionGraphRequest,
-    ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
-        self.workflow_service.workflow_graph_redo(request).await
-    }
-
-    pub async fn workflow_graph_get_connection_candidates(
-        &self,
-        request: WorkflowGraphGetConnectionCandidatesRequest,
-    ) -> Result<ConnectionCandidatesResponse, WorkflowServiceError> {
-        self.workflow_service
-            .workflow_graph_get_connection_candidates(request)
-            .await
-    }
-
-    pub async fn workflow_graph_connect(
-        &self,
-        request: WorkflowGraphConnectRequest,
-    ) -> Result<ConnectionCommitResponse, WorkflowServiceError> {
-        self.workflow_service.workflow_graph_connect(request).await
-    }
-
-    pub async fn workflow_graph_insert_node_and_connect(
-        &self,
-        request: WorkflowGraphInsertNodeAndConnectRequest,
-    ) -> Result<InsertNodeConnectionResponse, WorkflowServiceError> {
-        self.workflow_service
-            .workflow_graph_insert_node_and_connect(request)
-            .await
-    }
-
-    pub async fn workflow_graph_preview_node_insert_on_edge(
-        &self,
-        request: WorkflowGraphPreviewNodeInsertOnEdgeRequest,
-    ) -> Result<EdgeInsertionPreviewResponse, WorkflowServiceError> {
-        self.workflow_service
-            .workflow_graph_preview_node_insert_on_edge(request)
-            .await
-    }
-
-    pub async fn workflow_graph_insert_node_on_edge(
-        &self,
-        request: WorkflowGraphInsertNodeOnEdgeRequest,
-    ) -> Result<InsertNodeOnEdgeResponse, WorkflowServiceError> {
-        self.workflow_service
-            .workflow_graph_insert_node_on_edge(request)
-            .await
     }
 }
 
