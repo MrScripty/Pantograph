@@ -114,7 +114,7 @@ Goal: Stop current known failures and remove the easiest security/runtime violat
 Status:
 - Complete: `src/components/nodes/workflow/ImageOutputNode.svelte` no longer appends/removes a temporary anchor for downloads.
 - Complete: `src/components/runtime-manager/ManagedRuntimeSummaryGrid.svelte` no longer uses string-literal mustache spacing.
-- Pending: Vite loopback bind.
+- Complete: Vite now defaults to loopback and documents explicit LAN opt-in.
 - Pending: `src/generated/.git` decision.
 
 Tasks:

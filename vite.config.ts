@@ -4,6 +4,8 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 
 // Pattern for generated components - used to split Svelte plugin instances
 const GENERATED_PATTERN = 'src/generated/**/*.svelte';
+const DEFAULT_DEV_SERVER_HOST = '127.0.0.1';
+const DEV_SERVER_HOST = process.env.PANTOGRAPH_VITE_HOST || DEFAULT_DEV_SERVER_HOST;
 
 /**
  * Vite plugin to handle HMR for generated components.
@@ -80,7 +82,7 @@ export default defineConfig(() => {
     return {
       server: {
         port: 3001,
-        host: '0.0.0.0',
+        host: DEV_SERVER_HOST,
         strictPort: true,
         watch: {
           // Ignore Rust build artifacts - target/doc alone is 2.2GB with thousands of files

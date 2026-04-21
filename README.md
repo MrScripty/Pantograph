@@ -65,6 +65,9 @@ npm run dev:desktop
 npm run dev
 ```
 
+The Vite dev server binds to `127.0.0.1` by default. For an intentional LAN
+preview, set `PANTOGRAPH_VITE_HOST=0.0.0.0` when starting the server.
+
 ### Build Desktop App
 
 ```bash
