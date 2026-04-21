@@ -41,6 +41,7 @@ fixtures and provide a safe first boundary.
 | `data_graph_execution_tests.rs` | Integration tests for embedded data-graph execution, Python sidecar runtime observation, multi-runtime registry projection, and waiting-for-input propagation. |
 | `edit_session_execution_tests.rs` | Integration tests for embedded edit-session graph execution, embedding runtime prepare/restore reconciliation, runtime trace metrics, and waiting-for-input event behavior. |
 | `host_helper_tests.rs` | Unit tests for embedded workflow host helper contracts and workflow-facing runtime-registry error mapping. |
+| `session_checkpoint_capacity_tests.rs` | Integration tests for keep-alive workflow-session checkpoint preservation across capacity rebalance and repeated unloads. |
 | `session_execution_state_tests.rs` | Integration tests for keep-alive workflow-session executor reuse, carried inputs, graph-change reconciliation, and inspection state. |
 | `session_runtime_lifecycle_tests.rs` | Integration tests for embedded workflow-session runtime reservation, warmup, preflight, unload, and non-keep-alive release behavior. |
 | `workflow_run_execution_tests.rs` | Integration tests for embedded workflow runs, session runs, cancellation, human-input validation, and Python sidecar runtime observation. |

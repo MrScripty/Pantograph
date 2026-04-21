@@ -23,6 +23,7 @@ packages.
 | `lib_tests/data_graph_execution_tests.rs` | Embedded data-graph execution integration tests split out of the legacy root test module. |
 | `lib_tests/edit_session_execution_tests.rs` | Embedded edit-session graph execution integration tests split out of the legacy root test module. |
 | `lib_tests/host_helper_tests.rs` | Focused embedded workflow host helper and runtime-registry error-mapping unit tests split out of the legacy root test module. |
+| `lib_tests/session_checkpoint_capacity_tests.rs` | Embedded keep-alive workflow-session capacity checkpoint tests split out of the legacy root test module. |
 | `lib_tests/session_execution_state_tests.rs` | Embedded keep-alive workflow-session execution state tests split out of the legacy root test module. |
 | `lib_tests/session_runtime_lifecycle_tests.rs` | Embedded workflow-session runtime lifecycle integration tests split out of the legacy root test module. |
 | `lib_tests/workflow_run_execution_tests.rs` | Embedded workflow-run and session-run execution integration tests split out of the legacy root test module. |
@@ -153,6 +154,10 @@ embedded-runtime crate.
   `lib_tests/session_execution_state_tests.rs` so backend executor reuse,
   carried inputs, graph-change reconciliation, and inspection state follow the
   production workflow-session execution boundary.
+- Keep-alive workflow-session capacity checkpoint tests stay in
+  `lib_tests/session_checkpoint_capacity_tests.rs` so checkpoint preservation,
+  scheduler-driven rebalance, repeated unload idempotence, and keep-alive
+  disable cleanup follow the production session checkpoint boundary.
 - Python-backed nodes execute through the runtime adapter boundary.
 - Shared runtime extension snapshots and executor injection must stay in a
   backend-owned helper so workflow execution paths do not drift on extension

@@ -389,6 +389,8 @@ Tasks:
   `crates/pantograph-embedded-runtime/src/lib_tests/workflow_run_execution_tests.rs`;
   embedded keep-alive workflow-session execution state tests now live in
   `crates/pantograph-embedded-runtime/src/lib_tests/session_execution_state_tests.rs`;
+  embedded keep-alive workflow-session capacity checkpoint tests now live in
+  `crates/pantograph-embedded-runtime/src/lib_tests/session_checkpoint_capacity_tests.rs`;
   the remaining legacy integration tests still need behavior-area splits.
 - Split `crates/node-engine/src/core_executor.rs` by execution phases, blocking
   adapters, demand preparation, output handling, and tests.
