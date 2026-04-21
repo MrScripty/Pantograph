@@ -405,6 +405,9 @@ Tasks:
   Progress: core executor behavior tests now live in
   `crates/node-engine/src/core_executor/tests.rs`, reducing the facade to
   production dispatch and helper code before further execution-family splits.
+  Settings, optional input reader, and file-I/O traversal tests now live in
+  `crates/node-engine/src/core_executor/settings_tests.rs`, reducing the core
+  executor test index by behavior family.
   Synchronous built-in node handlers now live in
   `crates/node-engine/src/core_executor/pure_nodes.rs`, separating pure
   payload normalization from file I/O, dependency preflight, and runtime-backed

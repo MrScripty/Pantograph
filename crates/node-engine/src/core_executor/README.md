@@ -25,6 +25,7 @@ into frontend, transport, or descriptor crates.
 | `pytorch_nodes.rs` | Feature-gated PyTorch Python-worker initialization, inference execution, streaming, and KV-cache integration. |
 | `retrieval_nodes.rs` | Feature-gated reranking and embedding execution plus reranker document parsing. |
 | `settings.rs` | Settings-schema expansion and shared optional-input readers used by pure settings nodes and runtime-backed adapters. |
+| `settings_tests.rs` | Focused tests for settings expansion, optional input readers, and file-I/O traversal rejection. |
 | `tests.rs` | Behavior tests for core executor node dispatch, input/output normalization, settings expansion, dependency preflight, and feature-gated inference parsing helpers. |
 
 ## Problem
@@ -85,6 +86,8 @@ stable public facade and dispatch owner.
   introduced.
 - Tests in this directory may use private facade helpers through `super::*`
   while they verify core-executor implementation behavior.
+- Test modules should split by behavior family once a single module becomes too
+  large for focused review.
 
 ## Revisit Triggers
 - Another execution family grows enough to deserve a focused helper module.
