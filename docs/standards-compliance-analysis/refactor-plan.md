@@ -316,7 +316,9 @@ Tasks:
   Progress: public workflow request/response/error DTO definitions now live in
   `crates/pantograph-workflow-service/src/workflow/contracts.rs` and are
   re-exported by `workflow.rs`, preserving existing public imports while
-  reducing the facade.
+  reducing the facade. Workflow I/O surface derivation and host-response
+  validation now live in `workflow/io_contract.rs`, keeping the facade as the
+  caller while isolating bindable input/output schema handling.
 - Split `crates/pantograph-embedded-runtime/src/lib.rs` into runtime host,
   workflow sessions, registry lifecycle, diagnostics projection, model deps,
   and test modules.

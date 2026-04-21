@@ -12,14 +12,15 @@ public exports out of the service crate.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `contracts.rs` | Public workflow request/response/error DTO definitions re-exported by the parent facade. |
+| `io_contract.rs` | Workflow input/output surface derivation and host-response validation helpers. |
 | `runtime_preflight.rs` | Runtime requirement matching, issue formatting, and preflight warning collection. |
 | `session_runtime.rs` | Session runtime preflight cache checks, runtime loading, unload-candidate selection, and affinity refresh helpers. |
 
 ## Problem
 `src/workflow.rs` remains a large public facade with host traits and service
-methods. Public DTO definitions, runtime readiness, and session-runtime loading
-are cohesive enough to isolate, but they still preserve the parent facade as
-the compatibility export point.
+methods. Public DTO definitions, workflow I/O derivation, runtime readiness,
+and session-runtime loading are cohesive enough to isolate, but they still
+preserve the parent facade as the compatibility export point.
 
 ## Constraints
 - Preserve the public `WorkflowService` API while decomposing internals.
@@ -30,8 +31,8 @@ the compatibility export point.
 ## Decision
 Use this directory for workflow-service helper modules behind the parent
 facade. The parent facade remains the public export point while helpers own
-cohesive contract definitions, runtime readiness, and session-runtime
-workflows.
+cohesive contract definitions, workflow I/O derivation, runtime readiness, and
+session-runtime workflows.
 
 ## Alternatives Rejected
 - Leave all helpers in `workflow.rs`: rejected because runtime readiness and
@@ -52,6 +53,7 @@ workflows.
 ## Revisit Triggers
 - Runtime preflight becomes a public reusable crate-level policy.
 - Session lifecycle supervision moves to a dedicated backend runtime manager.
+- Workflow I/O schema handling needs to support a second bindable-origin model.
 - `workflow.rs` facade decomposition exposes these helpers through a narrower
   public module structure.
 
@@ -81,8 +83,9 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
 ## API Consumer Contract
 - Inputs: workflow runtime requirements, runtime capability DTOs, session ids,
   workflow ids, and host trait methods.
-- Outputs: request/response DTOs, runtime issues, preflight cache records, and
-  service errors consumed by public workflow operations.
+- Outputs: request/response DTOs, bindable I/O node surfaces, runtime issues,
+  preflight cache records, and service errors consumed by public workflow
+  operations.
 - Lifecycle: helpers run inside public workflow/session operations and do not
   own long-lived runtime resources directly.
 - Errors: capacity exhaustion, missing sessions, runtime-not-ready conditions,
@@ -91,12 +94,15 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
   of the public workflow service contract.
 
 ## Structured Producer Contract
-- Stable fields: runtime issue messages, runtime ids, required backend keys,
-  and preflight cache facts flow into public response DTOs.
+- Stable fields: bindable I/O node ids, port ids, runtime issue messages,
+  runtime ids, required backend keys, and preflight cache facts flow into public
+  response DTOs.
 - Defaults: blank required backend keys are ignored during matching.
 - Enums and labels: runtime install/readiness states retain the parent service
   contract semantics.
 - Ordering: runtime issues are sorted and deduplicated before public exposure.
+- Ordering: bindable workflow I/O nodes and ports are sorted before public
+  exposure.
 - Compatibility: changing matching or issue formatting can affect frontend,
   adapter, and binding consumers.
 - Regeneration/migration: update public contract tests, frontend runtime
@@ -106,6 +112,7 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
 ```bash
 cargo test -p pantograph-workflow-service runtime_preflight
 cargo test -p pantograph-workflow-service session_runtime
+cargo test -p pantograph-workflow-service workflow_io
 ```
 
 ## Notes
