@@ -668,7 +668,11 @@ Tasks:
   disabled backend-owned `ProcessExecutionPolicy`; allowed process commands
   require explicit host policy, and the anti-pattern tracker records Phase 5 as
   complete.
-- Add issue/backlog entries for non-compliance problems intentionally deferred.
+- [x] Add issue/backlog entries for non-compliance problems intentionally
+  deferred. Status: the Additional Issue Register below now records the
+  remaining deferred issues with owner/disposition labels so they can be picked
+  up as follow-on backlog without blocking the standards-compliance cleanup
+  slices.
 
 Verification:
 - `cargo check` warning count is reduced to zero or the documented baseline in
@@ -711,21 +715,24 @@ fully resolved by standards compliance:
 - Resolved: `tool-loop` and `tool-executor` no longer produce successful
   placeholder tool outputs; they fail until backend-owned tool execution
   contracts exist.
-- Many Rust dead-code warnings suggest stale workflow and server-discovery paths;
-  the current baseline and removal order are classified in
+- Resolved: broad Rust dead-code warnings and stale workflow/server-discovery
+  paths were classified and cleaned up; the zero-warning baseline is recorded in
   `docs/standards-compliance-analysis/rust-warning-baseline.md`.
-- `cargo check -p node-engine --features audio-nodes` compiles but emits
-  audio-only dead-code warnings for shared boolean settings readers in
-  `crates/node-engine/src/core_executor/settings.rs`; classify them during the
-  Rust warning ratchet as remove, feature-gate, or intentionally retained.
-- `pantograph-rustler` uses a scoped `non_local_definitions` lint exception
-  around `rustler::resource!` registration until Rustler exposes a
-  warning-clean resource registration API.
-- `cargo fmt --all -- --check` currently fails on pre-existing Rust formatting
-  drift across inference managed-runtime modules, node-engine executor helpers,
-  embedded-runtime modules, workflow-service tests, and Tauri workflow/LLM
-  modules. Keep that as a separate formatting cleanup slice instead of mixing
-  it into manifest or behavior commits.
+- Deferred, node-engine settings owner: `cargo check -p node-engine --features
+  audio-nodes` compiles but has historically exposed audio-only dead-code
+  warnings for shared boolean settings readers in
+  `crates/node-engine/src/core_executor/settings.rs`; re-check and classify as
+  remove, feature-gate, or intentionally retained when the audio feature path
+  is next touched.
+- Deferred, Rustler binding owner: `pantograph-rustler` uses a scoped
+  `non_local_definitions` lint exception around `rustler::resource!`
+  registration until Rustler exposes a warning-clean resource registration API.
+- Deferred, Rust formatting owner: `cargo fmt --all -- --check` currently fails
+  on pre-existing Rust formatting drift across inference managed-runtime
+  modules, node-engine executor helpers, embedded-runtime modules,
+  workflow-service tests, and Tauri workflow/LLM modules. Keep that as a
+  separate formatting cleanup slice instead of mixing it into manifest or
+  behavior commits.
 - Resolved: `cargo test -p pantograph-uniffi --all-features version` exposed a
   stale `WorkflowEvent::GraphModified` test fixture in
   `crates/pantograph-uniffi/src/lib.rs` that was missing the backend-owned
@@ -736,12 +743,15 @@ fully resolved by standards compliance:
   `src/generated/.git` into ignored `.pantograph/generated-components.git/`.
 - Resolved: general CI now protects main frontend and Rust workspace quality
   gates through `.github/workflows/quality-gates.yml`.
-- `npm audit --omit=dev --audit-level=high` passes, but the current dependency
-  tree still reports moderate advisories in `devalue`, `markdown-it`, and
-  `svelte`; schedule a dependency update once compatible versions are confirmed.
-- `crates/pantograph-workflow-service/src/workflow.rs` test fixture
-  `MockWorkflowHost` stores `runtime_capabilities: vec![ready_runtime_capability()]`
-  but does not override `WorkflowHost::runtime_capabilities`, so
+- Deferred, frontend dependency owner: `npm audit --omit=dev
+  --audit-level=high` passes, but the current dependency tree still reports
+  moderate advisories in `devalue`, `markdown-it`, and `svelte`; schedule a
+  dependency update once compatible versions are confirmed.
+- Deferred, workflow-service test owner:
+  `crates/pantograph-workflow-service/src/workflow.rs` test fixture
+  `MockWorkflowHost` stores
+  `runtime_capabilities: vec![ready_runtime_capability()]` but does not
+  override `WorkflowHost::runtime_capabilities`, so
   `workflow_session_lifecycle_create_run_close` fails its create-session
   runtime-capability assertion before close-session behavior is exercised.
 - Resolved: arbitrary `process` node execution is no longer enabled by default;
