@@ -12,6 +12,7 @@ public exports out of the service crate.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `contracts.rs` | Public workflow request/response/error DTO definitions re-exported by the parent facade. |
+| `graph_api.rs` | Graph edit-session, mutation, connection, persistence, and runtime snapshot facade methods. |
 | `host.rs` | Host trait defaults and scheduler diagnostics provider contracts re-exported by the parent facade. |
 | `io_contract.rs` | Workflow input/output surface derivation and host-response validation helpers. |
 | `runtime_preflight.rs` | Runtime requirement matching, issue formatting, and preflight warning collection. |
@@ -20,10 +21,10 @@ public exports out of the service crate.
 
 ## Problem
 `src/workflow.rs` remains a large public facade with service methods. Public
-DTO definitions, host/runtime trait defaults, workflow I/O derivation, runtime
-readiness, request validation, and session-runtime loading are cohesive enough
-to isolate, but they still preserve the parent facade as the compatibility
-export point.
+DTO definitions, graph edit-session APIs, host/runtime trait defaults,
+workflow I/O derivation, runtime readiness, request validation, and
+session-runtime loading are cohesive enough to isolate, but they still preserve
+the parent facade as the compatibility export point.
 
 ## Constraints
 - Preserve the public `WorkflowService` API while decomposing internals.
@@ -35,8 +36,8 @@ export point.
 Use this directory for workflow-service helper modules behind the parent
 facade. The parent facade remains the public export point while helpers own
 cohesive contract definitions, host/runtime trait defaults, request
-validation, workflow I/O derivation, runtime readiness, and session-runtime
-workflows.
+validation, graph edit-session methods, workflow I/O derivation, runtime
+readiness, and session-runtime workflows.
 
 ## Alternatives Rejected
 - Leave all helpers in `workflow.rs`: rejected because runtime readiness and
