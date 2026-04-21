@@ -145,7 +145,9 @@ Tasks:
   contracts. The Tauri runtime-registry command helper boundary now documents
   its transport-only role. Workflow-service tests, examples, and private
   workflow helper modules now document their public-contract and decomposition
-  roles; remaining inference nested READMEs are pending.
+  roles. Inference Python workers, managed runtime platform adapters, and the
+  reserved managed-binaries marker now document their runtime-artifact and
+  worker-contract boundaries.
 - Resolve the `src/generated/` documentation exception by either moving
   generated runtime state outside `src/` or replacing the nested Git repository
   with a backend-owned structured history store that allows a tracked
@@ -157,6 +159,12 @@ Tasks:
   generated components, schemas, and binding artifacts, with `Structured Producer Contract`.
 - Add a decision-traceability script adapted from the standards template and
   configure host-facing/structured-producer paths.
+
+Additional issue recorded during implementation:
+- `crates/inference/src/managed_runtime/managed_binaries/` is an empty,
+  unreferenced source-tree directory. It is now documented as a no-artifacts
+  marker, but M3 managed-runtime cleanup should remove it unless a real
+  source-owned fixture role is accepted.
 
 Verification:
 - Run the new decision-traceability script against changed directories.

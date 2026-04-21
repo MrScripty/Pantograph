@@ -20,6 +20,7 @@ and transition coordination without moving runtime lifecycle policy into Tauri.
 | `state.rs` | Durable managed runtime catalog, selection, and interrupted-job reconciliation helpers for restart-safe state projection. |
 | `llama_cpp_platform/` | Thin per-platform `llama.cpp` install/finalization/launch adapters kept behind the managed runtime boundary. |
 | `ollama_platform/` | Thin per-platform `Ollama` install and command-resolution adapters behind the same backend contracts. |
+| `managed_binaries/` | Reserved marker documenting that runtime binary artifacts must not be stored under `src/`. |
 
 ## Problem
 
