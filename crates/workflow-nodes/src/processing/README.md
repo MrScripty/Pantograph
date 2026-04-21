@@ -17,6 +17,7 @@ adapters such as the Python runtime.
 | `dependency_environment.rs` | Exposes dependency resolution and environment materialization as an explicit workflow step. |
 | `expand_settings.rs` | Declares the passthrough node that exposes inference-setting schemas as matching override-capable input/output ports. |
 | `json_filter.rs` | Filters JSON payloads without leaving the workflow graph. |
+| `ollama_inference.rs` | Declares the graph-visible local Ollama inference contract and reads only response fields consumed by node outputs. |
 | `vision_analysis.rs` | Declares image-to-text style vision analysis contracts. |
 
 ## Problem
@@ -65,6 +66,9 @@ instead of hiding behind generic JSON ports.
   source schema.
 - Reranker outputs must preserve stable ranked-result fields so saved workflows
   and templates can consume them without endpoint-specific parsing logic.
+- Ollama inference output mapping consumes the response text and model echo
+  only; unneeded `/api/generate` fields stay ignored by serde rather than being
+  stored as dead response state.
 
 ## Revisit Triggers
 - Another runtime requires a different environment handoff contract than the
@@ -77,6 +81,17 @@ and workflow frontend port synchronization.
 
 **External:** none directly; runtime-specific dependencies are owned by the
 host executors that consume these descriptors.
+- Reason: processing descriptors define graph contracts while host executors
+  own runtime-specific packages and endpoints.
+- Revisit trigger: a processing node begins owning runtime integration directly
+  rather than declaring a host-consumed descriptor.
+
+## Related ADRs
+- None identified as of 2026-04-21.
+- Reason: the Ollama response cleanup preserves the existing processing-node
+  contract and does not introduce a new architectural boundary.
+- Revisit trigger: processing nodes start owning runtime-specific response
+  state or shared endpoint integration policy.
 
 ## Usage Examples
 ```rust

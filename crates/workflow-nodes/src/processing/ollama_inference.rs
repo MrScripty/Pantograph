@@ -9,16 +9,13 @@ use node_engine::{
     ContextKeys, ExecutionMode, NodeCategory, PortDataType, PortMetadata, TaskDescriptor,
     TaskMetadata,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 /// Response structure from Ollama API
 #[derive(Debug, Deserialize)]
 struct OllamaResponse {
     model: String,
     response: String,
-    done: bool,
-    #[serde(default)]
-    context: Vec<i64>,
 }
 
 /// Ollama Inference Task

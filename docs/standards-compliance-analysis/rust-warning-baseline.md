@@ -8,7 +8,7 @@ Command used for the baseline:
 cargo check --workspace --all-features --message-format short
 ```
 
-The command completes successfully, but the workspace currently emits 97
+The command completes successfully, but the workspace currently emits 95
 warnings. This document classifies the warning debt required by M7 before
 `cargo clippy --workspace --all-targets --all-features -- -D warnings` can
 become a blocking quality gate.
@@ -23,7 +23,7 @@ The classification follows the updated standards expectations:
 
 | Crate/target | Count | Primary category | Resolution path |
 | --- | ---: | --- | --- |
-| `workflow-nodes` | 7 | Remove simple unused fields/imports; gate experimental model-provider executor | Remove unused Ollama response fields/imports; either register the model-provider executor or gate it behind an experimental feature. |
+| `workflow-nodes` | 5 | Gate experimental model-provider executor | Either register the model-provider executor or gate it behind an experimental feature. |
 | `pantograph-workflow-service` | 1 | Remove or test-scope helper | Remove the unused wrapper or move it behind `#[cfg(test)]`. |
 | `pantograph-embedded-runtime` | 2 | Remove unused imports | Drop unused public imports when the dirty embedded-runtime branch is normalized. |
 | `pantograph-uniffi` | 1 | Intentional retained ownership field | Rename/comment the field or add a narrow allow because it holds the executor alive for exported UniFFI resources. |
@@ -39,15 +39,20 @@ The classification follows the updated standards expectations:
 | `src/engine/multi_demand.rs:225` | `DemandExecutionBudget::sequential` unused | Test-scope | Resolved by compiling the helper only for tests, where the sequential dispatch-plan tests consume it. |
 | `src/engine/multi_demand.rs:290` | `DemandBatchExecutionOutcome::completed_targets` unused | Test-scope | Resolved by compiling the accessor only for tests, where batch outcome ordering assertions consume it. |
 
+### `crates/workflow-nodes`
+
+| Location | Warning | Classification | Resolution |
+| --- | --- | --- | --- |
+| `src/processing/ollama_inference.rs:12` | unused `Serialize` import | Remove | Resolved by importing only `Deserialize`. |
+| `src/processing/ollama_inference.rs:19` | `OllamaResponse.done` never read | Remove | Resolved by omitting the unconsumed response field; serde ignores unknown Ollama fields. |
+| `src/processing/ollama_inference.rs:21` | `OllamaResponse.context` never read | Remove | Resolved by omitting the unconsumed response field; context-token reuse is not part of this node contract. |
+
 ## Active Warnings
 
 ### `crates/workflow-nodes`
 
 | Location | Warning | Classification | Next action |
 | --- | --- | --- | --- |
-| `src/processing/ollama_inference.rs:12` | unused `Serialize` import | Remove | Delete the import. |
-| `src/processing/ollama_inference.rs:19` | `OllamaResponse.done` never read | Remove/use | Remove the field if streaming completion state is not consumed; serde ignores unknown response fields by default. |
-| `src/processing/ollama_inference.rs:21` | `OllamaResponse.context` never read | Remove/use | Remove the field unless the node needs to persist or chain Ollama context tokens. |
 | `src/input/model_provider.rs:162` | `ModelProviderExecutor` never constructed | Gate/use | Treat as experimental until registered by the node registry or moved behind a feature. |
 | `src/input/model_provider.rs:165` | `ModelProviderExecutor::factory` unused | Gate/use | Same as the executor: register, feature-gate, or delete the inactive implementation. |
 | `src/input/model_provider.rs:170` | `ModelProviderExecutorFactory` never constructed | Gate/use | Same as the executor. |
