@@ -12,6 +12,7 @@ packages.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `embedded_data_graph_execution.rs` | Owns embedded-runtime data-graph execution, terminal-node demand handling, runtime extension injection, and data-graph output collection. |
+| `embedded_edit_session_execution.rs` | Owns embedded-runtime edit-session graph execution, embedding runtime preparation, workflow event emission, runtime trace projection, and inference-runtime restore coordination. |
 | `embedding_workflow.rs` | Owns backend-side embedding workflow graph inspection, embedding model-path resolution, and workflow-specific runtime preparation rules. |
 | `embedded_runtime_lifecycle.rs` | Owns embedded-runtime constructors, host wiring, registry injection, accessors, and shutdown coordination. |
 | `embedded_workflow_graph_api.rs` | Owns embedded-runtime public graph persistence, edit-session, graph mutation, connection, and insert-preview facade methods that forward into the workflow service. |
@@ -100,6 +101,10 @@ embedded-runtime crate.
   `embedded_data_graph_execution.rs` so terminal-node demand handling and
   output shaping remain separate from graph persistence and edit-session API
   forwarding.
+- Embedded-runtime edit-session graph execution stays in
+  `embedded_edit_session_execution.rs` so embedding runtime preparation,
+  workflow event emission, runtime trace projection, and inference-runtime
+  restore coordination are isolated from the root facade.
 - Public embedded-runtime graph persistence, edit-session, mutation,
   connection, and insert-preview facade methods stay in
   `embedded_workflow_graph_api.rs` so graph API forwarding remains separate
