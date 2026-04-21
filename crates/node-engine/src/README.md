@@ -12,6 +12,7 @@ and keeps execution dispatch aligned with the contracts published by
 | `builder.rs` | Engine construction helpers and composition wiring. |
 | `composite_executor.rs` | Executor composition for multi-stage task execution. |
 | `core_executor.rs` | Main node-type dispatch, dependency-aware execution, and payload normalization. |
+| `core_executor/` | Focused core-executor helper and test modules behind the stable executor facade. |
 | `descriptor.rs` | Node descriptor contracts consumed by the graph and runtime layers. |
 | `engine.rs` | Workflow engine entry points and orchestration helpers. |
 | `engine/` | Focused graph-event and multi-demand helpers behind the stable engine facade. |
@@ -66,6 +67,8 @@ locally.
 ## Invariants
 - Built-in node dispatch in `core_executor.rs` must match descriptor inventory
   published by `workflow-nodes`.
+- Core executor behavior tests stay in `core_executor/tests.rs` so production
+  dispatch and helper extraction can proceed without growing the facade file.
 - Task-type inference must reflect execution semantics, not UI naming.
 - Input normalization may be permissive for additive compatibility, but output
   shapes must stay stable once published.

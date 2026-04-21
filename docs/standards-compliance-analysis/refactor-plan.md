@@ -402,6 +402,9 @@ Tasks:
   shared test harness and behavior-module index.
 - Split `crates/node-engine/src/core_executor.rs` by execution phases, blocking
   adapters, demand preparation, output handling, and tests.
+  Progress: core executor behavior tests now live in
+  `crates/node-engine/src/core_executor/tests.rs`, reducing the facade to
+  production dispatch and helper code before further execution-family splits.
 - Split `src/components/WorkflowGraph.svelte` and
   `packages/svelte-graph/src/components/WorkflowGraph.svelte` into graph canvas,
   connection drag, horseshoe insert, edge insert, selection, keyboard, and
