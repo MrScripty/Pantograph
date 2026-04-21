@@ -113,6 +113,8 @@ use crate::llm::commands::version::git_for_generated_history;
   component paths, and command-specific DTOs.
 - Outputs: serialized command responses, progress events, generated-component
   history views, and command-level error strings.
+- Runtime-debug tests should construct workflow diagnostics through the same
+  grouped snapshot input structs used by workflow transport code.
 - Lifecycle: commands execute per invoke request and must reuse app-composed
   services for long-lived runtime state.
 - Errors: backend error categories should be preserved or mapped explicitly

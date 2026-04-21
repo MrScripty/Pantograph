@@ -46,6 +46,8 @@ canonical workflow trace state, and `trace.rs` plus `types.rs` adapt
 backend-owned `WorkflowTraceStore`, runtime-lifecycle snapshots, and scheduler
 snapshots into the GUI diagnostics shape. This preserves one backend source of
 truth while still supporting desktop debug views and retained event history.
+Snapshot recording and overlay update APIs accept named input structs so
+runtime and scheduler facts cannot drift through positional argument lists.
 
 ## Alternatives Rejected
 - Rebuild diagnostics state in TypeScript.
@@ -62,6 +64,9 @@ truth while still supporting desktop debug views and retained event history.
 - Runtime lifecycle fallback and producer-aware runtime shaping remain
   backend-owned in `pantograph-embedded-runtime`.
 - Diagnostics payload casing and enum labels stay stable for the GUI consumer.
+- Large workflow event payloads should use boxed internal storage or named
+  input structs while preserving the existing serialized `{ type, data }`
+  event contract.
 
 ## Revisit Triggers
 - A non-Tauri host needs the same diagnostics projection boundary.

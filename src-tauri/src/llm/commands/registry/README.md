@@ -34,6 +34,8 @@ Use this directory for command-boundary helper types only. Helpers may normalize
 Tauri request payloads and aggregate already-owned backend facts into response
 DTOs, but they must not decide runtime readiness, backend selection, or
 workflow relevance.
+Tests that seed workflow diagnostics must use the same grouped runtime and
+scheduler snapshot input structs as production workflow transport code.
 
 ## Alternatives Rejected
 - Keep helper DTOs in `registry.rs`: rejected because the command file already
@@ -49,6 +51,8 @@ workflow relevance.
 - Helpers remain free of Tauri macros so they can be unit tested directly.
 - Runtime selection, readiness, and recovery policy stay outside this
   directory.
+- Runtime debug fixtures must not reintroduce positional diagnostics snapshot
+  construction that production code has already removed.
 
 ## Revisit Triggers
 - Runtime debug payloads become a public non-Tauri API.

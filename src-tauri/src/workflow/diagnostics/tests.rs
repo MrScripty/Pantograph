@@ -398,9 +398,9 @@ fn node_engine_parallel_waiting_trace_projection_tracks_waiting_state() {
 #[test]
 fn runtime_and_scheduler_snapshots_are_backend_owned() {
     let store = WorkflowDiagnosticsStore::default();
-    store.update_runtime_snapshot(
-        Some("wf-runtime".to_string()),
-        Some(pantograph_workflow_service::WorkflowCapabilitiesResponse {
+    store.update_runtime_snapshot(WorkflowRuntimeSnapshotUpdate {
+        workflow_id: Some("wf-runtime".to_string()),
+        capabilities: Some(pantograph_workflow_service::WorkflowCapabilitiesResponse {
             max_input_bindings: 4,
             max_output_targets: 2,
             max_value_bytes: 1000,
@@ -423,10 +423,10 @@ fn runtime_and_scheduler_snapshots_are_backend_owned() {
             }],
             runtime_capabilities: Vec::new(),
         }),
-        None,
-        Some("/models/main.gguf".to_string()),
-        Some("/models/embed.gguf".to_string()),
-        Some(inference::RuntimeLifecycleSnapshot {
+        last_error: None,
+        active_model_target: Some("/models/main.gguf".to_string()),
+        embedding_model_target: Some("/models/embed.gguf".to_string()),
+        active_runtime_snapshot: Some(inference::RuntimeLifecycleSnapshot {
             runtime_id: Some("llama.cpp".to_string()),
             runtime_instance_id: Some("llama-cpp-1".to_string()),
             warmup_started_at_ms: Some(4_900),
@@ -437,7 +437,7 @@ fn runtime_and_scheduler_snapshots_are_backend_owned() {
             active: true,
             last_error: None,
         }),
-        Some(inference::RuntimeLifecycleSnapshot {
+        embedding_runtime_snapshot: Some(inference::RuntimeLifecycleSnapshot {
             runtime_id: Some("llama.cpp.embedding".to_string()),
             runtime_instance_id: Some("llama-cpp-embedding-2".to_string()),
             warmup_started_at_ms: Some(4_800),
@@ -448,13 +448,13 @@ fn runtime_and_scheduler_snapshots_are_backend_owned() {
             active: true,
             last_error: None,
         }),
-        Vec::new(),
-        5_000,
-    );
-    let snapshot = store.update_scheduler_snapshot(
-        Some("wf-runtime".to_string()),
-        Some("session-1".to_string()),
-        Some(pantograph_workflow_service::WorkflowSessionSummary {
+        managed_runtimes: Vec::new(),
+        captured_at_ms: 5_000,
+    });
+    let snapshot = store.update_scheduler_snapshot(WorkflowSchedulerSnapshotUpdate {
+        workflow_id: Some("wf-runtime".to_string()),
+        session_id: Some("session-1".to_string()),
+        session: Some(pantograph_workflow_service::WorkflowSessionSummary {
             session_id: "session-1".to_string(),
             workflow_id: "wf-runtime".to_string(),
             session_kind: WorkflowSessionKind::Workflow,
@@ -464,7 +464,7 @@ fn runtime_and_scheduler_snapshots_are_backend_owned() {
             queued_runs: 1,
             run_count: 3,
         }),
-        vec![pantograph_workflow_service::WorkflowSessionQueueItem {
+        items: vec![pantograph_workflow_service::WorkflowSessionQueueItem {
             queue_id: "queue-1".to_string(),
             run_id: Some("run-1".to_string()),
             enqueued_at_ms: None,
@@ -475,10 +475,10 @@ fn runtime_and_scheduler_snapshots_are_backend_owned() {
             scheduler_decision_reason: None,
             status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
         }],
-        None,
-        None,
-        6_000,
-    );
+        diagnostics: None,
+        last_error: None,
+        captured_at_ms: 6_000,
+    });
 
     assert!(snapshot.runs_by_id.is_empty());
     assert!(snapshot.run_order.is_empty());
@@ -541,10 +541,10 @@ fn workflow_diagnostics_projection_preserves_scheduler_snapshot_diagnostics() {
         runtime_registry: None,
     };
 
-    let snapshot = store.update_scheduler_snapshot(
-        Some("wf-runtime".to_string()),
-        Some("session-1".to_string()),
-        Some(pantograph_workflow_service::WorkflowSessionSummary {
+    let snapshot = store.update_scheduler_snapshot(WorkflowSchedulerSnapshotUpdate {
+        workflow_id: Some("wf-runtime".to_string()),
+        session_id: Some("session-1".to_string()),
+        session: Some(pantograph_workflow_service::WorkflowSessionSummary {
             session_id: "session-1".to_string(),
             workflow_id: "wf-runtime".to_string(),
             session_kind: WorkflowSessionKind::Workflow,
@@ -554,11 +554,11 @@ fn workflow_diagnostics_projection_preserves_scheduler_snapshot_diagnostics() {
             queued_runs: 1,
             run_count: 3,
         }),
-        Vec::new(),
-        Some(diagnostics.clone()),
-        None,
-        6_000,
-    );
+        items: Vec::new(),
+        diagnostics: Some(diagnostics.clone()),
+        last_error: None,
+        captured_at_ms: 6_000,
+    });
 
     assert_eq!(snapshot.scheduler.diagnostics, Some(diagnostics));
 }
@@ -595,17 +595,17 @@ fn runtime_snapshot_preserves_managed_runtime_views() {
         install_history: Vec::new(),
     };
 
-    let snapshot = store.update_runtime_snapshot(
-        Some("wf-runtime".to_string()),
-        None,
-        Some("runtime not ready".to_string()),
-        Some("/models/main.gguf".to_string()),
-        None,
-        None,
-        None,
-        vec![managed_runtime],
-        5_000,
-    );
+    let snapshot = store.update_runtime_snapshot(WorkflowRuntimeSnapshotUpdate {
+        workflow_id: Some("wf-runtime".to_string()),
+        capabilities: None,
+        last_error: Some("runtime not ready".to_string()),
+        active_model_target: Some("/models/main.gguf".to_string()),
+        embedding_model_target: None,
+        active_runtime_snapshot: None,
+        embedding_runtime_snapshot: None,
+        managed_runtimes: vec![managed_runtime],
+        captured_at_ms: 5_000,
+    });
 
     assert_eq!(snapshot.runtime.managed_runtimes.len(), 1);
     let runtime = &snapshot.runtime.managed_runtimes[0];
@@ -627,9 +627,9 @@ fn runtime_snapshot_preserves_managed_runtime_views() {
 #[test]
 fn runtime_snapshot_falls_back_to_selected_capability_when_lifecycle_is_absent() {
     let store = WorkflowDiagnosticsStore::default();
-    let snapshot = store.update_runtime_snapshot(
-        Some("wf-runtime".to_string()),
-        Some(pantograph_workflow_service::WorkflowCapabilitiesResponse {
+    let snapshot = store.update_runtime_snapshot(WorkflowRuntimeSnapshotUpdate {
+        workflow_id: Some("wf-runtime".to_string()),
+        capabilities: Some(pantograph_workflow_service::WorkflowCapabilitiesResponse {
             max_input_bindings: 4,
             max_output_targets: 2,
             max_value_bytes: 1000,
@@ -665,14 +665,14 @@ fn runtime_snapshot_falls_back_to_selected_capability_when_lifecycle_is_absent()
                 unavailable_reason: None,
             }],
         }),
-        None,
-        Some("black-forest-labs/flux.1-schnell".to_string()),
-        None,
-        None,
-        None,
-        Vec::new(),
-        5_000,
-    );
+        last_error: None,
+        active_model_target: Some("black-forest-labs/flux.1-schnell".to_string()),
+        embedding_model_target: None,
+        active_runtime_snapshot: None,
+        embedding_runtime_snapshot: None,
+        managed_runtimes: Vec::new(),
+        captured_at_ms: 5_000,
+    });
 
     assert_eq!(snapshot.runtime.workflow_id.as_deref(), Some("wf-runtime"));
     assert_eq!(
@@ -704,9 +704,9 @@ fn runtime_snapshot_falls_back_to_selected_capability_when_lifecycle_is_absent()
 #[test]
 fn runtime_snapshot_matches_required_backend_alias_when_selected_runtime_is_absent() {
     let store = WorkflowDiagnosticsStore::default();
-    let snapshot = store.update_runtime_snapshot(
-        Some("wf-onnx".to_string()),
-        Some(pantograph_workflow_service::WorkflowCapabilitiesResponse {
+    let snapshot = store.update_runtime_snapshot(WorkflowRuntimeSnapshotUpdate {
+        workflow_id: Some("wf-onnx".to_string()),
+        capabilities: Some(pantograph_workflow_service::WorkflowCapabilitiesResponse {
             max_input_bindings: 4,
             max_output_targets: 2,
             max_value_bytes: 1000,
@@ -742,14 +742,14 @@ fn runtime_snapshot_matches_required_backend_alias_when_selected_runtime_is_abse
                 unavailable_reason: None,
             }],
         }),
-        None,
-        Some("kitten-tts".to_string()),
-        None,
-        None,
-        None,
-        Vec::new(),
-        5_000,
-    );
+        last_error: None,
+        active_model_target: Some("kitten-tts".to_string()),
+        embedding_model_target: None,
+        active_runtime_snapshot: None,
+        embedding_runtime_snapshot: None,
+        managed_runtimes: Vec::new(),
+        captured_at_ms: 5_000,
+    });
 
     assert_eq!(
         snapshot
@@ -772,9 +772,9 @@ fn runtime_snapshot_matches_required_backend_alias_when_selected_runtime_is_abse
 #[test]
 fn runtime_snapshot_normalizes_selected_capability_runtime_id_when_lifecycle_is_absent() {
     let store = WorkflowDiagnosticsStore::default();
-    let snapshot = store.update_runtime_snapshot(
-        Some("wf-runtime".to_string()),
-        Some(pantograph_workflow_service::WorkflowCapabilitiesResponse {
+    let snapshot = store.update_runtime_snapshot(WorkflowRuntimeSnapshotUpdate {
+        workflow_id: Some("wf-runtime".to_string()),
+        capabilities: Some(pantograph_workflow_service::WorkflowCapabilitiesResponse {
             max_input_bindings: 4,
             max_output_targets: 2,
             max_value_bytes: 1000,
@@ -810,14 +810,14 @@ fn runtime_snapshot_normalizes_selected_capability_runtime_id_when_lifecycle_is_
                 unavailable_reason: None,
             }],
         }),
-        None,
-        Some("black-forest-labs/flux.1-schnell".to_string()),
-        None,
-        None,
-        None,
-        Vec::new(),
-        5_000,
-    );
+        last_error: None,
+        active_model_target: Some("black-forest-labs/flux.1-schnell".to_string()),
+        embedding_model_target: None,
+        active_runtime_snapshot: None,
+        embedding_runtime_snapshot: None,
+        managed_runtimes: Vec::new(),
+        captured_at_ms: 5_000,
+    });
 
     assert_eq!(
         snapshot
@@ -832,12 +832,12 @@ fn runtime_snapshot_normalizes_selected_capability_runtime_id_when_lifecycle_is_
 #[test]
 fn runtime_snapshot_event_carries_runtime_lifecycle_into_trace_store() {
     let store = WorkflowDiagnosticsStore::default();
-    let snapshot = store.record_runtime_snapshot(
-        "wf-runtime".to_string(),
-        "exec-runtime".to_string(),
-        5_000,
-        None,
-        pantograph_workflow_service::WorkflowTraceRuntimeMetrics {
+    let snapshot = store.record_runtime_snapshot(WorkflowRuntimeSnapshotRecord {
+        workflow_id: "wf-runtime".to_string(),
+        execution_id: "exec-runtime".to_string(),
+        captured_at_ms: 5_000,
+        capabilities: None,
+        trace_runtime_metrics: pantograph_workflow_service::WorkflowTraceRuntimeMetrics {
             runtime_id: Some("llama.cpp".to_string()),
             observed_runtime_ids: vec!["llama.cpp".to_string()],
             runtime_instance_id: Some("llama-cpp-1".to_string()),
@@ -848,9 +848,9 @@ fn runtime_snapshot_event_carries_runtime_lifecycle_into_trace_store() {
             runtime_reused: Some(false),
             lifecycle_decision_reason: Some("runtime_ready".to_string()),
         },
-        Some("/models/main.gguf".to_string()),
-        Some("/models/embed.gguf".to_string()),
-        Some(inference::RuntimeLifecycleSnapshot {
+        active_model_target: Some("/models/main.gguf".to_string()),
+        embedding_model_target: Some("/models/embed.gguf".to_string()),
+        active_runtime_snapshot: Some(inference::RuntimeLifecycleSnapshot {
             runtime_id: Some("llama.cpp".to_string()),
             runtime_instance_id: Some("llama-cpp-1".to_string()),
             warmup_started_at_ms: Some(4_900),
@@ -861,7 +861,7 @@ fn runtime_snapshot_event_carries_runtime_lifecycle_into_trace_store() {
             active: true,
             last_error: None,
         }),
-        Some(inference::RuntimeLifecycleSnapshot {
+        embedding_runtime_snapshot: Some(inference::RuntimeLifecycleSnapshot {
             runtime_id: Some("llama.cpp.embedding".to_string()),
             runtime_instance_id: Some("llama-cpp-embedding-7".to_string()),
             warmup_started_at_ms: Some(4_700),
@@ -872,9 +872,9 @@ fn runtime_snapshot_event_carries_runtime_lifecycle_into_trace_store() {
             active: true,
             last_error: None,
         }),
-        Vec::new(),
-        None,
-    );
+        managed_runtimes: Vec::new(),
+        error: None,
+    });
 
     let trace = store
         .trace_snapshot(pantograph_workflow_service::WorkflowTraceSnapshotRequest {
@@ -1071,12 +1071,12 @@ fn inference_runtime_lifecycle_snapshot_from_diagnostics_canonicalizes_runtime_a
 #[test]
 fn scheduler_snapshot_event_carries_authoritative_queue_metrics_into_trace_store() {
     let store = WorkflowDiagnosticsStore::default();
-    let projection = store.record_scheduler_snapshot(
-        None,
-        "edit-session-1".to_string(),
-        "edit-session-1".to_string(),
-        5_000,
-        Some(pantograph_workflow_service::WorkflowSessionSummary {
+    let projection = store.record_scheduler_snapshot(WorkflowSchedulerSnapshotRecord {
+        workflow_id: None,
+        execution_id: "edit-session-1".to_string(),
+        session_id: "edit-session-1".to_string(),
+        captured_at_ms: 5_000,
+        session: Some(pantograph_workflow_service::WorkflowSessionSummary {
             session_id: "edit-session-1".to_string(),
             workflow_id: "edit-session-1".to_string(),
             session_kind: WorkflowSessionKind::Edit,
@@ -1086,7 +1086,7 @@ fn scheduler_snapshot_event_carries_authoritative_queue_metrics_into_trace_store
             queued_runs: 1,
             run_count: 2,
         }),
-        vec![pantograph_workflow_service::WorkflowSessionQueueItem {
+        items: vec![pantograph_workflow_service::WorkflowSessionQueueItem {
             queue_id: "edit-session-1".to_string(),
             run_id: Some("edit-session-1".to_string()),
             enqueued_at_ms: Some(4_750),
@@ -1097,9 +1097,9 @@ fn scheduler_snapshot_event_carries_authoritative_queue_metrics_into_trace_store
             scheduler_decision_reason: None,
             status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
         }],
-        None,
-        None,
-    );
+        diagnostics: None,
+        error: None,
+    });
     assert_eq!(
         projection.scheduler.trace_execution_id.as_deref(),
         Some("edit-session-1")
@@ -1136,12 +1136,12 @@ fn scheduler_snapshot_event_carries_authoritative_queue_metrics_into_trace_store
 #[test]
 fn scheduler_snapshot_event_carries_trace_execution_id_into_projection() {
     let store = WorkflowDiagnosticsStore::default();
-    let projection = store.record_scheduler_snapshot(
-        Some("wf-1".to_string()),
-        "run-1".to_string(),
-        "session-1".to_string(),
-        5_000,
-        Some(pantograph_workflow_service::WorkflowSessionSummary {
+    let projection = store.record_scheduler_snapshot(WorkflowSchedulerSnapshotRecord {
+        workflow_id: Some("wf-1".to_string()),
+        execution_id: "run-1".to_string(),
+        session_id: "session-1".to_string(),
+        captured_at_ms: 5_000,
+        session: Some(pantograph_workflow_service::WorkflowSessionSummary {
             session_id: "session-1".to_string(),
             workflow_id: "wf-1".to_string(),
             session_kind: WorkflowSessionKind::Workflow,
@@ -1151,7 +1151,7 @@ fn scheduler_snapshot_event_carries_trace_execution_id_into_projection() {
             queued_runs: 1,
             run_count: 2,
         }),
-        vec![pantograph_workflow_service::WorkflowSessionQueueItem {
+        items: vec![pantograph_workflow_service::WorkflowSessionQueueItem {
             queue_id: "queue-1".to_string(),
             run_id: Some("run-1".to_string()),
             enqueued_at_ms: Some(100),
@@ -1162,9 +1162,9 @@ fn scheduler_snapshot_event_carries_trace_execution_id_into_projection() {
             scheduler_decision_reason: None,
             status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
         }],
-        None,
-        None,
-    );
+        diagnostics: None,
+        error: None,
+    });
 
     assert_eq!(projection.scheduler.workflow_id.as_deref(), Some("wf-1"));
     assert_eq!(
@@ -1190,26 +1190,17 @@ fn clear_history_preserves_runtime_and_scheduler_snapshots() {
         },
         1_000,
     );
-    store.update_runtime_snapshot(
-        Some("wf-1".to_string()),
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        Vec::new(),
-        2_000,
-    );
-    store.update_scheduler_snapshot(
-        Some("wf-1".to_string()),
-        Some("exec-1".to_string()),
-        None,
-        Vec::new(),
-        None,
-        None,
-        2_100,
-    );
+    store.update_runtime_snapshot(WorkflowRuntimeSnapshotUpdate {
+        workflow_id: Some("wf-1".to_string()),
+        captured_at_ms: 2_000,
+        ..Default::default()
+    });
+    store.update_scheduler_snapshot(WorkflowSchedulerSnapshotUpdate {
+        workflow_id: Some("wf-1".to_string()),
+        session_id: Some("exec-1".to_string()),
+        captured_at_ms: 2_100,
+        ..Default::default()
+    });
 
     let snapshot = store.clear_history();
 
@@ -1243,12 +1234,12 @@ fn clear_history_reconciles_restarted_backend_trace_and_runtime_snapshots() {
     assert!(cleared.runs_by_id.is_empty());
     assert!(cleared.run_order.is_empty());
 
-    let projection = store.record_scheduler_snapshot(
-        Some("wf-1".to_string()),
-        "restored-exec".to_string(),
-        "session-1".to_string(),
-        2_000,
-        Some(pantograph_workflow_service::WorkflowSessionSummary {
+    let projection = store.record_scheduler_snapshot(WorkflowSchedulerSnapshotRecord {
+        workflow_id: Some("wf-1".to_string()),
+        execution_id: "restored-exec".to_string(),
+        session_id: "session-1".to_string(),
+        captured_at_ms: 2_000,
+        session: Some(pantograph_workflow_service::WorkflowSessionSummary {
             session_id: "session-1".to_string(),
             workflow_id: "wf-1".to_string(),
             session_kind: WorkflowSessionKind::Workflow,
@@ -1258,7 +1249,7 @@ fn clear_history_reconciles_restarted_backend_trace_and_runtime_snapshots() {
             queued_runs: 1,
             run_count: 1,
         }),
-        vec![pantograph_workflow_service::WorkflowSessionQueueItem {
+        items: vec![pantograph_workflow_service::WorkflowSessionQueueItem {
             queue_id: "queue-1".to_string(),
             run_id: Some("restored-exec".to_string()),
             enqueued_at_ms: Some(1_950),
@@ -1269,9 +1260,9 @@ fn clear_history_reconciles_restarted_backend_trace_and_runtime_snapshots() {
             scheduler_decision_reason: None,
             status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
         }],
-        None,
-        None,
-    );
+        diagnostics: None,
+        error: None,
+    });
 
     assert_eq!(projection.run_order, vec!["restored-exec".to_string()]);
     assert!(!projection.runs_by_id.contains_key("stale-exec"));
@@ -1280,13 +1271,10 @@ fn clear_history_reconciles_restarted_backend_trace_and_runtime_snapshots() {
         Some("restored-exec")
     );
 
-    let runtime_projection = store.update_runtime_snapshot(
-        Some("wf-1".to_string()),
-        None,
-        None,
-        Some("/models/restarted.gguf".to_string()),
-        None,
-        Some(inference::RuntimeLifecycleSnapshot {
+    let runtime_projection = store.update_runtime_snapshot(WorkflowRuntimeSnapshotUpdate {
+        workflow_id: Some("wf-1".to_string()),
+        active_model_target: Some("/models/restarted.gguf".to_string()),
+        active_runtime_snapshot: Some(inference::RuntimeLifecycleSnapshot {
             runtime_id: Some("llama.cpp".to_string()),
             runtime_instance_id: Some("llama-cpp-restored".to_string()),
             warmup_started_at_ms: Some(1_900),
@@ -1297,10 +1285,9 @@ fn clear_history_reconciles_restarted_backend_trace_and_runtime_snapshots() {
             active: true,
             last_error: None,
         }),
-        None,
-        Vec::new(),
-        2_010,
-    );
+        captured_at_ms: 2_010,
+        ..Default::default()
+    });
 
     assert_eq!(
         runtime_projection.run_order,
@@ -1585,12 +1572,12 @@ fn restarted_run_clears_stale_graph_mutation_overlay_state() {
 fn replayed_backend_scheduler_and_runtime_snapshots_do_not_duplicate_trace() {
     let store = WorkflowDiagnosticsStore::default();
 
-    store.record_scheduler_snapshot(
-        Some("wf-1".to_string()),
-        "exec-1".to_string(),
-        "session-1".to_string(),
-        1_000,
-        Some(pantograph_workflow_service::WorkflowSessionSummary {
+    store.record_scheduler_snapshot(WorkflowSchedulerSnapshotRecord {
+        workflow_id: Some("wf-1".to_string()),
+        execution_id: "exec-1".to_string(),
+        session_id: "session-1".to_string(),
+        captured_at_ms: 1_000,
+        session: Some(pantograph_workflow_service::WorkflowSessionSummary {
             session_id: "session-1".to_string(),
             workflow_id: "wf-1".to_string(),
             session_kind: WorkflowSessionKind::Workflow,
@@ -1600,7 +1587,7 @@ fn replayed_backend_scheduler_and_runtime_snapshots_do_not_duplicate_trace() {
             queued_runs: 1,
             run_count: 1,
         }),
-        vec![pantograph_workflow_service::WorkflowSessionQueueItem {
+        items: vec![pantograph_workflow_service::WorkflowSessionQueueItem {
             queue_id: "queue-1".to_string(),
             run_id: Some("exec-1".to_string()),
             enqueued_at_ms: Some(900),
@@ -1611,15 +1598,15 @@ fn replayed_backend_scheduler_and_runtime_snapshots_do_not_duplicate_trace() {
             scheduler_decision_reason: None,
             status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
         }],
-        None,
-        None,
-    );
-    store.record_runtime_snapshot(
-        "wf-1".to_string(),
-        "exec-1".to_string(),
-        1_010,
-        None,
-        pantograph_workflow_service::WorkflowTraceRuntimeMetrics {
+        diagnostics: None,
+        error: None,
+    });
+    store.record_runtime_snapshot(WorkflowRuntimeSnapshotRecord {
+        workflow_id: "wf-1".to_string(),
+        execution_id: "exec-1".to_string(),
+        captured_at_ms: 1_010,
+        capabilities: None,
+        trace_runtime_metrics: pantograph_workflow_service::WorkflowTraceRuntimeMetrics {
             runtime_id: Some("llama.cpp".to_string()),
             observed_runtime_ids: vec!["llama.cpp".to_string()],
             runtime_instance_id: Some("llama-cpp-1".to_string()),
@@ -1630,9 +1617,9 @@ fn replayed_backend_scheduler_and_runtime_snapshots_do_not_duplicate_trace() {
             runtime_reused: Some(false),
             lifecycle_decision_reason: Some("runtime_ready".to_string()),
         },
-        Some("/models/first.gguf".to_string()),
-        None,
-        Some(inference::RuntimeLifecycleSnapshot {
+        active_model_target: Some("/models/first.gguf".to_string()),
+        embedding_model_target: None,
+        active_runtime_snapshot: Some(inference::RuntimeLifecycleSnapshot {
             runtime_id: Some("llama.cpp".to_string()),
             runtime_instance_id: Some("llama-cpp-1".to_string()),
             warmup_started_at_ms: Some(880),
@@ -1643,17 +1630,17 @@ fn replayed_backend_scheduler_and_runtime_snapshots_do_not_duplicate_trace() {
             active: true,
             last_error: None,
         }),
-        None,
-        Vec::new(),
-        None,
-    );
+        embedding_runtime_snapshot: None,
+        managed_runtimes: Vec::new(),
+        error: None,
+    });
 
-    store.record_scheduler_snapshot(
-        Some("wf-1".to_string()),
-        "exec-1".to_string(),
-        "session-1".to_string(),
-        1_100,
-        Some(pantograph_workflow_service::WorkflowSessionSummary {
+    store.record_scheduler_snapshot(WorkflowSchedulerSnapshotRecord {
+        workflow_id: Some("wf-1".to_string()),
+        execution_id: "exec-1".to_string(),
+        session_id: "session-1".to_string(),
+        captured_at_ms: 1_100,
+        session: Some(pantograph_workflow_service::WorkflowSessionSummary {
             session_id: "session-1".to_string(),
             workflow_id: "wf-1".to_string(),
             session_kind: WorkflowSessionKind::Workflow,
@@ -1663,7 +1650,7 @@ fn replayed_backend_scheduler_and_runtime_snapshots_do_not_duplicate_trace() {
             queued_runs: 1,
             run_count: 1,
         }),
-        vec![pantograph_workflow_service::WorkflowSessionQueueItem {
+        items: vec![pantograph_workflow_service::WorkflowSessionQueueItem {
             queue_id: "queue-1".to_string(),
             run_id: Some("exec-1".to_string()),
             enqueued_at_ms: Some(900),
@@ -1674,16 +1661,16 @@ fn replayed_backend_scheduler_and_runtime_snapshots_do_not_duplicate_trace() {
             scheduler_decision_reason: None,
             status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
         }],
-        None,
-        None,
-    );
+        diagnostics: None,
+        error: None,
+    });
 
-    store.record_runtime_snapshot(
-        "wf-1".to_string(),
-        "exec-1".to_string(),
-        1_120,
-        None,
-        pantograph_workflow_service::WorkflowTraceRuntimeMetrics {
+    store.record_runtime_snapshot(WorkflowRuntimeSnapshotRecord {
+        workflow_id: "wf-1".to_string(),
+        execution_id: "exec-1".to_string(),
+        captured_at_ms: 1_120,
+        capabilities: None,
+        trace_runtime_metrics: pantograph_workflow_service::WorkflowTraceRuntimeMetrics {
             runtime_id: Some("llama.cpp".to_string()),
             observed_runtime_ids: vec!["llama.cpp".to_string(), "llama_cpp".to_string()],
             runtime_instance_id: Some("llama-cpp-1".to_string()),
@@ -1694,9 +1681,9 @@ fn replayed_backend_scheduler_and_runtime_snapshots_do_not_duplicate_trace() {
             runtime_reused: Some(true),
             lifecycle_decision_reason: Some("runtime_reused".to_string()),
         },
-        Some("/models/replayed.gguf".to_string()),
-        None,
-        Some(inference::RuntimeLifecycleSnapshot {
+        active_model_target: Some("/models/replayed.gguf".to_string()),
+        embedding_model_target: None,
+        active_runtime_snapshot: Some(inference::RuntimeLifecycleSnapshot {
             runtime_id: Some("llama.cpp".to_string()),
             runtime_instance_id: Some("llama-cpp-1".to_string()),
             warmup_started_at_ms: Some(880),
@@ -1707,10 +1694,10 @@ fn replayed_backend_scheduler_and_runtime_snapshots_do_not_duplicate_trace() {
             active: true,
             last_error: None,
         }),
-        None,
-        Vec::new(),
-        None,
-    );
+        embedding_runtime_snapshot: None,
+        managed_runtimes: Vec::new(),
+        error: None,
+    });
 
     let trace_snapshot = store
         .trace_snapshot(pantograph_workflow_service::WorkflowTraceSnapshotRequest {

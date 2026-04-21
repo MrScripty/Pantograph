@@ -7,6 +7,8 @@
 use super::commands::{SharedWorkflowDiagnosticsStore, SharedWorkflowService};
 use super::diagnostics::{
     WorkflowDiagnosticsProjection, WorkflowDiagnosticsProjectionContext, WorkflowDiagnosticsStore,
+    WorkflowRuntimeSnapshotRecord, WorkflowRuntimeSnapshotUpdate, WorkflowSchedulerSnapshotRecord,
+    WorkflowSchedulerSnapshotUpdate,
 };
 use pantograph_embedded_runtime::ManagedRuntimeManagerRuntimeView;
 use pantograph_workflow_service::{
@@ -45,40 +47,40 @@ pub(crate) fn record_headless_scheduler_snapshot(
                         .or_else(|| requested_workflow_id.clone()),
                     requested_workflow_name,
                 );
-                diagnostics_store.record_scheduler_snapshot(
-                    snapshot.workflow_id,
-                    observed_execution_id.clone(),
-                    snapshot.session_id,
+                diagnostics_store.record_scheduler_snapshot(WorkflowSchedulerSnapshotRecord {
+                    workflow_id: snapshot.workflow_id,
+                    execution_id: observed_execution_id.clone(),
+                    session_id: snapshot.session_id,
                     captured_at_ms,
-                    Some(snapshot.session),
-                    snapshot.items,
-                    snapshot.diagnostics,
-                    None,
-                );
+                    session: Some(snapshot.session),
+                    items: snapshot.items,
+                    diagnostics: snapshot.diagnostics,
+                    error: None,
+                });
                 Some(observed_execution_id)
             } else {
-                diagnostics_store.update_scheduler_snapshot(
-                    snapshot.workflow_id,
-                    Some(snapshot.session_id),
-                    Some(snapshot.session),
-                    snapshot.items,
-                    snapshot.diagnostics,
-                    None,
+                diagnostics_store.update_scheduler_snapshot(WorkflowSchedulerSnapshotUpdate {
+                    workflow_id: snapshot.workflow_id,
+                    session_id: Some(snapshot.session_id),
+                    session: Some(snapshot.session),
+                    items: snapshot.items,
+                    diagnostics: snapshot.diagnostics,
+                    last_error: None,
                     captured_at_ms,
-                );
+                });
                 None
             }
         }
         Err(error) => {
-            diagnostics_store.update_scheduler_snapshot(
-                requested_workflow_id,
-                Some(requested_session_id.to_string()),
-                None,
-                Vec::new(),
-                None,
-                Some(error.to_envelope_json()),
+            diagnostics_store.update_scheduler_snapshot(WorkflowSchedulerSnapshotUpdate {
+                workflow_id: requested_workflow_id,
+                session_id: Some(requested_session_id.to_string()),
+                session: None,
+                items: Vec::new(),
+                diagnostics: None,
+                last_error: Some(error.to_envelope_json()),
                 captured_at_ms,
-            );
+            });
             None
         }
     }
@@ -99,60 +101,60 @@ pub(crate) fn record_headless_runtime_snapshot(
 ) {
     match (trace_execution_id, capabilities_result) {
         (Some(trace_execution_id), Ok(capabilities)) => {
-            diagnostics_store.record_runtime_snapshot(
+            diagnostics_store.record_runtime_snapshot(WorkflowRuntimeSnapshotRecord {
                 workflow_id,
-                trace_execution_id.to_string(),
+                execution_id: trace_execution_id.to_string(),
                 captured_at_ms,
-                Some(capabilities),
+                capabilities: Some(capabilities),
                 trace_runtime_metrics,
-                active_model_target.clone(),
-                embedding_model_target.clone(),
-                active_runtime_snapshot.clone(),
-                embedding_runtime_snapshot.clone(),
-                managed_runtimes.clone(),
-                None,
-            );
+                active_model_target: active_model_target.clone(),
+                embedding_model_target: embedding_model_target.clone(),
+                active_runtime_snapshot: active_runtime_snapshot.clone(),
+                embedding_runtime_snapshot: embedding_runtime_snapshot.clone(),
+                managed_runtimes: managed_runtimes.clone(),
+                error: None,
+            });
         }
         (Some(trace_execution_id), Err(error)) => {
-            diagnostics_store.record_runtime_snapshot(
+            diagnostics_store.record_runtime_snapshot(WorkflowRuntimeSnapshotRecord {
                 workflow_id,
-                trace_execution_id.to_string(),
+                execution_id: trace_execution_id.to_string(),
                 captured_at_ms,
-                None,
+                capabilities: None,
                 trace_runtime_metrics,
-                active_model_target.clone(),
-                embedding_model_target.clone(),
-                active_runtime_snapshot.clone(),
-                embedding_runtime_snapshot.clone(),
-                managed_runtimes.clone(),
-                Some(error.to_envelope_json()),
-            );
+                active_model_target: active_model_target.clone(),
+                embedding_model_target: embedding_model_target.clone(),
+                active_runtime_snapshot: active_runtime_snapshot.clone(),
+                embedding_runtime_snapshot: embedding_runtime_snapshot.clone(),
+                managed_runtimes: managed_runtimes.clone(),
+                error: Some(error.to_envelope_json()),
+            });
         }
         (None, Ok(capabilities)) => {
-            diagnostics_store.update_runtime_snapshot(
-                Some(workflow_id),
-                Some(capabilities),
-                None,
+            diagnostics_store.update_runtime_snapshot(WorkflowRuntimeSnapshotUpdate {
+                workflow_id: Some(workflow_id),
+                capabilities: Some(capabilities),
+                last_error: None,
                 active_model_target,
                 embedding_model_target,
                 active_runtime_snapshot,
                 embedding_runtime_snapshot,
                 managed_runtimes,
                 captured_at_ms,
-            );
+            });
         }
         (None, Err(error)) => {
-            diagnostics_store.update_runtime_snapshot(
-                Some(workflow_id),
-                None,
-                Some(error.to_envelope_json()),
+            diagnostics_store.update_runtime_snapshot(WorkflowRuntimeSnapshotUpdate {
+                workflow_id: Some(workflow_id),
+                capabilities: None,
+                last_error: Some(error.to_envelope_json()),
                 active_model_target,
                 embedding_model_target,
                 active_runtime_snapshot,
                 embedding_runtime_snapshot,
                 managed_runtimes,
                 captured_at_ms,
-            );
+            });
         }
     }
 }
@@ -277,15 +279,15 @@ pub(crate) fn workflow_diagnostics_snapshot_projection(
             captured_at_ms,
         );
     } else {
-        diagnostics_store.update_scheduler_snapshot(
-            None,
-            None,
-            None,
-            Vec::new(),
-            None,
-            None,
+        diagnostics_store.update_scheduler_snapshot(WorkflowSchedulerSnapshotUpdate {
+            workflow_id: None,
+            session_id: None,
+            session: None,
+            items: Vec::new(),
+            diagnostics: None,
+            last_error: None,
             captured_at_ms,
-        );
+        });
     }
 
     if let Some(workflow_id) = workflow_id.clone() {
@@ -307,17 +309,17 @@ pub(crate) fn workflow_diagnostics_snapshot_projection(
             captured_at_ms,
         );
     } else {
-        diagnostics_store.update_runtime_snapshot(
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            Vec::new(),
+        diagnostics_store.update_runtime_snapshot(WorkflowRuntimeSnapshotUpdate {
+            workflow_id: None,
+            capabilities: None,
+            last_error: None,
+            active_model_target: None,
+            embedding_model_target: None,
+            active_runtime_snapshot: None,
+            embedding_runtime_snapshot: None,
+            managed_runtimes: Vec::new(),
             captured_at_ms,
-        );
+        });
     }
 
     let mut projection = diagnostics_store.snapshot();

@@ -18,6 +18,33 @@ use super::diagnostics::{DiagnosticsRuntimeLifecycleSnapshot, WorkflowDiagnostic
 /// A value that flows through a port (alias for serde_json::Value)
 pub type PortValue = serde_json::Value;
 
+#[derive(Debug, Clone)]
+pub struct WorkflowRuntimeSnapshotEventInput {
+    pub workflow_id: String,
+    pub execution_id: String,
+    pub captured_at_ms: u64,
+    pub capabilities: Option<WorkflowCapabilitiesResponse>,
+    pub trace_runtime_metrics: WorkflowTraceRuntimeMetrics,
+    pub active_model_target: Option<String>,
+    pub embedding_model_target: Option<String>,
+    pub active_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
+    pub embedding_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
+    pub managed_runtimes: Vec<ManagedRuntimeManagerRuntimeView>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct WorkflowSchedulerSnapshotEventInput {
+    pub workflow_id: Option<String>,
+    pub execution_id: String,
+    pub session_id: String,
+    pub captured_at_ms: u64,
+    pub session: Option<WorkflowSessionSummary>,
+    pub items: Vec<WorkflowSessionQueueItem>,
+    pub diagnostics: Option<WorkflowSchedulerSnapshotDiagnostics>,
+    pub error: Option<String>,
+}
+
 /// Events emitted during workflow execution
 ///
 /// These are sent to the frontend via a Tauri channel to provide
@@ -165,9 +192,9 @@ pub enum WorkflowEvent {
         /// Millisecond unix timestamp for when the snapshot was captured
         captured_at_ms: u64,
         /// Runtime capabilities and requirements when available
-        capabilities: Option<WorkflowCapabilitiesResponse>,
+        capabilities: Box<Option<WorkflowCapabilitiesResponse>>,
         /// Backend-owned runtime lifecycle metrics captured alongside the snapshot
-        trace_runtime_metrics: WorkflowTraceRuntimeMetrics,
+        trace_runtime_metrics: Box<WorkflowTraceRuntimeMetrics>,
         /// Backend-owned active runtime model target at capture time
         active_model_target: Option<String>,
         /// Backend-owned embedding runtime model target at capture time
@@ -207,7 +234,7 @@ pub enum WorkflowEvent {
         /// Unique identifier for this execution
         execution_id: String,
         /// Canonical diagnostics projection for the workflow UI
-        snapshot: WorkflowDiagnosticsProjection,
+        snapshot: Box<WorkflowDiagnosticsProjection>,
     },
 }
 
@@ -498,58 +525,39 @@ impl WorkflowEvent {
     }
 
     /// Create a RuntimeSnapshot event
-    pub fn runtime_snapshot(
-        workflow_id: impl Into<String>,
-        execution_id: impl Into<String>,
-        captured_at_ms: u64,
-        capabilities: Option<WorkflowCapabilitiesResponse>,
-        trace_runtime_metrics: WorkflowTraceRuntimeMetrics,
-        active_model_target: Option<String>,
-        embedding_model_target: Option<String>,
-        active_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
-        embedding_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
-        managed_runtimes: Vec<ManagedRuntimeManagerRuntimeView>,
-        error: Option<String>,
-    ) -> Self {
+    pub fn runtime_snapshot(input: WorkflowRuntimeSnapshotEventInput) -> Self {
         Self::RuntimeSnapshot {
-            workflow_id: workflow_id.into(),
-            execution_id: execution_id.into(),
-            captured_at_ms,
-            capabilities,
-            trace_runtime_metrics,
-            active_model_target,
-            embedding_model_target,
-            active_runtime_snapshot: active_runtime_snapshot
+            workflow_id: input.workflow_id,
+            execution_id: input.execution_id,
+            captured_at_ms: input.captured_at_ms,
+            capabilities: Box::new(input.capabilities),
+            trace_runtime_metrics: Box::new(input.trace_runtime_metrics),
+            active_model_target: input.active_model_target,
+            embedding_model_target: input.embedding_model_target,
+            active_runtime_snapshot: input
+                .active_runtime_snapshot
                 .as_ref()
                 .map(DiagnosticsRuntimeLifecycleSnapshot::from),
-            embedding_runtime_snapshot: embedding_runtime_snapshot
+            embedding_runtime_snapshot: input
+                .embedding_runtime_snapshot
                 .as_ref()
                 .map(DiagnosticsRuntimeLifecycleSnapshot::from),
-            managed_runtimes,
-            error,
+            managed_runtimes: input.managed_runtimes,
+            error: input.error,
         }
     }
 
     /// Create a SchedulerSnapshot event
-    pub fn scheduler_snapshot(
-        workflow_id: Option<String>,
-        execution_id: impl Into<String>,
-        session_id: impl Into<String>,
-        captured_at_ms: u64,
-        session: Option<WorkflowSessionSummary>,
-        items: Vec<WorkflowSessionQueueItem>,
-        diagnostics: Option<WorkflowSchedulerSnapshotDiagnostics>,
-        error: Option<String>,
-    ) -> Self {
+    pub fn scheduler_snapshot(input: WorkflowSchedulerSnapshotEventInput) -> Self {
         Self::SchedulerSnapshot {
-            workflow_id,
-            execution_id: execution_id.into(),
-            session_id: session_id.into(),
-            captured_at_ms,
-            session,
-            items,
-            diagnostics,
-            error,
+            workflow_id: input.workflow_id,
+            execution_id: input.execution_id,
+            session_id: input.session_id,
+            captured_at_ms: input.captured_at_ms,
+            session: input.session,
+            items: input.items,
+            diagnostics: input.diagnostics,
+            error: input.error,
         }
     }
 
@@ -560,7 +568,7 @@ impl WorkflowEvent {
     ) -> Self {
         Self::DiagnosticsSnapshot {
             execution_id: execution_id.into(),
-            snapshot,
+            snapshot: Box::new(snapshot),
         }
     }
 }
@@ -609,19 +617,19 @@ mod tests {
 
     #[test]
     fn test_runtime_snapshot_event() {
-        let event = WorkflowEvent::runtime_snapshot(
-            "workflow-123",
-            "exec-123",
-            1234,
-            None,
-            WorkflowTraceRuntimeMetrics::default(),
-            Some("/models/main.gguf".to_string()),
-            Some("/models/embed.gguf".to_string()),
-            None,
-            None,
-            Vec::new(),
-            Some("capability unavailable".to_string()),
-        );
+        let event = WorkflowEvent::runtime_snapshot(WorkflowRuntimeSnapshotEventInput {
+            workflow_id: "workflow-123".to_string(),
+            execution_id: "exec-123".to_string(),
+            captured_at_ms: 1234,
+            capabilities: None,
+            trace_runtime_metrics: WorkflowTraceRuntimeMetrics::default(),
+            active_model_target: Some("/models/main.gguf".to_string()),
+            embedding_model_target: Some("/models/embed.gguf".to_string()),
+            active_runtime_snapshot: None,
+            embedding_runtime_snapshot: None,
+            managed_runtimes: Vec::new(),
+            error: Some("capability unavailable".to_string()),
+        });
         let json = serde_json::to_string(&event).unwrap();
         assert!(json.contains("RuntimeSnapshot"));
         assert!(json.contains("workflow-123"));

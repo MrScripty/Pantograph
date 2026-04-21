@@ -5,8 +5,8 @@ use pantograph_workflow_service::{
 
 use super::overlay::{DiagnosticsNodeOverlay, DiagnosticsRunOverlay};
 use super::types::{
-    diagnostics_node_status, diagnostics_run_status, DiagnosticsNodeTrace, DiagnosticsRunTrace,
-    DiagnosticsTraceRuntimeMetrics,
+    DiagnosticsNodeTrace, DiagnosticsRunTrace, DiagnosticsTraceRuntimeMetrics,
+    diagnostics_node_status, diagnostics_run_status,
 };
 use crate::workflow::events::WorkflowEvent;
 
@@ -274,8 +274,8 @@ pub(crate) fn workflow_trace_event(event: &WorkflowEvent) -> Option<WorkflowTrac
             execution_id: execution_id.clone(),
             workflow_id: Some(workflow_id.clone()),
             captured_at_ms: *captured_at_ms,
-            runtime: trace_runtime_metrics.clone(),
-            capabilities: capabilities.clone(),
+            runtime: trace_runtime_metrics.as_ref().clone(),
+            capabilities: capabilities.as_ref().clone(),
             error: error.clone(),
         }),
         WorkflowEvent::SchedulerSnapshot {

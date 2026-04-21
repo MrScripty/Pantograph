@@ -655,10 +655,12 @@ Tasks:
   stale `map_or` checks, path-reference signatures, string replacement,
   redundant state clones, and test-module ordering. Tauri model-dependency
   commands now use the backend-owned `ModelDependencyRequest` envelope instead
-  of duplicated positional command/helper argument lists. The remaining active
-  Tauri blockers are argument grouping across diagnostics stores/events,
-  headless diagnostics, orchestration, and execution entrypoints, plus
-  workflow-event enum size reduction.
+  of duplicated positional command/helper argument lists. Tauri diagnostics
+  store/event constructors now use named runtime and scheduler snapshot input
+  structs, and large workflow event internals are boxed while preserving the
+  serialized event shape. The remaining active Tauri blockers are argument
+  grouping across headless diagnostics, orchestration, and execution
+  entrypoints.
 - Close or update `docs/anti-pattern-remediation-tracker.md` Phase 5 for
   process-node policy controls.
 - Add issue/backlog entries for non-compliance problems intentionally deferred.

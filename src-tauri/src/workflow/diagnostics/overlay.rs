@@ -5,8 +5,9 @@ use pantograph_workflow_service::WorkflowTraceSnapshotResponse;
 
 use super::trace::diagnostics_run_trace;
 use super::types::{
-    DiagnosticsEventRecord, DiagnosticsRuntimeSnapshot, DiagnosticsSchedulerSnapshot,
-    WorkflowDiagnosticsProjection, WorkflowDiagnosticsProjectionContext,
+    DiagnosticsEventRecord, DiagnosticsRuntimeSnapshot, DiagnosticsRuntimeSnapshotInput,
+    DiagnosticsSchedulerSnapshot, WorkflowDiagnosticsProjection,
+    WorkflowDiagnosticsProjectionContext,
 };
 use crate::workflow::events::WorkflowEvent;
 
@@ -230,17 +231,18 @@ fn apply_runtime_event(
         ..
     } = event
     {
-        state.runtime = DiagnosticsRuntimeSnapshot::from_capabilities(
-            workflow_id.clone(),
-            capabilities.clone(),
-            error.clone(),
-            active_model_target.clone(),
-            embedding_model_target.clone(),
-            active_runtime_snapshot.clone(),
-            embedding_runtime_snapshot.clone(),
-            managed_runtimes.clone(),
-            timestamp_ms,
-        );
+        state.runtime =
+            DiagnosticsRuntimeSnapshot::from_capabilities(DiagnosticsRuntimeSnapshotInput {
+                workflow_id: workflow_id.clone(),
+                capabilities: capabilities.as_ref().clone(),
+                last_error: error.clone(),
+                active_model_target: active_model_target.clone(),
+                embedding_model_target: embedding_model_target.clone(),
+                active_runtime_snapshot: active_runtime_snapshot.clone(),
+                embedding_runtime_snapshot: embedding_runtime_snapshot.clone(),
+                managed_runtimes: managed_runtimes.clone(),
+                captured_at_ms: timestamp_ms,
+            });
     }
 }
 

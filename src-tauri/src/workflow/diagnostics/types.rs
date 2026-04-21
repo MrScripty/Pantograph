@@ -237,44 +237,58 @@ pub struct DiagnosticsRuntimeSnapshot {
     pub managed_runtimes: Vec<ManagedRuntimeManagerRuntimeView>,
 }
 
+pub(crate) struct DiagnosticsRuntimeSnapshotInput {
+    pub workflow_id: String,
+    pub capabilities: Option<pantograph_workflow_service::WorkflowCapabilitiesResponse>,
+    pub last_error: Option<String>,
+    pub active_model_target: Option<String>,
+    pub embedding_model_target: Option<String>,
+    pub active_runtime_snapshot: Option<DiagnosticsRuntimeLifecycleSnapshot>,
+    pub embedding_runtime_snapshot: Option<DiagnosticsRuntimeLifecycleSnapshot>,
+    pub managed_runtimes: Vec<ManagedRuntimeManagerRuntimeView>,
+    pub captured_at_ms: u64,
+}
+
 impl DiagnosticsRuntimeSnapshot {
-    pub(crate) fn from_capabilities(
-        workflow_id: String,
-        capabilities: Option<pantograph_workflow_service::WorkflowCapabilitiesResponse>,
-        last_error: Option<String>,
-        active_model_target: Option<String>,
-        embedding_model_target: Option<String>,
-        active_runtime_snapshot: Option<DiagnosticsRuntimeLifecycleSnapshot>,
-        embedding_runtime_snapshot: Option<DiagnosticsRuntimeLifecycleSnapshot>,
-        managed_runtimes: Vec<ManagedRuntimeManagerRuntimeView>,
-        captured_at_ms: u64,
-    ) -> Self {
+    pub(crate) fn from_capabilities(input: DiagnosticsRuntimeSnapshotInput) -> Self {
         Self {
-            workflow_id: Some(workflow_id),
-            captured_at_ms: Some(captured_at_ms),
-            max_input_bindings: capabilities.as_ref().map(|value| value.max_input_bindings),
-            max_output_targets: capabilities.as_ref().map(|value| value.max_output_targets),
-            max_value_bytes: capabilities.as_ref().map(|value| value.max_value_bytes),
-            runtime_requirements: capabilities
+            workflow_id: Some(input.workflow_id),
+            captured_at_ms: Some(input.captured_at_ms),
+            max_input_bindings: input
+                .capabilities
+                .as_ref()
+                .map(|value| value.max_input_bindings),
+            max_output_targets: input
+                .capabilities
+                .as_ref()
+                .map(|value| value.max_output_targets),
+            max_value_bytes: input
+                .capabilities
+                .as_ref()
+                .map(|value| value.max_value_bytes),
+            runtime_requirements: input
+                .capabilities
                 .as_ref()
                 .map(|value| value.runtime_requirements.clone()),
-            runtime_capabilities: capabilities
+            runtime_capabilities: input
+                .capabilities
                 .as_ref()
                 .map(|value| value.runtime_capabilities.clone())
                 .unwrap_or_default(),
-            models: capabilities
+            models: input
+                .capabilities
                 .as_ref()
                 .map(|value| value.models.clone())
                 .unwrap_or_default(),
-            last_error,
-            active_model_target,
-            embedding_model_target,
-            active_runtime: active_runtime_snapshot.or_else(|| {
-                capability_runtime_lifecycle_snapshot(capabilities.as_ref())
+            last_error: input.last_error,
+            active_model_target: input.active_model_target,
+            embedding_model_target: input.embedding_model_target,
+            active_runtime: input.active_runtime_snapshot.or_else(|| {
+                capability_runtime_lifecycle_snapshot(input.capabilities.as_ref())
                     .map(|snapshot| DiagnosticsRuntimeLifecycleSnapshot::from(&snapshot))
             }),
-            embedding_runtime: embedding_runtime_snapshot,
-            managed_runtimes,
+            embedding_runtime: input.embedding_runtime_snapshot,
+            managed_runtimes: input.managed_runtimes,
         }
     }
 }

@@ -11,18 +11,71 @@ use pantograph_workflow_service::{
 use parking_lot::Mutex;
 
 use super::attempts::{
-    overlay_record_decision, trace_attempt_state_for_execution, trace_attempt_state_in_snapshot,
-    trace_event_execution_id, OverlayRecordDecision,
+    OverlayRecordDecision, overlay_record_decision, trace_attempt_state_for_execution,
+    trace_attempt_state_in_snapshot, trace_event_execution_id,
 };
-use super::overlay::{event_execution_id, record_diagnostics_overlay, WorkflowDiagnosticsState};
+use super::overlay::{WorkflowDiagnosticsState, event_execution_id, record_diagnostics_overlay};
 use super::trace::{graph_trace_context, workflow_trace_event};
 use super::types::{
-    DiagnosticsRuntimeLifecycleSnapshot, DiagnosticsRuntimeSnapshot, DiagnosticsSchedulerSnapshot,
-    WorkflowDiagnosticsProjection,
+    DiagnosticsRuntimeLifecycleSnapshot, DiagnosticsRuntimeSnapshot,
+    DiagnosticsRuntimeSnapshotInput, DiagnosticsSchedulerSnapshot, WorkflowDiagnosticsProjection,
 };
-use crate::workflow::events::WorkflowEvent;
+use crate::workflow::events::{
+    WorkflowEvent, WorkflowRuntimeSnapshotEventInput, WorkflowSchedulerSnapshotEventInput,
+};
 
 const DEFAULT_DIAGNOSTICS_EVENT_LIMIT: usize = 200;
+
+#[derive(Debug, Clone, Default)]
+pub struct WorkflowRuntimeSnapshotRecord {
+    pub workflow_id: String,
+    pub execution_id: String,
+    pub captured_at_ms: u64,
+    pub capabilities: Option<WorkflowCapabilitiesResponse>,
+    pub trace_runtime_metrics: WorkflowTraceRuntimeMetrics,
+    pub active_model_target: Option<String>,
+    pub embedding_model_target: Option<String>,
+    pub active_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
+    pub embedding_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
+    pub managed_runtimes: Vec<ManagedRuntimeManagerRuntimeView>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct WorkflowSchedulerSnapshotRecord {
+    pub workflow_id: Option<String>,
+    pub execution_id: String,
+    pub session_id: String,
+    pub captured_at_ms: u64,
+    pub session: Option<WorkflowSessionSummary>,
+    pub items: Vec<WorkflowSessionQueueItem>,
+    pub diagnostics: Option<pantograph_workflow_service::WorkflowSchedulerSnapshotDiagnostics>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct WorkflowRuntimeSnapshotUpdate {
+    pub workflow_id: Option<String>,
+    pub capabilities: Option<WorkflowCapabilitiesResponse>,
+    pub last_error: Option<String>,
+    pub active_model_target: Option<String>,
+    pub embedding_model_target: Option<String>,
+    pub active_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
+    pub embedding_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
+    pub managed_runtimes: Vec<ManagedRuntimeManagerRuntimeView>,
+    pub captured_at_ms: u64,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct WorkflowSchedulerSnapshotUpdate {
+    pub workflow_id: Option<String>,
+    pub session_id: Option<String>,
+    pub session: Option<WorkflowSessionSummary>,
+    pub items: Vec<WorkflowSessionQueueItem>,
+    pub diagnostics: Option<pantograph_workflow_service::WorkflowSchedulerSnapshotDiagnostics>,
+    pub last_error: Option<String>,
+    pub captured_at_ms: u64,
+}
 
 fn unix_timestamp_ms() -> u64 {
     SystemTime::now()
@@ -96,87 +149,66 @@ impl WorkflowDiagnosticsStore {
 
     pub fn record_runtime_snapshot(
         &self,
-        workflow_id: String,
-        execution_id: String,
-        captured_at_ms: u64,
-        capabilities: Option<WorkflowCapabilitiesResponse>,
-        trace_runtime_metrics: WorkflowTraceRuntimeMetrics,
-        active_model_target: Option<String>,
-        embedding_model_target: Option<String>,
-        active_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
-        embedding_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
-        managed_runtimes: Vec<ManagedRuntimeManagerRuntimeView>,
-        error: Option<String>,
+        input: WorkflowRuntimeSnapshotRecord,
     ) -> WorkflowDiagnosticsProjection {
-        let event = WorkflowEvent::runtime_snapshot(
-            workflow_id,
-            execution_id,
-            captured_at_ms,
-            capabilities,
-            trace_runtime_metrics,
-            active_model_target,
-            embedding_model_target,
-            active_runtime_snapshot,
-            embedding_runtime_snapshot,
-            managed_runtimes,
-            error,
-        );
-        self.record_workflow_event(&event, captured_at_ms)
+        let event = WorkflowEvent::runtime_snapshot(WorkflowRuntimeSnapshotEventInput {
+            workflow_id: input.workflow_id,
+            execution_id: input.execution_id,
+            captured_at_ms: input.captured_at_ms,
+            capabilities: input.capabilities,
+            trace_runtime_metrics: input.trace_runtime_metrics,
+            active_model_target: input.active_model_target,
+            embedding_model_target: input.embedding_model_target,
+            active_runtime_snapshot: input.active_runtime_snapshot,
+            embedding_runtime_snapshot: input.embedding_runtime_snapshot,
+            managed_runtimes: input.managed_runtimes,
+            error: input.error,
+        });
+        self.record_workflow_event(&event, input.captured_at_ms)
     }
 
     pub fn record_scheduler_snapshot(
         &self,
-        workflow_id: Option<String>,
-        execution_id: String,
-        session_id: String,
-        captured_at_ms: u64,
-        session: Option<WorkflowSessionSummary>,
-        items: Vec<WorkflowSessionQueueItem>,
-        diagnostics: Option<pantograph_workflow_service::WorkflowSchedulerSnapshotDiagnostics>,
-        error: Option<String>,
+        input: WorkflowSchedulerSnapshotRecord,
     ) -> WorkflowDiagnosticsProjection {
-        let event = WorkflowEvent::scheduler_snapshot(
-            workflow_id,
-            execution_id,
-            session_id,
-            captured_at_ms,
-            session,
-            items,
-            diagnostics,
-            error,
-        );
-        self.record_workflow_event(&event, captured_at_ms)
+        let event = WorkflowEvent::scheduler_snapshot(WorkflowSchedulerSnapshotEventInput {
+            workflow_id: input.workflow_id,
+            execution_id: input.execution_id,
+            session_id: input.session_id,
+            captured_at_ms: input.captured_at_ms,
+            session: input.session,
+            items: input.items,
+            diagnostics: input.diagnostics,
+            error: input.error,
+        });
+        self.record_workflow_event(&event, input.captured_at_ms)
     }
 
     pub fn update_runtime_snapshot(
         &self,
-        workflow_id: Option<String>,
-        capabilities: Option<WorkflowCapabilitiesResponse>,
-        last_error: Option<String>,
-        active_model_target: Option<String>,
-        embedding_model_target: Option<String>,
-        active_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
-        embedding_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
-        managed_runtimes: Vec<ManagedRuntimeManagerRuntimeView>,
-        captured_at_ms: u64,
+        input: WorkflowRuntimeSnapshotUpdate,
     ) -> WorkflowDiagnosticsProjection {
         let mut state = self.state.lock();
-        state.runtime = match workflow_id {
-            Some(workflow_id) => DiagnosticsRuntimeSnapshot::from_capabilities(
-                workflow_id,
-                capabilities,
-                last_error,
-                active_model_target,
-                embedding_model_target,
-                active_runtime_snapshot
-                    .as_ref()
-                    .map(DiagnosticsRuntimeLifecycleSnapshot::from),
-                embedding_runtime_snapshot
-                    .as_ref()
-                    .map(DiagnosticsRuntimeLifecycleSnapshot::from),
-                managed_runtimes,
-                captured_at_ms,
-            ),
+        state.runtime = match input.workflow_id {
+            Some(workflow_id) => {
+                DiagnosticsRuntimeSnapshot::from_capabilities(DiagnosticsRuntimeSnapshotInput {
+                    workflow_id,
+                    capabilities: input.capabilities,
+                    last_error: input.last_error,
+                    active_model_target: input.active_model_target,
+                    embedding_model_target: input.embedding_model_target,
+                    active_runtime_snapshot: input
+                        .active_runtime_snapshot
+                        .as_ref()
+                        .map(DiagnosticsRuntimeLifecycleSnapshot::from),
+                    embedding_runtime_snapshot: input
+                        .embedding_runtime_snapshot
+                        .as_ref()
+                        .map(DiagnosticsRuntimeLifecycleSnapshot::from),
+                    managed_runtimes: input.managed_runtimes,
+                    captured_at_ms: input.captured_at_ms,
+                })
+            }
             None => DiagnosticsRuntimeSnapshot::default(),
         };
         let traces = self.trace_store.snapshot_all();
@@ -186,25 +218,19 @@ impl WorkflowDiagnosticsStore {
 
     pub fn update_scheduler_snapshot(
         &self,
-        workflow_id: Option<String>,
-        session_id: Option<String>,
-        session: Option<WorkflowSessionSummary>,
-        items: Vec<WorkflowSessionQueueItem>,
-        diagnostics: Option<pantograph_workflow_service::WorkflowSchedulerSnapshotDiagnostics>,
-        last_error: Option<String>,
-        captured_at_ms: u64,
+        input: WorkflowSchedulerSnapshotUpdate,
     ) -> WorkflowDiagnosticsProjection {
         let mut state = self.state.lock();
-        state.scheduler = match session_id {
+        state.scheduler = match input.session_id {
             Some(session_id) => DiagnosticsSchedulerSnapshot {
-                workflow_id,
+                workflow_id: input.workflow_id,
                 session_id: Some(session_id),
                 trace_execution_id: None,
-                captured_at_ms: Some(captured_at_ms),
-                session,
-                items,
-                diagnostics,
-                last_error,
+                captured_at_ms: Some(input.captured_at_ms),
+                session: input.session,
+                items: input.items,
+                diagnostics: input.diagnostics,
+                last_error: input.last_error,
             },
             None => DiagnosticsSchedulerSnapshot::default(),
         };

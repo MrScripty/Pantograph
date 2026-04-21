@@ -8,19 +8,21 @@ use inference::{EmbeddingMemoryMode, LlamaCppEmbeddingRuntime};
 use tokio::sync::mpsc;
 
 use super::{
-    reclaim_runtime, resolve_runtime_debug_trace_scope, runtime_debug_snapshot_response,
-    runtime_registry_snapshot_response, RuntimeDebugSnapshotRequest,
+    RuntimeDebugSnapshotRequest, reclaim_runtime, resolve_runtime_debug_trace_scope,
+    runtime_debug_snapshot_response, runtime_registry_snapshot_response,
 };
 use crate::llm::health_monitor::{
     HealthCheckResult, HealthMonitor, HealthMonitorConfig, HealthStatus, SharedHealthMonitor,
 };
 use crate::llm::recovery::{RecoveryManager, SharedRecoveryManager};
 use crate::llm::{InferenceGateway, RuntimeRegistry, SharedGateway, SharedRuntimeRegistry};
-use crate::workflow::diagnostics::SharedWorkflowDiagnosticsStore;
+use crate::workflow::diagnostics::{
+    SharedWorkflowDiagnosticsStore, WorkflowRuntimeSnapshotRecord, WorkflowSchedulerSnapshotRecord,
+};
 use pantograph_workflow_service::{
-    graph::WorkflowSessionKind, WorkflowCapabilitiesResponse, WorkflowServiceError,
-    WorkflowSessionState, WorkflowSessionSummary, WorkflowTraceRuntimeMetrics,
-    WorkflowTraceSnapshotRequest,
+    WorkflowCapabilitiesResponse, WorkflowServiceError, WorkflowSessionState,
+    WorkflowSessionSummary, WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest,
+    graph::WorkflowSessionKind,
 };
 
 struct MockProcessHandle;
@@ -174,11 +176,11 @@ async fn runtime_debug_snapshot_includes_synced_runtime_and_recovery_state() {
         .await;
     let recovery_manager: SharedRecoveryManager = Arc::new(RecoveryManager::default());
     let workflow_diagnostics: SharedWorkflowDiagnosticsStore = Arc::new(Default::default());
-    workflow_diagnostics.record_runtime_snapshot(
-        "workflow-debug".to_string(),
-        "execution-debug".to_string(),
-        123,
-        Some(WorkflowCapabilitiesResponse {
+    workflow_diagnostics.record_runtime_snapshot(WorkflowRuntimeSnapshotRecord {
+        workflow_id: "workflow-debug".to_string(),
+        execution_id: "execution-debug".to_string(),
+        captured_at_ms: 123,
+        capabilities: Some(WorkflowCapabilitiesResponse {
             max_input_bindings: 1,
             max_output_targets: 1,
             max_value_bytes: 1024,
@@ -186,7 +188,7 @@ async fn runtime_debug_snapshot_includes_synced_runtime_and_recovery_state() {
             models: Vec::new(),
             runtime_capabilities: Vec::new(),
         }),
-        WorkflowTraceRuntimeMetrics {
+        trace_runtime_metrics: WorkflowTraceRuntimeMetrics {
             runtime_id: Some("llama.cpp.embedding".to_string()),
             observed_runtime_ids: vec!["llama.cpp.embedding".to_string()],
             runtime_instance_id: Some("llama-cpp-embedding-12".to_string()),
@@ -197,9 +199,9 @@ async fn runtime_debug_snapshot_includes_synced_runtime_and_recovery_state() {
             runtime_reused: Some(false),
             lifecycle_decision_reason: Some("runtime_ready".to_string()),
         },
-        Some("/models/embed.gguf".to_string()),
-        Some("/models/embed.gguf".to_string()),
-        Some(inference::RuntimeLifecycleSnapshot {
+        active_model_target: Some("/models/embed.gguf".to_string()),
+        embedding_model_target: Some("/models/embed.gguf".to_string()),
+        active_runtime_snapshot: Some(inference::RuntimeLifecycleSnapshot {
             runtime_id: Some("llama.cpp.embedding".to_string()),
             runtime_instance_id: Some("llama-cpp-embedding-12".to_string()),
             warmup_started_at_ms: Some(10),
@@ -210,29 +212,30 @@ async fn runtime_debug_snapshot_includes_synced_runtime_and_recovery_state() {
             active: true,
             last_error: None,
         }),
-        None,
-        Vec::new(),
-        None,
-    );
-    let scheduler_projection = workflow_diagnostics.record_scheduler_snapshot(
-        Some("workflow-debug".to_string()),
-        "execution-debug".to_string(),
-        "session-debug".to_string(),
-        456,
-        Some(WorkflowSessionSummary {
+        embedding_runtime_snapshot: None,
+        managed_runtimes: Vec::new(),
+        error: None,
+    });
+    let scheduler_projection =
+        workflow_diagnostics.record_scheduler_snapshot(WorkflowSchedulerSnapshotRecord {
+            workflow_id: Some("workflow-debug".to_string()),
+            execution_id: "execution-debug".to_string(),
             session_id: "session-debug".to_string(),
-            workflow_id: "workflow-debug".to_string(),
-            session_kind: WorkflowSessionKind::Workflow,
-            usage_profile: None,
-            keep_alive: false,
-            state: WorkflowSessionState::Running,
-            queued_runs: 0,
-            run_count: 1,
-        }),
-        Vec::new(),
-        None,
-        None,
-    );
+            captured_at_ms: 456,
+            session: Some(WorkflowSessionSummary {
+                session_id: "session-debug".to_string(),
+                workflow_id: "workflow-debug".to_string(),
+                session_kind: WorkflowSessionKind::Workflow,
+                usage_profile: None,
+                keep_alive: false,
+                state: WorkflowSessionState::Running,
+                queued_runs: 0,
+                run_count: 1,
+            }),
+            items: Vec::new(),
+            diagnostics: None,
+            error: None,
+        });
     assert_eq!(
         scheduler_projection.scheduler.workflow_id.as_deref(),
         Some("workflow-debug")
@@ -333,12 +336,12 @@ async fn runtime_debug_snapshot_preserves_backend_trace_and_scheduler_contracts(
 
     let runtime_registry: SharedRuntimeRegistry = Arc::new(RuntimeRegistry::new());
     let workflow_diagnostics: SharedWorkflowDiagnosticsStore = Arc::new(Default::default());
-    workflow_diagnostics.record_runtime_snapshot(
-        "workflow-debug".to_string(),
-        "execution-debug".to_string(),
-        123,
-        None,
-        WorkflowTraceRuntimeMetrics {
+    workflow_diagnostics.record_runtime_snapshot(WorkflowRuntimeSnapshotRecord {
+        workflow_id: "workflow-debug".to_string(),
+        execution_id: "execution-debug".to_string(),
+        captured_at_ms: 123,
+        capabilities: None,
+        trace_runtime_metrics: WorkflowTraceRuntimeMetrics {
             runtime_id: Some("llama.cpp.embedding".to_string()),
             observed_runtime_ids: vec![
                 "llama.cpp.embedding".to_string(),
@@ -352,9 +355,9 @@ async fn runtime_debug_snapshot_preserves_backend_trace_and_scheduler_contracts(
             runtime_reused: Some(false),
             lifecycle_decision_reason: Some("runtime_ready".to_string()),
         },
-        Some("/models/embed.gguf".to_string()),
-        None,
-        Some(inference::RuntimeLifecycleSnapshot {
+        active_model_target: Some("/models/embed.gguf".to_string()),
+        embedding_model_target: None,
+        active_runtime_snapshot: Some(inference::RuntimeLifecycleSnapshot {
             runtime_id: Some("llama.cpp.embedding".to_string()),
             runtime_instance_id: Some("llama-cpp-embedding-13".to_string()),
             warmup_started_at_ms: Some(10),
@@ -365,16 +368,16 @@ async fn runtime_debug_snapshot_preserves_backend_trace_and_scheduler_contracts(
             active: true,
             last_error: None,
         }),
-        None,
-        Vec::new(),
-        None,
-    );
-    workflow_diagnostics.record_scheduler_snapshot(
-        Some("workflow-debug".to_string()),
-        "execution-debug".to_string(),
-        "session-debug".to_string(),
-        456,
-        Some(WorkflowSessionSummary {
+        embedding_runtime_snapshot: None,
+        managed_runtimes: Vec::new(),
+        error: None,
+    });
+    workflow_diagnostics.record_scheduler_snapshot(WorkflowSchedulerSnapshotRecord {
+        workflow_id: Some("workflow-debug".to_string()),
+        execution_id: "execution-debug".to_string(),
+        session_id: "session-debug".to_string(),
+        captured_at_ms: 456,
+        session: Some(WorkflowSessionSummary {
             session_id: "session-debug".to_string(),
             workflow_id: "workflow-debug".to_string(),
             session_kind: WorkflowSessionKind::Workflow,
@@ -384,7 +387,7 @@ async fn runtime_debug_snapshot_preserves_backend_trace_and_scheduler_contracts(
             queued_runs: 1,
             run_count: 1,
         }),
-        vec![pantograph_workflow_service::WorkflowSessionQueueItem {
+        items: vec![pantograph_workflow_service::WorkflowSessionQueueItem {
             queue_id: "queue-1".to_string(),
             run_id: Some("execution-debug".to_string()),
             enqueued_at_ms: Some(400),
@@ -395,9 +398,9 @@ async fn runtime_debug_snapshot_preserves_backend_trace_and_scheduler_contracts(
             scheduler_decision_reason: None,
             status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
         }],
-        None,
-        None,
-    );
+        diagnostics: None,
+        error: None,
+    });
     let workflow_diagnostics_projection = workflow_diagnostics.snapshot();
     let workflow_trace = workflow_diagnostics
         .trace_snapshot(WorkflowTraceSnapshotRequest {
@@ -531,12 +534,12 @@ fn runtime_debug_snapshot_request_normalizes_and_rejects_blank_filters() {
 #[test]
 fn resolve_runtime_debug_trace_scope_uses_unique_execution_match() {
     let diagnostics_store: SharedWorkflowDiagnosticsStore = Arc::new(Default::default());
-    diagnostics_store.record_runtime_snapshot(
-        "workflow-debug".to_string(),
-        "execution-debug".to_string(),
-        123,
-        None,
-        WorkflowTraceRuntimeMetrics {
+    diagnostics_store.record_runtime_snapshot(WorkflowRuntimeSnapshotRecord {
+        workflow_id: "workflow-debug".to_string(),
+        execution_id: "execution-debug".to_string(),
+        captured_at_ms: 123,
+        capabilities: None,
+        trace_runtime_metrics: WorkflowTraceRuntimeMetrics {
             runtime_id: Some("llama.cpp.embedding".to_string()),
             observed_runtime_ids: vec!["llama.cpp.embedding".to_string()],
             runtime_instance_id: Some("llama-cpp-embedding-21".to_string()),
@@ -547,13 +550,9 @@ fn resolve_runtime_debug_trace_scope_uses_unique_execution_match() {
             runtime_reused: Some(false),
             lifecycle_decision_reason: Some("runtime_ready".to_string()),
         },
-        Some("/models/embed.gguf".to_string()),
-        None,
-        None,
-        None,
-        Vec::new(),
-        None,
-    );
+        active_model_target: Some("/models/embed.gguf".to_string()),
+        ..Default::default()
+    });
 
     let (request, selection) = resolve_runtime_debug_trace_scope(
         Some(&diagnostics_store),
@@ -581,12 +580,12 @@ fn resolve_runtime_debug_trace_scope_uses_unique_execution_match() {
 fn resolve_runtime_debug_trace_scope_marks_multi_run_scope_ambiguous() {
     let diagnostics_store: SharedWorkflowDiagnosticsStore = Arc::new(Default::default());
     for execution_id in ["execution-a", "execution-b"] {
-        diagnostics_store.record_runtime_snapshot(
-            "workflow-debug".to_string(),
-            execution_id.to_string(),
-            123,
-            None,
-            WorkflowTraceRuntimeMetrics {
+        diagnostics_store.record_runtime_snapshot(WorkflowRuntimeSnapshotRecord {
+            workflow_id: "workflow-debug".to_string(),
+            execution_id: execution_id.to_string(),
+            captured_at_ms: 123,
+            capabilities: None,
+            trace_runtime_metrics: WorkflowTraceRuntimeMetrics {
                 runtime_id: Some("llama.cpp.embedding".to_string()),
                 observed_runtime_ids: vec!["llama.cpp.embedding".to_string()],
                 runtime_instance_id: Some(format!("runtime-{}", execution_id)),
@@ -597,13 +596,9 @@ fn resolve_runtime_debug_trace_scope_marks_multi_run_scope_ambiguous() {
                 runtime_reused: Some(false),
                 lifecycle_decision_reason: Some("runtime_ready".to_string()),
             },
-            Some("/models/embed.gguf".to_string()),
-            None,
-            None,
-            None,
-            Vec::new(),
-            None,
-        );
+            active_model_target: Some("/models/embed.gguf".to_string()),
+            ..Default::default()
+        });
     }
 
     let (request, selection) = resolve_runtime_debug_trace_scope(
