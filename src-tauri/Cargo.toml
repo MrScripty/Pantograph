@@ -3,8 +3,15 @@ name = "pantograph"
 version = "0.0.0"
 description = "Pantograph"
 authors = ["you"]
-edition = "2021"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
 default-run = "pantograph"
+
+[lints]
+workspace = true
 
 [features]
 default = ["backend-llamacpp", "backend-ollama", "backend-candle"]

@@ -1,9 +1,15 @@
 [package]
 name = "pantograph-frontend-http-adapter"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
 description = "Explicit frontend HTTP workflow host adapter for Pantograph modular GUI surfaces"
-license = "MIT OR Apache-2.0"
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
 
 [dependencies]
 pantograph-workflow-service = { path = "../pantograph-workflow-service" }

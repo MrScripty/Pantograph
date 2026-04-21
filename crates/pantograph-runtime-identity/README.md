@@ -52,7 +52,7 @@ their own alias tables or display-name maps.
   state or registry crate.
 
 ## Dependencies
-**Internal:** None.
+**Internal:** This crate intentionally has no internal crate dependency.
 
 **External:** Rust standard library only.
 

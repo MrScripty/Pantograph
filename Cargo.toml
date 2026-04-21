@@ -27,8 +27,20 @@ default-members = [
 ]
 
 [workspace.package]
+version = "0.1.0"
 edition = "2021"
+rust-version = "1.92"
 license = "MIT OR Apache-2.0"
+repository = "https://github.com/MrScripty/Pantograph"
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+undocumented_unsafe_blocks = "deny"
+missing_safety_doc = "deny"
 
 [workspace.dependencies]
 # Shared dependencies across workspace

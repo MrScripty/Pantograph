@@ -1,105 +1,125 @@
 # Inference
 
-A Rust library for multi-backend AI inference, supporting llama.cpp, Ollama, and Candle.
+Multi-backend AI inference infrastructure for Pantograph.
 
-## Features
+## Purpose
+This crate owns backend execution, managed runtime resolution, process
+spawning contracts, backend lifecycle facts, and OpenAI-compatible inference
+facades. Host crates provide process/app-data integration, but backend
+capability and lifecycle behavior stay here.
 
-- **Multi-backend support**: Unified interface for different inference engines
-- **ProcessSpawner abstraction**: Pluggable runtime process management for different environments
-- **Managed runtimes**: `llama.cpp` and `Ollama` install, remove, resolve, and launch through the inference crate
-- **Feature-gated backends**: Include only what you need
-- **OpenAI-compatible API**: All backends expose the same chat/embedding interface
+## Contents
+| File/Folder | Description |
+| ----------- | ----------- |
+| `Cargo.toml` | Crate manifest and backend feature declarations. |
+| `src/` | Backend implementations, gateway facade, process contracts, KV-cache support, and managed-runtime lifecycle code. |
+| `audio/`, `depth/`, `onnx/`, `torch/` | Python/runtime helper assets used by optional backend families. |
 
-## Backends
+## Problem
+Pantograph supports llama.cpp, Ollama, Candle, and PyTorch-style execution
+paths. Without one infrastructure crate, runtime startup, backend capabilities,
+process spawning, managed downloads, and reuse diagnostics drift into adapters
+and workflow business logic.
 
-| Backend | Feature Flag | Description |
-|---------|-------------|-------------|
-| llama.cpp | `backend-llamacpp` (default) | Local inference via GGUF models |
-| Ollama | `backend-ollama` | Integration with Ollama daemon |
-| Candle | `backend-candle` | In-process CUDA inference |
+## Constraints
+- Keep host transport and workflow policy out of this crate.
+- Keep expensive backend families behind explicit Cargo features.
+- Report unsupported capabilities explicitly instead of silently succeeding.
+- Preserve backend-owned lifecycle facts for diagnostics and runtime registry
+  consumers.
 
-## Usage
+## Decision
+Keep inference as the infrastructure owner for backend execution and runtime
+process control. Consumers use `InferenceGateway` plus feature-gated backend
+families rather than calling backend modules directly.
 
+## Alternatives Rejected
+- Put backend lifecycle logic in Tauri commands: rejected because runtime
+  behavior must be reusable by non-Tauri hosts.
+- Put scheduler or technical-fit policy in inference: rejected because this
+  crate owns execution infrastructure, not workflow admission policy.
+- Always compile every backend: rejected because PyTorch, Candle, and audio
+  paths have heavyweight runtime costs.
+
+## Invariants
+- Backends expose explicit capabilities and unsupported behavior.
+- Managed runtime install/remove/resolve operations remain backend-owned.
+- Process spawning is injected through `ProcessSpawner`.
+- Feature flags are public contracts and must stay documented.
+- Runtime reuse, attach, and start facts are emitted by backend-owned code.
+
+## Revisit Triggers
+- A backend requires host-specific policy that cannot fit behind injected
+  process/app-data contracts.
+- A backend feature becomes part of the default desktop product surface or is
+  removed from supported builds.
+- Managed runtime state becomes a generated or externally versioned schema.
+
+## Dependencies
+**Internal:** `pantograph-runtime-identity`.
+
+**External:** `tokio`, `serde`, `reqwest`, `async-trait`, compression/archive
+crates, optional Candle crates, optional PyO3, and process/runtime utilities.
+
+## Related ADRs
+- `docs/adr/ADR-002-runtime-registry-ownership-and-lifecycle.md`
+- `docs/adr/ADR-003-rust-workspace-policy.md`
+
+## Usage Examples
 ```rust
-use inference::{InferenceGateway, BackendConfig};
-use std::sync::Arc;
+use inference::{BackendConfig, InferenceGateway};
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create gateway
+async fn start_gateway() -> Result<(), Box<dyn std::error::Error>> {
     let gateway = InferenceGateway::new();
-
-    // Set up process spawner (implement ProcessSpawner trait)
-    // gateway.set_spawner(your_spawner).await;
-
-    // Configure backend
     let config = BackendConfig {
         model_path: Some("/path/to/model.gguf".into()),
         mmproj_path: Some("/path/to/mmproj.gguf".into()),
         ..Default::default()
     };
 
-    // Start inference
     gateway.start(&config).await?;
-
-    // Use the gateway for chat completions or embeddings
     Ok(())
 }
 ```
 
-## ProcessSpawner
-
-The library uses a `ProcessSpawner` trait to abstract process management. This allows it to work in different environments:
-
-- **Tauri apps**: Provide an app-data-backed spawner while inference owns runtime resolution
-- **CLI tools**: Use `StdProcessSpawner` (enable `std-process` feature)
-- **Custom**: Implement `ProcessSpawner` for your environment
-
-```rust
-use inference::process::{ProcessSpawner, StdProcessSpawner};
-use std::path::PathBuf;
-
-// For standalone use (CLI tools, servers)
-let spawner = StdProcessSpawner::new(
-    PathBuf::from("/path/to/binaries"),
-    PathBuf::from("/path/to/data"),
-);
-
-// Managed runtime downloads/install paths are owned by inference.
-// Hosts only provide process spawning and app-data locations.
-```
-
-## Managed Runtime Lifecycle
-
-- Hosts query managed runtime capability state from inference.
-- Runtime installation is explicit and selective per backend.
-- Inference owns install/remove/resolve/launch behavior for managed runtimes.
-- Workflow execution should preflight runtime requirements instead of triggering
-  implicit downloads at run time.
-- Backend start paths also own runtime reuse facts. For example, the Ollama
-  backend reports whether it attached to an existing daemon so the gateway can
-  preserve lifecycle attribution without guessing in adapters.
-- When a backend knows why a runtime was reused or started, it should emit a
-  structured lifecycle decision reason rather than leaving adapters to infer a
-  generic label.
-- `BackendConfig` may also describe external producer attachment for
-  OpenAI-compatible hosts. When `llama.cpp` is given `external_url`, the
-  backend owns connection validation, external-host reuse detection, and
-  lifecycle reasoning instead of pushing those decisions into Tauri/UI code.
-
 ## Feature Flags
+| Feature | Default | Contract |
+| ------- | ------- | -------- |
+| `backend-llamacpp` | Yes | llama.cpp sidecar and GGUF support. |
+| `backend-ollama` | No | Ollama daemon integration. |
+| `backend-candle` | No | In-process Candle inference; pulls CUDA-oriented dependencies. |
+| `backend-pytorch` | No | In-process PyTorch/PyO3 backend support. |
+| `std-process` | No | Standard-library process spawner for non-Tauri hosts. |
 
-```toml
-[dependencies]
-inference = { version = "0.1", features = ["backend-llamacpp", "backend-ollama"] }
+## API Consumer Contract
+- Inputs: backend configuration, process spawner implementations, managed
+  runtime IDs, and inference requests.
+- Outputs: chat, embedding, rerank, KV-cache, runtime lifecycle, and managed
+  runtime DTOs.
+- Lifecycle: callers configure a gateway, inject host process behavior, start
+  or attach backends, and stop them through the gateway.
+- Errors: backend and lifecycle failures are surfaced as typed or structured
+  errors; unsupported capabilities must not return successful placeholder data.
+- Versioning: Cargo features, backend capability fields, and runtime lifecycle
+  payloads are public contracts for workspace consumers.
+
+## Structured Producer Contract
+- Managed runtime state and runtime lifecycle payloads are structured producer
+  outputs consumed by adapters and diagnostics.
+- Reason: these payloads describe install state, runtime readiness, reuse, and
+  backend attachment facts.
+- Revisit trigger: payloads become externally versioned schemas or are consumed
+  outside the Pantograph workspace.
+
+## Testing
+Run focused inference checks from the workspace root:
+
+```bash
+cargo test -p inference
+cargo check -p inference --all-features
+cargo check -p inference --no-default-features
 ```
 
-Available features:
-- `backend-llamacpp` (default): llama.cpp managed-runtime support
-- `backend-ollama`: Ollama daemon integration
-- `backend-candle`: In-process Candle inference (requires CUDA)
-- `std-process`: Standard library process spawner
-
-## License
-
-MIT OR Apache-2.0
+## Notes
+- Keep workflow scheduling, technical-fit policy, and adapter transport logic
+  outside this crate.

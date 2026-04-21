@@ -1,9 +1,15 @@
 [package]
 name = "node-engine"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
 description = "Graph-based workflow execution engine for Pantograph"
-license = "MIT OR Apache-2.0"
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
 
 [dependencies]
 pantograph-runtime-identity = { path = "../pantograph-runtime-identity" }

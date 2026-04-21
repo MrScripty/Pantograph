@@ -1,9 +1,15 @@
 [package]
 name = "pantograph_rustler"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
 description = "Elixir/Erlang NIFs for Pantograph workflow engine via Rustler"
-license = "MIT OR Apache-2.0"
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
 
 [lib]
 crate-type = ["cdylib"]

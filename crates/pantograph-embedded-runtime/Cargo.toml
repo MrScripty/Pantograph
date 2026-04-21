@@ -1,9 +1,15 @@
 [package]
 name = "pantograph-embedded-runtime"
-version = "0.1.0"
+version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
+publish = false
 description = "Backend-owned embedded runtime for direct Pantograph workflow execution"
+
+[lints]
+workspace = true
 
 [features]
 default = ["backend-llamacpp", "backend-ollama", "backend-candle"]

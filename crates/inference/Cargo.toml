@@ -1,10 +1,16 @@
 [package]
 name = "inference"
-version = "0.1.0"
+version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
+publish = false
 description = "Multi-backend AI inference library supporting llama.cpp, Ollama, and Candle"
 readme = "README.md"
+
+[lints]
+workspace = true
 
 [features]
 default = ["backend-llamacpp"]

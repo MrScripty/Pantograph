@@ -1,9 +1,15 @@
 [package]
 name = "pantograph-workflow-service"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
 description = "Host-agnostic workflow application services for Pantograph"
-license = "MIT OR Apache-2.0"
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
 
 [dependencies]
 async-trait.workspace = true

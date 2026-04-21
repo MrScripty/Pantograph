@@ -474,25 +474,33 @@ Goal: Adopt the Rust-specific standards now present under `languages/rust/`
 without blocking unrelated frontend work.
 
 Tasks:
-- Add root `[workspace.lints.rust]` and `[workspace.lints.clippy]`, including
-  `unsafe_code = "deny"` by default, then opt member crates into workspace lints.
-- Decide the warning ratchet for existing Rust warnings before turning clippy
-  into a hard `-D warnings` gate.
-- Normalize Rust crate metadata: workspace `version`, `rust-version`,
+- [x] Add root `[workspace.lints.rust]` and `[workspace.lints.clippy]`, including
+  `unsafe_code = "deny"` by default, then opt member crates into workspace
+  lints. Status: workspace lint policy now denies repo-owned unsafe code,
+  requires unsafe documentation if unsafe is ever introduced, and opts every
+  Rust workspace member into the policy. The exception checklist is documented
+  in `docs/rust-workspace-policy.md`.
+- [ ] Decide the warning ratchet for existing Rust warnings before turning
+  clippy into a hard `-D warnings` gate. Progress: `cargo check --workspace
+  --all-features` and `cargo check --workspace --no-default-features` pass, but
+  still emit the warning baseline tracked in M7.
+- [x] Normalize Rust crate metadata: workspace `version`, `rust-version`,
   `repository`, shared package inheritance, and explicit `publish = false`
-  for app, binding-wrapper, internal, and workspace-only crates.
-- Document Cargo feature contracts for `inference`, `node-engine`,
+  for app, binding-wrapper, internal, and workspace-only crates. Status:
+  reusable workspace crates now inherit shared package metadata, and the Tauri
+  app plus all local Rust crates explicitly opt out of crates.io publishing.
+- [ ] Document Cargo feature contracts for `inference`, `node-engine`,
   `pantograph-embedded-runtime`, `pantograph-uniffi`, `pantograph-rustler`,
   `workflow-nodes`, and `src-tauri`.
-- Keep or justify current default features; move expensive optional behavior
+- [ ] Keep or justify current default features; move expensive optional behavior
   behind explicit features where consumers should not always pay the cost.
-- Classify binding exports as `supported`, `experimental`, or `internal-only`;
+- [ ] Classify binding exports as `supported`, `experimental`, or `internal-only`;
   document product-native artifact names and version matching.
-- Add or document host-visible binding `version()` behavior.
-- Review non-test inline Rust platform `cfg` blocks against the thin-platform-module exception rule.
-- Preserve the current no-unsafe state with workspace lint policy; define the
+- [ ] Add or document host-visible binding `version()` behavior.
+- [ ] Review non-test inline Rust platform `cfg` blocks against the thin-platform-module exception rule.
+- [x] Preserve the current no-unsafe state with workspace lint policy; define the
   exception checklist before any future unsafe-owning crate is introduced.
-- Add Criterion benchmark policy for Rust performance claims and hot-path changes.
+- [ ] Add Criterion benchmark policy for Rust performance claims and hot-path changes.
 
 Verification:
 - `cargo fmt --all -- --check`
@@ -599,8 +607,13 @@ fully resolved by standards compliance:
   Rust warning ratchet as remove, feature-gate, or intentionally retained.
 - `pantograph-rustler` currently emits `non_local_definitions` warnings from
   `rustler::resource!`; resolve, update Rustler, or document a temporary lint exception.
-- The repo currently has no repo-owned Rust `unsafe` blocks, but also lacks the
-  workspace lint policy that would preserve that state.
+- `cargo fmt --all -- --check` currently fails on pre-existing Rust formatting
+  drift across inference managed-runtime modules, node-engine executor helpers,
+  embedded-runtime modules, workflow-service tests, and Tauri workflow/LLM
+  modules. Keep that as a separate formatting cleanup slice instead of mixing
+  it into manifest or behavior commits.
+- Resolved: the repo currently has no repo-owned Rust `unsafe` blocks, and the
+  workspace lint policy now denies new unsafe code by default.
 - Resolved: generated-component history metadata moved out of
   `src/generated/.git` into ignored `.pantograph/generated-components.git/`.
 - CI currently verifies important binding/runtime separation paths but does not protect the main frontend and workspace quality gates.

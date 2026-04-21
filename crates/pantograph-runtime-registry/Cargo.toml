@@ -1,9 +1,15 @@
 [package]
 name = "pantograph-runtime-registry"
-version = "0.1.0"
+version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
+publish = false
 description = "Pantograph runtime registry state machine and reservation contracts"
+
+[lints]
+workspace = true
 
 [dependencies]
 pantograph-runtime-identity = { path = "../pantograph-runtime-identity" }

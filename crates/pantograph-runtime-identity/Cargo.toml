@@ -1,8 +1,14 @@
 [package]
 name = "pantograph-runtime-identity"
-version = "0.1.0"
+version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
+publish = false
 description = "Shared backend identity and alias normalization for Pantograph runtime surfaces"
+
+[lints]
+workspace = true
 
 [dependencies]

@@ -63,9 +63,10 @@ optional `pumas-library`.
 
 ## Usage Examples
 ```rust
+let pumas_api = maybe_pumas_api();
 let host = pantograph_frontend_http_adapter::FrontendHttpWorkflowHost::with_defaults(
     "http://127.0.0.1:8081".to_string(),
-    None,
+    pumas_api,
     std::path::Path::new(env!("CARGO_MANIFEST_DIR")),
 )?;
 ```

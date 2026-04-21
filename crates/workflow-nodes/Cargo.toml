@@ -1,8 +1,15 @@
 [package]
 name = "workflow-nodes"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
 description = "Task/node implementations for Pantograph workflow engine"
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
 
 [dependencies]
 # Framework
