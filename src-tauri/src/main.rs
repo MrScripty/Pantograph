@@ -4,6 +4,7 @@
 extern crate workflow_nodes;
 
 mod agent;
+mod app_lifecycle;
 mod config;
 mod constants;
 mod hotload_sandbox;
@@ -44,9 +45,6 @@ use std::sync::Arc;
 use tauri::{Emitter, Manager};
 use tokio::sync::RwLock;
 use workflow::{ExecutionManager, SharedModelDependencyResolver};
-
-use crate::llm::runtime_registry::stop_all_and_sync_runtime_registry;
-use crate::workflow::runtime_shutdown::invalidate_loaded_session_runtimes;
 
 fn main() {
     // Initialize logging - shows logs in terminal when running in dev mode
@@ -442,38 +440,7 @@ fn main() {
             workflow::orchestration::execute_orchestration,
             workflow::orchestration::get_orchestration_node_types,
         ])
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { .. } = event {
-                // Stop the inference gateway when the window closes to avoid lingering processes
-                let app = window.app_handle();
-                let gateway = app.try_state::<SharedGateway>().map(|state| state.inner().clone());
-                let workflow_session_cleanup_worker = app
-                    .try_state::<workflow::commands::SharedWorkflowSessionStaleCleanupWorker>()
-                    .map(|state| state.inner().clone());
-                let runtime_registry = app
-                    .try_state::<SharedRuntimeRegistry>()
-                    .map(|state| state.clone());
-                tauri::async_runtime::block_on(async {
-                    if let Some(workflow_session_cleanup_worker) = workflow_session_cleanup_worker {
-                        workflow_session_cleanup_worker.shutdown().await;
-                    }
-                    if let Some(gateway) = gateway {
-                        invalidate_loaded_session_runtimes(&app);
-                        // Stop both main server and embedding server
-                        if let Some(runtime_registry) = runtime_registry {
-                            stop_all_and_sync_runtime_registry(
-                                gateway.as_ref(),
-                                runtime_registry.as_ref(),
-                            )
-                            .await;
-                        } else {
-                            gateway.stop_all().await;
-                        }
-                        log::info!("Stopped inference gateway and embedding server on window close");
-                    }
-                });
-            }
-        })
+        .on_window_event(app_lifecycle::handle_window_event)
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

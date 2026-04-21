@@ -260,6 +260,10 @@ Goal: Make startup, shutdown, process, and background tasks explicitly owned.
 Tasks:
 - Extract `src-tauri/src/main.rs` into a small composition facade and focused
   setup/shutdown modules.
+  Progress: window-close shutdown now lives in `src-tauri/src/app_lifecycle.rs`,
+  giving gateway shutdown, stale session worker shutdown, loaded runtime
+  invalidation, and runtime-registry sync a focused lifecycle owner outside the
+  command registration root.
 - Replace production `expect(...)` calls in startup/setup/shutdown with typed
   errors, logged context, or documented invariant-only assertions.
 - Introduce a task supervisor or owned service handles for extension init,

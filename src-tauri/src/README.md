@@ -12,6 +12,7 @@ the canonical owner of workflow, runtime registry, or node execution policy.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `main.rs` | Tauri application composition root and command registration. |
+| `app_lifecycle.rs` | Window lifecycle shutdown hook that stops owned workers, invalidates loaded workflow runtimes, and syncs runtime-registry state. |
 | `config.rs` | Desktop configuration structures and persistence integration. |
 | `constants.rs` | Tauri backend constants shared across modules. |
 | `agent/` | Assistant documentation, retrieval, enrichment, and tool support. |
@@ -43,6 +44,8 @@ entrypoints; collapsed group mutation policy lives in
 `pantograph-workflow-service`.
 Workflow save/load/list commands likewise delegate to the service graph store;
 Tauri no longer keeps a parallel workflow persistence/path-validation module.
+Window close shutdown now lives in `app_lifecycle.rs` so `main.rs` can stay a
+composition facade while lifecycle cleanup gets a focused owner.
 
 ## Alternatives Rejected
 - Put workflow/runtime policy directly in Tauri commands: rejected because
@@ -55,6 +58,8 @@ Tauri no longer keeps a parallel workflow persistence/path-validation module.
 - `main.rs` should trend toward composition wiring rather than policy.
 - Command modules must preserve backend error categories.
 - Long-lived tasks and process handles need owned shutdown paths.
+- Window-close cleanup must route through `app_lifecycle.rs` rather than inline
+  shutdown policy in `main.rs`.
 - Tauri-local DTOs should migrate toward shared backend contracts where
   practical.
 - Command registrations for graph edits, including node group mutations, must
