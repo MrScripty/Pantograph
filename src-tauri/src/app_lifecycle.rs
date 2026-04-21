@@ -1,5 +1,6 @@
 use tauri::{Manager, Window, WindowEvent};
 
+use crate::app_tasks::SharedAppTaskRegistry;
 use crate::llm::runtime_registry::stop_all_and_sync_runtime_registry;
 use crate::llm::{SharedGateway, SharedRuntimeRegistry};
 use crate::workflow;
@@ -19,11 +20,18 @@ fn shutdown_window_runtime(window: &Window) {
     let workflow_session_cleanup_worker = app
         .try_state::<workflow::commands::SharedWorkflowSessionStaleCleanupWorker>()
         .map(|state| state.inner().clone());
+    let app_task_registry = app
+        .try_state::<SharedAppTaskRegistry>()
+        .map(|state| state.inner().clone());
     let runtime_registry = app
         .try_state::<SharedRuntimeRegistry>()
         .map(|state| state.inner().clone());
 
     tauri::async_runtime::block_on(async {
+        if let Some(app_task_registry) = app_task_registry {
+            app_task_registry.shutdown().await;
+        }
+
         if let Some(workflow_session_cleanup_worker) = workflow_session_cleanup_worker {
             workflow_session_cleanup_worker.shutdown().await;
         }

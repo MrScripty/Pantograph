@@ -272,6 +272,11 @@ Tasks:
   Tauri run result now return logged startup/setup errors instead of panicking.
 - [ ] Introduce a task supervisor or owned service handles for extension init,
   process stdout/stderr readers, process monitors, health monitors, and cleanup workers.
+  Progress: `src-tauri/src/app_tasks.rs` now owns a Tauri-managed startup task
+  registry, and the executor-extension initialization task is tracked and
+  aborted during window shutdown before runtime workers/processes are stopped.
+  Remaining work covers process stdout/stderr readers, process monitors, and
+  health-monitor task ownership.
 - [ ] Replace bare PID files with structured records that include pid, start time,
   version/mode, and owner identity where needed.
 - [ ] Document listener bind address, max connections, timeout/heartbeat strategy,

@@ -13,6 +13,7 @@ the canonical owner of workflow, runtime registry, or node execution policy.
 | ----------- | ----------- |
 | `main.rs` | Tauri application composition root and command registration. |
 | `app_lifecycle.rs` | Window lifecycle shutdown hook that stops owned workers, invalidates loaded workflow runtimes, and syncs runtime-registry state. |
+| `app_tasks.rs` | App-owned async task registry for startup/setup work that must be stopped during shutdown. |
 | `config.rs` | Desktop configuration structures and persistence integration. |
 | `constants.rs` | Tauri backend constants shared across modules. |
 | `agent/` | Assistant documentation, retrieval, enrichment, and tool support. |
@@ -48,6 +49,8 @@ Window close shutdown now lives in `app_lifecycle.rs` so `main.rs` can stay a
 composition facade while lifecycle cleanup gets a focused owner.
 Startup resource failures now flow through `run_app()` and the Tauri setup
 result with logged context instead of production `expect(...)` panics.
+Startup/setup async tasks are registered in `app_tasks.rs` and drained during
+window shutdown before runtime workers and model processes are stopped.
 
 ## Alternatives Rejected
 - Put workflow/runtime policy directly in Tauri commands: rejected because
@@ -64,6 +67,8 @@ result with logged context instead of production `expect(...)` panics.
   shutdown policy in `main.rs`.
 - Startup/setup failures for required resources must return logged errors
   instead of panicking.
+- Startup/setup tasks spawned from the composition root must be tracked by the
+  app task registry.
 - Tauri-local DTOs should migrate toward shared backend contracts where
   practical.
 - Command registrations for graph edits, including node group mutations, must

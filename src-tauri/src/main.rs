@@ -5,6 +5,7 @@ extern crate workflow_nodes;
 
 mod agent;
 mod app_lifecycle;
+mod app_tasks;
 mod config;
 mod constants;
 mod hotload_sandbox;
@@ -13,6 +14,7 @@ mod project_root;
 mod workflow;
 
 use agent::create_rag_manager;
+use app_tasks::{AppTaskRegistry, SharedAppTaskRegistry};
 use config::AppConfig;
 use constants::paths::DATA_DIR;
 use llm::{
@@ -116,6 +118,7 @@ fn run_app() -> AppStartupResult<()> {
         Arc::new(llm::health_monitor::HealthMonitor::default());
     let recovery_manager: SharedRecoveryManager =
         Arc::new(llm::recovery::RecoveryManager::default());
+    let app_task_registry: SharedAppTaskRegistry = Arc::new(AppTaskRegistry::new());
 
     // Create shared executor extensions (populated async in .setup())
     let shared_extensions: workflow::commands::SharedExtensions =
@@ -140,12 +143,14 @@ fn run_app() -> AppStartupResult<()> {
         .manage(runtime_registry)
         .manage(health_monitor)
         .manage(recovery_manager)
+        .manage(app_task_registry.clone())
         .manage(shared_extensions.clone())
         .manage(model_dependency_resolver.clone())
         .setup({
             let shared_extensions = shared_extensions.clone();
             let model_dependency_resolver = model_dependency_resolver.clone();
             let workflow_service = workflow_service.clone();
+            let app_task_registry = app_task_registry.clone();
             move |app| {
                 let workflow_service_for_cleanup = workflow_service.clone();
                 let runtime_handle = tauri::async_runtime::handle().inner().clone();
@@ -261,7 +266,7 @@ fn run_app() -> AppStartupResult<()> {
                 });
 
                 let ext_init = shared_extensions.clone();
-                tauri::async_runtime::spawn(async move {
+                let extension_init_task = tauri::async_runtime::spawn(async move {
                     let mut ext = ext_init.write().await;
                     workflow_nodes::setup_extensions_with_path(
                         &mut ext,
@@ -277,6 +282,7 @@ fn run_app() -> AppStartupResult<()> {
                     ext.set(node_engine::extension_keys::KV_CACHE_STORE, kv_store);
                     log::info!("Initialized KV cache store");
                 });
+                app_task_registry.track("executor-extension-init", extension_init_task);
 
                 Ok(())
             }
