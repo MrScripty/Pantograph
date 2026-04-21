@@ -350,7 +350,10 @@ Tasks:
   and workflow-facing runtime-registry/warmup coordination error mapping now
   lives in `crates/pantograph-embedded-runtime/src/runtime_registry_errors.rs`.
   Shared runtime extension snapshots and executor extension injection now live
-  in `crates/pantograph-embedded-runtime/src/runtime_extensions.rs`.
+  in `crates/pantograph-embedded-runtime/src/runtime_extensions.rs`. The root
+  embedded-runtime test module now lives in
+  `crates/pantograph-embedded-runtime/src/lib_tests.rs`; the extracted module
+  still needs a later split by behavior area.
 - Split `crates/node-engine/src/core_executor.rs` by execution phases, blocking
   adapters, demand preparation, output handling, and tests.
 - Split `src/components/WorkflowGraph.svelte` and
