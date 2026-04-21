@@ -46,6 +46,8 @@ Workflow save/load/list commands likewise delegate to the service graph store;
 Tauri no longer keeps a parallel workflow persistence/path-validation module.
 Window close shutdown now lives in `app_lifecycle.rs` so `main.rs` can stay a
 composition facade while lifecycle cleanup gets a focused owner.
+Startup resource failures now flow through `run_app()` and the Tauri setup
+result with logged context instead of production `expect(...)` panics.
 
 ## Alternatives Rejected
 - Put workflow/runtime policy directly in Tauri commands: rejected because
@@ -60,6 +62,8 @@ composition facade while lifecycle cleanup gets a focused owner.
 - Long-lived tasks and process handles need owned shutdown paths.
 - Window-close cleanup must route through `app_lifecycle.rs` rather than inline
   shutdown policy in `main.rs`.
+- Startup/setup failures for required resources must return logged errors
+  instead of panicking.
 - Tauri-local DTOs should migrate toward shared backend contracts where
   practical.
 - Command registrations for graph edits, including node group mutations, must
