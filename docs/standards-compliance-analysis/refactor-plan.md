@@ -175,6 +175,7 @@ Tasks:
   subdirectories that need focused ownership text.
   Status: workflow-nodes root/control/output/system/tool READMEs are normalized
   and now explicitly record the tool-loop/tool-executor placeholder risk.
+  Node-engine orchestration and context-key helper READMEs are normalized.
 
 Additional issue recorded during implementation:
 - `crates/inference/src/managed_runtime/managed_binaries/` is an empty,

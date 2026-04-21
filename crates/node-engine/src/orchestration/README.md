@@ -1,28 +1,95 @@
 # crates/node-engine/src/orchestration
 
+Backend orchestration graph execution boundary.
+
 ## Purpose
-Submodule source for this crate, grouped by responsibility.
+This directory owns the high-level orchestration graph model and executor used
+to sequence data graphs through start, end, condition, loop, merge, and
+data-graph nodes.
 
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| executor.rs | Source file used by modules in this directory. |
-| mod.rs | Source file used by modules in this directory. |
-| nodes.rs | Source file used by modules in this directory. |
-| store.rs | Source file used by modules in this directory. |
-| types.rs | Source file used by modules in this directory. |
+| `mod.rs` | Public orchestration module exports and boundary documentation. |
+| `types.rs` | Orchestration graph, node, edge, config, and result DTOs. |
+| `nodes.rs` | Node execution context and per-node orchestration behavior helpers. |
+| `executor.rs` | Orchestration executor and event emission flow. |
+| `store.rs` | In-memory orchestration graph storage and metadata helpers. |
 
-## Design Decisions
-- Keep files in this directory scoped to a single responsibility boundary.
-- Prefer explicit module boundaries over cross-cutting utility placement.
-- Maintain predictable naming so callers can discover related modules quickly.
+## Problem
+Pantograph needs workflow-level control flow that can coordinate multiple data
+graphs without moving orchestration semantics into frontend stores or host
+adapters.
+
+## Constraints
+- Orchestration graph DTOs may be serialized in saved orchestration files.
+- Data graph execution is delegated through a trait rather than hard-coded.
+- Control-flow behavior must remain deterministic and backend-owned.
+- Event payloads must stay compatible with workflow service and binding
+  projections.
+
+## Decision
+Keep orchestration graph contracts and execution in this focused module tree.
+The executor owns control-flow sequencing while data-graph execution remains an
+injected dependency.
+
+## Alternatives Rejected
+- Store orchestration control flow only in frontend graph state: rejected
+  because backend execution must own runtime behavior.
+- Merge orchestration graph DTOs into workflow-node descriptors: rejected
+  because orchestration nodes describe control flow, not dataflow tasks.
+
+## Invariants
+- Orchestration graphs must have valid node/edge references before execution.
+- DataGraph nodes call the injected data-graph executor.
+- Orchestration events preserve backend execution order.
+- Saved orchestration DTO changes require migration of tracked examples.
+
+## Revisit Triggers
+- Orchestration JSON receives a formal schema.
+- Orchestration execution moves into workflow service.
+- Durable orchestration stores replace the current in-memory store.
 
 ## Dependencies
-**Internal:** Neighboring modules in this source tree and the nearest package/crate entry points.
-**External:** Dependencies declared in the corresponding manifest files.
+**Internal:** node-engine graph/runtime types and saved orchestration examples
+under `.pantograph/orchestrations`.
+
+**External:** `serde`, `serde_json`, `async-trait`, and `tokio`.
+
+## Related ADRs
+- `docs/adr/ADR-001-headless-embedding-service-boundary.md`
 
 ## Usage Examples
 ```rust
-// Example: expose modules from this directory in the crate root.
-mod module_name;
+use node_engine::orchestration::{OrchestrationGraph, OrchestrationNodeType};
 ```
+
+## API Consumer Contract
+- Inputs: orchestration graph DTOs, initial data, and a `DataGraphExecutor`.
+- Outputs: orchestration results and ordered orchestration events.
+- Lifecycle: callers create or load orchestration graphs, then execute them
+  through `OrchestrationExecutor`.
+- Errors: validation or data-graph execution failures propagate through the
+  orchestration result/error path.
+- Versioning: graph/node/edge DTO changes must migrate saved examples and
+  adapters together.
+
+## Structured Producer Contract
+- Stable fields: orchestration graph ids, node ids, edge ids, node types,
+  config keys, and event labels are machine-consumed.
+- Defaults: omitted optional config fields must match executor defaults.
+- Enums and labels: node types and event labels carry execution behavior.
+- Ordering: event order follows backend control-flow progression.
+- Compatibility: `.pantograph/orchestrations` examples may reference these DTOs
+  across releases.
+- Regeneration/migration: DTO changes require orchestration examples, tests,
+  and consumers to update in the same slice.
+
+## Testing
+```bash
+cargo test -p node-engine orchestration
+```
+
+## Notes
+- Keep orchestration policy in backend Rust; host adapters should only load,
+  save, and invoke it.
