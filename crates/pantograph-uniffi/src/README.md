@@ -48,6 +48,9 @@ and error projection, while workflow semantics stay in
 - Request/response JSON contracts remain backend-owned by
   `pantograph-workflow-service`.
 - `frontend-http` exports delegate to `pantograph-frontend-http-adapter`.
+- Test fixtures for canonical workflow events must include all backend-owned
+  event fields, including additive graph memory-impact metadata, so binding
+  tests compile against the current `node-engine` contract.
 - Generated bindings and native library artifacts must be produced from the
   same build input.
 - Public exported methods should map to documented host-language use cases.

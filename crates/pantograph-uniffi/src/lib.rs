@@ -1204,6 +1204,7 @@ mod tests {
             workflow_id: "wf-1".to_string(),
             execution_id: "exec-1".to_string(),
             dirty_tasks: vec!["node-a".to_string(), "node-b".to_string()],
+            memory_impact: None,
             occurred_at_ms: None,
         })
         .expect("send graph modified event");

@@ -675,6 +675,10 @@ fully resolved by standards compliance:
   embedded-runtime modules, workflow-service tests, and Tauri workflow/LLM
   modules. Keep that as a separate formatting cleanup slice instead of mixing
   it into manifest or behavior commits.
+- Resolved: `cargo test -p pantograph-uniffi --all-features version` exposed a
+  stale `WorkflowEvent::GraphModified` test fixture in
+  `crates/pantograph-uniffi/src/lib.rs` that was missing the backend-owned
+  `memory_impact` field.
 - Resolved: the repo currently has no repo-owned Rust `unsafe` blocks, and the
   workspace lint policy now denies new unsafe code by default.
 - Resolved: generated-component history metadata moved out of
