@@ -212,8 +212,12 @@ Tasks:
 - [ ] Convert group create/ungroup/update-port operations to return backend-owned
   graph mutation responses, then remove local graph reconstruction from
   `packages/svelte-graph/src/stores/createWorkflowStores.ts`.
-- [ ] Collapse duplicate Tauri wire normalizers into one executable contract module
-  consumed by both `WorkflowService.ts` and `TauriWorkflowBackend.ts`.
+- [x] Collapse duplicate Tauri wire normalizers into one executable contract
+  module consumed by both `WorkflowService.ts` and `TauriWorkflowBackend.ts`.
+  Status: `src/lib/tauriConnectionIntentWire.ts` owns connection-intent
+  serialization/normalization and `src/lib/tauriConnectionIntentWire.test.ts`
+  covers the camelCase/snake_case Tauri payload conversions used by both
+  consumers.
 - [x] Decide whether `tool-loop` and `tool-executor` are disabled/experimental
   or real. Remove successful placeholder behavior either way. Status:
   descriptors remain registered for saved workflow compatibility, while
