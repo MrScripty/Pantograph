@@ -566,7 +566,12 @@ Tasks:
   records that the package owns its peer dependency consumer contract while the
   repository root owns the current test/lint/typecheck commands, and requires
   future package-local scripts to declare their own dev dependencies.
-- Add toolchain pinning files after confirming intended Rust, Node, and Python versions.
+- [x] Add toolchain pinning files after confirming intended Rust, Node, and
+  Python versions. Status: `rust-toolchain.toml`, `.node-version`,
+  `.python-version`, `package.json` engine/package-manager pins, and
+  `docs/toolchain-policy.md` now record Rust 1.92.0, Node 24.12.0, npm 11.6.2,
+  and Python 3.12.3; existing CI Rust installation now targets the pinned Rust
+  toolchain.
 - Add release hardening: artifact naming policy, SBOM generation, release CI
   outline, and changelog automation decision.
 - Add Svelte-specific a11y lint/test coverage for interactive generic elements,

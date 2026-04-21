@@ -91,9 +91,13 @@ npm run build:desktop
 
 ### Prerequisites
 
-- Node.js + npm
-- Rust toolchain
+- Node.js + npm matching `.node-version` and `package.json`
+- Rust toolchain matching `rust-toolchain.toml`
+- Python matching `.python-version` for Python-backed smoke paths
 - Tauri system dependencies (above)
+
+Pinned toolchain ownership and update policy are documented in
+`docs/toolchain-policy.md`.
 
 ### Useful Commands
 
