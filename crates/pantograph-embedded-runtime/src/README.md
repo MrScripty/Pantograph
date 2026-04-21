@@ -23,6 +23,7 @@ packages.
 | `lib_tests/data_graph_execution_tests.rs` | Embedded data-graph execution integration tests split out of the legacy root test module. |
 | `lib_tests/edit_session_execution_tests.rs` | Embedded edit-session graph execution integration tests split out of the legacy root test module. |
 | `lib_tests/host_helper_tests.rs` | Focused embedded workflow host helper and runtime-registry error-mapping unit tests split out of the legacy root test module. |
+| `lib_tests/runtime_lifecycle_capability_tests.rs` | Embedded hosted-runtime lifecycle, shutdown, and injected-capability tests split out of the legacy root test module. |
 | `lib_tests/runtime_preflight_tests.rs` | Embedded runtime preflight and unload-candidate selection tests split out of the legacy root test module. |
 | `lib_tests/session_checkpoint_capacity_tests.rs` | Embedded keep-alive workflow-session capacity checkpoint tests split out of the legacy root test module. |
 | `lib_tests/session_checkpoint_recovery_tests.rs` | Embedded keep-alive workflow-session checkpoint recovery tests split out of the legacy root test module. |
@@ -168,6 +169,10 @@ embedded-runtime crate.
   `lib_tests/runtime_preflight_tests.rs` so install-state availability checks
   and registry eviction-order selection do not accumulate in the root test
   harness.
+- Hosted runtime lifecycle and injected capability tests stay in
+  `lib_tests/runtime_lifecycle_capability_tests.rs` so construction,
+  shutdown-state reconciliation, and capability injection checks do not
+  accumulate in the shared root test harness.
 - Python-backed nodes execute through the runtime adapter boundary.
 - Shared runtime extension snapshots and executor injection must stay in a
   backend-owned helper so workflow execution paths do not drift on extension

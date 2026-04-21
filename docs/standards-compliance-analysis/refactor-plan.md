@@ -395,7 +395,11 @@ Tasks:
   `crates/pantograph-embedded-runtime/src/lib_tests/session_checkpoint_recovery_tests.rs`;
   embedded runtime preflight and unload-candidate selection tests now live in
   `crates/pantograph-embedded-runtime/src/lib_tests/runtime_preflight_tests.rs`;
-  the remaining legacy integration tests still need behavior-area splits.
+  embedded hosted-runtime lifecycle, shutdown, and injected-capability tests now
+  live in
+  `crates/pantograph-embedded-runtime/src/lib_tests/runtime_lifecycle_capability_tests.rs`;
+  `crates/pantograph-embedded-runtime/src/lib_tests.rs` now owns only the
+  shared test harness and behavior-module index.
 - Split `crates/node-engine/src/core_executor.rs` by execution phases, blocking
   adapters, demand preparation, output handling, and tests.
 - Split `src/components/WorkflowGraph.svelte` and
