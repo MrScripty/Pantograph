@@ -92,6 +92,9 @@ it is represented by a backend contract.
 - Host-owned caches of embedding runtime availability must be synchronized from
   gateway facts whenever lifecycle commands or recovery change the active
   embedding producer.
+- RAG sync tests and helpers should construct RAG state through
+  `create_rag_manager` and the shared handle type rather than importing
+  concrete manager internals through public module re-exports.
 - Runtime-registry injection passes through this layer, but runtime residency
   and admission policy must not be implemented in command handlers or other
   Tauri transport modules.

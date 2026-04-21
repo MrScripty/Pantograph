@@ -43,24 +43,12 @@ mod tests {
     };
     use inference::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
     use inference::{ImageGenerationRequest, ImageGenerationResult, RerankRequest, RerankResponse};
-    use tokio::sync::{mpsc, RwLock};
+    use tokio::sync::mpsc;
 
-    use crate::agent::rag::{RagManager, SharedRagManager};
+    use crate::agent::rag::{create_rag_manager, SharedRagManager};
     use crate::llm::gateway::InferenceGateway;
 
     use super::sync_rag_embedding_url_from_gateway;
-
-    struct MockProcessHandle;
-
-    impl ProcessHandle for MockProcessHandle {
-        fn pid(&self) -> u32 {
-            11
-        }
-
-        fn kill(&self) -> Result<(), String> {
-            Ok(())
-        }
-    }
 
     struct MockProcessSpawner;
 
@@ -172,8 +160,7 @@ mod tests {
     #[tokio::test]
     async fn sync_rag_embedding_url_clears_stale_url_when_gateway_has_no_embedding_runtime() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let rag_manager: SharedRagManager =
-            Arc::new(RwLock::new(RagManager::new(temp.path().to_path_buf())));
+        let rag_manager: SharedRagManager = create_rag_manager(temp.path().to_path_buf());
         rag_manager
             .write()
             .await
@@ -197,8 +184,7 @@ mod tests {
     #[tokio::test]
     async fn sync_rag_embedding_url_uses_gateway_embedding_mode_url() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let rag_manager: SharedRagManager =
-            Arc::new(RwLock::new(RagManager::new(temp.path().to_path_buf())));
+        let rag_manager: SharedRagManager = create_rag_manager(temp.path().to_path_buf());
 
         let gateway = Arc::new(InferenceGateway::with_test_backend(
             Box::new(MockInferenceBackend::new()),

@@ -25,6 +25,8 @@ storage errors and ranking semantics can blur into generic agent logic.
 - Retrieval ranking order is semantically meaningful.
 - Storage failures need clear error categories.
 - RAG state must not become canonical product documentation.
+- Public exports should expose the shared manager handle and constructor, not
+  concrete manager internals unless an active non-test consumer requires them.
 
 ## Decision
 Keep RAG storage and retrieval orchestration here behind typed manager and DTO
@@ -41,6 +43,8 @@ storage directly.
 - Retrieval results preserve rank order and source references.
 - Index updates must not silently discard source metadata.
 - Storage-specific errors are converted into RAG error categories.
+- Manager internals such as storage paths remain private implementation
+  details unless surfaced through a command or typed DTO.
 
 ## Revisit Triggers
 - RAG moves to a shared backend crate.

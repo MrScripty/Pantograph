@@ -450,11 +450,6 @@ impl RagManager {
         Ok(())
     }
 
-    /// Get the store path for vector databases
-    pub fn store_path(&self) -> &PathBuf {
-        &self.store_path
-    }
-
     /// List all available vector databases in the store path
     pub async fn list_databases(&self) -> Result<Vec<super::types::DatabaseInfo>, RagError> {
         let mut databases = Vec::new();
