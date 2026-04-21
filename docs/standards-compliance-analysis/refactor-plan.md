@@ -320,7 +320,10 @@ Tasks:
   validation now live in `workflow/io_contract.rs`, keeping the facade as the
   caller while isolating bindable input/output schema handling. Host trait
   defaults and scheduler diagnostics provider contracts now live in
-  `workflow/host.rs` and are re-exported by the facade.
+  `workflow/host.rs` and are re-exported by the facade. Request, binding,
+  output-target, and produced-output validation helpers now live in
+  `workflow/validation.rs`, with `validate_workflow_id` re-exported internally
+  for technical-fit request shaping.
 - Split `crates/pantograph-embedded-runtime/src/lib.rs` into runtime host,
   workflow sessions, registry lifecycle, diagnostics projection, model deps,
   and test modules.

@@ -16,12 +16,14 @@ public exports out of the service crate.
 | `io_contract.rs` | Workflow input/output surface derivation and host-response validation helpers. |
 | `runtime_preflight.rs` | Runtime requirement matching, issue formatting, and preflight warning collection. |
 | `session_runtime.rs` | Session runtime preflight cache checks, runtime loading, unload-candidate selection, and affinity refresh helpers. |
+| `validation.rs` | Request, binding, output-target, and produced-output validation helpers shared by facade operations. |
 
 ## Problem
 `src/workflow.rs` remains a large public facade with service methods. Public
 DTO definitions, host/runtime trait defaults, workflow I/O derivation, runtime
-readiness, and session-runtime loading are cohesive enough to isolate, but they
-still preserve the parent facade as the compatibility export point.
+readiness, request validation, and session-runtime loading are cohesive enough
+to isolate, but they still preserve the parent facade as the compatibility
+export point.
 
 ## Constraints
 - Preserve the public `WorkflowService` API while decomposing internals.
@@ -32,8 +34,9 @@ still preserve the parent facade as the compatibility export point.
 ## Decision
 Use this directory for workflow-service helper modules behind the parent
 facade. The parent facade remains the public export point while helpers own
-cohesive contract definitions, host/runtime trait defaults, workflow I/O
-derivation, runtime readiness, and session-runtime workflows.
+cohesive contract definitions, host/runtime trait defaults, request
+validation, workflow I/O derivation, runtime readiness, and session-runtime
+workflows.
 
 ## Alternatives Rejected
 - Leave all helpers in `workflow.rs`: rejected because runtime readiness and
@@ -99,6 +102,9 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
   runtime ids, required backend keys, and preflight cache facts flow into public
   response DTOs.
 - Defaults: blank required backend keys are ignored during matching.
+- Validation: blank workflow ids, empty binding endpoints, duplicate endpoints,
+  invalid output targets, oversized values, and missing produced outputs keep
+  the same error codes as the parent facade.
 - Enums and labels: runtime install/readiness states retain the parent service
   contract semantics.
 - Ordering: runtime issues are sorted and deduplicated before public exposure.
