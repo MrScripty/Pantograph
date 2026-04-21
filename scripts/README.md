@@ -79,6 +79,8 @@ or runtime-boundary decision.
 ```bash
 python3 -m py_compile scripts/diffusion_cli_smoketest.py
 ./.venv/bin/python scripts/diffusion_cli_smoketest.py --model-path /path/to/tiny-sd-turbo
+npm run lint:no-new
+npm run format:check
 ./scripts/check-decision-traceability.sh
 ./scripts/check-no-python-linkage.sh
 ./scripts/check-runtime-redistributables-smoke.sh

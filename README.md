@@ -78,6 +78,7 @@ npm run build:desktop
 
 ```bash
 ./launcher.sh --help
+./launcher.sh --test
 ./launcher.sh --release-smoke
 ```
 
@@ -106,6 +107,12 @@ npm run lint:full
 # Critical anti-pattern gate (src/ + packages/)
 npm run lint:critical
 
+# No-new-debt gate for critical anti-patterns and decision traceability
+npm run lint:no-new
+
+# Rust formatting audit
+npm run format:check
+
 # Type check
 npm run typecheck
 
@@ -115,8 +122,11 @@ npm test
 # Runtime separation guard (no compile-time Python linkage)
 npm run test:runtime-separation
 
-# All quality gates
+# Configured quality gates
 npm run check
+
+# Canonical local quality gate
+./launcher.sh --test
 ```
 
 ### Runtime Separation
@@ -193,7 +203,7 @@ Current known limitation:
 
 1. Create a focused branch for one logical change.
 2. Follow coding, tooling, accessibility, and documentation standards.
-3. Run `npm run check` and relevant targeted Rust tests before opening a PR.
+3. Run `./launcher.sh --test` and relevant targeted checks before opening a PR.
 4. Use Conventional Commits for all commits.
 
 ## License

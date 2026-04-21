@@ -38,6 +38,7 @@ Usage:
   ./${SCRIPT_NAME} --build
   ./${SCRIPT_NAME} --build-release
   ./${SCRIPT_NAME} --release-smoke
+  ./${SCRIPT_NAME} --test
   ./${SCRIPT_NAME} --run [-- <app args...>]
   ./${SCRIPT_NAME} --run-release [-- <app args...>]
 
@@ -47,6 +48,7 @@ Required action flags (choose exactly one):
   --build          Build development artifacts
   --build-release  Build release artifacts
   --release-smoke  Run the bounded redistributables smoke against a built release artifact
+  --test           Run the canonical local quality gate
   --install        Install/verify dependencies
   --help           Print this help and exit
 
@@ -55,6 +57,7 @@ Examples:
   ./${SCRIPT_NAME} --build
   ./${SCRIPT_NAME} --build-release
   ./${SCRIPT_NAME} --release-smoke
+  ./${SCRIPT_NAME} --test
   ./${SCRIPT_NAME} --run
   ./${SCRIPT_NAME} --run -- --verbose
   ./${SCRIPT_NAME} --run-release
@@ -282,12 +285,32 @@ run_release_smoke() {
   "$ROOT_DIR/scripts/check-runtime-redistributables-smoke.sh" "$release_bin"
 }
 
+run_tests() {
+  ensure_runtime_dependencies
+  activate_python_env
+
+  log "[test] running critical frontend lint"
+  npm run lint:critical
+  log "[test] running TypeScript typecheck"
+  npm run typecheck
+  log "[test] running frontend unit tests"
+  npm run test:frontend
+  log "[test] checking Rust workspace with all features"
+  cargo check --workspace --all-features
+  log "[test] checking Rust workspace without default features"
+  cargo check --workspace --no-default-features
+  log "[test] running focused Rust unit tests"
+  cargo test -p node-engine --lib
+  cargo test -p workflow-nodes --lib
+  log "[test] local quality gate completed"
+}
+
 ACTION=""
 RUN_ARGS=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --run|--run-release|--build|--build-release|--release-smoke|--install|--help)
+    --run|--run-release|--build|--build-release|--release-smoke|--test|--install|--help)
       if [[ -n "$ACTION" ]]; then
         die_usage "exactly one action flag is allowed"
       fi
@@ -332,6 +355,9 @@ case "$ACTION" in
     ;;
   --release-smoke)
     run_release_smoke
+    ;;
+  --test)
+    run_tests
     ;;
   --run)
     run_app

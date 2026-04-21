@@ -535,9 +535,17 @@ Tasks:
   summary aggregation.
 - Ensure every CI job explicitly bootstraps the package manager or toolchain it
   invokes instead of relying on runner defaults.
-- Add `lint:no-new`, `format:check`, and decision-traceability commands; decide
-  which are immediately blocking and which begin as ratcheted audits.
-- Add `launcher.sh --test` as the canonical local test entrypoint.
+- [x] Add `lint:no-new`, `format:check`, and decision-traceability commands;
+  decide which are immediately blocking and which begin as ratcheted audits.
+  Status: `package.json` now exposes `lint:no-new` for immediately blocking
+  critical anti-pattern and decision-traceability checks plus `format:check` for
+  the Rust formatting baseline audit. Full lint and warning-deny enforcement
+  remain ratcheted until the recorded formatting and warning baselines are
+  cleaned up.
+- [x] Add `launcher.sh --test` as the canonical local test entrypoint. Status:
+  `launcher.sh --test` now runs the local quality gate across critical frontend
+  lint, TypeScript, frontend tests, Rust workspace checks, and focused Rust unit
+  tests.
 - Define the GUI `--release-smoke` CI strategy, including display server,
   sandbox/GPU/shared-memory constraints, and bounded startup behavior.
 - Document the repo's hybrid test placement and acceptance strategy.
