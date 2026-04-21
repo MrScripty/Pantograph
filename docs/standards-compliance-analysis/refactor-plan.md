@@ -115,7 +115,10 @@ Status:
 - Complete: `src/components/nodes/workflow/ImageOutputNode.svelte` no longer appends/removes a temporary anchor for downloads.
 - Complete: `src/components/runtime-manager/ManagedRuntimeSummaryGrid.svelte` no longer uses string-literal mustache spacing.
 - Complete: Vite now defaults to loopback and documents explicit LAN opt-in.
-- Pending: `src/generated/.git` decision.
+- Complete: `src/generated/.git` is documented as intentional runtime undo/redo state in tracked parent docs and ignore rules.
+- Added follow-up: move generated runtime state outside `src/` or replace the
+  nested repository with a backend-owned history store so source-root README
+  compliance can be enforced directly.
 
 Tasks:
 - Fix `src/components/nodes/workflow/ImageOutputNode.svelte` so `npm run lint:critical` passes.
@@ -134,6 +137,10 @@ Goal: Make source ownership and architectural intent navigable before moving lar
 
 Tasks:
 - Add missing READMEs identified in pass 01.
+- Resolve the `src/generated/` documentation exception by either moving
+  generated runtime state outside `src/` or replacing the nested Git repository
+  with a backend-owned structured history store that allows a tracked
+  `src/generated/README.md`.
 - Update host-facing READMEs for `pantograph-uniffi`, `pantograph-rustler`,
   `pantograph-workflow-service`, generated components, and Tauri workflow
   command boundaries to include required sections.

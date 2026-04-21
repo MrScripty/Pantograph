@@ -21,7 +21,9 @@ target
 #.idea/
 
 # Generated UI components (agent-created)
-# Ignore everything in generated/ (has its own nested git repo for undo/redo)
+# Ignore the entire directory because it owns a nested runtime Git repo for
+# component undo/redo. The outer repo records this exception in src/README.md
+# until generated runtime state moves outside the source tree.
 /src/generated/
 
 # Claude Code local settings
@@ -77,4 +79,3 @@ __pycache__/
 # Generated image artifacts
 **/grok-image*
 *.xcf
-

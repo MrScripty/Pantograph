@@ -12,7 +12,7 @@ Frontend application source for Pantograph, including UI, services, stores, and 
 | config/ | Subdirectory containing related implementation details. |
 | constants.ts | Source file used by modules in this directory. |
 | features/ | Subdirectory containing related implementation details. |
-| generated/ | Subdirectory containing related implementation details. |
+| generated/ | Runtime-generated Svelte component workspace used by the hot-load sandbox; ignored by the outer repo because it owns a nested Git history for component undo/redo. |
 | lib/ | Subdirectory containing related implementation details. |
 | main.ts | Source file used by modules in this directory. |
 | registry/ | Subdirectory containing related implementation details. |
@@ -29,6 +29,10 @@ Frontend application source for Pantograph, including UI, services, stores, and 
 - Keep files in this directory scoped to a single responsibility boundary.
 - Prefer explicit module boundaries over cross-cutting utility placement.
 - Maintain predictable naming so callers can discover related modules quickly.
+- Treat `generated/` as a temporary source-root exception: runtime component
+  files and their nested Git history are ignored by the outer repository, while
+  migration to a non-source runtime state directory is tracked in the standards
+  compliance plan.
 
 ## Dependencies
 **Internal:** Neighboring modules in this source tree and the nearest package/crate entry points.
