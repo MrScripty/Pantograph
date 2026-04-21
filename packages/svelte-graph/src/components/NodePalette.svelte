@@ -54,6 +54,14 @@
     stores.workflow.addNode(definition, { x: 200, y: 200 });
   }
 
+  function handleNodeKeyDown(event: KeyboardEvent, definition: NodeDefinition) {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return;
+    }
+    event.preventDefault();
+    handleDoubleClick(definition);
+  }
+
   const categoryIcons: Record<string, string> = {
     input: '[ ]',
     processing: '[~]',
@@ -100,6 +108,7 @@
                 ondragstart={(e) => handleDragStart(e, definition)}
                 ondragend={handleDragEnd}
                 ondblclick={() => handleDoubleClick(definition)}
+                onkeydown={(event) => handleNodeKeyDown(event, definition)}
                 title={definition.description}
                 role="button"
                 tabindex="0"

@@ -100,6 +100,7 @@
           <button type="button"
             class="nodrag nopan nowheel w-full cursor-pointer border-0 bg-transparent p-0"
             onclick={openModal}
+            aria-label="Open output image preview"
             onmousedown={stopControlEvent}
             onmouseup={stopControlEvent}
             onpointerdown={stopControlEvent}

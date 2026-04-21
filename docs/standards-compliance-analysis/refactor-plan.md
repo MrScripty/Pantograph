@@ -533,9 +533,9 @@ Tasks:
 - [x] Add a general CI workflow with separate jobs for critical lint, typecheck,
   frontend tests, Rust fmt/clippy/check/test/doc-test, dependency audit, and
   summary aggregation. Status: `.github/workflows/quality-gates.yml` now runs
-  blocking no-new lint/traceability, typecheck, frontend test, high-severity
-  dependency audit, Rust check, focused Rust test, and Rust doc-test jobs, with
-  separate ratcheted audit jobs for full lint, Rust formatting, and
+  blocking no-new lint/traceability, full lint, typecheck, frontend test,
+  high-severity dependency audit, Rust check, focused Rust test, and Rust
+  doc-test jobs, with separate ratcheted audit jobs for Rust formatting and
   `clippy -D warnings`.
 - [x] Ensure every CI job explicitly bootstraps the package manager or toolchain
   it invokes instead of relying on runner defaults. Status: Node jobs use
@@ -584,8 +584,12 @@ Tasks:
   now defines versioned artifact naming, release CI shape, SBOM requirements,
   and the current manual changelog decision; `scripts/generate-release-sbom.sh`
   and `npm run release:sbom` provide the CycloneDX SBOM entrypoint.
-- Add Svelte-specific a11y lint/test coverage for interactive generic elements,
-  icon-only buttons, embedded controls, and keyboard behavior.
+- [x] Add Svelte-specific a11y lint/test coverage for interactive generic
+  elements, icon-only buttons, embedded controls, and keyboard behavior.
+  Status: `scripts/check-svelte-a11y.mjs` now gates generic `role="button"`
+  focus/keyboard/name contracts, reviewed Svelte a11y suppressions, and
+  icon-only button accessible names; `npm run lint:no-new` and CI now include
+  `npm run lint:a11y`.
 
 Verification:
 - New CI workflow can run locally equivalent commands.

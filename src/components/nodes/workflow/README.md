@@ -45,6 +45,9 @@ or requiring the whole workflow view to remount.
   `HTMLAudioElement.duration`.
 - Stable Audio generation is batch-only in the current runtime, so the UI must
   not imply that its output will arrive as playable stream chunks mid-generation.
+- Embedded node controls must remain labelled and graph-safe: icon-only or
+  image-only buttons need accessible names, and pointer handlers must not leak
+  canvas drag/pan gestures.
 
 ## Decision
 Keep node-specific runtime behavior inside the component that owns the UI, but
@@ -89,6 +92,8 @@ workflow stores.
   definition.
 - `ExpandSettingsNode.svelte` must display the connected override value when one
   is available, otherwise the last runtime passthrough value or schema default.
+- Image and media preview controls must expose accessible names even when the
+  visible content is an image or icon rather than text.
 
 ## Revisit Triggers
 - Another output node needs the same rerun-reset pattern and the logic starts to

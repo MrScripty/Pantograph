@@ -174,10 +174,9 @@ jobs:
       - name: Run warning-deny clippy audit
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
-  lint-full-audit:
-    name: Full lint audit
+  lint-full:
+    name: Full lint
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -191,7 +190,7 @@ jobs:
       - name: Install npm dependencies
         run: npm ci --include=optional
 
-      - name: Run full lint audit
+      - name: Run full lint
         run: npm run lint:full
 
   quality-summary:
@@ -208,7 +207,7 @@ jobs:
       - rust-doc-tests
       - rust-format-audit
       - rust-clippy-audit
-      - lint-full-audit
+      - lint-full
     steps:
       - name: Summarize required gates
         run: |
@@ -216,6 +215,7 @@ jobs:
           for result in \
             "lint-no-new:${{ needs.lint-no-new.result }}" \
             "typecheck:${{ needs.typecheck.result }}" \
+            "lint-full:${{ needs.lint-full.result }}" \
             "frontend-tests:${{ needs.frontend-tests.result }}" \
             "dependency-audit:${{ needs.dependency-audit.result }}" \
             "rust-check:${{ needs.rust-check.result }}" \
@@ -232,6 +232,5 @@ jobs:
 
           echo "rust-format-audit: ${{ needs.rust-format-audit.result }}"
           echo "rust-clippy-audit: ${{ needs.rust-clippy-audit.result }}"
-          echo "lint-full-audit: ${{ needs.lint-full-audit.result }}"
 
           exit "$failed"

@@ -80,6 +80,7 @@ or runtime-boundary decision.
 python3 -m py_compile scripts/diffusion_cli_smoketest.py
 ./.venv/bin/python scripts/diffusion_cli_smoketest.py --model-path /path/to/tiny-sd-turbo
 npm run lint:no-new
+npm run lint:a11y
 npm run format:check
 npm run release:sbom -- 0.1.0
 ./scripts/check-decision-traceability.sh

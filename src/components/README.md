@@ -112,6 +112,13 @@ toolbar does not maintain a second local relevance gate.
   trigger insertion.
 - Node registration must stay consistent with bundled templates so shipped
   starter workflows render without fallback-node surprises.
+- Icon-only app-shell buttons must expose an accessible name with `aria-label`
+  or `aria-labelledby`; `title` alone is not treated as an accessible control
+  contract.
+- Palette node items must remain keyboard-activatable with Enter and Space when
+  they use generic `role="button"` semantics for drag-and-double-click behavior.
+- Svelte a11y suppressions on graph-canvas hosts require an adjacent
+  `a11y-reviewed:` comment explaining the ownership boundary.
 
 ## Revisit Triggers
 - The app graph fully converges with the package graph and can be deleted.

@@ -1005,6 +1005,7 @@
 
 <svelte:window onmousemove={updateDragCursorFromMouseEvent} />
 
+<!-- a11y-reviewed: SvelteFlow graph canvas owns pointer interaction while keyboard graph commands are handled on this focusable container. -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
   class="workflow-graph-container"

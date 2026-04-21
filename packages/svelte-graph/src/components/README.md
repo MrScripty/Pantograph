@@ -108,6 +108,10 @@ mapping.
   `IncrementalExecutionStarted`, `GraphModified`, and `Cancelled` events as
   execution-state updates rather than leaving those contracts unobserved in the
   existing GUI.
+- Palette node items must remain keyboard-activatable with Enter and Space when
+  they use generic `role="button"` semantics for drag-and-double-click behavior.
+- Svelte a11y suppressions on graph-canvas hosts require an adjacent
+  `a11y-reviewed:` comment explaining the ownership boundary.
 
 ## Revisit Triggers
 - Backend candidate queries become too slow for one-shot drag-start loading.

@@ -39,6 +39,10 @@ Application containers compose these components with service-backed state.
 - Follow-up input emits user intent rather than calling backend commands
   directly.
 - Settings UI delegates persistence through configured owners.
+- Hover-only activity rows must not claim button semantics; controls that do
+  perform actions need keyboard behavior and accessible names.
+- Follow-up icon buttons must expose accessible names because their visible
+  content is decorative SVG.
 
 ## Revisit Triggers
 - Side panel becomes plugin-extensible.

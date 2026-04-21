@@ -111,6 +111,9 @@ npm run lint:full
 # Critical anti-pattern gate (src/ + packages/)
 npm run lint:critical
 
+# Focused Svelte accessibility gate
+npm run lint:a11y
+
 # No-new-debt gate for critical anti-patterns and decision traceability
 npm run lint:no-new
 

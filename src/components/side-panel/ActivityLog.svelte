@@ -235,8 +235,6 @@
           class="rounded-lg p-3 bg-neutral-800/50"
           onmouseenter={() => hoveredItemId = item.id}
           onmouseleave={() => hoveredItemId = null}
-          role="button"
-          tabindex="0"
         >
           <div class="text-xs text-neutral-500 mb-1 uppercase tracking-wider">
             Assistant
@@ -280,8 +278,6 @@
           class="flex items-center gap-2 text-neutral-500 text-xs px-2"
           onmouseenter={() => hoveredItemId = item.id}
           onmouseleave={() => hoveredItemId = null}
-          role="button"
-          tabindex="0"
         >
           <div class="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
           <span>{item.content}</span>
@@ -293,8 +289,6 @@
           class="rounded-lg p-3 bg-red-900/30 border border-red-700 text-red-300 text-sm"
           onmouseenter={() => hoveredItemId = item.id}
           onmouseleave={() => hoveredItemId = null}
-          role="button"
-          tabindex="0"
         >
           {item.content}
         </div>

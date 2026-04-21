@@ -54,6 +54,7 @@ requests and pushes to `main`.
 Blocking jobs:
 
 - Critical lint plus decision traceability through `npm run lint:no-new`
+- Full lint through `npm run lint:full`
 - TypeScript typecheck
 - Frontend tests
 - Production dependency audit for high-severity vulnerabilities
@@ -65,12 +66,11 @@ Ratcheted audit jobs:
 
 - `cargo fmt --all -- --check`
 - `cargo clippy --workspace --all-targets --all-features -- -D warnings`
-- `npm run lint:full`
 
 The audit jobs are visible in CI but are non-blocking until the documented
-formatting, Rust warning, and full-lint baselines are cleaned up. The summary
-job fails the workflow when any blocking gate fails and reports the audit job
-status for review.
+formatting and Rust warning baselines are cleaned up. The summary job fails the
+workflow when any blocking gate fails and reports the audit job status for
+review.
 
 ## Acceptance Policy
 

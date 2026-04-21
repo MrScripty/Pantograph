@@ -83,6 +83,7 @@
     onkeydown={handleLinkKeyDown}
     role="button"
     tabindex={$linkModeActive ? 0 : -1}
+    aria-label={$linkModeActive ? 'Linked follow-up input' : 'Create link from follow-up input'}
   >
     <input
       type="text"
@@ -98,6 +99,7 @@
         onclick={handleStopAgent}
         class="px-4 py-2 bg-red-700 hover:bg-red-600 border-l border-neutral-600 transition-colors text-xs font-bold tracking-wider text-white"
         title="Stop agent"
+        aria-label="Stop agent"
       >
         <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
           <rect x="6" y="6" width="12" height="12" rx="1" />
@@ -110,6 +112,7 @@
         disabled={!followUpInput.trim() || !isReady}
         class="px-4 py-2 bg-neutral-700 hover:bg-neutral-600 disabled:opacity-50 disabled:cursor-not-allowed border-l border-neutral-600 transition-colors text-xs font-bold tracking-wider"
         title="Send message"
+        aria-label="Send message"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />

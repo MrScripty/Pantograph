@@ -120,6 +120,7 @@
   <button type="button"
     class="p-2 rounded-lg transition-colors {state.currentStroke === null ? 'bg-neutral-800 text-blue-400' : 'text-neutral-400'}"
     title="Pen Tool"
+    aria-label="Pen tool"
   >
     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l1.5 1.5"></path><circle cx="11" cy="11" r="2"></circle></svg>
   </button>
@@ -143,6 +144,7 @@
     onclick={() => engine.undo()}
     class="p-2 text-neutral-400 hover:text-white transition-colors"
     title="Undo Drawing (Ctrl+Z)"
+    aria-label="Undo drawing"
   >
     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"></path><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path></svg>
   </button>
@@ -151,6 +153,7 @@
     onclick={handleClear}
     class="p-2 text-neutral-400 hover:text-red-400 transition-colors"
     title="Clear Canvas & History"
+    aria-label="Clear canvas and history"
   >
     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
   </button>
@@ -163,6 +166,7 @@
       onclick={handleComponentUndo}
       class="p-2 text-neutral-400 hover:text-white transition-colors"
       title="Undo Component Change (Alt+Ctrl+Z)"
+      aria-label="Undo component change"
     >
       <!-- Undo2 icon -->
       <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></svg>
@@ -171,6 +175,7 @@
       onclick={handleComponentRedo}
       class="p-2 text-neutral-400 hover:text-white transition-colors"
       title="Redo Component Change (Ctrl+Shift+Z)"
+      aria-label="Redo component change"
     >
       <!-- Redo2 icon -->
       <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13"/></svg>
@@ -184,6 +189,7 @@
     onclick={toggleInteractionMode}
     class="relative flex items-center gap-1 p-1 bg-neutral-800 rounded-full"
     title="Toggle Draw/Interact Mode (Tab)"
+    aria-label="Toggle draw and interact mode"
   >
     <!-- Draw mode icon (pen) -->
     <div
