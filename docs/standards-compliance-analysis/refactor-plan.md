@@ -339,7 +339,9 @@ Tasks:
   scheduler snapshot, cancellation, and reprioritization facade methods now
   live in `workflow/session_queue_api.rs`. Stale cleanup, stale cleanup worker,
   keep-alive, and close-session facade methods now live in
-  `workflow/session_lifecycle_api.rs`.
+  `workflow/session_lifecycle_api.rs`. The root workflow facade test module now
+  lives in `workflow/tests.rs`, reducing `workflow.rs` to the production facade
+  shell; the extracted test module still needs a later split by behavior area.
 - Split `crates/pantograph-embedded-runtime/src/lib.rs` into runtime host,
   workflow sessions, registry lifecycle, diagnostics projection, model deps,
   and test modules.

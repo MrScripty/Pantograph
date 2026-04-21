@@ -22,6 +22,7 @@ public exports out of the service crate.
 | `session_queue_api.rs` | Workflow session status, queue inspection, scheduler snapshot, cancel, and reprioritize facade methods. |
 | `session_runtime.rs` | Session runtime preflight cache checks, runtime-capability fingerprinting, runtime loaded-state invalidation, runtime loading, unload-candidate selection, and affinity refresh helpers. |
 | `service_config.rs` | Workflow service construction, capacity-limit configuration, diagnostics-provider setup, and session-store guard helpers. |
+| `tests.rs` | Legacy workflow facade and scheduler/session behavior tests extracted from the root facade file. |
 | `validation.rs` | Request, binding, output-target, and produced-output validation helpers shared by facade operations. |
 | `workflow_run_api.rs` | Generic workflow run facade, run timeout handling, output validation, and internal session-run handoff. |
 
@@ -45,7 +46,7 @@ cohesive contract definitions, host/runtime trait defaults, request
 validation, graph edit-session methods, capability/preflight methods, session
 execution methods, session queue inspection methods, session lifecycle methods,
 service configuration methods, workflow run execution, workflow I/O derivation,
-runtime readiness, and session-runtime workflows.
+runtime readiness, session-runtime workflows, and the root facade test module.
 
 ## Alternatives Rejected
 - Leave all helpers in `workflow.rs`: rejected because runtime readiness and
@@ -61,6 +62,8 @@ runtime readiness, and session-runtime workflows.
 - Runtime warning and blocking-issue lists remain deterministic and deduped.
 - Service configuration owns constructor defaults, loaded runtime capacity
   bounds, and the shared session-store lock error mapping.
+- Workflow facade tests live outside `workflow.rs` so production facade imports
+  and service shape remain reviewable.
 - Host calls occur outside session-store locks.
 - Generic workflow run execution owns timeout cancellation, output validation,
   and direct runtime-not-ready checks behind the public facade.
@@ -83,6 +86,8 @@ runtime readiness, and session-runtime workflows.
 - Workflow I/O schema handling needs to support a second bindable-origin model.
 - `workflow.rs` facade decomposition exposes these helpers through a narrower
   public module structure.
+- `workflow/tests.rs` needs to be split by behavior area after production
+  facade decomposition is complete.
 
 ## Dependencies
 **Internal:** parent workflow facade exports, scheduler queue and preflight

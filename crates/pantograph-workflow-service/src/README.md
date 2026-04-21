@@ -52,7 +52,7 @@ Generic workflow run execution now lives behind the facade in the workflow run
 API helper.
 Service construction, capacity-limit configuration, diagnostics-provider setup,
 and the session-store guard now live in the workflow service configuration
-helper.
+helper. The root workflow facade tests now live in `workflow/tests.rs`.
 Session creation and queued session run methods now live behind the facade in
 the workflow session execution API helper.
 Session status, queue inspection, scheduler snapshot, cancellation, and
@@ -86,6 +86,8 @@ live behind the facade in the workflow session lifecycle API helper.
 - Scheduler snapshots omit execution attribution when identity is ambiguous.
 - Service configuration API methods preserve constructor defaults, capacity
   bounds, and shared lock error mapping behind the facade.
+- Workflow facade test coverage stays in the workflow helper directory so the
+  production facade file remains small enough to review directly.
 - Workflow run API methods preserve timeout cancellation, output validation,
   and runtime-readiness checks as backend-owned behavior.
 - Session execution API methods preserve queue admission, runtime preflight,
