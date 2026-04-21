@@ -134,7 +134,6 @@ pub(super) fn apply_trace_event(
         WorkflowTraceEvent::SchedulerSnapshotCaptured {
             execution_id,
             session_id,
-            captured_at_ms,
             session,
             items,
             diagnostics,
@@ -148,7 +147,6 @@ pub(super) fn apply_trace_event(
             items,
             diagnostics.as_ref(),
             error.as_deref(),
-            *captured_at_ms,
         ),
         WorkflowTraceEvent::NodeProgress { .. }
         | WorkflowTraceEvent::NodeCompleted { .. }

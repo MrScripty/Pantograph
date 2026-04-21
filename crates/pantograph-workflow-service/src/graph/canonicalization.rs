@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::registry::NodeRegistry;
 use super::types::{
@@ -474,7 +474,7 @@ fn merge_dynamic_ports(base_ports: Vec<Value>, dynamic_ports: Vec<Value>) -> Vec
 }
 
 fn resolved_definition_json(node: &GraphNode, base_definition: &NodeDefinition) -> Value {
-    let base_json = serde_json::to_value(base_definition).unwrap_or_else(|_| Value::Null);
+    let base_json = serde_json::to_value(base_definition).unwrap_or(Value::Null);
     let Some(dynamic_definition) = node.data.get("definition") else {
         return base_json;
     };
@@ -703,12 +703,16 @@ mod tests {
             .as_array()
             .expect("diffusion inputs");
 
-        assert!(expand_outputs
-            .iter()
-            .any(|port| port["id"] == json!("steps")));
-        assert!(diffusion_inputs
-            .iter()
-            .any(|port| port["id"] == json!("steps")));
+        assert!(
+            expand_outputs
+                .iter()
+                .any(|port| port["id"] == json!("steps"))
+        );
+        assert!(
+            diffusion_inputs
+                .iter()
+                .any(|port| port["id"] == json!("steps"))
+        );
         assert!(canonical.edges.iter().any(|edge| {
             edge.source == "expand"
                 && edge.source_handle == "steps"

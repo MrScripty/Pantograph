@@ -74,6 +74,8 @@ they do not own trace lifecycle rules.
 - Queue-item attribution is execution-first. Session identifiers may describe
   session scope, but they are not a fallback key for attaching queue-item
   metrics to another execution's trace.
+- Scheduler snapshot observation time is not currently a trace queue-state
+  input; scheduler projection consumes measured queue item/session facts only.
 - Recovery or replay updates for the same execution id update one canonical run
   record in place.
 

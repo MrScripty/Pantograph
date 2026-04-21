@@ -613,3 +613,9 @@ impl WorkflowRunHandle {
         self.cancelled.load(std::sync::atomic::Ordering::SeqCst)
     }
 }
+
+impl Default for WorkflowRunHandle {
+    fn default() -> Self {
+        Self::new()
+    }
+}

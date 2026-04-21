@@ -83,18 +83,13 @@ pub enum IoBindingOrigin {
     Integrated,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionMode {
+    #[default]
     Reactive,
     Manual,
     Stream,
-}
-
-impl Default for ExecutionMode {
-    fn default() -> Self {
-        Self::Reactive
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

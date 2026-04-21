@@ -63,8 +63,9 @@ Current policy:
 - `clippy -D warnings` is not a blocking gate until M7 resolves the
   clippy-specific findings exposed after the rustc warning baseline reached
   zero. The audit has cleared `inference`, `node-engine`, and
-  `workflow-nodes`; the current workspace run now stops in
-  `pantograph-workflow-service`.
+  `workflow-nodes`, and `pantograph-workflow-service`; the current workspace
+  run now stops in `pantograph-frontend-http-adapter` and
+  `pantograph-embedded-runtime`.
 - New policy lints may be denied only when they are known not to fail the
   current workspace.
 

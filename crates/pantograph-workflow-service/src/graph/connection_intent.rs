@@ -3,7 +3,7 @@ use std::collections::{HashSet, VecDeque};
 use serde_json::{Map, Value};
 use uuid::Uuid;
 
-use super::effective_definition::{effective_node_definition, EffectiveDefinitionError};
+use super::effective_definition::{EffectiveDefinitionError, effective_node_definition};
 use super::registry::NodeRegistry;
 use super::types::{
     ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse, ConnectionRejection,
@@ -311,7 +311,7 @@ pub fn connection_candidates(
 
     Ok(ConnectionCandidatesResponse {
         graph_revision: graph_revision.clone(),
-        revision_matches: requested_revision.map_or(true, |value| value == graph_revision),
+        revision_matches: requested_revision.is_none_or(|value| value == graph_revision),
         source_anchor,
         compatible_nodes,
         insertable_node_types,
@@ -782,11 +782,13 @@ mod tests {
 
         assert!(!response.graph_revision.is_empty());
         assert!(response.revision_matches);
-        assert!(response
-            .compatible_nodes
-            .iter()
-            .any(|node| node.node_id == "target"
-                && node.anchors.iter().any(|port| port.port_id == "text")));
+        assert!(
+            response
+                .compatible_nodes
+                .iter()
+                .any(|node| node.node_id == "target"
+                    && node.anchors.iter().any(|port| port.port_id == "text"))
+        );
         assert!(response.insertable_node_types.iter().any(|node| {
             node.node_type == "llm-inference"
                 && node.category == NodeCategory::Processing

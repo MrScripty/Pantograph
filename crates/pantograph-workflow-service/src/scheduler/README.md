@@ -86,9 +86,30 @@ needs to be the long-term home for scheduler contracts or queue mutation logic.
   than creating a second checkpoint or restore policy path in scheduler code.
 - Scheduler DTOs are machine-consumable contracts that adapters forward
   without reconstructing local scheduler truth.
+- Queue insertion should move the constructed queued-run record directly into
+  the store so scheduler state transitions do not accumulate redundant
+  rebinding or hidden policy steps.
 
 ## Revisit Triggers
 - Scheduler V2 needs policy modules that justify splitting `store.rs` further.
 - Queue state becomes durable or distributed instead of process-local.
 - Edit-session scheduler semantics grow enough shared behavior to warrant a
   narrower shared contract module.
+
+## Dependencies
+**Internal:** workflow service session contracts, runtime readiness facts,
+technical-fit override DTOs, and trace-facing scheduler projections.
+
+**External:** `serde`, `uuid`, and standard async/runtime primitives inherited
+through the parent crate.
+
+## Related ADRs
+- `docs/adr/ADR-001-headless-embedding-service-boundary.md`
+- `docs/adr/ADR-002-runtime-registry-ownership-and-lifecycle.md`
+
+## Usage Examples
+Scheduler APIs are reached through the workflow service facade:
+
+```rust
+let snapshot = service.workflow_session_scheduler_snapshot(session_id).await?;
+```

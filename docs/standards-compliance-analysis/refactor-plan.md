@@ -635,11 +635,15 @@ Tasks:
   workspace audit then reached `crates/workflow-nodes`; those findings are now
   resolved by making disabled tool-loop continuation explicit, simplifying
   Puma-Lib inference-setting/descriptor access, and deriving the JSON-filter
-  config default. The audit now reports the next clippy-specific cleanup set in
-  `crates/pantograph-workflow-service`: graph canonicalization lazy fallback,
+  config default. `crates/pantograph-workflow-service` now passes its focused
+  strict clippy check after resolving graph canonicalization lazy fallback,
   connection revision comparison, graph execution-mode default derivation,
-  scheduler queued-run rebinding, trace scheduler argument grouping, and
-  workflow run-handle default construction.
+  scheduler queued-run rebinding, trace scheduler unused timestamp arguments,
+  and workflow run-handle default construction. The full workspace audit now
+  reports the next cleanup set in `crates/pantograph-frontend-http-adapter` and
+  `crates/pantograph-embedded-runtime`; embedded-runtime all-target checks also
+  expose missing test-local imports for `ExecutorExtensions` and
+  `tokio::sync::RwLock` after the zero-warning root-facade import cleanup.
 - Close or update `docs/anti-pattern-remediation-tracker.md` Phase 5 for
   process-node policy controls.
 - Add issue/backlog entries for non-compliance problems intentionally deferred.

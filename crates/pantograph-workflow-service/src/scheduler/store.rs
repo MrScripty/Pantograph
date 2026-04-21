@@ -499,7 +499,6 @@ impl WorkflowSessionStore {
         };
 
         let insert_index = policy.placement_index_for_enqueue(&state.queue, &queued);
-        let queued = queued;
         state.queue.insert(insert_index, queued);
         for item in state.queue.iter_mut().skip(insert_index + 1) {
             item.starvation_bypass_count = item.starvation_bypass_count.saturating_add(1);

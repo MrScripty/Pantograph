@@ -67,6 +67,8 @@ runtime readiness, session-runtime workflows, and the root facade test module.
 - Host calls occur outside session-store locks.
 - Generic workflow run execution owns timeout cancellation, output validation,
   and direct runtime-not-ready checks behind the public facade.
+- Workflow run handles use the same constructor for explicit and default
+  creation so cancellation state starts from one backend-owned shape.
 - Session execution APIs keep queue admission, runtime preflight, runtime load,
   and run finalization in one helper behind the public facade.
 - Session lifecycle APIs keep cleanup, keep-alive, and close-session behavior

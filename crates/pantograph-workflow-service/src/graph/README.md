@@ -100,6 +100,11 @@ when the node type matches.
 - Dynamic `node.data.definition` overlays may add ports for a specific node
   instance, but they must not invalidate the registry node type or silently
   remove unrelated static ports.
+- Graph DTO defaults should derive from the declared enum default when the
+  public default remains the first-class reactive mode.
+- Revision comparison and canonical definition fallbacks should use eager,
+  explicit option/result helpers so graph-contract projection stays
+  warning-clean without changing fallback semantics.
 
 ## Revisit Triggers
 - Graph edit payloads need streaming patches instead of whole-graph snapshots.
