@@ -8,7 +8,7 @@ Command used for the baseline:
 cargo check --workspace --all-features --message-format short
 ```
 
-The command completes successfully, but the workspace currently emits 93
+The command completes successfully, but the workspace currently emits 88
 warnings. This document classifies the warning debt required by M7 before
 `cargo clippy --workspace --all-targets --all-features -- -D warnings` can
 become a blocking quality gate.
@@ -23,7 +23,6 @@ The classification follows the updated standards expectations:
 
 | Crate/target | Count | Primary category | Resolution path |
 | --- | ---: | --- | --- |
-| `workflow-nodes` | 5 | Gate experimental model-provider executor | Either register the model-provider executor or gate it behind an experimental feature. |
 | `pantograph-embedded-runtime` | 2 | Remove unused imports | Drop unused public imports when the dirty embedded-runtime branch is normalized. |
 | `pantograph` Tauri binary | 80 | Remove migrated/stale local workflow and server-discovery code | Delete superseded workflow local DTO/validation/registry/connection helpers and unused discovery paths after confirming no command references remain. |
 | `pantograph_rustler` | 6 | External macro/dependency exception | Resolve by upgrading/fixing `rustler::resource!`, or add a scoped lint exception with dependency rationale. |
@@ -57,16 +56,16 @@ The classification follows the updated standards expectations:
 | --- | --- | --- | --- |
 | `src/lib.rs:586` | `task_executor` field never read | Remove | Resolved by deleting the inactive no-op task executor field and helper from `FfiWorkflowEngine`; the binding object does not expose task execution. |
 
-## Active Warnings
+### `crates/workflow-nodes` Model Provider
 
-### `crates/workflow-nodes`
-
-| Location | Warning | Classification | Next action |
+| Location | Warning | Classification | Resolution |
 | --- | --- | --- | --- |
-| `src/input/model_provider.rs:162` | `ModelProviderExecutor` never constructed | Gate/use | Treat as experimental until registered by the node registry or moved behind a feature. |
-| `src/input/model_provider.rs:165` | `ModelProviderExecutor::factory` unused | Gate/use | Same as the executor: register, feature-gate, or delete the inactive implementation. |
-| `src/input/model_provider.rs:170` | `ModelProviderExecutorFactory` never constructed | Gate/use | Same as the executor. |
-| `src/input/model_provider.rs:272` and `:277` | `ResolvedModel` and `resolve_with_library` unused | Gate/use | These are only reachable through the inactive executor; resolve with the executor decision. |
+| `src/input/model_provider.rs:162` | `ModelProviderExecutor` never constructed | Remove | Resolved by deleting the unregistered executor implementation; active model-provider projection is owned by `node-engine` core executor handlers. |
+| `src/input/model_provider.rs:165` | `ModelProviderExecutor::factory` unused | Remove | Resolved with the inactive executor removal. |
+| `src/input/model_provider.rs:170` | `ModelProviderExecutorFactory` never constructed | Remove | Resolved with the inactive executor removal. |
+| `src/input/model_provider.rs:272` and `:277` | `ResolvedModel` and `resolve_with_library` unused | Remove | Resolved by deleting the executor-only library resolver path. Pumas-backed selection remains in `puma-lib` and setup helpers. |
+
+## Active Warnings
 
 ### `crates/pantograph-embedded-runtime`
 

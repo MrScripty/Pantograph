@@ -9,7 +9,7 @@ and library-provided metadata before host-specific executors take over.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `puma_lib.rs` | Host-bridged model selector that publishes routing and dependency metadata from Pumas into workflow graphs. |
-| `model_provider.rs` | Generic model selector used when the workflow is not backed by the Pantograph/Pumas library path. |
+| `model_provider.rs` | Generic model selector descriptor/task used when the workflow is not backed by the Pantograph/Pumas library path. It does not own a separate `NodeExecutor` implementation. |
 | `text_input.rs` | Freeform text source for prompts and other string inputs. |
 | `number_input.rs` | Numeric source node that adopts downstream defaults and constraints. |
 | `boolean_input.rs` | Boolean source node for true/false workflow settings. |
@@ -40,8 +40,20 @@ from Pumas `ModelExecutionDescriptor` whenever a `model_id` is available and
 descriptor resolution succeeds. Record metadata remains a display/fallback
 contract only, not the runtime source of truth.
 
+## Alternatives Rejected
+- Keep an unregistered `model-provider` `NodeExecutor` in this crate.
+  Rejected because active model-provider execution is already owned by
+  `node-engine` core executor handlers, leaving the workflow-nodes executor as
+  dead code.
+- Move Pumas-backed model selection into generic `model-provider`.
+  Rejected because `puma-lib` owns the Pumas-specific workflow metadata and
+  dependency contract.
+
 ## Invariants
 - Input nodes do not own runtime execution side effects.
+- Generic `model-provider` remains a descriptor/task contract; active runtime
+  projection for model-provider nodes is owned by `node-engine` core executor
+  handlers rather than an unregistered workflow-nodes executor.
 - `puma-lib` metadata is the primary workflow-facing bridge from Pumas-Library
   into Pantograph routing.
 - Pantograph must not infer Pumas runtime bundle semantics from projected
@@ -57,6 +69,19 @@ contract only, not the runtime source of truth.
 **Internal:** `node_engine` task metadata and inventory registration.
 
 **External:** optional `pumas_library` APIs behind the `model-library` feature.
+
+## Related ADRs
+- None identified as of 2026-04-21.
+- Reason: the model-provider executor cleanup removes an inactive
+  implementation and preserves the existing crate ownership boundary.
+- Revisit trigger: generic model-provider execution becomes a public,
+  host-bridged contract separate from `node-engine` core executor handling.
+
+## Usage Examples
+```rust
+let metadata = ModelProviderTask::descriptor();
+assert_eq!(metadata.node_type, "model-provider");
+```
 
 ## API Consumer Contract
 - Consumers should treat these modules as node descriptor sources, not direct
