@@ -18,6 +18,7 @@ into frontend, transport, or descriptor crates.
 | `inference_nodes.rs` | Feature-gated shared inference helpers plus OpenAI-compatible chat, vision, and unload-model handlers. |
 | `inference_tests.rs` | Focused tests for dependency preflight, backend-key normalization, embedding failure behavior, and reranker parsing. |
 | `kv_cache.rs` | Backend-owned execution handlers for KV-cache save/load/truncate nodes plus live llama.cpp/PyTorch restore-capture helpers and structured KV diagnostics emitted by `CoreTaskExecutor`. |
+| `kv_cache_llamacpp.rs` | llama.cpp KV-cache slot restore/capture helpers and temporary slot-file handling. |
 | `kv_cache_parsing_tests.rs` | Focused tests for KV-cache storage-policy and marker parsing helpers. |
 | `kv_cache_test_support.rs` | Mock inference backend and process fixtures shared by KV-cache behavior tests. |
 | `kv_cache_tests.rs` | Focused KV-cache store, handle restore/capture, and backend-owned truncation tests. |

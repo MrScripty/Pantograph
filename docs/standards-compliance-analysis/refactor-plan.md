@@ -414,6 +414,9 @@ Tasks:
   `crates/node-engine/src/core_executor/kv_cache_parsing_tests.rs` and
   `crates/node-engine/src/core_executor/kv_cache_tests.rs`, with shared mock
   backend fixtures in `crates/node-engine/src/core_executor/kv_cache_test_support.rs`.
+  Llama.cpp KV-cache slot restore/capture helpers now live in
+  `crates/node-engine/src/core_executor/kv_cache_llamacpp.rs`, separating
+  backend slot-file handling from generic KV-cache save/load/truncate nodes.
   Synchronous built-in node handlers now live in
   `crates/node-engine/src/core_executor/pure_nodes.rs`, separating pure
   payload normalization from file I/O, dependency preflight, and runtime-backed
