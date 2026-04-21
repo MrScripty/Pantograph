@@ -34,8 +34,10 @@ agent_plan.md
 
 # User-created workflows and orchestrations
 # Default examples (lowercase-hyphenated) are tracked; user creations are ignored
-.pantograph/orchestrations/
+.pantograph/orchestrations/*
+!.pantograph/orchestrations/README.md
 .pantograph/workflows/*
+!.pantograph/workflows/README.md
 !.pantograph/workflows/coding-agent.json
 
 # Project data directory (downloaded docs, vector embeddings, etc.)

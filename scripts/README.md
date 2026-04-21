@@ -48,8 +48,8 @@ can be debugged without the full app UI in the loop.
 ## Invariants
 - Scripts run relative to the repository root.
 - Decision traceability defaults cover `src`, `src-tauri/src`, `crates`,
-  `packages/svelte-graph/src`, and `scripts`; use environment overrides for
-  temporary focused audits.
+  `packages/svelte-graph/src`, `scripts`, and `.pantograph`; use environment
+  overrides for temporary focused audits.
 - Smoke tests target real Pantograph worker/runtime modules, not forks of that
   logic.
 - C# runtime execution smokes create workflow sessions before submitting runs.
