@@ -163,6 +163,8 @@ Tasks:
   generated components, schemas, and binding artifacts, with `Structured Producer Contract`.
   Status: `.pantograph` saved workflow and orchestration data directories now
   document their structured producer contracts and README marker ignore rules.
+  UniFFI binding generator helpers now document generated binding artifact
+  contracts.
 - Add a decision-traceability script adapted from the standards template and
   configure host-facing/structured-producer paths. Status: repo-local script,
   npm entrypoint, and Lefthook staged-file command are now in place.
