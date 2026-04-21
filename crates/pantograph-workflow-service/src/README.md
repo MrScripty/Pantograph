@@ -13,7 +13,7 @@ diagnostics reusable across Tauri, UniFFI, Rustler, and tests.
 | ----------- | ----------- |
 | `lib.rs` | Public module exports for the workflow service crate. |
 | `workflow.rs` | Public workflow facade exports, execution/session facade methods, and orchestration logic. |
-| `workflow/` | Private workflow contracts, host traits, graph API methods, request validation, I/O derivation, runtime preflight, and session-runtime helpers extracted from the main facade. |
+| `workflow/` | Private workflow contracts, host traits, graph API methods, capability/preflight API methods, request validation, I/O derivation, runtime preflight, and session-runtime helpers extracted from the main facade. |
 | `scheduler/` | Backend-owned workflow-session queue/store contracts used by the workflow facade. |
 | `trace/` | Workflow trace contracts, request validation, in-memory trace state, and runtime/scheduler snapshot merge helpers. |
 | `graph/` | Graph DTOs and session-kind contracts shared by service operations. |
@@ -44,6 +44,8 @@ Session runtime preflight cache fingerprinting now lives with the
 session-runtime helper that owns cache lookup and refresh behavior.
 Graph edit-session and persistence methods now live behind the facade in the
 workflow graph API helper.
+Workflow capability, I/O discovery, and preflight methods now live behind the
+facade in the workflow preflight API helper.
 
 ## Alternatives Rejected
 - Keep workflow behavior in Tauri commands: rejected because native bindings

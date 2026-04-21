@@ -15,16 +15,17 @@ public exports out of the service crate.
 | `graph_api.rs` | Graph edit-session, mutation, connection, persistence, and runtime snapshot facade methods. |
 | `host.rs` | Host trait defaults and scheduler diagnostics provider contracts re-exported by the parent facade. |
 | `io_contract.rs` | Workflow input/output surface derivation and host-response validation helpers. |
+| `preflight_api.rs` | Workflow capability, I/O discovery, and preflight facade methods. |
 | `runtime_preflight.rs` | Runtime requirement matching, issue formatting, and preflight warning collection. |
 | `session_runtime.rs` | Session runtime preflight cache checks, runtime-capability fingerprinting, runtime loading, unload-candidate selection, and affinity refresh helpers. |
 | `validation.rs` | Request, binding, output-target, and produced-output validation helpers shared by facade operations. |
 
 ## Problem
 `src/workflow.rs` remains a large public facade with service methods. Public
-DTO definitions, graph edit-session APIs, host/runtime trait defaults,
-workflow I/O derivation, runtime readiness, request validation, and
-session-runtime loading are cohesive enough to isolate, but they still preserve
-the parent facade as the compatibility export point.
+DTO definitions, graph edit-session APIs, capability/preflight APIs,
+host/runtime trait defaults, workflow I/O derivation, runtime readiness,
+request validation, and session-runtime loading are cohesive enough to isolate,
+but they still preserve the parent facade as the compatibility export point.
 
 ## Constraints
 - Preserve the public `WorkflowService` API while decomposing internals.
@@ -36,8 +37,8 @@ the parent facade as the compatibility export point.
 Use this directory for workflow-service helper modules behind the parent
 facade. The parent facade remains the public export point while helpers own
 cohesive contract definitions, host/runtime trait defaults, request
-validation, graph edit-session methods, workflow I/O derivation, runtime
-readiness, and session-runtime workflows.
+validation, graph edit-session methods, capability/preflight methods, workflow
+I/O derivation, runtime readiness, and session-runtime workflows.
 
 ## Alternatives Rejected
 - Leave all helpers in `workflow.rs`: rejected because runtime readiness and
