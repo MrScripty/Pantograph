@@ -615,7 +615,11 @@ Tasks:
   `docs/standards-compliance-analysis/rust-warning-baseline.md` records the
   2026-04-21 all-features warning baseline and ratchet path.
 - Delete unused Tauri-local workflow types, validators, and connection-intent
-  helpers superseded by `pantograph-workflow-service`.
+  helpers superseded by `pantograph-workflow-service`. Status: stale
+  connection-intent, validation, effective-definition, graph-policy, and
+  registry-mirror modules are deleted. Remaining M7 cleanup is tracked in
+  `docs/standards-compliance-analysis/rust-warning-baseline.md` for
+  `types.rs`, event constructors, and execution-manager warnings.
 - Close or update `docs/anti-pattern-remediation-tracker.md` Phase 5 for
   process-node policy controls.
 - Add issue/backlog entries for non-compliance problems intentionally deferred.

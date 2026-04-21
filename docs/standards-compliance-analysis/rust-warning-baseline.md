@@ -8,7 +8,7 @@ Command used for the baseline:
 cargo check --workspace --all-features --message-format short
 ```
 
-The command completes successfully, but the workspace currently emits 54
+The command completes successfully, but the workspace currently emits 42
 warnings. This document classifies the warning debt required by M7 before
 `cargo clippy --workspace --all-targets --all-features -- -D warnings` can
 become a blocking quality gate.
@@ -24,7 +24,7 @@ The classification follows the updated standards expectations:
 | Crate/target | Count | Primary category | Resolution path |
 | --- | ---: | --- | --- |
 | `pantograph-embedded-runtime` | 2 | Remove unused imports | Drop unused public imports when the dirty embedded-runtime branch is normalized. |
-| `pantograph` Tauri binary | 80 | Remove migrated/stale local workflow and server-discovery code | Delete superseded workflow local DTO/validation/registry/connection helpers and unused discovery paths after confirming no command references remain. |
+| `pantograph` Tauri binary | 34 | Remove migrated/stale local workflow code | Delete superseded workflow local DTOs, event constructors, and execution-manager helpers after confirming no command references remain. |
 | `pantograph_rustler` | 6 | External macro/dependency exception | Resolve by upgrading/fixing `rustler::resource!`, or add a scoped lint exception with dependency rationale. |
 
 ## Resolved Warnings
@@ -90,6 +90,12 @@ The classification follows the updated standards expectations:
 | --- | --- | --- | --- |
 | `src/workflow/connection_intent.rs`, `effective_definition.rs`, `validation.rs` | unused local connection-intent, effective-definition, and validation helpers | Remove | Resolved by deleting the stale Tauri-local graph policy modules; active editing wrappers delegate to `pantograph-workflow-service`. |
 
+### `src-tauri` Legacy Registry Mirror
+
+| Location | Warning group | Classification | Resolution |
+| --- | --- | --- | --- |
+| `src/workflow/registry.rs` | unused local node registry conversion mirror | Remove | Resolved by deleting the stale Tauri-local registry module; active definition commands use `pantograph-workflow-service::NodeRegistry` and port-option paths use active `node_engine::NodeRegistry` state. |
+
 ### `crates/workflow-nodes` Model Provider
 
 | Location | Warning | Classification | Resolution |
@@ -114,7 +120,6 @@ The classification follows the updated standards expectations:
 | --- | --- | --- | --- |
 | `src/workflow/events.rs` | workflow event constructor helpers unused | Remove/use | Delete inactive constructors or move expected construction through the backend-owned event adapter. |
 | `src/workflow/execution_manager.rs` and `execution_manager/state.rs` | execution state, undo/redo, cleanup, and accessors mostly unused | Remove/replace | Confirm Tauri state still needs `ExecutionManager`; then delete migrated session-manager logic or route remaining commands through backend-owned workflow sessions. |
-| `src/workflow/registry.rs` | local node registry conversion layer unused | Remove | Superseded by workflow-service graph registry and direct `node_engine::NodeRegistry` command state. |
 | `src/workflow/types.rs` | local workflow DTOs, graph helpers, fingerprint helpers, file metadata unused | Remove | Delete once stale local connection/validation/registry modules are removed and command DTO imports are migrated. |
 
 ### `crates/pantograph-rustler`
@@ -127,11 +132,12 @@ The classification follows the updated standards expectations:
 
 1. Remove simple unused imports, fields, constants, and wrappers in isolated
    commits.
-2. Delete the stale Tauri-local workflow connection, registry, validation, and
-   type modules once command imports are confirmed to use backend-owned
-   workflow-service contracts.
-3. Decide whether server discovery is active product behavior. Delete it if not;
-   otherwise put it behind an explicit feature and command surface.
+2. Delete the remaining stale Tauri-local workflow type, event, and
+   execution-manager helpers once command imports are confirmed to use
+   backend-owned workflow-service contracts.
+3. Keep desktop-local server discovery, graph policy, and registry mirrors
+   deleted unless a future feature reintroduces them through an explicit command
+   and backend-owned contract.
 4. Resolve intentional/external exceptions with narrow comments or lint allows.
 5. Re-run all-features and no-default-features checks, record the new warning
    count, and promote `clippy -D warnings` once the baseline reaches zero or a

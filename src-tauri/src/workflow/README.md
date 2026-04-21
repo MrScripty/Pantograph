@@ -83,6 +83,8 @@ entrypoints, while `workflow_execution_commands.rs` remains a thin command-
 group facade over `workflow_execution_runtime.rs` and `workflow_edit_session.rs`
 so edit-session graph operations and runtime execution sequencing stop growing
 inside the general command root.
+The legacy Tauri-local node registry mirror has also been removed; definition
+commands now use the service-owned registry directly.
 `execution_manager/` now splits per-execution lifecycle and undo/redo state
 helpers away from the public execution-manager facade so later Phase 6
 checkpoint transport work does not re-collapse manager and state ownership into
@@ -157,6 +159,9 @@ service crate, which is the active owner for save/load/list behavior.
 - Tauri must not reintroduce local graph validation, connection-intent, or
   effective-definition policy; those behaviors belong in
   `pantograph-workflow-service`.
+- Node definition discovery for graph editing and palettes must come from the
+  service-owned registry or the active `node_engine::NodeRegistry` state, not a
+  Tauri-local mirror.
 - Python-backed execution stays out-of-process and is selected by resolved
   dependency `env_id`, not by frontend code.
 - Bundle-capable model assets must resolve executable paths from Pumas
