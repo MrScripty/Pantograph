@@ -75,6 +75,9 @@ locally.
 - Core executor file I/O handlers stay in `core_executor/file_io.rs` so host
   path validation remains separate from pure node payload normalization and
   runtime-backed adapters.
+- Core executor settings expansion and optional-input readers stay in
+  `core_executor/settings.rs` so runtime-backed adapters share one schema
+  default and port-override normalization path.
 - Task-type inference must reflect execution semantics, not UI naming.
 - Input normalization may be permissive for additive compatibility, but output
   shapes must stay stable once published.

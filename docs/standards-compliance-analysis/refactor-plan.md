@@ -410,7 +410,10 @@ Tasks:
   payload normalization from file I/O, dependency preflight, and runtime-backed
   adapters. File I/O handlers now live in
   `crates/node-engine/src/core_executor/file_io.rs`, keeping project-root path
-  validation isolated from dispatch and runtime-backed handlers.
+  validation isolated from dispatch and runtime-backed handlers. Settings
+  expansion and shared optional-input readers now live in
+  `crates/node-engine/src/core_executor/settings.rs`, keeping schema
+  default/override normalization reusable across pure and runtime-backed nodes.
 - Split `src/components/WorkflowGraph.svelte` and
   `packages/svelte-graph/src/components/WorkflowGraph.svelte` into graph canvas,
   connection drag, horseshoe insert, edge insert, selection, keyboard, and

@@ -15,6 +15,7 @@ into frontend, transport, or descriptor crates.
 | `file_io.rs` | Async read-file/write-file handlers that resolve paths through the project-root validation boundary before touching the filesystem. |
 | `kv_cache.rs` | Backend-owned execution handlers for KV-cache save/load/truncate nodes plus live llama.cpp/PyTorch restore-capture helpers and structured KV diagnostics emitted by `CoreTaskExecutor`. |
 | `pure_nodes.rs` | Synchronous built-in node handlers for input/output passthrough, model provider payloads, control-flow helpers, validation, JSON filtering, human input, and disabled tool execution. |
+| `settings.rs` | Settings-schema expansion and shared optional-input readers used by pure settings nodes and runtime-backed adapters. |
 | `tests.rs` | Behavior tests for core executor node dispatch, input/output normalization, settings expansion, dependency preflight, and feature-gated inference parsing helpers. |
 
 ## Problem
@@ -52,6 +53,9 @@ stable public facade and dispatch owner.
   file-backed, or feature-gated adapters should not be added there.
 - File I/O handlers stay in `file_io.rs` and must continue resolving paths
   through `path_validation` before reading or writing host files.
+- Settings expansion and optional-input readers stay in `settings.rs` so
+  runtime adapters can share one normalization contract for schema defaults,
+  connected port overrides, aliases, and boolean coercion.
 - The public facade remains `CoreTaskExecutor`; helper modules are private
   implementation details unless a separate public contract is explicitly
   introduced.
