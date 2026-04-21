@@ -377,21 +377,10 @@ async fn maybe_start_auto_recovery(app: &AppHandle, gateway: &SharedGateway, fai
     };
     let recovery_manager = (*recovery_manager).clone();
 
-    if recovery_manager.is_recovering() {
-        return;
-    }
-
     let app = app.clone();
     let gateway = gateway.clone();
     let failure_reason = failure_reason.to_string();
-    tokio::spawn(async move {
-        if let Err(error) = recovery_manager
-            .recover(&app, &gateway, &failure_reason)
-            .await
-        {
-            log::warn!("Automatic recovery failed: {}", error);
-        }
-    });
+    recovery_manager.start_auto_recovery(app, gateway, failure_reason);
 }
 
 impl Default for HealthMonitor {

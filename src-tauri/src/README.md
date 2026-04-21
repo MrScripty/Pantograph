@@ -51,6 +51,8 @@ Startup resource failures now flow through `run_app()` and the Tauri setup
 result with logged context instead of production `expect(...)` panics.
 Startup/setup async tasks are registered in `app_tasks.rs` and drained during
 window shutdown before runtime workers and model processes are stopped.
+Window shutdown also stops health monitoring and any tracked automatic recovery
+task before workflow cleanup and runtime process shutdown.
 
 ## Alternatives Rejected
 - Put workflow/runtime policy directly in Tauri commands: rejected because
@@ -69,6 +71,8 @@ window shutdown before runtime workers and model processes are stopped.
   instead of panicking.
 - Startup/setup tasks spawned from the composition root must be tracked by the
   app task registry.
+- Window shutdown must stop health and recovery background tasks before
+  tearing down workflow runtimes and model processes.
 - Tauri-local DTOs should migrate toward shared backend contracts where
   practical.
 - Command registrations for graph edits, including node group mutations, must

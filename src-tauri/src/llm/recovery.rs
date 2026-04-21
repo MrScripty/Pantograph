@@ -3,10 +3,11 @@
 //! Handles restart attempts with exponential backoff.
 
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::Mutex;
+use tokio::task::JoinHandle;
 
 use crate::agent::rag::SharedRagManager;
 use crate::config::{AppConfig, EmbeddingMemoryMode};
@@ -17,12 +18,12 @@ use crate::llm::runtime_registry::run_runtime_transition_and_sync_runtime_regist
 use crate::llm::runtime_registry::stop_all_and_sync_runtime_registry;
 use crate::llm::startup::validate_external_server_url;
 use crate::llm::sync_rag_embedding_url_from_gateway;
-use crate::llm::{list_devices, SharedAppConfig, SharedGateway, SharedRuntimeRegistry};
+use crate::llm::{SharedAppConfig, SharedGateway, SharedRuntimeRegistry, list_devices};
 use crate::workflow::runtime_shutdown::invalidate_loaded_session_runtimes;
 use pantograph_embedded_runtime::embedding_workflow::resolve_embedding_model_path;
 use pantograph_embedded_runtime::runtime_recovery::{
-    build_recovery_attempt_plan, build_recovery_restart_plan, recovery_backoff,
-    RecoveryAttemptPlan, RecoveryStrategy,
+    RecoveryAttemptPlan, RecoveryStrategy, build_recovery_attempt_plan,
+    build_recovery_restart_plan, recovery_backoff,
 };
 
 /// Recovery configuration
@@ -76,6 +77,7 @@ pub struct RecoveryManager {
     recovering: Arc<AtomicBool>,
     attempt_count: Arc<AtomicU32>,
     last_error: Arc<Mutex<Option<String>>>,
+    auto_recovery_task: std::sync::Mutex<Option<JoinHandle<()>>>,
 }
 
 impl RecoveryManager {
@@ -85,6 +87,7 @@ impl RecoveryManager {
             recovering: Arc::new(AtomicBool::new(false)),
             attempt_count: Arc::new(AtomicU32::new(0)),
             last_error: Arc::new(Mutex::new(None)),
+            auto_recovery_task: std::sync::Mutex::new(None),
         }
     }
 
@@ -102,6 +105,67 @@ impl RecoveryManager {
     pub fn reset(&self) {
         self.recovering.store(false, Ordering::SeqCst);
         self.attempt_count.store(0, Ordering::SeqCst);
+    }
+
+    pub fn start_auto_recovery(
+        self: &Arc<Self>,
+        app: AppHandle,
+        gateway: SharedGateway,
+        failure_reason: String,
+    ) {
+        if self.is_recovering() {
+            return;
+        }
+
+        let recovery_manager = Arc::clone(self);
+        let auto_recovery_task = tokio::spawn(async move {
+            if let Err(error) = recovery_manager
+                .recover(&app, &gateway, &failure_reason)
+                .await
+            {
+                log::warn!("Automatic recovery failed: {}", error);
+            }
+        });
+
+        if let Err(auto_recovery_task) = self.track_auto_recovery_task(auto_recovery_task) {
+            auto_recovery_task.abort();
+        }
+    }
+
+    pub fn stop_auto_recovery_task(&self) {
+        let auto_recovery_task = match self.auto_recovery_task.lock() {
+            Ok(mut task) => task.take(),
+            Err(error) => {
+                log::error!("Failed to acquire auto-recovery task handle: {error}");
+                return;
+            }
+        };
+
+        if let Some(auto_recovery_task) = auto_recovery_task {
+            auto_recovery_task.abort();
+            self.recovering.store(false, Ordering::SeqCst);
+        }
+    }
+
+    fn track_auto_recovery_task(&self, handle: JoinHandle<()>) -> Result<(), JoinHandle<()>> {
+        let mut task = match self.auto_recovery_task.lock() {
+            Ok(task) => task,
+            Err(error) => {
+                log::error!("Failed to track auto-recovery task: {error}");
+                return Err(handle);
+            }
+        };
+
+        if task
+            .as_ref()
+            .is_some_and(|existing| !existing.is_finished())
+        {
+            log::debug!("Auto-recovery task already tracked");
+            return Err(handle);
+        }
+
+        *task = Some(handle);
+        Ok(())
     }
 
     /// Attempt to recover the server

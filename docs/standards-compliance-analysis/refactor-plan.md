@@ -270,20 +270,21 @@ Tasks:
   Status: project-root resolution, Tauri app-data resolution, workflow-session
   cleanup worker startup, workflow runtime capacity application, and the final
   Tauri run result now return logged startup/setup errors instead of panicking.
-- [ ] Introduce a task supervisor or owned service handles for extension init,
+- [x] Introduce a task supervisor or owned service handles for extension init,
   process stdout/stderr readers, process monitors, health monitors, and cleanup workers.
-  Progress: `src-tauri/src/app_tasks.rs` now owns a Tauri-managed startup task
+  Status: `src-tauri/src/app_tasks.rs` now owns a Tauri-managed startup task
   registry, and the executor-extension initialization task is tracked and
   aborted during window shutdown before runtime workers/processes are stopped.
   Tauri managed-runtime process handles now own and abort their stdout reader,
   stderr reader, and process-monitor tasks when stopped. `HealthMonitor` now
-  owns and aborts its polling loop through its service API. Remaining work
-  covers the auto-recovery task launched from health-monitor failure handling.
-- [ ] Route automatic recovery spawned from health-monitor failure handling
+  owns and aborts its polling loop through its service API, and app shutdown
+  stops health monitoring before workflow/runtime teardown.
+- [x] Route automatic recovery spawned from health-monitor failure handling
   through an owned recovery task handle or supervisor.
-  Added during implementation: `maybe_start_auto_recovery` still launches a
-  fire-and-forget task after the main health-monitor polling loop gained an
-  owned stop path.
+  Added during implementation: `RecoveryManager` now tracks the automatic
+  recovery task launched from health-monitor failure handling, ignores
+  duplicate launches while a task is still active, and exposes a shutdown hook
+  used by the window lifecycle path.
 - [ ] Replace bare PID files with structured records that include pid, start time,
   version/mode, and owner identity where needed.
 - [ ] Document listener bind address, max connections, timeout/heartbeat strategy,

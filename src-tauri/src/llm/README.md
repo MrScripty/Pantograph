@@ -53,6 +53,8 @@ monitor to the returned process handle so managed-runtime shutdown aborts
 companion tasks with the process owner.
 The health monitor stores its polling task handle and aborts it through
 `HealthMonitor::stop()` so the monitor loop has an explicit owner.
+Automatic recovery launched from health failures is tracked by `RecoveryManager`
+and stopped through the same app shutdown path as the health monitor.
 
 ## Alternatives Rejected
 - Move runtime policy into `gateway.rs`.
@@ -156,6 +158,8 @@ app.manage(gateway);
   returned process handle and stopped when that handle stops the process.
 - Health-monitor polling tasks must be owned by `HealthMonitor` and stopped
   through the same service API that flips the running flag.
+- Automatic recovery launched from health failures must be owned by
+  `RecoveryManager` and stopped during app shutdown.
 - Milestone 6 does not add a new rollout toggle for runtime debug or targeted
   reclaim transport. These command surfaces stay additive and always available
   to the desktop host because they forward already-owned backend state rather
