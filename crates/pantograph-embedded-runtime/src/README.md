@@ -21,6 +21,7 @@ packages.
 | `embedded_workflow_service_api.rs` | Owns embedded-runtime public workflow, session, queue, inspection, and keep-alive facade methods that forward into the workflow service. |
 | `lib_tests.rs` | Legacy embedded-runtime facade, host, registry, and workflow-session tests extracted from the root facade file. |
 | `lib_tests/data_graph_execution_tests.rs` | Embedded data-graph execution integration tests split out of the legacy root test module. |
+| `lib_tests/edit_session_execution_tests.rs` | Embedded edit-session graph execution integration tests split out of the legacy root test module. |
 | `lib_tests/host_helper_tests.rs` | Focused embedded workflow host helper and runtime-registry error-mapping unit tests split out of the legacy root test module. |
 | `lib.rs` | Composes the embedded runtime, workflow service, shared extensions, and public crate exports used by Tauri and standalone hosts. |
 | `model_dependencies.rs` | Resolves Pantograph model dependency requirements and binds workflow requests to Pumas-backed execution facts. |
@@ -133,6 +134,10 @@ embedded-runtime crate.
   `lib_tests/data_graph_execution_tests.rs` so Python sidecar runtime
   observation and waiting-for-input propagation tests follow the production
   data-graph execution boundary.
+- Edit-session graph execution integration tests stay in
+  `lib_tests/edit_session_execution_tests.rs` so embedding runtime
+  prepare/restore reconciliation, runtime trace metrics, and waiting-for-input
+  event behavior follow the production edit-session execution boundary.
 - Python-backed nodes execute through the runtime adapter boundary.
 - Shared runtime extension snapshots and executor injection must stay in a
   backend-owned helper so workflow execution paths do not drift on extension
