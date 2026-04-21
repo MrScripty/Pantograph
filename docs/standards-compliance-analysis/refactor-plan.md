@@ -275,7 +275,8 @@ Tasks:
   Progress: `src-tauri/src/app_tasks.rs` now owns a Tauri-managed startup task
   registry, and the executor-extension initialization task is tracked and
   aborted during window shutdown before runtime workers/processes are stopped.
-  Remaining work covers process stdout/stderr readers, process monitors, and
+  Tauri managed-runtime process handles now own and abort their stdout reader,
+  stderr reader, and process-monitor tasks when stopped. Remaining work covers
   health-monitor task ownership.
 - [ ] Replace bare PID files with structured records that include pid, start time,
   version/mode, and owner identity where needed.

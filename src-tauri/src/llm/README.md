@@ -48,6 +48,9 @@ monitoring loops. The shared `RuntimeRegistry` is still created from the app
 composition root and injected through this layer, but the registry state
 machine now lives in `crates/pantograph-runtime-registry` so transport code
 does not own runtime policy.
+The Tauri process bridge binds stdout/stderr reader tasks and the termination
+monitor to the returned process handle so managed-runtime shutdown aborts
+companion tasks with the process owner.
 
 ## Alternatives Rejected
 - Move runtime policy into `gateway.rs`.
@@ -147,6 +150,8 @@ app.manage(gateway);
   started and stopped by the app composition root or another explicit owner,
   not by arbitrary UI calls. Command handlers may invoke those managed
   services, but they must not create replacement service instances on demand.
+- Managed-runtime process reader and monitor tasks must be owned by the
+  returned process handle and stopped when that handle stops the process.
 - Milestone 6 does not add a new rollout toggle for runtime debug or targeted
   reclaim transport. These command surfaces stay additive and always available
   to the desktop host because they forward already-owned backend state rather

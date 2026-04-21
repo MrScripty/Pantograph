@@ -9,15 +9,28 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use inference::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
-use inference::{managed_runtime_dir, resolve_binary_command, ManagedBinaryId};
+use inference::{ManagedBinaryId, managed_runtime_dir, resolve_binary_command};
 use tauri::{AppHandle, Manager};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
 
 struct TauriProcessHandle {
     pid: u32,
     child: Arc<Mutex<Option<Child>>>,
+    auxiliary_tasks: Arc<Mutex<Vec<OwnedProcessTask>>>,
+}
+
+struct OwnedProcessTask {
+    name: &'static str,
+    handle: JoinHandle<()>,
+}
+
+impl TauriProcessHandle {
+    fn abort_auxiliary_tasks(&self) {
+        abort_auxiliary_tasks(&self.auxiliary_tasks);
+    }
 }
 
 impl ProcessHandle for TauriProcessHandle {
@@ -39,8 +52,46 @@ impl ProcessHandle for TauriProcessHandle {
                 .start_kill()
                 .map_err(|e| format!("Failed to kill process: {}", e))?;
         }
+        self.abort_auxiliary_tasks();
 
         Ok(())
+    }
+}
+
+impl Drop for TauriProcessHandle {
+    fn drop(&mut self) {
+        self.abort_auxiliary_tasks();
+    }
+}
+
+fn track_auxiliary_task(
+    auxiliary_tasks: &Arc<Mutex<Vec<OwnedProcessTask>>>,
+    name: &'static str,
+    handle: JoinHandle<()>,
+) {
+    match auxiliary_tasks.lock() {
+        Ok(mut tasks) => {
+            tasks.push(OwnedProcessTask { name, handle });
+        }
+        Err(error) => {
+            log::error!("Failed to track managed-runtime task '{name}': {error}");
+            handle.abort();
+        }
+    }
+}
+
+fn abort_auxiliary_tasks(auxiliary_tasks: &Arc<Mutex<Vec<OwnedProcessTask>>>) {
+    let tasks = match auxiliary_tasks.lock() {
+        Ok(mut tasks) => std::mem::take(&mut *tasks),
+        Err(error) => {
+            log::error!("Failed to acquire managed-runtime task registry: {error}");
+            return;
+        }
+    };
+
+    for task in tasks {
+        task.handle.abort();
+        log::debug!("Aborted managed-runtime task '{}'", task.name);
     }
 }
 
@@ -112,10 +163,11 @@ impl ProcessSpawner for TauriProcessSpawner {
 
         let (tx, rx) = mpsc::channel(100);
         let child = Arc::new(Mutex::new(Some(child)));
+        let auxiliary_tasks = Arc::new(Mutex::new(Vec::new()));
 
         if let Some(stdout) = stdout {
             let tx = tx.clone();
-            tokio::spawn(async move {
+            let stdout_task = tokio::spawn(async move {
                 let reader = BufReader::new(stdout);
                 let mut lines = reader.lines();
                 while let Ok(Some(line)) = lines.next_line().await {
@@ -128,11 +180,12 @@ impl ProcessSpawner for TauriProcessSpawner {
                     }
                 }
             });
+            track_auxiliary_task(&auxiliary_tasks, "stdout-reader", stdout_task);
         }
 
         if let Some(stderr) = stderr {
             let tx = tx.clone();
-            tokio::spawn(async move {
+            let stderr_task = tokio::spawn(async move {
                 let reader = BufReader::new(stderr);
                 let mut lines = reader.lines();
                 while let Ok(Some(line)) = lines.next_line().await {
@@ -145,10 +198,11 @@ impl ProcessSpawner for TauriProcessSpawner {
                     }
                 }
             });
+            track_auxiliary_task(&auxiliary_tasks, "stderr-reader", stderr_task);
         }
 
         let monitor = Arc::clone(&child);
-        tokio::spawn(async move {
+        let monitor_task = tokio::spawn(async move {
             loop {
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
@@ -178,8 +232,16 @@ impl ProcessSpawner for TauriProcessSpawner {
                 }
             }
         });
+        track_auxiliary_task(&auxiliary_tasks, "process-monitor", monitor_task);
 
-        Ok((rx, Box::new(TauriProcessHandle { pid, child })))
+        Ok((
+            rx,
+            Box::new(TauriProcessHandle {
+                pid,
+                child,
+                auxiliary_tasks,
+            }),
+        ))
     }
 
     fn app_data_dir(&self) -> Result<PathBuf, String> {
