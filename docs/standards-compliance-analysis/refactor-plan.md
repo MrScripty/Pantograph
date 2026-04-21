@@ -530,11 +530,18 @@ Verification:
 Goal: Make compliance enforceable instead of only documented.
 
 Tasks:
-- Add a general CI workflow with separate jobs for critical lint, typecheck,
+- [x] Add a general CI workflow with separate jobs for critical lint, typecheck,
   frontend tests, Rust fmt/clippy/check/test/doc-test, dependency audit, and
-  summary aggregation.
-- Ensure every CI job explicitly bootstraps the package manager or toolchain it
-  invokes instead of relying on runner defaults.
+  summary aggregation. Status: `.github/workflows/quality-gates.yml` now runs
+  blocking no-new lint/traceability, typecheck, frontend test, high-severity
+  dependency audit, Rust check, focused Rust test, and Rust doc-test jobs, with
+  separate ratcheted audit jobs for full lint, Rust formatting, and
+  `clippy -D warnings`.
+- [x] Ensure every CI job explicitly bootstraps the package manager or toolchain
+  it invokes instead of relying on runner defaults. Status: Node jobs use
+  `actions/setup-node` with `.node-version` and `npm ci --include=optional`;
+  Rust jobs use the pinned Rust toolchain action and Cargo cache before Cargo
+  commands.
 - [x] Add `lint:no-new`, `format:check`, and decision-traceability commands;
   decide which are immediately blocking and which begin as ratcheted audits.
   Status: `package.json` now exposes `lint:no-new` for immediately blocking
@@ -660,7 +667,11 @@ fully resolved by standards compliance:
   workspace lint policy now denies new unsafe code by default.
 - Resolved: generated-component history metadata moved out of
   `src/generated/.git` into ignored `.pantograph/generated-components.git/`.
-- CI currently verifies important binding/runtime separation paths but does not protect the main frontend and workspace quality gates.
+- Resolved: general CI now protects main frontend and Rust workspace quality
+  gates through `.github/workflows/quality-gates.yml`.
+- `npm audit --omit=dev --audit-level=high` passes, but the current dependency
+  tree still reports moderate advisories in `devalue`, `markdown-it`, and
+  `svelte`; schedule a dependency update once compatible versions are confirmed.
 - `crates/pantograph-workflow-service/src/workflow.rs` test fixture
   `MockWorkflowHost` stores `runtime_capabilities: vec![ready_runtime_capability()]`
   but does not override `WorkflowHost::runtime_capabilities`, so

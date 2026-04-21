@@ -1,0 +1,237 @@
+name: Quality Gates
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  lint-no-new:
+    name: Critical lint and traceability
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Node toolchain
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci --include=optional
+
+      - name: Run no-new-debt lint gate
+        run: npm run lint:no-new
+
+  typecheck:
+    name: TypeScript typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Node toolchain
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci --include=optional
+
+      - name: Run TypeScript typecheck
+        run: npm run typecheck
+
+  frontend-tests:
+    name: Frontend tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Node toolchain
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci --include=optional
+
+      - name: Run frontend tests
+        run: npm run test:frontend
+
+  dependency-audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Node toolchain
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci --include=optional
+
+      - name: Block high severity production vulnerabilities
+        run: npm audit --omit=dev --audit-level=high
+
+  rust-check:
+    name: Rust workspace check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.92.0
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check workspace without default features
+        run: cargo check --workspace --no-default-features
+
+      - name: Check workspace with all features
+        run: cargo check --workspace --all-features
+
+  rust-tests:
+    name: Rust focused tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.92.0
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run node-engine tests
+        run: cargo test -p node-engine --lib
+
+      - name: Run workflow-nodes tests
+        run: cargo test -p workflow-nodes --lib
+
+  rust-doc-tests:
+    name: Rust doc tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.92.0
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run workspace doc tests
+        run: cargo test --workspace --doc --no-default-features
+
+  rust-format-audit:
+    name: Rust format audit
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.92.0
+
+      - name: Run format audit
+        run: cargo fmt --all -- --check
+
+  rust-clippy-audit:
+    name: Rust clippy warning audit
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.92.0
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run warning-deny clippy audit
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+  lint-full-audit:
+    name: Full lint audit
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Node toolchain
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci --include=optional
+
+      - name: Run full lint audit
+        run: npm run lint:full
+
+  quality-summary:
+    name: Quality summary
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - lint-no-new
+      - typecheck
+      - frontend-tests
+      - dependency-audit
+      - rust-check
+      - rust-tests
+      - rust-doc-tests
+      - rust-format-audit
+      - rust-clippy-audit
+      - lint-full-audit
+    steps:
+      - name: Summarize required gates
+        run: |
+          failed=0
+          for result in \
+            "lint-no-new:${{ needs.lint-no-new.result }}" \
+            "typecheck:${{ needs.typecheck.result }}" \
+            "frontend-tests:${{ needs.frontend-tests.result }}" \
+            "dependency-audit:${{ needs.dependency-audit.result }}" \
+            "rust-check:${{ needs.rust-check.result }}" \
+            "rust-tests:${{ needs.rust-tests.result }}" \
+            "rust-doc-tests:${{ needs.rust-doc-tests.result }}"
+          do
+            name="${result%%:*}"
+            status="${result#*:}"
+            echo "$name: $status"
+            if [ "$status" != "success" ]; then
+              failed=1
+            fi
+          done
+
+          echo "rust-format-audit: ${{ needs.rust-format-audit.result }}"
+          echo "rust-clippy-audit: ${{ needs.rust-clippy-audit.result }}"
+          echo "lint-full-audit: ${{ needs.lint-full-audit.result }}"
+
+          exit "$failed"

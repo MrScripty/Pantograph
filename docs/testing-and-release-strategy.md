@@ -46,6 +46,32 @@ specialized surface. Examples:
   `./scripts/check-uniffi-csharp-diffusion-smoke.sh` with the required
   `PANTOGRAPH_DIFFUSION_SMOKE_*` environment variables
 
+## CI Quality Gates
+
+`.github/workflows/quality-gates.yml` runs the main repo quality gates on pull
+requests and pushes to `main`.
+
+Blocking jobs:
+
+- Critical lint plus decision traceability through `npm run lint:no-new`
+- TypeScript typecheck
+- Frontend tests
+- Production dependency audit for high-severity vulnerabilities
+- Rust workspace checks with all features and without default features
+- Focused Rust unit tests for `node-engine` and `workflow-nodes`
+- Rust workspace doc tests without default features
+
+Ratcheted audit jobs:
+
+- `cargo fmt --all -- --check`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+- `npm run lint:full`
+
+The audit jobs are visible in CI but are non-blocking until the documented
+formatting, Rust warning, and full-lint baselines are cleaned up. The summary
+job fails the workflow when any blocking gate fails and reports the audit job
+status for review.
+
 ## Acceptance Policy
 
 Changes that cross a producer/consumer boundary need one acceptance path through
