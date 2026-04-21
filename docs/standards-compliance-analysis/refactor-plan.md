@@ -330,11 +330,12 @@ Tasks:
   state transitions. Graph edit-session, mutation, connection, persistence,
   and runtime snapshot facade methods now live in `workflow/graph_api.rs`.
   Workflow capability, I/O discovery, and preflight facade methods now live in
-  `workflow/preflight_api.rs`. Session status, queue inspection, scheduler
-  snapshot, cancellation, and reprioritization facade methods now live in
-  `workflow/session_queue_api.rs`. Stale cleanup, stale cleanup worker,
-  keep-alive, and close-session facade methods now live in
-  `workflow/session_lifecycle_api.rs`.
+  `workflow/preflight_api.rs`. Session creation and queued session run facade
+  methods now live in `workflow/session_execution_api.rs`. Session status,
+  queue inspection, scheduler snapshot, cancellation, and reprioritization
+  facade methods now live in `workflow/session_queue_api.rs`. Stale cleanup,
+  stale cleanup worker, keep-alive, and close-session facade methods now live
+  in `workflow/session_lifecycle_api.rs`.
 - Split `crates/pantograph-embedded-runtime/src/lib.rs` into runtime host,
   workflow sessions, registry lifecycle, diagnostics projection, model deps,
   and test modules.

@@ -9,9 +9,7 @@ use crate::capabilities;
 use crate::graph::GraphSessionStore;
 #[cfg(test)]
 use crate::graph::WorkflowGraphSessionStateView;
-use crate::scheduler::{
-    WORKFLOW_SESSION_QUEUE_POLL_MS, WorkflowSessionPreflightCache, WorkflowSessionStore,
-};
+use crate::scheduler::{WorkflowSessionPreflightCache, WorkflowSessionStore};
 use crate::technical_fit::WorkflowTechnicalFitOverride;
 #[cfg(test)]
 use crate::technical_fit::{WorkflowTechnicalFitDecision, WorkflowTechnicalFitRequest};
@@ -22,6 +20,7 @@ mod host;
 mod io_contract;
 mod preflight_api;
 mod runtime_preflight;
+mod session_execution_api;
 mod session_lifecycle_api;
 mod session_queue_api;
 mod session_runtime;
@@ -134,182 +133,6 @@ impl WorkflowService {
         self.session_store
             .lock()
             .map_err(|_| WorkflowServiceError::Internal("session store lock poisoned".to_string()))
-    }
-
-    pub async fn create_workflow_session<H: WorkflowHost>(
-        &self,
-        host: &H,
-        request: WorkflowSessionCreateRequest,
-    ) -> Result<WorkflowSessionCreateResponse, WorkflowServiceError> {
-        validate_workflow_id(&request.workflow_id)?;
-        host.validate_workflow(&request.workflow_id).await?;
-
-        let session_id = {
-            let mut store = self.session_store.lock().map_err(|_| {
-                WorkflowServiceError::Internal("session store lock poisoned".to_string())
-            })?;
-            store.create_session(
-                request.workflow_id.clone(),
-                request
-                    .usage_profile
-                    .clone()
-                    .map(|v| v.trim().to_string())
-                    .filter(|v| !v.is_empty()),
-                Vec::new(),
-                Vec::new(),
-                request.keep_alive,
-            )?
-        };
-
-        if request.keep_alive {
-            if let Err(error) = self
-                .ensure_keep_alive_session_runtime_ready(host, &session_id, &request.workflow_id)
-                .await
-            {
-                if let Ok(mut rollback_store) = self.session_store.lock() {
-                    let _ = rollback_store.close_session(&session_id);
-                }
-                return Err(error);
-            }
-        }
-
-        Ok(WorkflowSessionCreateResponse {
-            session_id,
-            runtime_capabilities: host.runtime_capabilities().await?,
-        })
-    }
-
-    pub async fn run_workflow_session<H: WorkflowHost>(
-        &self,
-        host: &H,
-        request: WorkflowSessionRunRequest,
-    ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
-        let session_id = request.session_id.trim().to_string();
-        if session_id.is_empty() {
-            return Err(WorkflowServiceError::InvalidRequest(
-                "session_id must be non-empty".to_string(),
-            ));
-        }
-        validate_timeout_ms(request.timeout_ms)?;
-        validate_bindings(&request.inputs, "inputs")?;
-        if let Some(targets) = request.output_targets.as_ref() {
-            validate_output_targets(targets)?;
-        }
-
-        let queue_id = {
-            let mut store = self.session_store.lock().map_err(|_| {
-                WorkflowServiceError::Internal("session store lock poisoned".to_string())
-            })?;
-            store.enqueue_run(&session_id, &request)?
-        };
-
-        let queued_run = loop {
-            let session_ready_to_load = {
-                let mut store = self.session_store.lock().map_err(|_| {
-                    WorkflowServiceError::Internal("session store lock poisoned".to_string())
-                })?;
-                if !store.queued_run_is_admission_candidate(&session_id, &queue_id)? {
-                    None
-                } else {
-                    Some(store.session_summary(&session_id)?)
-                }
-            };
-            if let Some(session) = session_ready_to_load {
-                let retention_hint = if session.keep_alive {
-                    WorkflowSessionRetentionHint::KeepAlive
-                } else {
-                    WorkflowSessionRetentionHint::Ephemeral
-                };
-                if !host
-                    .can_load_session_runtime(
-                        &session.session_id,
-                        &session.workflow_id,
-                        session.usage_profile.as_deref(),
-                        retention_hint,
-                    )
-                    .await?
-                {
-                    if let Ok(mut store) = self.session_store.lock() {
-                        let _ = store.set_queue_decision_reason_if_present(
-                            &session_id,
-                            &queue_id,
-                            WorkflowSchedulerDecisionReason::WaitingForRuntimeAdmission,
-                        );
-                    }
-                    tokio::time::sleep(Duration::from_millis(WORKFLOW_SESSION_QUEUE_POLL_MS)).await;
-                    continue;
-                }
-            }
-
-            let maybe_queued = {
-                let mut store = self.session_store.lock().map_err(|_| {
-                    WorkflowServiceError::Internal("session store lock poisoned".to_string())
-                })?;
-                store.begin_queued_run(&session_id, &queue_id)?
-            };
-            if let Some(queued) = maybe_queued {
-                break queued;
-            }
-            tokio::time::sleep(Duration::from_millis(WORKFLOW_SESSION_QUEUE_POLL_MS)).await;
-        };
-
-        let preflight_cache = match self
-            .ensure_session_runtime_preflight(
-                host,
-                &session_id,
-                &queued_run.workflow_id,
-                queued_run.queued.override_selection.clone(),
-            )
-            .await
-        {
-            Ok(cache) => cache,
-            Err(error) => {
-                if let Ok(mut store) = self.session_store.lock() {
-                    let _ = store.finish_run(&session_id, &queue_id);
-                }
-                return Err(error);
-            }
-        };
-
-        if let Err(error) = self.ensure_session_runtime_loaded(host, &session_id).await {
-            if let Ok(mut store) = self.session_store.lock() {
-                let _ = store.finish_run(&session_id, &queue_id);
-            }
-            return Err(error);
-        }
-
-        let run_result = self
-            .workflow_run_internal(
-                host,
-                WorkflowRunRequest {
-                    workflow_id: queued_run.workflow_id,
-                    inputs: queued_run.queued.inputs,
-                    output_targets: queued_run.queued.output_targets,
-                    override_selection: queued_run.queued.override_selection,
-                    timeout_ms: queued_run.queued.timeout_ms,
-                    run_id: queued_run.queued.run_id,
-                },
-                Some(preflight_cache),
-                Some(session_id.clone()),
-            )
-            .await;
-
-        let finish_state = {
-            let mut store = self.session_store.lock().map_err(|_| {
-                WorkflowServiceError::Internal("session store lock poisoned".to_string())
-            })?;
-            store.finish_run(&session_id, &queue_id)?
-        };
-        if finish_state.unload_runtime {
-            host.unload_session_runtime(
-                &session_id,
-                &finish_state.workflow_id,
-                WorkflowSessionUnloadReason::KeepAliveDisabled,
-            )
-            .await?;
-        }
-
-        run_result
     }
 
     pub async fn workflow_run<H: WorkflowHost>(
