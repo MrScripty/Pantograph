@@ -36,6 +36,8 @@ of application-level scheduler policy.
 - The public contract must stay stable enough for multiple hosts to consume.
 - Backends have different lifecycle models, so process ownership must be
   abstracted.
+- Host-managed PID files must remain structured enough to guard stale-process
+  cleanup against PID reuse and ownership ambiguity.
 - Machine-consumed request/response payloads must preserve semantics across
   process and language boundaries.
 - New capability areas such as diffusion and reranking must extend the contract
@@ -83,6 +85,9 @@ than replaces.
 - Temporary embedding-mode switches for workflows or host features must be
   prepared and restored through backend-owned gateway operations rather than
   being orchestrated independently by adapters.
+- Stale sidecar cleanup must accept legacy plain-PID files but prefer
+  structured PID records containing owner, version, mode, start time, and
+  executable facts from the host spawner.
 
 ## Revisit Triggers
 
@@ -110,6 +115,11 @@ runtime crates such as Candle or PyO3-backed components.
   breaking facade split.
 
 ## Usage Examples
+
+Reason: the examples use Rust `None` values to show omitted optional request
+fields explicitly.
+Revisit trigger: update these examples when inference request defaults or
+optional field semantics change.
 
 ```rust
 use inference::{BackendConfig, ImageGenerationRequest, InferenceGateway};

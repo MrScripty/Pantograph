@@ -51,6 +51,9 @@ does not own runtime policy.
 The Tauri process bridge binds stdout/stderr reader tasks and the termination
 monitor to the returned process handle so managed-runtime shutdown aborts
 companion tasks with the process owner.
+The same process bridge writes structured managed-runtime PID records with the
+process id, owner/version, mode, start time, and executable path for later
+stale-process cleanup.
 The health monitor stores its polling task handle and aborts it through
 `HealthMonitor::stop()` so the monitor loop has an explicit owner.
 Automatic recovery launched from health failures is tracked by `RecoveryManager`
@@ -156,6 +159,8 @@ app.manage(gateway);
   services, but they must not create replacement service instances on demand.
 - Managed-runtime process reader and monitor tasks must be owned by the
   returned process handle and stopped when that handle stops the process.
+- Managed-runtime PID files written by the Tauri process bridge must be
+  structured records, not bare process ids.
 - Health-monitor polling tasks must be owned by `HealthMonitor` and stopped
   through the same service API that flips the running flag.
 - Automatic recovery launched from health failures must be owned by

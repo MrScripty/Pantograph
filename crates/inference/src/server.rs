@@ -5,6 +5,7 @@
 //! - Monitoring process health
 //! - Graceful shutdown
 
+use serde::Deserialize;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -18,6 +19,11 @@ use crate::types::ServerModeInfo;
 
 const SIDECAR_PID_FILE: &str = "llama-server.pid";
 const KV_SLOT_SAVE_DIR: &str = "llama-kv-slots";
+
+#[derive(Debug, Deserialize)]
+struct SidecarPidRecord {
+    pid: i32,
+}
 
 fn normalize_server_url(url: &str) -> String {
     url.trim_end_matches('/').to_string()
@@ -56,6 +62,21 @@ fn oom_error_message(hint: Option<&str>) -> String {
 
 fn kv_slot_save_dir(app_data_dir: &std::path::Path) -> PathBuf {
     app_data_dir.join(KV_SLOT_SAVE_DIR)
+}
+
+fn parse_sidecar_pid(raw: &str) -> Option<i32> {
+    let value = raw.trim();
+    if value.is_empty() {
+        return None;
+    }
+
+    if let Ok(pid) = value.parse::<i32>() {
+        return Some(pid);
+    }
+
+    serde_json::from_str::<SidecarPidRecord>(value)
+        .ok()
+        .map(|record| record.pid)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -150,10 +171,9 @@ impl LlamaServer {
 
         let pid_raw = fs::read_to_string(&pid_path)
             .map_err(|e| format!("Failed to read sidecar pid file: {}", e))?;
-        let pid_str = pid_raw.trim();
-        let pid: i32 = match pid_str.parse() {
-            Ok(pid) => pid,
-            Err(_) => {
+        let pid = match parse_sidecar_pid(&pid_raw) {
+            Some(pid) => pid,
+            None => {
                 let _ = fs::remove_file(&pid_path);
                 return Ok(());
             }
@@ -808,8 +828,28 @@ pub type SharedLlamaServer = Arc<RwLock<LlamaServer>>;
 
 #[cfg(test)]
 mod tests {
-    use super::{LlamaServer, ServerMode};
+    use super::{LlamaServer, ServerMode, parse_sidecar_pid};
     use crate::config::DeviceConfig;
+
+    #[test]
+    fn parse_sidecar_pid_accepts_legacy_plain_pid() {
+        assert_eq!(parse_sidecar_pid("12345\n"), Some(12345));
+    }
+
+    #[test]
+    fn parse_sidecar_pid_accepts_structured_pid_record() {
+        let record = r#"{
+            "schema_version": 1,
+            "pid": 12345,
+            "started_at_ms": 1710000000000,
+            "owner": "pantograph-tauri",
+            "owner_version": "0.0.0",
+            "mode": "llama.cpp.inference",
+            "executable": "/tmp/llama-server"
+        }"#;
+
+        assert_eq!(parse_sidecar_pid(record), Some(12345));
+    }
 
     #[test]
     fn base_url_reflects_sidecar_port_override() {

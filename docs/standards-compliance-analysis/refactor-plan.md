@@ -285,8 +285,12 @@ Tasks:
   recovery task launched from health-monitor failure handling, ignores
   duplicate launches while a task is still active, and exposes a shutdown hook
   used by the window lifecycle path.
-- [ ] Replace bare PID files with structured records that include pid, start time,
+- [x] Replace bare PID files with structured records that include pid, start time,
   version/mode, and owner identity where needed.
+  Status: Tauri-managed runtime launches now write JSON PID records with
+  schema version, pid, start time, owner, owner version, runtime mode, and
+  executable path. Inference stale-sidecar cleanup still accepts legacy
+  plain-PID files while preferring the structured record shape.
 - [ ] Document listener bind address, max connections, timeout/heartbeat strategy,
   and graceful shutdown for product listener paths.
 
