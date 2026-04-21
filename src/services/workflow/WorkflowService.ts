@@ -31,8 +31,8 @@ import {
   mockValidateConnection,
 } from './mocks.ts';
 import {
-  claimWorkflowExecutionIdFromEvent,
   getWorkflowEventExecutionId,
+  projectWorkflowEventOwnership,
 } from '@pantograph/svelte-graph';
 import {
   normalizeConnectionCandidatesResponse,
@@ -73,10 +73,10 @@ export class WorkflowService {
   private currentRunExecutionId: string | null = null;
 
   private publishEvent(event: WorkflowEvent): void {
-    this.currentRunExecutionId = claimWorkflowExecutionIdFromEvent(
+    this.currentRunExecutionId = projectWorkflowEventOwnership(
       event,
       this.currentRunExecutionId,
-    );
+    ).activeExecutionId;
     if (event.type === 'Started' && this.currentExecutionId === null) {
       this.currentExecutionId = getWorkflowEventExecutionId(event);
     }

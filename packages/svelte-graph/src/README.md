@@ -16,6 +16,7 @@ fork core canvas behavior.
 | `horseshoeInvocation.ts` | Shared `Space` open/confirm decisions, pointer-anchor freeze rules, and user-facing blocked-reason strings for horseshoe invocation. |
 | `stores/` | Package store factories for workflow, session, and view state. |
 | `types/` | Stable TypeScript contracts for graph, backend, and group APIs. |
+| `workflowEventOwnership.ts` | Projection helper for backend-provided workflow execution ids, active run identity, and stale-event relevance. |
 | `index.ts` | Package export surface consumed by the app shell and any external package users. |
 
 ## Problem
@@ -37,6 +38,9 @@ Keep reusable interaction policy in small top-level helpers such as
 `horseshoeInvocation.ts`, then compose them from the package graph component
 and the app graph wrapper. Export those helpers through `index.ts` so the app
 layer can consume the same connect/reconnect rules instead of copying them.
+Keep workflow execution event identity in `workflowEventOwnership.ts` as an
+explicit projection object until the backend-owned trace/session projection API
+can replace that frontend seam.
 
 ## Alternatives Rejected
 - Keep connect/reconnect state management inline in both graph components.
@@ -61,6 +65,8 @@ layer can consume the same connect/reconnect rules instead of copying them.
   breaking change is documented separately.
 - Helpers in this directory do not perform backend mutations directly; they
   compute state and decisions for callers that own side effects.
+- `workflowEventOwnership.ts` must only project backend-supplied execution ids
+  and active-run relevance; it must not synthesize canonical run identity.
 
 ## Revisit Triggers
 - A second non-Pantograph consumer needs a different reconnect policy.
@@ -101,6 +107,9 @@ const canInsert = supportsInsertFromConnectionDrag(dragState);
   and callers should surface or log those reasons consistently.
 - New exports in this directory should preserve existing names and semantics for
   current app consumers unless a migration is documented.
+- Consumers that need execution-event relevance should use
+  `projectWorkflowEventOwnership()` instead of composing lower-level helper
+  calls.
 
 ## Structured Producer Contract
 - `index.ts` is the structured producer for package consumers. Export names and
@@ -108,6 +117,9 @@ const canInsert = supportsInsertFromConnectionDrag(dragState);
 - Top-level helper modules return plain objects with explicit boolean/string
   fields so callers can serialize, test, or inspect decisions without framework
   internals.
+- `WorkflowEventOwnershipProjection` contains event execution id, active
+  execution id, and relevance as the current package-level execution event
+  projection contract.
 - If a helper contract changes, package exports and downstream app imports must
   be updated in the same change set; do not leave mixed old/new interaction
   semantics in the repo.

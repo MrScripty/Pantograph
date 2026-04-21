@@ -5,6 +5,7 @@ import {
   claimWorkflowExecutionIdFromEvent,
   getWorkflowEventExecutionId,
   isWorkflowEventRelevantToExecution,
+  projectWorkflowEventOwnership,
 } from './workflowEventOwnership.ts';
 
 test('getWorkflowEventExecutionId returns the event execution id when present', () => {
@@ -15,6 +16,42 @@ test('getWorkflowEventExecutionId returns the event execution id when present', 
       },
     }),
     'run-1',
+  );
+});
+
+test('projectWorkflowEventOwnership exposes event identity active identity and relevance', () => {
+  assert.deepEqual(
+    projectWorkflowEventOwnership(
+      {
+        data: {
+          execution_id: 'run-2',
+        },
+      },
+      'run-1',
+    ),
+    {
+      eventExecutionId: 'run-2',
+      activeExecutionId: 'run-1',
+      relevant: false,
+    },
+  );
+});
+
+test('projectWorkflowEventOwnership claims the backend event id when no run is pinned', () => {
+  assert.deepEqual(
+    projectWorkflowEventOwnership(
+      {
+        data: {
+          execution_id: 'run-1',
+        },
+      },
+      null,
+    ),
+    {
+      eventExecutionId: 'run-1',
+      activeExecutionId: 'run-1',
+      relevant: true,
+    },
   );
 });
 

@@ -5,32 +5,42 @@ export interface ExecutionScopedWorkflowEvent {
   };
 }
 
+export interface WorkflowEventOwnershipProjection {
+  eventExecutionId: string | null;
+  activeExecutionId: string | null;
+  relevant: boolean;
+}
+
 export function getWorkflowEventExecutionId(event: ExecutionScopedWorkflowEvent): string | null {
   return typeof event.data.execution_id === 'string' && event.data.execution_id.trim().length > 0
     ? event.data.execution_id
     : null;
 }
 
+export function projectWorkflowEventOwnership(
+  event: ExecutionScopedWorkflowEvent,
+  currentExecutionId: string | null,
+): WorkflowEventOwnershipProjection {
+  const eventExecutionId = getWorkflowEventExecutionId(event);
+  const activeExecutionId = currentExecutionId ?? eventExecutionId;
+
+  return {
+    eventExecutionId,
+    activeExecutionId,
+    relevant: activeExecutionId === null || eventExecutionId === activeExecutionId,
+  };
+}
+
 export function claimWorkflowExecutionIdFromEvent(
   event: ExecutionScopedWorkflowEvent,
   currentExecutionId: string | null,
 ): string | null {
-  if (currentExecutionId) {
-    return currentExecutionId;
-  }
-
-  return getWorkflowEventExecutionId(event);
+  return projectWorkflowEventOwnership(event, currentExecutionId).activeExecutionId;
 }
 
 export function isWorkflowEventRelevantToExecution(
   event: ExecutionScopedWorkflowEvent,
   expectedExecutionId: string | null,
 ): boolean {
-  if (!expectedExecutionId) {
-    return true;
-  }
-
-  const eventExecutionId = getWorkflowEventExecutionId(event);
-
-  return eventExecutionId === expectedExecutionId;
+  return projectWorkflowEventOwnership(event, expectedExecutionId).relevant;
 }

@@ -90,7 +90,9 @@ export {
   claimWorkflowExecutionIdFromEvent,
   getWorkflowEventExecutionId,
   isWorkflowEventRelevantToExecution,
+  projectWorkflowEventOwnership,
 } from './workflowEventOwnership.js';
+export type { WorkflowEventOwnershipProjection } from './workflowEventOwnership.js';
 export type { ExecutionScopedWorkflowEvent } from './workflowEventOwnership.js';
 
 // --- Context ---

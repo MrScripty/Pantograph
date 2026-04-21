@@ -62,7 +62,10 @@ Workflow execution event reduction now lives in
 `workflowExecutionEvents.ts` instead of `WorkflowToolbar.svelte`, keeping the
 component focused on subscription and run-lifecycle ownership while the store
 boundary owns the read-only event-to-overlay reduction shared by GUI
-consumers.
+consumers. That reducer now consumes the explicit execution ownership projection
+from `workflowEventOwnership.ts` so active-run identity and stale-event
+relevance are evaluated once before node overlays or runtime-data mirrors are
+updated.
 Collapsed node group create, ungroup, and port-mapping edits now follow the
 same backend-session rule as other structural graph mutations:
 `createWorkflowStores.ts` applies the returned graph mutation snapshot and
@@ -95,6 +98,9 @@ boundary edges locally.
 - Backend workflow events may update execution overlays and additive runtime
   output mirrors in store-managed state, but they must not become a second
   source of truth for persisted graph structure.
+- Execution event reducers must consume the shared workflow event ownership
+  projection instead of composing execution-id claiming and relevance checks
+  locally.
 
 ## Revisit Triggers
 - Multiple simultaneous connection intents need independent store partitions.

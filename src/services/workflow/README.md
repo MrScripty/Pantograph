@@ -48,6 +48,9 @@ or future metrics surfaces that should not depend on the GUI projection shape.
 Diagnostics snapshot reads and mock fallbacks now include backend-compatible
 projection context so app stores can consume relevance and attribution fields
 without rebuilding them from workflow events.
+Run identity updates now consume the package-level workflow event ownership
+projection so `WorkflowService.ts` and workflow execution reducers agree on how
+backend event execution ids claim or reject an active run.
 
 ## Alternatives Rejected
 - Remove `WorkflowService` and switch every app caller to `TauriWorkflowBackend`
@@ -62,6 +65,8 @@ without rebuilding them from workflow events.
   session-scoped graph mutation method runs.
 - `currentRunExecutionId` must only represent the active workflow run and must
   be reset when session ownership changes.
+- `currentRunExecutionId` updates must use the shared workflow event ownership
+  projection until a backend-owned trace/session projection replaces it.
 - Edit mutation methods must forward backend-owned graph state rather than
   reconstructing local graph changes client-side.
 - Expected connection rejection is returned as structured data, not thrown as an
