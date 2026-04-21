@@ -86,6 +86,9 @@ it is represented by a backend contract.
   because one runtime needs a new install or selection flow.
 - Health and recovery flows must operate through shared gateway-backed state,
   not independent adapter-local state machines.
+- Health-monitor accessors should expose active command/debug needs only; avoid
+  retaining unused counter readers when the structured health result already
+  carries those facts.
 - Recovery retry loops may gather host facts such as port availability, but
   alternate-port fallback and clean-restart sequencing must come from backend
   recovery helpers rather than from Tauri-local branching.

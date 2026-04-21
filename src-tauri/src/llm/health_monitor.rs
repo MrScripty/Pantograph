@@ -284,11 +284,6 @@ impl HealthMonitor {
         *self.last_result.write().await = result;
     }
 
-    /// Get current consecutive failure count
-    pub async fn consecutive_failures(&self) -> u32 {
-        *self.consecutive_failures.read().await
-    }
-
     /// Manually trigger a health check (outside of the regular interval)
     pub async fn check_now(&self, app: &AppHandle) -> Option<HealthCheckResult> {
         let gateway = app.try_state::<SharedGateway>()?;
