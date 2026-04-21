@@ -12,8 +12,8 @@ diagnostics reusable across Tauri, UniFFI, Rustler, and tests.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `lib.rs` | Public module exports for the workflow service crate. |
-| `workflow.rs` | Public workflow facade exports, host traits, facade methods, graph/session APIs, and orchestration logic. |
-| `workflow/` | Private workflow contracts, I/O derivation, runtime preflight, and session-runtime helpers extracted from the main facade. |
+| `workflow.rs` | Public workflow facade exports, facade methods, graph/session APIs, and orchestration logic. |
+| `workflow/` | Private workflow contracts, host traits, I/O derivation, runtime preflight, and session-runtime helpers extracted from the main facade. |
 | `scheduler/` | Backend-owned workflow-session queue/store contracts used by the workflow facade. |
 | `trace/` | Workflow trace contracts, request validation, in-memory trace state, and runtime/scheduler snapshot merge helpers. |
 | `graph/` | Graph DTOs and session-kind contracts shared by service operations. |

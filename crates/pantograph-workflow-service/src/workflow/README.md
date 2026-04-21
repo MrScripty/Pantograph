@@ -12,15 +12,16 @@ public exports out of the service crate.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `contracts.rs` | Public workflow request/response/error DTO definitions re-exported by the parent facade. |
+| `host.rs` | Host trait defaults and scheduler diagnostics provider contracts re-exported by the parent facade. |
 | `io_contract.rs` | Workflow input/output surface derivation and host-response validation helpers. |
 | `runtime_preflight.rs` | Runtime requirement matching, issue formatting, and preflight warning collection. |
 | `session_runtime.rs` | Session runtime preflight cache checks, runtime loading, unload-candidate selection, and affinity refresh helpers. |
 
 ## Problem
-`src/workflow.rs` remains a large public facade with host traits and service
-methods. Public DTO definitions, workflow I/O derivation, runtime readiness,
-and session-runtime loading are cohesive enough to isolate, but they still
-preserve the parent facade as the compatibility export point.
+`src/workflow.rs` remains a large public facade with service methods. Public
+DTO definitions, host/runtime trait defaults, workflow I/O derivation, runtime
+readiness, and session-runtime loading are cohesive enough to isolate, but they
+still preserve the parent facade as the compatibility export point.
 
 ## Constraints
 - Preserve the public `WorkflowService` API while decomposing internals.
@@ -31,8 +32,8 @@ preserve the parent facade as the compatibility export point.
 ## Decision
 Use this directory for workflow-service helper modules behind the parent
 facade. The parent facade remains the public export point while helpers own
-cohesive contract definitions, workflow I/O derivation, runtime readiness, and
-session-runtime workflows.
+cohesive contract definitions, host/runtime trait defaults, workflow I/O
+derivation, runtime readiness, and session-runtime workflows.
 
 ## Alternatives Rejected
 - Leave all helpers in `workflow.rs`: rejected because runtime readiness and
@@ -59,7 +60,7 @@ session-runtime workflows.
 
 ## Dependencies
 **Internal:** parent workflow facade exports, scheduler preflight cache,
-technical-fit overrides, `WorkflowHost`, and `pantograph-runtime-identity`.
+technical-fit overrides, host trait helpers, and `pantograph-runtime-identity`.
 
 **External:** none beyond parent crate dependencies.
 
@@ -84,8 +85,8 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
 - Inputs: workflow runtime requirements, runtime capability DTOs, session ids,
   workflow ids, and host trait methods.
 - Outputs: request/response DTOs, bindable I/O node surfaces, runtime issues,
-  preflight cache records, and service errors consumed by public workflow
-  operations.
+  scheduler diagnostics contracts, preflight cache records, and service errors
+  consumed by public workflow operations.
 - Lifecycle: helpers run inside public workflow/session operations and do not
   own long-lived runtime resources directly.
 - Errors: capacity exhaustion, missing sessions, runtime-not-ready conditions,
