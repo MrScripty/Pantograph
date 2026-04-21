@@ -1,26 +1,88 @@
 # src-tauri/src/hotload_sandbox
 
+Desktop hot-load sandbox validation boundary.
+
 ## Purpose
-Source files and submodules for this part of the codebase.
+This directory owns backend helpers for validating and sandboxing runtime
+Svelte component code before it is exposed to the desktop hot-load path.
 
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| mod.rs | Source file used by modules in this directory. |
-| runtime_sandbox.rs | Source file used by modules in this directory. |
-| svelte_validator.rs | Source file used by modules in this directory. |
+| `mod.rs` | Hotload sandbox module exports. |
+| `runtime_sandbox.rs` | Runtime sandbox setup and execution helpers. |
+| `svelte_validator.rs` | Svelte-specific validation logic. |
 
-## Design Decisions
-- Keep files in this directory scoped to a single responsibility boundary.
-- Prefer explicit module boundaries over cross-cutting utility placement.
-- Maintain predictable naming so callers can discover related modules quickly.
+## Problem
+Pantograph can work with runtime-generated Svelte components, but those assets
+need validation and sandbox boundaries so generated code does not bypass app
+constraints.
+
+## Constraints
+- Runtime-generated component state currently lives under the documented
+  `src/generated` exception.
+- Svelte validation must happen before hot-loaded components are trusted by the
+  UI.
+- Sandbox behavior belongs in backend helpers, not ad hoc frontend checks.
+
+## Decision
+Keep hot-load sandbox validation in this Tauri module while tracking the
+generated-state migration in M1/M3. The module validates generated component
+assets but does not own general workflow/runtime policy.
+
+## Alternatives Rejected
+- Trust generated Svelte without backend validation: rejected because runtime
+  code needs bounded checks.
+- Move generated component history into this module immediately: rejected
+  because the current nested Git state needs a focused migration.
+
+## Invariants
+- Hot-loaded components must pass validation before use.
+- Generated component history remains a documented temporary source-root
+  exception until migrated.
+- Sandbox helpers should not mutate workflow graph truth.
+
+## Revisit Triggers
+- `src/generated` history moves outside the source root.
+- Generated component validation becomes a shared service or CLI.
+- Hot-load sandbox policy changes from validation-only to execution isolation.
 
 ## Dependencies
-**Internal:** Neighboring modules in this source tree and the nearest package/crate entry points.
-**External:** Dependencies declared in the corresponding manifest files.
+**Internal:** generated component workspace, Tauri command paths, and frontend
+hotload sandbox services.
+
+**External:** Svelte validation/tooling and filesystem APIs.
+
+## Related ADRs
+- `docs/adr/ADR-001-headless-embedding-service-boundary.md`
 
 ## Usage Examples
 ```rust
-// Example: expose modules from this directory in the crate root.
-mod module_name;
+use crate::hotload_sandbox::svelte_validator;
 ```
+
+## API Consumer Contract
+- Inputs: generated component source and sandbox configuration.
+- Outputs: validation results and sandbox diagnostics.
+- Lifecycle: validation runs per generated component/update.
+- Errors: syntax, policy, and filesystem errors should stay distinguishable.
+- Versioning: validation result shape changes require frontend hotload
+  consumers to migrate.
+
+## Structured Producer Contract
+- Stable fields: validation result keys, diagnostics, and component identifiers
+  are machine-consumed by hotload UI paths.
+- Defaults: sandbox defaults must be explicit near validator/runtime owners.
+- Enums and labels: validation status labels carry behavior.
+- Ordering: diagnostics should preserve validator emission order.
+- Compatibility: generated component state may outlive a single app run.
+- Regeneration/migration: update generated-state docs, validators, UI
+  consumers, and tests together when validation contracts change.
+
+## Testing
+```bash
+cargo test --manifest-path src-tauri/Cargo.toml hotload_sandbox
+```
+
+## Notes
+- Generated history migration remains tracked in M1.

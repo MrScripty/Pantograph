@@ -1,31 +1,109 @@
 # src-tauri/src
 
+Tauri desktop backend source boundary.
+
 ## Purpose
-Rust backend source for the Tauri desktop runtime, command surface, and workflow execution.
+This directory owns Pantograph's desktop composition root, command transport,
+workflow host integration, local runtime wiring, and app-specific backend
+services. It adapts desktop state into backend-owned crates without becoming
+the canonical owner of workflow, runtime registry, or node execution policy.
 
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| agent/ | Subdirectory containing related implementation details. |
-| bin/ | Subdirectory containing related implementation details. |
-| config.rs | Source file used by modules in this directory. |
-| constants.rs | Source file used by modules in this directory. |
-| hotload_sandbox/ | Subdirectory containing related implementation details. |
-| llm/ | Subdirectory containing related implementation details. |
-| main.rs | Source file used by modules in this directory. |
-| workflow/ | Subdirectory containing related implementation details. |
+| `main.rs` | Tauri application composition root and command registration. |
+| `config.rs` | Desktop configuration structures and persistence integration. |
+| `constants.rs` | Tauri backend constants shared across modules. |
+| `agent/` | Assistant documentation, retrieval, enrichment, and tool support. |
+| `bin/` | Developer/runtime helper binaries compiled from the Tauri crate. |
+| `hotload_sandbox/` | Runtime Svelte component validation and sandbox helpers. |
+| `llm/` | LLM gateway, runtime registry, model server, and related command adapters. |
+| `workflow/` | Tauri workflow command transport and desktop runtime integration. |
 
-## Design Decisions
-- Keep files in this directory scoped to a single responsibility boundary.
-- Prefer explicit module boundaries over cross-cutting utility placement.
-- Maintain predictable naming so callers can discover related modules quickly.
+## Problem
+The desktop backend composes many long-lived services and transport adapters.
+Without an explicit boundary, Tauri modules can accumulate product policy that
+belongs in backend crates such as workflow service, runtime registry, inference,
+or embedded runtime.
+
+## Constraints
+- Tauri command handlers are adapters over backend-owned contracts.
+- Startup/shutdown and spawned task ownership must be explicit.
+- Desktop-only state may be composed here, but durable workflow/runtime policy
+  must stay in backend crates.
+- Public command payloads must remain aligned with frontend TypeScript
+  consumers.
+
+## Decision
+Keep desktop composition and command wiring in `src-tauri/src`. Move reusable
+workflow, runtime, inference, and binding behavior into workspace crates, then
+let Tauri inject app state and translate command payloads.
+
+## Alternatives Rejected
+- Put workflow/runtime policy directly in Tauri commands: rejected because
+  embedded/runtime bindings and tests need the same behavior without desktop
+  transport.
+- Move all desktop state into backend crates: rejected because Tauri owns app
+  handles, windows, command registration, and desktop-specific lifecycle.
+
+## Invariants
+- `main.rs` should trend toward composition wiring rather than policy.
+- Command modules must preserve backend error categories.
+- Long-lived tasks and process handles need owned shutdown paths.
+- Tauri-local DTOs should migrate toward shared backend contracts where
+  practical.
+
+## Revisit Triggers
+- `main.rs` composition extraction changes module ownership.
+- A command surface becomes supported outside the desktop app.
+- Runtime lifecycle supervision moves into a dedicated backend service.
 
 ## Dependencies
-**Internal:** Neighboring modules in this source tree and the nearest package/crate entry points.
-**External:** Dependencies declared in the corresponding manifest files.
+**Internal:** workspace Rust crates, frontend command consumers, Tauri command
+modules, workflow/runtime/inference services.
+
+**External:** Tauri 2, Tokio, serde, and platform process/filesystem APIs.
+
+## Related ADRs
+- `docs/adr/ADR-001-headless-embedding-service-boundary.md`
+- `docs/adr/ADR-002-runtime-registry-ownership-and-lifecycle.md`
+- `docs/adr/ADR-003-runtime-redistributables-manager-boundary.md`
 
 ## Usage Examples
 ```rust
-// Example: expose modules from this directory in the crate root.
-mod module_name;
+tauri::Builder::default()
+    .invoke_handler(tauri::generate_handler![])
+    .run(tauri::generate_context!())?;
 ```
+
+## API Consumer Contract
+- Inputs: Tauri invoke payloads, app state, filesystem paths, runtime handles,
+  and backend service requests.
+- Outputs: command responses, events, windows, logs, and persisted desktop app
+  state.
+- Lifecycle: Tauri creates shared services during setup and must release owned
+  tasks/processes during shutdown.
+- Errors: backend errors should stay categorized when projected across command
+  boundaries.
+- Versioning: command payload changes require frontend TypeScript and tests to
+  migrate together.
+
+## Structured Producer Contract
+- Stable fields: command response DTOs, event payloads, config state, and saved
+  runtime/workflow projections are machine-consumed.
+- Defaults: desktop defaults must be documented near configuration owners.
+- Enums and labels: runtime ids, command labels, and event names carry behavior.
+- Ordering: event delivery order should preserve backend producer order where
+  visible to the frontend.
+- Compatibility: persisted desktop state and command payloads may outlive a
+  single process run.
+- Regeneration/migration: command DTO changes require frontend services, tests,
+  and docs updates in the same slice.
+
+## Testing
+```bash
+cargo test --manifest-path src-tauri/Cargo.toml
+```
+
+## Notes
+- M3 tracks deeper startup/shutdown and task-supervision cleanup.

@@ -178,6 +178,8 @@ Tasks:
   Node-engine orchestration and context-key helper READMEs are normalized.
   Svelte graph package edge, constants, context, and utility READMEs are
   normalized.
+  Tauri root, agent/RAG/tools, helper binary, hotload sandbox, and LLM backend
+  READMEs are normalized.
 
 Additional issue recorded during implementation:
 - `crates/inference/src/managed_runtime/managed_binaries/` is an empty,
