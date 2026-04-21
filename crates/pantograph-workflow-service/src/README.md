@@ -42,6 +42,8 @@ into focused private modules. Adapters may translate transport payloads but
 must delegate workflow decisions to this crate.
 Session runtime preflight cache fingerprinting now lives with the
 session-runtime helper that owns cache lookup and refresh behavior.
+Session runtime loaded-state invalidation now lives with the same helper that
+owns runtime load and unload transitions.
 Graph edit-session and persistence methods now live behind the facade in the
 workflow graph API helper.
 Workflow capability, I/O discovery, and preflight methods now live behind the

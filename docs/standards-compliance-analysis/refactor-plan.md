@@ -325,10 +325,12 @@ Tasks:
   `workflow/validation.rs`, with `validate_workflow_id` re-exported internally
   for technical-fit request shaping. Session runtime preflight cache
   fingerprinting now lives in `workflow/session_runtime.rs` with the cache
-  lookup and refresh logic that consumes it. Graph edit-session, mutation,
-  connection, persistence, and runtime snapshot facade methods now live in
-  `workflow/graph_api.rs`. Workflow capability, I/O discovery, and preflight
-  facade methods now live in `workflow/preflight_api.rs`.
+  lookup and refresh logic that consumes it. Session runtime loaded-state
+  invalidation now lives in `workflow/session_runtime.rs` with the load/unload
+  state transitions. Graph edit-session, mutation, connection, persistence,
+  and runtime snapshot facade methods now live in `workflow/graph_api.rs`.
+  Workflow capability, I/O discovery, and preflight facade methods now live in
+  `workflow/preflight_api.rs`.
 - Split `crates/pantograph-embedded-runtime/src/lib.rs` into runtime host,
   workflow sessions, registry lifecycle, diagnostics projection, model deps,
   and test modules.

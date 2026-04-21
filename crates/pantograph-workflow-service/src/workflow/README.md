@@ -17,7 +17,7 @@ public exports out of the service crate.
 | `io_contract.rs` | Workflow input/output surface derivation and host-response validation helpers. |
 | `preflight_api.rs` | Workflow capability, I/O discovery, and preflight facade methods. |
 | `runtime_preflight.rs` | Runtime requirement matching, issue formatting, and preflight warning collection. |
-| `session_runtime.rs` | Session runtime preflight cache checks, runtime-capability fingerprinting, runtime loading, unload-candidate selection, and affinity refresh helpers. |
+| `session_runtime.rs` | Session runtime preflight cache checks, runtime-capability fingerprinting, runtime loaded-state invalidation, runtime loading, unload-candidate selection, and affinity refresh helpers. |
 | `validation.rs` | Request, binding, output-target, and produced-output validation helpers shared by facade operations. |
 
 ## Problem
@@ -55,6 +55,8 @@ I/O derivation, runtime readiness, and session-runtime workflows.
 - Host calls occur outside session-store locks.
 - Session runtime preflight cache fingerprints are derived in the
   session-runtime helper that consumes them.
+- Session runtime loaded-state invalidation stays with the session-runtime
+  helper that owns load-state transitions.
 - Session runtime loaded state is updated only after host load/unload calls
   succeed or return a service error.
 

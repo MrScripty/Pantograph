@@ -821,12 +821,6 @@ impl WorkflowService {
         })
     }
 
-    pub fn invalidate_all_session_runtimes(&self) -> Result<Vec<String>, WorkflowServiceError> {
-        let mut store = self.session_store.lock().map_err(|_| {
-            WorkflowServiceError::Internal("session store lock poisoned".to_string())
-        })?;
-        Ok(store.invalidate_all_loaded_session_runtimes())
-    }
 }
 
 #[cfg(test)]
