@@ -8,7 +8,6 @@ pub mod process_tauri;
 pub mod rag_sync;
 pub mod recovery;
 pub mod runtime_registry;
-pub mod server_discovery;
 pub mod startup;
 pub mod types;
 

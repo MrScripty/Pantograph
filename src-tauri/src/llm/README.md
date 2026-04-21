@@ -17,7 +17,6 @@ runtime contracts exposed by `crates/inference`.
 | `recovery.rs` | Recovery orchestration that reacts to runtime failures and retries through the shared gateway. |
 | `startup.rs` | Shared startup request construction and model-path resolution for Tauri-side runtime launches. |
 | `process_tauri.rs` | Tauri-specific process spawning bridge used when the app must launch managed runtimes. |
-| `server_discovery.rs` | Local runtime/server registration and discovery helpers used by the desktop host. |
 
 ## Problem
 Pantograph's desktop app still needs a native composition layer for runtime
@@ -62,6 +61,9 @@ Product listener paths launched by this layer are managed runtimes bound to
 loopback addresses. Tauri owns startup/shutdown orchestration and health
 timeouts, while max-connection behavior remains a managed-runtime concern until
 it is represented by a backend contract.
+The stale local server-discovery registry module was removed; runtime takeover
+or discovery behavior should be reintroduced only through an active command or
+backend-owned runtime-registry contract.
 
 ## Alternatives Rejected
 - Move runtime policy into `gateway.rs`.
@@ -101,6 +103,9 @@ it is represented by a backend contract.
 - Runtime-registry injection passes through this layer, but runtime residency
   and admission policy must not be implemented in command handlers or other
   Tauri transport modules.
+- Do not keep desktop server-discovery registries in this layer without active
+  command consumers and an explicit relationship to the backend runtime
+  registry.
 - Recovery orchestration may perform host-specific restart steps here, but the
   “run transition, then reconcile registry” sequencing must stay in backend
   lifecycle helpers rather than as a separate adapter-local sync step.

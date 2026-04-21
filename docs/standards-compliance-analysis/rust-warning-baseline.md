@@ -8,7 +8,7 @@ Command used for the baseline:
 cargo check --workspace --all-features --message-format short
 ```
 
-The command completes successfully, but the workspace currently emits 81
+The command completes successfully, but the workspace currently emits 72
 warnings. This document classifies the warning debt required by M7 before
 `cargo clippy --workspace --all-targets --all-features -- -D warnings` can
 become a blocking quality gate.
@@ -78,6 +78,12 @@ The classification follows the updated standards expectations:
 | --- | --- | --- | --- |
 | `src/llm/health_monitor.rs:288` | `consecutive_failures` unused | Remove | Resolved by deleting the unused accessor; structured health results still carry failure counts for command/debug consumers. |
 
+### `src-tauri` Server Discovery
+
+| Location | Warning group | Classification | Resolution |
+| --- | --- | --- | --- |
+| `src/llm/server_discovery.rs` | unused registration DTOs, registry file constant, discovery owner, helpers, and `get_process_info` import | Remove | Resolved by deleting the unconsumed desktop-local discovery registry module and removing it from `llm::mod`; future discovery must return through active command/backend runtime-registry contracts. |
+
 ### `crates/workflow-nodes` Model Provider
 
 | Location | Warning | Classification | Resolution |
@@ -100,7 +106,6 @@ The classification follows the updated standards expectations:
 
 | Location | Warning group | Classification | Next action |
 | --- | --- | --- | --- |
-| `src/llm/server_discovery.rs` | registry file, DTOs, discovery type, helpers, and display function unused | Remove/feature-gate | The module is still exported but has no active consumers. Delete the module or gate it behind a documented local-server-discovery feature. |
 | `src/workflow/connection_intent.rs` | local connection candidate/commit/insert helpers unused | Remove | Superseded by `pantograph-workflow-service::graph::connection_intent`; delete after command imports are confirmed clean. |
 | `src/workflow/effective_definition.rs` | local effective-definition resolver unused | Remove | Superseded by workflow-service graph definitions; delete with the stale local workflow type cleanup. |
 | `src/workflow/events.rs` | workflow event constructor helpers unused | Remove/use | Delete inactive constructors or move expected construction through the backend-owned event adapter. |
