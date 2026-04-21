@@ -78,6 +78,9 @@ individual command files.
 diagnostics-store bridge logic so event-contract completion work does not grow
 inside one oversized adapter file or blur the transport-versus-backend
 ownership boundary.
+Workflow event construction should stay with backend event translation or active
+diagnostics snapshot emitters; `events.rs` should not grow unused convenience
+constructors that bypass those owners.
 `workflow_execution_tauri_commands.rs` now owns the Tauri-facing execution
 entrypoints, while `workflow_execution_commands.rs` remains a thin command-
 group facade over `workflow_execution_runtime.rs` and `workflow_edit_session.rs`

@@ -497,128 +497,6 @@ impl WorkflowEvent {
         }
     }
 
-    /// Create a Started event
-    pub fn started(
-        workflow_id: impl Into<String>,
-        node_count: usize,
-        execution_id: impl Into<String>,
-    ) -> Self {
-        Self::Started {
-            workflow_id: workflow_id.into(),
-            node_count,
-            execution_id: execution_id.into(),
-        }
-    }
-
-    /// Create a NodeStarted event
-    pub fn node_started(
-        node_id: impl Into<String>,
-        node_type: impl Into<String>,
-        execution_id: impl Into<String>,
-    ) -> Self {
-        Self::NodeStarted {
-            node_id: node_id.into(),
-            node_type: node_type.into(),
-            execution_id: execution_id.into(),
-        }
-    }
-
-    /// Create a NodeProgress event
-    pub fn node_progress(
-        node_id: impl Into<String>,
-        progress: f32,
-        message: Option<String>,
-        execution_id: impl Into<String>,
-    ) -> Self {
-        Self::NodeProgress {
-            node_id: node_id.into(),
-            progress,
-            message,
-            detail: None,
-            execution_id: execution_id.into(),
-        }
-    }
-
-    /// Create a NodeStream event
-    pub fn node_stream(
-        node_id: impl Into<String>,
-        port: impl Into<String>,
-        chunk: serde_json::Value,
-        execution_id: impl Into<String>,
-    ) -> Self {
-        Self::NodeStream {
-            node_id: node_id.into(),
-            port: port.into(),
-            chunk,
-            execution_id: execution_id.into(),
-        }
-    }
-
-    /// Create a NodeCompleted event
-    pub fn node_completed(
-        node_id: impl Into<String>,
-        outputs: HashMap<String, PortValue>,
-        execution_id: impl Into<String>,
-    ) -> Self {
-        Self::NodeCompleted {
-            node_id: node_id.into(),
-            outputs,
-            execution_id: execution_id.into(),
-        }
-    }
-
-    /// Create a NodeError event
-    pub fn node_error(
-        node_id: impl Into<String>,
-        error: impl Into<String>,
-        execution_id: impl Into<String>,
-    ) -> Self {
-        Self::NodeError {
-            node_id: node_id.into(),
-            error: error.into(),
-            execution_id: execution_id.into(),
-        }
-    }
-
-    /// Create a Completed event
-    pub fn completed(
-        workflow_id: impl Into<String>,
-        outputs: HashMap<String, HashMap<String, PortValue>>,
-        execution_id: impl Into<String>,
-    ) -> Self {
-        Self::Completed {
-            workflow_id: workflow_id.into(),
-            outputs,
-            execution_id: execution_id.into(),
-        }
-    }
-
-    /// Create a Failed event
-    pub fn failed(
-        workflow_id: impl Into<String>,
-        error: impl Into<String>,
-        execution_id: impl Into<String>,
-    ) -> Self {
-        Self::Failed {
-            workflow_id: workflow_id.into(),
-            error: error.into(),
-            execution_id: execution_id.into(),
-        }
-    }
-
-    /// Create a Cancelled event
-    pub fn cancelled(
-        workflow_id: impl Into<String>,
-        error: impl Into<String>,
-        execution_id: impl Into<String>,
-    ) -> Self {
-        Self::Cancelled {
-            workflow_id: workflow_id.into(),
-            error: error.into(),
-            execution_id: execution_id.into(),
-        }
-    }
-
     /// Create a RuntimeSnapshot event
     pub fn runtime_snapshot(
         workflow_id: impl Into<String>,
@@ -693,7 +571,11 @@ mod tests {
 
     #[test]
     fn test_event_serialization() {
-        let event = WorkflowEvent::started("test-123", 5, "exec-123");
+        let event = WorkflowEvent::Started {
+            workflow_id: "test-123".to_string(),
+            node_count: 5,
+            execution_id: "exec-123".to_string(),
+        };
         let json = serde_json::to_string(&event).unwrap();
         assert!(json.contains("Started"));
         assert!(json.contains("test-123"));
@@ -713,12 +595,12 @@ mod tests {
 
     #[test]
     fn test_node_stream_event() {
-        let event = WorkflowEvent::node_stream(
-            "node1",
-            "output",
-            serde_json::json!({"text": "hello"}),
-            "exec-123",
-        );
+        let event = WorkflowEvent::NodeStream {
+            node_id: "node1".to_string(),
+            port: "output".to_string(),
+            chunk: serde_json::json!({"text": "hello"}),
+            execution_id: "exec-123".to_string(),
+        };
         let json = serde_json::to_string(&event).unwrap();
         assert!(json.contains("NodeStream"));
         assert!(json.contains("hello"));
