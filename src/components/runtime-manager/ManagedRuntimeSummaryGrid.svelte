@@ -41,8 +41,7 @@
       <dd class="mt-1 text-sm text-neutral-200">
         {downloadSizeLabel}
         <span class="text-neutral-500">
-          {' '}
-          • {available ? 'ready on this host' : `${installedVersionCount} installed`}
+          &nbsp;• {available ? 'ready on this host' : `${installedVersionCount} installed`}
         </span>
       </dd>
     </div>
