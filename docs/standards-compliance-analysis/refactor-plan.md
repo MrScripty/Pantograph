@@ -276,8 +276,14 @@ Tasks:
   registry, and the executor-extension initialization task is tracked and
   aborted during window shutdown before runtime workers/processes are stopped.
   Tauri managed-runtime process handles now own and abort their stdout reader,
-  stderr reader, and process-monitor tasks when stopped. Remaining work covers
-  health-monitor task ownership.
+  stderr reader, and process-monitor tasks when stopped. `HealthMonitor` now
+  owns and aborts its polling loop through its service API. Remaining work
+  covers the auto-recovery task launched from health-monitor failure handling.
+- [ ] Route automatic recovery spawned from health-monitor failure handling
+  through an owned recovery task handle or supervisor.
+  Added during implementation: `maybe_start_auto_recovery` still launches a
+  fire-and-forget task after the main health-monitor polling loop gained an
+  owned stop path.
 - [ ] Replace bare PID files with structured records that include pid, start time,
   version/mode, and owner identity where needed.
 - [ ] Document listener bind address, max connections, timeout/heartbeat strategy,

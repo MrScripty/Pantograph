@@ -4,17 +4,18 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::RwLock;
+use tokio::task::JoinHandle;
 
 use crate::llm::recovery::SharedRecoveryManager;
 use crate::llm::runtime_registry::sync_runtime_registry_from_gateway;
 use crate::llm::{SharedGateway, SharedRuntimeRegistry};
 use pantograph_embedded_runtime::runtime_health::{
-    assess_runtime_health_probe, RuntimeHealthAssessment, RuntimeHealthProbe, RuntimeHealthState,
+    RuntimeHealthAssessment, RuntimeHealthProbe, RuntimeHealthState, assess_runtime_health_probe,
 };
 
 /// Health check result
@@ -96,6 +97,7 @@ pub struct HealthMonitor {
     last_result: Arc<RwLock<Option<HealthCheckResult>>>,
     consecutive_failures: Arc<RwLock<u32>>,
     embedding_consecutive_failures: Arc<RwLock<u32>>,
+    monitor_task: std::sync::Mutex<Option<JoinHandle<()>>>,
 }
 
 impl HealthMonitor {
@@ -106,6 +108,7 @@ impl HealthMonitor {
             last_result: Arc::new(RwLock::new(None)),
             consecutive_failures: Arc::new(RwLock::new(0)),
             embedding_consecutive_failures: Arc::new(RwLock::new(0)),
+            monitor_task: std::sync::Mutex::new(None),
         }
     }
 
@@ -127,7 +130,7 @@ impl HealthMonitor {
             config.check_interval.as_secs()
         );
 
-        tokio::spawn(async move {
+        let monitor_task = tokio::spawn(async move {
             let mut previous_healthy = true;
 
             while running.load(Ordering::SeqCst) {
@@ -243,6 +246,19 @@ impl HealthMonitor {
 
             log::info!("Health monitor stopped");
         });
+
+        match self.monitor_task.lock() {
+            Ok(mut task) => {
+                if let Some(previous_task) = task.replace(monitor_task) {
+                    previous_task.abort();
+                }
+            }
+            Err(error) => {
+                log::error!("Failed to track health monitor task: {error}");
+                self.running.store(false, Ordering::SeqCst);
+                monitor_task.abort();
+            }
+        }
     }
 
     /// Stop health monitoring
@@ -250,6 +266,7 @@ impl HealthMonitor {
         if self.running.swap(false, Ordering::SeqCst) {
             log::info!("Stopping health monitor");
         }
+        self.abort_monitor_task();
     }
 
     /// Check if the monitor is running
@@ -329,6 +346,20 @@ impl HealthMonitor {
         sync_runtime_registry(app, gateway.inner()).await;
 
         Some(result)
+    }
+
+    fn abort_monitor_task(&self) {
+        let monitor_task = match self.monitor_task.lock() {
+            Ok(mut task) => task.take(),
+            Err(error) => {
+                log::error!("Failed to acquire health monitor task handle: {error}");
+                return;
+            }
+        };
+
+        if let Some(monitor_task) = monitor_task {
+            monitor_task.abort();
+        }
     }
 }
 
@@ -450,7 +481,7 @@ mod tests {
         RuntimeHealthAssessment, RuntimeHealthState,
     };
 
-    use super::{health_check_result_from_assessment, HealthStatus};
+    use super::{HealthStatus, health_check_result_from_assessment};
 
     #[test]
     fn health_check_result_maps_degraded_backend_state() {
