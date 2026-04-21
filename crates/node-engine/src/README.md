@@ -72,6 +72,9 @@ locally.
 - Synchronous built-in node handlers stay in `core_executor/pure_nodes.rs` so
   payload normalization for pure nodes remains separate from runtime-backed
   adapters and dispatch wiring.
+- Core executor pure processing handlers stay in
+  `core_executor/processing_nodes.rs` so validation and JSON path extraction do
+  not grow the input/output passthrough module.
 - Core executor file I/O handlers stay in `core_executor/file_io.rs` so host
   path validation remains separate from pure node payload normalization and
   runtime-backed adapters.

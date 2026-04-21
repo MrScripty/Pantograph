@@ -28,6 +28,7 @@ mod kv_cache;
 #[cfg(feature = "inference-nodes")]
 mod llamacpp_nodes;
 mod ollama;
+mod processing_nodes;
 mod pure_nodes;
 #[cfg(feature = "pytorch-nodes")]
 mod pytorch_nodes;
@@ -43,6 +44,7 @@ pub(crate) use inference_nodes::*;
 #[cfg(feature = "inference-nodes")]
 pub(crate) use llamacpp_nodes::*;
 pub(crate) use ollama::*;
+pub(crate) use processing_nodes::*;
 pub(crate) use pure_nodes::*;
 #[cfg(feature = "pytorch-nodes")]
 pub(crate) use pytorch_nodes::*;

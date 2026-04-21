@@ -19,6 +19,7 @@ into frontend, transport, or descriptor crates.
 | `kv_cache.rs` | Backend-owned execution handlers for KV-cache save/load/truncate nodes plus live llama.cpp/PyTorch restore-capture helpers and structured KV diagnostics emitted by `CoreTaskExecutor`. |
 | `llamacpp_nodes.rs` | Feature-gated llama.cpp completion execution, streaming response parsing, and KV-cache integration. |
 | `ollama.rs` | Standalone Ollama HTTP generation handler and response-to-model-reference projection for the `ollama-inference` node. |
+| `processing_nodes.rs` | Pure processing handlers for code validation and JSON path extraction. |
 | `pure_nodes.rs` | Synchronous built-in node handlers for input/output passthrough, model provider payloads, control-flow helpers, validation, JSON filtering, human input, and disabled tool execution. |
 | `pytorch_nodes.rs` | Feature-gated PyTorch Python-worker initialization, inference execution, streaming, and KV-cache integration. |
 | `retrieval_nodes.rs` | Feature-gated reranking and embedding execution plus reranker document parsing. |
@@ -58,6 +59,8 @@ stable public facade and dispatch owner.
 - New helper modules must stay cohesive around one execution concern.
 - Synchronous built-in node handlers stay in `pure_nodes.rs`; runtime-backed,
   file-backed, or feature-gated adapters should not be added there.
+- Pure processing handlers stay in `processing_nodes.rs` once they need helper
+  logic beyond direct input/output passthrough.
 - File I/O handlers stay in `file_io.rs` and must continue resolving paths
   through `path_validation` before reading or writing host files.
 - Settings expansion and optional-input readers stay in `settings.rs` so
