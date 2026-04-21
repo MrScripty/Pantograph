@@ -23,6 +23,7 @@ packages.
 | `lib_tests/data_graph_execution_tests.rs` | Embedded data-graph execution integration tests split out of the legacy root test module. |
 | `lib_tests/edit_session_execution_tests.rs` | Embedded edit-session graph execution integration tests split out of the legacy root test module. |
 | `lib_tests/host_helper_tests.rs` | Focused embedded workflow host helper and runtime-registry error-mapping unit tests split out of the legacy root test module. |
+| `lib_tests/session_runtime_lifecycle_tests.rs` | Embedded workflow-session runtime lifecycle integration tests split out of the legacy root test module. |
 | `lib.rs` | Composes the embedded runtime, workflow service, shared extensions, and public crate exports used by Tauri and standalone hosts. |
 | `model_dependencies.rs` | Resolves Pantograph model dependency requirements and binds workflow requests to Pumas-backed execution facts. |
 | `python_runtime_execution.rs` | Owns captured execution metadata for Python-backed runtime runs so workflow diagnostics and registry projection can reuse one recorder contract outside the task-executor facade. |
@@ -138,6 +139,10 @@ embedded-runtime crate.
   `lib_tests/edit_session_execution_tests.rs` so embedding runtime
   prepare/restore reconciliation, runtime trace metrics, and waiting-for-input
   event behavior follow the production edit-session execution boundary.
+- Workflow-session runtime lifecycle integration tests stay in
+  `lib_tests/session_runtime_lifecycle_tests.rs` so reservation lifecycle,
+  warmup/preflight, unload, and non-keep-alive release behavior follow the
+  production workflow-session runtime boundary.
 - Python-backed nodes execute through the runtime adapter boundary.
 - Shared runtime extension snapshots and executor injection must stay in a
   backend-owned helper so workflow execution paths do not drift on extension
