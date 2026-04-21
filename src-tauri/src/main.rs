@@ -45,7 +45,7 @@ use project_root::resolve_project_root;
 use std::sync::Arc;
 use tauri::{Emitter, Manager};
 use tokio::sync::RwLock;
-use workflow::{ExecutionManager, SharedModelDependencyResolver};
+use workflow::SharedModelDependencyResolver;
 
 type AppStartupResult<T> = Result<T, Box<dyn std::error::Error>>;
 
@@ -70,8 +70,6 @@ fn run_app() -> AppStartupResult<()> {
 
     // Gateway is created in setup() where the AppHandle is available for ProcessSpawner
 
-    // Create the execution manager for node-engine based workflows
-    let execution_manager: workflow::SharedExecutionManager = Arc::new(ExecutionManager::new());
     let workflow_service: workflow::commands::SharedWorkflowService =
         Arc::new(pantograph_workflow_service::WorkflowService::new());
     let workflow_diagnostics_store: workflow::commands::SharedWorkflowDiagnosticsStore =
@@ -134,7 +132,6 @@ fn run_app() -> AppStartupResult<()> {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .manage(execution_manager)
         .manage(workflow_service.clone())
         .manage(workflow_diagnostics_store)
         .manage(workflow_graph_store)

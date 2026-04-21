@@ -53,6 +53,9 @@ Startup/setup async tasks are registered in `app_tasks.rs` and drained during
 window shutdown before runtime workers and model processes are stopped.
 Window shutdown also stops health monitoring and any tracked automatic recovery
 task before workflow cleanup and runtime process shutdown.
+`main.rs` no longer registers a Tauri-local workflow execution manager; edit
+session undo/redo and execution state are injected through the backend-owned
+workflow service instead.
 
 ## Alternatives Rejected
 - Put workflow/runtime policy directly in Tauri commands: rejected because
@@ -81,6 +84,8 @@ task before workflow cleanup and runtime process shutdown.
   return backend-owned service snapshots instead of adapter-owned graph facts.
 - Workflow persistence command registrations must delegate path validation and
   file IO policy to the service graph store.
+- Desktop composition must not register parallel workflow execution-state
+  managers when the workflow service owns the active session state.
 
 ## Cargo Feature Contract
 | Feature | Default | Contract |

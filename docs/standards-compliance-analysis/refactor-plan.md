@@ -618,9 +618,10 @@ Tasks:
   helpers superseded by `pantograph-workflow-service`. Status: stale
   connection-intent, validation, effective-definition, graph-policy, and
   registry-mirror modules are deleted, and inactive workflow event constructors
-  have been removed. Remaining M7 cleanup is tracked in
+  and the legacy Tauri-local execution manager have been removed. Remaining M7
+  cleanup is tracked in
   `docs/standards-compliance-analysis/rust-warning-baseline.md` for `types.rs`
-  and execution-manager warnings.
+  warnings.
 - Close or update `docs/anti-pattern-remediation-tracker.md` Phase 5 for
   process-node policy controls.
 - Add issue/backlog entries for non-compliance problems intentionally deferred.

@@ -8,7 +8,7 @@ Command used for the baseline:
 cargo check --workspace --all-features --message-format short
 ```
 
-The command completes successfully, but the workspace currently emits 41
+The command completes successfully, but the workspace currently emits 36
 warnings. This document classifies the warning debt required by M7 before
 `cargo clippy --workspace --all-targets --all-features -- -D warnings` can
 become a blocking quality gate.
@@ -24,7 +24,7 @@ The classification follows the updated standards expectations:
 | Crate/target | Count | Primary category | Resolution path |
 | --- | ---: | --- | --- |
 | `pantograph-embedded-runtime` | 2 | Remove unused imports | Drop unused public imports when the dirty embedded-runtime branch is normalized. |
-| `pantograph` Tauri binary | 33 | Remove migrated/stale local workflow code | Delete superseded workflow local DTOs and execution-manager helpers after confirming no command references remain. |
+| `pantograph` Tauri binary | 28 | Remove migrated/stale local workflow code | Delete superseded workflow local DTOs after confirming no command references remain. |
 | `pantograph_rustler` | 6 | External macro/dependency exception | Resolve by upgrading/fixing `rustler::resource!`, or add a scoped lint exception with dependency rationale. |
 
 ## Resolved Warnings
@@ -102,6 +102,12 @@ The classification follows the updated standards expectations:
 | --- | --- | --- | --- |
 | `src/workflow/events.rs` | unused workflow event constructor helpers | Remove | Resolved by deleting inactive convenience constructors and constructing enum variants directly in serialization tests; production snapshot constructors remain for active diagnostics paths. |
 
+### `src-tauri` Legacy Execution Manager
+
+| Location | Warning group | Classification | Resolution |
+| --- | --- | --- | --- |
+| `src/workflow/execution_manager.rs` and `src/workflow/execution_manager/state.rs` | unused Tauri-local execution state, undo/redo, stale cleanup, and accessors | Remove | Resolved by deleting the stale desktop-local execution manager and removing its managed Tauri state injection; undo/redo and session execution state stay with `pantograph-workflow-service`. |
+
 ### `crates/workflow-nodes` Model Provider
 
 | Location | Warning | Classification | Resolution |
@@ -124,7 +130,6 @@ The classification follows the updated standards expectations:
 
 | Location | Warning group | Classification | Next action |
 | --- | --- | --- | --- |
-| `src/workflow/execution_manager.rs` and `execution_manager/state.rs` | execution state, undo/redo, cleanup, and accessors mostly unused | Remove/replace | Confirm Tauri state still needs `ExecutionManager`; then delete migrated session-manager logic or route remaining commands through backend-owned workflow sessions. |
 | `src/workflow/types.rs` | local workflow DTOs, graph helpers, fingerprint helpers, file metadata unused | Remove | Delete once stale local connection/validation/registry modules are removed and command DTO imports are migrated. |
 
 ### `crates/pantograph-rustler`

@@ -11,8 +11,8 @@
 //! ┌─────────────────┐        ┌─────────────────────────────────┐
 //! │ NodeGraph.svelte│◄──────►│ workflow/                       │
 //! │ (display only)  │        │ ├── commands.rs (Tauri commands)│
-//! └─────────────────┘        │ ├── execution_manager.rs        │
-//!                            │ └── event_adapter.rs            │
+//! └─────────────────┘        │ ├── event_adapter.rs            │
+//!                            │ └── workflow_execution_*.rs     │
 //!                            │                                 │
 //!                            │ node-engine crate:              │
 //!                            │ ├── engine.rs (demand-driven)   │
@@ -26,7 +26,6 @@ pub mod dependency_environment_commands;
 pub mod diagnostics;
 pub mod event_adapter;
 pub mod events;
-pub mod execution_manager;
 pub mod groups;
 mod headless_diagnostics;
 pub mod headless_diagnostics_transport;
@@ -49,6 +48,5 @@ pub mod workflow_port_query_commands;
 
 // Re-export types used by main.rs
 pub use diagnostics::WorkflowDiagnosticsStore;
-pub use execution_manager::{ExecutionManager, SharedExecutionManager};
 pub use model_dependencies::SharedModelDependencyResolver;
 pub use orchestration::SharedOrchestrationStore;

@@ -9,12 +9,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tauri::{command, ipc::Channel, AppHandle, State};
+use tauri::{AppHandle, State, command, ipc::Channel};
 use tokio::sync::RwLock;
 
 use super::commands::{SharedExtensions, SharedWorkflowService};
 use super::events::WorkflowEvent;
-use super::SharedExecutionManager;
 use crate::agent::rag::SharedRagManager;
 use crate::llm::{SharedGateway, SharedRuntimeRegistry};
 use pantograph_embedded_runtime::EmbeddedRuntime;
@@ -368,7 +367,6 @@ pub async fn execute_orchestration(
     extensions: State<'_, SharedExtensions>,
     rag_manager: State<'_, SharedRagManager>,
     workflow_service: State<'_, SharedWorkflowService>,
-    _execution_manager: State<'_, SharedExecutionManager>,
     channel: Channel<WorkflowEvent>,
 ) -> Result<OrchestrationResult, String> {
     // Get the orchestration graph

@@ -88,10 +88,9 @@ so edit-session graph operations and runtime execution sequencing stop growing
 inside the general command root.
 The legacy Tauri-local node registry mirror has also been removed; definition
 commands now use the service-owned registry directly.
-`execution_manager/` now splits per-execution lifecycle and undo/redo state
-helpers away from the public execution-manager facade so later Phase 6
-checkpoint transport work does not re-collapse manager and state ownership into
-one file.
+The legacy Tauri-local execution manager has been removed; undo/redo and
+session execution state now stay with the backend-owned workflow service rather
+than a parallel desktop state map.
 `headless_diagnostics_transport.rs` owns the host-facing diagnostics snapshot,
 trace snapshot, and clear-history responses so runtime debug commands and
 workflow command wrappers do not depend on the broader headless workflow
@@ -165,6 +164,9 @@ service crate, which is the active owner for save/load/list behavior.
 - Node definition discovery for graph editing and palettes must come from the
   service-owned registry or the active `node_engine::NodeRegistry` state, not a
   Tauri-local mirror.
+- Undo/redo and execution session state must stay with
+  `pantograph-workflow-service`; Tauri command handlers must not recreate a
+  parallel execution-state manager.
 - Python-backed execution stays out-of-process and is selected by resolved
   dependency `env_id`, not by frontend code.
 - Bundle-capable model assets must resolve executable paths from Pumas
