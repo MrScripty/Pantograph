@@ -19,6 +19,8 @@ architecture views on top of the shared editor.
 | `workflowConnections.ts` | Computes app graph connection validation, graph-edge normalization, and backend candidate projection. |
 | `workflowConnections.test.ts` | Unit coverage for app graph connection helper behavior. |
 | `edgeInsertInteraction.ts` | Computes palette edge-insert hover state, preview refresh decisions, and rendered-edge hit testing. |
+| `workflowGraphSource.ts` | Resolves whether the app graph should render workflow store data or the architecture graph. |
+| `workflowGraphSource.test.ts` | Unit coverage for app graph source selection. |
 | `workflowMiniMap.ts` | Maps workflow node groups and backend categories to minimap colors. |
 | `workflowMiniMap.test.ts` | Unit coverage for app workflow minimap color projection. |
 | `workflowPaletteDrag.ts` | Computes app palette drag eligibility, drag payload parsing, and graph-space drop positions. |
@@ -113,6 +115,9 @@ maps browser events into those helpers and owns backend preview/commit effects.
 Connection validation and backend candidate projection live in
 `workflowConnections.ts`, while `WorkflowGraph.svelte` owns backend calls and
 interaction cleanup.
+Workflow-versus-architecture graph source selection lives in
+`workflowGraphSource.ts`, keeping graph mode policy outside the store-sync
+effect.
 Horseshoe keyboard event interpretation now comes from the package
 `workflowHorseshoeKeyboard.ts` helper; the app graph only maps resolved actions
 to app-owned state and backend side effects.
@@ -186,6 +191,8 @@ side effects.
 - `workflowConnections.ts` must prefer active backend candidate intent when it
   matches the source anchor, then fall back to package port compatibility only
   when no active intent applies.
+- `workflowGraphSource.ts` must preserve the architecture-pending state so the
+  app graph does not flash workflow nodes while architecture data is loading.
 - App graph horseshoe keyboard behavior must use the package keyboard resolver
   so `Space`, `Enter`, arrow, `Escape`, and query-editing semantics stay aligned
   with the package graph.

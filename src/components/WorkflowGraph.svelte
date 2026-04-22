@@ -102,6 +102,7 @@
   } from './workflowContainerBoundary.ts';
   import { resolveWorkflowContainerKeyboardAction } from './workflowContainerSelection.ts';
   import { getWorkflowMiniMapNodeColor } from './workflowMiniMap.ts';
+  import { resolveWorkflowGraphSource } from './workflowGraphSource.ts';
   import {
     isWorkflowPaletteEdgeInsertEnabled,
     readWorkflowPaletteDragDefinition,
@@ -228,44 +229,44 @@
 
   // Sync store changes to local state based on graph type
   $effect(() => {
-    const graphType = $currentGraphType;
-    const graphId = $currentGraphId;
-    const archGraph = $architectureAsWorkflowGraph;
+    const graphSource = resolveWorkflowGraphSource({
+      currentGraphType: $currentGraphType,
+      currentGraphId: $currentGraphId,
+      architectureGraph: $architectureAsWorkflowGraph,
+      workflowNodes: $nodesStore,
+      workflowEdges: $edgesStore,
+    });
     const storeNodes = $nodesStore;
     const storeEdges = $edgesStore;
 
-    console.log('[WorkflowGraph] Syncing graph:', {
-      graphType,
-      graphId,
-      workflowNodeCount: storeNodes.length,
+    if (graphSource.type === 'architecture') {
+      nodes = graphSource.nodes;
+      edges = graphSource.edges;
+      return;
+    }
+
+    if (graphSource.type === 'architecture-pending') {
+      return;
+    }
+
+    const syncDecision = computeWorkflowGraphSyncDecision({
+      storeNodes,
+      storeEdges,
+      prevNodesRef: _prevNodesRef,
+      prevEdgesRef: _prevEdgesRef,
+      skipNextNodeSync: _skipNextNodeSync,
     });
 
-    if (graphType === 'system' && graphId === 'app-architecture') {
-      // Load architecture graph
-      if (archGraph) {
-        nodes = archGraph.nodes;
-        edges = archGraph.edges;
-      }
-    } else {
-      const syncDecision = computeWorkflowGraphSyncDecision({
-        storeNodes,
-        storeEdges,
-        prevNodesRef: _prevNodesRef,
-        prevEdgesRef: _prevEdgesRef,
-        skipNextNodeSync: _skipNextNodeSync,
-      });
+    _prevNodesRef = syncDecision.nextPrevNodesRef;
+    _prevEdgesRef = syncDecision.nextPrevEdgesRef;
 
-      _prevNodesRef = syncDecision.nextPrevNodesRef;
-      _prevEdgesRef = syncDecision.nextPrevEdgesRef;
+    if (syncDecision.applyNodes) {
+      nodes = storeNodes;
+    }
+    _skipNextNodeSync = syncDecision.nextSkipNextNodeSync;
 
-      if (syncDecision.applyNodes) {
-        nodes = storeNodes;
-      }
-      _skipNextNodeSync = syncDecision.nextSkipNextNodeSync;
-
-      if (syncDecision.applyEdges) {
-        edges = storeEdges;
-      }
+    if (syncDecision.applyEdges) {
+      edges = storeEdges;
     }
   });
 

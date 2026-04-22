@@ -533,7 +533,10 @@ Tasks:
   coverage in `src/components/workflowPaletteDrag.test.ts`. App orchestration
   boundary keyboard action mapping now lives in
   `src/components/workflowContainerSelection.ts`, with unit coverage in
-  `src/components/workflowContainerSelection.test.ts`.
+  `src/components/workflowContainerSelection.test.ts`. App workflow-versus-
+  architecture graph source selection now lives in
+  `src/components/workflowGraphSource.ts`, with unit coverage in
+  `src/components/workflowGraphSource.test.ts`.
 - Split `DependencyEnvironmentNode.svelte` into data parsing, activity log,
   mode controls, override editor, status panels, and command controls.
   Progress: dependency environment DTOs now live in
