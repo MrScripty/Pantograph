@@ -13,7 +13,6 @@
     createHorseshoeInsertFeedbackState,
     createHorseshoeDragSessionState,
     formatHorseshoeBlockedReason,
-    findBestInsertableMatchIndex,
     rejectHorseshoeInsertFeedback,
     resolveHorseshoeStatusLabel,
     isEditableKeyboardTarget,
@@ -22,6 +21,7 @@
     buildWorkflowHorseshoeOpenContext,
     formatWorkflowHorseshoeSessionTrace,
     normalizeWorkflowHorseshoeSelectedIndex,
+    resolveWorkflowHorseshoeQueryUpdate,
     requestWorkflowHorseshoeOpen,
     resolveWorkflowHorseshoeSelectionSnapshot,
     resolveWorkflowDragCursorUpdate,
@@ -31,7 +31,7 @@
     resolveWorkflowPointerClientPosition,
     resolveWorkflowRelativePointerPosition,
     markConnectionDragFinalizing,
-    rotateHorseshoeIndex,
+    rotateWorkflowHorseshoeSelection,
     startHorseshoeInsertFeedback,
     shouldRemoveReconnectedEdge,
     startHorseshoeDrag,
@@ -602,26 +602,28 @@
   }
 
   function rotateInsertSelection(delta: number) {
-    if (!$connectionIntent || $connectionIntent.insertableNodeTypes.length === 0) return;
+    const selectedIndex = rotateWorkflowHorseshoeSelection({
+      selectedIndex: horseshoeSelectedIndex,
+      delta,
+      itemCount: $connectionIntent?.insertableNodeTypes.length ?? 0,
+    });
+    if (selectedIndex === null) return;
 
     horseshoeInsertFeedback = clearHorseshoeInsertFeedback();
-    horseshoeSelectedIndex = rotateHorseshoeIndex(
-      horseshoeSelectedIndex,
-      delta,
-      $connectionIntent.insertableNodeTypes.length,
-    );
+    horseshoeSelectedIndex = selectedIndex;
   }
 
   function updateInsertQuery(nextQuery: string) {
+    const queryUpdate = resolveWorkflowHorseshoeQueryUpdate({
+      items: $connectionIntent?.insertableNodeTypes,
+      query: nextQuery,
+      selectedIndex: horseshoeSelectedIndex,
+    });
     horseshoeInsertFeedback = clearHorseshoeInsertFeedback();
-    horseshoeQuery = nextQuery;
-    horseshoeSelectedIndex = findBestInsertableMatchIndex(
-      $connectionIntent?.insertableNodeTypes ?? [],
-      nextQuery,
-      horseshoeSelectedIndex,
-    );
+    horseshoeQuery = queryUpdate.query;
+    horseshoeSelectedIndex = queryUpdate.selectedIndex;
 
-    if (nextQuery) {
+    if (queryUpdate.resetTimerAction === 'schedule') {
       scheduleHorseshoeQueryReset();
       return;
     }

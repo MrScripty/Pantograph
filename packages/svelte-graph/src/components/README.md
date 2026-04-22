@@ -24,8 +24,8 @@ shared node presentation rules live outside the Pantograph app shell.
 | `../workflowHorseshoeOpenContext.test.ts` | Unit coverage for horseshoe open-context projection. |
 | `../workflowHorseshoeOpenRequest.ts` | Projects horseshoe open context into diagnostic trace and requested session state. |
 | `../workflowHorseshoeOpenRequest.test.ts` | Unit coverage for open-request projection. |
-| `../workflowHorseshoeSelection.ts` | Projects horseshoe item selection into keyboard context and the candidate to confirm, and normalizes selected indices. |
-| `../workflowHorseshoeSelection.test.ts` | Unit coverage for horseshoe selection snapshots and index normalization. |
+| `../workflowHorseshoeSelection.ts` | Projects horseshoe item selection into keyboard context and the candidate to confirm, normalizes selected indices, rotates selection, and resolves query matches. |
+| `../workflowHorseshoeSelection.test.ts` | Unit coverage for horseshoe selection snapshots, index normalization, rotation, and query matching. |
 | `../workflowHorseshoeTrace.ts` | Formats horseshoe diagnostic trace labels for session and open-request state. |
 | `../workflowHorseshoeTrace.test.ts` | Unit coverage for horseshoe trace formatting. |
 | `../workflowInsertPosition.ts` | Projects horseshoe insert anchors into backend insert position hints. |
@@ -127,7 +127,7 @@ Horseshoe open-request projection lives in `workflowHorseshoeOpenRequest.ts`,
 while `WorkflowGraph.svelte` applies the returned trace and session state.
 Horseshoe selection snapshots and selected-index normalization live in
 `workflowHorseshoeSelection.ts`, while `WorkflowGraph.svelte` maps the resolved
-keyboard action to confirmation or query side effects.
+keyboard action to confirmation, rotation, or query side effects.
 Horseshoe trace labels live in `workflowHorseshoeTrace.ts`, while
 `WorkflowGraph.svelte` owns when interaction state changes should record a new
 trace string.
@@ -163,8 +163,8 @@ container element.
 - `workflowHorseshoeOpenRequest.ts` must derive request traces and requested
   session transitions from one context snapshot.
 - `workflowHorseshoeSelection.ts` must derive keyboard selection availability,
-  normalized selected indices, and confirmation candidates from the same package
-  selection rules.
+  normalized selected indices, rotated indices, query matches, and confirmation
+  candidates from the same package selection rules.
 - `workflowHorseshoeTrace.ts` must keep package/app trace labels aligned for
   blocked, pending, open, and idle horseshoe states.
 - Rejected horseshoe inserts must remain visible in-context and refresh

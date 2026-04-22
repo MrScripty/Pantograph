@@ -140,9 +140,10 @@ state before requesting or syncing the shared horseshoe drag session.
 Horseshoe open-request projection now comes from the package
 `workflowHorseshoeOpenRequest.ts` helper; the app graph only applies returned
 trace and session state.
-Horseshoe selection snapshots and selected-index normalization now come from the
-package `workflowHorseshoeSelection.ts` helper; the app graph only performs
-app-owned confirmation and query side effects after keyboard resolution.
+Horseshoe selection snapshots, selected-index normalization, rotation, and
+query matching now come from the package `workflowHorseshoeSelection.ts` helper;
+the app graph only performs app-owned confirmation and timer side effects after
+keyboard resolution.
 Horseshoe diagnostic trace labels now come from the package
 `workflowHorseshoeTrace.ts` helper so package and app graph traces stay aligned.
 Mouse/touch pointer projection now comes from the package
@@ -238,9 +239,9 @@ container bounds.
   the package graph.
 - App graph horseshoe open requests must use the package request helper so
   diagnostic trace and session transition context cannot drift.
-- App graph horseshoe keyboard confirmation and selected-index clamping must use
-  the package selection helper so `hasSelection` and the confirmed candidate
-  cannot drift.
+- App graph horseshoe keyboard confirmation, selected-index clamping, rotation,
+  and query matching must use the package selection helper so `hasSelection`
+  and the confirmed candidate cannot drift.
 - App graph horseshoe trace labels must use the package trace formatter instead
   of composing parallel string formats inline.
 - App graph pointer coordinate handling must use the package pointer-position

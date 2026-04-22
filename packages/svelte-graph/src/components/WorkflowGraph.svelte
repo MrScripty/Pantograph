@@ -28,10 +28,6 @@
     ConnectionCommitResponse,
     InsertableNodeTypeCandidate,
   } from '../types/workflow.js';
-  import {
-    findBestInsertableMatchIndex,
-    rotateHorseshoeIndex,
-  } from '../horseshoeSelector.js';
   import { formatHorseshoeBlockedReason } from '../horseshoeInvocation.js';
   import {
     isEditableKeyboardTarget,
@@ -39,7 +35,9 @@
   } from '../workflowHorseshoeKeyboard.js';
   import {
     normalizeWorkflowHorseshoeSelectedIndex,
+    resolveWorkflowHorseshoeQueryUpdate,
     resolveWorkflowHorseshoeSelectionSnapshot,
+    rotateWorkflowHorseshoeSelection,
   } from '../workflowHorseshoeSelection.js';
   import {
     formatWorkflowHorseshoeSessionTrace,
@@ -380,26 +378,28 @@
   }
 
   function rotateInsertSelection(delta: number) {
-    if (!$connectionIntentStore || $connectionIntentStore.insertableNodeTypes.length === 0) return;
+    const selectedIndex = rotateWorkflowHorseshoeSelection({
+      selectedIndex: horseshoeSelectedIndex,
+      delta,
+      itemCount: $connectionIntentStore?.insertableNodeTypes.length ?? 0,
+    });
+    if (selectedIndex === null) return;
 
     horseshoeInsertFeedback = clearHorseshoeInsertFeedback();
-    horseshoeSelectedIndex = rotateHorseshoeIndex(
-      horseshoeSelectedIndex,
-      delta,
-      $connectionIntentStore.insertableNodeTypes.length,
-    );
+    horseshoeSelectedIndex = selectedIndex;
   }
 
   function updateInsertQuery(nextQuery: string) {
+    const queryUpdate = resolveWorkflowHorseshoeQueryUpdate({
+      items: $connectionIntentStore?.insertableNodeTypes,
+      query: nextQuery,
+      selectedIndex: horseshoeSelectedIndex,
+    });
     horseshoeInsertFeedback = clearHorseshoeInsertFeedback();
-    horseshoeQuery = nextQuery;
-    horseshoeSelectedIndex = findBestInsertableMatchIndex(
-      $connectionIntentStore?.insertableNodeTypes ?? [],
-      nextQuery,
-      horseshoeSelectedIndex,
-    );
+    horseshoeQuery = queryUpdate.query;
+    horseshoeSelectedIndex = queryUpdate.selectedIndex;
 
-    if (nextQuery) {
+    if (queryUpdate.resetTimerAction === 'schedule') {
       scheduleHorseshoeQueryReset();
       return;
     }

@@ -1,6 +1,11 @@
 import type { HorseshoeDragSessionState } from './horseshoeDragSession.ts';
 import type { HorseshoeInsertFeedbackState } from './horseshoeInsertFeedback.ts';
-import { clampHorseshoeIndex } from './horseshoeSelector.ts';
+import {
+  clampHorseshoeIndex,
+  findBestInsertableMatchIndex,
+  rotateHorseshoeIndex,
+} from './horseshoeSelector.ts';
+import type { InsertableNodeTypeCandidate } from './types/workflow.ts';
 import type { HorseshoeKeyboardContext } from './workflowHorseshoeKeyboard.ts';
 
 export interface WorkflowHorseshoeSelectionSnapshot<TCandidate> {
@@ -32,4 +37,36 @@ export function normalizeWorkflowHorseshoeSelectedIndex(params: {
   itemCount: number;
 }): number {
   return clampHorseshoeIndex(params.selectedIndex, params.itemCount);
+}
+
+export function rotateWorkflowHorseshoeSelection(params: {
+  selectedIndex: number;
+  delta: number;
+  itemCount: number;
+}): number | null {
+  if (params.itemCount <= 0) {
+    return null;
+  }
+
+  return rotateHorseshoeIndex(params.selectedIndex, params.delta, params.itemCount);
+}
+
+export interface WorkflowHorseshoeQueryUpdate {
+  query: string;
+  selectedIndex: number;
+  resetTimerAction: 'schedule' | 'clear';
+}
+
+export function resolveWorkflowHorseshoeQueryUpdate(params: {
+  items: readonly InsertableNodeTypeCandidate[] | null | undefined;
+  query: string;
+  selectedIndex: number;
+}): WorkflowHorseshoeQueryUpdate {
+  const items = params.items ? [...params.items] : [];
+
+  return {
+    query: params.query,
+    selectedIndex: findBestInsertableMatchIndex(items, params.query, params.selectedIndex),
+    resetTimerAction: params.query ? 'schedule' : 'clear',
+  };
 }

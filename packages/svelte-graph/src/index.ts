@@ -195,9 +195,14 @@ export type {
 } from './workflowHorseshoeKeyboard.js';
 export {
   normalizeWorkflowHorseshoeSelectedIndex,
+  resolveWorkflowHorseshoeQueryUpdate,
   resolveWorkflowHorseshoeSelectionSnapshot,
+  rotateWorkflowHorseshoeSelection,
 } from './workflowHorseshoeSelection.js';
-export type { WorkflowHorseshoeSelectionSnapshot } from './workflowHorseshoeSelection.js';
+export type {
+  WorkflowHorseshoeQueryUpdate,
+  WorkflowHorseshoeSelectionSnapshot,
+} from './workflowHorseshoeSelection.js';
 export {
   formatWorkflowHorseshoeOpenRequestTrace,
   formatWorkflowHorseshoeSessionTrace,

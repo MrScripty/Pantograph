@@ -539,7 +539,8 @@ Tasks:
   `packages/svelte-graph/src/workflowHorseshoeOpenRequest.ts`, with unit
   coverage in `packages/svelte-graph/src/workflowHorseshoeOpenRequest.test.ts`
   and app graph reuse through the package export. Package graph horseshoe
-  keyboard selection snapshots and selected-index normalization now live in
+  keyboard selection snapshots, selected-index normalization, rotation, and
+  query matching now live in
   `packages/svelte-graph/src/workflowHorseshoeSelection.ts`, with unit coverage
   in `packages/svelte-graph/src/workflowHorseshoeSelection.test.ts` and app
   graph reuse through the package export. Package graph

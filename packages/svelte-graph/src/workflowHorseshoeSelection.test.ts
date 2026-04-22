@@ -8,8 +8,11 @@ import {
 } from './horseshoeInsertFeedback.ts';
 import {
   normalizeWorkflowHorseshoeSelectedIndex,
+  resolveWorkflowHorseshoeQueryUpdate,
   resolveWorkflowHorseshoeSelectionSnapshot,
+  rotateWorkflowHorseshoeSelection,
 } from './workflowHorseshoeSelection.ts';
+import type { InsertableNodeTypeCandidate } from './types/workflow.ts';
 
 const items = [
   { node_type: 'a' },
@@ -95,5 +98,76 @@ test('normalizeWorkflowHorseshoeSelectedIndex clamps selected index to available
       itemCount: 0,
     }),
     0,
+  );
+});
+
+test('rotateWorkflowHorseshoeSelection rotates within available items', () => {
+  assert.equal(
+    rotateWorkflowHorseshoeSelection({
+      selectedIndex: 1,
+      delta: 1,
+      itemCount: 3,
+    }),
+    2,
+  );
+  assert.equal(
+    rotateWorkflowHorseshoeSelection({
+      selectedIndex: 0,
+      delta: -1,
+      itemCount: 3,
+    }),
+    0,
+  );
+  assert.equal(
+    rotateWorkflowHorseshoeSelection({
+      selectedIndex: 0,
+      delta: 1,
+      itemCount: 0,
+    }),
+    null,
+  );
+});
+
+test('resolveWorkflowHorseshoeQueryUpdate selects best query match and reset action', () => {
+  const candidates: InsertableNodeTypeCandidate[] = [
+    {
+      node_type: 'text-output',
+      category: 'output',
+      label: 'Text Output',
+      description: 'Output text',
+      matching_input_port_ids: ['input'],
+    },
+    {
+      node_type: 'mask-image',
+      category: 'processing',
+      label: 'Mask Image',
+      description: 'Mask an image',
+      matching_input_port_ids: ['image'],
+    },
+  ];
+
+  assert.deepEqual(
+    resolveWorkflowHorseshoeQueryUpdate({
+      items: candidates,
+      query: 'mask',
+      selectedIndex: 0,
+    }),
+    {
+      query: 'mask',
+      selectedIndex: 1,
+      resetTimerAction: 'schedule',
+    },
+  );
+  assert.deepEqual(
+    resolveWorkflowHorseshoeQueryUpdate({
+      items: candidates,
+      query: '',
+      selectedIndex: 5,
+    }),
+    {
+      query: '',
+      selectedIndex: 1,
+      resetTimerAction: 'clear',
+    },
   );
 });
