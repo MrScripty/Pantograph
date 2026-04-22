@@ -519,7 +519,8 @@ Tasks:
   sampling, and overlay rendering now delegate to the package `CutTool`; the app
   graph keeps only the backend edge-deletion callback, and app edge-insert
   geometry, commit eligibility, and preview flag projection helpers now live inside
-  `src/components/edgeInsertInteraction.ts`.
+  `src/components/edgeInsertInteraction.ts`. App edge-insert preview marker
+  rendering now lives in `src/components/WorkflowEdgeInsertPreviewMarker.svelte`.
 - Split `DependencyEnvironmentNode.svelte` into data parsing, activity log,
   mode controls, override editor, status panels, and command controls.
   Progress: dependency environment DTOs now live in

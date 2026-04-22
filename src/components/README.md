@@ -11,6 +11,7 @@ architecture views on top of the shared editor.
 | ----------- | ----------- |
 | `WorkflowGraph.svelte` | Pantograph graph canvas that wires app node types, orchestration navigation, revision-aware connection-intent flows, and the `Space`-invoked horseshoe insert selector. |
 | `WorkflowContainerBoundary.svelte` | Renders the orchestration boundary overlay, clickable border hit zones, and boundary anchors for the app workflow graph. |
+| `WorkflowEdgeInsertPreviewMarker.svelte` | Renders the cursor-anchored palette edge-insert preview marker. |
 | `workflowContainerBoundary.ts` | Computes orchestration boundary extents and viewport visibility for graph zoom-out transitions. |
 | `workflowContainerBoundary.test.ts` | Unit coverage for orchestration boundary bounds and visibility projection. |
 | `workflowConnections.ts` | Computes app graph connection validation, graph-edge normalization, and backend candidate projection. |
@@ -95,6 +96,8 @@ Cut gesture state, line sampling, and overlay rendering come from the package
 `CutTool`; the app graph only owns the backend edge-deletion callback.
 Palette edge-insert hover projection, commit eligibility, preview edge flagging,
 and rendered-edge hit testing live in `edgeInsertInteraction.ts`.
+Palette edge-insert marker rendering lives in
+`WorkflowEdgeInsertPreviewMarker.svelte`.
 Connection validation and backend candidate projection live in
 `workflowConnections.ts`, while `WorkflowGraph.svelte` owns backend calls and
 interaction cleanup.
@@ -148,6 +151,8 @@ to app-owned state and backend side effects.
   `a11y-reviewed:` comment explaining the ownership boundary.
 - `WorkflowContainerBoundary.svelte` owns boundary hit-zone markup and emits only
   selection toggles; it must not mutate graph stores directly.
+- `WorkflowEdgeInsertPreviewMarker.svelte` owns only marker presentation and must
+  not read graph state or call backend APIs directly.
 - `workflowContainerBoundary.ts` must stay DOM-free so boundary projection
   remains unit-testable.
 - `workflowMiniMap.ts` must preserve backend category color semantics and keep
