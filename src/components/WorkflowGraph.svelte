@@ -1003,6 +1003,12 @@
 
   async function handleReconnect(oldEdge: Edge, newConnection: Connection) {
     if (!canEdit) return;
+    const anchors = resolveWorkflowConnectionAnchors(newConnection);
+    if (!anchors) {
+      clearConnectionInteraction();
+      return;
+    }
+
     connectionDragState = markConnectionDragFinalizing(connectionDragState);
 
     try {
@@ -1010,14 +1016,8 @@
       syncEdgesFromBackend(graphAfterRemoval);
 
       const response = await workflowService.connectAnchors(
-        {
-          node_id: newConnection.source!,
-          port_id: newConnection.sourceHandle!,
-        },
-        {
-          node_id: newConnection.target!,
-          port_id: newConnection.targetHandle!,
-        },
+        anchors.sourceAnchor,
+        anchors.targetAnchor,
         graphAfterRemoval.derived_graph?.graph_fingerprint ?? getGraphRevision()
       );
 
@@ -1039,19 +1039,14 @@
       syncEdgesFromBackend(restoredGraph);
 
       if (response.rejection) {
-        setConnectionIntent({
+        setConnectionIntent(preserveConnectionIntentState({
           sourceAnchor:
             connectionDragState.reconnectingSourceAnchor ??
-            {
-              node_id: newConnection.source!,
-              port_id: newConnection.sourceHandle!,
-            },
+            anchors.sourceAnchor,
           graphRevision: response.graph_revision,
-          compatibleNodeIds: $connectionIntent?.compatibleNodeIds ?? [],
-          compatibleTargetKeys: $connectionIntent?.compatibleTargetKeys ?? [],
-          insertableNodeTypes: $connectionIntent?.insertableNodeTypes ?? [],
+          currentIntent: $connectionIntent,
           rejection: response.rejection,
-        });
+        }));
         console.warn('[WorkflowGraph] Reconnection rejected:', response.rejection.message);
       }
     } catch (error) {

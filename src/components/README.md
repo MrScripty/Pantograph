@@ -116,9 +116,9 @@ maps browser events into those helpers and owns backend preview/commit effects.
 Connection validation and backend candidate projection live in
 `workflowConnections.ts`, while `WorkflowGraph.svelte` owns backend calls and
 interaction cleanup.
-Connection commit anchor projection and active-intent revision selection also
-live in `workflowConnections.ts`, so the app graph resolves a tested commit
-contract before invoking backend graph mutations.
+Connection and reconnect commit anchor projection plus active-intent revision
+selection also live in `workflowConnections.ts`, so the app graph resolves a
+tested commit contract before invoking backend graph mutations.
 Rejected connection-intent fallback state now uses the package
 `preserveConnectionIntentState()` helper, while the app graph owns backend
 refresh and warning side effects.
@@ -260,9 +260,9 @@ container bounds.
 - `workflowConnections.ts` must prefer active backend candidate intent when it
   matches the source anchor, then fall back to package port compatibility only
   when no active intent applies.
-- `workflowConnections.ts` must reject incomplete connection commits before
-  backend calls and must use the active intent revision only for matching source
-  anchors.
+- `workflowConnections.ts` must reject incomplete connection or reconnect
+  commits before backend calls and must use the active intent revision only for
+  matching source anchors.
 - App graph rejected connection or insert flows must preserve visible
   compatible targets through the package connection-intent preservation helper
   instead of rebuilding fallback state inline.
