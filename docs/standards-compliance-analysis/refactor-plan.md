@@ -572,6 +572,9 @@ Tasks:
   Package and app connection/reconnect commit anchor projection and
   active-intent revision selection now live in their `workflowConnections.ts`
   helpers, with unit coverage in both connection helper test suites.
+  Additional package graph edge-removal issue resolved during implementation:
+  delete, cut, and reconnect-end cleanup paths no longer synthesize an empty
+  backend session id when no active session is available.
   App graph cut gesture state, line
   sampling, and overlay rendering now delegate to the package `CutTool`; the app
   graph keeps only the backend edge-deletion callback, and app edge-insert

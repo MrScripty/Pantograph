@@ -695,15 +695,17 @@
   async function handleDelete({ nodes: deletedNodes, edges: deletedEdges }: { nodes: Node[]; edges: Edge[] }) {
     if (!canEdit) return;
 
-    const sessionId = get(currentSessionId) || '';
+    const sessionId = get(currentSessionId);
     clearConnectionInteraction();
 
     for (const edge of deletedEdges) {
-      try {
-        const updatedGraph = await backend.removeEdge(edge.id, sessionId);
-        stores.workflow.syncEdgesFromBackend(updatedGraph);
-      } catch (error) {
-        console.error('[WorkflowGraph] Failed to notify backend of edge removal:', error);
+      if (sessionId) {
+        try {
+          const updatedGraph = await backend.removeEdge(edge.id, sessionId);
+          stores.workflow.syncEdgesFromBackend(updatedGraph);
+        } catch (error) {
+          console.error('[WorkflowGraph] Failed to notify backend of edge removal:', error);
+        }
       }
     }
 
@@ -819,9 +821,11 @@
     const reconnectingEdgeId = shouldRemoveReconnectedEdge(connectionDragState, connectionState);
     if (reconnectingEdgeId) {
       try {
-        const sessionId = get(currentSessionId) || '';
-        const updatedGraph = await backend.removeEdge(reconnectingEdgeId, sessionId);
-        stores.workflow.syncEdgesFromBackend(updatedGraph);
+        const sessionId = get(currentSessionId);
+        if (sessionId) {
+          const updatedGraph = await backend.removeEdge(reconnectingEdgeId, sessionId);
+          stores.workflow.syncEdgesFromBackend(updatedGraph);
+        }
       } catch (error) {
         console.error('[WorkflowGraph] Failed to notify backend of edge removal:', error);
       }
@@ -855,14 +859,16 @@
   // --- Cut tool edge removal ---
 
   async function handleEdgesCut(edgeIds: string[]) {
-    const sessionId = get(currentSessionId) || '';
+    const sessionId = get(currentSessionId);
     clearConnectionInteraction();
     for (const edgeId of edgeIds) {
-      try {
-        const updatedGraph = await backend.removeEdge(edgeId, sessionId);
-        stores.workflow.syncEdgesFromBackend(updatedGraph);
-      } catch (error) {
-        console.error('[WorkflowGraph] Failed to notify backend of edge cut:', error);
+      if (sessionId) {
+        try {
+          const updatedGraph = await backend.removeEdge(edgeId, sessionId);
+          stores.workflow.syncEdgesFromBackend(updatedGraph);
+        } catch (error) {
+          console.error('[WorkflowGraph] Failed to notify backend of edge cut:', error);
+        }
       }
     }
   }

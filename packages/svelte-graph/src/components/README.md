@@ -117,6 +117,9 @@ Rejected connection-intent fallback state also lives in
 `workflowConnections.ts`, so preserved compatible targets and insertable node
 types stay aligned while `WorkflowGraph.svelte` attaches backend rejection
 metadata.
+Package graph edge deletion, edge cutting, and reconnect-end cleanup now require
+an active session id before calling backend edge-removal APIs, avoiding empty
+session-id fallbacks while still allowing local node removal to proceed.
 Connection drag reset and connect-end preservation live in
 `workflowConnectionInteraction.ts`, while `WorkflowGraph.svelte` owns clearing
 the backing connection-intent store and host-specific preview state.
@@ -268,6 +271,8 @@ while `WorkflowGraph.svelte` provides callbacks that mutate local graph state.
 - `workflowConnections.ts` must preserve prior compatible targets and
   insertable candidates when backend rejection state is attached to a still-open
   connection intent.
+- Package graph edge-removal calls must not synthesize an empty session id;
+  callers skip backend edge deletion when no active session is available.
 - `workflowHorseshoeKeyboard.ts` must keep `Space`, `Enter`, arrows, `Escape`,
   and query-editing keys aligned with the documented horseshoe interaction
   contract before graph keyboard behavior changes.
