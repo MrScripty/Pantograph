@@ -82,6 +82,8 @@ candidate projection or fallback port-compatibility rules.
   breaking change is documented separately.
 - Helpers in this directory do not perform backend mutations directly; they
   compute state and decisions for callers that own side effects.
+- `workflowNodeActivation.ts` owns node double-click timing and group zoom-target
+  projection so package/app graph components do not duplicate activation policy.
 - `workflowEventOwnership.ts` must only project backend-supplied execution ids
   and active-run relevance; when backend `ownership` is present, it must not
   override relevance with package-local current-run comparisons.

@@ -74,6 +74,11 @@
     WORKFLOW_PALETTE_DRAG_START_EVENT,
   } from '../paletteDragState.js';
   import { resolveReconnectSourceAnchor } from '../reconnectInteraction.js';
+  import {
+    resolveWorkflowGroupZoomTarget,
+    resolveWorkflowNodeClick,
+    type WorkflowNodeClickState,
+  } from '../workflowNodeActivation.js';
   import { getWorkflowMiniMapNodeColor } from '../workflowMiniMap.js';
   import CutTool from './CutTool.svelte';
   import ContainerBorder from './ContainerBorder.svelte';
@@ -117,9 +122,10 @@
   let canEdit = $derived($isEditing && !$isReadOnly);
 
   // Double-click tracking for group zoom
-  let lastClickTime = $state(0);
-  let lastClickNodeId = $state<string | null>(null);
-  const DOUBLE_CLICK_THRESHOLD = 300;
+  let nodeClickState = $state<WorkflowNodeClickState>({
+    lastClickTime: 0,
+    lastClickNodeId: null,
+  });
 
   // Container element reference for size calculations
   let containerElement = $state<HTMLElement | null>(null);
@@ -688,27 +694,20 @@
   }
 
   function onNodeClick({ node }: { node: Node }) {
-    const now = Date.now();
-    if (lastClickNodeId === node.id && now - lastClickTime < DOUBLE_CLICK_THRESHOLD) {
+    const decision = resolveWorkflowNodeClick(nodeClickState, node.id, Date.now());
+    nodeClickState = decision.state;
+
+    if (decision.isDoubleClick) {
       handleNodeDoubleClick(node);
     }
-    lastClickTime = now;
-    lastClickNodeId = node.id;
   }
 
   async function handleNodeDoubleClick(node: Node) {
-    const isGroup = node.data?.isGroup === true || node.type === 'node-group';
-    if (isGroup) {
-      stores.view.zoomTarget.set({
-        nodeId: node.id,
-        position: node.position,
-        bounds: {
-          width: (node.measured?.width || node.width || 200) as number,
-          height: (node.measured?.height || node.height || 100) as number,
-        },
-      });
-      await stores.view.tabIntoGroup(node.id);
-    }
+    const target = resolveWorkflowGroupZoomTarget(node);
+    if (!target) return;
+
+    stores.view.zoomTarget.set(target);
+    await stores.view.tabIntoGroup(node.id);
   }
 
   async function handleConnectStart(

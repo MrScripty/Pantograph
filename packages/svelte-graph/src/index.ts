@@ -186,6 +186,18 @@ export type {
   HorseshoeKeyboardAction,
   HorseshoeKeyboardContext,
 } from './workflowHorseshoeKeyboard.js';
+export {
+  WORKFLOW_NODE_DOUBLE_CLICK_THRESHOLD_MS,
+  isWorkflowGroupNode,
+  resolveWorkflowGroupZoomTarget,
+  resolveWorkflowNodeClick,
+} from './workflowNodeActivation.js';
+export type {
+  WorkflowGroupZoomTarget,
+  WorkflowNodeActivationLike,
+  WorkflowNodeClickDecision,
+  WorkflowNodeClickState,
+} from './workflowNodeActivation.js';
 export { isPortTypeCompatible } from './portTypeCompatibility.js';
 export {
   applySelectedNodeIds,

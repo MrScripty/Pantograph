@@ -18,6 +18,8 @@ shared node presentation rules live outside the Pantograph app shell.
 | `../workflowHorseshoeKeyboard.test.ts` | Unit coverage for horseshoe keyboard policy decisions. |
 | `../workflowMiniMap.ts` | Maps package workflow node groups and backend categories to minimap colors. |
 | `../workflowMiniMap.test.ts` | Unit coverage for package workflow minimap color projection. |
+| `../workflowNodeActivation.ts` | Resolves node double-click activation and group zoom targets. |
+| `../workflowNodeActivation.test.ts` | Unit coverage for node activation and group zoom-target decisions. |
 | `NodePalette.svelte` | Palette for adding node definitions into the active graph. |
 | `CutTool.svelte` | Edge-cut interaction used for Ctrl-drag deletion. |
 | `ContainerBorder.svelte` | Orchestration/group boundary overlay used during zoom transitions. |
@@ -84,6 +86,9 @@ Connection validation and backend candidate projection live in
 interaction cleanup.
 Horseshoe keyboard policy lives in `workflowHorseshoeKeyboard.ts`, while
 `WorkflowGraph.svelte` maps resolved actions to graph-specific state changes.
+Node double-click and group zoom-target decisions live in
+`workflowNodeActivation.ts`, while `WorkflowGraph.svelte` invokes the view store
+side effects.
 
 ## Alternatives Rejected
 - Ask the backend on every pointer move.
@@ -138,6 +143,8 @@ Horseshoe keyboard policy lives in `workflowHorseshoeKeyboard.ts`, while
 - `workflowHorseshoeKeyboard.ts` must keep `Space`, `Enter`, arrows, `Escape`,
   and query-editing keys aligned with the documented horseshoe interaction
   contract before graph keyboard behavior changes.
+- `workflowNodeActivation.ts` must keep double-click timing and group zoom-target
+  projection aligned before group navigation behavior changes.
 
 ## Revisit Triggers
 - Backend candidate queries become too slow for one-shot drag-start loading.
