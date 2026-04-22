@@ -67,7 +67,9 @@ capacity and rebalance coverage now lives in `workflow/tests/session_capacity.rs
 Runtime capacity/admission wait coverage now lives in
 `workflow/tests/session_admission.rs`. Session runtime preflight cache and
 keep-alive preflight failure coverage now lives in
-`workflow/tests/session_runtime_preflight.rs`.
+`workflow/tests/session_runtime_preflight.rs`. Session stale cleanup,
+inspection, and stale cleanup worker coverage now lives in
+`workflow/tests/session_stale_cleanup.rs`.
 Session creation and queued session run methods now live behind the facade in
 the workflow session execution API helper.
 Session status, queue inspection, scheduler snapshot, cancellation, and
