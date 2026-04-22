@@ -43,6 +43,7 @@
     WORKFLOW_PALETTE_DRAG_END_EVENT,
     WORKFLOW_PALETTE_DRAG_START_EVENT,
     CutTool,
+    HorseshoeDebugOverlay,
     type ConnectionDragState,
     type HorseshoeBlockedReason,
     type HorseshoeInsertFeedbackState,
@@ -1302,13 +1303,11 @@
   />
 
   {#if horseshoeSession.dragActive || horseshoeSession.displayState !== 'hidden' || horseshoeLastTrace !== 'idle'}
-    <div class="horseshoe-debug">
-      <div>trace: {horseshoeLastTrace}</div>
-      <div>state: {horseshoeSession.displayState}</div>
-      {#if horseshoeSession.blockedReason}
-        <div>blocked: {horseshoeSession.blockedReason}</div>
-      {/if}
-    </div>
+    <HorseshoeDebugOverlay
+      trace={horseshoeLastTrace}
+      displayState={horseshoeSession.displayState}
+      blockedReason={horseshoeSession.blockedReason}
+    />
   {/if}
 
   <CutTool
@@ -1399,22 +1398,6 @@
 
   .workflow-graph-container.cutting {
     cursor: crosshair;
-  }
-
-  .horseshoe-debug {
-    position: absolute;
-    top: 0.75rem;
-    right: 0.75rem;
-    z-index: 1400;
-    pointer-events: none;
-    padding: 0.5rem 0.65rem;
-    border-radius: 0.5rem;
-    background: rgba(10, 10, 10, 0.88);
-    border: 1px solid rgba(82, 82, 91, 0.9);
-    color: #e5e7eb;
-    font-size: 0.72rem;
-    line-height: 1.35;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
   }
 
 </style>

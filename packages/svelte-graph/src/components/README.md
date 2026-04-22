@@ -146,9 +146,9 @@ keyboard action to confirmation, rotation, or query side effects.
 Horseshoe trace labels live in `workflowHorseshoeTrace.ts`, while
 `WorkflowGraph.svelte` owns when interaction state changes should record a new
 trace string.
-Horseshoe diagnostic overlay rendering lives in `HorseshoeDebugOverlay.svelte`,
-while `WorkflowGraph.svelte` owns when the overlay is visible and which trace
-state to supply.
+Horseshoe diagnostic overlay rendering lives in `HorseshoeDebugOverlay.svelte`
+and is exported for app graph reuse, while `WorkflowGraph.svelte` owns when the
+overlay is visible and which trace state to supply.
 Mouse/touch pointer extraction and container-relative coordinate projection live
 in `workflowPointerPosition.ts`, while `WorkflowGraph.svelte` owns the concrete
 container element.
@@ -183,7 +183,7 @@ container element.
 - `workflowHorseshoeOpenRequest.ts` must derive request traces and requested
   session transitions from one context snapshot.
 - `HorseshoeDebugOverlay.svelte` must stay display-only and receive already
-  projected horseshoe trace state from `WorkflowGraph.svelte`.
+  projected horseshoe trace state from graph components.
 - `horseshoeInsertFeedback.ts` must derive selector status labels from one
   feedback/session snapshot.
 - `workflowHorseshoeSessionUpdate.ts` must derive selector reset, feedback,

@@ -155,6 +155,9 @@ the app graph only performs app-owned confirmation and timer side effects after
 keyboard resolution.
 Horseshoe diagnostic trace labels now come from the package
 `workflowHorseshoeTrace.ts` helper so package and app graph traces stay aligned.
+Horseshoe diagnostic overlay rendering now uses the package
+`HorseshoeDebugOverlay` component so package and app graph trace display stays
+aligned while the app graph owns overlay visibility and trace state.
 Mouse/touch pointer projection now comes from the package
 `workflowPointerPosition.ts` helper; the app graph only supplies the active
 container bounds.
@@ -261,6 +264,8 @@ container bounds.
   and the confirmed candidate cannot drift.
 - App graph horseshoe trace labels must use the package trace formatter instead
   of composing parallel string formats inline.
+- App graph horseshoe diagnostic rendering must use the package
+  `HorseshoeDebugOverlay` component instead of duplicating trace display markup.
 - App graph pointer coordinate handling must use the package pointer-position
   resolver so mouse/touch fallback behavior stays aligned with the package
   graph.

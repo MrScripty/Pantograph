@@ -591,6 +591,8 @@ Tasks:
   Package horseshoe diagnostic overlay rendering now lives in
   `packages/svelte-graph/src/components/HorseshoeDebugOverlay.svelte`, while
   package `WorkflowGraph.svelte` retains overlay visibility and trace state.
+  The app graph now reuses the package `HorseshoeDebugOverlay` export instead
+  of duplicating trace display markup and styling.
   App palette drag eligibility, drag payload parsing, and graph-space drop
   projection now live in `src/components/workflowPaletteDrag.ts`, with unit
   coverage in `src/components/workflowPaletteDrag.test.ts`. App orchestration

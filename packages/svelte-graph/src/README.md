@@ -113,6 +113,10 @@ before confirming an insert.
 Keep horseshoe trace formatting in `workflowHorseshoeTrace.ts` so package and
 app graph diagnostics use the same state labels while components own when to
 record them.
+Keep horseshoe diagnostic overlay rendering in exported
+`components/HorseshoeDebugOverlay.svelte` so package and app graph components
+share trace display markup while each graph owns overlay visibility and trace
+state.
 Keep pointer event coordinate projection in `workflowPointerPosition.ts` so
 mouse/touch fallback behavior and container-relative math stay aligned across
 package and app graph components.
@@ -156,6 +160,8 @@ package and app graph components.
   from package horseshoe selection rules.
 - `workflowHorseshoeTrace.ts` must remain formatting-only and must not decide
   whether a horseshoe session should open or close.
+- `HorseshoeDebugOverlay.svelte` must remain display-only and receive projected
+  trace state from graph components through the package export surface.
 - Horseshoe insert feedback stays visible until the backend accepts the insert
   or the interaction is explicitly cleared; rejected inserts must not collapse
   into a silent no-op.
