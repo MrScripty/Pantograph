@@ -3,12 +3,13 @@ use std::sync::{Arc, Mutex};
 
 use crate::task_executor;
 use crate::{
-    apply_runtime_extensions_for_execution, EmbeddedWorkflowHost, RuntimeExtensionsSnapshot,
+    EmbeddedWorkflowHost, RuntimeExtensionsSnapshot, apply_runtime_extensions_for_execution,
 };
 use node_engine::{CoreTaskExecutor, NullEventSink, WorkflowEvent, WorkflowExecutor};
 use pantograph_workflow_service::{
-    graph_memory_impact_from_node_engine_graph_change, WorkflowHost, WorkflowOutputTarget,
-    WorkflowPortBinding, WorkflowRunHandle, WorkflowServiceError, WorkflowSessionUnloadReason,
+    WorkflowHost, WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunHandle,
+    WorkflowServiceError, WorkflowSessionUnloadReason,
+    graph_memory_impact_from_node_engine_graph_change,
 };
 
 struct WorkflowSessionExecutionEntry {

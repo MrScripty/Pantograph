@@ -178,6 +178,10 @@ embedded-runtime crate.
   `lib_tests/runtime_preflight_tests.rs` so install-state availability checks
   and registry eviction-order selection do not accumulate in the root test
   harness.
+- Embedded-runtime source formatting and import grouping should stay
+  rustfmt-compatible across runtime capability, registry, workflow runtime, and
+  workflow-session modules so later behavior refactors do not mix semantic
+  changes with mechanical formatting churn.
 - Hosted runtime lifecycle and injected capability tests stay in
   `lib_tests/runtime_lifecycle_capability_tests.rs` so construction,
   shutdown-state reconciliation, and capability injection checks do not

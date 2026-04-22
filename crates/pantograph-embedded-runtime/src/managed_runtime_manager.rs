@@ -1,12 +1,12 @@
 use std::path::Path;
 
 use inference::{
-    cancel_binary_download, download_binary, list_managed_runtime_snapshots,
-    load_managed_runtime_state, pause_binary_download, refresh_managed_runtime_catalogs,
-    remove_binary, select_managed_runtime_version, set_default_managed_runtime_version,
     DownloadProgress, ManagedBinaryId, ManagedRuntimeInstallHistoryEntry,
     ManagedRuntimeJobArtifactStatus, ManagedRuntimeJobStatus, ManagedRuntimeSelectionState,
-    ManagedRuntimeSnapshot, ManagedRuntimeVersionStatus,
+    ManagedRuntimeSnapshot, ManagedRuntimeVersionStatus, cancel_binary_download, download_binary,
+    list_managed_runtime_snapshots, load_managed_runtime_state, pause_binary_download,
+    refresh_managed_runtime_catalogs, remove_binary, select_managed_runtime_version,
+    set_default_managed_runtime_version,
 };
 use serde::{Deserialize, Serialize};
 
@@ -182,15 +182,15 @@ fn project_progress(
 #[cfg(test)]
 mod tests {
     use super::{
+        ManagedRuntimeManagerProgress, ManagedRuntimeManagerRuntimeView,
         inspect_managed_runtime_manager_runtime, list_managed_runtime_manager_runtimes,
-        project_progress, select_managed_runtime_manager_version, ManagedRuntimeManagerProgress,
-        ManagedRuntimeManagerRuntimeView,
+        project_progress, select_managed_runtime_manager_version,
     };
     use inference::{
-        load_managed_runtime_state, save_managed_runtime_state, DownloadProgress, ManagedBinaryId,
-        ManagedRuntimeHistoryEventKind, ManagedRuntimeInstallHistoryEntry,
-        ManagedRuntimePersistedRuntime, ManagedRuntimePersistedVersion,
-        ManagedRuntimeReadinessState, ManagedRuntimeSelectionState,
+        DownloadProgress, ManagedBinaryId, ManagedRuntimeHistoryEventKind,
+        ManagedRuntimeInstallHistoryEntry, ManagedRuntimePersistedRuntime,
+        ManagedRuntimePersistedVersion, ManagedRuntimeReadinessState, ManagedRuntimeSelectionState,
+        load_managed_runtime_state, save_managed_runtime_state,
     };
 
     #[test]

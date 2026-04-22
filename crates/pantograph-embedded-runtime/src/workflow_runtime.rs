@@ -558,8 +558,8 @@ pub fn build_runtime_event_projection(
 
 #[cfg(test)]
 mod tests {
-    use crate::runtime_health::RuntimeHealthAssessmentSnapshot;
     use crate::HostRuntimeModeSnapshot;
+    use crate::runtime_health::RuntimeHealthAssessmentSnapshot;
     use async_trait::async_trait;
     use pantograph_runtime_registry::RuntimeRegistry;
     use pantograph_workflow_service::graph::WorkflowSessionKind;
@@ -569,10 +569,9 @@ mod tests {
     };
 
     use super::{
-        WorkflowExecutionDiagnosticsInput,
-        WorkflowExecutionDiagnosticsSyncInput,
-        build_runtime_diagnostics_projection, build_runtime_event_projection,
-        build_runtime_event_projection_with_registry_override,
+        WorkflowExecutionDiagnosticsController, WorkflowExecutionDiagnosticsInput,
+        WorkflowExecutionDiagnosticsSyncInput, build_runtime_diagnostics_projection,
+        build_runtime_event_projection, build_runtime_event_projection_with_registry_override,
         build_runtime_event_projection_with_registry_reconciliation,
         build_runtime_event_projection_with_registry_sync,
         build_workflow_execution_diagnostics_snapshot,
@@ -580,7 +579,6 @@ mod tests {
         normalized_runtime_lifecycle_snapshot,
         reconcile_runtime_registry_stored_projection_overrides, resolve_runtime_model_target,
         trace_runtime_metrics, trace_runtime_metrics_with_observed_runtime_ids,
-        WorkflowExecutionDiagnosticsController,
     };
 
     struct MockRuntimeRegistryController {
@@ -750,10 +748,12 @@ mod tests {
             Some("PyTorch")
         );
         let snapshot = registry.snapshot();
-        assert!(snapshot
-            .runtimes
-            .iter()
-            .any(|runtime| runtime.runtime_id == "llama_cpp"));
+        assert!(
+            snapshot
+                .runtimes
+                .iter()
+                .any(|runtime| runtime.runtime_id == "llama_cpp")
+        );
         let stored_runtime = snapshot
             .runtimes
             .iter()
@@ -873,10 +873,12 @@ mod tests {
         );
 
         let registry_snapshot = registry.snapshot();
-        assert!(registry_snapshot
-            .runtimes
-            .iter()
-            .any(|runtime| runtime.runtime_id == "llama_cpp"));
+        assert!(
+            registry_snapshot
+                .runtimes
+                .iter()
+                .any(|runtime| runtime.runtime_id == "llama_cpp")
+        );
         let execution_runtime = registry_snapshot
             .runtimes
             .iter()

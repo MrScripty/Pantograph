@@ -10,9 +10,9 @@ use std::time::Duration;
 use async_trait::async_trait;
 use thiserror::Error;
 
+use crate::HostRuntimeModeSnapshot;
 use crate::runtime_health::{RuntimeHealthAssessment, RuntimeHealthAssessmentSnapshot};
 use crate::runtime_registry::HostRuntimeProducer;
-use crate::HostRuntimeModeSnapshot;
 use pantograph_runtime_registry::{
     RuntimeReclaimDisposition, RuntimeRegistry, RuntimeRegistryError,
     RuntimeRegistryRuntimeSnapshot, RuntimeRegistrySnapshot, RuntimeRetentionDecision,
@@ -41,9 +41,7 @@ pub trait HostRuntimeRegistryLifecycleController: HostRuntimeRegistryController 
 pub enum RuntimeWarmupCoordinationError {
     #[error(transparent)]
     Registry(#[from] RuntimeRegistryError),
-    #[error(
-        "timed out waiting for runtime '{runtime_id}' to finish warmup or shutdown transition"
-    )]
+    #[error("timed out waiting for runtime '{runtime_id}' to finish warmup or shutdown transition")]
     Timeout { runtime_id: String },
 }
 
