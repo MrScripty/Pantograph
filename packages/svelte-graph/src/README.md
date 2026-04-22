@@ -17,6 +17,8 @@ fork core canvas behavior.
 | `stores/` | Package store factories for workflow, session, and view state. |
 | `types/` | Stable TypeScript contracts for graph, backend, and group APIs. |
 | `workflowEventOwnership.ts` | Projection helper for backend-provided workflow execution ids, active run identity, and stale-event relevance. |
+| `workflowMiniMap.ts` | Shared minimap color projection for backend node categories and graph group nodes. |
+| `workflowMiniMap.test.ts` | Unit coverage for reusable minimap color projection. |
 | `index.ts` | Package export surface consumed by the app shell and any external package users. |
 
 ## Problem
@@ -43,6 +45,8 @@ explicit projection object. Backend-authored event `ownership` payloads from
 Tauri are authoritative for event identity, active run identity, and relevance;
 the helper only falls back to legacy `execution_id` fields for events that do
 not yet carry that backend projection.
+Keep reusable minimap color projection in `workflowMiniMap.ts` so the graph
+component does not own backend category presentation policy inline.
 
 ## Alternatives Rejected
 - Keep connect/reconnect state management inline in both graph components.
@@ -72,6 +76,8 @@ not yet carry that backend projection.
   override relevance with package-local current-run comparisons.
 - Backend-authored workflow event `ownership` payloads take precedence over
   legacy raw `execution_id` fields.
+- `workflowMiniMap.ts` must keep group-node coloring ahead of backend category
+  coloring and provide a stable fallback color for unknown node types.
 
 ## Revisit Triggers
 - A second non-Pantograph consumer needs a different reconnect policy.

@@ -501,6 +501,9 @@ Tasks:
   `src/components/workflowGraphTypes.ts`. App graph cut-line intersection
   helpers now live in `src/components/cutInteraction.ts`, with unit coverage in
   `src/components/cutInteraction.test.ts`.
+  Package workflow minimap color projection now lives in
+  `packages/svelte-graph/src/workflowMiniMap.ts`, with unit coverage in
+  `packages/svelte-graph/src/workflowMiniMap.test.ts`.
 - Split `DependencyEnvironmentNode.svelte` into data parsing, activity log,
   mode controls, override editor, status panels, and command controls.
   Progress: dependency environment DTOs now live in

@@ -10,6 +10,8 @@ shared node presentation rules live outside the Pantograph app shell.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `WorkflowGraph.svelte` | Main graph canvas that owns connect/reconnect flows, candidate loading, revision-aware edge commits, and the drag-time horseshoe insert flow. |
+| `../workflowMiniMap.ts` | Maps package workflow node groups and backend categories to minimap colors. |
+| `../workflowMiniMap.test.ts` | Unit coverage for package workflow minimap color projection. |
 | `NodePalette.svelte` | Palette for adding node definitions into the active graph. |
 | `CutTool.svelte` | Edge-cut interaction used for Ctrl-drag deletion. |
 | `ContainerBorder.svelte` | Orchestration/group boundary overlay used during zoom transitions. |
@@ -67,6 +69,8 @@ workflow-event reduction to the focused store helper in
 `stores/workflowExecutionEvents.ts`, keeping the component responsible for
 subscription and run-lifecycle orchestration instead of full event-to-store
 mapping.
+Minimap color projection lives in `workflowMiniMap.ts` so category-to-color
+mapping stays testable outside the SvelteFlow component.
 
 ## Alternatives Rejected
 - Ask the backend on every pointer move.
@@ -112,6 +116,8 @@ mapping.
   they use generic `role="button"` semantics for drag-and-double-click behavior.
 - Svelte a11y suppressions on graph-canvas hosts require an adjacent
   `a11y-reviewed:` comment explaining the ownership boundary.
+- `workflowMiniMap.ts` must preserve backend category color semantics and keep
+  group-node coloring ahead of category coloring.
 
 ## Revisit Triggers
 - Backend candidate queries become too slow for one-shot drag-start loading.

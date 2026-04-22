@@ -68,6 +68,7 @@
     WORKFLOW_PALETTE_DRAG_START_EVENT,
   } from '../paletteDragState.js';
   import { resolveReconnectSourceAnchor } from '../reconnectInteraction.js';
+  import { getWorkflowMiniMapNodeColor } from '../workflowMiniMap.js';
   import CutTool from './CutTool.svelte';
   import ContainerBorder from './ContainerBorder.svelte';
   import HorseshoeInsertSelector from './HorseshoeInsertSelector.svelte';
@@ -1068,21 +1069,7 @@
     }}
   >
     <Controls />
-    <MiniMap
-      nodeColor={(node) => {
-        if (node.type === 'node-group' || node.data?.isGroup) return '#7c3aed';
-        const def = node.data?.definition as NodeDefinition | undefined;
-        switch (def?.category) {
-          case 'input': return '#2563eb';
-          case 'processing': return '#16a34a';
-          case 'tool': return '#d97706';
-          case 'output': return '#0891b2';
-          case 'control': return '#9333ea';
-          default: return '#525252';
-        }
-      }}
-      maskColor="rgba(0, 0, 0, 0.8)"
-    />
+    <MiniMap nodeColor={getWorkflowMiniMapNodeColor} maskColor="rgba(0, 0, 0, 0.8)" />
   </SvelteFlow>
 
   <ContainerBorder
