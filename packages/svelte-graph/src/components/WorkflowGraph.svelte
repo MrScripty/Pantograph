@@ -15,6 +15,7 @@
 
   import { useGraphContext } from '../context/useGraphContext.js';
   import { applyWorkflowGraphMutationResponse } from '../stores/workflowGraphMutationResponse.js';
+  import { computeWorkflowGraphSyncDecision } from '../workflowGraphSync.js';
   import type {
     NodeDefinition,
     GraphEdge,
@@ -149,22 +150,24 @@
 
   // Sync store → SvelteFlow local state (only when the respective store changed)
   $effect(() => {
-    const storeNodes = $nodesStore;
-    const storeEdges = $edgesStore;
+    const syncDecision = computeWorkflowGraphSyncDecision({
+      storeNodes: $nodesStore,
+      storeEdges: $edgesStore,
+      prevNodesRef: _prevNodesRef,
+      prevEdgesRef: _prevEdgesRef,
+      skipNextNodeSync: _skipNextNodeSync,
+    });
 
-    const nodesChanged = storeNodes !== _prevNodesRef;
-    const edgesChanged = storeEdges !== _prevEdgesRef;
+    _prevNodesRef = syncDecision.nextPrevNodesRef;
+    _prevEdgesRef = syncDecision.nextPrevEdgesRef;
+    _skipNextNodeSync = syncDecision.nextSkipNextNodeSync;
 
-    _prevNodesRef = storeNodes;
-    _prevEdgesRef = storeEdges;
-
-    if (nodesChanged && !_skipNextNodeSync) {
-      nodes = storeNodes;
+    if (syncDecision.applyNodes) {
+      nodes = $nodesStore;
     }
-    _skipNextNodeSync = false;
 
-    if (edgesChanged) {
-      edges = storeEdges;
+    if (syncDecision.applyEdges) {
+      edges = $edgesStore;
     }
   });
 

@@ -17,6 +17,8 @@ fork core canvas behavior.
 | `stores/` | Package store factories for workflow, session, and view state. |
 | `types/` | Stable TypeScript contracts for graph, backend, and group APIs. |
 | `workflowEventOwnership.ts` | Projection helper for backend-provided workflow execution ids, active run identity, and stale-event relevance. |
+| `workflowGraphSync.ts` | Reference-based store-to-SvelteFlow synchronization decision helper. |
+| `workflowGraphSync.test.ts` | Unit coverage for SvelteFlow node and edge sync decisions. |
 | `workflowMiniMap.ts` | Shared minimap color projection for backend node categories and graph group nodes. |
 | `workflowMiniMap.test.ts` | Unit coverage for reusable minimap color projection. |
 | `index.ts` | Package export surface consumed by the app shell and any external package users. |
@@ -47,6 +49,9 @@ the helper only falls back to legacy `execution_id` fields for events that do
 not yet carry that backend projection.
 Keep reusable minimap color projection in `workflowMiniMap.ts` so the graph
 component does not own backend category presentation policy inline.
+Keep store-to-SvelteFlow synchronization policy in `workflowGraphSync.ts` so
+the graph component can preserve xyflow internal metadata without owning
+reference-comparison rules inline.
 
 ## Alternatives Rejected
 - Keep connect/reconnect state management inline in both graph components.
@@ -78,6 +83,8 @@ component does not own backend category presentation policy inline.
   legacy raw `execution_id` fields.
 - `workflowMiniMap.ts` must keep group-node coloring ahead of backend category
   coloring and provide a stable fallback color for unknown node types.
+- `workflowGraphSync.ts` must clear one-shot node-sync suppression while still
+  allowing edge updates through.
 
 ## Revisit Triggers
 - A second non-Pantograph consumer needs a different reconnect policy.

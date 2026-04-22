@@ -10,6 +10,8 @@ shared node presentation rules live outside the Pantograph app shell.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `WorkflowGraph.svelte` | Main graph canvas that owns connect/reconnect flows, candidate loading, revision-aware edge commits, and the drag-time horseshoe insert flow. |
+| `../workflowGraphSync.ts` | Computes reference-based store-to-SvelteFlow node and edge synchronization decisions. |
+| `../workflowGraphSync.test.ts` | Unit coverage for package graph sync decisions. |
 | `../workflowMiniMap.ts` | Maps package workflow node groups and backend categories to minimap colors. |
 | `../workflowMiniMap.test.ts` | Unit coverage for package workflow minimap color projection. |
 | `NodePalette.svelte` | Palette for adding node definitions into the active graph. |
@@ -71,6 +73,8 @@ subscription and run-lifecycle orchestration instead of full event-to-store
 mapping.
 Minimap color projection lives in `workflowMiniMap.ts` so category-to-color
 mapping stays testable outside the SvelteFlow component.
+Store-to-SvelteFlow synchronization decisions live in `workflowGraphSync.ts`,
+keeping reference comparisons out of `WorkflowGraph.svelte`.
 
 ## Alternatives Rejected
 - Ask the backend on every pointer move.
@@ -118,6 +122,8 @@ mapping stays testable outside the SvelteFlow component.
   `a11y-reviewed:` comment explaining the ownership boundary.
 - `workflowMiniMap.ts` must preserve backend category color semantics and keep
   group-node coloring ahead of category coloring.
+- `workflowGraphSync.ts` must not reassign nodes when a caller intentionally
+  suppresses the next node sync after a local drag operation.
 
 ## Revisit Triggers
 - Backend candidate queries become too slow for one-shot drag-start loading.
