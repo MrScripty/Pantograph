@@ -593,6 +593,9 @@ Tasks:
   `packages/svelte-graph/src/stores/workflowStoreMaterialization.ts`, with unit
   coverage in
   `packages/svelte-graph/src/stores/workflowStoreMaterialization.test.ts`.
+  Package workflow store add-edge commits now reuse
+  `packages/svelte-graph/src/workflowConnections.ts` backend edge normalization
+  instead of rebuilding backend edge defaults inline.
   Package default workflow graph construction now lives in
   `packages/svelte-graph/src/stores/defaultWorkflowGraph.ts`, with unit coverage
   in `packages/svelte-graph/src/stores/defaultWorkflowGraph.test.ts`.

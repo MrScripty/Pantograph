@@ -39,6 +39,7 @@ import {
   projectWorkflowGraphStoreState,
 } from './workflowStoreMaterialization.ts';
 import { buildDefaultWorkflowGraphState } from './defaultWorkflowGraph.ts';
+import { edgeToGraphEdge } from '../workflowConnections.ts';
 
 interface InferenceParamSchema {
   key: string;
@@ -293,16 +294,7 @@ export function createWorkflowStores(
 
   function addEdgeFn(edge: Edge) {
     syncGraphMutationFromBackend('add edge', (sessionId) =>
-      backend.addEdge(
-        {
-          id: edge.id,
-          source: edge.source,
-          source_handle: edge.sourceHandle || 'output',
-          target: edge.target,
-          target_handle: edge.targetHandle || 'input',
-        },
-        sessionId,
-      ),
+      backend.addEdge(edgeToGraphEdge(edge), sessionId),
     );
   }
 

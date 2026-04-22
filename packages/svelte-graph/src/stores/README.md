@@ -89,6 +89,9 @@ tested helper while `createWorkflowStores.ts` owns assigning the returned state.
 Runtime node-data and stream-content projection lives in `runtimeData.ts`,
 keeping transient execution updates outside the store facade while
 `createWorkflowStores.ts` owns wiring those projections to Svelte stores.
+Backend edge normalization for store add-edge commits reuses
+`../workflowConnections.ts`, keeping backend `GraphEdge` shape policy shared
+with graph component connection commits.
 
 ## Alternatives Rejected
 - Store connection intent only inside `WorkflowGraph.svelte`.
@@ -117,6 +120,8 @@ keeping transient execution updates outside the store facade while
 - `runtimeData.ts` must own transient runtime-data and stream-content node array
   projection, and cleanup helpers must continue to touch only explicitly
   requested transient keys.
+- Store add-edge commits must use the shared `workflowConnections.ts`
+  `edgeToGraphEdge` helper rather than rebuilding backend edge defaults inline.
 - Dynamic inference-setting ports must be derived from backend-owned schema and
   written back into `node.data.definition`; ad hoc component-local copies are
   not authoritative.
