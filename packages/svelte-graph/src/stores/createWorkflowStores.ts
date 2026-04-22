@@ -20,8 +20,6 @@ import type { ViewportState } from '../types/view.js';
 import type { WorkflowBackend } from '../types/backend.js';
 import { removeNodeDataKeys } from './runtimeData.ts';
 import { buildDerivedGraph } from '../graphRevision.ts';
-import { resolveNodeDefinitionOverlay } from './definitionOverlay.ts';
-import { applySelectedNodeIds } from '../workflowSelection.ts';
 import { applyWorkflowGraphMutationResponse } from './workflowGraphMutationResponse.ts';
 import type { WorkflowGraphMutationResponse } from '../types/workflow.js';
 import {
@@ -30,6 +28,10 @@ import {
   getWorkflowConnectedNodes,
   getWorkflowNodesBounds,
 } from './workflowStoreGraphQueries.ts';
+import {
+  materializeWorkflowGraphSnapshot,
+  projectWorkflowGraphStoreState,
+} from './workflowStoreMaterialization.ts';
 
 interface InferenceParamSchema {
   key: string;
@@ -144,22 +146,12 @@ export function createWorkflowStores(
   // --- Derived stores ---
   const workflowGraph = derived(
     [nodes, edges, derivedGraph],
-    ([$nodes, $edges, $derivedGraph]): WorkflowGraph => ({
-      nodes: $nodes.map((n) => ({
-        id: n.id,
-        node_type: n.type || 'unknown',
-        position: n.position,
-        data: n.data,
-      })),
-      edges: $edges.map((e) => ({
-        id: e.id,
-        source: e.source,
-        source_handle: e.sourceHandle || 'output',
-        target: e.target,
-        target_handle: e.targetHandle || 'input',
-      })),
-      ...(typeof $derivedGraph === 'undefined' ? {} : { derived_graph: $derivedGraph }),
-    })
+    ([$nodes, $edges, $derivedGraph]): WorkflowGraph =>
+      projectWorkflowGraphStoreState({
+        nodes: $nodes,
+        edges: $edges,
+        derivedGraph: $derivedGraph,
+      }),
   );
 
   const nodeDefinitionsByCategory = derived(nodeDefinitions, ($defs) => {
@@ -180,33 +172,11 @@ export function createWorkflowStores(
     const definitions = get(nodeDefinitions);
     const selectedIds = get(selectedNodeIds);
 
-    const graphNodes = applySelectedNodeIds(
-      graph.nodes.map((n) => {
-        const nodeType = n.node_type;
-        const nodeData = { ...n.data };
-
-        const definition = resolveNodeDefinitionOverlay(nodeType, nodeData, definitions);
-        return {
-          id: n.id,
-          type: nodeType,
-          position: n.position,
-          data: { ...nodeData, definition },
-        };
-      }),
-      selectedIds,
-    );
-
-    const graphEdges: Edge[] = graph.edges.map((e) => {
-      return {
-        id: e.id,
-        source: e.source,
-        sourceHandle: e.source_handle,
-        target: e.target,
-        targetHandle: e.target_handle,
-      };
+    return materializeWorkflowGraphSnapshot({
+      graph,
+      definitions,
+      selectedNodeIds: selectedIds,
     });
-
-    return { graphNodes, graphEdges, graph };
   }
 
   function applyWorkflowGraph(

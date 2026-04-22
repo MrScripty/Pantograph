@@ -18,6 +18,7 @@ metadata, execution overlays, and transient connection-intent state.
 | `runtimeData.ts` | Removes transient execution data from nodes without touching persisted configuration fields. |
 | `workflowExecutionEvents.ts` | Reduces backend-owned workflow execution events into read-only execution overlays and downstream runtime-data mirrors for GUI consumers. |
 | `workflowStoreGraphQueries.ts` | Projects store-owned graph nodes and edges into group indexes, connected-node lists, and node bounds. |
+| `workflowStoreMaterialization.ts` | Converts between backend workflow graph snapshots and SvelteFlow store state while preserving selected-node projection. |
 
 ## Problem
 The graph editor needs a shared state boundary that can serve both UI rendering
@@ -77,6 +78,10 @@ boundary edges locally.
 Store graph query helpers live in `workflowStoreGraphQueries.ts`, keeping group
 extraction, selected-group lookup, connected-node projection, and node bounds
 calculation outside the store facade while preserving the existing store API.
+Workflow graph materialization lives in `workflowStoreMaterialization.ts`,
+keeping backend snapshot-to-SvelteFlow conversion and active-store-to-workflow
+projection outside the store facade while preserving selection reapplication and
+derived graph metadata.
 
 ## Alternatives Rejected
 - Store connection intent only inside `WorkflowGraph.svelte`.
@@ -92,6 +97,8 @@ calculation outside the store facade while preserving the existing store API.
   ungroup, and port edits must not synthesize nodes or boundary edges locally.
 - `workflowStoreGraphQueries.ts` owns group extraction, selected-group lookup,
   connected-node projection, and node bounds calculation for store consumers.
+- `workflowStoreMaterialization.ts` owns backend snapshot materialization and
+  active store projection into `WorkflowGraph` payloads.
 - `workflowGraph` must reflect the latest nodes, edges, and derived graph
   fingerprint after every applied graph snapshot.
 - `connectionIntent` is not persisted; it must reset on graph mutation,

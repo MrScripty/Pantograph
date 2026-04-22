@@ -580,7 +580,11 @@ Tasks:
   `packages/svelte-graph/src/stores/workflowStoreGraphQueries.ts`, with unit
   coverage in
   `packages/svelte-graph/src/stores/workflowStoreGraphQueries.test.ts`, while
-  `createWorkflowStores.ts` preserves the public store facade.
+  `createWorkflowStores.ts` preserves the public store facade. Package workflow
+  store graph materialization and active store projection now live in
+  `packages/svelte-graph/src/stores/workflowStoreMaterialization.ts`, with unit
+  coverage in
+  `packages/svelte-graph/src/stores/workflowStoreMaterialization.test.ts`.
   App palette drag eligibility, drag payload parsing, and graph-space drop
   projection now live in `src/components/workflowPaletteDrag.ts`, with unit
   coverage in `src/components/workflowPaletteDrag.test.ts`. App orchestration
