@@ -48,6 +48,7 @@ shared node presentation rules live outside the Pantograph app shell.
 | `CutTool.svelte` | Edge-cut interaction used for Ctrl-drag deletion. |
 | `ContainerBorder.svelte` | Orchestration/group boundary overlay used during zoom transitions. |
 | `HorseshoeInsertSelector.svelte` | Cursor-anchored horseshoe selector used to browse compatible insertable node types during an active connection intent. |
+| `HorseshoeDebugOverlay.svelte` | Renders drag-time horseshoe trace, display state, and blocked-reason diagnostics. |
 | `nodes/` | Shared node shells and reusable package node components, including connection-intent highlighting. |
 | `edges/` | Edge renderers and reconnect affordances used by `WorkflowGraph.svelte`; reconnect can start from either occupied edge endpoint so drag-off disconnect works directly from connected ports. |
 
@@ -145,6 +146,9 @@ keyboard action to confirmation, rotation, or query side effects.
 Horseshoe trace labels live in `workflowHorseshoeTrace.ts`, while
 `WorkflowGraph.svelte` owns when interaction state changes should record a new
 trace string.
+Horseshoe diagnostic overlay rendering lives in `HorseshoeDebugOverlay.svelte`,
+while `WorkflowGraph.svelte` owns when the overlay is visible and which trace
+state to supply.
 Mouse/touch pointer extraction and container-relative coordinate projection live
 in `workflowPointerPosition.ts`, while `WorkflowGraph.svelte` owns the concrete
 container element.
@@ -178,6 +182,8 @@ container element.
   invoked.
 - `workflowHorseshoeOpenRequest.ts` must derive request traces and requested
   session transitions from one context snapshot.
+- `HorseshoeDebugOverlay.svelte` must stay display-only and receive already
+  projected horseshoe trace state from `WorkflowGraph.svelte`.
 - `horseshoeInsertFeedback.ts` must derive selector status labels from one
   feedback/session snapshot.
 - `workflowHorseshoeSessionUpdate.ts` must derive selector reset, feedback,
