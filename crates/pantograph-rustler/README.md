@@ -135,6 +135,6 @@ canonical binding verification path.
   Rustler exposes a warning-clean registration API.
 - `src/lib.rs` is still over the decomposition threshold, but BEAM binding DTOs,
   resource wrappers, callback/event transport, frontend HTTP dispatch,
-  orchestration store JSON CRUD, and registry/extension dispatch now live in
-  focused source modules as part of the facade split tracked by the standards
-  compliance plan.
+  orchestration store JSON CRUD, registry/extension dispatch, and Pumas
+  model-library dispatch now live in focused source modules as part of the
+  facade split tracked by the standards compliance plan.
