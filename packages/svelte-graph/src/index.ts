@@ -209,6 +209,11 @@ export {
   dispatchWorkflowPaletteDragEnd,
   dispatchWorkflowPaletteDragStart,
 } from './paletteDragState.js';
+export { resolveWorkflowDragCursorUpdate } from './workflowDragCursor.js';
+export type {
+  WorkflowDragCursorDecision,
+  WorkflowDragCursorPosition,
+} from './workflowDragCursor.js';
 export {
   WORKFLOW_PALETTE_DROP_NODE_OFFSET,
   readWorkflowPaletteDragDefinition,

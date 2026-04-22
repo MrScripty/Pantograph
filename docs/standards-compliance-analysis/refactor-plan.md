@@ -516,7 +516,11 @@ Tasks:
   horseshoe insert position projection now lives in
   `packages/svelte-graph/src/workflowInsertPosition.ts`, with unit coverage in
   `packages/svelte-graph/src/workflowInsertPosition.test.ts` and app graph
-  reuse through the package export. Package graph
+  reuse through the package export. Package graph drag-cursor horseshoe anchor
+  and selection decisions now live in
+  `packages/svelte-graph/src/workflowDragCursor.ts`, with unit coverage in
+  `packages/svelte-graph/src/workflowDragCursor.test.ts` and app graph reuse
+  through the package export. Package graph
   palette drag payload parsing and drop-position projection now live in
   `packages/svelte-graph/src/workflowPaletteDrag.ts`, with unit coverage in
   `packages/svelte-graph/src/workflowPaletteDrag.test.ts`. Package graph

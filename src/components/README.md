@@ -127,6 +127,9 @@ side effects.
 Horseshoe insert position projection now comes from the package
 `workflowInsertPosition.ts` helper so package and app graph insert coordinates
 stay aligned.
+Drag-cursor horseshoe anchor and selection decisions now come from the package
+`workflowDragCursor.ts` helper; the app graph only applies the resolved state
+change.
 
 ## Alternatives Rejected
 - Replace the app graph entirely with the package component immediately.
@@ -204,6 +207,9 @@ stay aligned.
   package graph.
 - App graph horseshoe insert coordinates must use the package insert-position
   resolver before calling backend insert APIs.
+- App graph drag-cursor behavior must use the package drag-cursor resolver so
+  open-menu selection and hidden-menu anchor movement stay aligned with the
+  package graph.
 
 ## Revisit Triggers
 - The app graph fully converges with the package graph and can be deleted.

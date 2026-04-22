@@ -11,6 +11,8 @@ fork core canvas behavior.
 | ----------- | ----------- |
 | `components/` | Reusable graph UI, including the main canvas, reconnect affordances, and horseshoe selector. |
 | `connectionDragState.ts` | Shared state machine helpers that distinguish normal connect drags from explicit reconnect drags and gate reconnect cleanup. |
+| `workflowDragCursor.ts` | Shared drag-cursor decision helper for horseshoe anchor movement and open-menu selection. |
+| `workflowDragCursor.test.ts` | Unit coverage for drag-cursor horseshoe decisions. |
 | `horseshoeDragSession.ts` | Shared visibility and anchor lifecycle for the horseshoe insert UI during active drags. |
 | `horseshoeInsertFeedback.ts` | Shared pending/rejection feedback state and status-label resolution for horseshoe insert outcomes. |
 | `horseshoeInvocation.ts` | Shared `Space` open/confirm decisions, pointer-anchor freeze rules, and user-facing blocked-reason strings for horseshoe invocation. |
@@ -67,6 +69,9 @@ mutations without owning payload or coordinate policy inline.
 Keep horseshoe insert position projection in `workflowInsertPosition.ts` so
 package and app graph components share the same anchor-to-graph coordinate
 contract before calling backend insert APIs.
+Keep drag-cursor horseshoe decisions in `workflowDragCursor.ts` so anchor
+updates and open-menu item selection stay aligned across package and app graph
+components.
 
 ## Alternatives Rejected
 - Keep connect/reconnect state management inline in both graph components.
@@ -85,6 +90,8 @@ contract before calling backend insert APIs.
   projection so graph components only perform the resolved side effects.
 - Open horseshoe sessions freeze anchor updates; pointer motion is interpreted
   as menu selection input instead of menu repositioning.
+- `workflowDragCursor.ts` owns that anchor-versus-selection decision and returns
+  explicit side-effect decisions for graph components to apply.
 - Horseshoe insert feedback stays visible until the backend accepts the insert
   or the interaction is explicitly cleared; rejected inserts must not collapse
   into a silent no-op.

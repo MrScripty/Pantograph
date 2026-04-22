@@ -29,13 +29,9 @@
   } from '../types/workflow.js';
   import {
     findBestInsertableMatchIndex,
-    findNearestVisibleHorseshoeIndex,
     rotateHorseshoeIndex,
   } from '../horseshoeSelector.js';
-  import {
-    formatHorseshoeBlockedReason,
-    shouldUpdateHorseshoeAnchorFromPointer,
-  } from '../horseshoeInvocation.js';
+  import { formatHorseshoeBlockedReason } from '../horseshoeInvocation.js';
   import {
     isEditableKeyboardTarget,
     resolveHorseshoeKeyboardAction,
@@ -54,7 +50,6 @@
     requestHorseshoeDisplay,
     startHorseshoeDrag,
     syncHorseshoeDisplay,
-    updateHorseshoeAnchor,
     type HorseshoeBlockedReason,
     type HorseshoeDragSessionState,
   } from '../horseshoeDragSession.js';
@@ -73,6 +68,7 @@
     WORKFLOW_PALETTE_DRAG_START_EVENT,
   } from '../paletteDragState.js';
   import { resolveReconnectSourceAnchor } from '../reconnectInteraction.js';
+  import { resolveWorkflowDragCursorUpdate } from '../workflowDragCursor.js';
   import {
     resolveWorkflowGroupZoomTarget,
     resolveWorkflowNodeClick,
@@ -363,25 +359,18 @@
 
   function updateDragCursorFromMouseEvent(event: MouseEvent) {
     const nextPosition = getRelativePointerPosition(event.clientX, event.clientY);
-    if (!nextPosition) return;
+    const decision = resolveWorkflowDragCursorUpdate({
+      pointerPosition: nextPosition,
+      session: horseshoeSession,
+      insertableNodeTypes: $connectionIntentStore?.insertableNodeTypes ?? [],
+      selectedIndex: horseshoeSelectedIndex,
+    });
 
-    if (!shouldUpdateHorseshoeAnchorFromPointer(horseshoeSession.displayState)) {
-      const nextIndex = horseshoeSession.anchorPosition
-        ? findNearestVisibleHorseshoeIndex(
-            $connectionIntentStore?.insertableNodeTypes ?? [],
-            horseshoeSelectedIndex,
-            nextPosition,
-            horseshoeSession.anchorPosition,
-          )
-        : null;
-
-      if (nextIndex !== null) {
-        horseshoeSelectedIndex = nextIndex;
-      }
-      return;
+    if (decision.type === 'select-index') {
+      horseshoeSelectedIndex = decision.selectedIndex;
+    } else if (decision.type === 'update-anchor') {
+      applyHorseshoeSession(decision.session);
     }
-
-    applyHorseshoeSession(updateHorseshoeAnchor(horseshoeSession, nextPosition));
   }
 
   function scheduleHorseshoeQueryReset() {

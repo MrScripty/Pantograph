@@ -13,11 +13,11 @@
     createHorseshoeDragSessionState,
     formatHorseshoeBlockedReason,
     findBestInsertableMatchIndex,
-    findNearestVisibleHorseshoeIndex,
     rejectHorseshoeInsertFeedback,
     resolveHorseshoeStatusLabel,
     isEditableKeyboardTarget,
     resolveHorseshoeKeyboardAction,
+    resolveWorkflowDragCursorUpdate,
     resolveWorkflowGroupZoomTarget,
     resolveWorkflowInsertPositionHint,
     resolveWorkflowNodeClick,
@@ -25,14 +25,12 @@
     requestHorseshoeDisplay,
     rotateHorseshoeIndex,
     startHorseshoeInsertFeedback,
-    shouldUpdateHorseshoeAnchorFromPointer,
     shouldRemoveReconnectedEdge,
     startHorseshoeDrag,
     startConnectionDrag,
     startReconnectDrag,
     supportsInsertFromConnectionDrag,
     syncHorseshoeDisplay,
-    updateHorseshoeAnchor,
     applyWorkflowGraphMutationResponse,
     WORKFLOW_PALETTE_DRAG_END_EVENT,
     WORKFLOW_PALETTE_DRAG_START_EVENT,
@@ -565,25 +563,18 @@
 
   function updateDragCursorFromMouseEvent(event: MouseEvent) {
     const nextPosition = getRelativePointerPosition(event.clientX, event.clientY);
-    if (!nextPosition) return;
+    const decision = resolveWorkflowDragCursorUpdate({
+      pointerPosition: nextPosition,
+      session: horseshoeSession,
+      insertableNodeTypes: $connectionIntent?.insertableNodeTypes ?? [],
+      selectedIndex: horseshoeSelectedIndex,
+    });
 
-    if (!shouldUpdateHorseshoeAnchorFromPointer(horseshoeSession.displayState)) {
-      const nextIndex = horseshoeSession.anchorPosition
-        ? findNearestVisibleHorseshoeIndex(
-            $connectionIntent?.insertableNodeTypes ?? [],
-            horseshoeSelectedIndex,
-            nextPosition,
-            horseshoeSession.anchorPosition,
-          )
-        : null;
-
-      if (nextIndex !== null) {
-        horseshoeSelectedIndex = nextIndex;
-      }
-      return;
+    if (decision.type === 'select-index') {
+      horseshoeSelectedIndex = decision.selectedIndex;
+    } else if (decision.type === 'update-anchor') {
+      applyHorseshoeSession(decision.session);
     }
-
-    applyHorseshoeSession(updateHorseshoeAnchor(horseshoeSession, nextPosition));
   }
 
   $effect(() => {
