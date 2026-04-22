@@ -65,8 +65,8 @@ runtime readiness, session-runtime workflows, and the root facade test module.
   bounds, and the shared session-store lock error mapping.
 - Workflow facade tests live outside `workflow.rs` so production facade imports
   and service shape remain reviewable; behavior-specific test modules live
-  under `workflow/tests/`, including stale cleanup and worker lifecycle
-  coverage.
+  under `workflow/tests/`, including capacity, stale cleanup, and worker
+  lifecycle coverage.
 - Host calls occur outside session-store locks.
 - Generic workflow run execution owns timeout cancellation, output validation,
   and direct runtime-not-ready checks behind the public facade.

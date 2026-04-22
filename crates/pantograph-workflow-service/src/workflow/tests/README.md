@@ -15,7 +15,7 @@ can stay reviewable as more tests are split.
 | `runtime_preflight.rs` | Runtime preflight matching tests for selected runtime precedence, fallback readiness, backend aliases, and selected-version readiness context. |
 | `scheduler_snapshot.rs` | Scheduler snapshot facade tests covering workflow/edit-session snapshot shape, trace attribution, admission diagnostics, and runtime-registry diagnostics provider merging. |
 | `session_admission.rs` | Runtime capacity and runtime admission wait tests for queued session runs. |
-| `session_capacity.rs` | Loaded runtime capacity and runtime rebalance tests for host-selected, affinity-preserving, shared-model, and shared-backend unload choices. |
+| `session_capacity.rs` | Session and loaded runtime capacity tests for limit errors, release after close, host-selected unloads, affinity preservation, and shared resource reuse. |
 | `session_execution.rs` | Workflow session create/run/close, run-option propagation, and runtime retention-hint tests. |
 | `session_queue.rs` | Session queue item metadata, admission outcome, warm reuse, queue-position, and starvation protection tests. |
 | `session_runtime_preflight.rs` | Session runtime preflight cache invalidation and keep-alive preflight failure tests. |
