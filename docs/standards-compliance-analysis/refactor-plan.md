@@ -622,6 +622,8 @@ Tasks:
   `src/components/nodes/workflow/DependencyEnvironmentBindingsPanel.svelte`.
   Automatic/manual mode selector rendering now lives in
   `src/components/nodes/workflow/DependencyEnvironmentModeControls.svelte`.
+  Dependency environment node header icon and title rendering now lives in
+  `src/components/nodes/workflow/DependencyEnvironmentNodeHeader.svelte`.
   Node-local state initialization, persistence payload projection, backend action
   response projection, and retained activity-log trimming now live in
   `src/components/nodes/workflow/dependencyEnvironmentNodeState.ts`, with unit

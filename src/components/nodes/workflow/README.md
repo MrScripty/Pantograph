@@ -15,6 +15,7 @@ to the workflow graph runtime instead of being spread across generic canvas code
 | `DependencyEnvironmentActivityLog.svelte` | Renders the dependency environment activity log and owns log auto-scroll behavior. |
 | `DependencyEnvironmentBindingsPanel.svelte` | Renders binding selection, manual override summary controls, and per-requirement override fields. |
 | `DependencyEnvironmentModeControls.svelte` | Renders the dependency environment automatic/manual mode selector. |
+| `DependencyEnvironmentNodeHeader.svelte` | Renders the dependency environment node icon and title label. |
 | `DependencyEnvironmentNode.svelte` | Presents dependency resolution, check, install, activity, and override controls for model-backed environment setup. |
 | `DependencyEnvironmentRefPanel.svelte` | Renders the resolved dependency environment reference state, environment id, and Python executable. |
 | `DependencyEnvironmentStatusPanel.svelte` | Renders dependency state badges, status messages, and command buttons for dependency actions. |
@@ -109,6 +110,9 @@ mutation callbacks and persistence.
 The automatic/manual mode selector lives in
 `DependencyEnvironmentModeControls.svelte`, keeping mode rendering separate from
 node persistence.
+The dependency environment node header lives in
+`DependencyEnvironmentNodeHeader.svelte`, keeping icon and title markup separate
+from node state orchestration.
 
 ## Alternatives Rejected
 - Reset audio output state only by remounting the workflow view.
@@ -161,6 +165,8 @@ node persistence.
   without writing node data directly.
 - `DependencyEnvironmentModeControls.svelte` emits mode changes without writing
   node data directly.
+- `DependencyEnvironmentNodeHeader.svelte` owns dependency environment header
+  icon and label markup.
 - Image and media preview controls must expose accessible names even when the
   visible content is an image or icon rather than text.
 
