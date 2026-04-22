@@ -98,6 +98,9 @@ Palette edge-insert hover projection and rendered-edge hit testing live in
 Connection validation and backend candidate projection live in
 `workflowConnections.ts`, while `WorkflowGraph.svelte` owns backend calls and
 interaction cleanup.
+Horseshoe keyboard event interpretation now comes from the package
+`workflowHorseshoeKeyboard.ts` helper; the app graph only maps resolved actions
+to app-owned state and backend side effects.
 
 ## Alternatives Rejected
 - Replace the app graph entirely with the package component immediately.
@@ -158,6 +161,9 @@ interaction cleanup.
 - `workflowConnections.ts` must prefer active backend candidate intent when it
   matches the source anchor, then fall back to package port compatibility only
   when no active intent applies.
+- App graph horseshoe keyboard behavior must use the package keyboard resolver
+  so `Space`, `Enter`, arrow, `Escape`, and query-editing semantics stay aligned
+  with the package graph.
 
 ## Revisit Triggers
 - The app graph fully converges with the package graph and can be deleted.

@@ -14,10 +14,10 @@
     formatHorseshoeBlockedReason,
     findBestInsertableMatchIndex,
     findNearestVisibleHorseshoeIndex,
-    isSpaceKey,
     rejectHorseshoeInsertFeedback,
-    resolveHorseshoeSpaceKeyAction,
     resolveHorseshoeStatusLabel,
+    isEditableKeyboardTarget,
+    resolveHorseshoeKeyboardAction,
     markConnectionDragFinalizing,
     requestHorseshoeDisplay,
     rotateHorseshoeIndex,
@@ -1198,12 +1198,7 @@
       containerSelected = false;
     }
 
-    const target = e.target as HTMLElement | null;
-    if (
-      target &&
-      (target.isContentEditable ||
-        ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
-    ) {
+    if (isEditableKeyboardTarget(e.target as HTMLElement | null)) {
       return;
     }
 
@@ -1231,82 +1226,48 @@
   }
 
   function handleWindowKeyDown(e: KeyboardEvent) {
-    const target = e.target as HTMLElement | null;
-    if (
-      target &&
-      (target.isContentEditable ||
-        ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
-    ) {
+    if (isEditableKeyboardTarget(e.target as HTMLElement | null)) {
       return;
     }
 
-    if (!horseshoeSession.dragActive && horseshoeSession.displayState === 'hidden') {
-      return;
-    }
+    const action = resolveHorseshoeKeyboardAction(e, {
+      displayState: horseshoeSession.displayState,
+      dragActive: horseshoeSession.dragActive,
+      pending: horseshoeInsertFeedback.pending,
+      hasSelection: Boolean($connectionIntent?.insertableNodeTypes[horseshoeSelectedIndex]),
+    });
 
-    const spaceAction = isSpaceKey(e)
-      ? resolveHorseshoeSpaceKeyAction({
-          displayState: horseshoeSession.displayState,
-          dragActive: horseshoeSession.dragActive,
-          pending: horseshoeInsertFeedback.pending,
-          hasSelection: Boolean($connectionIntent?.insertableNodeTypes[horseshoeSelectedIndex]),
-        })
-      : 'noop';
-
-    if (spaceAction !== 'noop') {
+    if (action.preventDefault) {
       e.preventDefault();
-      horseshoeLastTrace = 'keydown:space';
-      if (spaceAction === 'confirm') {
+    }
+
+    switch (action.type) {
+      case 'request-open':
+        horseshoeLastTrace = 'keydown:space';
+        requestHorseshoeOpen();
+        return;
+      case 'confirm-selection': {
+        horseshoeLastTrace = e.key === 'Enter' ? 'keydown:enter' : 'keydown:space';
         const candidate = $connectionIntent?.insertableNodeTypes[horseshoeSelectedIndex];
         if (candidate) {
           void commitInsertSelection(candidate);
         }
-      } else {
-        requestHorseshoeOpen();
+        return;
       }
-      return;
-    }
-
-    if (horseshoeSession.displayState === 'hidden') return;
-
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      closeHorseshoeSelector();
-      return;
-    }
-
-    if (horseshoeSession.displayState !== 'open') return;
-
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      const candidate = $connectionIntent?.insertableNodeTypes[horseshoeSelectedIndex];
-      if (candidate) {
-        void commitInsertSelection(candidate);
-      }
-      return;
-    }
-
-    if (e.key === 'ArrowLeft') {
-      e.preventDefault();
-      rotateInsertSelection(-1);
-      return;
-    }
-
-    if (e.key === 'ArrowRight') {
-      e.preventDefault();
-      rotateInsertSelection(1);
-      return;
-    }
-
-    if (e.key === 'Backspace') {
-      e.preventDefault();
-      updateInsertQuery(horseshoeQuery.slice(0, -1));
-      return;
-    }
-
-    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      e.preventDefault();
-      updateInsertQuery(`${horseshoeQuery}${e.key}`);
+      case 'close':
+        closeHorseshoeSelector();
+        return;
+      case 'rotate-selection':
+        rotateInsertSelection(action.delta);
+        return;
+      case 'remove-query-character':
+        updateInsertQuery(horseshoeQuery.slice(0, -1));
+        return;
+      case 'append-query-character':
+        updateInsertQuery(`${horseshoeQuery}${action.character}`);
+        return;
+      case 'noop':
+        return;
     }
   }
 

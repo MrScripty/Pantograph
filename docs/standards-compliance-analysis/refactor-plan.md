@@ -514,9 +514,11 @@ Tasks:
   App graph connection validation, graph-edge normalization, and backend
   candidate projection now live in `src/components/workflowConnections.ts`,
   with unit coverage in `src/components/workflowConnections.test.ts`. App graph
-  cut gesture state, line sampling, and overlay rendering now delegate to the
-  package `CutTool`; the app graph keeps only the backend edge-deletion callback,
-  and app edge-insert geometry helpers now live inside
+  horseshoe keyboard behavior now uses the package
+  `workflowHorseshoeKeyboard.ts` resolver. App graph cut gesture state, line
+  sampling, and overlay rendering now delegate to the package `CutTool`; the app
+  graph keeps only the backend edge-deletion callback, and app edge-insert
+  geometry helpers now live inside
   `src/components/edgeInsertInteraction.ts`.
 - Split `DependencyEnvironmentNode.svelte` into data parsing, activity log,
   mode controls, override editor, status panels, and command controls.
