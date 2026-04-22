@@ -276,6 +276,7 @@ export type {
   WorkflowPointerPosition,
   WorkflowPointerTouchListLike,
 } from './workflowPointerPosition.js';
+export { WORKFLOW_GRAPH_DEFAULT_EDGE_OPTIONS } from './workflowGraphEdgeOptions.js';
 export { resolveWorkflowInsertPositionHint } from './workflowInsertPosition.js';
 export type {
   WorkflowInsertAnchorPosition,

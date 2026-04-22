@@ -158,6 +158,9 @@ Horseshoe diagnostic trace labels now come from the package
 Horseshoe diagnostic overlay rendering now uses the package
 `HorseshoeDebugOverlay` component so package and app graph trace display stays
 aligned while the app graph owns overlay visibility and trace state.
+Workflow graph default edge options now come from the package
+`WORKFLOW_GRAPH_DEFAULT_EDGE_OPTIONS` export so app and package canvases share
+the same reconnectable edge defaults.
 Mouse/touch pointer projection now comes from the package
 `workflowPointerPosition.ts` helper; the app graph only supplies the active
 container bounds.
@@ -266,6 +269,9 @@ container bounds.
   of composing parallel string formats inline.
 - App graph horseshoe diagnostic rendering must use the package
   `HorseshoeDebugOverlay` component instead of duplicating trace display markup.
+- App graph SvelteFlow default edge options must use the package
+  `WORKFLOW_GRAPH_DEFAULT_EDGE_OPTIONS` export so edge type and interaction
+  defaults cannot drift from the package graph.
 - App graph pointer coordinate handling must use the package pointer-position
   resolver so mouse/touch fallback behavior stays aligned with the package
   graph.

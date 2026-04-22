@@ -42,6 +42,7 @@
     applyWorkflowGraphMutationResponse,
     WORKFLOW_PALETTE_DRAG_END_EVENT,
     WORKFLOW_PALETTE_DRAG_START_EVENT,
+    WORKFLOW_GRAPH_DEFAULT_EDGE_OPTIONS,
     CutTool,
     HorseshoeDebugOverlay,
     type ConnectionDragState,
@@ -1264,14 +1265,7 @@
     onmove={handleMove}
     onmoveend={handleMoveEnd}
     onpaneclick={handlePaneClick}
-    defaultEdgeOptions={{
-      type: 'reconnectable',
-      animated: false,
-      style: 'stroke: #525252; stroke-width: 2px;',
-      interactionWidth: 20,
-      selectable: true,
-      focusable: true,
-    }}
+    defaultEdgeOptions={WORKFLOW_GRAPH_DEFAULT_EDGE_OPTIONS}
   >
     <Controls />
     <MiniMap nodeColor={getWorkflowMiniMapNodeColor} maskColor="rgba(0, 0, 0, 0.8)" />

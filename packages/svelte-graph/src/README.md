@@ -120,6 +120,9 @@ state.
 Keep pointer event coordinate projection in `workflowPointerPosition.ts` so
 mouse/touch fallback behavior and container-relative math stay aligned across
 package and app graph components.
+Keep shared workflow graph edge defaults in `workflowGraphEdgeOptions.ts` so
+package and app graph components use the same reconnectable edge type, styling,
+and interaction width.
 
 ## Alternatives Rejected
 - Keep connect/reconnect state management inline in both graph components.
@@ -162,6 +165,8 @@ package and app graph components.
   whether a horseshoe session should open or close.
 - `HorseshoeDebugOverlay.svelte` must remain display-only and receive projected
   trace state from graph components through the package export surface.
+- `workflowGraphEdgeOptions.ts` must keep default workflow edge options
+  transport-free and reusable by both graph components.
 - Horseshoe insert feedback stays visible until the backend accepts the insert
   or the interaction is explicitly cleared; rejected inserts must not collapse
   into a silent no-op.

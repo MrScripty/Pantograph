@@ -90,6 +90,7 @@
     resolveWorkflowPointerClientPosition,
     resolveWorkflowRelativePointerPosition,
   } from '../workflowPointerPosition.js';
+  import { WORKFLOW_GRAPH_DEFAULT_EDGE_OPTIONS } from '../workflowGraphEdgeOptions.js';
   import { resolveWorkflowInsertPositionHint } from '../workflowInsertPosition.js';
   import { getWorkflowMiniMapNodeColor } from '../workflowMiniMap.js';
   import CutTool from './CutTool.svelte';
@@ -950,14 +951,7 @@
     onmove={handleMove}
     onmoveend={handleMoveEnd}
     onpaneclick={handlePaneClick}
-    defaultEdgeOptions={{
-      type: 'reconnectable',
-      animated: false,
-      style: 'stroke: #525252; stroke-width: 2px;',
-      interactionWidth: 20,
-      selectable: true,
-      focusable: true,
-    }}
+    defaultEdgeOptions={WORKFLOW_GRAPH_DEFAULT_EDGE_OPTIONS}
   >
     <Controls />
     <MiniMap nodeColor={getWorkflowMiniMapNodeColor} maskColor="rgba(0, 0, 0, 0.8)" />
