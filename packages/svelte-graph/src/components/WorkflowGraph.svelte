@@ -45,7 +45,6 @@
     clearHorseshoeInsertFeedback,
     createHorseshoeInsertFeedbackState,
     rejectHorseshoeInsertFeedback,
-    resolveHorseshoeSessionStatusLabel,
     startHorseshoeInsertFeedback,
     type HorseshoeInsertFeedbackState,
   } from '../horseshoeInsertFeedback.js';
@@ -486,13 +485,6 @@
       horseshoeLastTrace = 'insert-error';
       console.error('[WorkflowGraph] Failed to insert compatible node:', error);
     }
-  }
-
-  function getHorseshoeStatusLabel(): string | null {
-    return resolveHorseshoeSessionStatusLabel({
-      feedback: horseshoeInsertFeedback,
-      session: horseshoeSession,
-    });
   }
 
   function handleWindowKeyDown(event: KeyboardEvent) {
@@ -994,7 +986,6 @@
     insertableNodeTypes={$connectionIntentStore?.insertableNodeTypes ?? []}
     selectedIndex={horseshoeSelectedIndex}
     query={horseshoeQuery}
-    statusLabel={getHorseshoeStatusLabel()}
     trace={horseshoeLastTrace}
     onSelect={(candidate) => void commitInsertSelection(candidate)}
     onRotate={rotateInsertSelection}

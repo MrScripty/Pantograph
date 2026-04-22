@@ -140,7 +140,8 @@ Keep horseshoe diagnostic trace and blocked-reason log projection in
 duplicate-suppression and message formatting rules.
 Keep the workflow graph horseshoe selector and diagnostic overlay composition in
 `components/WorkflowGraphHorseshoeLayer.svelte` so package and app graph
-components share rendering while retaining their own state and callbacks.
+components share rendering and selector status projection while retaining their
+own state and callbacks.
 
 ## Alternatives Rejected
 - Keep connect/reconnect state management inline in both graph components.
@@ -196,7 +197,8 @@ components share rendering while retaining their own state and callbacks.
 - `workflowHorseshoeTrace.ts` must own horseshoe diagnostic trace and
   blocked-reason log projection for package and app graph components.
 - `WorkflowGraphHorseshoeLayer.svelte` must own selector plus debug overlay
-  composition without owning graph state or backend mutation callbacks.
+  composition and selector status labels without owning graph state or backend
+  mutation callbacks.
 - Horseshoe insert feedback stays visible until the backend accepts the insert
   or the interaction is explicitly cleared; rejected inserts must not collapse
   into a silent no-op.

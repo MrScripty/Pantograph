@@ -166,8 +166,8 @@ while `WorkflowGraph.svelte` only writes the projected ids into the store.
 Workflow graph horseshoe blocked-reason log decisions live in
 `workflowHorseshoeTrace.ts`, while `WorkflowGraph.svelte` only emits the warning.
 `WorkflowGraphHorseshoeLayer.svelte` owns the shared horseshoe selector and
-debug overlay composition; graph components provide state, candidates, and
-callbacks.
+debug overlay composition plus selector status labels; graph components provide
+state, candidates, and callbacks.
 
 ## Alternatives Rejected
 - Ask the backend on every pointer move.

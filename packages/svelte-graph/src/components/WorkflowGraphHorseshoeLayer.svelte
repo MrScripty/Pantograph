@@ -1,6 +1,9 @@
 <script lang="ts">
   import type { HorseshoeDragSessionState } from '../horseshoeDragSession.js';
-  import type { HorseshoeInsertFeedbackState } from '../horseshoeInsertFeedback.js';
+  import {
+    resolveHorseshoeSessionStatusLabel,
+    type HorseshoeInsertFeedbackState,
+  } from '../horseshoeInsertFeedback.js';
   import type { InsertableNodeTypeCandidate } from '../types/workflow.js';
   import HorseshoeDebugOverlay from './HorseshoeDebugOverlay.svelte';
   import HorseshoeInsertSelector from './HorseshoeInsertSelector.svelte';
@@ -14,7 +17,6 @@
     query: string;
     selectedIndex: number;
     session: HorseshoeDragSessionState;
-    statusLabel: string | null;
     trace: string;
   }
 
@@ -27,9 +29,15 @@
     query,
     selectedIndex,
     session,
-    statusLabel,
     trace,
   }: Props = $props();
+
+  const statusLabel = $derived(
+    resolveHorseshoeSessionStatusLabel({
+      feedback,
+      session,
+    }),
+  );
 </script>
 
 <HorseshoeInsertSelector

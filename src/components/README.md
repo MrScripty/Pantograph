@@ -178,7 +178,7 @@ Workflow graph horseshoe blocked-reason log decisions now come from the package
 share the same duplicate-suppression and message formatting rules.
 Workflow graph horseshoe selector and debug overlay rendering now comes from the
 package `WorkflowGraphHorseshoeLayer` component so app and package canvases
-share the same horseshoe UI composition.
+share the same horseshoe UI composition and selector status labels.
 Mouse/touch pointer projection now comes from the package
 `workflowPointerPosition.ts` helper; the app graph only supplies the active
 container bounds.

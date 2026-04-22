@@ -10,7 +10,6 @@
     createHorseshoeInsertFeedbackState,
     createHorseshoeDragSessionState,
     rejectHorseshoeInsertFeedback,
-    resolveHorseshoeSessionStatusLabel,
     isEditableKeyboardTarget,
     resolveHorseshoeKeyboardAction,
     preserveConnectionIntentState,
@@ -1130,13 +1129,6 @@
     }
   }
 
-  function getHorseshoeStatusLabel(): string | null {
-    return resolveHorseshoeSessionStatusLabel({
-      feedback: horseshoeInsertFeedback,
-      session: horseshoeSession,
-    });
-  }
-
   function handleWindowKeyDown(e: KeyboardEvent) {
     if (isEditableKeyboardTarget(e.target as HTMLElement | null)) {
       return;
@@ -1301,7 +1293,6 @@
     insertableNodeTypes={$connectionIntent?.insertableNodeTypes ?? []}
     selectedIndex={horseshoeSelectedIndex}
     query={horseshoeQuery}
-    statusLabel={getHorseshoeStatusLabel()}
     trace={horseshoeLastTrace}
     onSelect={(candidate) => void commitInsertSelection(candidate)}
     onRotate={rotateInsertSelection}
