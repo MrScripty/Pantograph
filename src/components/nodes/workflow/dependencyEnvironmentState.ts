@@ -263,3 +263,105 @@ export function getPatchFrom(
 ): DependencyOverridePatchV1 | undefined {
   return patches.find((patch) => isPatchTarget(patch, bindingId, scope, requirementName));
 }
+
+export function upsertStringOverrideField(
+  patches: DependencyOverridePatchV1[],
+  bindingId: string,
+  scope: 'binding' | 'requirement',
+  requirementName: string | undefined,
+  field: StringOverrideField,
+  rawValue: string,
+  updatedAt: string
+): DependencyOverridePatchV1[] {
+  const value = rawValue.trim();
+  const next = [...patches];
+  const idx = next.findIndex((patch) => isPatchTarget(patch, bindingId, scope, requirementName));
+  const patch: DependencyOverridePatchV1 =
+    idx >= 0
+      ? {
+          ...next[idx],
+          fields: { ...next[idx].fields },
+        }
+      : {
+          contract_version: 1,
+          binding_id: bindingId,
+          scope,
+          requirement_name: scope === 'requirement' ? requirementName : undefined,
+          fields: {},
+          source: 'user',
+        };
+
+  if (value.length === 0) {
+    delete patch.fields[field];
+  } else {
+    patch.fields[field] = value;
+  }
+  patch.source = 'user';
+  patch.updated_at = updatedAt;
+
+  if (!hasOverrideFields(patch.fields)) {
+    if (idx >= 0) {
+      next.splice(idx, 1);
+    }
+  } else if (idx >= 0) {
+    next[idx] = patch;
+  } else {
+    next.push(patch);
+  }
+
+  return next;
+}
+
+export function upsertExtraIndexUrls(
+  patches: DependencyOverridePatchV1[],
+  bindingId: string,
+  requirementName: string,
+  rawValue: string,
+  updatedAt: string
+): DependencyOverridePatchV1[] {
+  const deduped = Array.from(
+    new Set(
+      rawValue
+        .split(',')
+        .map((part) => part.trim())
+        .filter((part) => part.length > 0)
+    )
+  );
+
+  const next = [...patches];
+  const idx = next.findIndex((patch) => isPatchTarget(patch, bindingId, 'requirement', requirementName));
+  const patch: DependencyOverridePatchV1 =
+    idx >= 0
+      ? {
+          ...next[idx],
+          fields: { ...next[idx].fields },
+        }
+      : {
+          contract_version: 1,
+          binding_id: bindingId,
+          scope: 'requirement',
+          requirement_name: requirementName,
+          fields: {},
+          source: 'user',
+        };
+
+  if (deduped.length === 0) {
+    delete patch.fields.extra_index_urls;
+  } else {
+    patch.fields.extra_index_urls = deduped;
+  }
+  patch.source = 'user';
+  patch.updated_at = updatedAt;
+
+  if (!hasOverrideFields(patch.fields)) {
+    if (idx >= 0) {
+      next.splice(idx, 1);
+    }
+  } else if (idx >= 0) {
+    next[idx] = patch;
+  } else {
+    next.push(patch);
+  }
+
+  return next;
+}

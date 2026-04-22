@@ -8,6 +8,8 @@ import {
   isPatchTarget,
   mergeOverridePatches,
   parseOverridePatches,
+  upsertExtraIndexUrls,
+  upsertStringOverrideField,
 } from './dependencyEnvironmentState.ts';
 
 test('parseOverridePatches accepts valid JSON patch arrays and drops invalid entries', () => {
@@ -83,4 +85,47 @@ test('dependencyCodeLabel maps known backend codes to readable labels', () => {
   assert.equal(dependencyCodeLabel('dependency_install_failed'), 'dependency check failed');
   assert.equal(dependencyCodeLabel('unknown_profile'), 'unknown profile');
   assert.equal(dependencyCodeLabel('custom_backend_code'), 'custom backend code');
+});
+
+test('upsertStringOverrideField adds updates and removes empty patches', () => {
+  const withValue = upsertStringOverrideField(
+    [],
+    'binding-a',
+    'binding',
+    undefined,
+    'python_executable',
+    ' /usr/bin/python3 ',
+    '2026-04-22T00:00:00.000Z',
+  );
+
+  assert.equal(withValue.length, 1);
+  assert.equal(withValue[0].fields.python_executable, '/usr/bin/python3');
+  assert.equal(withValue[0].source, 'user');
+
+  const cleared = upsertStringOverrideField(
+    withValue,
+    'binding-a',
+    'binding',
+    undefined,
+    'python_executable',
+    '',
+    '2026-04-22T00:00:01.000Z',
+  );
+
+  assert.deepEqual(cleared, []);
+});
+
+test('upsertExtraIndexUrls dedupes comma-separated URLs', () => {
+  const patches = upsertExtraIndexUrls(
+    [],
+    'binding-a',
+    'torch',
+    'https://a.example/simple, https://a.example/simple, https://b.example/simple',
+    '2026-04-22T00:00:00.000Z',
+  );
+
+  assert.deepEqual(patches[0].fields.extra_index_urls, [
+    'https://a.example/simple',
+    'https://b.example/simple',
+  ]);
 });

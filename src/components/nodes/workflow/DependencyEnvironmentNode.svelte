@@ -12,6 +12,8 @@
     isPatchTarget,
     mergeOverridePatches,
     parseOverridePatches,
+    upsertExtraIndexUrls,
+    upsertStringOverrideField,
     type DependencyActivityEvent,
     type DependencyOverridePatchV1,
     type EnvironmentRef,
@@ -339,43 +341,15 @@
     field: StringOverrideField,
     rawValue: string
   ) {
-    const value = rawValue.trim();
-    let next = [...manualOverrides];
-    const idx = next.findIndex((patch) => isPatchTarget(patch, bindingId, scope, requirementName));
-    const patch: DependencyOverridePatchV1 =
-      idx >= 0
-        ? {
-            ...next[idx],
-            fields: { ...next[idx].fields },
-          }
-        : {
-            contract_version: 1,
-            binding_id: bindingId,
-            scope,
-            requirement_name: scope === 'requirement' ? requirementName : undefined,
-            fields: {},
-            source: 'user',
-          };
-
-    if (value.length === 0) {
-      delete patch.fields[field];
-    } else {
-      patch.fields[field] = value;
-    }
-    patch.source = 'user';
-    patch.updated_at = new Date().toISOString();
-
-    if (!hasOverrideFields(patch.fields)) {
-      if (idx >= 0) {
-        next.splice(idx, 1);
-      }
-    } else if (idx >= 0) {
-      next[idx] = patch;
-    } else {
-      next.push(patch);
-    }
-
-    manualOverrides = next;
+    manualOverrides = upsertStringOverrideField(
+      manualOverrides,
+      bindingId,
+      scope,
+      requirementName,
+      field,
+      rawValue,
+      new Date().toISOString()
+    );
     persistNodeState();
   }
 
@@ -384,48 +358,13 @@
     requirementName: string,
     rawValue: string
   ) {
-    const parts = rawValue
-      .split(',')
-      .map((part) => part.trim())
-      .filter((part) => part.length > 0);
-    const deduped = Array.from(new Set(parts));
-
-    let next = [...manualOverrides];
-    const idx = next.findIndex((patch) => isPatchTarget(patch, bindingId, 'requirement', requirementName));
-    const patch: DependencyOverridePatchV1 =
-      idx >= 0
-        ? {
-            ...next[idx],
-            fields: { ...next[idx].fields },
-          }
-        : {
-            contract_version: 1,
-            binding_id: bindingId,
-            scope: 'requirement',
-            requirement_name: requirementName,
-            fields: {},
-            source: 'user',
-          };
-
-    if (deduped.length === 0) {
-      delete patch.fields.extra_index_urls;
-    } else {
-      patch.fields.extra_index_urls = deduped;
-    }
-    patch.source = 'user';
-    patch.updated_at = new Date().toISOString();
-
-    if (!hasOverrideFields(patch.fields)) {
-      if (idx >= 0) {
-        next.splice(idx, 1);
-      }
-    } else if (idx >= 0) {
-      next[idx] = patch;
-    } else {
-      next.push(patch);
-    }
-
-    manualOverrides = next;
+    manualOverrides = upsertExtraIndexUrls(
+      manualOverrides,
+      bindingId,
+      requirementName,
+      rawValue,
+      new Date().toISOString()
+    );
     persistNodeState();
   }
 
