@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import BaseNode from '../BaseNode.svelte';
   import DependencyEnvironmentActivityLog from './DependencyEnvironmentActivityLog.svelte';
+  import DependencyEnvironmentBindingsPanel from './DependencyEnvironmentBindingsPanel.svelte';
   import DependencyEnvironmentRefPanel from './DependencyEnvironmentRefPanel.svelte';
   import DependencyEnvironmentStatusPanel from './DependencyEnvironmentStatusPanel.svelte';
   import type { NodeDefinition } from '../../../services/workflow/types';
@@ -17,7 +18,6 @@
     type DependencyActivityEvent,
     type DependencyOverridePatchV1,
     type EnvironmentRef,
-    type ModelDependencyBinding,
     type ModelDependencyRequirements,
     type ModelDependencyStatus,
     type StringOverrideField,
@@ -389,6 +389,10 @@
     persistNodeState();
   }
 
+  function clearBindingPythonExecutable(bindingId: string) {
+    setStringOverrideField(bindingId, 'binding', undefined, 'python_executable', '');
+  }
+
   function clearAllOverrides() {
     manualOverrides = [];
     persistNodeState();
@@ -454,7 +458,7 @@
     persistNodeState();
   }
 
-  function filteredBindings(requirements: ModelDependencyRequirements): ModelDependencyBinding[] {
+  function filteredBindings(requirements: ModelDependencyRequirements) {
     if (selectedBindingIds.length === 0) return requirements.bindings;
     return requirements.bindings.filter((binding) => selectedBindingIds.includes(binding.binding_id));
   }
@@ -578,164 +582,33 @@
           </button>
         </div>
 
-        {#if mode === 'manual'}
-          <div class="rounded border border-neutral-700 px-2 py-1 space-y-2">
-            <div class="flex items-center gap-2">
-              <span class="text-[10px] text-neutral-400">Structured Override Controls</span>
-              <span class="ml-auto text-[10px] text-neutral-500">
-                {effectiveManualOverrides.length} effective patch(es)
-              </span>
-            </div>
-            <div class="text-[10px] text-neutral-500">
-              Configure per binding and per requirement below. Overrides are applied immediately.
-            </div>
-            {#if upstreamManualOverrides.length > 0}
-              <div class="text-[10px] text-amber-300">
-                {upstreamManualOverrides.length} patch(es) are provided by connected input. Local form edits override conflicts.
-              </div>
-            {/if}
-            <div class="flex items-center gap-2">
-              <button
-                type="button"
-                class="text-[10px] px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 hover:bg-neutral-700 disabled:opacity-50"
-                onclick={clearAllOverrides}
-                disabled={isBusy || manualOverrides.length === 0}
-              >
-                Clear All Overrides
-              </button>
-              {#if dependencyRequirements}
-                <button
-                  type="button"
-                  class="text-[10px] px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 hover:bg-neutral-700 disabled:opacity-50"
-                  onclick={() => toggleSelectedBindingsToAll(dependencyRequirements)}
-                  disabled={isBusy}
-                >
-                  Toggle All Bindings
-                </button>
-              {/if}
-            </div>
-          </div>
-        {/if}
-
         {#if dependencyRequirements && dependencyRequirements.bindings.length > 0}
-          <div class="rounded border border-neutral-700 px-2 py-1 text-[10px] space-y-1">
-            {#each filteredBindings(dependencyRequirements) as binding (binding.binding_id)}
-              <div class="rounded border border-neutral-800 px-2 py-1">
-                <div class="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={bindingHasSelection(binding.binding_id)}
-                    disabled={isBusy}
-                    onchange={() => toggleBinding(binding.binding_id)}
-                  />
-                  <span class="text-neutral-200 truncate" title={binding.binding_id}>{binding.binding_id}</span>
-                  {#if mode === 'manual' && bindingPatchCount(binding.binding_id) > 0}
-                    <span class="ml-auto text-[9px] text-cyan-300">
-                      {bindingPatchCount(binding.binding_id)} override patch(es)
-                    </span>
-                  {/if}
-                </div>
-                <div class="text-[9px] text-neutral-500 truncate" title={binding.profile_id + ' v' + binding.profile_version}>
-                  {binding.profile_id} v{binding.profile_version}
-                </div>
-                <div class="text-[9px] text-neutral-400">validation: {dependencyTokenLabel(binding.validation_state)}</div>
-                {#if binding.requirements.length > 0}
-                  <div class="space-y-1 mt-1">
-                    {#if mode === 'manual'}
-                      <div class="rounded border border-cyan-900/40 bg-cyan-950/10 px-2 py-1 space-y-1">
-                        <div class="text-[10px] text-cyan-300">Binding Override</div>
-                        <label class="text-[9px] text-neutral-400">Python executable</label>
-                        <input
-                          type="text"
-                          class="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-[10px] text-neutral-200 font-mono focus:outline-none focus:border-cyan-500"
-                          value={getStringOverrideField(binding.binding_id, 'binding', undefined, 'python_executable')}
-                          placeholder="/path/to/python or python3"
-                          onchange={(event) => handleBindingPythonExecutableChange(binding.binding_id, event)}
-                        />
-                        <div class="flex items-center gap-2">
-                          <button
-                            type="button"
-                            class="text-[9px] px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 hover:bg-neutral-700 disabled:opacity-50"
-                            onclick={() => setStringOverrideField(binding.binding_id, 'binding', undefined, 'python_executable', '')}
-                            disabled={isBusy || !hasBindingLocalOverride(binding.binding_id)}
-                          >
-                            Clear Local Binding Override
-                          </button>
-                          <button
-                            type="button"
-                            class="text-[9px] px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 hover:bg-neutral-700 disabled:opacity-50"
-                            onclick={() => clearBindingOverrides(binding.binding_id)}
-                            disabled={isBusy || bindingLocalPatchCount(binding.binding_id) === 0}
-                          >
-                            Clear Local Binding Patches
-                          </button>
-                        </div>
-                      </div>
-                    {/if}
-
-                    {#each binding.requirements as requirement (`${binding.binding_id}:${requirement.name}`)}
-                      <div class="rounded border border-neutral-800 px-2 py-1 space-y-1">
-                        <div class="text-[9px] text-neutral-200">
-                          {requirement.name}{requirement.exact_pin}
-                        </div>
-                        {#if mode === 'manual'}
-                          <div class="space-y-1">
-                            <label class="text-[9px] text-neutral-400">Index URL</label>
-                            <input
-                              type="text"
-                              class="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-[10px] text-neutral-200 font-mono focus:outline-none focus:border-cyan-500"
-                              value={getStringOverrideField(binding.binding_id, 'requirement', requirement.name, 'index_url')}
-                              placeholder="https://..."
-                              onchange={(event) => handleRequirementFieldChange(binding.binding_id, requirement.name, 'index_url', event)}
-                            />
-                            <label class="text-[9px] text-neutral-400">Extra index URLs (comma-separated)</label>
-                            <input
-                              type="text"
-                              class="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-[10px] text-neutral-200 font-mono focus:outline-none focus:border-cyan-500"
-                              value={getExtraIndexUrls(binding.binding_id, requirement.name)}
-                              placeholder="https://a, https://b"
-                              onchange={(event) => handleRequirementExtraUrlsChange(binding.binding_id, requirement.name, event)}
-                            />
-                            <label class="text-[9px] text-neutral-400">Wheel source path</label>
-                            <input
-                              type="text"
-                              class="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-[10px] text-neutral-200 font-mono focus:outline-none focus:border-cyan-500"
-                              value={getStringOverrideField(binding.binding_id, 'requirement', requirement.name, 'wheel_source_path')}
-                              placeholder="/path/to/wheels"
-                              onchange={(event) => handleRequirementFieldChange(binding.binding_id, requirement.name, 'wheel_source_path', event)}
-                            />
-                            <label class="text-[9px] text-neutral-400">Package source override</label>
-                            <input
-                              type="text"
-                              class="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-[10px] text-neutral-200 font-mono focus:outline-none focus:border-cyan-500"
-                              value={getStringOverrideField(binding.binding_id, 'requirement', requirement.name, 'package_source_override')}
-                              placeholder="custom source descriptor"
-                              onchange={(event) => handleRequirementFieldChange(binding.binding_id, requirement.name, 'package_source_override', event)}
-                            />
-                            <div class="flex items-center gap-2">
-                              <button
-                                type="button"
-                                class="text-[9px] px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 hover:bg-neutral-700 disabled:opacity-50"
-                                onclick={() => clearRequirementOverrides(binding.binding_id, requirement.name)}
-                                disabled={isBusy || !hasRequirementLocalOverrides(binding.binding_id, requirement.name)}
-                              >
-                                Clear Local Requirement Overrides
-                              </button>
-                              {#if requirementPatchCount(binding.binding_id, requirement.name) > 0}
-                                <span class="text-[9px] text-cyan-300">
-                                  {requirementPatchCount(binding.binding_id, requirement.name)} patch(es)
-                                </span>
-                              {/if}
-                            </div>
-                          </div>
-                        {/if}
-                      </div>
-                    {/each}
-                  </div>
-                {/if}
-              </div>
-            {/each}
-          </div>
+          <DependencyEnvironmentBindingsPanel
+            requirements={dependencyRequirements}
+            bindings={filteredBindings(dependencyRequirements)}
+            {mode}
+            {isBusy}
+            {effectiveManualOverrides}
+            {upstreamManualOverrides}
+            {manualOverrides}
+            {bindingHasSelection}
+            {bindingPatchCount}
+            {bindingLocalPatchCount}
+            {requirementPatchCount}
+            {hasRequirementLocalOverrides}
+            {hasBindingLocalOverride}
+            {getStringOverrideField}
+            {getExtraIndexUrls}
+            onClearAllOverrides={clearAllOverrides}
+            onToggleAllBindings={() => toggleSelectedBindingsToAll(dependencyRequirements)}
+            onToggleBinding={toggleBinding}
+            onBindingPythonExecutableChange={handleBindingPythonExecutableChange}
+            onClearBindingPythonExecutable={clearBindingPythonExecutable}
+            onClearBindingOverrides={clearBindingOverrides}
+            onRequirementFieldChange={handleRequirementFieldChange}
+            onRequirementExtraUrlsChange={handleRequirementExtraUrlsChange}
+            onClearRequirementOverrides={clearRequirementOverrides}
+          />
         {/if}
 
         {#if environmentRef}

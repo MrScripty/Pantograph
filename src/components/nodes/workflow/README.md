@@ -13,6 +13,7 @@ to the workflow graph runtime instead of being spread across generic canvas code
 | `AudioOutputNode.svelte` | Renders playback controls for streamed and final audio outputs, including rerun cleanup of execution-local playback state. |
 | `DiffusionInferenceNode.svelte` | Shows execution and dependency state for process-backed diffusion image generation. |
 | `DependencyEnvironmentActivityLog.svelte` | Renders the dependency environment activity log and owns log auto-scroll behavior. |
+| `DependencyEnvironmentBindingsPanel.svelte` | Renders binding selection, manual override summary controls, and per-requirement override fields. |
 | `DependencyEnvironmentNode.svelte` | Presents dependency resolution, check, install, activity, and override controls for model-backed environment setup. |
 | `DependencyEnvironmentRefPanel.svelte` | Renders the resolved dependency environment reference state, environment id, and Python executable. |
 | `DependencyEnvironmentStatusPanel.svelte` | Renders dependency state badges, status messages, and command buttons for dependency actions. |
@@ -84,6 +85,9 @@ The dependency action status panel lives in
 dispatch and persistence ownership.
 The resolved environment reference display lives in
 `DependencyEnvironmentRefPanel.svelte`.
+Binding selection and structured override form controls live in
+`DependencyEnvironmentBindingsPanel.svelte`, while the parent owns state
+mutation callbacks and persistence.
 
 ## Alternatives Rejected
 - Reset audio output state only by remounting the workflow view.
@@ -117,6 +121,8 @@ The resolved environment reference display lives in
   must not trigger graph drag or pan gestures.
 - `DependencyEnvironmentStatusPanel.svelte` emits command callbacks without
   invoking backend APIs directly.
+- `DependencyEnvironmentBindingsPanel.svelte` emits form and selection callbacks
+  without writing node data directly.
 - Image and media preview controls must expose accessible names even when the
   visible content is an image or icon rather than text.
 

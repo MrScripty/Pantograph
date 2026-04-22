@@ -502,6 +502,8 @@ Tasks:
   in `src/components/nodes/workflow/DependencyEnvironmentStatusPanel.svelte`.
   Resolved environment reference display now lives in
   `src/components/nodes/workflow/DependencyEnvironmentRefPanel.svelte`.
+  Binding selection and structured override form rendering now lives in
+  `src/components/nodes/workflow/DependencyEnvironmentBindingsPanel.svelte`.
 - Split `pantograph-uniffi` and `pantograph-rustler` facades by exported surface
   family while preserving public names.
 
