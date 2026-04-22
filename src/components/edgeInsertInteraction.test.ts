@@ -8,6 +8,7 @@ import {
   createEdgeInsertPreviewState,
   findEdgeInsertHitTarget,
   getCommittableEdgeInsertPreview,
+  isEdgeInsertPreviewRequestCurrent,
   sampleClosestEdgeDistance,
   setEdgeInsertHoverTarget,
   updateEdgeInsertHitPoint,
@@ -153,6 +154,55 @@ test('getCommittableEdgeInsertPreview requires a matching resolved preview', () 
   assert.equal(
     getCommittableEdgeInsertPreview(setEdgeInsertPreviewRejected(resolvedState), 'embedding'),
     null,
+  );
+});
+
+test('isEdgeInsertPreviewRequestCurrent matches active request and preview identity', () => {
+  const state = setEdgeInsertPreviewPending(
+    setEdgeInsertHoverTarget(
+      createEdgeInsertPreviewState(),
+      {
+        edgeId: 'edge-1',
+        hitPoint: { x: 120, y: 40 },
+        distance: 12,
+      },
+      'embedding',
+      'rev-1',
+    ),
+  );
+
+  assert.equal(
+    isEdgeInsertPreviewRequestCurrent({
+      requestId: 2,
+      activeRequestId: 2,
+      state,
+      edgeId: 'edge-1',
+      nodeType: 'embedding',
+      graphRevision: 'rev-1',
+    }),
+    true,
+  );
+  assert.equal(
+    isEdgeInsertPreviewRequestCurrent({
+      requestId: 1,
+      activeRequestId: 2,
+      state,
+      edgeId: 'edge-1',
+      nodeType: 'embedding',
+      graphRevision: 'rev-1',
+    }),
+    false,
+  );
+  assert.equal(
+    isEdgeInsertPreviewRequestCurrent({
+      requestId: 2,
+      activeRequestId: 2,
+      state,
+      edgeId: 'edge-2',
+      nodeType: 'embedding',
+      graphRevision: 'rev-1',
+    }),
+    false,
   );
 });
 

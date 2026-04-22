@@ -18,7 +18,7 @@ architecture views on top of the shared editor.
 | `workflowContainerSelection.test.ts` | Unit coverage for app orchestration boundary keyboard action mapping and selection transitions. |
 | `workflowConnections.ts` | Computes app graph connection validation, graph-edge normalization, backend candidate projection, commit anchors, and revision selection. |
 | `workflowConnections.test.ts` | Unit coverage for app graph connection helper behavior. |
-| `edgeInsertInteraction.ts` | Computes palette edge-insert hover state, preview refresh decisions, and rendered-edge hit testing. |
+| `edgeInsertInteraction.ts` | Computes palette edge-insert hover state, preview refresh/staleness decisions, and rendered-edge hit testing. |
 | `workflowGraphSource.ts` | Resolves whether the app graph should render workflow store data or the architecture graph. |
 | `workflowGraphSource.test.ts` | Unit coverage for app graph source selection. |
 | `workflowMiniMap.ts` | Maps workflow node groups and backend categories to minimap colors. |
@@ -110,7 +110,8 @@ The app SvelteFlow node and edge registry lives in `workflowGraphTypes.ts` so
 Cut gesture state, line sampling, and overlay rendering come from the package
 `CutTool`; the app graph only owns the backend edge-deletion callback.
 Palette edge-insert hover projection, commit eligibility, preview edge flagging,
-and rendered-edge hit testing live in `edgeInsertInteraction.ts`.
+rendered-edge hit testing, and async preview request staleness checks live in
+`edgeInsertInteraction.ts`.
 Palette edge-insert marker rendering lives in
 `WorkflowEdgeInsertPreviewMarker.svelte`.
 Palette drag payload parsing, graph-mode eligibility, and graph-space drop
@@ -258,8 +259,8 @@ container bounds.
 - App cut gestures must delegate to the package `CutTool` so the package and app
   canvases share modifier, line-sampling, and overlay behavior.
 - `edgeInsertInteraction.ts` must keep rendered-edge hit testing, commit
-  eligibility, and preview flag projection DOM-light and covered by unit tests
-  before palette edge-insert behavior is changed.
+  eligibility, preview request staleness, and preview flag projection DOM-light
+  and covered by unit tests before palette edge-insert behavior is changed.
 - `workflowConnections.ts` must prefer active backend candidate intent when it
   matches the source anchor, then fall back to package port compatibility only
   when no active intent applies.

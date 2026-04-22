@@ -99,6 +99,7 @@
     createEdgeInsertPreviewState,
     findEdgeInsertHitTarget,
     getCommittableEdgeInsertPreview,
+    isEdgeInsertPreviewRequestCurrent,
     setEdgeInsertHoverTarget,
     setEdgeInsertPreviewPending,
     setEdgeInsertPreviewRejected,
@@ -489,12 +490,14 @@
         graphRevision,
       );
 
-      if (
-        requestId !== edgeInsertPreviewRequestId ||
-        edgeInsertPreview.edgeId !== hitTarget.edgeId ||
-        edgeInsertPreview.nodeType !== definition.node_type ||
-        edgeInsertPreview.graphRevision !== graphRevision
-      ) {
+      if (!isEdgeInsertPreviewRequestCurrent({
+        requestId,
+        activeRequestId: edgeInsertPreviewRequestId,
+        state: edgeInsertPreview,
+        edgeId: hitTarget.edgeId,
+        nodeType: definition.node_type,
+        graphRevision,
+      })) {
         return;
       }
 
@@ -505,12 +508,14 @@
 
       edgeInsertPreview = setEdgeInsertPreviewRejected(edgeInsertPreview, response.rejection);
     } catch (error) {
-      if (
-        requestId === edgeInsertPreviewRequestId &&
-        edgeInsertPreview.edgeId === hitTarget.edgeId &&
-        edgeInsertPreview.nodeType === definition.node_type &&
-        edgeInsertPreview.graphRevision === graphRevision
-      ) {
+      if (isEdgeInsertPreviewRequestCurrent({
+        requestId,
+        activeRequestId: edgeInsertPreviewRequestId,
+        state: edgeInsertPreview,
+        edgeId: hitTarget.edgeId,
+        nodeType: definition.node_type,
+        graphRevision,
+      })) {
         edgeInsertPreview = setEdgeInsertPreviewRejected(edgeInsertPreview);
       }
       console.error('[WorkflowGraph] Failed to preview edge insertion:', error);

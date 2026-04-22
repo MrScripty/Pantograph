@@ -157,6 +157,22 @@ export function setEdgeInsertPreviewRejected(
   };
 }
 
+export function isEdgeInsertPreviewRequestCurrent(params: {
+  requestId: number;
+  activeRequestId: number;
+  state: EdgeInsertPreviewState;
+  edgeId: string;
+  nodeType: string;
+  graphRevision: string;
+}): boolean {
+  return (
+    params.requestId === params.activeRequestId &&
+    params.state.edgeId === params.edgeId &&
+    params.state.nodeType === params.nodeType &&
+    params.state.graphRevision === params.graphRevision
+  );
+}
+
 export function getCommittableEdgeInsertPreview(
   state: EdgeInsertPreviewState,
   nodeType: string,

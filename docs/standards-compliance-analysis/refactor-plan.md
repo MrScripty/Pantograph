@@ -578,8 +578,9 @@ Tasks:
   App graph cut gesture state, line
   sampling, and overlay rendering now delegate to the package `CutTool`; the app
   graph keeps only the backend edge-deletion callback, and app edge-insert
-  geometry, commit eligibility, and preview flag projection helpers now live inside
-  `src/components/edgeInsertInteraction.ts`. App edge-insert preview marker
+  geometry, commit eligibility, async preview staleness checks, and preview flag
+  projection helpers now live inside `src/components/edgeInsertInteraction.ts`.
+  App edge-insert preview marker
   rendering now lives in `src/components/WorkflowEdgeInsertPreviewMarker.svelte`.
   Package workflow store graph query helpers for group extraction, group lookup,
   connected-node projection, and node bounds now live in
