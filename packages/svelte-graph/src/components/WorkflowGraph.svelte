@@ -71,13 +71,10 @@
     clearWorkflowConnectionDragInteraction,
     shouldClearWorkflowConnectionInteractionAfterConnectEnd,
   } from '../workflowConnectionInteraction.js';
-  import {
-    WORKFLOW_PALETTE_DRAG_END_EVENT,
-    WORKFLOW_PALETTE_DRAG_START_EVENT,
-  } from '../paletteDragState.js';
   import { resolveReconnectSourceAnchor } from '../reconnectInteraction.js';
   import { resolveWorkflowDragCursorUpdate } from '../workflowDragCursor.js';
   import { resolveWorkflowGraphInteractionState } from '../workflowGraphInteraction.js';
+  import { registerWorkflowGraphWindowListeners } from '../workflowGraphWindowListeners.js';
   import {
     resolveWorkflowGroupZoomTarget,
     resolveWorkflowNodeClick,
@@ -220,20 +217,16 @@
 
   // Initialize node definitions on mount
   onMount(async () => {
-    window.addEventListener('keydown', handleWindowKeyDown, true);
-    window.addEventListener(WORKFLOW_PALETTE_DRAG_START_EVENT, handleWorkflowPaletteDragStart);
-    window.addEventListener(WORKFLOW_PALETTE_DRAG_END_EVENT, handleWorkflowPaletteDragEnd);
-    window.addEventListener('blur', handleWorkflowPaletteDragEnd);
+    const removeWindowListeners = registerWorkflowGraphWindowListeners(window, {
+      onKeyDown: handleWindowKeyDown,
+      onPaletteDragEnd: handleWorkflowPaletteDragEnd,
+      onPaletteDragStart: handleWorkflowPaletteDragStart,
+    });
 
     const definitions = await backend.getNodeDefinitions();
     nodeDefsStore.set(definitions);
 
-    return () => {
-      window.removeEventListener('keydown', handleWindowKeyDown, true);
-      window.removeEventListener(WORKFLOW_PALETTE_DRAG_START_EVENT, handleWorkflowPaletteDragStart);
-      window.removeEventListener(WORKFLOW_PALETTE_DRAG_END_EVENT, handleWorkflowPaletteDragEnd);
-      window.removeEventListener('blur', handleWorkflowPaletteDragEnd);
-    };
+    return removeWindowListeners;
   });
 
   onDestroy(() => {

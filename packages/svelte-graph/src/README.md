@@ -129,6 +129,9 @@ pane panning under the same conditions.
 Keep shared workflow graph viewport constants in `workflowGraphViewport.ts` so
 package and app graph components use the same fit, zoom, pan-activation, and
 minimap mask defaults.
+Keep shared workflow graph window listener lifecycle in
+`workflowGraphWindowListeners.ts` so package and app graph components register
+keyboard, palette drag, and blur cleanup events through one tested boundary.
 
 ## Alternatives Rejected
 - Keep connect/reconnect state management inline in both graph components.
@@ -177,6 +180,8 @@ minimap mask defaults.
   reusable so graph components only supply current UI state.
 - `workflowGraphViewport.ts` must keep static SvelteFlow viewport and minimap
   defaults reusable by package and app graph canvases.
+- `workflowGraphWindowListeners.ts` must own shared graph window listener
+  registration and cleanup ordering for package and app graph canvases.
 - Horseshoe insert feedback stays visible until the backend accepts the insert
   or the interaction is explicitly cleared; rejected inserts must not collapse
   into a silent no-op.

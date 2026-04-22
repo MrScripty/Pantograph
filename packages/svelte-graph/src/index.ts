@@ -289,6 +289,11 @@ export {
   WORKFLOW_GRAPH_MIN_ZOOM,
   WORKFLOW_GRAPH_PAN_ACTIVATION_KEY,
 } from './workflowGraphViewport.js';
+export { registerWorkflowGraphWindowListeners } from './workflowGraphWindowListeners.js';
+export type {
+  WorkflowGraphWindowListenerHandlers,
+  WorkflowGraphWindowListenerTarget,
+} from './workflowGraphWindowListeners.js';
 export { resolveWorkflowInsertPositionHint } from './workflowInsertPosition.js';
 export type {
   WorkflowInsertAnchorPosition,

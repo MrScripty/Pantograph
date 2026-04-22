@@ -158,6 +158,9 @@ Workflow graph interaction gating lives in `workflowGraphInteraction.ts`, while
 `WorkflowGraph.svelte` passes the projected editability state into SvelteFlow.
 Workflow graph viewport and minimap defaults live in `workflowGraphViewport.ts`,
 while `WorkflowGraph.svelte` passes the constants through to SvelteFlow.
+Workflow graph window listener setup lives in `workflowGraphWindowListeners.ts`,
+while `WorkflowGraph.svelte` supplies only the concrete keyboard and palette
+callbacks.
 
 ## Alternatives Rejected
 - Ask the backend on every pointer move.
@@ -196,6 +199,8 @@ while `WorkflowGraph.svelte` passes the constants through to SvelteFlow.
   package and app workflow graph canvases.
 - `workflowGraphViewport.ts` must own shared SvelteFlow viewport and minimap
   defaults for package and app workflow graph canvases.
+- `workflowGraphWindowListeners.ts` must own shared window listener registration
+  and cleanup ordering for package and app workflow graph canvases.
 - `horseshoeInsertFeedback.ts` must derive selector status labels from one
   feedback/session snapshot.
 - `workflowHorseshoeSessionUpdate.ts` must derive selector reset, feedback,

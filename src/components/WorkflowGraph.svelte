@@ -40,8 +40,6 @@
     supportsInsertFromConnectionDrag,
     syncHorseshoeDisplay,
     applyWorkflowGraphMutationResponse,
-    WORKFLOW_PALETTE_DRAG_END_EVENT,
-    WORKFLOW_PALETTE_DRAG_START_EVENT,
     WORKFLOW_GRAPH_DEFAULT_EDGE_OPTIONS,
     resolveWorkflowGraphInteractionState,
     WORKFLOW_GRAPH_FIT_VIEW_OPTIONS,
@@ -49,6 +47,7 @@
     WORKFLOW_GRAPH_MINIMAP_MASK_COLOR,
     WORKFLOW_GRAPH_MIN_ZOOM,
     WORKFLOW_GRAPH_PAN_ACTIVATION_KEY,
+    registerWorkflowGraphWindowListeners,
     CutTool,
     HorseshoeDebugOverlay,
     type ConnectionDragState,
@@ -294,20 +293,16 @@
 
   // Initialize node definitions on mount
   onMount(async () => {
-    window.addEventListener('keydown', handleWindowKeyDown, true);
-    window.addEventListener(WORKFLOW_PALETTE_DRAG_START_EVENT, handleWorkflowPaletteDragStart);
-    window.addEventListener(WORKFLOW_PALETTE_DRAG_END_EVENT, handleWorkflowPaletteDragEnd);
-    window.addEventListener('blur', handleWorkflowPaletteDragEnd);
+    const removeWindowListeners = registerWorkflowGraphWindowListeners(window, {
+      onKeyDown: handleWindowKeyDown,
+      onPaletteDragEnd: handleWorkflowPaletteDragEnd,
+      onPaletteDragStart: handleWorkflowPaletteDragStart,
+    });
 
     const definitions = await workflowService.getNodeDefinitions();
     nodeDefinitions.set(definitions);
 
-    return () => {
-      window.removeEventListener('keydown', handleWindowKeyDown, true);
-      window.removeEventListener(WORKFLOW_PALETTE_DRAG_START_EVENT, handleWorkflowPaletteDragStart);
-      window.removeEventListener(WORKFLOW_PALETTE_DRAG_END_EVENT, handleWorkflowPaletteDragEnd);
-      window.removeEventListener('blur', handleWorkflowPaletteDragEnd);
-    };
+    return removeWindowListeners;
   });
 
   onDestroy(() => {

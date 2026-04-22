@@ -167,6 +167,9 @@ the same edit, drag, selection, reconnect, and pane-panning conditions.
 Workflow graph viewport and minimap defaults now come from package
 `workflowGraphViewport.ts` constants so app and package canvases share the same
 fit, zoom, pan-activation, and minimap mask defaults.
+Workflow graph window listener lifecycle now comes from the package
+`registerWorkflowGraphWindowListeners` helper so app and package canvases share
+the same keyboard, palette drag, and blur cleanup registration.
 Mouse/touch pointer projection now comes from the package
 `workflowPointerPosition.ts` helper; the app graph only supplies the active
 container bounds.
@@ -284,6 +287,9 @@ container bounds.
 - App graph SvelteFlow viewport and minimap defaults must use package
   `workflowGraphViewport.ts` constants so zoom and minimap presentation cannot
   drift from the package graph.
+- App graph window listener lifecycle must use the package
+  `registerWorkflowGraphWindowListeners` helper so keyboard and palette-drag
+  cleanup cannot drift from the package graph.
 - App graph pointer coordinate handling must use the package pointer-position
   resolver so mouse/touch fallback behavior stays aligned with the package
   graph.
