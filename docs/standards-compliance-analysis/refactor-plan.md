@@ -498,7 +498,9 @@ Tasks:
   parsing, patch merging, patch mutation, and patch lookup helpers live in
   `src/components/nodes/workflow/dependencyEnvironmentOverrides.ts`; display
   badge/activity helpers live in
-  `src/components/nodes/workflow/dependencyEnvironmentDisplay.ts`; and
+  `src/components/nodes/workflow/dependencyEnvironmentDisplay.ts`; connected
+  upstream model, requirement, and manual override input projection lives in
+  `src/components/nodes/workflow/dependencyEnvironmentSources.ts`; and
   `dependencyEnvironmentState.ts` remains as a stable re-export surface, with
   unit coverage in `dependencyEnvironmentState.test.ts`, reducing the component to
   UI state, backend actions, and rendering. The activity log panel and auto-scroll

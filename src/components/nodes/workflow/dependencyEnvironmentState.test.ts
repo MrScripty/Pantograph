@@ -13,6 +13,7 @@ import {
   mergeOverridePatches,
   parseOverridePatches,
   renderDependencyActivityEvent,
+  resolveDependencyEnvironmentUpstreamState,
   upsertExtraIndexUrls,
   upsertStringOverrideField,
 } from './dependencyEnvironmentState.ts';
@@ -224,4 +225,69 @@ test('buildDependencyEnvironmentActionPayload projects upstream model and overri
   assert.equal(payload?.modelId, 'model-a');
   assert.deepEqual(payload?.selectedBindingIds, ['binding-a']);
   assert.equal(payload?.dependencyOverridePatches?.length, 1);
+});
+
+test('resolveDependencyEnvironmentUpstreamState projects connected model and override inputs', () => {
+  const requirements = {
+    model_id: 'model-a',
+    platform_key: 'linux-x86_64',
+    backend_key: 'llama_cpp',
+    dependency_contract_version: 1,
+    validation_state: 'resolved' as const,
+    validation_errors: [],
+    bindings: [],
+    selected_binding_ids: ['binding-a'],
+  };
+  const state = resolveDependencyEnvironmentUpstreamState(
+    'dependency-node',
+    [
+      {
+        id: 'model-node',
+        data: {
+          modelPath: '/models/model.gguf',
+          model_id: 'model-a',
+          model_type: 'embedding',
+          taskTypePrimary: 'embed',
+          backendKey: 'llama_cpp',
+          platform_context: { os: 'linux' },
+          dependency_requirements: requirements,
+        },
+      },
+      {
+        id: 'override-node',
+        data: {
+          output: JSON.stringify([
+            {
+              contract_version: 1,
+              binding_id: 'binding-a',
+              scope: 'binding',
+              fields: { python_executable: '/usr/bin/python3' },
+            },
+          ]),
+        },
+      },
+    ],
+    [
+      {
+        source: 'model-node',
+        sourceHandle: 'model_path',
+        target: 'dependency-node',
+        targetHandle: 'model_path',
+      },
+      {
+        source: 'override-node',
+        sourceHandle: 'output',
+        target: 'dependency-node',
+        targetHandle: 'manual_overrides',
+      },
+    ],
+  );
+
+  assert.equal(state.modelPath, '/models/model.gguf');
+  assert.equal(state.modelId, 'model-a');
+  assert.equal(state.taskType, 'embed');
+  assert.equal(state.backendKey, 'llama_cpp');
+  assert.equal(state.requirements, requirements);
+  assert.equal(state.manualOverrides.length, 1);
+  assert.equal(state.manualOverrides[0].fields.python_executable, '/usr/bin/python3');
 });

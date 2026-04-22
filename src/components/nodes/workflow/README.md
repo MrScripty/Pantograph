@@ -21,6 +21,7 @@ to the workflow graph runtime instead of being spread across generic canvas code
 | `dependencyEnvironmentActions.ts` | Builds backend action payloads from upstream model state and dependency override selections. |
 | `dependencyEnvironmentDisplay.ts` | Formats dependency badges, backend codes, and activity-log events. |
 | `dependencyEnvironmentOverrides.ts` | Parses, merges, looks up, and mutates dependency override patches. |
+| `dependencyEnvironmentSources.ts` | Resolves connected upstream model, requirement, and manual override inputs from workflow graph state. |
 | `dependencyEnvironmentState.ts` | Re-exports the dependency environment helper modules for stable component and test imports. |
 | `dependencyEnvironmentState.test.ts` | Unit coverage for dependency environment override parsing, merge, lookup, and label helpers. |
 | `dependencyEnvironmentTypes.ts` | Defines dependency environment frontend contracts that mirror backend payloads. |
@@ -81,10 +82,11 @@ workflow stores.
 `DependencyEnvironmentNode.svelte` keeps UI state and backend actions in the
 component, while dependency contracts and pure override state helpers live in
 `dependencyEnvironmentTypes.ts`, `dependencyEnvironmentActions.ts`,
-`dependencyEnvironmentOverrides.ts`, and `dependencyEnvironmentDisplay.ts` so
-payload projection, parsing, merge, and formatting behavior can be tested without
-mounting the node. `dependencyEnvironmentState.ts` remains as a stable re-export
-surface for component and test imports.
+`dependencyEnvironmentOverrides.ts`, `dependencyEnvironmentDisplay.ts`, and
+`dependencyEnvironmentSources.ts` so payload projection, graph-input projection,
+parsing, merge, and formatting behavior can be tested without mounting the node.
+`dependencyEnvironmentState.ts` remains as a stable re-export surface for
+component and test imports.
 The activity log panel lives in `DependencyEnvironmentActivityLog.svelte` so
 scroll handling and copyable log styling stay separate from dependency action
 state.

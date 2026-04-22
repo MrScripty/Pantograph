@@ -16,8 +16,8 @@
     isPatchTarget,
     matchesDependencyActivityEvent,
     mergeOverridePatches,
-    parseOverridePatches,
     renderDependencyActivityEvent,
+    resolveDependencyEnvironmentUpstreamState,
     upsertExtraIndexUrls,
     upsertStringOverrideField,
     type DependencyActivityEvent,
@@ -72,84 +72,15 @@
 
   const MAX_ACTIVITY_LOG_LINES = 200;
 
-  let modelSourceNode = $derived.by(() => {
-    const edge = $edges.find((e) => e.target === id && e.targetHandle === 'model_path');
-    if (!edge) return null;
-    return $nodes.find((n) => n.id === edge.source) ?? null;
-  });
-
-  let requirementsSourceNode = $derived.by(() => {
-    const edge = $edges.find((e) => e.target === id && e.targetHandle === 'dependency_requirements');
-    if (!edge) return null;
-    return $nodes.find((n) => n.id === edge.source) ?? null;
-  });
-
-  let manualOverridesSourceEdge = $derived.by(() => {
-    return $edges.find((e) => e.target === id && e.targetHandle === 'manual_overrides') ?? null;
-  });
-
-  let manualOverridesSourceNode = $derived.by(() => {
-    if (!manualOverridesSourceEdge) return null;
-    return $nodes.find((n) => n.id === manualOverridesSourceEdge.source) ?? null;
-  });
-
-  let upstreamModelPath = $derived(
-    (modelSourceNode?.data?.modelPath as string | undefined) ??
-      (modelSourceNode?.data?.model_path as string | undefined) ??
-      null
-  );
-  let upstreamModelId = $derived(
-    (modelSourceNode?.data?.model_id as string | undefined) ??
-      (modelSourceNode?.data?.modelId as string | undefined) ??
-      null
-  );
-  let upstreamModelType = $derived(
-    (modelSourceNode?.data?.model_type as string | undefined) ??
-      (modelSourceNode?.data?.modelType as string | undefined) ??
-      null
-  );
-  let upstreamTaskType = $derived(
-    (modelSourceNode?.data?.task_type_primary as string | undefined) ??
-      (modelSourceNode?.data?.taskTypePrimary as string | undefined) ??
-      null
-  );
-  let upstreamBackendKey = $derived(
-    (modelSourceNode?.data?.backend_key as string | undefined) ??
-      (modelSourceNode?.data?.backendKey as string | undefined) ??
-      null
-  );
-  let upstreamPlatformContext = $derived(
-    (modelSourceNode?.data?.platform_context as Record<string, string> | undefined) ??
-      (modelSourceNode?.data?.platformContext as Record<string, string> | undefined) ??
-      null
-  );
-  let upstreamRequirements = $derived(
-    ((requirementsSourceNode?.data?.dependency_requirements as ModelDependencyRequirements | undefined) ??
-      (modelSourceNode?.data?.dependency_requirements as ModelDependencyRequirements | undefined) ??
-      null)
-  );
-
-  let upstreamManualOverrides = $derived.by(() => {
-    if (!manualOverridesSourceNode || !manualOverridesSourceEdge) return [] as DependencyOverridePatchV1[];
-    const sourceData = (manualOverridesSourceNode.data as Record<string, unknown>) ?? {};
-    const sourceHandle = manualOverridesSourceEdge.sourceHandle ?? '';
-    const candidates: unknown[] = [];
-    if (sourceHandle.length > 0) candidates.push(sourceData[sourceHandle]);
-    candidates.push(
-      sourceData.manual_overrides,
-      sourceData.manualOverrides,
-      sourceData.dependency_override_patches,
-      sourceData.dependencyOverridePatches,
-      sourceData.output,
-      sourceData.value,
-      sourceData.json
-    );
-    for (const candidate of candidates) {
-      const parsed = parseOverridePatches(candidate);
-      if (parsed.length > 0) return parsed;
-    }
-    return [] as DependencyOverridePatchV1[];
-  });
+  let upstreamState = $derived(resolveDependencyEnvironmentUpstreamState(id, $nodes, $edges));
+  let upstreamModelPath = $derived(upstreamState.modelPath);
+  let upstreamModelId = $derived(upstreamState.modelId);
+  let upstreamModelType = $derived(upstreamState.modelType);
+  let upstreamTaskType = $derived(upstreamState.taskType);
+  let upstreamBackendKey = $derived(upstreamState.backendKey);
+  let upstreamPlatformContext = $derived(upstreamState.platformContext);
+  let upstreamRequirements = $derived(upstreamState.requirements);
+  let upstreamManualOverrides = $derived(upstreamState.manualOverrides);
 
   let effectiveManualOverrides = $derived.by(() =>
     mergeOverridePatches(upstreamManualOverrides, manualOverrides)
