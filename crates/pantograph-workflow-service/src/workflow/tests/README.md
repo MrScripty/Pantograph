@@ -18,6 +18,7 @@ can stay reviewable as more tests are split.
 | `session_capacity.rs` | Loaded runtime capacity and runtime rebalance tests for host-selected, affinity-preserving, shared-model, and shared-backend unload choices. |
 | `session_execution.rs` | Workflow session create/run/close, run-option propagation, and runtime retention-hint tests. |
 | `session_queue.rs` | Session queue item metadata, admission outcome, warm reuse, queue-position, and starvation protection tests. |
+| `session_runtime_preflight.rs` | Session runtime preflight cache invalidation and keep-alive preflight failure tests. |
 | `workflow_io.rs` | Workflow I/O discovery and validation tests for bindable input/output nodes and port contracts. |
 | `workflow_preflight.rs` | Workflow preflight facade tests for required inputs, target validation, technical-fit decisions, and override normalization. |
 | `workflow_run.rs` | Generic workflow run facade tests for host outputs, timeout cancellation, runtime readiness, input validation, and output-target enforcement. |
@@ -82,6 +83,7 @@ cargo test -p pantograph-workflow-service workflow::tests::contracts
 cargo test -p pantograph-workflow-service workflow::tests::session_admission
 cargo test -p pantograph-workflow-service workflow::tests::session_capacity
 cargo test -p pantograph-workflow-service workflow::tests::session_execution
+cargo test -p pantograph-workflow-service workflow::tests::session_runtime_preflight
 cargo test -p pantograph-workflow-service workflow_get_scheduler_snapshot
 cargo test -p pantograph-workflow-service workflow_session_queue
 cargo test -p pantograph-workflow-service workflow_get_io
@@ -96,6 +98,7 @@ cargo test -p pantograph-workflow-service workflow::tests::contracts
 cargo test -p pantograph-workflow-service workflow::tests::session_admission
 cargo test -p pantograph-workflow-service workflow::tests::session_capacity
 cargo test -p pantograph-workflow-service workflow::tests::session_execution
+cargo test -p pantograph-workflow-service workflow::tests::session_runtime_preflight
 cargo test -p pantograph-workflow-service workflow_get_scheduler_snapshot
 cargo test -p pantograph-workflow-service workflow_session_queue
 cargo test -p pantograph-workflow-service workflow_get_io

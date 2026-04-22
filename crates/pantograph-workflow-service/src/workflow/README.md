@@ -90,7 +90,7 @@ runtime readiness, session-runtime workflows, and the root facade test module.
 - Workflow I/O schema handling needs to support a second bindable-origin model.
 - `workflow.rs` facade decomposition exposes these helpers through a narrower
   public module structure.
-- More `workflow/tests.rs` behavior areas need extraction into
+- Remaining `workflow/tests.rs` behavior areas need extraction into
   `workflow/tests/` modules after production facade decomposition is complete.
 
 ## Dependencies

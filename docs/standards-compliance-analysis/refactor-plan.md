@@ -356,8 +356,10 @@ Tasks:
   coverage now lives in `workflow/tests/session_execution.rs`. Session runtime
   capacity and rebalance coverage now lives in
   `workflow/tests/session_capacity.rs`. Runtime capacity/admission wait
-  coverage now lives in `workflow/tests/session_admission.rs`, continuing the
-  behavior-area split for the extracted test module.
+  coverage now lives in `workflow/tests/session_admission.rs`. Session runtime
+  preflight cache and keep-alive preflight failure coverage now lives in
+  `workflow/tests/session_runtime_preflight.rs`, continuing the behavior-area
+  split for the extracted test module.
 - Split `crates/pantograph-embedded-runtime/src/lib.rs` into runtime host,
   workflow sessions, registry lifecycle, diagnostics projection, model deps,
   and test modules.

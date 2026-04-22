@@ -65,7 +65,9 @@ Workflow DTO serialization and error-envelope coverage now lives in
 coverage now lives in `workflow/tests/session_execution.rs`. Session runtime
 capacity and rebalance coverage now lives in `workflow/tests/session_capacity.rs`.
 Runtime capacity/admission wait coverage now lives in
-`workflow/tests/session_admission.rs`.
+`workflow/tests/session_admission.rs`. Session runtime preflight cache and
+keep-alive preflight failure coverage now lives in
+`workflow/tests/session_runtime_preflight.rs`.
 Session creation and queued session run methods now live behind the facade in
 the workflow session execution API helper.
 Session status, queue inspection, scheduler snapshot, cancellation, and
