@@ -344,8 +344,9 @@ Tasks:
   `workflow/session_lifecycle_api.rs`. The root workflow facade test module now
   lives in `workflow/tests.rs`, reducing `workflow.rs` to the production facade
   shell. Scheduler snapshot facade coverage now lives in
-  `workflow/tests/scheduler_snapshot.rs`, starting the behavior-area split for
-  the extracted test module.
+  `workflow/tests/scheduler_snapshot.rs`, and session queue item/admission
+  coverage now lives in `workflow/tests/session_queue.rs`, continuing the
+  behavior-area split for the extracted test module.
 - Split `crates/pantograph-embedded-runtime/src/lib.rs` into runtime host,
   workflow sessions, registry lifecycle, diagnostics projection, model deps,
   and test modules.

@@ -53,7 +53,9 @@ API helper.
 Service construction, capacity-limit configuration, diagnostics-provider setup,
 and the session-store guard now live in the workflow service configuration
 helper. The root workflow facade tests now live in `workflow/tests.rs`; scheduler
-snapshot facade coverage now lives in `workflow/tests/scheduler_snapshot.rs`.
+snapshot facade coverage now lives in `workflow/tests/scheduler_snapshot.rs`,
+and session queue item/admission coverage now lives in
+`workflow/tests/session_queue.rs`.
 Session creation and queued session run methods now live behind the facade in
 the workflow session execution API helper.
 Session status, queue inspection, scheduler snapshot, cancellation, and
