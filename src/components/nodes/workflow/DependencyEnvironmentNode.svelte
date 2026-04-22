@@ -3,6 +3,7 @@
   import BaseNode from '../BaseNode.svelte';
   import DependencyEnvironmentActivityLog from './DependencyEnvironmentActivityLog.svelte';
   import DependencyEnvironmentBindingsPanel from './DependencyEnvironmentBindingsPanel.svelte';
+  import DependencyEnvironmentModeControls from './DependencyEnvironmentModeControls.svelte';
   import DependencyEnvironmentRefPanel from './DependencyEnvironmentRefPanel.svelte';
   import DependencyEnvironmentStatusPanel from './DependencyEnvironmentStatusPanel.svelte';
   import type { NodeDefinition } from '../../../services/workflow/types';
@@ -501,26 +502,7 @@
           onInstall={installDependencies}
         />
 
-        <div class="flex gap-1 text-[10px]">
-          <button
-            type="button"
-            class="px-2 py-0.5 rounded transition-colors {mode === 'auto'
-              ? 'bg-cyan-600/30 text-cyan-300'
-              : 'text-neutral-500 hover:text-neutral-300'}"
-            onclick={() => setMode('auto')}
-          >
-            Auto
-          </button>
-          <button
-            type="button"
-            class="px-2 py-0.5 rounded transition-colors {mode === 'manual'
-              ? 'bg-cyan-600/30 text-cyan-300'
-              : 'text-neutral-500 hover:text-neutral-300'}"
-            onclick={() => setMode('manual')}
-          >
-            Manual
-          </button>
-        </div>
+        <DependencyEnvironmentModeControls {mode} onSetMode={setMode} />
 
         {#if dependencyRequirements && dependencyRequirements.bindings.length > 0}
           <DependencyEnvironmentBindingsPanel

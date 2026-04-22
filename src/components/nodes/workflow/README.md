@@ -14,6 +14,7 @@ to the workflow graph runtime instead of being spread across generic canvas code
 | `DiffusionInferenceNode.svelte` | Shows execution and dependency state for process-backed diffusion image generation. |
 | `DependencyEnvironmentActivityLog.svelte` | Renders the dependency environment activity log and owns log auto-scroll behavior. |
 | `DependencyEnvironmentBindingsPanel.svelte` | Renders binding selection, manual override summary controls, and per-requirement override fields. |
+| `DependencyEnvironmentModeControls.svelte` | Renders the dependency environment automatic/manual mode selector. |
 | `DependencyEnvironmentNode.svelte` | Presents dependency resolution, check, install, activity, and override controls for model-backed environment setup. |
 | `DependencyEnvironmentRefPanel.svelte` | Renders the resolved dependency environment reference state, environment id, and Python executable. |
 | `DependencyEnvironmentStatusPanel.svelte` | Renders dependency state badges, status messages, and command buttons for dependency actions. |
@@ -88,6 +89,9 @@ The resolved environment reference display lives in
 Binding selection and structured override form controls live in
 `DependencyEnvironmentBindingsPanel.svelte`, while the parent owns state
 mutation callbacks and persistence.
+The automatic/manual mode selector lives in
+`DependencyEnvironmentModeControls.svelte`, keeping mode rendering separate from
+node persistence.
 
 ## Alternatives Rejected
 - Reset audio output state only by remounting the workflow view.
@@ -123,6 +127,8 @@ mutation callbacks and persistence.
   invoking backend APIs directly.
 - `DependencyEnvironmentBindingsPanel.svelte` emits form and selection callbacks
   without writing node data directly.
+- `DependencyEnvironmentModeControls.svelte` emits mode changes without writing
+  node data directly.
 - Image and media preview controls must expose accessible names even when the
   visible content is an image or icon rather than text.
 
