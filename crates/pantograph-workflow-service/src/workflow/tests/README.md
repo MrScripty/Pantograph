@@ -16,6 +16,7 @@ can stay reviewable as more tests are split.
 | `session_queue.rs` | Session queue item metadata, admission outcome, warm reuse, queue-position, and starvation protection tests. |
 | `workflow_io.rs` | Workflow I/O discovery and validation tests for bindable input/output nodes and port contracts. |
 | `workflow_preflight.rs` | Workflow preflight facade tests for required inputs, target validation, technical-fit decisions, and override normalization. |
+| `workflow_run.rs` | Generic workflow run facade tests for host outputs, timeout cancellation, runtime readiness, input validation, and output-target enforcement. |
 
 ## Problem
 `workflow/tests.rs` remains too large to review efficiently. Moving every test
@@ -78,6 +79,7 @@ cargo test -p pantograph-workflow-service workflow_session_queue
 cargo test -p pantograph-workflow-service workflow_get_io
 cargo test -p pantograph-workflow-service workflow_preflight
 cargo test -p pantograph-workflow-service workflow::tests::runtime_preflight
+cargo test -p pantograph-workflow-service workflow::tests::workflow_run
 ```
 
 ## Testing
@@ -87,4 +89,5 @@ cargo test -p pantograph-workflow-service workflow_session_queue
 cargo test -p pantograph-workflow-service workflow_get_io
 cargo test -p pantograph-workflow-service workflow_preflight
 cargo test -p pantograph-workflow-service workflow::tests::runtime_preflight
+cargo test -p pantograph-workflow-service workflow::tests::workflow_run
 ```

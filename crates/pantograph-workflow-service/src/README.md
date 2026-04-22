@@ -58,7 +58,8 @@ and session queue item/admission coverage now lives in
 `workflow/tests/session_queue.rs`. Workflow I/O discovery and validation
 coverage now lives in `workflow/tests/workflow_io.rs`, and workflow preflight
 coverage now lives in `workflow/tests/workflow_preflight.rs`. Runtime preflight
-policy coverage now lives in `workflow/tests/runtime_preflight.rs`.
+policy coverage now lives in `workflow/tests/runtime_preflight.rs`. Generic
+workflow run facade coverage now lives in `workflow/tests/workflow_run.rs`.
 Session creation and queued session run methods now live behind the facade in
 the workflow session execution API helper.
 Session status, queue inspection, scheduler snapshot, cancellation, and
