@@ -71,6 +71,7 @@
     clearWorkflowConnectionDragInteraction,
     shouldClearWorkflowConnectionInteractionAfterConnectEnd,
   } from '../workflowConnectionInteraction.js';
+  import { collectSelectedNodeIds } from '../workflowSelection.js';
   import { resolveReconnectSourceAnchor } from '../reconnectInteraction.js';
   import { resolveWorkflowDragCursorUpdate } from '../workflowDragCursor.js';
   import { resolveWorkflowGraphInteractionState } from '../workflowGraphInteraction.js';
@@ -298,7 +299,7 @@
   }
 
   function handleSelectionChange({ nodes: selectedNodes }: { nodes: Node[]; edges: Edge[] }) {
-    selectedNodeIdsStore.set(selectedNodes.map((node) => node.id));
+    selectedNodeIdsStore.set(collectSelectedNodeIds(selectedNodes));
   }
 
   function applyHorseshoeSession(nextSession: HorseshoeDragSessionState) {

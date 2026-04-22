@@ -40,6 +40,7 @@
     supportsInsertFromConnectionDrag,
     syncHorseshoeDisplay,
     applyWorkflowGraphMutationResponse,
+    collectSelectedNodeIds,
     WORKFLOW_GRAPH_DEFAULT_EDGE_OPTIONS,
     resolveWorkflowGraphInteractionState,
     WORKFLOW_GRAPH_FIT_VIEW_OPTIONS,
@@ -231,7 +232,7 @@
   }
 
   function handleSelectionChange({ nodes: selectedNodes }: { nodes: Node[]; edges: Edge[] }) {
-    selectedNodeIds.set(selectedNodes.map((node) => node.id));
+    selectedNodeIds.set(collectSelectedNodeIds(selectedNodes));
 
     if (selectedNodes.length > 0) {
       containerSelected = false;

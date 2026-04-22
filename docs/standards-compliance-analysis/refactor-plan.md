@@ -605,6 +605,9 @@ Tasks:
   Package and app graph keyboard, palette drag, and blur listener lifecycle now
   reuse `packages/svelte-graph/src/workflowGraphWindowListeners.ts`, with unit
   coverage in `packages/svelte-graph/src/workflowGraphWindowListeners.test.ts`.
+  Package and app selected-node id projection now reuse
+  `packages/svelte-graph/src/workflowSelection.ts`, with existing unit coverage
+  in `packages/svelte-graph/src/workflowSelection.test.ts`.
   App palette drag eligibility, drag payload parsing, and graph-space drop
   projection now live in `src/components/workflowPaletteDrag.ts`, with unit
   coverage in `src/components/workflowPaletteDrag.test.ts`. App orchestration

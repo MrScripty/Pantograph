@@ -161,6 +161,8 @@ while `WorkflowGraph.svelte` passes the constants through to SvelteFlow.
 Workflow graph window listener setup lives in `workflowGraphWindowListeners.ts`,
 while `WorkflowGraph.svelte` supplies only the concrete keyboard and palette
 callbacks.
+Workflow graph selected-node id projection lives in `workflowSelection.ts`,
+while `WorkflowGraph.svelte` only writes the projected ids into the store.
 
 ## Alternatives Rejected
 - Ask the backend on every pointer move.
@@ -201,6 +203,8 @@ callbacks.
   defaults for package and app workflow graph canvases.
 - `workflowGraphWindowListeners.ts` must own shared window listener registration
   and cleanup ordering for package and app workflow graph canvases.
+- `workflowSelection.ts` must own selected-node id projection for package and app
+  workflow graph selection handlers.
 - `horseshoeInsertFeedback.ts` must derive selector status labels from one
   feedback/session snapshot.
 - `workflowHorseshoeSessionUpdate.ts` must derive selector reset, feedback,

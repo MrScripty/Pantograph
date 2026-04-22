@@ -132,6 +132,9 @@ minimap mask defaults.
 Keep shared workflow graph window listener lifecycle in
 `workflowGraphWindowListeners.ts` so package and app graph components register
 keyboard, palette drag, and blur cleanup events through one tested boundary.
+Keep selected-node id projection in `workflowSelection.ts` so package and app
+graph components update selection stores from the same SvelteFlow selection
+snapshot semantics.
 
 ## Alternatives Rejected
 - Keep connect/reconnect state management inline in both graph components.
@@ -182,6 +185,8 @@ keyboard, palette drag, and blur cleanup events through one tested boundary.
   defaults reusable by package and app graph canvases.
 - `workflowGraphWindowListeners.ts` must own shared graph window listener
   registration and cleanup ordering for package and app graph canvases.
+- `workflowSelection.ts` must own selected-node id projection for package and app
+  graph selection handlers.
 - Horseshoe insert feedback stays visible until the backend accepts the insert
   or the interaction is explicitly cleared; rejected inserts must not collapse
   into a silent no-op.
