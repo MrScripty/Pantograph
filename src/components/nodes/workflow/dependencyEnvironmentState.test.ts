@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 
 import {
   buildDependencyEnvironmentActionPayload,
+  appendDependencyActivityLogLine,
+  applyDependencyEnvironmentActionNodeData,
+  buildDependencyEnvironmentNodeData,
+  createDependencyEnvironmentNodeDataState,
   dependencyCodeLabel,
   dependencyBadgeFor,
   formatDependencyActivityLine,
@@ -17,6 +21,73 @@ import {
   upsertExtraIndexUrls,
   upsertStringOverrideField,
 } from './dependencyEnvironmentState.ts';
+
+test('dependency environment node state helpers initialize persist and apply backend data', () => {
+  const requirements = {
+    model_id: 'model-a',
+    platform_key: 'linux-x86_64',
+    backend_key: 'llama_cpp',
+    dependency_contract_version: 1,
+    validation_state: 'resolved' as const,
+    validation_errors: [],
+    bindings: [],
+    selected_binding_ids: ['binding-a'],
+  };
+
+  const initialState = createDependencyEnvironmentNodeDataState({
+    mode: 'manual',
+    selected_binding_ids: ['binding-a'],
+    dependency_requirements: requirements,
+    activity_log: ['[12:00:00] resolve started'],
+  });
+
+  assert.equal(initialState.mode, 'manual');
+  assert.deepEqual(initialState.selectedBindingIds, ['binding-a']);
+  assert.equal(initialState.dependencyRequirements, requirements);
+
+  assert.deepEqual(buildDependencyEnvironmentNodeData(initialState), {
+    mode: 'manual',
+    selected_binding_ids: ['binding-a'],
+    dependency_requirements: requirements,
+    dependency_status: null,
+    environment_ref: null,
+    manual_overrides: [],
+    dependency_override_patches: [],
+    activity_log: ['[12:00:00] resolve started'],
+  });
+
+  const nextState = applyDependencyEnvironmentActionNodeData(initialState, {
+    mode: 'auto',
+    selected_binding_ids: ['binding-b'],
+    environment_ref: {
+      contract_version: 1,
+      env_id: 'env-a',
+      state: 'ready',
+    },
+  });
+
+  assert.equal(nextState.mode, 'auto');
+  assert.deepEqual(nextState.selectedBindingIds, ['binding-b']);
+  assert.equal(nextState.dependencyRequirements, requirements);
+  assert.equal(nextState.environmentRef?.env_id, 'env-a');
+});
+
+test('appendDependencyActivityLogLine formats and trims retained log lines', () => {
+  assert.deepEqual(
+    appendDependencyActivityLogLine(['[12:00:00] old'], '   ', '12:00:01', 2),
+    ['[12:00:00] old'],
+  );
+
+  assert.deepEqual(
+    appendDependencyActivityLogLine(
+      ['[12:00:00] first', '[12:00:01] second'],
+      'third',
+      '12:00:02',
+      2,
+    ),
+    ['[12:00:01] second', '[12:00:02] third'],
+  );
+});
 
 test('parseOverridePatches accepts valid JSON patch arrays and drops invalid entries', () => {
   const patches = parseOverridePatches(

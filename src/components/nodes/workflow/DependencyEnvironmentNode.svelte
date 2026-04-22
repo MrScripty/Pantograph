@@ -9,8 +9,11 @@
   import type { NodeDefinition } from '../../../services/workflow/types';
   import {
     buildDependencyEnvironmentActionPayload,
+    appendDependencyActivityLogLine,
+    applyDependencyEnvironmentActionNodeData,
+    buildDependencyEnvironmentNodeData,
+    createDependencyEnvironmentNodeDataState,
     dependencyBadgeFor,
-    formatDependencyActivityLine,
     getPatchFrom,
     hasOverrideFields,
     isPatchTarget,
@@ -23,6 +26,7 @@
     type DependencyActivityEvent,
     type DependencyEnvironmentActionRequest,
     type DependencyEnvironmentActionResponse,
+    type DependencyEnvironmentNodeDataState,
     type DependencyOverridePatchV1,
     type EnvironmentRef,
     type ModelDependencyRequirements,
@@ -51,23 +55,17 @@
 
   let { id, data, selected = false }: Props = $props();
 
-  let mode = $state<'auto' | 'manual'>(data.mode ?? 'auto');
-  let selectedBindingIds = $state<string[]>(
-    Array.isArray(data.selected_binding_ids) ? data.selected_binding_ids : []
-  );
+  const initialNodeState = createDependencyEnvironmentNodeDataState(data);
+
+  let mode = $state<'auto' | 'manual'>(initialNodeState.mode);
+  let selectedBindingIds = $state<string[]>(initialNodeState.selectedBindingIds);
   let dependencyRequirements = $state<ModelDependencyRequirements | null>(
-    (data.dependency_requirements as ModelDependencyRequirements | null) ?? null
+    initialNodeState.dependencyRequirements
   );
-  let dependencyStatus = $state<ModelDependencyStatus | null>(
-    (data.dependency_status as ModelDependencyStatus | null) ?? null
-  );
-  let environmentRef = $state<EnvironmentRef | null>((data.environment_ref as EnvironmentRef | null) ?? null);
-  let manualOverrides = $state<DependencyOverridePatchV1[]>(
-    Array.isArray(data.manual_overrides) ? (data.manual_overrides as DependencyOverridePatchV1[]) : []
-  );
-  let activityLog = $state<string[]>(
-    Array.isArray(data.activity_log) ? (data.activity_log as string[]) : []
-  );
+  let dependencyStatus = $state<ModelDependencyStatus | null>(initialNodeState.dependencyStatus);
+  let environmentRef = $state<EnvironmentRef | null>(initialNodeState.environmentRef);
+  let manualOverrides = $state<DependencyOverridePatchV1[]>(initialNodeState.manualOverrides);
+  let activityLog = $state<string[]>(initialNodeState.activityLog);
   let isBusy = $state(false);
 
   const MAX_ACTIVITY_LOG_LINES = 200;
@@ -103,17 +101,20 @@
 
   const dependencyBadge = $derived(dependencyBadgeFor(dependencyRequirements, dependencyStatus));
 
-  function persistNodeState() {
-    updateNodeData(id, {
+  function currentNodeState(): DependencyEnvironmentNodeDataState {
+    return {
       mode,
-      selected_binding_ids: selectedBindingIds,
-      dependency_requirements: dependencyRequirements,
-      dependency_status: dependencyStatus,
-      environment_ref: environmentRef,
-      manual_overrides: manualOverrides,
-      dependency_override_patches: manualOverrides,
-      activity_log: activityLog,
-    });
+      selectedBindingIds,
+      dependencyRequirements,
+      dependencyStatus,
+      environmentRef,
+      manualOverrides,
+      activityLog,
+    };
+  }
+
+  function persistNodeState() {
+    updateNodeData(id, buildDependencyEnvironmentNodeData(currentNodeState()));
   }
 
   function dependencyActionPayload(action: DependencyEnvironmentActionRequest['action']): DependencyEnvironmentActionRequest | null {
@@ -135,17 +136,12 @@
 
   function applyDependencyActionNodeData(nodeData: Record<string, unknown>) {
     updateNodeData(id, nodeData);
-    mode = (nodeData.mode as 'auto' | 'manual' | undefined) ?? mode;
-    selectedBindingIds = Array.isArray(nodeData.selected_binding_ids)
-      ? (nodeData.selected_binding_ids as string[])
-      : selectedBindingIds;
-    dependencyRequirements =
-      (nodeData.dependency_requirements as ModelDependencyRequirements | null | undefined) ??
-      dependencyRequirements;
-    dependencyStatus =
-      (nodeData.dependency_status as ModelDependencyStatus | null | undefined) ?? dependencyStatus;
-    environmentRef =
-      (nodeData.environment_ref as EnvironmentRef | null | undefined) ?? environmentRef;
+    const nextState = applyDependencyEnvironmentActionNodeData(currentNodeState(), nodeData);
+    mode = nextState.mode;
+    selectedBindingIds = nextState.selectedBindingIds;
+    dependencyRequirements = nextState.dependencyRequirements;
+    dependencyStatus = nextState.dependencyStatus;
+    environmentRef = nextState.environmentRef;
   }
 
   async function runDependencyEnvironmentAction(
@@ -175,10 +171,14 @@
   }
 
   function appendActivityLine(line: string) {
-    const formatted = formatDependencyActivityLine(line, activityTimestamp());
-    if (!formatted) return;
-    const next = [...activityLog, formatted];
-    activityLog = next.length > MAX_ACTIVITY_LOG_LINES ? next.slice(next.length - MAX_ACTIVITY_LOG_LINES) : next;
+    const next = appendDependencyActivityLogLine(
+      activityLog,
+      line,
+      activityTimestamp(),
+      MAX_ACTIVITY_LOG_LINES
+    );
+    if (next === activityLog) return;
+    activityLog = next;
     persistNodeState();
   }
 

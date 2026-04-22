@@ -20,6 +20,7 @@ to the workflow graph runtime instead of being spread across generic canvas code
 | `DependencyEnvironmentStatusPanel.svelte` | Renders dependency state badges, status messages, and command buttons for dependency actions. |
 | `dependencyEnvironmentActions.ts` | Builds backend action payloads from upstream model state and dependency override selections. |
 | `dependencyEnvironmentDisplay.ts` | Formats dependency badges, backend codes, and activity-log events. |
+| `dependencyEnvironmentNodeState.ts` | Projects dependency environment node-local state, persistence payloads, action responses, and retained activity logs. |
 | `dependencyEnvironmentOverrides.ts` | Parses, merges, looks up, and mutates dependency override patches. |
 | `dependencyEnvironmentSources.ts` | Resolves connected upstream model, requirement, and manual override inputs from workflow graph state. |
 | `dependencyEnvironmentState.ts` | Re-exports the dependency environment helper modules for stable component and test imports. |
@@ -82,9 +83,10 @@ workflow stores.
 `DependencyEnvironmentNode.svelte` keeps UI state and backend actions in the
 component, while dependency contracts and pure override state helpers live in
 `dependencyEnvironmentTypes.ts`, `dependencyEnvironmentActions.ts`,
-`dependencyEnvironmentOverrides.ts`, `dependencyEnvironmentDisplay.ts`, and
-`dependencyEnvironmentSources.ts` so payload projection, graph-input projection,
-parsing, merge, and formatting behavior can be tested without mounting the node.
+`dependencyEnvironmentNodeState.ts`, `dependencyEnvironmentOverrides.ts`,
+`dependencyEnvironmentDisplay.ts`, and `dependencyEnvironmentSources.ts` so
+payload projection, node-local state projection, graph-input projection, parsing,
+merge, and formatting behavior can be tested without mounting the node.
 `dependencyEnvironmentState.ts` remains as a stable re-export surface for
 component and test imports.
 The activity log panel lives in `DependencyEnvironmentActivityLog.svelte` so
@@ -130,6 +132,9 @@ node persistence.
 - `DependencyEnvironmentNode.svelte` must keep dependency override parsing and
   merge semantics aligned with the backend patch contract in
   `dependencyEnvironmentOverrides.ts`.
+- `dependencyEnvironmentNodeState.ts` owns dependency node persistence payloads
+  and backend action response projection; the Svelte component must not duplicate
+  that state-shape mapping inline.
 - `DependencyEnvironmentActivityLog.svelte` owns log auto-scroll behavior and
   must not trigger graph drag or pan gestures.
 - `DependencyEnvironmentStatusPanel.svelte` emits command callbacks without

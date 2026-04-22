@@ -545,6 +545,10 @@ Tasks:
   `src/components/nodes/workflow/DependencyEnvironmentBindingsPanel.svelte`.
   Automatic/manual mode selector rendering now lives in
   `src/components/nodes/workflow/DependencyEnvironmentModeControls.svelte`.
+  Node-local state initialization, persistence payload projection, backend action
+  response projection, and retained activity-log trimming now live in
+  `src/components/nodes/workflow/dependencyEnvironmentNodeState.ts`, with unit
+  coverage in `dependencyEnvironmentState.test.ts`.
 - Split `pantograph-uniffi` and `pantograph-rustler` facades by exported surface
   family while preserving public names.
 
