@@ -80,6 +80,10 @@ export function formatDependencyActivityLine(line: string, timestamp: string): s
   return `[${timestamp}] ${normalized}`;
 }
 
+export function formatDependencyActivityTimestamp(date: Date): string {
+  return date.toLocaleTimeString('en-US', { hour12: false });
+}
+
 export function matchesDependencyActivityEvent(
   payload: DependencyActivityEvent,
   upstreamModelPath: string | null

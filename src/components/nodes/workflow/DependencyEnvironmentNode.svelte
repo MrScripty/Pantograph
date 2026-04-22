@@ -20,6 +20,8 @@
     countDependencyRequirementPatches,
     dependencyBadgeFor,
     filterDependencyEnvironmentBindings,
+    formatDependencyActivityTimestamp,
+    formatDependencyOverrideUpdatedAt,
     hasDependencyBindingOverrideFields,
     hasDependencyRequirementOverrideFields,
     isDependencyEnvironmentBindingSelected,
@@ -31,6 +33,7 @@
     renderDependencyActivityEvent,
     resolveDependencyEnvironmentUpstreamState,
     runDependencyEnvironmentActionRequest,
+    readDependencyOverrideInputValue,
     setupDependencyEnvironmentActivityListener,
     toggleDependencyEnvironmentAllBindings,
     toggleDependencyEnvironmentBindingSelection,
@@ -160,7 +163,7 @@
   }
 
   function activityTimestamp(): string {
-    return new Date().toLocaleTimeString('en-US', { hour12: false });
+    return formatDependencyActivityTimestamp(new Date());
   }
 
   function appendActivityLine(line: string) {
@@ -197,7 +200,7 @@
       requirementName,
       field,
       rawValue,
-      new Date().toISOString()
+      formatDependencyOverrideUpdatedAt(new Date())
     );
     persistNodeState();
   }
@@ -212,7 +215,7 @@
       bindingId,
       requirementName,
       rawValue,
-      new Date().toISOString()
+      formatDependencyOverrideUpdatedAt(new Date())
     );
     persistNodeState();
   }
@@ -256,8 +259,13 @@
   }
 
   function handleBindingPythonExecutableChange(bindingId: string, event: Event) {
-    const target = event.target as HTMLInputElement;
-    setStringOverrideField(bindingId, 'binding', undefined, 'python_executable', target.value);
+    setStringOverrideField(
+      bindingId,
+      'binding',
+      undefined,
+      'python_executable',
+      readDependencyOverrideInputValue(event)
+    );
   }
 
   function handleRequirementFieldChange(
@@ -266,8 +274,13 @@
     field: Exclude<StringOverrideField, 'python_executable'>,
     event: Event
   ) {
-    const target = event.target as HTMLInputElement;
-    setStringOverrideField(bindingId, 'requirement', requirementName, field, target.value);
+    setStringOverrideField(
+      bindingId,
+      'requirement',
+      requirementName,
+      field,
+      readDependencyOverrideInputValue(event)
+    );
   }
 
   function handleRequirementExtraUrlsChange(
@@ -275,8 +288,7 @@
     requirementName: string,
     event: Event
   ) {
-    const target = event.target as HTMLInputElement;
-    setExtraIndexUrls(bindingId, requirementName, target.value);
+    setExtraIndexUrls(bindingId, requirementName, readDependencyOverrideInputValue(event));
   }
 
   function clearRequirementOverrides(bindingId: string, requirementName: string) {

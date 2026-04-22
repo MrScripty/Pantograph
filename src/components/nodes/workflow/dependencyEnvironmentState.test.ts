@@ -18,6 +18,8 @@ import {
   formatDependencyEnvironmentActionError,
   formatDependencyEnvironmentListenerError,
   formatDependencyActivityLine,
+  formatDependencyActivityTimestamp,
+  formatDependencyOverrideUpdatedAt,
   getPatchFrom,
   hasDependencyBindingOverrideFields,
   hasDependencyRequirementOverrideFields,
@@ -28,6 +30,7 @@ import {
   mergeOverridePatches,
   parseOverridePatches,
   readDependencyExtraIndexUrls,
+  readDependencyOverrideInputValue,
   readDependencyStringOverrideField,
   renderDependencyActivityEvent,
   resolveDependencyEnvironmentUpstreamState,
@@ -396,6 +399,10 @@ test('dependency activity helpers filter and render matching backend events', ()
   assert.equal(renderDependencyActivityEvent(event), 'install | binding-a | torch: Installing torch');
   assert.equal(formatDependencyActivityLine(' done ', '12:00:00'), '[12:00:00] done');
   assert.equal(formatDependencyActivityLine(' ', '12:00:00'), null);
+  assert.equal(
+    formatDependencyActivityTimestamp(new Date(2026, 3, 22, 13, 14, 15)),
+    '13:14:15',
+  );
 });
 
 test('setupDependencyEnvironmentActivityListener wires matching events and auto run', async () => {
@@ -470,6 +477,18 @@ test('setupDependencyEnvironmentActivityListener preserves listener errors for l
 });
 
 test('upsertStringOverrideField adds updates and removes empty patches', () => {
+  assert.equal(
+    formatDependencyOverrideUpdatedAt(new Date('2026-04-22T00:00:00.000Z')),
+    '2026-04-22T00:00:00.000Z',
+  );
+  assert.equal(
+    readDependencyOverrideInputValue(
+      { target: { value: ' /usr/bin/python3 ' } } as unknown as Event,
+    ),
+    ' /usr/bin/python3 ',
+  );
+  assert.equal(readDependencyOverrideInputValue({ target: {} } as unknown as Event), '');
+
   const withValue = upsertStringOverrideField(
     [],
     'binding-a',

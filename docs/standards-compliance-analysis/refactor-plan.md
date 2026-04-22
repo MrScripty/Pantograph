@@ -680,7 +680,10 @@ Tasks:
   `src/components/nodes/workflow/dependencyEnvironmentSelection.ts`; override
   display reads, scope clears, summary counts, and local override checks now live in
   `src/components/nodes/workflow/dependencyEnvironmentOverrides.ts`, with unit
-  coverage in `dependencyEnvironmentState.test.ts`.
+  coverage in `dependencyEnvironmentState.test.ts`. Dependency override form
+  value projection and override timestamp formatting also live in
+  `dependencyEnvironmentOverrides.ts`, while dependency activity timestamp
+  formatting lives in `dependencyEnvironmentDisplay.ts`.
 - Split `pantograph-uniffi` and `pantograph-rustler` facades by exported surface
   family while preserving public names.
 

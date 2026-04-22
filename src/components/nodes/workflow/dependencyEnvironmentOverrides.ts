@@ -178,6 +178,15 @@ export function readDependencyExtraIndexUrls(
   return urls.join(', ');
 }
 
+export function readDependencyOverrideInputValue(event: Event): string {
+  const target = event.target as { value?: unknown } | null;
+  return typeof target?.value === 'string' ? target.value : '';
+}
+
+export function formatDependencyOverrideUpdatedAt(date: Date): string {
+  return date.toISOString();
+}
+
 export function clearDependencyBindingOverrides(
   patches: DependencyOverridePatchV1[],
   bindingId: string,
