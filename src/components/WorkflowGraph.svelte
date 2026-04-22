@@ -21,6 +21,7 @@
     buildWorkflowHorseshoeOpenContext,
     formatWorkflowHorseshoeOpenRequestTrace,
     formatWorkflowHorseshoeSessionTrace,
+    resolveWorkflowHorseshoeSelectionSnapshot,
     resolveWorkflowDragCursorUpdate,
     resolveWorkflowGroupZoomTarget,
     resolveWorkflowInsertPositionHint,
@@ -1141,12 +1142,13 @@
       return;
     }
 
-    const action = resolveHorseshoeKeyboardAction(e, {
-      displayState: horseshoeSession.displayState,
-      dragActive: horseshoeSession.dragActive,
-      pending: horseshoeInsertFeedback.pending,
-      hasSelection: Boolean($connectionIntent?.insertableNodeTypes[horseshoeSelectedIndex]),
+    const selection = resolveWorkflowHorseshoeSelectionSnapshot({
+      session: horseshoeSession,
+      feedback: horseshoeInsertFeedback,
+      items: $connectionIntent?.insertableNodeTypes,
+      selectedIndex: horseshoeSelectedIndex,
     });
+    const action = resolveHorseshoeKeyboardAction(e, selection.keyboardContext);
 
     if (action.preventDefault) {
       e.preventDefault();
@@ -1159,9 +1161,8 @@
         return;
       case 'confirm-selection': {
         horseshoeLastTrace = e.key === 'Enter' ? 'keydown:enter' : 'keydown:space';
-        const candidate = $connectionIntent?.insertableNodeTypes[horseshoeSelectedIndex];
-        if (candidate) {
-          void commitInsertSelection(candidate);
+        if (selection.selectedCandidate) {
+          void commitInsertSelection(selection.selectedCandidate);
         }
         return;
       }

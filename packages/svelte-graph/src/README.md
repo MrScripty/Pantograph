@@ -18,6 +18,8 @@ fork core canvas behavior.
 | `horseshoeInvocation.ts` | Shared `Space` open/confirm decisions, pointer-anchor freeze rules, and user-facing blocked-reason strings for horseshoe invocation. |
 | `workflowHorseshoeOpenContext.ts` | Shared projection from drag/session/intent state into the horseshoe open-request context. |
 | `workflowHorseshoeOpenContext.test.ts` | Unit coverage for connect, reconnect, and idle horseshoe open-context projection. |
+| `workflowHorseshoeSelection.ts` | Shared projection from horseshoe state and current items into keyboard context plus selected candidate. |
+| `workflowHorseshoeSelection.test.ts` | Unit coverage for selected, out-of-range, and missing horseshoe candidate snapshots. |
 | `stores/` | Package store factories for workflow, session, and view state. |
 | `types/` | Stable TypeScript contracts for graph, backend, and group APIs. |
 | `workflowEventOwnership.ts` | Projection helper for backend-provided workflow execution ids, active run identity, and stale-event relevance. |
@@ -81,6 +83,9 @@ components.
 Keep horseshoe open-context projection in `workflowHorseshoeOpenContext.ts` so
 package and app graph components share the same editability, intent, anchor,
 and connect-vs-reconnect insert gating before invoking the session controller.
+Keep horseshoe selection snapshots in `workflowHorseshoeSelection.ts` so package
+and app keyboard handlers share how pending state and selected candidates are
+projected before confirming an insert.
 Keep horseshoe trace formatting in `workflowHorseshoeTrace.ts` so package and
 app graph diagnostics use the same state labels while components own when to
 record them.
@@ -110,6 +115,8 @@ package and app graph components.
 - `workflowHorseshoeOpenContext.ts` must derive `supportsInsert` from
   `connectionDragState.ts` so reconnect drags cannot silently diverge from
   package connect-drag semantics.
+- `workflowHorseshoeSelection.ts` must keep keyboard `hasSelection` and the
+  confirmed candidate derived from the same selected-index snapshot.
 - `workflowHorseshoeTrace.ts` must remain formatting-only and must not decide
   whether a horseshoe session should open or close.
 - Horseshoe insert feedback stays visible until the backend accepts the insert

@@ -192,6 +192,8 @@ export type {
   HorseshoeKeyboardAction,
   HorseshoeKeyboardContext,
 } from './workflowHorseshoeKeyboard.js';
+export { resolveWorkflowHorseshoeSelectionSnapshot } from './workflowHorseshoeSelection.js';
+export type { WorkflowHorseshoeSelectionSnapshot } from './workflowHorseshoeSelection.js';
 export {
   formatWorkflowHorseshoeOpenRequestTrace,
   formatWorkflowHorseshoeSessionTrace,

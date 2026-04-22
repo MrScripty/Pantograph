@@ -20,6 +20,8 @@ shared node presentation rules live outside the Pantograph app shell.
 | `../workflowHorseshoeKeyboard.test.ts` | Unit coverage for horseshoe keyboard policy decisions. |
 | `../workflowHorseshoeOpenContext.ts` | Projects editability, drag-session, connection-drag, and intent state into horseshoe open context. |
 | `../workflowHorseshoeOpenContext.test.ts` | Unit coverage for horseshoe open-context projection. |
+| `../workflowHorseshoeSelection.ts` | Projects horseshoe item selection into keyboard context and the candidate to confirm. |
+| `../workflowHorseshoeSelection.test.ts` | Unit coverage for horseshoe selection snapshots. |
 | `../workflowHorseshoeTrace.ts` | Formats horseshoe diagnostic trace labels for session and open-request state. |
 | `../workflowHorseshoeTrace.test.ts` | Unit coverage for horseshoe trace formatting. |
 | `../workflowInsertPosition.ts` | Projects horseshoe insert anchors into backend insert position hints. |
@@ -116,6 +118,9 @@ Drag-cursor horseshoe decisions live in `workflowDragCursor.ts`, while
 Horseshoe open-context projection lives in `workflowHorseshoeOpenContext.ts`,
 while `WorkflowGraph.svelte` supplies the current stores and interaction state
 before invoking the drag-session controller.
+Horseshoe selection snapshots live in `workflowHorseshoeSelection.ts`, while
+`WorkflowGraph.svelte` maps the resolved keyboard action to confirmation or
+query side effects.
 Horseshoe trace labels live in `workflowHorseshoeTrace.ts`, while
 `WorkflowGraph.svelte` owns when interaction state changes should record a new
 trace string.
@@ -146,6 +151,8 @@ container element.
 - `workflowHorseshoeOpenContext.ts` must keep open-request context projection
   aligned with connection-drag insert support before the session controller is
   invoked.
+- `workflowHorseshoeSelection.ts` must derive keyboard selection availability
+  and confirmation candidate from the same item/index snapshot.
 - `workflowHorseshoeTrace.ts` must keep package/app trace labels aligned for
   blocked, pending, open, and idle horseshoe states.
 - Rejected horseshoe inserts must remain visible in-context and refresh

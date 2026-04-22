@@ -37,6 +37,7 @@
     isEditableKeyboardTarget,
     resolveHorseshoeKeyboardAction,
   } from '../workflowHorseshoeKeyboard.js';
+  import { resolveWorkflowHorseshoeSelectionSnapshot } from '../workflowHorseshoeSelection.js';
   import {
     formatWorkflowHorseshoeOpenRequestTrace,
     formatWorkflowHorseshoeSessionTrace,
@@ -498,12 +499,13 @@
       return;
     }
 
-    const action = resolveHorseshoeKeyboardAction(event, {
-      displayState: horseshoeSession.displayState,
-      dragActive: horseshoeSession.dragActive,
-      pending: horseshoeInsertFeedback.pending,
-      hasSelection: Boolean($connectionIntentStore?.insertableNodeTypes[horseshoeSelectedIndex]),
+    const selection = resolveWorkflowHorseshoeSelectionSnapshot({
+      session: horseshoeSession,
+      feedback: horseshoeInsertFeedback,
+      items: $connectionIntentStore?.insertableNodeTypes,
+      selectedIndex: horseshoeSelectedIndex,
     });
+    const action = resolveHorseshoeKeyboardAction(event, selection.keyboardContext);
 
     if (action.preventDefault) {
       event.preventDefault();
@@ -516,9 +518,8 @@
         return;
       case 'confirm-selection': {
         horseshoeLastTrace = event.key === 'Enter' ? 'keydown:enter' : 'keydown:space';
-        const candidate = $connectionIntentStore?.insertableNodeTypes[horseshoeSelectedIndex];
-        if (candidate) {
-          void commitInsertSelection(candidate);
+        if (selection.selectedCandidate) {
+          void commitInsertSelection(selection.selectedCandidate);
         }
         return;
       }
