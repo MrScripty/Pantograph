@@ -201,8 +201,13 @@ export type {
   WorkflowHorseshoeSessionViewState,
 } from './workflowHorseshoeSessionUpdate.js';
 export {
+  dispatchWorkflowHorseshoeKeyboardAction,
   isEditableKeyboardTarget,
   resolveHorseshoeKeyboardAction,
+} from './workflowHorseshoeKeyboard.js';
+export type {
+  WorkflowHorseshoeKeyboardActionHandlers,
+  WorkflowHorseshoeKeyboardSelection,
 } from './workflowHorseshoeKeyboard.js';
 export type {
   HorseshoeKeyboardAction,

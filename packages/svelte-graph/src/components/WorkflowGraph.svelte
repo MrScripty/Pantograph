@@ -29,8 +29,8 @@
     InsertableNodeTypeCandidate,
   } from '../types/workflow.js';
   import {
+    dispatchWorkflowHorseshoeKeyboardAction,
     isEditableKeyboardTarget,
-    resolveHorseshoeKeyboardAction,
   } from '../workflowHorseshoeKeyboard.js';
   import {
     normalizeWorkflowHorseshoeSelectedIndex,
@@ -498,39 +498,21 @@
       items: $connectionIntentStore?.insertableNodeTypes,
       selectedIndex: horseshoeSelectedIndex,
     });
-    const action = resolveHorseshoeKeyboardAction(event, selection.keyboardContext);
-
-    if (action.preventDefault) {
-      event.preventDefault();
-    }
-
-    switch (action.type) {
-      case 'request-open':
-        horseshoeLastTrace = 'keydown:space';
-        requestHorseshoeOpen();
-        return;
-      case 'confirm-selection': {
-        horseshoeLastTrace = event.key === 'Enter' ? 'keydown:enter' : 'keydown:space';
-        if (selection.selectedCandidate) {
-          void commitInsertSelection(selection.selectedCandidate);
-        }
-        return;
-      }
-      case 'close':
-        closeHorseshoeSelector();
-        return;
-      case 'rotate-selection':
-        rotateInsertSelection(action.delta);
-        return;
-      case 'remove-query-character':
-        updateInsertQuery(horseshoeQuery.slice(0, -1));
-        return;
-      case 'append-query-character':
-        updateInsertQuery(`${horseshoeQuery}${action.character}`);
-        return;
-      case 'noop':
-        return;
-    }
+    dispatchWorkflowHorseshoeKeyboardAction({
+      event,
+      query: horseshoeQuery,
+      selection,
+      handlers: {
+        onClose: closeHorseshoeSelector,
+        onConfirmSelection: (candidate) => void commitInsertSelection(candidate),
+        onQueryUpdate: updateInsertQuery,
+        onRequestOpen: requestHorseshoeOpen,
+        onRotateSelection: rotateInsertSelection,
+        onTrace: (trace) => {
+          horseshoeLastTrace = trace;
+        },
+      },
+    });
   }
 
   function checkValidConnection(connection: Edge | Connection): boolean {

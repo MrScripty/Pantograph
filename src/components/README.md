@@ -179,6 +179,9 @@ share the same duplicate-suppression and message formatting rules.
 Workflow graph horseshoe selector and debug overlay rendering now comes from the
 package `WorkflowGraphHorseshoeLayer` component so app and package canvases
 share the same horseshoe UI composition and selector status labels.
+Workflow graph horseshoe keyboard action dispatch now comes from the package
+`dispatchWorkflowHorseshoeKeyboardAction` helper so app and package canvases
+share the same trace, query, rotation, close/open, and confirm behavior.
 Mouse/touch pointer projection now comes from the package
 `workflowPointerPosition.ts` helper; the app graph only supplies the active
 container bounds.
@@ -308,6 +311,9 @@ container bounds.
 - App graph horseshoe selector and debug overlay rendering must use the package
   `WorkflowGraphHorseshoeLayer` component so horseshoe UI composition cannot
   drift from the package graph.
+- App graph horseshoe keyboard action dispatch must use the package
+  `dispatchWorkflowHorseshoeKeyboardAction` helper so trace, query, and
+  selection behavior cannot drift from the package graph.
 - App graph pointer coordinate handling must use the package pointer-position
   resolver so mouse/touch fallback behavior stays aligned with the package
   graph.

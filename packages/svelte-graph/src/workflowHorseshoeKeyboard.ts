@@ -7,11 +7,12 @@ type KeyboardTargetLike = {
 };
 
 type KeyboardEventLike = {
-  key: string;
+  altKey?: boolean;
   code?: string;
   ctrlKey?: boolean;
+  key: string;
   metaKey?: boolean;
-  altKey?: boolean;
+  preventDefault?: () => void;
 };
 
 export type HorseshoeKeyboardAction =
@@ -28,6 +29,20 @@ export interface HorseshoeKeyboardContext {
   dragActive: boolean;
   pending: boolean;
   hasSelection: boolean;
+}
+
+export interface WorkflowHorseshoeKeyboardSelection<TCandidate> {
+  keyboardContext: HorseshoeKeyboardContext;
+  selectedCandidate: TCandidate | null;
+}
+
+export interface WorkflowHorseshoeKeyboardActionHandlers<TCandidate> {
+  onClose: () => void;
+  onConfirmSelection: (candidate: TCandidate) => void;
+  onQueryUpdate: (query: string) => void;
+  onRequestOpen: () => void;
+  onRotateSelection: (delta: -1 | 1) => void;
+  onTrace: (trace: string) => void;
 }
 
 const NOOP_ACTION: HorseshoeKeyboardAction = {
@@ -124,4 +139,47 @@ export function resolveHorseshoeKeyboardAction(
   }
 
   return NOOP_ACTION;
+}
+
+export function dispatchWorkflowHorseshoeKeyboardAction<TCandidate>(params: {
+  event: KeyboardEventLike;
+  handlers: WorkflowHorseshoeKeyboardActionHandlers<TCandidate>;
+  query: string;
+  selection: WorkflowHorseshoeKeyboardSelection<TCandidate>;
+}): HorseshoeKeyboardAction {
+  const action = resolveHorseshoeKeyboardAction(
+    params.event,
+    params.selection.keyboardContext,
+  );
+
+  if (action.preventDefault) {
+    params.event.preventDefault?.();
+  }
+
+  switch (action.type) {
+    case 'request-open':
+      params.handlers.onTrace('keydown:space');
+      params.handlers.onRequestOpen();
+      return action;
+    case 'confirm-selection':
+      params.handlers.onTrace(params.event.key === 'Enter' ? 'keydown:enter' : 'keydown:space');
+      if (params.selection.selectedCandidate) {
+        params.handlers.onConfirmSelection(params.selection.selectedCandidate);
+      }
+      return action;
+    case 'close':
+      params.handlers.onClose();
+      return action;
+    case 'rotate-selection':
+      params.handlers.onRotateSelection(action.delta);
+      return action;
+    case 'remove-query-character':
+      params.handlers.onQueryUpdate(params.query.slice(0, -1));
+      return action;
+    case 'append-query-character':
+      params.handlers.onQueryUpdate(`${params.query}${action.character}`);
+      return action;
+    case 'noop':
+      return action;
+  }
 }

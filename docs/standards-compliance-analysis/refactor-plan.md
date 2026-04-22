@@ -614,6 +614,9 @@ Tasks:
   Package and app horseshoe selector plus diagnostic overlay composition now
   reuse `packages/svelte-graph/src/components/WorkflowGraphHorseshoeLayer.svelte`,
   which also owns selector status label projection.
+  Package and app horseshoe keyboard action dispatch now reuse
+  `packages/svelte-graph/src/workflowHorseshoeKeyboard.ts`, with expanded unit
+  coverage in `packages/svelte-graph/src/workflowHorseshoeKeyboard.test.ts`.
   App palette drag eligibility, drag payload parsing, and graph-space drop
   projection now live in `src/components/workflowPaletteDrag.ts`, with unit
   coverage in `src/components/workflowPaletteDrag.test.ts`. App orchestration

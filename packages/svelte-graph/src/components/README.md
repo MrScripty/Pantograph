@@ -168,6 +168,8 @@ Workflow graph horseshoe blocked-reason log decisions live in
 `WorkflowGraphHorseshoeLayer.svelte` owns the shared horseshoe selector and
 debug overlay composition plus selector status labels; graph components provide
 state, candidates, and callbacks.
+Horseshoe keyboard action dispatch lives in `workflowHorseshoeKeyboard.ts`,
+while `WorkflowGraph.svelte` provides callbacks that mutate local graph state.
 
 ## Alternatives Rejected
 - Ask the backend on every pointer move.
@@ -214,6 +216,8 @@ state, candidates, and callbacks.
   for package and app workflow graph components.
 - `WorkflowGraphHorseshoeLayer.svelte` must remain rendering-only and must not
   call backend graph mutation APIs directly.
+- `workflowHorseshoeKeyboard.ts` must own keyboard action dispatch so package
+  and app graph components cannot drift on trace, query, and selection handling.
 - `horseshoeInsertFeedback.ts` must derive selector status labels from one
   feedback/session snapshot.
 - `workflowHorseshoeSessionUpdate.ts` must derive selector reset, feedback,

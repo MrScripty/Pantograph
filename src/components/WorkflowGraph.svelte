@@ -10,8 +10,8 @@
     createHorseshoeInsertFeedbackState,
     createHorseshoeDragSessionState,
     rejectHorseshoeInsertFeedback,
+    dispatchWorkflowHorseshoeKeyboardAction,
     isEditableKeyboardTarget,
-    resolveHorseshoeKeyboardAction,
     preserveConnectionIntentState,
     buildWorkflowHorseshoeOpenContext,
     clearWorkflowConnectionDragInteraction,
@@ -1140,39 +1140,21 @@
       items: $connectionIntent?.insertableNodeTypes,
       selectedIndex: horseshoeSelectedIndex,
     });
-    const action = resolveHorseshoeKeyboardAction(e, selection.keyboardContext);
-
-    if (action.preventDefault) {
-      e.preventDefault();
-    }
-
-    switch (action.type) {
-      case 'request-open':
-        horseshoeLastTrace = 'keydown:space';
-        requestHorseshoeOpen();
-        return;
-      case 'confirm-selection': {
-        horseshoeLastTrace = e.key === 'Enter' ? 'keydown:enter' : 'keydown:space';
-        if (selection.selectedCandidate) {
-          void commitInsertSelection(selection.selectedCandidate);
-        }
-        return;
-      }
-      case 'close':
-        closeHorseshoeSelector();
-        return;
-      case 'rotate-selection':
-        rotateInsertSelection(action.delta);
-        return;
-      case 'remove-query-character':
-        updateInsertQuery(horseshoeQuery.slice(0, -1));
-        return;
-      case 'append-query-character':
-        updateInsertQuery(`${horseshoeQuery}${action.character}`);
-        return;
-      case 'noop':
-        return;
-    }
+    dispatchWorkflowHorseshoeKeyboardAction({
+      event: e,
+      query: horseshoeQuery,
+      selection,
+      handlers: {
+        onClose: closeHorseshoeSelector,
+        onConfirmSelection: (candidate) => void commitInsertSelection(candidate),
+        onQueryUpdate: updateInsertQuery,
+        onRequestOpen: requestHorseshoeOpen,
+        onRotateSelection: rotateInsertSelection,
+        onTrace: (trace) => {
+          horseshoeLastTrace = trace;
+        },
+      },
+    });
   }
 
   function handlePaneMouseDown(e: MouseEvent) {
