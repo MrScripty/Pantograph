@@ -37,6 +37,10 @@
     resolveHorseshoeKeyboardAction,
   } from '../workflowHorseshoeKeyboard.js';
   import {
+    formatWorkflowHorseshoeOpenRequestTrace,
+    formatWorkflowHorseshoeSessionTrace,
+  } from '../workflowHorseshoeTrace.js';
+  import {
     clearHorseshoeInsertFeedback,
     createHorseshoeInsertFeedbackState,
     rejectHorseshoeInsertFeedback,
@@ -302,13 +306,7 @@
 
     const previousDisplayState = horseshoeSession.displayState;
     horseshoeSession = nextSession;
-    horseshoeLastTrace = [
-      'session',
-      nextSession.displayState,
-      nextSession.openRequested ? 'requested' : 'idle',
-      nextSession.blockedReason ?? 'clear',
-      nextSession.anchorPosition ? 'anchor' : 'no-anchor',
-    ].join(':');
+    horseshoeLastTrace = formatWorkflowHorseshoeSessionTrace(nextSession);
 
     if (nextSession.displayState === 'open' && previousDisplayState !== 'open') {
       horseshoeQuery = '';
@@ -385,14 +383,13 @@
   }
 
   function requestHorseshoeOpen() {
-    horseshoeLastTrace = [
-      'request-open',
-      horseshoeSession.dragActive ? 'drag' : 'idle',
-      connectionDragState.mode,
-      $connectionIntentStore ? 'intent' : 'no-intent',
-      `${$connectionIntentStore?.insertableNodeTypes.length ?? 0}-insertables`,
-      horseshoeSession.anchorPosition ? 'anchor' : 'no-anchor',
-    ].join(':');
+    horseshoeLastTrace = formatWorkflowHorseshoeOpenRequestTrace({
+      dragActive: horseshoeSession.dragActive,
+      connectionMode: connectionDragState.mode,
+      hasConnectionIntent: Boolean($connectionIntentStore),
+      insertableCount: $connectionIntentStore?.insertableNodeTypes.length ?? 0,
+      hasAnchorPosition: Boolean(horseshoeSession.anchorPosition),
+    });
     applyHorseshoeSession(requestHorseshoeDisplay(horseshoeSession, getHorseshoeOpenContext()));
   }
 

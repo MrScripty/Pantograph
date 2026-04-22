@@ -18,6 +18,8 @@ shared node presentation rules live outside the Pantograph app shell.
 | `../workflowDragCursor.test.ts` | Unit coverage for drag-cursor horseshoe decisions. |
 | `../workflowHorseshoeKeyboard.ts` | Resolves drag-time horseshoe keyboard events into component actions. |
 | `../workflowHorseshoeKeyboard.test.ts` | Unit coverage for horseshoe keyboard policy decisions. |
+| `../workflowHorseshoeTrace.ts` | Formats horseshoe diagnostic trace labels for session and open-request state. |
+| `../workflowHorseshoeTrace.test.ts` | Unit coverage for horseshoe trace formatting. |
 | `../workflowInsertPosition.ts` | Projects horseshoe insert anchors into backend insert position hints. |
 | `../workflowInsertPosition.test.ts` | Unit coverage for insert position projection. |
 | `../workflowMiniMap.ts` | Maps package workflow node groups and backend categories to minimap colors. |
@@ -103,6 +105,9 @@ while `WorkflowGraph.svelte` owns the backend insert call and interaction
 feedback lifecycle.
 Drag-cursor horseshoe decisions live in `workflowDragCursor.ts`, while
 `WorkflowGraph.svelte` applies the selected-index or session-state update.
+Horseshoe trace labels live in `workflowHorseshoeTrace.ts`, while
+`WorkflowGraph.svelte` owns when interaction state changes should record a new
+trace string.
 
 ## Alternatives Rejected
 - Ask the backend on every pointer move.
@@ -124,6 +129,8 @@ Drag-cursor horseshoe decisions live in `workflowDragCursor.ts`, while
   it can only affect item selection inside the existing anchored layout.
 - `workflowDragCursor.ts` must preserve that behavior by updating anchors only
   while the horseshoe display state allows pointer anchoring.
+- `workflowHorseshoeTrace.ts` must keep package/app trace labels aligned for
+  blocked, pending, open, and idle horseshoe states.
 - Rejected horseshoe inserts must remain visible in-context and refresh
   connection-intent candidates against the backend-returned revision instead of
   silently clearing the interaction.

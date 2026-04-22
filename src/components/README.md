@@ -130,6 +130,8 @@ stay aligned.
 Drag-cursor horseshoe anchor and selection decisions now come from the package
 `workflowDragCursor.ts` helper; the app graph only applies the resolved state
 change.
+Horseshoe diagnostic trace labels now come from the package
+`workflowHorseshoeTrace.ts` helper so package and app graph traces stay aligned.
 
 ## Alternatives Rejected
 - Replace the app graph entirely with the package component immediately.
@@ -210,6 +212,8 @@ change.
 - App graph drag-cursor behavior must use the package drag-cursor resolver so
   open-menu selection and hidden-menu anchor movement stay aligned with the
   package graph.
+- App graph horseshoe trace labels must use the package trace formatter instead
+  of composing parallel string formats inline.
 
 ## Revisit Triggers
 - The app graph fully converges with the package graph and can be deleted.

@@ -23,6 +23,8 @@ fork core canvas behavior.
 | `workflowConnections.test.ts` | Unit coverage for reusable connection helper behavior. |
 | `workflowGraphSync.ts` | Reference-based store-to-SvelteFlow synchronization decision helper. |
 | `workflowGraphSync.test.ts` | Unit coverage for SvelteFlow node and edge sync decisions. |
+| `workflowHorseshoeTrace.ts` | Shared trace-label formatting for horseshoe session and open-request state. |
+| `workflowHorseshoeTrace.test.ts` | Unit coverage for horseshoe trace formatting. |
 | `workflowInsertPosition.ts` | Shared horseshoe insert anchor-to-graph position projection helper. |
 | `workflowInsertPosition.test.ts` | Unit coverage for insert position projection. |
 | `workflowMiniMap.ts` | Shared minimap color projection for backend node categories and graph group nodes. |
@@ -72,6 +74,9 @@ contract before calling backend insert APIs.
 Keep drag-cursor horseshoe decisions in `workflowDragCursor.ts` so anchor
 updates and open-menu item selection stay aligned across package and app graph
 components.
+Keep horseshoe trace formatting in `workflowHorseshoeTrace.ts` so package and
+app graph diagnostics use the same state labels while components own when to
+record them.
 
 ## Alternatives Rejected
 - Keep connect/reconnect state management inline in both graph components.
@@ -92,6 +97,8 @@ components.
   as menu selection input instead of menu repositioning.
 - `workflowDragCursor.ts` owns that anchor-versus-selection decision and returns
   explicit side-effect decisions for graph components to apply.
+- `workflowHorseshoeTrace.ts` must remain formatting-only and must not decide
+  whether a horseshoe session should open or close.
 - Horseshoe insert feedback stays visible until the backend accepts the insert
   or the interaction is explicitly cleared; rejected inserts must not collapse
   into a silent no-op.

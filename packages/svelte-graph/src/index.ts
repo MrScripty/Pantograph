@@ -187,6 +187,10 @@ export type {
   HorseshoeKeyboardContext,
 } from './workflowHorseshoeKeyboard.js';
 export {
+  formatWorkflowHorseshoeOpenRequestTrace,
+  formatWorkflowHorseshoeSessionTrace,
+} from './workflowHorseshoeTrace.js';
+export {
   WORKFLOW_NODE_DOUBLE_CLICK_THRESHOLD_MS,
   isWorkflowGroupNode,
   resolveWorkflowGroupZoomTarget,
