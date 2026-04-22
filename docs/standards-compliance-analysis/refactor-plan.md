@@ -705,6 +705,9 @@ Tasks:
   Rustler orchestration store resource creation and JSON CRUD now live in
   `crates/pantograph-rustler/src/orchestration_store_nifs.rs`, while `lib.rs`
   preserves the exported orchestration NIF names as thin wrappers.
+  Rustler node registry, executor extension setup, and port-option query
+  behavior now live in `crates/pantograph-rustler/src/registry_nifs.rs`, while
+  `lib.rs` preserves the exported registry/extension NIF names as thin wrappers.
 
 Verification:
 - File-size scan shows extracted files below review thresholds or documented exceptions.

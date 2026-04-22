@@ -49,6 +49,7 @@ mod elixir_data_graph_executor;
 #[cfg(feature = "frontend-http")]
 mod frontend_http_nifs;
 mod orchestration_store_nifs;
+mod registry_nifs;
 mod resource_registration;
 mod resources;
 mod type_parsing_contract;
@@ -756,9 +757,7 @@ fn orchestration_store_remove(
 /// Create a new empty node registry.
 #[rustler::nif]
 fn node_registry_new() -> ResourceArc<NodeRegistryResource> {
-    ResourceArc::new(NodeRegistryResource {
-        registry: Arc::new(tokio::sync::RwLock::new(node_engine::NodeRegistry::new())),
-    })
+    registry_nifs::node_registry_new()
 }
 
 /// Register a node type with metadata in the registry.
@@ -770,23 +769,13 @@ fn node_registry_register(
     resource: ResourceArc<NodeRegistryResource>,
     metadata_json: String,
 ) -> NifResult<Atom> {
-    let metadata: node_engine::TaskMetadata = serde_json::from_str(&metadata_json)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
-
-    let mut registry = resource.registry.blocking_write();
-    registry.register_metadata(metadata);
-
-    Ok(atoms::ok())
+    registry_nifs::node_registry_register(resource, metadata_json)
 }
 
 /// List all registered node types and their metadata as JSON.
 #[rustler::nif]
 fn node_registry_list(resource: ResourceArc<NodeRegistryResource>) -> NifResult<String> {
-    let registry = resource.registry.blocking_read();
-    let metadata: Vec<&node_engine::TaskMetadata> = registry.all_metadata();
-
-    serde_json::to_string(&metadata)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e))))
+    registry_nifs::node_registry_list(resource)
 }
 
 /// Register all built-in node types from the workflow-nodes crate.
@@ -795,9 +784,7 @@ fn node_registry_list(resource: ResourceArc<NodeRegistryResource>) -> NifResult<
 /// `inventory::submit!()` in workflow-nodes and registers them as metadata-only.
 #[rustler::nif]
 fn node_registry_register_builtins(resource: ResourceArc<NodeRegistryResource>) -> NifResult<Atom> {
-    let mut registry = resource.registry.blocking_write();
-    registry.register_builtins();
-    Ok(atoms::ok())
+    registry_nifs::node_registry_register_builtins(resource)
 }
 
 // ============================================================================
@@ -810,13 +797,7 @@ fn node_registry_register_builtins(resource: ResourceArc<NodeRegistryResource>) 
 /// port options providers. Call `extensions_setup` to initialize them.
 #[rustler::nif]
 fn extensions_new() -> ResourceArc<ExtensionsResource> {
-    let runtime = tokio::runtime::Runtime::new().expect("tokio runtime");
-    ResourceArc::new(ExtensionsResource {
-        extensions: Arc::new(tokio::sync::RwLock::new(
-            node_engine::ExecutorExtensions::new(),
-        )),
-        runtime: Arc::new(runtime),
-    })
+    registry_nifs::extensions_new()
 }
 
 /// Initialize extensions with PumasApi model library access.
@@ -831,15 +812,7 @@ fn extensions_setup(
     resource: ResourceArc<ExtensionsResource>,
     library_path: Option<String>,
 ) -> NifResult<Atom> {
-    let path_buf = library_path.map(std::path::PathBuf::from);
-    let path_ref = path_buf.as_deref();
-
-    resource.runtime.block_on(async {
-        let mut ext = resource.extensions.write().await;
-        workflow_nodes::setup_extensions_with_path(&mut ext, path_ref).await;
-    });
-
-    Ok(atoms::ok())
+    registry_nifs::extensions_setup(resource, library_path)
 }
 
 /// Query available options for a node's port.
@@ -856,23 +829,13 @@ fn node_registry_query_port_options(
     port_id: String,
     query_json: String,
 ) -> NifResult<String> {
-    let query: node_engine::PortOptionsQuery = serde_json::from_str(&query_json)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("JSON parse error: {}", e))))?;
-
-    extensions_resource
-        .runtime
-        .block_on(async {
-            let registry = registry_resource.registry.read().await;
-            let ext = extensions_resource.extensions.read().await;
-            registry
-                .query_port_options(&node_type, &port_id, &query, &ext)
-                .await
-        })
-        .map_err(|e| rustler::Error::Term(Box::new(format!("query_port_options error: {}", e))))
-        .and_then(|result| {
-            serde_json::to_string(&result)
-                .map_err(|e| rustler::Error::Term(Box::new(format!("JSON error: {}", e))))
-        })
+    registry_nifs::node_registry_query_port_options(
+        registry_resource,
+        extensions_resource,
+        node_type,
+        port_id,
+        query_json,
+    )
 }
 
 // ============================================================================
