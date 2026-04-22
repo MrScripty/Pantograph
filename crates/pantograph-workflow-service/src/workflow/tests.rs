@@ -19,6 +19,7 @@ mod runtime_preflight;
 mod scheduler_snapshot;
 mod session_admission;
 mod session_capacity;
+mod session_capacity_limits;
 mod session_execution;
 mod session_queue;
 mod session_runtime_preflight;

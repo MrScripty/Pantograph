@@ -17,7 +17,8 @@ stay reviewable as more tests are split.
 | `runtime_preflight.rs` | Runtime preflight matching tests for selected runtime precedence, fallback readiness, backend aliases, and selected-version readiness context. |
 | `scheduler_snapshot.rs` | Scheduler snapshot facade tests covering workflow/edit-session snapshot shape, trace attribution, admission diagnostics, and runtime-registry diagnostics provider merging. |
 | `session_admission.rs` | Runtime capacity and runtime admission wait tests for queued session runs. |
-| `session_capacity.rs` | Session and loaded runtime capacity tests for limit errors, release after close, host-selected unloads, affinity preservation, and shared resource reuse. |
+| `session_capacity.rs` | Loaded runtime rebalance tests for host-selected unloads, affinity preservation, and shared resource reuse. |
+| `session_capacity_limits.rs` | Session and loaded runtime capacity limit/error tests, including release after close and pinned loaded-runtime capacity details. |
 | `session_execution.rs` | Workflow session create/run/close, run-option propagation, and runtime retention-hint tests. |
 | `session_queue.rs` | Session queue item metadata, admission outcome, warm reuse, queue-position, and starvation protection tests. |
 | `session_runtime_preflight.rs` | Session runtime preflight cache invalidation and keep-alive preflight failure tests. |
@@ -89,6 +90,7 @@ Run the scheduler snapshot behavior slice:
 cargo test -p pantograph-workflow-service workflow::tests::contracts
 cargo test -p pantograph-workflow-service workflow::tests::session_admission
 cargo test -p pantograph-workflow-service workflow::tests::session_capacity
+cargo test -p pantograph-workflow-service workflow::tests::session_capacity_limits
 cargo test -p pantograph-workflow-service workflow::tests::session_execution
 cargo test -p pantograph-workflow-service workflow::tests::session_runtime_preflight
 cargo test -p pantograph-workflow-service workflow::tests::session_runtime_state
@@ -107,6 +109,7 @@ cargo test -p pantograph-workflow-service workflow::tests::workflow_run
 cargo test -p pantograph-workflow-service workflow::tests::contracts
 cargo test -p pantograph-workflow-service workflow::tests::session_admission
 cargo test -p pantograph-workflow-service workflow::tests::session_capacity
+cargo test -p pantograph-workflow-service workflow::tests::session_capacity_limits
 cargo test -p pantograph-workflow-service workflow::tests::session_execution
 cargo test -p pantograph-workflow-service workflow::tests::session_runtime_preflight
 cargo test -p pantograph-workflow-service workflow::tests::session_runtime_state

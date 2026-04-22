@@ -360,8 +360,9 @@ Tasks:
   serialization and error-envelope coverage now lives in
   `workflow/tests/contracts.rs`. Workflow session execution and retention-hint
   coverage now lives in `workflow/tests/session_execution.rs`. Session and
-  runtime capacity limit, release, and rebalance coverage now lives in
-  `workflow/tests/session_capacity.rs`. Runtime capacity/admission wait
+  runtime capacity limit/error coverage now lives in
+  `workflow/tests/session_capacity_limits.rs`, while runtime capacity rebalance
+  coverage lives in `workflow/tests/session_capacity.rs`. Runtime capacity/admission wait
   coverage now lives in `workflow/tests/session_admission.rs`. Session runtime
   preflight cache and keep-alive preflight failure coverage now lives in
   `workflow/tests/session_runtime_preflight.rs`. Session runtime loaded-state

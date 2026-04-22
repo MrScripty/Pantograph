@@ -67,6 +67,8 @@ runtime readiness, session-runtime workflows, and the root facade test module.
   and service shape remain reviewable; behavior-specific test modules live
   under `workflow/tests/`, including capacity, stale cleanup, and worker
   lifecycle coverage.
+- Session capacity limit/error coverage is separate from runtime rebalance
+  coverage so scheduler-bound capacity assertions stay focused.
 - Shared workflow facade test fixtures live under `workflow/tests/fixtures/`
   and are re-exported by `workflow/tests/fixtures.rs`, keeping
   `workflow/tests.rs` as the module index for behavior slices.
