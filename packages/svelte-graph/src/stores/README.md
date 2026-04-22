@@ -120,8 +120,9 @@ with graph component connection commits.
 - `runtimeData.ts` must own transient runtime-data and stream-content node array
   projection, and cleanup helpers must continue to touch only explicitly
   requested transient keys.
-- Store add-edge commits must use the shared `workflowConnections.ts`
-  `edgeToGraphEdge` helper rather than rebuilding backend edge defaults inline.
+- Store graph snapshots and add-edge commits must use the shared
+  `workflowConnections.ts` `edgeToGraphEdge` helper rather than rebuilding
+  backend edge defaults inline.
 - Dynamic inference-setting ports must be derived from backend-owned schema and
   written back into `node.data.definition`; ad hoc component-local copies are
   not authoritative.

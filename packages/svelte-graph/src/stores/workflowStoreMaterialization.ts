@@ -1,6 +1,7 @@
 import type { Edge, Node } from '@xyflow/svelte';
 
 import type { NodeDefinition, WorkflowGraph } from '../types/workflow.js';
+import { edgeToGraphEdge } from '../workflowConnections.ts';
 import { applySelectedNodeIds } from '../workflowSelection.ts';
 import { resolveNodeDefinitionOverlay } from './definitionOverlay.ts';
 
@@ -22,13 +23,7 @@ export function projectWorkflowGraphStoreState(params: {
       position: node.position,
       data: node.data,
     })),
-    edges: params.edges.map((edge) => ({
-      id: edge.id,
-      source: edge.source,
-      source_handle: edge.sourceHandle || 'output',
-      target: edge.target,
-      target_handle: edge.targetHandle || 'input',
-    })),
+    edges: params.edges.map((edge) => edgeToGraphEdge(edge)),
     ...(typeof params.derivedGraph === 'undefined' ? {} : { derived_graph: params.derivedGraph }),
   };
 }
