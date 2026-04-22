@@ -115,7 +115,12 @@
     resolveWorkflowContainerTransitionDecision,
     type WorkflowContainerViewport,
   } from './workflowContainerBoundary.ts';
-  import { resolveWorkflowContainerKeyboardAction } from './workflowContainerSelection.ts';
+  import {
+    clearWorkflowContainerSelection,
+    resolveWorkflowContainerKeyboardAction,
+    resolveWorkflowContainerSelectionAfterGraphSelection,
+    toggleWorkflowContainerSelection,
+  } from './workflowContainerSelection.ts';
   import { getWorkflowMiniMapNodeColor } from './workflowMiniMap.ts';
   import { resolveWorkflowGraphSource } from './workflowGraphSource.ts';
   import {
@@ -222,7 +227,7 @@
 
   function handleWorkflowPaletteDragStart() {
     externalPaletteDragActive = true;
-    containerSelected = false;
+    containerSelected = clearWorkflowContainerSelection();
     clearConnectionInteraction();
   }
 
@@ -233,19 +238,19 @@
 
   function handleSelectionChange({ nodes: selectedNodes }: { nodes: Node[]; edges: Edge[] }) {
     selectedNodeIds.set(collectSelectedNodeIds(selectedNodes));
-
-    if (selectedNodes.length > 0) {
-      containerSelected = false;
-    }
+    containerSelected = resolveWorkflowContainerSelectionAfterGraphSelection({
+      containerSelected,
+      selectedNodeCount: selectedNodes.length,
+    });
   }
 
   function toggleContainerSelection() {
-    containerSelected = !containerSelected;
+    containerSelected = toggleWorkflowContainerSelection(containerSelected);
   }
 
   // Deselect container when clicking on the graph background
   function handlePaneClick() {
-    containerSelected = false;
+    containerSelected = clearWorkflowContainerSelection();
     clearConnectionInteraction();
   }
 
@@ -1083,14 +1088,14 @@
 
     if (containerAction.type === 'zoom-to-orchestration') {
       e.preventDefault();
-      containerSelected = false;
+      containerSelected = clearWorkflowContainerSelection();
       zoomToOrchestration();
       return;
     }
 
     if (containerAction.type === 'deselect-container') {
       e.preventDefault();
-      containerSelected = false;
+      containerSelected = clearWorkflowContainerSelection();
     }
 
     if (isEditableKeyboardTarget(e.target as HTMLElement | null)) {

@@ -21,3 +21,18 @@ export function resolveWorkflowContainerKeyboardAction(params: {
 
   return { type: 'noop' };
 }
+
+export function resolveWorkflowContainerSelectionAfterGraphSelection(params: {
+  containerSelected: boolean;
+  selectedNodeCount: number;
+}): boolean {
+  return params.selectedNodeCount > 0 ? false : params.containerSelected;
+}
+
+export function toggleWorkflowContainerSelection(containerSelected: boolean): boolean {
+  return !containerSelected;
+}
+
+export function clearWorkflowContainerSelection(): false {
+  return false;
+}

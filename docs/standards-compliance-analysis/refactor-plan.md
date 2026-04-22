@@ -629,7 +629,7 @@ Tasks:
   App palette drag eligibility, drag payload parsing, and graph-space drop
   projection now live in `src/components/workflowPaletteDrag.ts`, with unit
   coverage in `src/components/workflowPaletteDrag.test.ts`. App orchestration
-  boundary keyboard action mapping now lives in
+  boundary keyboard action mapping and container selection transitions now live in
   `src/components/workflowContainerSelection.ts`, with unit coverage in
   `src/components/workflowContainerSelection.test.ts`. App workflow-versus-
   architecture graph source selection now lives in
