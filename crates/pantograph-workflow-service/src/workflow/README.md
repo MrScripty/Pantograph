@@ -67,8 +67,9 @@ runtime readiness, session-runtime workflows, and the root facade test module.
   and service shape remain reviewable; behavior-specific test modules live
   under `workflow/tests/`, including capacity, stale cleanup, and worker
   lifecycle coverage.
-- Shared workflow facade test fixtures live in `workflow/tests/fixtures.rs`,
-  keeping `workflow/tests.rs` as the module index for behavior slices.
+- Shared workflow facade test fixtures live under `workflow/tests/fixtures/`
+  and are re-exported by `workflow/tests/fixtures.rs`, keeping
+  `workflow/tests.rs` as the module index for behavior slices.
 - Session runtime loaded-state invalidation tests live with the
   session-runtime-state behavior slice.
 - Workflow capability discovery tests live with the workflow-capabilities

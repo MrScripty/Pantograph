@@ -52,9 +52,10 @@ Generic workflow run execution now lives behind the facade in the workflow run
 API helper.
 Service construction, capacity-limit configuration, diagnostics-provider setup,
 and the session-store guard now live in the workflow service configuration
-helper. The root workflow facade tests now live in `workflow/tests.rs`, and
-shared test fixtures now live in `workflow/tests/fixtures.rs`. Scheduler
-snapshot facade coverage now lives in `workflow/tests/scheduler_snapshot.rs`,
+helper. The root workflow facade tests now live in `workflow/tests.rs`; shared
+test fixture families now live under `workflow/tests/fixtures/` and are
+re-exported by `workflow/tests/fixtures.rs`. Scheduler snapshot facade coverage
+now lives in `workflow/tests/scheduler_snapshot.rs`,
 and session queue item/admission coverage now lives in
 `workflow/tests/session_queue.rs`. Workflow capability discovery and default
 capability derivation coverage now lives in
