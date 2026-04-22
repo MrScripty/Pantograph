@@ -510,6 +510,9 @@ Tasks:
   connection validation, graph-edge normalization, and backend candidate
   projection now live in `packages/svelte-graph/src/workflowConnections.ts`,
   with unit coverage in `packages/svelte-graph/src/workflowConnections.test.ts`.
+  App graph connection validation, graph-edge normalization, and backend
+  candidate projection now live in `src/components/workflowConnections.ts`,
+  with unit coverage in `src/components/workflowConnections.test.ts`.
 - Split `DependencyEnvironmentNode.svelte` into data parsing, activity log,
   mode controls, override editor, status panels, and command controls.
   Progress: dependency environment DTOs now live in

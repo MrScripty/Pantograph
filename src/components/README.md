@@ -15,6 +15,8 @@ architecture views on top of the shared editor.
 | `cutInteraction.test.ts` | Unit coverage for cut shortcut gating, edge-path lookup, point projection, and line intersection helpers. |
 | `workflowContainerBoundary.ts` | Computes orchestration boundary extents and viewport visibility for graph zoom-out transitions. |
 | `workflowContainerBoundary.test.ts` | Unit coverage for orchestration boundary bounds and visibility projection. |
+| `workflowConnections.ts` | Computes app graph connection validation, graph-edge normalization, and backend candidate projection. |
+| `workflowConnections.test.ts` | Unit coverage for app graph connection helper behavior. |
 | `workflowMiniMap.ts` | Maps workflow node groups and backend categories to minimap colors. |
 | `workflowMiniMap.test.ts` | Unit coverage for app workflow minimap color projection. |
 | `workflowGraphTypes.ts` | Defines the app workflow graph node and edge component registry used by SvelteFlow. |
@@ -92,6 +94,9 @@ The app SvelteFlow node and edge registry lives in `workflowGraphTypes.ts` so
 `WorkflowGraph.svelte` remains focused on graph state and interaction handling.
 Cut-line geometry lives in `cutInteraction.ts`; the graph component only owns
 gesture state and backend edge deletion.
+Connection validation and backend candidate projection live in
+`workflowConnections.ts`, while `WorkflowGraph.svelte` owns backend calls and
+interaction cleanup.
 
 ## Alternatives Rejected
 - Replace the app graph entirely with the package component immediately.
@@ -147,6 +152,9 @@ gesture state and backend edge deletion.
   templates and architecture graphs before falling back to generic renderers.
 - `cutInteraction.ts` must keep line-intersection behavior DOM-light and covered
   by unit tests before graph cut behavior is changed.
+- `workflowConnections.ts` must prefer active backend candidate intent when it
+  matches the source anchor, then fall back to package port compatibility only
+  when no active intent applies.
 
 ## Revisit Triggers
 - The app graph fully converges with the package graph and can be deleted.

@@ -60,7 +60,6 @@
   } from '../stores/workflowStore';
   import { isReadOnly, currentGraphId, currentGraphType } from '../stores/graphSessionStore';
   import type {
-    GraphEdge,
     ConnectionAnchor,
     ConnectionCandidatesResponse,
     ConnectionCommitResponse,
@@ -69,6 +68,11 @@
   import { architectureAsWorkflowGraph } from '../stores/architectureStore';
   import { workflowService } from '../services/workflow/WorkflowService';
   import type { NodeDefinition } from '../services/workflow/types';
+  import {
+    buildConnectionIntentState,
+    edgeToGraphEdge,
+    isWorkflowConnectionValid,
+  } from './workflowConnections.ts';
   import { computeWorkflowGraphSyncDecision } from './workflowGraphSync';
   import {
     findRenderedEdgePath,
@@ -837,62 +841,18 @@
   }
 
   function checkValidConnection(connection: Edge | Connection): boolean {
-    if (
-      $connectionIntent &&
-      connection.source === $connectionIntent.sourceAnchor.node_id &&
-      connection.sourceHandle === $connectionIntent.sourceAnchor.port_id &&
-      connection.target &&
-      connection.targetHandle
-    ) {
-      return $connectionIntent.compatibleTargetKeys.includes(
-        `${connection.target}:${connection.targetHandle}`
-      );
-    }
-
-    const sourceNode = nodes.find((n) => n.id === connection.source);
-    const targetNode = nodes.find((n) => n.id === connection.target);
-    const sourceDef = sourceNode?.data?.definition as NodeDefinition | undefined;
-    const targetDef = targetNode?.data?.definition as NodeDefinition | undefined;
-    const sourcePort = sourceDef?.outputs?.find((p) => p.id === connection.sourceHandle);
-    const targetPort = targetDef?.inputs?.find((p) => p.id === connection.targetHandle);
-    if (!sourcePort || !targetPort) return true;
-    return isPortTypeCompatible(sourcePort.data_type, targetPort.data_type);
+    return isWorkflowConnectionValid(connection, nodes, $connectionIntent, isPortTypeCompatible);
   }
 
   function getGraphRevision(): string {
     return currentGraphRevision;
   }
 
-  function edgeToGraphEdge(edge: Edge): GraphEdge {
-    return {
-      id: edge.id,
-      source: edge.source,
-      source_handle: edge.sourceHandle || 'output',
-      target: edge.target,
-      target_handle: edge.targetHandle || 'input',
-    };
-  }
-
-  function toConnectionIntentState(candidates: ConnectionCandidatesResponse) {
-    return {
-      sourceAnchor: candidates.source_anchor,
-      graphRevision: candidates.graph_revision,
-      compatibleNodeIds: candidates.compatible_nodes.map((node) => node.node_id),
-      compatibleTargetKeys: candidates.compatible_nodes.flatMap((node) =>
-        node.anchors.map((anchor) => `${node.node_id}:${anchor.port_id}`)
-      ),
-      insertableNodeTypes: candidates.insertable_node_types,
-    };
-  }
-
   function setConnectionIntentState(
     candidates: ConnectionCandidatesResponse,
     rejection?: ConnectionCommitResponse['rejection'],
   ) {
-    setConnectionIntent({
-      ...toConnectionIntentState(candidates),
-      rejection,
-    });
+    setConnectionIntent(buildConnectionIntentState(candidates, rejection));
   }
 
   let connectionIntentRequestId = $state(0);
