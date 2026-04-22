@@ -3,7 +3,7 @@
 ## Status
 Draft
 
-Last updated: 2026-04-18
+Last updated: 2026-04-22
 
 ## Current Source-of-Truth Summary
 
@@ -24,12 +24,28 @@ scope, sequencing, support tiers, and verification expectations.
 
 The BEAM/Rustler lane is no longer blocked on NIF compilation. The Rustler
 crate now compiles and builds successfully, and the in-repo Mix/ExUnit smoke
-harness proves real NIF loading plus initial contract behavior under BEAM. The
-remaining BEAM-specific issue relevant to this broader bindings plan is
-narrower: raw `cargo test -p pantograph_rustler` is still not an authoritative
-host verification path for NIF-bound behavior, so the remaining work is
-continued BEAM host-lane coverage breadth and binding-platform reconciliation,
-not basic product compile recovery.
+harness proves real NIF loading plus initial graph/error contract behavior under
+BEAM. The remaining BEAM-specific issue relevant to this broader bindings plan
+is narrower: raw `cargo test -p pantograph_rustler` is still not an
+authoritative host verification path for NIF-bound behavior, and the existing
+BEAM harness is not yet broad enough to justify the current Rustler README's
+broad `supported` tier without a support-tier reconciliation pass.
+
+Since the first version of this plan was written, binding-adjacent docs and
+wrappers have moved forward:
+
+- `crates/pantograph-uniffi/README.md` now defines supported, experimental, and
+  internal-only surfaces for the native headless library.
+- `crates/pantograph-rustler/README.md` now defines support tiers, but its
+  broad `Supported` row is ahead of the available host-language verification.
+- `bindings/beam/pantograph_native_smoke` now exists and covers NIF load,
+  version, workflow JSON roundtrip, validation errors, and parse errors.
+- `bindings/csharp/Pantograph.NativeSmoke` now exercises the generated C#
+  binding against the real native library through session create, run, status,
+  queue, keep-alive, and close paths.
+- Headless binding CI currently packages and uploads Linux C# and native
+  artifacts only; Windows and macOS artifact expectations are documented but
+  not yet backed by equivalent CI artifact verification.
 
 ## Objective
 
@@ -86,19 +102,25 @@ headless native library, and it has a narrower Rustler BEAM wrapper with a
 dedicated NIF verification problem. But the overall binding story remains
 incomplete:
 
-- the repository does not yet define a curated Pantograph binding surface as a
-  product contract
-- C# is the only host-language lane that currently looks close to first-class
+- the repository now has partial support-tier documentation, but the plan,
+  roadmap, UniFFI docs, Rustler docs, and binding harnesses do not yet agree on
+  which surfaces are actually `supported`, `experimental`, or `internal-only`
+- C# is the only host-language lane that currently looks close to first-class,
+  and its generated-binding smoke already covers real session-based execution
 - Python is mentioned as a potential UniFFI host language, but not yet treated
   as a first-class client binding with its own packaged flow and host-language
   tests
 - BEAM/Rustler verification has historically been scoped narrowly around NIF
   loading rather than integrated into a broader binding strategy; the baseline
-  local smoke harness now exists, but broader contract coverage and platform
-  positioning still need to be integrated into the larger bindings plan
+  local smoke harness now exists, but broader event, callback, session, and
+  error-envelope coverage plus support-tier positioning still need to be
+  integrated into the larger bindings plan
 - immediate wrapper insertion points are already oversized enough that more
   binding work would deepen existing standards violations if it lands without
   decomposition
+- product-native artifact docs mention Linux, Windows, and macOS library
+  layouts, while current headless binding CI only proves and uploads Linux
+  artifacts
 
 Without a dedicated binding-platform plan, Pantograph risks exporting too much,
 testing too little, and keeping wrapper-local logic that should instead live in
@@ -130,14 +152,14 @@ classify, and document behind current facades before considering API breaks.
 
 ### Assumptions
 
-- C# is the closest current candidate for an initial `supported` host binding
-  because it already has generated-artifact packaging and host-language smoke
-  coverage.
+- C# remains the closest current candidate for a first explicitly reconciled
+  `supported` host binding because it already has generated-artifact packaging,
+  host-language smoke coverage, and packaged quickstart checks.
 - Python should be treated as a distinct host-consumer binding lane, not
   conflated with the out-of-process Python worker/runtime separation work.
-- BEAM/Rustler should likely remain `experimental` until the current host-side
-  smoke baseline is expanded into broader event/error/session coverage and the
-  curated exposed surface is reconciled with the overall binding platform.
+- BEAM/Rustler should be treated as unreconciled until the current broad
+  `Supported` README row is either narrowed/downgraded or backed by expanded
+  host-side event, callback, error-envelope, and session coverage.
 - The current headless JSON DTO flow through `pantograph-workflow-service`
   remains the most realistic starting point for cross-language bindings.
 
@@ -148,8 +170,10 @@ classify, and document behind current facades before considering API breaks.
 - `IMPLEMENTATION-PLAN-pantograph-phase-5-rustler-nif-testability-and-beam-verification.md`
 - `docs/headless-native-bindings.md`
 - `bindings/csharp`
+- `bindings/beam`
 - `crates/pantograph-uniffi`
 - `crates/pantograph-rustler`
+- `.github/workflows/headless-embedding-contract.yml`
 - `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/PLAN-STANDARDS.md`
 - `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/CODING-STANDARDS.md`
 - `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/LANGUAGE-BINDINGS-STANDARDS.md`
@@ -176,8 +200,13 @@ classify, and document behind current facades before considering API breaks.
 - `IMPLEMENTATION-PLAN-pantograph-phase-5-rustler-nif-testability-and-beam-verification.md`
 - `docs/headless-native-bindings.md`
 - `bindings/csharp/README.md`
-- Any future `bindings/python/` or BEAM harness documentation introduced by
-  implementation
+- `bindings/beam/README.md`
+- `bindings/beam/pantograph_native_smoke/README.md`
+- `crates/pantograph-uniffi/README.md`
+- `crates/pantograph-rustler/README.md`
+- Any new `bindings/python/` documentation or expanded BEAM harness
+  documentation introduced by implementation
+- `.github/workflows/headless-embedding-contract.yml`
 - Packaging scripts and manifest guidance for generated host-language artifacts
 
 ### Existing Codebase Non-Compliance In Immediate Surroundings
@@ -185,13 +214,46 @@ classify, and document behind current facades before considering API breaks.
 The immediate wrapper insertion points already exceed decomposition thresholds
 from `CODING-STANDARDS.md`:
 
-- `crates/pantograph-rustler/src/lib.rs` is approximately 2511 lines
-- `crates/pantograph-uniffi/src/lib.rs` is approximately 1522 lines
-- `crates/pantograph-uniffi/src/runtime.rs` is approximately 915 lines
+- `crates/pantograph-rustler/src/lib.rs` is approximately 2008 lines after
+  partial extraction into focused helper modules
+- `crates/pantograph-uniffi/src/lib.rs` is approximately 1647 lines
+- `crates/pantograph-uniffi/src/runtime.rs` is approximately 1149 lines
 
 The binding-platform plan must therefore include decomposition review and
 shared-helper extraction before significantly expanding the public binding
-surface or host-language verification paths.
+surface or host-language verification paths. New exported surface should not be
+added to these oversized files unless the same slice also moves an equivalent
+or larger responsibility into a focused module or records an explicit
+decomposition exception with a revisit trigger.
+
+### Current Documentation Contract Gaps
+
+- `crates/pantograph-uniffi/README.md`, `crates/pantograph-uniffi/src/README.md`,
+  `crates/pantograph-rustler/README.md`, and
+  `crates/pantograph-rustler/src/README.md` now mostly satisfy host-facing and
+  structured-producer README expectations, but their support-tier content must
+  be reconciled with this plan and the roadmap.
+- `bindings/csharp/README.md` and `bindings/beam/README.md` describe harness
+  usage but do not yet carry the full host-facing `API Consumer Contract` and
+  structured artifact/package contract expected for binding harness and artifact
+  directories.
+- `docs/headless-native-bindings.md` documents C# and platform artifact layouts
+  but does not yet state a support-tier matrix or distinguish CI-backed
+  platform artifacts from documented future platform layouts.
+
+### Current Cross-Platform Artifact Gap
+
+`docs/headless-native-bindings.md` describes Linux, Windows, and macOS native
+library layouts. Current headless binding CI builds, packages, smoke-tests, and
+uploads the Linux artifact path only. Before the plan can claim cross-platform
+native binding support, it must define:
+
+- required versus best-effort host platforms
+- expected native library names per target
+- which platform artifacts are produced in CI
+- which host-language smoke or package checks run per platform
+- whether unsupported targets are documented as future work rather than shipped
+  product artifacts
 
 ### Concurrency / Race-Risk Review
 
@@ -227,6 +289,8 @@ surface or host-language verification paths.
 | Python host bindings are confused with Python worker/runtime concerns | High | Document separate ownership, package identity, and verification lanes |
 | Supported bindings drift because only Rust-side or only host-side tests exist | High | Require both native-language and host-language tests for supported bindings |
 | Oversized wrapper files make future binding work unreviewable | High | Make decomposition an early milestone before widening the surface |
+| README support tiers overstate host-language verification | High | Reconcile support tiers before promoting or packaging public binding contracts |
+| Platform artifact docs overpromise beyond CI coverage | High | Add a platform support matrix and CI/package checks before claiming support |
 
 ## Standards Review Passes
 
@@ -247,6 +311,9 @@ Corrections applied:
   leaving binding policy scattered across roadmap notes and narrower subplans.
 - Added explicit milestones, verification, re-plan triggers, and completion
   criteria.
+- Refreshed the plan after the Rustler split, BEAM smoke harness, C# smoke
+  expansion, and binding README support-tier updates so execution starts from
+  current repo state.
 
 ### Pass 2: Binding Architecture And Surface Policy
 
@@ -262,6 +329,8 @@ Corrections applied:
 - Recorded support tiers and the right to expose different subsets per host
   language when documented.
 - Added explicit decomposition pressure for the oversized wrapper files.
+- Added a reconciliation gate for existing UniFFI and Rustler support-tier
+  tables so documentation cannot claim `supported` status ahead of verification.
 
 ### Pass 3: Interop And Lifecycle Boundaries
 
@@ -276,6 +345,8 @@ Corrections applied:
   startup/shutdown expectations for the different language lanes.
 - Preserved thin-wrapper guidance and avoided moving semantics into host-side
   or wrapper-local code.
+- Added a cross-platform artifact matrix requirement before docs or artifacts
+  can imply Windows/macOS parity with the current Linux-backed package path.
 
 ### Pass 4: Testing And Verification
 
@@ -290,6 +361,8 @@ Corrections applied:
 - Added packaging-pairing verification and cross-layer acceptance obligations.
 - Added test-isolation requirements for native library paths, temp roots, and
   host runtime state.
+- Reclassified BEAM work from "create a harness" to "expand and integrate the
+  existing harness" because the Mix/ExUnit NIF smoke baseline now exists.
 
 ### Pass 5: Documentation And Dependency Hygiene
 
@@ -303,40 +376,60 @@ Corrections applied:
 - Planned README/doc updates where bindings become first-class artifacts rather
   than repo-internal smoke utilities.
 - Kept the plan minimal on new dependencies until each host-language lane is
-  justified by the support-tier freeze.
+  justified by the support-tier reconciliation.
+- Added explicit README contract work for `bindings/csharp` and `bindings/beam`
+  so host-facing harness/package directories meet documentation standards.
 
 ## Recommendations
 
-- Make C# the first `supported` binding lane because it already has the
-  strongest artifact and smoke coverage in-repo.
+- Reconcile the existing support-tier tables before changing code. In
+  particular, either narrow/downgrade the current broad Rustler `Supported`
+  surface or add the missing BEAM host-language verification needed to justify
+  it.
+- Treat C# as the first likely `supported` binding lane after reconciliation
+  because it has generated/package/runtime smoke coverage and CI packaging.
 - Treat Python as the next candidate lane, but keep it explicitly separate from
   the Python worker/runtime sidecar concerns.
 - Keep BEAM as a specialized lane focused on real host-boundary verification
   and curated surface selection, not blanket parity with UniFFI exports.
+- Do not advertise Windows or macOS native binding artifacts as supported until
+  the plan defines their target status and CI/package verification path.
 
 ## Milestones
 
-### Milestone 1: Binding Product Contract And Support-Tier Freeze
+### Milestone 1: Binding Product Contract And Support-Tier Reconciliation
 
 #### Tasks
 
 - Define the Pantograph client-facing binding surface for workflow execution,
   workflow sessions, workflow graph authoring, and shutdown/lifecycle calls.
-- Classify each binding lane as `supported`, `experimental`, or
-  `internal-only`.
-- Record the initial intended tier matrix:
-  C# as candidate `supported`, Python as candidate `experimental` moving toward
-  `supported`, and BEAM/Rustler as candidate `experimental`.
+- Reconcile existing support-tier claims in `crates/pantograph-uniffi/README.md`
+  and `crates/pantograph-rustler/README.md` with this plan and the roadmap.
+- Classify each host lane and exported surface as `supported`,
+  `experimental`, or `internal-only`.
+- Record the initial reconciled matrix. Expected starting point:
+  C# over the direct `pantograph_headless`/UniFFI runtime path is candidate
+  `supported`; Python host bindings are candidate `experimental`; BEAM/Rustler
+  is candidate `experimental` unless the existing broad `Supported` row is
+  backed by expanded BEAM host verification in the same milestone.
 - Mark non-client/internal capabilities that wrappers must not expose as part
   of the public binding contract without a later explicit decision.
-- Reconcile `docs/headless-native-bindings.md` and wrapper READMEs with the
-  curated surface policy.
+- Mark legacy in-memory workflow engine, frontend-HTTP exports, debug/admin
+  helpers, and host-harness-only functions as either explicitly experimental or
+  internal-only unless a documented external consumer rationale exists.
+- Reconcile `docs/headless-native-bindings.md`, wrapper READMEs, binding
+  harness READMEs, and the roadmap with the curated surface policy.
 
 #### Verification
 
-- Confirm the curated surface and support tiers are documented in this plan and
-  reflected in the roadmap.
+- Confirm the curated surface and support tiers are documented in this plan,
+  wrapper READMEs, binding harness/package READMEs, and the roadmap without
+  contradictory tier labels.
 - Confirm every included public capability has an external consumer rationale.
+- Confirm no README claims `supported` for a surface that lacks both native-side
+  and host-language verification required by the testing standards.
+- Confirm current `supported`, `experimental`, and `internal-only` labels state
+  packaging, versioning, and host-test expectations.
 
 ### Milestone 2: Shared Contract Layer And Wrapper Decomposition Map
 
@@ -347,28 +440,47 @@ Corrections applied:
 - Design the backend-owned or binding-neutral helper boundary for reusable
   contract shaping and error categorization.
 - Define the facade-preserving decomposition for the oversized UniFFI and
-  Rustler files before more binding surface is added.
+  Rustler files before more binding surface is added. Current targets:
+  split UniFFI runtime workflow/session/graph/lifecycle methods out of
+  `runtime.rs`; continue moving Rustler callback/event/host/resource groups out
+  of `lib.rs`; keep `lib.rs` files as export facades.
 - Record which host-lane differences are legitimate support-tier differences
   versus accidental wrapper drift.
+- Add a decomposition exception note for any file that remains over 500 lines
+  after a milestone, with a concrete reason and revisit trigger.
+- Require each new binding export slice to either reduce oversized facade
+  responsibility or explain why no further split is possible in that slice.
 
 #### Verification
 
 - Confirm the extraction map preserves the three-layer binding architecture.
-- Confirm no new milestone work depends on deepening the oversized wrapper
-  files without decomposition.
+- Confirm no new public binding surface is added to
+  `crates/pantograph-uniffi/src/lib.rs`,
+  `crates/pantograph-uniffi/src/runtime.rs`, or
+  `crates/pantograph-rustler/src/lib.rs` without a same-slice decomposition or
+  recorded exception.
+- Confirm all extracted modules have README coverage where required by the
+  documentation standards.
+- Confirm native tests cover extracted pure helper logic without requiring
+  host runtimes unless the helper is explicitly host-boundary-only.
 
 ### Milestone 3: C# Supported Binding Lane
 
 #### Tasks
 
-- Promote the existing C# binding lane from smoke-only posture to explicit
-  first-class support status if the Milestone 1 matrix confirms it.
+- Promote the existing C# binding lane from current generated/package/runtime
+  smoke posture to explicit first-class support status if the Milestone 1 matrix
+  confirms it.
 - Freeze the supported C# consumer contract around the curated headless
   workflow/session/graph surface.
-- Extend verification beyond generation/load smoke to include host-language
-  contract assertions for representative success, validation, and error paths.
+- Extend verification beyond the current session success smoke to include
+  host-language contract assertions for representative validation, malformed
+  request, missing workflow/session, and backend-owned error-envelope paths.
 - Preserve packaged-artifact checks so generated C# and the native library from
   the same build are proven together.
+- Decide whether C# support is Linux-only at first or cross-platform. If
+  cross-platform, add Windows/macOS package and smoke verification; if Linux-only
+  initially, document that explicitly in package docs and release notes.
 
 #### Verification
 
@@ -377,6 +489,10 @@ Corrections applied:
 - Host-language C# tests or smokes compile the generated binding, load the
   matching native library, and exercise representative supported calls.
 - At least one packaged-artifact acceptance path remains green.
+- The headless binding CI matrix matches the documented C# platform support
+  claim.
+- Generated C# and native library artifacts are version-matched from the same
+  build and manifests say so.
 
 ### Milestone 4: Python Binding Lane
 
@@ -390,6 +506,11 @@ Corrections applied:
   instead of mirroring everything UniFFI can technically export.
 - Add host-language import/load/smoke expectations and package/native-library
   pairing rules for Python artifacts.
+- Decide whether Python generation uses the repo-owned UniFFI bindgen helper,
+  upstream `uniffi-bindgen`, or another pinned tool, and document the dependency
+  and version policy before adding package scripts.
+- Document platform support separately from the C# lane; do not inherit C#
+  platform claims automatically.
 
 #### Verification
 
@@ -398,17 +519,28 @@ Corrections applied:
   native runtime, and exercise representative supported calls.
 - Python artifact guidance clearly distinguishes client bindings from Python
   sidecar execution requirements.
+- Python generation, import/load, and package/native pairing are reproducible
+  from documented commands and do not require hand-editing generated files.
 
 ### Milestone 5: BEAM / Rustler Lane
 
 #### Tasks
 
+- Reconcile the current Rustler README support-tier table with Milestone 1.
+  Either narrow/downgrade broad `Supported` claims or add the host-language
+  verification needed to justify them.
 - Keep only the curated client-facing or explicitly justified BEAM surface in
   scope for Rustler.
 - Extract pure-Rust contract-shaping logic out of the Rustler boundary where it
   is reusable or backend-owned.
-- Add the BEAM-hosted verification harness needed to prove real NIF loading and
-  term/error behavior with the `enif_*` runtime present.
+- Expand the existing BEAM-hosted verification harness beyond NIF load,
+  workflow graph roundtrip, validation errors, and parse errors to cover the
+  reconciled BEAM support tier.
+- Add host-side BEAM assertions for representative event, callback,
+  error-envelope, resource lifecycle, and session behavior if those surfaces
+  remain public or supported.
+- Add CI or documented local gating for the BEAM harness where the required
+  Elixir/Erlang runtime is available.
 - Reconcile the earlier NIF plan as a BEAM-specific execution lane under this
   broader binding-platform source of truth.
 
@@ -419,8 +551,12 @@ Corrections applied:
   behavior end to end.
 - BEAM-only coverage remains focused on the curated supported surface instead
   of wrapper-internal parity for its own sake.
+- The Rustler README no longer says direct `cargo test -p pantograph_rustler`
+  is waiting on a harness without acknowledging the current Mix/ExUnit baseline.
+- Any BEAM surface left as `supported` has native helper coverage plus
+  host-language smoke/acceptance coverage through the real NIF.
 
-### Milestone 6: Packaging, Documentation, And Source-of-Truth Reconciliation
+### Milestone 6: Packaging, Cross-Platform, Documentation, And Source-of-Truth Reconciliation
 
 #### Tasks
 
@@ -428,6 +564,13 @@ Corrections applied:
   not disagree on support tiers, scope, or remaining work.
 - Update host-binding docs to describe the curated client-facing surface,
   native-library pairing rules, and per-language expectations.
+- Add or update `API Consumer Contract` and `Structured Producer Contract`
+  sections for `bindings/csharp`, `bindings/beam`, and any new
+  `bindings/python` directory.
+- Add a platform support matrix covering Linux, Windows, macOS ARM, and macOS
+  Intel with each target marked `supported`, `best-effort`, or `future`.
+- Align `docs/headless-native-bindings.md`, packaging scripts, manifests, and
+  CI artifact uploads with that platform support matrix.
 - Record any remaining follow-on work per language lane after the first-class
   binding platform is established.
 
@@ -436,6 +579,12 @@ Corrections applied:
 - Confirm all source-of-truth docs agree on binding tiers and milestones.
 - Confirm artifact/package docs match the actual supported lanes and do not
   overstate parity.
+- Confirm CI or documented release checks exist for every platform/language
+  combination marked `supported`.
+- Confirm unsupported or best-effort platform artifacts are documented as such
+  and are not marketed as supported product artifacts.
+- Confirm the repository decision-traceability script recognizes updated
+  binding documentation directories or the plan records why they are excluded.
 
 ## Re-Plan Triggers
 
@@ -447,6 +596,12 @@ Corrections applied:
   module-level extraction.
 - C# is not ready for `supported` status once stronger host-language contract
   assertions are applied.
+- Current Rustler `Supported` claims cannot be justified without substantial
+  BEAM harness expansion.
+- Cross-platform package verification is not feasible in the current CI budget,
+  requiring a Linux-only initial support posture.
+- A wrapper file would grow further past the decomposition threshold without a
+  same-slice split or documented exception.
 
 ## Completion Criteria
 
@@ -454,7 +609,12 @@ Corrections applied:
 - Supported bindings have both native-language and host-language verification.
 - C#, Python, and BEAM each have explicit scope, support tier, and test
   expectations recorded in the source of truth.
+- Platform support for native binding artifacts is explicit and matches CI or
+  release verification.
+- Binding harness/package directories meet host-facing and structured-producer
+  documentation expectations.
 - Wrapper crates remain thin enough in ownership that canonical semantics do
-  not drift into host-specific implementation layers.
+  not drift into host-specific implementation layers, and remaining oversized
+  files have accepted decomposition exceptions with revisit triggers.
 - The roadmap and binding-platform documents are no longer stale or
   contradictory.
