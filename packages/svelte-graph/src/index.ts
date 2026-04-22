@@ -151,6 +151,7 @@ export {
   clearHorseshoeInsertFeedback,
   createHorseshoeInsertFeedbackState,
   rejectHorseshoeInsertFeedback,
+  resolveHorseshoeSessionStatusLabel,
   resolveHorseshoeStatusLabel,
   startHorseshoeInsertFeedback,
 } from './horseshoeInsertFeedback.js';

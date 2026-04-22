@@ -15,7 +15,8 @@ fork core canvas behavior.
 | `workflowDragCursor.test.ts` | Unit coverage for drag-cursor horseshoe decisions. |
 | `horseshoeDragSession.ts` | Shared visibility, close, and anchor lifecycle for the horseshoe insert UI during active drags. |
 | `horseshoeDragSession.test.ts` | Unit coverage for horseshoe request, sync, close, and clear state transitions. |
-| `horseshoeInsertFeedback.ts` | Shared pending/rejection feedback state and status-label resolution for horseshoe insert outcomes. |
+| `horseshoeInsertFeedback.ts` | Shared pending/rejection feedback state and session status-label resolution for horseshoe insert outcomes. |
+| `horseshoeInsertFeedback.test.ts` | Unit coverage for feedback state transitions and session status-label projection. |
 | `horseshoeInvocation.ts` | Shared `Space` open/confirm decisions, pointer-anchor freeze rules, and user-facing blocked-reason strings for horseshoe invocation. |
 | `workflowHorseshoeOpenContext.ts` | Shared projection from drag/session/intent state into the horseshoe open-request context. |
 | `workflowHorseshoeOpenContext.test.ts` | Unit coverage for connect, reconnect, and idle horseshoe open-context projection. |
@@ -92,6 +93,9 @@ and connect-vs-reconnect insert gating before invoking the session controller.
 Keep horseshoe open-request projection in `workflowHorseshoeOpenRequest.ts` so
 package and app graph components pair diagnostic trace context with the same
 drag-session request transition.
+Keep session status-label projection in `horseshoeInsertFeedback.ts` so package
+and app graph components share how feedback and drag-session state become
+selector status text.
 Keep horseshoe selection snapshots and index normalization in
 `workflowHorseshoeSelection.ts` so package and app keyboard handlers share how
 pending state, selected candidates, rotation, and query matching are projected
@@ -129,6 +133,8 @@ package and app graph components.
   package connect-drag semantics.
 - `workflowHorseshoeOpenRequest.ts` must keep open-request trace data and the
   requested session transition derived from the same context snapshot.
+- `horseshoeInsertFeedback.ts` must keep selector status labels derived from
+  one feedback/session snapshot.
 - `workflowHorseshoeSelection.ts` must keep keyboard `hasSelection`, selected
   index clamping, rotation, query matching, and the confirmed candidate derived
   from package horseshoe selection rules.

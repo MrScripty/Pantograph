@@ -1,5 +1,5 @@
 import { formatHorseshoeBlockedReason, type HorseshoeBlockedReason } from './horseshoeInvocation.ts';
-import type { HorseshoeDisplayState } from './horseshoeDragSession.ts';
+import type { HorseshoeDisplayState, HorseshoeDragSessionState } from './horseshoeDragSession.ts';
 
 export interface HorseshoeInsertFeedbackState {
   pending: boolean;
@@ -62,4 +62,16 @@ export function resolveHorseshoeStatusLabel(context: HorseshoeStatusContext): st
   }
 
   return null;
+}
+
+export function resolveHorseshoeSessionStatusLabel(params: {
+  feedback: HorseshoeInsertFeedbackState;
+  session: HorseshoeDragSessionState;
+}): string | null {
+  return resolveHorseshoeStatusLabel({
+    pending: params.feedback.pending,
+    rejectionMessage: params.feedback.rejectionMessage,
+    displayState: params.session.displayState,
+    blockedReason: params.session.blockedReason,
+  });
 }

@@ -14,6 +14,8 @@ shared node presentation rules live outside the Pantograph app shell.
 | `../workflowConnections.test.ts` | Unit coverage for package connection helper behavior. |
 | `../horseshoeDragSession.ts` | Owns horseshoe drag visibility, close, request, sync, and anchor state transitions. |
 | `../horseshoeDragSession.test.ts` | Unit coverage for horseshoe drag-session transitions. |
+| `../horseshoeInsertFeedback.ts` | Owns horseshoe insert pending/rejection state and status-label projection. |
+| `../horseshoeInsertFeedback.test.ts` | Unit coverage for feedback state and status-label projection. |
 | `../workflowGraphSync.ts` | Computes reference-based store-to-SvelteFlow node and edge synchronization decisions. |
 | `../workflowGraphSync.test.ts` | Unit coverage for package graph sync decisions. |
 | `../workflowDragCursor.ts` | Resolves drag-cursor movement into horseshoe anchor or selection updates. |
@@ -125,6 +127,8 @@ while `WorkflowGraph.svelte` supplies the current stores and interaction state
 before invoking the drag-session controller.
 Horseshoe open-request projection lives in `workflowHorseshoeOpenRequest.ts`,
 while `WorkflowGraph.svelte` applies the returned trace and session state.
+Horseshoe status-label projection lives in `horseshoeInsertFeedback.ts`, while
+`WorkflowGraph.svelte` supplies the current feedback and session state.
 Horseshoe selection snapshots and selected-index normalization live in
 `workflowHorseshoeSelection.ts`, while `WorkflowGraph.svelte` maps the resolved
 keyboard action to confirmation, rotation, or query side effects.
@@ -162,6 +166,8 @@ container element.
   invoked.
 - `workflowHorseshoeOpenRequest.ts` must derive request traces and requested
   session transitions from one context snapshot.
+- `horseshoeInsertFeedback.ts` must derive selector status labels from one
+  feedback/session snapshot.
 - `workflowHorseshoeSelection.ts` must derive keyboard selection availability,
   normalized selected indices, rotated indices, query matches, and confirmation
   candidates from the same package selection rules.

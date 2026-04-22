@@ -48,7 +48,7 @@
     clearHorseshoeInsertFeedback,
     createHorseshoeInsertFeedbackState,
     rejectHorseshoeInsertFeedback,
-    resolveHorseshoeStatusLabel,
+    resolveHorseshoeSessionStatusLabel,
     startHorseshoeInsertFeedback,
     type HorseshoeInsertFeedbackState,
   } from '../horseshoeInsertFeedback.js';
@@ -471,11 +471,9 @@
   }
 
   function getHorseshoeStatusLabel(): string | null {
-    return resolveHorseshoeStatusLabel({
-      pending: horseshoeInsertFeedback.pending,
-      rejectionMessage: horseshoeInsertFeedback.rejectionMessage,
-      displayState: horseshoeSession.displayState,
-      blockedReason: horseshoeSession.blockedReason,
+    return resolveHorseshoeSessionStatusLabel({
+      feedback: horseshoeInsertFeedback,
+      session: horseshoeSession,
     });
   }
 

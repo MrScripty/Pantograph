@@ -5,6 +5,7 @@ import {
   clearHorseshoeInsertFeedback,
   createHorseshoeInsertFeedbackState,
   rejectHorseshoeInsertFeedback,
+  resolveHorseshoeSessionStatusLabel,
   resolveHorseshoeStatusLabel,
   startHorseshoeInsertFeedback,
 } from './horseshoeInsertFeedback.ts';
@@ -74,6 +75,22 @@ test('resolveHorseshoeStatusLabel falls back to display-state messaging', () => 
       blockedReason: 'insert_not_supported',
     }) ?? '',
     /output handle/i,
+  );
+});
+
+test('resolveHorseshoeSessionStatusLabel projects feedback and session state', () => {
+  assert.equal(
+    resolveHorseshoeSessionStatusLabel({
+      feedback: createHorseshoeInsertFeedbackState(),
+      session: {
+        dragActive: true,
+        openRequested: true,
+        displayState: 'blocked',
+        blockedReason: 'no_insertable_nodes',
+        anchorPosition: { x: 10, y: 20 },
+      },
+    }),
+    'no compatible node types can be inserted from this anchor',
   );
 });
 
