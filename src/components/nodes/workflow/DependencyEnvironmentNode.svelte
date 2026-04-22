@@ -13,14 +13,21 @@
     applyDependencyEnvironmentActionNodeData,
     buildDependencyEnvironmentNodeData,
     createDependencyEnvironmentNodeDataState,
+    countDependencyBindingPatches,
+    countDependencyRequirementPatches,
     dependencyBadgeFor,
+    filterDependencyEnvironmentBindings,
     getPatchFrom,
-    hasOverrideFields,
+    hasDependencyBindingOverrideFields,
+    hasDependencyRequirementOverrideFields,
+    isDependencyEnvironmentBindingSelected,
     isPatchTarget,
     matchesDependencyActivityEvent,
     mergeOverridePatches,
     renderDependencyActivityEvent,
     resolveDependencyEnvironmentUpstreamState,
+    toggleDependencyEnvironmentAllBindings,
+    toggleDependencyEnvironmentBindingSelection,
     upsertExtraIndexUrls,
     upsertStringOverrideField,
     type DependencyActivityEvent,
@@ -190,14 +197,6 @@
     return renderDependencyActivityEvent(payload);
   }
 
-  function getPatch(
-    bindingId: string,
-    scope: 'binding' | 'requirement',
-    requirementName?: string
-  ): DependencyOverridePatchV1 | undefined {
-    return getPatchFrom(manualOverrides, bindingId, scope, requirementName);
-  }
-
   function getEffectivePatch(
     bindingId: string,
     scope: 'binding' | 'requirement',
@@ -299,30 +298,6 @@
     setExtraIndexUrls(bindingId, requirementName, target.value);
   }
 
-  function bindingPatchCount(bindingId: string): number {
-    return effectiveManualOverrides.filter((patch) => patch.binding_id === bindingId).length;
-  }
-
-  function bindingLocalPatchCount(bindingId: string): number {
-    return manualOverrides.filter((patch) => patch.binding_id === bindingId).length;
-  }
-
-  function requirementPatchCount(bindingId: string, requirementName: string): number {
-    return effectiveManualOverrides.filter((patch) =>
-      isPatchTarget(patch, bindingId, 'requirement', requirementName)
-    ).length;
-  }
-
-  function hasRequirementLocalOverrides(bindingId: string, requirementName: string): boolean {
-    const patch = getPatch(bindingId, 'requirement', requirementName);
-    return patch ? hasOverrideFields(patch.fields) : false;
-  }
-
-  function hasBindingLocalOverride(bindingId: string): boolean {
-    const patch = getPatch(bindingId, 'binding');
-    return patch ? hasOverrideFields(patch.fields) : false;
-  }
-
   function clearRequirementOverrides(bindingId: string, requirementName: string) {
     manualOverrides = manualOverrides.filter(
       (patch) => !isPatchTarget(patch, bindingId, 'requirement', requirementName)
@@ -330,22 +305,8 @@
     persistNodeState();
   }
 
-  function filteredBindings(requirements: ModelDependencyRequirements) {
-    if (selectedBindingIds.length === 0) return requirements.bindings;
-    return requirements.bindings.filter((binding) => selectedBindingIds.includes(binding.binding_id));
-  }
-
-  function bindingHasSelection(bindingId: string): boolean {
-    if (selectedBindingIds.length === 0) return true;
-    return selectedBindingIds.includes(bindingId);
-  }
-
   function toggleSelectedBindingsToAll(requirements: ModelDependencyRequirements) {
-    if (selectedBindingIds.length === requirements.bindings.length) {
-      selectedBindingIds = [];
-    } else {
-      selectedBindingIds = requirements.bindings.map((binding) => binding.binding_id);
-    }
+    selectedBindingIds = toggleDependencyEnvironmentAllBindings(requirements, selectedBindingIds);
     persistNodeState();
   }
 
@@ -366,11 +327,7 @@
   }
 
   function toggleBinding(bindingId: string) {
-    if (selectedBindingIds.includes(bindingId)) {
-      selectedBindingIds = selectedBindingIds.filter((id) => id !== bindingId);
-    } else {
-      selectedBindingIds = [...selectedBindingIds, bindingId];
-    }
+    selectedBindingIds = toggleDependencyEnvironmentBindingSelection(selectedBindingIds, bindingId);
     persistNodeState();
   }
 
@@ -438,18 +395,32 @@
         {#if dependencyRequirements && dependencyRequirements.bindings.length > 0}
           <DependencyEnvironmentBindingsPanel
             requirements={dependencyRequirements}
-            bindings={filteredBindings(dependencyRequirements)}
+            bindings={filterDependencyEnvironmentBindings(dependencyRequirements, selectedBindingIds)}
             {mode}
             {isBusy}
             {effectiveManualOverrides}
             {upstreamManualOverrides}
             {manualOverrides}
-            {bindingHasSelection}
-            {bindingPatchCount}
-            {bindingLocalPatchCount}
-            {requirementPatchCount}
-            {hasRequirementLocalOverrides}
-            {hasBindingLocalOverride}
+            bindingHasSelection={(bindingId) =>
+              isDependencyEnvironmentBindingSelected(selectedBindingIds, bindingId)}
+            bindingPatchCount={(bindingId) =>
+              countDependencyBindingPatches(effectiveManualOverrides, bindingId)}
+            bindingLocalPatchCount={(bindingId) =>
+              countDependencyBindingPatches(manualOverrides, bindingId)}
+            requirementPatchCount={(bindingId, requirementName) =>
+              countDependencyRequirementPatches(
+                effectiveManualOverrides,
+                bindingId,
+                requirementName
+              )}
+            hasRequirementLocalOverrides={(bindingId, requirementName) =>
+              hasDependencyRequirementOverrideFields(
+                manualOverrides,
+                bindingId,
+                requirementName
+              )}
+            hasBindingLocalOverride={(bindingId) =>
+              hasDependencyBindingOverrideFields(manualOverrides, bindingId)}
             {getStringOverrideField}
             {getExtraIndexUrls}
             onClearAllOverrides={clearAllOverrides}

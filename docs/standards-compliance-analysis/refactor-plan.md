@@ -612,6 +612,11 @@ Tasks:
   Node-local state initialization, persistence payload projection, backend action
   response projection, and retained activity-log trimming now live in
   `src/components/nodes/workflow/dependencyEnvironmentNodeState.ts`, with unit
+  coverage in `dependencyEnvironmentState.test.ts`. Binding selection filtering
+  and toggles now live in
+  `src/components/nodes/workflow/dependencyEnvironmentSelection.ts`; override
+  summary counts and local override checks now live in
+  `src/components/nodes/workflow/dependencyEnvironmentOverrides.ts`, with unit
   coverage in `dependencyEnvironmentState.test.ts`.
 - Split `pantograph-uniffi` and `pantograph-rustler` facades by exported surface
   family while preserving public names.

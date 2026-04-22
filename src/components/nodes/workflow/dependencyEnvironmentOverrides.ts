@@ -123,6 +123,40 @@ export function getPatchFrom(
   return patches.find((patch) => isPatchTarget(patch, bindingId, scope, requirementName));
 }
 
+export function countDependencyBindingPatches(
+  patches: DependencyOverridePatchV1[],
+  bindingId: string,
+): number {
+  return patches.filter((patch) => patch.binding_id === bindingId).length;
+}
+
+export function countDependencyRequirementPatches(
+  patches: DependencyOverridePatchV1[],
+  bindingId: string,
+  requirementName: string,
+): number {
+  return patches.filter((patch) =>
+    isPatchTarget(patch, bindingId, 'requirement', requirementName)
+  ).length;
+}
+
+export function hasDependencyBindingOverrideFields(
+  patches: DependencyOverridePatchV1[],
+  bindingId: string,
+): boolean {
+  const patch = getPatchFrom(patches, bindingId, 'binding');
+  return patch ? hasOverrideFields(patch.fields) : false;
+}
+
+export function hasDependencyRequirementOverrideFields(
+  patches: DependencyOverridePatchV1[],
+  bindingId: string,
+  requirementName: string,
+): boolean {
+  const patch = getPatchFrom(patches, bindingId, 'requirement', requirementName);
+  return patch ? hasOverrideFields(patch.fields) : false;
+}
+
 export function upsertStringOverrideField(
   patches: DependencyOverridePatchV1[],
   bindingId: string,

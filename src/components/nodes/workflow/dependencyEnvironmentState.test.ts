@@ -6,18 +6,26 @@ import {
   appendDependencyActivityLogLine,
   applyDependencyEnvironmentActionNodeData,
   buildDependencyEnvironmentNodeData,
+  countDependencyBindingPatches,
+  countDependencyRequirementPatches,
   createDependencyEnvironmentNodeDataState,
   dependencyCodeLabel,
   dependencyBadgeFor,
+  filterDependencyEnvironmentBindings,
   formatDependencyActivityLine,
   getPatchFrom,
+  hasDependencyBindingOverrideFields,
+  hasDependencyRequirementOverrideFields,
   hasOverrideFields,
+  isDependencyEnvironmentBindingSelected,
   isPatchTarget,
   matchesDependencyActivityEvent,
   mergeOverridePatches,
   parseOverridePatches,
   renderDependencyActivityEvent,
   resolveDependencyEnvironmentUpstreamState,
+  toggleDependencyEnvironmentAllBindings,
+  toggleDependencyEnvironmentBindingSelection,
   upsertExtraIndexUrls,
   upsertStringOverrideField,
 } from './dependencyEnvironmentState.ts';
@@ -156,6 +164,79 @@ test('patch lookup and field checks classify override targets', () => {
   assert.equal(isPatchTarget(patch, 'binding-a', 'binding'), false);
   assert.equal(hasOverrideFields(patch.fields), true);
   assert.equal(getPatchFrom([patch], 'binding-a', 'requirement', 'torch'), patch);
+});
+
+test('dependency override summary helpers count and classify local patches', () => {
+  const patches = [
+    {
+      contract_version: 1,
+      binding_id: 'binding-a',
+      scope: 'binding' as const,
+      fields: { python_executable: '/usr/bin/python3' },
+    },
+    {
+      contract_version: 1,
+      binding_id: 'binding-a',
+      scope: 'requirement' as const,
+      requirement_name: 'Torch',
+      fields: { index_url: 'https://packages.example/simple' },
+    },
+  ];
+
+  assert.equal(countDependencyBindingPatches(patches, 'binding-a'), 2);
+  assert.equal(countDependencyRequirementPatches(patches, 'binding-a', 'torch'), 1);
+  assert.equal(hasDependencyBindingOverrideFields(patches, 'binding-a'), true);
+  assert.equal(hasDependencyRequirementOverrideFields(patches, 'binding-a', 'torch'), true);
+  assert.equal(hasDependencyRequirementOverrideFields(patches, 'binding-a', 'numpy'), false);
+});
+
+test('dependency binding selection helpers filter and toggle bindings', () => {
+  const requirements = {
+    model_id: 'model-a',
+    platform_key: 'linux',
+    dependency_contract_version: 1,
+    validation_state: 'resolved' as const,
+    validation_errors: [],
+    selected_binding_ids: [],
+    bindings: [
+      {
+        binding_id: 'binding-a',
+        profile_id: 'profile-a',
+        profile_version: 1,
+        validation_state: 'resolved' as const,
+        validation_errors: [],
+        requirements: [],
+      },
+      {
+        binding_id: 'binding-b',
+        profile_id: 'profile-b',
+        profile_version: 1,
+        validation_state: 'resolved' as const,
+        validation_errors: [],
+        requirements: [],
+      },
+    ],
+  };
+
+  assert.deepEqual(filterDependencyEnvironmentBindings(requirements, []), requirements.bindings);
+  assert.deepEqual(
+    filterDependencyEnvironmentBindings(requirements, ['binding-b']).map(
+      (binding) => binding.binding_id,
+    ),
+    ['binding-b'],
+  );
+  assert.equal(isDependencyEnvironmentBindingSelected([], 'binding-a'), true);
+  assert.equal(isDependencyEnvironmentBindingSelected(['binding-b'], 'binding-a'), false);
+  assert.deepEqual(toggleDependencyEnvironmentBindingSelection(['binding-a'], 'binding-a'), []);
+  assert.deepEqual(toggleDependencyEnvironmentBindingSelection([], 'binding-a'), ['binding-a']);
+  assert.deepEqual(toggleDependencyEnvironmentAllBindings(requirements, ['binding-a']), [
+    'binding-a',
+    'binding-b',
+  ]);
+  assert.deepEqual(
+    toggleDependencyEnvironmentAllBindings(requirements, ['binding-a', 'binding-b']),
+    [],
+  );
 });
 
 test('dependencyCodeLabel maps known backend codes to readable labels', () => {
