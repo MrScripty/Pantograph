@@ -101,8 +101,7 @@
   import { getWorkflowMiniMapNodeColor } from '../workflowMiniMap.js';
   import CutTool from './CutTool.svelte';
   import ContainerBorder from './ContainerBorder.svelte';
-  import HorseshoeDebugOverlay from './HorseshoeDebugOverlay.svelte';
-  import HorseshoeInsertSelector from './HorseshoeInsertSelector.svelte';
+  import WorkflowGraphHorseshoeLayer from './WorkflowGraphHorseshoeLayer.svelte';
   import ReconnectableEdge from './edges/ReconnectableEdge.svelte';
 
   const { backend, registry, stores } = useGraphContext();
@@ -989,26 +988,18 @@
     onEdgesCut={handleEdgesCut}
   />
 
-  <HorseshoeInsertSelector
-    displayState={horseshoeSession.displayState}
-    anchorPosition={horseshoeSession.anchorPosition}
-    items={$connectionIntentStore?.insertableNodeTypes ?? []}
+  <WorkflowGraphHorseshoeLayer
+    session={horseshoeSession}
+    feedback={horseshoeInsertFeedback}
+    insertableNodeTypes={$connectionIntentStore?.insertableNodeTypes ?? []}
     selectedIndex={horseshoeSelectedIndex}
     query={horseshoeQuery}
-    pending={horseshoeInsertFeedback.pending}
     statusLabel={getHorseshoeStatusLabel()}
+    trace={horseshoeLastTrace}
     onSelect={(candidate) => void commitInsertSelection(candidate)}
     onRotate={rotateInsertSelection}
     onCancel={closeHorseshoeSelector}
   />
-
-  {#if horseshoeSession.dragActive || horseshoeSession.displayState !== 'hidden' || horseshoeLastTrace !== 'idle'}
-    <HorseshoeDebugOverlay
-      trace={horseshoeLastTrace}
-      displayState={horseshoeSession.displayState}
-      blockedReason={horseshoeSession.blockedReason}
-    />
-  {/if}
 </div>
 
 <style>

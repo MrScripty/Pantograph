@@ -4,7 +4,6 @@
   import { SvelteFlow, Controls, MiniMap, type Node, type Edge, type Connection } from '@xyflow/svelte';
   import '@xyflow/svelte/dist/style.css';
   import {
-    HorseshoeInsertSelector,
     clearHorseshoeInsertFeedback,
     closeHorseshoeDisplay,
     createConnectionDragState,
@@ -50,7 +49,7 @@
     WORKFLOW_GRAPH_PAN_ACTIVATION_KEY,
     registerWorkflowGraphWindowListeners,
     CutTool,
-    HorseshoeDebugOverlay,
+    WorkflowGraphHorseshoeLayer,
     type ConnectionDragState,
     type HorseshoeBlockedReason,
     type HorseshoeInsertFeedbackState,
@@ -1296,26 +1295,18 @@
     <WorkflowEdgeInsertPreviewMarker hitPoint={edgeInsertPreview.hitPoint} />
   {/if}
 
-  <HorseshoeInsertSelector
-    displayState={horseshoeSession.displayState}
-    anchorPosition={horseshoeSession.anchorPosition}
-    items={$connectionIntent?.insertableNodeTypes ?? []}
+  <WorkflowGraphHorseshoeLayer
+    session={horseshoeSession}
+    feedback={horseshoeInsertFeedback}
+    insertableNodeTypes={$connectionIntent?.insertableNodeTypes ?? []}
     selectedIndex={horseshoeSelectedIndex}
     query={horseshoeQuery}
-    pending={horseshoeInsertFeedback.pending}
     statusLabel={getHorseshoeStatusLabel()}
+    trace={horseshoeLastTrace}
     onSelect={(candidate) => void commitInsertSelection(candidate)}
     onRotate={rotateInsertSelection}
     onCancel={closeHorseshoeSelector}
   />
-
-  {#if horseshoeSession.dragActive || horseshoeSession.displayState !== 'hidden' || horseshoeLastTrace !== 'idle'}
-    <HorseshoeDebugOverlay
-      trace={horseshoeLastTrace}
-      displayState={horseshoeSession.displayState}
-      blockedReason={horseshoeSession.blockedReason}
-    />
-  {/if}
 
   <CutTool
     bind:this={cutToolRef}

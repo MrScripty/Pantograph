@@ -611,6 +611,8 @@ Tasks:
   Package and app horseshoe blocked-reason log decisions now reuse
   `packages/svelte-graph/src/workflowHorseshoeTrace.ts`, with unit coverage in
   `packages/svelte-graph/src/workflowHorseshoeTrace.test.ts`.
+  Package and app horseshoe selector plus diagnostic overlay composition now
+  reuse `packages/svelte-graph/src/components/WorkflowGraphHorseshoeLayer.svelte`.
   App palette drag eligibility, drag payload parsing, and graph-space drop
   projection now live in `src/components/workflowPaletteDrag.ts`, with unit
   coverage in `src/components/workflowPaletteDrag.test.ts`. App orchestration

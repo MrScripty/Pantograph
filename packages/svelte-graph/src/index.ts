@@ -314,6 +314,7 @@ export { default as ContainerBorder } from './components/ContainerBorder.svelte'
 export { default as CutTool } from './components/CutTool.svelte';
 export { default as HorseshoeDebugOverlay } from './components/HorseshoeDebugOverlay.svelte';
 export { default as HorseshoeInsertSelector } from './components/HorseshoeInsertSelector.svelte';
+export { default as WorkflowGraphHorseshoeLayer } from './components/WorkflowGraphHorseshoeLayer.svelte';
 
 // --- Node/Edge Components ---
 export { default as BaseNode } from './components/nodes/BaseNode.svelte';

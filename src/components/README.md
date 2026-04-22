@@ -176,6 +176,9 @@ SvelteFlow selection snapshot semantics.
 Workflow graph horseshoe blocked-reason log decisions now come from the package
 `resolveWorkflowHorseshoeBlockedReasonLog` helper so app and package canvases
 share the same duplicate-suppression and message formatting rules.
+Workflow graph horseshoe selector and debug overlay rendering now comes from the
+package `WorkflowGraphHorseshoeLayer` component so app and package canvases
+share the same horseshoe UI composition.
 Mouse/touch pointer projection now comes from the package
 `workflowPointerPosition.ts` helper; the app graph only supplies the active
 container bounds.
@@ -302,6 +305,9 @@ container bounds.
 - App graph horseshoe blocked-reason logging must use the package
   `resolveWorkflowHorseshoeBlockedReasonLog` helper so diagnostic duplicate
   suppression cannot drift from the package graph.
+- App graph horseshoe selector and debug overlay rendering must use the package
+  `WorkflowGraphHorseshoeLayer` component so horseshoe UI composition cannot
+  drift from the package graph.
 - App graph pointer coordinate handling must use the package pointer-position
   resolver so mouse/touch fallback behavior stays aligned with the package
   graph.
