@@ -55,6 +55,7 @@
     type HorseshoeInsertFeedbackState,
   } from '../horseshoeInsertFeedback.js';
   import {
+    closeHorseshoeDisplay,
     clearHorseshoeDragSession,
     createHorseshoeDragSessionState,
     requestHorseshoeDisplay,
@@ -265,20 +266,7 @@
   });
 
   function closeHorseshoeSelector() {
-    if (
-      horseshoeSession.displayState === 'hidden' &&
-      !horseshoeSession.openRequested &&
-      horseshoeSession.blockedReason === null
-    ) {
-      return;
-    }
-
-    applyHorseshoeSession({
-      ...horseshoeSession,
-      openRequested: false,
-      displayState: 'hidden',
-      blockedReason: null,
-    });
+    applyHorseshoeSession(closeHorseshoeDisplay(horseshoeSession));
   }
 
   function clearConnectionDragTracking() {

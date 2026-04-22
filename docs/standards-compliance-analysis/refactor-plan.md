@@ -510,6 +510,10 @@ Tasks:
   horseshoe keyboard policy now lives in
   `packages/svelte-graph/src/workflowHorseshoeKeyboard.ts`, with unit coverage in
   `packages/svelte-graph/src/workflowHorseshoeKeyboard.test.ts`. Package graph
+  horseshoe close-display state transitions now live in
+  `packages/svelte-graph/src/horseshoeDragSession.ts`, with unit coverage in
+  `packages/svelte-graph/src/horseshoeDragSession.test.ts` and app graph reuse
+  through the package export. Package graph
   node double-click and group zoom-target decisions now live in
   `packages/svelte-graph/src/workflowNodeActivation.ts`, with unit coverage in
   `packages/svelte-graph/src/workflowNodeActivation.test.ts`. Package graph

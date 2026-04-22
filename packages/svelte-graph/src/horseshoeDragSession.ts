@@ -59,6 +59,25 @@ export function clearHorseshoeDragSession(): HorseshoeDragSessionState {
   return createHorseshoeDragSessionState();
 }
 
+export function closeHorseshoeDisplay(
+  state: HorseshoeDragSessionState,
+): HorseshoeDragSessionState {
+  if (
+    state.displayState === 'hidden' &&
+    !state.openRequested &&
+    state.blockedReason === null
+  ) {
+    return state;
+  }
+
+  return {
+    ...state,
+    openRequested: false,
+    displayState: 'hidden',
+    blockedReason: null,
+  };
+}
+
 function shouldKeepOpenRequested(reason: HorseshoeBlockedReason | null): boolean {
   return reason === 'candidates_pending' || reason === 'missing_anchor_position';
 }

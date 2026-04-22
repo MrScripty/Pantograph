@@ -62,8 +62,9 @@ for validation/highlighting, and route horseshoe invocation through the same
 shared drag-session controller and drag-scoped window input used by the package
 graph before committing through revision-aware anchor and insert APIs. Pending
 and blocked horseshoe states remain visible instead of failing silently. The
-app graph also consumes the shared connection-drag helper contract so reconnect
-cleanup cannot bleed into ordinary insert flows. Reconnect affordances are
+app graph also consumes the shared drag-session close helper and
+connection-drag helper contract so reconnect cleanup cannot bleed into ordinary
+insert flows. Reconnect affordances are
 available directly on occupied edge endpoints so dragging off connected inputs
 and outputs starts a reconnect/disconnect gesture instead of a fresh edge
 creation. Once the horseshoe is open, repeated `Space`
@@ -167,6 +168,8 @@ container bounds.
   so the app never creates orphan nodes on stale or incompatible inserts.
 - Horseshoe open failures should be diagnosable through the shared blocked
   reason flow rather than app-only heuristics.
+- Closing app graph horseshoe display state must use the package
+  `closeHorseshoeDisplay()` helper instead of rebuilding hidden cleanup inline.
 - Successful horseshoe confirmation must drop drag state immediately so later
   drag-end events do not keep the pointer in a dragging interaction.
 - While the horseshoe is open, pointer movement must update highlighted menu

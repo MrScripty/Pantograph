@@ -172,6 +172,7 @@ export type {
   ConnectionDragState,
 } from './connectionDragState.js';
 export {
+  closeHorseshoeDisplay,
   clearHorseshoeDragSession,
   createHorseshoeDragSessionState,
   requestHorseshoeDisplay,

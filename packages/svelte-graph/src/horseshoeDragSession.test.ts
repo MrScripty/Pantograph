@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  closeHorseshoeDisplay,
   clearHorseshoeDragSession,
   createHorseshoeDragSessionState,
   requestHorseshoeDisplay,
@@ -108,4 +109,27 @@ test('no insertable nodes blocks and stops retrying', () => {
 
 test('clearHorseshoeDragSession resets to idle state', () => {
   assert.deepEqual(clearHorseshoeDragSession(), createHorseshoeDragSessionState());
+});
+
+test('closeHorseshoeDisplay hides requested and blocked sessions', () => {
+  assert.deepEqual(
+    closeHorseshoeDisplay({
+      ...startHorseshoeDrag({ x: 10, y: 20 }),
+      openRequested: true,
+      displayState: 'blocked',
+      blockedReason: 'no_insertable_nodes',
+    }),
+    {
+      ...startHorseshoeDrag({ x: 10, y: 20 }),
+      openRequested: false,
+      displayState: 'hidden',
+      blockedReason: null,
+    },
+  );
+});
+
+test('closeHorseshoeDisplay preserves already hidden idle sessions', () => {
+  const hidden = createHorseshoeDragSessionState();
+
+  assert.equal(closeHorseshoeDisplay(hidden), hidden);
 });

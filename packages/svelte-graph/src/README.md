@@ -13,7 +13,8 @@ fork core canvas behavior.
 | `connectionDragState.ts` | Shared state machine helpers that distinguish normal connect drags from explicit reconnect drags and gate reconnect cleanup. |
 | `workflowDragCursor.ts` | Shared drag-cursor decision helper for horseshoe anchor movement and open-menu selection. |
 | `workflowDragCursor.test.ts` | Unit coverage for drag-cursor horseshoe decisions. |
-| `horseshoeDragSession.ts` | Shared visibility and anchor lifecycle for the horseshoe insert UI during active drags. |
+| `horseshoeDragSession.ts` | Shared visibility, close, and anchor lifecycle for the horseshoe insert UI during active drags. |
+| `horseshoeDragSession.test.ts` | Unit coverage for horseshoe request, sync, close, and clear state transitions. |
 | `horseshoeInsertFeedback.ts` | Shared pending/rejection feedback state and status-label resolution for horseshoe insert outcomes. |
 | `horseshoeInvocation.ts` | Shared `Space` open/confirm decisions, pointer-anchor freeze rules, and user-facing blocked-reason strings for horseshoe invocation. |
 | `workflowHorseshoeOpenContext.ts` | Shared projection from drag/session/intent state into the horseshoe open-request context. |
@@ -58,6 +59,9 @@ Keep reusable interaction policy in small top-level helpers such as
 `horseshoeInvocation.ts`, then compose them from the package graph component
 and the app graph wrapper. Export those helpers through `index.ts` so the app
 layer can consume the same connect/reconnect rules instead of copying them.
+Keep close-selector state transitions in `horseshoeDragSession.ts` so package
+and app graph components share when hidden horseshoe sessions are no-ops and
+when open, pending, or blocked state should be cleared.
 Keep workflow execution event identity in `workflowEventOwnership.ts` as an
 explicit projection object. Backend-authored event `ownership` payloads from
 Tauri are authoritative for event identity, active run identity, and relevance;
@@ -108,6 +112,8 @@ package and app graph components.
   `Space` confirms the highlighted insert only after the menu is open and has a
   valid selection. `workflowHorseshoeKeyboard.ts` owns keyboard-to-action
   projection so graph components only perform the resolved side effects.
+- `horseshoeDragSession.ts` owns closing a horseshoe display; components must
+  not reconstruct hidden/open-request/blocked cleanup inline.
 - Open horseshoe sessions freeze anchor updates; pointer motion is interpreted
   as menu selection input instead of menu repositioning.
 - `workflowDragCursor.ts` owns that anchor-versus-selection decision and returns

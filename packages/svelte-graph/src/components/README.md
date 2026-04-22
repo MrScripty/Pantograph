@@ -12,6 +12,8 @@ shared node presentation rules live outside the Pantograph app shell.
 | `WorkflowGraph.svelte` | Main graph canvas that owns connect/reconnect flows, candidate loading, revision-aware edge commits, and the drag-time horseshoe insert flow. |
 | `../workflowConnections.ts` | Computes reusable connection validation, graph-edge normalization, candidate-to-intent projection, and rejected-intent preservation. |
 | `../workflowConnections.test.ts` | Unit coverage for package connection helper behavior. |
+| `../horseshoeDragSession.ts` | Owns horseshoe drag visibility, close, request, sync, and anchor state transitions. |
+| `../horseshoeDragSession.test.ts` | Unit coverage for horseshoe drag-session transitions. |
 | `../workflowGraphSync.ts` | Computes reference-based store-to-SvelteFlow node and edge synchronization decisions. |
 | `../workflowGraphSync.test.ts` | Unit coverage for package graph sync decisions. |
 | `../workflowDragCursor.ts` | Resolves drag-cursor movement into horseshoe anchor or selection updates. |
@@ -63,7 +65,8 @@ or commit. Horseshoe invocation now goes through a shared drag-session
 controller: the graph starts a shared drag session on connect/reconnect start,
 captures `Space` and pointer movement through drag-scoped window listeners,
 preserves queued opens while candidates load, records explicit blocked reasons,
-and renders pending/blocked selector states instead of silently doing nothing.
+renders pending/blocked selector states instead of silently doing nothing, and
+closes through the same shared hidden-state transition.
 `HorseshoeInsertSelector.svelte` opens once the session is ready. Node shells
 then read the same store to dim incompatible targets and highlight eligible
 anchors. The canvas now tracks explicit drag mode as part of that shared
@@ -142,6 +145,8 @@ container element.
   UI must not compose local `addNode` plus `connectAnchors`.
 - Horseshoe open failures must resolve to an explicit blocked reason instead of
   silently doing nothing.
+- Closing a horseshoe display must use `closeHorseshoeDisplay()` so hidden,
+  blocked, pending, and open cleanup semantics stay shared with the app graph.
 - Successful horseshoe confirmation must end the drag before later drag-end
   cleanup runs so the pointer is no longer treated as dragging an edge.
 - While the horseshoe is open, pointer movement must not reposition the menu;

@@ -7,6 +7,7 @@
     HorseshoeInsertSelector,
     clearHorseshoeInsertFeedback,
     clearConnectionDragState,
+    closeHorseshoeDisplay,
     clearHorseshoeDragSession,
     createConnectionDragState,
     createHorseshoeInsertFeedbackState,
@@ -339,20 +340,7 @@
   });
 
   function closeHorseshoeSelector() {
-    if (
-      horseshoeSession.displayState === 'hidden' &&
-      !horseshoeSession.openRequested &&
-      horseshoeSession.blockedReason === null
-    ) {
-      return;
-    }
-
-    applyHorseshoeSession({
-      ...horseshoeSession,
-      openRequested: false,
-      displayState: 'hidden',
-      blockedReason: null,
-    });
+    applyHorseshoeSession(closeHorseshoeDisplay(horseshoeSession));
   }
 
   function clearConnectionDragTracking() {
