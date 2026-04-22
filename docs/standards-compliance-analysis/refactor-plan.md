@@ -496,7 +496,9 @@ Tasks:
   `src/components/workflowContainerBoundary.ts`, with unit coverage in
   `src/components/workflowContainerBoundary.test.ts`. App workflow minimap color
   projection now lives in `src/components/workflowMiniMap.ts`, with unit
-  coverage in `src/components/workflowMiniMap.test.ts`.
+  coverage in `src/components/workflowMiniMap.test.ts`. App workflow SvelteFlow
+  node and edge type registration now lives in
+  `src/components/workflowGraphTypes.ts`.
 - Split `DependencyEnvironmentNode.svelte` into data parsing, activity log,
   mode controls, override editor, status panels, and command controls.
   Progress: dependency environment DTOs now live in

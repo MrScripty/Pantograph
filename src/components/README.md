@@ -15,6 +15,7 @@ architecture views on top of the shared editor.
 | `workflowContainerBoundary.test.ts` | Unit coverage for orchestration boundary bounds and visibility projection. |
 | `workflowMiniMap.ts` | Maps workflow node groups and backend categories to minimap colors. |
 | `workflowMiniMap.test.ts` | Unit coverage for app workflow minimap color projection. |
+| `workflowGraphTypes.ts` | Defines the app workflow graph node and edge component registry used by SvelteFlow. |
 | `NodePalette.svelte` | App palette for inserting workflow nodes into the active graph. |
 | `NodeGroupEditor.svelte` | App wrapper for group editing and exposed-port management. |
 | `NavigationBreadcrumb.svelte` | Breadcrumb UI for group/orchestration navigation. |
@@ -85,6 +86,8 @@ The app workflow graph delegates orchestration boundary overlay rendering to
 selection state, and orchestration transition ownership.
 Minimap color projection lives in `workflowMiniMap.ts` so category-to-color
 mapping remains testable outside the graph component.
+The app SvelteFlow node and edge registry lives in `workflowGraphTypes.ts` so
+`WorkflowGraph.svelte` remains focused on graph state and interaction handling.
 
 ## Alternatives Rejected
 - Replace the app graph entirely with the package component immediately.
@@ -136,6 +139,8 @@ mapping remains testable outside the graph component.
   remains unit-testable.
 - `workflowMiniMap.ts` must preserve backend category color semantics and keep
   group-node coloring ahead of category coloring.
+- `workflowGraphTypes.ts` must include every node type referenced by bundled
+  templates and architecture graphs before falling back to generic renderers.
 
 ## Revisit Triggers
 - The app graph fully converges with the package graph and can be deleted.
