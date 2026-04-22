@@ -134,5 +134,6 @@ canonical binding verification path.
   exception for the current `rustler::resource!` expansion; remove it when
   Rustler exposes a warning-clean registration API.
 - `src/lib.rs` is still over the decomposition threshold, but BEAM binding DTOs,
-  resource wrappers, and callback/event transport now live in focused source
-  modules as part of the facade split tracked by the standards compliance plan.
+  resource wrappers, callback/event transport, and frontend HTTP dispatch now
+  live in focused source modules as part of the facade split tracked by the
+  standards compliance plan.

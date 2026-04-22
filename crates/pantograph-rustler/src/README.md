@@ -15,6 +15,7 @@ outside core workflow crates.
 | `binding_types.rs` | BEAM-facing enum and struct declarations used by NIF signatures. |
 | `callback_bridge.rs` | BEAM callback task executor, core-first fallback executor, event sink, and pending callback response state. |
 | `elixir_data_graph_executor.rs` | Rustler-specific orchestration data-graph bridge into backend workflow execution. |
+| `frontend_http_nifs.rs` | Feature-gated frontend HTTP workflow/session implementation helpers behind exported NIF wrappers. |
 | `resource_registration.rs` | NIF load-time Rustler resource registration boundary. |
 | `resources.rs` | ResourceArc wrapper declarations for executor, orchestration, registry, Pumas, extensions, and inference gateway state. |
 | `type_parsing_contract.rs` | String-to-enum parsing helpers behind public type-parsing NIFs. |
@@ -65,7 +66,7 @@ registration, callback transport, and feature-gated adapter calls.
   state must serialize through an async-aware test mutex instead of holding a
   synchronous guard across workflow awaits.
 - Frontend HTTP NIFs are unavailable unless the `frontend-http` feature is
-  enabled.
+  enabled, and their backend service dispatch stays in `frontend_http_nifs.rs`.
 
 ## Revisit Triggers
 - Rustler resource macro behavior changes and removes current warning pressure.

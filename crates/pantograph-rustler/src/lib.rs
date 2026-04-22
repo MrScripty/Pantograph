@@ -34,22 +34,12 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-#[cfg(feature = "frontend-http")]
-use std::sync::LazyLock;
 
 use rustler::{Atom, Encoder, Env, NifResult, OwnedEnv, ResourceArc, Term};
 
 use node_engine::{
     EventSink, OrchestrationGraph, OrchestrationStore, TaskExecutor, WorkflowExecutor,
     WorkflowGraph,
-};
-#[cfg(feature = "frontend-http")]
-use pantograph_workflow_service::{
-    WorkflowCapabilitiesRequest, WorkflowPreflightRequest, WorkflowRunRequest, WorkflowService,
-    WorkflowSessionCloseRequest, WorkflowSessionCreateRequest, WorkflowSessionKeepAliveRequest,
-    WorkflowSessionQueueCancelRequest, WorkflowSessionQueueListRequest,
-    WorkflowSessionQueueReprioritizeRequest, WorkflowSessionRunRequest,
-    WorkflowSessionStatusRequest,
 };
 
 // Force the linker to include workflow-nodes object files,
@@ -59,6 +49,8 @@ extern crate workflow_nodes;
 mod binding_types;
 mod callback_bridge;
 mod elixir_data_graph_executor;
+#[cfg(feature = "frontend-http")]
+mod frontend_http_nifs;
 mod resource_registration;
 mod resources;
 mod type_parsing_contract;
@@ -86,8 +78,6 @@ use workflow_graph_contract::{
     workflow_remove_edge_json, workflow_remove_node_json, workflow_update_node_data_json,
     workflow_validate_json,
 };
-#[cfg(feature = "frontend-http")]
-use workflow_host_contract::{workflow_run_host_request, workflow_run_scheduler_request};
 
 // ============================================================================
 // Atoms
@@ -106,26 +96,9 @@ mod atoms {
     }
 }
 
-#[cfg(feature = "frontend-http")]
-static WORKFLOW_SERVICE: LazyLock<WorkflowService> = LazyLock::new(WorkflowService::new);
-
 // ============================================================================
 // Headless embedding adapter for Rustler
 // ============================================================================
-
-#[cfg(feature = "frontend-http")]
-fn frontend_http_workflow_run_impl(
-    base_url: String,
-    request_json: String,
-    pumas_resource: Option<ResourceArc<PumasApiResource>>,
-) -> NifResult<String> {
-    workflow_run_host_request::<WorkflowRunRequest, _, _>(
-        base_url,
-        request_json,
-        pumas_resource,
-        |host, request| async move { WORKFLOW_SERVICE.workflow_run(&host, request).await },
-    )
-}
 
 #[cfg(feature = "frontend-http")]
 #[rustler::nif(schedule = "DirtyCpu")]
@@ -134,25 +107,7 @@ fn frontend_http_workflow_run(
     request_json: String,
     pumas_resource: Option<ResourceArc<PumasApiResource>>,
 ) -> NifResult<String> {
-    frontend_http_workflow_run_impl(base_url, request_json, pumas_resource)
-}
-
-#[cfg(feature = "frontend-http")]
-fn frontend_http_workflow_get_capabilities_impl(
-    base_url: String,
-    request_json: String,
-    pumas_resource: Option<ResourceArc<PumasApiResource>>,
-) -> NifResult<String> {
-    workflow_run_host_request::<WorkflowCapabilitiesRequest, _, _>(
-        base_url,
-        request_json,
-        pumas_resource,
-        |host, request| async move {
-            WORKFLOW_SERVICE
-                .workflow_get_capabilities(&host, request)
-                .await
-        },
-    )
+    frontend_http_nifs::workflow_run(base_url, request_json, pumas_resource)
 }
 
 #[cfg(feature = "frontend-http")]
@@ -162,21 +117,7 @@ fn frontend_http_workflow_get_capabilities(
     request_json: String,
     pumas_resource: Option<ResourceArc<PumasApiResource>>,
 ) -> NifResult<String> {
-    frontend_http_workflow_get_capabilities_impl(base_url, request_json, pumas_resource)
-}
-
-#[cfg(feature = "frontend-http")]
-fn frontend_http_workflow_preflight_impl(
-    base_url: String,
-    request_json: String,
-    pumas_resource: Option<ResourceArc<PumasApiResource>>,
-) -> NifResult<String> {
-    workflow_run_host_request::<WorkflowPreflightRequest, _, _>(
-        base_url,
-        request_json,
-        pumas_resource,
-        |host, request| async move { WORKFLOW_SERVICE.workflow_preflight(&host, request).await },
-    )
+    frontend_http_nifs::workflow_get_capabilities(base_url, request_json, pumas_resource)
 }
 
 #[cfg(feature = "frontend-http")]
@@ -186,25 +127,7 @@ fn frontend_http_workflow_preflight(
     request_json: String,
     pumas_resource: Option<ResourceArc<PumasApiResource>>,
 ) -> NifResult<String> {
-    frontend_http_workflow_preflight_impl(base_url, request_json, pumas_resource)
-}
-
-#[cfg(feature = "frontend-http")]
-fn frontend_http_workflow_create_session_impl(
-    base_url: String,
-    request_json: String,
-    pumas_resource: Option<ResourceArc<PumasApiResource>>,
-) -> NifResult<String> {
-    workflow_run_host_request::<WorkflowSessionCreateRequest, _, _>(
-        base_url,
-        request_json,
-        pumas_resource,
-        |host, request| async move {
-            WORKFLOW_SERVICE
-                .create_workflow_session(&host, request)
-                .await
-        },
-    )
+    frontend_http_nifs::workflow_preflight(base_url, request_json, pumas_resource)
 }
 
 #[cfg(feature = "frontend-http")]
@@ -214,39 +137,7 @@ fn frontend_http_workflow_create_session(
     request_json: String,
     pumas_resource: Option<ResourceArc<PumasApiResource>>,
 ) -> NifResult<String> {
-    frontend_http_workflow_create_session_impl(base_url, request_json, pumas_resource)
-}
-
-#[cfg(feature = "frontend-http")]
-fn frontend_http_workflow_run_session_impl(
-    base_url: String,
-    request_json: String,
-    pumas_resource: Option<ResourceArc<PumasApiResource>>,
-) -> NifResult<String> {
-    workflow_run_host_request::<WorkflowSessionRunRequest, _, _>(
-        base_url,
-        request_json,
-        pumas_resource,
-        |host, request| async move { WORKFLOW_SERVICE.run_workflow_session(&host, request).await },
-    )
-}
-
-#[cfg(feature = "frontend-http")]
-fn frontend_http_workflow_close_session_impl(
-    base_url: String,
-    request_json: String,
-    pumas_resource: Option<ResourceArc<PumasApiResource>>,
-) -> NifResult<String> {
-    workflow_run_host_request::<WorkflowSessionCloseRequest, _, _>(
-        base_url,
-        request_json,
-        pumas_resource,
-        |host, request| async move {
-            WORKFLOW_SERVICE
-                .close_workflow_session(&host, request)
-                .await
-        },
-    )
+    frontend_http_nifs::workflow_create_session(base_url, request_json, pumas_resource)
 }
 
 #[cfg(feature = "frontend-http")]
@@ -256,7 +147,7 @@ fn frontend_http_workflow_run_session(
     request_json: String,
     pumas_resource: Option<ResourceArc<PumasApiResource>>,
 ) -> NifResult<String> {
-    frontend_http_workflow_run_session_impl(base_url, request_json, pumas_resource)
+    frontend_http_nifs::workflow_run_session(base_url, request_json, pumas_resource)
 }
 
 #[cfg(feature = "frontend-http")]
@@ -266,69 +157,25 @@ fn frontend_http_workflow_close_session(
     request_json: String,
     pumas_resource: Option<ResourceArc<PumasApiResource>>,
 ) -> NifResult<String> {
-    frontend_http_workflow_close_session_impl(base_url, request_json, pumas_resource)
-}
-
-#[cfg(feature = "frontend-http")]
-fn frontend_http_workflow_get_session_status_impl(request_json: String) -> NifResult<String> {
-    workflow_run_scheduler_request::<WorkflowSessionStatusRequest, _, _>(
-        request_json,
-        |request| async move { WORKFLOW_SERVICE.workflow_get_session_status(request).await },
-    )
+    frontend_http_nifs::workflow_close_session(base_url, request_json, pumas_resource)
 }
 
 #[cfg(feature = "frontend-http")]
 #[rustler::nif(schedule = "DirtyCpu")]
 fn frontend_http_workflow_get_session_status(request_json: String) -> NifResult<String> {
-    frontend_http_workflow_get_session_status_impl(request_json)
-}
-
-#[cfg(feature = "frontend-http")]
-fn frontend_http_workflow_list_session_queue_impl(request_json: String) -> NifResult<String> {
-    workflow_run_scheduler_request::<WorkflowSessionQueueListRequest, _, _>(
-        request_json,
-        |request| async move { WORKFLOW_SERVICE.workflow_list_session_queue(request).await },
-    )
+    frontend_http_nifs::workflow_get_session_status(request_json)
 }
 
 #[cfg(feature = "frontend-http")]
 #[rustler::nif(schedule = "DirtyCpu")]
 fn frontend_http_workflow_list_session_queue(request_json: String) -> NifResult<String> {
-    frontend_http_workflow_list_session_queue_impl(request_json)
-}
-
-#[cfg(feature = "frontend-http")]
-fn frontend_http_workflow_cancel_session_queue_item_impl(
-    request_json: String,
-) -> NifResult<String> {
-    workflow_run_scheduler_request::<WorkflowSessionQueueCancelRequest, _, _>(
-        request_json,
-        |request| async move {
-            WORKFLOW_SERVICE
-                .workflow_cancel_session_queue_item(request)
-                .await
-        },
-    )
+    frontend_http_nifs::workflow_list_session_queue(request_json)
 }
 
 #[cfg(feature = "frontend-http")]
 #[rustler::nif(schedule = "DirtyCpu")]
 fn frontend_http_workflow_cancel_session_queue_item(request_json: String) -> NifResult<String> {
-    frontend_http_workflow_cancel_session_queue_item_impl(request_json)
-}
-
-#[cfg(feature = "frontend-http")]
-fn frontend_http_workflow_reprioritize_session_queue_item_impl(
-    request_json: String,
-) -> NifResult<String> {
-    workflow_run_scheduler_request::<WorkflowSessionQueueReprioritizeRequest, _, _>(
-        request_json,
-        |request| async move {
-            WORKFLOW_SERVICE
-                .workflow_reprioritize_session_queue_item(request)
-                .await
-        },
-    )
+    frontend_http_nifs::workflow_cancel_session_queue_item(request_json)
 }
 
 #[cfg(feature = "frontend-http")]
@@ -336,25 +183,7 @@ fn frontend_http_workflow_reprioritize_session_queue_item_impl(
 fn frontend_http_workflow_reprioritize_session_queue_item(
     request_json: String,
 ) -> NifResult<String> {
-    frontend_http_workflow_reprioritize_session_queue_item_impl(request_json)
-}
-
-#[cfg(feature = "frontend-http")]
-fn frontend_http_workflow_set_session_keep_alive_impl(
-    base_url: String,
-    request_json: String,
-    pumas_resource: Option<ResourceArc<PumasApiResource>>,
-) -> NifResult<String> {
-    workflow_run_host_request::<WorkflowSessionKeepAliveRequest, _, _>(
-        base_url,
-        request_json,
-        pumas_resource,
-        |host, request| async move {
-            WORKFLOW_SERVICE
-                .workflow_set_session_keep_alive(&host, request)
-                .await
-        },
-    )
+    frontend_http_nifs::workflow_reprioritize_session_queue_item(request_json)
 }
 
 #[cfg(feature = "frontend-http")]
@@ -364,7 +193,7 @@ fn frontend_http_workflow_set_session_keep_alive(
     request_json: String,
     pumas_resource: Option<ResourceArc<PumasApiResource>>,
 ) -> NifResult<String> {
-    frontend_http_workflow_set_session_keep_alive_impl(base_url, request_json, pumas_resource)
+    frontend_http_nifs::workflow_set_session_keep_alive(base_url, request_json, pumas_resource)
 }
 
 // ============================================================================

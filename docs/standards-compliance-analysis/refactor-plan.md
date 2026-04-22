@@ -699,6 +699,9 @@ Tasks:
   delivery, and pending callback response state now live in
   `crates/pantograph-rustler/src/callback_bridge.rs`, while `lib.rs` preserves
   the existing callback NIF names as thin wrappers.
+  Rustler frontend HTTP workflow/session dispatch now lives in
+  `crates/pantograph-rustler/src/frontend_http_nifs.rs`, while `lib.rs`
+  preserves the exported feature-gated NIF names as thin wrappers.
 
 Verification:
 - File-size scan shows extracted files below review thresholds or documented exceptions.
