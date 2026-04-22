@@ -585,6 +585,9 @@ Tasks:
   `packages/svelte-graph/src/stores/workflowStoreMaterialization.ts`, with unit
   coverage in
   `packages/svelte-graph/src/stores/workflowStoreMaterialization.test.ts`.
+  Package default workflow graph construction now lives in
+  `packages/svelte-graph/src/stores/defaultWorkflowGraph.ts`, with unit coverage
+  in `packages/svelte-graph/src/stores/defaultWorkflowGraph.test.ts`.
   App palette drag eligibility, drag payload parsing, and graph-space drop
   projection now live in `src/components/workflowPaletteDrag.ts`, with unit
   coverage in `src/components/workflowPaletteDrag.test.ts`. App orchestration

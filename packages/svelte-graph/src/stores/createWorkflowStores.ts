@@ -32,6 +32,7 @@ import {
   materializeWorkflowGraphSnapshot,
   projectWorkflowGraphStoreState,
 } from './workflowStoreMaterialization.ts';
+import { buildDefaultWorkflowGraphState } from './defaultWorkflowGraph.ts';
 
 interface InferenceParamSchema {
   key: string;
@@ -398,34 +399,12 @@ export function createWorkflowStores(
 
   function loadDefaultWorkflow(definitions: NodeDefinition[]) {
     selectedNodeIds.set([]);
-    const textInputDef = definitions.find((d) => d.node_type === 'text-input');
-    const llmDef = definitions.find((d) => d.node_type === 'llm-inference');
-    const outputDef = definitions.find((d) => d.node_type === 'text-output');
-
-    nodes.set([
-      { id: 'user-input', type: 'text-input', position: { x: 50, y: 150 }, data: { label: 'User Input', text: '', definition: textInputDef } },
-      { id: 'llm', type: 'llm-inference', position: { x: 350, y: 150 }, data: { label: 'LLM Inference', definition: llmDef } },
-      { id: 'output', type: 'text-output', position: { x: 650, y: 150 }, data: { label: 'Output', text: '', definition: outputDef } },
-    ]);
+    const defaultWorkflow = buildDefaultWorkflowGraphState(definitions);
+    nodes.set(defaultWorkflow.nodes);
     nodeGroups.set(new Map());
-    edges.set([
-      { id: 'input-to-llm', source: 'user-input', sourceHandle: 'text', target: 'llm', targetHandle: 'prompt' },
-      { id: 'llm-to-output', source: 'llm', sourceHandle: 'response', target: 'output', targetHandle: 'text' },
-    ]);
+    edges.set(defaultWorkflow.edges);
     connectionIntent.set(null);
-    derivedGraph.set(
-      buildDerivedGraph({
-        nodes: [
-          { id: 'user-input', node_type: 'text-input', position: { x: 50, y: 150 }, data: { label: 'User Input', text: '', definition: textInputDef } },
-          { id: 'llm', node_type: 'llm-inference', position: { x: 350, y: 150 }, data: { label: 'LLM Inference', definition: llmDef } },
-          { id: 'output', node_type: 'text-output', position: { x: 650, y: 150 }, data: { label: 'Output', text: '', definition: outputDef } },
-        ],
-        edges: [
-          { id: 'input-to-llm', source: 'user-input', source_handle: 'text', target: 'llm', target_handle: 'prompt' },
-          { id: 'llm-to-output', source: 'llm', source_handle: 'response', target: 'output', target_handle: 'text' },
-        ],
-      })
-    );
+    derivedGraph.set(buildDerivedGraph(defaultWorkflow.graph));
     isDirty.set(false);
   }
 

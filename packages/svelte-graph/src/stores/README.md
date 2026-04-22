@@ -12,6 +12,7 @@ metadata, execution overlays, and transient connection-intent state.
 | `createWorkflowStores.ts` | Owns workflow nodes, edges, derived graph metadata, execution state, and connection intent for the active editor. |
 | `createSessionStores.ts` | Manages session lifecycle, graph loading, and current graph selection. |
 | `createViewStores.ts` | Holds viewport and navigation state such as group stacks and zoom targets. |
+| `defaultWorkflowGraph.ts` | Builds the starter workflow graph used when no saved graph is available. |
 | `canonicalizeWorkflowGraph.ts` | Canonicalizes loaded graphs by reconciling legacy node types, stale inference-setting overlays, and missing expand-setting passthrough edges before a session starts. |
 | `definitionOverlay.ts` | Rehydrates backend-supplied additive `node.data.definition` port overlays on top of static registry metadata during graph materialization. |
 | `inferenceSettingsPorts.ts` | Builds additive inference-setting port definitions, merges upstream schema with promoted inference-node defaults, and de-duplicates settings that should flow only through `inference_settings`. |
@@ -82,6 +83,9 @@ Workflow graph materialization lives in `workflowStoreMaterialization.ts`,
 keeping backend snapshot-to-SvelteFlow conversion and active-store-to-workflow
 projection outside the store facade while preserving selection reapplication and
 derived graph metadata.
+Default workflow graph construction lives in `defaultWorkflowGraph.ts`, keeping
+starter graph nodes, edges, labels, positions, and definition attachment in a
+tested helper while `createWorkflowStores.ts` owns assigning the returned state.
 
 ## Alternatives Rejected
 - Store connection intent only inside `WorkflowGraph.svelte`.
@@ -99,6 +103,8 @@ derived graph metadata.
   connected-node projection, and node bounds calculation for store consumers.
 - `workflowStoreMaterialization.ts` owns backend snapshot materialization and
   active store projection into `WorkflowGraph` payloads.
+- `defaultWorkflowGraph.ts` owns starter workflow shape and must keep the
+  SvelteFlow node/edge state aligned with the derived backend graph payload.
 - `workflowGraph` must reflect the latest nodes, edges, and derived graph
   fingerprint after every applied graph snapshot.
 - `connectionIntent` is not persisted; it must reset on graph mutation,
