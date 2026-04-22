@@ -154,6 +154,7 @@ cargo test -p pantograph-workflow-service runtime_preflight
 cargo test -p pantograph-workflow-service session_runtime
 cargo test -p pantograph-workflow-service workflow_io
 cargo test -p pantograph-workflow-service workflow_get_io
+cargo test -p pantograph-workflow-service workflow_preflight
 cargo test -p pantograph-workflow-service workflow_get_scheduler_snapshot
 cargo test -p pantograph-workflow-service workflow_session_queue
 ```

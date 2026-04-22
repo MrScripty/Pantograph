@@ -14,6 +14,7 @@ can stay reviewable as more tests are split.
 | `scheduler_snapshot.rs` | Scheduler snapshot facade tests covering workflow/edit-session snapshot shape, trace attribution, admission diagnostics, and runtime-registry diagnostics provider merging. |
 | `session_queue.rs` | Session queue item metadata, admission outcome, warm reuse, queue-position, and starvation protection tests. |
 | `workflow_io.rs` | Workflow I/O discovery and validation tests for bindable input/output nodes and port contracts. |
+| `workflow_preflight.rs` | Workflow preflight facade tests for required inputs, target validation, technical-fit decisions, and override normalization. |
 
 ## Problem
 `workflow/tests.rs` remains too large to review efficiently. Moving every test
@@ -74,6 +75,7 @@ Run the scheduler snapshot behavior slice:
 cargo test -p pantograph-workflow-service workflow_get_scheduler_snapshot
 cargo test -p pantograph-workflow-service workflow_session_queue
 cargo test -p pantograph-workflow-service workflow_get_io
+cargo test -p pantograph-workflow-service workflow_preflight
 ```
 
 ## Testing
@@ -81,4 +83,5 @@ cargo test -p pantograph-workflow-service workflow_get_io
 cargo test -p pantograph-workflow-service workflow_get_scheduler_snapshot
 cargo test -p pantograph-workflow-service workflow_session_queue
 cargo test -p pantograph-workflow-service workflow_get_io
+cargo test -p pantograph-workflow-service workflow_preflight
 ```
