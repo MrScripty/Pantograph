@@ -13,6 +13,8 @@ architecture views on top of the shared editor.
 | `WorkflowContainerBoundary.svelte` | Renders the orchestration boundary overlay, clickable border hit zones, and boundary anchors for the app workflow graph. |
 | `workflowContainerBoundary.ts` | Computes orchestration boundary extents and viewport visibility for graph zoom-out transitions. |
 | `workflowContainerBoundary.test.ts` | Unit coverage for orchestration boundary bounds and visibility projection. |
+| `workflowMiniMap.ts` | Maps workflow node groups and backend categories to minimap colors. |
+| `workflowMiniMap.test.ts` | Unit coverage for app workflow minimap color projection. |
 | `NodePalette.svelte` | App palette for inserting workflow nodes into the active graph. |
 | `NodeGroupEditor.svelte` | App wrapper for group editing and exposed-port management. |
 | `NavigationBreadcrumb.svelte` | Breadcrumb UI for group/orchestration navigation. |
@@ -81,6 +83,8 @@ The app workflow graph delegates orchestration boundary overlay rendering to
 `WorkflowContainerBoundary.svelte` and boundary math to
 `workflowContainerBoundary.ts`, while the parent keeps viewport tracking,
 selection state, and orchestration transition ownership.
+Minimap color projection lives in `workflowMiniMap.ts` so category-to-color
+mapping remains testable outside the graph component.
 
 ## Alternatives Rejected
 - Replace the app graph entirely with the package component immediately.
@@ -130,6 +134,8 @@ selection state, and orchestration transition ownership.
   selection toggles; it must not mutate graph stores directly.
 - `workflowContainerBoundary.ts` must stay DOM-free so boundary projection
   remains unit-testable.
+- `workflowMiniMap.ts` must preserve backend category color semantics and keep
+  group-node coloring ahead of category coloring.
 
 ## Revisit Triggers
 - The app graph fully converges with the package graph and can be deleted.

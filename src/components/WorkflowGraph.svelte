@@ -95,6 +95,7 @@
     isWorkflowContainerFullyVisible,
     resolveWorkflowContainerBounds,
   } from './workflowContainerBoundary.ts';
+  import { getWorkflowMiniMapNodeColor } from './workflowMiniMap.ts';
 
   // Import view store for zoom transitions
   import {
@@ -1684,31 +1685,7 @@
     }}
   >
     <Controls />
-    <MiniMap
-      nodeColor={(node) => {
-        // Node groups get a special purple color
-        if (node.type === 'node-group' || node.data?.isGroup) {
-          return '#7c3aed';
-        }
-        // Color by node category (snake_case to match Rust serde)
-        const def = node.data?.definition as NodeDefinition | undefined;
-        switch (def?.category) {
-          case 'input':
-            return '#2563eb';
-          case 'processing':
-            return '#16a34a';
-          case 'tool':
-            return '#d97706';
-          case 'output':
-            return '#0891b2';
-          case 'control':
-            return '#9333ea';
-          default:
-            return '#525252';
-        }
-      }}
-      maskColor="rgba(0, 0, 0, 0.8)"
-    />
+    <MiniMap nodeColor={getWorkflowMiniMapNodeColor} maskColor="rgba(0, 0, 0, 0.8)" />
 
   </SvelteFlow>
 

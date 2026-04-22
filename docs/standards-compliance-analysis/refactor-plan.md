@@ -494,7 +494,9 @@ Tasks:
   `WorkflowGraph.svelte` retains viewport tracking and selection state. Boundary
   extent and viewport visibility projection now lives in
   `src/components/workflowContainerBoundary.ts`, with unit coverage in
-  `src/components/workflowContainerBoundary.test.ts`.
+  `src/components/workflowContainerBoundary.test.ts`. App workflow minimap color
+  projection now lives in `src/components/workflowMiniMap.ts`, with unit
+  coverage in `src/components/workflowMiniMap.test.ts`.
 - Split `DependencyEnvironmentNode.svelte` into data parsing, activity log,
   mode controls, override editor, status panels, and command controls.
   Progress: dependency environment DTOs now live in
