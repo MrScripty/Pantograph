@@ -11,12 +11,11 @@ architecture views on top of the shared editor.
 | ----------- | ----------- |
 | `WorkflowGraph.svelte` | Pantograph graph canvas that wires app node types, orchestration navigation, revision-aware connection-intent flows, and the `Space`-invoked horseshoe insert selector. |
 | `WorkflowContainerBoundary.svelte` | Renders the orchestration boundary overlay, clickable border hit zones, and boundary anchors for the app workflow graph. |
-| `cutInteraction.ts` | Provides graph cut-gesture guards, rendered edge lookup, and cut-line geometry helpers. |
-| `cutInteraction.test.ts` | Unit coverage for cut shortcut gating, edge-path lookup, point projection, and line intersection helpers. |
 | `workflowContainerBoundary.ts` | Computes orchestration boundary extents and viewport visibility for graph zoom-out transitions. |
 | `workflowContainerBoundary.test.ts` | Unit coverage for orchestration boundary bounds and visibility projection. |
 | `workflowConnections.ts` | Computes app graph connection validation, graph-edge normalization, and backend candidate projection. |
 | `workflowConnections.test.ts` | Unit coverage for app graph connection helper behavior. |
+| `edgeInsertInteraction.ts` | Computes palette edge-insert hover state, preview refresh decisions, and rendered-edge hit testing. |
 | `workflowMiniMap.ts` | Maps workflow node groups and backend categories to minimap colors. |
 | `workflowMiniMap.test.ts` | Unit coverage for app workflow minimap color projection. |
 | `workflowGraphTypes.ts` | Defines the app workflow graph node and edge component registry used by SvelteFlow. |
@@ -92,8 +91,10 @@ Minimap color projection lives in `workflowMiniMap.ts` so category-to-color
 mapping remains testable outside the graph component.
 The app SvelteFlow node and edge registry lives in `workflowGraphTypes.ts` so
 `WorkflowGraph.svelte` remains focused on graph state and interaction handling.
-Cut-line geometry lives in `cutInteraction.ts`; the graph component only owns
-gesture state and backend edge deletion.
+Cut gesture state, line sampling, and overlay rendering come from the package
+`CutTool`; the app graph only owns the backend edge-deletion callback.
+Palette edge-insert hover projection and rendered-edge hit testing live in
+`edgeInsertInteraction.ts`.
 Connection validation and backend candidate projection live in
 `workflowConnections.ts`, while `WorkflowGraph.svelte` owns backend calls and
 interaction cleanup.
@@ -150,8 +151,10 @@ interaction cleanup.
   group-node coloring ahead of category coloring.
 - `workflowGraphTypes.ts` must include every node type referenced by bundled
   templates and architecture graphs before falling back to generic renderers.
-- `cutInteraction.ts` must keep line-intersection behavior DOM-light and covered
-  by unit tests before graph cut behavior is changed.
+- App cut gestures must delegate to the package `CutTool` so the package and app
+  canvases share modifier, line-sampling, and overlay behavior.
+- `edgeInsertInteraction.ts` must keep rendered-edge hit testing DOM-light and
+  covered by unit tests before palette edge-insert behavior is changed.
 - `workflowConnections.ts` must prefer active backend candidate intent when it
   matches the source anchor, then fall back to package port compatibility only
   when no active intent applies.

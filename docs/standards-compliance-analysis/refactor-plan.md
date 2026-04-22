@@ -498,9 +498,7 @@ Tasks:
   projection now lives in `src/components/workflowMiniMap.ts`, with unit
   coverage in `src/components/workflowMiniMap.test.ts`. App workflow SvelteFlow
   node and edge type registration now lives in
-  `src/components/workflowGraphTypes.ts`. App graph cut-line intersection
-  helpers now live in `src/components/cutInteraction.ts`, with unit coverage in
-  `src/components/cutInteraction.test.ts`.
+  `src/components/workflowGraphTypes.ts`.
   Package workflow minimap color projection now lives in
   `packages/svelte-graph/src/workflowMiniMap.ts`, with unit coverage in
   `packages/svelte-graph/src/workflowMiniMap.test.ts`. Package graph
@@ -512,7 +510,11 @@ Tasks:
   with unit coverage in `packages/svelte-graph/src/workflowConnections.test.ts`.
   App graph connection validation, graph-edge normalization, and backend
   candidate projection now live in `src/components/workflowConnections.ts`,
-  with unit coverage in `src/components/workflowConnections.test.ts`.
+  with unit coverage in `src/components/workflowConnections.test.ts`. App graph
+  cut gesture state, line sampling, and overlay rendering now delegate to the
+  package `CutTool`; the app graph keeps only the backend edge-deletion callback,
+  and app edge-insert geometry helpers now live inside
+  `src/components/edgeInsertInteraction.ts`.
 - Split `DependencyEnvironmentNode.svelte` into data parsing, activity log,
   mode controls, override editor, status panels, and command controls.
   Progress: dependency environment DTOs now live in

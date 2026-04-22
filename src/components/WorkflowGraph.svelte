@@ -33,6 +33,7 @@
     applyWorkflowGraphMutationResponse,
     WORKFLOW_PALETTE_DRAG_END_EVENT,
     WORKFLOW_PALETTE_DRAG_START_EVENT,
+    CutTool,
     type ConnectionDragState,
     type HorseshoeBlockedReason,
     type HorseshoeInsertFeedbackState,
@@ -74,12 +75,6 @@
     isWorkflowConnectionValid,
   } from './workflowConnections.ts';
   import { computeWorkflowGraphSyncDecision } from './workflowGraphSync';
-  import {
-    findRenderedEdgePath,
-    isCutModifierPressed,
-    lineIntersectsPath,
-    shouldStartCutGesture,
-  } from './cutInteraction';
   import {
     clearEdgeInsertPreviewState,
     createEdgeInsertPreviewState,
@@ -1182,12 +1177,9 @@
   }
 
   // --- Cut Tool (Ctrl+drag to cut edges) ---
+  let cutToolRef: CutTool;
   let isCutting = $state(false);
-  let cutStart = $state<{ x: number; y: number } | null>(null);
-  let cutEnd = $state<{ x: number; y: number } | null>(null);
-  let cutContainerRect = $state<DOMRect | null>(null);
   let ctrlPressed = $state(false);
-  let isFinalizingCut = $state(false);
 
   function handleKeyDown(e: KeyboardEvent) {
     // Tab transitions to orchestration view when container is selected
@@ -1239,10 +1231,6 @@
   }
 
   function handleWindowKeyDown(e: KeyboardEvent) {
-    if (isCutModifierPressed(e)) {
-      ctrlPressed = true;
-    }
-
     const target = e.target as HTMLElement | null;
     if (
       target &&
@@ -1322,42 +1310,12 @@
     }
   }
 
-  function handleKeyUp(e: KeyboardEvent) {
-    if (!isCutModifierPressed(e) && !ctrlPressed) {
-      return;
-    }
-
-    ctrlPressed = e.ctrlKey || e.metaKey;
-    if (!ctrlPressed && isCutting) {
-      void finishCut();
-    }
-  }
-
   function handlePaneMouseDown(e: MouseEvent) {
     if (externalPaletteDragActive) {
       return;
     }
 
-    const modifierPressedAtStart = isCutModifierPressed(e);
-    ctrlPressed = modifierPressedAtStart;
-
-    if (
-      !shouldStartCutGesture({
-        canEdit,
-        modifierPressed: modifierPressedAtStart,
-        target: e.target as HTMLElement | null,
-      })
-    ) {
-      return;
-    }
-
-    isCutting = true;
-    const container = (e.currentTarget as HTMLElement).querySelector('.svelte-flow');
-    if (!container) return;
-    const rect = container.getBoundingClientRect();
-    cutContainerRect = rect;
-    cutStart = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-    cutEnd = cutStart;
+    cutToolRef?.onPaneMouseDown(e);
   }
 
   function handlePaneMouseMove(e: MouseEvent) {
@@ -1366,13 +1324,7 @@
       return;
     }
 
-    if (!isCutting || !cutStart) return;
-
-    const container = (e.currentTarget as HTMLElement).querySelector('.svelte-flow');
-    if (!container) return;
-    const rect = container.getBoundingClientRect();
-    cutContainerRect = rect;
-    cutEnd = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    cutToolRef?.onPaneMouseMove(e);
   }
 
   function handlePaneMouseUp(e: MouseEvent) {
@@ -1380,59 +1332,25 @@
       return;
     }
 
-    ctrlPressed = isCutModifierPressed(e);
-    if (isCutting) {
-      void finishCut();
-    }
+    cutToolRef?.onPaneMouseUp(e);
   }
 
-  async function finishCut() {
-    if (isFinalizingCut) {
-      return;
-    }
+  async function handleEdgesCut(edgeIds: string[]) {
+    clearConnectionInteraction();
 
-    isFinalizingCut = true;
-    try {
-      if (!cutStart || !cutEnd) {
-        isCutting = false;
-        cutStart = null;
-        cutEnd = null;
-        cutContainerRect = null;
-        return;
+    for (const edgeId of edgeIds) {
+      try {
+        const updatedGraph = await workflowService.removeEdge(edgeId);
+        syncEdgesFromBackend(updatedGraph);
+      } catch (error) {
+        console.error('[WorkflowGraph] Failed to remove edge via cut:', error);
       }
-
-      clearConnectionInteraction();
-
-      // Find edges that intersect with the cut line
-      const edgesToRemove = edges.filter((edge) => {
-        const edgeEl = findRenderedEdgePath(document, edge.id);
-        if (!edgeEl) return false;
-
-        return lineIntersectsPath(cutStart!, cutEnd!, edgeEl as SVGPathElement, cutContainerRect);
-      });
-
-      // Remove intersecting edges via backend
-      for (const edge of edgesToRemove) {
-        try {
-          const updatedGraph = await workflowService.removeEdge(edge.id);
-          syncEdgesFromBackend(updatedGraph);
-        } catch (error) {
-          console.error('[WorkflowGraph] Failed to remove edge via cut:', error);
-        }
-      }
-
-      isCutting = false;
-      cutStart = null;
-      cutEnd = null;
-      cutContainerRect = null;
-    } finally {
-      isFinalizingCut = false;
     }
   }
 
 </script>
 
-<svelte:window onkeyup={handleKeyUp} onmousemove={updateDragCursorFromMouseEvent} />
+<svelte:window onmousemove={updateDragCursorFromMouseEvent} />
 
 <!-- a11y-reviewed: SvelteFlow graph canvas owns pointer interaction while keyboard graph commands are handled on this focusable container. -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -1543,20 +1461,14 @@
     </div>
   {/if}
 
-  <!-- Cut line overlay -->
-  {#if isCutting && cutStart && cutEnd}
-    <svg class="cut-overlay">
-      <line
-        x1={cutStart.x}
-        y1={cutStart.y}
-        x2={cutEnd.x}
-        y2={cutEnd.y}
-        stroke="#ef4444"
-        stroke-width="2"
-        stroke-dasharray="5,5"
-      />
-    </svg>
-  {/if}
+  <CutTool
+    bind:this={cutToolRef}
+    edges={edges}
+    enabled={canEdit && !externalPaletteDragActive}
+    bind:ctrlPressed
+    bind:isCutting
+    onEdgesCut={handleEdgesCut}
+  />
 
 </div>
 
@@ -1683,16 +1595,6 @@
     font-size: 0.72rem;
     line-height: 1.35;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
-  }
-
-  .cut-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    z-index: 1000;
   }
 
 </style>

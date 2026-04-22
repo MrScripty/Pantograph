@@ -2,11 +2,6 @@ import type {
   ConnectionRejection,
   EdgeInsertionBridge,
 } from '../services/workflow/types';
-import {
-  applyMatrixToPoint,
-  toContainerRelativePoint,
-} from './cutInteraction.ts';
-
 export const EDGE_INSERT_HIT_RADIUS_PX = 24;
 export const EDGE_INSERT_SAMPLE_STEP_PX = 20;
 
@@ -30,6 +25,15 @@ type EdgePathLike = SVGPathElement & {
   getTotalLength(): number;
   getPointAtLength(length: number): Point;
   getScreenCTM(): DOMMatrix | DOMMatrixReadOnly | null;
+};
+
+type Matrix2D = {
+  a: number;
+  b: number;
+  c: number;
+  d: number;
+  e: number;
+  f: number;
 };
 
 export interface EdgeInsertHitTarget {
@@ -150,6 +154,23 @@ export function setEdgeInsertPreviewRejected(
 
 function distanceBetweenPoints(left: Point, right: Point): number {
   return Math.hypot(left.x - right.x, left.y - right.y);
+}
+
+function applyMatrixToPoint(point: Point, matrix: Matrix2D): Point {
+  return {
+    x: matrix.a * point.x + matrix.c * point.y + matrix.e,
+    y: matrix.b * point.x + matrix.d * point.y + matrix.f,
+  };
+}
+
+function toContainerRelativePoint(
+  point: Point,
+  containerRect: Pick<DOMRect, 'left' | 'top'>,
+): Point {
+  return {
+    x: point.x - containerRect.left,
+    y: point.y - containerRect.top,
+  };
 }
 
 export function sampleClosestEdgeDistance(params: {
