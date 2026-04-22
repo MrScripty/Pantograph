@@ -18,7 +18,7 @@ to the workflow graph runtime instead of being spread across generic canvas code
 | `DependencyEnvironmentNode.svelte` | Presents dependency resolution, check, install, activity, and override controls for model-backed environment setup. |
 | `DependencyEnvironmentRefPanel.svelte` | Renders the resolved dependency environment reference state, environment id, and Python executable. |
 | `DependencyEnvironmentStatusPanel.svelte` | Renders dependency state badges, status messages, and command buttons for dependency actions. |
-| `dependencyEnvironmentActions.ts` | Builds backend action payloads from upstream model state and dependency override selections. |
+| `dependencyEnvironmentActions.ts` | Builds backend action payloads and wraps dependency action execution from upstream model state and dependency override selections. |
 | `dependencyEnvironmentDisplay.ts` | Formats dependency badges, backend codes, and activity-log events. |
 | `dependencyEnvironmentNodeState.ts` | Projects dependency environment node-local state, persistence payloads, action responses, and retained activity logs. |
 | `dependencyEnvironmentOverrides.ts` | Parses, merges, looks up, reads, clears, summarizes, and mutates dependency override patches. |
@@ -87,9 +87,9 @@ component, while dependency contracts and pure override state helpers live in
 `dependencyEnvironmentNodeState.ts`, `dependencyEnvironmentOverrides.ts`,
 `dependencyEnvironmentSelection.ts`, `dependencyEnvironmentDisplay.ts`, and
 `dependencyEnvironmentSources.ts` so payload projection, node-local state
-projection, upstream requirement adoption, graph-input projection, binding
-selection, override reads and scope clears, parsing, merge, and formatting
-behavior can be tested without mounting the node.
+projection, upstream requirement adoption, backend action execution bracketing,
+graph-input projection, binding selection, override reads and scope clears,
+parsing, merge, and formatting behavior can be tested without mounting the node.
 `dependencyEnvironmentState.ts` remains as a stable re-export surface for
 component and test imports.
 The activity log panel lives in `DependencyEnvironmentActivityLog.svelte` so
@@ -146,6 +146,9 @@ node persistence.
   Svelte component must not duplicate that state-shape mapping inline.
 - `DependencyEnvironmentActivityLog.svelte` owns log auto-scroll behavior and
   must not trigger graph drag or pan gestures.
+- `dependencyEnvironmentActions.ts` owns action payload construction, busy-state
+  bracketing, backend response application, and failure log formatting for
+  dependency action commands.
 - `DependencyEnvironmentStatusPanel.svelte` emits command callbacks without
   invoking backend APIs directly.
 - `DependencyEnvironmentBindingsPanel.svelte` emits form and selection callbacks

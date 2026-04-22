@@ -29,6 +29,7 @@
     readDependencyStringOverrideField,
     renderDependencyActivityEvent,
     resolveDependencyEnvironmentUpstreamState,
+    runDependencyEnvironmentActionRequest,
     toggleDependencyEnvironmentAllBindings,
     toggleDependencyEnvironmentBindingSelection,
     upsertExtraIndexUrls,
@@ -156,22 +157,19 @@
     action: DependencyEnvironmentActionRequest['action']
   ) {
     const payload = dependencyActionPayload(action);
-    if (!payload) return;
-
-    isBusy = true;
-    try {
-      const response = await invoke<DependencyEnvironmentActionResponse>(
-        'run_dependency_environment_action',
-        { request: payload }
-      );
-      applyDependencyActionNodeData(response.nodeData);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      appendActivityLine(`${action}: error="${message}"`);
-      throw error;
-    } finally {
-      isBusy = false;
-    }
+    await runDependencyEnvironmentActionRequest({
+      action,
+      payload,
+      invokeAction: (request) =>
+        invoke<DependencyEnvironmentActionResponse>('run_dependency_environment_action', {
+          request,
+        }),
+      applyNodeData: applyDependencyActionNodeData,
+      appendActivityLine,
+      setBusy: (busy) => {
+        isBusy = busy;
+      },
+    });
   }
 
   function activityTimestamp(): string {

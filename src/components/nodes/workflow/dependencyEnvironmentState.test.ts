@@ -15,6 +15,7 @@ import {
   dependencyCodeLabel,
   dependencyBadgeFor,
   filterDependencyEnvironmentBindings,
+  formatDependencyEnvironmentActionError,
   formatDependencyActivityLine,
   getPatchFrom,
   hasDependencyBindingOverrideFields,
@@ -29,6 +30,7 @@ import {
   readDependencyStringOverrideField,
   renderDependencyActivityEvent,
   resolveDependencyEnvironmentUpstreamState,
+  runDependencyEnvironmentActionRequest,
   toggleDependencyEnvironmentAllBindings,
   toggleDependencyEnvironmentBindingSelection,
   upsertExtraIndexUrls,
@@ -473,6 +475,94 @@ test('buildDependencyEnvironmentActionPayload projects upstream model and overri
   assert.equal(payload?.modelId, 'model-a');
   assert.deepEqual(payload?.selectedBindingIds, ['binding-a']);
   assert.equal(payload?.dependencyOverridePatches?.length, 1);
+});
+
+test('runDependencyEnvironmentActionRequest applies backend node data and busy state', async () => {
+  const busyStates: boolean[] = [];
+  const appliedNodeData: Record<string, unknown>[] = [];
+  const activityLines: string[] = [];
+
+  const didRun = await runDependencyEnvironmentActionRequest({
+    action: 'check',
+    payload: {
+      action: 'check',
+      mode: 'manual',
+      modelPath: '/models/model.gguf',
+    },
+    invokeAction: async () => ({
+      nodeData: {
+        dependency_status: { state: 'ready' },
+      },
+    }),
+    applyNodeData: (nodeData) => {
+      appliedNodeData.push(nodeData);
+    },
+    appendActivityLine: (line) => {
+      activityLines.push(line);
+    },
+    setBusy: (busy) => {
+      busyStates.push(busy);
+    },
+  });
+
+  assert.equal(didRun, true);
+  assert.deepEqual(busyStates, [true, false]);
+  assert.deepEqual(appliedNodeData, [{ dependency_status: { state: 'ready' } }]);
+  assert.deepEqual(activityLines, []);
+});
+
+test('runDependencyEnvironmentActionRequest skips empty payloads and logs failures', async () => {
+  const busyStates: boolean[] = [];
+  const activityLines: string[] = [];
+  const error = new Error('backend unavailable');
+
+  const didRun = await runDependencyEnvironmentActionRequest({
+    action: 'install',
+    payload: null,
+    invokeAction: async () => {
+      throw new Error('unexpected invocation');
+    },
+    applyNodeData: () => {
+      throw new Error('unexpected apply');
+    },
+    appendActivityLine: (line) => {
+      activityLines.push(line);
+    },
+    setBusy: (busy) => {
+      busyStates.push(busy);
+    },
+  });
+
+  assert.equal(didRun, false);
+  assert.equal(busyStates.length, 0);
+  assert.equal(activityLines.length, 0);
+
+  await assert.rejects(
+    runDependencyEnvironmentActionRequest({
+      action: 'install',
+      payload: {
+        action: 'install',
+        mode: 'manual',
+        modelPath: '/models/model.gguf',
+      },
+      invokeAction: async () => {
+        throw error;
+      },
+      applyNodeData: () => {
+        throw new Error('unexpected apply');
+      },
+      appendActivityLine: (line) => {
+        activityLines.push(line);
+      },
+      setBusy: (busy) => {
+        busyStates.push(busy);
+      },
+    }),
+    error,
+  );
+
+  assert.deepEqual(busyStates, [true, false]);
+  assert.deepEqual(activityLines, [formatDependencyEnvironmentActionError('install', error)]);
 });
 
 test('resolveDependencyEnvironmentUpstreamState projects connected model and override inputs', () => {
