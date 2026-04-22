@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import BaseNode from '../BaseNode.svelte';
+  import DependencyEnvironmentActivityLog from './DependencyEnvironmentActivityLog.svelte';
   import type { NodeDefinition } from '../../../services/workflow/types';
   import {
     dependencyCodeLabel,
@@ -57,7 +58,6 @@
   let activityLog = $state<string[]>(
     Array.isArray(data.activity_log) ? (data.activity_log as string[]) : []
   );
-  let activityLogContainer: HTMLDivElement | undefined = $state();
   let isBusy = $state(false);
 
   const MAX_ACTIVITY_LOG_LINES = 200;
@@ -298,11 +298,6 @@
     activityLog = next.length > MAX_ACTIVITY_LOG_LINES ? next.slice(next.length - MAX_ACTIVITY_LOG_LINES) : next;
     persistNodeState();
   }
-
-  $effect(() => {
-    if (!activityLogContainer || activityLog.length === 0) return;
-    activityLogContainer.scrollTop = activityLogContainer.scrollHeight;
-  });
 
   function matchesActivityEvent(payload: DependencyActivityEvent): boolean {
     const upstreamPath = (upstreamModelPath ?? '').trim();
@@ -863,32 +858,7 @@
         {/if}
 
         {#if upstreamModelPath}
-          <div class="rounded border border-neutral-700 bg-neutral-950/50 px-2 py-1 space-y-1">
-            <div class="flex items-center gap-2">
-              <span class="text-[10px] text-neutral-300">Activity Log</span>
-              <span class="ml-auto text-[9px] text-neutral-500">{activityLog.length} line(s)</span>
-              <button
-                type="button"
-                class="text-[9px] text-neutral-500 hover:text-neutral-300 disabled:opacity-50"
-                onclick={clearActivityLog}
-                disabled={isBusy || activityLog.length === 0}
-              >
-                Clear
-              </button>
-            </div>
-            <div
-              bind:this={activityLogContainer}
-              class="copyable-activity-log nodrag nopan nowheel h-28 overflow-y-auto rounded border border-neutral-800 bg-black/40 px-2 py-1 font-mono text-[9px] leading-4 text-neutral-300"
-            >
-              {#if activityLog.length === 0}
-                <div class="text-neutral-500">No activity yet. Use Run/Resolve/Check/Install to capture logs.</div>
-              {:else}
-                {#each activityLog as line, i (`${i}:${line}`)}
-                  <div class="whitespace-pre-wrap break-words">{line}</div>
-                {/each}
-              {/if}
-            </div>
-          </div>
+          <DependencyEnvironmentActivityLog {activityLog} {isBusy} onClear={clearActivityLog} />
         {/if}
       </div>
   </BaseNode>
@@ -904,9 +874,4 @@
     border-color: rgba(8, 145, 178, 0.3);
   }
 
-  .copyable-activity-log {
-    user-select: text;
-    -webkit-user-select: text;
-    cursor: text;
-  }
 </style>

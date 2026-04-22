@@ -495,7 +495,9 @@ Tasks:
   display labels, and patch lookup helpers now live in
   `src/components/nodes/workflow/dependencyEnvironmentState.ts`, with unit
   coverage in `dependencyEnvironmentState.test.ts`, reducing the component to
-  UI state, backend actions, and rendering.
+  UI state, backend actions, and rendering. The activity log panel and auto-scroll
+  behavior now live in
+  `src/components/nodes/workflow/DependencyEnvironmentActivityLog.svelte`.
 - Split `pantograph-uniffi` and `pantograph-rustler` facades by exported surface
   family while preserving public names.
 

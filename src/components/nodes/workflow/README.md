@@ -12,6 +12,7 @@ to the workflow graph runtime instead of being spread across generic canvas code
 | `BooleanInputNode.svelte` | Renders a metadata-driven boolean editor that can bind to any downstream boolean-compatible setting. |
 | `AudioOutputNode.svelte` | Renders playback controls for streamed and final audio outputs, including rerun cleanup of execution-local playback state. |
 | `DiffusionInferenceNode.svelte` | Shows execution and dependency state for process-backed diffusion image generation. |
+| `DependencyEnvironmentActivityLog.svelte` | Renders the dependency environment activity log and owns log auto-scroll behavior. |
 | `DependencyEnvironmentNode.svelte` | Presents dependency resolution, check, install, activity, and override controls for model-backed environment setup. |
 | `dependencyEnvironmentState.ts` | Defines dependency environment contracts and pure override parsing, merge, label, and lookup helpers. |
 | `dependencyEnvironmentState.test.ts` | Unit coverage for dependency environment override parsing, merge, lookup, and label helpers. |
@@ -73,6 +74,9 @@ workflow stores.
 component, while dependency contracts and pure override state helpers live in
 `dependencyEnvironmentState.ts` so parsing and merge behavior can be tested
 without mounting the node.
+The activity log panel lives in `DependencyEnvironmentActivityLog.svelte` so
+scroll handling and copyable log styling stay separate from dependency action
+state.
 
 ## Alternatives Rejected
 - Reset audio output state only by remounting the workflow view.
@@ -102,6 +106,8 @@ without mounting the node.
 - `DependencyEnvironmentNode.svelte` must keep dependency override parsing and
   merge semantics aligned with the backend patch contract in
   `dependencyEnvironmentState.ts`.
+- `DependencyEnvironmentActivityLog.svelte` owns log auto-scroll behavior and
+  must not trigger graph drag or pan gestures.
 - Image and media preview controls must expose accessible names even when the
   visible content is an image or icon rather than text.
 
