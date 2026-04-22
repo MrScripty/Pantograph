@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  buildDependencyEnvironmentActionPayload,
   dependencyCodeLabel,
   getPatchFrom,
   hasOverrideFields,
@@ -128,4 +129,42 @@ test('upsertExtraIndexUrls dedupes comma-separated URLs', () => {
     'https://a.example/simple',
     'https://b.example/simple',
   ]);
+});
+
+test('buildDependencyEnvironmentActionPayload projects upstream model and override state', () => {
+  const payload = buildDependencyEnvironmentActionPayload({
+    action: 'run',
+    mode: 'manual',
+    upstreamModelPath: ' /models/model.gguf ',
+    upstreamModelId: 'model-a',
+    upstreamModelType: 'embedding',
+    upstreamTaskType: 'embed',
+    upstreamBackendKey: 'llama_cpp',
+    upstreamPlatformContext: { os: 'linux' },
+    selectedBindingIds: ['binding-a'],
+    upstreamRequirements: null,
+    dependencyRequirements: {
+      model_id: 'model-a',
+      platform_key: 'linux-x86_64',
+      backend_key: 'llama_cpp',
+      dependency_contract_version: 1,
+      validation_state: 'resolved',
+      validation_errors: [],
+      bindings: [],
+      selected_binding_ids: [],
+    },
+    effectiveManualOverrides: [
+      {
+        contract_version: 1,
+        binding_id: 'binding-a',
+        scope: 'binding',
+        fields: { python_executable: '/usr/bin/python3' },
+      },
+    ],
+  });
+
+  assert.equal(payload?.modelPath, '/models/model.gguf');
+  assert.equal(payload?.modelId, 'model-a');
+  assert.deepEqual(payload?.selectedBindingIds, ['binding-a']);
+  assert.equal(payload?.dependencyOverridePatches?.length, 1);
 });

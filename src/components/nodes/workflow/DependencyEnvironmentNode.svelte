@@ -7,6 +7,7 @@
   import DependencyEnvironmentStatusPanel from './DependencyEnvironmentStatusPanel.svelte';
   import type { NodeDefinition } from '../../../services/workflow/types';
   import {
+    buildDependencyEnvironmentActionPayload,
     dependencyTokenLabel,
     getPatchFrom,
     hasOverrideFields,
@@ -16,6 +17,8 @@
     upsertExtraIndexUrls,
     upsertStringOverrideField,
     type DependencyActivityEvent,
+    type DependencyEnvironmentActionRequest,
+    type DependencyEnvironmentActionResponse,
     type DependencyOverridePatchV1,
     type EnvironmentRef,
     type ModelDependencyRequirements,
@@ -217,40 +220,21 @@
     });
   }
 
-  interface DependencyEnvironmentActionRequest {
-    action: 'resolve' | 'check' | 'install' | 'run';
-    mode?: 'auto' | 'manual';
-    modelPath: string;
-    modelId?: string;
-    modelType?: string;
-    taskTypePrimary?: string;
-    backendKey?: string;
-    platformContext?: Record<string, string>;
-    selectedBindingIds?: string[];
-    dependencyRequirements?: ModelDependencyRequirements;
-    dependencyOverridePatches?: DependencyOverridePatchV1[];
-  }
-
-  interface DependencyEnvironmentActionResponse {
-    nodeData: Record<string, unknown>;
-  }
-
   function dependencyActionPayload(action: DependencyEnvironmentActionRequest['action']): DependencyEnvironmentActionRequest | null {
-    const modelPath = (upstreamModelPath ?? '').trim();
-    if (!modelPath) return null;
-    return {
+    return buildDependencyEnvironmentActionPayload({
       action,
       mode,
-      modelPath,
-      modelId: upstreamModelId ?? dependencyRequirements?.model_id ?? undefined,
-      modelType: upstreamModelType ?? undefined,
-      taskTypePrimary: upstreamTaskType ?? undefined,
-      backendKey: upstreamBackendKey ?? dependencyRequirements?.backend_key ?? undefined,
-      platformContext: upstreamPlatformContext ?? undefined,
+      upstreamModelPath,
+      upstreamModelId,
+      upstreamModelType,
+      upstreamTaskType,
+      upstreamBackendKey,
+      upstreamPlatformContext,
       selectedBindingIds,
-      dependencyRequirements: upstreamRequirements ?? dependencyRequirements ?? undefined,
-      dependencyOverridePatches: effectiveManualOverrides.length > 0 ? effectiveManualOverrides : undefined,
-    };
+      upstreamRequirements,
+      dependencyRequirements,
+      effectiveManualOverrides,
+    });
   }
 
   function applyDependencyActionNodeData(nodeData: Record<string, unknown>) {

@@ -491,8 +491,8 @@ Tasks:
   container-border subcomponents/helpers.
 - Split `DependencyEnvironmentNode.svelte` into data parsing, activity log,
   mode controls, override editor, status panels, and command controls.
-  Progress: dependency environment DTOs, override parsing, patch merging,
-  patch mutation, display labels, and patch lookup helpers now live in
+  Progress: dependency environment DTOs, action payload projection, override
+  parsing, patch merging, patch mutation, display labels, and patch lookup helpers now live in
   `src/components/nodes/workflow/dependencyEnvironmentState.ts`, with unit
   coverage in `dependencyEnvironmentState.test.ts`, reducing the component to
   UI state, backend actions, and rendering. The activity log panel and auto-scroll

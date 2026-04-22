@@ -17,7 +17,7 @@ to the workflow graph runtime instead of being spread across generic canvas code
 | `DependencyEnvironmentNode.svelte` | Presents dependency resolution, check, install, activity, and override controls for model-backed environment setup. |
 | `DependencyEnvironmentRefPanel.svelte` | Renders the resolved dependency environment reference state, environment id, and Python executable. |
 | `DependencyEnvironmentStatusPanel.svelte` | Renders dependency state badges, status messages, and command buttons for dependency actions. |
-| `dependencyEnvironmentState.ts` | Defines dependency environment contracts and pure override parsing, merge, mutation, label, and lookup helpers. |
+| `dependencyEnvironmentState.ts` | Defines dependency environment contracts and pure action-payload, override parsing, merge, mutation, label, and lookup helpers. |
 | `dependencyEnvironmentState.test.ts` | Unit coverage for dependency environment override parsing, merge, lookup, and label helpers. |
 | `ExpandSettingsNode.svelte` | Displays the effective passthrough value for each model-derived inference setting while the shared base node renders matching override input/output handles from dynamic port metadata. |
 | `expandSettingsDisplay.ts` | Resolves the effective visible expand-setting value from live connected overrides, runtime passthrough data, and schema defaults. |

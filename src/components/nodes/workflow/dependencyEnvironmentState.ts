@@ -123,6 +123,70 @@ export type StringOverrideField =
   | 'wheel_source_path'
   | 'package_source_override';
 
+export interface DependencyEnvironmentActionRequest {
+  action: 'resolve' | 'check' | 'install' | 'run';
+  mode?: 'auto' | 'manual';
+  modelPath: string;
+  modelId?: string;
+  modelType?: string;
+  taskTypePrimary?: string;
+  backendKey?: string;
+  platformContext?: Record<string, string>;
+  selectedBindingIds?: string[];
+  dependencyRequirements?: ModelDependencyRequirements;
+  dependencyOverridePatches?: DependencyOverridePatchV1[];
+}
+
+export interface DependencyEnvironmentActionResponse {
+  nodeData: Record<string, unknown>;
+}
+
+export interface DependencyEnvironmentActionPayloadInput {
+  action: DependencyEnvironmentActionRequest['action'];
+  mode: 'auto' | 'manual';
+  upstreamModelPath: string | null;
+  upstreamModelId: string | null;
+  upstreamModelType: string | null;
+  upstreamTaskType: string | null;
+  upstreamBackendKey: string | null;
+  upstreamPlatformContext: Record<string, string> | null;
+  selectedBindingIds: string[];
+  upstreamRequirements: ModelDependencyRequirements | null;
+  dependencyRequirements: ModelDependencyRequirements | null;
+  effectiveManualOverrides: DependencyOverridePatchV1[];
+}
+
+export function buildDependencyEnvironmentActionPayload({
+  action,
+  mode,
+  upstreamModelPath,
+  upstreamModelId,
+  upstreamModelType,
+  upstreamTaskType,
+  upstreamBackendKey,
+  upstreamPlatformContext,
+  selectedBindingIds,
+  upstreamRequirements,
+  dependencyRequirements,
+  effectiveManualOverrides,
+}: DependencyEnvironmentActionPayloadInput): DependencyEnvironmentActionRequest | null {
+  const modelPath = (upstreamModelPath ?? '').trim();
+  if (!modelPath) return null;
+  return {
+    action,
+    mode,
+    modelPath,
+    modelId: upstreamModelId ?? dependencyRequirements?.model_id ?? undefined,
+    modelType: upstreamModelType ?? undefined,
+    taskTypePrimary: upstreamTaskType ?? undefined,
+    backendKey: upstreamBackendKey ?? dependencyRequirements?.backend_key ?? undefined,
+    platformContext: upstreamPlatformContext ?? undefined,
+    selectedBindingIds,
+    dependencyRequirements: upstreamRequirements ?? dependencyRequirements ?? undefined,
+    dependencyOverridePatches: effectiveManualOverrides.length > 0 ? effectiveManualOverrides : undefined,
+  };
+}
+
 export function normalizeOverridePatch(raw: unknown): DependencyOverridePatchV1 | null {
   if (!raw || typeof raw !== 'object') return null;
   const value = raw as Record<string, unknown>;
