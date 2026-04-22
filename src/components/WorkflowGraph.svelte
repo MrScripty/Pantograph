@@ -21,6 +21,7 @@
     buildWorkflowHorseshoeOpenContext,
     formatWorkflowHorseshoeOpenRequestTrace,
     formatWorkflowHorseshoeSessionTrace,
+    normalizeWorkflowHorseshoeSelectedIndex,
     resolveWorkflowHorseshoeSelectionSnapshot,
     resolveWorkflowDragCursorUpdate,
     resolveWorkflowGroupZoomTarget,
@@ -317,14 +318,10 @@
       return;
     }
 
-    if ($connectionIntent.insertableNodeTypes.length > 0) {
-      horseshoeSelectedIndex = Math.max(
-        0,
-        Math.min(horseshoeSelectedIndex, $connectionIntent.insertableNodeTypes.length - 1),
-      );
-    } else {
-      horseshoeSelectedIndex = 0;
-    }
+    horseshoeSelectedIndex = normalizeWorkflowHorseshoeSelectedIndex({
+      selectedIndex: horseshoeSelectedIndex,
+      itemCount: $connectionIntent.insertableNodeTypes.length,
+    });
 
     const nextSession = syncHorseshoeDisplay(horseshoeSession, getHorseshoeOpenContext());
     if (nextSession !== horseshoeSession) {

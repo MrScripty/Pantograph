@@ -37,7 +37,10 @@
     isEditableKeyboardTarget,
     resolveHorseshoeKeyboardAction,
   } from '../workflowHorseshoeKeyboard.js';
-  import { resolveWorkflowHorseshoeSelectionSnapshot } from '../workflowHorseshoeSelection.js';
+  import {
+    normalizeWorkflowHorseshoeSelectedIndex,
+    resolveWorkflowHorseshoeSelectionSnapshot,
+  } from '../workflowHorseshoeSelection.js';
   import {
     formatWorkflowHorseshoeOpenRequestTrace,
     formatWorkflowHorseshoeSessionTrace,
@@ -241,14 +244,10 @@
       return;
     }
 
-    if ($connectionIntentStore.insertableNodeTypes.length > 0) {
-      horseshoeSelectedIndex = Math.max(
-        0,
-        Math.min(horseshoeSelectedIndex, $connectionIntentStore.insertableNodeTypes.length - 1),
-      );
-    } else {
-      horseshoeSelectedIndex = 0;
-    }
+    horseshoeSelectedIndex = normalizeWorkflowHorseshoeSelectedIndex({
+      selectedIndex: horseshoeSelectedIndex,
+      itemCount: $connectionIntentStore.insertableNodeTypes.length,
+    });
 
     const nextSession = syncHorseshoeDisplay(horseshoeSession, getHorseshoeOpenContext());
     if (nextSession !== horseshoeSession) {

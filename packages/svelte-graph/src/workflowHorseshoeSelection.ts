@@ -1,5 +1,6 @@
 import type { HorseshoeDragSessionState } from './horseshoeDragSession.ts';
 import type { HorseshoeInsertFeedbackState } from './horseshoeInsertFeedback.ts';
+import { clampHorseshoeIndex } from './horseshoeSelector.ts';
 import type { HorseshoeKeyboardContext } from './workflowHorseshoeKeyboard.ts';
 
 export interface WorkflowHorseshoeSelectionSnapshot<TCandidate> {
@@ -24,4 +25,11 @@ export function resolveWorkflowHorseshoeSelectionSnapshot<TCandidate>(params: {
     },
     selectedCandidate,
   };
+}
+
+export function normalizeWorkflowHorseshoeSelectedIndex(params: {
+  selectedIndex: number;
+  itemCount: number;
+}): number {
+  return clampHorseshoeIndex(params.selectedIndex, params.itemCount);
 }

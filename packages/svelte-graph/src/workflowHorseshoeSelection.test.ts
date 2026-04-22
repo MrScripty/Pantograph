@@ -6,7 +6,10 @@ import {
   createHorseshoeInsertFeedbackState,
   startHorseshoeInsertFeedback,
 } from './horseshoeInsertFeedback.ts';
-import { resolveWorkflowHorseshoeSelectionSnapshot } from './workflowHorseshoeSelection.ts';
+import {
+  normalizeWorkflowHorseshoeSelectedIndex,
+  resolveWorkflowHorseshoeSelectionSnapshot,
+} from './workflowHorseshoeSelection.ts';
 
 const items = [
   { node_type: 'a' },
@@ -68,5 +71,29 @@ test('resolveWorkflowHorseshoeSelectionSnapshot accepts missing item lists', () 
       selectedIndex: 0,
     }).selectedCandidate,
     null,
+  );
+});
+
+test('normalizeWorkflowHorseshoeSelectedIndex clamps selected index to available items', () => {
+  assert.equal(
+    normalizeWorkflowHorseshoeSelectedIndex({
+      selectedIndex: -1,
+      itemCount: 2,
+    }),
+    0,
+  );
+  assert.equal(
+    normalizeWorkflowHorseshoeSelectedIndex({
+      selectedIndex: 5,
+      itemCount: 2,
+    }),
+    1,
+  );
+  assert.equal(
+    normalizeWorkflowHorseshoeSelectedIndex({
+      selectedIndex: 5,
+      itemCount: 0,
+    }),
+    0,
   );
 });
