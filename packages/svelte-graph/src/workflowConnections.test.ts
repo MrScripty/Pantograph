@@ -6,6 +6,8 @@ import {
   edgeToGraphEdge,
   isWorkflowConnectionValid,
   preserveConnectionIntentState,
+  resolveConnectionCommitGraphRevision,
+  resolveWorkflowConnectionAnchors,
 } from './workflowConnections.ts';
 import type { NodeDefinition } from './types/workflow.ts';
 
@@ -162,6 +164,58 @@ test('preserveConnectionIntentState builds an empty fallback without current int
       insertableNodeTypes: [],
       rejection: undefined,
     },
+  );
+});
+
+test('resolveWorkflowConnectionAnchors returns backend anchors for complete connections', () => {
+  assert.deepEqual(
+    resolveWorkflowConnectionAnchors({
+      source: 'source-a',
+      sourceHandle: 'out',
+      target: 'target-a',
+      targetHandle: 'in',
+    }),
+    {
+      sourceAnchor: { node_id: 'source-a', port_id: 'out' },
+      targetAnchor: { node_id: 'target-a', port_id: 'in' },
+    },
+  );
+
+  assert.equal(
+    resolveWorkflowConnectionAnchors({
+      source: 'source-a',
+      sourceHandle: 'out',
+      target: null,
+      targetHandle: 'in',
+    }),
+    null,
+  );
+});
+
+test('resolveConnectionCommitGraphRevision prefers matching active intent revision', () => {
+  const currentIntent = {
+    sourceAnchor: { node_id: 'source-a', port_id: 'out' },
+    graphRevision: 'intent-rev',
+    compatibleNodeIds: [],
+    compatibleTargetKeys: [],
+    insertableNodeTypes: [],
+  };
+
+  assert.equal(
+    resolveConnectionCommitGraphRevision({
+      sourceAnchor: { node_id: 'source-a', port_id: 'out' },
+      currentIntent,
+      currentGraphRevision: 'current-rev',
+    }),
+    'intent-rev',
+  );
+  assert.equal(
+    resolveConnectionCommitGraphRevision({
+      sourceAnchor: { node_id: 'source-b', port_id: 'out' },
+      currentIntent,
+      currentGraphRevision: 'current-rev',
+    }),
+    'current-rev',
   );
 });
 

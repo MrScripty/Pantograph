@@ -12,7 +12,7 @@ shared node presentation rules live outside the Pantograph app shell.
 | `WorkflowGraph.svelte` | Main graph canvas that owns connect/reconnect flows, candidate loading, revision-aware edge commits, and the drag-time horseshoe insert flow. |
 | `../workflowConnectionInteraction.ts` | Owns connection drag reset and connect-end preservation decisions. |
 | `../workflowConnectionInteraction.test.ts` | Unit coverage for connection interaction reset and connect-end preservation. |
-| `../workflowConnections.ts` | Computes reusable connection validation, graph-edge normalization, candidate-to-intent projection, and rejected-intent preservation. |
+| `../workflowConnections.ts` | Computes reusable connection validation, graph-edge normalization, candidate-to-intent projection, commit anchors, revision selection, and rejected-intent preservation. |
 | `../workflowConnections.test.ts` | Unit coverage for package connection helper behavior. |
 | `../horseshoeDragSession.ts` | Owns horseshoe drag visibility, close, request, sync, and anchor state transitions. |
 | `../horseshoeDragSession.test.ts` | Unit coverage for horseshoe drag-session transitions. |
@@ -110,6 +110,9 @@ keeping reference comparisons out of `WorkflowGraph.svelte`.
 Connection validation and backend candidate projection live in
 `workflowConnections.ts`, while `WorkflowGraph.svelte` owns backend calls and
 interaction cleanup.
+Connection commit anchor projection and active-intent revision selection also
+live in `workflowConnections.ts`, so `WorkflowGraph.svelte` resolves a tested
+commit contract before invoking backend graph mutations.
 Rejected connection-intent fallback state also lives in
 `workflowConnections.ts`, so preserved compatible targets and insertable node
 types stay aligned while `WorkflowGraph.svelte` attaches backend rejection
@@ -259,6 +262,9 @@ while `WorkflowGraph.svelte` provides callbacks that mutate local graph state.
   suppresses the next node sync after a local drag operation.
 - `workflowConnections.ts` must keep candidate-derived target validation aligned
   with backend source anchors and package port compatibility.
+- `workflowConnections.ts` must reject incomplete connection commits before
+  backend calls and must use the active intent revision only for matching source
+  anchors.
 - `workflowConnections.ts` must preserve prior compatible targets and
   insertable candidates when backend rejection state is attached to a still-open
   connection intent.

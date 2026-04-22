@@ -1,4 +1,5 @@
 import type {
+  ConnectionAnchor,
   ConnectionCandidatesResponse,
   ConnectionCommitResponse,
   GraphEdge,
@@ -12,6 +13,11 @@ interface WorkflowConnectionLike {
   sourceHandle?: string | null;
   target?: string | null;
   targetHandle?: string | null;
+}
+
+export interface WorkflowConnectionAnchors {
+  sourceAnchor: ConnectionAnchor;
+  targetAnchor: ConnectionAnchor;
 }
 
 interface WorkflowEdgeLike {
@@ -53,6 +59,42 @@ export function buildConnectionIntentState(
     insertableNodeTypes: candidates.insertable_node_types,
     rejection,
   };
+}
+
+export function resolveWorkflowConnectionAnchors(
+  connection: WorkflowConnectionLike,
+): WorkflowConnectionAnchors | null {
+  if (
+    !connection.source ||
+    !connection.sourceHandle ||
+    !connection.target ||
+    !connection.targetHandle
+  ) {
+    return null;
+  }
+
+  return {
+    sourceAnchor: {
+      node_id: connection.source,
+      port_id: connection.sourceHandle,
+    },
+    targetAnchor: {
+      node_id: connection.target,
+      port_id: connection.targetHandle,
+    },
+  };
+}
+
+export function resolveConnectionCommitGraphRevision(params: {
+  sourceAnchor: ConnectionAnchor;
+  currentIntent: ConnectionIntentState | null;
+  currentGraphRevision: string;
+}): string {
+  return params.currentIntent &&
+    params.currentIntent.sourceAnchor.node_id === params.sourceAnchor.node_id &&
+    params.currentIntent.sourceAnchor.port_id === params.sourceAnchor.port_id
+    ? params.currentIntent.graphRevision
+    : params.currentGraphRevision;
 }
 
 export function isWorkflowConnectionValid(

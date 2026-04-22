@@ -16,7 +16,7 @@ architecture views on top of the shared editor.
 | `workflowContainerBoundary.test.ts` | Unit coverage for orchestration boundary bounds and visibility projection. |
 | `workflowContainerSelection.ts` | Resolves app orchestration boundary keyboard actions. |
 | `workflowContainerSelection.test.ts` | Unit coverage for app orchestration boundary keyboard action mapping. |
-| `workflowConnections.ts` | Computes app graph connection validation, graph-edge normalization, and backend candidate projection. |
+| `workflowConnections.ts` | Computes app graph connection validation, graph-edge normalization, backend candidate projection, commit anchors, and revision selection. |
 | `workflowConnections.test.ts` | Unit coverage for app graph connection helper behavior. |
 | `edgeInsertInteraction.ts` | Computes palette edge-insert hover state, preview refresh decisions, and rendered-edge hit testing. |
 | `workflowGraphSource.ts` | Resolves whether the app graph should render workflow store data or the architecture graph. |
@@ -116,6 +116,9 @@ maps browser events into those helpers and owns backend preview/commit effects.
 Connection validation and backend candidate projection live in
 `workflowConnections.ts`, while `WorkflowGraph.svelte` owns backend calls and
 interaction cleanup.
+Connection commit anchor projection and active-intent revision selection also
+live in `workflowConnections.ts`, so the app graph resolves a tested commit
+contract before invoking backend graph mutations.
 Rejected connection-intent fallback state now uses the package
 `preserveConnectionIntentState()` helper, while the app graph owns backend
 refresh and warning side effects.
@@ -257,6 +260,9 @@ container bounds.
 - `workflowConnections.ts` must prefer active backend candidate intent when it
   matches the source anchor, then fall back to package port compatibility only
   when no active intent applies.
+- `workflowConnections.ts` must reject incomplete connection commits before
+  backend calls and must use the active intent revision only for matching source
+  anchors.
 - App graph rejected connection or insert flows must preserve visible
   compatible targets through the package connection-intent preservation helper
   instead of rebuilding fallback state inline.

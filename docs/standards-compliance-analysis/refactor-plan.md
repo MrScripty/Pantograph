@@ -569,6 +569,9 @@ Tasks:
   horseshoe keyboard behavior now uses the package
   `workflowHorseshoeKeyboard.ts` resolver. App graph node double-click and group
   zoom-target behavior now uses the package `workflowNodeActivation.ts` resolver.
+  Package and app connection commit anchor projection and active-intent revision
+  selection now live in their `workflowConnections.ts` helpers, with unit
+  coverage in both connection helper test suites.
   App graph cut gesture state, line
   sampling, and overlay rendering now delegate to the package `CutTool`; the app
   graph keeps only the backend edge-deletion callback, and app edge-insert

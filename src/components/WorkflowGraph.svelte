@@ -89,6 +89,8 @@
     buildConnectionIntentState,
     edgeToGraphEdge,
     isWorkflowConnectionValid,
+    resolveConnectionCommitGraphRevision,
+    resolveWorkflowConnectionAnchors,
   } from './workflowConnections.ts';
   import { computeWorkflowGraphSyncDecision } from './workflowGraphSync';
   import {
@@ -811,34 +813,19 @@
   }
 
   async function commitConnection(connection: Connection): Promise<ConnectionCommitResponse | null> {
-    if (
-      !connection.source ||
-      !connection.sourceHandle ||
-      !connection.target ||
-      !connection.targetHandle
-    ) {
-      return null;
-    }
+    const anchors = resolveWorkflowConnectionAnchors(connection);
+    if (!anchors) return null;
 
-    const sourceAnchor = {
-      node_id: connection.source,
-      port_id: connection.sourceHandle,
-    };
-    const targetAnchor = {
-      node_id: connection.target,
-      port_id: connection.targetHandle,
-    };
     const activeIntent = $connectionIntent;
-    const requestedRevision =
-      activeIntent &&
-      activeIntent.sourceAnchor.node_id === sourceAnchor.node_id &&
-      activeIntent.sourceAnchor.port_id === sourceAnchor.port_id
-        ? activeIntent.graphRevision
-        : getGraphRevision();
+    const requestedRevision = resolveConnectionCommitGraphRevision({
+      sourceAnchor: anchors.sourceAnchor,
+      currentIntent: activeIntent,
+      currentGraphRevision: getGraphRevision(),
+    });
 
     const response = await workflowService.connectAnchors(
-      sourceAnchor,
-      targetAnchor,
+      anchors.sourceAnchor,
+      anchors.targetAnchor,
       requestedRevision
     );
 
@@ -864,7 +851,7 @@
     }
 
     setConnectionIntent(preserveConnectionIntentState({
-      sourceAnchor,
+      sourceAnchor: anchors.sourceAnchor,
       graphRevision: response.graph_revision,
       currentIntent: $connectionIntent,
       rejection: response.rejection,

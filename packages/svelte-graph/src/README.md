@@ -31,7 +31,7 @@ fork core canvas behavior.
 | `stores/` | Package store factories for workflow, session, and view state. |
 | `types/` | Stable TypeScript contracts for graph, backend, and group APIs. |
 | `workflowEventOwnership.ts` | Projection helper for backend-provided workflow execution ids, active run identity, and stale-event relevance. |
-| `workflowConnections.ts` | Shared connection validation, graph-edge normalization, candidate-to-intent projection, and rejected-intent preservation helpers. |
+| `workflowConnections.ts` | Shared connection validation, graph-edge normalization, candidate-to-intent projection, commit-anchor projection, revision selection, and rejected-intent preservation helpers. |
 | `workflowConnections.test.ts` | Unit coverage for reusable connection helper behavior. |
 | `workflowGraphSync.ts` | Reference-based store-to-SvelteFlow synchronization decision helper. |
 | `workflowGraphSync.test.ts` | Unit coverage for SvelteFlow node and edge sync decisions. |
@@ -85,6 +85,9 @@ reference-comparison rules inline.
 Keep connection-intent projection and synchronous connection validation in
 `workflowConnections.ts` so the graph component does not duplicate backend
 candidate projection, fallback rejection state, or port-compatibility rules.
+Keep connection commit anchor projection and active-intent revision selection in
+`workflowConnections.ts` so graph components only perform backend side effects
+after resolving a tested connection commit contract.
 Keep palette drag parsing and drop-position projection in
 `workflowPaletteDrag.ts` so the graph component owns browser events and store
 mutations without owning payload or coordinate policy inline.
@@ -225,6 +228,9 @@ query editing, and close/open routing.
 - `workflowConnections.ts` must prefer active backend candidate intent when it
   matches the source anchor, then fall back to static port compatibility only
   when no active intent applies.
+- `workflowConnections.ts` must reject incomplete connection commits before
+  backend calls and must use the active intent revision only for matching source
+  anchors.
 - Rejected connection or insert flows that preserve the selector display must
   use `preserveConnectionIntentState()` so compatible targets and insertable
   nodes stay visible while backend rejection metadata is attached.

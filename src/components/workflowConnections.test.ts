@@ -5,6 +5,8 @@ import {
   buildConnectionIntentState,
   edgeToGraphEdge,
   isWorkflowConnectionValid,
+  resolveConnectionCommitGraphRevision,
+  resolveWorkflowConnectionAnchors,
 } from './workflowConnections.ts';
 import type { NodeDefinition, PortDataType } from '../services/workflow/types.ts';
 
@@ -99,6 +101,58 @@ test('buildConnectionIntentState projects backend candidates into app store stat
   assert.deepEqual(intent.compatibleNodeIds, ['target-a']);
   assert.deepEqual(intent.compatibleTargetKeys, ['target-a:number']);
   assert.equal(intent.graphRevision, 'rev-a');
+});
+
+test('resolveWorkflowConnectionAnchors returns backend anchors for complete app connections', () => {
+  assert.deepEqual(
+    resolveWorkflowConnectionAnchors({
+      source: 'source-a',
+      sourceHandle: 'out',
+      target: 'target-a',
+      targetHandle: 'number',
+    }),
+    {
+      sourceAnchor: { node_id: 'source-a', port_id: 'out' },
+      targetAnchor: { node_id: 'target-a', port_id: 'number' },
+    },
+  );
+
+  assert.equal(
+    resolveWorkflowConnectionAnchors({
+      source: 'source-a',
+      sourceHandle: null,
+      target: 'target-a',
+      targetHandle: 'number',
+    }),
+    null,
+  );
+});
+
+test('resolveConnectionCommitGraphRevision prefers matching active intent revision', () => {
+  const currentIntent = {
+    sourceAnchor: { node_id: 'source-a', port_id: 'out' },
+    graphRevision: 'intent-rev',
+    compatibleNodeIds: [],
+    compatibleTargetKeys: [],
+    insertableNodeTypes: [],
+  };
+
+  assert.equal(
+    resolveConnectionCommitGraphRevision({
+      sourceAnchor: { node_id: 'source-a', port_id: 'out' },
+      currentIntent,
+      currentGraphRevision: 'current-rev',
+    }),
+    'intent-rev',
+  );
+  assert.equal(
+    resolveConnectionCommitGraphRevision({
+      sourceAnchor: { node_id: 'source-a', port_id: 'other' },
+      currentIntent,
+      currentGraphRevision: 'current-rev',
+    }),
+    'current-rev',
+  );
 });
 
 test('isWorkflowConnectionValid uses active intent when it matches the source anchor', () => {

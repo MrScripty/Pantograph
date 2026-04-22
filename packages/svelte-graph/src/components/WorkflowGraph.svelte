@@ -20,6 +20,8 @@
     edgeToGraphEdge,
     isWorkflowConnectionValid,
     preserveConnectionIntentState,
+    resolveConnectionCommitGraphRevision,
+    resolveWorkflowConnectionAnchors,
   } from '../workflowConnections.js';
   import { computeWorkflowGraphSyncDecision } from '../workflowGraphSync.js';
   import type {
@@ -579,32 +581,21 @@
   }
 
   async function commitConnection(connection: Connection): Promise<ConnectionCommitResponse | null> {
-    if (
-      !connection.source ||
-      !connection.sourceHandle ||
-      !connection.target ||
-      !connection.targetHandle
-    ) {
-      return null;
-    }
+    const anchors = resolveWorkflowConnectionAnchors(connection);
+    if (!anchors) return null;
 
     const sessionId = get(currentSessionId);
     if (!sessionId) return null;
 
-    const sourceAnchor = {
-      node_id: connection.source,
-      port_id: connection.sourceHandle,
-    };
-    const targetAnchor = {
-      node_id: connection.target,
-      port_id: connection.targetHandle,
-    };
-
     const response = await backend.connectAnchors(
-      sourceAnchor,
-      targetAnchor,
+      anchors.sourceAnchor,
+      anchors.targetAnchor,
       sessionId,
-      getGraphRevision(),
+      resolveConnectionCommitGraphRevision({
+        sourceAnchor: anchors.sourceAnchor,
+        currentIntent: $connectionIntentStore,
+        currentGraphRevision: getGraphRevision(),
+      }),
     );
 
     if (response.accepted && response.graph) {
@@ -617,7 +608,7 @@
     }
 
     stores.workflow.setConnectionIntent(preserveConnectionIntentState({
-      sourceAnchor,
+      sourceAnchor: anchors.sourceAnchor,
       graphRevision: response.graph_revision,
       currentIntent: $connectionIntentStore,
       rejection: response.rejection,
