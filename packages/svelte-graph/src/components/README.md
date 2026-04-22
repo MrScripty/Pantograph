@@ -10,6 +10,8 @@ shared node presentation rules live outside the Pantograph app shell.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `WorkflowGraph.svelte` | Main graph canvas that owns connect/reconnect flows, candidate loading, revision-aware edge commits, and the drag-time horseshoe insert flow. |
+| `../workflowConnections.ts` | Computes reusable connection validation, graph-edge normalization, and candidate-to-intent projection. |
+| `../workflowConnections.test.ts` | Unit coverage for package connection helper behavior. |
 | `../workflowGraphSync.ts` | Computes reference-based store-to-SvelteFlow node and edge synchronization decisions. |
 | `../workflowGraphSync.test.ts` | Unit coverage for package graph sync decisions. |
 | `../workflowMiniMap.ts` | Maps package workflow node groups and backend categories to minimap colors. |
@@ -75,6 +77,9 @@ Minimap color projection lives in `workflowMiniMap.ts` so category-to-color
 mapping stays testable outside the SvelteFlow component.
 Store-to-SvelteFlow synchronization decisions live in `workflowGraphSync.ts`,
 keeping reference comparisons out of `WorkflowGraph.svelte`.
+Connection validation and backend candidate projection live in
+`workflowConnections.ts`, while `WorkflowGraph.svelte` owns backend calls and
+interaction cleanup.
 
 ## Alternatives Rejected
 - Ask the backend on every pointer move.
@@ -124,6 +129,8 @@ keeping reference comparisons out of `WorkflowGraph.svelte`.
   group-node coloring ahead of category coloring.
 - `workflowGraphSync.ts` must not reassign nodes when a caller intentionally
   suppresses the next node sync after a local drag operation.
+- `workflowConnections.ts` must keep candidate-derived target validation aligned
+  with backend source anchors and package port compatibility.
 
 ## Revisit Triggers
 - Backend candidate queries become too slow for one-shot drag-start loading.

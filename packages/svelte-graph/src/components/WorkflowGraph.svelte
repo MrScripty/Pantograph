@@ -15,16 +15,19 @@
 
   import { useGraphContext } from '../context/useGraphContext.js';
   import { applyWorkflowGraphMutationResponse } from '../stores/workflowGraphMutationResponse.js';
+  import {
+    buildConnectionIntentState,
+    edgeToGraphEdge,
+    isWorkflowConnectionValid,
+  } from '../workflowConnections.js';
   import { computeWorkflowGraphSyncDecision } from '../workflowGraphSync.js';
   import type {
     NodeDefinition,
-    GraphEdge,
     ConnectionAnchor,
     ConnectionCandidatesResponse,
     ConnectionCommitResponse,
     InsertableNodeTypeCandidate,
   } from '../types/workflow.js';
-  import { isPortTypeCompatible } from '../portTypeCompatibility.js';
   import {
     findBestInsertableMatchIndex,
     findNearestVisibleHorseshoeIndex,
@@ -583,64 +586,19 @@
     }
   }
 
-  /** Synchronous connection gate — prevents SvelteFlow from creating invalid edges. */
   function checkValidConnection(connection: Edge | Connection): boolean {
-    if (
-      $connectionIntentStore &&
-      connection.source === $connectionIntentStore.sourceAnchor.node_id &&
-      connection.sourceHandle === $connectionIntentStore.sourceAnchor.port_id &&
-      connection.target &&
-      connection.targetHandle
-    ) {
-      return $connectionIntentStore.compatibleTargetKeys.includes(
-        `${connection.target}:${connection.targetHandle}`,
-      );
-    }
-
-    const sourceNode = nodes.find((n) => n.id === connection.source);
-    const targetNode = nodes.find((n) => n.id === connection.target);
-    const sourceDef = sourceNode?.data?.definition as NodeDefinition | undefined;
-    const targetDef = targetNode?.data?.definition as NodeDefinition | undefined;
-    const sourcePort = sourceDef?.outputs?.find((p) => p.id === connection.sourceHandle);
-    const targetPort = targetDef?.inputs?.find((p) => p.id === connection.targetHandle);
-    if (!sourcePort || !targetPort) return true; // allow if definitions are missing
-    return isPortTypeCompatible(sourcePort.data_type, targetPort.data_type);
+    return isWorkflowConnectionValid(connection, nodes, $connectionIntentStore);
   }
 
   function getGraphRevision(): string {
     return get(workflowGraphStore).derived_graph?.graph_fingerprint ?? '';
   }
 
-  function edgeToGraphEdge(edge: Edge): GraphEdge {
-    return {
-      id: edge.id,
-      source: edge.source,
-      source_handle: edge.sourceHandle || 'output',
-      target: edge.target,
-      target_handle: edge.targetHandle || 'input',
-    };
-  }
-
-  function toConnectionIntentState(candidates: ConnectionCandidatesResponse) {
-    return {
-      sourceAnchor: candidates.source_anchor,
-      graphRevision: candidates.graph_revision,
-      compatibleNodeIds: candidates.compatible_nodes.map((node) => node.node_id),
-      compatibleTargetKeys: candidates.compatible_nodes.flatMap((node) =>
-        node.anchors.map((anchor) => `${node.node_id}:${anchor.port_id}`),
-      ),
-      insertableNodeTypes: candidates.insertable_node_types,
-    };
-  }
-
   function setConnectionIntentState(
     candidates: ConnectionCandidatesResponse,
     rejection?: ConnectionCommitResponse['rejection'],
   ) {
-    stores.workflow.setConnectionIntent({
-      ...toConnectionIntentState(candidates),
-      rejection,
-    });
+    stores.workflow.setConnectionIntent(buildConnectionIntentState(candidates, rejection));
   }
 
   let connectionIntentRequestId = $state(0);

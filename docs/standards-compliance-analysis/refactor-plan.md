@@ -506,7 +506,10 @@ Tasks:
   `packages/svelte-graph/src/workflowMiniMap.test.ts`. Package graph
   store-to-SvelteFlow synchronization decisions now live in
   `packages/svelte-graph/src/workflowGraphSync.ts`, with unit coverage in
-  `packages/svelte-graph/src/workflowGraphSync.test.ts`.
+  `packages/svelte-graph/src/workflowGraphSync.test.ts`. Package graph
+  connection validation, graph-edge normalization, and backend candidate
+  projection now live in `packages/svelte-graph/src/workflowConnections.ts`,
+  with unit coverage in `packages/svelte-graph/src/workflowConnections.test.ts`.
 - Split `DependencyEnvironmentNode.svelte` into data parsing, activity log,
   mode controls, override editor, status panels, and command controls.
   Progress: dependency environment DTOs now live in

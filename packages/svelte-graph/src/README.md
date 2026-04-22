@@ -17,6 +17,8 @@ fork core canvas behavior.
 | `stores/` | Package store factories for workflow, session, and view state. |
 | `types/` | Stable TypeScript contracts for graph, backend, and group APIs. |
 | `workflowEventOwnership.ts` | Projection helper for backend-provided workflow execution ids, active run identity, and stale-event relevance. |
+| `workflowConnections.ts` | Shared connection validation, graph-edge normalization, and candidate-to-intent projection helpers. |
+| `workflowConnections.test.ts` | Unit coverage for reusable connection helper behavior. |
 | `workflowGraphSync.ts` | Reference-based store-to-SvelteFlow synchronization decision helper. |
 | `workflowGraphSync.test.ts` | Unit coverage for SvelteFlow node and edge sync decisions. |
 | `workflowMiniMap.ts` | Shared minimap color projection for backend node categories and graph group nodes. |
@@ -52,6 +54,9 @@ component does not own backend category presentation policy inline.
 Keep store-to-SvelteFlow synchronization policy in `workflowGraphSync.ts` so
 the graph component can preserve xyflow internal metadata without owning
 reference-comparison rules inline.
+Keep connection-intent projection and synchronous connection validation in
+`workflowConnections.ts` so the graph component does not duplicate backend
+candidate projection or fallback port-compatibility rules.
 
 ## Alternatives Rejected
 - Keep connect/reconnect state management inline in both graph components.
@@ -85,6 +90,9 @@ reference-comparison rules inline.
   coloring and provide a stable fallback color for unknown node types.
 - `workflowGraphSync.ts` must clear one-shot node-sync suppression while still
   allowing edge updates through.
+- `workflowConnections.ts` must prefer active backend candidate intent when it
+  matches the source anchor, then fall back to static port compatibility only
+  when no active intent applies.
 
 ## Revisit Triggers
 - A second non-Pantograph consumer needs a different reconnect policy.
