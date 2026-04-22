@@ -9,6 +9,7 @@
   import type { NodeDefinition } from '../../../services/workflow/types';
   import {
     buildDependencyEnvironmentActionPayload,
+    adoptDependencyEnvironmentUpstreamRequirements,
     appendDependencyActivityLogLine,
     applyDependencyEnvironmentActionNodeData,
     buildDependencyEnvironmentNodeData,
@@ -94,18 +95,16 @@
   );
 
   $effect(() => {
-    if (upstreamRequirements && !dependencyRequirements) {
-      dependencyRequirements = upstreamRequirements;
-      if (selectedBindingIds.length === 0) {
-        selectedBindingIds = upstreamRequirements.selected_binding_ids?.length
-          ? upstreamRequirements.selected_binding_ids
-          : upstreamRequirements.bindings.map((b) => b.binding_id);
-      }
-      updateNodeData(id, {
-        dependency_requirements: upstreamRequirements,
-        selected_binding_ids: selectedBindingIds,
-      });
-    }
+    const adoption = adoptDependencyEnvironmentUpstreamRequirements(
+      dependencyRequirements,
+      selectedBindingIds,
+      upstreamRequirements
+    );
+    if (!adoption) return;
+
+    dependencyRequirements = adoption.dependencyRequirements;
+    selectedBindingIds = adoption.selectedBindingIds;
+    updateNodeData(id, adoption.nodeData);
   });
 
   const dependencyBadge = $derived(dependencyBadgeFor(dependencyRequirements, dependencyStatus));

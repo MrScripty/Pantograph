@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   buildDependencyEnvironmentActionPayload,
+  adoptDependencyEnvironmentUpstreamRequirements,
   appendDependencyActivityLogLine,
   applyDependencyEnvironmentActionNodeData,
   buildDependencyEnvironmentNodeData,
@@ -82,6 +83,48 @@ test('dependency environment node state helpers initialize persist and apply bac
   assert.deepEqual(nextState.selectedBindingIds, ['binding-b']);
   assert.equal(nextState.dependencyRequirements, requirements);
   assert.equal(nextState.environmentRef?.env_id, 'env-a');
+});
+
+test('adoptDependencyEnvironmentUpstreamRequirements projects connected requirements once', () => {
+  const requirements = {
+    model_id: 'model-a',
+    platform_key: 'linux',
+    dependency_contract_version: 1,
+    validation_state: 'resolved' as const,
+    validation_errors: [],
+    selected_binding_ids: [],
+    bindings: [
+      {
+        binding_id: 'binding-a',
+        profile_id: 'profile-a',
+        profile_version: 1,
+        validation_state: 'resolved' as const,
+        validation_errors: [],
+        requirements: [],
+      },
+      {
+        binding_id: 'binding-b',
+        profile_id: 'profile-b',
+        profile_version: 1,
+        validation_state: 'resolved' as const,
+        validation_errors: [],
+        requirements: [],
+      },
+    ],
+  };
+
+  const adoption = adoptDependencyEnvironmentUpstreamRequirements(null, [], requirements);
+
+  assert.equal(adoption?.dependencyRequirements, requirements);
+  assert.deepEqual(adoption?.selectedBindingIds, ['binding-a', 'binding-b']);
+  assert.deepEqual(adoption?.nodeData, {
+    dependency_requirements: requirements,
+    selected_binding_ids: ['binding-a', 'binding-b'],
+  });
+  assert.equal(
+    adoptDependencyEnvironmentUpstreamRequirements(requirements, [], requirements),
+    null,
+  );
 });
 
 test('appendDependencyActivityLogLine formats and trims retained log lines', () => {

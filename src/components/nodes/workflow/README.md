@@ -87,9 +87,9 @@ component, while dependency contracts and pure override state helpers live in
 `dependencyEnvironmentNodeState.ts`, `dependencyEnvironmentOverrides.ts`,
 `dependencyEnvironmentSelection.ts`, `dependencyEnvironmentDisplay.ts`, and
 `dependencyEnvironmentSources.ts` so payload projection, node-local state
-projection, graph-input projection, binding selection, override reads and
-scope clears, parsing, merge, and formatting behavior can be tested without
-mounting the node.
+projection, upstream requirement adoption, graph-input projection, binding
+selection, override reads and scope clears, parsing, merge, and formatting
+behavior can be tested without mounting the node.
 `dependencyEnvironmentState.ts` remains as a stable re-export surface for
 component and test imports.
 The activity log panel lives in `DependencyEnvironmentActivityLog.svelte` so
@@ -141,9 +141,9 @@ node persistence.
 - `dependencyEnvironmentSelection.ts` owns binding filtering and selection
   toggles; the Svelte component must not duplicate selected-binding rules
   inline.
-- `dependencyEnvironmentNodeState.ts` owns dependency node persistence payloads
-  and backend action response projection; the Svelte component must not duplicate
-  that state-shape mapping inline.
+- `dependencyEnvironmentNodeState.ts` owns dependency node persistence payloads,
+  backend action response projection, and upstream requirement adoption; the
+  Svelte component must not duplicate that state-shape mapping inline.
 - `DependencyEnvironmentActivityLog.svelte` owns log auto-scroll behavior and
   must not trigger graph drag or pan gestures.
 - `DependencyEnvironmentStatusPanel.svelte` emits command callbacks without

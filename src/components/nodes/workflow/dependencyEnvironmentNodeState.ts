@@ -28,6 +28,12 @@ export interface DependencyEnvironmentNodeDataSource {
   activity_log?: string[];
 }
 
+export interface DependencyEnvironmentUpstreamRequirementsAdoption {
+  dependencyRequirements: ModelDependencyRequirements;
+  selectedBindingIds: string[];
+  nodeData: Record<string, unknown>;
+}
+
 export function createDependencyEnvironmentNodeDataState(
   data: DependencyEnvironmentNodeDataSource,
 ): DependencyEnvironmentNodeDataState {
@@ -91,4 +97,28 @@ export function appendDependencyActivityLogLine(
 
   const next = [...activityLog, formatted];
   return next.length > maxLines ? next.slice(next.length - maxLines) : next;
+}
+
+export function adoptDependencyEnvironmentUpstreamRequirements(
+  dependencyRequirements: ModelDependencyRequirements | null,
+  selectedBindingIds: string[],
+  upstreamRequirements: ModelDependencyRequirements | null,
+): DependencyEnvironmentUpstreamRequirementsAdoption | null {
+  if (!upstreamRequirements || dependencyRequirements) return null;
+
+  const nextSelectedBindingIds =
+    selectedBindingIds.length > 0
+      ? selectedBindingIds
+      : upstreamRequirements.selected_binding_ids.length > 0
+        ? upstreamRequirements.selected_binding_ids
+        : upstreamRequirements.bindings.map((binding) => binding.binding_id);
+
+  return {
+    dependencyRequirements: upstreamRequirements,
+    selectedBindingIds: nextSelectedBindingIds,
+    nodeData: {
+      dependency_requirements: upstreamRequirements,
+      selected_binding_ids: nextSelectedBindingIds,
+    },
+  };
 }

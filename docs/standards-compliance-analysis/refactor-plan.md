@@ -625,6 +625,9 @@ Tasks:
   Node-local state initialization, persistence payload projection, backend action
   response projection, and retained activity-log trimming now live in
   `src/components/nodes/workflow/dependencyEnvironmentNodeState.ts`, with unit
+  coverage in `dependencyEnvironmentState.test.ts`. Connected upstream
+  requirement adoption and selected-binding defaulting also live in
+  `src/components/nodes/workflow/dependencyEnvironmentNodeState.ts`, with unit
   coverage in `dependencyEnvironmentState.test.ts`. Binding selection filtering
   and toggles now live in
   `src/components/nodes/workflow/dependencyEnvironmentSelection.ts`; override
