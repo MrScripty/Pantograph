@@ -599,7 +599,7 @@ Tasks:
   `src/components/workflowGraphSource.test.ts`.
 - Split `DependencyEnvironmentNode.svelte` into data parsing, activity log,
   mode controls, override editor, status panels, and command controls.
-  Progress: dependency environment DTOs now live in
+  Progress: dependency environment DTOs and node prop/data contracts now live in
   `src/components/nodes/workflow/dependencyEnvironmentTypes.ts`; action payload
   projection lives in
   `src/components/nodes/workflow/dependencyEnvironmentActions.ts`; override

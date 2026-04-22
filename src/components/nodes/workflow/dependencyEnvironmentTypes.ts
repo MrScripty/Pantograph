@@ -1,3 +1,5 @@
+import type { NodeDefinition } from '../../../services/workflow/types';
+
 export type DependencyState =
   | 'unresolved'
   | 'invalid'
@@ -159,4 +161,22 @@ export interface DependencyEnvironmentActionPayloadInput {
 export interface DependencyBadge {
   label: string;
   className: string;
+}
+
+export interface DependencyEnvironmentNodeData {
+  definition?: NodeDefinition;
+  label?: string;
+  mode?: 'auto' | 'manual';
+  selected_binding_ids?: string[];
+  dependency_requirements?: ModelDependencyRequirements;
+  dependency_status?: ModelDependencyStatus;
+  environment_ref?: EnvironmentRef;
+  manual_overrides?: DependencyOverridePatchV1[];
+  activity_log?: string[];
+}
+
+export interface DependencyEnvironmentNodeProps {
+  id: string;
+  data: DependencyEnvironmentNodeData;
+  selected?: boolean;
 }

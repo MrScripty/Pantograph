@@ -6,7 +6,6 @@
   import DependencyEnvironmentModeControls from './DependencyEnvironmentModeControls.svelte';
   import DependencyEnvironmentRefPanel from './DependencyEnvironmentRefPanel.svelte';
   import DependencyEnvironmentStatusPanel from './DependencyEnvironmentStatusPanel.svelte';
-  import type { NodeDefinition } from '../../../services/workflow/types';
   import {
     buildDependencyEnvironmentActionPayload,
     adoptDependencyEnvironmentUpstreamRequirements,
@@ -40,6 +39,7 @@
     type DependencyEnvironmentActionRequest,
     type DependencyEnvironmentActionResponse,
     type DependencyEnvironmentNodeDataState,
+    type DependencyEnvironmentNodeProps,
     type DependencyOverridePatchV1,
     type EnvironmentRef,
     type ModelDependencyRequirements,
@@ -50,23 +50,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
 
-  interface Props {
-    id: string;
-    data: {
-      definition?: NodeDefinition;
-      label?: string;
-      mode?: 'auto' | 'manual';
-      selected_binding_ids?: string[];
-      dependency_requirements?: ModelDependencyRequirements;
-      dependency_status?: ModelDependencyStatus;
-      environment_ref?: EnvironmentRef;
-      manual_overrides?: DependencyOverridePatchV1[];
-      activity_log?: string[];
-    };
-    selected?: boolean;
-  }
-
-  let { id, data, selected = false }: Props = $props();
+  let { id, data, selected = false }: DependencyEnvironmentNodeProps = $props();
 
   const initialNodeState = createDependencyEnvironmentNodeDataState(data);
 

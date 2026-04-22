@@ -27,7 +27,7 @@ to the workflow graph runtime instead of being spread across generic canvas code
 | `dependencyEnvironmentSources.ts` | Resolves connected upstream model, requirement, and manual override inputs from workflow graph state. |
 | `dependencyEnvironmentState.ts` | Re-exports the dependency environment helper modules for stable component and test imports. |
 | `dependencyEnvironmentState.test.ts` | Unit coverage for dependency environment override parsing, merge, lookup, and label helpers. |
-| `dependencyEnvironmentTypes.ts` | Defines dependency environment frontend contracts that mirror backend payloads. |
+| `dependencyEnvironmentTypes.ts` | Defines dependency environment frontend contracts, node props, and node data shapes that mirror backend payloads. |
 | `ExpandSettingsNode.svelte` | Displays the effective passthrough value for each model-derived inference setting while the shared base node renders matching override input/output handles from dynamic port metadata. |
 | `expandSettingsDisplay.ts` | Resolves the effective visible expand-setting value from live connected overrides, runtime passthrough data, and schema defaults. |
 | `audioOutputState.ts` | Defines the execution-local audio runtime keys and helper logic that maps backend completion metadata into output-node playback state. |
@@ -88,10 +88,11 @@ component, while dependency contracts and pure override state helpers live in
 `dependencyEnvironmentActivityListener.ts`, `dependencyEnvironmentNodeState.ts`,
 `dependencyEnvironmentOverrides.ts`, `dependencyEnvironmentSelection.ts`,
 `dependencyEnvironmentDisplay.ts`, and `dependencyEnvironmentSources.ts` so
-payload projection, node-local state projection, upstream requirement adoption,
-backend action execution bracketing, mount-time activity listener setup,
-graph-input projection, binding selection, override reads and scope clears,
-parsing, merge, and formatting behavior can be tested without mounting the node.
+payload projection, node prop/data contracts, node-local state projection,
+upstream requirement adoption, backend action execution bracketing, mount-time
+activity listener setup, graph-input projection, binding selection, override
+reads and scope clears, parsing, merge, and formatting behavior can be tested
+without mounting the node.
 `dependencyEnvironmentState.ts` remains as a stable re-export surface for
 component and test imports.
 The activity log panel lives in `DependencyEnvironmentActivityLog.svelte` so
