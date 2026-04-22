@@ -16,7 +16,7 @@ metadata, execution overlays, and transient connection-intent state.
 | `canonicalizeWorkflowGraph.ts` | Canonicalizes loaded graphs by reconciling legacy node types, stale inference-setting overlays, and missing expand-setting passthrough edges before a session starts. |
 | `definitionOverlay.ts` | Rehydrates backend-supplied additive `node.data.definition` port overlays on top of static registry metadata during graph materialization. |
 | `inferenceSettingsPorts.ts` | Builds additive inference-setting port definitions, merges upstream schema with promoted inference-node defaults, and de-duplicates settings that should flow only through `inference_settings`. |
-| `runtimeData.ts` | Removes transient execution data from nodes without touching persisted configuration fields. |
+| `runtimeData.ts` | Projects transient execution/runtime data updates into node arrays without touching persisted configuration fields. |
 | `workflowExecutionEvents.ts` | Reduces backend-owned workflow execution events into read-only execution overlays and downstream runtime-data mirrors for GUI consumers. |
 | `workflowStoreGraphQueries.ts` | Projects store-owned graph nodes and edges into group indexes, connected-node lists, and node bounds. |
 | `workflowStoreMaterialization.ts` | Converts between backend workflow graph snapshots and SvelteFlow store state while preserving selected-node projection. |
@@ -86,6 +86,9 @@ derived graph metadata.
 Default workflow graph construction lives in `defaultWorkflowGraph.ts`, keeping
 starter graph nodes, edges, labels, positions, and definition attachment in a
 tested helper while `createWorkflowStores.ts` owns assigning the returned state.
+Runtime node-data and stream-content projection lives in `runtimeData.ts`,
+keeping transient execution updates outside the store facade while
+`createWorkflowStores.ts` owns wiring those projections to Svelte stores.
 
 ## Alternatives Rejected
 - Store connection intent only inside `WorkflowGraph.svelte`.
@@ -111,8 +114,9 @@ tested helper while `createWorkflowStores.ts` owns assigning the returned state.
   workflow load, workflow clear, and default-graph load.
 - `selectedNodeIds` is transient UI state; graph rematerialization must project
   it back onto node snapshots until the user or consumer clears the selection.
-- Runtime cleanup helpers must continue to touch only explicitly requested
-  transient keys.
+- `runtimeData.ts` must own transient runtime-data and stream-content node array
+  projection, and cleanup helpers must continue to touch only explicitly
+  requested transient keys.
 - Dynamic inference-setting ports must be derived from backend-owned schema and
   written back into `node.data.definition`; ad hoc component-local copies are
   not authoritative.

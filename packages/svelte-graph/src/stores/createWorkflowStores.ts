@@ -18,7 +18,13 @@ import type {
 import type { NodeGroup, PortMapping } from '../types/groups.js';
 import type { ViewportState } from '../types/view.js';
 import type { WorkflowBackend } from '../types/backend.js';
-import { removeNodeDataKeys } from './runtimeData.ts';
+import {
+  appendNodeStreamContent,
+  clearNodeRuntimeDataKeysInNodes,
+  clearNodeStreamContent,
+  setNodeStreamContent,
+  updateNodeRuntimeDataInNodes,
+} from './runtimeData.ts';
 import { buildDerivedGraph } from '../graphRevision.ts';
 import { applyWorkflowGraphMutationResponse } from './workflowGraphMutationResponse.ts';
 import type { WorkflowGraphMutationResponse } from '../types/workflow.js';
@@ -256,23 +262,13 @@ export function createWorkflowStores(
   }
 
   function updateNodeRuntimeData(nodeId: string, data: Record<string, unknown>) {
-    nodes.update((n) =>
-      n.map((node) =>
-        node.id === nodeId ? { ...node, data: { ...node.data, ...data } } : node
-      )
-    );
+    nodes.update((n) => updateNodeRuntimeDataInNodes(n, nodeId, data));
   }
 
   function clearNodeRuntimeData(keys: string[]) {
     if (keys.length === 0) return;
 
-    const runtimeKeys = new Set(keys);
-    nodes.update((n) =>
-      n.map((node) => {
-        const { changed, data } = removeNodeDataKeys(node.data, runtimeKeys);
-        return changed ? { ...node, data } : node;
-      })
-    );
+    nodes.update((n) => clearNodeRuntimeDataKeysInNodes(n, keys));
   }
 
   function getNodeById(nodeId: string): Node | undefined {
@@ -341,33 +337,15 @@ export function createWorkflowStores(
   // --- Streaming actions ---
 
   function appendStreamContent(nodeId: string, chunk: string) {
-    nodes.update((n) =>
-      n.map((node) =>
-        node.id === nodeId
-          ? { ...node, data: { ...node.data, streamContent: (node.data.streamContent || '') + chunk } }
-          : node
-      )
-    );
+    nodes.update((n) => appendNodeStreamContent(n, nodeId, chunk));
   }
 
   function setStreamContent(nodeId: string, content: string) {
-    nodes.update((n) =>
-      n.map((node) =>
-        node.id === nodeId
-          ? { ...node, data: { ...node.data, streamContent: content } }
-          : node
-      )
-    );
+    nodes.update((n) => setNodeStreamContent(n, nodeId, content));
   }
 
   function clearStreamContent() {
-    nodes.update((n) =>
-      n.map((node) =>
-        node.data.streamContent
-          ? { ...node, data: { ...node.data, streamContent: '' } }
-          : node
-      )
-    );
+    nodes.update(clearNodeStreamContent);
   }
 
   // --- Workflow actions ---

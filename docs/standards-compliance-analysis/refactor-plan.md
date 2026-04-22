@@ -617,6 +617,9 @@ Tasks:
   Package and app horseshoe keyboard action dispatch now reuse
   `packages/svelte-graph/src/workflowHorseshoeKeyboard.ts`, with expanded unit
   coverage in `packages/svelte-graph/src/workflowHorseshoeKeyboard.test.ts`.
+  Package workflow store runtime-data merges, runtime cleanup, and stream-content
+  node projection now live in `packages/svelte-graph/src/stores/runtimeData.ts`,
+  with expanded unit coverage in `packages/svelte-graph/src/stores/runtimeData.test.ts`.
   App palette drag eligibility, drag payload parsing, and graph-space drop
   projection now live in `src/components/workflowPaletteDrag.ts`, with unit
   coverage in `src/components/workflowPaletteDrag.test.ts`. App orchestration
