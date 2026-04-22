@@ -18,6 +18,8 @@
     resolveHorseshoeStatusLabel,
     isEditableKeyboardTarget,
     resolveHorseshoeKeyboardAction,
+    resolveWorkflowGroupZoomTarget,
+    resolveWorkflowNodeClick,
     markConnectionDragFinalizing,
     requestHorseshoeDisplay,
     rotateHorseshoeIndex,
@@ -38,6 +40,7 @@
     type HorseshoeBlockedReason,
     type HorseshoeInsertFeedbackState,
     type HorseshoeDragSessionState,
+    type WorkflowNodeClickState,
     isPortTypeCompatible,
   } from '@pantograph/svelte-graph';
 
@@ -116,9 +119,10 @@
   let canEdit = $derived($isEditing && !$isReadOnly);
 
   // Track double-click for group zoom
-  let lastClickTime = $state(0);
-  let lastClickNodeId = $state<string | null>(null);
-  const DOUBLE_CLICK_THRESHOLD = 300; // ms
+  let nodeClickState = $state<WorkflowNodeClickState>({
+    lastClickTime: 0,
+    lastClickNodeId: null,
+  });
 
   // Track if we've already triggered the zoom-out transition
   let transitionTriggered = $state(false);
@@ -769,37 +773,21 @@
 
   // Handle node click for double-click detection (to zoom into groups)
   function onNodeClick({ node }: { node: Node }) {
-    const now = Date.now();
-    const isDoubleClick =
-      lastClickNodeId === node.id && now - lastClickTime < DOUBLE_CLICK_THRESHOLD;
+    const decision = resolveWorkflowNodeClick(nodeClickState, node.id, Date.now());
+    nodeClickState = decision.state;
 
-    if (isDoubleClick) {
+    if (decision.isDoubleClick) {
       handleNodeDoubleClick(node);
     }
-
-    lastClickTime = now;
-    lastClickNodeId = node.id;
   }
 
   // Handle double-click on a node to zoom into it (for node groups)
   async function handleNodeDoubleClick(node: Node) {
-    // Check if this node is a group (will be determined by Workstream B's NodeGroup type)
-    const isNodeGroup = node.data?.isGroup === true || node.type === 'node-group';
+    const target = resolveWorkflowGroupZoomTarget(node);
+    if (!target) return;
 
-    if (isNodeGroup) {
-      // Update zoom target position for animation origin
-      zoomTarget.set({
-        nodeId: node.id,
-        position: node.position,
-        bounds: {
-          width: (node.measured?.width || node.width || 200) as number,
-          height: (node.measured?.height || node.height || 100) as number,
-        },
-      });
-
-      // Trigger zoom into group
-      await tabIntoGroup(node.id);
-    }
+    zoomTarget.set(target);
+    await tabIntoGroup(node.id);
   }
 
   function checkValidConnection(connection: Edge | Connection): boolean {

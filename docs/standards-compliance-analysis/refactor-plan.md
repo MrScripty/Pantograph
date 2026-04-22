@@ -520,7 +520,9 @@ Tasks:
   candidate projection now live in `src/components/workflowConnections.ts`,
   with unit coverage in `src/components/workflowConnections.test.ts`. App graph
   horseshoe keyboard behavior now uses the package
-  `workflowHorseshoeKeyboard.ts` resolver. App graph cut gesture state, line
+  `workflowHorseshoeKeyboard.ts` resolver. App graph node double-click and group
+  zoom-target behavior now uses the package `workflowNodeActivation.ts` resolver.
+  App graph cut gesture state, line
   sampling, and overlay rendering now delegate to the package `CutTool`; the app
   graph keeps only the backend edge-deletion callback, and app edge-insert
   geometry, commit eligibility, and preview flag projection helpers now live inside

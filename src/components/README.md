@@ -106,6 +106,9 @@ interaction cleanup.
 Horseshoe keyboard event interpretation now comes from the package
 `workflowHorseshoeKeyboard.ts` helper; the app graph only maps resolved actions
 to app-owned state and backend side effects.
+Node double-click and group zoom-target decisions now come from the package
+`workflowNodeActivation.ts` helper; the app graph only invokes app view-store
+side effects.
 
 ## Alternatives Rejected
 - Replace the app graph entirely with the package component immediately.
@@ -172,6 +175,9 @@ to app-owned state and backend side effects.
 - App graph horseshoe keyboard behavior must use the package keyboard resolver
   so `Space`, `Enter`, arrow, `Escape`, and query-editing semantics stay aligned
   with the package graph.
+- App graph node double-click behavior must use the package node activation
+  resolver so group navigation timing and zoom bounds stay aligned with the
+  package graph.
 
 ## Revisit Triggers
 - The app graph fully converges with the package graph and can be deleted.
