@@ -161,6 +161,9 @@ aligned while the app graph owns overlay visibility and trace state.
 Workflow graph default edge options now come from the package
 `WORKFLOW_GRAPH_DEFAULT_EDGE_OPTIONS` export so app and package canvases share
 the same reconnectable edge defaults.
+Workflow graph interaction gating now comes from the package
+`resolveWorkflowGraphInteractionState` helper so app and package canvases share
+the same edit, drag, selection, reconnect, and pane-panning conditions.
 Mouse/touch pointer projection now comes from the package
 `workflowPointerPosition.ts` helper; the app graph only supplies the active
 container bounds.
@@ -272,6 +275,9 @@ container bounds.
 - App graph SvelteFlow default edge options must use the package
   `WORKFLOW_GRAPH_DEFAULT_EDGE_OPTIONS` export so edge type and interaction
   defaults cannot drift from the package graph.
+- App graph SvelteFlow interaction gating must use the package
+  `resolveWorkflowGraphInteractionState` helper so editability and palette-drag
+  behavior cannot drift from the package graph.
 - App graph pointer coordinate handling must use the package pointer-position
   resolver so mouse/touch fallback behavior stays aligned with the package
   graph.

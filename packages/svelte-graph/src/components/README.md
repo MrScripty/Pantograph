@@ -154,6 +154,8 @@ in `workflowPointerPosition.ts`, while `WorkflowGraph.svelte` owns the concrete
 container element.
 Workflow graph default edge options live in `workflowGraphEdgeOptions.ts`, while
 `WorkflowGraph.svelte` passes them through to SvelteFlow.
+Workflow graph interaction gating lives in `workflowGraphInteraction.ts`, while
+`WorkflowGraph.svelte` passes the projected editability state into SvelteFlow.
 
 ## Alternatives Rejected
 - Ask the backend on every pointer move.
@@ -188,6 +190,8 @@ Workflow graph default edge options live in `workflowGraphEdgeOptions.ts`, while
   projected horseshoe trace state from graph components.
 - `workflowGraphEdgeOptions.ts` must own shared SvelteFlow default edge options
   for package and app workflow graph canvases.
+- `workflowGraphInteraction.ts` must own shared SvelteFlow interaction gating for
+  package and app workflow graph canvases.
 - `horseshoeInsertFeedback.ts` must derive selector status labels from one
   feedback/session snapshot.
 - `workflowHorseshoeSessionUpdate.ts` must derive selector reset, feedback,

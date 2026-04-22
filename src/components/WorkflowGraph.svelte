@@ -43,6 +43,7 @@
     WORKFLOW_PALETTE_DRAG_END_EVENT,
     WORKFLOW_PALETTE_DRAG_START_EVENT,
     WORKFLOW_GRAPH_DEFAULT_EDGE_OPTIONS,
+    resolveWorkflowGraphInteractionState,
     CutTool,
     HorseshoeDebugOverlay,
     type ConnectionDragState,
@@ -162,6 +163,13 @@
   let horseshoeQueryResetTimer: ReturnType<typeof setTimeout> | null = null;
   let lastLoggedHorseshoeBlockedReason = $state<HorseshoeBlockedReason | null>(null);
   let horseshoeLastTrace = $state('idle');
+  let graphInteractionState = $derived(
+    resolveWorkflowGraphInteractionState({
+      canEdit,
+      ctrlPressed,
+      externalPaletteDragActive,
+    }),
+  );
   let edgeInsertPreview = $state<EdgeInsertPreviewState>(createEdgeInsertPreviewState());
   let edgeInsertPreviewRequestId = $state(0);
   let currentGraphRevision = $derived($workflowGraph.derived_graph?.graph_fingerprint ?? '');
@@ -1239,16 +1247,16 @@
     nodeTypes={workflowNodeTypes}
     edgeTypes={workflowEdgeTypes}
     fitViewOptions={{ maxZoom: 1 }}
-    nodesConnectable={canEdit && !externalPaletteDragActive}
-    elementsSelectable={!externalPaletteDragActive}
-    nodesDraggable={canEdit && !externalPaletteDragActive}
-    panOnDrag={!ctrlPressed && !externalPaletteDragActive}
+    nodesConnectable={graphInteractionState.nodesConnectable}
+    elementsSelectable={graphInteractionState.elementsSelectable}
+    nodesDraggable={graphInteractionState.nodesDraggable}
+    panOnDrag={graphInteractionState.panOnDrag}
     panActivationKey={null}
     zoomOnScroll={true}
     minZoom={0.25}
     maxZoom={2}
-    deleteKey={canEdit ? 'Delete' : null}
-    edgesReconnectable={canEdit && !externalPaletteDragActive}
+    deleteKey={graphInteractionState.deleteKey}
+    edgesReconnectable={graphInteractionState.edgesReconnectable}
     isValidConnection={checkValidConnection}
     onnodedragstop={onNodeDragStop}
     onnodeclick={onNodeClick}

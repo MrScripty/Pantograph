@@ -123,6 +123,9 @@ package and app graph components.
 Keep shared workflow graph edge defaults in `workflowGraphEdgeOptions.ts` so
 package and app graph components use the same reconnectable edge type, styling,
 and interaction width.
+Keep shared workflow graph interaction gating in `workflowGraphInteraction.ts`
+so package and app graph components suspend editing, selection, reconnecting, and
+pane panning under the same conditions.
 
 ## Alternatives Rejected
 - Keep connect/reconnect state management inline in both graph components.
@@ -167,6 +170,8 @@ and interaction width.
   trace state from graph components through the package export surface.
 - `workflowGraphEdgeOptions.ts` must keep default workflow edge options
   transport-free and reusable by both graph components.
+- `workflowGraphInteraction.ts` must keep SvelteFlow interaction gating pure and
+  reusable so graph components only supply current UI state.
 - Horseshoe insert feedback stays visible until the backend accepts the insert
   or the interaction is explicitly cleared; rejected inserts must not collapse
   into a silent no-op.

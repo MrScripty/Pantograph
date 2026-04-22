@@ -77,6 +77,7 @@
   } from '../paletteDragState.js';
   import { resolveReconnectSourceAnchor } from '../reconnectInteraction.js';
   import { resolveWorkflowDragCursorUpdate } from '../workflowDragCursor.js';
+  import { resolveWorkflowGraphInteractionState } from '../workflowGraphInteraction.js';
   import {
     resolveWorkflowGroupZoomTarget,
     resolveWorkflowNodeClick,
@@ -161,6 +162,13 @@
   let horseshoeQueryResetTimer: ReturnType<typeof setTimeout> | null = null;
   let lastLoggedHorseshoeBlockedReason = $state<HorseshoeBlockedReason | null>(null);
   let horseshoeLastTrace = $state('idle');
+  let graphInteractionState = $derived(
+    resolveWorkflowGraphInteractionState({
+      canEdit,
+      ctrlPressed,
+      externalPaletteDragActive,
+    }),
+  );
 
   // ContainerBorder ref
   let containerBorderRef: ContainerBorder;
@@ -925,16 +933,16 @@
     {nodeTypes}
     {edgeTypes}
     fitViewOptions={{ maxZoom: 1 }}
-    nodesConnectable={canEdit && !externalPaletteDragActive}
-    elementsSelectable={!externalPaletteDragActive}
-    nodesDraggable={canEdit && !externalPaletteDragActive}
-    panOnDrag={!ctrlPressed && !externalPaletteDragActive}
+    nodesConnectable={graphInteractionState.nodesConnectable}
+    elementsSelectable={graphInteractionState.elementsSelectable}
+    nodesDraggable={graphInteractionState.nodesDraggable}
+    panOnDrag={graphInteractionState.panOnDrag}
     panActivationKey={null}
     zoomOnScroll={true}
     minZoom={0.25}
     maxZoom={2}
-    deleteKey={canEdit ? 'Delete' : null}
-    edgesReconnectable={canEdit && !externalPaletteDragActive}
+    deleteKey={graphInteractionState.deleteKey}
+    edgesReconnectable={graphInteractionState.edgesReconnectable}
     isValidConnection={checkValidConnection}
     onnodedragstop={onNodeDragStop}
     onnodeclick={onNodeClick}
