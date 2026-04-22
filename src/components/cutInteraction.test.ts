@@ -5,6 +5,7 @@ import {
   applyMatrixToPoint,
   findRenderedEdgePath,
   isCutModifierPressed,
+  linesIntersect,
   shouldStartCutGesture,
   toContainerRelativePoint,
 } from './cutInteraction.ts';
@@ -100,5 +101,26 @@ test('toContainerRelativePoint converts screen points into container space', () 
       { left: 20, top: 30 },
     ),
     { x: 300, y: 150 },
+  );
+});
+
+test('linesIntersect detects crossing interior segments only', () => {
+  assert.equal(
+    linesIntersect(
+      { x: 0, y: 0 },
+      { x: 10, y: 10 },
+      { x: 0, y: 10 },
+      { x: 10, y: 0 },
+    ),
+    true,
+  );
+  assert.equal(
+    linesIntersect(
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 0, y: 5 },
+      { x: 10, y: 5 },
+    ),
+    false,
   );
 });

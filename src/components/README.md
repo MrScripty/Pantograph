@@ -11,6 +11,8 @@ architecture views on top of the shared editor.
 | ----------- | ----------- |
 | `WorkflowGraph.svelte` | Pantograph graph canvas that wires app node types, orchestration navigation, revision-aware connection-intent flows, and the `Space`-invoked horseshoe insert selector. |
 | `WorkflowContainerBoundary.svelte` | Renders the orchestration boundary overlay, clickable border hit zones, and boundary anchors for the app workflow graph. |
+| `cutInteraction.ts` | Provides graph cut-gesture guards, rendered edge lookup, and cut-line geometry helpers. |
+| `cutInteraction.test.ts` | Unit coverage for cut shortcut gating, edge-path lookup, point projection, and line intersection helpers. |
 | `workflowContainerBoundary.ts` | Computes orchestration boundary extents and viewport visibility for graph zoom-out transitions. |
 | `workflowContainerBoundary.test.ts` | Unit coverage for orchestration boundary bounds and visibility projection. |
 | `workflowMiniMap.ts` | Maps workflow node groups and backend categories to minimap colors. |
@@ -88,6 +90,8 @@ Minimap color projection lives in `workflowMiniMap.ts` so category-to-color
 mapping remains testable outside the graph component.
 The app SvelteFlow node and edge registry lives in `workflowGraphTypes.ts` so
 `WorkflowGraph.svelte` remains focused on graph state and interaction handling.
+Cut-line geometry lives in `cutInteraction.ts`; the graph component only owns
+gesture state and backend edge deletion.
 
 ## Alternatives Rejected
 - Replace the app graph entirely with the package component immediately.
@@ -141,6 +145,8 @@ The app SvelteFlow node and edge registry lives in `workflowGraphTypes.ts` so
   group-node coloring ahead of category coloring.
 - `workflowGraphTypes.ts` must include every node type referenced by bundled
   templates and architecture graphs before falling back to generic renderers.
+- `cutInteraction.ts` must keep line-intersection behavior DOM-light and covered
+  by unit tests before graph cut behavior is changed.
 
 ## Revisit Triggers
 - The app graph fully converges with the package graph and can be deleted.

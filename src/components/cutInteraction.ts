@@ -80,3 +80,55 @@ export function toContainerRelativePoint(
     y: point.y - containerRect.top,
   };
 }
+
+export function linesIntersect(
+  a1: Point,
+  a2: Point,
+  b1: Point,
+  b2: Point,
+): boolean {
+  const det = (a2.x - a1.x) * (b2.y - b1.y) - (b2.x - b1.x) * (a2.y - a1.y);
+  if (det === 0) return false;
+
+  const lambda = ((b2.y - b1.y) * (b2.x - a1.x) + (b1.x - b2.x) * (b2.y - a1.y)) / det;
+  const gamma = ((a1.y - a2.y) * (b2.x - a1.x) + (a2.x - a1.x) * (b2.y - a1.y)) / det;
+
+  return 0 < lambda && lambda < 1 && 0 < gamma && gamma < 1;
+}
+
+export function lineIntersectsPath(
+  p1: Point,
+  p2: Point,
+  path: SVGPathElement,
+  containerRect: DOMRect | null,
+): boolean {
+  const screenMatrix = path.getScreenCTM();
+  if (!screenMatrix || !containerRect) {
+    return false;
+  }
+
+  const pathLength = path.getTotalLength();
+  const samples = 20;
+
+  for (let i = 0; i < samples; i++) {
+    const t1 = (i / samples) * pathLength;
+    const t2 = ((i + 1) / samples) * pathLength;
+
+    const point1 = path.getPointAtLength(t1);
+    const point2 = path.getPointAtLength(t2);
+    const containerPoint1 = toContainerRelativePoint(
+      applyMatrixToPoint(point1, screenMatrix),
+      containerRect,
+    );
+    const containerPoint2 = toContainerRelativePoint(
+      applyMatrixToPoint(point2, screenMatrix),
+      containerRect,
+    );
+
+    if (linesIntersect(p1, p2, containerPoint1, containerPoint2)) {
+      return true;
+    }
+  }
+
+  return false;
+}

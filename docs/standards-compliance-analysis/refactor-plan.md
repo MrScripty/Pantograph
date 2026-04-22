@@ -498,7 +498,9 @@ Tasks:
   projection now lives in `src/components/workflowMiniMap.ts`, with unit
   coverage in `src/components/workflowMiniMap.test.ts`. App workflow SvelteFlow
   node and edge type registration now lives in
-  `src/components/workflowGraphTypes.ts`.
+  `src/components/workflowGraphTypes.ts`. App graph cut-line intersection
+  helpers now live in `src/components/cutInteraction.ts`, with unit coverage in
+  `src/components/cutInteraction.test.ts`.
 - Split `DependencyEnvironmentNode.svelte` into data parsing, activity log,
   mode controls, override editor, status panels, and command controls.
   Progress: dependency environment DTOs now live in

@@ -71,11 +71,10 @@
   import type { NodeDefinition } from '../services/workflow/types';
   import { computeWorkflowGraphSyncDecision } from './workflowGraphSync';
   import {
-    applyMatrixToPoint,
     findRenderedEdgePath,
     isCutModifierPressed,
+    lineIntersectsPath,
     shouldStartCutGesture,
-    toContainerRelativePoint,
   } from './cutInteraction';
   import {
     clearEdgeInsertPreviewState,
@@ -1471,60 +1470,6 @@
     }
   }
 
-  // Utility function to check if a line intersects an SVG path
-  function lineIntersectsPath(
-    p1: { x: number; y: number },
-    p2: { x: number; y: number },
-    path: SVGPathElement,
-    containerRect: DOMRect | null,
-  ): boolean {
-    const screenMatrix = path.getScreenCTM();
-    if (!screenMatrix || !containerRect) {
-      return false;
-    }
-
-    const pathLength = path.getTotalLength();
-    const samples = 20;
-
-    for (let i = 0; i < samples; i++) {
-      const t1 = (i / samples) * pathLength;
-      const t2 = ((i + 1) / samples) * pathLength;
-
-      const point1 = path.getPointAtLength(t1);
-      const point2 = path.getPointAtLength(t2);
-      const containerPoint1 = toContainerRelativePoint(
-        applyMatrixToPoint(point1, screenMatrix),
-        containerRect,
-      );
-      const containerPoint2 = toContainerRelativePoint(
-        applyMatrixToPoint(point2, screenMatrix),
-        containerRect,
-      );
-
-      if (
-        linesIntersect(p1, p2, containerPoint1, containerPoint2)
-      ) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  // Line-line intersection check
-  function linesIntersect(
-    a1: { x: number; y: number },
-    a2: { x: number; y: number },
-    b1: { x: number; y: number },
-    b2: { x: number; y: number }
-  ): boolean {
-    const det = (a2.x - a1.x) * (b2.y - b1.y) - (b2.x - b1.x) * (a2.y - a1.y);
-    if (det === 0) return false;
-
-    const lambda = ((b2.y - b1.y) * (b2.x - a1.x) + (b1.x - b2.x) * (b2.y - a1.y)) / det;
-    const gamma = ((a1.y - a2.y) * (b2.x - a1.x) + (a2.x - a1.x) * (b2.y - a1.y)) / det;
-
-    return 0 < lambda && lambda < 1 && 0 < gamma && gamma < 1;
-  }
 </script>
 
 <svelte:window onkeyup={handleKeyUp} onmousemove={updateDragCursorFromMouseEvent} />
