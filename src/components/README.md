@@ -93,8 +93,8 @@ The app SvelteFlow node and edge registry lives in `workflowGraphTypes.ts` so
 `WorkflowGraph.svelte` remains focused on graph state and interaction handling.
 Cut gesture state, line sampling, and overlay rendering come from the package
 `CutTool`; the app graph only owns the backend edge-deletion callback.
-Palette edge-insert hover projection and rendered-edge hit testing live in
-`edgeInsertInteraction.ts`.
+Palette edge-insert hover projection, commit eligibility, preview edge flagging,
+and rendered-edge hit testing live in `edgeInsertInteraction.ts`.
 Connection validation and backend candidate projection live in
 `workflowConnections.ts`, while `WorkflowGraph.svelte` owns backend calls and
 interaction cleanup.
@@ -156,8 +156,9 @@ to app-owned state and backend side effects.
   templates and architecture graphs before falling back to generic renderers.
 - App cut gestures must delegate to the package `CutTool` so the package and app
   canvases share modifier, line-sampling, and overlay behavior.
-- `edgeInsertInteraction.ts` must keep rendered-edge hit testing DOM-light and
-  covered by unit tests before palette edge-insert behavior is changed.
+- `edgeInsertInteraction.ts` must keep rendered-edge hit testing, commit
+  eligibility, and preview flag projection DOM-light and covered by unit tests
+  before palette edge-insert behavior is changed.
 - `workflowConnections.ts` must prefer active backend candidate intent when it
   matches the source anchor, then fall back to package port compatibility only
   when no active intent applies.

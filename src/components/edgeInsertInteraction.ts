@@ -52,6 +52,11 @@ export interface EdgeInsertPreviewState {
   rejection: ConnectionRejection | null;
 }
 
+export interface EdgeInsertEdgeLike {
+  id: string;
+  data?: Record<string, unknown> | null;
+}
+
 export function createEdgeInsertPreviewState(): EdgeInsertPreviewState {
   return {
     edgeId: null,
@@ -149,6 +154,54 @@ export function setEdgeInsertPreviewRejected(
     pending: false,
     bridge: null,
     rejection: rejection ?? null,
+  };
+}
+
+export function getCommittableEdgeInsertPreview(
+  state: EdgeInsertPreviewState,
+  nodeType: string,
+): EdgeInsertPreviewState | null {
+  if (!state.edgeId || state.nodeType !== nodeType || !state.graphRevision || !state.bridge) {
+    return null;
+  }
+
+  return {
+    ...state,
+  };
+}
+
+export function applyEdgeInsertPreviewActiveFlag<EdgeLike extends EdgeInsertEdgeLike>(
+  edges: EdgeLike[],
+  previewEdgeId: string | null,
+): { edges: EdgeLike[]; changed: boolean } {
+  let changed = false;
+
+  const nextEdges = edges.map((edge) => {
+    const edgeData = edge.data ?? {};
+    const isPreviewActive = edge.id === previewEdgeId;
+    const hasPreviewFlag = edgeData.edgeInsertPreviewActive === true;
+
+    if (isPreviewActive === hasPreviewFlag) {
+      return edge;
+    }
+
+    changed = true;
+    const nextData = { ...edgeData };
+    if (isPreviewActive) {
+      nextData.edgeInsertPreviewActive = true;
+    } else {
+      delete nextData.edgeInsertPreviewActive;
+    }
+
+    return {
+      ...edge,
+      data: nextData,
+    };
+  });
+
+  return {
+    edges: nextEdges,
+    changed,
   };
 }
 

@@ -76,9 +76,11 @@
   } from './workflowConnections.ts';
   import { computeWorkflowGraphSyncDecision } from './workflowGraphSync';
   import {
+    applyEdgeInsertPreviewActiveFlag,
     clearEdgeInsertPreviewState,
     createEdgeInsertPreviewState,
     findEdgeInsertHitTarget,
+    getCommittableEdgeInsertPreview,
     setEdgeInsertHoverTarget,
     setEdgeInsertPreviewPending,
     setEdgeInsertPreviewRejected,
@@ -629,33 +631,10 @@
 
   $effect(() => {
     const previewEdgeId = edgeInsertPreview.bridge ? edgeInsertPreview.edgeId : null;
-    let changed = false;
+    const result = applyEdgeInsertPreviewActiveFlag(edges, previewEdgeId);
 
-    const nextEdges = edges.map((edge) => {
-      const edgeData = (edge.data ?? {}) as Record<string, unknown>;
-      const isPreviewActive = edge.id === previewEdgeId;
-      const hasPreviewFlag = edgeData.edgeInsertPreviewActive === true;
-
-      if (isPreviewActive === hasPreviewFlag) {
-        return edge;
-      }
-
-      changed = true;
-      const nextData = { ...edgeData };
-      if (isPreviewActive) {
-        nextData.edgeInsertPreviewActive = true;
-      } else {
-        delete nextData.edgeInsertPreviewActive;
-      }
-
-      return {
-        ...edge,
-        data: nextData,
-      };
-    });
-
-    if (changed) {
-      edges = nextEdges;
+    if (result.changed) {
+      edges = result.edges;
     }
   });
 
@@ -1047,13 +1026,10 @@
     }
 
     const position = getDropPosition(event.clientX, event.clientY);
-    const activeEdgeInsertPreview =
-      edgeInsertPreview.edgeId &&
-      edgeInsertPreview.nodeType === definition.node_type &&
-      edgeInsertPreview.graphRevision &&
-      edgeInsertPreview.bridge
-        ? { ...edgeInsertPreview }
-        : null;
+    const activeEdgeInsertPreview = getCommittableEdgeInsertPreview(
+      edgeInsertPreview,
+      definition.node_type,
+    );
 
     clearConnectionInteraction();
     if (!position) {

@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 
 import {
   EDGE_INSERT_HIT_RADIUS_PX,
+  applyEdgeInsertPreviewActiveFlag,
   clearEdgeInsertPreviewState,
   createEdgeInsertPreviewState,
   findEdgeInsertHitTarget,
+  getCommittableEdgeInsertPreview,
   sampleClosestEdgeDistance,
   setEdgeInsertHoverTarget,
   updateEdgeInsertHitPoint,
@@ -124,6 +126,55 @@ test('shouldRefreshEdgeInsertPreview only invalidates when preview inputs change
   assert.equal(shouldRefreshEdgeInsertPreview(state, 'edge-2', 'embedding', 'rev-1'), true);
   assert.equal(shouldRefreshEdgeInsertPreview(state, 'edge-1', 'llm-inference', 'rev-1'), true);
   assert.equal(shouldRefreshEdgeInsertPreview(state, 'edge-1', 'embedding', 'rev-2'), true);
+});
+
+test('getCommittableEdgeInsertPreview requires a matching resolved preview', () => {
+  const resolvedState = setEdgeInsertPreviewResolved(
+    setEdgeInsertPreviewPending(
+      setEdgeInsertHoverTarget(
+        createEdgeInsertPreviewState(),
+        {
+          edgeId: 'edge-1',
+          hitPoint: { x: 120, y: 40 },
+          distance: 12,
+        },
+        'embedding',
+        'rev-1',
+      ),
+    ),
+    {
+      input_port_id: 'prompt',
+      output_port_id: 'document',
+    },
+  );
+
+  assert.deepEqual(getCommittableEdgeInsertPreview(resolvedState, 'embedding'), resolvedState);
+  assert.equal(getCommittableEdgeInsertPreview(resolvedState, 'llm-inference'), null);
+  assert.equal(
+    getCommittableEdgeInsertPreview(setEdgeInsertPreviewRejected(resolvedState), 'embedding'),
+    null,
+  );
+});
+
+test('applyEdgeInsertPreviewActiveFlag toggles only changed edge data', () => {
+  const edges = [
+    { id: 'edge-1', data: { label: 'existing' } },
+    { id: 'edge-2', data: { edgeInsertPreviewActive: true } },
+    { id: 'edge-3' },
+  ];
+
+  const activated = applyEdgeInsertPreviewActiveFlag(edges, 'edge-1');
+
+  assert.equal(activated.changed, true);
+  assert.equal(activated.edges[0].data?.edgeInsertPreviewActive, true);
+  assert.equal(activated.edges[0].data?.label, 'existing');
+  assert.equal(activated.edges[1].data?.edgeInsertPreviewActive, undefined);
+  assert.equal(activated.edges[2], edges[2]);
+
+  const unchanged = applyEdgeInsertPreviewActiveFlag(activated.edges, 'edge-1');
+
+  assert.equal(unchanged.changed, false);
+  assert.equal(unchanged.edges[0], activated.edges[0]);
 });
 
 test('sampleClosestEdgeDistance measures from the cursor to the rendered path', () => {
