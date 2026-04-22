@@ -11,6 +11,8 @@ architecture views on top of the shared editor.
 | ----------- | ----------- |
 | `WorkflowGraph.svelte` | Pantograph graph canvas that wires app node types, orchestration navigation, revision-aware connection-intent flows, and the `Space`-invoked horseshoe insert selector. |
 | `WorkflowContainerBoundary.svelte` | Renders the orchestration boundary overlay, clickable border hit zones, and boundary anchors for the app workflow graph. |
+| `workflowContainerBoundary.ts` | Computes orchestration boundary extents and viewport visibility for graph zoom-out transitions. |
+| `workflowContainerBoundary.test.ts` | Unit coverage for orchestration boundary bounds and visibility projection. |
 | `NodePalette.svelte` | App palette for inserting workflow nodes into the active graph. |
 | `NodeGroupEditor.svelte` | App wrapper for group editing and exposed-port management. |
 | `NavigationBreadcrumb.svelte` | Breadcrumb UI for group/orchestration navigation. |
@@ -76,7 +78,8 @@ Toolbar execution-event handling now delegates execution-id claiming and stale
 event filtering to the shared package workflow execution projector so the app
 toolbar does not maintain a second local relevance gate.
 The app workflow graph delegates orchestration boundary overlay rendering to
-`WorkflowContainerBoundary.svelte`, while the parent keeps viewport tracking,
+`WorkflowContainerBoundary.svelte` and boundary math to
+`workflowContainerBoundary.ts`, while the parent keeps viewport tracking,
 selection state, and orchestration transition ownership.
 
 ## Alternatives Rejected
@@ -125,6 +128,8 @@ selection state, and orchestration transition ownership.
   `a11y-reviewed:` comment explaining the ownership boundary.
 - `WorkflowContainerBoundary.svelte` owns boundary hit-zone markup and emits only
   selection toggles; it must not mutate graph stores directly.
+- `workflowContainerBoundary.ts` must stay DOM-free so boundary projection
+  remains unit-testable.
 
 ## Revisit Triggers
 - The app graph fully converges with the package graph and can be deleted.

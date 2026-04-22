@@ -91,6 +91,10 @@
   } from './edgeInsertInteraction.ts';
   import { resolveReconnectSourceAnchor } from './reconnectInteraction';
   import WorkflowContainerBoundary from './WorkflowContainerBoundary.svelte';
+  import {
+    isWorkflowContainerFullyVisible,
+    resolveWorkflowContainerBounds,
+  } from './workflowContainerBoundary.ts';
 
   // Import view store for zoom transitions
   import {
@@ -208,12 +212,6 @@
   let lastClickNodeId = $state<string | null>(null);
   const DOUBLE_CLICK_THRESHOLD = 300; // ms
 
-  // --- Container border and zoom-out transition ---
-  // Container margin around all nodes (represents orchestration node padding)
-  const CONTAINER_MARGIN = 100;
-  // Extra margin needed for visibility check before transition
-  const VISIBILITY_MARGIN = 50;
-
   // Track if we've already triggered the zoom-out transition
   let transitionTriggered = $state(false);
 
@@ -247,52 +245,7 @@
   let _prevEdgesRef: Edge[] | null = null;
   let _skipNextNodeSync = false;
 
-  // Calculate container bounds from all nodes (represents orchestration node boundary)
-  let containerBounds = $derived.by(() => {
-    if (nodes.length === 0) return null;
-
-    // Find bounding box of all nodes
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-
-    for (const node of nodes) {
-      const width = (node.measured?.width || node.width || 200) as number;
-      const height = (node.measured?.height || node.height || 100) as number;
-
-      minX = Math.min(minX, node.position.x);
-      minY = Math.min(minY, node.position.y);
-      maxX = Math.max(maxX, node.position.x + width);
-      maxY = Math.max(maxY, node.position.y + height);
-    }
-
-    return {
-      x: minX - CONTAINER_MARGIN,
-      y: minY - CONTAINER_MARGIN,
-      width: (maxX - minX) + (CONTAINER_MARGIN * 2),
-      height: (maxY - minY) + (CONTAINER_MARGIN * 2),
-    };
-  });
-
-  // Check if container is fully visible within the viewport
-  function isContainerFullyVisible(
-    bounds: { x: number; y: number; width: number; height: number },
-    viewport: { x: number; y: number; zoom: number },
-    screenWidth: number,
-    screenHeight: number
-  ): boolean {
-    // Convert flow coordinates to screen coordinates
-    const screenX = bounds.x * viewport.zoom + viewport.x;
-    const screenY = bounds.y * viewport.zoom + viewport.y;
-    const screenW = bounds.width * viewport.zoom;
-    const screenH = bounds.height * viewport.zoom;
-
-    // Check if container fits within viewport with margin
-    return (
-      screenX >= VISIBILITY_MARGIN &&
-      screenY >= VISIBILITY_MARGIN &&
-      screenX + screenW <= screenWidth - VISIBILITY_MARGIN &&
-      screenY + screenH <= screenHeight - VISIBILITY_MARGIN
-    );
-  }
+  let containerBounds = $derived(resolveWorkflowContainerBounds(nodes));
 
   // Handle viewport changes during pan/zoom for border rendering
   function handleMove(_event: MouseEvent | TouchEvent | null, viewport: { x: number; y: number; zoom: number }) {
@@ -317,7 +270,7 @@
     const screenWidth = containerElement.clientWidth;
     const screenHeight = containerElement.clientHeight;
 
-    const fullyVisible = isContainerFullyVisible(containerBounds, viewport, screenWidth, screenHeight);
+    const fullyVisible = isWorkflowContainerFullyVisible(containerBounds, viewport, screenWidth, screenHeight);
 
     // Trigger transition when container becomes fully visible
     if (fullyVisible && !transitionTriggered) {

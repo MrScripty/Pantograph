@@ -491,7 +491,10 @@ Tasks:
   container-border subcomponents/helpers.
   Progress: app workflow graph orchestration boundary overlay rendering now
   lives in `src/components/WorkflowContainerBoundary.svelte`, while
-  `WorkflowGraph.svelte` retains viewport tracking and selection state.
+  `WorkflowGraph.svelte` retains viewport tracking and selection state. Boundary
+  extent and viewport visibility projection now lives in
+  `src/components/workflowContainerBoundary.ts`, with unit coverage in
+  `src/components/workflowContainerBoundary.test.ts`.
 - Split `DependencyEnvironmentNode.svelte` into data parsing, activity log,
   mode controls, override editor, status panels, and command controls.
   Progress: dependency environment DTOs now live in
