@@ -35,10 +35,12 @@
   } from '../horseshoeSelector.js';
   import {
     formatHorseshoeBlockedReason,
-    isSpaceKey,
-    resolveHorseshoeSpaceKeyAction,
     shouldUpdateHorseshoeAnchorFromPointer,
   } from '../horseshoeInvocation.js';
+  import {
+    isEditableKeyboardTarget,
+    resolveHorseshoeKeyboardAction,
+  } from '../workflowHorseshoeKeyboard.js';
   import {
     clearHorseshoeInsertFeedback,
     createHorseshoeInsertFeedbackState,
@@ -505,84 +507,48 @@
   }
 
   function handleWindowKeyDown(event: KeyboardEvent) {
-    const target = event.target as HTMLElement | null;
-    if (
-      target &&
-      (target.isContentEditable ||
-        ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
-    ) {
+    if (isEditableKeyboardTarget(event.target as HTMLElement | null)) {
       return;
     }
 
-    if (!horseshoeSession.dragActive && horseshoeSession.displayState === 'hidden') {
-      return;
-    }
+    const action = resolveHorseshoeKeyboardAction(event, {
+      displayState: horseshoeSession.displayState,
+      dragActive: horseshoeSession.dragActive,
+      pending: horseshoeInsertFeedback.pending,
+      hasSelection: Boolean($connectionIntentStore?.insertableNodeTypes[horseshoeSelectedIndex]),
+    });
 
-    const spaceAction = isSpaceKey(event)
-      ? resolveHorseshoeSpaceKeyAction({
-          displayState: horseshoeSession.displayState,
-          dragActive: horseshoeSession.dragActive,
-          pending: horseshoeInsertFeedback.pending,
-          hasSelection: Boolean(
-            $connectionIntentStore?.insertableNodeTypes[horseshoeSelectedIndex],
-          ),
-        })
-      : 'noop';
-
-    if (spaceAction !== 'noop') {
+    if (action.preventDefault) {
       event.preventDefault();
-      horseshoeLastTrace = 'keydown:space';
-      if (spaceAction === 'confirm') {
+    }
+
+    switch (action.type) {
+      case 'request-open':
+        horseshoeLastTrace = 'keydown:space';
+        requestHorseshoeOpen();
+        return;
+      case 'confirm-selection': {
+        horseshoeLastTrace = event.key === 'Enter' ? 'keydown:enter' : 'keydown:space';
         const candidate = $connectionIntentStore?.insertableNodeTypes[horseshoeSelectedIndex];
         if (candidate) {
           void commitInsertSelection(candidate);
         }
-      } else {
-        requestHorseshoeOpen();
+        return;
       }
-      return;
-    }
-
-    if (horseshoeSession.displayState === 'hidden') return;
-
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      closeHorseshoeSelector();
-      return;
-    }
-
-    if (horseshoeSession.displayState !== 'open') return;
-
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      const candidate = $connectionIntentStore?.insertableNodeTypes[horseshoeSelectedIndex];
-      if (candidate) {
-        void commitInsertSelection(candidate);
-      }
-      return;
-    }
-
-    if (event.key === 'ArrowLeft') {
-      event.preventDefault();
-      rotateInsertSelection(-1);
-      return;
-    }
-
-    if (event.key === 'ArrowRight') {
-      event.preventDefault();
-      rotateInsertSelection(1);
-      return;
-    }
-
-    if (event.key === 'Backspace') {
-      event.preventDefault();
-      updateInsertQuery(horseshoeQuery.slice(0, -1));
-      return;
-    }
-
-    if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
-      event.preventDefault();
-      updateInsertQuery(`${horseshoeQuery}${event.key}`);
+      case 'close':
+        closeHorseshoeSelector();
+        return;
+      case 'rotate-selection':
+        rotateInsertSelection(action.delta);
+        return;
+      case 'remove-query-character':
+        updateInsertQuery(horseshoeQuery.slice(0, -1));
+        return;
+      case 'append-query-character':
+        updateInsertQuery(`${horseshoeQuery}${action.character}`);
+        return;
+      case 'noop':
+        return;
     }
   }
 

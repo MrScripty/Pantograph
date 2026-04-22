@@ -178,6 +178,14 @@ export type {
   HorseshoeDisplayState,
   HorseshoeDragSessionState,
 } from './horseshoeDragSession.js';
+export {
+  isEditableKeyboardTarget,
+  resolveHorseshoeKeyboardAction,
+} from './workflowHorseshoeKeyboard.js';
+export type {
+  HorseshoeKeyboardAction,
+  HorseshoeKeyboardContext,
+} from './workflowHorseshoeKeyboard.js';
 export { isPortTypeCompatible } from './portTypeCompatibility.js';
 export {
   applySelectedNodeIds,

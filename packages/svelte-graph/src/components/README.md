@@ -14,6 +14,8 @@ shared node presentation rules live outside the Pantograph app shell.
 | `../workflowConnections.test.ts` | Unit coverage for package connection helper behavior. |
 | `../workflowGraphSync.ts` | Computes reference-based store-to-SvelteFlow node and edge synchronization decisions. |
 | `../workflowGraphSync.test.ts` | Unit coverage for package graph sync decisions. |
+| `../workflowHorseshoeKeyboard.ts` | Resolves drag-time horseshoe keyboard events into component actions. |
+| `../workflowHorseshoeKeyboard.test.ts` | Unit coverage for horseshoe keyboard policy decisions. |
 | `../workflowMiniMap.ts` | Maps package workflow node groups and backend categories to minimap colors. |
 | `../workflowMiniMap.test.ts` | Unit coverage for package workflow minimap color projection. |
 | `NodePalette.svelte` | Palette for adding node definitions into the active graph. |
@@ -80,6 +82,8 @@ keeping reference comparisons out of `WorkflowGraph.svelte`.
 Connection validation and backend candidate projection live in
 `workflowConnections.ts`, while `WorkflowGraph.svelte` owns backend calls and
 interaction cleanup.
+Horseshoe keyboard policy lives in `workflowHorseshoeKeyboard.ts`, while
+`WorkflowGraph.svelte` maps resolved actions to graph-specific state changes.
 
 ## Alternatives Rejected
 - Ask the backend on every pointer move.
@@ -131,6 +135,9 @@ interaction cleanup.
   suppresses the next node sync after a local drag operation.
 - `workflowConnections.ts` must keep candidate-derived target validation aligned
   with backend source anchors and package port compatibility.
+- `workflowHorseshoeKeyboard.ts` must keep `Space`, `Enter`, arrows, `Escape`,
+  and query-editing keys aligned with the documented horseshoe interaction
+  contract before graph keyboard behavior changes.
 
 ## Revisit Triggers
 - Backend candidate queries become too slow for one-shot drag-start loading.

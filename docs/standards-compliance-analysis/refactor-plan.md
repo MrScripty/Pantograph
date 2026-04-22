@@ -505,6 +505,9 @@ Tasks:
   store-to-SvelteFlow synchronization decisions now live in
   `packages/svelte-graph/src/workflowGraphSync.ts`, with unit coverage in
   `packages/svelte-graph/src/workflowGraphSync.test.ts`. Package graph
+  horseshoe keyboard policy now lives in
+  `packages/svelte-graph/src/workflowHorseshoeKeyboard.ts`, with unit coverage in
+  `packages/svelte-graph/src/workflowHorseshoeKeyboard.test.ts`. Package graph
   connection validation, graph-edge normalization, and backend candidate
   projection now live in `packages/svelte-graph/src/workflowConnections.ts`,
   with unit coverage in `packages/svelte-graph/src/workflowConnections.test.ts`.

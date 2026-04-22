@@ -71,7 +71,8 @@ candidate projection or fallback port-compatibility rules.
   for package/app horseshoe gating and connect-vs-reconnect ownership.
 - Horseshoe keyboard policy stays shared: first `Space` requests open, second
   `Space` confirms the highlighted insert only after the menu is open and has a
-  valid selection.
+  valid selection. `workflowHorseshoeKeyboard.ts` owns keyboard-to-action
+  projection so graph components only perform the resolved side effects.
 - Open horseshoe sessions freeze anchor updates; pointer motion is interpreted
   as menu selection input instead of menu repositioning.
 - Horseshoe insert feedback stays visible until the backend accepts the insert
