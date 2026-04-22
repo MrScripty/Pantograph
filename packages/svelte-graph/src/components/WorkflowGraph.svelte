@@ -28,7 +28,6 @@
     ConnectionCommitResponse,
     InsertableNodeTypeCandidate,
   } from '../types/workflow.js';
-  import { formatHorseshoeBlockedReason } from '../horseshoeInvocation.js';
   import {
     isEditableKeyboardTarget,
     resolveHorseshoeKeyboardAction,
@@ -76,6 +75,7 @@
   import { resolveWorkflowDragCursorUpdate } from '../workflowDragCursor.js';
   import { resolveWorkflowGraphInteractionState } from '../workflowGraphInteraction.js';
   import { registerWorkflowGraphWindowListeners } from '../workflowGraphWindowListeners.js';
+  import { resolveWorkflowHorseshoeBlockedReasonLog } from '../workflowHorseshoeTrace.js';
   import {
     resolveWorkflowGroupZoomTarget,
     resolveWorkflowNodeClick,
@@ -265,12 +265,16 @@
   });
 
   $effect(() => {
-    if (!horseshoeSession.blockedReason || horseshoeSession.blockedReason === lastLoggedHorseshoeBlockedReason) {
+    const blockedLog = resolveWorkflowHorseshoeBlockedReasonLog({
+      blockedReason: horseshoeSession.blockedReason,
+      lastLoggedBlockedReason: lastLoggedHorseshoeBlockedReason,
+    });
+    lastLoggedHorseshoeBlockedReason = blockedLog.nextLoggedBlockedReason;
+    if (!blockedLog.shouldLog) {
       return;
     }
 
-    lastLoggedHorseshoeBlockedReason = horseshoeSession.blockedReason;
-    console.warn('[WorkflowGraph] Horseshoe blocked:', formatHorseshoeBlockedReason(horseshoeSession.blockedReason));
+    console.warn('[WorkflowGraph] Horseshoe blocked:', blockedLog.message);
   });
 
   function closeHorseshoeSelector() {

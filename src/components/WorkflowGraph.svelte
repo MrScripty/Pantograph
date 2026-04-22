@@ -10,7 +10,6 @@
     createConnectionDragState,
     createHorseshoeInsertFeedbackState,
     createHorseshoeDragSessionState,
-    formatHorseshoeBlockedReason,
     rejectHorseshoeInsertFeedback,
     resolveHorseshoeSessionStatusLabel,
     isEditableKeyboardTarget,
@@ -43,6 +42,7 @@
     collectSelectedNodeIds,
     WORKFLOW_GRAPH_DEFAULT_EDGE_OPTIONS,
     resolveWorkflowGraphInteractionState,
+    resolveWorkflowHorseshoeBlockedReasonLog,
     WORKFLOW_GRAPH_FIT_VIEW_OPTIONS,
     WORKFLOW_GRAPH_MAX_ZOOM,
     WORKFLOW_GRAPH_MINIMAP_MASK_COLOR,
@@ -341,12 +341,16 @@
   });
 
   $effect(() => {
-    if (!horseshoeSession.blockedReason || horseshoeSession.blockedReason === lastLoggedHorseshoeBlockedReason) {
+    const blockedLog = resolveWorkflowHorseshoeBlockedReasonLog({
+      blockedReason: horseshoeSession.blockedReason,
+      lastLoggedBlockedReason: lastLoggedHorseshoeBlockedReason,
+    });
+    lastLoggedHorseshoeBlockedReason = blockedLog.nextLoggedBlockedReason;
+    if (!blockedLog.shouldLog) {
       return;
     }
 
-    lastLoggedHorseshoeBlockedReason = horseshoeSession.blockedReason;
-    console.warn('[WorkflowGraph] Horseshoe blocked:', formatHorseshoeBlockedReason(horseshoeSession.blockedReason));
+    console.warn('[WorkflowGraph] Horseshoe blocked:', blockedLog.message);
   });
 
   function closeHorseshoeSelector() {

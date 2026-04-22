@@ -135,6 +135,9 @@ keyboard, palette drag, and blur cleanup events through one tested boundary.
 Keep selected-node id projection in `workflowSelection.ts` so package and app
 graph components update selection stores from the same SvelteFlow selection
 snapshot semantics.
+Keep horseshoe diagnostic trace and blocked-reason log projection in
+`workflowHorseshoeTrace.ts` so package and app graph components share the same
+duplicate-suppression and message formatting rules.
 
 ## Alternatives Rejected
 - Keep connect/reconnect state management inline in both graph components.
@@ -187,6 +190,8 @@ snapshot semantics.
   registration and cleanup ordering for package and app graph canvases.
 - `workflowSelection.ts` must own selected-node id projection for package and app
   graph selection handlers.
+- `workflowHorseshoeTrace.ts` must own horseshoe diagnostic trace and
+  blocked-reason log projection for package and app graph components.
 - Horseshoe insert feedback stays visible until the backend accepts the insert
   or the interaction is explicitly cleared; rejected inserts must not collapse
   into a silent no-op.

@@ -163,6 +163,8 @@ while `WorkflowGraph.svelte` supplies only the concrete keyboard and palette
 callbacks.
 Workflow graph selected-node id projection lives in `workflowSelection.ts`,
 while `WorkflowGraph.svelte` only writes the projected ids into the store.
+Workflow graph horseshoe blocked-reason log decisions live in
+`workflowHorseshoeTrace.ts`, while `WorkflowGraph.svelte` only emits the warning.
 
 ## Alternatives Rejected
 - Ask the backend on every pointer move.
@@ -205,6 +207,8 @@ while `WorkflowGraph.svelte` only writes the projected ids into the store.
   and cleanup ordering for package and app workflow graph canvases.
 - `workflowSelection.ts` must own selected-node id projection for package and app
   workflow graph selection handlers.
+- `workflowHorseshoeTrace.ts` must own horseshoe blocked-reason log projection
+  for package and app workflow graph components.
 - `horseshoeInsertFeedback.ts` must derive selector status labels from one
   feedback/session snapshot.
 - `workflowHorseshoeSessionUpdate.ts` must derive selector reset, feedback,

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   formatWorkflowHorseshoeOpenRequestTrace,
   formatWorkflowHorseshoeSessionTrace,
+  resolveWorkflowHorseshoeBlockedReasonLog,
 } from './workflowHorseshoeTrace.ts';
 
 test('formatWorkflowHorseshoeSessionTrace describes session display state and ownership flags', () => {
@@ -55,5 +56,44 @@ test('formatWorkflowHorseshoeOpenRequestTrace describes idle contexts without in
       hasAnchorPosition: false,
     }),
     'request-open:idle:idle:no-intent:0-insertables:no-anchor',
+  );
+});
+
+test('resolveWorkflowHorseshoeBlockedReasonLog suppresses empty and repeated blocked reasons', () => {
+  assert.deepEqual(
+    resolveWorkflowHorseshoeBlockedReasonLog({
+      blockedReason: null,
+      lastLoggedBlockedReason: 'no_active_drag',
+    }),
+    {
+      message: null,
+      nextLoggedBlockedReason: 'no_active_drag',
+      shouldLog: false,
+    },
+  );
+  assert.deepEqual(
+    resolveWorkflowHorseshoeBlockedReasonLog({
+      blockedReason: 'no_active_drag',
+      lastLoggedBlockedReason: 'no_active_drag',
+    }),
+    {
+      message: null,
+      nextLoggedBlockedReason: 'no_active_drag',
+      shouldLog: false,
+    },
+  );
+});
+
+test('resolveWorkflowHorseshoeBlockedReasonLog formats new blocked reasons', () => {
+  assert.deepEqual(
+    resolveWorkflowHorseshoeBlockedReasonLog({
+      blockedReason: 'missing_anchor_position',
+      lastLoggedBlockedReason: 'no_active_drag',
+    }),
+    {
+      message: 'cursor anchor position is unavailable',
+      nextLoggedBlockedReason: 'missing_anchor_position',
+      shouldLog: true,
+    },
   );
 });

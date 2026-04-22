@@ -221,7 +221,9 @@ export type {
 export {
   formatWorkflowHorseshoeOpenRequestTrace,
   formatWorkflowHorseshoeSessionTrace,
+  resolveWorkflowHorseshoeBlockedReasonLog,
 } from './workflowHorseshoeTrace.js';
+export type { WorkflowHorseshoeBlockedReasonLogDecision } from './workflowHorseshoeTrace.js';
 export { requestWorkflowHorseshoeOpen } from './workflowHorseshoeOpenRequest.js';
 export type { WorkflowHorseshoeOpenRequestResult } from './workflowHorseshoeOpenRequest.js';
 export { buildWorkflowHorseshoeOpenContext } from './workflowHorseshoeOpenContext.js';
