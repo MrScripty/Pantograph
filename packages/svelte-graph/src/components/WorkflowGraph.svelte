@@ -19,6 +19,7 @@
     buildConnectionIntentState,
     edgeToGraphEdge,
     isWorkflowConnectionValid,
+    preserveConnectionIntentState,
   } from '../workflowConnections.js';
   import { computeWorkflowGraphSyncDecision } from '../workflowGraphSync.js';
   import type {
@@ -587,14 +588,12 @@
     } catch (error) {
       if (requestId === connectionIntentRequestId) {
         if (options?.preserveDisplay) {
-          stores.workflow.setConnectionIntent({
+          stores.workflow.setConnectionIntent(preserveConnectionIntentState({
             sourceAnchor,
             graphRevision: options?.graphRevision ?? getGraphRevision(),
-            compatibleNodeIds: $connectionIntentStore?.compatibleNodeIds ?? [],
-            compatibleTargetKeys: $connectionIntentStore?.compatibleTargetKeys ?? [],
-            insertableNodeTypes: $connectionIntentStore?.insertableNodeTypes ?? [],
+            currentIntent: $connectionIntentStore,
             rejection: options?.rejection,
-          });
+          }));
         } else {
           clearConnectionInteraction();
         }
@@ -641,14 +640,12 @@
       return response;
     }
 
-    stores.workflow.setConnectionIntent({
+    stores.workflow.setConnectionIntent(preserveConnectionIntentState({
       sourceAnchor,
       graphRevision: response.graph_revision,
-      compatibleNodeIds: $connectionIntentStore?.compatibleNodeIds ?? [],
-      compatibleTargetKeys: $connectionIntentStore?.compatibleTargetKeys ?? [],
-      insertableNodeTypes: $connectionIntentStore?.insertableNodeTypes ?? [],
+      currentIntent: $connectionIntentStore,
       rejection: response.rejection,
-    });
+    }));
 
     if (response.rejection) {
       console.warn('[WorkflowGraph] Connection rejected:', response.rejection.message);

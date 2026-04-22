@@ -1,5 +1,6 @@
 import { isPortTypeCompatible } from './portTypeCompatibility.ts';
 import type {
+  ConnectionAnchor,
   ConnectionCandidatesResponse,
   ConnectionCommitResponse,
   ConnectionIntentState,
@@ -50,6 +51,22 @@ export function buildConnectionIntentState(
     ),
     insertableNodeTypes: candidates.insertable_node_types,
     rejection,
+  };
+}
+
+export function preserveConnectionIntentState(params: {
+  sourceAnchor: ConnectionAnchor;
+  graphRevision: string;
+  currentIntent: ConnectionIntentState | null;
+  rejection?: ConnectionCommitResponse['rejection'];
+}): ConnectionIntentState {
+  return {
+    sourceAnchor: params.sourceAnchor,
+    graphRevision: params.graphRevision,
+    compatibleNodeIds: params.currentIntent?.compatibleNodeIds ?? [],
+    compatibleTargetKeys: params.currentIntent?.compatibleTargetKeys ?? [],
+    insertableNodeTypes: params.currentIntent?.insertableNodeTypes ?? [],
+    rejection: params.rejection,
   };
 }
 

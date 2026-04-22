@@ -10,7 +10,7 @@ shared node presentation rules live outside the Pantograph app shell.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `WorkflowGraph.svelte` | Main graph canvas that owns connect/reconnect flows, candidate loading, revision-aware edge commits, and the drag-time horseshoe insert flow. |
-| `../workflowConnections.ts` | Computes reusable connection validation, graph-edge normalization, and candidate-to-intent projection. |
+| `../workflowConnections.ts` | Computes reusable connection validation, graph-edge normalization, candidate-to-intent projection, and rejected-intent preservation. |
 | `../workflowConnections.test.ts` | Unit coverage for package connection helper behavior. |
 | `../workflowGraphSync.ts` | Computes reference-based store-to-SvelteFlow node and edge synchronization decisions. |
 | `../workflowGraphSync.test.ts` | Unit coverage for package graph sync decisions. |
@@ -96,6 +96,10 @@ keeping reference comparisons out of `WorkflowGraph.svelte`.
 Connection validation and backend candidate projection live in
 `workflowConnections.ts`, while `WorkflowGraph.svelte` owns backend calls and
 interaction cleanup.
+Rejected connection-intent fallback state also lives in
+`workflowConnections.ts`, so preserved compatible targets and insertable node
+types stay aligned while `WorkflowGraph.svelte` attaches backend rejection
+metadata.
 Horseshoe keyboard policy lives in `workflowHorseshoeKeyboard.ts`, while
 `WorkflowGraph.svelte` maps resolved actions to graph-specific state changes.
 Node double-click and group zoom-target decisions live in
@@ -176,6 +180,9 @@ container element.
   suppresses the next node sync after a local drag operation.
 - `workflowConnections.ts` must keep candidate-derived target validation aligned
   with backend source anchors and package port compatibility.
+- `workflowConnections.ts` must preserve prior compatible targets and
+  insertable candidates when backend rejection state is attached to a still-open
+  connection intent.
 - `workflowHorseshoeKeyboard.ts` must keep `Space`, `Enter`, arrows, `Escape`,
   and query-editing keys aligned with the documented horseshoe interaction
   contract before graph keyboard behavior changes.

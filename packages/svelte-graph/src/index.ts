@@ -115,6 +115,12 @@ export {
   withDerivedGraph,
 } from './graphRevision.js';
 export {
+  buildConnectionIntentState,
+  edgeToGraphEdge,
+  isWorkflowConnectionValid,
+  preserveConnectionIntentState,
+} from './workflowConnections.js';
+export {
   HORSESHOE_VISIBLE_COUNT,
   HORSESHOE_OUTER_RADIUS,
   HORSESHOE_SELECTION_RADIUS,

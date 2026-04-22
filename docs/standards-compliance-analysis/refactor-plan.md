@@ -536,7 +536,9 @@ Tasks:
   `packages/svelte-graph/src/workflowPaletteDrag.test.ts`. Package graph
   connection validation, graph-edge normalization, and backend candidate
   projection now live in `packages/svelte-graph/src/workflowConnections.ts`,
-  with unit coverage in `packages/svelte-graph/src/workflowConnections.test.ts`.
+  with unit coverage in `packages/svelte-graph/src/workflowConnections.test.ts`;
+  rejected connection-intent preservation now also reuses that package helper
+  from the package and app graph components.
   App graph connection validation, graph-edge normalization, and backend
   candidate projection now live in `src/components/workflowConnections.ts`,
   with unit coverage in `src/components/workflowConnections.test.ts`. App graph

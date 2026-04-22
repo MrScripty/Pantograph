@@ -17,6 +17,7 @@
     resolveHorseshoeStatusLabel,
     isEditableKeyboardTarget,
     resolveHorseshoeKeyboardAction,
+    preserveConnectionIntentState,
     buildWorkflowHorseshoeOpenContext,
     formatWorkflowHorseshoeOpenRequestTrace,
     formatWorkflowHorseshoeSessionTrace,
@@ -792,14 +793,12 @@
     } catch (error) {
       if (requestId === connectionIntentRequestId) {
         if (options?.preserveDisplay) {
-          setConnectionIntent({
+          setConnectionIntent(preserveConnectionIntentState({
             sourceAnchor,
             graphRevision: options?.graphRevision ?? getGraphRevision(),
-            compatibleNodeIds: $connectionIntent?.compatibleNodeIds ?? [],
-            compatibleTargetKeys: $connectionIntent?.compatibleTargetKeys ?? [],
-            insertableNodeTypes: $connectionIntent?.insertableNodeTypes ?? [],
+            currentIntent: $connectionIntent,
             rejection: options?.rejection,
-          });
+          }));
         } else {
           clearConnectionInteraction();
         }
@@ -861,14 +860,12 @@
       console.warn('[WorkflowGraph] Failed to refresh execution graph after rejected connect:', error);
     }
 
-    setConnectionIntent({
+    setConnectionIntent(preserveConnectionIntentState({
       sourceAnchor,
       graphRevision: response.graph_revision,
-      compatibleNodeIds: $connectionIntent?.compatibleNodeIds ?? [],
-      compatibleTargetKeys: $connectionIntent?.compatibleTargetKeys ?? [],
-      insertableNodeTypes: $connectionIntent?.insertableNodeTypes ?? [],
+      currentIntent: $connectionIntent,
       rejection: response.rejection,
-    });
+    }));
 
     if (response.rejection) {
       console.warn('[WorkflowGraph] Connection rejected:', response.rejection.message);

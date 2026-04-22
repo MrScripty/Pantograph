@@ -21,7 +21,7 @@ fork core canvas behavior.
 | `stores/` | Package store factories for workflow, session, and view state. |
 | `types/` | Stable TypeScript contracts for graph, backend, and group APIs. |
 | `workflowEventOwnership.ts` | Projection helper for backend-provided workflow execution ids, active run identity, and stale-event relevance. |
-| `workflowConnections.ts` | Shared connection validation, graph-edge normalization, and candidate-to-intent projection helpers. |
+| `workflowConnections.ts` | Shared connection validation, graph-edge normalization, candidate-to-intent projection, and rejected-intent preservation helpers. |
 | `workflowConnections.test.ts` | Unit coverage for reusable connection helper behavior. |
 | `workflowGraphSync.ts` | Reference-based store-to-SvelteFlow synchronization decision helper. |
 | `workflowGraphSync.test.ts` | Unit coverage for SvelteFlow node and edge sync decisions. |
@@ -68,7 +68,7 @@ the graph component can preserve xyflow internal metadata without owning
 reference-comparison rules inline.
 Keep connection-intent projection and synchronous connection validation in
 `workflowConnections.ts` so the graph component does not duplicate backend
-candidate projection or fallback port-compatibility rules.
+candidate projection, fallback rejection state, or port-compatibility rules.
 Keep palette drag parsing and drop-position projection in
 `workflowPaletteDrag.ts` so the graph component owns browser events and store
 mutations without owning payload or coordinate policy inline.
@@ -133,6 +133,9 @@ package and app graph components.
 - `workflowConnections.ts` must prefer active backend candidate intent when it
   matches the source anchor, then fall back to static port compatibility only
   when no active intent applies.
+- Rejected connection or insert flows that preserve the selector display must
+  use `preserveConnectionIntentState()` so compatible targets and insertable
+  nodes stay visible while backend rejection metadata is attached.
 - `workflowPaletteDrag.ts` must keep malformed palette drag payloads from
   escaping as unhandled graph drop exceptions.
 - `workflowInsertPosition.ts` must return `null` without an anchor and must not

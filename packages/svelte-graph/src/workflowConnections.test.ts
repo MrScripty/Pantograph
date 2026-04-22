@@ -5,6 +5,7 @@ import {
   buildConnectionIntentState,
   edgeToGraphEdge,
   isWorkflowConnectionValid,
+  preserveConnectionIntentState,
 } from './workflowConnections.ts';
 import type { NodeDefinition } from './types/workflow.ts';
 
@@ -97,6 +98,71 @@ test('buildConnectionIntentState projects backend candidates into UI state', () 
   assert.equal(intent.graphRevision, 'rev-a');
   assert.deepEqual(intent.compatibleNodeIds, ['target-a']);
   assert.deepEqual(intent.compatibleTargetKeys, ['target-a:in']);
+});
+
+test('preserveConnectionIntentState keeps existing candidates while adding rejection state', () => {
+  assert.deepEqual(
+    preserveConnectionIntentState({
+      sourceAnchor: { node_id: 'source-b', port_id: 'out' },
+      graphRevision: 'rev-b',
+      currentIntent: {
+        sourceAnchor: { node_id: 'source-a', port_id: 'out' },
+        graphRevision: 'rev-a',
+        compatibleNodeIds: ['target-a'],
+        compatibleTargetKeys: ['target-a:in'],
+        insertableNodeTypes: [
+          {
+            node_type: 'processor',
+            label: 'Processor',
+            category: 'processing',
+            description: 'Processor node',
+            matching_input_port_ids: ['in'],
+          },
+        ],
+      },
+      rejection: {
+        reason: 'stale_revision',
+        message: 'Graph changed',
+      },
+    }),
+    {
+      sourceAnchor: { node_id: 'source-b', port_id: 'out' },
+      graphRevision: 'rev-b',
+      compatibleNodeIds: ['target-a'],
+      compatibleTargetKeys: ['target-a:in'],
+      insertableNodeTypes: [
+        {
+          node_type: 'processor',
+          label: 'Processor',
+          category: 'processing',
+          description: 'Processor node',
+          matching_input_port_ids: ['in'],
+        },
+      ],
+      rejection: {
+        reason: 'stale_revision',
+        message: 'Graph changed',
+      },
+    },
+  );
+});
+
+test('preserveConnectionIntentState builds an empty fallback without current intent', () => {
+  assert.deepEqual(
+    preserveConnectionIntentState({
+      sourceAnchor: { node_id: 'source-a', port_id: 'out' },
+      graphRevision: 'rev-a',
+      currentIntent: null,
+    }),
+    {
+      sourceAnchor: { node_id: 'source-a', port_id: 'out' },
+      graphRevision: 'rev-a',
+      compatibleNodeIds: [],
+      compatibleTargetKeys: [],
+      insertableNodeTypes: [],
+      rejection: undefined,
+    },
+  );
 });
 
 test('isWorkflowConnectionValid uses connection intent when it matches the active source', () => {
