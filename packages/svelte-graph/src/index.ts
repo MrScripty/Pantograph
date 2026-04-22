@@ -282,6 +282,13 @@ export type {
   WorkflowGraphInteractionInput,
   WorkflowGraphInteractionState,
 } from './workflowGraphInteraction.js';
+export {
+  WORKFLOW_GRAPH_FIT_VIEW_OPTIONS,
+  WORKFLOW_GRAPH_MAX_ZOOM,
+  WORKFLOW_GRAPH_MINIMAP_MASK_COLOR,
+  WORKFLOW_GRAPH_MIN_ZOOM,
+  WORKFLOW_GRAPH_PAN_ACTIVATION_KEY,
+} from './workflowGraphViewport.js';
 export { resolveWorkflowInsertPositionHint } from './workflowInsertPosition.js';
 export type {
   WorkflowInsertAnchorPosition,

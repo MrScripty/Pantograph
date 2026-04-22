@@ -92,6 +92,13 @@
     resolveWorkflowRelativePointerPosition,
   } from '../workflowPointerPosition.js';
   import { WORKFLOW_GRAPH_DEFAULT_EDGE_OPTIONS } from '../workflowGraphEdgeOptions.js';
+  import {
+    WORKFLOW_GRAPH_FIT_VIEW_OPTIONS,
+    WORKFLOW_GRAPH_MAX_ZOOM,
+    WORKFLOW_GRAPH_MINIMAP_MASK_COLOR,
+    WORKFLOW_GRAPH_MIN_ZOOM,
+    WORKFLOW_GRAPH_PAN_ACTIVATION_KEY,
+  } from '../workflowGraphViewport.js';
   import { resolveWorkflowInsertPositionHint } from '../workflowInsertPosition.js';
   import { getWorkflowMiniMapNodeColor } from '../workflowMiniMap.js';
   import CutTool from './CutTool.svelte';
@@ -932,15 +939,15 @@
     bind:edges
     {nodeTypes}
     {edgeTypes}
-    fitViewOptions={{ maxZoom: 1 }}
+    fitViewOptions={WORKFLOW_GRAPH_FIT_VIEW_OPTIONS}
     nodesConnectable={graphInteractionState.nodesConnectable}
     elementsSelectable={graphInteractionState.elementsSelectable}
     nodesDraggable={graphInteractionState.nodesDraggable}
     panOnDrag={graphInteractionState.panOnDrag}
-    panActivationKey={null}
+    panActivationKey={WORKFLOW_GRAPH_PAN_ACTIVATION_KEY}
     zoomOnScroll={true}
-    minZoom={0.25}
-    maxZoom={2}
+    minZoom={WORKFLOW_GRAPH_MIN_ZOOM}
+    maxZoom={WORKFLOW_GRAPH_MAX_ZOOM}
     deleteKey={graphInteractionState.deleteKey}
     edgesReconnectable={graphInteractionState.edgesReconnectable}
     isValidConnection={checkValidConnection}
@@ -962,7 +969,7 @@
     defaultEdgeOptions={WORKFLOW_GRAPH_DEFAULT_EDGE_OPTIONS}
   >
     <Controls />
-    <MiniMap nodeColor={getWorkflowMiniMapNodeColor} maskColor="rgba(0, 0, 0, 0.8)" />
+    <MiniMap nodeColor={getWorkflowMiniMapNodeColor} maskColor={WORKFLOW_GRAPH_MINIMAP_MASK_COLOR} />
   </SvelteFlow>
 
   <ContainerBorder

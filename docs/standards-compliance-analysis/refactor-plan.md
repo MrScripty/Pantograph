@@ -599,6 +599,9 @@ Tasks:
   Package and app SvelteFlow editability, selection, reconnect, and pane-panning
   gating now reuse `packages/svelte-graph/src/workflowGraphInteraction.ts`, with
   unit coverage in `packages/svelte-graph/src/workflowGraphInteraction.test.ts`.
+  Package and app SvelteFlow fit, zoom, pan-activation, and minimap mask defaults
+  now reuse `packages/svelte-graph/src/workflowGraphViewport.ts`, with unit
+  coverage in `packages/svelte-graph/src/workflowGraphViewport.test.ts`.
   App palette drag eligibility, drag payload parsing, and graph-space drop
   projection now live in `src/components/workflowPaletteDrag.ts`, with unit
   coverage in `src/components/workflowPaletteDrag.test.ts`. App orchestration

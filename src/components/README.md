@@ -164,6 +164,9 @@ the same reconnectable edge defaults.
 Workflow graph interaction gating now comes from the package
 `resolveWorkflowGraphInteractionState` helper so app and package canvases share
 the same edit, drag, selection, reconnect, and pane-panning conditions.
+Workflow graph viewport and minimap defaults now come from package
+`workflowGraphViewport.ts` constants so app and package canvases share the same
+fit, zoom, pan-activation, and minimap mask defaults.
 Mouse/touch pointer projection now comes from the package
 `workflowPointerPosition.ts` helper; the app graph only supplies the active
 container bounds.
@@ -278,6 +281,9 @@ container bounds.
 - App graph SvelteFlow interaction gating must use the package
   `resolveWorkflowGraphInteractionState` helper so editability and palette-drag
   behavior cannot drift from the package graph.
+- App graph SvelteFlow viewport and minimap defaults must use package
+  `workflowGraphViewport.ts` constants so zoom and minimap presentation cannot
+  drift from the package graph.
 - App graph pointer coordinate handling must use the package pointer-position
   resolver so mouse/touch fallback behavior stays aligned with the package
   graph.

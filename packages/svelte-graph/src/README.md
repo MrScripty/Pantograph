@@ -126,6 +126,9 @@ and interaction width.
 Keep shared workflow graph interaction gating in `workflowGraphInteraction.ts`
 so package and app graph components suspend editing, selection, reconnecting, and
 pane panning under the same conditions.
+Keep shared workflow graph viewport constants in `workflowGraphViewport.ts` so
+package and app graph components use the same fit, zoom, pan-activation, and
+minimap mask defaults.
 
 ## Alternatives Rejected
 - Keep connect/reconnect state management inline in both graph components.
@@ -172,6 +175,8 @@ pane panning under the same conditions.
   transport-free and reusable by both graph components.
 - `workflowGraphInteraction.ts` must keep SvelteFlow interaction gating pure and
   reusable so graph components only supply current UI state.
+- `workflowGraphViewport.ts` must keep static SvelteFlow viewport and minimap
+  defaults reusable by package and app graph canvases.
 - Horseshoe insert feedback stays visible until the backend accepts the insert
   or the interaction is explicitly cleared; rejected inserts must not collapse
   into a silent no-op.
