@@ -526,7 +526,11 @@ Tasks:
   reuse through the package export. Package graph mouse/touch pointer projection
   now lives in `packages/svelte-graph/src/workflowPointerPosition.ts`, with unit
   coverage in `packages/svelte-graph/src/workflowPointerPosition.test.ts` and
-  app graph reuse through the package export. Package graph
+  app graph reuse through the package export. Package graph horseshoe
+  open-context projection now lives in
+  `packages/svelte-graph/src/workflowHorseshoeOpenContext.ts`, with unit
+  coverage in `packages/svelte-graph/src/workflowHorseshoeOpenContext.test.ts`
+  and app graph reuse through the package export. Package graph
   palette drag payload parsing and drop-position projection now live in
   `packages/svelte-graph/src/workflowPaletteDrag.ts`, with unit coverage in
   `packages/svelte-graph/src/workflowPaletteDrag.test.ts`. Package graph

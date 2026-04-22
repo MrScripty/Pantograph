@@ -130,6 +130,9 @@ stay aligned.
 Drag-cursor horseshoe anchor and selection decisions now come from the package
 `workflowDragCursor.ts` helper; the app graph only applies the resolved state
 change.
+Horseshoe open-context projection now comes from the package
+`workflowHorseshoeOpenContext.ts` helper; the app graph only supplies app store
+state before requesting or syncing the shared horseshoe drag session.
 Horseshoe diagnostic trace labels now come from the package
 `workflowHorseshoeTrace.ts` helper so package and app graph traces stay aligned.
 Mouse/touch pointer projection now comes from the package
@@ -215,6 +218,9 @@ container bounds.
 - App graph drag-cursor behavior must use the package drag-cursor resolver so
   open-menu selection and hidden-menu anchor movement stay aligned with the
   package graph.
+- App graph horseshoe open-context projection must use the package helper so
+  reconnect insert blocking and connect intent availability stay aligned with
+  the package graph.
 - App graph horseshoe trace labels must use the package trace formatter instead
   of composing parallel string formats inline.
 - App graph pointer coordinate handling must use the package pointer-position

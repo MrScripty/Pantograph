@@ -190,6 +190,8 @@ export {
   formatWorkflowHorseshoeOpenRequestTrace,
   formatWorkflowHorseshoeSessionTrace,
 } from './workflowHorseshoeTrace.js';
+export { buildWorkflowHorseshoeOpenContext } from './workflowHorseshoeOpenContext.js';
+export type { WorkflowHorseshoeOpenContextInput } from './workflowHorseshoeOpenContext.js';
 export {
   WORKFLOW_NODE_DOUBLE_CLICK_THRESHOLD_MS,
   isWorkflowGroupNode,

@@ -16,6 +16,8 @@ fork core canvas behavior.
 | `horseshoeDragSession.ts` | Shared visibility and anchor lifecycle for the horseshoe insert UI during active drags. |
 | `horseshoeInsertFeedback.ts` | Shared pending/rejection feedback state and status-label resolution for horseshoe insert outcomes. |
 | `horseshoeInvocation.ts` | Shared `Space` open/confirm decisions, pointer-anchor freeze rules, and user-facing blocked-reason strings for horseshoe invocation. |
+| `workflowHorseshoeOpenContext.ts` | Shared projection from drag/session/intent state into the horseshoe open-request context. |
+| `workflowHorseshoeOpenContext.test.ts` | Unit coverage for connect, reconnect, and idle horseshoe open-context projection. |
 | `stores/` | Package store factories for workflow, session, and view state. |
 | `types/` | Stable TypeScript contracts for graph, backend, and group APIs. |
 | `workflowEventOwnership.ts` | Projection helper for backend-provided workflow execution ids, active run identity, and stale-event relevance. |
@@ -76,6 +78,9 @@ contract before calling backend insert APIs.
 Keep drag-cursor horseshoe decisions in `workflowDragCursor.ts` so anchor
 updates and open-menu item selection stay aligned across package and app graph
 components.
+Keep horseshoe open-context projection in `workflowHorseshoeOpenContext.ts` so
+package and app graph components share the same editability, intent, anchor,
+and connect-vs-reconnect insert gating before invoking the session controller.
 Keep horseshoe trace formatting in `workflowHorseshoeTrace.ts` so package and
 app graph diagnostics use the same state labels while components own when to
 record them.
@@ -102,6 +107,9 @@ package and app graph components.
   as menu selection input instead of menu repositioning.
 - `workflowDragCursor.ts` owns that anchor-versus-selection decision and returns
   explicit side-effect decisions for graph components to apply.
+- `workflowHorseshoeOpenContext.ts` must derive `supportsInsert` from
+  `connectionDragState.ts` so reconnect drags cannot silently diverge from
+  package connect-drag semantics.
 - `workflowHorseshoeTrace.ts` must remain formatting-only and must not decide
   whether a horseshoe session should open or close.
 - Horseshoe insert feedback stays visible until the backend accepts the insert

@@ -40,6 +40,7 @@
     formatWorkflowHorseshoeOpenRequestTrace,
     formatWorkflowHorseshoeSessionTrace,
   } from '../workflowHorseshoeTrace.js';
+  import { buildWorkflowHorseshoeOpenContext } from '../workflowHorseshoeOpenContext.js';
   import {
     clearHorseshoeInsertFeedback,
     createHorseshoeInsertFeedbackState,
@@ -330,14 +331,13 @@
   }
 
   function getHorseshoeOpenContext() {
-    return {
+    return buildWorkflowHorseshoeOpenContext({
       canEdit,
-      connectionDragActive: horseshoeSession.dragActive,
-      supportsInsert: supportsInsertFromConnectionDrag(connectionDragState),
+      session: horseshoeSession,
+      connectionDragState,
       hasConnectionIntent: Boolean($connectionIntentStore),
       insertableCount: $connectionIntentStore?.insertableNodeTypes.length ?? 0,
-      anchorPosition: horseshoeSession.anchorPosition,
-    };
+    });
   }
 
   function getRelativePointerPosition(clientX: number, clientY: number) {

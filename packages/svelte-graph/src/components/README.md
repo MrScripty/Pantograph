@@ -18,6 +18,8 @@ shared node presentation rules live outside the Pantograph app shell.
 | `../workflowDragCursor.test.ts` | Unit coverage for drag-cursor horseshoe decisions. |
 | `../workflowHorseshoeKeyboard.ts` | Resolves drag-time horseshoe keyboard events into component actions. |
 | `../workflowHorseshoeKeyboard.test.ts` | Unit coverage for horseshoe keyboard policy decisions. |
+| `../workflowHorseshoeOpenContext.ts` | Projects editability, drag-session, connection-drag, and intent state into horseshoe open context. |
+| `../workflowHorseshoeOpenContext.test.ts` | Unit coverage for horseshoe open-context projection. |
 | `../workflowHorseshoeTrace.ts` | Formats horseshoe diagnostic trace labels for session and open-request state. |
 | `../workflowHorseshoeTrace.test.ts` | Unit coverage for horseshoe trace formatting. |
 | `../workflowInsertPosition.ts` | Projects horseshoe insert anchors into backend insert position hints. |
@@ -107,6 +109,9 @@ while `WorkflowGraph.svelte` owns the backend insert call and interaction
 feedback lifecycle.
 Drag-cursor horseshoe decisions live in `workflowDragCursor.ts`, while
 `WorkflowGraph.svelte` applies the selected-index or session-state update.
+Horseshoe open-context projection lives in `workflowHorseshoeOpenContext.ts`,
+while `WorkflowGraph.svelte` supplies the current stores and interaction state
+before invoking the drag-session controller.
 Horseshoe trace labels live in `workflowHorseshoeTrace.ts`, while
 `WorkflowGraph.svelte` owns when interaction state changes should record a new
 trace string.
@@ -134,6 +139,9 @@ container element.
   it can only affect item selection inside the existing anchored layout.
 - `workflowDragCursor.ts` must preserve that behavior by updating anchors only
   while the horseshoe display state allows pointer anchoring.
+- `workflowHorseshoeOpenContext.ts` must keep open-request context projection
+  aligned with connection-drag insert support before the session controller is
+  invoked.
 - `workflowHorseshoeTrace.ts` must keep package/app trace labels aligned for
   blocked, pending, open, and idle horseshoe states.
 - Rejected horseshoe inserts must remain visible in-context and refresh
