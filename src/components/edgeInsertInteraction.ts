@@ -173,6 +173,24 @@ export function isEdgeInsertPreviewRequestCurrent(params: {
   );
 }
 
+export function shouldClearEdgeInsertPreviewForGraphState(params: {
+  state: EdgeInsertPreviewState;
+  edgeInsertEnabled: boolean;
+  externalPaletteDragActive: boolean;
+  currentGraphRevision: string;
+}): boolean {
+  if (!params.state.edgeId) {
+    return false;
+  }
+
+  return (
+    !params.edgeInsertEnabled ||
+    !params.externalPaletteDragActive ||
+    !params.currentGraphRevision ||
+    params.state.graphRevision !== params.currentGraphRevision
+  );
+}
+
 export function getCommittableEdgeInsertPreview(
   state: EdgeInsertPreviewState,
   nodeType: string,

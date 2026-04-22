@@ -15,6 +15,7 @@ import {
   setEdgeInsertPreviewPending,
   setEdgeInsertPreviewRejected,
   setEdgeInsertPreviewResolved,
+  shouldClearEdgeInsertPreviewForGraphState,
   shouldRefreshEdgeInsertPreview,
   type Point,
 } from './edgeInsertInteraction.ts';
@@ -201,6 +202,58 @@ test('isEdgeInsertPreviewRequestCurrent matches active request and preview ident
       edgeId: 'edge-2',
       nodeType: 'embedding',
       graphRevision: 'rev-1',
+    }),
+    false,
+  );
+});
+
+test('shouldClearEdgeInsertPreviewForGraphState clears stale or disabled previews', () => {
+  const state = setEdgeInsertPreviewPending(
+    setEdgeInsertHoverTarget(
+      createEdgeInsertPreviewState(),
+      {
+        edgeId: 'edge-1',
+        hitPoint: { x: 120, y: 40 },
+        distance: 12,
+      },
+      'embedding',
+      'rev-1',
+    ),
+  );
+
+  assert.equal(
+    shouldClearEdgeInsertPreviewForGraphState({
+      state,
+      edgeInsertEnabled: true,
+      externalPaletteDragActive: true,
+      currentGraphRevision: 'rev-1',
+    }),
+    false,
+  );
+  assert.equal(
+    shouldClearEdgeInsertPreviewForGraphState({
+      state,
+      edgeInsertEnabled: false,
+      externalPaletteDragActive: true,
+      currentGraphRevision: 'rev-1',
+    }),
+    true,
+  );
+  assert.equal(
+    shouldClearEdgeInsertPreviewForGraphState({
+      state,
+      edgeInsertEnabled: true,
+      externalPaletteDragActive: true,
+      currentGraphRevision: 'rev-2',
+    }),
+    true,
+  );
+  assert.equal(
+    shouldClearEdgeInsertPreviewForGraphState({
+      state: createEdgeInsertPreviewState(),
+      edgeInsertEnabled: false,
+      externalPaletteDragActive: false,
+      currentGraphRevision: '',
     }),
     false,
   );

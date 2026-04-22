@@ -104,6 +104,7 @@
     setEdgeInsertPreviewPending,
     setEdgeInsertPreviewRejected,
     setEdgeInsertPreviewResolved,
+    shouldClearEdgeInsertPreviewForGraphState,
     shouldRefreshEdgeInsertPreview,
     updateEdgeInsertHitPoint,
     type EdgeInsertPreviewState,
@@ -586,16 +587,12 @@
   }
 
   $effect(() => {
-    if (!edgeInsertPreview.edgeId) {
-      return;
-    }
-
-    if (
-      !isWorkflowPaletteEdgeInsertEnabled($currentGraphType, $currentGraphId) ||
-      !externalPaletteDragActive ||
-      !currentGraphRevision ||
-      edgeInsertPreview.graphRevision !== currentGraphRevision
-    ) {
+    if (shouldClearEdgeInsertPreviewForGraphState({
+      state: edgeInsertPreview,
+      edgeInsertEnabled: isWorkflowPaletteEdgeInsertEnabled($currentGraphType, $currentGraphId),
+      externalPaletteDragActive,
+      currentGraphRevision,
+    })) {
       clearEdgeInsertPreview();
     }
   });
