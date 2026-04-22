@@ -121,12 +121,18 @@ from the same package version.
 
 ## Testing
 ```bash
-cargo test -p pantograph_rustler
+cargo check -p pantograph_rustler
 ```
+
+Direct `cargo test -p pantograph_rustler` currently links against Rustler NIF
+symbols that are supplied by the BEAM runtime in host execution. Track a
+dedicated BEAM-backed test harness before treating crate-local Rust tests as the
+canonical binding verification path.
 
 ## Notes
 - `src/resource_registration.rs` carries a scoped `non_local_definitions` lint
   exception for the current `rustler::resource!` expansion; remove it when
   Rustler exposes a warning-clean registration API.
-- `src/lib.rs` is over the decomposition threshold and remains tracked in the
-  standards compliance plan.
+- `src/lib.rs` is still over the decomposition threshold, but BEAM binding DTOs
+  and resource wrappers now live in focused source modules as part of the
+  facade split tracked by the standards compliance plan.

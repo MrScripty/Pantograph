@@ -691,6 +691,10 @@ Tasks:
   formatting lives in `dependencyEnvironmentDisplay.ts`.
 - Split `pantograph-uniffi` and `pantograph-rustler` facades by exported surface
   family while preserving public names.
+  Progress: Rustler BEAM-facing enum/struct declarations now live in
+  `crates/pantograph-rustler/src/binding_types.rs`, and `ResourceArc` wrapper
+  declarations now live in `crates/pantograph-rustler/src/resources.rs`, while
+  `lib.rs` preserves the existing crate-root names through re-exports.
 
 Verification:
 - File-size scan shows extracted files below review thresholds or documented exceptions.
@@ -955,6 +959,12 @@ fully resolved by standards compliance:
 - Deferred, Rustler binding owner: `pantograph-rustler` uses a scoped
   `non_local_definitions` lint exception around `rustler::resource!`
   registration until Rustler exposes a warning-clean resource registration API.
+- Deferred, Rustler binding owner: `cargo test -p pantograph_rustler` currently
+  fails during test-binary linking because Rustler references Erlang NIF
+  `enif_*` symbols that are supplied by the BEAM host at runtime. Keep
+  `cargo check -p pantograph_rustler` as the crate-local Rust gate and add a
+  BEAM-backed binding test harness before promoting crate-local tests to a hard
+  Rustler verification gate.
 - Deferred, Rust formatting owner: `cargo fmt --all -- --check` currently fails
   on pre-existing Rust formatting drift across inference managed-runtime
   modules, node-engine executor helpers, embedded-runtime modules,

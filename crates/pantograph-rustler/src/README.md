@@ -11,9 +11,11 @@ outside core workflow crates.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `lib.rs` | Public NIF facade, resource wrappers, exported entrypoints, and module load wiring. |
+| `lib.rs` | Public NIF facade, exported entrypoints, callback bridge, and module load wiring. |
+| `binding_types.rs` | BEAM-facing enum and struct declarations used by NIF signatures. |
 | `elixir_data_graph_executor.rs` | Rustler-specific orchestration data-graph bridge into backend workflow execution. |
 | `resource_registration.rs` | NIF load-time Rustler resource registration boundary. |
+| `resources.rs` | ResourceArc wrapper declarations for executor, orchestration, registry, Pumas, extensions, and inference gateway state. |
 | `type_parsing_contract.rs` | String-to-enum parsing helpers behind public type-parsing NIFs. |
 | `workflow_event_contract.rs` | Workflow-event JSON serialization helpers for the BEAM event channel. |
 | `workflow_graph_contract.rs` | Workflow graph JSON CRUD and validation helpers behind public graph NIFs. |
@@ -50,6 +52,8 @@ registration, callback transport, and feature-gated adapter calls.
 - Workflow JSON responses and error envelopes preserve backend-owned service
   semantics.
 - Resource registration stays centralized in `resource_registration.rs`.
+- BEAM DTO and `ResourceArc` wrapper declarations stay outside `lib.rs` so the
+  facade remains focused on exported NIF behavior and load wiring.
 - Callback/event JSON serialization preserves backend event labels and order.
 - Callback bridge state uses local type aliases for pending callback maps so
   BEAM transport plumbing remains readable under strict clippy checks.
@@ -112,8 +116,11 @@ Pantograph.Native.workflow_validate(graph_json)
 
 ## Testing
 ```bash
-cargo test -p pantograph_rustler
+cargo check -p pantograph_rustler
 ```
+
+Direct Rust test binaries currently fail to link outside a BEAM-backed NIF test
+harness because the Erlang `enif_*` symbols are host-supplied.
 
 ## Notes
 - `resource_registration.rs` carries a scoped `non_local_definitions` lint

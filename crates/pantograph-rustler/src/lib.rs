@@ -37,7 +37,7 @@ use std::path::PathBuf;
 use std::sync::LazyLock;
 use std::sync::{Arc, Mutex};
 
-use rustler::{Atom, Encoder, Env, NifResult, NifStruct, NifUnitEnum, OwnedEnv, ResourceArc, Term};
+use rustler::{Atom, Encoder, Env, NifResult, OwnedEnv, ResourceArc, Term};
 use tokio::sync::oneshot;
 
 use node_engine::{
@@ -57,16 +57,26 @@ use pantograph_workflow_service::{
 // which contain `inventory::submit!()` statics for built-in node types.
 extern crate workflow_nodes;
 
+mod binding_types;
 mod elixir_data_graph_executor;
 mod resource_registration;
+mod resources;
 mod type_parsing_contract;
 mod workflow_event_contract;
 mod workflow_graph_contract;
 #[cfg(feature = "frontend-http")]
 mod workflow_host_contract;
 
+pub use binding_types::{
+    ElixirCacheStats, ElixirExecutionMode, ElixirNodeCategory, ElixirNodeDefinition,
+    ElixirOrchestrationMetadata, ElixirOrchestrationNodeType, ElixirPortDataType,
+};
 use elixir_data_graph_executor::ElixirDataGraphExecutor;
 use resource_registration::register_resources;
+pub use resources::{
+    ExtensionsResource, InferenceGatewayResource, NodeRegistryResource, OrchestrationStoreResource,
+    PumasApiResource, WorkflowExecutorResource,
+};
 use type_parsing_contract::{
     parse_execution_mode_string, parse_node_category_string, parse_port_data_type_string,
 };
@@ -94,140 +104,6 @@ mod atoms {
         node_stream,
         node_stream_done,
     }
-}
-
-// ============================================================================
-// NIF Enums
-// ============================================================================
-
-/// Port data type enum for Elixir.
-#[derive(NifUnitEnum)]
-pub enum ElixirPortDataType {
-    String,
-    Number,
-    Boolean,
-    Json,
-    KvCache,
-    Image,
-    Audio,
-    Video,
-    Embedding,
-    Document,
-    Binary,
-    Any,
-}
-
-/// Node category enum for Elixir.
-#[derive(NifUnitEnum)]
-pub enum ElixirNodeCategory {
-    Input,
-    Output,
-    Processing,
-    Control,
-    Storage,
-    Integration,
-}
-
-/// Execution mode enum for Elixir.
-#[derive(NifUnitEnum)]
-pub enum ElixirExecutionMode {
-    Reactive,
-    Manual,
-    Stream,
-}
-
-/// Orchestration node type enum for Elixir.
-#[derive(NifUnitEnum)]
-pub enum ElixirOrchestrationNodeType {
-    Start,
-    End,
-    DataGraph,
-    Condition,
-    Loop,
-    Merge,
-}
-
-// ============================================================================
-// NIF Structs
-// ============================================================================
-
-/// Node definition struct for Elixir (metadata about a node type).
-#[derive(NifStruct)]
-#[module = "Pantograph.NodeDefinition"]
-pub struct ElixirNodeDefinition {
-    pub node_type: String,
-    pub category: ElixirNodeCategory,
-    pub label: String,
-    pub description: String,
-    pub input_count: u32,
-    pub output_count: u32,
-    pub execution_mode: ElixirExecutionMode,
-}
-
-/// Cache statistics struct for Elixir.
-#[derive(NifStruct)]
-#[module = "Pantograph.CacheStats"]
-pub struct ElixirCacheStats {
-    pub cached_nodes: u32,
-    pub total_versions: u32,
-    pub global_version: u64,
-}
-
-/// Orchestration graph metadata for Elixir.
-#[derive(NifStruct)]
-#[module = "Pantograph.OrchestrationMetadata"]
-pub struct ElixirOrchestrationMetadata {
-    pub id: String,
-    pub name: String,
-    pub description: String,
-    pub node_count: u32,
-}
-
-// ============================================================================
-// Resource types (stateful objects shared across NIF calls)
-// ============================================================================
-
-/// Wrapper for WorkflowExecutor shared via ResourceArc.
-pub struct WorkflowExecutorResource {
-    pub executor: Arc<tokio::sync::RwLock<WorkflowExecutor>>,
-    pub task_executor: Arc<dyn TaskExecutor>,
-    pub runtime: Arc<tokio::runtime::Runtime>,
-}
-
-/// Wrapper for OrchestrationStore shared via ResourceArc.
-pub struct OrchestrationStoreResource {
-    pub store: Arc<tokio::sync::RwLock<OrchestrationStore>>,
-}
-
-/// Wrapper for NodeRegistry shared via ResourceArc.
-pub struct NodeRegistryResource {
-    pub registry: Arc<tokio::sync::RwLock<node_engine::NodeRegistry>>,
-}
-
-/// Wrapper for PumasApi shared via ResourceArc.
-pub struct PumasApiResource {
-    pub api: Arc<pumas_library::PumasApi>,
-    pub runtime: Arc<tokio::runtime::Runtime>,
-}
-
-/// Wrapper for ExecutorExtensions shared via ResourceArc.
-///
-/// Extensions hold optional runtime dependencies (e.g. PumasApi) that
-/// port options providers need. Initialized via `extensions_setup`.
-pub struct ExtensionsResource {
-    pub extensions: Arc<tokio::sync::RwLock<node_engine::ExecutorExtensions>>,
-    pub runtime: Arc<tokio::runtime::Runtime>,
-}
-
-/// Wrapper for InferenceGateway shared via ResourceArc.
-///
-/// The gateway manages the llama.cpp server lifecycle and should outlive
-/// individual executors so the model stays loaded across demand cycles.
-/// Create once at app startup, pass to every executor via
-/// `executor_new_with_inference`.
-pub struct InferenceGatewayResource {
-    pub gateway: Arc<inference::InferenceGateway>,
-    pub runtime: Arc<tokio::runtime::Runtime>,
 }
 
 type PendingCallbackSender = oneshot::Sender<Result<String, String>>;
