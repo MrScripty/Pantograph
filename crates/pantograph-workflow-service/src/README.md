@@ -62,7 +62,8 @@ policy coverage now lives in `workflow/tests/runtime_preflight.rs`. Generic
 workflow run facade coverage now lives in `workflow/tests/workflow_run.rs`.
 Workflow DTO serialization and error-envelope coverage now lives in
 `workflow/tests/contracts.rs`. Workflow session execution and retention-hint
-coverage now lives in `workflow/tests/session_execution.rs`.
+coverage now lives in `workflow/tests/session_execution.rs`. Session runtime
+capacity and rebalance coverage now lives in `workflow/tests/session_capacity.rs`.
 Session creation and queued session run methods now live behind the facade in
 the workflow session execution API helper.
 Session status, queue inspection, scheduler snapshot, cancellation, and
