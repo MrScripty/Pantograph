@@ -173,6 +173,13 @@ export type {
   ConnectionDragState,
 } from './connectionDragState.js';
 export {
+  clearWorkflowConnectionDragInteraction,
+  shouldClearWorkflowConnectionInteractionAfterConnectEnd,
+} from './workflowConnectionInteraction.js';
+export type {
+  WorkflowConnectionDragInteractionState,
+} from './workflowConnectionInteraction.js';
+export {
   closeHorseshoeDisplay,
   clearHorseshoeDragSession,
   createHorseshoeDragSessionState,

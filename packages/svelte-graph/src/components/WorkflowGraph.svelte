@@ -52,7 +52,6 @@
   } from '../horseshoeInsertFeedback.js';
   import {
     closeHorseshoeDisplay,
-    clearHorseshoeDragSession,
     createHorseshoeDragSessionState,
     startHorseshoeDrag,
     syncHorseshoeDisplay,
@@ -60,7 +59,6 @@
     type HorseshoeDragSessionState,
   } from '../horseshoeDragSession.js';
   import {
-    clearConnectionDragState,
     createConnectionDragState,
     markConnectionDragFinalizing,
     shouldRemoveReconnectedEdge,
@@ -69,6 +67,10 @@
     supportsInsertFromConnectionDrag,
     type ConnectionDragState,
   } from '../connectionDragState.js';
+  import {
+    clearWorkflowConnectionDragInteraction,
+    shouldClearWorkflowConnectionInteractionAfterConnectEnd,
+  } from '../workflowConnectionInteraction.js';
   import {
     WORKFLOW_PALETTE_DRAG_END_EVENT,
     WORKFLOW_PALETTE_DRAG_START_EVENT,
@@ -265,9 +267,10 @@
   }
 
   function clearConnectionDragTracking() {
-    connectionDragState = clearConnectionDragState();
-    horseshoeInsertFeedback = clearHorseshoeInsertFeedback();
-    applyHorseshoeSession(clearHorseshoeDragSession());
+    const reset = clearWorkflowConnectionDragInteraction();
+    connectionDragState = reset.connectionDragState;
+    horseshoeInsertFeedback = reset.feedback;
+    applyHorseshoeSession(reset.horseshoeSession);
   }
 
   function clearConnectionInteraction() {
@@ -696,11 +699,10 @@
     _event: MouseEvent | TouchEvent,
     _connectionState: { isValid: boolean },
   ) {
-    if (
-      horseshoeSession.displayState === 'open' ||
-      horseshoeInsertFeedback.pending ||
-      horseshoeSession.openRequested
-    ) return;
+    if (!shouldClearWorkflowConnectionInteractionAfterConnectEnd({
+      session: horseshoeSession,
+      feedback: horseshoeInsertFeedback,
+    })) return;
     clearConnectionInteraction();
   }
 

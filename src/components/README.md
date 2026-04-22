@@ -119,6 +119,9 @@ interaction cleanup.
 Rejected connection-intent fallback state now uses the package
 `preserveConnectionIntentState()` helper, while the app graph owns backend
 refresh and warning side effects.
+Connection drag reset and connect-end preservation now use the package
+`workflowConnectionInteraction.ts` helper; the app graph only clears
+app-specific connection-intent and preview state around that shared decision.
 Workflow-versus-architecture graph source selection lives in
 `workflowGraphSource.ts`, keeping graph mode policy outside the store-sync
 effect.
@@ -172,6 +175,9 @@ container bounds.
   to workflow events.
 - Connection-intent cleanup must happen on cancel, pane click, escape, and graph
   mutation paths.
+- Connection drag reset and connect-end cleanup must use the package
+  interaction helper so active horseshoe insert work is not cleared differently
+  from the package graph.
 - Dragging from an occupied edge endpoint must start reconnect/disconnect rather
   than silently creating a duplicate edge.
 - Horseshoe selection must route through `workflowService.insertNodeAndConnect`

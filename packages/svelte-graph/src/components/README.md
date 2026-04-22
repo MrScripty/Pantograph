@@ -10,6 +10,8 @@ shared node presentation rules live outside the Pantograph app shell.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `WorkflowGraph.svelte` | Main graph canvas that owns connect/reconnect flows, candidate loading, revision-aware edge commits, and the drag-time horseshoe insert flow. |
+| `../workflowConnectionInteraction.ts` | Owns connection drag reset and connect-end preservation decisions. |
+| `../workflowConnectionInteraction.test.ts` | Unit coverage for connection interaction reset and connect-end preservation. |
 | `../workflowConnections.ts` | Computes reusable connection validation, graph-edge normalization, candidate-to-intent projection, and rejected-intent preservation. |
 | `../workflowConnections.test.ts` | Unit coverage for package connection helper behavior. |
 | `../horseshoeDragSession.ts` | Owns horseshoe drag visibility, close, request, sync, and anchor state transitions. |
@@ -111,6 +113,9 @@ Rejected connection-intent fallback state also lives in
 `workflowConnections.ts`, so preserved compatible targets and insertable node
 types stay aligned while `WorkflowGraph.svelte` attaches backend rejection
 metadata.
+Connection drag reset and connect-end preservation live in
+`workflowConnectionInteraction.ts`, while `WorkflowGraph.svelte` owns clearing
+the backing connection-intent store and host-specific preview state.
 Horseshoe keyboard policy lives in `workflowHorseshoeKeyboard.ts`, while
 `WorkflowGraph.svelte` maps resolved actions to graph-specific state changes.
 Node double-click and group zoom-target decisions live in
@@ -154,6 +159,8 @@ container element.
 ## Invariants
 - `WorkflowGraph.svelte` must never create an edge locally that bypasses the
   backend-owned `connectAnchors` commit path.
+- `workflowConnectionInteraction.ts` must keep drag reset and connect-end
+  preservation decisions shared with the app graph.
 - Insert-from-drag must commit through backend-owned `insertNodeAndConnect`; the
   UI must not compose local `addNode` plus `connectAnchors`.
 - Horseshoe open failures must resolve to an explicit blocked reason instead of

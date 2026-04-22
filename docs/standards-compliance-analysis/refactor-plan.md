@@ -550,7 +550,11 @@ Tasks:
   query matching now live in
   `packages/svelte-graph/src/workflowHorseshoeSelection.ts`, with unit coverage
   in `packages/svelte-graph/src/workflowHorseshoeSelection.test.ts` and app
-  graph reuse through the package export. Package graph
+  graph reuse through the package export. Package graph connection interaction
+  reset and connect-end preservation now live in
+  `packages/svelte-graph/src/workflowConnectionInteraction.ts`, with unit
+  coverage in `packages/svelte-graph/src/workflowConnectionInteraction.test.ts`
+  and app graph reuse through the package export. Package graph
   palette drag payload parsing and drop-position projection now live in
   `packages/svelte-graph/src/workflowPaletteDrag.ts`, with unit coverage in
   `packages/svelte-graph/src/workflowPaletteDrag.test.ts`. Package graph

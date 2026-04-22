@@ -11,6 +11,8 @@ fork core canvas behavior.
 | ----------- | ----------- |
 | `components/` | Reusable graph UI, including the main canvas, reconnect affordances, and horseshoe selector. |
 | `connectionDragState.ts` | Shared state machine helpers that distinguish normal connect drags from explicit reconnect drags and gate reconnect cleanup. |
+| `workflowConnectionInteraction.ts` | Shared connection drag cleanup and connect-end preservation decisions across package and app graphs. |
+| `workflowConnectionInteraction.test.ts` | Unit coverage for connection interaction reset and connect-end preservation policy. |
 | `workflowDragCursor.ts` | Shared drag-cursor decision helper for horseshoe anchor movement and open-menu selection. |
 | `workflowDragCursor.test.ts` | Unit coverage for drag-cursor horseshoe decisions. |
 | `horseshoeDragSession.ts` | Shared visibility, close, and anchor lifecycle for the horseshoe insert UI during active drags. |
@@ -67,6 +69,9 @@ layer can consume the same connect/reconnect rules instead of copying them.
 Keep close-selector state transitions in `horseshoeDragSession.ts` so package
 and app graph components share when hidden horseshoe sessions are no-ops and
 when open, pending, or blocked state should be cleared.
+Keep connection interaction reset and connect-end preservation in
+`workflowConnectionInteraction.ts` so package and app graph components share
+when drag state should clear and when active horseshoe work must remain visible.
 Keep workflow execution event identity in `workflowEventOwnership.ts` as an
 explicit projection object. Backend-authored event `ownership` payloads from
 Tauri are authoritative for event identity, active run identity, and relevance;
@@ -123,6 +128,9 @@ package and app graph components.
 ## Invariants
 - Shared graph interaction helpers in this directory remain the source of truth
   for package/app horseshoe gating and connect-vs-reconnect ownership.
+- `workflowConnectionInteraction.ts` must keep connection drag reset and
+  connect-end preservation decisions shared across package and app graph
+  components.
 - Horseshoe keyboard policy stays shared: first `Space` requests open, second
   `Space` confirms the highlighted insert only after the menu is open and has a
   valid selection. `workflowHorseshoeKeyboard.ts` owns keyboard-to-action

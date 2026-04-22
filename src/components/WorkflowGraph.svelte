@@ -6,9 +6,7 @@
   import {
     HorseshoeInsertSelector,
     clearHorseshoeInsertFeedback,
-    clearConnectionDragState,
     closeHorseshoeDisplay,
-    clearHorseshoeDragSession,
     createConnectionDragState,
     createHorseshoeInsertFeedbackState,
     createHorseshoeDragSessionState,
@@ -19,7 +17,9 @@
     resolveHorseshoeKeyboardAction,
     preserveConnectionIntentState,
     buildWorkflowHorseshoeOpenContext,
+    clearWorkflowConnectionDragInteraction,
     resolveWorkflowHorseshoeSessionUpdate,
+    shouldClearWorkflowConnectionInteractionAfterConnectEnd,
     normalizeWorkflowHorseshoeSelectedIndex,
     resolveWorkflowHorseshoeQueryUpdate,
     requestWorkflowHorseshoeOpen,
@@ -343,9 +343,10 @@
   }
 
   function clearConnectionDragTracking() {
-    connectionDragState = clearConnectionDragState();
-    horseshoeInsertFeedback = clearHorseshoeInsertFeedback();
-    applyHorseshoeSession(clearHorseshoeDragSession());
+    const reset = clearWorkflowConnectionDragInteraction();
+    connectionDragState = reset.connectionDragState;
+    horseshoeInsertFeedback = reset.feedback;
+    applyHorseshoeSession(reset.horseshoeSession);
   }
 
   function clearConnectionInteraction() {
@@ -887,11 +888,10 @@
     _event: MouseEvent | TouchEvent,
     _connectionState: { isValid: boolean }
   ) {
-    if (
-      horseshoeSession.displayState === 'open' ||
-      horseshoeInsertFeedback.pending ||
-      horseshoeSession.openRequested
-    ) return;
+    if (!shouldClearWorkflowConnectionInteractionAfterConnectEnd({
+      session: horseshoeSession,
+      feedback: horseshoeInsertFeedback,
+    })) return;
     clearConnectionInteraction();
   }
 
