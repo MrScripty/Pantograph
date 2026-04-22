@@ -143,6 +143,9 @@ trace and session state.
 Horseshoe status-label projection now comes from the package
 `horseshoeInsertFeedback.ts` helper; the app graph only supplies current
 feedback and session state.
+Horseshoe session update projection now comes from the package
+`workflowHorseshoeSessionUpdate.ts` helper; the app graph only assigns local
+state and clears the active query-reset timer.
 Horseshoe selection snapshots, selected-index normalization, rotation, and
 query matching now come from the package `workflowHorseshoeSelection.ts` helper;
 the app graph only performs app-owned confirmation and timer side effects after
@@ -244,6 +247,9 @@ container bounds.
   diagnostic trace and session transition context cannot drift.
 - App graph horseshoe status labels must use the package feedback helper so
   pending, rejection, and blocked-state text cannot drift.
+- App graph horseshoe session updates must use the package session-update
+  helper so query, selection, feedback, trace, and timer cleanup behavior cannot
+  drift.
 - App graph horseshoe keyboard confirmation, selected-index clamping, rotation,
   and query matching must use the package selection helper so `hasSelection`
   and the confirmed candidate cannot drift.

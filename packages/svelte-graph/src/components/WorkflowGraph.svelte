@@ -39,9 +39,7 @@
     resolveWorkflowHorseshoeSelectionSnapshot,
     rotateWorkflowHorseshoeSelection,
   } from '../workflowHorseshoeSelection.js';
-  import {
-    formatWorkflowHorseshoeSessionTrace,
-  } from '../workflowHorseshoeTrace.js';
+  import { resolveWorkflowHorseshoeSessionUpdate } from '../workflowHorseshoeSessionUpdate.js';
   import { requestWorkflowHorseshoeOpen } from '../workflowHorseshoeOpenRequest.js';
   import { buildWorkflowHorseshoeOpenContext } from '../workflowHorseshoeOpenContext.js';
   import {
@@ -291,24 +289,27 @@
   }
 
   function applyHorseshoeSession(nextSession: HorseshoeDragSessionState) {
-    if (nextSession === horseshoeSession) {
+    const update = resolveWorkflowHorseshoeSessionUpdate({
+      current: {
+        session: horseshoeSession,
+        feedback: horseshoeInsertFeedback,
+        selectedIndex: horseshoeSelectedIndex,
+        query: horseshoeQuery,
+      },
+      nextSession,
+    });
+
+    if (!update.changed) {
       return;
     }
 
-    const previousDisplayState = horseshoeSession.displayState;
-    horseshoeSession = nextSession;
-    horseshoeLastTrace = formatWorkflowHorseshoeSessionTrace(nextSession);
+    horseshoeSession = update.state.session;
+    horseshoeInsertFeedback = update.state.feedback;
+    horseshoeSelectedIndex = update.state.selectedIndex;
+    horseshoeQuery = update.state.query;
+    horseshoeLastTrace = update.trace;
 
-    if (nextSession.displayState === 'open' && previousDisplayState !== 'open') {
-      horseshoeQuery = '';
-      horseshoeSelectedIndex = 0;
-    }
-
-    if (nextSession.displayState === 'hidden') {
-      horseshoeInsertFeedback = clearHorseshoeInsertFeedback();
-      horseshoeSelectedIndex = 0;
-      horseshoeQuery = '';
-
+    if (update.clearQueryResetTimer) {
       if (horseshoeQueryResetTimer) {
         clearTimeout(horseshoeQueryResetTimer);
         horseshoeQueryResetTimer = null;

@@ -16,6 +16,8 @@ shared node presentation rules live outside the Pantograph app shell.
 | `../horseshoeDragSession.test.ts` | Unit coverage for horseshoe drag-session transitions. |
 | `../horseshoeInsertFeedback.ts` | Owns horseshoe insert pending/rejection state and status-label projection. |
 | `../horseshoeInsertFeedback.test.ts` | Unit coverage for feedback state and status-label projection. |
+| `../workflowHorseshoeSessionUpdate.ts` | Owns horseshoe session-to-selector state update projection. |
+| `../workflowHorseshoeSessionUpdate.test.ts` | Unit coverage for selector reset and timer cleanup update decisions. |
 | `../workflowGraphSync.ts` | Computes reference-based store-to-SvelteFlow node and edge synchronization decisions. |
 | `../workflowGraphSync.test.ts` | Unit coverage for package graph sync decisions. |
 | `../workflowDragCursor.ts` | Resolves drag-cursor movement into horseshoe anchor or selection updates. |
@@ -129,6 +131,9 @@ Horseshoe open-request projection lives in `workflowHorseshoeOpenRequest.ts`,
 while `WorkflowGraph.svelte` applies the returned trace and session state.
 Horseshoe status-label projection lives in `horseshoeInsertFeedback.ts`, while
 `WorkflowGraph.svelte` supplies the current feedback and session state.
+Horseshoe session update projection lives in
+`workflowHorseshoeSessionUpdate.ts`, while `WorkflowGraph.svelte` assigns local
+state and clears its active query-reset timer.
 Horseshoe selection snapshots and selected-index normalization live in
 `workflowHorseshoeSelection.ts`, while `WorkflowGraph.svelte` maps the resolved
 keyboard action to confirmation, rotation, or query side effects.
@@ -168,6 +173,8 @@ container element.
   session transitions from one context snapshot.
 - `horseshoeInsertFeedback.ts` must derive selector status labels from one
   feedback/session snapshot.
+- `workflowHorseshoeSessionUpdate.ts` must derive selector reset, feedback,
+  trace, and timer cleanup decisions from one session transition snapshot.
 - `workflowHorseshoeSelection.ts` must derive keyboard selection availability,
   normalized selected indices, rotated indices, query matches, and confirmation
   candidates from the same package selection rules.

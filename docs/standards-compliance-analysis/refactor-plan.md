@@ -516,7 +516,11 @@ Tasks:
   through the package export. Package graph horseshoe status-label projection
   now lives in `packages/svelte-graph/src/horseshoeInsertFeedback.ts`, with unit
   coverage in `packages/svelte-graph/src/horseshoeInsertFeedback.test.ts` and
-  app graph reuse through the package export. Package graph
+  app graph reuse through the package export. Package graph horseshoe session
+  update projection now lives in
+  `packages/svelte-graph/src/workflowHorseshoeSessionUpdate.ts`, with unit
+  coverage in `packages/svelte-graph/src/workflowHorseshoeSessionUpdate.test.ts`
+  and app graph reuse through the package export. Package graph
   node double-click and group zoom-target decisions now live in
   `packages/svelte-graph/src/workflowNodeActivation.ts`, with unit coverage in
   `packages/svelte-graph/src/workflowNodeActivation.test.ts`. Package graph

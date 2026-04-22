@@ -187,6 +187,13 @@ export type {
   HorseshoeDragSessionState,
 } from './horseshoeDragSession.js';
 export {
+  resolveWorkflowHorseshoeSessionUpdate,
+} from './workflowHorseshoeSessionUpdate.js';
+export type {
+  WorkflowHorseshoeSessionUpdate,
+  WorkflowHorseshoeSessionViewState,
+} from './workflowHorseshoeSessionUpdate.js';
+export {
   isEditableKeyboardTarget,
   resolveHorseshoeKeyboardAction,
 } from './workflowHorseshoeKeyboard.js';

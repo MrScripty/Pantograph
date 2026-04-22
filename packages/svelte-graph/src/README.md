@@ -24,6 +24,8 @@ fork core canvas behavior.
 | `workflowHorseshoeOpenRequest.test.ts` | Unit coverage for connect and reconnect open-request projection. |
 | `workflowHorseshoeSelection.ts` | Shared projection from horseshoe state and current items into keyboard context plus selected candidate, selected-index normalization, rotation, and query matching. |
 | `workflowHorseshoeSelection.test.ts` | Unit coverage for selected, out-of-range, missing, clamped, rotated, and query-matched horseshoe candidate snapshots. |
+| `workflowHorseshoeSessionUpdate.ts` | Shared projection for applying drag-session changes to selector feedback, query, selection, and trace state. |
+| `workflowHorseshoeSessionUpdate.test.ts` | Unit coverage for unchanged, opened, and hidden horseshoe session update projection. |
 | `stores/` | Package store factories for workflow, session, and view state. |
 | `types/` | Stable TypeScript contracts for graph, backend, and group APIs. |
 | `workflowEventOwnership.ts` | Projection helper for backend-provided workflow execution ids, active run identity, and stale-event relevance. |
@@ -96,6 +98,9 @@ drag-session request transition.
 Keep session status-label projection in `horseshoeInsertFeedback.ts` so package
 and app graph components share how feedback and drag-session state become
 selector status text.
+Keep horseshoe session update projection in `workflowHorseshoeSessionUpdate.ts`
+so package and app graph components share how drag-session transitions reset
+selector query, selected index, feedback, trace text, and timer cleanup intent.
 Keep horseshoe selection snapshots and index normalization in
 `workflowHorseshoeSelection.ts` so package and app keyboard handlers share how
 pending state, selected candidates, rotation, and query matching are projected
@@ -135,6 +140,9 @@ package and app graph components.
   requested session transition derived from the same context snapshot.
 - `horseshoeInsertFeedback.ts` must keep selector status labels derived from
   one feedback/session snapshot.
+- `workflowHorseshoeSessionUpdate.ts` must keep selector query, selected index,
+  feedback, trace text, and query-reset timer cleanup decisions derived from one
+  old/new session snapshot.
 - `workflowHorseshoeSelection.ts` must keep keyboard `hasSelection`, selected
   index clamping, rotation, query matching, and the confirmed candidate derived
   from package horseshoe selection rules.
