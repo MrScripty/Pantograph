@@ -19,6 +19,8 @@ architecture views on top of the shared editor.
 | `edgeInsertInteraction.ts` | Computes palette edge-insert hover state, preview refresh decisions, and rendered-edge hit testing. |
 | `workflowMiniMap.ts` | Maps workflow node groups and backend categories to minimap colors. |
 | `workflowMiniMap.test.ts` | Unit coverage for app workflow minimap color projection. |
+| `workflowPaletteDrag.ts` | Computes app palette drag eligibility, drag payload parsing, and graph-space drop positions. |
+| `workflowPaletteDrag.test.ts` | Unit coverage for app palette drag parsing and drop-position projection. |
 | `workflowGraphTypes.ts` | Defines the app workflow graph node and edge component registry used by SvelteFlow. |
 | `NodePalette.svelte` | App palette for inserting workflow nodes into the active graph. |
 | `NodeGroupEditor.svelte` | App wrapper for group editing and exposed-port management. |
@@ -100,6 +102,9 @@ Palette edge-insert hover projection, commit eligibility, preview edge flagging,
 and rendered-edge hit testing live in `edgeInsertInteraction.ts`.
 Palette edge-insert marker rendering lives in
 `WorkflowEdgeInsertPreviewMarker.svelte`.
+Palette drag payload parsing, graph-mode eligibility, and graph-space drop
+position projection live in `workflowPaletteDrag.ts`; the parent graph only
+maps browser events into those helpers and owns backend preview/commit effects.
 Connection validation and backend candidate projection live in
 `workflowConnections.ts`, while `WorkflowGraph.svelte` owns backend calls and
 interaction cleanup.
@@ -145,6 +150,8 @@ side effects.
 - Palette edge insertion must use cursor hit-testing plus backend preview and
   commit APIs before replacing an existing edge; node overlap alone must not
   trigger insertion.
+- Workflow palette drop coordinates must be projected from viewport state by
+  `workflowPaletteDrag.ts`, not recomputed ad hoc inside graph event handlers.
 - Node registration must stay consistent with bundled templates so shipped
   starter workflows render without fallback-node surprises.
 - Icon-only app-shell buttons must expose an accessible name with `aria-label`

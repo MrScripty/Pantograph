@@ -98,8 +98,14 @@
   import {
     resolveWorkflowContainerBounds,
     resolveWorkflowContainerTransitionDecision,
+    type WorkflowContainerViewport,
   } from './workflowContainerBoundary.ts';
   import { getWorkflowMiniMapNodeColor } from './workflowMiniMap.ts';
+  import {
+    isWorkflowPaletteEdgeInsertEnabled,
+    readWorkflowPaletteDragDefinition,
+    resolveWorkflowPaletteDropPosition,
+  } from './workflowPaletteDrag.ts';
   import { workflowEdgeTypes, workflowNodeTypes } from './workflowGraphTypes.ts';
 
   // Import view store for zoom transitions
@@ -134,7 +140,7 @@
   let containerElement: HTMLElement;
 
   // Current viewport state for rendering the container border
-  let currentViewport = $state<{ x: number; y: number; zoom: number } | null>(null);
+  let currentViewport = $state<WorkflowContainerViewport | null>(null);
   let connectionDragState = $state<ConnectionDragState>(createConnectionDragState());
   let horseshoeSession = $state<HorseshoeDragSessionState>(createHorseshoeDragSessionState());
   let horseshoeInsertFeedback =
@@ -424,39 +430,11 @@
     return getRelativePointerPosition(event.clientX, event.clientY);
   }
 
-  function isWorkflowPaletteEdgeInsertEnabled() {
-    return !($currentGraphType === 'system' && $currentGraphId === 'app-architecture');
-  }
-
-  function getPaletteDragDefinition(event: DragEvent): NodeDefinition | null {
-    const data = event.dataTransfer?.getData('application/json');
-    if (!data) {
-      return null;
-    }
-
-    try {
-      return JSON.parse(data) as NodeDefinition;
-    } catch (error) {
-      console.warn('[WorkflowGraph] Failed to parse palette drag data:', error);
-      return null;
-    }
-  }
-
-  function getDropPosition(clientX: number, clientY: number) {
-    const pointerPosition = getRelativePointerPosition(clientX, clientY);
-    if (!pointerPosition) {
-      return null;
-    }
-
-    const viewport = currentViewport ?? { x: 0, y: 0, zoom: 1 };
-    return {
-      x: (pointerPosition.x - viewport.x) / viewport.zoom - 100,
-      y: (pointerPosition.y - viewport.y) / viewport.zoom - 50,
-    };
-  }
-
   async function refreshEdgeInsertPreview(event: DragEvent, definition: NodeDefinition) {
-    if (!externalPaletteDragActive || !isWorkflowPaletteEdgeInsertEnabled()) {
+    if (
+      !externalPaletteDragActive ||
+      !isWorkflowPaletteEdgeInsertEnabled($currentGraphType, $currentGraphId)
+    ) {
       clearEdgeInsertPreview();
       return;
     }
@@ -612,7 +590,7 @@
     }
 
     if (
-      !isWorkflowPaletteEdgeInsertEnabled() ||
+      !isWorkflowPaletteEdgeInsertEnabled($currentGraphType, $currentGraphId) ||
       !externalPaletteDragActive ||
       !currentGraphRevision ||
       edgeInsertPreview.graphRevision !== currentGraphRevision
@@ -995,13 +973,18 @@
 
     if (!canEdit) return;
 
-    const definition = getPaletteDragDefinition(event);
+    const definition = readWorkflowPaletteDragDefinition(event, (error) => {
+      console.warn('[WorkflowGraph] Failed to parse palette drag data:', error);
+    });
     if (!definition) {
       clearConnectionInteraction();
       return;
     }
 
-    const position = getDropPosition(event.clientX, event.clientY);
+    const position = resolveWorkflowPaletteDropPosition({
+      pointerPosition: getRelativePointerPosition(event.clientX, event.clientY),
+      viewport: currentViewport,
+    });
     const activeEdgeInsertPreview = getCommittableEdgeInsertPreview(
       edgeInsertPreview,
       definition.node_type,
@@ -1025,7 +1008,9 @@
     if (!canEdit) return;
     event.dataTransfer!.dropEffect = 'copy';
 
-    const definition = getPaletteDragDefinition(event);
+    const definition = readWorkflowPaletteDragDefinition(event, (error) => {
+      console.warn('[WorkflowGraph] Failed to parse palette drag data:', error);
+    });
     if (!definition) {
       clearEdgeInsertPreview();
       return;
