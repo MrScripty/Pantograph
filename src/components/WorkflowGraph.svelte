@@ -19,6 +19,7 @@
     isEditableKeyboardTarget,
     resolveHorseshoeKeyboardAction,
     resolveWorkflowGroupZoomTarget,
+    resolveWorkflowInsertPositionHint,
     resolveWorkflowNodeClick,
     markConnectionDragFinalizing,
     requestHorseshoeDisplay,
@@ -663,18 +664,6 @@
     }
   }
 
-  function getInsertPositionHint() {
-    if (!horseshoeSession.anchorPosition) return null;
-
-    const viewport = currentViewport ?? { x: 0, y: 0, zoom: 1 };
-    return {
-      position: {
-        x: (horseshoeSession.anchorPosition.x - viewport.x) / viewport.zoom,
-        y: (horseshoeSession.anchorPosition.y - viewport.y) / viewport.zoom,
-      },
-    };
-  }
-
   async function commitInsertSelection(candidate: InsertableNodeTypeCandidate) {
     const currentConnectionIntent = $connectionIntent;
     if (
@@ -683,7 +672,10 @@
       !supportsInsertFromConnectionDrag(connectionDragState)
     ) return;
 
-    const positionHint = getInsertPositionHint();
+    const positionHint = resolveWorkflowInsertPositionHint({
+      anchorPosition: horseshoeSession.anchorPosition,
+      viewport: currentViewport,
+    });
     if (!positionHint) return;
 
     horseshoeInsertFeedback = startHorseshoeInsertFeedback();

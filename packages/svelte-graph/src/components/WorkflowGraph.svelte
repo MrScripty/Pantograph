@@ -82,6 +82,7 @@
     readWorkflowPaletteDragDefinition,
     resolveWorkflowPaletteDropPosition,
   } from '../workflowPaletteDrag.js';
+  import { resolveWorkflowInsertPositionHint } from '../workflowInsertPosition.js';
   import { getWorkflowMiniMapNodeColor } from '../workflowMiniMap.js';
   import CutTool from './CutTool.svelte';
   import ContainerBorder from './ContainerBorder.svelte';
@@ -437,18 +438,6 @@
     }
   }
 
-  function getInsertPositionHint() {
-    if (!horseshoeSession.anchorPosition) return null;
-
-    const viewport = currentViewport ?? { x: 0, y: 0, zoom: 1 };
-    return {
-      position: {
-        x: (horseshoeSession.anchorPosition.x - viewport.x) / viewport.zoom,
-        y: (horseshoeSession.anchorPosition.y - viewport.y) / viewport.zoom,
-      },
-    };
-  }
-
   async function commitInsertSelection(candidate: InsertableNodeTypeCandidate) {
     const connectionIntent = $connectionIntentStore;
     if (
@@ -460,7 +449,10 @@
     }
 
     const sessionId = get(currentSessionId);
-    const positionHint = getInsertPositionHint();
+    const positionHint = resolveWorkflowInsertPositionHint({
+      anchorPosition: horseshoeSession.anchorPosition,
+      viewport: currentViewport,
+    });
     if (!sessionId || !positionHint) return;
 
     horseshoeInsertFeedback = startHorseshoeInsertFeedback();

@@ -16,6 +16,8 @@ shared node presentation rules live outside the Pantograph app shell.
 | `../workflowGraphSync.test.ts` | Unit coverage for package graph sync decisions. |
 | `../workflowHorseshoeKeyboard.ts` | Resolves drag-time horseshoe keyboard events into component actions. |
 | `../workflowHorseshoeKeyboard.test.ts` | Unit coverage for horseshoe keyboard policy decisions. |
+| `../workflowInsertPosition.ts` | Projects horseshoe insert anchors into backend insert position hints. |
+| `../workflowInsertPosition.test.ts` | Unit coverage for insert position projection. |
 | `../workflowMiniMap.ts` | Maps package workflow node groups and backend categories to minimap colors. |
 | `../workflowMiniMap.test.ts` | Unit coverage for package workflow minimap color projection. |
 | `../workflowNodeActivation.ts` | Resolves node double-click activation and group zoom targets. |
@@ -94,6 +96,9 @@ side effects.
 Palette drag payload parsing and graph-space drop positioning live in
 `workflowPaletteDrag.ts`, while `WorkflowGraph.svelte` owns the browser event
 and store mutation side effects.
+Horseshoe insert position projection lives in `workflowInsertPosition.ts`,
+while `WorkflowGraph.svelte` owns the backend insert call and interaction
+feedback lifecycle.
 
 ## Alternatives Rejected
 - Ask the backend on every pointer move.
@@ -153,6 +158,8 @@ and store mutation side effects.
 - `workflowPaletteDrag.ts` must return `null` for missing or malformed drag
   payloads so native drop events cannot throw before graph interaction cleanup
   has completed.
+- `workflowInsertPosition.ts` must stay side-effect-free so app and package
+  graphs cannot drift on anchor-to-viewport math.
 
 ## Revisit Triggers
 - Backend candidate queries become too slow for one-shot drag-start loading.

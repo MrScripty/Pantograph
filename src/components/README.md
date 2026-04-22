@@ -124,6 +124,9 @@ to app-owned state and backend side effects.
 Node double-click and group zoom-target decisions now come from the package
 `workflowNodeActivation.ts` helper; the app graph only invokes app view-store
 side effects.
+Horseshoe insert position projection now comes from the package
+`workflowInsertPosition.ts` helper so package and app graph insert coordinates
+stay aligned.
 
 ## Alternatives Rejected
 - Replace the app graph entirely with the package component immediately.
@@ -199,6 +202,8 @@ side effects.
 - App graph node double-click behavior must use the package node activation
   resolver so group navigation timing and zoom bounds stay aligned with the
   package graph.
+- App graph horseshoe insert coordinates must use the package insert-position
+  resolver before calling backend insert APIs.
 
 ## Revisit Triggers
 - The app graph fully converges with the package graph and can be deleted.

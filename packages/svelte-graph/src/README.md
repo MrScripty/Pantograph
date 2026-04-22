@@ -21,6 +21,8 @@ fork core canvas behavior.
 | `workflowConnections.test.ts` | Unit coverage for reusable connection helper behavior. |
 | `workflowGraphSync.ts` | Reference-based store-to-SvelteFlow synchronization decision helper. |
 | `workflowGraphSync.test.ts` | Unit coverage for SvelteFlow node and edge sync decisions. |
+| `workflowInsertPosition.ts` | Shared horseshoe insert anchor-to-graph position projection helper. |
+| `workflowInsertPosition.test.ts` | Unit coverage for insert position projection. |
 | `workflowMiniMap.ts` | Shared minimap color projection for backend node categories and graph group nodes. |
 | `workflowMiniMap.test.ts` | Unit coverage for reusable minimap color projection. |
 | `workflowPaletteDrag.ts` | Shared palette drag payload parsing and drop-position projection helpers. |
@@ -62,6 +64,9 @@ candidate projection or fallback port-compatibility rules.
 Keep palette drag parsing and drop-position projection in
 `workflowPaletteDrag.ts` so the graph component owns browser events and store
 mutations without owning payload or coordinate policy inline.
+Keep horseshoe insert position projection in `workflowInsertPosition.ts` so
+package and app graph components share the same anchor-to-graph coordinate
+contract before calling backend insert APIs.
 
 ## Alternatives Rejected
 - Keep connect/reconnect state management inline in both graph components.
@@ -103,6 +108,8 @@ mutations without owning payload or coordinate policy inline.
   when no active intent applies.
 - `workflowPaletteDrag.ts` must keep malformed palette drag payloads from
   escaping as unhandled graph drop exceptions.
+- `workflowInsertPosition.ts` must return `null` without an anchor and must not
+  own backend insert side effects.
 
 ## Revisit Triggers
 - A second non-Pantograph consumer needs a different reconnect policy.

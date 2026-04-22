@@ -220,6 +220,11 @@ export type {
   WorkflowPaletteDragEvent,
   WorkflowPalettePointerPosition,
 } from './workflowPaletteDrag.js';
+export { resolveWorkflowInsertPositionHint } from './workflowInsertPosition.js';
+export type {
+  WorkflowInsertAnchorPosition,
+  WorkflowInsertViewport,
+} from './workflowInsertPosition.js';
 
 // --- Components ---
 export { default as WorkflowGraphEditor } from './components/WorkflowGraph.svelte';
