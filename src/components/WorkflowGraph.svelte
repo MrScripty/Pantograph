@@ -90,6 +90,7 @@
     type EdgeInsertPreviewState,
   } from './edgeInsertInteraction.ts';
   import { resolveReconnectSourceAnchor } from './reconnectInteraction';
+  import WorkflowContainerBoundary from './WorkflowContainerBoundary.svelte';
 
   // Import view store for zoom transitions
   import {
@@ -356,9 +357,7 @@
     }
   }
 
-  // Handle container border click to select/deselect
-  function handleContainerClick(event: MouseEvent) {
-    event.stopPropagation();
+  function toggleContainerSelection() {
     containerSelected = !containerSelected;
     console.log('[WorkflowGraph] Container clicked, selected:', containerSelected);
   }
@@ -1760,149 +1759,12 @@
 
   </SvelteFlow>
 
-  <!-- Container border overlay (represents orchestration node boundary) -->
-  <!-- Uses edge divs for click detection so interior doesn't block canvas panning -->
-  {#if containerBounds && currentViewport}
-    {@const x = containerBounds.x * currentViewport.zoom + currentViewport.x}
-    {@const y = containerBounds.y * currentViewport.zoom + currentViewport.y}
-    {@const w = containerBounds.width * currentViewport.zoom}
-    {@const h = containerBounds.height * currentViewport.zoom}
-    {@const edgeWidth = 12}
-
-    <!-- Visual border (pointer-events: none) -->
-    <div
-      class="container-border-visual"
-      style="
-        position: absolute;
-        left: {x}px;
-        top: {y}px;
-        width: {w}px;
-        height: {h}px;
-        border: 3px solid {containerSelected ? '#93c5fd' : '#60a5fa'};
-        border-radius: 8px;
-        pointer-events: none;
-        z-index: 1;
-        box-shadow:
-          0 0 15px rgba(96, 165, 250, 0.4),
-          0 0 30px rgba(96, 165, 250, 0.2),
-          inset 0 0 15px rgba(96, 165, 250, 0.05);
-        transition: border-color 0.15s ease, box-shadow 0.15s ease;
-      "
-    ></div>
-
-    <!-- Clickable edge zones (invisible, only for click detection) -->
-    <button
-      type="button"
-      class="container-edge top"
-      onclick={handleContainerClick}
-      aria-label="Select orchestration boundary"
-      style="
-        position: absolute;
-        left: {x}px;
-        top: {y - edgeWidth/2}px;
-        width: {w}px;
-        height: {edgeWidth}px;
-        border: 0;
-        padding: 0;
-        background: transparent;
-        cursor: pointer;
-        pointer-events: auto;
-        z-index: 2;
-      "
-    ></button>
-    <button
-      type="button"
-      class="container-edge bottom"
-      onclick={handleContainerClick}
-      aria-label="Select orchestration boundary"
-      style="
-        position: absolute;
-        left: {x}px;
-        top: {y + h - edgeWidth/2}px;
-        width: {w}px;
-        height: {edgeWidth}px;
-        border: 0;
-        padding: 0;
-        background: transparent;
-        cursor: pointer;
-        pointer-events: auto;
-        z-index: 2;
-      "
-    ></button>
-    <button
-      type="button"
-      class="container-edge left"
-      onclick={handleContainerClick}
-      aria-label="Select orchestration boundary"
-      style="
-        position: absolute;
-        left: {x - edgeWidth/2}px;
-        top: {y}px;
-        width: {edgeWidth}px;
-        height: {h}px;
-        border: 0;
-        padding: 0;
-        background: transparent;
-        cursor: pointer;
-        pointer-events: auto;
-        z-index: 2;
-      "
-    ></button>
-    <button
-      type="button"
-      class="container-edge right"
-      onclick={handleContainerClick}
-      aria-label="Select orchestration boundary"
-      style="
-        position: absolute;
-        left: {x + w - edgeWidth/2}px;
-        top: {y}px;
-        width: {edgeWidth}px;
-        height: {h}px;
-        border: 0;
-        padding: 0;
-        background: transparent;
-        cursor: pointer;
-        pointer-events: auto;
-        z-index: 2;
-      "
-    ></button>
-
-    <!-- Input anchor (left side) -->
-    <div
-      class="container-anchor input"
-      style="
-        position: absolute;
-        left: {x - 8}px;
-        top: {y + h / 2 - 8}px;
-        width: 16px;
-        height: 16px;
-        background: #3b82f6;
-        border: 2px solid #1e3a5f;
-        border-radius: 50%;
-        pointer-events: auto;
-        z-index: 3;
-        box-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
-      "
-    ></div>
-    <!-- Output anchor (right side) -->
-    <div
-      class="container-anchor output"
-      style="
-        position: absolute;
-        left: {x + w - 8}px;
-        top: {y + h / 2 - 8}px;
-        width: 16px;
-        height: 16px;
-        background: #3b82f6;
-        border: 2px solid #1e3a5f;
-        border-radius: 50%;
-        pointer-events: auto;
-        z-index: 3;
-        box-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
-      "
-    ></div>
-  {/if}
+  <WorkflowContainerBoundary
+    bounds={containerBounds}
+    viewport={currentViewport}
+    selected={containerSelected}
+    onToggleSelected={toggleContainerSelection}
+  />
 
   {#if edgeInsertPreview.bridge && edgeInsertPreview.hitPoint}
     <div

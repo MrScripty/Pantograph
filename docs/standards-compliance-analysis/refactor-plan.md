@@ -489,6 +489,9 @@ Tasks:
   `packages/svelte-graph/src/components/WorkflowGraph.svelte` into graph canvas,
   connection drag, horseshoe insert, edge insert, selection, keyboard, and
   container-border subcomponents/helpers.
+  Progress: app workflow graph orchestration boundary overlay rendering now
+  lives in `src/components/WorkflowContainerBoundary.svelte`, while
+  `WorkflowGraph.svelte` retains viewport tracking and selection state.
 - Split `DependencyEnvironmentNode.svelte` into data parsing, activity log,
   mode controls, override editor, status panels, and command controls.
   Progress: dependency environment DTOs now live in

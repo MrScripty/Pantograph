@@ -10,6 +10,7 @@ architecture views on top of the shared editor.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `WorkflowGraph.svelte` | Pantograph graph canvas that wires app node types, orchestration navigation, revision-aware connection-intent flows, and the `Space`-invoked horseshoe insert selector. |
+| `WorkflowContainerBoundary.svelte` | Renders the orchestration boundary overlay, clickable border hit zones, and boundary anchors for the app workflow graph. |
 | `NodePalette.svelte` | App palette for inserting workflow nodes into the active graph. |
 | `NodeGroupEditor.svelte` | App wrapper for group editing and exposed-port management. |
 | `NavigationBreadcrumb.svelte` | Breadcrumb UI for group/orchestration navigation. |
@@ -74,6 +75,9 @@ without continuing to grow one large component file.
 Toolbar execution-event handling now delegates execution-id claiming and stale
 event filtering to the shared package workflow execution projector so the app
 toolbar does not maintain a second local relevance gate.
+The app workflow graph delegates orchestration boundary overlay rendering to
+`WorkflowContainerBoundary.svelte`, while the parent keeps viewport tracking,
+selection state, and orchestration transition ownership.
 
 ## Alternatives Rejected
 - Replace the app graph entirely with the package component immediately.
@@ -119,6 +123,8 @@ toolbar does not maintain a second local relevance gate.
   they use generic `role="button"` semantics for drag-and-double-click behavior.
 - Svelte a11y suppressions on graph-canvas hosts require an adjacent
   `a11y-reviewed:` comment explaining the ownership boundary.
+- `WorkflowContainerBoundary.svelte` owns boundary hit-zone markup and emits only
+  selection toggles; it must not mutate graph stores directly.
 
 ## Revisit Triggers
 - The app graph fully converges with the package graph and can be deleted.
