@@ -23,6 +23,8 @@ fork core canvas behavior.
 | `workflowGraphSync.test.ts` | Unit coverage for SvelteFlow node and edge sync decisions. |
 | `workflowMiniMap.ts` | Shared minimap color projection for backend node categories and graph group nodes. |
 | `workflowMiniMap.test.ts` | Unit coverage for reusable minimap color projection. |
+| `workflowPaletteDrag.ts` | Shared palette drag payload parsing and drop-position projection helpers. |
+| `workflowPaletteDrag.test.ts` | Unit coverage for palette drag parsing and graph-space drop positioning. |
 | `index.ts` | Package export surface consumed by the app shell and any external package users. |
 
 ## Problem
@@ -57,6 +59,9 @@ reference-comparison rules inline.
 Keep connection-intent projection and synchronous connection validation in
 `workflowConnections.ts` so the graph component does not duplicate backend
 candidate projection or fallback port-compatibility rules.
+Keep palette drag parsing and drop-position projection in
+`workflowPaletteDrag.ts` so the graph component owns browser events and store
+mutations without owning payload or coordinate policy inline.
 
 ## Alternatives Rejected
 - Keep connect/reconnect state management inline in both graph components.
@@ -96,6 +101,8 @@ candidate projection or fallback port-compatibility rules.
 - `workflowConnections.ts` must prefer active backend candidate intent when it
   matches the source anchor, then fall back to static port compatibility only
   when no active intent applies.
+- `workflowPaletteDrag.ts` must keep malformed palette drag payloads from
+  escaping as unhandled graph drop exceptions.
 
 ## Revisit Triggers
 - A second non-Pantograph consumer needs a different reconnect policy.

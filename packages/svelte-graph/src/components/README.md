@@ -20,6 +20,8 @@ shared node presentation rules live outside the Pantograph app shell.
 | `../workflowMiniMap.test.ts` | Unit coverage for package workflow minimap color projection. |
 | `../workflowNodeActivation.ts` | Resolves node double-click activation and group zoom targets. |
 | `../workflowNodeActivation.test.ts` | Unit coverage for node activation and group zoom-target decisions. |
+| `../workflowPaletteDrag.ts` | Parses package palette drag payloads and projects drop coordinates. |
+| `../workflowPaletteDrag.test.ts` | Unit coverage for palette drag parsing and drop-position projection. |
 | `NodePalette.svelte` | Palette for adding node definitions into the active graph. |
 | `CutTool.svelte` | Edge-cut interaction used for Ctrl-drag deletion. |
 | `ContainerBorder.svelte` | Orchestration/group boundary overlay used during zoom transitions. |
@@ -89,6 +91,9 @@ Horseshoe keyboard policy lives in `workflowHorseshoeKeyboard.ts`, while
 Node double-click and group zoom-target decisions live in
 `workflowNodeActivation.ts`, while `WorkflowGraph.svelte` invokes the view store
 side effects.
+Palette drag payload parsing and graph-space drop positioning live in
+`workflowPaletteDrag.ts`, while `WorkflowGraph.svelte` owns the browser event
+and store mutation side effects.
 
 ## Alternatives Rejected
 - Ask the backend on every pointer move.
@@ -145,6 +150,9 @@ side effects.
   contract before graph keyboard behavior changes.
 - `workflowNodeActivation.ts` must keep double-click timing and group zoom-target
   projection aligned before group navigation behavior changes.
+- `workflowPaletteDrag.ts` must return `null` for missing or malformed drag
+  payloads so native drop events cannot throw before graph interaction cleanup
+  has completed.
 
 ## Revisit Triggers
 - Backend candidate queries become too slow for one-shot drag-start loading.
@@ -182,6 +190,9 @@ side effects.
 - `NodePalette.svelte` must emit palette drag lifecycle events before and after
   native HTML drag sessions so `WorkflowGraph.svelte` can suppress conflicting
   graph gestures during external drops.
+- `WorkflowGraph.svelte` consumes `workflowPaletteDrag.ts` for package palette
+  drops; consumers should treat helper exports from `index.ts` as the supported
+  way to reuse that payload and coordinate policy.
 - `WorkflowGraph.svelte` binds `Space` to the horseshoe selector through
   drag-scoped window listeners and the shared drag-session controller; failed
   opens remain visible through pending/blocked selector states plus internal

@@ -513,6 +513,9 @@ Tasks:
   node double-click and group zoom-target decisions now live in
   `packages/svelte-graph/src/workflowNodeActivation.ts`, with unit coverage in
   `packages/svelte-graph/src/workflowNodeActivation.test.ts`. Package graph
+  palette drag payload parsing and drop-position projection now live in
+  `packages/svelte-graph/src/workflowPaletteDrag.ts`, with unit coverage in
+  `packages/svelte-graph/src/workflowPaletteDrag.test.ts`. Package graph
   connection validation, graph-edge normalization, and backend candidate
   projection now live in `packages/svelte-graph/src/workflowConnections.ts`,
   with unit coverage in `packages/svelte-graph/src/workflowConnections.test.ts`.

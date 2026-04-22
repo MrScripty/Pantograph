@@ -22,7 +22,6 @@
   } from '../workflowConnections.js';
   import { computeWorkflowGraphSyncDecision } from '../workflowGraphSync.js';
   import type {
-    NodeDefinition,
     ConnectionAnchor,
     ConnectionCandidatesResponse,
     ConnectionCommitResponse,
@@ -79,6 +78,10 @@
     resolveWorkflowNodeClick,
     type WorkflowNodeClickState,
   } from '../workflowNodeActivation.js';
+  import {
+    readWorkflowPaletteDragDefinition,
+    resolveWorkflowPaletteDropPosition,
+  } from '../workflowPaletteDrag.js';
   import { getWorkflowMiniMapNodeColor } from '../workflowMiniMap.js';
   import CutTool from './CutTool.svelte';
   import ContainerBorder from './ContainerBorder.svelte';
@@ -774,16 +777,16 @@
     if (!canEdit) return;
     clearConnectionInteraction();
 
-    const data = event.dataTransfer?.getData('application/json');
-    if (!data) return;
+    const definition = readWorkflowPaletteDragDefinition(event, (error) => {
+      console.warn('[WorkflowGraph] Failed to parse palette drag data:', error);
+    });
+    if (!definition) return;
 
-    const definition: NodeDefinition = JSON.parse(data);
     const container = event.currentTarget as HTMLElement;
-    const bounds = container.getBoundingClientRect();
-    const position = {
-      x: event.clientX - bounds.left - 100,
-      y: event.clientY - bounds.top - 50,
-    };
+    const position = resolveWorkflowPaletteDropPosition({
+      clientPosition: { x: event.clientX, y: event.clientY },
+      containerBounds: container.getBoundingClientRect(),
+    });
 
     stores.workflow.addNode(definition, position);
   }

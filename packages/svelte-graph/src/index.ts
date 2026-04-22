@@ -209,6 +209,17 @@ export {
   dispatchWorkflowPaletteDragEnd,
   dispatchWorkflowPaletteDragStart,
 } from './paletteDragState.js';
+export {
+  WORKFLOW_PALETTE_DROP_NODE_OFFSET,
+  readWorkflowPaletteDragDefinition,
+  resolveWorkflowPaletteDropPosition,
+} from './workflowPaletteDrag.js';
+export type {
+  WorkflowPaletteContainerBounds,
+  WorkflowPaletteDragDataTransfer,
+  WorkflowPaletteDragEvent,
+  WorkflowPalettePointerPosition,
+} from './workflowPaletteDrag.js';
 
 // --- Components ---
 export { default as WorkflowGraphEditor } from './components/WorkflowGraph.svelte';
