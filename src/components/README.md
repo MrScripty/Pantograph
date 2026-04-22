@@ -137,6 +137,9 @@ change.
 Horseshoe open-context projection now comes from the package
 `workflowHorseshoeOpenContext.ts` helper; the app graph only supplies app store
 state before requesting or syncing the shared horseshoe drag session.
+Horseshoe open-request projection now comes from the package
+`workflowHorseshoeOpenRequest.ts` helper; the app graph only applies returned
+trace and session state.
 Horseshoe selection snapshots and selected-index normalization now come from the
 package `workflowHorseshoeSelection.ts` helper; the app graph only performs
 app-owned confirmation and query side effects after keyboard resolution.
@@ -233,6 +236,8 @@ container bounds.
 - App graph horseshoe open-context projection must use the package helper so
   reconnect insert blocking and connect intent availability stay aligned with
   the package graph.
+- App graph horseshoe open requests must use the package request helper so
+  diagnostic trace and session transition context cannot drift.
 - App graph horseshoe keyboard confirmation and selected-index clamping must use
   the package selection helper so `hasSelection` and the confirmed candidate
   cannot drift.

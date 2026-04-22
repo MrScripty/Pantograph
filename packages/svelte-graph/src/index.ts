@@ -202,6 +202,8 @@ export {
   formatWorkflowHorseshoeOpenRequestTrace,
   formatWorkflowHorseshoeSessionTrace,
 } from './workflowHorseshoeTrace.js';
+export { requestWorkflowHorseshoeOpen } from './workflowHorseshoeOpenRequest.js';
+export type { WorkflowHorseshoeOpenRequestResult } from './workflowHorseshoeOpenRequest.js';
 export { buildWorkflowHorseshoeOpenContext } from './workflowHorseshoeOpenContext.js';
 export type { WorkflowHorseshoeOpenContextInput } from './workflowHorseshoeOpenContext.js';
 export {

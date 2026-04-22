@@ -22,6 +22,8 @@ shared node presentation rules live outside the Pantograph app shell.
 | `../workflowHorseshoeKeyboard.test.ts` | Unit coverage for horseshoe keyboard policy decisions. |
 | `../workflowHorseshoeOpenContext.ts` | Projects editability, drag-session, connection-drag, and intent state into horseshoe open context. |
 | `../workflowHorseshoeOpenContext.test.ts` | Unit coverage for horseshoe open-context projection. |
+| `../workflowHorseshoeOpenRequest.ts` | Projects horseshoe open context into diagnostic trace and requested session state. |
+| `../workflowHorseshoeOpenRequest.test.ts` | Unit coverage for open-request projection. |
 | `../workflowHorseshoeSelection.ts` | Projects horseshoe item selection into keyboard context and the candidate to confirm, and normalizes selected indices. |
 | `../workflowHorseshoeSelection.test.ts` | Unit coverage for horseshoe selection snapshots and index normalization. |
 | `../workflowHorseshoeTrace.ts` | Formats horseshoe diagnostic trace labels for session and open-request state. |
@@ -121,6 +123,8 @@ Drag-cursor horseshoe decisions live in `workflowDragCursor.ts`, while
 Horseshoe open-context projection lives in `workflowHorseshoeOpenContext.ts`,
 while `WorkflowGraph.svelte` supplies the current stores and interaction state
 before invoking the drag-session controller.
+Horseshoe open-request projection lives in `workflowHorseshoeOpenRequest.ts`,
+while `WorkflowGraph.svelte` applies the returned trace and session state.
 Horseshoe selection snapshots and selected-index normalization live in
 `workflowHorseshoeSelection.ts`, while `WorkflowGraph.svelte` maps the resolved
 keyboard action to confirmation or query side effects.
@@ -156,6 +160,8 @@ container element.
 - `workflowHorseshoeOpenContext.ts` must keep open-request context projection
   aligned with connection-drag insert support before the session controller is
   invoked.
+- `workflowHorseshoeOpenRequest.ts` must derive request traces and requested
+  session transitions from one context snapshot.
 - `workflowHorseshoeSelection.ts` must derive keyboard selection availability,
   normalized selected indices, and confirmation candidates from the same package
   selection rules.

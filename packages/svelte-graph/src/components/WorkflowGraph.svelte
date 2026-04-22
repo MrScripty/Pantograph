@@ -42,9 +42,9 @@
     resolveWorkflowHorseshoeSelectionSnapshot,
   } from '../workflowHorseshoeSelection.js';
   import {
-    formatWorkflowHorseshoeOpenRequestTrace,
     formatWorkflowHorseshoeSessionTrace,
   } from '../workflowHorseshoeTrace.js';
+  import { requestWorkflowHorseshoeOpen } from '../workflowHorseshoeOpenRequest.js';
   import { buildWorkflowHorseshoeOpenContext } from '../workflowHorseshoeOpenContext.js';
   import {
     clearHorseshoeInsertFeedback,
@@ -58,7 +58,6 @@
     closeHorseshoeDisplay,
     clearHorseshoeDragSession,
     createHorseshoeDragSessionState,
-    requestHorseshoeDisplay,
     startHorseshoeDrag,
     syncHorseshoeDisplay,
     type HorseshoeBlockedReason,
@@ -371,14 +370,13 @@
   }
 
   function requestHorseshoeOpen() {
-    horseshoeLastTrace = formatWorkflowHorseshoeOpenRequestTrace({
-      dragActive: horseshoeSession.dragActive,
-      connectionMode: connectionDragState.mode,
-      hasConnectionIntent: Boolean($connectionIntentStore),
-      insertableCount: $connectionIntentStore?.insertableNodeTypes.length ?? 0,
-      hasAnchorPosition: Boolean(horseshoeSession.anchorPosition),
+    const request = requestWorkflowHorseshoeOpen({
+      session: horseshoeSession,
+      connectionDragState,
+      openContext: getHorseshoeOpenContext(),
     });
-    applyHorseshoeSession(requestHorseshoeDisplay(horseshoeSession, getHorseshoeOpenContext()));
+    horseshoeLastTrace = request.trace;
+    applyHorseshoeSession(request.session);
   }
 
   function rotateInsertSelection(delta: number) {

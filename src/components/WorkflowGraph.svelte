@@ -20,9 +20,9 @@
     resolveHorseshoeKeyboardAction,
     preserveConnectionIntentState,
     buildWorkflowHorseshoeOpenContext,
-    formatWorkflowHorseshoeOpenRequestTrace,
     formatWorkflowHorseshoeSessionTrace,
     normalizeWorkflowHorseshoeSelectedIndex,
+    requestWorkflowHorseshoeOpen,
     resolveWorkflowHorseshoeSelectionSnapshot,
     resolveWorkflowDragCursorUpdate,
     resolveWorkflowGroupZoomTarget,
@@ -31,7 +31,6 @@
     resolveWorkflowPointerClientPosition,
     resolveWorkflowRelativePointerPosition,
     markConnectionDragFinalizing,
-    requestHorseshoeDisplay,
     rotateHorseshoeIndex,
     startHorseshoeInsertFeedback,
     shouldRemoveReconnectedEdge,
@@ -593,14 +592,13 @@
   }
 
   function requestHorseshoeOpen() {
-    horseshoeLastTrace = formatWorkflowHorseshoeOpenRequestTrace({
-      dragActive: horseshoeSession.dragActive,
-      connectionMode: connectionDragState.mode,
-      hasConnectionIntent: Boolean($connectionIntent),
-      insertableCount: $connectionIntent?.insertableNodeTypes.length ?? 0,
-      hasAnchorPosition: Boolean(horseshoeSession.anchorPosition),
+    const request = requestWorkflowHorseshoeOpen({
+      session: horseshoeSession,
+      connectionDragState,
+      openContext: getHorseshoeOpenContext(),
     });
-    applyHorseshoeSession(requestHorseshoeDisplay(horseshoeSession, getHorseshoeOpenContext()));
+    horseshoeLastTrace = request.trace;
+    applyHorseshoeSession(request.session);
   }
 
   function rotateInsertSelection(delta: number) {

@@ -19,6 +19,8 @@ fork core canvas behavior.
 | `horseshoeInvocation.ts` | Shared `Space` open/confirm decisions, pointer-anchor freeze rules, and user-facing blocked-reason strings for horseshoe invocation. |
 | `workflowHorseshoeOpenContext.ts` | Shared projection from drag/session/intent state into the horseshoe open-request context. |
 | `workflowHorseshoeOpenContext.test.ts` | Unit coverage for connect, reconnect, and idle horseshoe open-context projection. |
+| `workflowHorseshoeOpenRequest.ts` | Shared projection from open context into open-request trace and drag-session state. |
+| `workflowHorseshoeOpenRequest.test.ts` | Unit coverage for connect and reconnect open-request projection. |
 | `workflowHorseshoeSelection.ts` | Shared projection from horseshoe state and current items into keyboard context plus selected candidate, with selected-index normalization. |
 | `workflowHorseshoeSelection.test.ts` | Unit coverage for selected, out-of-range, missing, and clamped horseshoe candidate snapshots. |
 | `stores/` | Package store factories for workflow, session, and view state. |
@@ -87,6 +89,9 @@ components.
 Keep horseshoe open-context projection in `workflowHorseshoeOpenContext.ts` so
 package and app graph components share the same editability, intent, anchor,
 and connect-vs-reconnect insert gating before invoking the session controller.
+Keep horseshoe open-request projection in `workflowHorseshoeOpenRequest.ts` so
+package and app graph components pair diagnostic trace context with the same
+drag-session request transition.
 Keep horseshoe selection snapshots and index normalization in
 `workflowHorseshoeSelection.ts` so package and app keyboard handlers share how
 pending state and selected candidates are projected before confirming an insert.
@@ -121,6 +126,8 @@ package and app graph components.
 - `workflowHorseshoeOpenContext.ts` must derive `supportsInsert` from
   `connectionDragState.ts` so reconnect drags cannot silently diverge from
   package connect-drag semantics.
+- `workflowHorseshoeOpenRequest.ts` must keep open-request trace data and the
+  requested session transition derived from the same context snapshot.
 - `workflowHorseshoeSelection.ts` must keep keyboard `hasSelection`, selected
   index clamping, and the confirmed candidate derived from package horseshoe
   selection rules.
