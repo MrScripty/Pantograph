@@ -17,6 +17,7 @@ use fixtures::*;
 mod contracts;
 mod runtime_preflight;
 mod scheduler_snapshot;
+mod scheduler_snapshot_diagnostics;
 mod session_admission;
 mod session_capacity;
 mod session_capacity_limits;

@@ -348,7 +348,9 @@ Tasks:
   `workflow/tests/fixtures.rs`, keeping the root test module as a
   behavior-slice index while splitting fixture families below the large-file
   threshold. Scheduler snapshot facade coverage now lives in
-  `workflow/tests/scheduler_snapshot.rs`, and session queue item/admission
+  `workflow/tests/scheduler_snapshot.rs`; scheduler admission, runtime-registry,
+  and rebalance diagnostics coverage lives in
+  `workflow/tests/scheduler_snapshot_diagnostics.rs`; and session queue item/admission
   coverage now lives in `workflow/tests/session_queue.rs`. Workflow capability
   discovery and default capability derivation coverage now lives in
   `workflow/tests/workflow_capabilities.rs`. Workflow I/O discovery and

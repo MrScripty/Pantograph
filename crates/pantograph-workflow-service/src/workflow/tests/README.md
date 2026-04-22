@@ -15,7 +15,8 @@ stay reviewable as more tests are split.
 | `fixtures.rs` | Re-export index for shared workflow test fixture families in `fixtures/`. |
 | `fixtures/` | Shared workflow test hosts, runtime capabilities, scheduler diagnostics providers, and helper constructors split by fixture family. |
 | `runtime_preflight.rs` | Runtime preflight matching tests for selected runtime precedence, fallback readiness, backend aliases, and selected-version readiness context. |
-| `scheduler_snapshot.rs` | Scheduler snapshot facade tests covering workflow/edit-session snapshot shape, trace attribution, admission diagnostics, and runtime-registry diagnostics provider merging. |
+| `scheduler_snapshot.rs` | Scheduler snapshot facade tests covering workflow/edit-session snapshot shape, trace attribution, queue bypass, and ambiguous pending queue behavior. |
+| `scheduler_snapshot_diagnostics.rs` | Scheduler snapshot diagnostics tests for admission details, runtime-registry provider merging, and runtime rebalance requirements. |
 | `session_admission.rs` | Runtime capacity and runtime admission wait tests for queued session runs. |
 | `session_capacity.rs` | Loaded runtime rebalance tests for host-selected unloads, affinity preservation, and shared resource reuse. |
 | `session_capacity_limits.rs` | Session and loaded runtime capacity limit/error tests, including release after close and pinned loaded-runtime capacity details. |
@@ -96,6 +97,7 @@ cargo test -p pantograph-workflow-service workflow::tests::session_runtime_prefl
 cargo test -p pantograph-workflow-service workflow::tests::session_runtime_state
 cargo test -p pantograph-workflow-service workflow::tests::session_stale_cleanup
 cargo test -p pantograph-workflow-service workflow::tests::workflow_capabilities
+cargo test -p pantograph-workflow-service workflow::tests::scheduler_snapshot_diagnostics
 cargo test -p pantograph-workflow-service workflow_get_scheduler_snapshot
 cargo test -p pantograph-workflow-service workflow_session_queue
 cargo test -p pantograph-workflow-service workflow_get_io
@@ -115,6 +117,7 @@ cargo test -p pantograph-workflow-service workflow::tests::session_runtime_prefl
 cargo test -p pantograph-workflow-service workflow::tests::session_runtime_state
 cargo test -p pantograph-workflow-service workflow::tests::session_stale_cleanup
 cargo test -p pantograph-workflow-service workflow::tests::workflow_capabilities
+cargo test -p pantograph-workflow-service workflow::tests::scheduler_snapshot_diagnostics
 cargo test -p pantograph-workflow-service workflow_get_scheduler_snapshot
 cargo test -p pantograph-workflow-service workflow_session_queue
 cargo test -p pantograph-workflow-service workflow_get_io

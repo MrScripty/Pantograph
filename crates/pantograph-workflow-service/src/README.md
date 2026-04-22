@@ -55,7 +55,9 @@ and the session-store guard now live in the workflow service configuration
 helper. The root workflow facade tests now live in `workflow/tests.rs`; shared
 test fixture families now live under `workflow/tests/fixtures/` and are
 re-exported by `workflow/tests/fixtures.rs`. Scheduler snapshot facade coverage
-now lives in `workflow/tests/scheduler_snapshot.rs`,
+now lives in `workflow/tests/scheduler_snapshot.rs`, while scheduler admission,
+runtime-registry, and rebalance diagnostics coverage lives in
+`workflow/tests/scheduler_snapshot_diagnostics.rs`,
 and session queue item/admission coverage now lives in
 `workflow/tests/session_queue.rs`. Workflow capability discovery and default
 capability derivation coverage now lives in

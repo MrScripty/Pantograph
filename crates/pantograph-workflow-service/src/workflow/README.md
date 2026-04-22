@@ -69,6 +69,8 @@ runtime readiness, session-runtime workflows, and the root facade test module.
   lifecycle coverage.
 - Session capacity limit/error coverage is separate from runtime rebalance
   coverage so scheduler-bound capacity assertions stay focused.
+- Scheduler snapshot shape coverage is separate from scheduler diagnostics
+  projection coverage.
 - Shared workflow facade test fixtures live under `workflow/tests/fixtures/`
   and are re-exported by `workflow/tests/fixtures.rs`, keeping
   `workflow/tests.rs` as the module index for behavior slices.
