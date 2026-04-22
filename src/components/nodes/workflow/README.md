@@ -18,8 +18,12 @@ to the workflow graph runtime instead of being spread across generic canvas code
 | `DependencyEnvironmentNode.svelte` | Presents dependency resolution, check, install, activity, and override controls for model-backed environment setup. |
 | `DependencyEnvironmentRefPanel.svelte` | Renders the resolved dependency environment reference state, environment id, and Python executable. |
 | `DependencyEnvironmentStatusPanel.svelte` | Renders dependency state badges, status messages, and command buttons for dependency actions. |
-| `dependencyEnvironmentState.ts` | Defines dependency environment contracts and pure action-payload, override parsing, merge, mutation, badge, activity, label, and lookup helpers. |
+| `dependencyEnvironmentActions.ts` | Builds backend action payloads from upstream model state and dependency override selections. |
+| `dependencyEnvironmentDisplay.ts` | Formats dependency badges, backend codes, and activity-log events. |
+| `dependencyEnvironmentOverrides.ts` | Parses, merges, looks up, and mutates dependency override patches. |
+| `dependencyEnvironmentState.ts` | Re-exports the dependency environment helper modules for stable component and test imports. |
 | `dependencyEnvironmentState.test.ts` | Unit coverage for dependency environment override parsing, merge, lookup, and label helpers. |
+| `dependencyEnvironmentTypes.ts` | Defines dependency environment frontend contracts that mirror backend payloads. |
 | `ExpandSettingsNode.svelte` | Displays the effective passthrough value for each model-derived inference setting while the shared base node renders matching override input/output handles from dynamic port metadata. |
 | `expandSettingsDisplay.ts` | Resolves the effective visible expand-setting value from live connected overrides, runtime passthrough data, and schema defaults. |
 | `audioOutputState.ts` | Defines the execution-local audio runtime keys and helper logic that maps backend completion metadata into output-node playback state. |
@@ -76,8 +80,11 @@ override-capable handles come from the shared node definition supplied by the
 workflow stores.
 `DependencyEnvironmentNode.svelte` keeps UI state and backend actions in the
 component, while dependency contracts and pure override state helpers live in
-`dependencyEnvironmentState.ts` so parsing and merge behavior can be tested
-without mounting the node.
+`dependencyEnvironmentTypes.ts`, `dependencyEnvironmentActions.ts`,
+`dependencyEnvironmentOverrides.ts`, and `dependencyEnvironmentDisplay.ts` so
+payload projection, parsing, merge, and formatting behavior can be tested without
+mounting the node. `dependencyEnvironmentState.ts` remains as a stable re-export
+surface for component and test imports.
 The activity log panel lives in `DependencyEnvironmentActivityLog.svelte` so
 scroll handling and copyable log styling stay separate from dependency action
 state.
@@ -120,7 +127,7 @@ node persistence.
   is available, otherwise the last runtime passthrough value or schema default.
 - `DependencyEnvironmentNode.svelte` must keep dependency override parsing and
   merge semantics aligned with the backend patch contract in
-  `dependencyEnvironmentState.ts`.
+  `dependencyEnvironmentOverrides.ts`.
 - `DependencyEnvironmentActivityLog.svelte` owns log auto-scroll behavior and
   must not trigger graph drag or pan gestures.
 - `DependencyEnvironmentStatusPanel.svelte` emits command callbacks without
