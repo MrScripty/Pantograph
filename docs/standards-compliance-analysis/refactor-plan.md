@@ -358,8 +358,9 @@ Tasks:
   `workflow/tests/session_capacity.rs`. Runtime capacity/admission wait
   coverage now lives in `workflow/tests/session_admission.rs`. Session runtime
   preflight cache and keep-alive preflight failure coverage now lives in
-  `workflow/tests/session_runtime_preflight.rs`. Session stale cleanup,
-  inspection, and stale cleanup worker coverage now lives in
+  `workflow/tests/session_runtime_preflight.rs`. Session runtime loaded-state
+  invalidation coverage now lives in `workflow/tests/session_runtime_state.rs`.
+  Session stale cleanup, inspection, and stale cleanup worker coverage now lives in
   `workflow/tests/session_stale_cleanup.rs`, continuing the behavior-area split
   for the extracted test module.
 - Split `crates/pantograph-embedded-runtime/src/lib.rs` into runtime host,

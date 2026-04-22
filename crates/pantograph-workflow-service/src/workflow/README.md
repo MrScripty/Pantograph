@@ -67,6 +67,8 @@ runtime readiness, session-runtime workflows, and the root facade test module.
   and service shape remain reviewable; behavior-specific test modules live
   under `workflow/tests/`, including capacity, stale cleanup, and worker
   lifecycle coverage.
+- Session runtime loaded-state invalidation tests live with the
+  session-runtime-state behavior slice.
 - Host calls occur outside session-store locks.
 - Generic workflow run execution owns timeout cancellation, output validation,
   and direct runtime-not-ready checks behind the public facade.
