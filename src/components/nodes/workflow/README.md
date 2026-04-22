@@ -14,6 +14,7 @@ to the workflow graph runtime instead of being spread across generic canvas code
 | `DiffusionInferenceNode.svelte` | Shows execution and dependency state for process-backed diffusion image generation. |
 | `DependencyEnvironmentActivityLog.svelte` | Renders the dependency environment activity log and owns log auto-scroll behavior. |
 | `DependencyEnvironmentNode.svelte` | Presents dependency resolution, check, install, activity, and override controls for model-backed environment setup. |
+| `DependencyEnvironmentRefPanel.svelte` | Renders the resolved dependency environment reference state, environment id, and Python executable. |
 | `DependencyEnvironmentStatusPanel.svelte` | Renders dependency state badges, status messages, and command buttons for dependency actions. |
 | `dependencyEnvironmentState.ts` | Defines dependency environment contracts and pure override parsing, merge, label, and lookup helpers. |
 | `dependencyEnvironmentState.test.ts` | Unit coverage for dependency environment override parsing, merge, lookup, and label helpers. |
@@ -81,6 +82,8 @@ state.
 The dependency action status panel lives in
 `DependencyEnvironmentStatusPanel.svelte`, while the parent keeps backend action
 dispatch and persistence ownership.
+The resolved environment reference display lives in
+`DependencyEnvironmentRefPanel.svelte`.
 
 ## Alternatives Rejected
 - Reset audio output state only by remounting the workflow view.

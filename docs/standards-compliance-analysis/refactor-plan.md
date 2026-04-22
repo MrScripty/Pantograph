@@ -500,6 +500,8 @@ Tasks:
   `src/components/nodes/workflow/DependencyEnvironmentActivityLog.svelte`.
   Dependency state badge, status message, and command button rendering now lives
   in `src/components/nodes/workflow/DependencyEnvironmentStatusPanel.svelte`.
+  Resolved environment reference display now lives in
+  `src/components/nodes/workflow/DependencyEnvironmentRefPanel.svelte`.
 - Split `pantograph-uniffi` and `pantograph-rustler` facades by exported surface
   family while preserving public names.
 
