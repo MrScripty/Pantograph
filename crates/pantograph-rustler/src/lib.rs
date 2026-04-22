@@ -33,12 +33,11 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 #[cfg(feature = "frontend-http")]
 use std::sync::LazyLock;
-use std::sync::{Arc, Mutex};
 
 use rustler::{Atom, Encoder, Env, NifResult, OwnedEnv, ResourceArc, Term};
-use tokio::sync::oneshot;
 
 use node_engine::{
     EventSink, OrchestrationGraph, OrchestrationStore, TaskExecutor, WorkflowExecutor,
@@ -58,6 +57,7 @@ use pantograph_workflow_service::{
 extern crate workflow_nodes;
 
 mod binding_types;
+mod callback_bridge;
 mod elixir_data_graph_executor;
 mod resource_registration;
 mod resources;
@@ -71,6 +71,7 @@ pub use binding_types::{
     ElixirCacheStats, ElixirExecutionMode, ElixirNodeCategory, ElixirNodeDefinition,
     ElixirOrchestrationMetadata, ElixirOrchestrationNodeType, ElixirPortDataType,
 };
+use callback_bridge::{BeamEventSink, CoreFirstExecutor, ElixirCallbackTaskExecutor};
 use elixir_data_graph_executor::ElixirDataGraphExecutor;
 use resource_registration::register_resources;
 pub use resources::{
@@ -80,7 +81,6 @@ pub use resources::{
 use type_parsing_contract::{
     parse_execution_mode_string, parse_node_category_string, parse_port_data_type_string,
 };
-use workflow_event_contract::serialize_workflow_event_json;
 use workflow_graph_contract::{
     workflow_add_edge_json, workflow_add_node_json, workflow_from_json_string, workflow_new_json,
     workflow_remove_edge_json, workflow_remove_node_json, workflow_update_node_data_json,
@@ -106,219 +106,8 @@ mod atoms {
     }
 }
 
-type PendingCallbackSender = oneshot::Sender<Result<String, String>>;
-type PendingCallbackMap = HashMap<String, PendingCallbackSender>;
-
-/// Pending callback channels for bridging node execution to BEAM.
-static PENDING_CALLBACKS: std::sync::LazyLock<Mutex<PendingCallbackMap>> =
-    std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
-
-/// Counter for generating unique callback IDs.
-static CALLBACK_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 #[cfg(feature = "frontend-http")]
 static WORKFLOW_SERVICE: LazyLock<WorkflowService> = LazyLock::new(WorkflowService::new);
-
-// ============================================================================
-// Elixir callback-based TaskExecutor
-// ============================================================================
-
-/// TaskExecutor that bridges node execution to Elixir via callback NIFs.
-pub struct ElixirCallbackTaskExecutor {
-    pid: rustler::LocalPid,
-    owned_env: Arc<Mutex<OwnedEnv>>,
-    timeout_secs: u64,
-}
-
-impl ElixirCallbackTaskExecutor {
-    pub fn new(pid: rustler::LocalPid) -> Self {
-        Self {
-            pid,
-            owned_env: Arc::new(Mutex::new(OwnedEnv::new())),
-            timeout_secs: 300,
-        }
-    }
-
-    pub fn with_timeout(mut self, timeout_secs: u64) -> Self {
-        self.timeout_secs = timeout_secs;
-        self
-    }
-}
-
-#[async_trait::async_trait]
-impl TaskExecutor for ElixirCallbackTaskExecutor {
-    async fn execute_task(
-        &self,
-        task_id: &str,
-        inputs: HashMap<String, serde_json::Value>,
-        _context: &graph_flow::Context,
-        _extensions: &node_engine::ExecutorExtensions,
-    ) -> node_engine::Result<HashMap<String, serde_json::Value>> {
-        let callback_id = format!(
-            "cb-{}",
-            CALLBACK_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
-        );
-
-        let (tx, rx) = oneshot::channel();
-
-        // Store the sender
-        {
-            let mut callbacks = PENDING_CALLBACKS.lock().map_err(|e| {
-                node_engine::NodeEngineError::ExecutionFailed(format!("Lock poisoned: {}", e))
-            })?;
-            callbacks.insert(callback_id.clone(), tx);
-        }
-
-        // Serialize inputs to JSON
-        let inputs_json = serde_json::to_string(&inputs)?;
-
-        // Send message to Elixir PID via spawn_blocking to avoid
-        // "send_and_clear: current thread is managed" panic on DirtyCpu threads
-        let pid = self.pid;
-        let cb_id = callback_id.clone();
-        let t_id = task_id.to_string();
-        let owned_env = self.owned_env.clone();
-        tokio::task::spawn_blocking(move || {
-            let mut env = owned_env
-                .lock()
-                .map_err(|e| format!("Env lock poisoned: {}", e))?;
-            env.send_and_clear(&pid, |env| {
-                let msg = (
-                    atoms::node_execute().encode(env),
-                    cb_id.encode(env),
-                    t_id.encode(env),
-                    inputs_json.encode(env),
-                );
-                msg.encode(env)
-            })
-            .map_err(|_| "Failed to send to Elixir PID".to_string())
-        })
-        .await
-        .map_err(|e| {
-            node_engine::NodeEngineError::ExecutionFailed(format!("Send thread error: {}", e))
-        })?
-        .map_err(node_engine::NodeEngineError::ExecutionFailed)?;
-
-        // Wait for response with timeout
-        let result = tokio::time::timeout(std::time::Duration::from_secs(self.timeout_secs), rx)
-            .await
-            .map_err(|_| {
-                // Clean up on timeout
-                let mut callbacks = PENDING_CALLBACKS.lock().unwrap_or_else(|e| e.into_inner());
-                callbacks.remove(&callback_id);
-                node_engine::NodeEngineError::ExecutionFailed(format!(
-                    "Callback timeout for task '{}'",
-                    task_id
-                ))
-            })?
-            .map_err(|_| {
-                node_engine::NodeEngineError::ExecutionFailed(format!(
-                    "Callback channel dropped for task '{}'",
-                    task_id
-                ))
-            })?;
-
-        match result {
-            Ok(json_str) => {
-                let outputs: HashMap<String, serde_json::Value> = serde_json::from_str(&json_str)?;
-                Ok(outputs)
-            }
-            Err(err_msg) => Err(node_engine::NodeEngineError::ExecutionFailed(err_msg)),
-        }
-    }
-}
-
-// ============================================================================
-// Core-first composite executor for NIF
-// ============================================================================
-
-/// Task executor that tries CoreTaskExecutor first, then falls back to Elixir.
-///
-/// This is the inverse of `CompositeTaskExecutor` (which tries host first).
-/// For the NIF case, we want the core to handle all standard node types
-/// natively in Rust, and only delegate to Elixir for custom node types
-/// that core doesn't know about.
-struct CoreFirstExecutor {
-    core: Arc<node_engine::CoreTaskExecutor>,
-    elixir: Arc<ElixirCallbackTaskExecutor>,
-}
-
-impl CoreFirstExecutor {
-    fn new(core: node_engine::CoreTaskExecutor, elixir: ElixirCallbackTaskExecutor) -> Self {
-        Self {
-            core: Arc::new(core),
-            elixir: Arc::new(elixir),
-        }
-    }
-}
-
-#[async_trait::async_trait]
-impl TaskExecutor for CoreFirstExecutor {
-    async fn execute_task(
-        &self,
-        task_id: &str,
-        inputs: HashMap<String, serde_json::Value>,
-        context: &graph_flow::Context,
-        extensions: &node_engine::ExecutorExtensions,
-    ) -> node_engine::Result<HashMap<String, serde_json::Value>> {
-        // Try core executor first (handles all standard node types)
-        match self
-            .core
-            .execute_task(task_id, inputs.clone(), context, extensions)
-            .await
-        {
-            Err(node_engine::NodeEngineError::ExecutionFailed(ref msg))
-                if msg.contains("requires host-specific executor") =>
-            {
-                // Core doesn't handle this type — delegate to Elixir
-                self.elixir
-                    .execute_task(task_id, inputs, context, extensions)
-                    .await
-            }
-            other => other,
-        }
-    }
-}
-
-/// EventSink that sends events to an Elixir PID.
-pub struct BeamEventSink {
-    pid: rustler::LocalPid,
-    owned_env: Arc<Mutex<OwnedEnv>>,
-}
-
-impl BeamEventSink {
-    pub fn new(pid: rustler::LocalPid) -> Self {
-        Self {
-            pid,
-            owned_env: Arc::new(Mutex::new(OwnedEnv::new())),
-        }
-    }
-}
-
-impl EventSink for BeamEventSink {
-    fn send(
-        &self,
-        event: node_engine::WorkflowEvent,
-    ) -> std::result::Result<(), node_engine::EventError> {
-        let json = serialize_workflow_event_json(&event)?;
-
-        // Send via std::thread::spawn to avoid "current thread is managed" panic
-        // when called from DirtyCpu scheduler threads
-        let pid = self.pid;
-        let owned_env = self.owned_env.clone();
-        std::thread::spawn(move || {
-            let mut env = owned_env.lock().unwrap();
-            let _ = env.send_and_clear(&pid, |env| {
-                (atoms::workflow_event().encode(env), json.encode(env)).encode(env)
-            });
-        })
-        .join()
-        .map_err(|_| node_engine::EventError {
-            message: "Event send thread panicked".to_string(),
-        })?;
-
-        Ok(())
-    }
-}
 
 // ============================================================================
 // Headless embedding adapter for Rustler
@@ -1073,37 +862,13 @@ fn executor_get_output(
 /// Respond to a pending callback with success.
 #[rustler::nif]
 fn callback_respond(callback_id: String, outputs_json: String) -> NifResult<Atom> {
-    let mut callbacks = PENDING_CALLBACKS
-        .lock()
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Lock poisoned: {}", e))))?;
-
-    if let Some(sender) = callbacks.remove(&callback_id) {
-        let _ = sender.send(Ok(outputs_json));
-        Ok(atoms::ok())
-    } else {
-        Err(rustler::Error::Term(Box::new(format!(
-            "Unknown callback: {}",
-            callback_id
-        ))))
-    }
+    callback_bridge::callback_respond(callback_id, outputs_json)
 }
 
 /// Respond to a pending callback with an error.
 #[rustler::nif]
 fn callback_error(callback_id: String, error_message: String) -> NifResult<Atom> {
-    let mut callbacks = PENDING_CALLBACKS
-        .lock()
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Lock poisoned: {}", e))))?;
-
-    if let Some(sender) = callbacks.remove(&callback_id) {
-        let _ = sender.send(Err(error_message));
-        Ok(atoms::ok())
-    } else {
-        Err(rustler::Error::Term(Box::new(format!(
-            "Unknown callback: {}",
-            callback_id
-        ))))
-    }
+    callback_bridge::callback_error(callback_id, error_message)
 }
 
 // ============================================================================
@@ -1856,20 +1621,13 @@ mod tests {
 
     #[test]
     fn test_callback_channel_lifecycle() {
-        let (tx, rx) = oneshot::channel::<Result<String, String>>();
+        let (tx, rx) = tokio::sync::oneshot::channel::<Result<String, String>>();
         let callback_id = "test-cb-1".to_string();
 
-        {
-            let mut callbacks = PENDING_CALLBACKS.lock().unwrap();
-            callbacks.insert(callback_id.clone(), tx);
-        }
+        callback_bridge::insert_pending_callback_for_test(callback_id.clone(), tx);
 
-        // Simulate callback response
-        {
-            let mut callbacks = PENDING_CALLBACKS.lock().unwrap();
-            let sender = callbacks.remove(&callback_id).unwrap();
-            sender.send(Ok(r#"{"result": "ok"}"#.to_string())).unwrap();
-        }
+        callback_bridge::callback_respond(callback_id, r#"{"result": "ok"}"#.to_string())
+            .expect("callback response");
 
         let result = rx.blocking_recv().unwrap();
         assert!(result.is_ok());

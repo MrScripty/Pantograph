@@ -13,6 +13,7 @@ outside core workflow crates.
 | ----------- | ----------- |
 | `lib.rs` | Public NIF facade, exported entrypoints, callback bridge, and module load wiring. |
 | `binding_types.rs` | BEAM-facing enum and struct declarations used by NIF signatures. |
+| `callback_bridge.rs` | BEAM callback task executor, core-first fallback executor, event sink, and pending callback response state. |
 | `elixir_data_graph_executor.rs` | Rustler-specific orchestration data-graph bridge into backend workflow execution. |
 | `resource_registration.rs` | NIF load-time Rustler resource registration boundary. |
 | `resources.rs` | ResourceArc wrapper declarations for executor, orchestration, registry, Pumas, extensions, and inference gateway state. |
@@ -55,8 +56,8 @@ registration, callback transport, and feature-gated adapter calls.
 - BEAM DTO and `ResourceArc` wrapper declarations stay outside `lib.rs` so the
   facade remains focused on exported NIF behavior and load wiring.
 - Callback/event JSON serialization preserves backend event labels and order.
-- Callback bridge state uses local type aliases for pending callback maps so
-  BEAM transport plumbing remains readable under strict clippy checks.
+- Callback bridge state and BEAM event delivery stay in `callback_bridge.rs`;
+  `lib.rs` keeps only the exported callback NIF wrappers.
 - Event contract tests must construct the current backend event shape,
   including additive graph memory-impact fields, even when the BEAM projection
   only asserts the stable legacy fields.

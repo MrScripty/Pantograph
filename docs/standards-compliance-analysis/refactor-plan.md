@@ -695,6 +695,10 @@ Tasks:
   `crates/pantograph-rustler/src/binding_types.rs`, and `ResourceArc` wrapper
   declarations now live in `crates/pantograph-rustler/src/resources.rs`, while
   `lib.rs` preserves the existing crate-root names through re-exports.
+  Rustler callback task execution, core-first fallback execution, BEAM event
+  delivery, and pending callback response state now live in
+  `crates/pantograph-rustler/src/callback_bridge.rs`, while `lib.rs` preserves
+  the existing callback NIF names as thin wrappers.
 
 Verification:
 - File-size scan shows extracted files below review thresholds or documented exceptions.
