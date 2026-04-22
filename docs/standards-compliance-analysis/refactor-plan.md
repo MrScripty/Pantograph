@@ -352,8 +352,9 @@ Tasks:
   lives in `workflow/tests/runtime_preflight.rs`. Generic workflow run facade
   coverage now lives in `workflow/tests/workflow_run.rs`. Workflow DTO
   serialization and error-envelope coverage now lives in
-  `workflow/tests/contracts.rs`, continuing the behavior-area split for the
-  extracted test module.
+  `workflow/tests/contracts.rs`. Workflow session execution and retention-hint
+  coverage now lives in `workflow/tests/session_execution.rs`, continuing the
+  behavior-area split for the extracted test module.
 - Split `crates/pantograph-embedded-runtime/src/lib.rs` into runtime host,
   workflow sessions, registry lifecycle, diagnostics projection, model deps,
   and test modules.

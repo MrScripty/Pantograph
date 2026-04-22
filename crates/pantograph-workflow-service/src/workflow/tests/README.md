@@ -14,6 +14,7 @@ can stay reviewable as more tests are split.
 | `contracts.rs` | Workflow DTO serialization and service error-envelope contract tests. |
 | `runtime_preflight.rs` | Runtime preflight matching tests for selected runtime precedence, fallback readiness, backend aliases, and selected-version readiness context. |
 | `scheduler_snapshot.rs` | Scheduler snapshot facade tests covering workflow/edit-session snapshot shape, trace attribution, admission diagnostics, and runtime-registry diagnostics provider merging. |
+| `session_execution.rs` | Workflow session create/run/close, run-option propagation, and runtime retention-hint tests. |
 | `session_queue.rs` | Session queue item metadata, admission outcome, warm reuse, queue-position, and starvation protection tests. |
 | `workflow_io.rs` | Workflow I/O discovery and validation tests for bindable input/output nodes and port contracts. |
 | `workflow_preflight.rs` | Workflow preflight facade tests for required inputs, target validation, technical-fit decisions, and override normalization. |
@@ -76,6 +77,7 @@ Run the scheduler snapshot behavior slice:
 
 ```bash
 cargo test -p pantograph-workflow-service workflow::tests::contracts
+cargo test -p pantograph-workflow-service workflow::tests::session_execution
 cargo test -p pantograph-workflow-service workflow_get_scheduler_snapshot
 cargo test -p pantograph-workflow-service workflow_session_queue
 cargo test -p pantograph-workflow-service workflow_get_io
@@ -87,6 +89,7 @@ cargo test -p pantograph-workflow-service workflow::tests::workflow_run
 ## Testing
 ```bash
 cargo test -p pantograph-workflow-service workflow::tests::contracts
+cargo test -p pantograph-workflow-service workflow::tests::session_execution
 cargo test -p pantograph-workflow-service workflow_get_scheduler_snapshot
 cargo test -p pantograph-workflow-service workflow_session_queue
 cargo test -p pantograph-workflow-service workflow_get_io
