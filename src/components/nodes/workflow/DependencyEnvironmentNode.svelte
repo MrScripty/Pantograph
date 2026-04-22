@@ -8,12 +8,15 @@
   import type { NodeDefinition } from '../../../services/workflow/types';
   import {
     buildDependencyEnvironmentActionPayload,
-    dependencyTokenLabel,
+    dependencyBadgeFor,
+    formatDependencyActivityLine,
     getPatchFrom,
     hasOverrideFields,
     isPatchTarget,
+    matchesDependencyActivityEvent,
     mergeOverridePatches,
     parseOverridePatches,
+    renderDependencyActivityEvent,
     upsertExtraIndexUrls,
     upsertStringOverrideField,
     type DependencyActivityEvent,
@@ -166,46 +169,7 @@
     }
   });
 
-  function deriveDisplayState(): string | null {
-    if (dependencyStatus) return dependencyStatus.state;
-    if (!dependencyRequirements) return null;
-    switch (dependencyRequirements.validation_state) {
-      case 'resolved':
-        return 'resolved';
-      case 'unknown_profile':
-        return 'unresolved';
-      default:
-        return 'invalid';
-    }
-  }
-
-  const dependencyBadge = $derived.by(() => {
-    const state = deriveDisplayState();
-    if (!state) return { label: 'requirements unknown', className: 'text-neutral-400 border-neutral-700' };
-    switch (state) {
-      case 'ready':
-        return { label: 'deps ready', className: 'text-emerald-400 border-emerald-500/40' };
-      case 'missing':
-        return { label: 'deps missing', className: 'text-amber-400 border-amber-500/40' };
-      case 'resolved':
-        return { label: 'requirements resolved', className: 'text-cyan-300 border-cyan-500/40' };
-      case 'checking':
-        return { label: 'deps checking', className: 'text-cyan-400 border-cyan-500/40' };
-      case 'installing':
-        return { label: 'deps installing', className: 'text-sky-400 border-sky-500/40' };
-      case 'unresolved':
-        return { label: 'requirements unresolved', className: 'text-violet-400 border-violet-500/40' };
-      case 'invalid':
-        return { label: 'requirements invalid', className: 'text-orange-400 border-orange-500/40' };
-      case 'failed':
-        return { label: 'deps failed', className: 'text-red-400 border-red-500/40' };
-      default:
-        return {
-          label: `deps ${dependencyTokenLabel(state)}`,
-          className: 'text-neutral-300 border-neutral-600/50',
-        };
-    }
-  });
+  const dependencyBadge = $derived(dependencyBadgeFor(dependencyRequirements, dependencyStatus));
 
   function persistNodeState() {
     updateNodeData(id, {
@@ -279,27 +243,19 @@
   }
 
   function appendActivityLine(line: string) {
-    const normalized = line.trim();
-    if (normalized.length === 0) return;
-    const next = [...activityLog, `[${activityTimestamp()}] ${normalized}`];
+    const formatted = formatDependencyActivityLine(line, activityTimestamp());
+    if (!formatted) return;
+    const next = [...activityLog, formatted];
     activityLog = next.length > MAX_ACTIVITY_LOG_LINES ? next.slice(next.length - MAX_ACTIVITY_LOG_LINES) : next;
     persistNodeState();
   }
 
   function matchesActivityEvent(payload: DependencyActivityEvent): boolean {
-    const upstreamPath = (upstreamModelPath ?? '').trim();
-    if (upstreamPath.length === 0) return false;
-    const eventPath = (payload.model_path ?? '').trim();
-    if (eventPath.length === 0 || eventPath !== upstreamPath) return false;
-    return (payload.node_type ?? '').trim() === 'dependency-environment';
+    return matchesDependencyActivityEvent(payload, upstreamModelPath);
   }
 
   function renderActivityEvent(payload: DependencyActivityEvent): string {
-    const parts = [payload.phase];
-    if (payload.binding_id) parts.push(payload.binding_id);
-    if (payload.requirement_name) parts.push(payload.requirement_name);
-    if (payload.stream) parts.push(payload.stream);
-    return `${parts.join(' | ')}: ${payload.message}`;
+    return renderDependencyActivityEvent(payload);
   }
 
   function getPatch(

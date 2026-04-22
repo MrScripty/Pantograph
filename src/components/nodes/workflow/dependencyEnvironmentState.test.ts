@@ -4,11 +4,15 @@ import assert from 'node:assert/strict';
 import {
   buildDependencyEnvironmentActionPayload,
   dependencyCodeLabel,
+  dependencyBadgeFor,
+  formatDependencyActivityLine,
   getPatchFrom,
   hasOverrideFields,
   isPatchTarget,
+  matchesDependencyActivityEvent,
   mergeOverridePatches,
   parseOverridePatches,
+  renderDependencyActivityEvent,
   upsertExtraIndexUrls,
   upsertStringOverrideField,
 } from './dependencyEnvironmentState.ts';
@@ -86,6 +90,59 @@ test('dependencyCodeLabel maps known backend codes to readable labels', () => {
   assert.equal(dependencyCodeLabel('dependency_install_failed'), 'dependency check failed');
   assert.equal(dependencyCodeLabel('unknown_profile'), 'unknown profile');
   assert.equal(dependencyCodeLabel('custom_backend_code'), 'custom backend code');
+});
+
+test('dependencyBadgeFor derives labels from status and validation state', () => {
+  assert.equal(
+    dependencyBadgeFor(null, {
+      state: 'ready',
+      requirements: {
+        model_id: 'model-a',
+        platform_key: 'linux',
+        dependency_contract_version: 1,
+        validation_state: 'resolved',
+        validation_errors: [],
+        bindings: [],
+        selected_binding_ids: [],
+      },
+      bindings: [],
+    }).label,
+    'deps ready',
+  );
+
+  assert.equal(
+    dependencyBadgeFor(
+      {
+        model_id: 'model-a',
+        platform_key: 'linux',
+        dependency_contract_version: 1,
+        validation_state: 'unknown_profile',
+        validation_errors: [],
+        bindings: [],
+        selected_binding_ids: [],
+      },
+      null,
+    ).label,
+    'requirements unresolved',
+  );
+});
+
+test('dependency activity helpers filter and render matching backend events', () => {
+  const event = {
+    timestamp: '2026-04-22T00:00:00Z',
+    node_type: 'dependency-environment',
+    model_path: '/models/model.gguf',
+    phase: 'install',
+    message: 'Installing torch',
+    binding_id: 'binding-a',
+    requirement_name: 'torch',
+  };
+
+  assert.equal(matchesDependencyActivityEvent(event, '/models/model.gguf'), true);
+  assert.equal(matchesDependencyActivityEvent(event, '/models/other.gguf'), false);
+  assert.equal(renderDependencyActivityEvent(event), 'install | binding-a | torch: Installing torch');
+  assert.equal(formatDependencyActivityLine(' done ', '12:00:00'), '[12:00:00] done');
+  assert.equal(formatDependencyActivityLine(' ', '12:00:00'), null);
 });
 
 test('upsertStringOverrideField adds updates and removes empty patches', () => {
