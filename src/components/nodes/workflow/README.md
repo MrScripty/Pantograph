@@ -12,6 +12,9 @@ to the workflow graph runtime instead of being spread across generic canvas code
 | `BooleanInputNode.svelte` | Renders a metadata-driven boolean editor that can bind to any downstream boolean-compatible setting. |
 | `AudioOutputNode.svelte` | Renders playback controls for streamed and final audio outputs, including rerun cleanup of execution-local playback state. |
 | `DiffusionInferenceNode.svelte` | Shows execution and dependency state for process-backed diffusion image generation. |
+| `DependencyEnvironmentNode.svelte` | Presents dependency resolution, check, install, activity, and override controls for model-backed environment setup. |
+| `dependencyEnvironmentState.ts` | Defines dependency environment contracts and pure override parsing, merge, label, and lookup helpers. |
+| `dependencyEnvironmentState.test.ts` | Unit coverage for dependency environment override parsing, merge, lookup, and label helpers. |
 | `ExpandSettingsNode.svelte` | Displays the effective passthrough value for each model-derived inference setting while the shared base node renders matching override input/output handles from dynamic port metadata. |
 | `expandSettingsDisplay.ts` | Resolves the effective visible expand-setting value from live connected overrides, runtime passthrough data, and schema defaults. |
 | `audioOutputState.ts` | Defines the execution-local audio runtime keys and helper logic that maps backend completion metadata into output-node playback state. |
@@ -66,6 +69,10 @@ instead of the text-only PyTorch or llama.cpp generation nodes.
 the effective value currently flowing through each setting, while
 override-capable handles come from the shared node definition supplied by the
 workflow stores.
+`DependencyEnvironmentNode.svelte` keeps UI state and backend actions in the
+component, while dependency contracts and pure override state helpers live in
+`dependencyEnvironmentState.ts` so parsing and merge behavior can be tested
+without mounting the node.
 
 ## Alternatives Rejected
 - Reset audio output state only by remounting the workflow view.
@@ -92,6 +99,9 @@ workflow stores.
   definition.
 - `ExpandSettingsNode.svelte` must display the connected override value when one
   is available, otherwise the last runtime passthrough value or schema default.
+- `DependencyEnvironmentNode.svelte` must keep dependency override parsing and
+  merge semantics aligned with the backend patch contract in
+  `dependencyEnvironmentState.ts`.
 - Image and media preview controls must expose accessible names even when the
   visible content is an image or icon rather than text.
 
