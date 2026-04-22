@@ -28,6 +28,8 @@ shared node presentation rules live outside the Pantograph app shell.
 | `../workflowNodeActivation.test.ts` | Unit coverage for node activation and group zoom-target decisions. |
 | `../workflowPaletteDrag.ts` | Parses package palette drag payloads and projects drop coordinates. |
 | `../workflowPaletteDrag.test.ts` | Unit coverage for palette drag parsing and drop-position projection. |
+| `../workflowPointerPosition.ts` | Resolves mouse/touch client positions and container-relative pointer coordinates. |
+| `../workflowPointerPosition.test.ts` | Unit coverage for pointer coordinate projection. |
 | `NodePalette.svelte` | Palette for adding node definitions into the active graph. |
 | `CutTool.svelte` | Edge-cut interaction used for Ctrl-drag deletion. |
 | `ContainerBorder.svelte` | Orchestration/group boundary overlay used during zoom transitions. |
@@ -108,6 +110,9 @@ Drag-cursor horseshoe decisions live in `workflowDragCursor.ts`, while
 Horseshoe trace labels live in `workflowHorseshoeTrace.ts`, while
 `WorkflowGraph.svelte` owns when interaction state changes should record a new
 trace string.
+Mouse/touch pointer extraction and container-relative coordinate projection live
+in `workflowPointerPosition.ts`, while `WorkflowGraph.svelte` owns the concrete
+container element.
 
 ## Alternatives Rejected
 - Ask the backend on every pointer move.
@@ -173,6 +178,9 @@ trace string.
   has completed.
 - `workflowInsertPosition.ts` must stay side-effect-free so app and package
   graphs cannot drift on anchor-to-viewport math.
+- `workflowPointerPosition.ts` must keep mouse and touch coordinate fallback
+  behavior aligned before connect, reconnect, and horseshoe pointer handling
+  changes.
 
 ## Revisit Triggers
 - Backend candidate queries become too slow for one-shot drag-start loading.

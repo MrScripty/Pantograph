@@ -229,6 +229,17 @@ export type {
   WorkflowPaletteDragEvent,
   WorkflowPalettePointerPosition,
 } from './workflowPaletteDrag.js';
+export {
+  resolveWorkflowPointerClientPosition,
+  resolveWorkflowRelativePointerPosition,
+} from './workflowPointerPosition.js';
+export type {
+  WorkflowPointerBounds,
+  WorkflowPointerClientPosition,
+  WorkflowPointerEventLike,
+  WorkflowPointerPosition,
+  WorkflowPointerTouchListLike,
+} from './workflowPointerPosition.js';
 export { resolveWorkflowInsertPositionHint } from './workflowInsertPosition.js';
 export type {
   WorkflowInsertAnchorPosition,

@@ -31,6 +31,8 @@ fork core canvas behavior.
 | `workflowMiniMap.test.ts` | Unit coverage for reusable minimap color projection. |
 | `workflowPaletteDrag.ts` | Shared palette drag payload parsing and drop-position projection helpers. |
 | `workflowPaletteDrag.test.ts` | Unit coverage for palette drag parsing and graph-space drop positioning. |
+| `workflowPointerPosition.ts` | Shared mouse/touch client and container-relative pointer projection helpers. |
+| `workflowPointerPosition.test.ts` | Unit coverage for pointer client and relative coordinate projection. |
 | `index.ts` | Package export surface consumed by the app shell and any external package users. |
 
 ## Problem
@@ -77,6 +79,9 @@ components.
 Keep horseshoe trace formatting in `workflowHorseshoeTrace.ts` so package and
 app graph diagnostics use the same state labels while components own when to
 record them.
+Keep pointer event coordinate projection in `workflowPointerPosition.ts` so
+mouse/touch fallback behavior and container-relative math stay aligned across
+package and app graph components.
 
 ## Alternatives Rejected
 - Keep connect/reconnect state management inline in both graph components.
@@ -124,6 +129,9 @@ record them.
   escaping as unhandled graph drop exceptions.
 - `workflowInsertPosition.ts` must return `null` without an anchor and must not
   own backend insert side effects.
+- `workflowPointerPosition.ts` must return `null` when no touch point or
+  container bounds are available instead of forcing callers to synthesize
+  coordinates.
 
 ## Revisit Triggers
 - A second non-Pantograph consumer needs a different reconnect policy.

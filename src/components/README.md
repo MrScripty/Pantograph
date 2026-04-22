@@ -132,6 +132,9 @@ Drag-cursor horseshoe anchor and selection decisions now come from the package
 change.
 Horseshoe diagnostic trace labels now come from the package
 `workflowHorseshoeTrace.ts` helper so package and app graph traces stay aligned.
+Mouse/touch pointer projection now comes from the package
+`workflowPointerPosition.ts` helper; the app graph only supplies the active
+container bounds.
 
 ## Alternatives Rejected
 - Replace the app graph entirely with the package component immediately.
@@ -214,6 +217,9 @@ Horseshoe diagnostic trace labels now come from the package
   package graph.
 - App graph horseshoe trace labels must use the package trace formatter instead
   of composing parallel string formats inline.
+- App graph pointer coordinate handling must use the package pointer-position
+  resolver so mouse/touch fallback behavior stays aligned with the package
+  graph.
 
 ## Revisit Triggers
 - The app graph fully converges with the package graph and can be deleted.

@@ -82,6 +82,10 @@
     readWorkflowPaletteDragDefinition,
     resolveWorkflowPaletteDropPosition,
   } from '../workflowPaletteDrag.js';
+  import {
+    resolveWorkflowPointerClientPosition,
+    resolveWorkflowRelativePointerPosition,
+  } from '../workflowPointerPosition.js';
   import { resolveWorkflowInsertPositionHint } from '../workflowInsertPosition.js';
   import { getWorkflowMiniMapNodeColor } from '../workflowMiniMap.js';
   import CutTool from './CutTool.svelte';
@@ -337,22 +341,17 @@
   }
 
   function getRelativePointerPosition(clientX: number, clientY: number) {
-    if (!containerElement) return null;
-    const bounds = containerElement.getBoundingClientRect();
-    return {
-      x: clientX - bounds.left,
-      y: clientY - bounds.top,
-    };
+    return resolveWorkflowRelativePointerPosition({
+      clientPosition: { clientX, clientY },
+      containerBounds: containerElement?.getBoundingClientRect() ?? null,
+    });
   }
 
   function getEventPointerPosition(event: MouseEvent | TouchEvent) {
-    if ('touches' in event) {
-      const touch = event.touches[0] ?? event.changedTouches[0];
-      if (!touch) return null;
-      return getRelativePointerPosition(touch.clientX, touch.clientY);
-    }
-
-    return getRelativePointerPosition(event.clientX, event.clientY);
+    return resolveWorkflowRelativePointerPosition({
+      clientPosition: resolveWorkflowPointerClientPosition(event),
+      containerBounds: containerElement?.getBoundingClientRect() ?? null,
+    });
   }
 
   function updateDragCursorFromMouseEvent(event: MouseEvent) {
