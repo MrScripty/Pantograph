@@ -631,6 +631,10 @@ Tasks:
   coverage in `dependencyEnvironmentState.test.ts`. Dependency action execution
   bracketing, backend response application, and failure log formatting now live
   in `src/components/nodes/workflow/dependencyEnvironmentActions.ts`, with unit
+  coverage in `dependencyEnvironmentState.test.ts`. Mount-time dependency
+  activity listener setup, initial persistence, automatic mode startup, and
+  listener failure log formatting now live in
+  `src/components/nodes/workflow/dependencyEnvironmentActivityListener.ts`, with unit
   coverage in `dependencyEnvironmentState.test.ts`. Binding selection filtering
   and toggles now live in
   `src/components/nodes/workflow/dependencyEnvironmentSelection.ts`; override

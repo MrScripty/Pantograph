@@ -23,6 +23,7 @@
     hasDependencyBindingOverrideFields,
     hasDependencyRequirementOverrideFields,
     isDependencyEnvironmentBindingSelected,
+    formatDependencyEnvironmentListenerError,
     matchesDependencyActivityEvent,
     mergeOverridePatches,
     readDependencyExtraIndexUrls,
@@ -30,6 +31,7 @@
     renderDependencyActivityEvent,
     resolveDependencyEnvironmentUpstreamState,
     runDependencyEnvironmentActionRequest,
+    setupDependencyEnvironmentActivityListener,
     toggleDependencyEnvironmentAllBindings,
     toggleDependencyEnvironmentBindingSelection,
     upsertExtraIndexUrls,
@@ -46,7 +48,7 @@
   } from './dependencyEnvironmentState';
   import { edges, nodes, updateNodeData } from '../../../stores/workflowStore';
   import { invoke } from '@tauri-apps/api/core';
-  import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+  import { listen } from '@tauri-apps/api/event';
 
   interface Props {
     id: string;
@@ -333,25 +335,23 @@
   }
 
   onMount(() => {
-    let unlisten: UnlistenFn | null = null;
+    let unlisten: (() => void) | null = null;
 
-    const setup = async () => {
-      unlisten = await listen<DependencyActivityEvent>('dependency-activity', (event) => {
-        const payload = event.payload;
-        if (!matchesActivityEvent(payload)) return;
-        appendActivityLine(renderActivityEvent(payload));
+    setupDependencyEnvironmentActivityListener({
+      listenEvent: listen,
+      matchesActivityEvent,
+      renderActivityEvent,
+      appendActivityLine,
+      persistNodeState,
+      shouldRunModeAction: () => mode === 'auto' && Boolean(upstreamModelPath),
+      runModeAction,
+    })
+      .then((nextUnlisten) => {
+        unlisten = nextUnlisten;
+      })
+      .catch((error) => {
+        appendActivityLine(formatDependencyEnvironmentListenerError(error));
       });
-
-      persistNodeState();
-      if (mode === 'auto' && upstreamModelPath) {
-        await runModeAction();
-      }
-    };
-
-    setup().catch((error) => {
-      const message = error instanceof Error ? error.message : String(error);
-      appendActivityLine(`listener: error="${message}"`);
-    });
 
     return () => {
       if (unlisten) {

@@ -1,4 +1,5 @@
 export * from './dependencyEnvironmentActions.ts';
+export * from './dependencyEnvironmentActivityListener.ts';
 export * from './dependencyEnvironmentDisplay.ts';
 export * from './dependencyEnvironmentNodeState.ts';
 export * from './dependencyEnvironmentOverrides.ts';

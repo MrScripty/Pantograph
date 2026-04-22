@@ -16,6 +16,7 @@ import {
   dependencyBadgeFor,
   filterDependencyEnvironmentBindings,
   formatDependencyEnvironmentActionError,
+  formatDependencyEnvironmentListenerError,
   formatDependencyActivityLine,
   getPatchFrom,
   hasDependencyBindingOverrideFields,
@@ -31,6 +32,7 @@ import {
   renderDependencyActivityEvent,
   resolveDependencyEnvironmentUpstreamState,
   runDependencyEnvironmentActionRequest,
+  setupDependencyEnvironmentActivityListener,
   toggleDependencyEnvironmentAllBindings,
   toggleDependencyEnvironmentBindingSelection,
   upsertExtraIndexUrls,
@@ -394,6 +396,77 @@ test('dependency activity helpers filter and render matching backend events', ()
   assert.equal(renderDependencyActivityEvent(event), 'install | binding-a | torch: Installing torch');
   assert.equal(formatDependencyActivityLine(' done ', '12:00:00'), '[12:00:00] done');
   assert.equal(formatDependencyActivityLine(' ', '12:00:00'), null);
+});
+
+test('setupDependencyEnvironmentActivityListener wires matching events and auto run', async () => {
+  const activityLines: string[] = [];
+  const calls: string[] = [];
+  const matchingEvent = {
+    timestamp: '2026-04-22T00:00:00Z',
+    node_type: 'dependency-environment',
+    model_path: '/models/model.gguf',
+    phase: 'check',
+    message: 'Checking torch',
+  };
+  const ignoredEvent = {
+    ...matchingEvent,
+    node_type: 'model-provider',
+  };
+
+  const unlisten = await setupDependencyEnvironmentActivityListener({
+    listenEvent: async <Payload>(
+      _eventName: string,
+      handler: (event: { payload: Payload }) => void,
+    ) => {
+      handler({ payload: ignoredEvent as Payload });
+      handler({ payload: matchingEvent as Payload });
+      return () => {
+        calls.push('unlisten');
+      };
+    },
+    matchesActivityEvent: (payload) =>
+      matchesDependencyActivityEvent(payload, '/models/model.gguf'),
+    renderActivityEvent: renderDependencyActivityEvent,
+    appendActivityLine: (line) => {
+      activityLines.push(line);
+    },
+    persistNodeState: () => {
+      calls.push('persist');
+    },
+    shouldRunModeAction: () => true,
+    runModeAction: async () => {
+      calls.push('run');
+    },
+  });
+
+  assert.deepEqual(activityLines, ['check: Checking torch']);
+  assert.deepEqual(calls, ['persist', 'run']);
+  unlisten();
+  assert.deepEqual(calls, ['persist', 'run', 'unlisten']);
+});
+
+test('setupDependencyEnvironmentActivityListener preserves listener errors for logs', async () => {
+  const error = new Error('event bridge unavailable');
+
+  await assert.rejects(
+    setupDependencyEnvironmentActivityListener({
+      listenEvent: async () => {
+        throw error;
+      },
+      matchesActivityEvent: () => true,
+      renderActivityEvent: renderDependencyActivityEvent,
+      appendActivityLine: () => {},
+      persistNodeState: () => {},
+      shouldRunModeAction: () => false,
+      runModeAction: async () => {},
+    }),
+    error,
+  );
+
+  assert.equal(
+    formatDependencyEnvironmentListenerError(error),
+    'listener: error="event bridge unavailable"',
+  );
 });
 
 test('upsertStringOverrideField adds updates and removes empty patches', () => {
