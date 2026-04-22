@@ -702,6 +702,9 @@ Tasks:
   Rustler frontend HTTP workflow/session dispatch now lives in
   `crates/pantograph-rustler/src/frontend_http_nifs.rs`, while `lib.rs`
   preserves the exported feature-gated NIF names as thin wrappers.
+  Rustler orchestration store resource creation and JSON CRUD now live in
+  `crates/pantograph-rustler/src/orchestration_store_nifs.rs`, while `lib.rs`
+  preserves the exported orchestration NIF names as thin wrappers.
 
 Verification:
 - File-size scan shows extracted files below review thresholds or documented exceptions.

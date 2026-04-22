@@ -16,6 +16,7 @@ outside core workflow crates.
 | `callback_bridge.rs` | BEAM callback task executor, core-first fallback executor, event sink, and pending callback response state. |
 | `elixir_data_graph_executor.rs` | Rustler-specific orchestration data-graph bridge into backend workflow execution. |
 | `frontend_http_nifs.rs` | Feature-gated frontend HTTP workflow/session implementation helpers behind exported NIF wrappers. |
+| `orchestration_store_nifs.rs` | Orchestration store resource creation and JSON CRUD helpers behind exported NIF wrappers. |
 | `resource_registration.rs` | NIF load-time Rustler resource registration boundary. |
 | `resources.rs` | ResourceArc wrapper declarations for executor, orchestration, registry, Pumas, extensions, and inference gateway state. |
 | `type_parsing_contract.rs` | String-to-enum parsing helpers behind public type-parsing NIFs. |
@@ -54,6 +55,8 @@ registration, callback transport, and feature-gated adapter calls.
 - Workflow JSON responses and error envelopes preserve backend-owned service
   semantics.
 - Resource registration stays centralized in `resource_registration.rs`.
+- Orchestration store JSON CRUD behavior stays in `orchestration_store_nifs.rs`;
+  `lib.rs` keeps only the exported orchestration NIF wrappers.
 - BEAM DTO and `ResourceArc` wrapper declarations stay outside `lib.rs` so the
   facade remains focused on exported NIF behavior and load wiring.
 - Callback/event JSON serialization preserves backend event labels and order.

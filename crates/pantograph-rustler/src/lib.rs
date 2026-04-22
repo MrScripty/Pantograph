@@ -37,10 +37,7 @@ use std::sync::Arc;
 
 use rustler::{Atom, Encoder, Env, NifResult, OwnedEnv, ResourceArc, Term};
 
-use node_engine::{
-    EventSink, OrchestrationGraph, OrchestrationStore, TaskExecutor, WorkflowExecutor,
-    WorkflowGraph,
-};
+use node_engine::{EventSink, TaskExecutor, WorkflowExecutor, WorkflowGraph};
 
 // Force the linker to include workflow-nodes object files,
 // which contain `inventory::submit!()` statics for built-in node types.
@@ -51,6 +48,7 @@ mod callback_bridge;
 mod elixir_data_graph_executor;
 #[cfg(feature = "frontend-http")]
 mod frontend_http_nifs;
+mod orchestration_store_nifs;
 mod resource_registration;
 mod resources;
 mod type_parsing_contract;
@@ -707,19 +705,13 @@ fn callback_error(callback_id: String, error_message: String) -> NifResult<Atom>
 /// Create a new in-memory orchestration store.
 #[rustler::nif]
 fn orchestration_store_new() -> ResourceArc<OrchestrationStoreResource> {
-    ResourceArc::new(OrchestrationStoreResource {
-        store: Arc::new(tokio::sync::RwLock::new(OrchestrationStore::new())),
-    })
+    orchestration_store_nifs::new_store()
 }
 
 /// Create a persistent orchestration store.
 #[rustler::nif]
 fn orchestration_store_with_persistence(path: String) -> ResourceArc<OrchestrationStoreResource> {
-    ResourceArc::new(OrchestrationStoreResource {
-        store: Arc::new(tokio::sync::RwLock::new(
-            OrchestrationStore::with_persistence(path),
-        )),
-    })
+    orchestration_store_nifs::with_persistence(path)
 }
 
 /// Insert an orchestration graph into the store (as JSON).
@@ -728,15 +720,7 @@ fn orchestration_store_insert(
     resource: ResourceArc<OrchestrationStoreResource>,
     graph_json: String,
 ) -> NifResult<Atom> {
-    let graph: OrchestrationGraph = serde_json::from_str(&graph_json)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
-
-    let mut guard = resource.store.blocking_write();
-    guard
-        .insert_graph(graph)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Insert error: {}", e))))?;
-
-    Ok(atoms::ok())
+    orchestration_store_nifs::insert(resource, graph_json)
 }
 
 /// Get an orchestration graph from the store by ID.
@@ -745,16 +729,7 @@ fn orchestration_store_get(
     resource: ResourceArc<OrchestrationStoreResource>,
     graph_id: String,
 ) -> NifResult<Option<String>> {
-    let guard = resource.store.blocking_read();
-    match guard.get_graph(&graph_id) {
-        Some(graph) => {
-            let json = serde_json::to_string(graph).map_err(|e| {
-                rustler::Error::Term(Box::new(format!("Serialization error: {}", e)))
-            })?;
-            Ok(Some(json))
-        }
-        None => Ok(None),
-    }
+    orchestration_store_nifs::get(resource, graph_id)
 }
 
 /// List all orchestration graph metadata.
@@ -762,17 +737,7 @@ fn orchestration_store_get(
 fn orchestration_store_list(
     resource: ResourceArc<OrchestrationStoreResource>,
 ) -> Vec<ElixirOrchestrationMetadata> {
-    let guard = resource.store.blocking_read();
-    guard
-        .list_graphs()
-        .into_iter()
-        .map(|m| ElixirOrchestrationMetadata {
-            id: m.id,
-            name: m.name,
-            description: m.description,
-            node_count: m.node_count as u32,
-        })
-        .collect()
+    orchestration_store_nifs::list(resource)
 }
 
 /// Remove an orchestration graph from the store.
@@ -781,11 +746,7 @@ fn orchestration_store_remove(
     resource: ResourceArc<OrchestrationStoreResource>,
     graph_id: String,
 ) -> NifResult<bool> {
-    let mut guard = resource.store.blocking_write();
-    guard
-        .remove_graph(&graph_id)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Remove error: {}", e))))?;
-    Ok(true)
+    orchestration_store_nifs::remove(resource, graph_id)
 }
 
 // ============================================================================
@@ -1464,7 +1425,7 @@ mod tests {
 
     #[test]
     fn test_orchestration_store_roundtrip() {
-        let store = OrchestrationStore::new();
+        let store = node_engine::OrchestrationStore::new();
         assert!(store.list_graphs().is_empty());
     }
 
