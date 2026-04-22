@@ -348,8 +348,9 @@ Tasks:
   coverage now lives in `workflow/tests/session_queue.rs`. Workflow I/O
   discovery and validation coverage now lives in `workflow/tests/workflow_io.rs`,
   and workflow preflight facade coverage now lives in
-  `workflow/tests/workflow_preflight.rs`, continuing the behavior-area split
-  for the extracted test module.
+  `workflow/tests/workflow_preflight.rs`. Runtime preflight policy coverage now
+  lives in `workflow/tests/runtime_preflight.rs`, continuing the behavior-area
+  split for the extracted test module.
 - Split `crates/pantograph-embedded-runtime/src/lib.rs` into runtime host,
   workflow sessions, registry lifecycle, diagnostics projection, model deps,
   and test modules.

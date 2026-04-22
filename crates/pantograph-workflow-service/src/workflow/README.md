@@ -151,6 +151,7 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
 ## Testing
 ```bash
 cargo test -p pantograph-workflow-service runtime_preflight
+cargo test -p pantograph-workflow-service workflow::tests::runtime_preflight
 cargo test -p pantograph-workflow-service session_runtime
 cargo test -p pantograph-workflow-service workflow_io
 cargo test -p pantograph-workflow-service workflow_get_io

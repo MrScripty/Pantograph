@@ -11,6 +11,7 @@ can stay reviewable as more tests are split.
 ## Contents
 | File | Description |
 | ---- | ----------- |
+| `runtime_preflight.rs` | Runtime preflight matching tests for selected runtime precedence, fallback readiness, backend aliases, and selected-version readiness context. |
 | `scheduler_snapshot.rs` | Scheduler snapshot facade tests covering workflow/edit-session snapshot shape, trace attribution, admission diagnostics, and runtime-registry diagnostics provider merging. |
 | `session_queue.rs` | Session queue item metadata, admission outcome, warm reuse, queue-position, and starvation protection tests. |
 | `workflow_io.rs` | Workflow I/O discovery and validation tests for bindable input/output nodes and port contracts. |
@@ -76,6 +77,7 @@ cargo test -p pantograph-workflow-service workflow_get_scheduler_snapshot
 cargo test -p pantograph-workflow-service workflow_session_queue
 cargo test -p pantograph-workflow-service workflow_get_io
 cargo test -p pantograph-workflow-service workflow_preflight
+cargo test -p pantograph-workflow-service workflow::tests::runtime_preflight
 ```
 
 ## Testing
@@ -84,4 +86,5 @@ cargo test -p pantograph-workflow-service workflow_get_scheduler_snapshot
 cargo test -p pantograph-workflow-service workflow_session_queue
 cargo test -p pantograph-workflow-service workflow_get_io
 cargo test -p pantograph-workflow-service workflow_preflight
+cargo test -p pantograph-workflow-service workflow::tests::runtime_preflight
 ```
