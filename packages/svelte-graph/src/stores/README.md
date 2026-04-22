@@ -17,6 +17,7 @@ metadata, execution overlays, and transient connection-intent state.
 | `inferenceSettingsPorts.ts` | Builds additive inference-setting port definitions, merges upstream schema with promoted inference-node defaults, and de-duplicates settings that should flow only through `inference_settings`. |
 | `runtimeData.ts` | Removes transient execution data from nodes without touching persisted configuration fields. |
 | `workflowExecutionEvents.ts` | Reduces backend-owned workflow execution events into read-only execution overlays and downstream runtime-data mirrors for GUI consumers. |
+| `workflowStoreGraphQueries.ts` | Projects store-owned graph nodes and edges into group indexes, connected-node lists, and node bounds. |
 
 ## Problem
 The graph editor needs a shared state boundary that can serve both UI rendering
@@ -73,6 +74,9 @@ same backend-session rule as other structural graph mutations:
 `createWorkflowStores.ts` applies the returned graph mutation snapshot and
 derives `nodeGroups` from group node data rather than rewriting group nodes or
 boundary edges locally.
+Store graph query helpers live in `workflowStoreGraphQueries.ts`, keeping group
+extraction, selected-group lookup, connected-node projection, and node bounds
+calculation outside the store facade while preserving the existing store API.
 
 ## Alternatives Rejected
 - Store connection intent only inside `WorkflowGraph.svelte`.
@@ -86,6 +90,8 @@ boundary edges locally.
   stores only from the returned graph snapshot.
 - Node group stores are derived from backend graph snapshots; group create,
   ungroup, and port edits must not synthesize nodes or boundary edges locally.
+- `workflowStoreGraphQueries.ts` owns group extraction, selected-group lookup,
+  connected-node projection, and node bounds calculation for store consumers.
 - `workflowGraph` must reflect the latest nodes, edges, and derived graph
   fingerprint after every applied graph snapshot.
 - `connectionIntent` is not persisted; it must reset on graph mutation,

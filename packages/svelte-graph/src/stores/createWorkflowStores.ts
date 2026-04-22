@@ -24,6 +24,12 @@ import { resolveNodeDefinitionOverlay } from './definitionOverlay.ts';
 import { applySelectedNodeIds } from '../workflowSelection.ts';
 import { applyWorkflowGraphMutationResponse } from './workflowGraphMutationResponse.ts';
 import type { WorkflowGraphMutationResponse } from '../types/workflow.js';
+import {
+  extractWorkflowNodeGroups,
+  findWorkflowGroupContainingNodeIds,
+  getWorkflowConnectedNodes,
+  getWorkflowNodesBounds,
+} from './workflowStoreGraphQueries.ts';
 
 interface InferenceParamSchema {
   key: string;
@@ -135,43 +141,6 @@ export function createWorkflowStores(
   const connectionIntent = writable<ConnectionIntentState | null>(null);
   let activeSessionId: string | null = null;
 
-  function isNodeGroupData(value: unknown): value is NodeGroup {
-    if (typeof value !== 'object' || value === null) {
-      return false;
-    }
-    const candidate = value as Partial<NodeGroup>;
-    return (
-      typeof candidate.id === 'string' &&
-      typeof candidate.name === 'string' &&
-      Array.isArray(candidate.nodes) &&
-      Array.isArray(candidate.edges) &&
-      Array.isArray(candidate.exposed_inputs) &&
-      Array.isArray(candidate.exposed_outputs)
-    );
-  }
-
-  function extractNodeGroups(graphNodes: Node[]): Map<string, NodeGroup> {
-    const groups = new Map<string, NodeGroup>();
-    for (const node of graphNodes) {
-      const group = node.data?.group;
-      if (isNodeGroupData(group)) {
-        groups.set(group.id, group);
-      }
-    }
-    return groups;
-  }
-
-  function findGroupContainingNodeIds(groups: Map<string, NodeGroup>, nodeIds: string[]) {
-    const selected = new Set(nodeIds);
-    for (const group of groups.values()) {
-      const groupNodeIds = new Set(group.nodes.map((node) => node.id));
-      if (selected.size === groupNodeIds.size && nodeIds.every((nodeId) => groupNodeIds.has(nodeId))) {
-        return group;
-      }
-    }
-    return null;
-  }
-
   // --- Derived stores ---
   const workflowGraph = derived(
     [nodes, edges, derivedGraph],
@@ -250,7 +219,7 @@ export function createWorkflowStores(
     const { graphNodes, graphEdges, graph: nextGraph } = materializeWorkflowGraph(graph);
     nodes.set(graphNodes);
     edges.set(graphEdges);
-    nodeGroups.set(extractNodeGroups(graphNodes));
+    nodeGroups.set(extractWorkflowNodeGroups(graphNodes));
     if (typeof options?.metadata !== 'undefined') {
       workflowMetadata.set(options.metadata);
     }
@@ -346,31 +315,11 @@ export function createWorkflowStores(
   }
 
   function getConnectedNodes(nodeId: string): { inputs: Node[]; outputs: Node[] } {
-    const currentEdges = get(edges);
-    const currentNodes = get(nodes);
-    const inputNodeIds = currentEdges.filter((e) => e.target === nodeId).map((e) => e.source);
-    const outputNodeIds = currentEdges.filter((e) => e.source === nodeId).map((e) => e.target);
-    return {
-      inputs: currentNodes.filter((n) => inputNodeIds.includes(n.id)),
-      outputs: currentNodes.filter((n) => outputNodeIds.includes(n.id)),
-    };
+    return getWorkflowConnectedNodes(get(nodes), get(edges), nodeId);
   }
 
   function getNodesBounds(nodeIds: string[]) {
-    const currentNodes = get(nodes);
-    const targetNodes = currentNodes.filter((n) => nodeIds.includes(n.id));
-    if (targetNodes.length === 0) return null;
-
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const node of targetNodes) {
-      const width = (node.measured?.width || node.width || 200) as number;
-      const height = (node.measured?.height || node.height || 100) as number;
-      minX = Math.min(minX, node.position.x);
-      minY = Math.min(minY, node.position.y);
-      maxX = Math.max(maxX, node.position.x + width);
-      maxY = Math.max(maxY, node.position.y + height);
-    }
-    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+    return getWorkflowNodesBounds(get(nodes), nodeIds);
   }
 
   // --- Edge actions ---
@@ -561,7 +510,7 @@ export function createWorkflowStores(
       applyWorkflowGraphMutationResponse(response, {
         setNodeExecutionState,
       });
-      return findGroupContainingNodeIds(get(nodeGroups), nodeIds);
+      return findWorkflowGroupContainingNodeIds(get(nodeGroups), nodeIds);
     } catch (error) {
       console.error('[workflowStores] Failed to create group:', error);
       return null;

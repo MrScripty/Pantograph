@@ -575,6 +575,12 @@ Tasks:
   geometry, commit eligibility, and preview flag projection helpers now live inside
   `src/components/edgeInsertInteraction.ts`. App edge-insert preview marker
   rendering now lives in `src/components/WorkflowEdgeInsertPreviewMarker.svelte`.
+  Package workflow store graph query helpers for group extraction, group lookup,
+  connected-node projection, and node bounds now live in
+  `packages/svelte-graph/src/stores/workflowStoreGraphQueries.ts`, with unit
+  coverage in
+  `packages/svelte-graph/src/stores/workflowStoreGraphQueries.test.ts`, while
+  `createWorkflowStores.ts` preserves the public store facade.
   App palette drag eligibility, drag payload parsing, and graph-space drop
   projection now live in `src/components/workflowPaletteDrag.ts`, with unit
   coverage in `src/components/workflowPaletteDrag.test.ts`. App orchestration
