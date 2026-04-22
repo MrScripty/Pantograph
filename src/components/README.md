@@ -14,6 +14,8 @@ architecture views on top of the shared editor.
 | `WorkflowEdgeInsertPreviewMarker.svelte` | Renders the cursor-anchored palette edge-insert preview marker. |
 | `workflowContainerBoundary.ts` | Computes orchestration boundary extents and viewport visibility for graph zoom-out transitions. |
 | `workflowContainerBoundary.test.ts` | Unit coverage for orchestration boundary bounds and visibility projection. |
+| `workflowContainerSelection.ts` | Resolves app orchestration boundary keyboard actions. |
+| `workflowContainerSelection.test.ts` | Unit coverage for app orchestration boundary keyboard action mapping. |
 | `workflowConnections.ts` | Computes app graph connection validation, graph-edge normalization, and backend candidate projection. |
 | `workflowConnections.test.ts` | Unit coverage for app graph connection helper behavior. |
 | `edgeInsertInteraction.ts` | Computes palette edge-insert hover state, preview refresh decisions, and rendered-edge hit testing. |
@@ -92,6 +94,9 @@ The app workflow graph delegates orchestration boundary overlay rendering to
 selection state, and orchestration transition ownership.
 Zoom-out transition decisions also live in `workflowContainerBoundary.ts`; the
 parent only applies the returned transition action.
+Orchestration boundary keyboard action mapping lives in
+`workflowContainerSelection.ts`, while the graph applies the selected-state and
+view-transition side effects.
 Minimap color projection lives in `workflowMiniMap.ts` so category-to-color
 mapping remains testable outside the graph component.
 The app SvelteFlow node and edge registry lives in `workflowGraphTypes.ts` so
@@ -167,6 +172,8 @@ side effects.
   not read graph state or call backend APIs directly.
 - `workflowContainerBoundary.ts` must stay DOM-free so boundary projection
   and zoom-out transition decisions remain unit-testable.
+- `workflowContainerSelection.ts` must stay side-effect-free so boundary
+  keyboard policy can be tested without SvelteFlow or app stores.
 - `workflowMiniMap.ts` must preserve backend category color semantics and keep
   group-node coloring ahead of category coloring.
 - `workflowGraphTypes.ts` must include every node type referenced by bundled

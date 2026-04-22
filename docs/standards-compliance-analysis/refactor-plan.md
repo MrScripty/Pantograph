@@ -530,7 +530,10 @@ Tasks:
   rendering now lives in `src/components/WorkflowEdgeInsertPreviewMarker.svelte`.
   App palette drag eligibility, drag payload parsing, and graph-space drop
   projection now live in `src/components/workflowPaletteDrag.ts`, with unit
-  coverage in `src/components/workflowPaletteDrag.test.ts`.
+  coverage in `src/components/workflowPaletteDrag.test.ts`. App orchestration
+  boundary keyboard action mapping now lives in
+  `src/components/workflowContainerSelection.ts`, with unit coverage in
+  `src/components/workflowContainerSelection.test.ts`.
 - Split `DependencyEnvironmentNode.svelte` into data parsing, activity log,
   mode controls, override editor, status panels, and command controls.
   Progress: dependency environment DTOs now live in

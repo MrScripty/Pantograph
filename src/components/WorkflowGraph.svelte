@@ -100,6 +100,7 @@
     resolveWorkflowContainerTransitionDecision,
     type WorkflowContainerViewport,
   } from './workflowContainerBoundary.ts';
+  import { resolveWorkflowContainerKeyboardAction } from './workflowContainerSelection.ts';
   import { getWorkflowMiniMapNodeColor } from './workflowMiniMap.ts';
   import {
     isWorkflowPaletteEdgeInsertEnabled,
@@ -217,7 +218,6 @@
 
   function toggleContainerSelection() {
     containerSelected = !containerSelected;
-    console.log('[WorkflowGraph] Container clicked, selected:', containerSelected);
   }
 
   // Deselect container when clicking on the graph background
@@ -1119,18 +1119,19 @@
   let ctrlPressed = $state(false);
 
   function handleKeyDown(e: KeyboardEvent) {
-    // Tab transitions to orchestration view when container is selected
-    if (e.key === 'Tab') {
-      console.log('[WorkflowGraph] Tab pressed, containerSelected:', containerSelected);
-      if (containerSelected) {
-        e.preventDefault();
-        containerSelected = false;
-        console.log('[WorkflowGraph] Transitioning to orchestration view');
-        zoomToOrchestration();
-      }
+    const containerAction = resolveWorkflowContainerKeyboardAction({
+      key: e.key,
+      containerSelected,
+    });
+
+    if (containerAction.type === 'zoom-to-orchestration') {
+      e.preventDefault();
+      containerSelected = false;
+      zoomToOrchestration();
+      return;
     }
-    // Escape deselects the container
-    if (e.key === 'Escape' && containerSelected) {
+
+    if (containerAction.type === 'deselect-container') {
       e.preventDefault();
       containerSelected = false;
     }
