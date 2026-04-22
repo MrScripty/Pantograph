@@ -12,6 +12,7 @@ can stay reviewable as more tests are split.
 | File | Description |
 | ---- | ----------- |
 | `contracts.rs` | Workflow DTO serialization and service error-envelope contract tests. |
+| `fixtures.rs` | Shared workflow test hosts, runtime capabilities, scheduler diagnostics providers, and helper constructors. |
 | `runtime_preflight.rs` | Runtime preflight matching tests for selected runtime precedence, fallback readiness, backend aliases, and selected-version readiness context. |
 | `scheduler_snapshot.rs` | Scheduler snapshot facade tests covering workflow/edit-session snapshot shape, trace attribution, admission diagnostics, and runtime-registry diagnostics provider merging. |
 | `session_admission.rs` | Runtime capacity and runtime admission wait tests for queued session runs. |
@@ -58,7 +59,8 @@ Use `workflow/tests/` for behavior-specific child modules under the parent
 ## Revisit Triggers
 - Shared mocks become stable enough to move into a dedicated test-support
   module.
-- `workflow/tests.rs` stops owning any behavior-specific test groups.
+- `workflow/tests.rs` stops owning shared fixture definitions or any
+  behavior-specific test groups.
 - Scheduler, runtime, or graph tests need fixture builders that would simplify
   multiple child modules.
 
