@@ -259,13 +259,14 @@ Verification:
 Goal: Make startup, shutdown, process, and background tasks explicitly owned.
 
 Tasks:
-- [ ] Extract `src-tauri/src/main.rs` into a small composition facade and focused
+- [x] Extract `src-tauri/src/main.rs` into a small composition facade and focused
   setup/shutdown modules.
   Progress: window-close shutdown now lives in `src-tauri/src/app_lifecycle.rs`,
   giving gateway shutdown, stale session worker shutdown, loaded runtime
   invalidation, and runtime-registry sync a focused lifecycle owner outside the
-  command registration root. Startup now flows through `run_app()` so fatal
-  composition errors are explicit rather than hidden in `main()`.
+  command registration root. Startup now flows through `app_setup::run_app()`
+  so fatal composition errors are explicit rather than hidden in `main()`, and
+  `src-tauri/src/main.rs` is now a thin launcher/module declaration surface.
 - [x] Replace production `expect(...)` calls in startup/setup/shutdown with typed
   errors, logged context, or documented invariant-only assertions.
   Status: project-root resolution, Tauri app-data resolution, workflow-session
