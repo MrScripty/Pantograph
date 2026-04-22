@@ -11,6 +11,11 @@ export interface WorkflowContainerViewport {
   zoom: number;
 }
 
+export interface WorkflowContainerTransitionDecision {
+  transitionTriggered: boolean;
+  shouldZoomToOrchestration: boolean;
+}
+
 interface WorkflowContainerNodeLike {
   position: {
     x: number;
@@ -74,4 +79,44 @@ export function isWorkflowContainerFullyVisible(
     screenX + screenW <= screenWidth - visibilityMargin &&
     screenY + screenH <= screenHeight - visibilityMargin
   );
+}
+
+export function resolveWorkflowContainerTransitionDecision(params: {
+  bounds: WorkflowContainerBounds | null;
+  viewport: WorkflowContainerViewport;
+  screenWidth: number | null;
+  screenHeight: number | null;
+  hasCurrentOrchestration: boolean;
+  transitionTriggered: boolean;
+}): WorkflowContainerTransitionDecision {
+  if (
+    !params.bounds ||
+    params.screenWidth === null ||
+    params.screenHeight === null ||
+    !params.hasCurrentOrchestration
+  ) {
+    return {
+      transitionTriggered: params.transitionTriggered,
+      shouldZoomToOrchestration: false,
+    };
+  }
+
+  const fullyVisible = isWorkflowContainerFullyVisible(
+    params.bounds,
+    params.viewport,
+    params.screenWidth,
+    params.screenHeight,
+  );
+
+  if (fullyVisible) {
+    return {
+      transitionTriggered: true,
+      shouldZoomToOrchestration: !params.transitionTriggered,
+    };
+  }
+
+  return {
+    transitionTriggered: false,
+    shouldZoomToOrchestration: false,
+  };
 }

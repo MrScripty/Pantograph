@@ -93,8 +93,8 @@
   import WorkflowContainerBoundary from './WorkflowContainerBoundary.svelte';
   import WorkflowEdgeInsertPreviewMarker from './WorkflowEdgeInsertPreviewMarker.svelte';
   import {
-    isWorkflowContainerFullyVisible,
     resolveWorkflowContainerBounds,
+    resolveWorkflowContainerTransitionDecision,
   } from './workflowContainerBoundary.ts';
   import { getWorkflowMiniMapNodeColor } from './workflowMiniMap.ts';
   import { workflowEdgeTypes, workflowNodeTypes } from './workflowGraphTypes.ts';
@@ -162,33 +162,20 @@
 
   // Handle viewport changes to detect when to transition to orchestration view
   function handleMoveEnd(_event: MouseEvent | TouchEvent | null, viewport: { x: number; y: number; zoom: number }) {
-    // Always update current viewport for border rendering
     currentViewport = viewport;
 
-    // Debug logging to diagnose zoom-out transition
-    console.log('[WorkflowGraph] handleMoveEnd:', {
-      hasContainerBounds: !!containerBounds,
-      hasContainerElement: !!containerElement,
-      currentOrchestration: $currentOrchestration,
-      zoom: viewport.zoom,
+    const decision = resolveWorkflowContainerTransitionDecision({
+      bounds: containerBounds,
+      viewport,
+      screenWidth: containerElement?.clientWidth ?? null,
+      screenHeight: containerElement?.clientHeight ?? null,
+      hasCurrentOrchestration: $currentOrchestration !== null,
+      transitionTriggered,
     });
 
-    if (!containerBounds || !containerElement || $currentOrchestration === null) return;
-
-    const screenWidth = containerElement.clientWidth;
-    const screenHeight = containerElement.clientHeight;
-
-    const fullyVisible = isWorkflowContainerFullyVisible(containerBounds, viewport, screenWidth, screenHeight);
-
-    // Trigger transition when container becomes fully visible
-    if (fullyVisible && !transitionTriggered) {
-      transitionTriggered = true;
+    transitionTriggered = decision.transitionTriggered;
+    if (decision.shouldZoomToOrchestration) {
       zoomToOrchestration();
-    }
-
-    // Reset trigger when zoomed back in (container not fully visible)
-    if (!fullyVisible) {
-      transitionTriggered = false;
     }
   }
 

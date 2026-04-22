@@ -88,6 +88,8 @@ The app workflow graph delegates orchestration boundary overlay rendering to
 `WorkflowContainerBoundary.svelte` and boundary math to
 `workflowContainerBoundary.ts`, while the parent keeps viewport tracking,
 selection state, and orchestration transition ownership.
+Zoom-out transition decisions also live in `workflowContainerBoundary.ts`; the
+parent only applies the returned transition action.
 Minimap color projection lives in `workflowMiniMap.ts` so category-to-color
 mapping remains testable outside the graph component.
 The app SvelteFlow node and edge registry lives in `workflowGraphTypes.ts` so
@@ -154,7 +156,7 @@ to app-owned state and backend side effects.
 - `WorkflowEdgeInsertPreviewMarker.svelte` owns only marker presentation and must
   not read graph state or call backend APIs directly.
 - `workflowContainerBoundary.ts` must stay DOM-free so boundary projection
-  remains unit-testable.
+  and zoom-out transition decisions remain unit-testable.
 - `workflowMiniMap.ts` must preserve backend category color semantics and keep
   group-node coloring ahead of category coloring.
 - `workflowGraphTypes.ts` must include every node type referenced by bundled

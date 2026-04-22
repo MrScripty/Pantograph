@@ -494,7 +494,9 @@ Tasks:
   `WorkflowGraph.svelte` retains viewport tracking and selection state. Boundary
   extent and viewport visibility projection now lives in
   `src/components/workflowContainerBoundary.ts`, with unit coverage in
-  `src/components/workflowContainerBoundary.test.ts`. App workflow minimap color
+  `src/components/workflowContainerBoundary.test.ts`. App workflow zoom-out
+  transition decisions now also live in `src/components/workflowContainerBoundary.ts`,
+  removing inline move-end debug policy from `WorkflowGraph.svelte`. App workflow minimap color
   projection now lives in `src/components/workflowMiniMap.ts`, with unit
   coverage in `src/components/workflowMiniMap.test.ts`. App workflow SvelteFlow
   node and edge type registration now lives in
