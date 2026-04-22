@@ -12,18 +12,20 @@
     appendDependencyActivityLogLine,
     applyDependencyEnvironmentActionNodeData,
     buildDependencyEnvironmentNodeData,
+    clearDependencyBindingOverrides,
+    clearDependencyRequirementOverrides,
     createDependencyEnvironmentNodeDataState,
     countDependencyBindingPatches,
     countDependencyRequirementPatches,
     dependencyBadgeFor,
     filterDependencyEnvironmentBindings,
-    getPatchFrom,
     hasDependencyBindingOverrideFields,
     hasDependencyRequirementOverrideFields,
     isDependencyEnvironmentBindingSelected,
-    isPatchTarget,
     matchesDependencyActivityEvent,
     mergeOverridePatches,
+    readDependencyExtraIndexUrls,
+    readDependencyStringOverrideField,
     renderDependencyActivityEvent,
     resolveDependencyEnvironmentUpstreamState,
     toggleDependencyEnvironmentAllBindings,
@@ -197,14 +199,6 @@
     return renderDependencyActivityEvent(payload);
   }
 
-  function getEffectivePatch(
-    bindingId: string,
-    scope: 'binding' | 'requirement',
-    requirementName?: string
-  ): DependencyOverridePatchV1 | undefined {
-    return getPatchFrom(effectiveManualOverrides, bindingId, scope, requirementName);
-  }
-
   function setStringOverrideField(
     bindingId: string,
     scope: 'binding' | 'requirement',
@@ -245,18 +239,21 @@
     requirementName: string | undefined,
     field: StringOverrideField
   ): string {
-    const patch = getEffectivePatch(bindingId, scope, requirementName);
-    return (patch?.fields[field] ?? '').toString();
+    return readDependencyStringOverrideField(
+      effectiveManualOverrides,
+      bindingId,
+      scope,
+      requirementName,
+      field
+    );
   }
 
   function getExtraIndexUrls(bindingId: string, requirementName: string): string {
-    const patch = getEffectivePatch(bindingId, 'requirement', requirementName);
-    const urls = patch?.fields.extra_index_urls ?? [];
-    return urls.join(', ');
+    return readDependencyExtraIndexUrls(effectiveManualOverrides, bindingId, requirementName);
   }
 
   function clearBindingOverrides(bindingId: string) {
-    manualOverrides = manualOverrides.filter((patch) => patch.binding_id !== bindingId);
+    manualOverrides = clearDependencyBindingOverrides(manualOverrides, bindingId);
     persistNodeState();
   }
 
@@ -299,8 +296,10 @@
   }
 
   function clearRequirementOverrides(bindingId: string, requirementName: string) {
-    manualOverrides = manualOverrides.filter(
-      (patch) => !isPatchTarget(patch, bindingId, 'requirement', requirementName)
+    manualOverrides = clearDependencyRequirementOverrides(
+      manualOverrides,
+      bindingId,
+      requirementName
     );
     persistNodeState();
   }

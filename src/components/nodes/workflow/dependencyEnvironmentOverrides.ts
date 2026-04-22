@@ -157,6 +157,44 @@ export function hasDependencyRequirementOverrideFields(
   return patch ? hasOverrideFields(patch.fields) : false;
 }
 
+export function readDependencyStringOverrideField(
+  patches: DependencyOverridePatchV1[],
+  bindingId: string,
+  scope: 'binding' | 'requirement',
+  requirementName: string | undefined,
+  field: StringOverrideField,
+): string {
+  const patch = getPatchFrom(patches, bindingId, scope, requirementName);
+  return (patch?.fields[field] ?? '').toString();
+}
+
+export function readDependencyExtraIndexUrls(
+  patches: DependencyOverridePatchV1[],
+  bindingId: string,
+  requirementName: string,
+): string {
+  const patch = getPatchFrom(patches, bindingId, 'requirement', requirementName);
+  const urls = patch?.fields.extra_index_urls ?? [];
+  return urls.join(', ');
+}
+
+export function clearDependencyBindingOverrides(
+  patches: DependencyOverridePatchV1[],
+  bindingId: string,
+): DependencyOverridePatchV1[] {
+  return patches.filter((patch) => patch.binding_id !== bindingId);
+}
+
+export function clearDependencyRequirementOverrides(
+  patches: DependencyOverridePatchV1[],
+  bindingId: string,
+  requirementName: string,
+): DependencyOverridePatchV1[] {
+  return patches.filter(
+    (patch) => !isPatchTarget(patch, bindingId, 'requirement', requirementName)
+  );
+}
+
 export function upsertStringOverrideField(
   patches: DependencyOverridePatchV1[],
   bindingId: string,

@@ -615,7 +615,7 @@ Tasks:
   coverage in `dependencyEnvironmentState.test.ts`. Binding selection filtering
   and toggles now live in
   `src/components/nodes/workflow/dependencyEnvironmentSelection.ts`; override
-  summary counts and local override checks now live in
+  display reads, scope clears, summary counts, and local override checks now live in
   `src/components/nodes/workflow/dependencyEnvironmentOverrides.ts`, with unit
   coverage in `dependencyEnvironmentState.test.ts`.
 - Split `pantograph-uniffi` and `pantograph-rustler` facades by exported surface

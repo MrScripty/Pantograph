@@ -21,7 +21,7 @@ to the workflow graph runtime instead of being spread across generic canvas code
 | `dependencyEnvironmentActions.ts` | Builds backend action payloads from upstream model state and dependency override selections. |
 | `dependencyEnvironmentDisplay.ts` | Formats dependency badges, backend codes, and activity-log events. |
 | `dependencyEnvironmentNodeState.ts` | Projects dependency environment node-local state, persistence payloads, action responses, and retained activity logs. |
-| `dependencyEnvironmentOverrides.ts` | Parses, merges, looks up, and mutates dependency override patches. |
+| `dependencyEnvironmentOverrides.ts` | Parses, merges, looks up, reads, clears, summarizes, and mutates dependency override patches. |
 | `dependencyEnvironmentSelection.ts` | Filters and toggles dependency binding selection state for the environment node UI. |
 | `dependencyEnvironmentSources.ts` | Resolves connected upstream model, requirement, and manual override inputs from workflow graph state. |
 | `dependencyEnvironmentState.ts` | Re-exports the dependency environment helper modules for stable component and test imports. |
@@ -87,8 +87,9 @@ component, while dependency contracts and pure override state helpers live in
 `dependencyEnvironmentNodeState.ts`, `dependencyEnvironmentOverrides.ts`,
 `dependencyEnvironmentSelection.ts`, `dependencyEnvironmentDisplay.ts`, and
 `dependencyEnvironmentSources.ts` so payload projection, node-local state
-projection, graph-input projection, binding selection, parsing, merge, and
-formatting behavior can be tested without mounting the node.
+projection, graph-input projection, binding selection, override reads and
+scope clears, parsing, merge, and formatting behavior can be tested without
+mounting the node.
 `dependencyEnvironmentState.ts` remains as a stable re-export surface for
 component and test imports.
 The activity log panel lives in `DependencyEnvironmentActivityLog.svelte` so
@@ -134,6 +135,9 @@ node persistence.
 - `DependencyEnvironmentNode.svelte` must keep dependency override parsing and
   merge semantics aligned with the backend patch contract in
   `dependencyEnvironmentOverrides.ts`.
+- `dependencyEnvironmentOverrides.ts` owns displayed override values, scope
+  clears, summary counts, and local override checks; the Svelte component must
+  only assign returned patch arrays and persist state.
 - `dependencyEnvironmentSelection.ts` owns binding filtering and selection
   toggles; the Svelte component must not duplicate selected-binding rules
   inline.

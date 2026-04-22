@@ -6,6 +6,8 @@ import {
   appendDependencyActivityLogLine,
   applyDependencyEnvironmentActionNodeData,
   buildDependencyEnvironmentNodeData,
+  clearDependencyBindingOverrides,
+  clearDependencyRequirementOverrides,
   countDependencyBindingPatches,
   countDependencyRequirementPatches,
   createDependencyEnvironmentNodeDataState,
@@ -22,6 +24,8 @@ import {
   matchesDependencyActivityEvent,
   mergeOverridePatches,
   parseOverridePatches,
+  readDependencyExtraIndexUrls,
+  readDependencyStringOverrideField,
   renderDependencyActivityEvent,
   resolveDependencyEnvironmentUpstreamState,
   toggleDependencyEnvironmentAllBindings,
@@ -188,6 +192,55 @@ test('dependency override summary helpers count and classify local patches', () 
   assert.equal(hasDependencyBindingOverrideFields(patches, 'binding-a'), true);
   assert.equal(hasDependencyRequirementOverrideFields(patches, 'binding-a', 'torch'), true);
   assert.equal(hasDependencyRequirementOverrideFields(patches, 'binding-a', 'numpy'), false);
+  assert.equal(
+    readDependencyStringOverrideField(
+      patches,
+      'binding-a',
+      'binding',
+      undefined,
+      'python_executable',
+    ),
+    '/usr/bin/python3',
+  );
+});
+
+test('dependency override read and clear helpers preserve scope boundaries', () => {
+  const patches = [
+    {
+      contract_version: 1,
+      binding_id: 'binding-a',
+      scope: 'binding' as const,
+      fields: { python_executable: '/usr/bin/python3' },
+    },
+    {
+      contract_version: 1,
+      binding_id: 'binding-a',
+      scope: 'requirement' as const,
+      requirement_name: 'torch',
+      fields: {
+        extra_index_urls: ['https://a.example/simple', 'https://b.example/simple'],
+      },
+    },
+    {
+      contract_version: 1,
+      binding_id: 'binding-b',
+      scope: 'requirement' as const,
+      requirement_name: 'torch',
+      fields: { index_url: 'https://packages.example/simple' },
+    },
+  ];
+
+  assert.equal(
+    readDependencyExtraIndexUrls(patches, 'binding-a', 'torch'),
+    'https://a.example/simple, https://b.example/simple',
+  );
+  assert.equal(clearDependencyBindingOverrides(patches, 'binding-a').length, 1);
+  assert.deepEqual(
+    clearDependencyRequirementOverrides(patches, 'binding-a', 'torch').map(
+      (patch) => `${patch.binding_id}:${patch.scope}:${patch.requirement_name ?? ''}`,
+    ),
+    ['binding-a:binding:', 'binding-b:requirement:torch'],
+  );
 });
 
 test('dependency binding selection helpers filter and toggle bindings', () => {
