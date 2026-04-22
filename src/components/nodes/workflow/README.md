@@ -14,6 +14,7 @@ to the workflow graph runtime instead of being spread across generic canvas code
 | `DiffusionInferenceNode.svelte` | Shows execution and dependency state for process-backed diffusion image generation. |
 | `DependencyEnvironmentActivityLog.svelte` | Renders the dependency environment activity log and owns log auto-scroll behavior. |
 | `DependencyEnvironmentNode.svelte` | Presents dependency resolution, check, install, activity, and override controls for model-backed environment setup. |
+| `DependencyEnvironmentStatusPanel.svelte` | Renders dependency state badges, status messages, and command buttons for dependency actions. |
 | `dependencyEnvironmentState.ts` | Defines dependency environment contracts and pure override parsing, merge, label, and lookup helpers. |
 | `dependencyEnvironmentState.test.ts` | Unit coverage for dependency environment override parsing, merge, lookup, and label helpers. |
 | `ExpandSettingsNode.svelte` | Displays the effective passthrough value for each model-derived inference setting while the shared base node renders matching override input/output handles from dynamic port metadata. |
@@ -77,6 +78,9 @@ without mounting the node.
 The activity log panel lives in `DependencyEnvironmentActivityLog.svelte` so
 scroll handling and copyable log styling stay separate from dependency action
 state.
+The dependency action status panel lives in
+`DependencyEnvironmentStatusPanel.svelte`, while the parent keeps backend action
+dispatch and persistence ownership.
 
 ## Alternatives Rejected
 - Reset audio output state only by remounting the workflow view.
@@ -108,6 +112,8 @@ state.
   `dependencyEnvironmentState.ts`.
 - `DependencyEnvironmentActivityLog.svelte` owns log auto-scroll behavior and
   must not trigger graph drag or pan gestures.
+- `DependencyEnvironmentStatusPanel.svelte` emits command callbacks without
+  invoking backend APIs directly.
 - Image and media preview controls must expose accessible names even when the
   visible content is an image or icon rather than text.
 

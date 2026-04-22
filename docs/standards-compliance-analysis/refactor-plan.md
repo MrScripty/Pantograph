@@ -498,6 +498,8 @@ Tasks:
   UI state, backend actions, and rendering. The activity log panel and auto-scroll
   behavior now live in
   `src/components/nodes/workflow/DependencyEnvironmentActivityLog.svelte`.
+  Dependency state badge, status message, and command button rendering now lives
+  in `src/components/nodes/workflow/DependencyEnvironmentStatusPanel.svelte`.
 - Split `pantograph-uniffi` and `pantograph-rustler` facades by exported surface
   family while preserving public names.
 

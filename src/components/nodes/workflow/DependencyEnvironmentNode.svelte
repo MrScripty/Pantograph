@@ -2,9 +2,9 @@
   import { onMount } from 'svelte';
   import BaseNode from '../BaseNode.svelte';
   import DependencyEnvironmentActivityLog from './DependencyEnvironmentActivityLog.svelte';
+  import DependencyEnvironmentStatusPanel from './DependencyEnvironmentStatusPanel.svelte';
   import type { NodeDefinition } from '../../../services/workflow/types';
   import {
-    dependencyCodeLabel,
     dependencyTokenLabel,
     getPatchFrom,
     hasOverrideFields,
@@ -606,59 +606,16 @@
     {/snippet}
 
       <div class="space-y-2">
-        {#if !upstreamModelPath}
-          <div class="text-[10px] text-amber-400">
-            Connect Puma-Lib `model_path` and `dependency_requirements`.
-          </div>
-        {:else}
-          <div class="rounded border px-2 py-1 text-[10px] {dependencyBadge.className}">
-            <div class="flex items-center gap-2">
-              <span>{dependencyBadge.label}</span>
-              <button
-                type="button"
-                class="ml-auto text-neutral-400 hover:text-neutral-200 disabled:opacity-50"
-                onclick={runModeAction}
-                disabled={isBusy}
-              >
-                Run
-              </button>
-              <button
-                type="button"
-                class="text-neutral-400 hover:text-neutral-200 disabled:opacity-50"
-                onclick={resolveDependencyRequirements}
-                disabled={isBusy}
-              >
-                Resolve
-              </button>
-              <button
-                type="button"
-                class="text-neutral-400 hover:text-neutral-200 disabled:opacity-50"
-                onclick={checkDependencies}
-                disabled={isBusy}
-              >
-                Check
-              </button>
-              <button
-                type="button"
-                class="text-neutral-400 hover:text-neutral-200 disabled:opacity-50"
-                onclick={installDependencies}
-                disabled={isBusy}
-              >
-                Install
-              </button>
-            </div>
-            {#if dependencyStatus?.message}
-              <div class="mt-1 text-[9px] text-neutral-500 truncate" title={dependencyStatus.message}>
-                {dependencyStatus.message}
-              </div>
-            {/if}
-            {#if dependencyStatus?.code}
-              <div class="mt-1 text-[9px] text-amber-300 truncate" title={dependencyStatus.code}>
-                code: {dependencyCodeLabel(dependencyStatus.code) ?? dependencyStatus.code}
-              </div>
-            {/if}
-          </div>
-        {/if}
+        <DependencyEnvironmentStatusPanel
+          hasModelPath={Boolean(upstreamModelPath)}
+          {dependencyBadge}
+          {dependencyStatus}
+          {isBusy}
+          onRun={runModeAction}
+          onResolve={resolveDependencyRequirements}
+          onCheck={checkDependencies}
+          onInstall={installDependencies}
+        />
 
         <div class="flex gap-1 text-[10px]">
           <button
