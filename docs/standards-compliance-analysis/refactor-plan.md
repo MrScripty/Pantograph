@@ -1312,15 +1312,11 @@ fully resolved by standards compliance:
 - Resolved: broad Rust dead-code warnings and stale workflow/server-discovery
   paths were classified and cleaned up; the zero-warning baseline is recorded in
   `docs/standards-compliance-analysis/rust-warning-baseline.md`.
-- Deferred, node-engine settings owner: `cargo check -p node-engine --features
-  audio-nodes` compiles but has historically exposed audio-only dead-code
-  warnings for shared boolean settings readers in
-  `crates/node-engine/src/core_executor/settings.rs`; re-check and classify as
-  remove, feature-gate, or intentionally retained when the audio feature path
-  is next touched. Status: the boolean readers are now marked as
+- Resolved: node-engine shared boolean settings readers are now scoped as
   inference-feature helpers only, and `cargo check -p node-engine --features
-  audio-nodes --message-format short` no longer reports those dead-code
-  warnings.
+  audio-nodes --message-format short` no longer reports the historical
+  audio-only dead-code warnings from
+  `crates/node-engine/src/core_executor/settings.rs`.
 - Deferred, Rustler binding owner: `pantograph-rustler` uses a scoped
   `non_local_definitions` lint exception around `rustler::resource!`
   registration until Rustler exposes a warning-clean resource registration API.
