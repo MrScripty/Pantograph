@@ -200,6 +200,9 @@ threshold while preserving the same package-owned visual contract.
 - `workflowGraphBackendActions.ts` must keep package graph backend mutation
   calls and response projection aligned with the reusable `WorkflowBackend`
   contract instead of reintroducing app-local service coupling.
+- `WorkflowToolbar.svelte` must keep execution-banner state that is rendered in
+  the template on Svelte runes-backed reactive state so workflow events can
+  switch between running and waiting-for-input labels without a manual refresh.
 - Insert-from-drag must commit through backend-owned `insertNodeAndConnect`; the
   UI must not compose local `addNode` plus `connectAnchors`.
 - Horseshoe open failures must resolve to an explicit blocked reason instead of

@@ -1,4 +1,4 @@
-<script context="module" lang="ts">
+<script module lang="ts">
   import type { PortOption } from '../../../services/workflow/types';
 
   let cachedModelOptions: PortOption[] | null = null;

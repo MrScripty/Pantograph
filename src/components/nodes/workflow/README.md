@@ -134,6 +134,9 @@ from node state orchestration.
   lags in the browser.
 - Specialized node components must mirror canonical backend-owned port names so
   template graphs and execution bindings do not depend on UI-local aliases.
+- `PumaLibNode.svelte` must keep its shared model-option cache in a Svelte 5
+  `module` script so the component avoids deprecated module-script syntax while
+  preserving one cache per bundled module instance.
 - `ExpandSettingsNode.svelte` must not hardcode durable override handles; it
   renders whatever additive inputs/outputs arrive in the backend-owned node
   definition.

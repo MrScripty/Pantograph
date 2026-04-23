@@ -1324,12 +1324,11 @@ fully resolved by standards compliance:
 - Deferred, frontend accessibility owner: `npm run build` succeeds but still
   reports pre-existing Svelte warnings outside the app `WorkflowGraph.svelte`
   split, including ActivityLog static mouseenter/mouseleave containers,
-  package graph noninteractive tabindex, WorkflowToolbar non-reactive
-  `waitingForInput`, ImageOutputNode static click container warnings,
-  PumaLibNode deprecated module-script syntax, DependencyEnvironmentNode
-  initial-state capture, and DependencyEnvironmentBindingsPanel labels without
-  associated controls. Track those in a dedicated frontend warning ratchet
-  rather than mixing them into the graph decomposition commit.
+  package graph noninteractive tabindex, ImageOutputNode static click container
+  warnings, DependencyEnvironmentNode initial-state capture, and
+  DependencyEnvironmentBindingsPanel labels without associated controls.
+  Track those in a dedicated frontend warning ratchet rather than mixing them
+  into the graph decomposition commit.
 - Resolved: `cargo test -p pantograph-uniffi --all-features version` exposed a
   stale `WorkflowEvent::GraphModified` test fixture in
   `crates/pantograph-uniffi/src/lib.rs` that was missing the backend-owned

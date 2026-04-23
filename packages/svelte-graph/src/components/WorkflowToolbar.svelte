@@ -20,7 +20,7 @@
 
   let currentUnsubscribe: (() => void) | null = null;
   let activeExecutionId: string | null = null;
-  let waitingForInput = false;
+  let waitingForInput = $state(false);
 
   async function handleRun() {
     if ($isExecuting) return;
