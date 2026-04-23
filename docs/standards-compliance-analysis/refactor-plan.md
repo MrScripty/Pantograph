@@ -391,7 +391,21 @@ Tasks:
   Progress: graph edit-session mutation, undo/redo, insertion, connection,
   stale cleanup, event projection, and memory-impact tests now live in
   `crates/pantograph-workflow-service/src/graph/session_tests.rs`, reducing
-  `session.rs` to production graph session orchestration.
+  `session.rs` to production graph session orchestration. Edit-session
+  connection candidate lookup, direct connect, node insert-connect, edge insert
+  preview, and edge insert commit API methods now live in
+  `crates/pantograph-workflow-service/src/graph/session_connection_api.rs`,
+  reducing the session store below the large-file threshold while preserving
+  the `GraphSessionStore` method surface.
+
+  Additional issue recorded during implementation: targeted session test
+  verification is currently blocked outside this repo slice because
+  `cargo test -p pantograph-workflow-service graph::session` fails while
+  compiling `Pumas-Library` at
+  `rust/crates/pumas-core/src/api/builder.rs:516`, where a `PrimaryState`
+  initializer is missing the newer `runtime_tasks` field. The session module
+  itself passes `cargo check`, but the shared dependency needs its own
+  standards-compliant fix before this test target can run again.
 - Split `crates/pantograph-workflow-service/src/scheduler/policy.rs` by queue
   priority, FIFO/starvation policy, warm-reuse bypass, runtime-capacity
   admission, and tests.

@@ -21,6 +21,7 @@ and persistence abstractions so adapters do not implement graph business logic.
 | `session_runtime.rs` | Focused runtime/lifecycle state for one graph edit session, including active execution metadata, queue projection, and run counters. |
 | `session_types.rs` | Edit-session request/response DTOs and local undo/redo/session-kind types that are shared by the graph session boundary. |
 | `session.rs` | Edit-session store, undo/redo state, and graph mutation orchestration. |
+| `session_connection_api.rs` | Edit-session connection candidate, direct connect, node insert-connect, and edge-insert API methods. |
 | `session_tests.rs` | Graph edit-session mutation, undo/redo, insertion, connection, stale cleanup, event projection, and memory-impact tests extracted from the production session module. |
 | `persistence.rs` | Graph-store trait plus the filesystem-backed `.pantograph/workflows` implementation. |
 
@@ -91,6 +92,10 @@ when the node type matches.
   the same additive backend-owned `workflow_event` and
   `workflow_session_state` projection as graph snapshot mutations so transport
   clients do not need a second read to observe mutation impact facts.
+- Edit-session connection and insertion API methods stay in
+  `session_connection_api.rs` so revision-aware connection orchestration and
+  insertion response projection remain separate from lifecycle and basic graph
+  mutation methods.
 - Graph session response helpers that exist only to support contract tests stay
   test-scoped; production response assembly should use the state-aware
   projection path.
