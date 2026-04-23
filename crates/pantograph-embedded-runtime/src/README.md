@@ -53,6 +53,7 @@ packages.
 | `runtime_registry_observations.rs` | Owns backend-side runtime-registry observation builders and health-overlay matching for active, embedding, and execution-observed producer facts. |
 | `workflow_scheduler_diagnostics.rs` | Owns workflow scheduler diagnostics provider projection from host runtime mode and shared runtime-registry state. |
 | `workflow_runtime.rs` | Owns backend-side workflow execution helpers for embedding metadata flag projection, runtime trace/model-target shaping, runtime diagnostics input grouping, and execution-path or stored-snapshot runtime-registry reconciliation used by workflow diagnostics transport. |
+| `workflow_runtime_tests.rs` | Workflow runtime diagnostics, runtime event projection, and registry reconciliation tests extracted from the production workflow-runtime helper module. |
 | `workflow_session_execution.rs` | Owns backend-side keep-alive workflow-session executor storage, graph-change reuse/reconciliation, and unload-transition application so scheduler-driven reclaim and direct capacity rebalance share one logical-session path. |
 
 ## Problem
@@ -442,6 +443,9 @@ let runtime = EmbeddedRuntime::with_default_python_runtime(
   coordination tests stay in `runtime_registry_tests.rs` so production
   observation mapping and registry orchestration stay separate from mocked host
   controller coverage.
+- Workflow runtime diagnostics, runtime event projection, and registry
+  reconciliation tests stay in `workflow_runtime_tests.rs` so production
+  workflow-runtime projection helpers stay separate from diagnostics fixtures.
 - Workflow technical-fit calls may also reuse this crate's request-projection
   helpers, but transport adapters must not build registry selector input or
   project selector reasons on their own.

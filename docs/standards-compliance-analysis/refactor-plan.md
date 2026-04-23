@@ -440,7 +440,10 @@ Tasks:
   tests now live in
   `crates/pantograph-embedded-runtime/src/runtime_registry_tests.rs`, reducing
   `runtime_registry.rs` to production observation mapping and registry
-  orchestration logic.
+  orchestration logic. Workflow runtime diagnostics, runtime event projection,
+  and registry reconciliation tests now live in
+  `crates/pantograph-embedded-runtime/src/workflow_runtime_tests.rs`, reducing
+  `workflow_runtime.rs` to production projection helpers.
 - Split `crates/pantograph-runtime-registry/src/lib.rs` by core registry facade,
   reservation/admission/reclaim/warmup policy, technical-fit, observation, and
   tests.
