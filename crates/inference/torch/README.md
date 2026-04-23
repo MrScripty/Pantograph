@@ -12,6 +12,8 @@ process/runtime lifecycle and public inference contracts.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `worker.py` | PyO3-facing worker entrypoints, loaded-model state, and dispatch into generation helpers. |
+| `worker_runtime.py` | Shared device, model-type, dtype, diffusion-load, and base64 image payload helpers used by the worker facade. |
+| `worker_transformers.py` | Cross-version transformers compatibility shims used before trusted model loading. |
 | `autoregressive.py` | Autoregressive HuggingFace generation and streaming helpers. |
 | `block_diffusion.py` | dLLM, SDAR, TraDo, and masked block-diffusion generation helpers. |
 
@@ -26,11 +28,16 @@ ownership rules.
 - Python module globals hold one loaded model state per worker.
 - Sibling imports must work both from filesystem loading and PyO3 embedding.
 - Worker responses must stay JSON/base64-safe for Rust callers.
+- Rust PyO3 loaders must register every embedded sibling module before loading
+  `worker.py`.
 
 ## Decision
 Keep PyTorch-specific generation in this Python worker directory. Rust callers
 load `worker.py`, invoke stable functions, and treat helper modules as private
-implementation details behind the worker contract.
+implementation details behind the worker contract. Shared worker runtime helpers
+and transformers compatibility shims are private sibling modules so the
+entrypoint can stay below the large-file threshold without changing callable
+worker names.
 
 ## Alternatives Rejected
 - Port all generation paths to Rust immediately: rejected because current
@@ -44,6 +51,8 @@ implementation details behind the worker contract.
   model families.
 - Generated audio and text payloads must remain serializable for Rust callers.
 - Sibling helper modules must not own process lifecycle or backend selection.
+- Private helper modules must be added to both Rust embedded-loader paths when
+  `worker.py` imports them.
 
 ## Revisit Triggers
 - Rust-native inference replaces a model family.

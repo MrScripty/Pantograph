@@ -90,6 +90,8 @@ stable public facade and dispatch owner.
 - Python-worker handlers should pass worker parameters directly into their
   blocking closures and avoid redundant rebinding so the feature-gated path
   stays clippy-clean without changing runtime behavior.
+- PyTorch worker initialization must register every `worker.py` sibling module
+  used by the embedded source, mirroring the inference backend loader.
 - The public facade remains `CoreTaskExecutor`; helper modules are private
   implementation details unless a separate public contract is explicitly
   introduced.

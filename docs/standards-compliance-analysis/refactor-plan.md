@@ -563,6 +563,15 @@ Tasks:
   extraction, and system prompt tests now live in
   `crates/inference/src/backend/pytorch_tests.rs`, reducing `pytorch.rs` to
   production adapter behavior.
+- Split `crates/inference/torch/worker.py` by worker facade, shared runtime
+  helpers, and transformers compatibility shims.
+  Progress: device/model-type/dtype resolution, diffusion load override
+  detection, and base64 image payload helpers now live in
+  `crates/inference/torch/worker_runtime.py`, while cross-version transformers
+  shims now live in `crates/inference/torch/worker_transformers.py`. Both Rust
+  PyO3 embedding paths register the new sibling modules before loading
+  `worker.py`, reducing the Python worker facade below the large-file threshold
+  without changing callable worker entrypoints.
 - Split `crates/node-engine/src/core_executor.rs` by execution phases, blocking
   adapters, demand preparation, output handling, and tests.
   Progress: core executor behavior tests now live in

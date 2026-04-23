@@ -9,6 +9,8 @@ Module-level globals hold the loaded model state.
 Generation logic is split into sibling modules:
   - block_diffusion: dLLM / SDAR / TraDo block diffusion generation
   - autoregressive: standard token-by-token HuggingFace generation
+  - worker_runtime: shared device, model, dtype, and payload helpers
+  - worker_transformers: cross-version transformers compatibility shims
 """
 
 import base64
@@ -31,18 +33,24 @@ if _self_path.parent.is_dir():
     if _torch_dir not in sys.path:
         sys.path.insert(0, _torch_dir)
 
-from block_diffusion import (
-    _generate_dllm,
-    _generate_dllm_streaming,
-    _generate_dllm_masked,
-    _generate_dllm_masked_streaming,
-)
+from block_diffusion import _generate_dllm_masked, _generate_dllm_masked_streaming
 from autoregressive import (
     _generate_autoregressive,
     _generate_autoregressive_streaming,
     _continue_sdar_cached,
     _generate_sdar_cached,
 )
+from worker_runtime import (
+    _decode_base64_image,
+    _detect_diffusion_load_overrides,
+    _detect_model_type,
+    _dtype_name,
+    _encode_image,
+    _resolve_device,
+    _resolve_model_directory,
+    _resolve_torch_dtype,
+)
+from worker_transformers import apply_compatibility_shims
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("pantograph.pytorch")
@@ -63,14 +71,6 @@ _diffusion_dtype = None
 _asr_pipeline = None
 _asr_device = None
 _asr_model_path = None
-
-
-def _resolve_model_directory(model_path):
-    """Return the containing model directory for a resolved model artifact path."""
-    path = Path(model_path)
-    if path.is_file():
-        return path.parent
-    return path
 
 
 def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature, top_p, top_k=None):
@@ -204,160 +204,6 @@ def get_loaded_asr_info():
     }
 
 
-def _apply_compatibility_shims():
-    """Patch transformers modules for cross-version compatibility.
-
-    Models loaded via trust_remote_code=True (e.g. SDAR/TraDo) may import
-    names that were removed in newer transformers versions. This injects
-    aliases so the model code works regardless of installed version.
-
-    Known removals:
-      - transformers 4.54: LossKwargs removed from transformers.utils
-      - transformers 5.0:  SlidingWindowCache removed from cache_utils
-      - transformers 5.0:  pad_token_id etc. removed from PretrainedConfig defaults
-    """
-    import importlib.metadata
-    import transformers.cache_utils as cu
-    import transformers.utils as tu
-
-    version = importlib.metadata.version("transformers")
-    major, minor = (int(x) for x in version.split(".")[:2])
-
-    # SlidingWindowCache -> DynamicSlidingWindowLayer (removed in 5.0)
-    if not hasattr(cu, "SlidingWindowCache") and hasattr(cu, "DynamicSlidingWindowLayer"):
-        cu.SlidingWindowCache = cu.DynamicSlidingWindowLayer
-        logger.info("Shimmed SlidingWindowCache -> DynamicSlidingWindowLayer (transformers %s)", version)
-
-    # LossKwargs removed in 4.54 — stub it as a TypedDict
-    if not hasattr(tu, "LossKwargs"):
-        from typing import Optional, TypedDict
-        class LossKwargs(TypedDict, total=False):
-            num_items_in_batch: Optional["torch.Tensor"]
-        tu.LossKwargs = LossKwargs
-        logger.info("Shimmed LossKwargs stub into transformers.utils (transformers %s)", version)
-
-    # accelerate's dispatch_model calls model.to(device) which explodes when
-    # any parameter is still on the meta device (common with trust_remote_code
-    # models whose __init__ creates extra buffers or padded embeddings).
-    # Patch it to materialise meta tensors via to_empty before moving.
-    import transformers.modeling_utils as _mu
-    if not getattr(_mu, "_pantograph_dispatch_patched", False):
-        _orig_dispatch = _mu.dispatch_model
-
-        def _safe_dispatch(model, device_map, **kwargs):
-            has_meta = any(p.device.type == "meta" for p in model.parameters())
-            if not has_meta:
-                return _orig_dispatch(model, device_map, **kwargs)
-            # Single-device map: materialise then move
-            if isinstance(device_map, dict) and len(device_map) == 1 and "" in device_map:
-                device = device_map[""]
-            elif isinstance(device_map, str):
-                device = device_map
-            else:
-                return _orig_dispatch(model, device_map, **kwargs)
-
-            # Collect names of meta parameters that need loading
-            meta_names = {n for n, p in model.named_parameters()
-                          if p.device.type == "meta"}
-
-            if meta_names and hasattr(model.config, "_name_or_path"):
-                # Reload missing weights from safetensors with key remapping.
-                # We assign tensors directly via setattr to bypass shape
-                # validation (embed_tokens may differ between checkpoint and
-                # config) and avoid resize_token_embeddings on meta tensors.
-                import glob as _glob
-                from safetensors.torch import load_file as _load_file
-                model_dir = Path(model.config._name_or_path)
-                if model_dir.is_dir():
-                    # Expected shapes from meta params — truncate oversized
-                    # checkpoint tensors (e.g. padded embeddings) to match.
-                    expected_shapes = {n: p.shape for n, p in model.named_parameters()
-                                       if n in meta_names}
-                    loaded_count = 0
-                    for shard in sorted(_glob.glob(str(model_dir / "*.safetensors"))):
-                        sd = _load_file(shard, device=str(device))
-                        for k, v in sd.items():
-                            candidates = [k]
-                            if k.startswith("language_model."):
-                                candidates.append(k.replace("language_model.", "model.", 1))
-                            for cand in candidates:
-                                if cand in meta_names:
-                                    exp = expected_shapes.get(cand)
-                                    if exp is not None and v.shape != exp:
-                                        slices = tuple(slice(0, s) for s in exp)
-                                        v = v[slices].contiguous()
-                                    parts = cand.split(".")
-                                    mod = model
-                                    for p in parts[:-1]:
-                                        mod = getattr(mod, p)
-                                    setattr(mod, parts[-1], torch.nn.Parameter(
-                                        v, requires_grad=False,
-                                    ))
-                                    meta_names.discard(cand)
-                                    loaded_count += 1
-                                    break
-                        del sd
-                    logger.info("  Reloaded %d params from safetensors (%d still meta)",
-                                loaded_count, len(meta_names))
-
-            # Move any remaining real params to device; zero-fill any still-meta
-            for name, param in list(model.named_parameters()):
-                if param.device.type == "meta":
-                    parts = name.split(".")
-                    mod = model
-                    for p in parts[:-1]:
-                        mod = getattr(mod, p)
-                    setattr(mod, parts[-1], torch.nn.Parameter(
-                        torch.empty(param.shape, dtype=param.dtype, device=device),
-                        requires_grad=param.requires_grad,
-                    ))
-                elif str(param.device) != str(torch.device(device)):
-                    parts = name.split(".")
-                    mod = model
-                    for p in parts[:-1]:
-                        mod = getattr(mod, p)
-                    setattr(mod, parts[-1], torch.nn.Parameter(
-                        param.data.to(device), requires_grad=param.requires_grad,
-                    ))
-            for name, buf in list(model.named_buffers()):
-                if buf.device.type == "meta":
-                    parts = name.split(".")
-                    mod = model
-                    for p in parts[:-1]:
-                        mod = getattr(mod, p)
-                    setattr(mod, parts[-1],
-                            torch.empty(buf.shape, dtype=buf.dtype, device=device))
-                elif str(buf.device) != str(torch.device(device)):
-                    parts = name.split(".")
-                    mod = model
-                    for p in parts[:-1]:
-                        mod = getattr(mod, p)
-                    setattr(mod, parts[-1], buf.to(device))
-            model.tie_weights()
-            logger.info("Shimmed dispatch_model: materialised meta tensors onto %s", device)
-            return model
-
-        _mu.dispatch_model = _safe_dispatch
-        _mu._pantograph_dispatch_patched = True
-        logger.info("Shimmed dispatch_model for meta-tensor safety (transformers %s)", version)
-
-    # PretrainedConfig no longer sets default token IDs in 5.x — patch __init__
-    # so older custom config classes that never set these still work.
-    if major >= 5:
-        from transformers import PretrainedConfig
-        _orig_config_init = PretrainedConfig.__init__
-        if not getattr(PretrainedConfig, "_pantograph_patched", False):
-            _TOKEN_DEFAULTS = {"pad_token_id": None, "bos_token_id": None, "eos_token_id": None}
-            def _patched_config_init(self, **kwargs):
-                _orig_config_init(self, **kwargs)
-                for attr, default in _TOKEN_DEFAULTS.items():
-                    if not hasattr(self, attr):
-                        setattr(self, attr, default)
-            PretrainedConfig.__init__ = _patched_config_init
-            PretrainedConfig._pantograph_patched = True
-            logger.info("Shimmed PretrainedConfig token ID defaults (transformers %s)", version)
-
-
 def load_model(model_path, device="auto", model_type=None):
     """Load a model + tokenizer into module globals.
 
@@ -372,7 +218,7 @@ def load_model(model_path, device="auto", model_type=None):
     """
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
-    _apply_compatibility_shims()
+    apply_compatibility_shims()
 
     global _model, _tokenizer, _device, _model_path, _model_type
 
@@ -899,8 +745,6 @@ def generate_tokens(prompt, system_prompt=None, max_tokens=512, temperature=0.7,
         )
 
 
-# --- Internal helpers ---
-
 def _format_prompt(prompt, system_prompt=None):
     """Format user + system prompt into a single string.
 
@@ -941,134 +785,3 @@ def _format_prompt(prompt, system_prompt=None):
     parts.append(f"User: {prompt}")
     parts.append("Assistant:")
     return "\n".join(parts)
-
-
-def _detect_model_type(path):
-    """Auto-detect model type from config.json."""
-    config_path = path / "config.json" if path.is_dir() else path.parent / "config.json"
-
-    if config_path.exists():
-        try:
-            with open(config_path) as f:
-                config = json.load(f)
-
-            architectures = config.get("architectures", [])
-            model_type_field = config.get("model_type", "")
-
-            if any("dllm" in arch.lower() or "sdar" in arch.lower() for arch in architectures):
-                return "dllm"
-            if "dllm" in model_type_field.lower() or "sdar" in model_type_field.lower():
-                return "dllm"
-
-            if any("sherry" in arch.lower() for arch in architectures):
-                return "sherry"
-            if "sherry" in model_type_field.lower():
-                return "sherry"
-
-        except (json.JSONDecodeError, OSError) as e:
-            logger.warning("Failed to read config.json: %s", e)
-
-    return "text-generation"
-
-
-def _resolve_device(device_str):
-    """Resolve a device string to a torch.device.
-
-    "auto" picks the best available: cuda > mps > cpu.
-    """
-    if device_str == "auto":
-        if torch.cuda.is_available():
-            return torch.device("cuda")
-        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-            return torch.device("mps")
-        else:
-            return torch.device("cpu")
-
-    return torch.device(device_str)
-
-
-def _resolve_torch_dtype(device, requested_dtype=None):
-    if isinstance(requested_dtype, str):
-        normalized = requested_dtype.strip().lower()
-        if normalized in {"bf16", "bfloat16"}:
-            return torch.bfloat16
-        if normalized in {"fp16", "float16", "half"}:
-            return torch.float16
-        if normalized in {"fp32", "float32", "float"}:
-            return torch.float32
-
-    if isinstance(device, torch.device):
-        device_type = device.type
-    else:
-        device_type = str(device)
-
-    if device_type == "cuda":
-        if hasattr(torch.cuda, "is_bf16_supported") and torch.cuda.is_bf16_supported():
-            return torch.bfloat16
-        return torch.float16
-    if device_type == "mps":
-        return torch.float16
-    return torch.float32
-
-
-def _dtype_name(dtype):
-    if dtype is None:
-        return None
-    for name in ("bfloat16", "float16", "float32"):
-        if getattr(torch, name) == dtype:
-            return name
-    return str(dtype)
-
-
-def _detect_diffusion_load_overrides(bundle_root):
-    """Infer narrow from_pretrained overrides from a diffusers bundle layout."""
-    safetensor_variants = set()
-    saw_safetensors = False
-
-    for child in bundle_root.iterdir():
-        if not child.is_dir():
-            continue
-        for candidate in child.iterdir():
-            if not candidate.is_file():
-                continue
-            name = candidate.name
-            if not name.endswith(".safetensors"):
-                continue
-            saw_safetensors = True
-            stem = candidate.stem
-            if "." not in stem:
-                continue
-            variant = stem.rsplit(".", 1)[-1].strip().lower()
-            if variant:
-                safetensor_variants.add(variant)
-
-    overrides = {}
-    if saw_safetensors:
-        overrides["use_safetensors"] = True
-    if len(safetensor_variants) == 1:
-        overrides["variant"] = next(iter(safetensor_variants))
-    return overrides
-
-
-def _decode_base64_image(value):
-    from PIL import Image
-
-    if isinstance(value, dict):
-        encoded = value.get("data_base64")
-    else:
-        encoded = value
-    if not isinstance(encoded, str) or not encoded.strip():
-        raise RuntimeError("Expected base64 image payload")
-    raw = base64.b64decode(encoded)
-    return Image.open(io.BytesIO(raw)).convert("RGB")
-
-
-def _encode_image(image):
-    buffer = io.BytesIO()
-    image.save(buffer, format="PNG")
-    return {
-        "data_base64": base64.b64encode(buffer.getvalue()).decode("ascii"),
-        "mime_type": "image/png",
-        "width": getattr(image, "width", None),
-        "height": getattr(image, "height", None),
-    }

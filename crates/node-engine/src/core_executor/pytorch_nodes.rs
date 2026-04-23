@@ -31,28 +31,43 @@ pub(crate) fn ensure_torch_worker_initialised(
         .getattr("modules")
         .map_err(|e| format!("Failed to get sys.modules: {}", e))?;
 
-    // Register sibling modules first so worker.py's imports resolve
-    let bd_code =
-        std::ffi::CString::new(include_str!("../../../inference/torch/block_diffusion.py"))
-            .map_err(|e| format!("Invalid block_diffusion source: {}", e))?;
-    let bd_module =
-        pyo3::types::PyModule::from_code(py, &bd_code, c"block_diffusion.py", c"block_diffusion")
-            .map_err(|e| format!("Failed to load block_diffusion: {}", e))?;
-    modules
-        .set_item("block_diffusion", &bd_module)
-        .map_err(|e| format!("Failed to register block_diffusion: {}", e))?;
+    // Register sibling modules first so worker.py's imports resolve.
+    for (name, source, file_name, module_name) in [
+        (
+            "block_diffusion",
+            include_str!("../../../inference/torch/block_diffusion.py"),
+            c"block_diffusion.py",
+            c"block_diffusion",
+        ),
+        (
+            "autoregressive",
+            include_str!("../../../inference/torch/autoregressive.py"),
+            c"autoregressive.py",
+            c"autoregressive",
+        ),
+        (
+            "worker_runtime",
+            include_str!("../../../inference/torch/worker_runtime.py"),
+            c"worker_runtime.py",
+            c"worker_runtime",
+        ),
+        (
+            "worker_transformers",
+            include_str!("../../../inference/torch/worker_transformers.py"),
+            c"worker_transformers.py",
+            c"worker_transformers",
+        ),
+    ] {
+        let module_code = std::ffi::CString::new(source)
+            .map_err(|e| format!("Invalid {} source: {}", name, e))?;
+        let module = pyo3::types::PyModule::from_code(py, &module_code, file_name, module_name)
+            .map_err(|e| format!("Failed to load {}: {}", name, e))?;
+        modules
+            .set_item(name, &module)
+            .map_err(|e| format!("Failed to register {}: {}", name, e))?;
+    }
 
-    let ar_code =
-        std::ffi::CString::new(include_str!("../../../inference/torch/autoregressive.py"))
-            .map_err(|e| format!("Invalid autoregressive source: {}", e))?;
-    let ar_module =
-        pyo3::types::PyModule::from_code(py, &ar_code, c"autoregressive.py", c"autoregressive")
-            .map_err(|e| format!("Failed to load autoregressive: {}", e))?;
-    modules
-        .set_item("autoregressive", &ar_module)
-        .map_err(|e| format!("Failed to register autoregressive: {}", e))?;
-
-    // Now load the worker module (which imports from block_diffusion and autoregressive)
+    // Now load the worker module.
     let code = std::ffi::CString::new(include_str!("../../../inference/torch/worker.py"))
         .map_err(|e| format!("Invalid worker source: {}", e))?;
     pyo3::types::PyModule::from_code(
@@ -63,9 +78,7 @@ pub(crate) fn ensure_torch_worker_initialised(
     )
     .map_err(|e| format!("Failed to load worker: {}", e))?;
 
-    log::info!(
-        "PyTorch worker module initialised (with block_diffusion + autoregressive siblings)"
-    );
+    log::info!("PyTorch worker module initialised with embedded sibling modules");
     Ok(())
 }
 

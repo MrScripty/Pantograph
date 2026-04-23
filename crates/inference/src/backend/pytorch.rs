@@ -35,36 +35,62 @@ const BLOCK_DIFFUSION_PY: &str = include_str!("../../torch/block_diffusion.py");
 /// The autoregressive module source, embedded at compile time.
 const AUTOREGRESSIVE_PY: &str = include_str!("../../torch/autoregressive.py");
 
+/// Shared PyTorch worker runtime helpers, embedded at compile time.
+const WORKER_RUNTIME_PY: &str = include_str!("../../torch/worker_runtime.py");
+
+/// Transformers compatibility shims, embedded at compile time.
+const WORKER_TRANSFORMERS_PY: &str = include_str!("../../torch/worker_transformers.py");
+
 /// Whether the Python worker module has been initialised.
 static WORKER_INITIALISED: AtomicBool = AtomicBool::new(false);
 
 /// Ensure the worker module is loaded into the Python interpreter.
 ///
 /// Safe to call multiple times — only the first call actually loads.
-/// Registers the sibling modules (`block_diffusion`, `autoregressive`)
-/// into `sys.modules` so the worker can import them normally.
+/// Registers sibling modules into `sys.modules` so the worker can import them normally.
 fn ensure_worker_initialised(py: Python<'_>) -> PyResult<()> {
     if WORKER_INITIALISED.load(Ordering::Acquire) {
         return Ok(());
     }
 
-    // Register sibling modules first so worker.py's imports resolve
+    // Register sibling modules first so worker.py's imports resolve.
     let sys = py.import("sys")?;
     let modules = sys.getattr("modules")?;
 
-    let bd_code = std::ffi::CString::new(BLOCK_DIFFUSION_PY).map_err(|e| {
-        pyo3::exceptions::PyValueError::new_err(format!("Invalid block_diffusion source: {}", e))
-    })?;
-    let bd_module = PyModule::from_code(py, &bd_code, c"block_diffusion.py", c"block_diffusion")?;
-    modules.set_item("block_diffusion", &bd_module)?;
+    for (name, source, file_name, module_name) in [
+        (
+            "block_diffusion",
+            BLOCK_DIFFUSION_PY,
+            c"block_diffusion.py",
+            c"block_diffusion",
+        ),
+        (
+            "autoregressive",
+            AUTOREGRESSIVE_PY,
+            c"autoregressive.py",
+            c"autoregressive",
+        ),
+        (
+            "worker_runtime",
+            WORKER_RUNTIME_PY,
+            c"worker_runtime.py",
+            c"worker_runtime",
+        ),
+        (
+            "worker_transformers",
+            WORKER_TRANSFORMERS_PY,
+            c"worker_transformers.py",
+            c"worker_transformers",
+        ),
+    ] {
+        let code = std::ffi::CString::new(source).map_err(|e| {
+            pyo3::exceptions::PyValueError::new_err(format!("Invalid {} source: {}", name, e))
+        })?;
+        let module = PyModule::from_code(py, &code, file_name, module_name)?;
+        modules.set_item(name, &module)?;
+    }
 
-    let ar_code = std::ffi::CString::new(AUTOREGRESSIVE_PY).map_err(|e| {
-        pyo3::exceptions::PyValueError::new_err(format!("Invalid autoregressive source: {}", e))
-    })?;
-    let ar_module = PyModule::from_code(py, &ar_code, c"autoregressive.py", c"autoregressive")?;
-    modules.set_item("autoregressive", &ar_module)?;
-
-    // Now load the worker module (which imports from block_diffusion and autoregressive)
+    // Now load the worker module.
     let code = std::ffi::CString::new(WORKER_PY).map_err(|e| {
         pyo3::exceptions::PyValueError::new_err(format!("Invalid worker source: {}", e))
     })?;
@@ -76,9 +102,7 @@ fn ensure_worker_initialised(py: Python<'_>) -> PyResult<()> {
     )?;
 
     WORKER_INITIALISED.store(true, Ordering::Release);
-    log::info!(
-        "PyTorch worker module initialised (with block_diffusion + autoregressive siblings)"
-    );
+    log::info!("PyTorch worker module initialised with embedded sibling modules");
     Ok(())
 }
 

@@ -120,3 +120,6 @@ fn create_backend() {
 - PyTorch backend capability, lifecycle, KV-cache fingerprint, prompt
   extraction, and system prompt tests stay in `pytorch_tests.rs` so
   `pytorch.rs` remains focused on production adapter behavior.
+- The PyTorch backend must register `worker.py` sibling modules, including
+  private runtime and transformers helpers, before loading the embedded worker
+  facade.
