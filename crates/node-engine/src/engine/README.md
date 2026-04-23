@@ -22,6 +22,7 @@ entrypoint while preserving the current public API.
 | `session_state.rs` | Phase 6 workflow-session residency, bound workflow-session identity, node-memory, graph-memory-impact, and checkpoint contract types plus the private executor-owned per-session node-memory store, compatibility-reconciliation helper, checkpoint-availability tracking, and checkpoint-summary helper. |
 | `single_demand.rs` | Executor-facing single-target demand helper that keeps facade lock choreography out of `engine.rs`. |
 | `workflow_session.rs` | Executor-facing workflow-session binding, residency, node-memory inspection/update/reconciliation, and checkpoint-summary helpers that keep the Phase 6 facade wiring out of `engine.rs`. |
+| `workflow_session/tests/workflow_session_tests/` | Focused workflow-session helper tests for checkpoint/session identity, node-memory reconciliation, and KV-cache preservation behavior. |
 
 ## Problem
 `engine.rs` owns both workflow execution and graph-mutation orchestration, and
@@ -121,6 +122,10 @@ changing the public executor surface.
   remains the primary suffix-reuse path for kept-alive reruns: if only the
   downstream suffix inputs change, the demand engine should keep the upstream
   KV-producing prefix node cached and rerun only the suffix consumer.
+- Workflow-session helper coverage stays split under
+  `workflow_session/tests/workflow_session_tests/` so checkpoint/session
+  identity, node-memory reconciliation, and KV-cache preservation behavior
+  remain reviewable without growing the production helper module.
 
 ## Decision
 Extract graph-event and multi-demand helper logic into focused modules under

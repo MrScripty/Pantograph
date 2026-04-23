@@ -612,6 +612,11 @@ Tasks:
   `crates/node-engine/src/engine_tests/` for cache state, demand execution,
   workflow events, multi-demand behavior, human input, and snapshot projection,
   reducing the root test fixture/index below the large-file threshold.
+  Workflow-session helper tests now live in
+  `crates/node-engine/src/engine/workflow_session/tests/workflow_session_tests/`
+  for session identity/checkpoint helpers, node-memory reconciliation, and
+  KV-cache preservation behavior, reducing `engine/workflow_session.rs` below
+  the large-file threshold while preserving private helper coverage.
   Multi-demand planning, dispatch-window, bounded-parallel execution, failure
   attribution, and result aggregation tests now live in
   `crates/node-engine/src/engine/multi_demand_tests.rs`, reducing
