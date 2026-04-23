@@ -436,6 +436,16 @@ Tasks:
   dependency resolver tests and Pumas descriptor fixture helpers now live in
   `crates/pantograph-embedded-runtime/src/model_dependencies_tests.rs`,
   reducing `model_dependencies.rs` to production resolver logic.
+- Split `crates/pantograph-runtime-registry/src/lib.rs` by core registry facade,
+  reservation/admission/reclaim/warmup policy, technical-fit, observation, and
+  tests.
+  Progress: root runtime-registry facade, reservation, transition, observation,
+  reclaim, warmup, and admission unit coverage now lives in
+  `crates/pantograph-runtime-registry/src/lib_tests.rs`, reducing `lib.rs` to
+  production registry facade and policy APIs before further behavior-focused
+  splits. The runtime-registry source README now also carries the required
+  standards headings so future boundary edits keep decision traceability
+  complete.
 - Split `crates/node-engine/src/core_executor.rs` by execution phases, blocking
   adapters, demand preparation, output handling, and tests.
   Progress: core executor behavior tests now live in

@@ -6,15 +6,41 @@ runtime residency records, observation reconciliation, reservation contracts,
 and deterministic snapshot generation without depending on Tauri transport or
 desktop app wiring.
 
-## Boundaries
+## Problem
+Pantograph hosts need one backend-owned place to record runtime residency,
+admission reservations, lifecycle observations, reclaim decisions, and
+technical-fit inputs. Without this boundary, Tauri commands, embedded runtime
+adapters, and workflow-service integration would each rebuild their own
+state-machine and policy interpretation.
+
+## Constraints
 - No Tauri state, commands, or desktop transport concerns.
 - No direct process spawning or backend execution control.
 - App hosts create and inject the registry, but this crate owns the runtime
   registry state machine itself.
 
+## Decision
+Keep runtime registry state, admission, reservation, retention, reclaim,
+warmup, observation reconciliation, and technical-fit selector contracts in this
+crate. Hosts may supply producer facts and consume deterministic decisions, but
+process ownership and app composition stay outside this crate.
+
+## Alternatives Rejected
+- Keep runtime residency in transport adapters.
+  Rejected because adapter-local state would drift on admission, retention, and
+  lifecycle semantics.
+- Let execution producers decide registry reservation policy.
+  Rejected because producer facts are inputs to policy, not the owner of
+  workflow/runtime pressure decisions.
+- Reconcile observations by replacing all runtime state from every caller.
+  Rejected because single-producer observations must not implicitly stop
+  unrelated runtimes owned by another observation path.
+
 ## Contents
-- `lib.rs`: public runtime-registry facade, reservation/transition APIs, and
-  focused unit coverage.
+- `lib.rs`: public runtime-registry facade and reservation/transition APIs.
+- `lib_tests.rs`: root runtime-registry facade, reservation, transition,
+  observation, reclaim, warmup, and admission unit coverage extracted from the
+  production facade.
 - `admission.rs`: runtime admission budget, request requirement, and rejection
   reason contracts owned by the backend registry policy layer.
 - `observation.rs`: host-supplied runtime observation contracts used to
@@ -87,6 +113,17 @@ desktop app wiring.
 - Invalid state transitions are rejected rather than coerced.
 - Observation reconciliation updates registry-owned state but does not invent
   backend lifecycle facts.
+- Root runtime-registry facade tests stay in `lib_tests.rs` so production
+  registry APIs remain reviewable while later behavior-focused test splits can
+  follow the existing policy modules.
+
+## Revisit Triggers
+- A host needs to coordinate runtime state across processes or machines instead
+  of a single in-process registry owner.
+- Runtime producers expose richer lifecycle or resource contracts that require
+  new normalized observation fields.
+- Admission, retention, reclaim, or technical-fit decisions need user-visible
+  override semantics that cannot be represented by additive request fields.
 
 ## Dependencies
 **Internal:** `pantograph-runtime-identity`
@@ -98,7 +135,7 @@ desktop app wiring.
 - Reason: ADR-002 freezes the registry as Pantograph-owned application logic
   above the execution facade while keeping app composition ownership explicit.
 
-## API Consumer Contract
+## Usage Examples
 - App hosts create a shared `RuntimeRegistry` and inject it into transport or
   execution adapters.
 - Hosts may reconcile backend-owned runtime observations into the registry, but
