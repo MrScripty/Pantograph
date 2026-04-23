@@ -8,8 +8,9 @@ handoffs for the CI quality-gates reliability remediation.
 | Item | Status | Notes |
 | ---- | ------ | ----- |
 | Planning | complete | Findings and implementation waves recorded |
-| Source implementation | pending | This package is planning-only |
-| CI verification | pending | Awaiting implementation |
+| Source implementation | in progress | User approved continuing with unrelated `assets/` dirt left untouched |
+| M1 Rust bootstrap | complete | Workflow now materializes pinned `Pumas-Library` checkout for every Rust lane |
+| CI verification | pending | Awaiting post-implementation CI run |
 
 ## Shared Constraints
 - Do not modify unrelated asset worktree changes under `assets/`.
@@ -25,6 +26,9 @@ handoffs for the CI quality-gates reliability remediation.
   after authenticated log inspection.
 - Observed local worktree has unrelated dirty asset changes that remain outside
   this remediation scope.
+- 2026-04-23: user explicitly approved proceeding after committing the Markdown
+  planning artifacts while leaving unrelated dirty asset changes under
+  `assets/` untouched.
 
 ## Dependency Order
 1. Resolve Rust external dependency bootstrap for clean CI runners.
@@ -47,6 +51,15 @@ handoffs for the CI quality-gates reliability remediation.
 | `Rust clippy warning audit` CI job | fail | same manifest bootstrap failure |
 | `Critical lint and traceability` CI job | fail | missing `rg` in runner |
 | `Quality summary` CI job | fail | required lanes failed; audit lines misreported as success |
+| `cargo check --workspace --no-default-features` | pass | 2026-04-23 M1 local verification |
+| `cargo check --workspace --all-features` | pass | 2026-04-23 M1 local verification |
+| `cargo test -p node-engine --lib` | pass | 2026-04-23 M1 local verification |
+| `cargo test -p workflow-nodes --lib` | pass | 2026-04-23 M1 local verification |
+| `cargo test -p pantograph-workflow-service --test contract` | pass | 2026-04-23 M1 local verification |
+| `cargo test --workspace --doc --no-default-features` | pass | 2026-04-23 M1 local verification |
+| `cargo fmt --all -- --check` | pass | 2026-04-23 M1 local verification |
+| `cargo clippy --workspace --all-targets --all-features -- -D warnings` | pass | 2026-04-23 M1 local verification |
+| `./scripts/check-rustler-beam-smoke.sh` | blocked | local environment missing `mix`; CI lane remains required |
 
 ## Worker Report Paths
 - `reports/wave-01-worker-ci-rust-bootstrap.md`

@@ -11,6 +11,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  PUMAS_LIBRARY_REF: 66c0c11a57b8bfe8fb70d827efced0fbc442b156
 
 jobs:
   lint-no-new:
@@ -96,6 +97,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Checkout Pumas-Library
+        uses: actions/checkout@v4
+        with:
+          repository: MrScripty/Pumas-Library
+          ref: ${{ env.PUMAS_LIBRARY_REF }}
+          path: pumas-library-src
+
+      - name: Link sibling Pumas-Library checkout
+        run: |
+          rm -rf "$GITHUB_WORKSPACE/../Pumas-Library"
+          ln -s "$GITHUB_WORKSPACE/pumas-library-src" "$GITHUB_WORKSPACE/../Pumas-Library"
+          test -f "$GITHUB_WORKSPACE/../Pumas-Library/rust/crates/pumas-core/Cargo.toml"
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@1.92.0
 
@@ -114,6 +128,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Checkout Pumas-Library
+        uses: actions/checkout@v4
+        with:
+          repository: MrScripty/Pumas-Library
+          ref: ${{ env.PUMAS_LIBRARY_REF }}
+          path: pumas-library-src
+
+      - name: Link sibling Pumas-Library checkout
+        run: |
+          rm -rf "$GITHUB_WORKSPACE/../Pumas-Library"
+          ln -s "$GITHUB_WORKSPACE/pumas-library-src" "$GITHUB_WORKSPACE/../Pumas-Library"
+          test -f "$GITHUB_WORKSPACE/../Pumas-Library/rust/crates/pumas-core/Cargo.toml"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@1.92.0
@@ -137,6 +164,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Checkout Pumas-Library
+        uses: actions/checkout@v4
+        with:
+          repository: MrScripty/Pumas-Library
+          ref: ${{ env.PUMAS_LIBRARY_REF }}
+          path: pumas-library-src
+
+      - name: Link sibling Pumas-Library checkout
+        run: |
+          rm -rf "$GITHUB_WORKSPACE/../Pumas-Library"
+          ln -s "$GITHUB_WORKSPACE/pumas-library-src" "$GITHUB_WORKSPACE/../Pumas-Library"
+          test -f "$GITHUB_WORKSPACE/../Pumas-Library/rust/crates/pumas-core/Cargo.toml"
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@1.92.0
 
@@ -152,6 +192,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Checkout Pumas-Library
+        uses: actions/checkout@v4
+        with:
+          repository: MrScripty/Pumas-Library
+          ref: ${{ env.PUMAS_LIBRARY_REF }}
+          path: pumas-library-src
+
+      - name: Link sibling Pumas-Library checkout
+        run: |
+          rm -rf "$GITHUB_WORKSPACE/../Pumas-Library"
+          ln -s "$GITHUB_WORKSPACE/pumas-library-src" "$GITHUB_WORKSPACE/../Pumas-Library"
+          test -f "$GITHUB_WORKSPACE/../Pumas-Library/rust/crates/pumas-core/Cargo.toml"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@1.92.0
@@ -176,6 +229,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Checkout Pumas-Library
+        uses: actions/checkout@v4
+        with:
+          repository: MrScripty/Pumas-Library
+          ref: ${{ env.PUMAS_LIBRARY_REF }}
+          path: pumas-library-src
+
+      - name: Link sibling Pumas-Library checkout
+        run: |
+          rm -rf "$GITHUB_WORKSPACE/../Pumas-Library"
+          ln -s "$GITHUB_WORKSPACE/pumas-library-src" "$GITHUB_WORKSPACE/../Pumas-Library"
+          test -f "$GITHUB_WORKSPACE/../Pumas-Library/rust/crates/pumas-core/Cargo.toml"
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@1.92.0
 
@@ -189,6 +255,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Checkout Pumas-Library
+        uses: actions/checkout@v4
+        with:
+          repository: MrScripty/Pumas-Library
+          ref: ${{ env.PUMAS_LIBRARY_REF }}
+          path: pumas-library-src
+
+      - name: Link sibling Pumas-Library checkout
+        run: |
+          rm -rf "$GITHUB_WORKSPACE/../Pumas-Library"
+          ln -s "$GITHUB_WORKSPACE/pumas-library-src" "$GITHUB_WORKSPACE/../Pumas-Library"
+          test -f "$GITHUB_WORKSPACE/../Pumas-Library/rust/crates/pumas-core/Cargo.toml"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@1.92.0

@@ -142,6 +142,13 @@ because the summary reads `needs.<job>.result` from `continue-on-error` jobs.
 ### M1: Restore Clean-Checkout Rust CI Bootstrap
 Goal: make Rust CI lanes able to load the workspace from a clean GitHub runner.
 
+Status:
+- Complete on 2026-04-23.
+- Implemented by pinning `Pumas-Library` to commit
+  `66c0c11a57b8bfe8fb70d827efced0fbc442b156` in the workflow, checking that
+  repository out in every Rust lane, and linking it into the sibling path that
+  the Cargo workspace already expects.
+
 Tasks:
 1. Choose and document the external dependency bootstrap strategy for
    `Pumas-Library`:
@@ -183,6 +190,11 @@ Validation:
 - `cargo fmt --all -- --check`
 - `cargo clippy --workspace --all-targets --all-features -- -D warnings`
 - `./scripts/check-rustler-beam-smoke.sh` or the CI-equivalent lane
+
+Observed result:
+- all Rust workspace validation commands passed locally on 2026-04-23
+- local Rustler BEAM smoke remained environment-blocked because `mix` is not
+  installed on this workstation; the CI lane remains the authoritative check
 
 ### M2: Make the No-New-Debt Gate Self-Contained
 Goal: remove the CI-only bootstrap failure from the traceability lane.
