@@ -379,6 +379,13 @@ Tasks:
   stale cleanup, event projection, and memory-impact tests now live in
   `crates/pantograph-workflow-service/src/graph/session_tests.rs`, reducing
   `session.rs` to production graph session orchestration.
+- Split `crates/pantograph-workflow-service/src/scheduler/policy.rs` by queue
+  priority, FIFO/starvation policy, warm-reuse bypass, runtime-capacity
+  admission, and tests.
+  Progress: scheduler priority, FIFO, starvation-protection, warm-reuse bypass,
+  runtime-capacity, and admission-wait tests now live in
+  `crates/pantograph-workflow-service/src/scheduler/policy_tests.rs`, reducing
+  `policy.rs` to production queue and admission decisions.
 - Split `crates/pantograph-embedded-runtime/src/lib.rs` into runtime host,
   workflow sessions, registry lifecycle, diagnostics projection, model deps,
   and test modules.

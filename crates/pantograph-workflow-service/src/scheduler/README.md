@@ -12,6 +12,7 @@ by `WorkflowService` so adapters do not become queue-policy owners.
 | `mod.rs` | Internal module entrypoint that re-exports scheduler contracts and store helpers to the workflow facade. |
 | `contracts.rs` | Scheduler request/response DTOs, queue item contracts, keep-alive/unload semantics, and stale-cleanup worker types. |
 | `policy.rs` | Explicit scheduler ordering policy objects, internal admission-input/decision models, and stable decision vocabulary for queue placement and admission. |
+| `policy_tests.rs` | Scheduler priority, FIFO, starvation-protection, warm-reuse bypass, runtime-capacity, and admission-wait tests extracted from the production policy module. |
 | `store.rs` | In-memory scheduler state, queue ordering, canonical admission-input construction, runtime-unload candidate selection inputs, and stale-cleanup candidate logic. |
 
 ## Problem
@@ -89,6 +90,9 @@ needs to be the long-term home for scheduler contracts or queue mutation logic.
 - Queue insertion should move the constructed queued-run record directly into
   the store so scheduler state transitions do not accumulate redundant
   rebinding or hidden policy steps.
+- Scheduler priority, FIFO, starvation-protection, warm-reuse bypass,
+  runtime-capacity, and admission-wait tests stay in `policy_tests.rs` so
+  `policy.rs` remains focused on production queue and admission decisions.
 
 ## Revisit Triggers
 - Scheduler V2 needs policy modules that justify splitting `store.rs` further.
