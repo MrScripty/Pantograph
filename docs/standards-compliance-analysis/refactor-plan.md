@@ -722,6 +722,9 @@ Tasks:
   `crates/pantograph-rustler/src/orchestration_execution_nifs.rs`, while
   `lib.rs` preserves the exported orchestration execution and data-graph NIF
   names as thin wrappers.
+  Rustler crate-local non-NIF test coverage now lives in
+  `crates/pantograph-rustler/src/lib_tests.rs`, keeping `lib.rs` focused on
+  exported NIF wrappers, resource loading, and the test module declaration.
 
 Verification:
 - File-size scan shows extracted files below review thresholds or documented exceptions.

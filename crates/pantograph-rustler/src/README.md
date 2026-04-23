@@ -17,6 +17,7 @@ outside core workflow crates.
 | `elixir_data_graph_executor.rs` | Rustler-specific orchestration data-graph bridge into backend workflow execution. |
 | `executor_nifs.rs` | Workflow executor resource construction, inference gateway setup, demand, cache, graph snapshot, and context I/O helpers behind exported NIF wrappers. |
 | `frontend_http_nifs.rs` | Feature-gated frontend HTTP workflow/session implementation helpers behind exported NIF wrappers. |
+| `lib_tests.rs` | Crate-local non-NIF Rust tests and feature-gated frontend HTTP host-contract tests. |
 | `orchestration_execution_nifs.rs` | Orchestration execution, inference-backed orchestration execution, and data-graph insertion helpers behind exported NIF wrappers. |
 | `orchestration_store_nifs.rs` | Orchestration store resource creation and JSON CRUD helpers behind exported NIF wrappers. |
 | `pumas_nifs.rs` | Pumas model-library resource, executor extension, download/import, and system-info helpers behind exported NIF wrappers. |
@@ -59,6 +60,9 @@ registration, callback transport, and feature-gated adapter calls.
 - Workflow JSON responses and error envelopes preserve backend-owned service
   semantics.
 - Resource registration stays centralized in `resource_registration.rs`.
+- Crate-local Rust tests stay in `lib_tests.rs`; `lib.rs` keeps only the test
+  module declaration because NIF-annotated functions require a BEAM-backed host
+  for direct integration testing.
 - Orchestration store JSON CRUD behavior stays in `orchestration_store_nifs.rs`;
   `lib.rs` keeps only the exported orchestration NIF wrappers.
 - Orchestration execution, inference-backed orchestration execution, and

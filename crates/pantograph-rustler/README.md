@@ -136,6 +136,6 @@ canonical binding verification path.
 - `src/lib.rs` is still over the decomposition threshold, but BEAM binding DTOs,
   resource wrappers, callback/event transport, executor/inference-gateway
   dispatch, frontend HTTP dispatch, orchestration store JSON CRUD,
-  orchestration execution dispatch, registry/extension dispatch, and Pumas
-  model-library dispatch now live in focused source modules as part of the
-  facade split tracked by the standards compliance plan.
+  orchestration execution dispatch, crate-local tests, registry/extension
+  dispatch, and Pumas model-library dispatch now live in focused source modules
+  as part of the facade split tracked by the standards compliance plan.
