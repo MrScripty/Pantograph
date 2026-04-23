@@ -12,6 +12,7 @@ core workflow/runtime crates.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `lib.rs` | UniFFI exports, wrapper DTOs, legacy graph/orchestration surface, adapter delegation, and test module wiring. The legacy workflow engine owns graph CRUD, cache inspection, and event buffering only. |
+| `frontend_http.rs` | Feature-gated frontend HTTP workflow/session binding exports and workflow-service error-envelope mapping. |
 | `lib_tests.rs` | Crate-local UniFFI facade tests, event projection tests, and feature-gated frontend HTTP binding contract tests. |
 | `runtime.rs` | Direct `FfiPantographRuntime` wrapper over `pantograph-embedded-runtime`. |
 | `runtime_tests.rs` | Direct embedded-runtime binding integration tests and runtime fixture helpers. |
@@ -54,6 +55,9 @@ and error projection, while workflow semantics stay in
 - Request/response JSON contracts remain backend-owned by
   `pantograph-workflow-service`.
 - `frontend-http` exports delegate to `pantograph-frontend-http-adapter`.
+- Frontend HTTP workflow/session exports stay in `frontend_http.rs`; `lib.rs`
+  re-exports them to preserve the binding surface while keeping adapter
+  delegation separate from legacy graph wrapper code.
 - Test fixtures for canonical workflow events must include all backend-owned
   event fields, including additive graph memory-impact metadata, so binding
   tests compile against the current `node-engine` contract.
@@ -131,5 +135,4 @@ cargo test -p pantograph-uniffi
 ```
 
 ## Notes
-- `lib.rs` remains over the decomposition threshold after moving crate-local
-  tests and is tracked in the standards compliance plan.
+- Keep generated binding smoke checks in sync with feature-gated export moves.

@@ -940,7 +940,20 @@ Tasks:
   UniFFI direct embedded-runtime integration tests and fixture helpers now live
   in `crates/pantograph-uniffi/src/runtime_tests.rs`, keeping `runtime.rs`
   focused on exported runtime wrapper methods, conversion helpers, and test
-  module wiring.
+  module wiring. UniFFI frontend HTTP workflow/session exports and
+  workflow-service error-envelope mapping now live in
+  `crates/pantograph-uniffi/src/frontend_http.rs`, while `lib.rs` re-exports
+  the feature-gated functions to preserve the generated binding surface and
+  drops below the large-file threshold.
+
+  Additional issue recorded during implementation: full UniFFI runtime test
+  coverage currently fails at
+  `crates/pantograph-uniffi/src/runtime_tests.rs:433` because the
+  session-based interactive-input assertion expects
+  `workflow 'uniffi-runtime-interactive-session' requires interactive input at
+  node 'human-input-1'`, while the runtime now returns `workflow requires
+  interactive input at node 'human-input-1'`. The mismatch is unrelated to the
+  frontend HTTP module extraction and needs a later contract/fixture decision.
 
 Verification:
 - File-size scan shows extracted files below review thresholds or documented exceptions.
