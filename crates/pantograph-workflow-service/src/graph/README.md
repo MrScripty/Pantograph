@@ -15,6 +15,7 @@ and persistence abstractions so adapters do not implement graph business logic.
 | `effective_definition.rs` | Merges registry metadata with additive per-node definition overlays before validation or candidate lookup. |
 | `validation.rs` | Shared connection compatibility helpers used by graph-edit flows. |
 | `connection_intent.rs` | Canonical candidate-discovery and revision-aware connection/insert validation. |
+| `connection_insert.rs` | Internal node-insert, edge-insert preview, and edge-bridge helpers used by `connection_intent.rs` while preserving the public graph-edit facade. |
 | `group_mutation.rs` | Backend-owned create/ungroup/update-port graph mutations for collapsed node groups. |
 | `session_contract.rs` | Additive graph snapshot contracts and response-assembly helpers, including the Phase 6 workflow-session state view and explicit backend-state projection seam surfaced to transport layers. |
 | `session_graph.rs` | Graph utility helpers for embedding metadata sync, graph conversion into `node-engine`, and shared node-data merge behavior. |

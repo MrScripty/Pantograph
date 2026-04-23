@@ -397,6 +397,13 @@ Tasks:
   `crates/pantograph-workflow-service/src/graph/session_connection_api.rs`,
   reducing the session store below the large-file threshold while preserving
   the `GraphSessionStore` method surface.
+  Connection candidate lookup and direct commit validation remain in
+  `crates/pantograph-workflow-service/src/graph/connection_intent.rs`, while
+  node insert-connect, edge-insert preview, bridge selection, and rejected
+  insert response helpers now live in
+  `crates/pantograph-workflow-service/src/graph/connection_insert.rs`,
+  reducing the root connection-intent module below the large-file threshold
+  without changing the public graph-edit exports.
 
   Additional issue recorded during implementation: targeted session test
   verification is currently blocked outside this repo slice because
