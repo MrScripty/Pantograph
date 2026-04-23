@@ -8,19 +8,19 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use futures_util::{Stream, StreamExt};
+use futures_util::Stream;
 
 use super::{
     BackendCapabilities, BackendConfig, BackendError, BackendStartOutcome, ChatChunk,
     EmbeddingResult, InferenceBackend,
 };
-use crate::config::DeviceConfig;
-use crate::constants::defaults;
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::process::ProcessSpawner;
-use crate::server::{LlamaServer, ServerMode};
-use crate::types::{RerankRequest, RerankResponse, RerankResult};
-use pantograph_runtime_identity::{canonical_runtime_backend_key, canonical_runtime_id};
+use crate::server::LlamaServer;
+use crate::types::{RerankRequest, RerankResponse};
+
+#[path = "llamacpp_support.rs"]
+mod llamacpp_support;
 
 /// llama.cpp backend using sidecar process management
 ///
@@ -60,227 +60,6 @@ impl LlamaCppBackend {
             tool_calling: true,     // Via OpenAI-compatible API
             external_connection: true,
         }
-    }
-
-    fn normalize_rerank_results(
-        json: serde_json::Value,
-        documents: &[String],
-        return_documents: bool,
-    ) -> Result<RerankResponse, BackendError> {
-        let (items, metadata) = if let Some(results) = json
-            .get("results")
-            .and_then(|value| value.as_array())
-            .cloned()
-        {
-            let mut metadata = json;
-            if let Some(object) = metadata.as_object_mut() {
-                object.remove("results");
-            }
-            (results, metadata)
-        } else if let Some(results) = json.as_array() {
-            (results.clone(), serde_json::Value::Null)
-        } else {
-            return Err(BackendError::Inference(
-                "Invalid rerank response format".to_string(),
-            ));
-        };
-
-        let mut normalized = Vec::with_capacity(items.len());
-        for item in items {
-            let index =
-                item.get("index").and_then(|v| v.as_u64()).ok_or_else(|| {
-                    BackendError::Inference("Missing rerank result index".to_string())
-                })? as usize;
-            let score = item
-                .get("score")
-                .or_else(|| item.get("relevance_score"))
-                .and_then(|v| v.as_f64())
-                .ok_or_else(|| BackendError::Inference("Missing rerank score".to_string()))?
-                as f32;
-            let document = if return_documents {
-                item.get("document")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string())
-                    .or_else(|| documents.get(index).cloned())
-            } else {
-                None
-            };
-            normalized.push(RerankResult {
-                index,
-                score,
-                document,
-            });
-        }
-
-        Ok(RerankResponse {
-            results: normalized,
-            metadata,
-        })
-    }
-
-    async fn post_rerank_request(
-        &self,
-        url: &str,
-        request: &serde_json::Value,
-        documents: &[String],
-        return_documents: bool,
-    ) -> Result<RerankResponse, BackendError> {
-        let response = self
-            .http_client
-            .post(url)
-            .json(request)
-            .send()
-            .await
-            .map_err(BackendError::Http)?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(BackendError::Inference(format!(
-                "Rerank API error {}: {}",
-                status, body
-            )));
-        }
-
-        let json: serde_json::Value = response
-            .json()
-            .await
-            .map_err(|e| BackendError::Inference(format!("Failed to parse response: {}", e)))?;
-        Self::normalize_rerank_results(json, documents, return_documents)
-    }
-
-    /// Parse SSE stream into ChatChunk stream
-    fn parse_sse_stream(
-        response: reqwest::Response,
-    ) -> Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>> {
-        let stream = response.bytes_stream().map(|result| {
-            match result {
-                Ok(bytes) => {
-                    let text = String::from_utf8_lossy(&bytes);
-
-                    // Parse SSE format: "data: {...}\n\n"
-                    for line in text.lines() {
-                        if let Some(data) = line.strip_prefix("data: ") {
-                            if data == "[DONE]" {
-                                return Ok(ChatChunk {
-                                    content: None,
-                                    done: true,
-                                });
-                            }
-
-                            // Parse JSON and extract content
-                            if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
-                                if let Some(content) = json
-                                    .get("choices")
-                                    .and_then(|c| c.get(0))
-                                    .and_then(|c| c.get("delta"))
-                                    .and_then(|d| d.get("content"))
-                                    .and_then(|c| c.as_str())
-                                {
-                                    return Ok(ChatChunk {
-                                        content: Some(content.to_string()),
-                                        done: false,
-                                    });
-                                }
-                            }
-                        }
-                    }
-
-                    // No content in this chunk
-                    Ok(ChatChunk {
-                        content: None,
-                        done: false,
-                    })
-                }
-                Err(e) => Err(BackendError::Http(e)),
-            }
-        });
-
-        Box::pin(stream)
-    }
-
-    fn kv_cache_runtime_fingerprint_for_mode(
-        mode: &ServerMode,
-        active_config: Option<&BackendConfig>,
-    ) -> Result<KvCacheRuntimeFingerprint, BackendError> {
-        let (model_path, mmproj_path, device) = match mode {
-            ServerMode::SidecarInference {
-                model_path,
-                mmproj_path,
-                device,
-                ..
-            } => (model_path.as_str(), mmproj_path.as_deref(), device),
-            ServerMode::External { .. } => {
-                return Err(BackendError::Inference(
-                    "KV cache reuse is not supported for external llama.cpp runtimes".to_string(),
-                ));
-            }
-            _ => {
-                return Err(BackendError::Inference(
-                    "KV cache reuse requires llama.cpp inference mode".to_string(),
-                ));
-            }
-        };
-
-        let context_size = active_config
-            .and_then(|config| config.context_size)
-            .unwrap_or(defaults::CONTEXT_SIZE);
-
-        Ok(KvCacheRuntimeFingerprint {
-            runtime_id: canonical_runtime_id("llama.cpp"),
-            backend_key: canonical_runtime_backend_key("llama.cpp"),
-            tokenizer_fingerprint: format!(
-                "llamacpp:{}:{}:{}:{}",
-                model_path, device.device, device.gpu_layers, context_size
-            ),
-            prompt_format_fingerprint: Some(if mmproj_path.is_some() {
-                "llamacpp_completion_multimodal".to_string()
-            } else {
-                "llamacpp_completion".to_string()
-            }),
-            runtime_build_fingerprint: Some(format!("ctx-{}", context_size)),
-        })
-    }
-
-    fn kv_cache_model_fingerprint_for_mode(
-        mode: &ServerMode,
-        active_config: Option<&BackendConfig>,
-    ) -> Result<ModelFingerprint, BackendError> {
-        let (model_path, mmproj_path, device) = match mode {
-            ServerMode::SidecarInference {
-                model_path,
-                mmproj_path,
-                device,
-                ..
-            } => (model_path.as_str(), mmproj_path.as_deref(), device),
-            ServerMode::External { .. } => {
-                return Err(BackendError::Inference(
-                    "KV cache model fingerprint is not supported for external llama.cpp runtimes"
-                        .to_string(),
-                ));
-            }
-            _ => {
-                return Err(BackendError::Inference(
-                    "KV cache model fingerprint requires llama.cpp inference mode".to_string(),
-                ));
-            }
-        };
-
-        let context_size = active_config
-            .and_then(|config| config.context_size)
-            .unwrap_or(defaults::CONTEXT_SIZE);
-
-        Ok(ModelFingerprint {
-            model_id: model_path.to_string(),
-            config_hash: format!(
-                "llamacpp:{}:{}:{}:{}:{}",
-                model_path,
-                mmproj_path.unwrap_or("none"),
-                device.device,
-                device.gpu_layers,
-                context_size
-            ),
-        })
     }
 }
 
@@ -337,10 +116,7 @@ impl InferenceBackend for LlamaCppBackend {
         }
 
         // Build device config from BackendConfig
-        let device_config = DeviceConfig {
-            device: config.device.clone().unwrap_or_else(|| "auto".to_string()),
-            gpu_layers: config.gpu_layers.unwrap_or(-1),
-        };
+        let device_config = llamacpp_support::sidecar_device_config(config);
 
         if config.embedding_mode {
             // Start in embedding mode
@@ -367,15 +143,7 @@ impl InferenceBackend for LlamaCppBackend {
                     config.port_override,
                 )
                 .await
-                .map_err(|e| {
-                    if e.to_lowercase().contains("out of memory")
-                        || e.to_lowercase().contains("oom")
-                    {
-                        BackendError::OutOfMemory(e)
-                    } else {
-                        BackendError::StartupFailed(e)
-                    }
-                })?;
+                .map_err(llamacpp_support::map_sidecar_start_error)?;
             Ok(BackendStartOutcome {
                 runtime_reused: Some(false),
                 lifecycle_decision_reason: Some("runtime_ready".to_string()),
@@ -404,15 +172,7 @@ impl InferenceBackend for LlamaCppBackend {
                     config.port_override,
                 )
                 .await
-                .map_err(|e| {
-                    if e.to_lowercase().contains("out of memory")
-                        || e.to_lowercase().contains("oom")
-                    {
-                        BackendError::OutOfMemory(e)
-                    } else {
-                        BackendError::StartupFailed(e)
-                    }
-                })?;
+                .map_err(llamacpp_support::map_sidecar_start_error)?;
             Ok(BackendStartOutcome {
                 runtime_reused: Some(false),
                 lifecycle_decision_reason: Some("runtime_ready".to_string()),
@@ -451,15 +211,7 @@ impl InferenceBackend for LlamaCppBackend {
                     config.port_override,
                 )
                 .await
-                .map_err(|e| {
-                    if e.to_lowercase().contains("out of memory")
-                        || e.to_lowercase().contains("oom")
-                    {
-                        BackendError::OutOfMemory(e)
-                    } else {
-                        BackendError::StartupFailed(e)
-                    }
-                })?;
+                .map_err(llamacpp_support::map_sidecar_start_error)?;
             Ok(BackendStartOutcome {
                 runtime_reused: Some(false),
                 lifecycle_decision_reason: Some("runtime_ready".to_string()),
@@ -523,7 +275,7 @@ impl InferenceBackend for LlamaCppBackend {
             )));
         }
 
-        Ok(Self::parse_sse_stream(response))
+        Ok(llamacpp_support::parse_sse_stream(response))
     }
 
     async fn embeddings(
@@ -617,9 +369,14 @@ impl InferenceBackend for LlamaCppBackend {
             .unwrap_or_default();
 
         let preferred_url = format!("{}/v1/rerank", base_url);
-        match self
-            .post_rerank_request(&preferred_url, &body, &documents, request.return_documents)
-            .await
+        match llamacpp_support::post_rerank_request(
+            &self.http_client,
+            &preferred_url,
+            &body,
+            &documents,
+            request.return_documents,
+        )
+        .await
         {
             Ok(response) => Ok(response),
             Err(BackendError::Inference(message))
@@ -628,8 +385,14 @@ impl InferenceBackend for LlamaCppBackend {
                     || message.contains("Not Found") =>
             {
                 let fallback_url = format!("{}/reranking", base_url);
-                self.post_rerank_request(&fallback_url, &body, &documents, request.return_documents)
-                    .await
+                llamacpp_support::post_rerank_request(
+                    &self.http_client,
+                    &fallback_url,
+                    &body,
+                    &documents,
+                    request.return_documents,
+                )
+                .await
             }
             Err(error) => Err(error),
         }
@@ -639,14 +402,20 @@ impl InferenceBackend for LlamaCppBackend {
         &self,
         active_config: Option<&BackendConfig>,
     ) -> Result<KvCacheRuntimeFingerprint, BackendError> {
-        Self::kv_cache_runtime_fingerprint_for_mode(self.server.current_mode(), active_config)
+        llamacpp_support::kv_cache_runtime_fingerprint_for_mode(
+            self.server.current_mode(),
+            active_config,
+        )
     }
 
     async fn kv_cache_model_fingerprint(
         &self,
         active_config: Option<&BackendConfig>,
     ) -> Result<ModelFingerprint, BackendError> {
-        Self::kv_cache_model_fingerprint_for_mode(self.server.current_mode(), active_config)
+        llamacpp_support::kv_cache_model_fingerprint_for_mode(
+            self.server.current_mode(),
+            active_config,
+        )
     }
 
     async fn save_kv_cache_slot(&self, slot_id: u32, path: &Path) -> Result<(), BackendError> {
@@ -694,6 +463,8 @@ mod tests {
     use std::path::PathBuf;
     use tokio::sync::mpsc;
 
+    use crate::config::DeviceConfig;
+    use crate::constants::defaults;
     use crate::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
     use crate::server::ServerMode;
 
@@ -759,7 +530,7 @@ mod tests {
         };
 
         let fingerprint =
-            LlamaCppBackend::kv_cache_runtime_fingerprint_for_mode(&mode, Some(&config))
+            llamacpp_support::kv_cache_runtime_fingerprint_for_mode(&mode, Some(&config))
                 .expect("llama.cpp inference mode should support KV fingerprints");
 
         assert_eq!(fingerprint.runtime_id, "llama_cpp");
@@ -791,7 +562,7 @@ mod tests {
             },
         };
 
-        let fingerprint = LlamaCppBackend::kv_cache_model_fingerprint_for_mode(&mode, None)
+        let fingerprint = llamacpp_support::kv_cache_model_fingerprint_for_mode(&mode, None)
             .expect("llama.cpp inference mode should support model fingerprints");
 
         assert_eq!(fingerprint.model_id, "/models/main.gguf");
@@ -827,6 +598,7 @@ mod tests {
                     mmproj_path: Some(PathBuf::from("/models/vision.mmproj")),
                     device: Some("Vulkan0".to_string()),
                     gpu_layers: Some(40),
+                    port_override: Some(11434),
                     ..BackendConfig::default()
                 },
                 Arc::new(NoopProcessSpawner),

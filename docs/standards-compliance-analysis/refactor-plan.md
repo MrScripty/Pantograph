@@ -596,6 +596,16 @@ Tasks:
   extraction, and system prompt tests now live in
   `crates/inference/src/backend/pytorch_tests.rs`, reducing `pytorch.rs` to
   production adapter behavior.
+- Split `crates/inference/src/backend/llamacpp.rs` by llama.cpp backend facade,
+  request parsing/rerank helpers, sidecar-start utilities, and KV-cache
+  fingerprint helpers.
+  Progress: llama.cpp SSE parsing, rerank response normalization, sidecar
+  start helper utilities, and KV-cache fingerprint helpers now live in
+  `crates/inference/src/backend/llamacpp_support.rs`, reducing `llamacpp.rs`
+  below the large-file threshold while preserving the `LlamaCppBackend`
+  facade. The matching-inference-runtime reuse fixture now pins
+  `port_override: Some(11434)` so the test expresses the intended reuse case
+  against the backend's explicit port-matching contract.
 - Split `crates/inference/torch/worker.py` by worker facade, shared runtime
   helpers, and transformers compatibility shims.
   Progress: device/model-type/dtype resolution, diffusion load override

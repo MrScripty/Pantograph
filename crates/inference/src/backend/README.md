@@ -14,6 +14,7 @@ isolated here.
 | `mod.rs` | The backend trait, capability model, shared config, and backend error contract. |
 | `registry.rs` | Compile-time backend registration and backend discovery helpers. |
 | `llamacpp.rs` | llama.cpp backend adapter for chat, embeddings, and sidecar reranking. |
+| `llamacpp_support.rs` | Shared llama.cpp request parsing, rerank response normalization, sidecar start helpers, and KV-cache fingerprint helpers used by `llamacpp.rs`. |
 | `ollama.rs` | Ollama backend adapter. |
 | `candle.rs` | Candle backend placeholder and capability declaration. |
 | `pytorch.rs` | PyTorch backend implementation used for HuggingFace-style runtimes. |
@@ -117,6 +118,9 @@ fn create_backend() {
 - Streaming response parsers should use `strip_prefix` for SSE `data:` lines
   so prefix handling stays explicit and warning-clean under the Rust clippy
   audit.
+- llama.cpp request parsing, rerank normalization, sidecar start error mapping,
+  and KV-cache fingerprint helpers stay in `llamacpp_support.rs` so
+  `llamacpp.rs` remains focused on the backend facade and trait methods.
 - PyTorch backend capability, lifecycle, KV-cache fingerprint, prompt
   extraction, and system prompt tests stay in `pytorch_tests.rs` so
   `pytorch.rs` remains focused on production adapter behavior.
