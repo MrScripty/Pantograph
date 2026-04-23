@@ -16,6 +16,7 @@ details.
 | `embedding_runtime.rs` | Dedicated llama.cpp embedding runtime lifecycle plus backend-owned coordination for parallel embedding modes. |
 | `gateway.rs` | The single entry point that owns the active backend, temporary embedding-mode prepare/restore orchestration, and request forwarding through the frozen contracts. |
 | `gateway_tests.rs` | Gateway lifecycle, request forwarding, runtime reuse, embedding prepare/restore, and mock-backend tests extracted from the production gateway facade. |
+| `gateway_tests/` | Behavior-focused child modules for oversized gateway test families. |
 | `managed_runtime/` | Backend-owned managed binary contracts and orchestration for installable runtime sidecars such as `llama.cpp` and `Ollama`. |
 | `process.rs` | Sidecar process abstraction used by backends that need external runtimes. |
 | `types.rs` | Shared request/response contracts consumed across backend and host boundaries. |
@@ -104,9 +105,10 @@ than replaces.
 - Backend parsing and managed-runtime path handling should use standard-library
   helpers such as `strip_prefix`, `Path`, and direct `Path::join` inputs rather
   than manual slicing or temporary string allocations.
-- Gateway lifecycle, request forwarding, runtime reuse, embedding
-  prepare/restore, and mock-backend tests stay in `gateway_tests.rs` so
-  `gateway.rs` remains focused on production gateway behavior.
+- Gateway lifecycle, request forwarding, runtime reuse, and shared mock-backend
+  fixtures stay in `gateway_tests.rs`, while oversized behavior families split
+  under `gateway_tests/` so `gateway.rs` remains focused on production gateway
+  behavior.
 
 ## Revisit Triggers
 

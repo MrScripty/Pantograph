@@ -555,7 +555,11 @@ Tasks:
   Progress: gateway lifecycle, request forwarding, runtime reuse, embedding
   prepare/restore, and mock-backend tests now live in
   `crates/inference/src/gateway_tests.rs`, reducing `gateway.rs` to production
-  gateway behavior.
+  gateway behavior. Gateway start-config, embedding-runtime preparation, and
+  restart-config tests now live in
+  `crates/inference/src/gateway_tests/start_config.rs`, reducing the root
+  gateway test fixture below the large-file threshold while preserving shared
+  mock backends in `gateway_tests.rs`.
 - Split `crates/inference/src/backend/pytorch.rs` by PyTorch backend adapter,
   lifecycle/capability contracts, KV-cache metadata, prompt extraction, and
   tests.
