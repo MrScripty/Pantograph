@@ -67,7 +67,10 @@ Blocking jobs:
 
 The Rust jobs also bootstrap the pinned external `Pumas-Library` checkout in
 CI so the clean runner matches the sibling path dependency layout used by the
-workspace.
+workspace. The full-workspace `rust-check` and `rust-clippy-audit` lanes also
+install the Ubuntu desktop/native development packages needed by the Tauri and
+GTK/WebKit-linked workspace crates instead of assuming those libraries exist on
+the runner image.
 
 Ratcheted audit jobs:
 

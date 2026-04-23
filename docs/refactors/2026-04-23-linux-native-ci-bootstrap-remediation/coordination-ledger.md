@@ -9,8 +9,8 @@ fixes.
 | Item | Status | Notes |
 | ---- | ------ | ----- |
 | Planning | complete | Findings and waves recorded |
-| Source implementation | pending | This package is planning-only |
-| CI verification | pending | Awaiting implementation |
+| Source implementation | complete | Ubuntu native bootstrap added to the remaining failing Rust lanes; docs aligned |
+| CI verification | pending | Awaiting post-change GitHub Actions rerun |
 
 ## Shared Constraints
 - Do not modify unrelated asset worktree changes under `assets/`.
@@ -25,6 +25,12 @@ fixes.
   after authenticated log inspection.
 - The previous CI remediation already fixed sibling dependency bootstrap,
   traceability tooling fallback, and audit-summary truthfulness.
+- 2026-04-23: added explicit Ubuntu desktop/native package installation to the
+  `rust-check` and `rust-clippy-audit` jobs in
+  `.github/workflows/quality-gates.yml`.
+- 2026-04-23: updated `docs/testing-and-release-strategy.md` and
+  `docs/toolchain-policy.md` so the CI runner contract now documents that the
+  workflow owns desktop/native package bootstrap for full-workspace Rust lanes.
 
 ## Dependency Order
 1. Add Ubuntu native package bootstrap for the remaining Rust lanes.
@@ -42,6 +48,8 @@ fixes.
 | `Rust workspace check` CI job | fail | missing `glib-2.0.pc` / Ubuntu native packages |
 | `Rust clippy warning audit` CI job | fail | same missing `glib-2.0.pc` / Ubuntu native packages |
 | `Quality summary` CI job | fail | correctly reflecting `rust-check` failure and clippy audit failure |
+| Workflow remediation patch | implemented locally | adds Ubuntu native bootstrap for `rust-check` and `rust-clippy-audit` |
+| Docs alignment for native bootstrap | implemented locally | `testing-and-release-strategy.md` and `toolchain-policy.md` updated |
 
 ## Worker Report Paths
 - `reports/wave-01-worker-native-ci-bootstrap.md`

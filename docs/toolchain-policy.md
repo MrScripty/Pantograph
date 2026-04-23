@@ -26,6 +26,16 @@ become required in CI.
 These versions match the active development environment used when the standards
 compliance pass added toolchain pinning.
 
+## Optional Host-Lane Native Prerequisites
+
+Some CI lanes also require runner-owned native system packages instead of extra
+developer-local toolchain installs.
+
+| Lane | Native prerequisite owner |
+| ---- | ------------------------- |
+| Rust workspace check | `.github/workflows/quality-gates.yml` installs the Ubuntu desktop/native development packages required by the full workspace build |
+| Rust clippy warning audit | `.github/workflows/quality-gates.yml` installs the same Ubuntu desktop/native development packages before the audit runs |
+
 ## Ownership
 
 - `rust-toolchain.toml` is the source of truth for `rustup` and CI Rust
@@ -39,6 +49,9 @@ compliance pass added toolchain pinning.
   environments and Python-backed smoke paths.
 - Host-language smoke lanes may pin their own toolchains in CI when the repo
   does not require that runtime for ordinary local development.
+- CI lanes that compile desktop-linked crates must also own any required native
+  runner packages in workflow bootstrap, rather than assuming the GitHub-hosted
+  Ubuntu image already provides them.
 
 ## Update Policy
 

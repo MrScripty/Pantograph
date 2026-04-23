@@ -64,7 +64,10 @@ The quality summary is now truthful; it is not the remaining problem.
 - CI documentation for native prerequisites
 
 ### Affected Persisted Artifacts
-- documentation and planning Markdown only
+- `.github/workflows/quality-gates.yml`
+- `docs/testing-and-release-strategy.md`
+- `docs/toolchain-policy.md`
+- this remediation package
 
 ### Concurrency / Race Review
 - No runtime concurrency change is planned.
@@ -140,6 +143,13 @@ Validation:
 - `cargo clippy --workspace --all-targets --all-features -- -D warnings`
 - follow-up GitHub Actions run on the updated workflow
 
+Implementation status:
+- complete locally on 2026-04-23
+- workflow now installs Ubuntu desktop/native development packages for the two
+  remaining failing Rust lanes
+- final proof still depends on the next GitHub-hosted rerun because the native
+  package gap only reproduces on the clean Ubuntu runner
+
 ### M2: Verify Follow-On Native Dependencies
 Goal: confirm whether the first Ubuntu package set is sufficient or whether the
 runner still lacks additional desktop/native libraries.
@@ -166,6 +176,11 @@ Risks:
 
 Validation:
 - GitHub Actions rerun inspection
+
+Implementation status:
+- pending rerun inspection
+- if another missing native package appears after `glib`, extend the same
+  workflow bootstrap and record the new dependency before closing the package
 
 ### M3: Align Docs With Final Native Bootstrap
 Goal: make CI/testing/toolchain docs match the implemented Ubuntu prerequisites.
@@ -195,6 +210,11 @@ Risks:
 Validation:
 - manual review against final workflow YAML
 - post-change GitHub Actions run status
+
+Implementation status:
+- local doc alignment complete on 2026-04-23
+- final closeout still waits on the rerun outcome so the documented package
+  contract matches the proven runner behavior
 
 ## Safe Parallel Waves
 
