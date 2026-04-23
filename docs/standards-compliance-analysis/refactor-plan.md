@@ -644,6 +644,12 @@ Tasks:
   `crates/node-engine/src/orchestration/executor_tests.rs`, reducing
   `executor.rs` to production sequencing and workflow-event emission while
   preserving data-graph propagation and terminal-error coverage.
+- [x] Split `crates/inference/src/kv_cache/store.rs` by production KV-store
+  orchestration and crate-local regression coverage.
+  Status: KV-store tests now live in
+  `crates/inference/src/kv_cache/store_tests.rs`, reducing `store.rs` to
+  production save/load/compatibility/retention logic while preserving marker,
+  truncation, runtime-fingerprint, and prune behavior coverage.
   Synchronous built-in node handlers now live in
   `crates/node-engine/src/core_executor/pure_nodes.rs`, separating pure
   payload normalization from file I/O, dependency preflight, and runtime-backed
