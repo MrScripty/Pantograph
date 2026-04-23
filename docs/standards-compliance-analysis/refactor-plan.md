@@ -631,7 +631,12 @@ Tasks:
   Progress: headless workflow command diagnostics projection, trace, scheduler
   snapshot, runtime metadata, and clear-history tests now live in
   `src-tauri/src/workflow/headless_workflow_commands_tests.rs`, reducing
-  `headless_workflow_commands.rs` to request orchestration.
+  `headless_workflow_commands.rs` to request orchestration. Headless workflow
+  command test coverage is now further split under
+  `src-tauri/src/workflow/headless_workflow_commands_tests/` by diagnostics
+  helper recording, transport responses/errors, and diagnostics
+  projection/storage behavior, reducing the root test module below the
+  large-file threshold while preserving shared fixtures.
 - Split `src-tauri/src/workflow/diagnostics/tests.rs` by diagnostics test
   harness, runtime/scheduler projection, replay/clear-history, and small
   request/trace assertions.

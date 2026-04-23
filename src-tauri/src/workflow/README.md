@@ -28,7 +28,8 @@ owner of that policy itself.
 | `headless_diagnostics.rs` | Backend-owned diagnostics projection and trace/scheduler snapshot adaptation for headless workflow transport. |
 | `headless_diagnostics_transport.rs` | Host-facing diagnostics, trace, and history snapshot responses shared by workflow commands and runtime debug surfaces. |
 | `headless_runtime.rs` | Shared host-resource composition for backend-owned embedded workflow runtime construction. |
-| `headless_workflow_commands_tests.rs` | Headless workflow command diagnostics projection, trace, scheduler snapshot, runtime metadata, and clear-history tests extracted from the command orchestration file. |
+| `headless_workflow_commands_tests.rs` | Shared fixtures and module index for headless workflow command diagnostics, trace, scheduler, runtime metadata, and transport tests. |
+| `headless_workflow_commands_tests/` | Focused headless workflow command tests split by diagnostics helper recording, transport responses/errors, and diagnostics projection/storage behavior. |
 
 ## Problem
 Pantograph’s standalone GUI still needs a native bridge, but graph editing can
@@ -169,9 +170,11 @@ service crate, which is the active owner for save/load/list behavior.
   envelopes for registry admission and runtime-unavailable failures rather than
   rewriting them into generic transport/internal errors.
 - Headless workflow command diagnostics projection, trace, scheduler snapshot,
-  runtime metadata, and clear-history tests stay in
-  `headless_workflow_commands_tests.rs` so `headless_workflow_commands.rs`
-  remains focused on request orchestration.
+  runtime metadata, and clear-history tests stay under
+  `headless_workflow_commands_tests/`, while
+  `headless_workflow_commands_tests.rs` retains shared fixtures and module
+  registration so `headless_workflow_commands.rs` remains focused on request
+  orchestration.
 - Tauri must not reintroduce local graph validation, connection-intent, or
   effective-definition policy; those behaviors belong in
   `pantograph-workflow-service`.
