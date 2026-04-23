@@ -6,16 +6,16 @@
 
 use std::path::PathBuf;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 use futures_util::Stream;
 use pantograph_runtime_identity::canonical_runtime_id;
 use tokio::sync::RwLock;
 
 use crate::backend::{
-    BackendCapabilities, BackendConfig, BackendError, BackendInfo, BackendRegistry, ChatChunk,
-    EmbeddingResult, InferenceBackend, canonical_backend_key,
+    canonical_backend_key, BackendCapabilities, BackendConfig, BackendError, BackendInfo,
+    BackendRegistry, ChatChunk, EmbeddingResult, InferenceBackend,
 };
 use crate::config::EmbeddingMemoryMode;
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};

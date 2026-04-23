@@ -535,11 +535,9 @@ mod tests {
 
         assert_eq!(fingerprint.runtime_id, "llama_cpp");
         assert_eq!(fingerprint.backend_key, "llama_cpp");
-        assert!(
-            fingerprint
-                .tokenizer_fingerprint
-                .contains("/models/main.gguf")
-        );
+        assert!(fingerprint
+            .tokenizer_fingerprint
+            .contains("/models/main.gguf"));
         assert_eq!(
             fingerprint.prompt_format_fingerprint.as_deref(),
             Some("llamacpp_completion")
@@ -568,11 +566,9 @@ mod tests {
         assert_eq!(fingerprint.model_id, "/models/main.gguf");
         assert!(fingerprint.config_hash.contains("/models/vision.mmproj"));
         assert!(fingerprint.config_hash.contains("auto"));
-        assert!(
-            fingerprint
-                .config_hash
-                .contains(&defaults::CONTEXT_SIZE.to_string())
-        );
+        assert!(fingerprint
+            .config_hash
+            .contains(&defaults::CONTEXT_SIZE.to_string()));
     }
 
     #[tokio::test]

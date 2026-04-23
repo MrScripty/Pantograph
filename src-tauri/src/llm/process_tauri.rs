@@ -10,7 +10,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use inference::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
-use inference::{ManagedBinaryId, managed_runtime_dir, resolve_binary_command};
+use inference::{managed_runtime_dir, resolve_binary_command, ManagedBinaryId};
 use serde::Serialize;
 use tauri::{AppHandle, Manager};
 use tokio::io::{AsyncBufReadExt, BufReader};

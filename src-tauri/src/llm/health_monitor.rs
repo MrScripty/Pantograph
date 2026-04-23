@@ -4,8 +4,8 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::RwLock;
@@ -15,7 +15,7 @@ use crate::llm::recovery::SharedRecoveryManager;
 use crate::llm::runtime_registry::sync_runtime_registry_from_gateway;
 use crate::llm::{SharedGateway, SharedRuntimeRegistry};
 use pantograph_embedded_runtime::runtime_health::{
-    RuntimeHealthAssessment, RuntimeHealthProbe, RuntimeHealthState, assess_runtime_health_probe,
+    assess_runtime_health_probe, RuntimeHealthAssessment, RuntimeHealthProbe, RuntimeHealthState,
 };
 
 /// Health check result
@@ -465,7 +465,7 @@ mod tests {
         RuntimeHealthAssessment, RuntimeHealthState,
     };
 
-    use super::{HealthStatus, health_check_result_from_assessment};
+    use super::{health_check_result_from_assessment, HealthStatus};
 
     #[test]
     fn health_check_result_maps_degraded_backend_state() {

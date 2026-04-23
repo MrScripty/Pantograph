@@ -6,8 +6,8 @@ use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
 
 use crate::workflow::{
-    WorkflowSchedulerSnapshotResponse, WorkflowServiceError, WorkflowSessionQueueItem,
-    WorkflowSessionSummary, scheduler_snapshot_trace_execution_id,
+    scheduler_snapshot_trace_execution_id, WorkflowSchedulerSnapshotResponse, WorkflowServiceError,
+    WorkflowSessionQueueItem, WorkflowSessionSummary,
 };
 
 use super::canonicalization::canonicalize_workflow_graph;
@@ -17,9 +17,9 @@ use super::group_mutation::{
 use super::memory_impact::graph_memory_impact_from_graph_change;
 use super::registry::NodeRegistry;
 use super::session_contract::{
+    build_workflow_session_state_view, resolve_workflow_session_memory_impact,
     WorkflowGraphEditSessionGraphResponse, WorkflowGraphSessionStateProjection,
-    WorkflowGraphSessionStateView, build_workflow_session_state_view,
-    resolve_workflow_session_memory_impact,
+    WorkflowGraphSessionStateView,
 };
 use super::session_event::{
     dirty_tasks_for_full_snapshot, dirty_tasks_from_seed_nodes, graph_modified_event,

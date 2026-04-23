@@ -52,8 +52,7 @@ impl ManagedBinaryDefinition for LlamaCppBinary {
     fn download_url(&self, version: &str, release_asset: &ReleaseAsset) -> String {
         format!(
             "https://github.com/ggml-org/llama.cpp/releases/download/{}/{}",
-            version,
-            release_asset.archive_name
+            version, release_asset.archive_name
         )
     }
 
@@ -102,8 +101,7 @@ impl ManagedBinaryDefinition for OllamaBinary {
     fn download_url(&self, version: &str, release_asset: &ReleaseAsset) -> String {
         format!(
             "https://github.com/ollama/ollama/releases/download/{}/{}",
-            version,
-            release_asset.archive_name
+            version, release_asset.archive_name
         )
     }
 

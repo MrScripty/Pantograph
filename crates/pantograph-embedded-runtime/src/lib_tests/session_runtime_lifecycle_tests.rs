@@ -86,11 +86,9 @@ async fn test_keep_alive_session_load_tracks_registry_reservation_lifecycle() {
 
     let released_snapshot = runtime_registry.snapshot();
     assert!(released_snapshot.reservations.is_empty());
-    assert!(
-        released_snapshot.runtimes[0]
-            .active_reservation_ids
-            .is_empty()
-    );
+    assert!(released_snapshot.runtimes[0]
+        .active_reservation_ids
+        .is_empty());
     assert_eq!(
         released_snapshot.runtimes[0].status,
         RuntimeRegistryStatus::Stopped
@@ -531,12 +529,10 @@ async fn test_session_runtime_load_releases_reservation_after_warmup_timeout() {
 
     let snapshot = runtime_registry.snapshot();
     assert!(snapshot.reservations.is_empty());
-    assert!(
-        snapshot
-            .runtimes
-            .iter()
-            .all(|runtime| runtime.active_reservation_ids.is_empty())
-    );
+    assert!(snapshot
+        .runtimes
+        .iter()
+        .all(|runtime| runtime.active_reservation_ids.is_empty()));
     assert_eq!(snapshot.runtimes[0].status, RuntimeRegistryStatus::Stopped);
 }
 
@@ -601,17 +597,13 @@ async fn test_session_run_without_keep_alive_releases_runtime_reservation_after_
 
     let snapshot = runtime_registry.snapshot();
     assert!(snapshot.reservations.is_empty());
-    assert!(
-        snapshot
-            .runtimes
-            .iter()
-            .all(|runtime| runtime.active_reservation_ids.is_empty())
-    );
-    assert!(
-        runtime
-            .session_executions
-            .handle(&created.session_id)
-            .expect("session execution lookup should succeed")
-            .is_none()
-    );
+    assert!(snapshot
+        .runtimes
+        .iter()
+        .all(|runtime| runtime.active_reservation_ids.is_empty()));
+    assert!(runtime
+        .session_executions
+        .handle(&created.session_id)
+        .expect("session execution lookup should succeed")
+        .is_none());
 }

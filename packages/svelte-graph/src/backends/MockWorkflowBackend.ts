@@ -27,7 +27,7 @@ import type {
 } from '../types/workflow.js';
 import type { NodeGroup, PortMapping } from '../types/groups.js';
 import { isPortTypeCompatible } from '../portTypeCompatibility.js';
-import { buildDerivedGraph, computeGraphFingerprint } from '../graphRevision.js';
+import { buildDerivedGraph } from '../graphRevision.js';
 import {
   mockConnectAnchors,
   mockGetConnectionCandidates,

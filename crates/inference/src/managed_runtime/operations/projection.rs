@@ -3,7 +3,7 @@ use super::super::contracts::{
     ManagedRuntimeJobArtifactStatus, ManagedRuntimeJobState, ManagedRuntimeReadinessState,
     ManagedRuntimeSelectionState, ManagedRuntimeSnapshot, ManagedRuntimeVersionStatus,
 };
-use super::super::definitions::{ManagedBinaryDefinition, definition};
+use super::super::definitions::{definition, ManagedBinaryDefinition};
 use super::super::paths::managed_install_dir;
 use super::super::state::{ManagedRuntimePersistedRuntime, ManagedRuntimePersistedVersion};
 use std::path::Path;

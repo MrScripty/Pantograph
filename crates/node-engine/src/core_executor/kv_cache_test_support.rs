@@ -5,7 +5,7 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use futures_util::{Stream, stream};
+use futures_util::{stream, Stream};
 use inference::backend::{
     BackendCapabilities, BackendConfig, BackendError, BackendStartOutcome, ChatChunk,
     EmbeddingResult, InferenceBackend,

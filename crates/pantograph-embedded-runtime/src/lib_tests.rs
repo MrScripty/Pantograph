@@ -25,7 +25,7 @@ use std::path::Path;
 use std::pin::Pin;
 use std::time::Duration;
 use tempfile::TempDir;
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::{mpsc, RwLock};
 
 #[path = "lib_tests/data_graph_execution_tests.rs"]
 mod data_graph_execution_tests;

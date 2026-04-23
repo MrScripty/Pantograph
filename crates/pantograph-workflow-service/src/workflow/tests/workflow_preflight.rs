@@ -29,12 +29,10 @@ async fn workflow_preflight_reports_missing_required_inputs_and_invalid_targets(
     assert_eq!(response.invalid_targets.len(), 1);
     assert_eq!(response.invalid_targets[0].node_id, "text-output-1");
     assert_eq!(response.invalid_targets[0].port_id, "stream");
-    assert!(
-        response
-            .warnings
-            .iter()
-            .any(|warning| warning.contains("does not declare required metadata"))
-    );
+    assert!(response
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("does not declare required metadata")));
 }
 
 #[tokio::test]
@@ -66,12 +64,10 @@ async fn workflow_preflight_can_run_when_inputs_and_targets_are_valid() {
     assert_eq!(response.graph_fingerprint, "preflight-graph");
     assert!(response.missing_required_inputs.is_empty());
     assert!(response.invalid_targets.is_empty());
-    assert!(
-        response
-            .warnings
-            .iter()
-            .any(|warning| warning.contains("does not declare required metadata"))
-    );
+    assert!(response
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("does not declare required metadata")));
 }
 
 #[tokio::test]
@@ -223,11 +219,9 @@ async fn workflow_preflight_blocks_selected_technical_fit_runtime_when_capabilit
 
     assert!(!response.can_run);
     assert_eq!(response.blocking_runtime_issues.len(), 1);
-    assert!(
-        response.blocking_runtime_issues[0]
-            .message
-            .contains("validation failed")
-    );
+    assert!(response.blocking_runtime_issues[0]
+        .message
+        .contains("validation failed"));
 }
 
 #[tokio::test]

@@ -138,9 +138,9 @@ pub fn assess_runtime_health_probe(
 #[cfg(test)]
 mod tests {
     use super::{
-        RuntimeHealthProbe, RuntimeHealthState, assess_runtime_health_probe,
-        failed_runtime_health_assessment, runtime_health_assessment_record,
-        unhealthy_runtime_health_assessment,
+        assess_runtime_health_probe, failed_runtime_health_assessment,
+        runtime_health_assessment_record, unhealthy_runtime_health_assessment, RuntimeHealthProbe,
+        RuntimeHealthState,
     };
 
     #[test]

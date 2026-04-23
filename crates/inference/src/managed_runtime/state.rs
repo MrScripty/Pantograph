@@ -1,6 +1,6 @@
 use super::contracts::{
-    ManagedBinaryId, ManagedRuntimeCatalogVersion, ManagedRuntimeJobState,
-    ManagedRuntimeJobStatus, ManagedRuntimeReadinessState, ManagedRuntimeSelectionState,
+    ManagedBinaryId, ManagedRuntimeCatalogVersion, ManagedRuntimeJobState, ManagedRuntimeJobStatus,
+    ManagedRuntimeReadinessState, ManagedRuntimeSelectionState,
 };
 use super::paths::managed_runtime_dir;
 use serde::{Deserialize, Serialize};

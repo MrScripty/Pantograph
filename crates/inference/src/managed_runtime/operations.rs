@@ -10,7 +10,7 @@ use super::paths::{
     extract_pid_file, managed_install_dir, managed_runtime_dir, managed_version_install_dir,
 };
 use super::state::{
-    ManagedRuntimePersistedJobArtifact, load_managed_runtime_state, runtime_state_entry,
+    load_managed_runtime_state, runtime_state_entry, ManagedRuntimePersistedJobArtifact,
 };
 use futures_util::TryStreamExt;
 use once_cell::sync::Lazy;
@@ -20,21 +20,21 @@ use std::collections::HashMap;
 use std::fs;
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 mod download;
 mod projection;
 mod state_transitions;
 
-use self::download::{DownloadResponseMode, download_response_mode, existing_download_artifact};
+use self::download::{download_response_mode, existing_download_artifact, DownloadResponseMode};
 use self::download::{persist_catalog_versions, resolve_download_source};
 #[cfg(test)]
 use self::projection::readiness_state_for_capability;
 use self::projection::snapshot_from_capability;
 use self::state_transitions::{
-    SelectionTarget, discard_retained_job_artifact, persist_active_job,
-    persist_active_job_with_artifact, persist_failed_job, update_runtime_selection,
+    discard_retained_job_artifact, persist_active_job, persist_active_job_with_artifact,
+    persist_failed_job, update_runtime_selection, SelectionTarget,
 };
 use self::state_transitions::{
     finish_requested_cancellation, finish_requested_pause, persist_install_success,

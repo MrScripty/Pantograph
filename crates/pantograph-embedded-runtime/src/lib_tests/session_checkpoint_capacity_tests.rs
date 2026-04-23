@@ -432,11 +432,9 @@ async fn repeated_capacity_unload_keeps_checkpoint_identity_and_keep_alive_disab
         .await
         .expect("disable keep-alive after checkpoint");
 
-    assert!(
-        runtime
-            .session_executions
-            .handle(&session.session_id)
-            .expect("session execution lookup should succeed")
-            .is_none()
-    );
+    assert!(runtime
+        .session_executions
+        .handle(&session.session_id)
+        .expect("session execution lookup should succeed")
+        .is_none());
 }

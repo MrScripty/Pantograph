@@ -444,12 +444,10 @@ mod tests {
 
         let result = task.run(context).await;
         assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("not allowed by host policy")
-        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("not allowed by host policy"));
     }
 
     #[test]

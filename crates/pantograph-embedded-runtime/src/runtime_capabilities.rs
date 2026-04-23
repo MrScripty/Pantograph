@@ -425,12 +425,10 @@ mod tests {
         assert_eq!(capability.source_kind, expected_source_kind);
         assert_eq!(capability.install_state, expected_install_state);
         assert!(!capability.display_name.trim().is_empty());
-        assert!(
-            capability
-                .backend_keys
-                .iter()
-                .all(|backend_key| !backend_key.trim().is_empty())
-        );
+        assert!(capability
+            .backend_keys
+            .iter()
+            .all(|backend_key| !backend_key.trim().is_empty()));
         assert!(!capability.backend_keys.is_empty());
     }
 
@@ -529,11 +527,9 @@ mod tests {
             .iter()
             .find(|capability| capability.runtime_id == "stable_audio")
             .expect("stable audio capability");
-        assert!(
-            stable_audio
-                .backend_keys
-                .contains(&"stable_audio".to_string())
-        );
+        assert!(stable_audio
+            .backend_keys
+            .contains(&"stable_audio".to_string()));
     }
 
     #[test]

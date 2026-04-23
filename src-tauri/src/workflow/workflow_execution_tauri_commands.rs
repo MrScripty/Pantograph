@@ -1,4 +1,4 @@
-use tauri::{AppHandle, State, command, ipc::Channel};
+use tauri::{command, ipc::Channel, AppHandle, State};
 
 use crate::agent::rag::SharedRagManager;
 use crate::llm::{SharedAppConfig, SharedGateway, SharedRuntimeRegistry};

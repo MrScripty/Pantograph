@@ -151,9 +151,7 @@ fn runtime_preflight_reports_selected_version_readiness_context() {
 
     assert_eq!(runtime_warnings.len(), 1);
     assert_eq!(blocking_runtime_issues.len(), 1);
-    assert!(
-        blocking_runtime_issues[0]
-            .message
-            .contains("selected version 'b8248' is validating")
-    );
+    assert!(blocking_runtime_issues[0]
+        .message
+        .contains("selected version 'b8248' is validating"));
 }

@@ -631,11 +631,9 @@ async fn execute_edit_session_graph_waiting_for_input_does_not_emit_workflow_fai
             ..
         } if task_id == "approval" && prompt == "Approve deployment?"
     )));
-    assert!(
-        !events
-            .iter()
-            .any(|event| matches!(event, node_engine::WorkflowEvent::WorkflowFailed { .. }))
-    );
+    assert!(!events
+        .iter()
+        .any(|event| matches!(event, node_engine::WorkflowEvent::WorkflowFailed { .. })));
     assert!(!events.iter().any(|event| matches!(
         event,
         node_engine::WorkflowEvent::WorkflowCompleted { .. }

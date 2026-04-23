@@ -19,7 +19,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub use admission::{
     RuntimeAdmissionBudget, RuntimeAdmissionFailure, RuntimeReservationRequirements,
 };
-pub use observation::{RuntimeObservation, observed_runtime_status_from_lifecycle};
+pub use observation::{observed_runtime_status_from_lifecycle, RuntimeObservation};
 use pantograph_runtime_identity::canonical_runtime_id;
 pub use reclaim::{RuntimeReclaimAction, RuntimeReclaimDisposition};
 use reservation::RuntimeReservationRecord;
@@ -33,11 +33,12 @@ pub use state::{
     RuntimeModelResidencyRecord, RuntimeRegistryRecord, RuntimeRegistryStatus, RuntimeTransition,
 };
 pub use technical_fit::{
-    RuntimeTechnicalFitCandidate, RuntimeTechnicalFitCandidateSourceKind,
-    RuntimeTechnicalFitDecision, RuntimeTechnicalFitFactor, RuntimeTechnicalFitOverride,
-    RuntimeTechnicalFitReason, RuntimeTechnicalFitReasonCode, RuntimeTechnicalFitRequest,
-    RuntimeTechnicalFitResidencyState, RuntimeTechnicalFitResourcePressure,
-    RuntimeTechnicalFitSelectionMode, RuntimeTechnicalFitWarmupState, select_runtime_technical_fit,
+    select_runtime_technical_fit, RuntimeTechnicalFitCandidate,
+    RuntimeTechnicalFitCandidateSourceKind, RuntimeTechnicalFitDecision, RuntimeTechnicalFitFactor,
+    RuntimeTechnicalFitOverride, RuntimeTechnicalFitReason, RuntimeTechnicalFitReasonCode,
+    RuntimeTechnicalFitRequest, RuntimeTechnicalFitResidencyState,
+    RuntimeTechnicalFitResourcePressure, RuntimeTechnicalFitSelectionMode,
+    RuntimeTechnicalFitWarmupState,
 };
 pub use warmup::{RuntimeWarmupDecision, RuntimeWarmupDisposition, RuntimeWarmupReason};
 

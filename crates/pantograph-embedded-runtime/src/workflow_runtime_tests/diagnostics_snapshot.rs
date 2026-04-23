@@ -1,8 +1,8 @@
 use super::*;
 
 #[tokio::test]
-async fn build_workflow_execution_diagnostics_snapshot_with_registry_sync_reconciles_execution_runtime()
- {
+async fn build_workflow_execution_diagnostics_snapshot_with_registry_sync_reconciles_execution_runtime(
+) {
     let registry = RuntimeRegistry::new();
     let active_runtime_snapshot = inference::RuntimeLifecycleSnapshot {
         runtime_id: Some("llama.cpp".to_string()),
@@ -108,12 +108,10 @@ async fn build_workflow_execution_diagnostics_snapshot_with_registry_sync_reconc
     );
 
     let registry_snapshot = registry.snapshot();
-    assert!(
-        registry_snapshot
-            .runtimes
-            .iter()
-            .any(|runtime| runtime.runtime_id == "llama_cpp")
-    );
+    assert!(registry_snapshot
+        .runtimes
+        .iter()
+        .any(|runtime| runtime.runtime_id == "llama_cpp"));
     let execution_runtime = registry_snapshot
         .runtimes
         .iter()

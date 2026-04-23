@@ -8,7 +8,7 @@ use tokio::process::Command;
 
 use crate::config::DeviceInfo;
 use crate::constants::device_types;
-use crate::managed_runtime::{ManagedBinaryId, resolve_binary_command};
+use crate::managed_runtime::{resolve_binary_command, ManagedBinaryId};
 
 /// Represents a compute backend for inference
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

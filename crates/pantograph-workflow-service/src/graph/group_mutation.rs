@@ -356,12 +356,10 @@ mod tests {
         assert_eq!(group.nodes.len(), 2);
         assert_eq!(group.edges.len(), 1);
         assert_eq!(group.edges[0].id, "internal");
-        assert!(
-            grouped
-                .nodes
-                .iter()
-                .all(|node| node.id != "a" && node.id != "b")
-        );
+        assert!(grouped
+            .nodes
+            .iter()
+            .all(|node| node.id != "a" && node.id != "b"));
         assert!(grouped.edges.iter().any(|edge| edge.id == "in"
             && edge.target == group.id
             && edge.target_handle == "in-a-text"));
@@ -392,23 +390,17 @@ mod tests {
         assert!(ungrouped.nodes.iter().any(|node| node.id == "a"));
         assert!(ungrouped.nodes.iter().any(|node| node.id == "b"));
         assert!(ungrouped.nodes.iter().all(|node| node.id != group_id));
-        assert!(
-            ungrouped
-                .edges
-                .iter()
-                .any(|edge| edge.id == "in" && edge.target == "a" && edge.target_handle == "text")
-        );
-        assert!(
-            ungrouped
-                .edges
-                .iter()
-                .any(|edge| edge.id == "internal" && edge.source == "a" && edge.target == "b")
-        );
-        assert!(
-            ungrouped
-                .edges
-                .iter()
-                .any(|edge| edge.id == "out" && edge.source == "b" && edge.source_handle == "text")
-        );
+        assert!(ungrouped
+            .edges
+            .iter()
+            .any(|edge| edge.id == "in" && edge.target == "a" && edge.target_handle == "text"));
+        assert!(ungrouped
+            .edges
+            .iter()
+            .any(|edge| edge.id == "internal" && edge.source == "a" && edge.target == "b"));
+        assert!(ungrouped
+            .edges
+            .iter()
+            .any(|edge| edge.id == "out" && edge.source == "b" && edge.source_handle == "text"));
     }
 }

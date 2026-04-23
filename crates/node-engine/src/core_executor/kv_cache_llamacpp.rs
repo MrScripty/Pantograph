@@ -2,10 +2,10 @@ use std::collections::HashMap;
 use std::fs;
 use std::sync::Arc;
 
-use inference::InferenceGateway;
 use inference::kv_cache::{
     KvCacheEntry, KvCacheHandle, KvCacheMetadata, KvCacheStore, StoragePolicy,
 };
+use inference::InferenceGateway;
 
 use crate::error::{NodeEngineError, Result};
 use crate::events::{

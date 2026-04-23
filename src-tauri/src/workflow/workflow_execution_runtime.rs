@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use tauri::{AppHandle, Manager, State, ipc::Channel};
+use tauri::{ipc::Channel, AppHandle, Manager, State};
 
 use crate::agent::rag::SharedRagManager;
 use crate::llm::startup::build_resolved_embedding_request;
@@ -10,8 +10,8 @@ pub(crate) use pantograph_embedded_runtime::workflow_runtime::unix_timestamp_ms;
 use pantograph_embedded_runtime::{
     list_managed_runtime_manager_runtimes,
     workflow_runtime::{
-        WorkflowExecutionDiagnosticsSyncInput,
         build_workflow_execution_diagnostics_snapshot_with_registry_sync,
+        WorkflowExecutionDiagnosticsSyncInput,
     },
 };
 use pantograph_workflow_service::{

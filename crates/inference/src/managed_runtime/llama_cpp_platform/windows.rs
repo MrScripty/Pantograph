@@ -1,8 +1,7 @@
 use std::path::Path;
 
 use super::{
-    extract_pid_file, prepend_env_path, ArchiveKind, LlamaPlatform, ReleaseAsset,
-    ResolvedCommand,
+    extract_pid_file, prepend_env_path, ArchiveKind, LlamaPlatform, ReleaseAsset, ResolvedCommand,
 };
 
 pub(crate) struct WindowsPlatform;

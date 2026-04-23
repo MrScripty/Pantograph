@@ -1,13 +1,13 @@
-use crate::HostRuntimeModeSnapshot;
 use crate::runtime_health::{
     RuntimeHealthAssessment, RuntimeHealthAssessmentRecord, RuntimeHealthAssessmentSnapshot,
     RuntimeHealthState,
 };
 use crate::runtime_registry::HostRuntimeProducer;
+use crate::HostRuntimeModeSnapshot;
 use pantograph_runtime_identity::canonical_runtime_id;
 use pantograph_runtime_registry::{
-    RuntimeObservation, RuntimeRegistry, RuntimeRegistryRuntimeSnapshot,
-    observed_runtime_status_from_lifecycle,
+    observed_runtime_status_from_lifecycle, RuntimeObservation, RuntimeRegistry,
+    RuntimeRegistryRuntimeSnapshot,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]

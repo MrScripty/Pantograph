@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 
-use crate::{HostRuntimeModeSnapshot, runtime_registry};
+use crate::{runtime_registry, HostRuntimeModeSnapshot};
 
 #[async_trait]
 impl runtime_registry::HostRuntimeRegistryController for inference::InferenceGateway {

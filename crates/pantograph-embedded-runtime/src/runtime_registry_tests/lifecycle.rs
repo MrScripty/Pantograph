@@ -40,18 +40,14 @@ async fn runtime_registry_snapshot_syncs_controller_mode_info() {
 
     let snapshot = runtime_registry_snapshot(&controller, &registry).await;
 
-    assert!(
-        snapshot
-            .runtimes
-            .iter()
-            .any(|runtime| runtime.runtime_id == "llama_cpp")
-    );
-    assert!(
-        snapshot
-            .runtimes
-            .iter()
-            .any(|runtime| runtime.runtime_id == "llama.cpp.embedding")
-    );
+    assert!(snapshot
+        .runtimes
+        .iter()
+        .any(|runtime| runtime.runtime_id == "llama_cpp"));
+    assert!(snapshot
+        .runtimes
+        .iter()
+        .any(|runtime| runtime.runtime_id == "llama.cpp.embedding"));
 }
 
 #[tokio::test]
@@ -103,12 +99,10 @@ async fn stop_all_runtime_producers_and_reconcile_runtime_registry_syncs_after_s
         1
     );
     let snapshot = registry.snapshot();
-    assert!(
-        snapshot
-            .runtimes
-            .iter()
-            .all(|runtime| runtime.status == RuntimeRegistryStatus::Stopped)
-    );
+    assert!(snapshot
+        .runtimes
+        .iter()
+        .all(|runtime| runtime.status == RuntimeRegistryStatus::Stopped));
 }
 
 #[tokio::test]

@@ -235,7 +235,11 @@ fn normalized_selected_binding_ids(value: &[String]) -> Option<Vec<String>> {
             out.push(owned);
         }
     }
-    if out.is_empty() { None } else { Some(out) }
+    if out.is_empty() {
+        None
+    } else {
+        Some(out)
+    }
 }
 
 pub(super) fn make_requirements_id(

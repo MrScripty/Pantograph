@@ -55,9 +55,14 @@ pub async fn install_managed_runtime(
     channel: Channel<ManagedRuntimeManagerProgress>,
 ) -> Result<(), String> {
     let app_data_dir = app_data_dir(&app)?;
-    install_managed_runtime_manager_runtime(&app_data_dir, binary_id, version.as_deref(), |progress| {
-        let _ = channel.send(progress);
-    })
+    install_managed_runtime_manager_runtime(
+        &app_data_dir,
+        binary_id,
+        version.as_deref(),
+        |progress| {
+            let _ = channel.send(progress);
+        },
+    )
     .await
 }
 

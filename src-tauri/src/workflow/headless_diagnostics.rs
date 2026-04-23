@@ -12,10 +12,9 @@ use super::diagnostics::{
 };
 use pantograph_embedded_runtime::ManagedRuntimeManagerRuntimeView;
 use pantograph_workflow_service::{
-    WorkflowCapabilitiesResponse, WorkflowSchedulerSnapshotRequest,
-    WorkflowSchedulerSnapshotResponse, WorkflowServiceError, WorkflowTraceRuntimeMetrics,
-    WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
-    graph::WorkflowGraphSessionStateView,
+    graph::WorkflowGraphSessionStateView, WorkflowCapabilitiesResponse,
+    WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse, WorkflowServiceError,
+    WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
 };
 
 pub(crate) fn workflow_error_json(error: WorkflowServiceError) -> String {
@@ -351,16 +350,16 @@ mod tests {
     use std::sync::Arc;
 
     use pantograph_workflow_service::{
+        graph::{WorkflowGraphSessionStateView, WorkflowSessionKind},
         WorkflowCapabilitiesResponse, WorkflowRuntimeRequirements,
         WorkflowSchedulerSnapshotResponse, WorkflowSessionQueueItem,
         WorkflowSessionQueueItemStatus, WorkflowSessionState, WorkflowSessionSummary,
         WorkflowTraceRuntimeMetrics,
-        graph::{WorkflowGraphSessionStateView, WorkflowSessionKind},
     };
 
     use super::{
-        WorkflowDiagnosticsSnapshotProjectionInput, stored_runtime_trace_metrics,
-        workflow_diagnostics_snapshot_projection,
+        stored_runtime_trace_metrics, workflow_diagnostics_snapshot_projection,
+        WorkflowDiagnosticsSnapshotProjectionInput,
     };
     use crate::workflow::diagnostics::WorkflowDiagnosticsStore;
 

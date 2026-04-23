@@ -8,9 +8,9 @@ use pantograph_runtime_identity::canonical_engine_backend_key;
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 use crate::error::{NodeEngineError, Result};
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
-use crate::extensions::ExecutorExtensions;
-#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 use crate::extensions::extension_keys;
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+use crate::extensions::ExecutorExtensions;
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 use crate::model_dependencies::{DependencyState, ModelDependencyRequest, ModelDependencyResolver};
 use crate::model_dependencies::{ModelDependencyBinding, ModelRefV2};

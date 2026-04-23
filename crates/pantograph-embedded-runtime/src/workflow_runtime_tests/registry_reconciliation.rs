@@ -63,12 +63,10 @@ async fn build_runtime_event_projection_with_registry_sync_reconciles_live_and_s
         Some("PyTorch")
     );
     let snapshot = registry.snapshot();
-    assert!(
-        snapshot
-            .runtimes
-            .iter()
-            .any(|runtime| runtime.runtime_id == "llama_cpp")
-    );
+    assert!(snapshot
+        .runtimes
+        .iter()
+        .any(|runtime| runtime.runtime_id == "llama_cpp"));
     let stored_runtime = snapshot
         .runtimes
         .iter()
@@ -134,8 +132,8 @@ fn build_runtime_event_projection_with_registry_override_reconciles_execution_ru
 }
 
 #[test]
-fn build_runtime_event_projection_with_registry_reconciliation_replays_stored_runtime_into_registry()
- {
+fn build_runtime_event_projection_with_registry_reconciliation_replays_stored_runtime_into_registry(
+) {
     let registry = RuntimeRegistry::new();
     crate::runtime_registry::reconcile_runtime_registry_mode_info(
         &registry,

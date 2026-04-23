@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::future::Future;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
@@ -14,11 +14,11 @@ use crate::extensions::ExecutorExtensions;
 use crate::types::{GraphEdge, GraphNode, WorkflowGraph};
 
 use super::{
+    demand_multiple_with_default_budget, demand_multiple_with_explicit_budget,
     DemandBatchDispatchPlan, DemandBatchExecutionOutcome, DemandBatchExecutionResult,
     DemandDispatchWindowExecutionMode, DemandDispatchWindowOutcome, DemandDispatchWindowPlan,
     DemandDispatchWindowResult, DemandEngine, DemandExecutionBudget, DemandMultiplePlan,
-    DemandMultipleResults, DemandWindowRunner, TaskExecutor, demand_multiple_with_default_budget,
-    demand_multiple_with_explicit_budget,
+    DemandMultipleResults, DemandWindowRunner, TaskExecutor,
 };
 
 fn demand_runtime<'a>(
@@ -765,11 +765,9 @@ async fn workflow_executor_parallel_multi_demand_reconciles_input_snapshots() {
             .collect::<Vec<_>>(),
         vec!["left", "right"]
     );
-    assert!(
-        snapshots
-            .iter()
-            .all(|snapshot| snapshot.input_fingerprint.as_deref() == Some("{\"_data\":{}}"))
-    );
+    assert!(snapshots
+        .iter()
+        .all(|snapshot| snapshot.input_fingerprint.as_deref() == Some("{\"_data\":{}}")));
     assert!(snapshots.iter().all(|snapshot| {
         snapshot.inspection_metadata
             == Some(serde_json::json!({

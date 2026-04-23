@@ -3,8 +3,8 @@
 //! Handles restart attempts with exponential backoff.
 
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
@@ -18,12 +18,12 @@ use crate::llm::runtime_registry::run_runtime_transition_and_sync_runtime_regist
 use crate::llm::runtime_registry::stop_all_and_sync_runtime_registry;
 use crate::llm::startup::validate_external_server_url;
 use crate::llm::sync_rag_embedding_url_from_gateway;
-use crate::llm::{SharedAppConfig, SharedGateway, SharedRuntimeRegistry, list_devices};
+use crate::llm::{list_devices, SharedAppConfig, SharedGateway, SharedRuntimeRegistry};
 use crate::workflow::runtime_shutdown::invalidate_loaded_session_runtimes;
 use pantograph_embedded_runtime::embedding_workflow::resolve_embedding_model_path;
 use pantograph_embedded_runtime::runtime_recovery::{
-    RecoveryAttemptPlan, RecoveryStrategy, build_recovery_attempt_plan,
-    build_recovery_restart_plan, recovery_backoff,
+    build_recovery_attempt_plan, build_recovery_restart_plan, recovery_backoff,
+    RecoveryAttemptPlan, RecoveryStrategy,
 };
 
 /// Recovery configuration

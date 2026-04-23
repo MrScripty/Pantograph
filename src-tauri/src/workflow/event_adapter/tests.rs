@@ -8,7 +8,7 @@ use node_engine::{
     Context, ExecutorExtensions, GraphNode as EngineGraphNode, TaskExecutor, WorkflowExecutor,
 };
 use pantograph_workflow_service::{
-    GraphNode, Position, WorkflowGraph, graph::WorkflowDerivedGraph,
+    graph::WorkflowDerivedGraph, GraphNode, Position, WorkflowGraph,
 };
 use serde_json::Value;
 use tauri::ipc::{Channel, InvokeResponseBody};

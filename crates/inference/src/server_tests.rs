@@ -1,4 +1,4 @@
-use super::{LlamaServer, ServerMode, parse_sidecar_pid};
+use super::{parse_sidecar_pid, LlamaServer, ServerMode};
 use crate::config::DeviceConfig;
 
 #[test]

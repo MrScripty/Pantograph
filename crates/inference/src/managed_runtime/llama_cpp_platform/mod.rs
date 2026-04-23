@@ -1,6 +1,6 @@
 use crate::managed_runtime::{
-    ArchiveKind, ReleaseAsset, ResolvedCommand, extract_pid_file as extract_pid_file_impl,
-    prepend_env_path as prepend_env_path_impl,
+    extract_pid_file as extract_pid_file_impl, prepend_env_path as prepend_env_path_impl,
+    ArchiveKind, ReleaseAsset, ResolvedCommand,
 };
 use std::ffi::OsString;
 use std::fs;

@@ -19,7 +19,7 @@ use super::super::types::{
     GraphEdge, InsertNodeConnectionResponse, InsertNodeOnEdgeResponse,
 };
 
-use super::{GraphSessionStore, phase6_memory_impact_projection};
+use super::{phase6_memory_impact_projection, GraphSessionStore};
 
 impl GraphSessionStore {
     pub async fn get_connection_candidates(

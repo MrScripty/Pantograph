@@ -111,8 +111,8 @@ inventory::submit!(node_engine::DescriptorFn(PumaLibTask::descriptor));
 mod options_provider {
     use async_trait::async_trait;
     use node_engine::{
-        ExecutorExtensions, NodeEngineError, PortOption, PortOptionsProvider, PortOptionsQuery,
-        PortOptionsResult, extension_keys,
+        extension_keys, ExecutorExtensions, NodeEngineError, PortOption, PortOptionsProvider,
+        PortOptionsQuery, PortOptionsResult,
     };
     use pumas_library::models::ModelExecutionDescriptor;
     use std::sync::Arc;
@@ -384,23 +384,21 @@ mod tests {
         assert!(meta.outputs.iter().any(|p| p.id == "dependency_bindings"
             && p.data_type == PortDataType::Json
             && !p.required));
-        assert!(
-            meta.outputs
-                .iter()
-                .any(|p| p.id == "dependency_requirements_id"
-                    && p.data_type == PortDataType::String
-                    && !p.required)
-        );
+        assert!(meta
+            .outputs
+            .iter()
+            .any(|p| p.id == "dependency_requirements_id"
+                && p.data_type == PortDataType::String
+                && !p.required));
         assert!(meta.outputs.iter().any(|p| p.id == "inference_settings"
             && p.data_type == PortDataType::Json
             && !p.required));
-        assert!(
-            meta.outputs
-                .iter()
-                .any(|p| p.id == "dependency_requirements"
-                    && p.data_type == PortDataType::Json
-                    && !p.required)
-        );
+        assert!(meta
+            .outputs
+            .iter()
+            .any(|p| p.id == "dependency_requirements"
+                && p.data_type == PortDataType::Json
+                && !p.required));
     }
 
     #[tokio::test]

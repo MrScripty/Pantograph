@@ -1,8 +1,8 @@
 use super::*;
 use std::sync::{Arc, Mutex};
 
-use inference::InferenceGateway;
 use inference::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
+use inference::InferenceGateway;
 
 #[path = "kv_cache_test_support.rs"]
 mod test_support;

@@ -416,13 +416,11 @@ async fn reclaim_runtime_and_reconcile_runtime_registry_keeps_other_runtime_runn
             RuntimeRegistryStatus::Stopped,
         )
     );
-    assert!(
-        controller
-            .stopped_producers
-            .lock()
-            .expect("stopped producers lock poisoned")
-            .is_empty()
-    );
+    assert!(controller
+        .stopped_producers
+        .lock()
+        .expect("stopped producers lock poisoned")
+        .is_empty());
 }
 
 #[tokio::test]

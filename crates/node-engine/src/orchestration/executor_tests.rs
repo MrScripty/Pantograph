@@ -318,21 +318,15 @@ async fn test_data_graph_waiting_for_input_propagates_without_terminal_failure()
     assert!(!events.iter().any(
         |event| matches!(event, WorkflowEvent::TaskFailed { task_id, .. } if task_id == "data")
     ));
-    assert!(
-        !events
-            .iter()
-            .any(|event| matches!(event, WorkflowEvent::WorkflowFailed { .. }))
-    );
-    assert!(
-        !events
-            .iter()
-            .any(|event| matches!(event, WorkflowEvent::WorkflowCompleted { .. }))
-    );
-    assert!(
-        !events
-            .iter()
-            .any(|event| matches!(event, WorkflowEvent::WorkflowCancelled { .. }))
-    );
+    assert!(!events
+        .iter()
+        .any(|event| matches!(event, WorkflowEvent::WorkflowFailed { .. })));
+    assert!(!events
+        .iter()
+        .any(|event| matches!(event, WorkflowEvent::WorkflowCompleted { .. })));
+    assert!(!events
+        .iter()
+        .any(|event| matches!(event, WorkflowEvent::WorkflowCancelled { .. })));
 }
 
 #[tokio::test]
@@ -394,16 +388,12 @@ async fn test_data_graph_cancelled_propagates_without_task_failure() {
     assert!(!events.iter().any(
         |event| matches!(event, WorkflowEvent::TaskFailed { task_id, .. } if task_id == "data")
     ));
-    assert!(
-        !events
-            .iter()
-            .any(|event| matches!(event, WorkflowEvent::WorkflowFailed { .. }))
-    );
-    assert!(
-        !events
-            .iter()
-            .any(|event| matches!(event, WorkflowEvent::WorkflowCompleted { .. }))
-    );
+    assert!(!events
+        .iter()
+        .any(|event| matches!(event, WorkflowEvent::WorkflowFailed { .. })));
+    assert!(!events
+        .iter()
+        .any(|event| matches!(event, WorkflowEvent::WorkflowCompleted { .. })));
 }
 
 #[tokio::test]

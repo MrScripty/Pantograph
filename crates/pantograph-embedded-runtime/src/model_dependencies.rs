@@ -12,11 +12,11 @@ use tokio::process::Command;
 use tokio::sync::{Mutex, RwLock};
 
 use node_engine::{
-    DependencyOverridePatchV1, DependencyState, DependencyValidationError,
+    extension_keys, DependencyOverridePatchV1, DependencyState, DependencyValidationError,
     DependencyValidationErrorScope, DependencyValidationState, ModelDependencyBinding,
     ModelDependencyBindingStatus, ModelDependencyInstallResult, ModelDependencyRequest,
     ModelDependencyRequirement, ModelDependencyRequirements, ModelDependencyResolver,
-    ModelDependencyStatus, ModelRefV2, extension_keys,
+    ModelDependencyStatus, ModelRefV2,
 };
 
 #[path = "model_dependency_activity.rs"]

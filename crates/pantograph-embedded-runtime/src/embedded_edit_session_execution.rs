@@ -2,13 +2,12 @@ use std::sync::Arc;
 
 use node_engine::{CoreTaskExecutor, EventSink, WorkflowExecutor};
 use pantograph_workflow_service::{
-    WorkflowGraph, WorkflowTraceRuntimeMetrics, convert_graph_to_node_engine,
+    convert_graph_to_node_engine, WorkflowGraph, WorkflowTraceRuntimeMetrics,
 };
 
 use crate::{
-    EmbeddedRuntime, HostRuntimeModeSnapshot, RuntimeExtensionsSnapshot,
     apply_runtime_extensions_for_execution, embedding_workflow, runtime_registry, task_executor,
-    workflow_runtime,
+    workflow_runtime, EmbeddedRuntime, HostRuntimeModeSnapshot, RuntimeExtensionsSnapshot,
 };
 
 #[derive(Debug, Clone)]

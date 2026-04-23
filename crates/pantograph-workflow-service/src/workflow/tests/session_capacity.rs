@@ -66,16 +66,12 @@ async fn workflow_session_capacity_rebalance_uses_host_selected_candidate() {
             WorkflowSessionUnloadReason::CapacityRebalance,
         ))
     );
-    assert!(
-        unloads
-            .iter()
-            .any(|(session_id, _)| session_id == &third_session_id)
-    );
-    assert!(
-        !unloads
-            .iter()
-            .any(|(session_id, _)| session_id == &first.session_id)
-    );
+    assert!(unloads
+        .iter()
+        .any(|(session_id, _)| session_id == &third_session_id));
+    assert!(!unloads
+        .iter()
+        .any(|(session_id, _)| session_id == &first.session_id));
 }
 
 #[tokio::test]
@@ -139,16 +135,12 @@ async fn workflow_session_capacity_rebalance_preserves_affine_idle_runtime_by_de
         unloads.first().map(String::as_str),
         Some(non_affine.session_id.as_str())
     );
-    assert!(
-        unloads
-            .iter()
-            .any(|session_id| session_id == &target.session_id)
-    );
-    assert!(
-        !unloads
-            .iter()
-            .any(|session_id| session_id == &affine.session_id)
-    );
+    assert!(unloads
+        .iter()
+        .any(|session_id| session_id == &target.session_id));
+    assert!(!unloads
+        .iter()
+        .any(|session_id| session_id == &affine.session_id));
 }
 
 #[tokio::test]
@@ -224,16 +216,12 @@ async fn workflow_session_capacity_rebalance_preserves_shared_model_idle_runtime
         unloads.first().map(String::as_str),
         Some(other_model.session_id.as_str())
     );
-    assert!(
-        unloads
-            .iter()
-            .any(|session_id| session_id == &target.session_id)
-    );
-    assert!(
-        !unloads
-            .iter()
-            .any(|session_id| session_id == &shared_model.session_id)
-    );
+    assert!(unloads
+        .iter()
+        .any(|session_id| session_id == &target.session_id));
+    assert!(!unloads
+        .iter()
+        .any(|session_id| session_id == &shared_model.session_id));
 }
 
 #[tokio::test]
@@ -312,14 +300,10 @@ async fn workflow_session_capacity_rebalance_preserves_shared_backend_idle_runti
         unloads.first().map(String::as_str),
         Some(other_backend.session_id.as_str())
     );
-    assert!(
-        unloads
-            .iter()
-            .any(|session_id| session_id == &target.session_id)
-    );
-    assert!(
-        !unloads
-            .iter()
-            .any(|session_id| session_id == &shared_backend.session_id)
-    );
+    assert!(unloads
+        .iter()
+        .any(|session_id| session_id == &target.session_id));
+    assert!(!unloads
+        .iter()
+        .any(|session_id| session_id == &shared_backend.session_id));
 }

@@ -175,11 +175,9 @@ async fn execute_data_graph_propagates_waiting_for_input_without_synthetic_error
             ..
         } if task_id == "approval" && prompt == "Approve deployment?"
     )));
-    assert!(
-        !events
-            .iter()
-            .any(|event| matches!(event, node_engine::WorkflowEvent::WorkflowFailed { .. }))
-    );
+    assert!(!events
+        .iter()
+        .any(|event| matches!(event, node_engine::WorkflowEvent::WorkflowFailed { .. })));
     assert!(!events.iter().any(|event| matches!(
         event,
         node_engine::WorkflowEvent::WorkflowCompleted { .. }

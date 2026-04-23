@@ -378,9 +378,7 @@ fn eviction_reservation_candidate_for_owners_returns_first_matching_owner() {
         .expect("matching candidate should exist");
     assert_eq!(selected.reservation_id, old_ephemeral.reservation_id);
 
-    assert!(
-        registry
-            .eviction_reservation_candidate_for_owners(&["missing-session"])
-            .is_none()
-    );
+    assert!(registry
+        .eviction_reservation_candidate_for_owners(&["missing-session"])
+        .is_none());
 }

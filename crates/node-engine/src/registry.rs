@@ -289,12 +289,12 @@ pub struct SyncCallbackNodeExecutor {
 impl SyncCallbackNodeExecutor {
     pub fn new(
         callback: impl Fn(
-            &str,
-            HashMap<String, serde_json::Value>,
-        ) -> Result<HashMap<String, serde_json::Value>>
-        + Send
-        + Sync
-        + 'static,
+                &str,
+                HashMap<String, serde_json::Value>,
+            ) -> Result<HashMap<String, serde_json::Value>>
+            + Send
+            + Sync
+            + 'static,
     ) -> Self {
         Self {
             callback: Box::new(callback),

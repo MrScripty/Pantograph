@@ -5,8 +5,9 @@
 //! command adapter.
 
 use pantograph_embedded_runtime::{
-    HostRuntimeModeSnapshot, list_managed_runtime_manager_runtimes,
+    list_managed_runtime_manager_runtimes,
     workflow_runtime::{build_runtime_event_projection_with_registry_sync, unix_timestamp_ms},
+    HostRuntimeModeSnapshot,
 };
 use pantograph_workflow_service::{
     WorkflowCapabilitiesRequest, WorkflowSchedulerSnapshotRequest,
@@ -20,10 +21,9 @@ use super::commands::{SharedExtensions, SharedWorkflowDiagnosticsStore, SharedWo
 use super::diagnostics::{WorkflowDiagnosticsProjection, WorkflowDiagnosticsSnapshotRequest};
 pub(crate) use super::headless_diagnostics::workflow_trace_snapshot_response;
 use super::headless_diagnostics::{
-    WorkflowDiagnosticsSnapshotProjectionInput, stored_runtime_model_targets,
-    stored_runtime_snapshots, stored_runtime_trace_metrics,
+    stored_runtime_model_targets, stored_runtime_snapshots, stored_runtime_trace_metrics,
     workflow_clear_diagnostics_history_response, workflow_diagnostics_snapshot_projection,
-    workflow_error_json,
+    workflow_error_json, WorkflowDiagnosticsSnapshotProjectionInput,
 };
 use super::headless_runtime::build_runtime;
 

@@ -1,6 +1,6 @@
 //! Agent orchestration and execution commands.
 
-use super::shared::{MAX_IMAGE_BASE64_LEN, SharedAppConfig};
+use super::shared::{SharedAppConfig, MAX_IMAGE_BASE64_LEN};
 use crate::agent;
 use crate::agent::rag::SharedRagManager;
 use crate::agent::tools::WriteGuiFileArgs;
@@ -9,7 +9,7 @@ use crate::agent::{
     FileChange, Position, Size, WriteTracker,
 };
 use crate::llm::types::*;
-use crate::llm::{SharedGateway, sync_rag_embedding_url_from_gateway};
+use crate::llm::{sync_rag_embedding_url_from_gateway, SharedGateway};
 use futures_util::StreamExt;
 use reqwest::Client;
 use rig::agent::MultiTurnStreamItem;
@@ -18,7 +18,7 @@ use rig::streaming::{
 };
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, State, command, ipc::Channel};
+use tauri::{command, ipc::Channel, AppHandle, State};
 
 #[command]
 pub async fn run_agent(

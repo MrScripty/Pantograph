@@ -4,35 +4,34 @@
 //! snapshots into `pantograph_runtime_registry::RuntimeObservation` values so
 //! host adapters do not own registry-observation mapping logic.
 
-use crate::HostRuntimeModeSnapshot;
 use crate::runtime_health::RuntimeHealthAssessment;
 pub use crate::runtime_registry_lifecycle::{
-    HostRuntimeRegistryController, HostRuntimeRegistryLifecycleController,
-    RuntimeWarmupCoordinationError, consume_active_runtime_warmup_disposition,
-    reclaim_runtime_and_reconcile_runtime_registry,
+    consume_active_runtime_warmup_disposition, reclaim_runtime_and_reconcile_runtime_registry,
     release_reservation_and_reconcile_runtime_registry,
     restore_runtime_and_reconcile_runtime_registry,
     run_runtime_transition_and_reconcile_runtime_registry, runtime_registry_snapshot,
     stop_all_runtime_producers_and_reconcile_runtime_registry, sync_runtime_registry,
     sync_runtime_registry_with_active_health_assessment,
-    sync_runtime_registry_with_health_assessments,
+    sync_runtime_registry_with_health_assessments, HostRuntimeRegistryController,
+    HostRuntimeRegistryLifecycleController, RuntimeWarmupCoordinationError,
 };
 pub use crate::runtime_registry_observations::{
-    ActiveRuntimeDescriptor, active_runtime_descriptor, active_runtime_id,
-    active_runtime_observation, active_runtime_observation_with_health_assessment,
-    embedding_runtime_id, embedding_runtime_observation,
-    embedding_runtime_observation_with_health_assessment, live_host_runtime_producer,
-    observations_from_mode_info, observations_from_mode_info_with_active_health_assessment,
+    active_runtime_descriptor, active_runtime_id, active_runtime_observation,
+    active_runtime_observation_with_health_assessment, embedding_runtime_id,
+    embedding_runtime_observation, embedding_runtime_observation_with_health_assessment,
+    live_host_runtime_producer, observations_from_mode_info,
+    observations_from_mode_info_with_active_health_assessment,
     observations_from_mode_info_with_health_assessments, reconcile_active_runtime_mode_info,
-    reconcile_runtime_registry_mode_info_with_health_snapshot,
+    reconcile_runtime_registry_mode_info_with_health_snapshot, ActiveRuntimeDescriptor,
 };
+use crate::HostRuntimeModeSnapshot;
 use pantograph_runtime_identity::{
     canonical_runtime_id, runtime_backend_key_aliases, runtime_display_name,
 };
 use pantograph_runtime_registry::{
-    RuntimeObservation, RuntimeRegistration, RuntimeRegistry, RuntimeRegistryError,
-    RuntimeRegistryRuntimeSnapshot, RuntimeRegistryStatus, RuntimeReservationRequest,
-    RuntimeReservationRequirements, RuntimeRetentionHint, observed_runtime_status_from_lifecycle,
+    observed_runtime_status_from_lifecycle, RuntimeObservation, RuntimeRegistration,
+    RuntimeRegistry, RuntimeRegistryError, RuntimeRegistryRuntimeSnapshot, RuntimeRegistryStatus,
+    RuntimeReservationRequest, RuntimeReservationRequirements, RuntimeRetentionHint,
 };
 use pantograph_workflow_service::{
     WorkflowSchedulerRuntimeDiagnosticsRequest, WorkflowSchedulerRuntimeRegistryDiagnostics,

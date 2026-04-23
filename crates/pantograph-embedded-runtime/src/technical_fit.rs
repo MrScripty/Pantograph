@@ -1,9 +1,10 @@
 use pantograph_runtime_registry::{
-    RuntimeRegistrySnapshot, RuntimeTechnicalFitCandidate, RuntimeTechnicalFitCandidateSourceKind,
-    RuntimeTechnicalFitDecision, RuntimeTechnicalFitFactor, RuntimeTechnicalFitOverride,
-    RuntimeTechnicalFitReason, RuntimeTechnicalFitReasonCode, RuntimeTechnicalFitRequest,
-    RuntimeTechnicalFitResidencyState, RuntimeTechnicalFitResourcePressure,
-    RuntimeTechnicalFitSelectionMode, RuntimeTechnicalFitWarmupState, select_runtime_technical_fit,
+    select_runtime_technical_fit, RuntimeRegistrySnapshot, RuntimeTechnicalFitCandidate,
+    RuntimeTechnicalFitCandidateSourceKind, RuntimeTechnicalFitDecision, RuntimeTechnicalFitFactor,
+    RuntimeTechnicalFitOverride, RuntimeTechnicalFitReason, RuntimeTechnicalFitReasonCode,
+    RuntimeTechnicalFitRequest, RuntimeTechnicalFitResidencyState,
+    RuntimeTechnicalFitResourcePressure, RuntimeTechnicalFitSelectionMode,
+    RuntimeTechnicalFitWarmupState,
 };
 use pantograph_workflow_service::{
     WorkflowHost, WorkflowRuntimeCapability, WorkflowRuntimeInstallState,
@@ -12,7 +13,7 @@ use pantograph_workflow_service::{
     WorkflowTechnicalFitRequest, WorkflowTechnicalFitSelectionMode,
 };
 
-use crate::{EmbeddedWorkflowHost, workflow_runtime::unix_timestamp_ms};
+use crate::{workflow_runtime::unix_timestamp_ms, EmbeddedWorkflowHost};
 
 pub(crate) async fn workflow_technical_fit_decision(
     host: &EmbeddedWorkflowHost,
@@ -250,8 +251,8 @@ fn empty_runtime_snapshot() -> RuntimeRegistrySnapshot {
 mod tests {
     use super::*;
     use pantograph_workflow_service::{
-        WorkflowRuntimeReadinessState, WorkflowRuntimeRequirements,
-        build_workflow_technical_fit_request,
+        build_workflow_technical_fit_request, WorkflowRuntimeReadinessState,
+        WorkflowRuntimeRequirements,
     };
 
     fn runtime_capability() -> WorkflowRuntimeCapability {

@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::future::{Future, poll_fn};
+use std::future::{poll_fn, Future};
 use std::pin::Pin;
 use std::task::Poll;
 

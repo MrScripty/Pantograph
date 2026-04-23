@@ -299,31 +299,30 @@ pub(crate) async fn execute_pytorch_inference(
                     match item {
                         Ok(token_obj) => {
                             // Try dict first: {"mode": "append"|"replace", "text": "..."}
-                            let result = if let Ok(dict) =
-                                token_obj.downcast::<pyo3::types::PyDict>()
-                            {
-                                let mode = dict
-                                    .get_item("mode")
-                                    .ok()
-                                    .flatten()
-                                    .and_then(|v| v.extract::<String>().ok())
-                                    .unwrap_or_else(|| "append".to_string());
-                                let text = dict
-                                    .get_item("text")
-                                    .ok()
-                                    .flatten()
-                                    .and_then(|v| v.extract::<String>().ok())
-                                    .unwrap_or_default();
-                                Ok((mode, text))
-                            } else if let Ok(text) = token_obj.extract::<String>() {
-                                // Backwards compat: plain string → append
-                                Ok(("append".to_string(), text))
-                            } else {
-                                Err(format!(
+                            let result =
+                                if let Ok(dict) = token_obj.downcast::<pyo3::types::PyDict>() {
+                                    let mode = dict
+                                        .get_item("mode")
+                                        .ok()
+                                        .flatten()
+                                        .and_then(|v| v.extract::<String>().ok())
+                                        .unwrap_or_else(|| "append".to_string());
+                                    let text = dict
+                                        .get_item("text")
+                                        .ok()
+                                        .flatten()
+                                        .and_then(|v| v.extract::<String>().ok())
+                                        .unwrap_or_default();
+                                    Ok((mode, text))
+                                } else if let Ok(text) = token_obj.extract::<String>() {
+                                    // Backwards compat: plain string → append
+                                    Ok(("append".to_string(), text))
+                                } else {
+                                    Err(format!(
                                     "Token extraction failed: expected dict or string, got {:?}",
                                     token_obj.get_type().name()
                                 ))
-                            };
+                                };
                             if tx.blocking_send(result).is_err() {
                                 return;
                             }

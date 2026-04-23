@@ -1,5 +1,5 @@
-use crate::HostRuntimeModeSnapshot;
 use crate::runtime_health::RuntimeHealthAssessmentSnapshot;
+use crate::HostRuntimeModeSnapshot;
 use async_trait::async_trait;
 use pantograph_runtime_registry::RuntimeRegistry;
 use pantograph_workflow_service::graph::WorkflowSessionKind;
@@ -9,16 +9,16 @@ use pantograph_workflow_service::{
 };
 
 use super::{
-    WorkflowExecutionDiagnosticsController, WorkflowExecutionDiagnosticsInput,
-    WorkflowExecutionDiagnosticsSyncInput, build_runtime_diagnostics_projection,
-    build_runtime_event_projection, build_runtime_event_projection_with_registry_override,
+    build_runtime_diagnostics_projection, build_runtime_event_projection,
+    build_runtime_event_projection_with_registry_override,
     build_runtime_event_projection_with_registry_reconciliation,
     build_runtime_event_projection_with_registry_sync,
     build_workflow_execution_diagnostics_snapshot,
     build_workflow_execution_diagnostics_snapshot_with_registry_sync,
     normalized_runtime_lifecycle_snapshot, reconcile_runtime_registry_stored_projection_overrides,
     resolve_runtime_model_target, trace_runtime_metrics,
-    trace_runtime_metrics_with_observed_runtime_ids,
+    trace_runtime_metrics_with_observed_runtime_ids, WorkflowExecutionDiagnosticsController,
+    WorkflowExecutionDiagnosticsInput, WorkflowExecutionDiagnosticsSyncInput,
 };
 
 struct MockRuntimeRegistryController {

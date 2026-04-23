@@ -483,13 +483,11 @@ async fn direct_runtime_exposes_workflow_graph_persistence_and_edit_session() {
     let list_response_json = runtime.workflow_graph_list().expect("list workflow graphs");
     let list_response: serde_json::Value =
         serde_json::from_str(&list_response_json).expect("parse list response");
-    assert!(
-        list_response["workflows"]
-            .as_array()
-            .expect("workflows")
-            .iter()
-            .any(|metadata| metadata["id"] == "Native Edited Workflow")
-    );
+    assert!(list_response["workflows"]
+        .as_array()
+        .expect("workflows")
+        .iter()
+        .any(|metadata| metadata["id"] == "Native Edited Workflow"));
 
     let load_response_json = runtime
         .workflow_graph_load(serde_json::json!({ "path": path }).to_string())

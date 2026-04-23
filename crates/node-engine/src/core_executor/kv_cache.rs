@@ -3,11 +3,11 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use inference::InferenceGateway;
 use inference::kv_cache::{
     CacheMarker, KvCacheCodec, KvCacheEntry, KvCacheHandle, KvCacheMetadata, KvCacheStore,
     ModelFingerprint, StoragePolicy,
 };
+use inference::InferenceGateway;
 use uuid::Uuid;
 
 use crate::core_executor::require_gateway;

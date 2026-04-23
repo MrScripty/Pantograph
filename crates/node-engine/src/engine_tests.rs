@@ -2,8 +2,8 @@ use super::*;
 use crate::error::NodeEngineError;
 use crate::events::{NullEventSink, VecEventSink};
 use crate::types::{GraphEdge, GraphNode};
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Mutex;
 
 fn make_linear_graph() -> WorkflowGraph {
     let mut graph = WorkflowGraph::new("test", "Test");

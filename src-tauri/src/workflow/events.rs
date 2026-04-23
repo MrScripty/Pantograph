@@ -3,8 +3,8 @@
 //! These events are sent via Tauri channels to provide real-time
 //! feedback on workflow execution progress.
 
-use serde::{Serialize, Serializer, ser::Error as _};
-use serde_json::{Map, Value, json};
+use serde::{ser::Error as _, Serialize, Serializer};
+use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 
 use pantograph_embedded_runtime::ManagedRuntimeManagerRuntimeView;

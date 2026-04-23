@@ -1241,7 +1241,12 @@ Tasks:
   accept grouped execution/session/runtime-state inputs, and Tauri command
   entrypoints that must preserve framework-injected state signatures carry
   scoped `#[expect]` annotations with boundary reasons. The full workspace
-  strict clippy gate now passes.
+  strict clippy gate now passes. 2026-04-23 post-decomposition reruns of
+  `cargo clippy --workspace --all-targets --all-features -- -D warnings`,
+  `cargo check`, `cargo check --workspace --no-default-features`,
+  `npm run test:frontend`, and `npm run lint:full` remained green after
+  restoring the Rust formatting baseline and removing a stale mock-backend
+  import in `packages/svelte-graph`.
 - [x] Close or update `docs/anti-pattern-remediation-tracker.md` Phase 5 for
   process-node policy controls. Status: `ProcessTask` now defaults to a
   disabled backend-owned `ProcessExecutionPolicy`; allowed process commands

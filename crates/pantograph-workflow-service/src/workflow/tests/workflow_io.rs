@@ -117,23 +117,19 @@ async fn workflow_get_io_derives_inputs_and_outputs_from_workflow() {
         response.inputs[0].ports[0].data_type.as_deref(),
         Some("string")
     );
-    assert!(
-        response.inputs[0]
-            .ports
-            .iter()
-            .all(|port| port.port_id != "legacy-out")
-    );
+    assert!(response.inputs[0]
+        .ports
+        .iter()
+        .all(|port| port.port_id != "legacy-out"));
 
     assert_eq!(response.outputs.len(), 1);
     assert_eq!(response.outputs[0].node_id, "text-output-1");
     assert_eq!(response.outputs[0].ports.len(), 1);
     assert_eq!(response.outputs[0].ports[0].port_id, "text");
-    assert!(
-        response.outputs[0]
-            .ports
-            .iter()
-            .all(|port| port.port_id != "stream")
-    );
+    assert!(response.outputs[0]
+        .ports
+        .iter()
+        .all(|port| port.port_id != "stream"));
 
     let _ = fs::remove_dir_all(temp_root);
 }
@@ -290,10 +286,9 @@ async fn workflow_get_io_rejects_missing_io_binding_origin() {
         .expect_err("workflow io should reject missing io_binding_origin");
 
     assert!(matches!(err, WorkflowServiceError::InvalidRequest(_)));
-    assert!(
-        err.to_string()
-            .contains("missing definition.io_binding_origin")
-    );
+    assert!(err
+        .to_string()
+        .contains("missing definition.io_binding_origin"));
     let _ = fs::remove_dir_all(temp_root);
 }
 

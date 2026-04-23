@@ -8,8 +8,8 @@ use inference::{EmbeddingMemoryMode, LlamaCppEmbeddingRuntime};
 use tokio::sync::mpsc;
 
 use super::{
-    RuntimeDebugSnapshotRequest, reclaim_runtime, resolve_runtime_debug_trace_scope,
-    runtime_debug_snapshot_response, runtime_registry_snapshot_response,
+    reclaim_runtime, resolve_runtime_debug_trace_scope, runtime_debug_snapshot_response,
+    runtime_registry_snapshot_response, RuntimeDebugSnapshotRequest,
 };
 use crate::llm::health_monitor::{
     HealthCheckResult, HealthMonitor, HealthMonitorConfig, HealthStatus, SharedHealthMonitor,
@@ -20,9 +20,9 @@ use crate::workflow::diagnostics::{
     SharedWorkflowDiagnosticsStore, WorkflowRuntimeSnapshotRecord, WorkflowSchedulerSnapshotRecord,
 };
 use pantograph_workflow_service::{
-    WorkflowCapabilitiesResponse, WorkflowServiceError, WorkflowSessionState,
-    WorkflowSessionSummary, WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest,
-    graph::WorkflowSessionKind,
+    graph::WorkflowSessionKind, WorkflowCapabilitiesResponse, WorkflowServiceError,
+    WorkflowSessionState, WorkflowSessionSummary, WorkflowTraceRuntimeMetrics,
+    WorkflowTraceSnapshotRequest,
 };
 
 struct MockProcessHandle;

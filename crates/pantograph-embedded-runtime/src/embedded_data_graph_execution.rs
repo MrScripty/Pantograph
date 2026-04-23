@@ -5,8 +5,8 @@ use node_engine::{CoreTaskExecutor, EventSink, WorkflowExecutor, WorkflowGraph};
 use uuid::Uuid;
 
 use crate::{
-    EmbeddedRuntime, EmbeddedWorkflowHost, RuntimeExtensionsSnapshot,
-    apply_runtime_extensions_for_execution, task_executor,
+    apply_runtime_extensions_for_execution, task_executor, EmbeddedRuntime, EmbeddedWorkflowHost,
+    RuntimeExtensionsSnapshot,
 };
 
 impl EmbeddedRuntime {

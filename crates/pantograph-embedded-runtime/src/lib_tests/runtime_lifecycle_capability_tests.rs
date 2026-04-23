@@ -80,12 +80,10 @@ async fn hosted_runtime_constructor_syncs_registry_and_derives_capabilities_from
         })
         .await
         .expect("workflow capabilities");
-    assert!(
-        capabilities
-            .runtime_capabilities
-            .iter()
-            .any(|capability| capability.runtime_id == "llama.cpp.embedding")
-    );
+    assert!(capabilities
+        .runtime_capabilities
+        .iter()
+        .any(|capability| capability.runtime_id == "llama.cpp.embedding"));
 }
 
 #[tokio::test]

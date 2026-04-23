@@ -12,10 +12,10 @@ use pantograph_runtime_identity::{
     backend_key_aliases, normalize_runtime_identifier_with_fallback,
 };
 use pantograph_workflow_service::{
-    WorkflowErrorCode, WorkflowErrorDetails, WorkflowErrorEnvelope, WorkflowHost,
+    capabilities, WorkflowErrorCode, WorkflowErrorDetails, WorkflowErrorEnvelope, WorkflowHost,
     WorkflowHostModelDescriptor, WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunHandle,
     WorkflowRunOptions, WorkflowRuntimeCapability, WorkflowRuntimeInstallState,
-    WorkflowRuntimeSourceKind, WorkflowServiceError, capabilities,
+    WorkflowRuntimeSourceKind, WorkflowServiceError,
 };
 
 pub const DEFAULT_BACKEND_NAME: &str = "openai-compatible";
@@ -724,10 +724,9 @@ mod tests {
 
         server_thread.join().expect("join server");
         assert!(matches!(err, WorkflowServiceError::Internal(_)));
-        assert!(
-            err.to_string()
-                .contains("expected workflow error envelope JSON")
-        );
+        assert!(err
+            .to_string()
+            .contains("expected workflow error envelope JSON"));
     }
 
     #[tokio::test]
@@ -851,10 +850,8 @@ mod tests {
 
         server_thread.join().expect("join server");
         assert!(matches!(error, WorkflowServiceError::Internal(_)));
-        assert!(
-            error
-                .to_string()
-                .contains("expected workflow error envelope JSON")
-        );
+        assert!(error
+            .to_string()
+            .contains("expected workflow error envelope JSON"));
     }
 }

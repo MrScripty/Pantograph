@@ -4,10 +4,10 @@ use super::super::contracts::{
 use super::super::definitions::definition;
 use super::super::paths::managed_install_dir;
 use super::super::state::{
-    ManagedRuntimeHistoryEventKind, ManagedRuntimeInstallHistoryEntry,
-    ManagedRuntimePersistedJobArtifact, ManagedRuntimePersistedRuntime,
-    ManagedRuntimePersistedVersion, ensure_runtime_state_entry, load_managed_runtime_state,
-    runtime_state_entry, runtime_state_entry_mut, save_managed_runtime_state,
+    ensure_runtime_state_entry, load_managed_runtime_state, runtime_state_entry,
+    runtime_state_entry_mut, save_managed_runtime_state, ManagedRuntimeHistoryEventKind,
+    ManagedRuntimeInstallHistoryEntry, ManagedRuntimePersistedJobArtifact,
+    ManagedRuntimePersistedRuntime, ManagedRuntimePersistedVersion,
 };
 use super::{take_cancellation_request, take_pause_request};
 use std::fs;
