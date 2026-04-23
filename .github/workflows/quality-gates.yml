@@ -143,6 +143,28 @@ jobs:
       - name: Run workspace doc tests
         run: cargo test --workspace --doc --no-default-features
 
+  rustler-beam-smoke:
+    name: Rustler BEAM smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.92.0
+
+      - name: Install BEAM toolchain
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: '27.0'
+          elixir-version: '1.16.3'
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run Rustler BEAM smoke harness
+        run: ./scripts/check-rustler-beam-smoke.sh
+
   rust-format-audit:
     name: Rust format audit
     runs-on: ubuntu-latest
@@ -205,6 +227,7 @@ jobs:
       - rust-check
       - rust-tests
       - rust-doc-tests
+      - rustler-beam-smoke
       - rust-format-audit
       - rust-clippy-audit
       - lint-full
@@ -220,7 +243,8 @@ jobs:
             "dependency-audit:${{ needs.dependency-audit.result }}" \
             "rust-check:${{ needs.rust-check.result }}" \
             "rust-tests:${{ needs.rust-tests.result }}" \
-            "rust-doc-tests:${{ needs.rust-doc-tests.result }}"
+            "rust-doc-tests:${{ needs.rust-doc-tests.result }}" \
+            "rustler-beam-smoke:${{ needs.rustler-beam-smoke.result }}"
           do
             name="${result%%:*}"
             status="${result#*:}"

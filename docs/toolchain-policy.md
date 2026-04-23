@@ -12,6 +12,17 @@ artifacts do not drift across developer machines or runners.
 | npm | `11.6.2` | `package.json` `packageManager` and `engines.npm` |
 | Python | `3.12.3` | `.python-version` |
 
+## Optional Host-Lane Toolchains
+
+Some verification lanes are host-specific rather than universal local
+prerequisites. Those lanes still need explicit toolchain ownership when they
+become required in CI.
+
+| Lane | Toolchain | Pin | Owner |
+| ---- | --------- | --- | ----- |
+| Rustler BEAM smoke | Erlang/OTP | `27.0` | `.github/workflows/quality-gates.yml` via `erlef/setup-beam` |
+| Rustler BEAM smoke | Elixir | `1.16.3` | `.github/workflows/quality-gates.yml` via `erlef/setup-beam` |
+
 These versions match the active development environment used when the standards
 compliance pass added toolchain pinning.
 
@@ -26,6 +37,8 @@ compliance pass added toolchain pinning.
   in package-manager aware tooling.
 - `.python-version` records the Python version used for local virtual
   environments and Python-backed smoke paths.
+- Host-language smoke lanes may pin their own toolchains in CI when the repo
+  does not require that runtime for ordinary local development.
 
 ## Update Policy
 

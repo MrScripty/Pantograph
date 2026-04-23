@@ -147,7 +147,8 @@ Direct Rust test binaries still fail to link outside a BEAM-backed NIF test
 harness because the Erlang `enif_*` symbols are host-supplied. The canonical
 host-visible verification path is `bindings/beam/pantograph_native_smoke/`,
 invoked through `./scripts/check-rustler-beam-smoke.sh` when the BEAM toolchain
-is present.
+is present. CI now provisions `otp 27.0` and `elixir 1.16.3` for the required
+`Rustler BEAM smoke` quality gate before invoking that same runner.
 
 ## Notes
 - `resource_registration.rs` now registers resources through direct

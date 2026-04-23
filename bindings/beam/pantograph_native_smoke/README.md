@@ -27,6 +27,10 @@ From the repository root, the standard way to execute this harness is:
 That runner builds `pantograph_rustler`, verifies the BEAM toolchain exists,
 and then exports `PANTOGRAPH_RUSTLER_NIF_PATH` for `mix test`.
 
+The same runner is used by the required `Rustler BEAM smoke` job in
+`.github/workflows/quality-gates.yml`, which installs `otp 27.0` and
+`elixir 1.16.3` before invoking the harness.
+
 ## Notes
 - This harness intentionally avoids Hex dependencies.
 - JSON assertions stay string-based here so the harness remains runnable in

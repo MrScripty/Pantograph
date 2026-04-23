@@ -130,7 +130,8 @@ symbols that are supplied by the BEAM runtime in host execution. The canonical
 binding verification path is the BEAM-backed smoke harness under
 `bindings/beam/pantograph_native_smoke/`, invoked through
 `./scripts/check-rustler-beam-smoke.sh` when the host has Mix/Elixir/Erlang
-installed.
+installed. CI now runs that same smoke runner in the required quality gate
+after provisioning `otp 27.0` and `elixir 1.16.3`.
 
 ## Notes
 - `src/resource_registration.rs` now uses direct `impl rustler::Resource` plus

@@ -30,6 +30,10 @@ toolchain checks, and harness invocation together:
 ./scripts/check-rustler-beam-smoke.sh
 ```
 
+CI runs the same script in `.github/workflows/quality-gates.yml` after
+installing Rust plus an explicit BEAM host toolchain (`otp 27.0`,
+`elixir 1.16.3`).
+
 The harness strips any platform extension before calling
 `:erlang.load_nif/2`, so callers may provide either the full library filename
 or the extensionless base path.

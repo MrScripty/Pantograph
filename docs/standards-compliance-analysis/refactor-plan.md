@@ -1322,14 +1322,14 @@ fully resolved by standards compliance:
   removing the deprecated `rustler::resource!` macro path and the scoped
   `non_local_definitions` lint exception from
   `crates/pantograph-rustler/src/resource_registration.rs`.
-- Deferred, Rustler binding owner: `cargo test -p pantograph_rustler` currently
-  fails during test-binary linking because Rustler references Erlang NIF
-  `enif_*` symbols that are supplied by the BEAM host at runtime. Keep
-  `cargo check -p pantograph_rustler` as the crate-local Rust gate; use the
-  BEAM-backed smoke harness through `./scripts/check-rustler-beam-smoke.sh`
-  when Mix/Elixir/Erlang are installed; and promote that host-side runner into
-  a harder CI/local gate only after the BEAM toolchain becomes an explicit
-  supported verification prerequisite.
+- Resolved: raw `cargo test -p pantograph_rustler` still fails during
+  test-binary linking because Rustler references Erlang NIF `enif_*` symbols
+  that are supplied by the BEAM host at runtime, but the repo now treats
+  `cargo check -p pantograph_rustler` as the crate-local Rust gate and runs
+  the authoritative host-side verification path through
+  `./scripts/check-rustler-beam-smoke.sh`. The required
+  `.github/workflows/quality-gates.yml` lane now provisions `otp 27.0` and
+  `elixir 1.16.3` before invoking that BEAM smoke harness.
 - Resolved: `cargo test -p pantograph-uniffi --all-features version` exposed a
   stale `WorkflowEvent::GraphModified` test fixture in
   `crates/pantograph-uniffi/src/lib.rs` that was missing the backend-owned
