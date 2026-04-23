@@ -7,7 +7,6 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::Utc;
-use serde::Serialize;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::{Mutex, RwLock};
@@ -20,50 +19,21 @@ use node_engine::{
     ModelDependencyStatus, ModelRefV2, extension_keys,
 };
 
+#[path = "model_dependency_activity.rs"]
+mod activity;
 #[path = "model_dependency_descriptors.rs"]
 mod descriptors;
 #[path = "model_dependency_requirements.rs"]
 mod requirements;
 
+use activity::DependencyActivityContext;
+pub use activity::{DependencyActivityEmitter, DependencyActivityEvent};
 use descriptors::ResolvedModelDescriptor;
 
 /// Shared dependency resolver state.
 pub type SharedModelDependencyResolver = Arc<TauriModelDependencyResolver>;
 
 const SUPPORTED_DEPENDENCY_CONTRACT_VERSION: u32 = 1;
-
-pub type DependencyActivityEmitter = Arc<dyn Fn(DependencyActivityEvent) + Send + Sync>;
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub struct DependencyActivityEvent {
-    pub timestamp: String,
-    pub node_type: String,
-    pub model_path: String,
-    pub phase: String,
-    pub message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub binding_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub requirement_name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub stream: Option<String>,
-}
-
-#[derive(Debug, Clone)]
-struct DependencyActivityContext {
-    node_type: String,
-    model_path: String,
-}
-
-impl DependencyActivityContext {
-    fn from_request(request: &ModelDependencyRequest) -> Self {
-        Self {
-            node_type: request.node_type.trim().to_string(),
-            model_path: request.model_path.trim().to_string(),
-        }
-    }
-}
 
 /// Tauri host implementation for model dependency resolution/check/install.
 pub struct TauriModelDependencyResolver {
@@ -121,16 +91,15 @@ impl TauriModelDependencyResolver {
         let Some(emitter) = emitter else {
             return;
         };
-        emitter(DependencyActivityEvent {
-            timestamp: Utc::now().to_rfc3339(),
-            node_type: context.node_type.clone(),
-            model_path: context.model_path.clone(),
-            phase: phase.to_string(),
-            message: message.into(),
-            binding_id: binding_id.map(|v| v.to_string()),
-            requirement_name: requirement_name.map(|v| v.to_string()),
-            stream: stream.map(|v| v.to_string()),
-        });
+        activity::emit_activity_with_emitter(
+            Some(emitter),
+            context,
+            phase,
+            message,
+            binding_id,
+            requirement_name,
+            stream,
+        );
     }
 
     fn emit_activity(
@@ -369,10 +338,9 @@ impl TauriModelDependencyResolver {
         })?;
 
         let emitter = self.current_activity_emitter();
-        let context_value = context.cloned().unwrap_or(DependencyActivityContext {
-            node_type: "unknown".to_string(),
-            model_path: "unknown".to_string(),
-        });
+        let context_value = context
+            .cloned()
+            .unwrap_or_else(DependencyActivityContext::unknown);
         let stdout_task = child.stdout.take().map(|stdout| {
             tokio::spawn(Self::consume_install_stream(
                 stdout,

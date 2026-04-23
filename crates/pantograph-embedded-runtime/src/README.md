@@ -32,6 +32,7 @@ packages.
 | `lib_tests/workflow_run_execution_tests.rs` | Embedded workflow-run and session-run execution integration tests split out of the legacy root test module. |
 | `lib.rs` | Composes the embedded runtime, workflow service, shared extensions, and public crate exports used by Tauri and standalone hosts. |
 | `model_dependencies.rs` | Resolves Pantograph model dependency requirements and binds workflow requests to Pumas-backed execution facts. |
+| `model_dependency_activity.rs` | Defines dependency activity event payloads, emitters, and request context projection shared by resolver phases and install streams. |
 | `model_dependency_descriptors.rs` | Resolves stable model identity, cache keys, Pumas execution descriptors, backend aliases, task tags, and requirements ids for dependency preflight. |
 | `model_dependency_requirements.rs` | Maps Pumas dependency requirement contracts into node-engine DTOs and applies validated user override patches. |
 | `model_dependencies_tests.rs` | Pantograph model dependency resolver tests and Pumas descriptor fixture helpers extracted from the production resolver module. |
@@ -454,6 +455,9 @@ let runtime = EmbeddedRuntime::with_default_python_runtime(
 - `model_dependencies.rs` accepts workflow dependency requests and returns
   machine-consumable dependency status or validation errors suitable for
   preflight blocking.
+- `model_dependency_activity.rs` owns dependency activity event payloads and
+  request context projection while `model_dependencies.rs` remains the public
+  re-export surface used by Tauri event emitters.
 - `model_dependency_descriptors.rs` owns descriptor/cache/model identity
   resolution so model ids, executable paths, backend aliases, selected binding
   ids, and task tags are normalized before dependency requirement and model-ref
@@ -474,6 +478,9 @@ let runtime = EmbeddedRuntime::with_default_python_runtime(
 ## Structured Producer Contract
 - `model_dependencies.rs` produces resolved dependency requirements and
   normalized model descriptors for Pantograph workflow execution.
+- `model_dependency_activity.rs` preserves the serialized dependency activity
+  event shape emitted to Tauri so frontend listeners keep receiving stable
+  phase, binding, requirement, stream, and model-path fields.
 - `model_dependency_descriptors.rs` preserves stable cache keys,
   requirements-id shape, Pumas descriptor fallback semantics, backend-key
   canonicalization, and workflow-facing `model_path`/`task_type_primary`

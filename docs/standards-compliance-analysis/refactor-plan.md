@@ -472,6 +472,10 @@ Tasks:
   task-tag mapping, selected binding normalization, Pumas descriptor fallback,
   and requirements-id shaping now live in
   `crates/pantograph-embedded-runtime/src/model_dependency_descriptors.rs`.
+  Dependency activity event payloads, request context projection, and emitter
+  invocation now live in
+  `crates/pantograph-embedded-runtime/src/model_dependency_activity.rs`, while
+  `model_dependencies.rs` preserves the public re-export path used by Tauri.
   Embedded runtime-registry translation, sync, reclaim, restore, and warmup
   coordination tests now live in
   `crates/pantograph-embedded-runtime/src/runtime_registry_tests.rs`, reducing
