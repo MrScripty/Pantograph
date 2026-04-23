@@ -744,7 +744,9 @@ Tasks:
   `src/components/workflowContainerSelection.test.ts`. App workflow-versus-
   architecture graph source selection now lives in
   `src/components/workflowGraphSource.ts`, with unit coverage in
-  `src/components/workflowGraphSource.test.ts`.
+  `src/components/workflowGraphSource.test.ts`. App graph canvas and SvelteFlow
+  chrome styling now lives in `src/components/WorkflowGraph.css`, removing the
+  inline visual styling block from `src/components/WorkflowGraph.svelte`.
 - Split `DependencyEnvironmentNode.svelte` into data parsing, activity log,
   mode controls, override editor, status panels, and command controls.
   Progress: dependency environment DTOs and node prop/data contracts now live in

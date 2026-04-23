@@ -10,6 +10,7 @@ architecture views on top of the shared editor.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `WorkflowGraph.svelte` | Pantograph graph canvas that wires app node types, orchestration navigation, revision-aware connection-intent flows, and the `Space`-invoked horseshoe insert selector. |
+| `WorkflowGraph.css` | App graph canvas and SvelteFlow chrome styling imported by `WorkflowGraph.svelte`. |
 | `WorkflowContainerBoundary.svelte` | Renders the orchestration boundary overlay, clickable border hit zones, and boundary anchors for the app workflow graph. |
 | `WorkflowEdgeInsertPreviewMarker.svelte` | Renders the cursor-anchored palette edge-insert preview marker. |
 | `workflowContainerBoundary.ts` | Computes orchestration boundary extents and viewport visibility for graph zoom-out transitions. |
@@ -192,6 +193,9 @@ share the same trace, query, rotation, close/open, and confirm behavior.
 Mouse/touch pointer projection now comes from the package
 `workflowPointerPosition.ts` helper; the app graph only supplies the active
 container bounds.
+App graph canvas and SvelteFlow chrome styling lives in `WorkflowGraph.css`, so
+visual policy is separated from the interaction-heavy graph composition
+component.
 
 ## Alternatives Rejected
 - Replace the app graph entirely with the package component immediately.
