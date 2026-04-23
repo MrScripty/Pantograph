@@ -487,6 +487,13 @@ Tasks:
   prepare/restore, and mock-backend tests now live in
   `crates/inference/src/gateway_tests.rs`, reducing `gateway.rs` to production
   gateway behavior.
+- Split `crates/inference/src/backend/pytorch.rs` by PyTorch backend adapter,
+  lifecycle/capability contracts, KV-cache metadata, prompt extraction, and
+  tests.
+  Progress: PyTorch backend capability, lifecycle, KV-cache fingerprint, prompt
+  extraction, and system prompt tests now live in
+  `crates/inference/src/backend/pytorch_tests.rs`, reducing `pytorch.rs` to
+  production adapter behavior.
 - Split `crates/node-engine/src/core_executor.rs` by execution phases, blocking
   adapters, demand preparation, output handling, and tests.
   Progress: core executor behavior tests now live in

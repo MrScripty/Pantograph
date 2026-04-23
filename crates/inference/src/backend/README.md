@@ -17,6 +17,7 @@ isolated here.
 | `ollama.rs` | Ollama backend adapter. |
 | `candle.rs` | Candle backend placeholder and capability declaration. |
 | `pytorch.rs` | PyTorch backend implementation used for HuggingFace-style runtimes. |
+| `pytorch_tests.rs` | PyTorch backend capability, lifecycle, KV-cache fingerprint, prompt extraction, and system prompt tests extracted from the production adapter. |
 
 ## Problem
 
@@ -116,3 +117,6 @@ fn create_backend() {
 - Streaming response parsers should use `strip_prefix` for SSE `data:` lines
   so prefix handling stays explicit and warning-clean under the Rust clippy
   audit.
+- PyTorch backend capability, lifecycle, KV-cache fingerprint, prompt
+  extraction, and system prompt tests stay in `pytorch_tests.rs` so
+  `pytorch.rs` remains focused on production adapter behavior.
