@@ -372,6 +372,13 @@ Tasks:
   Session stale cleanup, inspection, and stale cleanup worker coverage now lives in
   `workflow/tests/session_stale_cleanup.rs`, continuing the behavior-area split
   for the extracted test module.
+- Split `crates/pantograph-workflow-service/src/trace/mod.rs` by trace module
+  entrypoint, DTO contracts, store/query/runtime/scheduler helpers, and tests.
+  Progress: trace DTO serialization, runtime inference, lifecycle reason,
+  snapshot filtering, replay, scheduler attribution, waiting/resume, and
+  dirty-task tests now live in
+  `crates/pantograph-workflow-service/src/trace/tests.rs`, reducing `mod.rs`
+  to the module entrypoint and public re-exports.
 - Split `crates/pantograph-workflow-service/src/graph/session.rs` by graph
   edit-session store, undo/redo state, mutation orchestration, response
   projection, and tests.

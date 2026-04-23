@@ -17,6 +17,7 @@ frontend code.
 | `store.rs` | Owns retained trace state, replay behavior, request filtering, and snapshot generation. |
 | `runtime.rs` | Applies runtime snapshot events to canonical workflow trace state. |
 | `scheduler.rs` | Applies scheduler snapshot events to canonical workflow trace state. |
+| `tests.rs` | Trace DTO serialization, runtime inference, lifecycle reason, snapshot filtering, replay, scheduler attribution, waiting/resume, and dirty-task tests extracted from the module entrypoint. |
 
 ## Problem
 Pantograph needs machine-consumable workflow execution history that survives
@@ -78,6 +79,9 @@ they do not own trace lifecycle rules.
   input; scheduler projection consumes measured queue item/session facts only.
 - Recovery or replay updates for the same execution id update one canonical run
   record in place.
+- Trace DTO serialization, runtime inference, lifecycle reason, snapshot
+  filtering, replay, scheduler attribution, waiting/resume, and dirty-task
+  tests stay in `tests.rs` so `mod.rs` remains a small module entrypoint.
 
 ## Revisit Triggers
 - A durable trace store replaces the in-memory retained-history implementation.
