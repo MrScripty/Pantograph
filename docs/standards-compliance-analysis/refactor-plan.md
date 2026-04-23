@@ -490,7 +490,11 @@ Tasks:
   Dependency activity event payloads, request context projection, and emitter
   invocation now live in
   `crates/pantograph-embedded-runtime/src/model_dependency_activity.rs`, while
-  `model_dependencies.rs` preserves the public re-export path used by Tauri.
+  Python environment lookup, package checks, pip install stream capture,
+  binding check/install behavior, and per-environment install locks now live in
+  `crates/pantograph-embedded-runtime/src/model_dependency_python.rs`, reducing
+  `model_dependencies.rs` below the large-file threshold while preserving the
+  public re-export path used by Tauri.
   Embedded runtime-registry producer matching and reclaim smoke tests now live
   in `crates/pantograph-embedded-runtime/src/runtime_registry_tests.rs`, while
   observation/diagnostics tests live in

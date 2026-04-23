@@ -34,6 +34,7 @@ packages.
 | `model_dependencies.rs` | Resolves Pantograph model dependency requirements and binds workflow requests to Pumas-backed execution facts. |
 | `model_dependency_activity.rs` | Defines dependency activity event payloads, emitters, and request context projection shared by resolver phases and install streams. |
 | `model_dependency_descriptors.rs` | Resolves stable model identity, cache keys, Pumas execution descriptors, backend aliases, task tags, and requirements ids for dependency preflight. |
+| `model_dependency_python.rs` | Owns Python environment lookup, pip package checks, package install stream capture, binding checks, and per-environment install locks for the dependency resolver. |
 | `model_dependency_requirements.rs` | Maps Pumas dependency requirement contracts into node-engine DTOs and applies validated user override patches. |
 | `model_dependencies_tests.rs` | Pantograph model dependency resolver tests and Pumas descriptor fixture helpers extracted from the production resolver module. |
 | `python_runtime_execution.rs` | Owns captured execution metadata for Python-backed runtime runs so workflow diagnostics and registry projection can reuse one recorder contract outside the task-executor facade. |
@@ -97,10 +98,13 @@ mapping workflow dependency requests onto Pumas contracts, and it should prefer
 preserves the existing workflow-facing `model_path`, `model_type`, and
 `task_type_primary` facades, but the values behind those fields may come from
 the descriptor `entry_path` and descriptor task/type data rather than projected
-record metadata. The runtime registry may consume this crate's capability and
-execution facts, and this crate may emit reservation lifecycle signals into
-that registry when a host injects one. Registry ownership still belongs to a
-higher Pantograph application-layer coordinator rather than to this
+record metadata. Python package checks, binding installation, install stream
+capture, and per-environment install locks stay in `model_dependency_python.rs`
+so the resolver facade remains focused on API orchestration, cache lookup, and
+Pumas contract projection. The runtime registry may consume this crate's
+capability and execution facts, and this crate may emit reservation lifecycle
+signals into that registry when a host injects one. Registry ownership still
+belongs to a higher Pantograph application-layer coordinator rather than to this
 embedded-runtime crate.
 
 ## Alternatives Rejected
@@ -481,6 +485,10 @@ let runtime = EmbeddedRuntime::with_default_python_runtime(
   binding selection, runtime-state aggregation, install-target normalization,
   and override patch validation so the resolver facade can focus on API,
   cache, Python process, and Pumas lookup orchestration.
+- `model_dependency_python.rs` owns Python environment lookup, package version
+  checks, pip install invocation, output stream capture, binding install
+  checks, and per-environment install locks so dependency-resolution API flow
+  stays separate from process orchestration.
 - Model dependency resolver tests and Pumas descriptor fixture helpers stay in
   `model_dependencies_tests.rs` so production resolver changes are not coupled
   to integration-fixture churn.
@@ -504,6 +512,10 @@ let runtime = EmbeddedRuntime::with_default_python_runtime(
   binding ids, validation scopes, selected binding order, install targets, and
   user override validation before those facts are cached or returned by the
   resolver facade.
+- `model_dependency_python.rs` preserves dependency package check/install
+  semantics, pip output projection, binding installation status, and
+  per-environment install serialization before those results are cached or
+  returned by the resolver facade.
 - When Pumas descriptor resolution succeeds, the executable path contract is the
   descriptor `entry_path`; projected metadata fields such as `entry_path`,
   `storage_kind`, and `bundle_format` are compatibility fallbacks only.
