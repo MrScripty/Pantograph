@@ -595,7 +595,10 @@ Tasks:
   Progress: PyTorch backend capability, lifecycle, KV-cache fingerprint, prompt
   extraction, and system prompt tests now live in
   `crates/inference/src/backend/pytorch_tests.rs`, reducing `pytorch.rs` to
-  production adapter behavior.
+  production adapter behavior. Embedded worker source registration,
+  sibling-module bootstrapping, and Python result extraction now live in
+  `crates/inference/src/backend/pytorch_worker.rs`, reducing `pytorch.rs`
+  below the large-file threshold while preserving the `PyTorchBackend` facade.
 - Split `crates/inference/src/backend/llamacpp.rs` by llama.cpp backend facade,
   request parsing/rerank helpers, sidecar-start utilities, and KV-cache
   fingerprint helpers.

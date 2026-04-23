@@ -10,12 +10,10 @@
 use std::path::Path;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use async_trait::async_trait;
 use futures_util::Stream;
 use pyo3::prelude::*;
-use pyo3::types::PyModule;
 
 use super::{
     BackendCapabilities, BackendConfig, BackendError, BackendStartOutcome, ChatChunk,
@@ -26,145 +24,8 @@ use crate::process::ProcessSpawner;
 use crate::types::{RerankRequest, RerankResponse};
 use pantograph_runtime_identity::{canonical_runtime_backend_key, canonical_runtime_id};
 
-/// The Python worker source, embedded at compile time.
-const WORKER_PY: &str = include_str!("../../torch/worker.py");
-
-/// The block diffusion module source, embedded at compile time.
-const BLOCK_DIFFUSION_PY: &str = include_str!("../../torch/block_diffusion.py");
-
-/// The autoregressive module source, embedded at compile time.
-const AUTOREGRESSIVE_PY: &str = include_str!("../../torch/autoregressive.py");
-
-/// Shared PyTorch worker runtime helpers, embedded at compile time.
-const WORKER_RUNTIME_PY: &str = include_str!("../../torch/worker_runtime.py");
-
-/// Transformers compatibility shims, embedded at compile time.
-const WORKER_TRANSFORMERS_PY: &str = include_str!("../../torch/worker_transformers.py");
-
-/// Whether the Python worker module has been initialised.
-static WORKER_INITIALISED: AtomicBool = AtomicBool::new(false);
-
-/// Ensure the worker module is loaded into the Python interpreter.
-///
-/// Safe to call multiple times — only the first call actually loads.
-/// Registers sibling modules into `sys.modules` so the worker can import them normally.
-fn ensure_worker_initialised(py: Python<'_>) -> PyResult<()> {
-    if WORKER_INITIALISED.load(Ordering::Acquire) {
-        return Ok(());
-    }
-
-    // Register sibling modules first so worker.py's imports resolve.
-    let sys = py.import("sys")?;
-    let modules = sys.getattr("modules")?;
-
-    for (name, source, file_name, module_name) in [
-        (
-            "block_diffusion",
-            BLOCK_DIFFUSION_PY,
-            c"block_diffusion.py",
-            c"block_diffusion",
-        ),
-        (
-            "autoregressive",
-            AUTOREGRESSIVE_PY,
-            c"autoregressive.py",
-            c"autoregressive",
-        ),
-        (
-            "worker_runtime",
-            WORKER_RUNTIME_PY,
-            c"worker_runtime.py",
-            c"worker_runtime",
-        ),
-        (
-            "worker_transformers",
-            WORKER_TRANSFORMERS_PY,
-            c"worker_transformers.py",
-            c"worker_transformers",
-        ),
-    ] {
-        let code = std::ffi::CString::new(source).map_err(|e| {
-            pyo3::exceptions::PyValueError::new_err(format!("Invalid {} source: {}", name, e))
-        })?;
-        let module = PyModule::from_code(py, &code, file_name, module_name)?;
-        modules.set_item(name, &module)?;
-    }
-
-    // Now load the worker module.
-    let code = std::ffi::CString::new(WORKER_PY).map_err(|e| {
-        pyo3::exceptions::PyValueError::new_err(format!("Invalid worker source: {}", e))
-    })?;
-    PyModule::from_code(
-        py,
-        &code,
-        c"pantograph_torch_worker",
-        c"pantograph_torch_worker",
-    )?;
-
-    WORKER_INITIALISED.store(true, Ordering::Release);
-    log::info!("PyTorch worker module initialised with embedded sibling modules");
-    Ok(())
-}
-
-/// Get a reference to the already-loaded worker module.
-fn worker_module(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    ensure_worker_initialised(py)?;
-    py.import("pantograph_torch_worker")
-}
-
-fn extract_live_kv_info(value: &Bound<'_, PyAny>) -> Result<PyTorchLiveKvInfo, BackendError> {
-    let token_count = value
-        .get_item("token_count")
-        .map_err(|e| BackendError::Inference(format!("Missing KV token_count: {}", e)))?
-        .extract::<usize>()
-        .map_err(|e| BackendError::Inference(format!("Invalid KV token_count: {}", e)))?;
-    let model_path = value
-        .get_item("model_path")
-        .map_err(|e| BackendError::Inference(format!("Missing KV model_path: {}", e)))?
-        .extract::<String>()
-        .map_err(|e| BackendError::Inference(format!("Invalid KV model_path: {}", e)))?;
-    let model_type = value
-        .get_item("model_type")
-        .map_err(|e| BackendError::Inference(format!("Missing KV model_type: {}", e)))?
-        .extract::<String>()
-        .map_err(|e| BackendError::Inference(format!("Invalid KV model_type: {}", e)))?;
-    let device = value
-        .get_item("device")
-        .map_err(|e| BackendError::Inference(format!("Missing KV device: {}", e)))?
-        .extract::<String>()
-        .map_err(|e| BackendError::Inference(format!("Invalid KV device: {}", e)))?;
-
-    Ok(PyTorchLiveKvInfo {
-        token_count,
-        model_path,
-        model_type,
-        device,
-    })
-}
-
-fn extract_loaded_model_info(value: &Bound<'_, PyAny>) -> Result<LoadedModelInfo, BackendError> {
-    let model_path = value
-        .get_item("model_path")
-        .map_err(|e| BackendError::Inference(format!("Missing loaded model_path: {}", e)))?
-        .extract::<String>()
-        .map_err(|e| BackendError::Inference(format!("Invalid loaded model_path: {}", e)))?;
-    let model_type = value
-        .get_item("model_type")
-        .map_err(|e| BackendError::Inference(format!("Missing loaded model_type: {}", e)))?
-        .extract::<String>()
-        .map_err(|e| BackendError::Inference(format!("Invalid loaded model_type: {}", e)))?;
-    let device = value
-        .get_item("device")
-        .map_err(|e| BackendError::Inference(format!("Missing loaded device: {}", e)))?
-        .extract::<String>()
-        .map_err(|e| BackendError::Inference(format!("Invalid loaded device: {}", e)))?;
-
-    Ok(LoadedModelInfo {
-        model_path,
-        model_type,
-        device,
-    })
-}
+#[path = "pytorch_worker.rs"]
+mod pytorch_worker;
 
 /// PyTorch backend using in-process PyO3 embedded Python.
 ///
@@ -227,7 +88,7 @@ pub fn supports_live_kv_reuse(model_type: &str) -> bool {
 pub async fn active_loaded_model_info() -> Result<LoadedModelInfo, BackendError> {
     tokio::task::spawn_blocking(move || {
         Python::with_gil(|py| -> Result<LoadedModelInfo, BackendError> {
-            let worker = worker_module(py).map_err(|e| {
+            let worker = pytorch_worker::worker_module(py).map_err(|e| {
                 BackendError::Inference(format!("Failed to get worker module: {}", e))
             })?;
             let result = worker.call_method0("get_loaded_info").map_err(|e| {
@@ -238,7 +99,7 @@ pub async fn active_loaded_model_info() -> Result<LoadedModelInfo, BackendError>
                     "PyTorch KV operations require an active loaded model".to_string(),
                 ));
             }
-            extract_loaded_model_info(&result)
+            pytorch_worker::extract_loaded_model_info(&result)
         })
     })
     .await
@@ -249,13 +110,13 @@ pub async fn save_live_kv_snapshot(path: &Path) -> Result<PyTorchLiveKvInfo, Bac
     let path = path.to_path_buf();
     tokio::task::spawn_blocking(move || {
         Python::with_gil(|py| -> Result<PyTorchLiveKvInfo, BackendError> {
-            let worker = worker_module(py).map_err(|e| {
+            let worker = pytorch_worker::worker_module(py).map_err(|e| {
                 BackendError::Inference(format!("Failed to get worker module: {}", e))
             })?;
             let result = worker
                 .call_method1("save_live_kv_cache", (path.to_string_lossy().to_string(),))
                 .map_err(|e| BackendError::Inference(format!("PyTorch KV save failed: {}", e)))?;
-            extract_live_kv_info(&result)
+            pytorch_worker::extract_live_kv_info(&result)
         })
     })
     .await
@@ -266,7 +127,7 @@ pub async fn restore_live_kv_snapshot(path: &Path) -> Result<PyTorchLiveKvInfo, 
     let path = path.to_path_buf();
     tokio::task::spawn_blocking(move || {
         Python::with_gil(|py| -> Result<PyTorchLiveKvInfo, BackendError> {
-            let worker = worker_module(py).map_err(|e| {
+            let worker = pytorch_worker::worker_module(py).map_err(|e| {
                 BackendError::Inference(format!("Failed to get worker module: {}", e))
             })?;
             let result = worker
@@ -277,7 +138,7 @@ pub async fn restore_live_kv_snapshot(path: &Path) -> Result<PyTorchLiveKvInfo, 
                 .map_err(|e| {
                     BackendError::Inference(format!("PyTorch KV restore failed: {}", e))
                 })?;
-            extract_live_kv_info(&result)
+            pytorch_worker::extract_live_kv_info(&result)
         })
     })
     .await
@@ -287,7 +148,7 @@ pub async fn restore_live_kv_snapshot(path: &Path) -> Result<PyTorchLiveKvInfo, 
 pub async fn clear_live_kv_snapshot() -> Result<(), BackendError> {
     tokio::task::spawn_blocking(move || {
         Python::with_gil(|py| -> Result<(), BackendError> {
-            let worker = worker_module(py).map_err(|e| {
+            let worker = pytorch_worker::worker_module(py).map_err(|e| {
                 BackendError::Inference(format!("Failed to get worker module: {}", e))
             })?;
             worker
@@ -396,7 +257,7 @@ impl PyTorchBackend {
 
         let info = tokio::task::spawn_blocking(move || {
             Python::with_gil(|py| -> Result<LoadedModelInfo, BackendError> {
-                let worker = worker_module(py).map_err(|e| {
+                let worker = pytorch_worker::worker_module(py).map_err(|e| {
                     BackendError::StartupFailed(format!("Failed to load worker module: {}", e))
                 })?;
 
@@ -444,7 +305,7 @@ impl PyTorchBackend {
     pub async fn unload_model(&mut self) -> Result<(), BackendError> {
         tokio::task::spawn_blocking(|| {
             Python::with_gil(|py| -> Result<(), BackendError> {
-                let worker = worker_module(py).map_err(|e| {
+                let worker = pytorch_worker::worker_module(py).map_err(|e| {
                     BackendError::Inference(format!("Failed to get worker module: {}", e))
                 })?;
                 worker
@@ -475,7 +336,7 @@ impl PyTorchBackend {
     ) -> Result<String, BackendError> {
         tokio::task::spawn_blocking(move || {
             Python::with_gil(|py| -> Result<String, BackendError> {
-                let worker = worker_module(py).map_err(|e| {
+                let worker = pytorch_worker::worker_module(py).map_err(|e| {
                     BackendError::Inference(format!("Failed to get worker module: {}", e))
                 })?;
 
@@ -522,7 +383,7 @@ impl PyTorchBackend {
 
         tokio::task::spawn_blocking(move || {
             Python::with_gil(|py| {
-                let worker = match worker_module(py) {
+                let worker = match pytorch_worker::worker_module(py) {
                     Ok(w) => w,
                     Err(e) => {
                         let _ = tx.blocking_send(Err(BackendError::Inference(format!(
@@ -642,7 +503,7 @@ impl InferenceBackend for PyTorchBackend {
         // Initialise the Python worker module
         tokio::task::spawn_blocking(|| {
             Python::with_gil(|py| {
-                ensure_worker_initialised(py).map_err(|e| {
+                pytorch_worker::ensure_worker_initialised(py).map_err(|e| {
                     BackendError::StartupFailed(format!(
                         "Failed to initialise Python worker: {}",
                         e
@@ -712,7 +573,7 @@ impl InferenceBackend for PyTorchBackend {
         if had_model {
             std::thread::spawn(|| {
                 Python::with_gil(|py| {
-                    if let Ok(worker) = worker_module(py) {
+                    if let Ok(worker) = pytorch_worker::worker_module(py) {
                         let _ = worker.call_method0("unload_model");
                     }
                 });
@@ -728,9 +589,11 @@ impl InferenceBackend for PyTorchBackend {
         if !self.ready {
             return false;
         }
-        tokio::task::spawn_blocking(|| Python::with_gil(|py| worker_module(py).is_ok()))
-            .await
-            .unwrap_or(false)
+        tokio::task::spawn_blocking(|| {
+            Python::with_gil(|py| pytorch_worker::worker_module(py).is_ok())
+        })
+        .await
+        .unwrap_or(false)
     }
 
     fn base_url(&self) -> Option<String> {
@@ -803,7 +666,7 @@ impl InferenceBackend for PyTorchBackend {
         let path = path.to_path_buf();
         tokio::task::spawn_blocking(move || {
             Python::with_gil(|py| -> Result<(), BackendError> {
-                let worker = worker_module(py).map_err(|e| {
+                let worker = pytorch_worker::worker_module(py).map_err(|e| {
                     BackendError::Inference(format!("Failed to get worker module: {}", e))
                 })?;
                 worker
@@ -823,7 +686,7 @@ impl InferenceBackend for PyTorchBackend {
         let path = path.to_path_buf();
         tokio::task::spawn_blocking(move || {
             Python::with_gil(|py| -> Result<(), BackendError> {
-                let worker = worker_module(py).map_err(|e| {
+                let worker = pytorch_worker::worker_module(py).map_err(|e| {
                     BackendError::Inference(format!("Failed to get worker module: {}", e))
                 })?;
                 worker
@@ -845,7 +708,7 @@ impl InferenceBackend for PyTorchBackend {
         Self::require_live_kv_slot(slot_id)?;
         tokio::task::spawn_blocking(move || {
             Python::with_gil(|py| -> Result<(), BackendError> {
-                let worker = worker_module(py).map_err(|e| {
+                let worker = pytorch_worker::worker_module(py).map_err(|e| {
                     BackendError::Inference(format!("Failed to get worker module: {}", e))
                 })?;
                 worker.call_method0("clear_live_kv_cache").map_err(|e| {
@@ -874,7 +737,7 @@ impl InferenceBackend for PyTorchBackend {
             let temp_path = temp_path.clone();
             move || {
                 Python::with_gil(|py| -> Result<(), BackendError> {
-                    let worker = worker_module(py).map_err(|e| {
+                    let worker = pytorch_worker::worker_module(py).map_err(|e| {
                         BackendError::Inference(format!("Failed to get worker module: {}", e))
                     })?;
                     worker
