@@ -1338,10 +1338,10 @@ fully resolved by standards compliance:
   `src/generated/.git` into ignored `.pantograph/generated-components.git/`.
 - Resolved: general CI now protects main frontend and Rust workspace quality
   gates through `.github/workflows/quality-gates.yml`.
-- Deferred, frontend dependency owner: `npm audit --omit=dev
-  --audit-level=high` passes, but the current dependency tree still reports
-  moderate advisories in `devalue`, `markdown-it`, and `svelte`; schedule a
-  dependency update once compatible versions are confirmed.
+- Resolved: root `package.json` now pins the shipped Svelte runtime to
+  `^5.55.4` and owns a repo-level `markdown-it` override at `14.1.1`, so
+  `npm audit --omit=dev --json` reports zero production advisories and the
+  package ownership contract is documented in `packages/svelte-graph/README.md`.
 - Resolved: `crates/pantograph-workflow-service` fixture
   `MockWorkflowHost` now overrides `WorkflowHost::runtime_capabilities`, and
   `cargo test -p pantograph-workflow-service workflow_session_lifecycle_create_run_close`

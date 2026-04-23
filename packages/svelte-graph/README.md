@@ -16,7 +16,7 @@ consumer contract:
 | ---------------- | ----- | --------- |
 | `peerDependencies.svelte` | `@pantograph/svelte-graph` | Consumers must provide the Svelte runtime used to render package components. |
 | `peerDependencies.@xyflow/svelte` | `@pantograph/svelte-graph` | Consumers must provide the graph rendering library that the package components integrate with. |
-| Root `dependencies` and `devDependencies` | Repository root | The root app currently owns the executable, TypeScript compiler, ESLint config, and Node test command that run package tests. |
+| Root `dependencies`, `devDependencies`, and `overrides` | Repository root | The root app currently owns the executable, TypeScript compiler, ESLint config, Node test command, and transitive security pins that run package tests and harden the shipped dependency graph. |
 
 `packages/svelte-graph/package.json` intentionally has no package-local
 `scripts` today. The package tests are run by the root-owned
