@@ -650,6 +650,12 @@ Tasks:
   `crates/inference/src/kv_cache/store_tests.rs`, reducing `store.rs` to
   production save/load/compatibility/retention logic while preserving marker,
   truncation, runtime-fingerprint, and prune behavior coverage.
+- [x] Split `crates/inference/src/server.rs` by production llama.cpp sidecar
+  lifecycle helpers and crate-local regression coverage.
+  Status: server tests now live in `crates/inference/src/server_tests.rs`,
+  reducing `server.rs` to production sidecar startup, readiness, slot-action,
+  and runtime-matching logic while preserving PID parsing and port/path
+  regression coverage.
   Synchronous built-in node handlers now live in
   `crates/node-engine/src/core_executor/pure_nodes.rs`, separating pure
   payload normalization from file I/O, dependency preflight, and runtime-backed

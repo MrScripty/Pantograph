@@ -21,6 +21,7 @@ details.
 | `process.rs` | Sidecar process abstraction used by backends that need external runtimes. |
 | `types.rs` | Shared request/response contracts consumed across backend and host boundaries. |
 | `server.rs` | Legacy sidecar/server lifecycle helpers for llama.cpp-style backends. |
+| `server_tests.rs` | Crate-local llama.cpp sidecar regression coverage for PID parsing, path scoping, and runtime matching. |
 | `kv_cache/` | KV-cache contracts and helpers used by inference-capable hosts. |
 
 ## Problem
@@ -102,6 +103,8 @@ than replaces.
   timeouts and HTTP request timeouts. Graceful shutdown is owned by the
   process handle and gateway stop paths, which remove PID records and stop
   managed sidecar processes.
+- Llama.cpp sidecar regression coverage stays in `server_tests.rs` so
+  `server.rs` remains focused on production lifecycle and HTTP slot behavior.
 - Backend parsing and managed-runtime path handling should use standard-library
   helpers such as `strip_prefix`, `Path`, and direct `Path::join` inputs rather
   than manual slicing or temporary string allocations.
