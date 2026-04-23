@@ -14,6 +14,7 @@ by `WorkflowService` so adapters do not become queue-policy owners.
 | `policy.rs` | Explicit scheduler ordering policy objects, internal admission-input/decision models, and stable decision vocabulary for queue placement and admission. |
 | `policy_tests.rs` | Scheduler priority, FIFO, starvation-protection, warm-reuse bypass, runtime-capacity, and admission-wait tests extracted from the production policy module. |
 | `store.rs` | In-memory scheduler state, queue ordering, canonical admission-input construction, runtime-unload candidate selection inputs, and stale-cleanup candidate logic. |
+| `store_tests.rs` | Scheduler store admission-input and warm-session compatibility tests extracted from the production store module. |
 
 ## Problem
 Pantograph previously kept workflow session scheduler contracts and queue/store
@@ -93,6 +94,9 @@ needs to be the long-term home for scheduler contracts or queue mutation logic.
 - Scheduler priority, FIFO, starvation-protection, warm-reuse bypass,
   runtime-capacity, and admission-wait tests stay in `policy_tests.rs` so
   `policy.rs` remains focused on production queue and admission decisions.
+- Scheduler store admission-input and warm-session compatibility tests stay in
+  `store_tests.rs` so `store.rs` remains focused on production queue/session
+  state mutation.
 
 ## Revisit Triggers
 - Scheduler V2 needs policy modules that justify splitting `store.rs` further.
