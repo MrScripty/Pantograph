@@ -127,6 +127,9 @@ jobs:
       - name: Run workflow-nodes tests
         run: cargo test -p workflow-nodes --lib
 
+      - name: Run workflow-service contract tests
+        run: cargo test -p pantograph-workflow-service --test contract
+
   rust-doc-tests:
     name: Rust doc tests
     runs-on: ubuntu-latest

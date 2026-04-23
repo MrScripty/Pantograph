@@ -9,7 +9,8 @@ the standards-closeout remediation.
 | ---- | ------ | ----- |
 | Wave 01 planning | complete | Gate restoration slices defined |
 | Wave 01 implementation | complete | M1 local gate restoration finished and verified |
-| Wave 02 planning | planned | CI and traceability alignment defined |
+| Wave 02 planning | complete | CI and traceability alignment defined |
+| Wave 02 implementation | complete | Blocking CI now covers workflow-service contract tests |
 | Source implementation | in progress | Proceeding with unrelated `assets/` dirt left untouched by user approval |
 
 ## Shared Constraints
@@ -43,6 +44,7 @@ the standards-closeout remediation.
 | `cargo test -p pantograph-workflow-service --test contract` | pass | 2026-04-23 M1 verification |
 | `npm run lint:no-new` | pass | 2026-04-23 M1 verification |
 | `cargo fmt --all -- --check` | pass | 2026-04-23 M1 verification |
+| blocking CI coverage for workflow-service contract suite | pass | 2026-04-23 M2 workflow update |
 
 ## Worker Report Paths
 - `reports/wave-01-worker-contracts.md`

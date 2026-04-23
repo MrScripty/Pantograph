@@ -157,6 +157,12 @@ Observed result:
 ### M2: Align Blocking CI with Restored Gates
 Goal: prevent the same classes of drift from recurring unobserved.
 
+Status:
+- Complete on 2026-04-23.
+- Implemented by extending the blocking `rust-tests` job in
+  `.github/workflows/quality-gates.yml` to run
+  `cargo test -p pantograph-workflow-service --test contract`.
+
 Tasks:
 1. Extend `.github/workflows/quality-gates.yml` so a blocking Rust test job
    covers the workflow-service contract suite.
@@ -178,6 +184,10 @@ Risks:
 Validation:
 - review workflow YAML for explicit coverage
 - rerun `cargo test -p pantograph-workflow-service --test contract`
+
+Observed result:
+- blocking Rust CI now includes the workflow-service contract suite
+- `cargo test -p pantograph-workflow-service --test contract` passed on 2026-04-23
 
 ### M3: Repair Standards Traceability
 Goal: make standards and ADR docs accurately describe the restored baseline.
