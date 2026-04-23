@@ -178,6 +178,9 @@ embedded-runtime crate.
   `lib_tests/workflow_run_execution_tests.rs` so public run facades,
   cancellation, human-input validation, and Python sidecar runtime observation
   follow the production workflow execution boundary.
+- Interactive-input invalid-request errors from keep-alive session execution
+  must preserve the workflow id in the message, matching direct workflow-run
+  behavior so bindings do not drift on caller-visible error envelopes.
 - Keep-alive workflow-session execution state tests stay in
   `lib_tests/session_execution_state_tests.rs` so backend executor reuse,
   carried inputs, graph-change reconciliation, and inspection state follow the

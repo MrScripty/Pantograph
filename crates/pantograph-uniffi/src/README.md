@@ -72,6 +72,9 @@ and error projection, while workflow semantics stay in
 - Binding objects should not retain placeholder runtime executors. If a binding
   surface exposes execution, it must own a real host/runtime execution contract
   or delegate to the embedded runtime wrapper.
+- Direct embedded-runtime invalid-request envelopes for interactive-input
+  failures must preserve the workflow id for both direct runs and session runs
+  so host-language consumers see one stable message contract.
 
 ## Revisit Triggers
 - A supported host language needs a different binding framework.

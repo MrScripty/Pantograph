@@ -1339,22 +1339,14 @@ fully resolved by standards compliance:
   --audit-level=high` passes, but the current dependency tree still reports
   moderate advisories in `devalue`, `markdown-it`, and `svelte`; schedule a
   dependency update once compatible versions are confirmed.
-- Deferred, workflow-service test owner:
-  `crates/pantograph-workflow-service/src/workflow.rs` test fixture
-  `MockWorkflowHost` stores
-  `runtime_capabilities: vec![ready_runtime_capability()]` but does not
-  override `WorkflowHost::runtime_capabilities`, so
-  `workflow_session_lifecycle_create_run_close` fails its create-session
-  runtime-capability assertion before close-session behavior is exercised.
-- Deferred, UniFFI direct-runtime binding owner:
-  `cargo test -p pantograph-uniffi direct_runtime` currently compiles and runs
-  the moved direct-runtime tests, but
-  `direct_runtime_workflow_run_session_preserves_invalid_request_envelope`
-  fails because the session-run invalid-request envelope message omits the
-  workflow id (`workflow requires interactive input at node 'human-input-1'`)
-  while the test expects the workflow-specific run message. Decide whether the
-  service contract or binding test expectation owns that wording before making
-  this a hard binding gate.
+- Resolved: `crates/pantograph-workflow-service` fixture
+  `MockWorkflowHost` now overrides `WorkflowHost::runtime_capabilities`, and
+  `cargo test -p pantograph-workflow-service workflow_session_lifecycle_create_run_close`
+  passes with its runtime-capability assertion and close-session coverage.
+- Resolved: `cargo test -p pantograph-uniffi direct_runtime` now passes after
+  `pantograph-embedded-runtime` preserves workflow ids in session-run
+  interactive-input invalid-request envelopes, matching direct workflow-run
+  behavior across the UniFFI binding surface.
 - Resolved: arbitrary `process` node execution is no longer enabled by default;
   backend hosts must provide an explicit `ProcessExecutionPolicy` command
   allowlist before process-backed workflows can spawn host commands.

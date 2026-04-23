@@ -3,12 +3,13 @@ use std::sync::{Arc, Mutex};
 
 use crate::task_executor;
 use crate::{
-    apply_runtime_extensions_for_execution, EmbeddedWorkflowHost, RuntimeExtensionsSnapshot,
+    EmbeddedWorkflowHost, RuntimeExtensionsSnapshot, apply_runtime_extensions_for_execution,
 };
 use node_engine::{CoreTaskExecutor, NullEventSink, WorkflowEvent, WorkflowExecutor};
 use pantograph_workflow_service::{
-    graph_memory_impact_from_node_engine_graph_change, WorkflowHost, WorkflowOutputTarget,
-    WorkflowPortBinding, WorkflowRunHandle, WorkflowServiceError, WorkflowSessionUnloadReason,
+    WorkflowHost, WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunHandle,
+    WorkflowServiceError, WorkflowSessionUnloadReason,
+    graph_memory_impact_from_node_engine_graph_change,
 };
 
 struct WorkflowSessionExecutionEntry {
@@ -328,7 +329,9 @@ pub(crate) async fn run_session_workflow(
             let outputs = executor
                 .demand(node_id, &task_executor)
                 .await
-                .map_err(node_engine_error_to_workflow_service_error)?;
+                .map_err(|error| {
+                    node_engine_error_to_workflow_service_error(error, Some(workflow_id))
+                })?;
             node_outputs.insert(node_id.clone(), outputs);
         }
         Ok::<(), WorkflowServiceError>(())
@@ -449,7 +452,7 @@ async fn apply_incremental_input_bindings(
         executor
             .update_node_data(&binding.node_id, updated_data)
             .await
-            .map_err(node_engine_error_to_workflow_service_error)?;
+            .map_err(|error| node_engine_error_to_workflow_service_error(error, None))?;
     }
 
     Ok(())
@@ -506,19 +509,26 @@ async fn apply_input_binding_if_present(
     executor
         .update_node_data(&binding.node_id, updated_data)
         .await
-        .map_err(node_engine_error_to_workflow_service_error)?;
+        .map_err(|error| node_engine_error_to_workflow_service_error(error, None))?;
     Ok(true)
 }
 
 fn node_engine_error_to_workflow_service_error(
     error: node_engine::NodeEngineError,
+    workflow_id: Option<&str>,
 ) -> WorkflowServiceError {
     match error {
         node_engine::NodeEngineError::WaitingForInput { task_id, .. } => {
-            WorkflowServiceError::InvalidRequest(format!(
-                "workflow requires interactive input at node '{}'",
-                task_id
-            ))
+            let message = workflow_id.map_or_else(
+                || format!("workflow requires interactive input at node '{}'", task_id),
+                |workflow_id| {
+                    format!(
+                        "workflow '{}' requires interactive input at node '{}'",
+                        workflow_id, task_id
+                    )
+                },
+            );
+            WorkflowServiceError::InvalidRequest(message)
         }
         other => WorkflowServiceError::Internal(other.to_string()),
     }
