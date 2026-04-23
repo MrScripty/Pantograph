@@ -37,7 +37,8 @@ packages.
 | `model_dependency_requirements.rs` | Maps Pumas dependency requirement contracts into node-engine DTOs and applies validated user override patches. |
 | `model_dependencies_tests.rs` | Pantograph model dependency resolver tests and Pumas descriptor fixture helpers extracted from the production resolver module. |
 | `python_runtime_execution.rs` | Owns captured execution metadata for Python-backed runtime runs so workflow diagnostics and registry projection can reuse one recorder contract outside the task-executor facade. |
-| `task_executor.rs` | Hosts Pantograph-specific task execution for Python-backed nodes and RAG-backed nodes while preserving core-node fallthrough. |
+| `task_executor.rs` | Hosts the Pantograph-specific task executor facade, construction, extension keys, and node-type dispatch while preserving core-node fallthrough. |
+| `task_executor/` | Behavior modules for RAG search, Puma-Lib metadata projection, dependency environment/preflight, and Python runtime execution used by the host executor facade. |
 | `task_executor_tests.rs` | Pantograph host task-executor unit and integration tests plus Python runtime fixture helpers extracted from the production task-executor module. |
 | `technical_fit.rs` | Owns embedded-runtime technical-fit translation, including host-side runtime snapshot/candidate assembly, request projection into backend runtime-registry selector input, selector invocation, and decision projection back to workflow-service contracts without moving policy into adapters. |
 | `python_runtime.rs` | Defines the out-of-process Python runtime adapter contract and the default process-backed implementation. |
@@ -190,6 +191,12 @@ embedded-runtime crate.
   in `task_executor_tests.rs` so `task_executor.rs` remains focused on
   production host execution for Python-backed nodes, RAG-backed nodes, and core
   executor fallthrough.
+- Pantograph host task-executor behavior stays grouped by execution family:
+  dependency environment and preflight helpers in
+  `task_executor/dependency_environment.rs`, Puma-Lib metadata projection in
+  `task_executor/puma_lib.rs`, Python sidecar execution and stream replay in
+  `task_executor/python_execution.rs`, and RAG search in
+  `task_executor/rag_search.rs`.
 - Embedded-runtime source formatting and import grouping should stay
   rustfmt-compatible across runtime capability, registry, workflow runtime, and
   workflow-session modules so later behavior refactors do not mix semantic

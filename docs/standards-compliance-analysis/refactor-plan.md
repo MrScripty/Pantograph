@@ -466,7 +466,12 @@ Tasks:
   shared test harness and behavior-module index. Pantograph host task-executor
   tests and Python runtime fixture helpers now live in
   `crates/pantograph-embedded-runtime/src/task_executor_tests.rs`, reducing
-  `task_executor.rs` to production host execution logic. Pantograph model
+  `task_executor.rs` to production host execution logic. Task-executor behavior
+  modules now split RAG execution, Puma-Lib model metadata projection,
+  dependency environment/preflight handling, and Python runtime execution into
+  `crates/pantograph-embedded-runtime/src/task_executor/`, reducing the
+  dispatcher facade below the large-file threshold while preserving the
+  exported `TauriTaskExecutor` type. Pantograph model
   dependency resolver tests and Pumas descriptor fixture helpers now live in
   `crates/pantograph-embedded-runtime/src/model_dependencies_tests.rs`,
   reducing `model_dependencies.rs` to production resolver logic. Model
