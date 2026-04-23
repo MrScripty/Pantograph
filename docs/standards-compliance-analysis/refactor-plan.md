@@ -552,6 +552,13 @@ Tasks:
   attribution, and result aggregation tests now live in
   `crates/node-engine/src/engine/multi_demand_tests.rs`, reducing
   `engine/multi_demand.rs` to production multi-target demand coordination.
+- Split `src-tauri/src/workflow/headless_workflow_commands.rs` by headless
+  request orchestration, runtime construction, diagnostics projection, and
+  tests.
+  Progress: headless workflow command diagnostics projection, trace, scheduler
+  snapshot, runtime metadata, and clear-history tests now live in
+  `src-tauri/src/workflow/headless_workflow_commands_tests.rs`, reducing
+  `headless_workflow_commands.rs` to request orchestration.
 - Split `src/components/WorkflowGraph.svelte` and
   `packages/svelte-graph/src/components/WorkflowGraph.svelte` into graph canvas,
   connection drag, horseshoe insert, edge insert, selection, keyboard, and
