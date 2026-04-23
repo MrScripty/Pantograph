@@ -106,6 +106,9 @@ locally.
 - Task-type inference must reflect execution semantics, not UI naming.
 - Input normalization may be permissive for additive compatibility, but output
   shapes must stay stable once published.
+- `PortDataType::String` remains self-compatible, while also accepting
+  `Prompt`, `Json`, `Number`, and `Boolean` sources where legacy string-backed
+  ports still need additive coercion during graph validation.
 - Graph mutation and incremental execution events must be emitted from executor
   state transitions, not synthesized by frontend or transport adapters.
 - Workflow engine execution, graph mutation, event emission, cancellation, and

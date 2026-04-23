@@ -1246,7 +1246,11 @@ Tasks:
   `cargo check`, `cargo check --workspace --no-default-features`,
   `npm run test:frontend`, and `npm run lint:full` remained green after
   restoring the Rust formatting baseline and removing a stale mock-backend
-  import in `packages/svelte-graph`.
+  import in `packages/svelte-graph`. `./launcher.sh --test` is now green again
+  after restoring `PortDataType::String -> PortDataType::String` compatibility
+  in `crates/node-engine/src/types.rs`; a fresh `cargo test --workspace` rerun
+  still stops only at the already-deferred `pantograph_rustler` BEAM-linking
+  limitation.
 - [x] Close or update `docs/anti-pattern-remediation-tracker.md` Phase 5 for
   process-node policy controls. Status: `ProcessTask` now defaults to a
   disabled backend-owned `ProcessExecutionPolicy`; allowed process commands
@@ -1317,12 +1321,6 @@ fully resolved by standards compliance:
   `cargo check -p pantograph_rustler` as the crate-local Rust gate and add a
   BEAM-backed binding test harness before promoting crate-local tests to a hard
   Rustler verification gate.
-- Deferred, Rust formatting owner: `cargo fmt --all -- --check` currently fails
-  on pre-existing Rust formatting drift across inference managed-runtime
-  modules, node-engine executor helpers, embedded-runtime modules,
-  workflow-service tests, and Tauri workflow/LLM modules. Keep that as a
-  separate formatting cleanup slice instead of mixing it into manifest or
-  behavior commits.
 - Deferred, frontend accessibility owner: `npm run build` succeeds but still
   reports pre-existing Svelte warnings outside the app `WorkflowGraph.svelte`
   split, including ActivityLog static mouseenter/mouseleave containers,

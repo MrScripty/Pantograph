@@ -93,7 +93,10 @@ impl PortDataType {
         if matches!(other, PortDataType::String) {
             return matches!(
                 self,
-                PortDataType::Json | PortDataType::Number | PortDataType::Boolean
+                PortDataType::String
+                    | PortDataType::Json
+                    | PortDataType::Number
+                    | PortDataType::Boolean
             );
         }
 
@@ -353,6 +356,7 @@ mod tests {
     fn test_port_data_type_compatibility() {
         assert!(PortDataType::Any.is_compatible_with(&PortDataType::String));
         assert!(PortDataType::String.is_compatible_with(&PortDataType::Any));
+        assert!(PortDataType::String.is_compatible_with(&PortDataType::String));
         assert!(PortDataType::Prompt.is_compatible_with(&PortDataType::String));
         assert!(PortDataType::String.is_compatible_with(&PortDataType::Prompt));
         assert!(PortDataType::AudioStream.is_compatible_with(&PortDataType::Stream));
