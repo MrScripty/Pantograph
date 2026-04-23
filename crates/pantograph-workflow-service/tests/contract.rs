@@ -227,6 +227,7 @@ async fn workflow_capabilities_contract_snapshot() {
             "can_remove": true,
             "source_kind": "managed",
             "selected": true,
+            "readiness_state": "ready",
             "supports_external_connection": true,
             "backend_keys": ["llamacpp", "llama.cpp"],
             "missing_files": [],

@@ -806,6 +806,7 @@
 
 <!-- a11y-reviewed: SvelteFlow graph canvas owns pointer interaction while keyboard graph commands are handled on this focusable container. -->
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<!-- a11y-reviewed: The same keyboard-enabled container intentionally carries tabindex so graph shortcuts and focus management remain on one stable surface. -->
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div
   class="workflow-graph-container"
