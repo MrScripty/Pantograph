@@ -446,6 +446,13 @@ Tasks:
   splits. The runtime-registry source README now also carries the required
   standards headings so future boundary edits keep decision traceability
   complete.
+- Split `crates/inference/src/managed_runtime/operations.rs` by managed-runtime
+  status projection, install/remove transitions, command/version selection, and
+  tests.
+  Progress: managed-runtime orchestration tests and filesystem fixture helpers
+  now live in `crates/inference/src/managed_runtime/operations_tests.rs`,
+  reducing `operations.rs` to production transition and command-resolution
+  logic before deeper operation-family splits.
 - Split `crates/node-engine/src/core_executor.rs` by execution phases, blocking
   adapters, demand preparation, output handling, and tests.
   Progress: core executor behavior tests now live in

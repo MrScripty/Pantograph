@@ -16,6 +16,7 @@ and transition coordination without moving runtime lifecycle policy into Tauri.
 | `contracts.rs` | Stable managed-runtime DTOs for capability, snapshot, version, selection, job, and low-level archive/command contracts shared across backend and host boundaries. |
 | `definitions.rs` | Binary-definition registry that maps managed runtime ids onto runtime-specific release, validation, and command-resolution behavior. |
 | `operations.rs` | Backend-owned orchestration for status reads, install/remove transitions, and command resolution. |
+| `operations_tests.rs` | Managed-runtime orchestration tests and filesystem fixture helpers extracted from the production operations module. |
 | `paths.rs` | Managed runtime root/path helpers plus shared argument and environment helpers used by platform adapters. |
 | `state.rs` | Durable managed runtime catalog, selection, and interrupted-job reconciliation helpers for restart-safe state projection. |
 | `llama_cpp_platform/` | Thin per-platform `llama.cpp` install/finalization/launch adapters kept behind the managed runtime boundary. |
@@ -97,6 +98,9 @@ launch policy.
 - Managed-runtime orchestration should avoid avoidable allocations and lazy
   option substitutions when standard-library `Path` and `Option` helpers express
   the same behavior directly.
+- Managed-runtime orchestration tests and filesystem fixture helpers stay in
+  `operations_tests.rs` so production transition logic remains separate from
+  restart, retained-artifact, and persisted-state coverage.
 
 ## Revisit Triggers
 
