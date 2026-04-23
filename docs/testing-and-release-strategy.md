@@ -39,6 +39,8 @@ setup.
 Use targeted commands in addition to the launcher gate when a change touches a
 specialized surface. Examples:
 
+- Workflow-service contract surface:
+  `cargo test -p pantograph-workflow-service --test contract`
 - Runtime separation: `npm run test:runtime-separation`
 - UniFFI C# surface: `./scripts/check-uniffi-csharp-smoke.sh`
 - Packaged C# quickstart: `./scripts/check-packaged-csharp-quickstart.sh`
@@ -59,7 +61,8 @@ Blocking jobs:
 - Frontend tests
 - Production dependency audit for high-severity vulnerabilities
 - Rust workspace checks with all features and without default features
-- Focused Rust unit tests for `node-engine` and `workflow-nodes`
+- Focused Rust unit tests for `node-engine` and `workflow-nodes`, plus the
+  workflow-service contract suite
 - Rust workspace doc tests without default features
 
 Ratcheted audit jobs:

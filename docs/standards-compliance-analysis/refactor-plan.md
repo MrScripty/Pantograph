@@ -1112,9 +1112,9 @@ Tasks:
   frontend tests, Rust fmt/clippy/check/test/doc-test, dependency audit, and
   summary aggregation. Status: `.github/workflows/quality-gates.yml` now runs
   blocking no-new lint/traceability, full lint, typecheck, frontend test,
-  high-severity dependency audit, Rust check, focused Rust test, and Rust
-  doc-test jobs, with separate ratcheted audit jobs for Rust formatting and
-  `clippy -D warnings`.
+  high-severity dependency audit, Rust check, focused Rust test, explicit
+  workflow-service contract coverage, and Rust doc-test jobs, with separate
+  ratcheted audit jobs for Rust formatting and `clippy -D warnings`.
 - [x] Ensure every CI job explicitly bootstraps the package manager or toolchain
   it invokes instead of relying on runner defaults. Status: Node jobs use
   `actions/setup-node` with `.node-version` and `npm ci --include=optional`;
@@ -1130,7 +1130,9 @@ Tasks:
 - [x] Add `launcher.sh --test` as the canonical local test entrypoint. Status:
   `launcher.sh --test` now runs the local quality gate across critical frontend
   lint, TypeScript, frontend tests, Rust workspace checks, and focused Rust unit
-  tests.
+  tests. Workflow-service contract changes also require the targeted local
+  command `cargo test -p pantograph-workflow-service --test contract`, as
+  recorded in `docs/testing-and-release-strategy.md`.
 - [x] Define the GUI `--release-smoke` CI strategy, including display server,
   sandbox/GPU/shared-memory constraints, and bounded startup behavior. Status:
   `docs/testing-and-release-strategy.md` now requires clean-runner execution,

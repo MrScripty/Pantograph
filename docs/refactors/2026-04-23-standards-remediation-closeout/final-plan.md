@@ -192,6 +192,15 @@ Observed result:
 ### M3: Repair Standards Traceability
 Goal: make standards and ADR docs accurately describe the restored baseline.
 
+Status:
+- Complete on 2026-04-23.
+- Implemented by updating `ADR-004`, `docs/testing-and-release-strategy.md`,
+  and `docs/standards-compliance-analysis/refactor-plan.md` so they now
+  describe the closeout slice accurately: the workflow-service contract suite is
+  part of blocking CI coverage, targeted local verification names the contract
+  suite explicitly, and the ADR records that the final baseline closeout
+  happened in this remediation.
+
 Tasks:
 1. Update `ADR-004` if the formatter baseline was not actually restored until
    this closeout slice.
@@ -218,6 +227,10 @@ Risks:
 Validation:
 - rerun the same M1 checks
 - confirm docs match observed outcomes
+
+Observed result:
+- standards traceability docs now match the restored gates and blocking CI scope
+- final closeout checks passed on 2026-04-23
 
 ## Safe Parallel Waves
 
