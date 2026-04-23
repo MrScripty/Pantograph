@@ -12,7 +12,8 @@ workflow semantics.
 | ----------- | ----------- |
 | `translation.rs` | Pure translation from `node_engine::WorkflowEvent` into Tauri workflow-event DTOs. |
 | `diagnostics_bridge.rs` | Diagnostics-store update bridge that pairs translated workflow events with backend-owned diagnostics snapshots. |
-| `tests.rs` | Adapter regression coverage for translation and diagnostics projection behavior. |
+| `tests.rs` | Shared adapter test fixtures and module registration. |
+| `tests/` | Focused adapter regression coverage split by translation/projection, transport, and executor integration behavior. |
 
 ## Problem
 `src-tauri/src/workflow/event_adapter.rs` had become a shared insertion point
@@ -32,13 +33,18 @@ workflow semantics in one oversized file.
 Keep `workflow::event_adapter` as the stable facade while moving translation
 and diagnostics-bridge helpers into focused internal modules. This preserves
 existing imports and adapter behavior while creating standards-compliant
-insertion points for later event-contract completion work.
+insertion points for later event-contract completion work. The test harness now
+follows the same pattern: `tests.rs` keeps shared fixtures while focused test
+modules own each behavior area.
 
 ## Alternatives Rejected
 - Leaving translation and diagnostics-bridge logic in one file.
   Rejected because the adapter file already exceeded decomposition thresholds.
 - Moving diagnostics update logic into TypeScript.
   Rejected because diagnostics state is backend-owned and must remain in Rust.
+- Keeping all adapter tests in one root module.
+  Rejected because the regression coverage exceeded the large-file threshold and
+  mixed translation, transport, and executor-backed behavior.
 
 ## Invariants
 - `TauriEventAdapter` remains a transport adapter over backend-owned event
@@ -51,10 +57,14 @@ insertion points for later event-contract completion work.
   adapter-local diagnostics-only state.
 - Diagnostics snapshots are derived from backend-owned trace and workflow-event
   projections, not from frontend reconstruction.
+- Shared adapter fixtures stay in `tests.rs`; focused behavior coverage moves
+  into the `tests/` subdirectory.
 
 ## Revisit Triggers
 - Tauri workflow transport gains another distinct event family that needs a
   separate helper module.
+- Adapter fixture setup grows enough to justify another shared test helper
+  module.
 - Diagnostics projection ownership moves again and the bridge no longer belongs
   at this boundary.
 - The adapter begins to expose enough transport-specific behavior to require a

@@ -713,6 +713,17 @@ Tasks:
   `src-tauri/src/workflow/diagnostics/tests/replay.rs`; the diagnostics test
   subdirectory now has its own README, and `tests.rs` retains shared fixtures
   plus small request/trace assertions.
+- [x] Split `src-tauri/src/workflow/event_adapter/tests.rs` by translation and
+  diagnostics projection regressions, direct channel transport behavior, and
+  executor-backed integration coverage.
+  Status: backend event translation and diagnostics projection regressions now
+  live in `src-tauri/src/workflow/event_adapter/tests/translation_projection.rs`;
+  direct adapter send coverage now lives in
+  `src-tauri/src/workflow/event_adapter/tests/channel_transport.rs`;
+  executor-backed parallel workflow coverage now lives in
+  `src-tauri/src/workflow/event_adapter/tests/executor_integration.rs`; the
+  test subdirectory now has its own README, and `tests.rs` retains only shared
+  graph/executor/channel fixtures plus module registration.
 - Split `src/components/WorkflowGraph.svelte` and
   `packages/svelte-graph/src/components/WorkflowGraph.svelte` into graph canvas,
   connection drag, horseshoe insert, edge insert, selection, keyboard, and

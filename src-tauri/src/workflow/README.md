@@ -20,6 +20,7 @@ owner of that policy itself.
 | `execution_manager/` | Focused execution-state lifecycle helpers behind the public execution-manager facade. |
 | `event_adapter.rs` | Stable facade that bridges `node-engine` workflow events onto Tauri channels. |
 | `event_adapter/` | Focused translation and diagnostics-bridge helpers behind the stable event-adapter facade. |
+| `event_adapter/tests/` | Focused adapter regression tests split by translation/projection, channel transport, and executor integration behavior. |
 | `workflow_edit_session.rs` | Backend-owned workflow edit-session graph operations surfaced through thin Tauri wrappers. |
 | `types.rs` | Legacy Rust DTO mirrors retained during migration; core DTOs are the source of truth for new editing surfaces. |
 | `model_dependencies.rs` | Dependency preflight, binding resolution, and runtime-environment selection for Python-backed models. |
@@ -80,6 +81,9 @@ individual command files.
 diagnostics-store bridge logic so event-contract completion work does not grow
 inside one oversized adapter file or blur the transport-versus-backend
 ownership boundary.
+`event_adapter/tests/` now splits backend event translation/projection,
+channel-transport, and executor-backed integration coverage so adapter
+regressions no longer accumulate in one large root test module.
 Workflow event construction should stay with backend event translation or active
 diagnostics snapshot emitters; `events.rs` should not grow unused convenience
 constructors that bypass those owners.
