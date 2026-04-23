@@ -30,6 +30,9 @@ handoffs for the CI quality-gates reliability remediation.
 - 2026-04-23: user explicitly approved proceeding after committing the Markdown
   planning artifacts while leaving unrelated dirty asset changes under
   `assets/` untouched.
+- 2026-04-23: M3 verification exposed that the earlier script change also
+  required a `scripts/README.md` traceability update; that documentation fix
+  was folded into the final implementation slice instead of weakening the gate.
 
 ## Dependency Order
 1. Resolve Rust external dependency bootstrap for clean CI runners.

@@ -65,6 +65,10 @@ Blocking jobs:
   workflow-service contract suite
 - Rust workspace doc tests without default features
 
+The Rust jobs also bootstrap the pinned external `Pumas-Library` checkout in
+CI so the clean runner matches the sibling path dependency layout used by the
+workspace.
+
 Ratcheted audit jobs:
 
 - `cargo fmt --all -- --check`
@@ -74,7 +78,9 @@ The audit jobs are visible in CI but are non-blocking until the documented
 formatting baseline is cleaned up. The strict clippy audit currently passes
 after the M7 cleanup and can be promoted independently from the Rust formatting
 ratchet. The summary job fails the workflow when any blocking gate fails and
-reports the audit job status for review.
+reports the audit job status for review using explicit audit-result outputs
+instead of `needs.<job>.result`, because those audit jobs use
+`continue-on-error`.
 
 ## Acceptance Policy
 

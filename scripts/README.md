@@ -9,7 +9,7 @@ main app entrypoint.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `check-runtime-redistributables-smoke.sh` | Verifies a built Pantograph release artifact exists, then runs the bounded managed-runtime contract smoke that covers runtime-manager view projection, workflow preflight blocking, and diagnostics projection. |
-| `check-decision-traceability.sh` | Enforces source-directory README/ADR decision traceability for changed source directories, with repo-specific host-facing and structured-producer paths. |
+| `check-decision-traceability.sh` | Enforces source-directory README/ADR decision traceability for changed source directories, with repo-specific host-facing and structured-producer paths plus a grep fallback when `ripgrep` is unavailable. |
 | `check-no-python-linkage.sh` | Verifies the runtime-separation guarantee that Pantograph no longer links Python in-process. |
 | `check-rustler-beam-smoke.sh` | Builds `pantograph_rustler`, verifies the local BEAM toolchain exists, and runs the Mix smoke harness under `bindings/beam/pantograph_native_smoke/`. |
 | `check-packaged-csharp-quickstart.sh` | Compiles the artifact-staged C# quickstart against the generated binding with Roslyn and .NET reference assemblies, then runs the authoring path against the packaged native library; does not restore NuGet packages. |
@@ -52,6 +52,9 @@ can be debugged without the full app UI in the loop.
   `packages/svelte-graph/src`, `scripts`, and `.pantograph`; use environment
   overrides for temporary focused audits. The default host-facing and
   structured-producer lists include UniFFI binding generator helpers.
+- Decision traceability must preserve equivalent README/ADR checks when `rg` is
+  unavailable by falling back to standard shell tooling instead of failing on
+  clean CI runners.
 - Smoke tests target real Pantograph worker/runtime modules, not forks of that
   logic.
 - C# runtime execution smokes create workflow sessions before submitting runs.
