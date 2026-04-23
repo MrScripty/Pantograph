@@ -15,6 +15,7 @@ and keeps execution dispatch aligned with the contracts published by
 | `core_executor/` | Focused core-executor helper and test modules behind the stable executor facade. |
 | `descriptor.rs` | Node descriptor contracts consumed by the graph and runtime layers. |
 | `engine.rs` | Workflow engine entry points and orchestration helpers. |
+| `engine_tests.rs` | Workflow engine execution, graph mutation, event emission, cancellation, and human-input tests extracted from the production engine facade. |
 | `engine/` | Focused graph-event and multi-demand helpers behind the stable engine facade. |
 | `error.rs` | Shared engine and execution error types. |
 | `events.rs` | Stable facade for workflow event contracts and sink implementations. |
@@ -106,6 +107,9 @@ locally.
   shapes must stay stable once published.
 - Graph mutation and incremental execution events must be emitted from executor
   state transitions, not synthesized by frontend or transport adapters.
+- Workflow engine execution, graph mutation, event emission, cancellation, and
+  human-input tests stay in `engine_tests.rs` so `engine.rs` remains focused on
+  production orchestration helpers and facade methods.
 - Execution events may carry additive `occurred_at_ms` timestamps, and adapter
   layers must preserve those backend-owned producer times when projecting trace
   or diagnostics state instead of restamping them locally.

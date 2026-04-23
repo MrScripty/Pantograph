@@ -516,6 +516,12 @@ Tasks:
   `crates/node-engine/src/core_executor/pytorch_nodes.rs` and
   `crates/node-engine/src/core_executor/audio_nodes.rs`, keeping feature-family
   worker initialization and execution separate from dispatch.
+- Split `crates/node-engine/src/engine.rs` by workflow engine facade, graph
+  state/event helpers, multi-demand execution, and tests.
+  Progress: workflow engine execution, graph mutation, event emission,
+  cancellation, and human-input tests now live in
+  `crates/node-engine/src/engine_tests.rs`, reducing `engine.rs` to production
+  orchestration helpers and facade methods before deeper engine-family splits.
 - Split `src/components/WorkflowGraph.svelte` and
   `packages/svelte-graph/src/components/WorkflowGraph.svelte` into graph canvas,
   connection drag, horseshoe insert, edge insert, selection, keyboard, and
