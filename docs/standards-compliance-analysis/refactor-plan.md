@@ -471,7 +471,11 @@ Tasks:
   dependency environment/preflight handling, and Python runtime execution into
   `crates/pantograph-embedded-runtime/src/task_executor/`, reducing the
   dispatcher facade below the large-file threshold while preserving the
-  exported `TauriTaskExecutor` type. Pantograph model
+  exported `TauriTaskExecutor` type. Task-executor behavior tests now live in
+  `crates/pantograph-embedded-runtime/src/task_executor_tests/`, keeping shared
+  fixtures in the root test module while splitting dependency preflight,
+  dependency fallback, input helper, Puma-Lib, and Python recorder/stream
+  coverage below the large-file threshold. Pantograph model
   dependency resolver tests and Pumas descriptor fixture helpers now live in
   `crates/pantograph-embedded-runtime/src/model_dependencies_tests.rs`,
   reducing `model_dependencies.rs` to production resolver logic. Model
