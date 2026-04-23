@@ -10,6 +10,7 @@ on raw invoke payloads.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `WorkflowService.ts` | Main client-side workflow service, including session lifecycle, graph mutation, connection-intent commands, and atomic insert-and-connect. |
+| `workflowConnectionActions.ts` | Focused Tauri invoke helpers for connection-intent candidate, commit, and edge-insert commands. |
 | `types.ts` | App-local workflow DTO mirrors used by the service and legacy callers. |
 | `mocks.ts` | Mock workflow data and behaviors used when the app runs in mock mode. |
 | `templateService.ts` | Workflow template discovery/loading helpers, including the built-in tiny-sd-turbo and GGUF reranker starter workflows. |
@@ -53,6 +54,9 @@ projection so `WorkflowService.ts` and workflow execution reducers agree on
 active-run identity. Backend-authored event `ownership` payloads are
 authoritative over raw execution-id fields when native Tauri events provide
 them.
+Connection-intent invoke wiring now lives in
+`workflowConnectionActions.ts` so `WorkflowService.ts` stays focused on
+session ownership, mock branching, and legacy app-facing method shapes.
 
 ## Alternatives Rejected
 - Remove `WorkflowService` and switch every app caller to `TauriWorkflowBackend`
@@ -61,6 +65,9 @@ them.
   service boundary.
 - Keep connection-intent methods only in the package backend adapter.
   Rejected because the app graph still routes through this service today.
+- Keep Tauri connection-intent invoke wiring in `WorkflowService.ts`.
+  Rejected because the file had become an oversized insertion point for both
+  session state and backend connection-command normalization.
 
 ## Invariants
 - `currentExecutionId` must refer to the active editable session before any
@@ -80,6 +87,9 @@ them.
   service returns either an updated graph or a structured rejection.
 - Edge insertion preview must stay side-effect free; replacing the existing edge
   is only allowed through `insertNodeOnEdge`.
+- Connection-intent invoke helpers stay in `workflowConnectionActions.ts` so
+  the service keeps one legacy-facing wrapper surface while the raw Tauri
+  command wiring remains focused and reusable.
 - Mock-mode payload shapes must remain compatible enough for callers to compile
   and branch safely.
 - Mock-mode diagnostics projections must include the same projection context

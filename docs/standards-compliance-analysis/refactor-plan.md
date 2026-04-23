@@ -656,6 +656,12 @@ Tasks:
   reducing `server.rs` to production sidecar startup, readiness, slot-action,
   and runtime-matching logic while preserving PID parsing and port/path
   regression coverage.
+- [x] Split `src/services/workflow/WorkflowService.ts` by legacy service state
+  orchestration and focused connection-intent invoke wiring.
+  Status: Tauri connection-intent candidate/commit/edge-insert calls now live
+  in `src/services/workflow/workflowConnectionActions.ts`, reducing
+  `WorkflowService.ts` below the large-file threshold while preserving the
+  legacy app-facing service method surface and mock-mode rejections.
   Synchronous built-in node handlers now live in
   `crates/node-engine/src/core_executor/pure_nodes.rs`, separating pure
   payload normalization from file I/O, dependency preflight, and runtime-backed

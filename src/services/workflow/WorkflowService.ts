@@ -35,13 +35,12 @@ import {
   projectWorkflowEventOwnership,
 } from '@pantograph/svelte-graph';
 import {
-  normalizeConnectionCandidatesResponse,
-  normalizeConnectionCommitResponse,
-  normalizeEdgeInsertionPreviewResponse,
-  normalizeInsertNodeConnectionResponse,
-  normalizeInsertNodeOnEdgeResponse,
-  serializeConnectionAnchor,
-} from '../../lib/tauriConnectionIntentWire.ts';
+  connectWorkflowAnchors,
+  getWorkflowConnectionCandidates,
+  insertWorkflowNodeAndConnect,
+  insertWorkflowNodeOnEdge,
+  previewWorkflowNodeInsertOnEdge,
+} from './workflowConnectionActions.ts';
 import { parseWorkflowGraphMutationResponse } from '../../lib/workflowGraphMutationResponse.ts';
 
 // Set to false to use real Rust backend, true to use frontend mocks
@@ -615,15 +614,11 @@ export class WorkflowService {
       };
     }
 
-    const response = await invoke<Parameters<typeof normalizeConnectionCandidatesResponse>[0]>(
-      'get_connection_candidates',
-      {
-      executionId: id,
-      sourceAnchor: serializeConnectionAnchor(sourceAnchor),
+    return getWorkflowConnectionCandidates(
+      id,
+      sourceAnchor,
       graphRevision,
-      }
     );
-    return normalizeConnectionCandidatesResponse(response);
   }
 
   async connectAnchors(
@@ -648,16 +643,7 @@ export class WorkflowService {
       };
     }
 
-    const response = await invoke<Parameters<typeof normalizeConnectionCommitResponse>[0]>(
-      'connect_anchors_in_execution',
-      {
-      executionId: id,
-      sourceAnchor: serializeConnectionAnchor(sourceAnchor),
-      targetAnchor: serializeConnectionAnchor(targetAnchor),
-      graphRevision,
-      }
-    );
-    return normalizeConnectionCommitResponse(response);
+    return connectWorkflowAnchors(id, sourceAnchor, targetAnchor, graphRevision);
   }
 
   async insertNodeAndConnect(
@@ -684,18 +670,14 @@ export class WorkflowService {
       };
     }
 
-    const response = await invoke<Parameters<typeof normalizeInsertNodeConnectionResponse>[0]>(
-      'insert_node_and_connect_in_execution',
-      {
-      executionId: id,
-      sourceAnchor: serializeConnectionAnchor(sourceAnchor),
+    return insertWorkflowNodeAndConnect(
+      id,
+      sourceAnchor,
       nodeType,
       graphRevision,
       positionHint,
       preferredInputPortId,
-      }
     );
-    return normalizeInsertNodeConnectionResponse(response);
   }
 
   async previewNodeInsertOnEdge(
@@ -720,16 +702,7 @@ export class WorkflowService {
       };
     }
 
-    const response = await invoke<Parameters<typeof normalizeEdgeInsertionPreviewResponse>[0]>(
-      'preview_node_insert_on_edge_in_execution',
-      {
-        executionId: id,
-        edgeId,
-        nodeType,
-        graphRevision,
-      }
-    );
-    return normalizeEdgeInsertionPreviewResponse(response);
+    return previewWorkflowNodeInsertOnEdge(id, edgeId, nodeType, graphRevision);
   }
 
   async insertNodeOnEdge(
@@ -755,17 +728,7 @@ export class WorkflowService {
       };
     }
 
-    const response = await invoke<Parameters<typeof normalizeInsertNodeOnEdgeResponse>[0]>(
-      'insert_node_on_edge_in_execution',
-      {
-        executionId: id,
-        edgeId,
-        nodeType,
-        graphRevision,
-        positionHint,
-      }
-    );
-    return normalizeInsertNodeOnEdgeResponse(response);
+    return insertWorkflowNodeOnEdge(id, edgeId, nodeType, graphRevision, positionHint);
   }
 
   /**
