@@ -15,7 +15,10 @@ and transition coordination without moving runtime lifecycle policy into Tauri.
 | `catalog.rs` | Backend-owned GitHub release catalog refresh and fallback projection for managed runtime versions installable on the current platform. |
 | `contracts.rs` | Stable managed-runtime DTOs for capability, snapshot, version, selection, job, and low-level archive/command contracts shared across backend and host boundaries. |
 | `definitions.rs` | Binary-definition registry that maps managed runtime ids onto runtime-specific release, validation, and command-resolution behavior. |
-| `operations.rs` | Backend-owned orchestration for status reads, install/remove transitions, and command resolution. |
+| `operations.rs` | Backend-owned orchestration entrypoint for status reads, install/remove transitions, catalog refresh, and command resolution. |
+| `operations/download.rs` | Catalog selection, retained download artifact discovery, and HTTP resume response classification helpers used by install orchestration. |
+| `operations/projection.rs` | Snapshot, readiness, retained artifact, and version-status projection from persisted runtime state. |
+| `operations/state_transitions.rs` | Persisted job, install/remove, selection, and runtime install-dir state transitions shared by orchestration and tests. |
 | `operations_tests.rs` | Managed-runtime orchestration tests and filesystem fixture helpers extracted from the production operations module. |
 | `paths.rs` | Managed runtime root/path helpers plus shared argument and environment helpers used by platform adapters. |
 | `state.rs` | Durable managed runtime catalog, selection, and interrupted-job reconciliation helpers for restart-safe state projection. |
@@ -67,9 +70,11 @@ Use a small managed-runtime module tree with explicit responsibility splits:
 contracts, catalog refresh, definition lookup, orchestration, archive
 extraction, and path helpers. Runtime-specific platform details remain in
 `llama_cpp_platform/` and `ollama_platform/`, while `operations.rs` owns the
-backend-facing transition and availability flow. This keeps Tauri as an
-adapter that calls backend services instead of becoming the owner of install or
-launch policy.
+backend-facing transition and availability flow. Helper modules under
+`operations/` keep download-source resolution, snapshot projection, and
+persisted state transitions below the large-file threshold without changing the
+public managed-runtime facade. This keeps Tauri as an adapter that calls
+backend services instead of becoming the owner of install or launch policy.
 
 ## Alternatives Rejected
 
@@ -101,6 +106,10 @@ launch policy.
 - Managed-runtime orchestration tests and filesystem fixture helpers stay in
   `operations_tests.rs` so production transition logic remains separate from
   restart, retained-artifact, and persisted-state coverage.
+- Managed-runtime operation helpers stay grouped by lifecycle responsibility:
+  download-source/resume decisions in `operations/download.rs`, state projection
+  in `operations/projection.rs`, and persisted state transitions in
+  `operations/state_transitions.rs`.
 
 ## Revisit Triggers
 

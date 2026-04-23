@@ -514,7 +514,13 @@ Tasks:
   Progress: managed-runtime orchestration tests and filesystem fixture helpers
   now live in `crates/inference/src/managed_runtime/operations_tests.rs`,
   reducing `operations.rs` to production transition and command-resolution
-  logic before deeper operation-family splits.
+  logic before deeper operation-family splits. Download-source resolution,
+  retained artifact discovery, and HTTP resume classification now live in
+  `operations/download.rs`; snapshot/version projection now lives in
+  `operations/projection.rs`; and persisted job, selection, install/remove, and
+  runtime install-dir transitions now live in `operations/state_transitions.rs`,
+  reducing the production orchestration entrypoint below the large-file
+  threshold while preserving the public managed-runtime facade.
 - Split `crates/inference/src/gateway.rs` by gateway lifecycle, request
   forwarding, embedding prepare/restore, runtime reuse, and tests.
   Progress: gateway lifecycle, request forwarding, runtime reuse, embedding
