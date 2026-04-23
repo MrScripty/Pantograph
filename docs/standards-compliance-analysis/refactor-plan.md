@@ -395,7 +395,11 @@ Tasks:
   `policy.rs` to production queue and admission decisions. Scheduler store
   admission-input and warm-session compatibility tests now live in
   `crates/pantograph-workflow-service/src/scheduler/store_tests.rs`, reducing
-  `store.rs` to production queue/session state mutation.
+  `store.rs` to production queue/session state mutation. Scheduler store
+  admission ETA projection now lives in
+  `crates/pantograph-workflow-service/src/scheduler/store_admission.rs`,
+  bringing `store.rs` below the decomposition threshold while keeping queue
+  diagnostics timing helper ownership inside the scheduler boundary.
 - Split `crates/pantograph-embedded-runtime/src/lib.rs` into runtime host,
   workflow sessions, registry lifecycle, diagnostics projection, model deps,
   and test modules.

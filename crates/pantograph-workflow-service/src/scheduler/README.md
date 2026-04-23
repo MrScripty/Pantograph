@@ -14,6 +14,7 @@ by `WorkflowService` so adapters do not become queue-policy owners.
 | `policy.rs` | Explicit scheduler ordering policy objects, internal admission-input/decision models, and stable decision vocabulary for queue placement and admission. |
 | `policy_tests.rs` | Scheduler priority, FIFO, starvation-protection, warm-reuse bypass, runtime-capacity, and admission-wait tests extracted from the production policy module. |
 | `store.rs` | In-memory scheduler state, queue ordering, canonical admission-input construction, runtime-unload candidate selection inputs, and stale-cleanup candidate logic. |
+| `store_admission.rs` | Scheduler store admission ETA projection helper used by queue diagnostics. |
 | `store_tests.rs` | Scheduler store admission-input and warm-session compatibility tests extracted from the production store module. |
 
 ## Problem
@@ -97,6 +98,9 @@ needs to be the long-term home for scheduler contracts or queue mutation logic.
 - Scheduler store admission-input and warm-session compatibility tests stay in
   `store_tests.rs` so `store.rs` remains focused on production queue/session
   state mutation.
+- Scheduler store admission ETA projection stays in `store_admission.rs` so
+  queue diagnostics timing helpers do not keep `store.rs` above the
+  decomposition threshold.
 
 ## Revisit Triggers
 - Scheduler V2 needs policy modules that justify splitting `store.rs` further.

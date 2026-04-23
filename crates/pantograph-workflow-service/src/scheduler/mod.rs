@@ -1,6 +1,7 @@
 mod contracts;
 mod policy;
 mod store;
+mod store_admission;
 
 pub(crate) use contracts::scheduler_snapshot_trace_execution_id;
 pub use contracts::{
