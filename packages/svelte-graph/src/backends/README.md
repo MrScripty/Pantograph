@@ -11,6 +11,7 @@ transport.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `MockWorkflowBackend.ts` | In-memory backend used for package development, UI prototyping, and tests that need session-scoped graph edits without a Tauri runtime. |
+| `mockConnectionIntent.ts` | Shared in-memory candidate lookup, connect, insert-connect, and edge-insert preview/commit helpers used by `MockWorkflowBackend.ts`. |
 
 ## Problem
 The graph package needs one editing API surface that works for embedded GUI
@@ -32,6 +33,10 @@ package-local behavior through `MockWorkflowBackend`. The mock stores a
 session-local graph with derived revision metadata so the same
 `getConnectionCandidates` and `connectAnchors` flow can be exercised without a
 native backend.
+Mock connection candidate discovery, direct connect, insert-connect, and
+edge-insert preview/commit policy now live in `mockConnectionIntent.ts`, while
+`MockWorkflowBackend.ts` remains the stable `WorkflowBackend` facade and
+session store shell.
 Group create, ungroup, and port-mapping operations are also session-scoped
 graph mutation methods; mock and production backends must return the full graph
 mutation response rather than group-only DTOs.
@@ -56,6 +61,9 @@ mutation response rather than group-only DTOs.
   anchor, not a whole-graph recommendation pass.
 - `connectAnchors` must return structured rejection data on failure instead of
   throwing for expected incompatibility cases.
+- `mockConnectionIntent.ts` must stay transport-agnostic and operate only on
+  the in-memory graph plus node-definition inventory passed in by
+  `MockWorkflowBackend.ts`.
 
 ## Revisit Triggers
 - A second production transport (HTTP/WebSocket) needs adapter-specific retry or

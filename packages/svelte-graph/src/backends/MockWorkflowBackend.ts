@@ -28,6 +28,13 @@ import type {
 import type { NodeGroup, PortMapping } from '../types/groups.js';
 import { isPortTypeCompatible } from '../portTypeCompatibility.js';
 import { buildDerivedGraph, computeGraphFingerprint } from '../graphRevision.js';
+import {
+  mockConnectAnchors,
+  mockGetConnectionCandidates,
+  mockInsertNodeAndConnect,
+  mockInsertNodeOnEdge,
+  mockPreviewNodeInsertOnEdge,
+} from './mockConnectionIntent.js';
 
 /** Default mock node definitions */
 export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
@@ -96,13 +103,6 @@ function mockValidateConnection(sourceType: string, targetType: string): boolean
   );
 }
 
-function cloneGraphWithoutEdge(graph: WorkflowGraph, edgeId: string): WorkflowGraph {
-  return {
-    ...structuredClone(graph),
-    edges: graph.edges.filter((edge) => edge.id !== edgeId),
-  };
-}
-
 export class MockWorkflowBackend implements WorkflowBackend {
   private eventListeners: Set<(event: WorkflowEvent) => void> = new Set();
   private savedWorkflows: Map<string, { graph: WorkflowGraph; metadata: WorkflowMetadata }> = new Map();
@@ -136,107 +136,6 @@ export class MockWorkflowBackend implements WorkflowBackend {
 
   async validateConnection(sourceType: string, targetType: string): Promise<boolean> {
     return mockValidateConnection(sourceType, targetType);
-  }
-
-  private findDefinition(nodeType: string | undefined): NodeDefinition | undefined {
-    return this.nodeDefinitions.find((definition) => definition.node_type === nodeType);
-  }
-
-  private resolveEdgeInsertBridge(
-    graph: WorkflowGraph,
-    edgeId: string,
-    nodeType: string,
-  ): EdgeInsertionPreviewResponse {
-    const currentRevision = computeGraphFingerprint(graph);
-    const edge = graph.edges.find((candidate) => candidate.id === edgeId);
-    if (!edge) {
-      return {
-        accepted: false,
-        graph_revision: currentRevision,
-        rejection: {
-          reason: 'unknown_edge',
-          message: `edge '${edgeId}' was not found`,
-        },
-      };
-    }
-
-    const sourceNode = graph.nodes.find((node) => node.id === edge.source);
-    const targetNode = graph.nodes.find((node) => node.id === edge.target);
-    const sourceDef = this.findDefinition(sourceNode?.node_type);
-    const targetDef = this.findDefinition(targetNode?.node_type);
-    const insertDef = this.findDefinition(nodeType);
-    const sourcePort = sourceDef?.outputs.find((port) => port.id === edge.source_handle);
-    const targetPort = targetDef?.inputs.find((port) => port.id === edge.target_handle);
-
-    if (!sourcePort) {
-      return {
-        accepted: false,
-        graph_revision: currentRevision,
-        rejection: {
-          reason: 'unknown_source_anchor',
-          message: `source anchor '${edge.source}.${edge.source_handle}' was not found`,
-        },
-      };
-    }
-    if (!targetPort) {
-      return {
-        accepted: false,
-        graph_revision: currentRevision,
-        rejection: {
-          reason: 'unknown_target_anchor',
-          message: `target anchor '${edge.target}.${edge.target_handle}' was not found`,
-        },
-      };
-    }
-    if (!insertDef) {
-      return {
-        accepted: false,
-        graph_revision: currentRevision,
-        rejection: {
-          reason: 'unknown_insert_node_type',
-          message: `insertable node type '${nodeType}' is unknown`,
-        },
-      };
-    }
-
-    const graphWithoutEdge = cloneGraphWithoutEdge(graph, edgeId);
-    for (const inputPort of insertDef.inputs) {
-      if (!isPortTypeCompatible(sourcePort.data_type, inputPort.data_type)) {
-        continue;
-      }
-
-      for (const outputPort of insertDef.outputs) {
-        if (!isPortTypeCompatible(outputPort.data_type, targetPort.data_type)) {
-          continue;
-        }
-
-        const targetOccupied = graphWithoutEdge.edges.some(
-          (candidate) =>
-            candidate.target === edge.target && candidate.target_handle === edge.target_handle,
-        );
-        if (!targetPort.multiple && targetOccupied) {
-          continue;
-        }
-
-        return {
-          accepted: true,
-          graph_revision: currentRevision,
-          bridge: {
-            input_port_id: inputPort.id,
-            output_port_id: outputPort.id,
-          },
-        };
-      }
-    }
-
-    return {
-      accepted: false,
-      graph_revision: currentRevision,
-      rejection: {
-        reason: 'no_compatible_insert_path',
-        message: `node type '${nodeType}' has no valid path between edge '${edgeId}'`,
-      },
-    };
   }
 
   async createSession(graph: WorkflowGraph): Promise<WorkflowSessionHandle> {
@@ -295,72 +194,7 @@ export class MockWorkflowBackend implements WorkflowBackend {
   ): Promise<ConnectionCandidatesResponse> {
     const graph = this.sessions.get(sessionId);
     if (!graph) throw new Error(`Session not found: ${sessionId}`);
-
-    const sourceNode = graph.nodes.find((node) => node.id === sourceAnchor.node_id);
-    if (!sourceNode) throw new Error(`Source node not found: ${sourceAnchor.node_id}`);
-    const sourceDef = this.nodeDefinitions.find((def) => def.node_type === sourceNode.node_type);
-    const sourcePort = sourceDef?.outputs.find((port) => port.id === sourceAnchor.port_id);
-    if (!sourcePort) throw new Error(`Source anchor not found: ${sourceAnchor.node_id}.${sourceAnchor.port_id}`);
-
-    const compatibleNodes = graph.nodes
-      .filter((node) => node.id !== sourceAnchor.node_id)
-      .map((node) => {
-        const definition = this.nodeDefinitions.find((def) => def.node_type === node.node_type);
-        if (!definition) return null;
-
-        const anchors = definition.inputs
-          .filter((port) => {
-            if (!isPortTypeCompatible(sourcePort.data_type, port.data_type)) return false;
-            if (!port.multiple) {
-              return !graph.edges.some(
-                (edge) => edge.target === node.id && edge.target_handle === port.id
-              );
-            }
-            return true;
-          })
-          .map((port) => ({
-            port_id: port.id,
-            port_label: port.label,
-            data_type: port.data_type,
-            multiple: port.multiple,
-          }));
-
-        if (anchors.length === 0) return null;
-
-        return {
-          node_id: node.id,
-          node_type: node.node_type,
-          node_label: String(node.data.label ?? definition.label),
-          position: node.position,
-          anchors,
-        };
-      })
-      .filter((node): node is NonNullable<typeof node> => node !== null);
-
-    const insertableNodeTypes = this.nodeDefinitions
-      .map((definition) => {
-        const matchingInputPortIds = definition.inputs
-          .filter((port) => isPortTypeCompatible(sourcePort.data_type, port.data_type))
-          .map((port) => port.id);
-        if (matchingInputPortIds.length === 0) return null;
-        return {
-          node_type: definition.node_type,
-          category: definition.category,
-          label: definition.label,
-          description: definition.description,
-          matching_input_port_ids: matchingInputPortIds,
-        };
-      })
-      .filter((node): node is NonNullable<typeof node> => node !== null);
-
-    const currentRevision = computeGraphFingerprint(graph);
-    return {
-      graph_revision: currentRevision,
-      revision_matches: !graphRevision || graphRevision === currentRevision,
-      source_anchor: sourceAnchor,
-      compatible_nodes: compatibleNodes,
-      insertable_node_types: insertableNodeTypes,
-    };
+    return mockGetConnectionCandidates(this.nodeDefinitions, graph, sourceAnchor, graphRevision);
   }
 
   async connectAnchors(
@@ -371,71 +205,13 @@ export class MockWorkflowBackend implements WorkflowBackend {
   ): Promise<ConnectionCommitResponse> {
     const graph = this.sessions.get(sessionId);
     if (!graph) throw new Error(`Session not found: ${sessionId}`);
-
-    const currentRevision = computeGraphFingerprint(graph);
-    if (graphRevision !== currentRevision) {
-      return {
-        accepted: false,
-        graph_revision: currentRevision,
-        rejection: {
-          reason: 'stale_revision',
-          message: `graph revision '${graphRevision}' is stale`,
-        },
-      };
-    }
-
-    const sourceNode = graph.nodes.find((node) => node.id === sourceAnchor.node_id);
-    const targetNode = graph.nodes.find((node) => node.id === targetAnchor.node_id);
-    const sourceDef = this.nodeDefinitions.find((def) => def.node_type === sourceNode?.node_type);
-    const targetDef = this.nodeDefinitions.find((def) => def.node_type === targetNode?.node_type);
-    const sourcePort = sourceDef?.outputs.find((port) => port.id === sourceAnchor.port_id);
-    const targetPort = targetDef?.inputs.find((port) => port.id === targetAnchor.port_id);
-
-    if (!sourcePort) {
-      return {
-        accepted: false,
-        graph_revision: currentRevision,
-        rejection: {
-          reason: 'unknown_source_anchor',
-          message: `source anchor '${sourceAnchor.node_id}.${sourceAnchor.port_id}' was not found`,
-        },
-      };
-    }
-    if (!targetPort) {
-      return {
-        accepted: false,
-        graph_revision: currentRevision,
-        rejection: {
-          reason: 'unknown_target_anchor',
-          message: `target anchor '${targetAnchor.node_id}.${targetAnchor.port_id}' was not found`,
-        },
-      };
-    }
-    if (!isPortTypeCompatible(sourcePort.data_type, targetPort.data_type)) {
-      return {
-        accepted: false,
-        graph_revision: currentRevision,
-        rejection: {
-          reason: 'incompatible_types',
-          message: `${sourcePort.data_type} cannot connect to ${targetPort.data_type}`,
-        },
-      };
-    }
-
-    const edge: GraphEdge = {
-      id: `${sourceAnchor.node_id}-${sourceAnchor.port_id}-${targetAnchor.node_id}-${targetAnchor.port_id}`,
-      source: sourceAnchor.node_id,
-      source_handle: sourceAnchor.port_id,
-      target: targetAnchor.node_id,
-      target_handle: targetAnchor.port_id,
-    };
-    graph.edges.push(edge);
-    graph.derived_graph = buildDerivedGraph(graph);
-    return {
-      accepted: true,
-      graph_revision: graph.derived_graph.graph_fingerprint,
-      graph: structuredClone(graph),
-    };
+    return mockConnectAnchors(
+      this.nodeDefinitions,
+      graph,
+      sourceAnchor,
+      targetAnchor,
+      graphRevision,
+    );
   }
 
   async insertNodeAndConnect(
@@ -448,92 +224,15 @@ export class MockWorkflowBackend implements WorkflowBackend {
   ): Promise<InsertNodeConnectionResponse> {
     const graph = this.sessions.get(sessionId);
     if (!graph) throw new Error(`Session not found: ${sessionId}`);
-
-    const currentRevision = computeGraphFingerprint(graph);
-    if (graphRevision !== currentRevision) {
-      return {
-        accepted: false,
-        graph_revision: currentRevision,
-        rejection: {
-          reason: 'stale_revision',
-          message: `graph revision '${graphRevision}' is stale`,
-        },
-      };
-    }
-
-    const sourceNode = graph.nodes.find((node) => node.id === sourceAnchor.node_id);
-    const sourceDef = this.nodeDefinitions.find((def) => def.node_type === sourceNode?.node_type);
-    const sourcePort = sourceDef?.outputs.find((port) => port.id === sourceAnchor.port_id);
-    if (!sourcePort) {
-      return {
-        accepted: false,
-        graph_revision: currentRevision,
-        rejection: {
-          reason: 'unknown_source_anchor',
-          message: `source anchor '${sourceAnchor.node_id}.${sourceAnchor.port_id}' was not found`,
-        },
-      };
-    }
-
-    const insertDef = this.nodeDefinitions.find((def) => def.node_type === nodeType);
-    if (!insertDef) {
-      return {
-        accepted: false,
-        graph_revision: currentRevision,
-        rejection: {
-          reason: 'unknown_insert_node_type',
-          message: `insertable node type '${nodeType}' is unknown`,
-        },
-      };
-    }
-
-    const targetPort =
-      insertDef.inputs.find(
-        (port) =>
-          preferredInputPortId &&
-          port.id === preferredInputPortId &&
-          isPortTypeCompatible(sourcePort.data_type, port.data_type)
-      ) ??
-      insertDef.inputs
-        .filter((port) => isPortTypeCompatible(sourcePort.data_type, port.data_type))
-        .sort((left, right) => left.label.localeCompare(right.label) || left.id.localeCompare(right.id))[0];
-
-    if (!targetPort) {
-      return {
-        accepted: false,
-        graph_revision: currentRevision,
-        rejection: {
-          reason: 'no_compatible_insert_input',
-          message: `node type '${nodeType}' has no compatible input for ${sourcePort.data_type}`,
-        },
-      };
-    }
-
-    const insertedNodeId = `${nodeType}-${Date.now()}`;
-    graph.nodes.push({
-      id: insertedNodeId,
-      node_type: nodeType,
-      position: positionHint.position,
-      data: {
-        label: insertDef.label,
-        ...Object.fromEntries(insertDef.inputs.map((input) => [input.id, null])),
-      },
-    });
-    graph.edges.push({
-      id: `${sourceAnchor.node_id}-${sourceAnchor.port_id}-${insertedNodeId}-${targetPort.id}`,
-      source: sourceAnchor.node_id,
-      source_handle: sourceAnchor.port_id,
-      target: insertedNodeId,
-      target_handle: targetPort.id,
-    });
-    graph.derived_graph = buildDerivedGraph(graph);
-
-    return {
-      accepted: true,
-      graph_revision: graph.derived_graph.graph_fingerprint,
-      inserted_node_id: insertedNodeId,
-      graph: structuredClone(graph),
-    };
+    return mockInsertNodeAndConnect(
+      this.nodeDefinitions,
+      graph,
+      sourceAnchor,
+      nodeType,
+      graphRevision,
+      positionHint,
+      preferredInputPortId,
+    );
   }
 
   async previewNodeInsertOnEdge(
@@ -544,20 +243,13 @@ export class MockWorkflowBackend implements WorkflowBackend {
   ): Promise<EdgeInsertionPreviewResponse> {
     const graph = this.sessions.get(sessionId);
     if (!graph) throw new Error(`Session not found: ${sessionId}`);
-
-    const currentRevision = computeGraphFingerprint(graph);
-    if (graphRevision !== currentRevision) {
-      return {
-        accepted: false,
-        graph_revision: currentRevision,
-        rejection: {
-          reason: 'stale_revision',
-          message: `graph revision '${graphRevision}' is stale`,
-        },
-      };
-    }
-
-    return this.resolveEdgeInsertBridge(graph, edgeId, nodeType);
+    return mockPreviewNodeInsertOnEdge(
+      this.nodeDefinitions,
+      graph,
+      edgeId,
+      nodeType,
+      graphRevision,
+    );
   }
 
   async insertNodeOnEdge(
@@ -569,86 +261,14 @@ export class MockWorkflowBackend implements WorkflowBackend {
   ): Promise<InsertNodeOnEdgeResponse> {
     const graph = this.sessions.get(sessionId);
     if (!graph) throw new Error(`Session not found: ${sessionId}`);
-
-    const currentRevision = computeGraphFingerprint(graph);
-    if (graphRevision !== currentRevision) {
-      return {
-        accepted: false,
-        graph_revision: currentRevision,
-        rejection: {
-          reason: 'stale_revision',
-          message: `graph revision '${graphRevision}' is stale`,
-        },
-      };
-    }
-
-    const preview = this.resolveEdgeInsertBridge(graph, edgeId, nodeType);
-    if (!preview.accepted || !preview.bridge) {
-      return {
-        accepted: false,
-        graph_revision: preview.graph_revision,
-        rejection: preview.rejection,
-      };
-    }
-
-    const edge = graph.edges.find((candidate) => candidate.id === edgeId);
-    if (!edge) {
-      return {
-        accepted: false,
-        graph_revision: currentRevision,
-        rejection: {
-          reason: 'unknown_edge',
-          message: `edge '${edgeId}' was not found`,
-        },
-      };
-    }
-
-    const insertDef = this.findDefinition(nodeType);
-    if (!insertDef) {
-      return {
-        accepted: false,
-        graph_revision: currentRevision,
-        rejection: {
-          reason: 'unknown_insert_node_type',
-          message: `insertable node type '${nodeType}' is unknown`,
-        },
-      };
-    }
-
-    const insertedNodeId = `${nodeType}-${Date.now()}`;
-    graph.edges = graph.edges.filter((candidate) => candidate.id !== edgeId);
-    graph.nodes.push({
-      id: insertedNodeId,
-      node_type: nodeType,
-      position: positionHint.position,
-      data: {
-        label: insertDef.label,
-        ...Object.fromEntries(insertDef.inputs.map((input) => [input.id, null])),
-      },
-    });
-    graph.edges.push({
-      id: `${edge.source}-${edge.source_handle}-${insertedNodeId}-${preview.bridge.input_port_id}`,
-      source: edge.source,
-      source_handle: edge.source_handle,
-      target: insertedNodeId,
-      target_handle: preview.bridge.input_port_id,
-    });
-    graph.edges.push({
-      id: `${insertedNodeId}-${preview.bridge.output_port_id}-${edge.target}-${edge.target_handle}`,
-      source: insertedNodeId,
-      source_handle: preview.bridge.output_port_id,
-      target: edge.target,
-      target_handle: edge.target_handle,
-    });
-    graph.derived_graph = buildDerivedGraph(graph);
-
-    return {
-      accepted: true,
-      graph_revision: graph.derived_graph.graph_fingerprint,
-      inserted_node_id: insertedNodeId,
-      bridge: preview.bridge,
-      graph: structuredClone(graph),
-    };
+    return mockInsertNodeOnEdge(
+      this.nodeDefinitions,
+      graph,
+      edgeId,
+      nodeType,
+      graphRevision,
+      positionHint,
+    );
   }
 
   async removeEdge(edgeId: string, sessionId: string): Promise<WorkflowGraphMutationResponse> {

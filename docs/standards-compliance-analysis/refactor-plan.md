@@ -829,6 +829,11 @@ Tasks:
   `packages/svelte-graph/src/components/workflowGraphBackendActions.ts`,
   reducing package `WorkflowGraph.svelte` below the large-file threshold while
   keeping drag state, viewport state, and selector wiring in the component.
+  Mock package backend connection candidate lookup, direct connect,
+  insert-connect, and edge-insert preview/commit helpers now live in
+  `packages/svelte-graph/src/backends/mockConnectionIntent.ts`, reducing
+  `packages/svelte-graph/src/backends/MockWorkflowBackend.ts` below the
+  large-file threshold while preserving the `WorkflowBackend` class facade.
   Package and app SvelteFlow default edge options now reuse
   `packages/svelte-graph/src/workflowGraphEdgeOptions.ts`, with unit coverage in
   `packages/svelte-graph/src/workflowGraphEdgeOptions.test.ts`.
