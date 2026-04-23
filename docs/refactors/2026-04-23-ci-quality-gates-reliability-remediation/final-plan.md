@@ -199,6 +199,12 @@ Observed result:
 ### M2: Make the No-New-Debt Gate Self-Contained
 Goal: remove the CI-only bootstrap failure from the traceability lane.
 
+Status:
+- Complete on 2026-04-23.
+- Implemented by teaching `scripts/check-decision-traceability.sh` to use
+  `grep` when `rg` is unavailable, preserving the existing ripgrep fast path
+  while removing the hard CI bootstrap dependency.
+
 Tasks:
 1. Choose the portability strategy:
    - provision `ripgrep` explicitly in the lint CI job, or
@@ -232,6 +238,11 @@ Validation:
 - `npm run lint:no-new`
 - direct invocation of `./scripts/check-decision-traceability.sh` in a
   provisioned CI-like shell
+
+Observed result:
+- `npm run lint:no-new` passed on 2026-04-23
+- `env PATH=/usr/bin:/bin ./scripts/check-decision-traceability.sh` passed on
+  2026-04-23, confirming the non-`rg` fallback path works
 
 ### M3: Repair Quality Summary Audit Reporting
 Goal: keep the summary truthful without changing audit blocking policy.

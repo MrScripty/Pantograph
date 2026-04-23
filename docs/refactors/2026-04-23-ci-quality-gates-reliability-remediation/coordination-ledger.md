@@ -10,6 +10,7 @@ handoffs for the CI quality-gates reliability remediation.
 | Planning | complete | Findings and implementation waves recorded |
 | Source implementation | in progress | User approved continuing with unrelated `assets/` dirt left untouched |
 | M1 Rust bootstrap | complete | Workflow now materializes pinned `Pumas-Library` checkout for every Rust lane |
+| M2 traceability tooling | complete | Script now falls back to standard grep when ripgrep is unavailable |
 | CI verification | pending | Awaiting post-implementation CI run |
 
 ## Shared Constraints
@@ -60,6 +61,8 @@ handoffs for the CI quality-gates reliability remediation.
 | `cargo fmt --all -- --check` | pass | 2026-04-23 M1 local verification |
 | `cargo clippy --workspace --all-targets --all-features -- -D warnings` | pass | 2026-04-23 M1 local verification |
 | `./scripts/check-rustler-beam-smoke.sh` | blocked | local environment missing `mix`; CI lane remains required |
+| `npm run lint:no-new` | pass | 2026-04-23 M2 local verification |
+| `env PATH=/usr/bin:/bin ./scripts/check-decision-traceability.sh` | pass | 2026-04-23 M2 fallback verification without `rg` |
 
 ## Worker Report Paths
 - `reports/wave-01-worker-ci-rust-bootstrap.md`

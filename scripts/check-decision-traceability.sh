@@ -32,6 +32,53 @@ banned_placeholders=(
   "import { value } from './module';"
 )
 
+have_rg=false
+if command -v rg >/dev/null 2>&1; then
+  have_rg=true
+fi
+
+contains_fixed_exact_line() {
+  local pattern="$1"
+  local file="$2"
+
+  if [ "$have_rg" = true ]; then
+    rg -F -x -q "$pattern" "$file"
+  else
+    grep -F -x -q -- "$pattern" "$file"
+  fi
+}
+
+contains_fixed_text() {
+  local pattern="$1"
+  local file="$2"
+
+  if [ "$have_rg" = true ]; then
+    rg -F -q "$pattern" "$file"
+  else
+    grep -F -q -- "$pattern" "$file"
+  fi
+}
+
+stdin_matches_regex() {
+  local pattern="$1"
+
+  if [ "$have_rg" = true ]; then
+    rg -q "$pattern"
+  else
+    grep -E -q -- "$pattern"
+  fi
+}
+
+stdin_matches_regex_i() {
+  local pattern="$1"
+
+  if [ "$have_rg" = true ]; then
+    rg -i -q "$pattern"
+  else
+    grep -E -i -q -- "$pattern"
+  fi
+}
+
 trim_dir() {
   local dir_path="$1"
   dir_path="${dir_path#./}"
@@ -116,11 +163,6 @@ if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! command -v rg >/dev/null 2>&1; then
-  echo "Missing required tool: rg"
-  exit 1
-fi
-
 if ! mapfile -t changed_files < <(changed_files_for_mode); then
   echo "Skipping decision traceability check: unable to resolve changed files."
   exit 0
@@ -176,7 +218,7 @@ for module_dir in "${!changed_dirs[@]}"; do
 
   missing_header=false
   for header in "${required_headers_for_dir[@]}"; do
-    if ! rg -F -x -q "$header" "$readme_path"; then
+    if ! contains_fixed_exact_line "$header" "$readme_path"; then
       echo "Missing required heading in $readme_path: $header"
       missing_header=true
     fi
@@ -188,12 +230,12 @@ for module_dir in "${!changed_dirs[@]}"; do
   none_format_invalid=false
   for header in "${required_headers_for_dir[@]}"; do
     section_body="$(extract_section_body "$header" "$readme_path")"
-    if printf '%s\n' "$section_body" | rg -i -q '\bnone\b'; then
-      if ! printf '%s\n' "$section_body" | rg -i -q 'reason:'; then
+    if printf '%s\n' "$section_body" | stdin_matches_regex_i '(^|[^[:alnum:]_])none([^[:alnum:]_]|$)'; then
+      if ! printf '%s\n' "$section_body" | stdin_matches_regex_i 'reason:'; then
         echo "Section with None is missing Reason in $readme_path: $header"
         none_format_invalid=true
       fi
-      if ! printf '%s\n' "$section_body" | rg -i -q 'revisit trigger:'; then
+      if ! printf '%s\n' "$section_body" | stdin_matches_regex_i 'revisit trigger:'; then
         echo "Section with None is missing Revisit trigger in $readme_path: $header"
         none_format_invalid=true
       fi
@@ -205,7 +247,7 @@ for module_dir in "${!changed_dirs[@]}"; do
 
   placeholder_found=false
   for phrase in "${banned_placeholders[@]}"; do
-    if rg -F -q "$phrase" "$readme_path"; then
+    if contains_fixed_text "$phrase" "$readme_path"; then
       echo "Banned placeholder phrase in $readme_path: $phrase"
       placeholder_found=true
     fi
