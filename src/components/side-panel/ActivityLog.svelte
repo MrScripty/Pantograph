@@ -103,13 +103,15 @@
 <div class="space-y-3">
   <!-- Agent Activity Log -->
   {#each activityLog as item (item.id)}
-    <div transition:slide>
+    <div
+      transition:slide
+      onpointerenter={() => hoveredItemId = item.id}
+      onpointerleave={() => hoveredItemId = null}
+    >
       {#if item.type === 'system_prompt'}
         <!-- System Prompt Card (collapsible) -->
         <button type="button"
           onclick={() => toggleExpanded(item.id)}
-          onmouseenter={() => hoveredItemId = item.id}
-          onmouseleave={() => hoveredItemId = null}
           class="w-full text-left rounded-lg p-3 bg-purple-900/20 border border-purple-800/50 hover:bg-purple-900/30 transition-colors"
         >
           <div class="flex items-center gap-2 text-xs text-purple-400 mb-1">
@@ -136,8 +138,6 @@
         <!-- Tool Call Card with status -->
         <button type="button"
           onclick={() => toggleExpanded(item.id)}
-          onmouseenter={() => hoveredItemId = item.id}
-          onmouseleave={() => hoveredItemId = null}
           class="w-full text-left rounded-lg p-3 {item.metadata?.status === 'error' ? 'bg-red-900/20 border border-red-800/50 hover:bg-red-900/30' : 'bg-amber-900/20 border border-amber-800/50 hover:bg-amber-900/30'} transition-colors"
         >
           <div class="flex items-center gap-2 text-xs {item.metadata?.status === 'error' ? 'text-red-400' : 'text-amber-400'} mb-1">
@@ -175,8 +175,6 @@
         <!-- Streaming Tool Call Card - shows tool call as it's being generated -->
         <button type="button"
           onclick={() => toggleExpanded(item.id)}
-          onmouseenter={() => hoveredItemId = item.id}
-          onmouseleave={() => hoveredItemId = null}
           class="w-full text-left rounded-lg p-3 bg-cyan-900/20 border border-cyan-800/50 hover:bg-cyan-900/30 transition-colors"
         >
           <div class="flex items-center gap-2 text-xs text-cyan-400 mb-1">
@@ -205,8 +203,6 @@
         <!-- Tool Result Card - Legacy, kept for backwards compatibility but results now merge into tool_call -->
         <button type="button"
           onclick={() => toggleExpanded(item.id)}
-          onmouseenter={() => hoveredItemId = item.id}
-          onmouseleave={() => hoveredItemId = null}
           class="w-full text-left rounded-lg p-3 bg-green-900/20 border border-green-800/50 hover:bg-green-900/30 transition-colors"
         >
           <div class="flex items-center gap-2 text-xs text-green-400 mb-1">
@@ -233,8 +229,6 @@
         <!-- Final Text Response -->
         <div
           class="rounded-lg p-3 bg-neutral-800/50"
-          onmouseenter={() => hoveredItemId = item.id}
-          onmouseleave={() => hoveredItemId = null}
         >
           <div class="text-xs text-neutral-500 mb-1 uppercase tracking-wider">
             Assistant
@@ -248,8 +242,6 @@
         <!-- Reasoning (collapsible) -->
         <button type="button"
           onclick={() => toggleExpanded(item.id)}
-          onmouseenter={() => hoveredItemId = item.id}
-          onmouseleave={() => hoveredItemId = null}
           class="w-full text-left rounded-lg p-3 bg-blue-900/20 border border-blue-800/50 hover:bg-blue-900/30 transition-colors"
         >
           <div class="flex items-center gap-2 text-xs text-blue-400 mb-1">
@@ -276,8 +268,6 @@
         <!-- Status Message -->
         <div
           class="flex items-center gap-2 text-neutral-500 text-xs px-2"
-          onmouseenter={() => hoveredItemId = item.id}
-          onmouseleave={() => hoveredItemId = null}
         >
           <div class="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
           <span>{item.content}</span>
@@ -287,8 +277,6 @@
         <!-- Error Message -->
         <div
           class="rounded-lg p-3 bg-red-900/30 border border-red-700 text-red-300 text-sm"
-          onmouseenter={() => hoveredItemId = item.id}
-          onmouseleave={() => hoveredItemId = null}
         >
           {item.content}
         </div>

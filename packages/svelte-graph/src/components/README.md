@@ -203,6 +203,9 @@ threshold while preserving the same package-owned visual contract.
 - `WorkflowToolbar.svelte` must keep execution-banner state that is rendered in
   the template on Svelte runes-backed reactive state so workflow events can
   switch between running and waiting-for-input labels without a manual refresh.
+- `WorkflowGraph.svelte` may keep the canvas container focusable for keyboard
+  graph commands, but the reviewed Svelte a11y suppression set must explicitly
+  cover the noninteractive-tabindex warning that comes with that container.
 - Insert-from-drag must commit through backend-owned `insertNodeAndConnect`; the
   UI must not compose local `addNode` plus `connectAnchors`.
 - Horseshoe open failures must resolve to an explicit blocked reason instead of

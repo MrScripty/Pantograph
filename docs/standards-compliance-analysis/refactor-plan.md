@@ -1250,7 +1250,11 @@ Tasks:
   after restoring `PortDataType::String -> PortDataType::String` compatibility
   in `crates/node-engine/src/types.rs`; a fresh `cargo test --workspace` rerun
   still stops only at the already-deferred `pantograph_rustler` BEAM-linking
-  limitation.
+  limitation. Subsequent frontend warning-ratchet slices also removed the
+  remaining `npm run build` Svelte warnings in `WorkflowToolbar`,
+  `PumaLibNode`, workflow-node dependency overrides and image preview, the
+  dependency environment node state snapshot, `ActivityLog`, and the reviewed
+  graph-canvas tabindex suppression, so the production build now runs clean.
 - [x] Close or update `docs/anti-pattern-remediation-tracker.md` Phase 5 for
   process-node policy controls. Status: `ProcessTask` now defaults to a
   disabled backend-owned `ProcessExecutionPolicy`; allowed process commands
@@ -1321,12 +1325,6 @@ fully resolved by standards compliance:
   `cargo check -p pantograph_rustler` as the crate-local Rust gate and add a
   BEAM-backed binding test harness before promoting crate-local tests to a hard
   Rustler verification gate.
-- Deferred, frontend accessibility owner: `npm run build` succeeds but still
-  reports pre-existing Svelte warnings outside the app `WorkflowGraph.svelte`
-  split, including ActivityLog static mouseenter/mouseleave containers and the
-  package graph noninteractive tabindex warning on the focusable graph canvas.
-  Track those in a dedicated frontend warning ratchet rather than mixing them
-  into the graph decomposition commit.
 - Resolved: `cargo test -p pantograph-uniffi --all-features version` exposed a
   stale `WorkflowEvent::GraphModified` test fixture in
   `crates/pantograph-uniffi/src/lib.rs` that was missing the backend-owned

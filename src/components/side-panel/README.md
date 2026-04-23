@@ -36,6 +36,9 @@ Application containers compose these components with service-backed state.
 
 ## Invariants
 - Activity display preserves source ordering supplied by stores.
+- `ActivityLog.svelte` keeps hover ownership on the per-item wrapper so copy
+  targeting works across every row shape without giving passive text/status
+  cards button semantics.
 - Follow-up input emits user intent rather than calling backend commands
   directly.
 - Settings UI delegates persistence through configured owners.
