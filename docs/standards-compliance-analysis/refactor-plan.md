@@ -717,6 +717,11 @@ Tasks:
   now live in `crates/pantograph-rustler/src/executor_nifs.rs`, while `lib.rs`
   preserves the exported executor and inference-gateway NIF names as thin
   wrappers.
+  Rustler orchestration execution, inference-backed orchestration execution,
+  and data-graph insertion behavior now live in
+  `crates/pantograph-rustler/src/orchestration_execution_nifs.rs`, while
+  `lib.rs` preserves the exported orchestration execution and data-graph NIF
+  names as thin wrappers.
 
 Verification:
 - File-size scan shows extracted files below review thresholds or documented exceptions.

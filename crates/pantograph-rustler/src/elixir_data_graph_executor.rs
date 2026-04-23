@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use node_engine::{EventSink, OrchestrationStore, TaskExecutor, WorkflowExecutor, WorkflowGraph};
 
-use crate::BeamEventSink;
+use crate::callback_bridge::BeamEventSink;
 
 /// DataGraphExecutor that executes data graphs using the Elixir callback bridge.
 pub(crate) struct ElixirDataGraphExecutor {

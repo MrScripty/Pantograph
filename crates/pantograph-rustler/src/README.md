@@ -17,6 +17,7 @@ outside core workflow crates.
 | `elixir_data_graph_executor.rs` | Rustler-specific orchestration data-graph bridge into backend workflow execution. |
 | `executor_nifs.rs` | Workflow executor resource construction, inference gateway setup, demand, cache, graph snapshot, and context I/O helpers behind exported NIF wrappers. |
 | `frontend_http_nifs.rs` | Feature-gated frontend HTTP workflow/session implementation helpers behind exported NIF wrappers. |
+| `orchestration_execution_nifs.rs` | Orchestration execution, inference-backed orchestration execution, and data-graph insertion helpers behind exported NIF wrappers. |
 | `orchestration_store_nifs.rs` | Orchestration store resource creation and JSON CRUD helpers behind exported NIF wrappers. |
 | `pumas_nifs.rs` | Pumas model-library resource, executor extension, download/import, and system-info helpers behind exported NIF wrappers. |
 | `registry_nifs.rs` | Node registry, executor extension, and port-option query helpers behind exported NIF wrappers. |
@@ -60,6 +61,9 @@ registration, callback transport, and feature-gated adapter calls.
 - Resource registration stays centralized in `resource_registration.rs`.
 - Orchestration store JSON CRUD behavior stays in `orchestration_store_nifs.rs`;
   `lib.rs` keeps only the exported orchestration NIF wrappers.
+- Orchestration execution, inference-backed orchestration execution, and
+  data-graph insertion behavior stays in `orchestration_execution_nifs.rs`;
+  `lib.rs` keeps only the exported orchestration execution NIF wrappers.
 - Node registry and extension setup behavior stays in `registry_nifs.rs`;
   `lib.rs` keeps only the exported registry/extension NIF wrappers.
 - Pumas model-library behavior stays in `pumas_nifs.rs`; `lib.rs` keeps only

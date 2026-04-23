@@ -31,12 +31,7 @@
 //! end
 //! ```
 
-use std::collections::HashMap;
-use std::sync::Arc;
-
 use rustler::{Atom, Env, NifResult, ResourceArc, Term};
-
-use node_engine::{EventSink, TaskExecutor, WorkflowGraph};
 
 // Force the linker to include workflow-nodes object files,
 // which contain `inventory::submit!()` statics for built-in node types.
@@ -48,6 +43,7 @@ mod elixir_data_graph_executor;
 mod executor_nifs;
 #[cfg(feature = "frontend-http")]
 mod frontend_http_nifs;
+mod orchestration_execution_nifs;
 mod orchestration_store_nifs;
 mod pumas_nifs;
 mod registry_nifs;
@@ -63,8 +59,6 @@ pub use binding_types::{
     ElixirCacheStats, ElixirExecutionMode, ElixirNodeCategory, ElixirNodeDefinition,
     ElixirOrchestrationMetadata, ElixirOrchestrationNodeType, ElixirPortDataType,
 };
-use callback_bridge::{BeamEventSink, CoreFirstExecutor, ElixirCallbackTaskExecutor};
-use elixir_data_graph_executor::ElixirDataGraphExecutor;
 use resource_registration::register_resources;
 pub use resources::{
     ExtensionsResource, InferenceGatewayResource, NodeRegistryResource, OrchestrationStoreResource,
@@ -663,52 +657,7 @@ fn execute_orchestration(
     callback_pid: rustler::LocalPid,
 ) -> NifResult<String> {
     let _ = env;
-
-    let initial_data: HashMap<String, serde_json::Value> = serde_json::from_str(&initial_data_json)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
-
-    // Look up the orchestration graph
-    let graph = {
-        let store = store_resource.store.blocking_read();
-        store.get_graph(&graph_id).cloned().ok_or_else(|| {
-            rustler::Error::Term(Box::new(format!(
-                "Orchestration graph '{}' not found",
-                graph_id
-            )))
-        })?
-    };
-
-    // Create runtime for this execution
-    let runtime = tokio::runtime::Runtime::new()
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
-
-    let core = node_engine::CoreTaskExecutor::new();
-    let elixir = ElixirCallbackTaskExecutor::new(callback_pid);
-    let task_executor: Arc<dyn TaskExecutor> = Arc::new(CoreFirstExecutor::new(core, elixir));
-    let event_sink = BeamEventSink::new(callback_pid);
-
-    // Create the data graph executor
-    let data_executor =
-        ElixirDataGraphExecutor::new(store_resource.store.clone(), task_executor, callback_pid);
-
-    // Create and run the orchestration executor
-    let orch_executor = node_engine::OrchestrationExecutor::new(data_executor)
-        .with_execution_id(format!("nif-orch-{}", graph_id));
-
-    let result = runtime.block_on(async {
-        orch_executor
-            .execute(&graph, initial_data, &event_sink)
-            .await
-    });
-
-    match result {
-        Ok(orch_result) => serde_json::to_string(&orch_result)
-            .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e)))),
-        Err(e) => Err(rustler::Error::Term(Box::new(format!(
-            "Orchestration error: {}",
-            e
-        )))),
-    }
+    orchestration_execution_nifs::execute(store_resource, graph_id, initial_data_json, callback_pid)
 }
 
 /// Execute an orchestration graph with inference gateway support.
@@ -727,55 +676,13 @@ fn execute_orchestration_with_inference(
     gateway_resource: ResourceArc<InferenceGatewayResource>,
 ) -> NifResult<String> {
     let _ = env;
-
-    let initial_data: HashMap<String, serde_json::Value> = serde_json::from_str(&initial_data_json)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
-
-    // Look up the orchestration graph
-    let graph = {
-        let store = store_resource.store.blocking_read();
-        store.get_graph(&graph_id).cloned().ok_or_else(|| {
-            rustler::Error::Term(Box::new(format!(
-                "Orchestration graph '{}' not found",
-                graph_id
-            )))
-        })?
-    };
-
-    // Create runtime for this execution
-    let runtime = tokio::runtime::Runtime::new()
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
-
-    let event_sink: Arc<dyn EventSink> = Arc::new(BeamEventSink::new(callback_pid));
-    let core = node_engine::CoreTaskExecutor::new()
-        .with_gateway(gateway_resource.gateway.clone())
-        .with_event_sink(event_sink.clone())
-        .with_execution_id(format!("nif-orch-{}", graph_id));
-    let elixir = ElixirCallbackTaskExecutor::new(callback_pid);
-    let task_executor: Arc<dyn TaskExecutor> = Arc::new(CoreFirstExecutor::new(core, elixir));
-
-    // Create the data graph executor
-    let data_executor =
-        ElixirDataGraphExecutor::new(store_resource.store.clone(), task_executor, callback_pid);
-
-    // Create and run the orchestration executor
-    let orch_executor = node_engine::OrchestrationExecutor::new(data_executor)
-        .with_execution_id(format!("nif-orch-{}", graph_id));
-
-    let result = runtime.block_on(async {
-        orch_executor
-            .execute(&graph, initial_data, event_sink.as_ref())
-            .await
-    });
-
-    match result {
-        Ok(orch_result) => serde_json::to_string(&orch_result)
-            .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e)))),
-        Err(e) => Err(rustler::Error::Term(Box::new(format!(
-            "Orchestration error: {}",
-            e
-        )))),
-    }
+    orchestration_execution_nifs::execute_with_inference(
+        store_resource,
+        graph_id,
+        initial_data_json,
+        callback_pid,
+        gateway_resource,
+    )
 }
 
 /// Insert a data graph (workflow) into the orchestration store.
@@ -788,13 +695,7 @@ fn orchestration_store_insert_data_graph(
     graph_id: String,
     graph_json: String,
 ) -> NifResult<Atom> {
-    let graph: WorkflowGraph = serde_json::from_str(&graph_json)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
-
-    let mut guard = resource.store.blocking_write();
-    guard.insert_data_graph(graph_id, graph);
-
-    Ok(atoms::ok())
+    orchestration_execution_nifs::insert_data_graph(resource, graph_id, graph_json)
 }
 
 // ============================================================================
@@ -987,6 +888,7 @@ rustler::init!("Elixir.Pantograph.Native", load = load);
 #[cfg(test)]
 mod tests {
     use super::*;
+    use node_engine::WorkflowGraph;
     #[cfg(feature = "frontend-http")]
     use pantograph_frontend_http_adapter::parse_workflow_outputs_payload;
     #[cfg(feature = "frontend-http")]
