@@ -1,5 +1,5 @@
 use super::*;
-use node_engine::extension_keys;
+use node_engine::{DependencyOverrideScope, extension_keys};
 use pumas_library::PumasApi;
 use std::path::PathBuf;
 use std::sync::Arc;

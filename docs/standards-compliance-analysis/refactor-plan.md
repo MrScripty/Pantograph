@@ -463,7 +463,12 @@ Tasks:
   `task_executor.rs` to production host execution logic. Pantograph model
   dependency resolver tests and Pumas descriptor fixture helpers now live in
   `crates/pantograph-embedded-runtime/src/model_dependencies_tests.rs`,
-  reducing `model_dependencies.rs` to production resolver logic. Embedded
+  reducing `model_dependencies.rs` to production resolver logic. Model
+  dependency requirement mapping, runtime-state aggregation, install-target
+  normalization, and override patch validation now live in
+  `crates/pantograph-embedded-runtime/src/model_dependency_requirements.rs`,
+  further separating Pumas contract projection from resolver orchestration.
+  Embedded
   runtime-registry translation, sync, reclaim, restore, and warmup coordination
   tests now live in
   `crates/pantograph-embedded-runtime/src/runtime_registry_tests.rs`, reducing

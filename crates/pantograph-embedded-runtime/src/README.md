@@ -32,6 +32,7 @@ packages.
 | `lib_tests/workflow_run_execution_tests.rs` | Embedded workflow-run and session-run execution integration tests split out of the legacy root test module. |
 | `lib.rs` | Composes the embedded runtime, workflow service, shared extensions, and public crate exports used by Tauri and standalone hosts. |
 | `model_dependencies.rs` | Resolves Pantograph model dependency requirements and binds workflow requests to Pumas-backed execution facts. |
+| `model_dependency_requirements.rs` | Maps Pumas dependency requirement contracts into node-engine DTOs and applies validated user override patches. |
 | `model_dependencies_tests.rs` | Pantograph model dependency resolver tests and Pumas descriptor fixture helpers extracted from the production resolver module. |
 | `python_runtime_execution.rs` | Owns captured execution metadata for Python-backed runtime runs so workflow diagnostics and registry projection can reuse one recorder contract outside the task-executor facade. |
 | `task_executor.rs` | Hosts Pantograph-specific task execution for Python-backed nodes and RAG-backed nodes while preserving core-node fallthrough. |
@@ -452,6 +453,10 @@ let runtime = EmbeddedRuntime::with_default_python_runtime(
 - `model_dependencies.rs` accepts workflow dependency requests and returns
   machine-consumable dependency status or validation errors suitable for
   preflight blocking.
+- `model_dependency_requirements.rs` owns Pumas dependency-contract mapping,
+  binding selection, runtime-state aggregation, install-target normalization,
+  and override patch validation so the resolver facade can focus on API,
+  cache, Python process, and Pumas lookup orchestration.
 - Model dependency resolver tests and Pumas descriptor fixture helpers stay in
   `model_dependencies_tests.rs` so production resolver changes are not coupled
   to integration-fixture churn.
@@ -464,6 +469,10 @@ let runtime = EmbeddedRuntime::with_default_python_runtime(
 ## Structured Producer Contract
 - `model_dependencies.rs` produces resolved dependency requirements and
   normalized model descriptors for Pantograph workflow execution.
+- `model_dependency_requirements.rs` preserves stable dependency error codes,
+  binding ids, validation scopes, selected binding order, install targets, and
+  user override validation before those facts are cached or returned by the
+  resolver facade.
 - When Pumas descriptor resolution succeeds, the executable path contract is the
   descriptor `entry_path`; projected metadata fields such as `entry_path`,
   `storage_kind`, and `bundle_format` are compatibility fallbacks only.
