@@ -21,6 +21,7 @@ and persistence abstractions so adapters do not implement graph business logic.
 | `session_runtime.rs` | Focused runtime/lifecycle state for one graph edit session, including active execution metadata, queue projection, and run counters. |
 | `session_types.rs` | Edit-session request/response DTOs and local undo/redo/session-kind types that are shared by the graph session boundary. |
 | `session.rs` | Edit-session store, undo/redo state, and graph mutation orchestration. |
+| `session_tests.rs` | Graph edit-session mutation, undo/redo, insertion, connection, stale cleanup, event projection, and memory-impact tests extracted from the production session module. |
 | `persistence.rs` | Graph-store trait plus the filesystem-backed `.pantograph/workflows` implementation. |
 
 ## Problem
@@ -93,6 +94,9 @@ when the node type matches.
 - Graph session response helpers that exist only to support contract tests stay
   test-scoped; production response assembly should use the state-aware
   projection path.
+- Graph edit-session mutation, undo/redo, insertion, connection, stale cleanup,
+  event projection, and memory-impact tests stay in `session_tests.rs` so
+  `session.rs` remains focused on production session orchestration.
 - Connection candidate lookup never mutates session state.
 - Persisted derived graph metadata is advisory and must be recomputed when stale.
 - Filesystem workflow load path validation is tested at `FileSystemWorkflowGraphStore`;

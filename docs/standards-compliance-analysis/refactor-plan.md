@@ -372,6 +372,13 @@ Tasks:
   Session stale cleanup, inspection, and stale cleanup worker coverage now lives in
   `workflow/tests/session_stale_cleanup.rs`, continuing the behavior-area split
   for the extracted test module.
+- Split `crates/pantograph-workflow-service/src/graph/session.rs` by graph
+  edit-session store, undo/redo state, mutation orchestration, response
+  projection, and tests.
+  Progress: graph edit-session mutation, undo/redo, insertion, connection,
+  stale cleanup, event projection, and memory-impact tests now live in
+  `crates/pantograph-workflow-service/src/graph/session_tests.rs`, reducing
+  `session.rs` to production graph session orchestration.
 - Split `crates/pantograph-embedded-runtime/src/lib.rs` into runtime host,
   workflow sessions, registry lifecycle, diagnostics projection, model deps,
   and test modules.
