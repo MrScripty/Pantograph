@@ -712,6 +712,11 @@ Tasks:
   injection, download/import, and system-info behavior now live in
   `crates/pantograph-rustler/src/pumas_nifs.rs`, while `lib.rs` preserves the
   exported Pumas NIF names as thin wrappers.
+  Rustler workflow executor resource construction, inference-gateway setup,
+  demand execution, cache statistics, graph snapshots, and executor context I/O
+  now live in `crates/pantograph-rustler/src/executor_nifs.rs`, while `lib.rs`
+  preserves the exported executor and inference-gateway NIF names as thin
+  wrappers.
 
 Verification:
 - File-size scan shows extracted files below review thresholds or documented exceptions.

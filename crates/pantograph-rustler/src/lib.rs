@@ -32,12 +32,11 @@
 //! ```
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::Arc;
 
-use rustler::{Atom, Encoder, Env, NifResult, OwnedEnv, ResourceArc, Term};
+use rustler::{Atom, Env, NifResult, ResourceArc, Term};
 
-use node_engine::{EventSink, TaskExecutor, WorkflowExecutor, WorkflowGraph};
+use node_engine::{EventSink, TaskExecutor, WorkflowGraph};
 
 // Force the linker to include workflow-nodes object files,
 // which contain `inventory::submit!()` statics for built-in node types.
@@ -46,6 +45,7 @@ extern crate workflow_nodes;
 mod binding_types;
 mod callback_bridge;
 mod elixir_data_graph_executor;
+mod executor_nifs;
 #[cfg(feature = "frontend-http")]
 mod frontend_http_nifs;
 mod orchestration_store_nifs;
@@ -313,24 +313,7 @@ fn executor_new(
     caller_pid: rustler::LocalPid,
 ) -> NifResult<ResourceArc<WorkflowExecutorResource>> {
     let _ = env;
-    let graph: WorkflowGraph = serde_json::from_str(&graph_json)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
-
-    let runtime = tokio::runtime::Runtime::new()
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
-
-    let core = node_engine::CoreTaskExecutor::new();
-    let elixir = ElixirCallbackTaskExecutor::new(caller_pid);
-    let task_executor: Arc<dyn TaskExecutor> = Arc::new(CoreFirstExecutor::new(core, elixir));
-    let event_sink: Arc<dyn EventSink> = Arc::new(BeamEventSink::new(caller_pid));
-
-    let executor = WorkflowExecutor::new("nif-execution", graph, event_sink);
-
-    Ok(ResourceArc::new(WorkflowExecutorResource {
-        executor: Arc::new(tokio::sync::RwLock::new(executor)),
-        task_executor,
-        runtime: Arc::new(runtime),
-    }))
+    executor_nifs::new_executor(graph_json, caller_pid)
 }
 
 /// Create a new WorkflowExecutor with a custom callback timeout.
@@ -344,24 +327,7 @@ fn executor_new_with_timeout(
     timeout_secs: u64,
 ) -> NifResult<ResourceArc<WorkflowExecutorResource>> {
     let _ = env;
-    let graph: WorkflowGraph = serde_json::from_str(&graph_json)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
-
-    let runtime = tokio::runtime::Runtime::new()
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
-
-    let core = node_engine::CoreTaskExecutor::new();
-    let elixir = ElixirCallbackTaskExecutor::new(caller_pid).with_timeout(timeout_secs);
-    let task_executor: Arc<dyn TaskExecutor> = Arc::new(CoreFirstExecutor::new(core, elixir));
-    let event_sink: Arc<dyn EventSink> = Arc::new(BeamEventSink::new(caller_pid));
-
-    let executor = WorkflowExecutor::new("nif-execution", graph, event_sink);
-
-    Ok(ResourceArc::new(WorkflowExecutorResource {
-        executor: Arc::new(tokio::sync::RwLock::new(executor)),
-        task_executor,
-        runtime: Arc::new(runtime),
-    }))
+    executor_nifs::new_executor_with_timeout(graph_json, caller_pid, timeout_secs)
 }
 
 // ============================================================================
@@ -382,20 +348,7 @@ fn inference_gateway_new(
     data_dir: String,
 ) -> NifResult<ResourceArc<InferenceGatewayResource>> {
     let _ = env;
-    let runtime = tokio::runtime::Runtime::new()
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
-
-    let gateway = Arc::new(inference::InferenceGateway::new());
-    let spawner = Arc::new(inference::StdProcessSpawner::new(
-        PathBuf::from(binaries_dir),
-        PathBuf::from(data_dir),
-    ));
-    runtime.block_on(async { gateway.set_spawner(spawner).await });
-
-    Ok(ResourceArc::new(InferenceGatewayResource {
-        gateway,
-        runtime: Arc::new(runtime),
-    }))
+    executor_nifs::new_inference_gateway(binaries_dir, data_dir)
 }
 
 // ============================================================================
@@ -415,27 +368,7 @@ fn executor_new_with_inference(
     gateway_resource: ResourceArc<InferenceGatewayResource>,
 ) -> NifResult<ResourceArc<WorkflowExecutorResource>> {
     let _ = env;
-    let graph: WorkflowGraph = serde_json::from_str(&graph_json)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
-
-    let runtime = tokio::runtime::Runtime::new()
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
-
-    let event_sink: Arc<dyn EventSink> = Arc::new(BeamEventSink::new(caller_pid));
-    let core = node_engine::CoreTaskExecutor::new()
-        .with_gateway(gateway_resource.gateway.clone())
-        .with_event_sink(event_sink.clone())
-        .with_execution_id("nif-execution".to_string());
-    let elixir = ElixirCallbackTaskExecutor::new(caller_pid);
-    let task_executor: Arc<dyn TaskExecutor> = Arc::new(CoreFirstExecutor::new(core, elixir));
-
-    let executor = WorkflowExecutor::new("nif-execution", graph, event_sink);
-
-    Ok(ResourceArc::new(WorkflowExecutorResource {
-        executor: Arc::new(tokio::sync::RwLock::new(executor)),
-        task_executor,
-        runtime: Arc::new(runtime),
-    }))
+    executor_nifs::new_executor_with_inference(graph_json, caller_pid, gateway_resource)
 }
 
 /// Create a new WorkflowExecutor with inference gateway and custom timeout.
@@ -450,27 +383,12 @@ fn executor_new_with_inference_timeout(
     timeout_secs: u64,
 ) -> NifResult<ResourceArc<WorkflowExecutorResource>> {
     let _ = env;
-    let graph: WorkflowGraph = serde_json::from_str(&graph_json)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
-
-    let runtime = tokio::runtime::Runtime::new()
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Runtime error: {}", e))))?;
-
-    let event_sink: Arc<dyn EventSink> = Arc::new(BeamEventSink::new(caller_pid));
-    let core = node_engine::CoreTaskExecutor::new()
-        .with_gateway(gateway_resource.gateway.clone())
-        .with_event_sink(event_sink.clone())
-        .with_execution_id("nif-execution".to_string());
-    let elixir = ElixirCallbackTaskExecutor::new(caller_pid).with_timeout(timeout_secs);
-    let task_executor: Arc<dyn TaskExecutor> = Arc::new(CoreFirstExecutor::new(core, elixir));
-
-    let executor = WorkflowExecutor::new("nif-execution", graph, event_sink);
-
-    Ok(ResourceArc::new(WorkflowExecutorResource {
-        executor: Arc::new(tokio::sync::RwLock::new(executor)),
-        task_executor,
-        runtime: Arc::new(runtime),
-    }))
+    executor_nifs::new_executor_with_inference_timeout(
+        graph_json,
+        caller_pid,
+        gateway_resource,
+        timeout_secs,
+    )
 }
 
 /// Demand output from a node synchronously (blocks the DirtyCpu scheduler).
@@ -483,19 +401,7 @@ fn executor_demand(
     resource: ResourceArc<WorkflowExecutorResource>,
     node_id: String,
 ) -> NifResult<String> {
-    let rt = &resource.runtime;
-    let executor = &resource.executor;
-    let task_exec = &resource.task_executor;
-
-    rt.block_on(async {
-        let exec = executor.read().await;
-        let result = exec
-            .demand(&node_id, task_exec.as_ref())
-            .await
-            .map_err(|e| rustler::Error::Term(Box::new(format!("Demand error: {}", e))))?;
-        serde_json::to_string(&result)
-            .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e))))
-    })
+    executor_nifs::demand(resource, node_id)
 }
 
 /// Demand output from a node asynchronously (non-blocking).
@@ -514,43 +420,7 @@ fn executor_demand_async(
     caller_pid: rustler::LocalPid,
 ) -> Atom {
     let _ = env;
-    let executor = resource.executor.clone();
-    let task_exec = resource.task_executor.clone();
-    let nid = node_id.clone();
-
-    resource.runtime.spawn(async move {
-        let exec = executor.read().await;
-        let result = exec.demand(&nid, task_exec.as_ref()).await;
-
-        // Send result back to caller via OwnedEnv
-        let mut owned_env = OwnedEnv::new();
-        match result {
-            Ok(outputs) => {
-                let json = serde_json::to_string(&outputs)
-                    .unwrap_or_else(|e| format!("{{\"error\": \"serialization: {}\"}}", e));
-                let _ = owned_env.send_and_clear(&caller_pid, |env| {
-                    (
-                        atoms::demand_complete().encode(env),
-                        nid.encode(env),
-                        json.encode(env),
-                    )
-                        .encode(env)
-                });
-            }
-            Err(e) => {
-                let _ = owned_env.send_and_clear(&caller_pid, |env| {
-                    (
-                        atoms::demand_error().encode(env),
-                        nid.encode(env),
-                        e.to_string().encode(env),
-                    )
-                        .encode(env)
-                });
-            }
-        }
-    });
-
-    atoms::ok()
+    executor_nifs::demand_async(resource, node_id, caller_pid)
 }
 
 /// Update node data on the executor (marks the node modified).
@@ -560,18 +430,7 @@ fn executor_update_node_data(
     node_id: String,
     data_json: String,
 ) -> NifResult<Atom> {
-    let rt = &resource.runtime;
-    let executor = &resource.executor;
-
-    let data: serde_json::Value = serde_json::from_str(&data_json).unwrap_or_default();
-
-    rt.block_on(async {
-        let exec = executor.read().await;
-        exec.update_node_data(&node_id, data)
-            .await
-            .map_err(|e| rustler::Error::Term(Box::new(format!("Update error: {}", e))))?;
-        Ok(atoms::ok())
-    })
+    executor_nifs::update_node_data(resource, node_id, data_json)
 }
 
 /// Mark a node as modified (invalidates caches).
@@ -580,14 +439,7 @@ fn executor_mark_modified(
     resource: ResourceArc<WorkflowExecutorResource>,
     node_id: String,
 ) -> NifResult<Atom> {
-    let rt = &resource.runtime;
-    let executor = &resource.executor;
-
-    rt.block_on(async {
-        let exec = executor.read().await;
-        exec.mark_modified(&node_id).await;
-        Ok(atoms::ok())
-    })
+    executor_nifs::mark_modified(resource, node_id)
 }
 
 /// Get cache statistics from the executor.
@@ -595,18 +447,7 @@ fn executor_mark_modified(
 fn executor_cache_stats(
     resource: ResourceArc<WorkflowExecutorResource>,
 ) -> NifResult<ElixirCacheStats> {
-    let rt = &resource.runtime;
-    let executor = &resource.executor;
-
-    rt.block_on(async {
-        let exec = executor.read().await;
-        let stats = exec.cache_stats().await;
-        Ok(ElixirCacheStats {
-            cached_nodes: stats.cached_nodes as u32,
-            total_versions: stats.total_versions as u32,
-            global_version: stats.global_version,
-        })
-    })
+    executor_nifs::cache_stats(resource)
 }
 
 /// Get a snapshot of the current graph as JSON.
@@ -614,15 +455,7 @@ fn executor_cache_stats(
 fn executor_get_graph_snapshot(
     resource: ResourceArc<WorkflowExecutorResource>,
 ) -> NifResult<String> {
-    let rt = &resource.runtime;
-    let executor = &resource.executor;
-
-    rt.block_on(async {
-        let exec = executor.read().await;
-        let graph = exec.get_graph_snapshot().await;
-        serde_json::to_string(&graph)
-            .map_err(|e| rustler::Error::Term(Box::new(format!("Serialization error: {}", e))))
-    })
+    executor_nifs::get_graph_snapshot(resource)
 }
 
 // ============================================================================
@@ -639,19 +472,7 @@ fn executor_set_input(
     port: String,
     value_json: String,
 ) -> NifResult<Atom> {
-    let rt = &resource.runtime;
-    let executor = &resource.executor;
-
-    let value: serde_json::Value = serde_json::from_str(&value_json)
-        .map_err(|e| rustler::Error::Term(Box::new(format!("Parse error: {}", e))))?;
-
-    let key = node_engine::ContextKeys::input(&node_id, &port);
-
-    rt.block_on(async {
-        let exec = executor.read().await;
-        exec.set_context_value(&key, value).await;
-        Ok(atoms::ok())
-    })
+    executor_nifs::set_input(resource, node_id, port, value_json)
 }
 
 /// Get an output value from a node in the executor context.
@@ -664,24 +485,7 @@ fn executor_get_output(
     node_id: String,
     port: String,
 ) -> NifResult<Option<String>> {
-    let rt = &resource.runtime;
-    let executor = &resource.executor;
-
-    let key = node_engine::ContextKeys::output(&node_id, &port);
-
-    rt.block_on(async {
-        let exec = executor.read().await;
-        let value: Option<serde_json::Value> = exec.get_context_value(&key).await;
-        match value {
-            Some(v) => {
-                let json = serde_json::to_string(&v).map_err(|e| {
-                    rustler::Error::Term(Box::new(format!("Serialization error: {}", e)))
-                })?;
-                Ok(Some(json))
-            }
-            None => Ok(None),
-        }
-    })
+    executor_nifs::get_output(resource, node_id, port)
 }
 
 // ============================================================================

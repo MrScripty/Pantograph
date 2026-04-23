@@ -11,10 +11,11 @@ outside core workflow crates.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `lib.rs` | Public NIF facade, exported entrypoints, callback bridge, and module load wiring. |
+| `lib.rs` | Public NIF facade, exported entrypoints, and module load wiring. |
 | `binding_types.rs` | BEAM-facing enum and struct declarations used by NIF signatures. |
 | `callback_bridge.rs` | BEAM callback task executor, core-first fallback executor, event sink, and pending callback response state. |
 | `elixir_data_graph_executor.rs` | Rustler-specific orchestration data-graph bridge into backend workflow execution. |
+| `executor_nifs.rs` | Workflow executor resource construction, inference gateway setup, demand, cache, graph snapshot, and context I/O helpers behind exported NIF wrappers. |
 | `frontend_http_nifs.rs` | Feature-gated frontend HTTP workflow/session implementation helpers behind exported NIF wrappers. |
 | `orchestration_store_nifs.rs` | Orchestration store resource creation and JSON CRUD helpers behind exported NIF wrappers. |
 | `pumas_nifs.rs` | Pumas model-library resource, executor extension, download/import, and system-info helpers behind exported NIF wrappers. |
@@ -63,6 +64,9 @@ registration, callback transport, and feature-gated adapter calls.
   `lib.rs` keeps only the exported registry/extension NIF wrappers.
 - Pumas model-library behavior stays in `pumas_nifs.rs`; `lib.rs` keeps only
   the exported Pumas and related executor-extension NIF wrappers.
+- Executor construction, inference gateway setup, demand, cache, graph
+  snapshots, and context I/O behavior stays in `executor_nifs.rs`; `lib.rs`
+  keeps only the exported executor NIF wrappers.
 - BEAM DTO and `ResourceArc` wrapper declarations stay outside `lib.rs` so the
   facade remains focused on exported NIF behavior and load wiring.
 - Callback/event JSON serialization preserves backend event labels and order.
