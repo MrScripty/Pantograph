@@ -138,5 +138,6 @@ cargo test -p pantograph-uniffi
 ```
 
 ## Notes
-- `src/lib.rs` is over the decomposition threshold and remains tracked in the
-  standards compliance plan.
+- `src/lib.rs` remains over the decomposition threshold after moving
+  crate-local tests into `src/lib_tests.rs`; the remaining facade split is
+  tracked in the standards compliance plan.

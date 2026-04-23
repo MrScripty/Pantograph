@@ -725,6 +725,10 @@ Tasks:
   Rustler crate-local non-NIF test coverage now lives in
   `crates/pantograph-rustler/src/lib_tests.rs`, keeping `lib.rs` focused on
   exported NIF wrappers, resource loading, and the test module declaration.
+  UniFFI crate-local facade, event projection, and frontend-HTTP contract tests
+  now live in `crates/pantograph-uniffi/src/lib_tests.rs`, reducing
+  `lib.rs` to exported binding definitions, facade objects, adapter delegation,
+  and test module wiring.
 
 Verification:
 - File-size scan shows extracted files below review thresholds or documented exceptions.

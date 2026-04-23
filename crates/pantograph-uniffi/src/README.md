@@ -11,7 +11,8 @@ core workflow/runtime crates.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `lib.rs` | UniFFI exports, wrapper DTOs, legacy graph/orchestration surface, and adapter delegation. The legacy workflow engine owns graph CRUD, cache inspection, and event buffering only. |
+| `lib.rs` | UniFFI exports, wrapper DTOs, legacy graph/orchestration surface, adapter delegation, and test module wiring. The legacy workflow engine owns graph CRUD, cache inspection, and event buffering only. |
+| `lib_tests.rs` | Crate-local UniFFI facade tests, event projection tests, and feature-gated frontend HTTP binding contract tests. |
 | `runtime.rs` | Direct `FfiPantographRuntime` wrapper over `pantograph-embedded-runtime`. |
 | `bin/` | Binding generation helper utilities for supported UniFFI generator flows. |
 
@@ -51,6 +52,8 @@ and error projection, while workflow semantics stay in
 - Test fixtures for canonical workflow events must include all backend-owned
   event fields, including additive graph memory-impact metadata, so binding
   tests compile against the current `node-engine` contract.
+- Crate-local tests stay in `lib_tests.rs`; `lib.rs` keeps only the test module
+  declaration so exported binding definitions remain navigable.
 - Generated bindings and native library artifacts must be produced from the
   same build input.
 - Public exported methods should map to documented host-language use cases.
@@ -120,5 +123,5 @@ cargo test -p pantograph-uniffi
 ```
 
 ## Notes
-- `lib.rs` remains over the decomposition threshold and is tracked in the
-  standards compliance plan.
+- `lib.rs` remains over the decomposition threshold after moving crate-local
+  tests and is tracked in the standards compliance plan.
