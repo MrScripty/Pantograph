@@ -11,6 +11,7 @@
     type Connection,
   } from '@xyflow/svelte';
   import '@xyflow/svelte/dist/style.css';
+  import './WorkflowGraph.css';
   import { get } from 'svelte/store';
 
   import { useGraphContext } from '../context/useGraphContext.js';
@@ -966,85 +967,3 @@
     onCancel={closeHorseshoeSelector}
   />
 </div>
-
-<style>
-  :global(.svelte-flow) {
-    background-color: transparent !important;
-    background-image: none !important;
-  }
-
-  :global(.svelte-flow__background) {
-    display: none !important;
-  }
-
-  :global(.svelte-flow__renderer) {
-    background-color: transparent !important;
-  }
-
-  :global(.svelte-flow__edge-path) {
-    stroke: #60a5fa;
-    stroke-width: 2px;
-    filter: drop-shadow(0 0 3px rgba(96, 165, 250, 0.6));
-  }
-
-  :global(.svelte-flow__edge.selected .svelte-flow__edge-path) {
-    stroke: #93c5fd;
-    stroke-width: 3px;
-    filter: drop-shadow(0 0 6px rgba(147, 197, 253, 0.8));
-  }
-
-  :global(.svelte-flow__controls) {
-    background-color: #262626;
-    border: 1px solid #404040;
-    border-radius: 8px;
-  }
-
-  :global(.svelte-flow__controls-button) {
-    background-color: #262626;
-    border-color: #404040;
-    color: #a3a3a3;
-  }
-
-  :global(.svelte-flow__controls-button:hover) {
-    background-color: #404040;
-  }
-
-  :global(.svelte-flow__minimap) {
-    background-color: #171717;
-    border: 1px solid #404040;
-    border-radius: 8px;
-  }
-
-  :global(.svelte-flow__node) {
-    background-color: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-  }
-
-  :global(.svelte-flow__handle) {
-    border-radius: 50%;
-  }
-
-  :global(.svelte-flow__handle.connecting) {
-    background: #60a5fa !important;
-    box-shadow: 0 0 10px rgba(96, 165, 250, 0.8);
-  }
-
-  :global(.svelte-flow__connection-line) {
-    stroke: #60a5fa;
-    stroke-width: 2px;
-    filter: drop-shadow(0 0 4px rgba(96, 165, 250, 0.7));
-  }
-
-  .workflow-graph-container {
-    width: 100%;
-    height: 100%;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .workflow-graph-container.cutting {
-    cursor: crosshair;
-  }
-
-</style>

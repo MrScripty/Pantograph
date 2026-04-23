@@ -697,6 +697,10 @@ Tasks:
   Package workflow store graph snapshots and add-edge commits now reuse
   `packages/svelte-graph/src/workflowConnections.ts` backend edge normalization
   instead of rebuilding backend edge defaults inline.
+  Package graph canvas and SvelteFlow chrome styling now lives in
+  `packages/svelte-graph/src/components/WorkflowGraph.css`, reducing package
+  `WorkflowGraph.svelte` below the decomposition threshold while preserving the
+  package-owned visual contract.
   Package default workflow graph construction now lives in
   `packages/svelte-graph/src/stores/defaultWorkflowGraph.ts`, with unit coverage
   in `packages/svelte-graph/src/stores/defaultWorkflowGraph.test.ts`.

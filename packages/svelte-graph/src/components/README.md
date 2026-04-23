@@ -10,6 +10,7 @@ shared node presentation rules live outside the Pantograph app shell.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `WorkflowGraph.svelte` | Main graph canvas that owns connect/reconnect flows, candidate loading, revision-aware edge commits, and the drag-time horseshoe insert flow. |
+| `WorkflowGraph.css` | Package graph canvas and SvelteFlow chrome styling imported by `WorkflowGraph.svelte`. |
 | `../workflowConnectionInteraction.ts` | Owns connection drag reset and connect-end preservation decisions. |
 | `../workflowConnectionInteraction.test.ts` | Unit coverage for connection interaction reset and connect-end preservation. |
 | `../workflowConnections.ts` | Computes reusable connection validation, graph-edge normalization, candidate-to-intent projection, commit anchors, revision selection, and rejected-intent preservation. |
@@ -176,6 +177,9 @@ debug overlay composition plus selector status labels; graph components provide
 state, candidates, and callbacks.
 Horseshoe keyboard action dispatch lives in `workflowHorseshoeKeyboard.ts`,
 while `WorkflowGraph.svelte` provides callbacks that mutate local graph state.
+Package graph canvas and SvelteFlow chrome styling lives in
+`WorkflowGraph.css` so `WorkflowGraph.svelte` stays below the decomposition
+threshold while preserving the same package-owned visual contract.
 
 ## Alternatives Rejected
 - Ask the backend on every pointer move.
