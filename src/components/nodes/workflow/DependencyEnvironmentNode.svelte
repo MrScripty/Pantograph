@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import BaseNode from '../BaseNode.svelte';
   import DependencyEnvironmentActivityLog from './DependencyEnvironmentActivityLog.svelte';
   import DependencyEnvironmentBindingsPanel from './DependencyEnvironmentBindingsPanel.svelte';
@@ -56,7 +56,7 @@
 
   let { id, data, selected = false }: DependencyEnvironmentNodeProps = $props();
 
-  const initialNodeState = createDependencyEnvironmentNodeDataState(data);
+  const initialNodeState = untrack(() => createDependencyEnvironmentNodeDataState(data));
 
   let mode = $state<'auto' | 'manual'>(initialNodeState.mode);
   let selectedBindingIds = $state<string[]>(initialNodeState.selectedBindingIds);

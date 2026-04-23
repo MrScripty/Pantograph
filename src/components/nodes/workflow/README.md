@@ -155,6 +155,10 @@ from node state orchestration.
 - `dependencyEnvironmentNodeState.ts` owns dependency node persistence payloads,
   backend action response projection, and upstream requirement adoption; the
   Svelte component must not duplicate that state-shape mapping inline.
+- `DependencyEnvironmentNode.svelte` may seed local state from the incoming
+  node data once, but that initialization must be an explicit snapshot so
+  subsequent prop updates are handled by the node's persistence and upstream
+  adoption flows instead of hidden reactive capture.
 - `DependencyEnvironmentActivityLog.svelte` owns log auto-scroll behavior and
   must not trigger graph drag or pan gestures.
 - `dependencyEnvironmentActivityListener.ts` owns dependency activity event

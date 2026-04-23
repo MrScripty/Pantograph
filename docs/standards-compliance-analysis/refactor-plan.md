@@ -1323,11 +1323,10 @@ fully resolved by standards compliance:
   Rustler verification gate.
 - Deferred, frontend accessibility owner: `npm run build` succeeds but still
   reports pre-existing Svelte warnings outside the app `WorkflowGraph.svelte`
-  split, including ActivityLog static mouseenter/mouseleave containers,
-  package graph noninteractive tabindex, and the
-  `DependencyEnvironmentNode.svelte` initial-state capture warning. Track those
-  in a dedicated frontend warning ratchet rather than mixing them into the
-  graph decomposition commit.
+  split, including ActivityLog static mouseenter/mouseleave containers and the
+  package graph noninteractive tabindex warning on the focusable graph canvas.
+  Track those in a dedicated frontend warning ratchet rather than mixing them
+  into the graph decomposition commit.
 - Resolved: `cargo test -p pantograph-uniffi --all-features version` exposed a
   stale `WorkflowEvent::GraphModified` test fixture in
   `crates/pantograph-uniffi/src/lib.rs` that was missing the backend-owned
