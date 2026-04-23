@@ -823,6 +823,12 @@ Tasks:
   package `WorkflowGraph.svelte` retains overlay visibility and trace state.
   The app graph now reuses the package `HorseshoeDebugOverlay` export instead
   of duplicating trace display markup and styling.
+  Package graph backend connection-intent loading, insert commits, accepted
+  graph-sync projection, edge-removal mutation calls, and reconnect rollback
+  now live in
+  `packages/svelte-graph/src/components/workflowGraphBackendActions.ts`,
+  reducing package `WorkflowGraph.svelte` below the large-file threshold while
+  keeping drag state, viewport state, and selector wiring in the component.
   Package and app SvelteFlow default edge options now reuse
   `packages/svelte-graph/src/workflowGraphEdgeOptions.ts`, with unit coverage in
   `packages/svelte-graph/src/workflowGraphEdgeOptions.test.ts`.

@@ -11,6 +11,7 @@ shared node presentation rules live outside the Pantograph app shell.
 | ----------- | ----------- |
 | `WorkflowGraph.svelte` | Main graph canvas that owns connect/reconnect flows, candidate loading, revision-aware edge commits, and the drag-time horseshoe insert flow. |
 | `WorkflowGraph.css` | Package graph canvas and SvelteFlow chrome styling imported by `WorkflowGraph.svelte`. |
+| `workflowGraphBackendActions.ts` | Owns package-local backend mutation calls, connection-intent loading, reconnect rollback, and accepted graph-sync projection used by `WorkflowGraph.svelte`. |
 | `../workflowConnectionInteraction.ts` | Owns connection drag reset and connect-end preservation decisions. |
 | `../workflowConnectionInteraction.test.ts` | Unit coverage for connection interaction reset and connect-end preservation. |
 | `../workflowConnections.ts` | Computes reusable connection validation, graph-edge normalization, candidate-to-intent projection, commit anchors, revision selection, and rejected-intent preservation. |
@@ -109,8 +110,8 @@ mapping stays testable outside the SvelteFlow component.
 Store-to-SvelteFlow synchronization decisions live in `workflowGraphSync.ts`,
 keeping reference comparisons out of `WorkflowGraph.svelte`.
 Connection validation and backend candidate projection live in
-`workflowConnections.ts`, while `WorkflowGraph.svelte` owns backend calls and
-interaction cleanup.
+`workflowConnections.ts`, while `workflowGraphBackendActions.ts` owns backend
+calls and accepted/rejected graph-sync projection for `WorkflowGraph.svelte`.
 Connection and reconnect commit anchor projection plus active-intent revision
 selection also live in `workflowConnections.ts`, so `WorkflowGraph.svelte`
 resolves a tested commit contract before invoking backend graph mutations.
@@ -121,6 +122,9 @@ metadata.
 Package graph edge deletion, edge cutting, and reconnect-end cleanup now require
 an active session id before calling backend edge-removal APIs, avoiding empty
 session-id fallbacks while still allowing local node removal to proceed.
+Those backend edge-removal calls now live in
+`workflowGraphBackendActions.ts`, keeping `WorkflowGraph.svelte` focused on
+selection cleanup and event wiring.
 Connection drag reset and connect-end preservation live in
 `workflowConnectionInteraction.ts`, while `WorkflowGraph.svelte` owns clearing
 the backing connection-intent store and host-specific preview state.
@@ -133,8 +137,8 @@ Palette drag payload parsing and graph-space drop positioning live in
 `workflowPaletteDrag.ts`, while `WorkflowGraph.svelte` owns the browser event
 and store mutation side effects.
 Horseshoe insert position projection lives in `workflowInsertPosition.ts`,
-while `WorkflowGraph.svelte` owns the backend insert call and interaction
-feedback lifecycle.
+while `workflowGraphBackendActions.ts` owns the backend insert call and
+`WorkflowGraph.svelte` owns the interaction feedback lifecycle.
 Drag-cursor horseshoe decisions live in `workflowDragCursor.ts`, while
 `WorkflowGraph.svelte` applies the selected-index or session-state update.
 Horseshoe open-context projection lives in `workflowHorseshoeOpenContext.ts`,
@@ -193,6 +197,9 @@ threshold while preserving the same package-owned visual contract.
   backend-owned `connectAnchors` commit path.
 - `workflowConnectionInteraction.ts` must keep drag reset and connect-end
   preservation decisions shared with the app graph.
+- `workflowGraphBackendActions.ts` must keep package graph backend mutation
+  calls and response projection aligned with the reusable `WorkflowBackend`
+  contract instead of reintroducing app-local service coupling.
 - Insert-from-drag must commit through backend-owned `insertNodeAndConnect`; the
   UI must not compose local `addNode` plus `connectAnchors`.
 - Horseshoe open failures must resolve to an explicit blocked reason instead of

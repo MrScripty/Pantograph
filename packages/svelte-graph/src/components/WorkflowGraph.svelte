@@ -15,19 +15,10 @@
   import { get } from 'svelte/store';
 
   import { useGraphContext } from '../context/useGraphContext.js';
-  import { applyWorkflowGraphMutationResponse } from '../stores/workflowGraphMutationResponse.js';
-  import {
-    buildConnectionIntentState,
-    edgeToGraphEdge,
-    isWorkflowConnectionValid,
-    preserveConnectionIntentState,
-    resolveConnectionCommitGraphRevision,
-    resolveWorkflowConnectionAnchors,
-  } from '../workflowConnections.js';
+  import { isWorkflowConnectionValid } from '../workflowConnections.js';
   import { computeWorkflowGraphSyncDecision } from '../workflowGraphSync.js';
   import type {
     ConnectionAnchor,
-    ConnectionCandidatesResponse,
     ConnectionCommitResponse,
     InsertableNodeTypeCandidate,
   } from '../types/workflow.js';
@@ -101,6 +92,13 @@
   } from '../workflowGraphViewport.js';
   import { resolveWorkflowInsertPositionHint } from '../workflowInsertPosition.js';
   import { getWorkflowMiniMapNodeColor } from '../workflowMiniMap.js';
+  import {
+    commitWorkflowConnection as commitWorkflowConnectionMutation,
+    commitWorkflowInsertCandidate as commitWorkflowInsertCandidateMutation,
+    commitWorkflowReconnect as commitWorkflowReconnectMutation,
+    loadWorkflowConnectionIntentState as loadWorkflowConnectionIntentStateMutation,
+    removeWorkflowGraphEdges as removeWorkflowGraphEdgesMutation,
+  } from './workflowGraphBackendActions.js';
   import CutTool from './CutTool.svelte';
   import ContainerBorder from './ContainerBorder.svelte';
   import WorkflowGraphHorseshoeLayer from './WorkflowGraphHorseshoeLayer.svelte';
@@ -109,15 +107,11 @@
   const { backend, registry, stores } = useGraphContext();
 
   interface Props {
-    /** Whether to show the orchestration container border overlay */
     showContainerBorder?: boolean;
-    /** Called when the container border becomes fully visible (zoom-out transition) */
     onContainerZoomOut?: () => void;
   }
 
   let { showContainerBorder = false, onContainerZoomOut }: Props = $props();
-
-  // --- Store destructuring for reactive $-prefix access ---
   const nodesStore = stores.workflow.nodes;
   const edgesStore = stores.workflow.edges;
   const connectionIntentStore = stores.workflow.connectionIntent;
@@ -126,35 +120,24 @@
     nodeDefinitions: nodeDefsStore,
     selectedNodeIds: selectedNodeIdsStore,
     workflowGraph: workflowGraphStore,
-    workflowMetadata: workflowMetadataStore,
   } =
     stores.workflow;
   const { isReadOnly, currentSessionId } = stores.session;
   const { viewLevel } = stores.view;
 
-  // Build node/edge types from registry
   const nodeTypes: NodeTypes = registry.nodeTypes as unknown as NodeTypes;
   const edgeTypes: EdgeTypes = (registry.edgeTypes || { reconnectable: ReconnectableEdge }) as unknown as EdgeTypes;
 
-  // Local state for SvelteFlow (Svelte 5 requires $state.raw for xyflow)
   let nodes = $state.raw<Node[]>([]);
   let edges = $state.raw<Edge[]>([]);
 
   let canEdit = $derived($isEditing && !$isReadOnly);
-
-  // Double-click tracking for group zoom
   let nodeClickState = $state<WorkflowNodeClickState>({
     lastClickTime: 0,
     lastClickNodeId: null,
   });
-
-  // Container element reference for size calculations
   let containerElement = $state<HTMLElement | null>(null);
-
-  // Current viewport state for container border rendering
   let currentViewport = $state<{ x: number; y: number; zoom: number } | null>(null);
-
-  // CutTool ref and bindable state
   let cutToolRef: CutTool;
   let ctrlPressed = $state(false);
   let isCutting = $state(false);
@@ -175,19 +158,11 @@
       externalPaletteDragActive,
     }),
   );
-
-  // ContainerBorder ref
   let containerBorderRef: ContainerBorder;
-
-  // Track previous store references so we only push genuine changes to SvelteFlow.
-  // SvelteFlow enriches node/edge objects with internal metadata (measured, internals).
-  // Blindly reassigning from the store overwrites that metadata and causes xyflow to
-  // re-reconcile, which can drop edges or lose measured dimensions.
   let _prevNodesRef: Node[] | null = null;
   let _prevEdgesRef: Edge[] | null = null;
   let _skipNextNodeSync = false;
 
-  // Sync store → SvelteFlow local state (only when the respective store changed)
   $effect(() => {
     const syncDecision = computeWorkflowGraphSyncDecision({
       storeNodes: $nodesStore,
@@ -210,14 +185,12 @@
     }
   });
 
-  // Reset container border transition when returning to data-graph view
   $effect(() => {
     if ($viewLevel === 'data-graph') {
       containerBorderRef?.resetTransition();
     }
   });
 
-  // Initialize node definitions on mount
   onMount(async () => {
     const removeWindowListeners = registerWorkflowGraphWindowListeners(window, {
       onKeyDown: handleWindowKeyDown,
@@ -450,20 +423,18 @@
     horseshoeInsertFeedback = startHorseshoeInsertFeedback();
 
     try {
-      const response = await backend.insertNodeAndConnect(
-        connectionIntent.sourceAnchor,
-        candidate.node_type,
-        sessionId,
-        connectionIntent.graphRevision || getGraphRevision(),
+      const response = await commitWorkflowInsertCandidateMutation({
+        backend,
+        candidateNodeType: candidate.node_type,
+        graphRevision: connectionIntent.graphRevision || getGraphRevision(),
         positionHint,
-        candidate.matching_input_port_ids[0],
-      );
+        preferredInputPortId: candidate.matching_input_port_ids[0],
+        sessionId,
+        sourceAnchor: connectionIntent.sourceAnchor,
+        workflowStores: stores.workflow,
+      });
 
       if (response.accepted && response.graph) {
-        stores.workflow.loadWorkflow(response.graph, get(workflowMetadataStore) ?? undefined);
-        applyWorkflowGraphMutationResponse(response, {
-          setNodeExecutionState: stores.workflow.setNodeExecutionState,
-        });
         clearConnectionInteraction();
         return;
       }
@@ -526,13 +497,6 @@
     return get(workflowGraphStore).derived_graph?.graph_fingerprint ?? '';
   }
 
-  function setConnectionIntentState(
-    candidates: ConnectionCandidatesResponse,
-    rejection?: ConnectionCommitResponse['rejection'],
-  ) {
-    stores.workflow.setConnectionIntent(buildConnectionIntentState(candidates, rejection));
-  }
-
   let connectionIntentRequestId = $state(0);
 
   async function loadConnectionIntent(
@@ -556,73 +520,60 @@
     }
 
     try {
-      const candidates = await backend.getConnectionCandidates(
-        sourceAnchor,
+      const result = await loadWorkflowConnectionIntentStateMutation({
+        backend,
+        currentIntent: $connectionIntentStore,
+        graphRevision: options?.graphRevision ?? getGraphRevision(),
+        preserveDisplay: options?.preserveDisplay,
+        rejection: options?.rejection,
         sessionId,
-        options?.graphRevision ?? getGraphRevision(),
-      );
+        sourceAnchor,
+        workflowStores: stores.workflow,
+      });
 
       if (requestId !== connectionIntentRequestId) return;
-      setConnectionIntentState(candidates, options?.rejection);
+      if (result.type === 'set') {
+        stores.workflow.setConnectionIntent(result.intent);
+      } else {
+        clearConnectionInteraction();
+      }
     } catch (error) {
       if (requestId === connectionIntentRequestId) {
-        if (options?.preserveDisplay) {
-          stores.workflow.setConnectionIntent(preserveConnectionIntentState({
-            sourceAnchor,
-            graphRevision: options?.graphRevision ?? getGraphRevision(),
-            currentIntent: $connectionIntentStore,
-            rejection: options?.rejection,
-          }));
-        } else {
-          clearConnectionInteraction();
-        }
+        clearConnectionInteraction();
       }
       console.error('[WorkflowGraph] Failed to load connection candidates:', error);
     }
   }
 
   async function commitConnection(connection: Connection): Promise<ConnectionCommitResponse | null> {
-    const anchors = resolveWorkflowConnectionAnchors(connection);
-    if (!anchors) return null;
-
     const sessionId = get(currentSessionId);
     if (!sessionId) return null;
 
-    const response = await backend.connectAnchors(
-      anchors.sourceAnchor,
-      anchors.targetAnchor,
+    const result = await commitWorkflowConnectionMutation({
+      backend,
+      connection,
+      currentGraphRevision: getGraphRevision(),
+      currentIntent: $connectionIntentStore,
       sessionId,
-      resolveConnectionCommitGraphRevision({
-        sourceAnchor: anchors.sourceAnchor,
-        currentIntent: $connectionIntentStore,
-        currentGraphRevision: getGraphRevision(),
-      }),
-    );
+      workflowStores: stores.workflow,
+    });
+    const response = result.response;
 
-    if (response.accepted && response.graph) {
-      stores.workflow.syncEdgesFromBackend(response.graph);
-      applyWorkflowGraphMutationResponse(response, {
-        setNodeExecutionState: stores.workflow.setNodeExecutionState,
-      });
+    if (response?.accepted) {
       clearConnectionInteraction();
       return response;
     }
 
-    stores.workflow.setConnectionIntent(preserveConnectionIntentState({
-      sourceAnchor: anchors.sourceAnchor,
-      graphRevision: response.graph_revision,
-      currentIntent: $connectionIntentStore,
-      rejection: response.rejection,
-    }));
+    if (result.intent) {
+      stores.workflow.setConnectionIntent(result.intent);
+    }
 
-    if (response.rejection) {
+    if (response?.rejection) {
       console.warn('[WorkflowGraph] Connection rejected:', response.rejection.message);
     }
 
     return response;
   }
-
-  // --- Event handlers ---
 
   function onNodeDragStop({
     targetNode,
@@ -632,8 +583,6 @@
     event: MouseEvent | TouchEvent;
   }) {
     if (!canEdit || !targetNode) return;
-    // Skip overwriting SvelteFlow's nodes on the next $effect run —
-    // SvelteFlow already has the correct position via bind:nodes.
     _skipNextNodeSync = true;
     stores.workflow.updateNodePosition(targetNode.id, targetNode.position);
   }
@@ -699,15 +648,14 @@
     const sessionId = get(currentSessionId);
     clearConnectionInteraction();
 
-    for (const edge of deletedEdges) {
-      if (sessionId) {
-        try {
-          const updatedGraph = await backend.removeEdge(edge.id, sessionId);
-          stores.workflow.syncEdgesFromBackend(updatedGraph);
-        } catch (error) {
-          console.error('[WorkflowGraph] Failed to notify backend of edge removal:', error);
-        }
-      }
+    if (sessionId) {
+      await removeWorkflowGraphEdgesMutation({
+        backend,
+        edgeIds: deletedEdges.map((edge) => edge.id),
+        errorMessage: '[WorkflowGraph] Failed to notify backend of edge removal:',
+        sessionId,
+        workflowStores: stores.workflow,
+      });
     }
 
     for (const node of deletedNodes) {
@@ -740,8 +688,6 @@
     event.dataTransfer!.dropEffect = 'copy';
   }
 
-  // --- Edge Reconnection ---
-
   async function handleReconnectStart(
     _event: MouseEvent | TouchEvent,
     edge: Edge,
@@ -761,53 +707,40 @@
 
   async function handleReconnect(oldEdge: Edge, newConnection: Connection) {
     if (!canEdit) return;
-    const anchors = resolveWorkflowConnectionAnchors(newConnection);
-    if (!anchors) {
-      clearConnectionInteraction();
-      return;
-    }
-
     connectionDragState = markConnectionDragFinalizing(connectionDragState);
 
     const sessionId = get(currentSessionId);
     if (!sessionId) return;
 
-    try {
-      const graphAfterRemoval = await backend.removeEdge(oldEdge.id, sessionId);
-      stores.workflow.syncEdgesFromBackend(graphAfterRemoval);
+    const result = await commitWorkflowReconnectMutation({
+      backend,
+      currentIntent: $connectionIntentStore,
+      fallbackRevision: getGraphRevision(),
+      newConnection,
+      oldEdge,
+      reconnectingSourceAnchor: connectionDragState.reconnectingSourceAnchor,
+      sessionId,
+      workflowStores: stores.workflow,
+    });
 
-      const response = await backend.connectAnchors(
-        anchors.sourceAnchor,
-        anchors.targetAnchor,
-        sessionId,
-        graphAfterRemoval.derived_graph?.graph_fingerprint ?? getGraphRevision(),
-      );
+    if (result.type === 'invalid') {
+      clearConnectionInteraction();
+      return;
+    }
 
-      if (response.accepted && response.graph) {
-        stores.workflow.syncEdgesFromBackend(response.graph);
-        applyWorkflowGraphMutationResponse(response, {
-          setNodeExecutionState: stores.workflow.setNodeExecutionState,
-        });
-        clearConnectionInteraction();
-        return;
-      }
+    if (result.type === 'accepted') {
+      clearConnectionInteraction();
+      return;
+    }
 
-      const restoredGraph = await backend.addEdge(edgeToGraphEdge(oldEdge), sessionId);
-      stores.workflow.syncEdgesFromBackend(restoredGraph);
+    if (result.type === 'rejected') {
+      stores.workflow.setConnectionIntent(result.intent);
+      console.warn('[WorkflowGraph] Reconnection rejected:', result.intent.rejection?.message);
+      return;
+    }
 
-      if (response.rejection) {
-        stores.workflow.setConnectionIntent(preserveConnectionIntentState({
-          sourceAnchor:
-            connectionDragState.reconnectingSourceAnchor ??
-            anchors.sourceAnchor,
-          graphRevision: response.graph_revision,
-          currentIntent: $connectionIntentStore,
-          rejection: response.rejection,
-        }));
-        console.warn('[WorkflowGraph] Reconnection rejected:', response.rejection.message);
-      }
-    } catch (error) {
-      console.error('[WorkflowGraph] Failed to notify backend of reconnection:', error);
+    if (result.type === 'failed') {
+      console.error('[WorkflowGraph] Failed to notify backend of reconnection:', result.error);
     }
   }
 
@@ -820,22 +753,19 @@
     if (!canEdit) return;
 
     const reconnectingEdgeId = shouldRemoveReconnectedEdge(connectionDragState, connectionState);
-    if (reconnectingEdgeId) {
-      try {
-        const sessionId = get(currentSessionId);
-        if (sessionId) {
-          const updatedGraph = await backend.removeEdge(reconnectingEdgeId, sessionId);
-          stores.workflow.syncEdgesFromBackend(updatedGraph);
-        }
-      } catch (error) {
-        console.error('[WorkflowGraph] Failed to notify backend of edge removal:', error);
-      }
+    const sessionId = get(currentSessionId);
+    if (reconnectingEdgeId && sessionId) {
+      await removeWorkflowGraphEdgesMutation({
+        backend,
+        edgeIds: [reconnectingEdgeId],
+        errorMessage: '[WorkflowGraph] Failed to notify backend of edge removal:',
+        sessionId,
+        workflowStores: stores.workflow,
+      });
     }
 
     clearConnectionInteraction();
   }
-
-  // --- Viewport handling ---
 
   function handleMove(
     _event: MouseEvent | TouchEvent | null,
@@ -857,20 +787,17 @@
     clearConnectionInteraction();
   }
 
-  // --- Cut tool edge removal ---
-
   async function handleEdgesCut(edgeIds: string[]) {
     const sessionId = get(currentSessionId);
     clearConnectionInteraction();
-    for (const edgeId of edgeIds) {
-      if (sessionId) {
-        try {
-          const updatedGraph = await backend.removeEdge(edgeId, sessionId);
-          stores.workflow.syncEdgesFromBackend(updatedGraph);
-        } catch (error) {
-          console.error('[WorkflowGraph] Failed to notify backend of edge cut:', error);
-        }
-      }
+    if (sessionId) {
+      await removeWorkflowGraphEdgesMutation({
+        backend,
+        edgeIds,
+        errorMessage: '[WorkflowGraph] Failed to notify backend of edge cut:',
+        sessionId,
+        workflowStores: stores.workflow,
+      });
     }
   }
 </script>
