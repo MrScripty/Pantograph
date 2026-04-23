@@ -110,6 +110,10 @@ locally.
 - Workflow engine execution, graph mutation, event emission, cancellation, and
   human-input tests stay in `engine_tests.rs` so `engine.rs` remains focused on
   production orchestration helpers and facade methods.
+- Multi-demand planning, dispatch-window, bounded-parallel execution, failure
+  attribution, and result aggregation tests stay in
+  `engine/multi_demand_tests.rs` so `engine/multi_demand.rs` remains focused on
+  production multi-target demand coordination.
 - Execution events may carry additive `occurred_at_ms` timestamps, and adapter
   layers must preserve those backend-owned producer times when projecting trace
   or diagnostics state instead of restamping them locally.

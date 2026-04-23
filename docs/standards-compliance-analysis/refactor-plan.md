@@ -545,6 +545,10 @@ Tasks:
   cancellation, and human-input tests now live in
   `crates/node-engine/src/engine_tests.rs`, reducing `engine.rs` to production
   orchestration helpers and facade methods before deeper engine-family splits.
+  Multi-demand planning, dispatch-window, bounded-parallel execution, failure
+  attribution, and result aggregation tests now live in
+  `crates/node-engine/src/engine/multi_demand_tests.rs`, reducing
+  `engine/multi_demand.rs` to production multi-target demand coordination.
 - Split `src/components/WorkflowGraph.svelte` and
   `packages/svelte-graph/src/components/WorkflowGraph.svelte` into graph canvas,
   connection drag, horseshoe insert, edge insert, selection, keyboard, and

@@ -16,6 +16,7 @@ entrypoint while preserving the current public API.
 | `graph_events.rs` | Dirty-subgraph collection and incremental graph-event helpers. |
 | `inflight_tracking.rs` | In-flight node bookkeeping helpers for cycle detection and cleanup around recursive demand. |
 | `multi_demand.rs` | Current multi-demand execution helpers, including the executor-facing facade path, borrowed runtime context wiring, request-plan contract, root-target planning, execution-batch schedule, result-merge contract, execution-budget contract, coordinator owner, bounded-parallel coordination, and bound-session node-memory projection after successful runs. |
+| `multi_demand_tests.rs` | Multi-demand planning, dispatch-window, bounded-parallel execution, failure attribution, and result aggregation tests extracted from the production multi-demand coordinator. |
 | `node_preparation.rs` | Static node-data injection and human-input pause preparation for demand execution. |
 | `output_cache.rs` | Fresh-cache resolution and completed-output cache/version finalization helpers. |
 | `session_state.rs` | Phase 6 workflow-session residency, bound workflow-session identity, node-memory, graph-memory-impact, and checkpoint contract types plus the private executor-owned per-session node-memory store, compatibility-reconciliation helper, checkpoint-availability tracking, and checkpoint-summary helper. |
@@ -251,6 +252,10 @@ planning split, plus the private execution-batch schedule derived from it.
 - Test-only multi-demand inspection helpers remain compiled only for tests so
   production engine builds do not carry warning debt for helpers whose only
   consumers are contract assertions.
+- Multi-demand planning, dispatch-window, bounded-parallel execution, failure
+  attribution, and result aggregation tests stay in `multi_demand_tests.rs` so
+  `multi_demand.rs` remains focused on production multi-target demand
+  coordination.
 
 ## Revisit Triggers
 - Bounded parallel demand execution requires additional planner or coordinator
