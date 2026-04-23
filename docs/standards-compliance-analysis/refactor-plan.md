@@ -432,7 +432,10 @@ Tasks:
   shared test harness and behavior-module index. Pantograph host task-executor
   tests and Python runtime fixture helpers now live in
   `crates/pantograph-embedded-runtime/src/task_executor_tests.rs`, reducing
-  `task_executor.rs` to production host execution logic.
+  `task_executor.rs` to production host execution logic. Pantograph model
+  dependency resolver tests and Pumas descriptor fixture helpers now live in
+  `crates/pantograph-embedded-runtime/src/model_dependencies_tests.rs`,
+  reducing `model_dependencies.rs` to production resolver logic.
 - Split `crates/node-engine/src/core_executor.rs` by execution phases, blocking
   adapters, demand preparation, output handling, and tests.
   Progress: core executor behavior tests now live in

@@ -32,6 +32,7 @@ packages.
 | `lib_tests/workflow_run_execution_tests.rs` | Embedded workflow-run and session-run execution integration tests split out of the legacy root test module. |
 | `lib.rs` | Composes the embedded runtime, workflow service, shared extensions, and public crate exports used by Tauri and standalone hosts. |
 | `model_dependencies.rs` | Resolves Pantograph model dependency requirements and binds workflow requests to Pumas-backed execution facts. |
+| `model_dependencies_tests.rs` | Pantograph model dependency resolver tests and Pumas descriptor fixture helpers extracted from the production resolver module. |
 | `python_runtime_execution.rs` | Owns captured execution metadata for Python-backed runtime runs so workflow diagnostics and registry projection can reuse one recorder contract outside the task-executor facade. |
 | `task_executor.rs` | Hosts Pantograph-specific task execution for Python-backed nodes and RAG-backed nodes while preserving core-node fallthrough. |
 | `task_executor_tests.rs` | Pantograph host task-executor unit and integration tests plus Python runtime fixture helpers extracted from the production task-executor module. |
@@ -442,6 +443,9 @@ let runtime = EmbeddedRuntime::with_default_python_runtime(
 - `model_dependencies.rs` accepts workflow dependency requests and returns
   machine-consumable dependency status or validation errors suitable for
   preflight blocking.
+- Model dependency resolver tests and Pumas descriptor fixture helpers stay in
+  `model_dependencies_tests.rs` so production resolver changes are not coupled
+  to integration-fixture churn.
 - Python-backed execution always crosses the adapter/process boundary; callers
   must expect process-launch and external-runtime failures to surface as
   execution errors.
