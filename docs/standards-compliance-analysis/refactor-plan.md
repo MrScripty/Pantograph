@@ -507,7 +507,13 @@ Tasks:
   Workflow runtime diagnostics, runtime event projection,
   and registry reconciliation tests now live in
   `crates/pantograph-embedded-runtime/src/workflow_runtime_tests.rs`, reducing
-  `workflow_runtime.rs` to production projection helpers.
+  `workflow_runtime.rs` to production projection helpers. Workflow-runtime test
+  coverage is now further split under
+  `crates/pantograph-embedded-runtime/src/workflow_runtime_tests/` by
+  diagnostics snapshot assembly, event projection, metrics/model-target
+  helpers, and registry reconciliation behavior, reducing the root test module
+  below the large-file threshold while preserving shared mocked controller
+  fixtures.
 - Split `crates/pantograph-runtime-registry/src/lib.rs` by core registry facade,
   reservation/admission/reclaim/warmup policy, technical-fit, observation, and
   tests.

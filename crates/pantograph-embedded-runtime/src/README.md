@@ -60,7 +60,8 @@ packages.
 | `runtime_registry_observations.rs` | Owns backend-side runtime-registry observation builders and health-overlay matching for active, embedding, and execution-observed producer facts. |
 | `workflow_scheduler_diagnostics.rs` | Owns workflow scheduler diagnostics provider projection from host runtime mode and shared runtime-registry state. |
 | `workflow_runtime.rs` | Owns backend-side workflow execution helpers for embedding metadata flag projection, runtime trace/model-target shaping, runtime diagnostics input grouping, and execution-path or stored-snapshot runtime-registry reconciliation used by workflow diagnostics transport. |
-| `workflow_runtime_tests.rs` | Workflow runtime diagnostics, runtime event projection, and registry reconciliation tests extracted from the production workflow-runtime helper module. |
+| `workflow_runtime_tests.rs` | Shared fixtures and module index for workflow runtime diagnostics, event projection, metric normalization, and registry reconciliation tests. |
+| `workflow_runtime_tests/` | Focused workflow-runtime helper tests for diagnostics snapshot assembly, event projection, metrics/model-target helpers, and registry reconciliation behavior. |
 | `workflow_session_execution.rs` | Owns backend-side keep-alive workflow-session executor storage, graph-change reuse/reconciliation, and unload-transition application so scheduler-driven reclaim and direct capacity rebalance share one logical-session path. |
 
 ## Problem
@@ -465,9 +466,11 @@ let runtime = EmbeddedRuntime::with_default_python_runtime(
   controller coverage. Larger observation, lifecycle, health, and warmup
   behavior families live under `runtime_registry_tests/` so the parent test
   module remains a fixture/index boundary.
-- Workflow runtime diagnostics, runtime event projection, and registry
-  reconciliation tests stay in `workflow_runtime_tests.rs` so production
-  workflow-runtime projection helpers stay separate from diagnostics fixtures.
+- Workflow runtime diagnostics, runtime event projection, metric normalization,
+  model-target selection, and registry reconciliation tests stay under
+  `workflow_runtime_tests/`, while `workflow_runtime_tests.rs` retains shared
+  fixtures and module registration so production workflow-runtime projection
+  helpers stay separate from diagnostics fixtures.
 - Workflow technical-fit calls may also reuse this crate's request-projection
   helpers, but transport adapters must not build registry selector input or
   project selector reasons on their own.
