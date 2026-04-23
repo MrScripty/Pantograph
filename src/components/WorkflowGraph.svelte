@@ -1,85 +1,35 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
-  import { get } from 'svelte/store';
-  import { SvelteFlow, Controls, MiniMap, type Node, type Edge, type Connection } from '@xyflow/svelte';
+  import type { Node, Edge, Connection } from '@xyflow/svelte';
   import '@xyflow/svelte/dist/style.css';
-  import './WorkflowGraph.css';
   import {
-    clearHorseshoeInsertFeedback,
-    closeHorseshoeDisplay,
-    createConnectionDragState,
-    createHorseshoeInsertFeedbackState,
-    createHorseshoeDragSessionState,
-    rejectHorseshoeInsertFeedback,
-    dispatchWorkflowHorseshoeKeyboardAction,
-    isEditableKeyboardTarget,
-    preserveConnectionIntentState,
-    buildWorkflowHorseshoeOpenContext,
-    clearWorkflowConnectionDragInteraction,
-    resolveWorkflowHorseshoeSessionUpdate,
-    shouldClearWorkflowConnectionInteractionAfterConnectEnd,
-    normalizeWorkflowHorseshoeSelectedIndex,
-    resolveWorkflowHorseshoeQueryUpdate,
-    requestWorkflowHorseshoeOpen,
-    resolveWorkflowHorseshoeSelectionSnapshot,
-    resolveWorkflowDragCursorUpdate,
-    resolveWorkflowGroupZoomTarget,
-    resolveWorkflowInsertPositionHint,
-    resolveWorkflowNodeClick,
-    resolveWorkflowPointerClientPosition,
-    resolveWorkflowRelativePointerPosition,
-    markConnectionDragFinalizing,
-    rotateWorkflowHorseshoeSelection,
-    startHorseshoeInsertFeedback,
-    shouldRemoveReconnectedEdge,
-    startHorseshoeDrag,
-    startConnectionDrag,
-    startReconnectDrag,
-    supportsInsertFromConnectionDrag,
-    syncHorseshoeDisplay,
-    applyWorkflowGraphMutationResponse,
-    collectSelectedNodeIds,
-    WORKFLOW_GRAPH_DEFAULT_EDGE_OPTIONS,
-    resolveWorkflowGraphInteractionState,
-    resolveWorkflowHorseshoeBlockedReasonLog,
-    WORKFLOW_GRAPH_FIT_VIEW_OPTIONS,
-    WORKFLOW_GRAPH_MAX_ZOOM,
-    WORKFLOW_GRAPH_MINIMAP_MASK_COLOR,
-    WORKFLOW_GRAPH_MIN_ZOOM,
-    WORKFLOW_GRAPH_PAN_ACTIVATION_KEY,
-    registerWorkflowGraphWindowListeners,
-    CutTool,
-    WorkflowGraphHorseshoeLayer,
-    type ConnectionDragState,
-    type HorseshoeBlockedReason,
-    type HorseshoeInsertFeedbackState,
-    type HorseshoeDragSessionState,
-    type WorkflowNodeClickState,
-    isPortTypeCompatible,
+    buildWorkflowHorseshoeOpenContext, clearHorseshoeInsertFeedback,
+    clearWorkflowConnectionDragInteraction, closeHorseshoeDisplay, collectSelectedNodeIds,
+    createConnectionDragState, createHorseshoeDragSessionState,
+    createHorseshoeInsertFeedbackState, isPortTypeCompatible, markConnectionDragFinalizing,
+    normalizeWorkflowHorseshoeSelectedIndex, preserveConnectionIntentState,
+    registerWorkflowGraphWindowListeners, rejectHorseshoeInsertFeedback,
+    requestWorkflowHorseshoeOpen, resolveWorkflowDragCursorUpdate,
+    resolveWorkflowGraphInteractionState, resolveWorkflowGroupZoomTarget,
+    resolveWorkflowHorseshoeBlockedReasonLog, resolveWorkflowHorseshoeQueryUpdate,
+    resolveWorkflowHorseshoeSessionUpdate, resolveWorkflowInsertPositionHint,
+    resolveWorkflowNodeClick, resolveWorkflowPointerClientPosition,
+    resolveWorkflowRelativePointerPosition, rotateWorkflowHorseshoeSelection,
+    shouldClearWorkflowConnectionInteractionAfterConnectEnd, shouldRemoveReconnectedEdge,
+    startConnectionDrag, startHorseshoeDrag, startHorseshoeInsertFeedback,
+    startReconnectDrag, supportsInsertFromConnectionDrag, syncHorseshoeDisplay,
+    type ConnectionDragState, type HorseshoeBlockedReason, type HorseshoeDragSessionState,
+    type HorseshoeInsertFeedbackState, type WorkflowNodeClickState,
   } from '@pantograph/svelte-graph';
 
   import {
-    nodes as nodesStore,
-    edges as edgesStore,
-    connectionIntent,
-    nodeDefinitions,
-    isEditing,
-    updateNodePosition,
-    addNode,
-    removeNode,
-    syncEdgesFromBackend,
-    workflowGraph,
-    workflowMetadata,
-    setConnectionIntent,
-    clearConnectionIntent,
-    loadWorkflow,
-    selectedNodeIds,
-    setNodeExecutionState,
+    addNode, clearConnectionIntent, connectionIntent, edges as edgesStore, isEditing,
+    nodeDefinitions, nodes as nodesStore, removeNode, selectedNodeIds, setConnectionIntent,
+    updateNodePosition, workflowGraph,
   } from '../stores/workflowStore';
   import { isReadOnly, currentGraphId, currentGraphType } from '../stores/graphSessionStore';
   import type {
     ConnectionAnchor,
-    ConnectionCandidatesResponse,
     ConnectionCommitResponse,
     InsertableNodeTypeCandidate,
   } from '../services/workflow/types';
@@ -87,10 +37,7 @@
   import { workflowService } from '../services/workflow/WorkflowService';
   import type { NodeDefinition } from '../services/workflow/types';
   import {
-    buildConnectionIntentState,
-    edgeToGraphEdge,
     isWorkflowConnectionValid,
-    resolveConnectionCommitGraphRevision,
     resolveWorkflowConnectionAnchors,
   } from './workflowConnections.ts';
   import { computeWorkflowGraphSyncDecision } from './workflowGraphSync';
@@ -98,21 +45,12 @@
     applyEdgeInsertPreviewActiveFlag,
     clearEdgeInsertPreviewState,
     createEdgeInsertPreviewState,
-    findEdgeInsertHitTarget,
-    getCommittableEdgeInsertPreview,
-    isEdgeInsertPreviewRequestCurrent,
-    setEdgeInsertHoverTarget,
-    setEdgeInsertPreviewPending,
-    setEdgeInsertPreviewRejected,
-    setEdgeInsertPreviewResolved,
     shouldClearEdgeInsertPreviewForGraphState,
-    shouldRefreshEdgeInsertPreview,
-    updateEdgeInsertHitPoint,
     type EdgeInsertPreviewState,
   } from './edgeInsertInteraction.ts';
+  import { refreshWorkflowGraphEdgeInsertPreview } from './workflowGraphEdgeInsertPreview.ts';
   import { resolveReconnectSourceAnchor } from './reconnectInteraction';
-  import WorkflowContainerBoundary from './WorkflowContainerBoundary.svelte';
-  import WorkflowEdgeInsertPreviewMarker from './WorkflowEdgeInsertPreviewMarker.svelte';
+  import WorkflowGraphCanvas from './WorkflowGraphCanvas.svelte';
   import {
     resolveWorkflowContainerBounds,
     resolveWorkflowContainerTransitionDecision,
@@ -120,20 +58,31 @@
   } from './workflowContainerBoundary.ts';
   import {
     clearWorkflowContainerSelection,
-    resolveWorkflowContainerKeyboardAction,
     resolveWorkflowContainerSelectionAfterGraphSelection,
     toggleWorkflowContainerSelection,
   } from './workflowContainerSelection.ts';
-  import { getWorkflowMiniMapNodeColor } from './workflowMiniMap.ts';
+  import {
+    handleWorkflowGraphContainerKeyDown,
+    handleWorkflowGraphWindowKeyDown,
+  } from './workflowGraphKeyboardActions.ts';
   import { resolveWorkflowGraphSource } from './workflowGraphSource.ts';
   import {
+    commitWorkflowConnection,
+    commitWorkflowEdgeInsertDrop,
+    commitWorkflowInsertCandidate,
+    commitWorkflowReconnect,
+    loadWorkflowConnectionIntentState,
+    removeWorkflowGraphEdge,
+    removeWorkflowGraphEdges,
+  } from './workflowGraphBackendActions.ts';
+  import {
     isWorkflowPaletteEdgeInsertEnabled,
-    readWorkflowPaletteDragDefinition,
-    resolveWorkflowPaletteDropPosition,
   } from './workflowPaletteDrag.ts';
-  import { workflowEdgeTypes, workflowNodeTypes } from './workflowGraphTypes.ts';
+  import {
+    handleWorkflowGraphPaletteDragOver,
+    handleWorkflowGraphPaletteDrop,
+  } from './workflowGraphPaletteHandlers.ts';
 
-  // Import view store for zoom transitions
   import {
     tabIntoGroup,
     zoomTarget,
@@ -142,29 +91,22 @@
   } from '../stores/viewStore';
   import { currentOrchestration } from '../stores/orchestrationStore';
 
-  // Local state for SvelteFlow (Svelte 5 requires $state.raw for xyflow)
   let nodes = $state.raw<Node[]>([]);
   let edges = $state.raw<Edge[]>([]);
 
-  // Determine if we can edit based on both isEditing store and isReadOnly
   let canEdit = $derived($isEditing && !$isReadOnly);
 
-  // Track double-click for group zoom
   let nodeClickState = $state<WorkflowNodeClickState>({
     lastClickTime: 0,
     lastClickNodeId: null,
   });
 
-  // Track if we've already triggered the zoom-out transition
   let transitionTriggered = $state(false);
 
-  // Track if the container border is selected
   let containerSelected = $state(false);
 
-  // Container element reference for size calculations
-  let containerElement: HTMLElement;
+  let containerElement = $state<HTMLElement | undefined>(undefined);
 
-  // Current viewport state for rendering the container border
   let currentViewport = $state<WorkflowContainerViewport | null>(null);
   let connectionDragState = $state<ConnectionDragState>(createConnectionDragState());
   let horseshoeSession = $state<HorseshoeDragSessionState>(createHorseshoeDragSessionState());
@@ -197,12 +139,10 @@
 
   let containerBounds = $derived(resolveWorkflowContainerBounds(nodes));
 
-  // Handle viewport changes during pan/zoom for border rendering
   function handleMove(_event: MouseEvent | TouchEvent | null, viewport: { x: number; y: number; zoom: number }) {
     currentViewport = viewport;
   }
 
-  // Handle viewport changes to detect when to transition to orchestration view
   function handleMoveEnd(_event: MouseEvent | TouchEvent | null, viewport: { x: number; y: number; zoom: number }) {
     currentViewport = viewport;
 
@@ -221,7 +161,6 @@
     }
   }
 
-  // Reset transition state when returning to data-graph view
   $effect(() => {
     if ($viewLevel === 'data-graph') {
       transitionTriggered = false;
@@ -251,13 +190,11 @@
     containerSelected = toggleWorkflowContainerSelection(containerSelected);
   }
 
-  // Deselect container when clicking on the graph background
   function handlePaneClick() {
     containerSelected = clearWorkflowContainerSelection();
     clearConnectionInteraction();
   }
 
-  // Sync store changes to local state based on graph type
   $effect(() => {
     const graphSource = resolveWorkflowGraphSource({
       currentGraphType: $currentGraphType,
@@ -300,7 +237,6 @@
     }
   });
 
-  // Initialize node definitions on mount
   onMount(async () => {
     const removeWindowListeners = registerWorkflowGraphWindowListeners(window, {
       onKeyDown: handleWindowKeyDown,
@@ -437,91 +373,20 @@
   }
 
   async function refreshEdgeInsertPreview(event: DragEvent, definition: NodeDefinition) {
-    if (
-      !externalPaletteDragActive ||
-      !isWorkflowPaletteEdgeInsertEnabled($currentGraphType, $currentGraphId)
-    ) {
-      clearEdgeInsertPreview();
-      return;
-    }
-
-    const hitPoint = getRelativePointerPosition(event.clientX, event.clientY);
-    const flowRoot = containerElement?.querySelector('.svelte-flow');
-    const graphRevision = getGraphRevision();
-    if (!hitPoint || !flowRoot || !graphRevision) {
-      clearEdgeInsertPreview();
-      return;
-    }
-
-    const hitTarget = findEdgeInsertHitTarget({
-      root: flowRoot,
-      hitPoint,
-      containerRect: flowRoot.getBoundingClientRect(),
+    await refreshWorkflowGraphEdgeInsertPreview({
+      bumpRequestId: () => ++edgeInsertPreviewRequestId,
+      containerElement,
+      definition,
+      edgeInsertEnabled: isWorkflowPaletteEdgeInsertEnabled($currentGraphType, $currentGraphId),
+      externalPaletteDragActive,
+      getRequestId: () => edgeInsertPreviewRequestId,
+      getState: () => edgeInsertPreview,
+      graphRevision: getGraphRevision(),
+      hitPoint: getRelativePointerPosition(event.clientX, event.clientY),
+      setState: (state) => {
+        edgeInsertPreview = state;
+      },
     });
-    if (!hitTarget) {
-      clearEdgeInsertPreview();
-      return;
-    }
-
-    if (
-      !shouldRefreshEdgeInsertPreview(
-        edgeInsertPreview,
-        hitTarget.edgeId,
-        definition.node_type,
-        graphRevision,
-      )
-    ) {
-      edgeInsertPreview = updateEdgeInsertHitPoint(edgeInsertPreview, hitTarget.hitPoint);
-      return;
-    }
-
-    edgeInsertPreview = setEdgeInsertPreviewPending(
-      setEdgeInsertHoverTarget(
-        edgeInsertPreview,
-        hitTarget,
-        definition.node_type,
-        graphRevision,
-      ),
-    );
-
-    const requestId = ++edgeInsertPreviewRequestId;
-    try {
-      const response = await workflowService.previewNodeInsertOnEdge(
-        hitTarget.edgeId,
-        definition.node_type,
-        graphRevision,
-      );
-
-      if (!isEdgeInsertPreviewRequestCurrent({
-        requestId,
-        activeRequestId: edgeInsertPreviewRequestId,
-        state: edgeInsertPreview,
-        edgeId: hitTarget.edgeId,
-        nodeType: definition.node_type,
-        graphRevision,
-      })) {
-        return;
-      }
-
-      if (response.accepted && response.bridge) {
-        edgeInsertPreview = setEdgeInsertPreviewResolved(edgeInsertPreview, response.bridge);
-        return;
-      }
-
-      edgeInsertPreview = setEdgeInsertPreviewRejected(edgeInsertPreview, response.rejection);
-    } catch (error) {
-      if (isEdgeInsertPreviewRequestCurrent({
-        requestId,
-        activeRequestId: edgeInsertPreviewRequestId,
-        state: edgeInsertPreview,
-        edgeId: hitTarget.edgeId,
-        nodeType: definition.node_type,
-        graphRevision,
-      })) {
-        edgeInsertPreview = setEdgeInsertPreviewRejected(edgeInsertPreview);
-      }
-      console.error('[WorkflowGraph] Failed to preview edge insertion:', error);
-    }
   }
 
   async function commitEdgeInsertDrop(
@@ -529,46 +394,7 @@
     position: { x: number; y: number },
     preview: EdgeInsertPreviewState,
   ) {
-    if (!preview.edgeId || !preview.graphRevision || !preview.bridge) {
-      return false;
-    }
-
-    try {
-      const response = await workflowService.insertNodeOnEdge(
-        preview.edgeId,
-        definition.node_type,
-        preview.graphRevision,
-        { position },
-      );
-
-      if (response.accepted && response.graph) {
-        loadWorkflow(response.graph, get(workflowMetadata) ?? undefined);
-        applyWorkflowGraphMutationResponse(
-          {
-            graph: response.graph,
-            workflow_event: response.workflow_event,
-            workflow_session_state: response.workflow_session_state,
-          },
-          { setNodeExecutionState },
-        );
-        return true;
-      }
-
-      try {
-        const backendGraph = await workflowService.getExecutionGraph();
-        syncEdgesFromBackend(backendGraph);
-      } catch (refreshError) {
-        console.warn('[WorkflowGraph] Failed to refresh graph after rejected edge insertion:', refreshError);
-      }
-
-      if (response.rejection) {
-        console.warn('[WorkflowGraph] Edge insertion rejected:', response.rejection.message);
-      }
-    } catch (error) {
-      console.error('[WorkflowGraph] Failed to insert node on edge:', error);
-    }
-
-    return false;
+    return commitWorkflowEdgeInsertDrop({ definition, position, preview });
   }
 
   function updateDragCursorFromMouseEvent(event: MouseEvent) {
@@ -678,24 +504,15 @@
     horseshoeInsertFeedback = startHorseshoeInsertFeedback();
 
     try {
-      const response = await workflowService.insertNodeAndConnect(
-        currentConnectionIntent.sourceAnchor,
-        candidate.node_type,
-        currentConnectionIntent.graphRevision || getGraphRevision(),
+      const response = await commitWorkflowInsertCandidate({
+        sourceAnchor: currentConnectionIntent.sourceAnchor,
+        candidateNodeType: candidate.node_type,
+        graphRevision: currentConnectionIntent.graphRevision || getGraphRevision(),
         positionHint,
-        candidate.matching_input_port_ids[0],
-      );
+        preferredInputPortId: candidate.matching_input_port_ids[0],
+      });
 
-      if (response.accepted && response.graph) {
-        loadWorkflow(response.graph, get(workflowMetadata) ?? undefined);
-        applyWorkflowGraphMutationResponse(
-          {
-            graph: response.graph,
-            workflow_event: response.workflow_event,
-            workflow_session_state: response.workflow_session_state,
-          },
-          { setNodeExecutionState },
-        );
+      if (response.accepted) {
         clearConnectionInteraction();
         return;
       }
@@ -722,7 +539,6 @@
     }
   }
 
-  // Handle node drag events - sync back to store
   function onNodeDragStop({
     targetNode,
   }: {
@@ -739,7 +555,6 @@
     }
   }
 
-  // Handle node click for double-click detection (to zoom into groups)
   function onNodeClick({ node }: { node: Node }) {
     const decision = resolveWorkflowNodeClick(nodeClickState, node.id, Date.now());
     nodeClickState = decision.state;
@@ -749,7 +564,6 @@
     }
   }
 
-  // Handle double-click on a node to zoom into it (for node groups)
   async function handleNodeDoubleClick(node: Node) {
     const target = resolveWorkflowGroupZoomTarget(node);
     if (!target) return;
@@ -764,13 +578,6 @@
 
   function getGraphRevision(): string {
     return currentGraphRevision;
-  }
-
-  function setConnectionIntentState(
-    candidates: ConnectionCandidatesResponse,
-    rejection?: ConnectionCommitResponse['rejection'],
-  ) {
-    setConnectionIntent(buildConnectionIntentState(candidates, rejection));
   }
 
   let connectionIntentRequestId = $state(0);
@@ -794,76 +601,42 @@
       closeHorseshoeSelector();
     }
 
-    try {
-      const candidates = await workflowService.getConnectionCandidates(
-        sourceAnchor,
-        undefined,
-        options?.graphRevision ?? getGraphRevision()
-      );
+    const result = await loadWorkflowConnectionIntentState({
+      sourceAnchor,
+      graphRevision: options?.graphRevision ?? getGraphRevision(),
+      currentIntent: $connectionIntent,
+      preserveDisplay: options?.preserveDisplay,
+      rejection: options?.rejection,
+    });
 
-      if (requestId !== connectionIntentRequestId) return;
-      setConnectionIntentState(candidates, options?.rejection);
-    } catch (error) {
-      if (requestId === connectionIntentRequestId) {
-        if (options?.preserveDisplay) {
-          setConnectionIntent(preserveConnectionIntentState({
-            sourceAnchor,
-            graphRevision: options?.graphRevision ?? getGraphRevision(),
-            currentIntent: $connectionIntent,
-            rejection: options?.rejection,
-          }));
-        } else {
-          clearConnectionInteraction();
-        }
-      }
-      console.error('[WorkflowGraph] Failed to load connection candidates:', error);
+    if (requestId !== connectionIntentRequestId) {
+      return;
     }
+
+    if (result.type === 'set') {
+      setConnectionIntent(result.intent);
+      return;
+    }
+
+    clearConnectionInteraction();
   }
 
   async function commitConnection(connection: Connection): Promise<ConnectionCommitResponse | null> {
-    const anchors = resolveWorkflowConnectionAnchors(connection);
-    if (!anchors) return null;
-
-    const activeIntent = $connectionIntent;
-    const requestedRevision = resolveConnectionCommitGraphRevision({
-      sourceAnchor: anchors.sourceAnchor,
-      currentIntent: activeIntent,
+    const result = await commitWorkflowConnection({
+      connection,
+      currentIntent: $connectionIntent,
       currentGraphRevision: getGraphRevision(),
     });
+    const response = result.response;
 
-    const response = await workflowService.connectAnchors(
-      anchors.sourceAnchor,
-      anchors.targetAnchor,
-      requestedRevision
-    );
-
-    if (response.accepted && response.graph) {
-      syncEdgesFromBackend(response.graph);
-      applyWorkflowGraphMutationResponse(
-        {
-          graph: response.graph,
-          workflow_event: response.workflow_event,
-          workflow_session_state: response.workflow_session_state,
-        },
-        { setNodeExecutionState },
-      );
+    if (!response || response.accepted) {
       clearConnectionInteraction();
       return response;
     }
 
-    try {
-      const backendGraph = await workflowService.getExecutionGraph();
-      syncEdgesFromBackend(backendGraph);
-    } catch (error) {
-      console.warn('[WorkflowGraph] Failed to refresh execution graph after rejected connect:', error);
+    if (result.intent) {
+      setConnectionIntent(result.intent);
     }
-
-    setConnectionIntent(preserveConnectionIntentState({
-      sourceAnchor: anchors.sourceAnchor,
-      graphRevision: response.graph_revision,
-      currentIntent: $connectionIntent,
-      rejection: response.rejection,
-    }));
 
     if (response.rejection) {
       console.warn('[WorkflowGraph] Connection rejected:', response.rejection.message);
@@ -903,7 +676,6 @@
     clearConnectionInteraction();
   }
 
-  // Handle new connections - routes through backend for single source of truth
   async function handleConnect(connection: Connection) {
     if (!canEdit) return;
     try {
@@ -916,80 +688,49 @@
     }
   }
 
-  // Handle deletion of nodes and edges - edge deletion routes through backend
   async function handleDelete({ nodes: deletedNodes, edges: deletedEdges }: { nodes: Node[]; edges: Edge[] }) {
     if (!canEdit) return;
     clearConnectionInteraction();
 
-    // Delete edges via backend
-    for (const edge of deletedEdges) {
-      try {
-        const updatedGraph = await workflowService.removeEdge(edge.id);
-        syncEdgesFromBackend(updatedGraph);
-      } catch (error) {
-        console.error('[WorkflowGraph] Failed to remove edge:', error);
-      }
-    }
+    await removeWorkflowGraphEdges(
+      deletedEdges.map((edge) => edge.id),
+      '[WorkflowGraph] Failed to remove edge:',
+    );
 
-    // Delete nodes (still local for now - could be moved to backend later)
     for (const node of deletedNodes) {
       removeNode(node.id);
     }
   }
 
-  // Handle drop from palette
   async function handleDrop(event: DragEvent) {
-    event.preventDefault();
-
-    if (!canEdit) return;
-
-    const definition = readWorkflowPaletteDragDefinition(event, (error) => {
-      console.warn('[WorkflowGraph] Failed to parse palette drag data:', error);
-    });
-    if (!definition) {
-      clearConnectionInteraction();
-      return;
-    }
-
-    const position = resolveWorkflowPaletteDropPosition({
-      pointerPosition: getRelativePointerPosition(event.clientX, event.clientY),
-      viewport: currentViewport,
-    });
-    const activeEdgeInsertPreview = getCommittableEdgeInsertPreview(
+    await handleWorkflowGraphPaletteDrop({
+      canEdit,
+      clearConnectionInteraction,
+      clearEdgeInsertPreview,
+      commitEdgeInsertDrop,
+      currentViewport,
       edgeInsertPreview,
-      definition.node_type,
-    );
-
-    clearConnectionInteraction();
-    if (!position) {
-      return;
-    }
-
-    if (activeEdgeInsertPreview) {
-      await commitEdgeInsertDrop(definition, position, activeEdgeInsertPreview);
-      return;
-    }
-
-    addNode(definition, position);
+      event,
+      getRelativePointerPosition,
+      onAddNode: addNode,
+      refreshEdgeInsertPreview,
+    });
   }
 
   async function handleDragOver(event: DragEvent) {
-    event.preventDefault();
-    if (!canEdit) return;
-    event.dataTransfer!.dropEffect = 'copy';
-
-    const definition = readWorkflowPaletteDragDefinition(event, (error) => {
-      console.warn('[WorkflowGraph] Failed to parse palette drag data:', error);
+    await handleWorkflowGraphPaletteDragOver({
+      canEdit,
+      clearConnectionInteraction,
+      clearEdgeInsertPreview,
+      commitEdgeInsertDrop,
+      currentViewport,
+      edgeInsertPreview,
+      event,
+      getRelativePointerPosition,
+      onAddNode: addNode,
+      refreshEdgeInsertPreview,
     });
-    if (!definition) {
-      clearEdgeInsertPreview();
-      return;
-    }
-
-    await refreshEdgeInsertPreview(event, definition);
   }
-
-  // --- Edge Reconnection (drag-off-anchor to disconnect) ---
 
   async function handleReconnectStart(
     _event: MouseEvent | TouchEvent,
@@ -1019,46 +760,32 @@
 
     connectionDragState = markConnectionDragFinalizing(connectionDragState);
 
-    try {
-      const graphAfterRemoval = await workflowService.removeEdge(oldEdge.id);
-      syncEdgesFromBackend(graphAfterRemoval);
+    const result = await commitWorkflowReconnect({
+      anchors,
+      oldEdge,
+      fallbackRevision: getGraphRevision(),
+    });
 
-      const response = await workflowService.connectAnchors(
-        anchors.sourceAnchor,
-        anchors.targetAnchor,
-        graphAfterRemoval.derived_graph?.graph_fingerprint ?? getGraphRevision()
-      );
+    if (result.type === 'accepted') {
+      clearConnectionInteraction();
+      return;
+    }
 
-      if (response.accepted && response.graph) {
-        syncEdgesFromBackend(response.graph);
-        applyWorkflowGraphMutationResponse(
-          {
-            graph: response.graph,
-            workflow_event: response.workflow_event,
-            workflow_session_state: response.workflow_session_state,
-          },
-          { setNodeExecutionState },
-        );
-        clearConnectionInteraction();
-        return;
-      }
+    if (result.type === 'rejected' && result.rejection) {
+      setConnectionIntent(preserveConnectionIntentState({
+        sourceAnchor:
+          connectionDragState.reconnectingSourceAnchor ??
+          result.sourceAnchor,
+        graphRevision: result.graphRevision,
+        currentIntent: $connectionIntent,
+        rejection: result.rejection,
+      }));
+      console.warn('[WorkflowGraph] Reconnection rejected:', result.rejection.message);
+      return;
+    }
 
-      const restoredGraph = await workflowService.addEdge(edgeToGraphEdge(oldEdge));
-      syncEdgesFromBackend(restoredGraph);
-
-      if (response.rejection) {
-        setConnectionIntent(preserveConnectionIntentState({
-          sourceAnchor:
-            connectionDragState.reconnectingSourceAnchor ??
-            anchors.sourceAnchor,
-          graphRevision: response.graph_revision,
-          currentIntent: $connectionIntent,
-          rejection: response.rejection,
-        }));
-        console.warn('[WorkflowGraph] Reconnection rejected:', response.rejection.message);
-      }
-    } catch (error) {
-      console.error('[WorkflowGraph] Failed to reconnect edge:', error);
+    if (result.type === 'failed') {
+      console.error('[WorkflowGraph] Failed to reconnect edge:', result.error);
     }
   }
 
@@ -1067,217 +794,97 @@
 
     const reconnectingEdgeId = shouldRemoveReconnectedEdge(connectionDragState, connectionState);
     if (reconnectingEdgeId) {
-      try {
-        const updatedGraph = await workflowService.removeEdge(reconnectingEdgeId);
-        syncEdgesFromBackend(updatedGraph);
-      } catch (error) {
-        console.error('[WorkflowGraph] Failed to remove edge on reconnect end:', error);
-      }
+      await removeWorkflowGraphEdge(
+        reconnectingEdgeId,
+        '[WorkflowGraph] Failed to remove edge on reconnect end:',
+      );
     }
 
     clearConnectionInteraction();
   }
 
-  // --- Cut Tool (Ctrl+drag to cut edges) ---
-  let cutToolRef: CutTool;
   let isCutting = $state(false);
   let ctrlPressed = $state(false);
 
   function handleKeyDown(e: KeyboardEvent) {
-    const containerAction = resolveWorkflowContainerKeyboardAction({
-      key: e.key,
+    containerSelected = handleWorkflowGraphContainerKeyDown({
+      event: e,
       containerSelected,
+      horseshoeDisplayState: horseshoeSession.displayState,
+      onClearConnectionInteraction: clearConnectionInteraction,
+      onCloseHorseshoeSelector: closeHorseshoeSelector,
+      onZoomToOrchestration: zoomToOrchestration,
     });
-
-    if (containerAction.type === 'zoom-to-orchestration') {
-      e.preventDefault();
-      containerSelected = clearWorkflowContainerSelection();
-      zoomToOrchestration();
-      return;
-    }
-
-    if (containerAction.type === 'deselect-container') {
-      e.preventDefault();
-      containerSelected = clearWorkflowContainerSelection();
-    }
-
-    if (isEditableKeyboardTarget(e.target as HTMLElement | null)) {
-      return;
-    }
-
-    if (horseshoeSession.displayState === 'hidden') {
-      if (e.key === 'Escape') {
-        clearConnectionInteraction();
-      }
-      return;
-    }
-
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      closeHorseshoeSelector();
-      return;
-    }
   }
 
   function handleWindowKeyDown(e: KeyboardEvent) {
-    if (isEditableKeyboardTarget(e.target as HTMLElement | null)) {
-      return;
-    }
-
-    const selection = resolveWorkflowHorseshoeSelectionSnapshot({
+    handleWorkflowGraphWindowKeyDown({
+      event: e,
       session: horseshoeSession,
       feedback: horseshoeInsertFeedback,
       items: $connectionIntent?.insertableNodeTypes,
       selectedIndex: horseshoeSelectedIndex,
-    });
-    dispatchWorkflowHorseshoeKeyboardAction({
-      event: e,
       query: horseshoeQuery,
-      selection,
-      handlers: {
-        onClose: closeHorseshoeSelector,
-        onConfirmSelection: (candidate) => void commitInsertSelection(candidate),
-        onQueryUpdate: updateInsertQuery,
-        onRequestOpen: requestHorseshoeOpen,
-        onRotateSelection: rotateInsertSelection,
-        onTrace: (trace) => {
-          horseshoeLastTrace = trace;
-        },
+      onClose: closeHorseshoeSelector,
+      onConfirmSelection: (candidate) => void commitInsertSelection(candidate),
+      onQueryUpdate: updateInsertQuery,
+      onRequestOpen: requestHorseshoeOpen,
+      onRotateSelection: rotateInsertSelection,
+      onTrace: (trace) => {
+        horseshoeLastTrace = trace;
       },
     });
   }
 
-  function handlePaneMouseDown(e: MouseEvent) {
-    if (externalPaletteDragActive) {
-      return;
-    }
-
-    cutToolRef?.onPaneMouseDown(e);
-  }
-
-  function handlePaneMouseMove(e: MouseEvent) {
-    updateDragCursorFromMouseEvent(e);
-    if (externalPaletteDragActive) {
-      return;
-    }
-
-    cutToolRef?.onPaneMouseMove(e);
-  }
-
-  function handlePaneMouseUp(e: MouseEvent) {
-    if (externalPaletteDragActive) {
-      return;
-    }
-
-    cutToolRef?.onPaneMouseUp(e);
-  }
-
   async function handleEdgesCut(edgeIds: string[]) {
     clearConnectionInteraction();
-
-    for (const edgeId of edgeIds) {
-      try {
-        const updatedGraph = await workflowService.removeEdge(edgeId);
-        syncEdgesFromBackend(updatedGraph);
-      } catch (error) {
-        console.error('[WorkflowGraph] Failed to remove edge via cut:', error);
-      }
-    }
+    await removeWorkflowGraphEdges(edgeIds, '[WorkflowGraph] Failed to remove edge via cut:');
   }
 
 </script>
 
 <svelte:window onmousemove={updateDragCursorFromMouseEvent} />
 
-<!-- a11y-reviewed: SvelteFlow graph canvas owns pointer interaction while keyboard graph commands are handled on this focusable container. -->
-<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<!-- a11y-reviewed: SvelteFlow graph canvas requires a focusable host for keyboard graph commands. -->
-<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-<div
-  class="workflow-graph-container w-full h-full"
-  class:cutting={isCutting}
-  bind:this={containerElement}
-  tabindex={canEdit ? 0 : -1}
-  data-horseshoe-blocked-reason={horseshoeSession.blockedReason ?? undefined}
-  data-horseshoe-display-state={horseshoeSession.displayState}
-  data-horseshoe-last-trace={horseshoeLastTrace}
-  ondrop={handleDrop}
-  ondragover={handleDragOver}
-  onkeydown={handleKeyDown}
-  onmousedown={handlePaneMouseDown}
-  onmousemove={handlePaneMouseMove}
-  onmouseup={handlePaneMouseUp}
-  role="application"
->
-  <SvelteFlow
-    bind:nodes
-    bind:edges
-    nodeTypes={workflowNodeTypes}
-    edgeTypes={workflowEdgeTypes}
-    fitViewOptions={WORKFLOW_GRAPH_FIT_VIEW_OPTIONS}
-    nodesConnectable={graphInteractionState.nodesConnectable}
-    elementsSelectable={graphInteractionState.elementsSelectable}
-    nodesDraggable={graphInteractionState.nodesDraggable}
-    panOnDrag={graphInteractionState.panOnDrag}
-    panActivationKey={WORKFLOW_GRAPH_PAN_ACTIVATION_KEY}
-    zoomOnScroll={true}
-    minZoom={WORKFLOW_GRAPH_MIN_ZOOM}
-    maxZoom={WORKFLOW_GRAPH_MAX_ZOOM}
-    deleteKey={graphInteractionState.deleteKey}
-    edgesReconnectable={graphInteractionState.edgesReconnectable}
-    isValidConnection={checkValidConnection}
-    onnodedragstop={onNodeDragStop}
-    onnodeclick={onNodeClick}
-    onselectionchange={handleSelectionChange}
-    onconnectstart={handleConnectStart}
-    onclickconnectstart={handleConnectStart}
-    onconnectend={handleConnectEnd}
-    onclickconnectend={handleConnectEnd}
-    onconnect={handleConnect}
-    ondelete={handleDelete}
-    onreconnectstart={handleReconnectStart}
-    onreconnect={handleReconnect}
-    onreconnectend={handleReconnectEnd}
-    onmove={handleMove}
-    onmoveend={handleMoveEnd}
-    onpaneclick={handlePaneClick}
-    defaultEdgeOptions={WORKFLOW_GRAPH_DEFAULT_EDGE_OPTIONS}
-  >
-    <Controls />
-    <MiniMap nodeColor={getWorkflowMiniMapNodeColor} maskColor={WORKFLOW_GRAPH_MINIMAP_MASK_COLOR} />
-
-  </SvelteFlow>
-
-  <WorkflowContainerBoundary
-    bounds={containerBounds}
-    viewport={currentViewport}
-    selected={containerSelected}
-    onToggleSelected={toggleContainerSelection}
-  />
-
-  {#if edgeInsertPreview.bridge && edgeInsertPreview.hitPoint}
-    <WorkflowEdgeInsertPreviewMarker hitPoint={edgeInsertPreview.hitPoint} />
-  {/if}
-
-  <WorkflowGraphHorseshoeLayer
-    session={horseshoeSession}
-    feedback={horseshoeInsertFeedback}
-    insertableNodeTypes={$connectionIntent?.insertableNodeTypes ?? []}
-    selectedIndex={horseshoeSelectedIndex}
-    query={horseshoeQuery}
-    trace={horseshoeLastTrace}
-    onSelect={(candidate) => void commitInsertSelection(candidate)}
-    onRotate={rotateInsertSelection}
-    onCancel={closeHorseshoeSelector}
-  />
-
-  <CutTool
-    bind:this={cutToolRef}
-    edges={edges}
-    enabled={canEdit && !externalPaletteDragActive}
-    bind:ctrlPressed
-    bind:isCutting
-    onEdgesCut={handleEdgesCut}
-  />
-
-</div>
+<WorkflowGraphCanvas
+  bind:nodes
+  bind:edges
+  bind:containerElement
+  bind:ctrlPressed
+  bind:isCutting
+  {canEdit}
+  {checkValidConnection}
+  {containerBounds}
+  {containerSelected}
+  {currentViewport}
+  {edgeInsertPreview}
+  {externalPaletteDragActive}
+  {graphInteractionState}
+  {handleConnect}
+  {handleConnectEnd}
+  {handleConnectStart}
+  {handleDelete}
+  {handleDragOver}
+  {handleDrop}
+  {handleEdgesCut}
+  {handleKeyDown}
+  {handleMove}
+  {handleMoveEnd}
+  handleNodeClick={onNodeClick}
+  handleNodeDragStop={onNodeDragStop}
+  {handlePaneClick}
+  handlePaneMouseMove={updateDragCursorFromMouseEvent}
+  {handleReconnect}
+  {handleReconnectEnd}
+  {handleReconnectStart}
+  {handleSelectionChange}
+  {horseshoeInsertFeedback}
+  {horseshoeLastTrace}
+  {horseshoeQuery}
+  {horseshoeSelectedIndex}
+  {horseshoeSession}
+  insertableNodeTypes={$connectionIntent?.insertableNodeTypes ?? []}
+  onCancelHorseshoe={closeHorseshoeSelector}
+  onRotateInsertSelection={rotateInsertSelection}
+  onSelectInsertCandidate={(candidate) => void commitInsertSelection(candidate)}
+  onToggleContainerSelection={toggleContainerSelection}
+/>

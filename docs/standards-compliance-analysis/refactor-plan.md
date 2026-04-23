@@ -801,7 +801,18 @@ Tasks:
   `src/components/workflowGraphSource.ts`, with unit coverage in
   `src/components/workflowGraphSource.test.ts`. App graph canvas and SvelteFlow
   chrome styling now lives in `src/components/WorkflowGraph.css`, removing the
-  inline visual styling block from `src/components/WorkflowGraph.svelte`.
+  inline visual styling block from `src/components/WorkflowGraph.svelte`. App
+  SvelteFlow rendering, controls, minimap, container boundary, edge-insert
+  marker, horseshoe layer, and cut tool now live in
+  `src/components/WorkflowGraphCanvas.svelte`. App graph backend mutation calls
+  now live in `src/components/workflowGraphBackendActions.ts`; edge-insert
+  preview refresh request orchestration now lives in
+  `src/components/workflowGraphEdgeInsertPreview.ts`; app graph keyboard
+  dispatch now lives in `src/components/workflowGraphKeyboardActions.ts`; and
+  palette drop/drag-over orchestration now lives in
+  `src/components/workflowGraphPaletteHandlers.ts`, reducing
+  `src/components/WorkflowGraph.svelte` below the large-file threshold while
+  keeping state coordination in the parent component.
 - Split `DependencyEnvironmentNode.svelte` into data parsing, activity log,
   mode controls, override editor, status panels, and command controls.
   Progress: dependency environment DTOs and node prop/data contracts now live in
@@ -1176,6 +1187,15 @@ fully resolved by standards compliance:
   workflow-service tests, and Tauri workflow/LLM modules. Keep that as a
   separate formatting cleanup slice instead of mixing it into manifest or
   behavior commits.
+- Deferred, frontend accessibility owner: `npm run build` succeeds but still
+  reports pre-existing Svelte warnings outside the app `WorkflowGraph.svelte`
+  split, including ActivityLog static mouseenter/mouseleave containers,
+  package graph noninteractive tabindex, WorkflowToolbar non-reactive
+  `waitingForInput`, ImageOutputNode static click container warnings,
+  PumaLibNode deprecated module-script syntax, DependencyEnvironmentNode
+  initial-state capture, and DependencyEnvironmentBindingsPanel labels without
+  associated controls. Track those in a dedicated frontend warning ratchet
+  rather than mixing them into the graph decomposition commit.
 - Resolved: `cargo test -p pantograph-uniffi --all-features version` exposed a
   stale `WorkflowEvent::GraphModified` test fixture in
   `crates/pantograph-uniffi/src/lib.rs` that was missing the backend-owned

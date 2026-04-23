@@ -9,8 +9,9 @@ architecture views on top of the shared editor.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `WorkflowGraph.svelte` | Pantograph graph canvas that wires app node types, orchestration navigation, revision-aware connection-intent flows, and the `Space`-invoked horseshoe insert selector. |
-| `WorkflowGraph.css` | App graph canvas and SvelteFlow chrome styling imported by `WorkflowGraph.svelte`. |
+| `WorkflowGraph.svelte` | Pantograph graph state coordinator that wires orchestration navigation, revision-aware connection intent, palette insert, reconnect, and horseshoe flows. |
+| `WorkflowGraphCanvas.svelte` | Renders the app SvelteFlow canvas, controls, minimap, container boundary, edge-insert marker, horseshoe layer, and cut tool. |
+| `WorkflowGraph.css` | App graph canvas and SvelteFlow chrome styling imported by `WorkflowGraphCanvas.svelte`. |
 | `WorkflowContainerBoundary.svelte` | Renders the orchestration boundary overlay, clickable border hit zones, and boundary anchors for the app workflow graph. |
 | `WorkflowEdgeInsertPreviewMarker.svelte` | Renders the cursor-anchored palette edge-insert preview marker. |
 | `workflowContainerBoundary.ts` | Computes orchestration boundary extents and viewport visibility for graph zoom-out transitions. |
@@ -20,6 +21,10 @@ architecture views on top of the shared editor.
 | `workflowConnections.ts` | Computes app graph connection validation, graph-edge normalization, backend candidate projection, commit anchors, and revision selection. |
 | `workflowConnections.test.ts` | Unit coverage for app graph connection helper behavior. |
 | `edgeInsertInteraction.ts` | Computes palette edge-insert hover state, preview refresh/staleness/cleanup decisions, and rendered-edge hit testing. |
+| `workflowGraphBackendActions.ts` | Owns app graph backend mutation calls for edge insertion, insert-and-connect, connection commits, reconnect, edge removal, and backend graph refresh. |
+| `workflowGraphEdgeInsertPreview.ts` | Coordinates palette edge-insert preview refresh requests and stale-response guards around the edge-insert interaction state helpers. |
+| `workflowGraphKeyboardActions.ts` | Coordinates app graph container keyboard commands and horseshoe window keyboard dispatch. |
+| `workflowGraphPaletteHandlers.ts` | Coordinates app palette drop and drag-over events before delegating to node insertion or edge-insert preview handlers. |
 | `workflowGraphSource.ts` | Resolves whether the app graph should render workflow store data or the architecture graph. |
 | `workflowGraphSource.test.ts` | Unit coverage for app graph source selection. |
 | `workflowMiniMap.ts` | Maps workflow node groups and backend categories to minimap colors. |
@@ -57,13 +62,13 @@ as the package graph so GUI behavior and backend validation stay aligned.
 
 ## Decision
 Keep the app `WorkflowGraph.svelte` as a composition layer over package store
-instances and `workflowService`. The component now follows the same intent flow
-as the reusable graph: load candidates on connect start, use shared store state
-for validation/highlighting, and route horseshoe invocation through the same
-shared drag-session controller and drag-scoped window input used by the package
-graph before committing through revision-aware anchor and insert APIs. Pending
-and blocked horseshoe states remain visible instead of failing silently. The
-app graph also consumes the shared drag-session close helper and
+instances and backend action helpers. The component now follows the same intent
+flow as the reusable graph: load candidates on connect start, use shared store
+state for validation/highlighting, and route horseshoe invocation through the
+same shared drag-session controller and drag-scoped window input used by the
+package graph before committing through revision-aware anchor and insert APIs.
+Pending and blocked horseshoe states remain visible instead of failing
+silently. The app graph also consumes the shared drag-session close helper and
 connection-drag helper contract so reconnect cleanup cannot bleed into ordinary
 insert flows. Reconnect affordances are
 available directly on occupied edge endpoints so dragging off connected inputs
