@@ -247,6 +247,13 @@ Observed result:
 ### M3: Repair Quality Summary Audit Reporting
 Goal: keep the summary truthful without changing audit blocking policy.
 
+Status:
+- Complete on 2026-04-23.
+- Implemented by giving the non-blocking Rust audit jobs explicit
+  `audit-result` outputs, recording each audit step outcome before any final
+  failure marker, and teaching `quality-summary` to print those outputs instead
+  of `needs.<job>.result`.
+
 Tasks:
 1. Replace the current summary logic for `rust-format-audit` and
    `rust-clippy-audit` with a mechanism that reports actual audit outcome even
@@ -275,8 +282,20 @@ Validation:
 - inspect a subsequent CI run and confirm audit lines match actual job outcome
 - verify the summary still fails only when required gates fail
 
+Observed result:
+- local workflow parse sanity check passed on 2026-04-23
+- a post-implementation GitHub Actions run is still required to confirm the
+  end-to-end summary output on a real runner
+
 ### M4: Align CI and Tooling Documentation
 Goal: ensure written standards match the implemented workflow after the fixes.
+
+Status:
+- Complete on 2026-04-23.
+- Implemented by updating `docs/testing-and-release-strategy.md` and
+  `scripts/README.md`, plus the host-owned remediation ledger, to match the
+  implemented Rust bootstrap, traceability fallback, and audit-summary
+  behavior.
 
 Tasks:
 1. Update `docs/testing-and-release-strategy.md` to describe:
@@ -305,6 +324,12 @@ Risks:
 Validation:
 - manual review against final workflow YAML
 - rerun the affected local/CI-equivalent commands named in the docs
+
+Observed result:
+- `npm run lint:no-new` passed on the committed tree on 2026-04-23
+- `env PATH=/usr/bin:/bin ./scripts/check-decision-traceability.sh` passed on
+  the committed tree on 2026-04-23
+- `quality-gates.yml` parsed successfully via Python/YAML on 2026-04-23
 
 ## Safe Parallel Waves
 
@@ -367,3 +392,15 @@ Required reports:
 - The summary no longer reports failed audits as `success`.
 - Docs describing CI/testing/toolchain behavior match the implemented workflow
   and helper scripts.
+
+## Completion Summary
+- M1 is complete: Rust quality-gate jobs now bootstrap the pinned external
+  `Pumas-Library` checkout into the sibling path expected by the workspace.
+- M2 is complete: the decision-traceability script now works with either
+  `ripgrep` or standard `grep`, and the committed tree passes `lint:no-new`
+  locally.
+- M3 is complete in code: the workflow now reports explicit audit outcomes for
+  the non-blocking Rust audit jobs; a follow-up GitHub Actions run is still the
+  remaining validation step for that summary behavior on a real runner.
+- M4 is complete: the testing and script documentation now reflect the
+  implemented CI bootstrap and traceability behavior.

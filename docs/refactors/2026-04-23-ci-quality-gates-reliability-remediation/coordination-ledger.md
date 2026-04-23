@@ -8,10 +8,11 @@ handoffs for the CI quality-gates reliability remediation.
 | Item | Status | Notes |
 | ---- | ------ | ----- |
 | Planning | complete | Findings and implementation waves recorded |
-| Source implementation | in progress | User approved continuing with unrelated `assets/` dirt left untouched |
+| Source implementation | complete | M1-M3 implemented with unrelated `assets/` dirt left untouched |
 | M1 Rust bootstrap | complete | Workflow now materializes pinned `Pumas-Library` checkout for every Rust lane |
 | M2 traceability tooling | complete | Script now falls back to standard grep when ripgrep is unavailable |
-| CI verification | pending | Awaiting post-implementation CI run |
+| M3 summary and doc alignment | complete | Audit jobs publish explicit outcomes and docs match the workflow behavior |
+| CI verification | pending | Awaiting post-implementation GitHub Actions run |
 
 ## Shared Constraints
 - Do not modify unrelated asset worktree changes under `assets/`.
@@ -66,6 +67,20 @@ handoffs for the CI quality-gates reliability remediation.
 | `./scripts/check-rustler-beam-smoke.sh` | blocked | local environment missing `mix`; CI lane remains required |
 | `npm run lint:no-new` | pass | 2026-04-23 M2 local verification |
 | `env PATH=/usr/bin:/bin ./scripts/check-decision-traceability.sh` | pass | 2026-04-23 M2 fallback verification without `rg` |
+| `python3 -c "import yaml; yaml.safe_load(...)"` for `quality-gates.yml` | pass | 2026-04-23 M3 local verification |
+| `npm run lint:no-new` | pass | 2026-04-23 final verification on committed tree |
+| `env PATH=/usr/bin:/bin ./scripts/check-decision-traceability.sh` | pass | 2026-04-23 final verification on committed tree |
+
+## Completion Summary
+- Implemented explicit CI bootstrap for the external `Pumas-Library`
+  dependency across all Rust quality-gate lanes.
+- Removed the hard `ripgrep` requirement from the decision-traceability script
+  by preserving the `rg` fast path and adding a grep fallback.
+- Reworked quality-summary audit reporting so the non-blocking Rust audit jobs
+  publish explicit outcomes instead of being reported as `success` through
+  `needs.<job>.result`.
+- Updated the workflow-facing docs and `scripts/README.md` so the implemented
+  behavior is traceable.
 
 ## Worker Report Paths
 - `reports/wave-01-worker-ci-rust-bootstrap.md`
