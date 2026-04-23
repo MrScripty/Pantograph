@@ -734,6 +734,10 @@ Tasks:
   `crates/pantograph-uniffi/src/workflow_event_bridge.rs`, while the exported
   `FfiWorkflowEvent` record remains in `lib.rs` to preserve generated binding
   metadata shape.
+  UniFFI direct embedded-runtime integration tests and fixture helpers now live
+  in `crates/pantograph-uniffi/src/runtime_tests.rs`, keeping `runtime.rs`
+  focused on exported runtime wrapper methods, conversion helpers, and test
+  module wiring.
 
 Verification:
 - File-size scan shows extracted files below review thresholds or documented exceptions.
@@ -1031,6 +1035,15 @@ fully resolved by standards compliance:
   override `WorkflowHost::runtime_capabilities`, so
   `workflow_session_lifecycle_create_run_close` fails its create-session
   runtime-capability assertion before close-session behavior is exercised.
+- Deferred, UniFFI direct-runtime binding owner:
+  `cargo test -p pantograph-uniffi direct_runtime` currently compiles and runs
+  the moved direct-runtime tests, but
+  `direct_runtime_workflow_run_session_preserves_invalid_request_envelope`
+  fails because the session-run invalid-request envelope message omits the
+  workflow id (`workflow requires interactive input at node 'human-input-1'`)
+  while the test expects the workflow-specific run message. Decide whether the
+  service contract or binding test expectation owns that wording before making
+  this a hard binding gate.
 - Resolved: arbitrary `process` node execution is no longer enabled by default;
   backend hosts must provide an explicit `ProcessExecutionPolicy` command
   allowlist before process-backed workflows can spawn host commands.

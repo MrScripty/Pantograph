@@ -14,6 +14,7 @@ core workflow/runtime crates.
 | `lib.rs` | UniFFI exports, wrapper DTOs, legacy graph/orchestration surface, adapter delegation, and test module wiring. The legacy workflow engine owns graph CRUD, cache inspection, and event buffering only. |
 | `lib_tests.rs` | Crate-local UniFFI facade tests, event projection tests, and feature-gated frontend HTTP binding contract tests. |
 | `runtime.rs` | Direct `FfiPantographRuntime` wrapper over `pantograph-embedded-runtime`. |
+| `runtime_tests.rs` | Direct embedded-runtime binding integration tests and runtime fixture helpers. |
 | `workflow_event_bridge.rs` | Internal buffered workflow-event sink and backend event label projection used by the legacy workflow-engine binding object. |
 | `bin/` | Binding generation helper utilities for supported UniFFI generator flows. |
 
@@ -47,6 +48,9 @@ and error projection, while workflow semantics stay in
 ## Invariants
 - `FfiPantographRuntime` wraps the direct embedded runtime when the
   `embedded-runtime` feature is enabled.
+- Direct embedded-runtime binding tests stay in `runtime_tests.rs`; `runtime.rs`
+  keeps only exported runtime wrapper methods, conversion helpers, and test
+  module wiring.
 - Request/response JSON contracts remain backend-owned by
   `pantograph-workflow-service`.
 - `frontend-http` exports delegate to `pantograph-frontend-http-adapter`.
