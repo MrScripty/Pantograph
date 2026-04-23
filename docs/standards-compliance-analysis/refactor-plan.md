@@ -482,11 +482,16 @@ Tasks:
   invocation now live in
   `crates/pantograph-embedded-runtime/src/model_dependency_activity.rs`, while
   `model_dependencies.rs` preserves the public re-export path used by Tauri.
-  Embedded runtime-registry translation, sync, reclaim, restore, and warmup
-  coordination tests now live in
-  `crates/pantograph-embedded-runtime/src/runtime_registry_tests.rs`, reducing
-  `runtime_registry.rs` to production observation mapping and registry
-  orchestration logic. Workflow runtime diagnostics, runtime event projection,
+  Embedded runtime-registry producer matching and reclaim smoke tests now live
+  in `crates/pantograph-embedded-runtime/src/runtime_registry_tests.rs`, while
+  observation/diagnostics tests live in
+  `crates/pantograph-embedded-runtime/src/runtime_registry_tests/observations.rs`,
+  lifecycle transition tests live in
+  `crates/pantograph-embedded-runtime/src/runtime_registry_tests/lifecycle.rs`,
+  and health/warmup coordination tests live in
+  `crates/pantograph-embedded-runtime/src/runtime_registry_tests/health_warmup.rs`,
+  keeping each runtime-registry test slice below the decomposition threshold.
+  Workflow runtime diagnostics, runtime event projection,
   and registry reconciliation tests now live in
   `crates/pantograph-embedded-runtime/src/workflow_runtime_tests.rs`, reducing
   `workflow_runtime.rs` to production projection helpers.

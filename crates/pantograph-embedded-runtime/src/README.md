@@ -50,6 +50,7 @@ packages.
 | `runtime_recovery.rs` | Owns backend-side recovery restart planning, retry-strategy selection, retry-attempt sequencing, retry backoff, backend port overrides, clean-restart settle delays, and dedicated-embedding restart policy. |
 | `runtime_registry.rs` | Owns backend-side translation from gateway and producer lifecycle facts into shared runtime-registry observations, active-runtime registration, active/embedding health-aware unhealthy reconciliation, sync, reclaim, stop-all, and restore coordination. |
 | `runtime_registry_tests.rs` | Embedded runtime-registry translation, sync, reclaim, restore, and warmup coordination tests extracted from the production runtime-registry module. |
+| `runtime_registry_tests/` | Behavior-focused runtime-registry test modules for observation, lifecycle, health, and warmup coordination coverage. |
 | `runtime_registry_controller.rs` | Owns the inference-gateway implementations of embedded runtime-registry controller traits. |
 | `runtime_registry_errors.rs` | Owns workflow-facing runtime-registry and warmup coordination error mapping so adapters keep stable workflow-service error codes. |
 | `runtime_registry_lifecycle.rs` | Owns backend-side runtime-registry sync, snapshot, warmup coordination, reclaim, stop-all, and restore orchestration so lifecycle sequencing stays separate from observation mapping. |
@@ -445,7 +446,9 @@ let runtime = EmbeddedRuntime::with_default_python_runtime(
 - Embedded runtime-registry translation, sync, reclaim, restore, and warmup
   coordination tests stay in `runtime_registry_tests.rs` so production
   observation mapping and registry orchestration stay separate from mocked host
-  controller coverage.
+  controller coverage. Larger observation, lifecycle, health, and warmup
+  behavior families live under `runtime_registry_tests/` so the parent test
+  module remains a fixture/index boundary.
 - Workflow runtime diagnostics, runtime event projection, and registry
   reconciliation tests stay in `workflow_runtime_tests.rs` so production
   workflow-runtime projection helpers stay separate from diagnostics fixtures.
