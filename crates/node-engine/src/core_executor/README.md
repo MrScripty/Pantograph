@@ -76,6 +76,9 @@ stable public facade and dispatch owner.
 - Settings expansion and optional-input readers stay in `settings.rs` so
   runtime adapters can share one normalization contract for schema defaults,
   connected port overrides, aliases, and boolean coercion.
+- Boolean settings readers in `settings.rs` are an inference-family helper
+  contract; audio-only feature builds may compile the module, but they must not
+  treat those inference-only readers as live production paths.
 - Dependency preflight and model-reference construction stay in
   `dependency_preflight.rs` so runtime adapters share backend-key and
   dependency-state validation without growing dispatch code.

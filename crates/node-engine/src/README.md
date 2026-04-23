@@ -109,6 +109,10 @@ locally.
 - `PortDataType::String` remains self-compatible, while also accepting
   `Prompt`, `Json`, `Number`, and `Boolean` sources where legacy string-backed
   ports still need additive coercion during graph validation.
+- Boolean setting readers in `core_executor/settings.rs` remain an
+  inference-node helper contract; audio-only builds may compile that module,
+  but they must not force those inference-only readers to count as live
+  production paths.
 - Graph mutation and incremental execution events must be emitted from executor
   state transitions, not synthesized by frontend or transport adapters.
 - Workflow engine execution, graph mutation, event emission, cancellation, and

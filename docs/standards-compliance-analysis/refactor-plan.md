@@ -1315,7 +1315,10 @@ fully resolved by standards compliance:
   warnings for shared boolean settings readers in
   `crates/node-engine/src/core_executor/settings.rs`; re-check and classify as
   remove, feature-gate, or intentionally retained when the audio feature path
-  is next touched.
+  is next touched. Status: the boolean readers are now marked as
+  inference-feature helpers only, and `cargo check -p node-engine --features
+  audio-nodes --message-format short` no longer reports those dead-code
+  warnings.
 - Deferred, Rustler binding owner: `pantograph-rustler` uses a scoped
   `non_local_definitions` lint exception around `rustler::resource!`
   registration until Rustler exposes a warning-clean resource registration API.

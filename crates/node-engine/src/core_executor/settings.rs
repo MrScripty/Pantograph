@@ -182,10 +182,7 @@ pub(crate) fn read_optional_input_value_aliases(
         .find_map(|key| read_optional_input_value(inputs, key))
 }
 
-#[cfg_attr(
-    not(any(feature = "inference-nodes", feature = "audio-nodes")),
-    allow(dead_code)
-)]
+#[cfg_attr(not(feature = "inference-nodes"), allow(dead_code))]
 pub(crate) fn read_optional_input_bool(
     inputs: &HashMap<String, serde_json::Value>,
     key: &str,
@@ -203,10 +200,7 @@ pub(crate) fn read_optional_input_bool(
         })
 }
 
-#[cfg_attr(
-    not(any(feature = "inference-nodes", feature = "audio-nodes")),
-    allow(dead_code)
-)]
+#[cfg_attr(not(feature = "inference-nodes"), allow(dead_code))]
 pub(crate) fn read_optional_input_bool_aliases(
     inputs: &HashMap<String, serde_json::Value>,
     aliases: &[&str],
