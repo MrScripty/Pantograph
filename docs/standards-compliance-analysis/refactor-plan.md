@@ -461,6 +461,12 @@ Tasks:
   now live in `crates/inference/src/managed_runtime/operations_tests.rs`,
   reducing `operations.rs` to production transition and command-resolution
   logic before deeper operation-family splits.
+- Split `crates/inference/src/gateway.rs` by gateway lifecycle, request
+  forwarding, embedding prepare/restore, runtime reuse, and tests.
+  Progress: gateway lifecycle, request forwarding, runtime reuse, embedding
+  prepare/restore, and mock-backend tests now live in
+  `crates/inference/src/gateway_tests.rs`, reducing `gateway.rs` to production
+  gateway behavior.
 - Split `crates/node-engine/src/core_executor.rs` by execution phases, blocking
   adapters, demand preparation, output handling, and tests.
   Progress: core executor behavior tests now live in
