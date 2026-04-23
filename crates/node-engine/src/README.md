@@ -15,7 +15,8 @@ and keeps execution dispatch aligned with the contracts published by
 | `core_executor/` | Focused core-executor helper and test modules behind the stable executor facade. |
 | `descriptor.rs` | Node descriptor contracts consumed by the graph and runtime layers. |
 | `engine.rs` | Workflow engine entry points and orchestration helpers. |
-| `engine_tests.rs` | Workflow engine execution, graph mutation, event emission, cancellation, and human-input tests extracted from the production engine facade. |
+| `engine_tests.rs` | Shared workflow engine facade test fixtures and behavior-module index. |
+| `engine_tests/` | Focused workflow engine facade tests for cache state, demand execution, workflow events, multi-demand behavior, human input, and snapshot projection. |
 | `engine/` | Focused graph-event and multi-demand helpers behind the stable engine facade. |
 | `error.rs` | Shared engine and execution error types. |
 | `events.rs` | Stable facade for workflow event contracts and sink implementations. |
@@ -108,8 +109,9 @@ locally.
 - Graph mutation and incremental execution events must be emitted from executor
   state transitions, not synthesized by frontend or transport adapters.
 - Workflow engine execution, graph mutation, event emission, cancellation, and
-  human-input tests stay in `engine_tests.rs` so `engine.rs` remains focused on
-  production orchestration helpers and facade methods.
+  human-input tests stay indexed by `engine_tests.rs`, with behavior coverage
+  split under `engine_tests/` so `engine.rs` remains focused on production
+  orchestration helpers and facade methods.
 - Multi-demand planning, dispatch-window, bounded-parallel execution, failure
   attribution, and result aggregation tests stay in
   `engine/multi_demand_tests.rs` so `engine/multi_demand.rs` remains focused on

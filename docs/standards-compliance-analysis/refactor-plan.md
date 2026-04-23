@@ -608,6 +608,10 @@ Tasks:
   cancellation, and human-input tests now live in
   `crates/node-engine/src/engine_tests.rs`, reducing `engine.rs` to production
   orchestration helpers and facade methods before deeper engine-family splits.
+  Engine facade test coverage now lives in
+  `crates/node-engine/src/engine_tests/` for cache state, demand execution,
+  workflow events, multi-demand behavior, human input, and snapshot projection,
+  reducing the root test fixture/index below the large-file threshold.
   Multi-demand planning, dispatch-window, bounded-parallel execution, failure
   attribution, and result aggregation tests now live in
   `crates/node-engine/src/engine/multi_demand_tests.rs`, reducing
