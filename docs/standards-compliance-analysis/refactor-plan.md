@@ -378,7 +378,13 @@ Tasks:
   snapshot filtering, replay, scheduler attribution, waiting/resume, and
   dirty-task tests now live in
   `crates/pantograph-workflow-service/src/trace/tests.rs`, reducing `mod.rs`
-  to the module entrypoint and public re-exports.
+  to the module entrypoint and public re-exports. Trace lifecycle/restart
+  tests now live in
+  `crates/pantograph-workflow-service/src/trace/tests/lifecycle.rs`, and
+  graph reconciliation, waiting pause, scheduler attribution, runtime metric,
+  and backend timestamp capture tests now live in
+  `crates/pantograph-workflow-service/src/trace/tests/scheduler_runtime.rs`,
+  reducing the root trace test index below the decomposition threshold.
 - Split `crates/pantograph-workflow-service/src/graph/session.rs` by graph
   edit-session store, undo/redo state, mutation orchestration, response
   projection, and tests.

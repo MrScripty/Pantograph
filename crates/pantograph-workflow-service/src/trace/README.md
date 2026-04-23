@@ -18,6 +18,7 @@ frontend code.
 | `runtime.rs` | Applies runtime snapshot events to canonical workflow trace state. |
 | `scheduler.rs` | Applies scheduler snapshot events to canonical workflow trace state. |
 | `tests.rs` | Trace DTO serialization, runtime inference, lifecycle reason, snapshot filtering, replay, scheduler attribution, waiting/resume, and dirty-task tests extracted from the module entrypoint. |
+| `tests/` | Behavior-focused trace test submodules for lifecycle/restart and scheduler/runtime metric attribution coverage. |
 
 ## Problem
 Pantograph needs machine-consumable workflow execution history that survives
@@ -80,8 +81,10 @@ they do not own trace lifecycle rules.
 - Recovery or replay updates for the same execution id update one canonical run
   record in place.
 - Trace DTO serialization, runtime inference, lifecycle reason, snapshot
-  filtering, replay, scheduler attribution, waiting/resume, and dirty-task
-  tests stay in `tests.rs` so `mod.rs` remains a small module entrypoint.
+  filtering, replay, baseline scheduler attribution, waiting/resume, and
+  dirty-task tests stay indexed by `tests.rs`, while larger lifecycle/restart
+  and scheduler/runtime metric coverage lives under `tests/` so both the module
+  entrypoint and behavior slices remain reviewable.
 
 ## Revisit Triggers
 - A durable trace store replaces the in-memory retained-history implementation.
