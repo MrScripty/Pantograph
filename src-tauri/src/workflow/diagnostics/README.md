@@ -16,7 +16,8 @@ TypeScript or command handlers.
 | `store.rs` | Owns the diagnostics facade and orchestrates backend trace snapshots with additive overlay application. |
 | `trace.rs` | Converts workflow events and backend trace summaries into diagnostics-friendly run projections. |
 | `types.rs` | Defines the Tauri-facing diagnostics DTOs and snapshot request/response shapes. |
-| `tests.rs` | Regression coverage for projection, replay, and clear-history behavior. |
+| `tests.rs` | Diagnostics test harness, shared fixtures, request normalization, event timing, and small trace-filter assertions. |
+| `tests/` | Behavior-focused diagnostics test modules for runtime/scheduler projection and replay/clear-history coverage. |
 
 ## Problem
 The GUI needs a stable diagnostics view that includes retained event history,
@@ -67,6 +68,10 @@ runtime and scheduler facts cannot drift through positional argument lists.
 - Large workflow event payloads should use boxed internal storage or named
   input structs while preserving the existing serialized `{ type, data }`
   event contract.
+- Runtime/scheduler projection coverage stays in `tests/runtime_projection.rs`,
+  and replay/clear-history coverage stays in `tests/replay.rs`, so the parent
+  diagnostics test harness remains focused on shared fixtures and small
+  request/trace assertions.
 
 ## Revisit Triggers
 - A non-Tauri host needs the same diagnostics projection boundary.

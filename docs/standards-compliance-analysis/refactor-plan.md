@@ -573,6 +573,15 @@ Tasks:
   snapshot, runtime metadata, and clear-history tests now live in
   `src-tauri/src/workflow/headless_workflow_commands_tests.rs`, reducing
   `headless_workflow_commands.rs` to request orchestration.
+- Split `src-tauri/src/workflow/diagnostics/tests.rs` by diagnostics test
+  harness, runtime/scheduler projection, replay/clear-history, and small
+  request/trace assertions.
+  Progress: runtime/scheduler projection coverage now lives in
+  `src-tauri/src/workflow/diagnostics/tests/runtime_projection.rs`; replay,
+  restart, clear-history, and overlay reset coverage now lives in
+  `src-tauri/src/workflow/diagnostics/tests/replay.rs`; the diagnostics test
+  subdirectory now has its own README, and `tests.rs` retains shared fixtures
+  plus small request/trace assertions.
 - Split `src/components/WorkflowGraph.svelte` and
   `packages/svelte-graph/src/components/WorkflowGraph.svelte` into graph canvas,
   connection drag, horseshoe insert, edge insert, selection, keyboard, and
