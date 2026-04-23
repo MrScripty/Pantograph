@@ -419,7 +419,11 @@ Tasks:
   admission ETA projection now lives in
   `crates/pantograph-workflow-service/src/scheduler/store_admission.rs`,
   bringing `store.rs` below the decomposition threshold while keeping queue
-  diagnostics timing helper ownership inside the scheduler boundary.
+  diagnostics timing helper ownership inside the scheduler boundary. Scheduler
+  snapshot diagnostics and runtime-diagnostics request projection now live in
+  `crates/pantograph-workflow-service/src/scheduler/store_diagnostics.rs`,
+  further separating read-side scheduler projection from queue mutation while
+  preserving the `WorkflowSessionStore` method surface.
 - Split `crates/pantograph-embedded-runtime/src/lib.rs` into runtime host,
   workflow sessions, registry lifecycle, diagnostics projection, model deps,
   and test modules.
