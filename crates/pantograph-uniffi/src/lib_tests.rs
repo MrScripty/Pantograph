@@ -4,8 +4,8 @@ use node_engine::{EventSink, WorkflowEvent, WorkflowGraph};
 use tokio::sync::RwLock;
 
 use crate::{
-    BufferedEventSink, FfiError, FfiOrchestrationStore, FfiWorkflowEngine, FfiWorkflowGraph,
-    validate_workflow_json, version,
+    FfiError, FfiOrchestrationStore, FfiWorkflowEngine, FfiWorkflowGraph, validate_workflow_json,
+    version, workflow_event_bridge::BufferedEventSink,
 };
 
 #[cfg(feature = "frontend-http")]
@@ -132,9 +132,7 @@ async fn test_drain_events_empty() {
 #[tokio::test]
 async fn test_buffered_event_sink_uses_canonical_event_type_names() {
     let buffer = Arc::new(RwLock::new(Vec::new()));
-    let sink = BufferedEventSink {
-        buffer: buffer.clone(),
-    };
+    let sink = BufferedEventSink::new(buffer.clone());
 
     sink.send(WorkflowEvent::WaitingForInput {
         workflow_id: "wf-1".to_string(),

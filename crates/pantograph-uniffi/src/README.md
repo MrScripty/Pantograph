@@ -14,6 +14,7 @@ core workflow/runtime crates.
 | `lib.rs` | UniFFI exports, wrapper DTOs, legacy graph/orchestration surface, adapter delegation, and test module wiring. The legacy workflow engine owns graph CRUD, cache inspection, and event buffering only. |
 | `lib_tests.rs` | Crate-local UniFFI facade tests, event projection tests, and feature-gated frontend HTTP binding contract tests. |
 | `runtime.rs` | Direct `FfiPantographRuntime` wrapper over `pantograph-embedded-runtime`. |
+| `workflow_event_bridge.rs` | Internal buffered workflow-event sink and backend event label projection used by the legacy workflow-engine binding object. |
 | `bin/` | Binding generation helper utilities for supported UniFFI generator flows. |
 
 ## Problem
@@ -54,6 +55,9 @@ and error projection, while workflow semantics stay in
   tests compile against the current `node-engine` contract.
 - Crate-local tests stay in `lib_tests.rs`; `lib.rs` keeps only the test module
   declaration so exported binding definitions remain navigable.
+- Buffered workflow-event delivery for the legacy engine object stays in
+  `workflow_event_bridge.rs`; the exported `FfiWorkflowEvent` record stays in
+  `lib.rs` to preserve binding metadata shape.
 - Generated bindings and native library artifacts must be produced from the
   same build input.
 - Public exported methods should map to documented host-language use cases.

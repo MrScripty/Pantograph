@@ -138,6 +138,7 @@ cargo test -p pantograph-uniffi
 ```
 
 ## Notes
-- `src/lib.rs` remains over the decomposition threshold after moving
-  crate-local tests into `src/lib_tests.rs`; the remaining facade split is
-  tracked in the standards compliance plan.
+- `src/lib.rs` remains near the decomposition threshold after moving
+  crate-local tests into `src/lib_tests.rs` and internal event buffering into
+  `src/workflow_event_bridge.rs`; the remaining facade split is tracked in the
+  standards compliance plan.

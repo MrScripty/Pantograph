@@ -25,8 +25,7 @@ use std::sync::Arc;
 use std::sync::LazyLock;
 
 use node_engine::{
-    EventSink, OrchestrationGraph, OrchestrationStore, WorkflowEvent, WorkflowExecutor,
-    WorkflowGraph,
+    EventSink, OrchestrationGraph, OrchestrationStore, WorkflowExecutor, WorkflowGraph,
 };
 use tokio::sync::RwLock;
 
@@ -34,6 +33,8 @@ use tokio::sync::RwLock;
 mod runtime;
 #[cfg(feature = "embedded-runtime")]
 pub use runtime::{FfiEmbeddedRuntimeConfig, FfiPantographRuntime};
+mod workflow_event_bridge;
+use workflow_event_bridge::BufferedEventSink;
 
 #[cfg(feature = "frontend-http")]
 use pantograph_frontend_http_adapter::FrontendHttpWorkflowHost;
@@ -220,27 +221,6 @@ pub struct FfiWorkflowEvent {
     /// Full event data as JSON
     pub event_json: String,
 }
-
-fn ffi_workflow_event_type(event: &WorkflowEvent) -> &'static str {
-    match event {
-        WorkflowEvent::WorkflowStarted { .. } => "WorkflowStarted",
-        WorkflowEvent::WorkflowCompleted { .. } => "WorkflowCompleted",
-        WorkflowEvent::WorkflowFailed { .. } => "WorkflowFailed",
-        WorkflowEvent::WorkflowCancelled { .. } => "WorkflowCancelled",
-        WorkflowEvent::WaitingForInput { .. } => "WaitingForInput",
-        WorkflowEvent::TaskStarted { .. } => "TaskStarted",
-        WorkflowEvent::TaskCompleted { .. } => "TaskCompleted",
-        WorkflowEvent::TaskFailed { .. } => "TaskFailed",
-        WorkflowEvent::TaskProgress { .. } => "TaskProgress",
-        WorkflowEvent::TaskStream { .. } => "TaskStream",
-        WorkflowEvent::GraphModified { .. } => "GraphModified",
-        WorkflowEvent::IncrementalExecutionStarted { .. } => "IncrementalExecutionStarted",
-    }
-}
-
-// ============================================================================
-// Free functions
-// ============================================================================
 
 /// Get the version of the Pantograph headless binding surface.
 #[uniffi::export]
@@ -561,29 +541,6 @@ pub struct FfiWorkflowEngine {
     event_buffer: Arc<RwLock<Vec<FfiWorkflowEvent>>>,
 }
 
-/// Callback EventSink that buffers events for polling.
-struct BufferedEventSink {
-    buffer: Arc<RwLock<Vec<FfiWorkflowEvent>>>,
-}
-
-impl EventSink for BufferedEventSink {
-    fn send(&self, event: WorkflowEvent) -> std::result::Result<(), node_engine::EventError> {
-        let event_type = ffi_workflow_event_type(&event).to_string();
-        let event_json = serde_json::to_string(&event).map_err(|e| node_engine::EventError {
-            message: e.to_string(),
-        })?;
-
-        // Use try_write to avoid blocking in sync context
-        if let Ok(mut buf) = self.buffer.try_write() {
-            buf.push(FfiWorkflowEvent {
-                event_type,
-                event_json,
-            });
-        }
-        Ok(())
-    }
-}
-
 #[uniffi::export(async_runtime = "tokio")]
 impl FfiWorkflowEngine {
     /// Create a new workflow engine with an empty graph.
@@ -591,9 +548,7 @@ impl FfiWorkflowEngine {
     pub fn new(id: String, name: String) -> Arc<Self> {
         let graph = WorkflowGraph::new(&id, &name);
         let event_buffer = Arc::new(RwLock::new(Vec::new()));
-        let event_sink: Arc<dyn EventSink> = Arc::new(BufferedEventSink {
-            buffer: event_buffer.clone(),
-        });
+        let event_sink: Arc<dyn EventSink> = Arc::new(BufferedEventSink::new(event_buffer.clone()));
         let executor = WorkflowExecutor::new("uniffi-execution", graph, event_sink);
 
         Arc::new(Self {
@@ -610,9 +565,7 @@ impl FfiWorkflowEngine {
                 message: e.to_string(),
             })?;
         let event_buffer = Arc::new(RwLock::new(Vec::new()));
-        let event_sink: Arc<dyn EventSink> = Arc::new(BufferedEventSink {
-            buffer: event_buffer.clone(),
-        });
+        let event_sink: Arc<dyn EventSink> = Arc::new(BufferedEventSink::new(event_buffer.clone()));
         let executor = WorkflowExecutor::new("uniffi-execution", graph, event_sink);
 
         Ok(Arc::new(Self {

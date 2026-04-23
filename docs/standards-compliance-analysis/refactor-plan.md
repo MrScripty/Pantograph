@@ -729,6 +729,11 @@ Tasks:
   now live in `crates/pantograph-uniffi/src/lib_tests.rs`, reducing
   `lib.rs` to exported binding definitions, facade objects, adapter delegation,
   and test module wiring.
+  UniFFI legacy workflow-engine event buffering and backend event label
+  projection now live in
+  `crates/pantograph-uniffi/src/workflow_event_bridge.rs`, while the exported
+  `FfiWorkflowEvent` record remains in `lib.rs` to preserve generated binding
+  metadata shape.
 
 Verification:
 - File-size scan shows extracted files below review thresholds or documented exceptions.
