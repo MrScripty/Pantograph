@@ -134,20 +134,16 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
         let mut nodes_executed: u32 = 0;
         let mut context = OrchestrationContext::with_data(initial_data);
 
-        // Emit started event
         self.emit_workflow_started(event_sink, &graph.id);
 
         let execution = async {
-            // Find the start node
             let start_node = graph
                 .find_start_node()
                 .ok_or_else(|| NodeEngineError::failed("Orchestration graph has no Start node"))?;
 
-            // Begin execution from the start node
             let mut current_node_id = start_node.id.clone();
 
             loop {
-                // Check execution limit
                 if nodes_executed >= self.max_nodes {
                     let elapsed = start_time.elapsed().as_millis() as u64;
                     let error = format!("Execution limit reached ({} nodes)", self.max_nodes);
@@ -155,7 +151,6 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
                     return Ok(OrchestrationResult::failure(error, nodes_executed, elapsed));
                 }
 
-                // Find the current node
                 let node = graph.find_node(&current_node_id).ok_or_else(|| {
                     NodeEngineError::failed(format!(
                         "Node '{}' not found in graph",
@@ -163,33 +158,23 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
                     ))
                 })?;
 
-                // Emit node started event
                 self.emit_task_started(event_sink, &node.id);
-
                 nodes_executed += 1;
 
-                // Execute the node
                 let result = match node.node_type {
                     OrchestrationNodeType::DataGraph => {
-                        // Special handling for data graph nodes
                         self.execute_data_graph_node(graph, node, &mut context, event_sink)
                             .await?
                     }
-                    _ => {
-                        // Regular node execution
-                        execute_node(node, &mut context)?
-                    }
+                    _ => execute_node(node, &mut context)?,
                 };
 
-                // Apply context updates
                 for (key, value) in result.context_updates {
                     context.set(key, value);
                 }
 
-                // Emit task completed event
                 self.emit_task_completed(event_sink, &node.id, result.message.clone());
 
-                // Emit specific events based on node type
                 match node.node_type {
                     OrchestrationNodeType::Condition => {
                         self.emit_task_progress(
@@ -220,7 +205,6 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
                     _ => {}
                 }
 
-                // Check for End node (empty next handle)
                 if result.next_handle.is_empty() {
                     let elapsed = start_time.elapsed().as_millis() as u64;
                     let outputs = context.into_data();
@@ -234,7 +218,6 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
                     ));
                 }
 
-                // Find the next node by following the edge
                 let next_node_id = self.find_next_node(graph, &node.id, &result.next_handle)?;
                 current_node_id = next_node_id;
             }
@@ -256,16 +239,12 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
         context: &mut OrchestrationContext,
         event_sink: &dyn EventSink,
     ) -> Result<NodeExecutionResult> {
-        // Get the data graph configuration
         let config = prepare_data_graph_execution(node)?;
-
-        // Get the data graph ID (from config or from graph's data_graphs map)
         let data_graph_id = orchestration_graph
             .get_data_graph_id(&node.id)
             .cloned()
             .unwrap_or(config.data_graph_id.clone());
 
-        // Emit data graph started progress
         self.emit_task_progress(
             event_sink,
             &node.id,
@@ -273,7 +252,6 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
             Some(format!("Starting data graph: {}", data_graph_id)),
         );
 
-        // Map orchestration context to data graph inputs
         let mut inputs = HashMap::new();
         for (context_key, port_name) in &config.input_mappings {
             if let Some(value) = context.get(context_key) {
@@ -281,14 +259,12 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
             }
         }
 
-        // Execute the data graph
         match self
             .data_executor
             .execute_data_graph(&data_graph_id, inputs, event_sink)
             .await
         {
             Ok(outputs) => {
-                // Map data graph outputs back to orchestration context
                 let mut context_updates = HashMap::new();
                 for (port_name, context_key) in &config.output_mappings {
                     if let Some(value) = outputs.get(port_name) {
@@ -296,7 +272,6 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
                     }
                 }
 
-                // Also store all outputs under the node ID prefix
                 for (port_name, value) in &outputs {
                     context_updates.insert(format!("{}.{}", node.id, port_name), value.clone());
                 }
@@ -315,13 +290,15 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
             Err(error @ (NodeEngineError::Cancelled | NodeEngineError::WaitingForInput { .. })) => {
                 Err(error)
             }
-            Err(e) => {
-                self.emit_task_failed(event_sink, &node.id, &e.to_string());
+            Err(error) => {
+                self.emit_task_failed(event_sink, &node.id, &error.to_string());
 
-                // Route ordinary execution failures through the orchestration error handle.
                 Ok(NodeExecutionResult::handle("error")
-                    .with_update(format!("{}.error", node.id), Value::String(e.to_string()))
-                    .with_message(format!("Data graph '{}' failed: {}", data_graph_id, e)))
+                    .with_update(
+                        format!("{}.error", node.id),
+                        Value::String(error.to_string()),
+                    )
+                    .with_message(format!("Data graph '{}' failed: {}", data_graph_id, error)))
             }
         }
     }
@@ -346,8 +323,6 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
             source_id, source_handle
         )))
     }
-
-    // Event emission helpers using the correct WorkflowEvent variants
 
     fn emit_workflow_started(&self, event_sink: &dyn EventSink, workflow_id: &str) {
         let _ = event_sink.send(WorkflowEvent::WorkflowStarted {
@@ -450,473 +425,5 @@ impl<E: DataGraphExecutor> OrchestrationExecutor<E> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::events::{NullEventSink, VecEventSink};
-    use crate::orchestration::types::{OrchestrationEdge, OrchestrationNode};
-
-    /// Mock data graph executor for testing.
-    #[derive(Clone)]
-    enum MockDataGraphError {
-        WaitingForInput {
-            task_id: String,
-            prompt: Option<String>,
-            emit_event: bool,
-        },
-        Cancelled,
-    }
-
-    struct MockDataGraphExecutor {
-        outputs: HashMap<String, HashMap<String, Value>>,
-        errors: HashMap<String, MockDataGraphError>,
-    }
-
-    impl MockDataGraphExecutor {
-        fn new() -> Self {
-            Self {
-                outputs: HashMap::new(),
-                errors: HashMap::new(),
-            }
-        }
-
-        fn with_output(mut self, graph_id: &str, outputs: HashMap<String, Value>) -> Self {
-            self.outputs.insert(graph_id.to_string(), outputs);
-            self
-        }
-
-        fn with_error(mut self, graph_id: &str, error: MockDataGraphError) -> Self {
-            self.errors.insert(graph_id.to_string(), error);
-            self
-        }
-    }
-
-    #[async_trait]
-    impl DataGraphExecutor for MockDataGraphExecutor {
-        async fn execute_data_graph(
-            &self,
-            graph_id: &str,
-            _inputs: HashMap<String, Value>,
-            event_sink: &dyn EventSink,
-        ) -> Result<HashMap<String, Value>> {
-            if let Some(error) = self.errors.get(graph_id) {
-                return Err(match error {
-                    MockDataGraphError::WaitingForInput {
-                        task_id,
-                        prompt,
-                        emit_event,
-                    } => {
-                        if *emit_event {
-                            let _ = event_sink.send(WorkflowEvent::WaitingForInput {
-                                workflow_id: graph_id.to_string(),
-                                execution_id: "data-graph-exec".to_string(),
-                                task_id: task_id.clone(),
-                                prompt: prompt.clone(),
-                                occurred_at_ms: None,
-                            });
-                        }
-                        NodeEngineError::waiting_for_input(task_id.clone(), prompt.clone())
-                    }
-                    MockDataGraphError::Cancelled => NodeEngineError::Cancelled,
-                });
-            }
-
-            self.outputs
-                .get(graph_id)
-                .cloned()
-                .ok_or_else(|| NodeEngineError::failed(format!("Unknown graph: {}", graph_id)))
-        }
-
-        fn get_data_graph(&self, _graph_id: &str) -> Option<WorkflowGraph> {
-            None
-        }
-    }
-
-    fn create_simple_graph() -> OrchestrationGraph {
-        let mut graph = OrchestrationGraph::new("test", "Test Orchestration");
-
-        // Add nodes: Start -> End
-        graph.nodes.push(OrchestrationNode::new(
-            "start",
-            OrchestrationNodeType::Start,
-            (0.0, 0.0),
-        ));
-        graph.nodes.push(OrchestrationNode::new(
-            "end",
-            OrchestrationNodeType::End,
-            (200.0, 0.0),
-        ));
-
-        // Add edge
-        graph.edges.push(OrchestrationEdge::new(
-            "e1", "start", "next", "end", "input",
-        ));
-
-        graph
-    }
-
-    #[tokio::test]
-    async fn test_simple_execution() {
-        let executor = OrchestrationExecutor::new(MockDataGraphExecutor::new());
-        let graph = create_simple_graph();
-        let event_sink = NullEventSink;
-
-        let result = executor
-            .execute(&graph, HashMap::new(), &event_sink)
-            .await
-            .unwrap();
-
-        assert!(result.success);
-        assert_eq!(result.nodes_executed, 2); // Start + End
-    }
-
-    #[tokio::test]
-    async fn test_condition_true_path() {
-        let executor = OrchestrationExecutor::new(MockDataGraphExecutor::new());
-        let event_sink = NullEventSink;
-
-        let mut graph = OrchestrationGraph::new("test", "Test");
-
-        // Start -> Condition -> (true) -> End1
-        //                    -> (false) -> End2
-        graph.nodes.push(OrchestrationNode::new(
-            "start",
-            OrchestrationNodeType::Start,
-            (0.0, 0.0),
-        ));
-        graph.nodes.push(OrchestrationNode::with_config(
-            "cond",
-            OrchestrationNodeType::Condition,
-            (100.0, 0.0),
-            serde_json::json!({"conditionKey": "isValid"}),
-        ));
-        graph.nodes.push(OrchestrationNode::new(
-            "end_true",
-            OrchestrationNodeType::End,
-            (200.0, -50.0),
-        ));
-        graph.nodes.push(OrchestrationNode::new(
-            "end_false",
-            OrchestrationNodeType::End,
-            (200.0, 50.0),
-        ));
-
-        graph.edges.push(OrchestrationEdge::new(
-            "e1", "start", "next", "cond", "input",
-        ));
-        graph.edges.push(OrchestrationEdge::new(
-            "e2", "cond", "true", "end_true", "input",
-        ));
-        graph.edges.push(OrchestrationEdge::new(
-            "e3",
-            "cond",
-            "false",
-            "end_false",
-            "input",
-        ));
-
-        // Test true path
-        let mut initial_data = HashMap::new();
-        initial_data.insert("isValid".to_string(), Value::Bool(true));
-
-        let result = executor
-            .execute(&graph, initial_data, &event_sink)
-            .await
-            .unwrap();
-        assert!(result.success);
-        assert_eq!(result.nodes_executed, 3); // Start + Condition + End
-    }
-
-    #[tokio::test]
-    async fn test_loop_execution() {
-        let executor = OrchestrationExecutor::new(MockDataGraphExecutor::new());
-        let event_sink = NullEventSink;
-
-        let mut graph = OrchestrationGraph::new("test", "Test");
-
-        // Start -> Loop (3 iterations) -> End
-        graph.nodes.push(OrchestrationNode::new(
-            "start",
-            OrchestrationNodeType::Start,
-            (0.0, 0.0),
-        ));
-        graph.nodes.push(OrchestrationNode::with_config(
-            "loop",
-            OrchestrationNodeType::Loop,
-            (100.0, 0.0),
-            serde_json::json!({"maxIterations": 3}),
-        ));
-        graph.nodes.push(OrchestrationNode::new(
-            "end",
-            OrchestrationNodeType::End,
-            (200.0, 0.0),
-        ));
-
-        graph.edges.push(OrchestrationEdge::new(
-            "e1", "start", "next", "loop", "input",
-        ));
-        graph.edges.push(OrchestrationEdge::new(
-            "e2",
-            "loop",
-            "iteration",
-            "loop",
-            "loop_back",
-        ));
-        graph.edges.push(OrchestrationEdge::new(
-            "e3", "loop", "complete", "end", "input",
-        ));
-
-        let result = executor
-            .execute(&graph, HashMap::new(), &event_sink)
-            .await
-            .unwrap();
-        assert!(result.success);
-        // Start + 3 iterations + 1 complete check + End = 6
-        // Actually: Start(1) + Loop(4 times: 3 iterations + 1 for hitting max) + End(1) = 6
-        assert_eq!(result.nodes_executed, 6);
-    }
-
-    #[tokio::test]
-    async fn test_data_graph_execution() {
-        let mut outputs = HashMap::new();
-        outputs.insert("result".to_string(), Value::String("success".to_string()));
-
-        let mock_executor = MockDataGraphExecutor::new().with_output("test_graph", outputs);
-        let executor = OrchestrationExecutor::new(mock_executor);
-        let event_sink = NullEventSink;
-
-        let mut graph = OrchestrationGraph::new("test", "Test");
-
-        graph.nodes.push(OrchestrationNode::new(
-            "start",
-            OrchestrationNodeType::Start,
-            (0.0, 0.0),
-        ));
-        graph.nodes.push(OrchestrationNode::with_config(
-            "data",
-            OrchestrationNodeType::DataGraph,
-            (100.0, 0.0),
-            serde_json::json!({
-                "dataGraphId": "test_graph",
-                "inputMappings": {},
-                "outputMappings": {"result": "output_value"}
-            }),
-        ));
-        graph.nodes.push(OrchestrationNode::new(
-            "end",
-            OrchestrationNodeType::End,
-            (200.0, 0.0),
-        ));
-
-        graph.edges.push(OrchestrationEdge::new(
-            "e1", "start", "next", "data", "input",
-        ));
-        graph
-            .edges
-            .push(OrchestrationEdge::new("e2", "data", "next", "end", "input"));
-
-        let result = executor
-            .execute(&graph, HashMap::new(), &event_sink)
-            .await
-            .unwrap();
-        assert!(result.success);
-        assert_eq!(
-            result.outputs.get("output_value"),
-            Some(&Value::String("success".to_string()))
-        );
-    }
-
-    #[tokio::test]
-    async fn test_data_graph_waiting_for_input_propagates_without_terminal_failure() {
-        let mock_executor = MockDataGraphExecutor::new().with_error(
-            "test_graph",
-            MockDataGraphError::WaitingForInput {
-                task_id: "human-input-1".to_string(),
-                prompt: Some("Approve deployment?".to_string()),
-                emit_event: true,
-            },
-        );
-        let executor =
-            OrchestrationExecutor::new(mock_executor).with_execution_id("orch-exec-test");
-        let event_sink = VecEventSink::new();
-
-        let mut graph = OrchestrationGraph::new("test", "Test");
-        graph.nodes.push(OrchestrationNode::new(
-            "start",
-            OrchestrationNodeType::Start,
-            (0.0, 0.0),
-        ));
-        graph.nodes.push(OrchestrationNode::with_config(
-            "data",
-            OrchestrationNodeType::DataGraph,
-            (100.0, 0.0),
-            serde_json::json!({
-                "dataGraphId": "test_graph",
-                "inputMappings": {},
-                "outputMappings": {"result": "output_value"}
-            }),
-        ));
-        graph.nodes.push(OrchestrationNode::new(
-            "end",
-            OrchestrationNodeType::End,
-            (200.0, 0.0),
-        ));
-        graph.edges.push(OrchestrationEdge::new(
-            "e1", "start", "next", "data", "input",
-        ));
-        graph
-            .edges
-            .push(OrchestrationEdge::new("e2", "data", "next", "end", "input"));
-
-        let result = executor.execute(&graph, HashMap::new(), &event_sink).await;
-
-        assert!(matches!(
-            result,
-            Err(NodeEngineError::WaitingForInput { task_id, prompt })
-                if task_id == "human-input-1"
-                    && prompt.as_deref() == Some("Approve deployment?")
-        ));
-
-        let events = event_sink.events();
-        assert!(events.iter().any(
-            |event| matches!(event, WorkflowEvent::WaitingForInput { task_id, prompt, .. }
-                if task_id == "human-input-1"
-                    && prompt.as_deref() == Some("Approve deployment?"))
-        ));
-        assert!(!events
-            .iter()
-            .any(|event| matches!(event, WorkflowEvent::TaskCompleted { task_id, .. } if task_id == "data")));
-        assert!(!events.iter().any(
-            |event| matches!(event, WorkflowEvent::TaskFailed { task_id, .. } if task_id == "data")
-        ));
-        assert!(
-            !events
-                .iter()
-                .any(|event| matches!(event, WorkflowEvent::WorkflowFailed { .. }))
-        );
-        assert!(
-            !events
-                .iter()
-                .any(|event| matches!(event, WorkflowEvent::WorkflowCompleted { .. }))
-        );
-        assert!(
-            !events
-                .iter()
-                .any(|event| matches!(event, WorkflowEvent::WorkflowCancelled { .. }))
-        );
-    }
-
-    #[tokio::test]
-    async fn test_data_graph_cancelled_propagates_without_task_failure() {
-        let mock_executor =
-            MockDataGraphExecutor::new().with_error("test_graph", MockDataGraphError::Cancelled);
-        let executor =
-            OrchestrationExecutor::new(mock_executor).with_execution_id("orch-exec-test");
-        let event_sink = VecEventSink::new();
-
-        let mut graph = OrchestrationGraph::new("test", "Test");
-        graph.nodes.push(OrchestrationNode::new(
-            "start",
-            OrchestrationNodeType::Start,
-            (0.0, 0.0),
-        ));
-        graph.nodes.push(OrchestrationNode::with_config(
-            "data",
-            OrchestrationNodeType::DataGraph,
-            (100.0, 0.0),
-            serde_json::json!({
-                "dataGraphId": "test_graph",
-                "inputMappings": {},
-                "outputMappings": {"result": "output_value"}
-            }),
-        ));
-        graph.nodes.push(OrchestrationNode::new(
-            "end",
-            OrchestrationNodeType::End,
-            (200.0, 0.0),
-        ));
-        graph.edges.push(OrchestrationEdge::new(
-            "e1", "start", "next", "data", "input",
-        ));
-        graph
-            .edges
-            .push(OrchestrationEdge::new("e2", "data", "next", "end", "input"));
-
-        let result = executor.execute(&graph, HashMap::new(), &event_sink).await;
-
-        assert!(matches!(result, Err(NodeEngineError::Cancelled)));
-
-        let events = event_sink.events();
-        assert!(events
-            .iter()
-            .any(|event| matches!(event, WorkflowEvent::WorkflowCancelled { workflow_id, execution_id, error, .. }
-                if workflow_id == "test"
-                    && execution_id == "orch-exec-test"
-                    && error == "Workflow cancelled")));
-        assert!(!events
-            .iter()
-            .any(|event| matches!(event, WorkflowEvent::TaskCompleted { task_id, .. } if task_id == "data")));
-        assert!(!events.iter().any(
-            |event| matches!(event, WorkflowEvent::TaskFailed { task_id, .. } if task_id == "data")
-        ));
-        assert!(
-            !events
-                .iter()
-                .any(|event| matches!(event, WorkflowEvent::WorkflowFailed { .. }))
-        );
-        assert!(
-            !events
-                .iter()
-                .any(|event| matches!(event, WorkflowEvent::WorkflowCompleted { .. }))
-        );
-    }
-
-    #[tokio::test]
-    async fn test_missing_start_node_emits_workflow_failed() {
-        let executor = OrchestrationExecutor::new(MockDataGraphExecutor::new())
-            .with_execution_id("orch-exec-test");
-        let graph = OrchestrationGraph::new("test", "Missing Start");
-        let event_sink = VecEventSink::new();
-
-        let result = executor.execute(&graph, HashMap::new(), &event_sink).await;
-
-        assert!(matches!(result, Err(NodeEngineError::ExecutionFailed(_))));
-
-        let events = event_sink.events();
-        assert_eq!(events.len(), 2);
-        assert!(matches!(events[0], WorkflowEvent::WorkflowStarted { .. }));
-        assert!(matches!(
-            &events[1],
-            WorkflowEvent::WorkflowFailed {
-                workflow_id,
-                execution_id,
-                error,
-                ..
-            } if workflow_id == "test"
-                && execution_id == "orch-exec-test"
-                && error == "Task execution failed: Orchestration graph has no Start node"
-        ));
-    }
-
-    #[test]
-    fn test_emit_terminal_workflow_error_uses_cancelled_variant() {
-        let executor = OrchestrationExecutor::new(MockDataGraphExecutor::new())
-            .with_execution_id("orch-exec-test");
-        let event_sink = VecEventSink::new();
-
-        executor.emit_terminal_workflow_error(&event_sink, "test", &NodeEngineError::Cancelled);
-
-        let events = event_sink.events();
-        assert_eq!(events.len(), 1);
-        assert!(matches!(
-            &events[0],
-            WorkflowEvent::WorkflowCancelled {
-                workflow_id,
-                execution_id,
-                error,
-                ..
-            } if workflow_id == "test"
-                && execution_id == "orch-exec-test"
-                && error == "Workflow cancelled"
-        ));
-    }
-}
+#[path = "executor_tests.rs"]
+mod tests;

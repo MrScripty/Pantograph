@@ -14,6 +14,7 @@ data-graph nodes.
 | `types.rs` | Orchestration graph, node, edge, config, and result DTOs. |
 | `nodes.rs` | Node execution context and per-node orchestration behavior helpers. |
 | `executor.rs` | Orchestration executor and event emission flow. |
+| `executor_tests.rs` | Crate-local orchestration executor regression coverage for control flow and terminal event behavior. |
 | `store.rs` | In-memory orchestration graph storage and metadata helpers. |
 
 ## Problem
@@ -33,7 +34,9 @@ adapters.
 ## Decision
 Keep orchestration graph contracts and execution in this focused module tree.
 The executor owns control-flow sequencing while data-graph execution remains an
-injected dependency.
+injected dependency. Executor regression coverage now lives in a sibling
+`executor_tests.rs` harness so production control-flow code does not grow under
+an inlined test module.
 
 ## Alternatives Rejected
 - Store orchestration control flow only in frontend graph state: rejected
@@ -45,6 +48,8 @@ injected dependency.
 - Orchestration graphs must have valid node/edge references before execution.
 - DataGraph nodes call the injected data-graph executor.
 - Orchestration events preserve backend execution order.
+- Executor behavior tests stay in `executor_tests.rs` so `executor.rs` remains
+  focused on production control-flow sequencing and event emission.
 - Orchestration storage filters should use explicit option predicates for file
   extensions so saved-graph discovery remains easy to audit.
 - Saved orchestration DTO changes require migration of tracked examples.

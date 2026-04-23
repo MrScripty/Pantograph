@@ -638,6 +638,12 @@ Tasks:
   PyTorch live KV snapshot restore/capture helpers now live in
   `crates/node-engine/src/core_executor/kv_cache_pytorch.rs`, keeping the
   feature-gated snapshot-file workflow out of the generic KV-cache handlers.
+- [x] Split `crates/node-engine/src/orchestration/executor.rs` by production
+  orchestration control flow and crate-local regression coverage.
+  Status: orchestration executor tests now live in
+  `crates/node-engine/src/orchestration/executor_tests.rs`, reducing
+  `executor.rs` to production sequencing and workflow-event emission while
+  preserving data-graph propagation and terminal-error coverage.
   Synchronous built-in node handlers now live in
   `crates/node-engine/src/core_executor/pure_nodes.rs`, separating pure
   payload normalization from file I/O, dependency preflight, and runtime-backed
