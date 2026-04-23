@@ -46,6 +46,9 @@ process ownership and app composition stay outside this crate.
 - `observation.rs`: host-supplied runtime observation contracts used to
   reconcile backend lifecycle facts into registry state, including shared
   lifecycle-to-registry-status helpers for host adapters.
+- `registry_queries.rs`: read-side registry snapshot, runtime eviction
+  candidate, reservation eviction candidate, owner-filtered eviction lookup,
+  and deterministic ordering helpers used by the public facade.
 - `state.rs`: runtime status, registry records, and transition validation
   rules.
 - `reservation.rs`: reservation request, lease, and stored reservation-record
@@ -89,6 +92,9 @@ process ownership and app composition stay outside this crate.
 - Owner-filtered reservation eviction lookup is also computed here so hosts can
   ask for the first matching unload candidate from backend-owned ordering
   instead of rebuilding that filter locally.
+- Read-side registry snapshot and eviction query ordering lives in
+  `registry_queries.rs` so `lib.rs` remains the public facade while query
+  ordering stays shared by snapshot and pressure-relief callers.
 - Warmup/reuse lifecycle classification is also computed here so callers can
   decide whether to start, reuse, or wait without rebuilding status semantics
   in host adapters.

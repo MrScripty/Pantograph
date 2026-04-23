@@ -530,6 +530,12 @@ Tasks:
   complete. Technical-fit normalization, override, residency, queue-pressure,
   budget-pressure, and selector fallback tests now live in
   `crates/pantograph-runtime-registry/src/technical_fit_tests.rs`, reducing
+  the selector module to production ranking helpers. Runtime-registry read-side
+  snapshot, runtime eviction candidate, reservation eviction candidate,
+  owner-filtered eviction lookup, and deterministic ordering helpers now live in
+  `crates/pantograph-runtime-registry/src/registry_queries.rs`, reducing
+  `lib.rs` below the large-file threshold while preserving the public
+  `RuntimeRegistry` facade.
   `technical_fit.rs` to production selector contracts and ranking helpers.
 - Split `crates/inference/src/managed_runtime/operations.rs` by managed-runtime
   status projection, install/remove transitions, command/version selection, and
