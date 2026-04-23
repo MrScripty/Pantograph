@@ -57,6 +57,9 @@ process ownership and app composition stay outside this crate.
 - `technical_fit.rs`: backend-owned technical-fit request, candidate, factor,
   selector, and decision contracts that freeze selector inputs plus
   machine-consumable reason codes before workflow integration lands.
+- `technical_fit_tests.rs`: technical-fit normalization, override, residency,
+  queue-pressure, budget-pressure, and selector fallback tests extracted from
+  the production selector module.
 - `warmup.rs`: backend-owned warmup/reuse disposition contracts derived from
   runtime registry status for host execution orchestration.
 - `reclaim.rs`: backend-owned reclaim disposition contracts that tell hosts
@@ -100,6 +103,10 @@ process ownership and app composition stay outside this crate.
   depth, loaded-runtime saturation, and reservation headroom affect candidate
   ordering through one backend-owned selector instead of adapter-local tie
   breakers.
+- Technical-fit normalization, override, residency, queue-pressure,
+  budget-pressure, and selector fallback tests stay in
+  `technical_fit_tests.rs` so selector contracts stay separate from production
+  ranking helpers.
 - Reclaim sequencing is also computed here so hosts can ask whether an
   evictable runtime still needs a real producer stop or can be converged to
   `stopped` inside the registry without re-deriving that policy from raw

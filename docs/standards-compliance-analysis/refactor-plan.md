@@ -453,7 +453,10 @@ Tasks:
   production registry facade and policy APIs before further behavior-focused
   splits. The runtime-registry source README now also carries the required
   standards headings so future boundary edits keep decision traceability
-  complete.
+  complete. Technical-fit normalization, override, residency, queue-pressure,
+  budget-pressure, and selector fallback tests now live in
+  `crates/pantograph-runtime-registry/src/technical_fit_tests.rs`, reducing
+  `technical_fit.rs` to production selector contracts and ranking helpers.
 - Split `crates/inference/src/managed_runtime/operations.rs` by managed-runtime
   status projection, install/remove transitions, command/version selection, and
   tests.
