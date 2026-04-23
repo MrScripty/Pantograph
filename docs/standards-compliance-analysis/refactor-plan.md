@@ -443,6 +443,10 @@ Tasks:
   Embedded workflow host helper and runtime-registry error-mapping unit tests
   now live in
   `crates/pantograph-embedded-runtime/src/lib_tests/host_helper_tests.rs`;
+  runtime data-graph builders and synthetic node-memory snapshot fixtures now
+  live in `crates/pantograph-embedded-runtime/src/lib_tests/graph_fixtures.rs`,
+  reducing the root embedded-runtime test harness below the large-file
+  threshold while preserving child-module fixture access;
   embedded data-graph execution integration tests now live in
   `crates/pantograph-embedded-runtime/src/lib_tests/data_graph_execution_tests.rs`;
   embedded edit-session graph execution integration tests now live in

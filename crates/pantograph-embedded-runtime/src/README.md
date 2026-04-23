@@ -22,6 +22,7 @@ packages.
 | `lib_tests.rs` | Legacy embedded-runtime facade, host, registry, and workflow-session tests extracted from the root facade file. |
 | `lib_tests/data_graph_execution_tests.rs` | Embedded data-graph execution integration tests split out of the legacy root test module. |
 | `lib_tests/edit_session_execution_tests.rs` | Embedded edit-session graph execution integration tests split out of the legacy root test module. |
+| `lib_tests/graph_fixtures.rs` | Shared runtime data-graph builders and synthetic node-memory snapshot fixtures used by embedded-runtime behavior tests. |
 | `lib_tests/host_helper_tests.rs` | Focused embedded workflow host helper and runtime-registry error-mapping unit tests split out of the legacy root test module. |
 | `lib_tests/runtime_lifecycle_capability_tests.rs` | Embedded hosted-runtime lifecycle, shutdown, and injected-capability tests split out of the legacy root test module. |
 | `lib_tests/runtime_preflight_tests.rs` | Embedded runtime preflight and unload-candidate selection tests split out of the legacy root test module. |
@@ -193,6 +194,9 @@ embedded-runtime crate.
   `lib_tests/runtime_preflight_tests.rs` so install-state availability checks
   and registry eviction-order selection do not accumulate in the root test
   harness.
+- Runtime graph builders and synthetic node-memory snapshot fixtures stay in
+  `lib_tests/graph_fixtures.rs` so shared data-graph/checkpoint fixtures do not
+  keep the root test harness over the large-file threshold.
 - Pantograph host task-executor tests and Python runtime fixture helpers stay
   in `task_executor_tests.rs` so `task_executor.rs` remains focused on
   production host execution for Python-backed nodes, RAG-backed nodes, and core

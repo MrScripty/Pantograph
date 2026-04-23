@@ -40,6 +40,7 @@ fixtures and provide a safe first boundary.
 | ---- | ----------- |
 | `data_graph_execution_tests.rs` | Integration tests for embedded data-graph execution, Python sidecar runtime observation, multi-runtime registry projection, and waiting-for-input propagation. |
 | `edit_session_execution_tests.rs` | Integration tests for embedded edit-session graph execution, embedding runtime prepare/restore reconciliation, runtime trace metrics, and waiting-for-input event behavior. |
+| `graph_fixtures.rs` | Runtime data-graph builders and synthetic node-memory snapshots shared by data-graph and checkpoint tests. |
 | `host_helper_tests.rs` | Unit tests for embedded workflow host helper contracts and workflow-facing runtime-registry error mapping. |
 | `runtime_lifecycle_capability_tests.rs` | Integration tests for hosted runtime construction, shutdown reconciliation, loaded-session shutdown state, and injected runtime capabilities. |
 | `runtime_preflight_tests.rs` | Integration tests for runtime unload-candidate selection and workflow runtime preflight availability after runtime-install state changes. |
