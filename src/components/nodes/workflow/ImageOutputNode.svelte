@@ -149,7 +149,7 @@
   onclose={closeModal}
 >
   {#if imageSrc}
-    <div class="dialog-content" onclick={stopControlEvent}>
+    <div class="dialog-content">
       <button type="button" class="nodrag nopan nowheel dialog-close" onclick={closeModal}>
         Close
       </button>

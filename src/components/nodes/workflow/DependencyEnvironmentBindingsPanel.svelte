@@ -70,6 +70,25 @@
     onRequirementExtraUrlsChange,
     onClearRequirementOverrides,
   }: Props = $props();
+
+  function overrideFieldId(...parts: string[]): string {
+    return parts
+      .join('-')
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, '-');
+  }
+
+  function bindingPythonExecutableId(bindingId: string): string {
+    return overrideFieldId(bindingId, 'python-executable');
+  }
+
+  function requirementFieldId(
+    bindingId: string,
+    requirementName: string,
+    field: 'index-url' | 'extra-index-urls' | 'wheel-source-path' | 'package-source-override'
+  ): string {
+    return overrideFieldId(bindingId, requirementName, field);
+  }
 </script>
 
 {#if mode === 'manual'}
@@ -136,8 +155,11 @@
             {#if mode === 'manual'}
               <div class="rounded border border-cyan-900/40 bg-cyan-950/10 px-2 py-1 space-y-1">
                 <div class="text-[10px] text-cyan-300">Binding Override</div>
-                <label class="text-[9px] text-neutral-400">Python executable</label>
+                <label class="text-[9px] text-neutral-400" for={bindingPythonExecutableId(binding.binding_id)}>
+                  Python executable
+                </label>
                 <input
+                  id={bindingPythonExecutableId(binding.binding_id)}
                   type="text"
                   class="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-[10px] text-neutral-200 font-mono focus:outline-none focus:border-cyan-500"
                   value={getStringOverrideField(binding.binding_id, 'binding', undefined, 'python_executable')}
@@ -172,32 +194,44 @@
                 </div>
                 {#if mode === 'manual'}
                   <div class="space-y-1">
-                    <label class="text-[9px] text-neutral-400">Index URL</label>
+                    <label class="text-[9px] text-neutral-400" for={requirementFieldId(binding.binding_id, requirement.name, 'index-url')}>
+                      Index URL
+                    </label>
                     <input
+                      id={requirementFieldId(binding.binding_id, requirement.name, 'index-url')}
                       type="text"
                       class="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-[10px] text-neutral-200 font-mono focus:outline-none focus:border-cyan-500"
                       value={getStringOverrideField(binding.binding_id, 'requirement', requirement.name, 'index_url')}
                       placeholder="https://..."
                       onchange={(event) => onRequirementFieldChange(binding.binding_id, requirement.name, 'index_url', event)}
                     />
-                    <label class="text-[9px] text-neutral-400">Extra index URLs (comma-separated)</label>
+                    <label class="text-[9px] text-neutral-400" for={requirementFieldId(binding.binding_id, requirement.name, 'extra-index-urls')}>
+                      Extra index URLs (comma-separated)
+                    </label>
                     <input
+                      id={requirementFieldId(binding.binding_id, requirement.name, 'extra-index-urls')}
                       type="text"
                       class="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-[10px] text-neutral-200 font-mono focus:outline-none focus:border-cyan-500"
                       value={getExtraIndexUrls(binding.binding_id, requirement.name)}
                       placeholder="https://a, https://b"
                       onchange={(event) => onRequirementExtraUrlsChange(binding.binding_id, requirement.name, event)}
                     />
-                    <label class="text-[9px] text-neutral-400">Wheel source path</label>
+                    <label class="text-[9px] text-neutral-400" for={requirementFieldId(binding.binding_id, requirement.name, 'wheel-source-path')}>
+                      Wheel source path
+                    </label>
                     <input
+                      id={requirementFieldId(binding.binding_id, requirement.name, 'wheel-source-path')}
                       type="text"
                       class="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-[10px] text-neutral-200 font-mono focus:outline-none focus:border-cyan-500"
                       value={getStringOverrideField(binding.binding_id, 'requirement', requirement.name, 'wheel_source_path')}
                       placeholder="/path/to/wheels"
                       onchange={(event) => onRequirementFieldChange(binding.binding_id, requirement.name, 'wheel_source_path', event)}
                     />
-                    <label class="text-[9px] text-neutral-400">Package source override</label>
+                    <label class="text-[9px] text-neutral-400" for={requirementFieldId(binding.binding_id, requirement.name, 'package-source-override')}>
+                      Package source override
+                    </label>
                     <input
+                      id={requirementFieldId(binding.binding_id, requirement.name, 'package-source-override')}
                       type="text"
                       class="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-[10px] text-neutral-200 font-mono focus:outline-none focus:border-cyan-500"
                       value={getStringOverrideField(binding.binding_id, 'requirement', requirement.name, 'package_source_override')}

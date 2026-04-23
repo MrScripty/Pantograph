@@ -168,13 +168,18 @@ from node state orchestration.
 - `DependencyEnvironmentStatusPanel.svelte` emits command callbacks without
   invoking backend APIs directly.
 - `DependencyEnvironmentBindingsPanel.svelte` emits form and selection callbacks
-  without writing node data directly.
+  without writing node data directly, and any visible override labels must stay
+  associated with concrete input ids so the manual override panel remains
+  keyboard and screen-reader navigable.
 - `DependencyEnvironmentModeControls.svelte` emits mode changes without writing
   node data directly.
 - `DependencyEnvironmentNodeHeader.svelte` owns dependency environment header
   icon and label markup.
 - Image and media preview controls must expose accessible names even when the
   visible content is an image or icon rather than text.
+- `ImageOutputNode.svelte` must treat only backdrop clicks as dialog-dismiss
+  input; clicks inside the modal content stay local so expanded previews do not
+  close while the user is interacting with the image or close button.
 
 ## Revisit Triggers
 - Another output node needs the same rerun-reset pattern and the logic starts to
