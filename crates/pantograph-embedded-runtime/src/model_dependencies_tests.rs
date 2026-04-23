@@ -169,35 +169,34 @@ fn aggregate_state_for_empty_bindings_is_unresolved() {
 #[test]
 fn normalized_backend_key_canonicalizes_aliases() {
     assert_eq!(
-        TauriModelDependencyResolver::normalized_backend_key(&Some("onnx-runtime".to_string())),
+        descriptors::normalized_backend_key(&Some("onnx-runtime".to_string())),
         Some("onnx-runtime".to_string())
     );
     assert_eq!(
-        TauriModelDependencyResolver::normalized_backend_key(&Some("llama_cpp".to_string())),
+        descriptors::normalized_backend_key(&Some("llama_cpp".to_string())),
         Some("llamacpp".to_string())
     );
     assert_eq!(
-        TauriModelDependencyResolver::normalized_backend_key(&Some("torch".to_string())),
+        descriptors::normalized_backend_key(&Some("torch".to_string())),
         Some("pytorch".to_string())
     );
 }
 
 #[test]
 fn infer_engine_defaults_diffusion_node_to_pytorch() {
-    let engine =
-        TauriModelDependencyResolver::infer_engine(None, "diffusion-inference", Some("diffusion"));
+    let engine = descriptors::infer_engine(None, "diffusion-inference", Some("diffusion"));
     assert_eq!(engine, "pytorch");
 }
 
 #[test]
 fn infer_engine_uses_llamacpp_for_reranker_node() {
-    let engine = TauriModelDependencyResolver::infer_engine(None, "reranker", Some("reranker"));
+    let engine = descriptors::infer_engine(None, "reranker", Some("reranker"));
     assert_eq!(engine, "llamacpp");
 }
 
 #[test]
 fn map_pipeline_tag_recognizes_reranking() {
-    let task = TauriModelDependencyResolver::map_pipeline_tag_to_task("reranking");
+    let task = descriptors::map_pipeline_tag_to_task("reranking");
     assert_eq!(task, "reranking");
 }
 
@@ -450,28 +449,22 @@ async fn puma_lib_option_and_dependency_resolver_agree_on_primary_file_path() {
 
 #[test]
 fn descriptor_lookup_fallback_is_allowed_only_for_missing_descriptor_cases() {
-    assert!(
-        TauriModelDependencyResolver::descriptor_lookup_fallback_allowed(
-            &pumas_library::PumasError::ModelNotFound {
-                model_id: "missing".to_string()
-            }
-        )
-    );
-    assert!(
-        TauriModelDependencyResolver::descriptor_lookup_fallback_allowed(
-            &pumas_library::PumasError::NotFound {
-                resource: "resolve_model_execution_descriptor".to_string()
-            }
-        )
-    );
-    assert!(
-        !TauriModelDependencyResolver::descriptor_lookup_fallback_allowed(
-            &pumas_library::PumasError::Validation {
-                field: "validation_state".to_string(),
-                message: "invalid".to_string()
-            }
-        )
-    );
+    assert!(descriptors::descriptor_lookup_fallback_allowed(
+        &pumas_library::PumasError::ModelNotFound {
+            model_id: "missing".to_string()
+        }
+    ));
+    assert!(descriptors::descriptor_lookup_fallback_allowed(
+        &pumas_library::PumasError::NotFound {
+            resource: "resolve_model_execution_descriptor".to_string()
+        }
+    ));
+    assert!(!descriptors::descriptor_lookup_fallback_allowed(
+        &pumas_library::PumasError::Validation {
+            field: "validation_state".to_string(),
+            message: "invalid".to_string()
+        }
+    ));
 }
 
 #[test]

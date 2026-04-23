@@ -32,6 +32,7 @@ packages.
 | `lib_tests/workflow_run_execution_tests.rs` | Embedded workflow-run and session-run execution integration tests split out of the legacy root test module. |
 | `lib.rs` | Composes the embedded runtime, workflow service, shared extensions, and public crate exports used by Tauri and standalone hosts. |
 | `model_dependencies.rs` | Resolves Pantograph model dependency requirements and binds workflow requests to Pumas-backed execution facts. |
+| `model_dependency_descriptors.rs` | Resolves stable model identity, cache keys, Pumas execution descriptors, backend aliases, task tags, and requirements ids for dependency preflight. |
 | `model_dependency_requirements.rs` | Maps Pumas dependency requirement contracts into node-engine DTOs and applies validated user override patches. |
 | `model_dependencies_tests.rs` | Pantograph model dependency resolver tests and Pumas descriptor fixture helpers extracted from the production resolver module. |
 | `python_runtime_execution.rs` | Owns captured execution metadata for Python-backed runtime runs so workflow diagnostics and registry projection can reuse one recorder contract outside the task-executor facade. |
@@ -453,6 +454,10 @@ let runtime = EmbeddedRuntime::with_default_python_runtime(
 - `model_dependencies.rs` accepts workflow dependency requests and returns
   machine-consumable dependency status or validation errors suitable for
   preflight blocking.
+- `model_dependency_descriptors.rs` owns descriptor/cache/model identity
+  resolution so model ids, executable paths, backend aliases, selected binding
+  ids, and task tags are normalized before dependency requirement and model-ref
+  projection.
 - `model_dependency_requirements.rs` owns Pumas dependency-contract mapping,
   binding selection, runtime-state aggregation, install-target normalization,
   and override patch validation so the resolver facade can focus on API,
@@ -469,6 +474,10 @@ let runtime = EmbeddedRuntime::with_default_python_runtime(
 ## Structured Producer Contract
 - `model_dependencies.rs` produces resolved dependency requirements and
   normalized model descriptors for Pantograph workflow execution.
+- `model_dependency_descriptors.rs` preserves stable cache keys,
+  requirements-id shape, Pumas descriptor fallback semantics, backend-key
+  canonicalization, and workflow-facing `model_path`/`task_type_primary`
+  compatibility before the resolver runs dependency checks or installation.
 - `model_dependency_requirements.rs` preserves stable dependency error codes,
   binding ids, validation scopes, selected binding order, install targets, and
   user override validation before those facts are cached or returned by the

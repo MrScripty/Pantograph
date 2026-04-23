@@ -468,9 +468,12 @@ Tasks:
   normalization, and override patch validation now live in
   `crates/pantograph-embedded-runtime/src/model_dependency_requirements.rs`,
   further separating Pumas contract projection from resolver orchestration.
-  Embedded
-  runtime-registry translation, sync, reclaim, restore, and warmup coordination
-  tests now live in
+  Model descriptor/cache key resolution, backend-key canonicalization,
+  task-tag mapping, selected binding normalization, Pumas descriptor fallback,
+  and requirements-id shaping now live in
+  `crates/pantograph-embedded-runtime/src/model_dependency_descriptors.rs`.
+  Embedded runtime-registry translation, sync, reclaim, restore, and warmup
+  coordination tests now live in
   `crates/pantograph-embedded-runtime/src/runtime_registry_tests.rs`, reducing
   `runtime_registry.rs` to production observation mapping and registry
   orchestration logic. Workflow runtime diagnostics, runtime event projection,
