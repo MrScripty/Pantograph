@@ -122,17 +122,20 @@ from the same package version.
 ## Testing
 ```bash
 cargo check -p pantograph_rustler
+./scripts/check-rustler-beam-smoke.sh
 ```
 
-Direct `cargo test -p pantograph_rustler` currently links against Rustler NIF
-symbols that are supplied by the BEAM runtime in host execution. Track a
-dedicated BEAM-backed test harness before treating crate-local Rust tests as the
-canonical binding verification path.
+Direct `cargo test -p pantograph_rustler` still links against Rustler NIF
+symbols that are supplied by the BEAM runtime in host execution. The canonical
+binding verification path is the BEAM-backed smoke harness under
+`bindings/beam/pantograph_native_smoke/`, invoked through
+`./scripts/check-rustler-beam-smoke.sh` when the host has Mix/Elixir/Erlang
+installed.
 
 ## Notes
-- `src/resource_registration.rs` carries a scoped `non_local_definitions` lint
-  exception for the current `rustler::resource!` expansion; remove it when
-  Rustler exposes a warning-clean registration API.
+- `src/resource_registration.rs` now uses direct `impl rustler::Resource` plus
+  `Env::register::<T>()`, avoiding the deprecated `rustler::resource!` macro
+  expansion and its `non_local_definitions` warning pressure.
 - `src/lib.rs` is still over the decomposition threshold, but BEAM binding DTOs,
   resource wrappers, callback/event transport, executor/inference-gateway
   dispatch, frontend HTTP dispatch, orchestration store JSON CRUD,

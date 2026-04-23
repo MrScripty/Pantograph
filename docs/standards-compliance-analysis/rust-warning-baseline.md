@@ -24,7 +24,7 @@ The classification follows the updated standards expectations:
 | --- | ---: | --- | --- |
 | `pantograph-embedded-runtime` | 0 | Complete | Root facade imports are warning-clean. |
 | `pantograph` Tauri binary | 0 | Complete | Tauri-local warning debt has been removed; keep command adapters on backend-owned DTOs and service contracts. |
-| `pantograph_rustler` | 0 | Scoped external macro exception | Keep the narrow `rustler::resource!` lint exception documented until Rustler exposes a warning-clean registration API. |
+| `pantograph_rustler` | 0 | Complete | Resource registration now uses direct `impl rustler::Resource` and `Env::register::<T>()`; keep the BEAM smoke lane documented separately from raw `cargo test`. |
 
 ## Resolved Warnings
 
@@ -133,7 +133,7 @@ The classification follows the updated standards expectations:
 
 | Location | Warning | Classification | Resolution |
 | --- | --- | --- | --- |
-| `src/resource_registration.rs` | `rustler::resource!` emits `non_local_definitions` under the current Rustler macro expansion | Scoped external macro exception | Resolved by adding a narrow `#[allow(non_local_definitions)]` on the load-time resource registration function with removal guidance in the rustler README files. |
+| `src/resource_registration.rs` | deprecated `rustler::resource!` macro emitted `non_local_definitions` under its macro expansion | Remove | Resolved by implementing `rustler::Resource` directly on the wrapper structs and registering them via `Env::register::<T>()` in the load-time registration path. |
 
 ## Active Warnings
 
@@ -150,8 +150,6 @@ warnings remain as of the 2026-04-21 M7 cleanup pass.
 3. Keep desktop-local server discovery, graph policy, and registry mirrors
    deleted unless a future feature reintroduces them through an explicit command
    and backend-owned contract.
-4. Remove the Rustler macro lint exception when upstream resource registration
-   no longer emits `non_local_definitions`.
-5. Keep all-features and no-default-features checks warning-clean, and track
+4. Keep all-features and no-default-features checks warning-clean, and track
    clippy-specific findings separately before promoting
    `cargo clippy --workspace --all-targets --all-features -- -D warnings`.

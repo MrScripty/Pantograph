@@ -129,6 +129,9 @@ npm test
 # Runtime separation guard (no compile-time Python linkage)
 npm run test:runtime-separation
 
+# Opt-in BEAM / Rustler host smoke
+npm run test:rustler-beam-smoke
+
 # Configured quality gates
 npm run check
 

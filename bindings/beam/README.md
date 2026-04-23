@@ -23,6 +23,13 @@ PANTOGRAPH_RUSTLER_NIF_PATH="$(pwd)/target/debug/libpantograph_rustler.so" \
   mix test
 ```
 
+The repository also provides a canonical runner that performs the build,
+toolchain checks, and harness invocation together:
+
+```bash
+./scripts/check-rustler-beam-smoke.sh
+```
+
 The harness strips any platform extension before calling
 `:erlang.load_nif/2`, so callers may provide either the full library filename
 or the extensionless base path.

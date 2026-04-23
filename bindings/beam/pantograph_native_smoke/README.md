@@ -17,6 +17,16 @@ local build artifact and exercising a small public contract surface.
 - `PANTOGRAPH_RUSTLER_NIF_PATH` set to the compiled NIF path or base name,
   for example `target/debug/libpantograph_rustler.so`
 
+## Canonical Runner
+From the repository root, the standard way to execute this harness is:
+
+```bash
+./scripts/check-rustler-beam-smoke.sh
+```
+
+That runner builds `pantograph_rustler`, verifies the BEAM toolchain exists,
+and then exports `PANTOGRAPH_RUSTLER_NIF_PATH` for `mix test`.
+
 ## Notes
 - This harness intentionally avoids Hex dependencies.
 - JSON assertions stay string-based here so the harness remains runnable in

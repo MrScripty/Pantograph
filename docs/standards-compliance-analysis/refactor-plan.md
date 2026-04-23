@@ -1317,15 +1317,19 @@ fully resolved by standards compliance:
   audio-nodes --message-format short` no longer reports the historical
   audio-only dead-code warnings from
   `crates/node-engine/src/core_executor/settings.rs`.
-- Deferred, Rustler binding owner: `pantograph-rustler` uses a scoped
-  `non_local_definitions` lint exception around `rustler::resource!`
-  registration until Rustler exposes a warning-clean resource registration API.
+- Resolved: `pantograph-rustler` now registers resources through direct
+  `impl rustler::Resource` implementations plus `Env::register::<T>()`,
+  removing the deprecated `rustler::resource!` macro path and the scoped
+  `non_local_definitions` lint exception from
+  `crates/pantograph-rustler/src/resource_registration.rs`.
 - Deferred, Rustler binding owner: `cargo test -p pantograph_rustler` currently
   fails during test-binary linking because Rustler references Erlang NIF
   `enif_*` symbols that are supplied by the BEAM host at runtime. Keep
-  `cargo check -p pantograph_rustler` as the crate-local Rust gate and add a
-  BEAM-backed binding test harness before promoting crate-local tests to a hard
-  Rustler verification gate.
+  `cargo check -p pantograph_rustler` as the crate-local Rust gate; use the
+  BEAM-backed smoke harness through `./scripts/check-rustler-beam-smoke.sh`
+  when Mix/Elixir/Erlang are installed; and promote that host-side runner into
+  a harder CI/local gate only after the BEAM toolchain becomes an explicit
+  supported verification prerequisite.
 - Resolved: `cargo test -p pantograph-uniffi --all-features version` exposed a
   stale `WorkflowEvent::GraphModified` test fixture in
   `crates/pantograph-uniffi/src/lib.rs` that was missing the backend-owned

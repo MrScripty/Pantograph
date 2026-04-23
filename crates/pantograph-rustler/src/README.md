@@ -140,14 +140,19 @@ Pantograph.Native.workflow_validate(graph_json)
 ## Testing
 ```bash
 cargo check -p pantograph_rustler
+./scripts/check-rustler-beam-smoke.sh
 ```
 
-Direct Rust test binaries currently fail to link outside a BEAM-backed NIF test
-harness because the Erlang `enif_*` symbols are host-supplied.
+Direct Rust test binaries still fail to link outside a BEAM-backed NIF test
+harness because the Erlang `enif_*` symbols are host-supplied. The canonical
+host-visible verification path is `bindings/beam/pantograph_native_smoke/`,
+invoked through `./scripts/check-rustler-beam-smoke.sh` when the BEAM toolchain
+is present.
 
 ## Notes
-- `resource_registration.rs` carries a scoped `non_local_definitions` lint
-  exception for the current `rustler::resource!` expansion; remove it when
-  Rustler exposes a warning-clean registration API.
+- `resource_registration.rs` now registers resources through direct
+  `impl rustler::Resource` implementations and `Env::register::<T>()`,
+  avoiding the deprecated `rustler::resource!` macro expansion and its
+  `non_local_definitions` warning pressure.
 - `lib.rs` remains over the decomposition threshold and is tracked in the
   standards compliance plan.
