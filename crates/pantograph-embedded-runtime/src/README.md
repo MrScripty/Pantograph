@@ -34,6 +34,7 @@ packages.
 | `model_dependencies.rs` | Resolves Pantograph model dependency requirements and binds workflow requests to Pumas-backed execution facts. |
 | `python_runtime_execution.rs` | Owns captured execution metadata for Python-backed runtime runs so workflow diagnostics and registry projection can reuse one recorder contract outside the task-executor facade. |
 | `task_executor.rs` | Hosts Pantograph-specific task execution for Python-backed nodes and RAG-backed nodes while preserving core-node fallthrough. |
+| `task_executor_tests.rs` | Pantograph host task-executor unit and integration tests plus Python runtime fixture helpers extracted from the production task-executor module. |
 | `technical_fit.rs` | Owns embedded-runtime technical-fit translation, including host-side runtime snapshot/candidate assembly, request projection into backend runtime-registry selector input, selector invocation, and decision projection back to workflow-service contracts without moving policy into adapters. |
 | `python_runtime.rs` | Defines the out-of-process Python runtime adapter contract and the default process-backed implementation. |
 | `python_runtime_bridge.py` | Bridge script executed by the Python adapter so Pantograph can invoke Python workers without linking Python in-process. |
@@ -178,6 +179,10 @@ embedded-runtime crate.
   `lib_tests/runtime_preflight_tests.rs` so install-state availability checks
   and registry eviction-order selection do not accumulate in the root test
   harness.
+- Pantograph host task-executor tests and Python runtime fixture helpers stay
+  in `task_executor_tests.rs` so `task_executor.rs` remains focused on
+  production host execution for Python-backed nodes, RAG-backed nodes, and core
+  executor fallthrough.
 - Embedded-runtime source formatting and import grouping should stay
   rustfmt-compatible across runtime capability, registry, workflow runtime, and
   workflow-session modules so later behavior refactors do not mix semantic
