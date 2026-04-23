@@ -38,9 +38,9 @@ process ownership and app composition stay outside this crate.
 
 ## Contents
 - `lib.rs`: public runtime-registry facade and reservation/transition APIs.
-- `lib_tests.rs`: root runtime-registry facade, reservation, transition,
-  observation, reclaim, warmup, and admission unit coverage extracted from the
-  production facade.
+- `lib_tests.rs`: root runtime-registry facade test index.
+- `lib_tests/`: behavior-focused runtime-registry facade tests for lifecycle,
+  observations, retention/warmup, reclaim, reservations, and admission.
 - `admission.rs`: runtime admission budget, request requirement, and rejection
   reason contracts owned by the backend registry policy layer.
 - `observation.rs`: host-supplied runtime observation contracts used to
@@ -120,9 +120,10 @@ process ownership and app composition stay outside this crate.
 - Invalid state transitions are rejected rather than coerced.
 - Observation reconciliation updates registry-owned state but does not invent
   backend lifecycle facts.
-- Root runtime-registry facade tests stay in `lib_tests.rs` so production
-  registry APIs remain reviewable while later behavior-focused test splits can
-  follow the existing policy modules.
+- Root runtime-registry facade tests stay indexed by `lib_tests.rs`, with
+  behavior coverage split under `lib_tests/` so lifecycle, observation,
+  retention/warmup, reclaim, reservation-owner, and admission policy tests stay
+  reviewable by policy area.
 
 ## Revisit Triggers
 - A host needs to coordinate runtime state across processes or machines instead

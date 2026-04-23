@@ -507,7 +507,11 @@ Tasks:
   reclaim, warmup, and admission unit coverage now lives in
   `crates/pantograph-runtime-registry/src/lib_tests.rs`, reducing `lib.rs` to
   production registry facade and policy APIs before further behavior-focused
-  splits. The runtime-registry source README now also carries the required
+  splits. Runtime-registry facade test coverage now lives in behavior modules
+  under `crates/pantograph-runtime-registry/src/lib_tests/` for lifecycle,
+  observations, retention/warmup, reclaim, reservations, and admission,
+  reducing the root test index below the large-file threshold. The
+  runtime-registry source README now also carries the required
   standards headings so future boundary edits keep decision traceability
   complete. Technical-fit normalization, override, residency, queue-pressure,
   budget-pressure, and selector fallback tests now live in
