@@ -100,10 +100,11 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<div class="space-y-3">
+<div class="space-y-3" role="list">
   <!-- Agent Activity Log -->
   {#each activityLog as item (item.id)}
     <div
+      role="listitem"
       transition:slide
       onpointerenter={() => hoveredItemId = item.id}
       onpointerleave={() => hoveredItemId = null}

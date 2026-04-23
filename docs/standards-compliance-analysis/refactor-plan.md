@@ -1253,8 +1253,10 @@ Tasks:
   limitation. Subsequent frontend warning-ratchet slices also removed the
   remaining `npm run build` Svelte warnings in `WorkflowToolbar`,
   `PumaLibNode`, workflow-node dependency overrides and image preview, the
-  dependency environment node state snapshot, `ActivityLog`, and the reviewed
-  graph-canvas tabindex suppression, so the production build now runs clean.
+  dependency environment node state snapshot, and the reviewed graph-canvas
+  tabindex suppression. A later verification rerun caught one remaining
+  `ActivityLog` hover-wrapper warning; the component now exposes list/listitem
+  semantics, so the production build runs clean again.
 - [x] Close or update `docs/anti-pattern-remediation-tracker.md` Phase 5 for
   process-node policy controls. Status: `ProcessTask` now defaults to a
   disabled backend-owned `ProcessExecutionPolicy`; allowed process commands
