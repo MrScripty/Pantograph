@@ -81,7 +81,7 @@ runtime capabilities now project from managed-runtime snapshots rather than
 flat install-only capability records, preserving readiness-phase context for
 preflight and diagnostics.
 Binding platform planning now also has a dedicated standards-reviewed plan in
-`IMPLEMENTATION-PLAN-pantograph-binding-platform.md`, covering curated
+`docs/plans/pantograph-binding-platform/final-plan.md`, covering curated
 client-facing surface policy, shared backend-owned binding contract ownership,
 and the C#, Python, and BEAM language lanes.
 KV cache implementation now also has a dedicated standards-reviewed plan in
@@ -800,7 +800,7 @@ session scheduler that makes better admission and reuse decisions.
 
 - `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`
 - `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-phase-5-follow-on-completion.md`
-- `IMPLEMENTATION-PLAN-pantograph-binding-platform.md`
+- `docs/plans/pantograph-binding-platform/final-plan.md`
 - `IMPLEMENTATION-PLAN-pantograph-phase-5-rustler-nif-testability-and-beam-verification.md`
 
 **Goal:** Stop degrading engine semantics at the adapter boundary and give the

@@ -3,7 +3,7 @@
 ## Status
 Draft
 
-Last updated: 2026-04-22
+Last updated: 2026-04-23
 
 ## Current Source-of-Truth Summary
 
@@ -21,6 +21,9 @@ The roadmap should summarize status and point here for binding-platform
 milestone detail. Binding-specific subplans may exist for individual host
 lanes, but this document is the primary source of truth for overall binding
 scope, sequencing, support tiers, and verification expectations.
+
+Canonical plan path:
+`docs/plans/pantograph-binding-platform/final-plan.md`.
 
 The BEAM/Rustler lane is no longer blocked on NIF compilation. The Rustler
 crate now compiles and builds successfully, and the in-repo Mix/ExUnit smoke
@@ -43,6 +46,15 @@ wrappers have moved forward:
 - `bindings/csharp/Pantograph.NativeSmoke` now exercises the generated C#
   binding against the real native library through session create, run, status,
   queue, keep-alive, and close paths.
+- `bindings/csharp/PACKAGE-README.md`,
+  `bindings/csharp/Pantograph.DirectRuntimeQuickstart/README.md`, and the
+  generated package manifests are now shipped as part of the C# artifact
+  contract and therefore need explicit support-tier reconciliation rather than
+  being treated as incidental examples.
+- `crates/pantograph-uniffi/src/runtime_tests.rs` now covers direct-runtime
+  invalid-request session envelopes plus persisted graph/edit-session behavior,
+  so the native-side baseline for the direct headless runtime is stronger than
+  earlier drafts of this plan assumed.
 - Headless binding CI currently packages and uploads Linux C# and native
   artifacts only; Windows and macOS artifact expectations are documented but
   not yet backed by equivalent CI artifact verification.
@@ -115,6 +127,12 @@ incomplete:
   local smoke harness now exists, but broader event, callback, session, and
   error-envelope coverage plus support-tier positioning still need to be
   integrated into the larger bindings plan
+- the plan artifact itself must now live under `docs/` and stop using a
+  repository-root path if it is going to remain standards-compliant source of
+  truth
+- shipped C# package docs, quickstart docs, and generated manifests are part
+  of the external consumer contract, but earlier drafts of this plan did not
+  treat them as first-class affected artifacts
 - immediate wrapper insertion points are already oversized enough that more
   binding work would deepen existing standards violations if it lands without
   decomposition
@@ -196,10 +214,12 @@ classify, and document behind current facades before considering API breaks.
 ### Affected Persisted Artifacts
 
 - `ROADMAP-pantograph-workflow-graph-scheduling-runtime.md`
-- This binding-platform plan
+- `docs/plans/pantograph-binding-platform/final-plan.md`
 - `IMPLEMENTATION-PLAN-pantograph-phase-5-rustler-nif-testability-and-beam-verification.md`
 - `docs/headless-native-bindings.md`
 - `bindings/csharp/README.md`
+- `bindings/csharp/PACKAGE-README.md`
+- `bindings/csharp/Pantograph.DirectRuntimeQuickstart/README.md`
 - `bindings/beam/README.md`
 - `bindings/beam/pantograph_native_smoke/README.md`
 - `crates/pantograph-uniffi/README.md`
@@ -207,17 +227,20 @@ classify, and document behind current facades before considering API breaks.
 - Any new `bindings/python/` documentation or expanded BEAM harness
   documentation introduced by implementation
 - `.github/workflows/headless-embedding-contract.yml`
-- Packaging scripts and manifest guidance for generated host-language artifacts
+- `scripts/package-uniffi-csharp-artifacts.sh`
+- `scripts/check-packaged-csharp-quickstart.sh`
+- Generated package manifests and manifest guidance for host-language artifacts
 
 ### Existing Codebase Non-Compliance In Immediate Surroundings
 
-The immediate wrapper insertion points already exceed decomposition thresholds
-from `CODING-STANDARDS.md`:
+The immediate wrapper insertion points still exceed decomposition thresholds
+from `CODING-STANDARDS.md`, although they are materially smaller than in the
+earlier draft of this plan:
 
-- `crates/pantograph-rustler/src/lib.rs` is approximately 2008 lines after
-  partial extraction into focused helper modules
-- `crates/pantograph-uniffi/src/lib.rs` is approximately 1647 lines
-- `crates/pantograph-uniffi/src/runtime.rs` is approximately 1149 lines
+- `crates/pantograph-rustler/src/lib.rs` is approximately 889 lines after
+  substantial extraction into focused helper modules
+- `crates/pantograph-uniffi/src/lib.rs` is approximately 720 lines
+- `crates/pantograph-uniffi/src/runtime.rs` is approximately 588 lines
 
 The binding-platform plan must therefore include decomposition review and
 shared-helper extraction before significantly expanding the public binding
@@ -233,10 +256,14 @@ decomposition exception with a revisit trigger.
   `crates/pantograph-rustler/src/README.md` now mostly satisfy host-facing and
   structured-producer README expectations, but their support-tier content must
   be reconciled with this plan and the roadmap.
-- `bindings/csharp/README.md` and `bindings/beam/README.md` describe harness
-  usage but do not yet carry the full host-facing `API Consumer Contract` and
-  structured artifact/package contract expected for binding harness and artifact
-  directories.
+- `bindings/csharp/README.md` and `bindings/beam/README.md` remain lighter than
+  the current README template expectations for host-facing directories, and the
+  shipped C# artifact docs in `bindings/csharp/PACKAGE-README.md` and
+  `bindings/csharp/Pantograph.DirectRuntimeQuickstart/README.md` are not yet
+  reconciled with the same support-tier and platform-support language.
+- `bindings/beam/pantograph_native_smoke/README.md` documents the current BEAM
+  smoke surface, but it does not yet explain how that narrow harness maps to
+  the much broader Rustler README `Supported` row.
 - `docs/headless-native-bindings.md` documents C# and platform artifact layouts
   but does not yet state a support-tier matrix or distinguish CI-backed
   platform artifacts from documented future platform layouts.
@@ -309,11 +336,14 @@ Corrections applied:
 
 - Recorded this as the primary binding-platform source of truth instead of
   leaving binding policy scattered across roadmap notes and narrower subplans.
+- Moved the plan to `docs/plans/pantograph-binding-platform/final-plan.md` so
+  the source-of-truth artifact follows the current documentation artifact
+  layout.
 - Added explicit milestones, verification, re-plan triggers, and completion
   criteria.
 - Refreshed the plan after the Rustler split, BEAM smoke harness, C# smoke
-  expansion, and binding README support-tier updates so execution starts from
-  current repo state.
+  expansion, direct-runtime native tests, shipped C# package docs, and binding
+  README support-tier updates so execution starts from current repo state.
 
 ### Pass 2: Binding Architecture And Surface Policy
 
@@ -402,11 +432,19 @@ Corrections applied:
 #### Tasks
 
 - Define the Pantograph client-facing binding surface for workflow execution,
-  workflow sessions, workflow graph authoring, and shutdown/lifecycle calls.
+  workflow sessions, workflow graph authoring, shutdown/lifecycle calls, and
+  every other surface currently labeled `supported` in host-facing READMEs or
+  shipped package docs.
 - Reconcile existing support-tier claims in `crates/pantograph-uniffi/README.md`
-  and `crates/pantograph-rustler/README.md` with this plan and the roadmap.
+  and `crates/pantograph-rustler/README.md` with this plan, the shipped C#
+  artifact docs, and the roadmap.
 - Classify each host lane and exported surface as `supported`,
   `experimental`, or `internal-only`.
+- Inventory the full current Rustler `Supported` row, including workflow JSON
+  graph helpers, executor resources, orchestration store operations, node
+  registry operations, callback response/error NIFs, and Pumas API resource
+  operations, then either justify each surface with an external consumer
+  rationale and verification plan or downgrade/reclassify it.
 - Record the initial reconciled matrix. Expected starting point:
   C# over the direct `pantograph_headless`/UniFFI runtime path is candidate
   `supported`; Python host bindings are candidate `experimental`; BEAM/Rustler
@@ -418,7 +456,10 @@ Corrections applied:
   helpers, and host-harness-only functions as either explicitly experimental or
   internal-only unless a documented external consumer rationale exists.
 - Reconcile `docs/headless-native-bindings.md`, wrapper READMEs, binding
-  harness READMEs, and the roadmap with the curated surface policy.
+  harness READMEs, shipped C# package docs, generated manifest expectations,
+  and the roadmap with the curated surface policy.
+- Remove the repository-root copy of this plan once all live references point
+  to the canonical `docs/plans/` path.
 
 #### Verification
 
@@ -428,8 +469,12 @@ Corrections applied:
 - Confirm every included public capability has an external consumer rationale.
 - Confirm no README claims `supported` for a surface that lacks both native-side
   and host-language verification required by the testing standards.
+- Confirm any BEAM surface that remains `supported` is explicitly justified and
+  no longer inherited implicitly from the older broad Rustler README row.
 - Confirm current `supported`, `experimental`, and `internal-only` labels state
   packaging, versioning, and host-test expectations.
+- Confirm the canonical source-of-truth path for this plan is under `docs/`
+  and all live references resolve to that path.
 
 ### Milestone 2: Shared Contract Layer And Wrapper Decomposition Map
 
@@ -478,6 +523,9 @@ Corrections applied:
   request, missing workflow/session, and backend-owned error-envelope paths.
 - Preserve packaged-artifact checks so generated C# and the native library from
   the same build are proven together.
+- Reconcile shipped C# artifact docs and manifests with the actual supported
+  surface so the artifact README, quickstart README, generated manifest, and
+  repository docs describe the same contract.
 - Decide whether C# support is Linux-only at first or cross-platform. If
   cross-platform, add Windows/macOS package and smoke verification; if Linux-only
   initially, document that explicitly in package docs and release notes.
@@ -567,6 +615,11 @@ Corrections applied:
 - Add or update `API Consumer Contract` and `Structured Producer Contract`
   sections for `bindings/csharp`, `bindings/beam`, and any new
   `bindings/python` directory.
+- Update shipped C# artifact docs and generated manifest content so
+  `bindings/csharp/PACKAGE-README.md`,
+  `bindings/csharp/Pantograph.DirectRuntimeQuickstart/README.md`,
+  `docs/headless-native-bindings.md`, and package `manifest.json` semantics stay
+  aligned.
 - Add a platform support matrix covering Linux, Windows, macOS ARM, and macOS
   Intel with each target marked `supported`, `best-effort`, or `future`.
 - Align `docs/headless-native-bindings.md`, packaging scripts, manifests, and
@@ -609,10 +662,13 @@ Corrections applied:
 - Supported bindings have both native-language and host-language verification.
 - C#, Python, and BEAM each have explicit scope, support tier, and test
   expectations recorded in the source of truth.
+- The canonical binding-platform source of truth lives under `docs/plans/`, and
+  active roadmap/subplan references point there instead of the repository root.
 - Platform support for native binding artifacts is explicit and matches CI or
   release verification.
-- Binding harness/package directories meet host-facing and structured-producer
-  documentation expectations.
+- Binding harness/package directories, shipped C# artifact docs, and generated
+  manifest expectations meet host-facing and structured-producer documentation
+  requirements.
 - Wrapper crates remain thin enough in ownership that canonical semantics do
   not drift into host-specific implementation layers, and remaining oversized
   files have accepted decomposition exceptions with revisit triggers.

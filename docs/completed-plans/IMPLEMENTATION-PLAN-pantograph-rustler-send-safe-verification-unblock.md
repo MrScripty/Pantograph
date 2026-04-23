@@ -22,7 +22,7 @@ Use this file when the work being discussed is specifically:
 
 Use `IMPLEMENTATION-PLAN-pantograph-phase-5-rustler-nif-testability-and-beam-verification.md`
 for the broader BEAM-hosted verification lane, and
-`IMPLEMENTATION-PLAN-pantograph-binding-platform.md` for broader binding
+`docs/plans/pantograph-binding-platform/final-plan.md` for broader binding
 platform policy and support-tier questions.
 
 ## Objective

@@ -9,7 +9,7 @@ Last updated: 2026-04-18
 
 This document now serves as the BEAM-specific execution lane within the broader
 Pantograph binding platform planning in
-`IMPLEMENTATION-PLAN-pantograph-binding-platform.md`. It keeps the narrower
+`docs/plans/pantograph-binding-platform/final-plan.md`. It keeps the narrower
 Rustler NIF problem statement and BEAM-hosted verification detail available,
 but the binding-platform plan is now the primary source of truth for overall
 binding policy, support tiers, and cross-language sequencing across C#, Python,

@@ -23,7 +23,7 @@ Use this file for the recorded close-out result covering:
 Use the earlier plan
 `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`
 for completed milestone history and already-landed contract work. Use
-`IMPLEMENTATION-PLAN-pantograph-binding-platform.md` for broader first-class
+`docs/plans/pantograph-binding-platform/final-plan.md` for broader first-class
 binding platform scope that is not required to close the remaining event
 contract.
 
@@ -68,7 +68,7 @@ completed Phase 5 implementation unnecessarily, while ensuring that:
 - Expanding the supported client-facing binding surface beyond what is required
   to preserve the current event contract
 - New C#, Python, or BEAM product-surface work that belongs to
-  `IMPLEMENTATION-PLAN-pantograph-binding-platform.md`
+  `docs/plans/pantograph-binding-platform/final-plan.md`
 - Scheduler V2, incremental graph execution, KV cache, or runtime-registry
   roadmap work except where they expose a concrete remaining Phase 5 gap
 - Frontend-owned workflow semantics, optimistic event handling, or adapter-side
@@ -126,7 +126,7 @@ helpers and tightens remaining coverage behind the current boundary.
 
 - `ROADMAP-pantograph-workflow-graph-scheduling-runtime.md`
 - `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`
-- `IMPLEMENTATION-PLAN-pantograph-binding-platform.md`
+- `docs/plans/pantograph-binding-platform/final-plan.md`
 - `IMPLEMENTATION-PLAN-pantograph-phase-5-rustler-nif-testability-and-beam-verification.md`
 - `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/PLAN-STANDARDS.md`
 - `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/ARCHITECTURE-PATTERNS.md`
@@ -154,7 +154,7 @@ helpers and tightens remaining coverage behind the current boundary.
 - `ROADMAP-pantograph-workflow-graph-scheduling-runtime.md`
 - This follow-on plan
 - `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`
-- `IMPLEMENTATION-PLAN-pantograph-binding-platform.md`
+- `docs/plans/pantograph-binding-platform/final-plan.md`
 - `IMPLEMENTATION-PLAN-pantograph-phase-5-rustler-nif-testability-and-beam-verification.md`
 - Touched backend, wrapper, adapter, or consumer `README.md` files
 
@@ -435,7 +435,7 @@ without losing visibility into broader binding-platform follow-ons.
 **Tasks:**
 - [ ] Update the roadmap’s remaining Phase 5 items so true event-contract gaps
       stay in Phase 5 and broader binding-platform product work points to
-      `IMPLEMENTATION-PLAN-pantograph-binding-platform.md`.
+      `docs/plans/pantograph-binding-platform/final-plan.md`.
 - [ ] Update
       `docs/completed-plans/IMPLEMENTATION-PLAN-pantograph-phase-5-real-workflow-event-contract.md`
       to mark this follow-on plan as the source of truth for the remaining
