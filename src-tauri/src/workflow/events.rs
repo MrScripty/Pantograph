@@ -9,8 +9,9 @@ use std::collections::HashMap;
 
 use pantograph_embedded_runtime::ManagedRuntimeManagerRuntimeView;
 use pantograph_workflow_service::{
-    WorkflowCapabilitiesResponse, WorkflowGraph, WorkflowSchedulerSnapshotDiagnostics,
-    WorkflowSessionQueueItem, WorkflowSessionSummary, WorkflowTraceRuntimeMetrics,
+    WorkflowCapabilitiesResponse, WorkflowExecutionSessionQueueItem,
+    WorkflowExecutionSessionSummary, WorkflowGraph, WorkflowSchedulerSnapshotDiagnostics,
+    WorkflowTraceRuntimeMetrics,
 };
 
 use super::diagnostics::{DiagnosticsRuntimeLifecycleSnapshot, WorkflowDiagnosticsProjection};
@@ -39,8 +40,8 @@ pub struct WorkflowSchedulerSnapshotEventInput {
     pub execution_id: String,
     pub session_id: String,
     pub captured_at_ms: u64,
-    pub session: Option<WorkflowSessionSummary>,
-    pub items: Vec<WorkflowSessionQueueItem>,
+    pub session: Option<WorkflowExecutionSessionSummary>,
+    pub items: Vec<WorkflowExecutionSessionQueueItem>,
     pub diagnostics: Option<WorkflowSchedulerSnapshotDiagnostics>,
     pub error: Option<String>,
 }
@@ -220,9 +221,9 @@ pub enum WorkflowEvent {
         /// Millisecond unix timestamp for when the snapshot was captured
         captured_at_ms: u64,
         /// Session summary when available
-        session: Option<WorkflowSessionSummary>,
+        session: Option<WorkflowExecutionSessionSummary>,
         /// Queue items visible at capture time
-        items: Vec<WorkflowSessionQueueItem>,
+        items: Vec<WorkflowExecutionSessionQueueItem>,
         /// Additive backend-owned scheduler diagnostics
         diagnostics: Option<WorkflowSchedulerSnapshotDiagnostics>,
         /// Error encountered while collecting the scheduler snapshot

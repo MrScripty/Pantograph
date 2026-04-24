@@ -9,7 +9,7 @@ use crate::capabilities;
 use crate::graph::GraphSessionStore;
 #[cfg(test)]
 use crate::graph::WorkflowGraphSessionStateView;
-use crate::scheduler::WorkflowSessionStore;
+use crate::scheduler::WorkflowExecutionSessionStore;
 #[cfg(test)]
 use crate::technical_fit::WorkflowTechnicalFitOverride;
 #[cfg(test)]
@@ -48,33 +48,34 @@ pub use pantograph_runtime_attribution::{
 };
 
 #[cfg(test)]
-use crate::graph::WorkflowSessionKind;
+use crate::graph::WorkflowExecutionSessionKind;
 #[cfg(test)]
 use crate::scheduler::unix_timestamp_ms;
 
 pub(crate) use crate::scheduler::scheduler_snapshot_trace_execution_id;
 pub use crate::scheduler::{
-    select_runtime_unload_candidate_by_affinity, WorkflowSchedulerAdmissionOutcome,
+    select_runtime_unload_candidate_by_affinity, WorkflowExecutionSessionInspectionRequest,
+    WorkflowExecutionSessionInspectionResponse, WorkflowExecutionSessionKeepAliveRequest,
+    WorkflowExecutionSessionKeepAliveResponse, WorkflowExecutionSessionQueueCancelRequest,
+    WorkflowExecutionSessionQueueCancelResponse, WorkflowExecutionSessionQueueItem,
+    WorkflowExecutionSessionQueueItemStatus, WorkflowExecutionSessionQueueListRequest,
+    WorkflowExecutionSessionQueueListResponse, WorkflowExecutionSessionQueueReprioritizeRequest,
+    WorkflowExecutionSessionQueueReprioritizeResponse, WorkflowExecutionSessionRetentionHint,
+    WorkflowExecutionSessionRuntimeSelectionTarget, WorkflowExecutionSessionRuntimeUnloadCandidate,
+    WorkflowExecutionSessionStaleCleanupRequest, WorkflowExecutionSessionStaleCleanupResponse,
+    WorkflowExecutionSessionStaleCleanupWorker, WorkflowExecutionSessionStaleCleanupWorkerConfig,
+    WorkflowExecutionSessionState, WorkflowExecutionSessionStatusRequest,
+    WorkflowExecutionSessionStatusResponse, WorkflowExecutionSessionSummary,
+    WorkflowExecutionSessionUnloadReason, WorkflowSchedulerAdmissionOutcome,
     WorkflowSchedulerDecisionReason, WorkflowSchedulerRuntimeRegistryDiagnostics,
     WorkflowSchedulerRuntimeWarmupDecision, WorkflowSchedulerRuntimeWarmupReason,
     WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse,
-    WorkflowSessionInspectionRequest, WorkflowSessionInspectionResponse,
-    WorkflowSessionKeepAliveRequest, WorkflowSessionKeepAliveResponse,
-    WorkflowSessionQueueCancelRequest, WorkflowSessionQueueCancelResponse,
-    WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus, WorkflowSessionQueueListRequest,
-    WorkflowSessionQueueListResponse, WorkflowSessionQueueReprioritizeRequest,
-    WorkflowSessionQueueReprioritizeResponse, WorkflowSessionRetentionHint,
-    WorkflowSessionRuntimeSelectionTarget, WorkflowSessionRuntimeUnloadCandidate,
-    WorkflowSessionStaleCleanupRequest, WorkflowSessionStaleCleanupResponse,
-    WorkflowSessionStaleCleanupWorker, WorkflowSessionStaleCleanupWorkerConfig,
-    WorkflowSessionState, WorkflowSessionStatusRequest, WorkflowSessionStatusResponse,
-    WorkflowSessionSummary, WorkflowSessionUnloadReason,
 };
 
 /// Service entrypoint for workflow API operations.
 #[derive(Clone)]
 pub struct WorkflowService {
-    session_store: Arc<Mutex<WorkflowSessionStore>>,
+    session_store: Arc<Mutex<WorkflowExecutionSessionStore>>,
     graph_session_store: Arc<GraphSessionStore>,
     attribution_store: Option<Arc<Mutex<SqliteAttributionStore>>>,
     scheduler_diagnostics_provider:

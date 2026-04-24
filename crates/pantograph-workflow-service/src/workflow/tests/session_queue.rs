@@ -1,22 +1,22 @@
 use super::*;
 
 #[tokio::test]
-async fn workflow_session_queue_items_include_authoritative_timestamps() {
+async fn workflow_execution_session_queue_items_include_authoritative_timestamps() {
     let host = MockWorkflowHost::new(8, 1024);
     let service = WorkflowService::new();
     let created = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-1".to_string(),
                 usage_profile: None,
                 keep_alive: false,
             },
         )
         .await
-        .expect("create workflow session");
+        .expect("create workflow execution session");
 
-    let request = WorkflowSessionRunRequest {
+    let request = WorkflowExecutionSessionRunRequest {
         session_id: created.session_id.clone(),
         inputs: Vec::new(),
         output_targets: None,
@@ -57,7 +57,7 @@ async fn workflow_session_queue_items_include_authoritative_timestamps() {
     );
     assert_eq!(
         pending_items[0].status,
-        WorkflowSessionQueueItemStatus::Pending
+        WorkflowExecutionSessionQueueItemStatus::Pending
     );
     assert_eq!(
         pending_items[0].scheduler_decision_reason,
@@ -80,7 +80,7 @@ async fn workflow_session_queue_items_include_authoritative_timestamps() {
     assert_eq!(running_items[0].queue_id, queue_id);
     assert_eq!(
         running_items[0].status,
-        WorkflowSessionQueueItemStatus::Running
+        WorkflowExecutionSessionQueueItemStatus::Running
     );
     assert_eq!(
         running_items[0].enqueued_at_ms,
@@ -107,20 +107,20 @@ async fn workflow_session_queue_items_include_authoritative_timestamps() {
 }
 
 #[tokio::test]
-async fn workflow_session_queue_marks_loaded_compatible_admission_as_warm_reuse() {
+async fn workflow_execution_session_queue_marks_loaded_compatible_admission_as_warm_reuse() {
     let host = MockWorkflowHost::new(8, 1024);
     let service = WorkflowService::new();
     let created = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-1".to_string(),
                 usage_profile: Some("interactive".to_string()),
                 keep_alive: true,
             },
         )
         .await
-        .expect("create workflow session");
+        .expect("create workflow execution session");
 
     let queue_id = {
         let mut store = service
@@ -133,7 +133,7 @@ async fn workflow_session_queue_marks_loaded_compatible_admission_as_warm_reuse(
         store
             .enqueue_run(
                 &created.session_id,
-                &WorkflowSessionRunRequest {
+                &WorkflowExecutionSessionRunRequest {
                     session_id: created.session_id.clone(),
                     inputs: Vec::new(),
                     output_targets: None,
@@ -172,20 +172,21 @@ async fn workflow_session_queue_marks_loaded_compatible_admission_as_warm_reuse(
 }
 
 #[tokio::test]
-async fn workflow_session_queue_prefers_bounded_warm_reuse_over_same_priority_cold_head() {
+async fn workflow_execution_session_queue_prefers_bounded_warm_reuse_over_same_priority_cold_head()
+{
     let host = MockWorkflowHost::new(8, 1024);
     let service = WorkflowService::new();
     let created = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-1".to_string(),
                 usage_profile: Some("interactive".to_string()),
                 keep_alive: true,
             },
         )
         .await
-        .expect("create workflow session");
+        .expect("create workflow execution session");
 
     let (cold_head_queue_id, warm_queue_id) = {
         let mut store = service
@@ -205,7 +206,7 @@ async fn workflow_session_queue_prefers_bounded_warm_reuse_over_same_priority_co
         let cold_head_queue_id = store
             .enqueue_run(
                 &created.session_id,
-                &WorkflowSessionRunRequest {
+                &WorkflowExecutionSessionRunRequest {
                     session_id: created.session_id.clone(),
                     inputs: Vec::new(),
                     output_targets: None,
@@ -222,7 +223,7 @@ async fn workflow_session_queue_prefers_bounded_warm_reuse_over_same_priority_co
         let warm_queue_id = store
             .enqueue_run(
                 &created.session_id,
-                &WorkflowSessionRunRequest {
+                &WorkflowExecutionSessionRunRequest {
                     session_id: created.session_id.clone(),
                     inputs: Vec::new(),
                     output_targets: None,
@@ -263,20 +264,20 @@ async fn workflow_session_queue_prefers_bounded_warm_reuse_over_same_priority_co
 }
 
 #[tokio::test]
-async fn workflow_session_queue_items_expose_authoritative_queue_positions() {
+async fn workflow_execution_session_queue_items_expose_authoritative_queue_positions() {
     let host = MockWorkflowHost::new(8, 1024);
     let service = WorkflowService::new();
     let created = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-1".to_string(),
                 usage_profile: Some("interactive".to_string()),
                 keep_alive: false,
             },
         )
         .await
-        .expect("create workflow session");
+        .expect("create workflow execution session");
 
     let first_queue_id = {
         let mut store = service
@@ -286,7 +287,7 @@ async fn workflow_session_queue_items_expose_authoritative_queue_positions() {
         store
             .enqueue_run(
                 &created.session_id,
-                &WorkflowSessionRunRequest {
+                &WorkflowExecutionSessionRunRequest {
                     session_id: created.session_id.clone(),
                     inputs: Vec::new(),
                     output_targets: None,
@@ -306,7 +307,7 @@ async fn workflow_session_queue_items_expose_authoritative_queue_positions() {
         store
             .enqueue_run(
                 &created.session_id,
-                &WorkflowSessionRunRequest {
+                &WorkflowExecutionSessionRunRequest {
                     session_id: created.session_id.clone(),
                     inputs: Vec::new(),
                     output_targets: None,
@@ -354,20 +355,21 @@ async fn workflow_session_queue_items_expose_authoritative_queue_positions() {
 }
 
 #[tokio::test]
-async fn workflow_session_queue_promotes_starved_runs_before_newer_higher_priority_runs() {
+async fn workflow_execution_session_queue_promotes_starved_runs_before_newer_higher_priority_runs()
+{
     let host = MockWorkflowHost::new(8, 1024);
     let service = WorkflowService::new();
     let created = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-1".to_string(),
                 usage_profile: Some("interactive".to_string()),
                 keep_alive: false,
             },
         )
         .await
-        .expect("create workflow session");
+        .expect("create workflow execution session");
 
     let low_priority_queue_id = {
         let mut store = service
@@ -377,7 +379,7 @@ async fn workflow_session_queue_promotes_starved_runs_before_newer_higher_priori
         store
             .enqueue_run(
                 &created.session_id,
-                &WorkflowSessionRunRequest {
+                &WorkflowExecutionSessionRunRequest {
                     session_id: created.session_id.clone(),
                     inputs: Vec::new(),
                     output_targets: None,
@@ -404,7 +406,7 @@ async fn workflow_session_queue_promotes_starved_runs_before_newer_higher_priori
             store
                 .enqueue_run(
                     &created.session_id,
-                    &WorkflowSessionRunRequest {
+                    &WorkflowExecutionSessionRunRequest {
                         session_id: created.session_id.clone(),
                         inputs: Vec::new(),
                         output_targets: None,

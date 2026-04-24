@@ -534,17 +534,17 @@ fn workflow_trace_store_filters_by_session_id_when_execution_differs() {
             workflow_id: Some("wf-1".to_string()),
             session_id: "session-1".to_string(),
             captured_at_ms: 105,
-            session: Some(crate::workflow::WorkflowSessionSummary {
+            session: Some(crate::workflow::WorkflowExecutionSessionSummary {
                 session_id: "session-1".to_string(),
                 workflow_id: "wf-1".to_string(),
-                session_kind: crate::graph::WorkflowSessionKind::Workflow,
+                session_kind: crate::graph::WorkflowExecutionSessionKind::Workflow,
                 usage_profile: Some("interactive".to_string()),
                 keep_alive: true,
-                state: crate::workflow::WorkflowSessionState::Running,
+                state: crate::workflow::WorkflowExecutionSessionState::Running,
                 queued_runs: 0,
                 run_count: 1,
             }),
-            items: vec![crate::workflow::WorkflowSessionQueueItem {
+            items: vec![crate::workflow::WorkflowExecutionSessionQueueItem {
                 queue_id: "queue-1".to_string(),
                 run_id: Some("run-1".to_string()),
                 enqueued_at_ms: Some(100),
@@ -553,7 +553,7 @@ fn workflow_trace_store_filters_by_session_id_when_execution_differs() {
                 queue_position: None,
                 scheduler_admission_outcome: None,
                 scheduler_decision_reason: None,
-                status: crate::workflow::WorkflowSessionQueueItemStatus::Running,
+                status: crate::workflow::WorkflowExecutionSessionQueueItemStatus::Running,
             }],
             diagnostics: None,
             error: None,
@@ -658,17 +658,17 @@ fn workflow_trace_store_records_queue_and_runtime_snapshot_metrics() {
             workflow_id: Some("wf-1".to_string()),
             session_id: "session-1".to_string(),
             captured_at_ms: 90,
-            session: Some(crate::workflow::WorkflowSessionSummary {
+            session: Some(crate::workflow::WorkflowExecutionSessionSummary {
                 session_id: "session-1".to_string(),
                 workflow_id: "wf-1".to_string(),
-                session_kind: crate::graph::WorkflowSessionKind::Workflow,
+                session_kind: crate::graph::WorkflowExecutionSessionKind::Workflow,
                 usage_profile: None,
                 keep_alive: true,
-                state: crate::workflow::WorkflowSessionState::IdleLoaded,
+                state: crate::workflow::WorkflowExecutionSessionState::IdleLoaded,
                 queued_runs: 1,
                 run_count: 2,
             }),
-            items: vec![crate::workflow::WorkflowSessionQueueItem {
+            items: vec![crate::workflow::WorkflowExecutionSessionQueueItem {
                 queue_id: "queue-1".to_string(),
                 run_id: Some("exec-1".to_string()),
                 enqueued_at_ms: Some(80),
@@ -677,7 +677,7 @@ fn workflow_trace_store_records_queue_and_runtime_snapshot_metrics() {
                 queue_position: None,
                 scheduler_admission_outcome: None,
                 scheduler_decision_reason: None,
-                status: crate::workflow::WorkflowSessionQueueItemStatus::Pending,
+                status: crate::workflow::WorkflowExecutionSessionQueueItemStatus::Pending,
             }],
             diagnostics: Some(WorkflowSchedulerSnapshotDiagnostics {
                 loaded_session_count: 1,
@@ -765,17 +765,17 @@ fn workflow_trace_store_records_queue_and_runtime_snapshot_metrics() {
             workflow_id: Some("wf-1".to_string()),
             session_id: "session-1".to_string(),
             captured_at_ms: 120,
-            session: Some(crate::workflow::WorkflowSessionSummary {
+            session: Some(crate::workflow::WorkflowExecutionSessionSummary {
                 session_id: "session-1".to_string(),
                 workflow_id: "wf-1".to_string(),
-                session_kind: crate::graph::WorkflowSessionKind::Workflow,
+                session_kind: crate::graph::WorkflowExecutionSessionKind::Workflow,
                 usage_profile: None,
                 keep_alive: true,
-                state: crate::workflow::WorkflowSessionState::Running,
+                state: crate::workflow::WorkflowExecutionSessionState::Running,
                 queued_runs: 0,
                 run_count: 3,
             }),
-            items: vec![crate::workflow::WorkflowSessionQueueItem {
+            items: vec![crate::workflow::WorkflowExecutionSessionQueueItem {
                 queue_id: "queue-1".to_string(),
                 run_id: Some("exec-1".to_string()),
                 enqueued_at_ms: Some(80),
@@ -784,7 +784,7 @@ fn workflow_trace_store_records_queue_and_runtime_snapshot_metrics() {
                 queue_position: None,
                 scheduler_admission_outcome: None,
                 scheduler_decision_reason: None,
-                status: crate::workflow::WorkflowSessionQueueItemStatus::Running,
+                status: crate::workflow::WorkflowExecutionSessionQueueItemStatus::Running,
             }],
             diagnostics: Some(WorkflowSchedulerSnapshotDiagnostics {
                 loaded_session_count: 1,

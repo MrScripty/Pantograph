@@ -1,14 +1,14 @@
 use super::*;
 
 #[tokio::test]
-async fn workflow_session_capacity_rebalance_uses_host_selected_candidate() {
+async fn workflow_execution_session_capacity_rebalance_uses_host_selected_candidate() {
     let unloads = Arc::new(Mutex::new(Vec::new()));
     let service = WorkflowService::with_capacity_limits(3, 2);
 
     let first = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &SelectingRuntimeHost::new(String::new(), unloads.clone()),
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-1".to_string(),
                 usage_profile: Some("first".to_string()),
                 keep_alive: true,
@@ -17,9 +17,9 @@ async fn workflow_session_capacity_rebalance_uses_host_selected_candidate() {
         .await
         .expect("create first keep-alive session");
     let second = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &SelectingRuntimeHost::new(String::new(), unloads.clone()),
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-2".to_string(),
                 usage_profile: Some("second".to_string()),
                 keep_alive: true,
@@ -28,9 +28,9 @@ async fn workflow_session_capacity_rebalance_uses_host_selected_candidate() {
         .await
         .expect("create second keep-alive session");
     let third = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &SelectingRuntimeHost::new(String::new(), unloads.clone()),
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-3".to_string(),
                 usage_profile: Some("third".to_string()),
                 keep_alive: false,
@@ -43,9 +43,9 @@ async fn workflow_session_capacity_rebalance_uses_host_selected_candidate() {
     let selecting_host = SelectingRuntimeHost::new(second.session_id.clone(), unloads.clone());
 
     service
-        .run_workflow_session(
+        .run_workflow_execution_session(
             &selecting_host,
-            WorkflowSessionRunRequest {
+            WorkflowExecutionSessionRunRequest {
                 session_id: third_session_id.clone(),
                 inputs: Vec::new(),
                 output_targets: None,
@@ -63,7 +63,7 @@ async fn workflow_session_capacity_rebalance_uses_host_selected_candidate() {
         unloads.first(),
         Some(&(
             second.session_id.clone(),
-            WorkflowSessionUnloadReason::CapacityRebalance,
+            WorkflowExecutionSessionUnloadReason::CapacityRebalance,
         ))
     );
     assert!(unloads
@@ -75,15 +75,15 @@ async fn workflow_session_capacity_rebalance_uses_host_selected_candidate() {
 }
 
 #[tokio::test]
-async fn workflow_session_capacity_rebalance_preserves_affine_idle_runtime_by_default() {
+async fn workflow_execution_session_capacity_rebalance_preserves_affine_idle_runtime_by_default() {
     let unloads = Arc::new(Mutex::new(Vec::new()));
     let host = AffinityRuntimeHost::new(unloads.clone());
     let service = WorkflowService::with_capacity_limits(3, 2);
 
     let affine = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-shared".to_string(),
                 usage_profile: Some("interactive".to_string()),
                 keep_alive: true,
@@ -92,9 +92,9 @@ async fn workflow_session_capacity_rebalance_preserves_affine_idle_runtime_by_de
         .await
         .expect("create affine keep-alive session");
     let non_affine = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-other".to_string(),
                 usage_profile: Some("batch".to_string()),
                 keep_alive: true,
@@ -103,9 +103,9 @@ async fn workflow_session_capacity_rebalance_preserves_affine_idle_runtime_by_de
         .await
         .expect("create non-affine keep-alive session");
     let target = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-shared".to_string(),
                 usage_profile: Some("interactive".to_string()),
                 keep_alive: false,
@@ -115,9 +115,9 @@ async fn workflow_session_capacity_rebalance_preserves_affine_idle_runtime_by_de
         .expect("create target session");
 
     service
-        .run_workflow_session(
+        .run_workflow_execution_session(
             &host,
-            WorkflowSessionRunRequest {
+            WorkflowExecutionSessionRunRequest {
                 session_id: target.session_id.clone(),
                 inputs: Vec::new(),
                 output_targets: None,
@@ -144,7 +144,7 @@ async fn workflow_session_capacity_rebalance_preserves_affine_idle_runtime_by_de
 }
 
 #[tokio::test]
-async fn workflow_session_capacity_rebalance_preserves_shared_model_idle_runtime() {
+async fn workflow_execution_session_capacity_rebalance_preserves_shared_model_idle_runtime() {
     let unloads = Arc::new(Mutex::new(Vec::new()));
     let host = AffinityRuntimeHost::with_runtime_affinity(
         unloads.clone(),
@@ -162,9 +162,9 @@ async fn workflow_session_capacity_rebalance_preserves_shared_model_idle_runtime
     let service = WorkflowService::with_capacity_limits(3, 2);
 
     let shared_model = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-shared-model".to_string(),
                 usage_profile: Some("interactive".to_string()),
                 keep_alive: true,
@@ -173,9 +173,9 @@ async fn workflow_session_capacity_rebalance_preserves_shared_model_idle_runtime
         .await
         .expect("create shared-model keep-alive session");
     let other_model = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-other-model".to_string(),
                 usage_profile: Some("interactive".to_string()),
                 keep_alive: true,
@@ -184,9 +184,9 @@ async fn workflow_session_capacity_rebalance_preserves_shared_model_idle_runtime
         .await
         .expect("create other-model keep-alive session");
     let target = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-target".to_string(),
                 usage_profile: Some("interactive".to_string()),
                 keep_alive: false,
@@ -196,9 +196,9 @@ async fn workflow_session_capacity_rebalance_preserves_shared_model_idle_runtime
         .expect("create target session");
 
     service
-        .run_workflow_session(
+        .run_workflow_execution_session(
             &host,
-            WorkflowSessionRunRequest {
+            WorkflowExecutionSessionRunRequest {
                 session_id: target.session_id.clone(),
                 inputs: Vec::new(),
                 output_targets: None,
@@ -225,7 +225,7 @@ async fn workflow_session_capacity_rebalance_preserves_shared_model_idle_runtime
 }
 
 #[tokio::test]
-async fn workflow_session_capacity_rebalance_preserves_shared_backend_idle_runtime() {
+async fn workflow_execution_session_capacity_rebalance_preserves_shared_backend_idle_runtime() {
     let unloads = Arc::new(Mutex::new(Vec::new()));
     let host = AffinityRuntimeHost::with_runtime_affinity(
         unloads.clone(),
@@ -246,9 +246,9 @@ async fn workflow_session_capacity_rebalance_preserves_shared_backend_idle_runti
     let service = WorkflowService::with_capacity_limits(3, 2);
 
     let shared_backend = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-shared-backend".to_string(),
                 usage_profile: Some("interactive".to_string()),
                 keep_alive: true,
@@ -257,9 +257,9 @@ async fn workflow_session_capacity_rebalance_preserves_shared_backend_idle_runti
         .await
         .expect("create shared-backend keep-alive session");
     let other_backend = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-other-backend".to_string(),
                 usage_profile: Some("interactive".to_string()),
                 keep_alive: true,
@@ -268,9 +268,9 @@ async fn workflow_session_capacity_rebalance_preserves_shared_backend_idle_runti
         .await
         .expect("create other-backend keep-alive session");
     let target = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-target".to_string(),
                 usage_profile: Some("interactive".to_string()),
                 keep_alive: false,
@@ -280,9 +280,9 @@ async fn workflow_session_capacity_rebalance_preserves_shared_backend_idle_runti
         .expect("create target session");
 
     service
-        .run_workflow_session(
+        .run_workflow_execution_session(
             &host,
-            WorkflowSessionRunRequest {
+            WorkflowExecutionSessionRunRequest {
                 session_id: target.session_id.clone(),
                 inputs: Vec::new(),
                 output_targets: None,

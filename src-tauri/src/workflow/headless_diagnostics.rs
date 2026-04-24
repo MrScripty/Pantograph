@@ -350,11 +350,11 @@ mod tests {
     use std::sync::Arc;
 
     use pantograph_workflow_service::{
-        graph::{WorkflowGraphSessionStateView, WorkflowSessionKind},
-        WorkflowCapabilitiesResponse, WorkflowRuntimeRequirements,
-        WorkflowSchedulerSnapshotResponse, WorkflowSessionQueueItem,
-        WorkflowSessionQueueItemStatus, WorkflowSessionState, WorkflowSessionSummary,
-        WorkflowTraceRuntimeMetrics,
+        graph::{WorkflowExecutionSessionKind, WorkflowGraphSessionStateView},
+        WorkflowCapabilitiesResponse, WorkflowExecutionSessionQueueItem,
+        WorkflowExecutionSessionQueueItemStatus, WorkflowExecutionSessionState,
+        WorkflowExecutionSessionSummary, WorkflowRuntimeRequirements,
+        WorkflowSchedulerSnapshotResponse, WorkflowTraceRuntimeMetrics,
     };
 
     use super::{
@@ -404,14 +404,14 @@ mod tests {
         };
     }
 
-    fn running_session_summary() -> WorkflowSessionSummary {
-        WorkflowSessionSummary {
+    fn running_session_summary() -> WorkflowExecutionSessionSummary {
+        WorkflowExecutionSessionSummary {
             session_id: "session-1".to_string(),
             workflow_id: "wf-1".to_string(),
-            session_kind: WorkflowSessionKind::Workflow,
+            session_kind: WorkflowExecutionSessionKind::Workflow,
             usage_profile: Some("interactive".to_string()),
             keep_alive: true,
-            state: WorkflowSessionState::Running,
+            state: WorkflowExecutionSessionState::Running,
             queued_runs: 1,
             run_count: 2,
         }
@@ -443,7 +443,7 @@ mod tests {
                     session_id: "session-1".to_string(),
                     trace_execution_id: None,
                     session: running_session_summary(),
-                    items: vec![WorkflowSessionQueueItem {
+                    items: vec![WorkflowExecutionSessionQueueItem {
                         queue_id: "queue-1".to_string(),
                         run_id: Some("run-1".to_string()),
                         enqueued_at_ms: Some(100),
@@ -452,7 +452,7 @@ mod tests {
                         queue_position: None,
                         scheduler_admission_outcome: None,
                         scheduler_decision_reason: None,
-                        status: WorkflowSessionQueueItemStatus::Pending,
+                        status: WorkflowExecutionSessionQueueItemStatus::Pending,
                     }],
                     diagnostics: None,
                 })),
@@ -509,7 +509,7 @@ mod tests {
     fn workflow_diagnostics_snapshot_projection_preserves_current_session_state() {
         let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
         let current_session_state = WorkflowGraphSessionStateView::new(
-            node_engine::WorkflowSessionResidencyState::Warm,
+            node_engine::WorkflowExecutionSessionResidencyState::Warm,
             Vec::new(),
             None,
             None,
@@ -566,7 +566,7 @@ mod tests {
                         session_id: "session-1".to_string(),
                         trace_execution_id: Some(execution_id.to_string()),
                         session: running_session_summary(),
-                        items: vec![WorkflowSessionQueueItem {
+                        items: vec![WorkflowExecutionSessionQueueItem {
                             queue_id: format!("queue-{execution_id}"),
                             run_id: Some(execution_id.to_string()),
                             enqueued_at_ms: Some(captured_at_ms.saturating_sub(10)),
@@ -575,7 +575,7 @@ mod tests {
                             queue_position: Some(0),
                             scheduler_admission_outcome: None,
                             scheduler_decision_reason: None,
-                            status: WorkflowSessionQueueItemStatus::Running,
+                            status: WorkflowExecutionSessionQueueItemStatus::Running,
                         }],
                         diagnostics: None,
                     })),

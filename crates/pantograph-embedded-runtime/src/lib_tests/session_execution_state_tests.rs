@@ -23,7 +23,7 @@ async fn keep_alive_session_reuses_backend_executor_and_carries_forward_inputs()
     );
 
     let created = runtime
-        .create_workflow_session(WorkflowSessionCreateRequest {
+        .create_workflow_execution_session(WorkflowExecutionSessionCreateRequest {
             workflow_id: "runtime-text".to_string(),
             usage_profile: None,
             keep_alive: true,
@@ -33,7 +33,7 @@ async fn keep_alive_session_reuses_backend_executor_and_carries_forward_inputs()
     let session_id = created.session_id.clone();
 
     let first_run = runtime
-        .run_workflow_session(WorkflowSessionRunRequest {
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session_id.clone(),
             inputs: vec![WorkflowPortBinding {
                 node_id: "text-input-1".to_string(),
@@ -61,7 +61,7 @@ async fn keep_alive_session_reuses_backend_executor_and_carries_forward_inputs()
     let first_snapshots = {
         let executor = first_executor.lock().await;
         executor
-            .workflow_session_node_memory_snapshots(&session_id)
+            .workflow_execution_session_node_memory_snapshots(&session_id)
             .await
     };
     assert_eq!(first_snapshots.len(), 2);
@@ -73,7 +73,7 @@ async fn keep_alive_session_reuses_backend_executor_and_carries_forward_inputs()
         .any(|snapshot| snapshot.identity.node_id == "text-output-1"));
 
     let second_run = runtime
-        .run_workflow_session(WorkflowSessionRunRequest {
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session_id.clone(),
             inputs: Vec::new(),
             output_targets: Some(vec![WorkflowOutputTarget {
@@ -97,7 +97,7 @@ async fn keep_alive_session_reuses_backend_executor_and_carries_forward_inputs()
     assert!(Arc::ptr_eq(&first_executor, &second_executor));
 
     let third_run = runtime
-        .run_workflow_session(WorkflowSessionRunRequest {
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session_id.clone(),
             inputs: vec![WorkflowPortBinding {
                 node_id: "text-input-1".to_string(),
@@ -125,7 +125,7 @@ async fn keep_alive_session_reuses_backend_executor_and_carries_forward_inputs()
     assert!(Arc::ptr_eq(&first_executor, &third_executor));
 
     runtime
-        .close_workflow_session(WorkflowSessionCloseRequest {
+        .close_workflow_execution_session(WorkflowExecutionSessionCloseRequest {
             session_id: session_id.clone(),
         })
         .await
@@ -160,7 +160,7 @@ async fn keep_alive_session_reconciles_graph_change_and_replays_carried_inputs()
     );
 
     let created = runtime
-        .create_workflow_session(WorkflowSessionCreateRequest {
+        .create_workflow_execution_session(WorkflowExecutionSessionCreateRequest {
             workflow_id: "runtime-text".to_string(),
             usage_profile: None,
             keep_alive: true,
@@ -170,7 +170,7 @@ async fn keep_alive_session_reconciles_graph_change_and_replays_carried_inputs()
     let session_id = created.session_id.clone();
 
     let first_run = runtime
-        .run_workflow_session(WorkflowSessionRunRequest {
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session_id.clone(),
             inputs: vec![WorkflowPortBinding {
                 node_id: "text-input-1".to_string(),
@@ -203,7 +203,7 @@ async fn keep_alive_session_reconciles_graph_change_and_replays_carried_inputs()
     );
 
     let second_run = runtime
-        .run_workflow_session(WorkflowSessionRunRequest {
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session_id.clone(),
             inputs: Vec::new(),
             output_targets: Some(vec![WorkflowOutputTarget {
@@ -229,7 +229,7 @@ async fn keep_alive_session_reconciles_graph_change_and_replays_carried_inputs()
     let snapshots = {
         let executor = second_executor.lock().await;
         executor
-            .workflow_session_node_memory_snapshots(&session_id)
+            .workflow_execution_session_node_memory_snapshots(&session_id)
             .await
     };
     assert_eq!(snapshots.len(), 2);

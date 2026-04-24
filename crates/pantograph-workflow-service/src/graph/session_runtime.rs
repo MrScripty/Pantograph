@@ -1,9 +1,10 @@
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use super::session_types::WorkflowSessionKind;
+use super::session_types::WorkflowExecutionSessionKind;
 use crate::workflow::{
-    WorkflowSchedulerAdmissionOutcome, WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus,
-    WorkflowSessionState, WorkflowSessionSummary,
+    WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionQueueItemStatus,
+    WorkflowExecutionSessionState, WorkflowExecutionSessionSummary,
+    WorkflowSchedulerAdmissionOutcome,
 };
 
 fn unix_timestamp_ms() -> u64 {
@@ -40,29 +41,29 @@ impl GraphEditSessionRuntime {
         self.last_accessed.elapsed() > timeout
     }
 
-    pub(crate) fn session_summary(&self, session_id: &str) -> WorkflowSessionSummary {
-        WorkflowSessionSummary {
+    pub(crate) fn session_summary(&self, session_id: &str) -> WorkflowExecutionSessionSummary {
+        WorkflowExecutionSessionSummary {
             session_id: session_id.to_string(),
             workflow_id: session_id.to_string(),
-            session_kind: WorkflowSessionKind::Edit,
+            session_kind: WorkflowExecutionSessionKind::Edit,
             usage_profile: None,
             keep_alive: false,
             state: if self.active_execution_id.is_some() {
-                WorkflowSessionState::Running
+                WorkflowExecutionSessionState::Running
             } else {
-                WorkflowSessionState::IdleLoaded
+                WorkflowExecutionSessionState::IdleLoaded
             },
             queued_runs: usize::from(self.active_execution_id.is_some()),
             run_count: self.run_count,
         }
     }
 
-    pub(crate) fn queue_items(&self) -> Vec<WorkflowSessionQueueItem> {
+    pub(crate) fn queue_items(&self) -> Vec<WorkflowExecutionSessionQueueItem> {
         self.active_execution_id
             .as_ref()
             .map(|execution_id| {
                 let started_at_ms = self.active_execution_started_at_ms;
-                WorkflowSessionQueueItem {
+                WorkflowExecutionSessionQueueItem {
                     queue_id: execution_id.clone(),
                     run_id: Some(execution_id.clone()),
                     enqueued_at_ms: started_at_ms,
@@ -71,7 +72,7 @@ impl GraphEditSessionRuntime {
                     queue_position: Some(0),
                     scheduler_admission_outcome: Some(WorkflowSchedulerAdmissionOutcome::Admitted),
                     scheduler_decision_reason: None,
-                    status: WorkflowSessionQueueItemStatus::Running,
+                    status: WorkflowExecutionSessionQueueItemStatus::Running,
                 }
             })
             .into_iter()
@@ -100,7 +101,7 @@ impl GraphEditSessionRuntime {
 #[cfg(test)]
 mod tests {
     use super::GraphEditSessionRuntime;
-    use crate::workflow::{WorkflowSessionQueueItemStatus, WorkflowSessionState};
+    use crate::workflow::{WorkflowExecutionSessionQueueItemStatus, WorkflowExecutionSessionState};
 
     #[test]
     fn session_summary_defaults_to_idle_loaded() {
@@ -109,7 +110,7 @@ mod tests {
 
         assert_eq!(summary.session_id, "session-1");
         assert_eq!(summary.workflow_id, "session-1");
-        assert_eq!(summary.state, WorkflowSessionState::IdleLoaded);
+        assert_eq!(summary.state, WorkflowExecutionSessionState::IdleLoaded);
         assert_eq!(summary.queued_runs, 0);
         assert_eq!(summary.run_count, 0);
     }
@@ -122,13 +123,13 @@ mod tests {
         let summary = runtime.session_summary("session-1");
         let queue_items = runtime.queue_items();
 
-        assert_eq!(summary.state, WorkflowSessionState::Running);
+        assert_eq!(summary.state, WorkflowExecutionSessionState::Running);
         assert_eq!(summary.queued_runs, 1);
         assert_eq!(queue_items.len(), 1);
         assert_eq!(queue_items[0].queue_id, "session-1");
         assert_eq!(
             queue_items[0].status,
-            WorkflowSessionQueueItemStatus::Running
+            WorkflowExecutionSessionQueueItemStatus::Running
         );
         assert!(queue_items[0].enqueued_at_ms.is_some());
     }
@@ -141,7 +142,7 @@ mod tests {
 
         let summary = runtime.session_summary("session-1");
 
-        assert_eq!(summary.state, WorkflowSessionState::IdleLoaded);
+        assert_eq!(summary.state, WorkflowExecutionSessionState::IdleLoaded);
         assert_eq!(summary.queued_runs, 0);
         assert_eq!(summary.run_count, 1);
         assert!(runtime.queue_items().is_empty());

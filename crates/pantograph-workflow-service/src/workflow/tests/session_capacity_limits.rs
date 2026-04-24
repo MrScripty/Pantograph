@@ -54,14 +54,14 @@ fn loaded_runtime_capacity_limit_clamps_to_valid_session_bounds() {
 }
 
 #[tokio::test]
-async fn workflow_session_create_returns_scheduler_busy_at_capacity() {
+async fn workflow_execution_session_create_returns_scheduler_busy_at_capacity() {
     let host = MockWorkflowHost::new(8, 1024);
     let service = WorkflowService::with_max_sessions(1);
 
     let _first = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-1".to_string(),
                 usage_profile: None,
                 keep_alive: false,
@@ -71,9 +71,9 @@ async fn workflow_session_create_returns_scheduler_busy_at_capacity() {
         .expect("create first");
 
     let err = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-1".to_string(),
                 usage_profile: None,
                 keep_alive: false,
@@ -90,13 +90,13 @@ async fn workflow_session_create_returns_scheduler_busy_at_capacity() {
 }
 
 #[tokio::test]
-async fn workflow_session_capacity_is_released_after_close() {
+async fn workflow_execution_session_capacity_is_released_after_close() {
     let host = MockWorkflowHost::new(8, 1024);
     let service = WorkflowService::with_max_sessions(1);
     let first = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-1".to_string(),
                 usage_profile: None,
                 keep_alive: false,
@@ -106,9 +106,9 @@ async fn workflow_session_capacity_is_released_after_close() {
         .expect("create session");
 
     let err = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-1".to_string(),
                 usage_profile: None,
                 keep_alive: false,
@@ -124,9 +124,9 @@ async fn workflow_session_capacity_is_released_after_close() {
     );
 
     let closed = service
-        .close_workflow_session(
+        .close_workflow_execution_session(
             &host,
-            WorkflowSessionCloseRequest {
+            WorkflowExecutionSessionCloseRequest {
                 session_id: first.session_id,
             },
         )
@@ -135,9 +135,9 @@ async fn workflow_session_capacity_is_released_after_close() {
     assert!(closed.ok);
 
     let created = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-1".to_string(),
                 usage_profile: None,
                 keep_alive: false,
@@ -147,24 +147,27 @@ async fn workflow_session_capacity_is_released_after_close() {
         .expect("create session after close");
 
     let status = service
-        .workflow_get_session_status(WorkflowSessionStatusRequest {
+        .workflow_get_execution_session_status(WorkflowExecutionSessionStatusRequest {
             session_id: created.session_id,
         })
         .await
         .expect("get status");
-    assert_eq!(status.session.session_kind, WorkflowSessionKind::Workflow);
+    assert_eq!(
+        status.session.session_kind,
+        WorkflowExecutionSessionKind::Workflow
+    );
     assert!(!status.session.keep_alive);
 }
 
 #[tokio::test]
-async fn workflow_session_create_surfaces_runtime_capacity_details_when_no_unload_candidate_available(
+async fn workflow_execution_session_create_surfaces_runtime_capacity_details_when_no_unload_candidate_available(
 ) {
     let host = MockWorkflowHost::new(8, 1024);
     let service = WorkflowService::with_capacity_limits(2, 1);
     let loaded = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-loaded".to_string(),
                 usage_profile: Some("interactive".to_string()),
                 keep_alive: true,
@@ -181,7 +184,7 @@ async fn workflow_session_create_surfaces_runtime_capacity_details_when_no_unloa
         let queue_id = store
             .enqueue_run(
                 &loaded.session_id,
-                &WorkflowSessionRunRequest {
+                &WorkflowExecutionSessionRunRequest {
                     session_id: loaded.session_id.clone(),
                     inputs: Vec::new(),
                     output_targets: None,
@@ -202,9 +205,9 @@ async fn workflow_session_create_surfaces_runtime_capacity_details_when_no_unloa
     }
 
     let err = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-blocked".to_string(),
                 usage_profile: Some("interactive".to_string()),
                 keep_alive: true,

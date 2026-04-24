@@ -340,7 +340,7 @@ pub fn rejected_commit_response(
         graph_revision: graph.compute_fingerprint(),
         graph: Some(graph.clone()),
         workflow_event: None,
-        workflow_session_state: None,
+        workflow_execution_session_state: None,
         rejection: Some(rejection),
     }
 }

@@ -7,8 +7,8 @@ fn queued_run(
     priority: i32,
     enqueued_tick: u64,
     starvation_bypass_count: u32,
-) -> WorkflowSessionQueuedRun {
-    WorkflowSessionQueuedRun {
+) -> WorkflowExecutionSessionQueuedRun {
+    WorkflowExecutionSessionQueuedRun {
         queue_id: queue_id.to_string(),
         run_id: Some(queue_id.to_string()),
         enqueued_at_ms: 0,
@@ -29,8 +29,8 @@ fn runtime_target(
     usage_profile: Option<&str>,
     required_backends: &[&str],
     required_models: &[&str],
-) -> WorkflowSessionRuntimeSelectionTarget {
-    WorkflowSessionRuntimeSelectionTarget {
+) -> WorkflowExecutionSessionRuntimeSelectionTarget {
+    WorkflowExecutionSessionRuntimeSelectionTarget {
         session_id: session_id.to_string(),
         workflow_id: workflow_id.to_string(),
         usage_profile: usage_profile.map(str::to_string),
@@ -53,8 +53,8 @@ fn unload_candidate(
     required_models: &[&str],
     keep_alive: bool,
     access_tick: u64,
-) -> WorkflowSessionRuntimeUnloadCandidate {
-    WorkflowSessionRuntimeUnloadCandidate {
+) -> WorkflowExecutionSessionRuntimeUnloadCandidate {
+    WorkflowExecutionSessionRuntimeUnloadCandidate {
         session_id: session_id.to_string(),
         workflow_id: workflow_id.to_string(),
         usage_profile: usage_profile.map(str::to_string),
@@ -79,9 +79,9 @@ fn admission_candidate(
     starvation_bypass_count: u32,
     queue_position: usize,
     affine_runtime_reuse: bool,
-    warm_session_compatibility: WorkflowSessionWarmCompatibility,
-) -> WorkflowSessionAdmissionCandidate {
-    WorkflowSessionAdmissionCandidate {
+    warm_session_compatibility: WorkflowExecutionSessionWarmCompatibility,
+) -> WorkflowExecutionSessionAdmissionCandidate {
+    WorkflowExecutionSessionAdmissionCandidate {
         queue_id: queue_id.to_string(),
         priority,
         enqueued_tick,
@@ -333,9 +333,9 @@ fn select_runtime_unload_candidate_prefers_unrelated_backends_before_shared_back
 #[test]
 fn admission_decision_selects_highest_priority_candidate_from_admission_input() {
     let policy = PriorityThenFifoSchedulerPolicy;
-    let input = WorkflowSessionAdmissionInput {
+    let input = WorkflowExecutionSessionAdmissionInput {
         has_active_run: false,
-        runtime_posture: WorkflowSessionAdmissionRuntimePosture::Loaded,
+        runtime_posture: WorkflowExecutionSessionAdmissionRuntimePosture::Loaded,
         usage_profile: Some("interactive".to_string()),
         required_backends: vec!["llama_cpp".to_string()],
         required_models: vec!["model-a".to_string()],
@@ -347,7 +347,7 @@ fn admission_decision_selects_highest_priority_candidate_from_admission_input() 
                 0,
                 0,
                 true,
-                WorkflowSessionWarmCompatibility::Compatible,
+                WorkflowExecutionSessionWarmCompatibility::Compatible,
             ),
             admission_candidate(
                 "higher-priority",
@@ -356,7 +356,7 @@ fn admission_decision_selects_highest_priority_candidate_from_admission_input() 
                 0,
                 1,
                 false,
-                WorkflowSessionWarmCompatibility::Incompatible,
+                WorkflowExecutionSessionWarmCompatibility::Incompatible,
             ),
         ],
     };
@@ -378,9 +378,9 @@ fn admission_decision_selects_highest_priority_candidate_from_admission_input() 
 #[test]
 fn admission_decision_keeps_pending_candidate_when_another_item_is_selected() {
     let policy = PriorityThenFifoSchedulerPolicy;
-    let input = WorkflowSessionAdmissionInput {
+    let input = WorkflowExecutionSessionAdmissionInput {
         has_active_run: false,
-        runtime_posture: WorkflowSessionAdmissionRuntimePosture::Loaded,
+        runtime_posture: WorkflowExecutionSessionAdmissionRuntimePosture::Loaded,
         usage_profile: Some("interactive".to_string()),
         required_backends: vec!["llama_cpp".to_string()],
         required_models: vec!["model-a".to_string()],
@@ -392,7 +392,7 @@ fn admission_decision_keeps_pending_candidate_when_another_item_is_selected() {
                 0,
                 0,
                 true,
-                WorkflowSessionWarmCompatibility::Compatible,
+                WorkflowExecutionSessionWarmCompatibility::Compatible,
             ),
             admission_candidate(
                 "pending",
@@ -401,7 +401,7 @@ fn admission_decision_keeps_pending_candidate_when_another_item_is_selected() {
                 0,
                 1,
                 false,
-                WorkflowSessionWarmCompatibility::Incompatible,
+                WorkflowExecutionSessionWarmCompatibility::Incompatible,
             ),
         ],
     };
@@ -417,9 +417,9 @@ fn admission_decision_keeps_pending_candidate_when_another_item_is_selected() {
 #[test]
 fn admission_decision_reports_warm_session_reuse_for_loaded_compatible_runtime() {
     let policy = PriorityThenFifoSchedulerPolicy;
-    let input = WorkflowSessionAdmissionInput {
+    let input = WorkflowExecutionSessionAdmissionInput {
         has_active_run: false,
-        runtime_posture: WorkflowSessionAdmissionRuntimePosture::Loaded,
+        runtime_posture: WorkflowExecutionSessionAdmissionRuntimePosture::Loaded,
         usage_profile: Some("interactive".to_string()),
         required_backends: vec!["llama_cpp".to_string()],
         required_models: vec!["model-a".to_string()],
@@ -430,7 +430,7 @@ fn admission_decision_reports_warm_session_reuse_for_loaded_compatible_runtime()
             0,
             0,
             true,
-            WorkflowSessionWarmCompatibility::Compatible,
+            WorkflowExecutionSessionWarmCompatibility::Compatible,
         )],
     };
 
@@ -447,9 +447,9 @@ fn admission_decision_reports_warm_session_reuse_for_loaded_compatible_runtime()
 #[test]
 fn admission_decision_reports_cold_start_when_runtime_is_unloaded() {
     let policy = PriorityThenFifoSchedulerPolicy;
-    let input = WorkflowSessionAdmissionInput {
+    let input = WorkflowExecutionSessionAdmissionInput {
         has_active_run: false,
-        runtime_posture: WorkflowSessionAdmissionRuntimePosture::Unloaded,
+        runtime_posture: WorkflowExecutionSessionAdmissionRuntimePosture::Unloaded,
         usage_profile: Some("interactive".to_string()),
         required_backends: vec!["llama_cpp".to_string()],
         required_models: vec!["model-a".to_string()],
@@ -460,7 +460,7 @@ fn admission_decision_reports_cold_start_when_runtime_is_unloaded() {
             0,
             0,
             false,
-            WorkflowSessionWarmCompatibility::Unknown,
+            WorkflowExecutionSessionWarmCompatibility::Unknown,
         )],
     };
 
@@ -477,9 +477,9 @@ fn admission_decision_reports_cold_start_when_runtime_is_unloaded() {
 #[test]
 fn admission_decision_prefers_warm_reuse_within_bounded_fairness_window() {
     let policy = PriorityThenFifoSchedulerPolicy;
-    let input = WorkflowSessionAdmissionInput {
+    let input = WorkflowExecutionSessionAdmissionInput {
         has_active_run: false,
-        runtime_posture: WorkflowSessionAdmissionRuntimePosture::Loaded,
+        runtime_posture: WorkflowExecutionSessionAdmissionRuntimePosture::Loaded,
         usage_profile: Some("interactive".to_string()),
         required_backends: vec!["llama_cpp".to_string()],
         required_models: vec!["model-a".to_string()],
@@ -491,7 +491,7 @@ fn admission_decision_prefers_warm_reuse_within_bounded_fairness_window() {
                 0,
                 0,
                 false,
-                WorkflowSessionWarmCompatibility::Incompatible,
+                WorkflowExecutionSessionWarmCompatibility::Incompatible,
             ),
             admission_candidate(
                 "next-warm",
@@ -500,7 +500,7 @@ fn admission_decision_prefers_warm_reuse_within_bounded_fairness_window() {
                 0,
                 1,
                 true,
-                WorkflowSessionWarmCompatibility::Compatible,
+                WorkflowExecutionSessionWarmCompatibility::Compatible,
             ),
         ],
     };
@@ -519,9 +519,9 @@ fn admission_decision_prefers_warm_reuse_within_bounded_fairness_window() {
 #[test]
 fn admission_decision_preserves_starved_head_over_warm_reuse_candidate() {
     let policy = PriorityThenFifoSchedulerPolicy;
-    let input = WorkflowSessionAdmissionInput {
+    let input = WorkflowExecutionSessionAdmissionInput {
         has_active_run: false,
-        runtime_posture: WorkflowSessionAdmissionRuntimePosture::Loaded,
+        runtime_posture: WorkflowExecutionSessionAdmissionRuntimePosture::Loaded,
         usage_profile: Some("interactive".to_string()),
         required_backends: vec!["llama_cpp".to_string()],
         required_models: vec!["model-a".to_string()],
@@ -533,7 +533,7 @@ fn admission_decision_preserves_starved_head_over_warm_reuse_candidate() {
                 4,
                 0,
                 false,
-                WorkflowSessionWarmCompatibility::Incompatible,
+                WorkflowExecutionSessionWarmCompatibility::Incompatible,
             ),
             admission_candidate(
                 "warm-follower",
@@ -542,7 +542,7 @@ fn admission_decision_preserves_starved_head_over_warm_reuse_candidate() {
                 0,
                 1,
                 true,
-                WorkflowSessionWarmCompatibility::Compatible,
+                WorkflowExecutionSessionWarmCompatibility::Compatible,
             ),
         ],
     };
@@ -558,9 +558,9 @@ fn admission_decision_preserves_starved_head_over_warm_reuse_candidate() {
 #[test]
 fn admission_decision_preserves_fifo_when_warm_reuse_candidate_is_outside_window() {
     let policy = PriorityThenFifoSchedulerPolicy;
-    let input = WorkflowSessionAdmissionInput {
+    let input = WorkflowExecutionSessionAdmissionInput {
         has_active_run: false,
-        runtime_posture: WorkflowSessionAdmissionRuntimePosture::Loaded,
+        runtime_posture: WorkflowExecutionSessionAdmissionRuntimePosture::Loaded,
         usage_profile: Some("interactive".to_string()),
         required_backends: vec!["llama_cpp".to_string()],
         required_models: vec!["model-a".to_string()],
@@ -572,7 +572,7 @@ fn admission_decision_preserves_fifo_when_warm_reuse_candidate_is_outside_window
                 0,
                 0,
                 false,
-                WorkflowSessionWarmCompatibility::Incompatible,
+                WorkflowExecutionSessionWarmCompatibility::Incompatible,
             ),
             admission_candidate(
                 "middle-cold",
@@ -581,7 +581,7 @@ fn admission_decision_preserves_fifo_when_warm_reuse_candidate_is_outside_window
                 0,
                 1,
                 false,
-                WorkflowSessionWarmCompatibility::Unknown,
+                WorkflowExecutionSessionWarmCompatibility::Unknown,
             ),
             admission_candidate(
                 "far-warm",
@@ -590,7 +590,7 @@ fn admission_decision_preserves_fifo_when_warm_reuse_candidate_is_outside_window
                 0,
                 2,
                 true,
-                WorkflowSessionWarmCompatibility::Compatible,
+                WorkflowExecutionSessionWarmCompatibility::Compatible,
             ),
         ],
     };

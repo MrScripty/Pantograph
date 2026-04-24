@@ -14,7 +14,7 @@ fn workflow_diagnostics_snapshot_projection_joins_backend_scheduler_and_runtime_
             session_id: "session-1".to_string(),
             trace_execution_id: Some("run-1".to_string()),
             session: running_session_summary(),
-            items: vec![WorkflowSessionQueueItem {
+            items: vec![WorkflowExecutionSessionQueueItem {
                 queue_id: "queue-1".to_string(),
                 run_id: Some("run-1".to_string()),
                 enqueued_at_ms: Some(100),
@@ -23,7 +23,7 @@ fn workflow_diagnostics_snapshot_projection_joins_backend_scheduler_and_runtime_
                 queue_position: None,
                 scheduler_admission_outcome: None,
                 scheduler_decision_reason: None,
-                status: WorkflowSessionQueueItemStatus::Running,
+                status: WorkflowExecutionSessionQueueItemStatus::Running,
             }],
             diagnostics: None,
         })),
@@ -80,7 +80,7 @@ fn workflow_diagnostics_snapshot_projection_preserves_scheduler_runtime_registry
             session_id: "session-1".to_string(),
             trace_execution_id: Some("run-1".to_string()),
             session: running_session_summary(),
-            items: vec![WorkflowSessionQueueItem {
+            items: vec![WorkflowExecutionSessionQueueItem {
                 queue_id: "queue-1".to_string(),
                 run_id: Some("run-1".to_string()),
                 enqueued_at_ms: Some(100),
@@ -89,7 +89,7 @@ fn workflow_diagnostics_snapshot_projection_preserves_scheduler_runtime_registry
                 queue_position: Some(0),
                 scheduler_admission_outcome: None,
                 scheduler_decision_reason: None,
-                status: WorkflowSessionQueueItemStatus::Pending,
+                status: WorkflowExecutionSessionQueueItemStatus::Pending,
             }],
             diagnostics: Some(WorkflowSchedulerSnapshotDiagnostics {
                 loaded_session_count: 1,
@@ -456,7 +456,7 @@ fn workflow_diagnostics_snapshot_projection_clears_scheduler_and_runtime_without
             session_id: "session-1".to_string(),
             trace_execution_id: Some("run-1".to_string()),
             session: running_session_summary(),
-            items: vec![WorkflowSessionQueueItem {
+            items: vec![WorkflowExecutionSessionQueueItem {
                 queue_id: "queue-1".to_string(),
                 run_id: Some("run-1".to_string()),
                 enqueued_at_ms: Some(100),
@@ -465,7 +465,7 @@ fn workflow_diagnostics_snapshot_projection_clears_scheduler_and_runtime_without
                 queue_position: None,
                 scheduler_admission_outcome: None,
                 scheduler_decision_reason: None,
-                status: WorkflowSessionQueueItemStatus::Running,
+                status: WorkflowExecutionSessionQueueItemStatus::Running,
             }],
             diagnostics: None,
         })),
@@ -517,7 +517,7 @@ fn workflow_clear_diagnostics_history_response_preserves_backend_snapshots() {
             session_id: "session-1".to_string(),
             trace_execution_id: Some("run-1".to_string()),
             session: running_session_summary(),
-            items: vec![WorkflowSessionQueueItem {
+            items: vec![WorkflowExecutionSessionQueueItem {
                 queue_id: "queue-1".to_string(),
                 run_id: Some("run-1".to_string()),
                 enqueued_at_ms: Some(100),
@@ -526,7 +526,7 @@ fn workflow_clear_diagnostics_history_response_preserves_backend_snapshots() {
                 queue_position: None,
                 scheduler_admission_outcome: None,
                 scheduler_decision_reason: None,
-                status: WorkflowSessionQueueItemStatus::Running,
+                status: WorkflowExecutionSessionQueueItemStatus::Running,
             }],
             diagnostics: None,
         })),

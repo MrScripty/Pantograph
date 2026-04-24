@@ -10,7 +10,10 @@ pub(super) async fn demand_with_executor(
     executor: &dyn TaskExecutor,
 ) -> Result<HashMap<String, serde_json::Value>> {
     let node_memories =
-        super::workflow_session::bound_workflow_session_node_memory_view(workflow_executor).await;
+        super::workflow_execution_session::bound_workflow_execution_session_node_memory_view(
+            workflow_executor,
+        )
+        .await;
     let graph = workflow_executor.graph.read().await;
     let mut demand_engine = workflow_executor.demand_engine.write().await;
     let runtime = super::DemandRuntimeContext::new(
@@ -26,6 +29,7 @@ pub(super) async fn demand_with_executor(
     drop(demand_engine);
     drop(graph);
 
-    super::workflow_session::sync_bound_session_node_memory_from_cache(workflow_executor).await;
+    super::workflow_execution_session::sync_bound_session_node_memory_from_cache(workflow_executor)
+        .await;
     Ok(outputs)
 }

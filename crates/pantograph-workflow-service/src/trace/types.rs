@@ -4,8 +4,8 @@ use node_engine::GraphMemoryImpactSummary;
 use serde::{Deserialize, Serialize};
 
 use crate::workflow::{
-    WorkflowCapabilitiesResponse, WorkflowServiceError, WorkflowSessionQueueItem,
-    WorkflowSessionSummary,
+    WorkflowCapabilitiesResponse, WorkflowExecutionSessionQueueItem,
+    WorkflowExecutionSessionSummary, WorkflowServiceError,
 };
 use crate::WorkflowSchedulerSnapshotDiagnostics;
 
@@ -216,8 +216,8 @@ pub enum WorkflowTraceEvent {
         workflow_id: Option<String>,
         session_id: String,
         captured_at_ms: u64,
-        session: Option<WorkflowSessionSummary>,
-        items: Vec<WorkflowSessionQueueItem>,
+        session: Option<WorkflowExecutionSessionSummary>,
+        items: Vec<WorkflowExecutionSessionQueueItem>,
         diagnostics: Option<WorkflowSchedulerSnapshotDiagnostics>,
         error: Option<String>,
     },

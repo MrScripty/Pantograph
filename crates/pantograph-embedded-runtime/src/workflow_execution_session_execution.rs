@@ -7,11 +7,12 @@ use crate::{
 };
 use node_engine::{CoreTaskExecutor, NullEventSink, WorkflowEvent, WorkflowExecutor};
 use pantograph_workflow_service::{
-    graph_memory_impact_from_node_engine_graph_change, WorkflowHost, WorkflowOutputTarget,
-    WorkflowPortBinding, WorkflowRunHandle, WorkflowServiceError, WorkflowSessionUnloadReason,
+    graph_memory_impact_from_node_engine_graph_change, WorkflowExecutionSessionUnloadReason,
+    WorkflowHost, WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunHandle,
+    WorkflowServiceError,
 };
 
-struct WorkflowSessionExecutionEntry {
+struct WorkflowExecutionSessionExecutionEntry {
     workflow_id: String,
     graph_fingerprint: String,
     executor: Arc<tokio::sync::Mutex<WorkflowExecutor>>,
@@ -19,7 +20,7 @@ struct WorkflowSessionExecutionEntry {
 }
 
 #[derive(Clone)]
-pub(crate) struct WorkflowSessionExecutionHandle {
+pub(crate) struct WorkflowExecutionSessionExecutionHandle {
     pub(crate) workflow_id: String,
     pub(crate) graph_fingerprint: String,
     pub(crate) executor: Arc<tokio::sync::Mutex<WorkflowExecutor>>,
@@ -27,11 +28,11 @@ pub(crate) struct WorkflowSessionExecutionHandle {
 }
 
 #[derive(Default)]
-pub(crate) struct WorkflowSessionExecutionStore {
-    entries: Mutex<HashMap<String, WorkflowSessionExecutionEntry>>,
+pub(crate) struct WorkflowExecutionSessionExecutionStore {
+    entries: Mutex<HashMap<String, WorkflowExecutionSessionExecutionEntry>>,
 }
 
-impl WorkflowSessionExecutionStore {
+impl WorkflowExecutionSessionExecutionStore {
     pub(crate) fn new() -> Self {
         Self::default()
     }
@@ -39,16 +40,16 @@ impl WorkflowSessionExecutionStore {
     pub(crate) fn get(
         &self,
         session_id: &str,
-    ) -> Result<Option<WorkflowSessionExecutionHandle>, WorkflowServiceError> {
+    ) -> Result<Option<WorkflowExecutionSessionExecutionHandle>, WorkflowServiceError> {
         let entries = self.entries.lock().map_err(|_| {
             WorkflowServiceError::Internal(
-                "workflow session execution store lock poisoned".to_string(),
+                "workflow execution session execution store lock poisoned".to_string(),
             )
         })?;
 
         Ok(entries
             .get(session_id)
-            .map(|entry| WorkflowSessionExecutionHandle {
+            .map(|entry| WorkflowExecutionSessionExecutionHandle {
                 workflow_id: entry.workflow_id.clone(),
                 graph_fingerprint: entry.graph_fingerprint.clone(),
                 executor: entry.executor.clone(),
@@ -66,12 +67,12 @@ impl WorkflowSessionExecutionStore {
     ) -> Result<(), WorkflowServiceError> {
         let mut entries = self.entries.lock().map_err(|_| {
             WorkflowServiceError::Internal(
-                "workflow session execution store lock poisoned".to_string(),
+                "workflow execution session execution store lock poisoned".to_string(),
             )
         })?;
         entries.insert(
             session_id.to_string(),
-            WorkflowSessionExecutionEntry {
+            WorkflowExecutionSessionExecutionEntry {
                 workflow_id: workflow_id.to_string(),
                 graph_fingerprint: graph_fingerprint.to_string(),
                 executor,
@@ -92,7 +93,7 @@ impl WorkflowSessionExecutionStore {
 
         let mut entries = self.entries.lock().map_err(|_| {
             WorkflowServiceError::Internal(
-                "workflow session execution store lock poisoned".to_string(),
+                "workflow execution session execution store lock poisoned".to_string(),
             )
         })?;
         let Some(entry) = entries.get_mut(session_id) else {
@@ -122,7 +123,7 @@ impl WorkflowSessionExecutionStore {
     ) -> Result<(), WorkflowServiceError> {
         let mut entries = self.entries.lock().map_err(|_| {
             WorkflowServiceError::Internal(
-                "workflow session execution store lock poisoned".to_string(),
+                "workflow execution session execution store lock poisoned".to_string(),
             )
         })?;
         if let Some(entry) = entries.get_mut(session_id) {
@@ -134,7 +135,7 @@ impl WorkflowSessionExecutionStore {
     pub(crate) fn remove(&self, session_id: &str) -> Result<(), WorkflowServiceError> {
         let mut entries = self.entries.lock().map_err(|_| {
             WorkflowServiceError::Internal(
-                "workflow session execution store lock poisoned".to_string(),
+                "workflow execution session execution store lock poisoned".to_string(),
             )
         })?;
         entries.remove(session_id);
@@ -148,7 +149,7 @@ impl WorkflowSessionExecutionStore {
     ) -> Result<Option<Arc<tokio::sync::Mutex<WorkflowExecutor>>>, WorkflowServiceError> {
         let entries = self.entries.lock().map_err(|_| {
             WorkflowServiceError::Internal(
-                "workflow session execution store lock poisoned".to_string(),
+                "workflow execution session execution store lock poisoned".to_string(),
             )
         })?;
         Ok(entries.get(session_id).map(|entry| entry.executor.clone()))
@@ -156,35 +157,37 @@ impl WorkflowSessionExecutionStore {
 }
 
 pub(crate) async fn apply_session_execution_unload_transition(
-    store: &WorkflowSessionExecutionStore,
-    workflow_session_id: &str,
-    reason: WorkflowSessionUnloadReason,
+    store: &WorkflowExecutionSessionExecutionStore,
+    workflow_execution_session_id: &str,
+    reason: WorkflowExecutionSessionUnloadReason,
 ) -> Result<(), WorkflowServiceError> {
     match reason {
-        WorkflowSessionUnloadReason::CapacityRebalance => {
-            let Some(entry) = store.get(workflow_session_id)? else {
+        WorkflowExecutionSessionUnloadReason::CapacityRebalance => {
+            let Some(entry) = store.get(workflow_execution_session_id)? else {
                 return Ok(());
             };
             let executor = entry.executor.lock().await;
             executor
-                .set_workflow_session_residency(
-                    node_engine::WorkflowSessionResidencyState::CheckpointedButUnloaded,
+                .set_workflow_execution_session_residency(
+                    node_engine::WorkflowExecutionSessionResidencyState::CheckpointedButUnloaded,
                 )
                 .await;
             executor
-                .mark_workflow_session_checkpoint_available(workflow_session_id)
+                .mark_workflow_execution_session_checkpoint_available(workflow_execution_session_id)
                 .await;
             Ok(())
         }
-        WorkflowSessionUnloadReason::KeepAliveDisabled
-        | WorkflowSessionUnloadReason::SessionClosed => store.remove(workflow_session_id),
+        WorkflowExecutionSessionUnloadReason::KeepAliveDisabled
+        | WorkflowExecutionSessionUnloadReason::SessionClosed => {
+            store.remove(workflow_execution_session_id)
+        }
     }
 }
 
 pub(crate) async fn run_session_workflow(
     host: &EmbeddedWorkflowHost,
     workflow_id: &str,
-    workflow_session_id: &str,
+    workflow_execution_session_id: &str,
     inputs: &[WorkflowPortBinding],
     output_targets: Option<&[WorkflowOutputTarget]>,
     run_handle: WorkflowRunHandle,
@@ -206,7 +209,7 @@ pub(crate) async fn run_session_workflow(
 
     let python_runtime_execution_recorder =
         Arc::new(task_executor::PythonRuntimeExecutionRecorder::default());
-    let existing = host.session_executions.get(workflow_session_id)?;
+    let existing = host.session_executions.get(workflow_execution_session_id)?;
     let (session_executor, replayed_inputs) = match existing {
         Some(entry)
             if entry.workflow_id == workflow_id && entry.graph_fingerprint == graph_fingerprint =>
@@ -214,9 +217,10 @@ pub(crate) async fn run_session_workflow(
             (entry.executor, false)
         }
         Some(entry) if entry.workflow_id == workflow_id => {
-            reconcile_session_graph_change(&entry.executor, workflow_session_id, &graph).await?;
+            reconcile_session_graph_change(&entry.executor, workflow_execution_session_id, &graph)
+                .await?;
             host.session_executions.upsert(
-                workflow_session_id,
+                workflow_execution_session_id,
                 workflow_id,
                 &graph_fingerprint,
                 entry.executor.clone(),
@@ -228,14 +232,14 @@ pub(crate) async fn run_session_workflow(
             let executor = Arc::new(tokio::sync::Mutex::new(
                 build_session_executor(
                     graph.clone(),
-                    workflow_session_id,
+                    workflow_execution_session_id,
                     &runtime_ext,
                     python_runtime_execution_recorder.clone(),
                 )
                 .await,
             ));
             host.session_executions.upsert(
-                workflow_session_id,
+                workflow_execution_session_id,
                 workflow_id,
                 &graph_fingerprint,
                 executor.clone(),
@@ -248,14 +252,14 @@ pub(crate) async fn run_session_workflow(
             let executor = Arc::new(tokio::sync::Mutex::new(
                 build_session_executor(
                     graph.clone(),
-                    workflow_session_id,
+                    workflow_execution_session_id,
                     &runtime_ext,
                     python_runtime_execution_recorder.clone(),
                 )
                 .await,
             ));
             host.session_executions.upsert(
-                workflow_session_id,
+                workflow_execution_session_id,
                 workflow_id,
                 &graph_fingerprint,
                 executor.clone(),
@@ -269,7 +273,7 @@ pub(crate) async fn run_session_workflow(
         CoreTaskExecutor::new()
             .with_project_root(host.project_root.clone())
             .with_gateway(host.gateway.clone())
-            .with_execution_id(workflow_session_id.to_string()),
+            .with_execution_id(workflow_execution_session_id.to_string()),
     );
     let tauri_executor = Arc::new(task_executor::TauriTaskExecutor::with_python_runtime(
         host.rag_backend.clone(),
@@ -282,21 +286,24 @@ pub(crate) async fn run_session_workflow(
 
     let mut executor = session_executor.lock().await;
     let checkpoint_summary = executor
-        .workflow_session_checkpoint_summary(workflow_session_id)
+        .workflow_execution_session_checkpoint_summary(workflow_execution_session_id)
         .await;
     let restored_from_checkpoint = checkpoint_summary.checkpoint_available;
-    match executor.workflow_session_residency().await {
-        node_engine::WorkflowSessionResidencyState::CheckpointedButUnloaded => {
+    match executor.workflow_execution_session_residency().await {
+        node_engine::WorkflowExecutionSessionResidencyState::CheckpointedButUnloaded => {
             executor
-                .set_workflow_session_residency(
-                    node_engine::WorkflowSessionResidencyState::Restored,
+                .set_workflow_execution_session_residency(
+                    node_engine::WorkflowExecutionSessionResidencyState::Restored,
                 )
                 .await;
         }
-        node_engine::WorkflowSessionResidencyState::Restored if restored_from_checkpoint => {}
+        node_engine::WorkflowExecutionSessionResidencyState::Restored
+            if restored_from_checkpoint => {}
         _ => {
             executor
-                .set_workflow_session_residency(node_engine::WorkflowSessionResidencyState::Active)
+                .set_workflow_execution_session_residency(
+                    node_engine::WorkflowExecutionSessionResidencyState::Active,
+                )
                 .await;
         }
     }
@@ -304,20 +311,20 @@ pub(crate) async fn run_session_workflow(
         &mut executor,
         &runtime_ext,
         None,
-        Some(workflow_session_id.to_string()),
+        Some(workflow_execution_session_id.to_string()),
         Some(python_runtime_execution_recorder.clone()),
     );
     let mut node_outputs = HashMap::new();
     let run_result = async {
         if replayed_inputs {
             let carried_inputs =
-                replay_carried_inputs(&executor, workflow_session_id, host).await?;
+                replay_carried_inputs(&executor, workflow_execution_session_id, host).await?;
             host.session_executions
-                .set_carried_inputs(workflow_session_id, carried_inputs)?;
+                .set_carried_inputs(workflow_execution_session_id, carried_inputs)?;
         }
         apply_incremental_input_bindings(&executor, inputs).await?;
         host.session_executions
-            .remember_explicit_inputs(workflow_session_id, inputs)?;
+            .remember_explicit_inputs(workflow_execution_session_id, inputs)?;
 
         for node_id in &output_node_ids {
             if run_handle.is_cancelled() {
@@ -339,8 +346,8 @@ pub(crate) async fn run_session_workflow(
     if let Err(error) = run_result {
         if restored_from_checkpoint {
             executor
-                .set_workflow_session_residency(
-                    node_engine::WorkflowSessionResidencyState::CheckpointedButUnloaded,
+                .set_workflow_execution_session_residency(
+                    node_engine::WorkflowExecutionSessionResidencyState::CheckpointedButUnloaded,
                 )
                 .await;
         }
@@ -348,14 +355,18 @@ pub(crate) async fn run_session_workflow(
     }
     if restored_from_checkpoint {
         executor
-            .set_workflow_session_residency(node_engine::WorkflowSessionResidencyState::Restored)
+            .set_workflow_execution_session_residency(
+                node_engine::WorkflowExecutionSessionResidencyState::Restored,
+            )
             .await;
         executor
-            .clear_workflow_session_checkpoint(workflow_session_id)
+            .clear_workflow_execution_session_checkpoint(workflow_execution_session_id)
             .await;
     }
     executor
-        .set_workflow_session_residency(node_engine::WorkflowSessionResidencyState::Warm)
+        .set_workflow_execution_session_residency(
+            node_engine::WorkflowExecutionSessionResidencyState::Warm,
+        )
         .await;
     drop(executor);
 
@@ -367,7 +378,7 @@ pub(crate) async fn run_session_workflow(
 
 async fn reconcile_session_graph_change(
     executor: &Arc<tokio::sync::Mutex<WorkflowExecutor>>,
-    workflow_session_id: &str,
+    workflow_execution_session_id: &str,
     graph: &node_engine::WorkflowGraph,
 ) -> Result<(), WorkflowServiceError> {
     let executor = executor.lock().await;
@@ -377,14 +388,17 @@ async fn reconcile_session_graph_change(
         graph_memory_impact_from_node_engine_graph_change(&previous_graph, graph)
     {
         executor
-            .reconcile_workflow_session_node_memory(workflow_session_id, &memory_impact)
+            .reconcile_workflow_execution_session_node_memory(
+                workflow_execution_session_id,
+                &memory_impact,
+            )
             .await;
         let dirty_tasks = memory_impact.dirty_task_ids();
         if !dirty_tasks.is_empty() {
             let _ = executor.send_event(
                 WorkflowEvent::GraphModified {
                     workflow_id: graph.id.clone(),
-                    execution_id: workflow_session_id.to_string(),
+                    execution_id: workflow_execution_session_id.to_string(),
                     dirty_tasks,
                     memory_impact: Some(memory_impact),
                     occurred_at_ms: None,
@@ -398,23 +412,23 @@ async fn reconcile_session_graph_change(
 
 async fn build_session_executor(
     graph: node_engine::WorkflowGraph,
-    workflow_session_id: &str,
+    workflow_execution_session_id: &str,
     runtime_ext: &RuntimeExtensionsSnapshot,
     python_runtime_execution_recorder: Arc<task_executor::PythonRuntimeExecutionRecorder>,
 ) -> WorkflowExecutor {
     let mut executor = WorkflowExecutor::new(
-        workflow_session_id.to_string(),
+        workflow_execution_session_id.to_string(),
         graph,
         Arc::new(NullEventSink),
     );
     executor
-        .bind_workflow_session(workflow_session_id.to_string())
+        .bind_workflow_execution_session(workflow_execution_session_id.to_string())
         .await;
     apply_runtime_extensions_for_execution(
         &mut executor,
         runtime_ext,
         None,
-        Some(workflow_session_id.to_string()),
+        Some(workflow_execution_session_id.to_string()),
         Some(python_runtime_execution_recorder),
     );
     executor
@@ -422,10 +436,10 @@ async fn build_session_executor(
 
 async fn replay_carried_inputs(
     executor: &WorkflowExecutor,
-    workflow_session_id: &str,
+    workflow_execution_session_id: &str,
     host: &EmbeddedWorkflowHost,
 ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
-    let Some(entry) = host.session_executions.get(workflow_session_id)? else {
+    let Some(entry) = host.session_executions.get(workflow_execution_session_id)? else {
         return Ok(Vec::new());
     };
 

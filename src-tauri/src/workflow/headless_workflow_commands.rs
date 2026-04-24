@@ -4,17 +4,19 @@
 //! Pantograph embedded runtime.
 
 use pantograph_workflow_service::{
-    WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse, WorkflowIoRequest,
-    WorkflowIoResponse, WorkflowPreflightRequest, WorkflowPreflightResponse, WorkflowRunRequest,
-    WorkflowRunResponse, WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse,
-    WorkflowServiceError, WorkflowSessionCloseRequest, WorkflowSessionCloseResponse,
-    WorkflowSessionCreateRequest, WorkflowSessionCreateResponse, WorkflowSessionKeepAliveRequest,
-    WorkflowSessionKeepAliveResponse, WorkflowSessionQueueCancelRequest,
-    WorkflowSessionQueueCancelResponse, WorkflowSessionQueueListRequest,
-    WorkflowSessionQueueListResponse, WorkflowSessionQueueReprioritizeRequest,
-    WorkflowSessionQueueReprioritizeResponse, WorkflowSessionRunRequest,
-    WorkflowSessionStaleCleanupRequest, WorkflowSessionStaleCleanupResponse,
-    WorkflowSessionStatusRequest, WorkflowSessionStatusResponse,
+    WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse,
+    WorkflowExecutionSessionCloseRequest, WorkflowExecutionSessionCloseResponse,
+    WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionCreateResponse,
+    WorkflowExecutionSessionKeepAliveRequest, WorkflowExecutionSessionKeepAliveResponse,
+    WorkflowExecutionSessionQueueCancelRequest, WorkflowExecutionSessionQueueCancelResponse,
+    WorkflowExecutionSessionQueueListRequest, WorkflowExecutionSessionQueueListResponse,
+    WorkflowExecutionSessionQueueReprioritizeRequest,
+    WorkflowExecutionSessionQueueReprioritizeResponse, WorkflowExecutionSessionRunRequest,
+    WorkflowExecutionSessionStaleCleanupRequest, WorkflowExecutionSessionStaleCleanupResponse,
+    WorkflowExecutionSessionStatusRequest, WorkflowExecutionSessionStatusResponse,
+    WorkflowIoRequest, WorkflowIoResponse, WorkflowPreflightRequest, WorkflowPreflightResponse,
+    WorkflowRunRequest, WorkflowRunResponse, WorkflowSchedulerSnapshotRequest,
+    WorkflowSchedulerSnapshotResponse, WorkflowServiceError,
 };
 use tauri::{AppHandle, State};
 
@@ -123,13 +125,13 @@ pub async fn workflow_preflight(
 }
 
 pub async fn workflow_create_session(
-    request: WorkflowSessionCreateRequest,
+    request: WorkflowExecutionSessionCreateRequest,
     app: AppHandle,
     gateway: State<'_, SharedGateway>,
     runtime_registry: State<'_, SharedRuntimeRegistry>,
     extensions: State<'_, SharedExtensions>,
     workflow_service: State<'_, SharedWorkflowService>,
-) -> Result<WorkflowSessionCreateResponse, String> {
+) -> Result<WorkflowExecutionSessionCreateResponse, String> {
     let runtime = build_runtime(
         &app,
         gateway.inner(),
@@ -140,13 +142,13 @@ pub async fn workflow_create_session(
     )
     .await?;
     runtime
-        .create_workflow_session(request)
+        .create_workflow_execution_session(request)
         .await
         .map_err(workflow_error_json)
 }
 
 pub async fn workflow_run_session(
-    request: WorkflowSessionRunRequest,
+    request: WorkflowExecutionSessionRunRequest,
     app: AppHandle,
     gateway: State<'_, SharedGateway>,
     runtime_registry: State<'_, SharedRuntimeRegistry>,
@@ -164,19 +166,19 @@ pub async fn workflow_run_session(
     )
     .await?;
     runtime
-        .run_workflow_session(request)
+        .run_workflow_execution_session(request)
         .await
         .map_err(workflow_error_json)
 }
 
 pub async fn workflow_close_session(
-    request: WorkflowSessionCloseRequest,
+    request: WorkflowExecutionSessionCloseRequest,
     app: AppHandle,
     gateway: State<'_, SharedGateway>,
     runtime_registry: State<'_, SharedRuntimeRegistry>,
     extensions: State<'_, SharedExtensions>,
     workflow_service: State<'_, SharedWorkflowService>,
-) -> Result<WorkflowSessionCloseResponse, String> {
+) -> Result<WorkflowExecutionSessionCloseResponse, String> {
     let runtime = build_runtime(
         &app,
         gateway.inner(),
@@ -187,37 +189,37 @@ pub async fn workflow_close_session(
     )
     .await?;
     runtime
-        .close_workflow_session(request)
+        .close_workflow_execution_session(request)
         .await
         .map_err(workflow_error_json)
 }
 
-pub async fn workflow_get_session_status(
-    request: WorkflowSessionStatusRequest,
+pub async fn workflow_get_execution_session_status(
+    request: WorkflowExecutionSessionStatusRequest,
     workflow_service: State<'_, SharedWorkflowService>,
-) -> Result<WorkflowSessionStatusResponse, String> {
+) -> Result<WorkflowExecutionSessionStatusResponse, String> {
     workflow_service
-        .workflow_get_session_status(request)
+        .workflow_get_execution_session_status(request)
         .await
         .map_err(workflow_error_json)
 }
 
-pub async fn workflow_list_session_queue(
-    request: WorkflowSessionQueueListRequest,
+pub async fn workflow_list_execution_session_queue(
+    request: WorkflowExecutionSessionQueueListRequest,
     workflow_service: State<'_, SharedWorkflowService>,
-) -> Result<WorkflowSessionQueueListResponse, String> {
+) -> Result<WorkflowExecutionSessionQueueListResponse, String> {
     workflow_service
-        .workflow_list_session_queue(request)
+        .workflow_list_execution_session_queue(request)
         .await
         .map_err(workflow_error_json)
 }
 
-pub async fn workflow_cleanup_stale_sessions(
-    request: WorkflowSessionStaleCleanupRequest,
+pub async fn workflow_cleanup_stale_execution_sessions(
+    request: WorkflowExecutionSessionStaleCleanupRequest,
     workflow_service: State<'_, SharedWorkflowService>,
-) -> Result<WorkflowSessionStaleCleanupResponse, String> {
+) -> Result<WorkflowExecutionSessionStaleCleanupResponse, String> {
     workflow_service
-        .workflow_cleanup_stale_sessions(request)
+        .workflow_cleanup_stale_execution_sessions(request)
         .await
         .map_err(workflow_error_json)
 }
@@ -229,34 +231,34 @@ pub async fn workflow_get_scheduler_snapshot(
     workflow_scheduler_snapshot_response(workflow_service.inner(), request).await
 }
 
-pub async fn workflow_cancel_session_queue_item(
-    request: WorkflowSessionQueueCancelRequest,
+pub async fn workflow_cancel_execution_session_queue_item(
+    request: WorkflowExecutionSessionQueueCancelRequest,
     workflow_service: State<'_, SharedWorkflowService>,
-) -> Result<WorkflowSessionQueueCancelResponse, String> {
+) -> Result<WorkflowExecutionSessionQueueCancelResponse, String> {
     workflow_service
-        .workflow_cancel_session_queue_item(request)
+        .workflow_cancel_execution_session_queue_item(request)
         .await
         .map_err(workflow_error_json)
 }
 
-pub async fn workflow_reprioritize_session_queue_item(
-    request: WorkflowSessionQueueReprioritizeRequest,
+pub async fn workflow_reprioritize_execution_session_queue_item(
+    request: WorkflowExecutionSessionQueueReprioritizeRequest,
     workflow_service: State<'_, SharedWorkflowService>,
-) -> Result<WorkflowSessionQueueReprioritizeResponse, String> {
+) -> Result<WorkflowExecutionSessionQueueReprioritizeResponse, String> {
     workflow_service
-        .workflow_reprioritize_session_queue_item(request)
+        .workflow_reprioritize_execution_session_queue_item(request)
         .await
         .map_err(workflow_error_json)
 }
 
-pub async fn workflow_set_session_keep_alive(
-    request: WorkflowSessionKeepAliveRequest,
+pub async fn workflow_set_execution_session_keep_alive(
+    request: WorkflowExecutionSessionKeepAliveRequest,
     app: AppHandle,
     gateway: State<'_, SharedGateway>,
     runtime_registry: State<'_, SharedRuntimeRegistry>,
     extensions: State<'_, SharedExtensions>,
     workflow_service: State<'_, SharedWorkflowService>,
-) -> Result<WorkflowSessionKeepAliveResponse, String> {
+) -> Result<WorkflowExecutionSessionKeepAliveResponse, String> {
     let runtime = build_runtime(
         &app,
         gateway.inner(),
@@ -267,7 +269,7 @@ pub async fn workflow_set_session_keep_alive(
     )
     .await?;
     runtime
-        .workflow_set_session_keep_alive(request)
+        .workflow_set_execution_session_keep_alive(request)
         .await
         .map_err(workflow_error_json)
 }

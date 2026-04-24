@@ -2,7 +2,7 @@ use std::time::{Duration, Instant};
 
 use uuid::Uuid;
 
-use crate::scheduler::WorkflowSessionPreflightCache;
+use crate::scheduler::WorkflowExecutionSessionPreflightCache;
 use crate::technical_fit::WorkflowTechnicalFitOverride;
 
 use super::io_contract::validate_workflow_io;
@@ -44,8 +44,8 @@ impl WorkflowService {
         &self,
         host: &H,
         request: WorkflowRunRequest,
-        cached_preflight: Option<WorkflowSessionPreflightCache>,
-        workflow_session_id: Option<String>,
+        cached_preflight: Option<WorkflowExecutionSessionPreflightCache>,
+        workflow_execution_session_id: Option<String>,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
         validate_workflow_id(&request.workflow_id)?;
         validate_timeout_ms(request.timeout_ms)?;
@@ -113,7 +113,7 @@ impl WorkflowService {
         let started = Instant::now();
         let run_options = WorkflowRunOptions {
             timeout_ms: request.timeout_ms,
-            workflow_session_id,
+            workflow_execution_session_id,
         };
         let run_handle = WorkflowRunHandle::new();
         let mut run_future = Box::pin(host.run_workflow(

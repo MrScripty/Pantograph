@@ -2,7 +2,7 @@
 
 ## Status
 
-Partial.
+Integrated.
 
 ## Write Set
 
@@ -68,6 +68,14 @@ Partial.
   execution.
 - Configured Rustler's frontend-HTTP workflow service with an ephemeral
   attribution store and removed the now-unused scheduler-request NIF helper.
+- Renamed the remaining workflow-service scheduler contracts, embedded-runtime
+  execution-session paths, Tauri diagnostics projections, and node-engine
+  residency/checkpoint helpers from workflow-session terminology to
+  execution-session terminology.
+- Renamed serialized scheduler, graph-state, and workflow-run option fields
+  from `workflow_session_*` to `workflow_execution_session_*`.
+- Renamed private node-engine and embedded-runtime module paths that still
+  carried legacy workflow-session terminology.
 
 ## Verification
 
@@ -80,9 +88,13 @@ Partial.
 - `cargo test -p pantograph-workflow-service workflow_run`
 - `cargo test -p pantograph-uniffi --features frontend-http`
 - `cargo check -p pantograph_rustler --features frontend-http`
+- `cargo test -p pantograph-embedded-runtime workflow_runtime`
+- `cargo test -p node-engine workflow_execution_session`
 - `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+- `rg -n "WorkflowSession|create_workflow_session|run_workflow_session|close_workflow_session|workflow_get_session_status|workflow_get_session_inspection|workflow_list_session_queue|workflow_cancel_session_queue_item|workflow_reprioritize_session_queue_item|workflow_set_session_keep_alive|workflow_cleanup_stale_sessions|spawn_workflow_session_stale_cleanup_worker" crates src-tauri -g '*.rs'`
+- `rg -n "workflow_session|workflow-session|workflow session|Workflow session" crates src-tauri -g '*.rs'`
 
-All commands passed.
+All cargo commands passed. Both source vocabulary checks returned no matches.
 
 ## Deviations
 
@@ -99,12 +111,16 @@ All commands passed.
   as `enif_send`. This is an existing Rustler test-link environment limitation;
   `cargo check -p pantograph_rustler --features frontend-http` verifies the
   Rustler cutover compile surface.
+- The old workflow-session terminology cutover also renamed JSON field names
+  for scheduler inspection and graph-state projections. This is intentional for
+  Stage `01`; compatibility aliases were not kept because the stage requires
+  removing residual workflow-session public vocabulary.
 
 ## Follow-Ups
 
-- Replace, remove, or make internal the remaining workflow-session entry points
-  in workflow-service and embedded-runtime scheduler/execution-session
-  surfaces.
+- Apply the Stage `01` stage-end refactor gate and decide whether the renamed
+  execution-session scheduler controls remain an internal native runtime
+  management surface or need further restriction before Stage `02`.
 - Decide whether non-attributed `WorkflowService::new` remains a temporary
   compatibility path or should require configured attribution before Stage `01`
   completion.

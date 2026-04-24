@@ -8,9 +8,9 @@ use node_engine::{NodeEngineError, WorkflowExecutor};
 use pantograph_runtime_identity::canonical_runtime_id;
 use pantograph_runtime_registry::RuntimeRegistry;
 use pantograph_workflow_service::{
-    WorkflowCapabilitiesResponse, WorkflowSchedulerSnapshotDiagnostics,
-    WorkflowSchedulerSnapshotResponse, WorkflowSessionQueueItem, WorkflowSessionSummary,
-    WorkflowTraceRuntimeMetrics,
+    WorkflowCapabilitiesResponse, WorkflowExecutionSessionQueueItem,
+    WorkflowExecutionSessionSummary, WorkflowSchedulerSnapshotDiagnostics,
+    WorkflowSchedulerSnapshotResponse, WorkflowTraceRuntimeMetrics,
 };
 
 #[derive(Debug, Clone)]
@@ -35,8 +35,8 @@ pub struct WorkflowExecutionSchedulerSnapshot {
     pub trace_execution_id: String,
     pub session_id: String,
     pub captured_at_ms: u64,
-    pub session: WorkflowSessionSummary,
-    pub items: Vec<WorkflowSessionQueueItem>,
+    pub session: WorkflowExecutionSessionSummary,
+    pub items: Vec<WorkflowExecutionSessionQueueItem>,
     pub diagnostics: Option<WorkflowSchedulerSnapshotDiagnostics>,
 }
 

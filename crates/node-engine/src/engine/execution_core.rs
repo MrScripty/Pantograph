@@ -52,7 +52,10 @@ impl<'a> DemandExecutionCore<'a> {
                     .node_memories
                     .and_then(|node_memories| node_memories.get(node_id))
                 {
-                    super::workflow_session::inject_node_memory_input(&mut inputs, snapshot)?;
+                    super::workflow_execution_session::inject_node_memory_input(
+                        &mut inputs,
+                        snapshot,
+                    )?;
                 }
 
                 if let Some(prompt) = super::node_preparation::prepare_node_inputs(

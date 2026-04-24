@@ -1,20 +1,20 @@
 use super::*;
 
 #[tokio::test]
-async fn workflow_cleanup_stale_sessions_removes_idle_non_keep_alive_session() {
+async fn workflow_cleanup_stale_execution_sessions_removes_idle_non_keep_alive_session() {
     let host = MockWorkflowHost::new(8, 1024);
     let service = WorkflowService::new();
     let created = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-1".to_string(),
                 usage_profile: None,
                 keep_alive: false,
             },
         )
         .await
-        .expect("create workflow session");
+        .expect("create workflow execution session");
 
     {
         let mut store = service
@@ -29,7 +29,7 @@ async fn workflow_cleanup_stale_sessions_removes_idle_non_keep_alive_session() {
     }
 
     let response = service
-        .workflow_cleanup_stale_sessions(WorkflowSessionStaleCleanupRequest {
+        .workflow_cleanup_stale_execution_sessions(WorkflowExecutionSessionStaleCleanupRequest {
             idle_timeout_ms: 1_000,
         })
         .await
@@ -40,7 +40,7 @@ async fn workflow_cleanup_stale_sessions_removes_idle_non_keep_alive_session() {
         vec![created.session_id.clone()]
     );
     let err = service
-        .workflow_get_session_status(WorkflowSessionStatusRequest {
+        .workflow_get_execution_session_status(WorkflowExecutionSessionStatusRequest {
             session_id: created.session_id,
         })
         .await
@@ -48,7 +48,7 @@ async fn workflow_cleanup_stale_sessions_removes_idle_non_keep_alive_session() {
     assert!(matches!(err, WorkflowServiceError::SessionNotFound(_)));
 
     let second_response = service
-        .workflow_cleanup_stale_sessions(WorkflowSessionStaleCleanupRequest {
+        .workflow_cleanup_stale_execution_sessions(WorkflowExecutionSessionStaleCleanupRequest {
             idle_timeout_ms: 1_000,
         })
         .await
@@ -60,20 +60,20 @@ async fn workflow_cleanup_stale_sessions_removes_idle_non_keep_alive_session() {
 }
 
 #[tokio::test]
-async fn workflow_cleanup_stale_sessions_keeps_session_with_queued_work() {
+async fn workflow_cleanup_stale_execution_sessions_keeps_session_with_queued_work() {
     let host = MockWorkflowHost::new(8, 1024);
     let service = WorkflowService::new();
     let created = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-1".to_string(),
                 usage_profile: None,
                 keep_alive: false,
             },
         )
         .await
-        .expect("create workflow session");
+        .expect("create workflow execution session");
 
     {
         let mut store = service
@@ -83,7 +83,7 @@ async fn workflow_cleanup_stale_sessions_keeps_session_with_queued_work() {
         store
             .enqueue_run(
                 &created.session_id,
-                &WorkflowSessionRunRequest {
+                &WorkflowExecutionSessionRunRequest {
                     session_id: created.session_id.clone(),
                     inputs: Vec::new(),
                     output_targets: None,
@@ -102,7 +102,7 @@ async fn workflow_cleanup_stale_sessions_keeps_session_with_queued_work() {
     }
 
     let response = service
-        .workflow_cleanup_stale_sessions(WorkflowSessionStaleCleanupRequest {
+        .workflow_cleanup_stale_execution_sessions(WorkflowExecutionSessionStaleCleanupRequest {
             idle_timeout_ms: 1_000,
         })
         .await
@@ -123,25 +123,25 @@ async fn workflow_cleanup_stale_sessions_keeps_session_with_queued_work() {
     assert_eq!(snapshot.items.len(), 1);
     assert_eq!(
         snapshot.items[0].status,
-        WorkflowSessionQueueItemStatus::Pending
+        WorkflowExecutionSessionQueueItemStatus::Pending
     );
 }
 
 #[tokio::test]
-async fn workflow_cleanup_stale_sessions_keeps_keep_alive_session() {
+async fn workflow_cleanup_stale_execution_sessions_keeps_keep_alive_session() {
     let host = MockWorkflowHost::new(8, 1024);
     let service = WorkflowService::new();
     let created = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-1".to_string(),
                 usage_profile: None,
                 keep_alive: true,
             },
         )
         .await
-        .expect("create workflow session");
+        .expect("create workflow execution session");
 
     {
         let mut store = service
@@ -156,7 +156,7 @@ async fn workflow_cleanup_stale_sessions_keeps_keep_alive_session() {
     }
 
     let response = service
-        .workflow_cleanup_stale_sessions(WorkflowSessionStaleCleanupRequest {
+        .workflow_cleanup_stale_execution_sessions(WorkflowExecutionSessionStaleCleanupRequest {
             idle_timeout_ms: 1_000,
         })
         .await
@@ -164,7 +164,7 @@ async fn workflow_cleanup_stale_sessions_keeps_keep_alive_session() {
 
     assert!(response.cleaned_session_ids.is_empty());
     let status = service
-        .workflow_get_session_status(WorkflowSessionStatusRequest {
+        .workflow_get_execution_session_status(WorkflowExecutionSessionStatusRequest {
             session_id: created.session_id,
         })
         .await
@@ -173,24 +173,24 @@ async fn workflow_cleanup_stale_sessions_keeps_keep_alive_session() {
 }
 
 #[tokio::test]
-async fn workflow_get_session_inspection_uses_host_owned_live_state_view() {
+async fn workflow_get_execution_session_inspection_uses_host_owned_live_state_view() {
     let create_host = MockWorkflowHost::new(8, 1024);
     let service = WorkflowService::new();
     let created = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &create_host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-1".to_string(),
                 usage_profile: None,
                 keep_alive: true,
             },
         )
         .await
-        .expect("create workflow session");
+        .expect("create workflow execution session");
 
     let calls = Arc::new(Mutex::new(Vec::new()));
     let inspection_state = WorkflowGraphSessionStateView::new(
-        node_engine::WorkflowSessionResidencyState::Warm,
+        node_engine::WorkflowExecutionSessionResidencyState::Warm,
         Vec::new(),
         None,
         None,
@@ -201,18 +201,21 @@ async fn workflow_get_session_inspection_uses_host_owned_live_state_view() {
     };
 
     let response = service
-        .workflow_get_session_inspection(
+        .workflow_get_execution_session_inspection(
             &inspection_host,
-            WorkflowSessionInspectionRequest {
+            WorkflowExecutionSessionInspectionRequest {
                 session_id: created.session_id.clone(),
             },
         )
         .await
-        .expect("inspect workflow session");
+        .expect("inspect workflow execution session");
 
     assert_eq!(response.session.session_id, created.session_id);
     assert_eq!(response.session.workflow_id, "wf-1");
-    assert_eq!(response.workflow_session_state, Some(inspection_state));
+    assert_eq!(
+        response.workflow_execution_session_state,
+        Some(inspection_state)
+    );
     assert_eq!(
         calls
             .lock()
@@ -223,20 +226,20 @@ async fn workflow_get_session_inspection_uses_host_owned_live_state_view() {
 }
 
 #[tokio::test]
-async fn workflow_cleanup_stale_sessions_respects_recent_status_reads() {
+async fn workflow_cleanup_stale_execution_sessions_respects_recent_status_reads() {
     let host = MockWorkflowHost::new(8, 1024);
     let service = WorkflowService::new();
     let created = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-1".to_string(),
                 usage_profile: None,
                 keep_alive: false,
             },
         )
         .await
-        .expect("create workflow session");
+        .expect("create workflow execution session");
 
     {
         let mut store = service
@@ -251,14 +254,14 @@ async fn workflow_cleanup_stale_sessions_respects_recent_status_reads() {
     }
 
     service
-        .workflow_get_session_status(WorkflowSessionStatusRequest {
+        .workflow_get_execution_session_status(WorkflowExecutionSessionStatusRequest {
             session_id: created.session_id.clone(),
         })
         .await
         .expect("status read should refresh session access");
 
     let response = service
-        .workflow_cleanup_stale_sessions(WorkflowSessionStaleCleanupRequest {
+        .workflow_cleanup_stale_execution_sessions(WorkflowExecutionSessionStaleCleanupRequest {
             idle_timeout_ms: 1_000,
         })
         .await
@@ -266,12 +269,15 @@ async fn workflow_cleanup_stale_sessions_respects_recent_status_reads() {
 
     assert!(response.cleaned_session_ids.is_empty());
     let status = service
-        .workflow_get_session_status(WorkflowSessionStatusRequest {
+        .workflow_get_execution_session_status(WorkflowExecutionSessionStatusRequest {
             session_id: created.session_id,
         })
         .await
         .expect("recently accessed session should remain accessible");
-    assert_eq!(status.session.state, WorkflowSessionState::IdleUnloaded);
+    assert_eq!(
+        status.session.state,
+        WorkflowExecutionSessionState::IdleUnloaded
+    );
 }
 
 #[tokio::test]
@@ -279,22 +285,24 @@ async fn workflow_stale_cleanup_worker_removes_stale_sessions() {
     let host = MockWorkflowHost::new(8, 1024);
     let service = Arc::new(WorkflowService::new());
     let worker = service
-        .spawn_workflow_session_stale_cleanup_worker(WorkflowSessionStaleCleanupWorkerConfig {
-            interval: Duration::from_millis(10),
-            idle_timeout: Duration::from_millis(20),
-        })
+        .spawn_workflow_execution_session_stale_cleanup_worker(
+            WorkflowExecutionSessionStaleCleanupWorkerConfig {
+                interval: Duration::from_millis(10),
+                idle_timeout: Duration::from_millis(20),
+            },
+        )
         .expect("spawn stale cleanup worker");
     let created = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-1".to_string(),
                 usage_profile: None,
                 keep_alive: false,
             },
         )
         .await
-        .expect("create workflow session");
+        .expect("create workflow execution session");
 
     {
         let mut store = service
@@ -324,7 +332,7 @@ async fn workflow_stale_cleanup_worker_removes_stale_sessions() {
         }
     })
     .await
-    .expect("worker should remove stale workflow session");
+    .expect("worker should remove stale workflow execution session");
 
     worker.shutdown().await;
 }
@@ -334,22 +342,24 @@ async fn workflow_stale_cleanup_worker_keeps_sessions_with_queued_work() {
     let host = MockWorkflowHost::new(8, 1024);
     let service = Arc::new(WorkflowService::new());
     let worker = service
-        .spawn_workflow_session_stale_cleanup_worker(WorkflowSessionStaleCleanupWorkerConfig {
-            interval: Duration::from_millis(10),
-            idle_timeout: Duration::from_millis(20),
-        })
+        .spawn_workflow_execution_session_stale_cleanup_worker(
+            WorkflowExecutionSessionStaleCleanupWorkerConfig {
+                interval: Duration::from_millis(10),
+                idle_timeout: Duration::from_millis(20),
+            },
+        )
         .expect("spawn stale cleanup worker");
     let created = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-1".to_string(),
                 usage_profile: None,
                 keep_alive: false,
             },
         )
         .await
-        .expect("create workflow session");
+        .expect("create workflow execution session");
 
     {
         let mut store = service
@@ -359,7 +369,7 @@ async fn workflow_stale_cleanup_worker_keeps_sessions_with_queued_work() {
         store
             .enqueue_run(
                 &created.session_id,
-                &WorkflowSessionRunRequest {
+                &WorkflowExecutionSessionRunRequest {
                     session_id: created.session_id.clone(),
                     inputs: Vec::new(),
                     output_targets: None,
@@ -390,7 +400,7 @@ async fn workflow_stale_cleanup_worker_keeps_sessions_with_queued_work() {
     assert_eq!(snapshot.items.len(), 1);
     assert_eq!(
         snapshot.items[0].status,
-        WorkflowSessionQueueItemStatus::Pending
+        WorkflowExecutionSessionQueueItemStatus::Pending
     );
 
     worker.shutdown().await;
@@ -401,25 +411,27 @@ async fn workflow_stale_cleanup_worker_shutdown_stops_future_cleanup() {
     let host = MockWorkflowHost::new(8, 1024);
     let service = Arc::new(WorkflowService::new());
     let worker = service
-        .spawn_workflow_session_stale_cleanup_worker(WorkflowSessionStaleCleanupWorkerConfig {
-            interval: Duration::from_secs(1),
-            idle_timeout: Duration::from_millis(20),
-        })
+        .spawn_workflow_execution_session_stale_cleanup_worker(
+            WorkflowExecutionSessionStaleCleanupWorkerConfig {
+                interval: Duration::from_secs(1),
+                idle_timeout: Duration::from_millis(20),
+            },
+        )
         .expect("spawn stale cleanup worker");
     worker.shutdown().await;
     worker.shutdown().await;
 
     let created = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-1".to_string(),
                 usage_profile: None,
                 keep_alive: false,
             },
         )
         .await
-        .expect("create workflow session");
+        .expect("create workflow execution session");
 
     {
         let mut store = service
@@ -436,19 +448,22 @@ async fn workflow_stale_cleanup_worker_shutdown_stops_future_cleanup() {
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     let status = service
-        .workflow_get_session_status(WorkflowSessionStatusRequest {
+        .workflow_get_execution_session_status(WorkflowExecutionSessionStatusRequest {
             session_id: created.session_id,
         })
         .await
         .expect("shutdown worker should not remove stale sessions");
-    assert_eq!(status.session.state, WorkflowSessionState::IdleUnloaded);
+    assert_eq!(
+        status.session.state,
+        WorkflowExecutionSessionState::IdleUnloaded
+    );
 }
 
 #[test]
 fn workflow_stale_cleanup_worker_requires_active_tokio_runtime() {
     let service = Arc::new(WorkflowService::new());
-    let err = match service.spawn_workflow_session_stale_cleanup_worker(
-        WorkflowSessionStaleCleanupWorkerConfig::default(),
+    let err = match service.spawn_workflow_execution_session_stale_cleanup_worker(
+        WorkflowExecutionSessionStaleCleanupWorkerConfig::default(),
     ) {
         Ok(_) => panic!("spawn should fail without an active tokio runtime"),
         Err(err) => err,
@@ -465,8 +480,8 @@ fn workflow_stale_cleanup_worker_accepts_explicit_runtime_handle() {
     let runtime = tokio::runtime::Runtime::new().expect("create tokio runtime");
     let service = Arc::new(WorkflowService::new());
     let worker = service
-        .spawn_workflow_session_stale_cleanup_worker_with_handle(
-            WorkflowSessionStaleCleanupWorkerConfig::default(),
+        .spawn_workflow_execution_session_stale_cleanup_worker_with_handle(
+            WorkflowExecutionSessionStaleCleanupWorkerConfig::default(),
             runtime.handle().clone(),
         )
         .expect("spawn stale cleanup worker with explicit runtime handle");

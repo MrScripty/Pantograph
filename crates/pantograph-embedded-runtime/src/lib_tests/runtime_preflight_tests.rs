@@ -61,7 +61,7 @@ async fn test_runtime_unload_candidate_selection_uses_registry_eviction_order() 
     let selected = runtime
         .host()
         .select_runtime_unload_candidate(
-            &WorkflowSessionRuntimeSelectionTarget {
+            &WorkflowExecutionSessionRuntimeSelectionTarget {
                 session_id: "session-target".to_string(),
                 workflow_id: "wf-a".to_string(),
                 usage_profile: Some("interactive".to_string()),
@@ -69,7 +69,7 @@ async fn test_runtime_unload_candidate_selection_uses_registry_eviction_order() 
                 required_models: Vec::new(),
             },
             &[
-                WorkflowSessionRuntimeUnloadCandidate {
+                WorkflowExecutionSessionRuntimeUnloadCandidate {
                     session_id: "session-a".to_string(),
                     workflow_id: "wf-a".to_string(),
                     usage_profile: Some("interactive".to_string()),
@@ -79,7 +79,7 @@ async fn test_runtime_unload_candidate_selection_uses_registry_eviction_order() 
                     access_tick: 1,
                     run_count: 0,
                 },
-                WorkflowSessionRuntimeUnloadCandidate {
+                WorkflowExecutionSessionRuntimeUnloadCandidate {
                     session_id: "session-b".to_string(),
                     workflow_id: "wf-b".to_string(),
                     usage_profile: Some("batch".to_string()),

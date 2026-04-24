@@ -45,7 +45,7 @@ async fn test_keep_alive_session_load_tracks_registry_reservation_lifecycle() {
     .with_runtime_registry(runtime_registry.clone());
 
     let created = runtime
-        .create_workflow_session(WorkflowSessionCreateRequest {
+        .create_workflow_execution_session(WorkflowExecutionSessionCreateRequest {
             workflow_id: "runtime-text".to_string(),
             usage_profile: Some("interactive".to_string()),
             keep_alive: true,
@@ -77,7 +77,7 @@ async fn test_keep_alive_session_load_tracks_registry_reservation_lifecycle() {
     );
 
     runtime
-        .workflow_set_session_keep_alive(WorkflowSessionKeepAliveRequest {
+        .workflow_set_execution_session_keep_alive(WorkflowExecutionSessionKeepAliveRequest {
             session_id: created.session_id.clone(),
             keep_alive: false,
         })
@@ -135,7 +135,7 @@ async fn keep_alive_disable_reclaim_flips_scheduler_runtime_registry_diagnostics
     .await;
 
     let created = runtime
-        .create_workflow_session(WorkflowSessionCreateRequest {
+        .create_workflow_execution_session(WorkflowExecutionSessionCreateRequest {
             workflow_id: "runtime-text".to_string(),
             usage_profile: Some("interactive".to_string()),
             keep_alive: true,
@@ -144,7 +144,7 @@ async fn keep_alive_disable_reclaim_flips_scheduler_runtime_registry_diagnostics
         .expect("create keep-alive session");
 
     runtime
-        .workflow_set_session_keep_alive(WorkflowSessionKeepAliveRequest {
+        .workflow_set_execution_session_keep_alive(WorkflowExecutionSessionKeepAliveRequest {
             session_id: created.session_id,
             keep_alive: false,
         })
@@ -242,7 +242,7 @@ async fn test_sync_loaded_session_runtime_retention_hint_updates_running_session
     host.sync_loaded_session_runtime_retention_hint(
         "session-running",
         true,
-        WorkflowSessionState::Running,
+        WorkflowExecutionSessionState::Running,
     )
     .expect("running session retention hint should update");
 
@@ -295,7 +295,7 @@ async fn test_session_runtime_load_reuses_ready_gateway_runtime_in_registry() {
             "session-ready",
             "runtime-text",
             Some("interactive"),
-            WorkflowSessionRetentionHint::KeepAlive,
+            WorkflowExecutionSessionRetentionHint::KeepAlive,
         )
         .await
         .expect("ready runtime should be reused");
@@ -361,7 +361,7 @@ async fn test_session_runtime_load_waits_for_existing_warmup_transition() {
             "session-wait",
             "runtime-text",
             None,
-            WorkflowSessionRetentionHint::KeepAlive,
+            WorkflowExecutionSessionRetentionHint::KeepAlive,
         )
         .await
         .expect("load should wait for warmup completion");
@@ -405,7 +405,7 @@ async fn test_session_runtime_load_blocks_when_runtime_preflight_reports_not_rea
             "session-not-ready",
             "runtime-text",
             None,
-            WorkflowSessionRetentionHint::KeepAlive,
+            WorkflowExecutionSessionRetentionHint::KeepAlive,
         )
         .await
         .expect_err("load should fail when required runtime is not ready");
@@ -461,7 +461,7 @@ async fn test_session_runtime_unload_stops_active_gateway_runtime_when_evictable
             "session-stop",
             "runtime-text",
             None,
-            WorkflowSessionRetentionHint::KeepAlive,
+            WorkflowExecutionSessionRetentionHint::KeepAlive,
         )
         .await
         .expect("ready runtime should load");
@@ -470,7 +470,7 @@ async fn test_session_runtime_unload_stops_active_gateway_runtime_when_evictable
         .unload_session_runtime(
             "session-stop",
             "runtime-text",
-            pantograph_workflow_service::WorkflowSessionUnloadReason::SessionClosed,
+            pantograph_workflow_service::WorkflowExecutionSessionUnloadReason::SessionClosed,
         )
         .await
         .expect("runtime should unload");
@@ -521,7 +521,7 @@ async fn test_session_runtime_load_releases_reservation_after_warmup_timeout() {
             "session-timeout",
             "runtime-text",
             None,
-            WorkflowSessionRetentionHint::KeepAlive,
+            WorkflowExecutionSessionRetentionHint::KeepAlive,
         )
         .await
         .expect_err("warming timeout should fail");
@@ -561,7 +561,7 @@ async fn test_session_run_without_keep_alive_releases_runtime_reservation_after_
     .with_runtime_registry(runtime_registry.clone());
 
     let created = runtime
-        .create_workflow_session(WorkflowSessionCreateRequest {
+        .create_workflow_execution_session(WorkflowExecutionSessionCreateRequest {
             workflow_id: "runtime-text".to_string(),
             usage_profile: None,
             keep_alive: false,
@@ -571,7 +571,7 @@ async fn test_session_run_without_keep_alive_releases_runtime_reservation_after_
     let session_id = created.session_id.clone();
 
     let run_response = runtime
-        .run_workflow_session(WorkflowSessionRunRequest {
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id,
             inputs: vec![WorkflowPortBinding {
                 node_id: "text-input-1".to_string(),

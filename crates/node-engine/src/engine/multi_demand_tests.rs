@@ -713,7 +713,9 @@ async fn default_budget_runs_independent_targets_concurrently() {
 async fn workflow_executor_multi_demand_records_bound_session_node_memory_from_cache() {
     let workflow_executor =
         WorkflowExecutor::new("exec-1", make_linear_graph(), Arc::new(NullEventSink));
-    workflow_executor.bind_workflow_session("session-1").await;
+    workflow_executor
+        .bind_workflow_execution_session("session-1")
+        .await;
 
     workflow_executor
         .demand_multiple(&["b".to_string(), "c".to_string()], &SnapshotTaskExecutor)
@@ -721,7 +723,7 @@ async fn workflow_executor_multi_demand_records_bound_session_node_memory_from_c
         .expect("multi-demand graph");
 
     let snapshots = workflow_executor
-        .workflow_session_node_memory_snapshots("session-1")
+        .workflow_execution_session_node_memory_snapshots("session-1")
         .await;
     assert_eq!(snapshots.len(), 3);
     assert_eq!(
@@ -744,7 +746,9 @@ async fn workflow_executor_parallel_multi_demand_reconciles_input_snapshots() {
         make_parallel_roots_graph(),
         Arc::new(NullEventSink),
     );
-    workflow_executor.bind_workflow_session("session-1").await;
+    workflow_executor
+        .bind_workflow_execution_session("session-1")
+        .await;
 
     workflow_executor
         .demand_multiple(
@@ -755,7 +759,7 @@ async fn workflow_executor_parallel_multi_demand_reconciles_input_snapshots() {
         .expect("parallel multi-demand graph");
 
     let snapshots = workflow_executor
-        .workflow_session_node_memory_snapshots("session-1")
+        .workflow_execution_session_node_memory_snapshots("session-1")
         .await;
     assert_eq!(snapshots.len(), 2);
     assert_eq!(

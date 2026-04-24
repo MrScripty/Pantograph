@@ -23,7 +23,7 @@ async fn failed_restore_keeps_checkpoint_until_resume_succeeds() {
     );
 
     let session = runtime
-        .create_workflow_session(WorkflowSessionCreateRequest {
+        .create_workflow_execution_session(WorkflowExecutionSessionCreateRequest {
             workflow_id: "runtime-text".to_string(),
             usage_profile: Some("interactive".to_string()),
             keep_alive: true,
@@ -32,7 +32,7 @@ async fn failed_restore_keeps_checkpoint_until_resume_succeeds() {
         .expect("create keep-alive session");
 
     runtime
-        .run_workflow_session(WorkflowSessionRunRequest {
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session.session_id.clone(),
             inputs: vec![WorkflowPortBinding {
                 node_id: "text-input-1".to_string(),
@@ -61,7 +61,7 @@ async fn failed_restore_keeps_checkpoint_until_resume_succeeds() {
         &runtime.host(),
         &session.session_id,
         "runtime-text",
-        pantograph_workflow_service::WorkflowSessionUnloadReason::CapacityRebalance,
+        pantograph_workflow_service::WorkflowExecutionSessionUnloadReason::CapacityRebalance,
     )
     .await
     .expect("checkpoint keep-alive session");
@@ -69,7 +69,7 @@ async fn failed_restore_keeps_checkpoint_until_resume_succeeds() {
     let checkpointed_summary = {
         let executor = executor.lock().await;
         executor
-            .workflow_session_checkpoint_summary(&session.session_id)
+            .workflow_execution_session_checkpoint_summary(&session.session_id)
             .await
     };
     assert!(checkpointed_summary.checkpoint_available);
@@ -77,7 +77,7 @@ async fn failed_restore_keeps_checkpoint_until_resume_succeeds() {
     rewrite_test_workflow_output_node_to_human_input(temp.path(), "runtime-text");
 
     let error = runtime
-        .run_workflow_session(WorkflowSessionRunRequest {
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session.session_id.clone(),
             inputs: Vec::new(),
             output_targets: Some(vec![WorkflowOutputTarget {
@@ -104,7 +104,7 @@ async fn failed_restore_keeps_checkpoint_until_resume_succeeds() {
     let failed_restore_summary = {
         let executor = executor.lock().await;
         executor
-            .workflow_session_checkpoint_summary(&session.session_id)
+            .workflow_execution_session_checkpoint_summary(&session.session_id)
             .await
     };
     assert!(failed_restore_summary.checkpoint_available);
@@ -114,13 +114,13 @@ async fn failed_restore_keeps_checkpoint_until_resume_succeeds() {
     );
     assert_eq!(
         failed_restore_summary.residency,
-        node_engine::WorkflowSessionResidencyState::CheckpointedButUnloaded
+        node_engine::WorkflowExecutionSessionResidencyState::CheckpointedButUnloaded
     );
 
     write_test_workflow(temp.path(), "runtime-text");
 
     let resumed_output = runtime
-        .run_workflow_session(WorkflowSessionRunRequest {
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session.session_id.clone(),
             inputs: Vec::new(),
             output_targets: Some(vec![WorkflowOutputTarget {
@@ -139,17 +139,17 @@ async fn failed_restore_keeps_checkpoint_until_resume_succeeds() {
     let resumed_summary = {
         let executor = executor.lock().await;
         executor
-            .workflow_session_checkpoint_summary(&session.session_id)
+            .workflow_execution_session_checkpoint_summary(&session.session_id)
             .await
     };
     assert!(!resumed_summary.checkpoint_available);
     assert_eq!(
         resumed_summary.residency,
-        node_engine::WorkflowSessionResidencyState::Warm
+        node_engine::WorkflowExecutionSessionResidencyState::Warm
     );
 
     runtime
-        .close_workflow_session(WorkflowSessionCloseRequest {
+        .close_workflow_execution_session(WorkflowExecutionSessionCloseRequest {
             session_id: session.session_id.clone(),
         })
         .await
@@ -179,7 +179,7 @@ async fn runtime_not_ready_resume_keeps_checkpoint_until_runtime_returns() {
     );
 
     let session = runtime
-        .create_workflow_session(WorkflowSessionCreateRequest {
+        .create_workflow_execution_session(WorkflowExecutionSessionCreateRequest {
             workflow_id: "runtime-text".to_string(),
             usage_profile: Some("interactive".to_string()),
             keep_alive: true,
@@ -188,7 +188,7 @@ async fn runtime_not_ready_resume_keeps_checkpoint_until_runtime_returns() {
         .expect("create keep-alive session");
 
     runtime
-        .run_workflow_session(WorkflowSessionRunRequest {
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session.session_id.clone(),
             inputs: vec![WorkflowPortBinding {
                 node_id: "text-input-1".to_string(),
@@ -214,7 +214,7 @@ async fn runtime_not_ready_resume_keeps_checkpoint_until_runtime_returns() {
         .expect("keep-alive executor should exist");
 
     let one_shot = runtime
-        .create_workflow_session(WorkflowSessionCreateRequest {
+        .create_workflow_execution_session(WorkflowExecutionSessionCreateRequest {
             workflow_id: "runtime-text".to_string(),
             usage_profile: Some("batch".to_string()),
             keep_alive: false,
@@ -223,7 +223,7 @@ async fn runtime_not_ready_resume_keeps_checkpoint_until_runtime_returns() {
         .expect("create one-shot session");
 
     let one_shot_output = runtime
-        .run_workflow_session(WorkflowSessionRunRequest {
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: one_shot.session_id.clone(),
             inputs: vec![WorkflowPortBinding {
                 node_id: "text-input-1".to_string(),
@@ -246,7 +246,7 @@ async fn runtime_not_ready_resume_keeps_checkpoint_until_runtime_returns() {
     let checkpointed_summary = {
         let executor = executor.lock().await;
         executor
-            .workflow_session_checkpoint_summary(&session.session_id)
+            .workflow_execution_session_checkpoint_summary(&session.session_id)
             .await
     };
     assert!(checkpointed_summary.checkpoint_available);
@@ -255,7 +255,7 @@ async fn runtime_not_ready_resume_keeps_checkpoint_until_runtime_returns() {
         .expect("remove fake runtime before resume");
 
     let error = runtime
-        .run_workflow_session(WorkflowSessionRunRequest {
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session.session_id.clone(),
             inputs: Vec::new(),
             output_targets: Some(vec![WorkflowOutputTarget {
@@ -282,7 +282,7 @@ async fn runtime_not_ready_resume_keeps_checkpoint_until_runtime_returns() {
     let failed_resume_summary = {
         let executor = executor.lock().await;
         executor
-            .workflow_session_checkpoint_summary(&session.session_id)
+            .workflow_execution_session_checkpoint_summary(&session.session_id)
             .await
     };
     assert!(failed_resume_summary.checkpoint_available);
@@ -292,13 +292,13 @@ async fn runtime_not_ready_resume_keeps_checkpoint_until_runtime_returns() {
     );
     assert_eq!(
         failed_resume_summary.residency,
-        node_engine::WorkflowSessionResidencyState::CheckpointedButUnloaded
+        node_engine::WorkflowExecutionSessionResidencyState::CheckpointedButUnloaded
     );
 
     install_fake_default_runtime(&app_data_dir);
 
     let resumed_output = runtime
-        .run_workflow_session(WorkflowSessionRunRequest {
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session.session_id.clone(),
             inputs: Vec::new(),
             output_targets: Some(vec![WorkflowOutputTarget {
@@ -317,17 +317,17 @@ async fn runtime_not_ready_resume_keeps_checkpoint_until_runtime_returns() {
     let resumed_summary = {
         let executor = executor.lock().await;
         executor
-            .workflow_session_checkpoint_summary(&session.session_id)
+            .workflow_execution_session_checkpoint_summary(&session.session_id)
             .await
     };
     assert!(!resumed_summary.checkpoint_available);
     assert_eq!(
         resumed_summary.residency,
-        node_engine::WorkflowSessionResidencyState::Warm
+        node_engine::WorkflowExecutionSessionResidencyState::Warm
     );
 
     runtime
-        .close_workflow_session(WorkflowSessionCloseRequest {
+        .close_workflow_execution_session(WorkflowExecutionSessionCloseRequest {
             session_id: session.session_id.clone(),
         })
         .await
@@ -357,7 +357,7 @@ async fn scheduler_reclaim_keeps_checkpointed_sessions_isolated_across_resumes()
     );
 
     let session_a = runtime
-        .create_workflow_session(WorkflowSessionCreateRequest {
+        .create_workflow_execution_session(WorkflowExecutionSessionCreateRequest {
             workflow_id: "runtime-text".to_string(),
             usage_profile: Some("interactive".to_string()),
             keep_alive: true,
@@ -365,7 +365,7 @@ async fn scheduler_reclaim_keeps_checkpointed_sessions_isolated_across_resumes()
         .await
         .expect("create first keep-alive session");
     let session_b = runtime
-        .create_workflow_session(WorkflowSessionCreateRequest {
+        .create_workflow_execution_session(WorkflowExecutionSessionCreateRequest {
             workflow_id: "runtime-text".to_string(),
             usage_profile: Some("interactive".to_string()),
             keep_alive: true,
@@ -374,7 +374,7 @@ async fn scheduler_reclaim_keeps_checkpointed_sessions_isolated_across_resumes()
         .expect("create second keep-alive session");
 
     let first_output = runtime
-        .run_workflow_session(WorkflowSessionRunRequest {
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session_a.session_id.clone(),
             inputs: vec![WorkflowPortBinding {
                 node_id: "text-input-1".to_string(),
@@ -402,7 +402,7 @@ async fn scheduler_reclaim_keeps_checkpointed_sessions_isolated_across_resumes()
     {
         let executor = executor_a.lock().await;
         executor
-            .record_workflow_session_node_memory(synthetic_kv_node_memory_snapshot(
+            .record_workflow_execution_session_node_memory(synthetic_kv_node_memory_snapshot(
                 &session_a.session_id,
                 "kv-memory-a",
                 "cache-session-a",
@@ -411,7 +411,7 @@ async fn scheduler_reclaim_keeps_checkpointed_sessions_isolated_across_resumes()
     }
 
     let second_output = runtime
-        .run_workflow_session(WorkflowSessionRunRequest {
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session_b.session_id.clone(),
             inputs: vec![WorkflowPortBinding {
                 node_id: "text-input-1".to_string(),
@@ -439,7 +439,7 @@ async fn scheduler_reclaim_keeps_checkpointed_sessions_isolated_across_resumes()
     {
         let executor = executor_b.lock().await;
         executor
-            .record_workflow_session_node_memory(synthetic_kv_node_memory_snapshot(
+            .record_workflow_execution_session_node_memory(synthetic_kv_node_memory_snapshot(
                 &session_b.session_id,
                 "kv-memory-b",
                 "cache-session-b",
@@ -448,23 +448,23 @@ async fn scheduler_reclaim_keeps_checkpointed_sessions_isolated_across_resumes()
     }
     assert!(
         !Arc::ptr_eq(&executor_a, &executor_b),
-        "distinct workflow sessions must not share the same executor"
+        "distinct workflow execution sessions must not share the same executor"
     );
 
     let first_checkpoint_summary = {
         let executor = executor_a.lock().await;
         executor
-            .workflow_session_checkpoint_summary(&session_a.session_id)
+            .workflow_execution_session_checkpoint_summary(&session_a.session_id)
             .await
     };
     assert!(first_checkpoint_summary.checkpoint_available);
     assert_eq!(
         first_checkpoint_summary.residency,
-        node_engine::WorkflowSessionResidencyState::CheckpointedButUnloaded
+        node_engine::WorkflowExecutionSessionResidencyState::CheckpointedButUnloaded
     );
 
     let resumed_a = runtime
-        .run_workflow_session(WorkflowSessionRunRequest {
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session_a.session_id.clone(),
             inputs: Vec::new(),
             output_targets: Some(vec![WorkflowOutputTarget {
@@ -483,18 +483,18 @@ async fn scheduler_reclaim_keeps_checkpointed_sessions_isolated_across_resumes()
     let resumed_a_summary = {
         let executor = executor_a.lock().await;
         executor
-            .workflow_session_checkpoint_summary(&session_a.session_id)
+            .workflow_execution_session_checkpoint_summary(&session_a.session_id)
             .await
     };
     assert!(!resumed_a_summary.checkpoint_available);
     assert_eq!(
         resumed_a_summary.residency,
-        node_engine::WorkflowSessionResidencyState::Warm
+        node_engine::WorkflowExecutionSessionResidencyState::Warm
     );
     let resumed_a_snapshots = {
         let executor = executor_a.lock().await;
         executor
-            .workflow_session_node_memory_snapshots(&session_a.session_id)
+            .workflow_execution_session_node_memory_snapshots(&session_a.session_id)
             .await
     };
     assert!(
@@ -522,17 +522,17 @@ async fn scheduler_reclaim_keeps_checkpointed_sessions_isolated_across_resumes()
     let second_checkpoint_summary = {
         let executor = executor_b.lock().await;
         executor
-            .workflow_session_checkpoint_summary(&session_b.session_id)
+            .workflow_execution_session_checkpoint_summary(&session_b.session_id)
             .await
     };
     assert!(second_checkpoint_summary.checkpoint_available);
     assert_eq!(
         second_checkpoint_summary.residency,
-        node_engine::WorkflowSessionResidencyState::CheckpointedButUnloaded
+        node_engine::WorkflowExecutionSessionResidencyState::CheckpointedButUnloaded
     );
 
     let resumed_b = runtime
-        .run_workflow_session(WorkflowSessionRunRequest {
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session_b.session_id.clone(),
             inputs: Vec::new(),
             output_targets: Some(vec![WorkflowOutputTarget {
@@ -551,18 +551,18 @@ async fn scheduler_reclaim_keeps_checkpointed_sessions_isolated_across_resumes()
     let resumed_b_summary = {
         let executor = executor_b.lock().await;
         executor
-            .workflow_session_checkpoint_summary(&session_b.session_id)
+            .workflow_execution_session_checkpoint_summary(&session_b.session_id)
             .await
     };
     assert!(!resumed_b_summary.checkpoint_available);
     assert_eq!(
         resumed_b_summary.residency,
-        node_engine::WorkflowSessionResidencyState::Warm
+        node_engine::WorkflowExecutionSessionResidencyState::Warm
     );
     let resumed_b_snapshots = {
         let executor = executor_b.lock().await;
         executor
-            .workflow_session_node_memory_snapshots(&session_b.session_id)
+            .workflow_execution_session_node_memory_snapshots(&session_b.session_id)
             .await
     };
     assert!(
@@ -588,13 +588,13 @@ async fn scheduler_reclaim_keeps_checkpointed_sessions_isolated_across_resumes()
     );
 
     runtime
-        .close_workflow_session(WorkflowSessionCloseRequest {
+        .close_workflow_execution_session(WorkflowExecutionSessionCloseRequest {
             session_id: session_a.session_id.clone(),
         })
         .await
         .expect("close first resumed keep-alive session");
     runtime
-        .close_workflow_session(WorkflowSessionCloseRequest {
+        .close_workflow_execution_session(WorkflowExecutionSessionCloseRequest {
             session_id: session_b.session_id.clone(),
         })
         .await

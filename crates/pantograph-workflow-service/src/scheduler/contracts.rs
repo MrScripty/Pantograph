@@ -1,31 +1,31 @@
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-use crate::graph::{WorkflowGraphSessionStateView, WorkflowSessionKind};
+use crate::graph::{WorkflowExecutionSessionKind, WorkflowGraphSessionStateView};
 
-/// Stale workflow-session cleanup request.
+/// Stale workflow execution session cleanup request.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub struct WorkflowSessionStaleCleanupRequest {
+pub struct WorkflowExecutionSessionStaleCleanupRequest {
     pub idle_timeout_ms: u64,
 }
 
-/// Stale workflow-session cleanup response.
+/// Stale workflow execution session cleanup response.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub struct WorkflowSessionStaleCleanupResponse {
+pub struct WorkflowExecutionSessionStaleCleanupResponse {
     #[serde(default)]
     pub cleaned_session_ids: Vec<String>,
 }
 
-/// Background cleanup worker configuration for workflow sessions.
+/// Background cleanup worker configuration for workflow execution sessions.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WorkflowSessionStaleCleanupWorkerConfig {
+pub struct WorkflowExecutionSessionStaleCleanupWorkerConfig {
     pub interval: Duration,
     pub idle_timeout: Duration,
 }
 
-impl Default for WorkflowSessionStaleCleanupWorkerConfig {
+impl Default for WorkflowExecutionSessionStaleCleanupWorkerConfig {
     fn default() -> Self {
         Self {
             interval: Duration::from_secs(60),
@@ -34,13 +34,13 @@ impl Default for WorkflowSessionStaleCleanupWorkerConfig {
     }
 }
 
-/// Handle for a running stale workflow-session cleanup worker.
-pub struct WorkflowSessionStaleCleanupWorker {
+/// Handle for a running stale workflow execution session cleanup worker.
+pub struct WorkflowExecutionSessionStaleCleanupWorker {
     shutdown_tx: tokio::sync::watch::Sender<bool>,
     join_handle: tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
-impl WorkflowSessionStaleCleanupWorker {
+impl WorkflowExecutionSessionStaleCleanupWorker {
     pub(crate) fn new(
         shutdown_tx: tokio::sync::watch::Sender<bool>,
         join_handle: tokio::task::JoinHandle<()>,
@@ -62,7 +62,7 @@ impl WorkflowSessionStaleCleanupWorker {
 /// Session lifecycle state exposed to clients.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum WorkflowSessionState {
+pub enum WorkflowExecutionSessionState {
     IdleLoaded,
     IdleUnloaded,
     Running,
@@ -71,14 +71,14 @@ pub enum WorkflowSessionState {
 /// Session summary payload.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub struct WorkflowSessionSummary {
+pub struct WorkflowExecutionSessionSummary {
     pub session_id: String,
     pub workflow_id: String,
-    pub session_kind: WorkflowSessionKind,
+    pub session_kind: WorkflowExecutionSessionKind,
     #[serde(default)]
     pub usage_profile: Option<String>,
     pub keep_alive: bool,
-    pub state: WorkflowSessionState,
+    pub state: WorkflowExecutionSessionState,
     pub queued_runs: usize,
     pub run_count: u64,
 }
@@ -86,37 +86,37 @@ pub struct WorkflowSessionSummary {
 /// Session status request.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub struct WorkflowSessionStatusRequest {
+pub struct WorkflowExecutionSessionStatusRequest {
     pub session_id: String,
 }
 
 /// Session status response.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub struct WorkflowSessionStatusResponse {
-    pub session: WorkflowSessionSummary,
+pub struct WorkflowExecutionSessionStatusResponse {
+    pub session: WorkflowExecutionSessionSummary,
 }
 
 /// Session inspection request.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub struct WorkflowSessionInspectionRequest {
+pub struct WorkflowExecutionSessionInspectionRequest {
     pub session_id: String,
 }
 
 /// Session inspection response.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub struct WorkflowSessionInspectionResponse {
-    pub session: WorkflowSessionSummary,
+pub struct WorkflowExecutionSessionInspectionResponse {
+    pub session: WorkflowExecutionSessionSummary,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub workflow_session_state: Option<WorkflowGraphSessionStateView>,
+    pub workflow_execution_session_state: Option<WorkflowGraphSessionStateView>,
 }
 
 /// Session queue item status.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum WorkflowSessionQueueItemStatus {
+pub enum WorkflowExecutionSessionQueueItemStatus {
     Pending,
     Running,
 }
@@ -198,7 +198,7 @@ impl WorkflowSchedulerDecisionReason {
 /// Session queue item metadata.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub struct WorkflowSessionQueueItem {
+pub struct WorkflowExecutionSessionQueueItem {
     pub queue_id: String,
     #[serde(default)]
     pub run_id: Option<String>,
@@ -213,22 +213,22 @@ pub struct WorkflowSessionQueueItem {
     pub scheduler_admission_outcome: Option<WorkflowSchedulerAdmissionOutcome>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scheduler_decision_reason: Option<WorkflowSchedulerDecisionReason>,
-    pub status: WorkflowSessionQueueItemStatus,
+    pub status: WorkflowExecutionSessionQueueItemStatus,
 }
 
 /// Session queue list request.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub struct WorkflowSessionQueueListRequest {
+pub struct WorkflowExecutionSessionQueueListRequest {
     pub session_id: String,
 }
 
 /// Session queue list response.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub struct WorkflowSessionQueueListResponse {
+pub struct WorkflowExecutionSessionQueueListResponse {
     pub session_id: String,
-    pub items: Vec<WorkflowSessionQueueItem>,
+    pub items: Vec<WorkflowExecutionSessionQueueItem>,
 }
 
 /// Scheduler snapshot request.
@@ -247,23 +247,23 @@ pub struct WorkflowSchedulerSnapshotResponse {
     pub session_id: String,
     #[serde(default)]
     pub trace_execution_id: Option<String>,
-    pub session: WorkflowSessionSummary,
+    pub session: WorkflowExecutionSessionSummary,
     #[serde(default)]
-    pub items: Vec<WorkflowSessionQueueItem>,
+    pub items: Vec<WorkflowExecutionSessionQueueItem>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub diagnostics: Option<WorkflowSchedulerSnapshotDiagnostics>,
 }
 
 pub(crate) fn scheduler_snapshot_trace_execution_id(
-    items: &[WorkflowSessionQueueItem],
+    items: &[WorkflowExecutionSessionQueueItem],
 ) -> Option<String> {
     items
         .iter()
-        .find(|item| item.status == WorkflowSessionQueueItemStatus::Running)
+        .find(|item| item.status == WorkflowExecutionSessionQueueItemStatus::Running)
         .or_else(|| {
             let mut pending = items
                 .iter()
-                .filter(|item| item.status == WorkflowSessionQueueItemStatus::Pending);
+                .filter(|item| item.status == WorkflowExecutionSessionQueueItemStatus::Pending);
             match (pending.next(), pending.next()) {
                 (Some(item), None) => Some(item),
                 _ => None,
@@ -275,7 +275,7 @@ pub(crate) fn scheduler_snapshot_trace_execution_id(
 /// Session queue cancellation request.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub struct WorkflowSessionQueueCancelRequest {
+pub struct WorkflowExecutionSessionQueueCancelRequest {
     pub session_id: String,
     pub queue_id: String,
 }
@@ -283,14 +283,14 @@ pub struct WorkflowSessionQueueCancelRequest {
 /// Session queue cancellation response.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub struct WorkflowSessionQueueCancelResponse {
+pub struct WorkflowExecutionSessionQueueCancelResponse {
     pub ok: bool,
 }
 
 /// Session queue reprioritization request.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub struct WorkflowSessionQueueReprioritizeRequest {
+pub struct WorkflowExecutionSessionQueueReprioritizeRequest {
     pub session_id: String,
     pub queue_id: String,
     pub priority: i32,
@@ -299,14 +299,14 @@ pub struct WorkflowSessionQueueReprioritizeRequest {
 /// Session queue reprioritization response.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub struct WorkflowSessionQueueReprioritizeResponse {
+pub struct WorkflowExecutionSessionQueueReprioritizeResponse {
     pub ok: bool,
 }
 
 /// Session keep-alive update request.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub struct WorkflowSessionKeepAliveRequest {
+pub struct WorkflowExecutionSessionKeepAliveRequest {
     pub session_id: String,
     pub keep_alive: bool,
 }
@@ -314,16 +314,16 @@ pub struct WorkflowSessionKeepAliveRequest {
 /// Session keep-alive update response.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub struct WorkflowSessionKeepAliveResponse {
+pub struct WorkflowExecutionSessionKeepAliveResponse {
     pub session_id: String,
     pub keep_alive: bool,
-    pub state: WorkflowSessionState,
+    pub state: WorkflowExecutionSessionState,
 }
 
 /// Host runtime retention hint derived from session behavior.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum WorkflowSessionRetentionHint {
+pub enum WorkflowExecutionSessionRetentionHint {
     Ephemeral,
     KeepAlive,
 }
@@ -331,7 +331,7 @@ pub enum WorkflowSessionRetentionHint {
 /// Host runtime unload reason.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum WorkflowSessionUnloadReason {
+pub enum WorkflowExecutionSessionUnloadReason {
     CapacityRebalance,
     KeepAliveDisabled,
     SessionClosed,
@@ -414,7 +414,7 @@ pub struct WorkflowSchedulerSnapshotDiagnostics {
 
 /// Idle session runtime candidate that may be unloaded under capacity pressure.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WorkflowSessionRuntimeUnloadCandidate {
+pub struct WorkflowExecutionSessionRuntimeUnloadCandidate {
     pub session_id: String,
     pub workflow_id: String,
     pub usage_profile: Option<String>,
@@ -428,7 +428,7 @@ pub struct WorkflowSessionRuntimeUnloadCandidate {
 /// Runtime-affinity target context used when selecting which idle session
 /// runtime to unload under capacity pressure.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WorkflowSessionRuntimeSelectionTarget {
+pub struct WorkflowExecutionSessionRuntimeSelectionTarget {
     pub session_id: String,
     pub workflow_id: String,
     pub usage_profile: Option<String>,

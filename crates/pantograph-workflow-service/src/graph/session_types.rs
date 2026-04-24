@@ -17,7 +17,7 @@ pub struct WorkflowGraphEditSessionCreateRequest {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum WorkflowSessionKind {
+pub enum WorkflowExecutionSessionKind {
     Edit,
     Workflow,
 }
@@ -26,7 +26,7 @@ pub enum WorkflowSessionKind {
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowGraphEditSessionCreateResponse {
     pub session_id: String,
-    pub session_kind: WorkflowSessionKind,
+    pub session_kind: WorkflowExecutionSessionKind,
     pub graph_revision: String,
 }
 

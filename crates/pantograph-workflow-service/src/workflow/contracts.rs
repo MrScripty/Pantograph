@@ -301,7 +301,7 @@ pub struct WorkflowIoPort {
 /// Session creation request.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub struct WorkflowSessionCreateRequest {
+pub struct WorkflowExecutionSessionCreateRequest {
     pub workflow_id: String,
     #[serde(default)]
     pub usage_profile: Option<String>,
@@ -312,7 +312,7 @@ pub struct WorkflowSessionCreateRequest {
 /// Session creation response.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub struct WorkflowSessionCreateResponse {
+pub struct WorkflowExecutionSessionCreateResponse {
     pub session_id: String,
     #[serde(default)]
     pub runtime_capabilities: Vec<WorkflowRuntimeCapability>,
@@ -321,7 +321,7 @@ pub struct WorkflowSessionCreateResponse {
 /// Session run request.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub struct WorkflowSessionRunRequest {
+pub struct WorkflowExecutionSessionRunRequest {
     pub session_id: String,
     #[serde(default)]
     pub inputs: Vec<WorkflowPortBinding>,
@@ -340,14 +340,14 @@ pub struct WorkflowSessionRunRequest {
 /// Session close request.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub struct WorkflowSessionCloseRequest {
+pub struct WorkflowExecutionSessionCloseRequest {
     pub session_id: String,
 }
 
 /// Session close response.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub struct WorkflowSessionCloseResponse {
+pub struct WorkflowExecutionSessionCloseResponse {
     pub ok: bool,
 }
 
@@ -602,7 +602,7 @@ pub struct WorkflowRunOptions {
     #[serde(default)]
     pub timeout_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub workflow_session_id: Option<String>,
+    pub workflow_execution_session_id: Option<String>,
 }
 
 #[derive(Debug, Clone)]

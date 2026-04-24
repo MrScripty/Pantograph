@@ -1,20 +1,20 @@
 use crate::scheduler::scheduler_snapshot_trace_execution_id;
 
 use super::{
-    WorkflowHost, WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse,
-    WorkflowService, WorkflowServiceError, WorkflowSessionInspectionRequest,
-    WorkflowSessionInspectionResponse, WorkflowSessionQueueCancelRequest,
-    WorkflowSessionQueueCancelResponse, WorkflowSessionQueueListRequest,
-    WorkflowSessionQueueListResponse, WorkflowSessionQueueReprioritizeRequest,
-    WorkflowSessionQueueReprioritizeResponse, WorkflowSessionStatusRequest,
-    WorkflowSessionStatusResponse,
+    WorkflowExecutionSessionInspectionRequest, WorkflowExecutionSessionInspectionResponse,
+    WorkflowExecutionSessionQueueCancelRequest, WorkflowExecutionSessionQueueCancelResponse,
+    WorkflowExecutionSessionQueueListRequest, WorkflowExecutionSessionQueueListResponse,
+    WorkflowExecutionSessionQueueReprioritizeRequest,
+    WorkflowExecutionSessionQueueReprioritizeResponse, WorkflowExecutionSessionStatusRequest,
+    WorkflowExecutionSessionStatusResponse, WorkflowHost, WorkflowSchedulerSnapshotRequest,
+    WorkflowSchedulerSnapshotResponse, WorkflowService, WorkflowServiceError,
 };
 
 impl WorkflowService {
-    pub async fn workflow_get_session_status(
+    pub async fn workflow_get_execution_session_status(
         &self,
-        request: WorkflowSessionStatusRequest,
-    ) -> Result<WorkflowSessionStatusResponse, WorkflowServiceError> {
+        request: WorkflowExecutionSessionStatusRequest,
+    ) -> Result<WorkflowExecutionSessionStatusResponse, WorkflowServiceError> {
         let session_id = request.session_id.trim();
         if session_id.is_empty() {
             return Err(WorkflowServiceError::InvalidRequest(
@@ -24,14 +24,14 @@ impl WorkflowService {
         let mut store = self.session_store_guard()?;
         store.touch_session(session_id)?;
         let session = store.session_summary(session_id)?;
-        Ok(WorkflowSessionStatusResponse { session })
+        Ok(WorkflowExecutionSessionStatusResponse { session })
     }
 
-    pub async fn workflow_get_session_inspection<H: WorkflowHost>(
+    pub async fn workflow_get_execution_session_inspection<H: WorkflowHost>(
         &self,
         host: &H,
-        request: WorkflowSessionInspectionRequest,
-    ) -> Result<WorkflowSessionInspectionResponse, WorkflowServiceError> {
+        request: WorkflowExecutionSessionInspectionRequest,
+    ) -> Result<WorkflowExecutionSessionInspectionResponse, WorkflowServiceError> {
         let session_id = request.session_id.trim();
         if session_id.is_empty() {
             return Err(WorkflowServiceError::InvalidRequest(
@@ -43,19 +43,19 @@ impl WorkflowService {
             store.touch_session(session_id)?;
             store.session_summary(session_id)?
         };
-        let workflow_session_state = host
-            .workflow_session_inspection_state(session_id, &session.workflow_id)
+        let workflow_execution_session_state = host
+            .workflow_execution_session_inspection_state(session_id, &session.workflow_id)
             .await?;
-        Ok(WorkflowSessionInspectionResponse {
+        Ok(WorkflowExecutionSessionInspectionResponse {
             session,
-            workflow_session_state,
+            workflow_execution_session_state,
         })
     }
 
-    pub async fn workflow_list_session_queue(
+    pub async fn workflow_list_execution_session_queue(
         &self,
-        request: WorkflowSessionQueueListRequest,
-    ) -> Result<WorkflowSessionQueueListResponse, WorkflowServiceError> {
+        request: WorkflowExecutionSessionQueueListRequest,
+    ) -> Result<WorkflowExecutionSessionQueueListResponse, WorkflowServiceError> {
         let session_id = request.session_id.trim();
         if session_id.is_empty() {
             return Err(WorkflowServiceError::InvalidRequest(
@@ -65,7 +65,7 @@ impl WorkflowService {
         let mut store = self.session_store_guard()?;
         store.touch_session(session_id)?;
         let items = store.list_queue(session_id)?;
-        Ok(WorkflowSessionQueueListResponse {
+        Ok(WorkflowExecutionSessionQueueListResponse {
             session_id: session_id.to_string(),
             items,
         })
@@ -133,10 +133,10 @@ impl WorkflowService {
             .await
     }
 
-    pub async fn workflow_cancel_session_queue_item(
+    pub async fn workflow_cancel_execution_session_queue_item(
         &self,
-        request: WorkflowSessionQueueCancelRequest,
-    ) -> Result<WorkflowSessionQueueCancelResponse, WorkflowServiceError> {
+        request: WorkflowExecutionSessionQueueCancelRequest,
+    ) -> Result<WorkflowExecutionSessionQueueCancelResponse, WorkflowServiceError> {
         let session_id = request.session_id.trim();
         if session_id.is_empty() {
             return Err(WorkflowServiceError::InvalidRequest(
@@ -152,13 +152,13 @@ impl WorkflowService {
 
         let mut store = self.session_store_guard()?;
         store.cancel_queue_item(session_id, queue_id)?;
-        Ok(WorkflowSessionQueueCancelResponse { ok: true })
+        Ok(WorkflowExecutionSessionQueueCancelResponse { ok: true })
     }
 
-    pub async fn workflow_reprioritize_session_queue_item(
+    pub async fn workflow_reprioritize_execution_session_queue_item(
         &self,
-        request: WorkflowSessionQueueReprioritizeRequest,
-    ) -> Result<WorkflowSessionQueueReprioritizeResponse, WorkflowServiceError> {
+        request: WorkflowExecutionSessionQueueReprioritizeRequest,
+    ) -> Result<WorkflowExecutionSessionQueueReprioritizeResponse, WorkflowServiceError> {
         let session_id = request.session_id.trim();
         if session_id.is_empty() {
             return Err(WorkflowServiceError::InvalidRequest(
@@ -173,6 +173,6 @@ impl WorkflowService {
         }
         let mut store = self.session_store_guard()?;
         store.reprioritize_queue_item(session_id, queue_id, request.priority)?;
-        Ok(WorkflowSessionQueueReprioritizeResponse { ok: true })
+        Ok(WorkflowExecutionSessionQueueReprioritizeResponse { ok: true })
     }
 }

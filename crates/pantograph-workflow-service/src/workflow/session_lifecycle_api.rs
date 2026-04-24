@@ -3,18 +3,19 @@ use std::sync::Arc;
 use crate::scheduler::unix_timestamp_ms;
 
 use super::{
-    WorkflowHost, WorkflowService, WorkflowServiceError, WorkflowSessionCloseRequest,
-    WorkflowSessionCloseResponse, WorkflowSessionKeepAliveRequest,
-    WorkflowSessionKeepAliveResponse, WorkflowSessionStaleCleanupRequest,
-    WorkflowSessionStaleCleanupResponse, WorkflowSessionStaleCleanupWorker,
-    WorkflowSessionStaleCleanupWorkerConfig, WorkflowSessionState, WorkflowSessionUnloadReason,
+    WorkflowExecutionSessionCloseRequest, WorkflowExecutionSessionCloseResponse,
+    WorkflowExecutionSessionKeepAliveRequest, WorkflowExecutionSessionKeepAliveResponse,
+    WorkflowExecutionSessionStaleCleanupRequest, WorkflowExecutionSessionStaleCleanupResponse,
+    WorkflowExecutionSessionStaleCleanupWorker, WorkflowExecutionSessionStaleCleanupWorkerConfig,
+    WorkflowExecutionSessionState, WorkflowExecutionSessionUnloadReason, WorkflowHost,
+    WorkflowService, WorkflowServiceError,
 };
 
 impl WorkflowService {
-    pub async fn workflow_cleanup_stale_sessions(
+    pub async fn workflow_cleanup_stale_execution_sessions(
         &self,
-        request: WorkflowSessionStaleCleanupRequest,
-    ) -> Result<WorkflowSessionStaleCleanupResponse, WorkflowServiceError> {
+        request: WorkflowExecutionSessionStaleCleanupRequest,
+    ) -> Result<WorkflowExecutionSessionStaleCleanupResponse, WorkflowServiceError> {
         if request.idle_timeout_ms == 0 {
             return Err(WorkflowServiceError::InvalidRequest(
                 "idle_timeout_ms must be greater than zero".to_string(),
@@ -38,48 +39,55 @@ impl WorkflowService {
             }
         }
 
-        Ok(WorkflowSessionStaleCleanupResponse {
+        Ok(WorkflowExecutionSessionStaleCleanupResponse {
             cleaned_session_ids,
         })
     }
 
-    pub fn spawn_workflow_session_stale_cleanup_worker(
+    pub fn spawn_workflow_execution_session_stale_cleanup_worker(
         self: &Arc<Self>,
-        config: WorkflowSessionStaleCleanupWorkerConfig,
-    ) -> Result<WorkflowSessionStaleCleanupWorker, WorkflowServiceError> {
+        config: WorkflowExecutionSessionStaleCleanupWorkerConfig,
+    ) -> Result<WorkflowExecutionSessionStaleCleanupWorker, WorkflowServiceError> {
         if config.interval.is_zero() {
             return Err(WorkflowServiceError::InvalidRequest(
-                "workflow-session stale cleanup interval must be greater than zero".to_string(),
+                "workflow execution session stale cleanup interval must be greater than zero"
+                    .to_string(),
             ));
         }
         if config.idle_timeout.is_zero() {
             return Err(WorkflowServiceError::InvalidRequest(
-                "workflow-session stale cleanup idle timeout must be greater than zero".to_string(),
+                "workflow execution session stale cleanup idle timeout must be greater than zero"
+                    .to_string(),
             ));
         }
 
         let runtime_handle = tokio::runtime::Handle::try_current().map_err(|_| {
             WorkflowServiceError::Internal(
-                "workflow-session stale cleanup worker requires an active Tokio runtime"
+                "workflow execution session stale cleanup worker requires an active Tokio runtime"
                     .to_string(),
             )
         })?;
-        self.spawn_workflow_session_stale_cleanup_worker_with_handle(config, runtime_handle)
+        self.spawn_workflow_execution_session_stale_cleanup_worker_with_handle(
+            config,
+            runtime_handle,
+        )
     }
 
-    pub fn spawn_workflow_session_stale_cleanup_worker_with_handle(
+    pub fn spawn_workflow_execution_session_stale_cleanup_worker_with_handle(
         self: &Arc<Self>,
-        config: WorkflowSessionStaleCleanupWorkerConfig,
+        config: WorkflowExecutionSessionStaleCleanupWorkerConfig,
         runtime_handle: tokio::runtime::Handle,
-    ) -> Result<WorkflowSessionStaleCleanupWorker, WorkflowServiceError> {
+    ) -> Result<WorkflowExecutionSessionStaleCleanupWorker, WorkflowServiceError> {
         if config.interval.is_zero() {
             return Err(WorkflowServiceError::InvalidRequest(
-                "workflow-session stale cleanup interval must be greater than zero".to_string(),
+                "workflow execution session stale cleanup interval must be greater than zero"
+                    .to_string(),
             ));
         }
         if config.idle_timeout.is_zero() {
             return Err(WorkflowServiceError::InvalidRequest(
-                "workflow-session stale cleanup idle timeout must be greater than zero".to_string(),
+                "workflow execution session stale cleanup idle timeout must be greater than zero"
+                    .to_string(),
             ));
         }
 
@@ -97,7 +105,7 @@ impl WorkflowService {
                     }
                     _ = tokio::time::sleep(interval) => {
                         let _ = service
-                            .workflow_cleanup_stale_sessions(WorkflowSessionStaleCleanupRequest {
+                            .workflow_cleanup_stale_execution_sessions(WorkflowExecutionSessionStaleCleanupRequest {
                                 idle_timeout_ms,
                             })
                             .await;
@@ -106,17 +114,17 @@ impl WorkflowService {
             }
         });
 
-        Ok(WorkflowSessionStaleCleanupWorker::new(
+        Ok(WorkflowExecutionSessionStaleCleanupWorker::new(
             shutdown_tx,
             join_handle,
         ))
     }
 
-    pub async fn workflow_set_session_keep_alive<H: WorkflowHost>(
+    pub async fn workflow_set_execution_session_keep_alive<H: WorkflowHost>(
         &self,
         host: &H,
-        request: WorkflowSessionKeepAliveRequest,
-    ) -> Result<WorkflowSessionKeepAliveResponse, WorkflowServiceError> {
+        request: WorkflowExecutionSessionKeepAliveRequest,
+    ) -> Result<WorkflowExecutionSessionKeepAliveResponse, WorkflowServiceError> {
         let session_id = request.session_id.trim().to_string();
         if session_id.is_empty() {
             return Err(WorkflowServiceError::InvalidRequest(
@@ -132,11 +140,14 @@ impl WorkflowService {
             host.unload_session_runtime(
                 &session_id,
                 &workflow_id,
-                WorkflowSessionUnloadReason::KeepAliveDisabled,
+                WorkflowExecutionSessionUnloadReason::KeepAliveDisabled,
             )
             .await?;
         } else if request.keep_alive
-            && matches!(state_after_update, WorkflowSessionState::IdleUnloaded)
+            && matches!(
+                state_after_update,
+                WorkflowExecutionSessionState::IdleUnloaded
+            )
         {
             let workflow_id = {
                 let store = self.session_store_guard()?;
@@ -157,18 +168,18 @@ impl WorkflowService {
             let store = self.session_store_guard()?;
             store.session_summary(&session_id)?.state
         };
-        Ok(WorkflowSessionKeepAliveResponse {
+        Ok(WorkflowExecutionSessionKeepAliveResponse {
             session_id,
             keep_alive: request.keep_alive,
             state,
         })
     }
 
-    pub async fn close_workflow_session<H: WorkflowHost>(
+    pub async fn close_workflow_execution_session<H: WorkflowHost>(
         &self,
         host: &H,
-        request: WorkflowSessionCloseRequest,
-    ) -> Result<WorkflowSessionCloseResponse, WorkflowServiceError> {
+        request: WorkflowExecutionSessionCloseRequest,
+    ) -> Result<WorkflowExecutionSessionCloseResponse, WorkflowServiceError> {
         let session_id = request.session_id.trim().to_string();
         if session_id.is_empty() {
             return Err(WorkflowServiceError::InvalidRequest(
@@ -184,11 +195,11 @@ impl WorkflowService {
             host.unload_session_runtime(
                 &session_id,
                 &close_state.workflow_id,
-                WorkflowSessionUnloadReason::SessionClosed,
+                WorkflowExecutionSessionUnloadReason::SessionClosed,
             )
             .await?;
         }
 
-        Ok(WorkflowSessionCloseResponse { ok: true })
+        Ok(WorkflowExecutionSessionCloseResponse { ok: true })
     }
 }

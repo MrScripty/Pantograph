@@ -242,7 +242,8 @@ pub struct ConnectionCommitResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workflow_event: Option<node_engine::WorkflowEvent>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub workflow_session_state: Option<super::session_contract::WorkflowGraphSessionStateView>,
+    pub workflow_execution_session_state:
+        Option<super::session_contract::WorkflowGraphSessionStateView>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rejection: Option<ConnectionRejection>,
 }
@@ -259,7 +260,8 @@ pub struct InsertNodeConnectionResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workflow_event: Option<node_engine::WorkflowEvent>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub workflow_session_state: Option<super::session_contract::WorkflowGraphSessionStateView>,
+    pub workflow_execution_session_state:
+        Option<super::session_contract::WorkflowGraphSessionStateView>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rejection: Option<ConnectionRejection>,
 }
@@ -296,7 +298,8 @@ pub struct InsertNodeOnEdgeResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workflow_event: Option<node_engine::WorkflowEvent>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub workflow_session_state: Option<super::session_contract::WorkflowGraphSessionStateView>,
+    pub workflow_execution_session_state:
+        Option<super::session_contract::WorkflowGraphSessionStateView>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rejection: Option<ConnectionRejection>,
 }

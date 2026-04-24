@@ -2,63 +2,63 @@ use std::cmp::Ordering;
 
 use crate::workflow::WorkflowServiceError;
 
-use super::store::WorkflowSessionQueuedRun;
+use super::store::WorkflowExecutionSessionQueuedRun;
 use super::{
-    WorkflowSchedulerDecisionReason, WorkflowSessionRuntimeSelectionTarget,
-    WorkflowSessionRuntimeUnloadCandidate,
+    WorkflowExecutionSessionRuntimeSelectionTarget, WorkflowExecutionSessionRuntimeUnloadCandidate,
+    WorkflowSchedulerDecisionReason,
 };
 
 const STARVATION_BYPASS_THRESHOLD: u32 = 2;
 const WARM_REUSE_FAIRNESS_WINDOW: usize = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum WorkflowSessionAdmissionRuntimePosture {
+pub(crate) enum WorkflowExecutionSessionAdmissionRuntimePosture {
     Loaded,
     Unloaded,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum WorkflowSessionWarmCompatibility {
+pub(crate) enum WorkflowExecutionSessionWarmCompatibility {
     Compatible,
     Incompatible,
     Unknown,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct WorkflowSessionAdmissionCandidate {
+pub(crate) struct WorkflowExecutionSessionAdmissionCandidate {
     pub(crate) queue_id: String,
     pub(crate) priority: i32,
     pub(crate) enqueued_tick: u64,
     pub(crate) starvation_bypass_count: u32,
     pub(crate) queue_position: usize,
     pub(crate) affine_runtime_reuse: bool,
-    pub(crate) warm_session_compatibility: WorkflowSessionWarmCompatibility,
+    pub(crate) warm_session_compatibility: WorkflowExecutionSessionWarmCompatibility,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct WorkflowSessionAdmissionInput {
+pub(crate) struct WorkflowExecutionSessionAdmissionInput {
     pub(crate) has_active_run: bool,
-    pub(crate) runtime_posture: WorkflowSessionAdmissionRuntimePosture,
+    pub(crate) runtime_posture: WorkflowExecutionSessionAdmissionRuntimePosture,
     pub(crate) usage_profile: Option<String>,
     pub(crate) required_backends: Vec<String>,
     pub(crate) required_models: Vec<String>,
-    pub(crate) candidates: Vec<WorkflowSessionAdmissionCandidate>,
+    pub(crate) candidates: Vec<WorkflowExecutionSessionAdmissionCandidate>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct WorkflowSessionAdmissionDecision {
+pub(crate) struct WorkflowExecutionSessionAdmissionDecision {
     pub(crate) admitted_queue_id: Option<String>,
     pub(crate) reason: Option<WorkflowSchedulerDecisionReason>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct WorkflowSessionCompatibilityKey {
+struct WorkflowExecutionSessionCompatibilityKey {
     usage_profile: Option<String>,
     required_backends: Vec<String>,
     required_models: Vec<String>,
 }
 
-impl WorkflowSessionCompatibilityKey {
+impl WorkflowExecutionSessionCompatibilityKey {
     fn is_empty(&self) -> bool {
         self.usage_profile.is_none()
             && self.required_backends.is_empty()
@@ -70,19 +70,19 @@ impl WorkflowSessionCompatibilityKey {
 pub(crate) struct PriorityThenFifoSchedulerPolicy;
 
 pub fn select_runtime_unload_candidate_by_affinity(
-    target: &WorkflowSessionRuntimeSelectionTarget,
-    candidates: &[WorkflowSessionRuntimeUnloadCandidate],
-) -> Option<WorkflowSessionRuntimeUnloadCandidate> {
+    target: &WorkflowExecutionSessionRuntimeSelectionTarget,
+    candidates: &[WorkflowExecutionSessionRuntimeUnloadCandidate],
+) -> Option<WorkflowExecutionSessionRuntimeUnloadCandidate> {
     PriorityThenFifoSchedulerPolicy.select_runtime_unload_candidate(target, candidates)
 }
 
 impl PriorityThenFifoSchedulerPolicy {
     pub(crate) fn predicted_admission_decision(
         &self,
-        input: &WorkflowSessionAdmissionInput,
-    ) -> Option<WorkflowSessionAdmissionDecision> {
+        input: &WorkflowExecutionSessionAdmissionInput,
+    ) -> Option<WorkflowExecutionSessionAdmissionDecision> {
         let candidate = self.select_admission_candidate(input)?;
-        Some(WorkflowSessionAdmissionDecision {
+        Some(WorkflowExecutionSessionAdmissionDecision {
             admitted_queue_id: Some(candidate.queue_id.clone()),
             reason: Some(self.admission_reason(input, candidate)),
         })
@@ -90,9 +90,9 @@ impl PriorityThenFifoSchedulerPolicy {
 
     pub(crate) fn select_runtime_unload_candidate(
         &self,
-        target: &WorkflowSessionRuntimeSelectionTarget,
-        candidates: &[WorkflowSessionRuntimeUnloadCandidate],
-    ) -> Option<WorkflowSessionRuntimeUnloadCandidate> {
+        target: &WorkflowExecutionSessionRuntimeSelectionTarget,
+        candidates: &[WorkflowExecutionSessionRuntimeUnloadCandidate],
+    ) -> Option<WorkflowExecutionSessionRuntimeUnloadCandidate> {
         candidates
             .iter()
             .cloned()
@@ -101,8 +101,8 @@ impl PriorityThenFifoSchedulerPolicy {
 
     pub(crate) fn placement_index_for_enqueue(
         &self,
-        queue: &[WorkflowSessionQueuedRun],
-        queued: &WorkflowSessionQueuedRun,
+        queue: &[WorkflowExecutionSessionQueuedRun],
+        queued: &WorkflowExecutionSessionQueuedRun,
     ) -> usize {
         queue
             .iter()
@@ -110,7 +110,7 @@ impl PriorityThenFifoSchedulerPolicy {
             .unwrap_or(queue.len())
     }
 
-    pub(crate) fn refresh_queue(&self, queue: &mut [WorkflowSessionQueuedRun]) {
+    pub(crate) fn refresh_queue(&self, queue: &mut [WorkflowExecutionSessionQueuedRun]) {
         queue.sort_by(|left, right| self.compare_runs(left, right));
 
         for index in 0..queue.len() {
@@ -121,9 +121,9 @@ impl PriorityThenFifoSchedulerPolicy {
 
     pub(crate) fn admission_decision(
         &self,
-        input: &WorkflowSessionAdmissionInput,
+        input: &WorkflowExecutionSessionAdmissionInput,
         queue_id: &str,
-    ) -> Result<WorkflowSessionAdmissionDecision, WorkflowServiceError> {
+    ) -> Result<WorkflowExecutionSessionAdmissionDecision, WorkflowServiceError> {
         if input.has_active_run {
             return self.pending_or_not_found(input, queue_id);
         }
@@ -136,7 +136,7 @@ impl PriorityThenFifoSchedulerPolicy {
         };
 
         if candidate.queue_id == queue_id {
-            return Ok(WorkflowSessionAdmissionDecision {
+            return Ok(WorkflowExecutionSessionAdmissionDecision {
                 admitted_queue_id: Some(candidate.queue_id.clone()),
                 reason: Some(self.admission_reason(input, candidate)),
             });
@@ -147,8 +147,8 @@ impl PriorityThenFifoSchedulerPolicy {
 
     pub(crate) fn select_admission_candidate<'a>(
         &self,
-        input: &'a WorkflowSessionAdmissionInput,
-    ) -> Option<&'a WorkflowSessionAdmissionCandidate> {
+        input: &'a WorkflowExecutionSessionAdmissionInput,
+    ) -> Option<&'a WorkflowExecutionSessionAdmissionCandidate> {
         if input.has_active_run {
             return None;
         }
@@ -165,8 +165,8 @@ impl PriorityThenFifoSchedulerPolicy {
 
     fn compare_runs(
         &self,
-        left: &WorkflowSessionQueuedRun,
-        right: &WorkflowSessionQueuedRun,
+        left: &WorkflowExecutionSessionQueuedRun,
+        right: &WorkflowExecutionSessionQueuedRun,
     ) -> Ordering {
         self.effective_priority(right)
             .cmp(&self.effective_priority(left))
@@ -176,8 +176,8 @@ impl PriorityThenFifoSchedulerPolicy {
 
     fn compare_admission_candidates(
         &self,
-        left: &WorkflowSessionAdmissionCandidate,
-        right: &WorkflowSessionAdmissionCandidate,
+        left: &WorkflowExecutionSessionAdmissionCandidate,
+        right: &WorkflowExecutionSessionAdmissionCandidate,
     ) -> Ordering {
         self.admission_effective_priority(right)
             .cmp(&self.admission_effective_priority(left))
@@ -187,9 +187,9 @@ impl PriorityThenFifoSchedulerPolicy {
 
     fn compare_runtime_unload_candidates(
         &self,
-        target: &WorkflowSessionRuntimeSelectionTarget,
-        left: &WorkflowSessionRuntimeUnloadCandidate,
-        right: &WorkflowSessionRuntimeUnloadCandidate,
+        target: &WorkflowExecutionSessionRuntimeSelectionTarget,
+        left: &WorkflowExecutionSessionRuntimeUnloadCandidate,
+        right: &WorkflowExecutionSessionRuntimeUnloadCandidate,
     ) -> Ordering {
         self.runtime_affinity_rank(target, left)
             .cmp(&self.runtime_affinity_rank(target, right))
@@ -201,8 +201,8 @@ impl PriorityThenFifoSchedulerPolicy {
 
     fn runtime_affinity_rank(
         &self,
-        target: &WorkflowSessionRuntimeSelectionTarget,
-        candidate: &WorkflowSessionRuntimeUnloadCandidate,
+        target: &WorkflowExecutionSessionRuntimeSelectionTarget,
+        candidate: &WorkflowExecutionSessionRuntimeUnloadCandidate,
     ) -> (bool, bool, bool, bool, bool, bool, bool, bool) {
         let target_key = Self::compatibility_key_from_target(target);
         let candidate_key = Self::compatibility_key_from_candidate(candidate);
@@ -239,9 +239,9 @@ impl PriorityThenFifoSchedulerPolicy {
     }
 
     fn compatibility_key_from_target(
-        target: &WorkflowSessionRuntimeSelectionTarget,
-    ) -> WorkflowSessionCompatibilityKey {
-        WorkflowSessionCompatibilityKey {
+        target: &WorkflowExecutionSessionRuntimeSelectionTarget,
+    ) -> WorkflowExecutionSessionCompatibilityKey {
+        WorkflowExecutionSessionCompatibilityKey {
             usage_profile: target.usage_profile.clone(),
             required_backends: target.required_backends.clone(),
             required_models: target.required_models.clone(),
@@ -249,9 +249,9 @@ impl PriorityThenFifoSchedulerPolicy {
     }
 
     fn compatibility_key_from_candidate(
-        candidate: &WorkflowSessionRuntimeUnloadCandidate,
-    ) -> WorkflowSessionCompatibilityKey {
-        WorkflowSessionCompatibilityKey {
+        candidate: &WorkflowExecutionSessionRuntimeUnloadCandidate,
+    ) -> WorkflowExecutionSessionCompatibilityKey {
+        WorkflowExecutionSessionCompatibilityKey {
             usage_profile: candidate.usage_profile.clone(),
             required_backends: candidate.required_backends.clone(),
             required_models: candidate.required_models.clone(),
@@ -260,8 +260,8 @@ impl PriorityThenFifoSchedulerPolicy {
 
     fn select_warm_reuse_candidate_within_fairness_window<'a>(
         &self,
-        input: &'a WorkflowSessionAdmissionInput,
-    ) -> Option<&'a WorkflowSessionAdmissionCandidate> {
+        input: &'a WorkflowExecutionSessionAdmissionInput,
+    ) -> Option<&'a WorkflowExecutionSessionAdmissionCandidate> {
         let highest_effective_priority = input
             .candidates
             .iter()
@@ -292,7 +292,8 @@ impl PriorityThenFifoSchedulerPolicy {
                         .saturating_add(WARM_REUSE_FAIRNESS_WINDOW)
             })
             .filter(|candidate| {
-                candidate.warm_session_compatibility == WorkflowSessionWarmCompatibility::Compatible
+                candidate.warm_session_compatibility
+                    == WorkflowExecutionSessionWarmCompatibility::Compatible
             })
             .min_by(|left, right| {
                 left.queue_position
@@ -304,20 +305,20 @@ impl PriorityThenFifoSchedulerPolicy {
 
     fn admission_reason(
         &self,
-        input: &WorkflowSessionAdmissionInput,
-        candidate: &WorkflowSessionAdmissionCandidate,
+        input: &WorkflowExecutionSessionAdmissionInput,
+        candidate: &WorkflowExecutionSessionAdmissionCandidate,
     ) -> WorkflowSchedulerDecisionReason {
         match input.runtime_posture {
-            WorkflowSessionAdmissionRuntimePosture::Unloaded => {
+            WorkflowExecutionSessionAdmissionRuntimePosture::Unloaded => {
                 WorkflowSchedulerDecisionReason::ColdStartRequired
             }
-            WorkflowSessionAdmissionRuntimePosture::Loaded => {
+            WorkflowExecutionSessionAdmissionRuntimePosture::Loaded => {
                 match candidate.warm_session_compatibility {
-                    WorkflowSessionWarmCompatibility::Compatible => {
+                    WorkflowExecutionSessionWarmCompatibility::Compatible => {
                         WorkflowSchedulerDecisionReason::WarmSessionReused
                     }
-                    WorkflowSessionWarmCompatibility::Incompatible
-                    | WorkflowSessionWarmCompatibility::Unknown => {
+                    WorkflowExecutionSessionWarmCompatibility::Incompatible
+                    | WorkflowExecutionSessionWarmCompatibility::Unknown => {
                         WorkflowSchedulerDecisionReason::RuntimeReloadRequired
                     }
                 }
@@ -325,17 +326,20 @@ impl PriorityThenFifoSchedulerPolicy {
         }
     }
 
-    fn effective_priority(&self, queued: &WorkflowSessionQueuedRun) -> i32 {
+    fn effective_priority(&self, queued: &WorkflowExecutionSessionQueuedRun) -> i32 {
         queued
             .priority
             .saturating_add(self.starvation_priority_boost(queued))
     }
 
-    fn starvation_priority_boost(&self, queued: &WorkflowSessionQueuedRun) -> i32 {
+    fn starvation_priority_boost(&self, queued: &WorkflowExecutionSessionQueuedRun) -> i32 {
         (queued.starvation_bypass_count / STARVATION_BYPASS_THRESHOLD).min(i32::MAX as u32) as i32
     }
 
-    fn admission_effective_priority(&self, candidate: &WorkflowSessionAdmissionCandidate) -> i32 {
+    fn admission_effective_priority(
+        &self,
+        candidate: &WorkflowExecutionSessionAdmissionCandidate,
+    ) -> i32 {
         candidate
             .priority
             .saturating_add(self.admission_starvation_priority_boost(candidate))
@@ -343,7 +347,7 @@ impl PriorityThenFifoSchedulerPolicy {
 
     fn admission_starvation_priority_boost(
         &self,
-        candidate: &WorkflowSessionAdmissionCandidate,
+        candidate: &WorkflowExecutionSessionAdmissionCandidate,
     ) -> i32 {
         (candidate.starvation_bypass_count / STARVATION_BYPASS_THRESHOLD).min(i32::MAX as u32)
             as i32
@@ -351,15 +355,15 @@ impl PriorityThenFifoSchedulerPolicy {
 
     fn pending_or_not_found(
         &self,
-        input: &WorkflowSessionAdmissionInput,
+        input: &WorkflowExecutionSessionAdmissionInput,
         queue_id: &str,
-    ) -> Result<WorkflowSessionAdmissionDecision, WorkflowServiceError> {
+    ) -> Result<WorkflowExecutionSessionAdmissionDecision, WorkflowServiceError> {
         if input
             .candidates
             .iter()
             .any(|item| item.queue_id == queue_id)
         {
-            return Ok(WorkflowSessionAdmissionDecision {
+            return Ok(WorkflowExecutionSessionAdmissionDecision {
                 admitted_queue_id: None,
                 reason: None,
             });
@@ -373,7 +377,7 @@ impl PriorityThenFifoSchedulerPolicy {
 
     fn reason_for_queue_position(
         &self,
-        queue: &[WorkflowSessionQueuedRun],
+        queue: &[WorkflowExecutionSessionQueuedRun],
         index: usize,
     ) -> WorkflowSchedulerDecisionReason {
         let item = &queue[index];

@@ -109,7 +109,7 @@ impl EmbeddedRuntime {
                 }
                 Err(node_engine::NodeEngineError::WaitingForInput { task_id, prompt }) => {
                     log::info!(
-                        "Workflow session '{}' is waiting for input at node '{}' (prompt: {:?})",
+                        "workflow execution session '{}' is waiting for input at node '{}' (prompt: {:?})",
                         session_id,
                         task_id,
                         prompt
@@ -132,7 +132,7 @@ impl EmbeddedRuntime {
 
         if waiting_for_input {
             log::debug!(
-                "Workflow session '{}' paused in waiting-for-input state",
+                "workflow execution session '{}' paused in waiting-for-input state",
                 session_id
             );
         } else if workflow_result.is_ok() {

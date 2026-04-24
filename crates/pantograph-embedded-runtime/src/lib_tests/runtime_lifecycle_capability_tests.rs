@@ -181,31 +181,37 @@ async fn embedded_runtime_shutdown_marks_loaded_sessions_unloaded() {
     .await;
 
     let session = runtime
-        .create_workflow_session(WorkflowSessionCreateRequest {
+        .create_workflow_execution_session(WorkflowExecutionSessionCreateRequest {
             workflow_id: "runtime-text".to_string(),
             usage_profile: Some("interactive".to_string()),
             keep_alive: true,
         })
         .await
-        .expect("create workflow session");
+        .expect("create workflow execution session");
 
     let status = runtime
-        .workflow_get_session_status(WorkflowSessionStatusRequest {
+        .workflow_get_execution_session_status(WorkflowExecutionSessionStatusRequest {
             session_id: session.session_id.clone(),
         })
         .await
         .expect("session status before shutdown");
-    assert_eq!(status.session.state, WorkflowSessionState::IdleLoaded);
+    assert_eq!(
+        status.session.state,
+        WorkflowExecutionSessionState::IdleLoaded
+    );
 
     runtime.shutdown().await;
 
     let status = runtime
-        .workflow_get_session_status(WorkflowSessionStatusRequest {
+        .workflow_get_execution_session_status(WorkflowExecutionSessionStatusRequest {
             session_id: session.session_id,
         })
         .await
         .expect("session status after shutdown");
-    assert_eq!(status.session.state, WorkflowSessionState::IdleUnloaded);
+    assert_eq!(
+        status.session.state,
+        WorkflowExecutionSessionState::IdleUnloaded
+    );
 }
 
 #[tokio::test]

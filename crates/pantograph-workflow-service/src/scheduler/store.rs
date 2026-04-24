@@ -2,21 +2,22 @@ use std::collections::HashMap;
 
 use uuid::Uuid;
 
-use crate::graph::WorkflowSessionKind;
+use crate::graph::WorkflowExecutionSessionKind;
 use crate::technical_fit::WorkflowTechnicalFitOverride;
 use crate::workflow::{
-    WorkflowOutputTarget, WorkflowPortBinding, WorkflowRuntimeIssue, WorkflowServiceError,
-    WorkflowSessionRunRequest,
+    WorkflowExecutionSessionRunRequest, WorkflowOutputTarget, WorkflowPortBinding,
+    WorkflowRuntimeIssue, WorkflowServiceError,
 };
 
 use super::policy::{
-    WorkflowSessionAdmissionCandidate, WorkflowSessionAdmissionInput,
-    WorkflowSessionAdmissionRuntimePosture, WorkflowSessionWarmCompatibility,
+    WorkflowExecutionSessionAdmissionCandidate, WorkflowExecutionSessionAdmissionInput,
+    WorkflowExecutionSessionAdmissionRuntimePosture, WorkflowExecutionSessionWarmCompatibility,
 };
 use super::{
-    PriorityThenFifoSchedulerPolicy, WorkflowSchedulerAdmissionOutcome,
-    WorkflowSchedulerDecisionReason, WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus,
-    WorkflowSessionRuntimeUnloadCandidate, WorkflowSessionState, WorkflowSessionSummary,
+    PriorityThenFifoSchedulerPolicy, WorkflowExecutionSessionQueueItem,
+    WorkflowExecutionSessionQueueItemStatus, WorkflowExecutionSessionRuntimeUnloadCandidate,
+    WorkflowExecutionSessionState, WorkflowExecutionSessionSummary,
+    WorkflowSchedulerAdmissionOutcome, WorkflowSchedulerDecisionReason,
 };
 
 pub(crate) const WORKFLOW_SESSION_QUEUE_POLL_MS: u64 = 10;
@@ -25,7 +26,7 @@ pub(crate) const WORKFLOW_SESSION_QUEUE_POLL_MS: u64 = 10;
 mod store_diagnostics;
 
 #[derive(Debug, Clone)]
-pub(crate) struct WorkflowSessionQueuedRun {
+pub(crate) struct WorkflowExecutionSessionQueuedRun {
     pub(crate) queue_id: String,
     pub(crate) run_id: Option<String>,
     pub(super) enqueued_at_ms: u64,
@@ -40,7 +41,7 @@ pub(crate) struct WorkflowSessionQueuedRun {
 }
 
 #[derive(Debug, Clone)]
-struct WorkflowSessionActiveRun {
+struct WorkflowExecutionSessionActiveRun {
     queue_id: String,
     run_id: Option<String>,
     enqueued_at_ms: u64,
@@ -50,7 +51,7 @@ struct WorkflowSessionActiveRun {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct WorkflowSessionPreflightCache {
+pub(crate) struct WorkflowExecutionSessionPreflightCache {
     pub(crate) graph_fingerprint: String,
     pub(crate) runtime_capability_fingerprint: String,
     pub(crate) override_selection: Option<WorkflowTechnicalFitOverride>,
@@ -60,37 +61,37 @@ pub(crate) struct WorkflowSessionPreflightCache {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct WorkflowSessionRecord {
+pub(crate) struct WorkflowExecutionSessionRecord {
     pub(crate) workflow_id: String,
     pub(crate) usage_profile: Option<String>,
     pub(crate) required_backends: Vec<String>,
     pub(crate) required_models: Vec<String>,
     pub(crate) keep_alive: bool,
     pub(crate) runtime_loaded: bool,
-    active_run: Option<WorkflowSessionActiveRun>,
-    queue: Vec<WorkflowSessionQueuedRun>,
+    active_run: Option<WorkflowExecutionSessionActiveRun>,
+    queue: Vec<WorkflowExecutionSessionQueuedRun>,
     pub(crate) access_tick: u64,
     pub(crate) last_accessed_at_ms: u64,
     pub(crate) run_count: u64,
-    pub(crate) preflight_cache: Option<WorkflowSessionPreflightCache>,
+    pub(crate) preflight_cache: Option<WorkflowExecutionSessionPreflightCache>,
 }
 
-impl WorkflowSessionRecord {
+impl WorkflowExecutionSessionRecord {
     pub(crate) fn queue_len(&self) -> usize {
         self.queue.len()
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct WorkflowSessionStaleCleanupCandidate {
+pub(crate) struct WorkflowExecutionSessionStaleCleanupCandidate {
     pub(crate) session_id: String,
     last_accessed_at_ms: u64,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct WorkflowSessionDequeuedRun {
+pub(crate) struct WorkflowExecutionSessionDequeuedRun {
     pub(crate) workflow_id: String,
-    pub(crate) queued: WorkflowSessionQueuedRun,
+    pub(crate) queued: WorkflowExecutionSessionQueuedRun,
 }
 
 pub(crate) fn unix_timestamp_ms() -> u64 {
@@ -103,26 +104,26 @@ pub(crate) fn unix_timestamp_ms() -> u64 {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct WorkflowSessionCloseState {
+pub(crate) struct WorkflowExecutionSessionCloseState {
     pub(crate) workflow_id: String,
     pub(crate) runtime_loaded: bool,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct WorkflowSessionRunFinishState {
+pub(crate) struct WorkflowExecutionSessionRunFinishState {
     pub(crate) workflow_id: String,
     pub(crate) unload_runtime: bool,
 }
 
 #[derive(Debug)]
-pub(crate) struct WorkflowSessionStore {
+pub(crate) struct WorkflowExecutionSessionStore {
     pub(crate) max_sessions: usize,
     pub(crate) max_loaded_sessions: usize,
     tick: u64,
-    pub(crate) active: HashMap<String, WorkflowSessionRecord>,
+    pub(crate) active: HashMap<String, WorkflowExecutionSessionRecord>,
 }
 
-impl WorkflowSessionStore {
+impl WorkflowExecutionSessionStore {
     pub(crate) fn new(max_sessions: usize, max_loaded_sessions: usize) -> Self {
         let max_sessions = max_sessions.max(1);
         let max_loaded_sessions = max_loaded_sessions.max(1).min(max_sessions);
@@ -157,7 +158,7 @@ impl WorkflowSessionStore {
         let session_id = Uuid::new_v4().to_string();
         let now_ms = unix_timestamp_ms();
         let access_tick = self.next_tick();
-        let state = WorkflowSessionRecord {
+        let state = WorkflowExecutionSessionRecord {
             workflow_id,
             usage_profile,
             required_backends: normalize_affinity_values(required_backends),
@@ -185,7 +186,7 @@ impl WorkflowSessionStore {
     pub(crate) fn runtime_unload_candidates(
         &self,
         exclude_session_id: &str,
-    ) -> Vec<WorkflowSessionRuntimeUnloadCandidate> {
+    ) -> Vec<WorkflowExecutionSessionRuntimeUnloadCandidate> {
         self.active
             .iter()
             .filter(|(session_id, state)| {
@@ -194,7 +195,7 @@ impl WorkflowSessionStore {
                     && session_id.as_str() != exclude_session_id
             })
             .map(
-                |(session_id, state)| WorkflowSessionRuntimeUnloadCandidate {
+                |(session_id, state)| WorkflowExecutionSessionRuntimeUnloadCandidate {
                     session_id: session_id.clone(),
                     workflow_id: state.workflow_id.clone(),
                     usage_profile: state.usage_profile.clone(),
@@ -248,14 +249,14 @@ impl WorkflowSessionStore {
     pub(crate) fn session_summary(
         &self,
         session_id: &str,
-    ) -> Result<WorkflowSessionSummary, WorkflowServiceError> {
+    ) -> Result<WorkflowExecutionSessionSummary, WorkflowServiceError> {
         let state = self.active.get(session_id).ok_or_else(|| {
             WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
         })?;
-        Ok(WorkflowSessionSummary {
+        Ok(WorkflowExecutionSessionSummary {
             session_id: session_id.to_string(),
             workflow_id: state.workflow_id.clone(),
-            session_kind: WorkflowSessionKind::Workflow,
+            session_kind: WorkflowExecutionSessionKind::Workflow,
             usage_profile: state.usage_profile.clone(),
             keep_alive: state.keep_alive,
             state: session_state_from_record(state),
@@ -267,7 +268,7 @@ impl WorkflowSessionStore {
     pub(crate) fn cached_preflight(
         &self,
         session_id: &str,
-    ) -> Result<Option<WorkflowSessionPreflightCache>, WorkflowServiceError> {
+    ) -> Result<Option<WorkflowExecutionSessionPreflightCache>, WorkflowServiceError> {
         Ok(self
             .active
             .get(session_id)
@@ -281,7 +282,7 @@ impl WorkflowSessionStore {
     pub(crate) fn cache_preflight(
         &mut self,
         session_id: &str,
-        cache: WorkflowSessionPreflightCache,
+        cache: WorkflowExecutionSessionPreflightCache,
     ) -> Result<(), WorkflowServiceError> {
         let tick = self.next_tick();
         let state = self.active.get_mut(session_id).ok_or_else(|| {
@@ -321,7 +322,7 @@ impl WorkflowSessionStore {
     pub(crate) fn list_queue(
         &self,
         session_id: &str,
-    ) -> Result<Vec<WorkflowSessionQueueItem>, WorkflowServiceError> {
+    ) -> Result<Vec<WorkflowExecutionSessionQueueItem>, WorkflowServiceError> {
         let state = self.active.get(session_id).ok_or_else(|| {
             WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
         })?;
@@ -329,7 +330,7 @@ impl WorkflowSessionStore {
         let mut items =
             Vec::with_capacity(state.queue.len() + usize::from(state.active_run.is_some()));
         if let Some(active_run) = state.active_run.as_ref() {
-            items.push(WorkflowSessionQueueItem {
+            items.push(WorkflowExecutionSessionQueueItem {
                 queue_id: active_run.queue_id.clone(),
                 run_id: active_run.run_id.clone(),
                 enqueued_at_ms: Some(active_run.enqueued_at_ms),
@@ -338,13 +339,13 @@ impl WorkflowSessionStore {
                 queue_position: Some(0),
                 scheduler_admission_outcome: Some(WorkflowSchedulerAdmissionOutcome::Admitted),
                 scheduler_decision_reason: Some(active_run.scheduler_decision_reason),
-                status: WorkflowSessionQueueItemStatus::Running,
+                status: WorkflowExecutionSessionQueueItemStatus::Running,
             });
         }
 
         let pending_offset = items.len();
         for (index, queued) in state.queue.iter().enumerate() {
-            items.push(WorkflowSessionQueueItem {
+            items.push(WorkflowExecutionSessionQueueItem {
                 queue_id: queued.queue_id.clone(),
                 run_id: queued.run_id.clone(),
                 enqueued_at_ms: Some(queued.enqueued_at_ms),
@@ -353,7 +354,7 @@ impl WorkflowSessionStore {
                 queue_position: Some(pending_offset + index),
                 scheduler_admission_outcome: Some(WorkflowSchedulerAdmissionOutcome::Queued),
                 scheduler_decision_reason: Some(queued.scheduler_decision_reason),
-                status: WorkflowSessionQueueItemStatus::Pending,
+                status: WorkflowExecutionSessionQueueItemStatus::Pending,
             });
         }
         Ok(items)
@@ -362,7 +363,7 @@ impl WorkflowSessionStore {
     pub(crate) fn enqueue_run(
         &mut self,
         session_id: &str,
-        request: &WorkflowSessionRunRequest,
+        request: &WorkflowExecutionSessionRunRequest,
     ) -> Result<String, WorkflowServiceError> {
         let tick = self.next_tick();
         let state = self.active.get_mut(session_id).ok_or_else(|| {
@@ -371,7 +372,7 @@ impl WorkflowSessionStore {
 
         let policy = PriorityThenFifoSchedulerPolicy;
         let queue_id = Uuid::new_v4().to_string();
-        let queued = WorkflowSessionQueuedRun {
+        let queued = WorkflowExecutionSessionQueuedRun {
             queue_id: queue_id.clone(),
             run_id: request
                 .run_id
@@ -471,7 +472,7 @@ impl WorkflowSessionStore {
         &mut self,
         session_id: &str,
         queue_id: &str,
-    ) -> Result<Option<WorkflowSessionDequeuedRun>, WorkflowServiceError> {
+    ) -> Result<Option<WorkflowExecutionSessionDequeuedRun>, WorkflowServiceError> {
         let tick = self.next_tick();
         let capacity_blocked = {
             let state = self.active.get(session_id).ok_or_else(|| {
@@ -538,7 +539,7 @@ impl WorkflowSessionStore {
             item.starvation_bypass_count = item.starvation_bypass_count.saturating_add(1);
         }
         policy.refresh_queue(&mut state.queue);
-        state.active_run = Some(WorkflowSessionActiveRun {
+        state.active_run = Some(WorkflowExecutionSessionActiveRun {
             queue_id: queued.queue_id.clone(),
             run_id: queued.run_id.clone(),
             enqueued_at_ms: queued.enqueued_at_ms,
@@ -552,7 +553,7 @@ impl WorkflowSessionStore {
             })?,
         });
         Self::mark_session_access(state, tick);
-        Ok(Some(WorkflowSessionDequeuedRun {
+        Ok(Some(WorkflowExecutionSessionDequeuedRun {
             workflow_id: state.workflow_id.clone(),
             queued,
         }))
@@ -562,7 +563,7 @@ impl WorkflowSessionStore {
         &mut self,
         session_id: &str,
         queue_id: &str,
-    ) -> Result<WorkflowSessionRunFinishState, WorkflowServiceError> {
+    ) -> Result<WorkflowExecutionSessionRunFinishState, WorkflowServiceError> {
         let tick = self.next_tick();
         let state = self.active.get_mut(session_id).ok_or_else(|| {
             WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
@@ -587,7 +588,7 @@ impl WorkflowSessionStore {
         if unload_runtime {
             state.runtime_loaded = false;
         }
-        Ok(WorkflowSessionRunFinishState {
+        Ok(WorkflowExecutionSessionRunFinishState {
             workflow_id: state.workflow_id.clone(),
             unload_runtime,
         })
@@ -597,7 +598,7 @@ impl WorkflowSessionStore {
         &mut self,
         session_id: &str,
         keep_alive: bool,
-    ) -> Result<(WorkflowSessionState, Option<String>), WorkflowServiceError> {
+    ) -> Result<(WorkflowExecutionSessionState, Option<String>), WorkflowServiceError> {
         let tick = self.next_tick();
         let state = self.active.get_mut(session_id).ok_or_else(|| {
             WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
@@ -709,7 +710,7 @@ impl WorkflowSessionStore {
         &self,
         now_ms: u64,
         idle_timeout_ms: u64,
-    ) -> Vec<WorkflowSessionStaleCleanupCandidate> {
+    ) -> Vec<WorkflowExecutionSessionStaleCleanupCandidate> {
         let mut candidates = self
             .active
             .iter()
@@ -720,10 +721,12 @@ impl WorkflowSessionStore {
                     && state.queue.is_empty()
                     && state.last_accessed_at_ms.saturating_add(idle_timeout_ms) <= now_ms
             })
-            .map(|(session_id, state)| WorkflowSessionStaleCleanupCandidate {
-                session_id: session_id.clone(),
-                last_accessed_at_ms: state.last_accessed_at_ms,
-            })
+            .map(
+                |(session_id, state)| WorkflowExecutionSessionStaleCleanupCandidate {
+                    session_id: session_id.clone(),
+                    last_accessed_at_ms: state.last_accessed_at_ms,
+                },
+            )
             .collect::<Vec<_>>();
         candidates.sort_by(|left, right| {
             left.last_accessed_at_ms
@@ -735,7 +738,7 @@ impl WorkflowSessionStore {
 
     pub(crate) fn close_stale_session_if_unchanged(
         &mut self,
-        candidate: &WorkflowSessionStaleCleanupCandidate,
+        candidate: &WorkflowExecutionSessionStaleCleanupCandidate,
         now_ms: u64,
         idle_timeout_ms: u64,
     ) -> bool {
@@ -756,7 +759,7 @@ impl WorkflowSessionStore {
         true
     }
 
-    fn mark_session_access(state: &mut WorkflowSessionRecord, tick: u64) {
+    fn mark_session_access(state: &mut WorkflowExecutionSessionRecord, tick: u64) {
         state.access_tick = tick;
         state.last_accessed_at_ms = unix_timestamp_ms();
     }
@@ -764,7 +767,7 @@ impl WorkflowSessionStore {
     pub(crate) fn close_session(
         &mut self,
         session_id: &str,
-    ) -> Result<WorkflowSessionCloseState, WorkflowServiceError> {
+    ) -> Result<WorkflowExecutionSessionCloseState, WorkflowServiceError> {
         let Some(state) = self.active.get(session_id) else {
             return Err(WorkflowServiceError::SessionNotFound(format!(
                 "session '{}' not found",
@@ -779,19 +782,21 @@ impl WorkflowSessionStore {
         }
 
         let removed = self.active.remove(session_id).expect("session exists");
-        Ok(WorkflowSessionCloseState {
+        Ok(WorkflowExecutionSessionCloseState {
             workflow_id: removed.workflow_id,
             runtime_loaded: removed.runtime_loaded,
         })
     }
 
-    fn admission_input_from_state(state: &WorkflowSessionRecord) -> WorkflowSessionAdmissionInput {
-        WorkflowSessionAdmissionInput {
+    fn admission_input_from_state(
+        state: &WorkflowExecutionSessionRecord,
+    ) -> WorkflowExecutionSessionAdmissionInput {
+        WorkflowExecutionSessionAdmissionInput {
             has_active_run: state.active_run.is_some(),
             runtime_posture: if state.runtime_loaded {
-                WorkflowSessionAdmissionRuntimePosture::Loaded
+                WorkflowExecutionSessionAdmissionRuntimePosture::Loaded
             } else {
-                WorkflowSessionAdmissionRuntimePosture::Unloaded
+                WorkflowExecutionSessionAdmissionRuntimePosture::Unloaded
             },
             usage_profile: state.usage_profile.clone(),
             required_backends: state.required_backends.clone(),
@@ -803,7 +808,7 @@ impl WorkflowSessionStore {
                 .map(|(queue_position, queued)| {
                     let warm_session_compatibility =
                         Self::warm_session_compatibility(state, queued);
-                    WorkflowSessionAdmissionCandidate {
+                    WorkflowExecutionSessionAdmissionCandidate {
                         queue_id: queued.queue_id.clone(),
                         priority: queued.priority,
                         enqueued_tick: queued.enqueued_tick,
@@ -811,7 +816,7 @@ impl WorkflowSessionStore {
                         queue_position,
                         affine_runtime_reuse: state.runtime_loaded
                             && warm_session_compatibility
-                                != WorkflowSessionWarmCompatibility::Incompatible,
+                                != WorkflowExecutionSessionWarmCompatibility::Incompatible,
                         warm_session_compatibility,
                     }
                 })
@@ -820,44 +825,44 @@ impl WorkflowSessionStore {
     }
 
     fn warm_session_compatibility(
-        state: &WorkflowSessionRecord,
-        queued: &WorkflowSessionQueuedRun,
-    ) -> WorkflowSessionWarmCompatibility {
+        state: &WorkflowExecutionSessionRecord,
+        queued: &WorkflowExecutionSessionQueuedRun,
+    ) -> WorkflowExecutionSessionWarmCompatibility {
         if !state.runtime_loaded {
-            return WorkflowSessionWarmCompatibility::Unknown;
+            return WorkflowExecutionSessionWarmCompatibility::Unknown;
         }
 
         let Some(override_selection) = queued.override_selection.as_ref() else {
-            return WorkflowSessionWarmCompatibility::Compatible;
+            return WorkflowExecutionSessionWarmCompatibility::Compatible;
         };
 
         if let Some(backend_key) = override_selection.backend_key.as_deref() {
             if state.required_backends.is_empty() {
-                return WorkflowSessionWarmCompatibility::Unknown;
+                return WorkflowExecutionSessionWarmCompatibility::Unknown;
             }
             if !state
                 .required_backends
                 .iter()
                 .any(|required| required == backend_key)
             {
-                return WorkflowSessionWarmCompatibility::Incompatible;
+                return WorkflowExecutionSessionWarmCompatibility::Incompatible;
             }
         }
 
         if let Some(model_id) = override_selection.model_id.as_deref() {
             if state.required_models.is_empty() {
-                return WorkflowSessionWarmCompatibility::Unknown;
+                return WorkflowExecutionSessionWarmCompatibility::Unknown;
             }
             if !state
                 .required_models
                 .iter()
                 .any(|required| required == model_id)
             {
-                return WorkflowSessionWarmCompatibility::Incompatible;
+                return WorkflowExecutionSessionWarmCompatibility::Incompatible;
             }
         }
 
-        WorkflowSessionWarmCompatibility::Compatible
+        WorkflowExecutionSessionWarmCompatibility::Compatible
     }
 }
 
@@ -872,13 +877,15 @@ fn normalize_affinity_values(values: Vec<String>) -> Vec<String> {
     values
 }
 
-fn session_state_from_record(state: &WorkflowSessionRecord) -> WorkflowSessionState {
+fn session_state_from_record(
+    state: &WorkflowExecutionSessionRecord,
+) -> WorkflowExecutionSessionState {
     if state.active_run.is_some() {
-        WorkflowSessionState::Running
+        WorkflowExecutionSessionState::Running
     } else if state.runtime_loaded {
-        WorkflowSessionState::IdleLoaded
+        WorkflowExecutionSessionState::IdleLoaded
     } else {
-        WorkflowSessionState::IdleUnloaded
+        WorkflowExecutionSessionState::IdleUnloaded
     }
 }
 

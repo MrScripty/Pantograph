@@ -67,13 +67,14 @@ impl AdmissionGatedHost {
 }
 
 pub(in crate::workflow::tests) struct RecordingRuntimeHost {
-    pub(in crate::workflow::tests) retention_hints: Arc<Mutex<Vec<WorkflowSessionRetentionHint>>>,
+    pub(in crate::workflow::tests) retention_hints:
+        Arc<Mutex<Vec<WorkflowExecutionSessionRetentionHint>>>,
     pub(in crate::workflow::tests) capabilities: WorkflowHostCapabilities,
 }
 
 impl RecordingRuntimeHost {
     pub(in crate::workflow::tests) fn new(
-        retention_hints: Arc<Mutex<Vec<WorkflowSessionRetentionHint>>>,
+        retention_hints: Arc<Mutex<Vec<WorkflowExecutionSessionRetentionHint>>>,
     ) -> Self {
         Self {
             retention_hints,
@@ -195,7 +196,7 @@ impl WorkflowHost for AdmissionGatedHost {
         _session_id: &str,
         _workflow_id: &str,
         _usage_profile: Option<&str>,
-        _retention_hint: WorkflowSessionRetentionHint,
+        _retention_hint: WorkflowExecutionSessionRetentionHint,
     ) -> Result<bool, WorkflowServiceError> {
         Ok(self.admission_open.load(Ordering::SeqCst))
     }
@@ -247,7 +248,7 @@ impl WorkflowHost for RecordingRuntimeHost {
         _session_id: &str,
         _workflow_id: &str,
         _usage_profile: Option<&str>,
-        retention_hint: WorkflowSessionRetentionHint,
+        retention_hint: WorkflowExecutionSessionRetentionHint,
     ) -> Result<(), WorkflowServiceError> {
         self.retention_hints
             .lock()

@@ -14,7 +14,7 @@ fn headless_scheduler_snapshot_helper_uses_trace_execution_identity() {
             session_id: "session-1".to_string(),
             trace_execution_id: Some("run-1".to_string()),
             session: running_session_summary(),
-            items: vec![WorkflowSessionQueueItem {
+            items: vec![WorkflowExecutionSessionQueueItem {
                 queue_id: "queue-1".to_string(),
                 run_id: Some("run-1".to_string()),
                 enqueued_at_ms: Some(100),
@@ -23,7 +23,7 @@ fn headless_scheduler_snapshot_helper_uses_trace_execution_identity() {
                 queue_position: None,
                 scheduler_admission_outcome: None,
                 scheduler_decision_reason: None,
-                status: WorkflowSessionQueueItemStatus::Running,
+                status: WorkflowExecutionSessionQueueItemStatus::Running,
             }],
             diagnostics: None,
         }),
@@ -202,7 +202,7 @@ fn headless_scheduler_and_runtime_helpers_join_on_trace_execution_identity() {
             session_id: "session-1".to_string(),
             trace_execution_id: Some("run-1".to_string()),
             session: running_session_summary(),
-            items: vec![WorkflowSessionQueueItem {
+            items: vec![WorkflowExecutionSessionQueueItem {
                 queue_id: "queue-1".to_string(),
                 run_id: Some("run-1".to_string()),
                 enqueued_at_ms: Some(100),
@@ -211,7 +211,7 @@ fn headless_scheduler_and_runtime_helpers_join_on_trace_execution_identity() {
                 queue_position: None,
                 scheduler_admission_outcome: None,
                 scheduler_decision_reason: None,
-                status: WorkflowSessionQueueItemStatus::Running,
+                status: WorkflowExecutionSessionQueueItemStatus::Running,
             }],
             diagnostics: None,
         }),

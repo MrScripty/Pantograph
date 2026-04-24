@@ -46,13 +46,13 @@ async fn build_workflow_execution_diagnostics_snapshot_with_registry_sync_reconc
                 workflow_id: Some("wf-123".to_string()),
                 session_id: "session-123".to_string(),
                 trace_execution_id: Some("exec-456".to_string()),
-                session: WorkflowSessionSummary {
+                session: WorkflowExecutionSessionSummary {
                     session_id: "session-123".to_string(),
                     workflow_id: "wf-123".to_string(),
-                    session_kind: WorkflowSessionKind::Workflow,
+                    session_kind: WorkflowExecutionSessionKind::Workflow,
                     usage_profile: Some("interactive".to_string()),
                     keep_alive: false,
-                    state: WorkflowSessionState::Running,
+                    state: WorkflowExecutionSessionState::Running,
                     queued_runs: 0,
                     run_count: 1,
                 },
@@ -133,17 +133,17 @@ fn build_workflow_execution_diagnostics_snapshot_uses_backend_owned_scheduler_an
                 workflow_id: Some("wf-123".to_string()),
                 session_id: "session-123".to_string(),
                 trace_execution_id: Some("exec-456".to_string()),
-                session: WorkflowSessionSummary {
+                session: WorkflowExecutionSessionSummary {
                     session_id: "session-123".to_string(),
                     workflow_id: "wf-123".to_string(),
-                    session_kind: WorkflowSessionKind::Workflow,
+                    session_kind: WorkflowExecutionSessionKind::Workflow,
                     usage_profile: Some("interactive".to_string()),
                     keep_alive: false,
-                    state: WorkflowSessionState::Running,
+                    state: WorkflowExecutionSessionState::Running,
                     queued_runs: 0,
                     run_count: 1,
                 },
-                items: vec![WorkflowSessionQueueItem {
+                items: vec![WorkflowExecutionSessionQueueItem {
                     queue_id: "queue-1".to_string(),
                     run_id: Some("exec-456".to_string()),
                     enqueued_at_ms: Some(11),
@@ -152,7 +152,7 @@ fn build_workflow_execution_diagnostics_snapshot_uses_backend_owned_scheduler_an
                     queue_position: None,
                     scheduler_admission_outcome: None,
                     scheduler_decision_reason: None,
-                    status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
+                    status: pantograph_workflow_service::WorkflowExecutionSessionQueueItemStatus::Running,
                 }],
                 diagnostics: None,
             },

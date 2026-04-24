@@ -1,14 +1,14 @@
 use super::*;
 
 #[tokio::test]
-async fn workflow_session_run_waits_for_runtime_capacity_before_admission() {
+async fn workflow_execution_session_run_waits_for_runtime_capacity_before_admission() {
     let host = BlockingRunHost::new();
     let service = WorkflowService::with_capacity_limits(2, 1);
 
     let first = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-first".to_string(),
                 usage_profile: Some("interactive".to_string()),
                 keep_alive: false,
@@ -17,9 +17,9 @@ async fn workflow_session_run_waits_for_runtime_capacity_before_admission() {
         .await
         .expect("create first session");
     let second = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-second".to_string(),
                 usage_profile: Some("interactive".to_string()),
                 keep_alive: false,
@@ -33,9 +33,9 @@ async fn workflow_session_run_waits_for_runtime_capacity_before_admission() {
     let first_session_id = first.session_id.clone();
     let first_run = tokio::spawn(async move {
         first_service
-            .run_workflow_session(
+            .run_workflow_execution_session(
                 &first_host,
-                WorkflowSessionRunRequest {
+                WorkflowExecutionSessionRunRequest {
                     session_id: first_session_id,
                     inputs: Vec::new(),
                     output_targets: None,
@@ -55,9 +55,9 @@ async fn workflow_session_run_waits_for_runtime_capacity_before_admission() {
     let second_session_id = second.session_id.clone();
     let mut second_run = tokio::spawn(async move {
         second_service
-            .run_workflow_session(
+            .run_workflow_execution_session(
                 &second_host,
-                WorkflowSessionRunRequest {
+                WorkflowExecutionSessionRunRequest {
                     session_id: second_session_id,
                     inputs: Vec::new(),
                     output_targets: None,
@@ -83,11 +83,14 @@ async fn workflow_session_run_waits_for_runtime_capacity_before_admission() {
         .as_ref()
         .expect("scheduler diagnostics while waiting");
 
-    assert_eq!(snapshot.session.state, WorkflowSessionState::IdleUnloaded);
+    assert_eq!(
+        snapshot.session.state,
+        WorkflowExecutionSessionState::IdleUnloaded
+    );
     assert_eq!(snapshot.items.len(), 1);
     assert_eq!(
         snapshot.items[0].status,
-        WorkflowSessionQueueItemStatus::Pending
+        WorkflowExecutionSessionQueueItemStatus::Pending
     );
     assert_eq!(
         snapshot.items[0].scheduler_decision_reason,
@@ -122,15 +125,15 @@ async fn workflow_session_run_waits_for_runtime_capacity_before_admission() {
 }
 
 #[tokio::test]
-async fn workflow_session_run_waits_for_runtime_admission_before_dequeue() {
+async fn workflow_execution_session_run_waits_for_runtime_admission_before_dequeue() {
     let admission_open = Arc::new(AtomicBool::new(false));
     let host = AdmissionGatedHost::new(admission_open.clone());
     let service = WorkflowService::with_capacity_limits(1, 1);
 
     let created = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-gated".to_string(),
                 usage_profile: Some("interactive".to_string()),
                 keep_alive: false,
@@ -144,9 +147,9 @@ async fn workflow_session_run_waits_for_runtime_admission_before_dequeue() {
     let session_id = created.session_id.clone();
     let mut run = tokio::spawn(async move {
         run_service
-            .run_workflow_session(
+            .run_workflow_execution_session(
                 &run_host,
-                WorkflowSessionRunRequest {
+                WorkflowExecutionSessionRunRequest {
                     session_id,
                     inputs: Vec::new(),
                     output_targets: None,
@@ -174,11 +177,14 @@ async fn workflow_session_run_waits_for_runtime_admission_before_dequeue() {
         .as_ref()
         .expect("scheduler diagnostics while admission is blocked");
 
-    assert_eq!(snapshot.session.state, WorkflowSessionState::IdleUnloaded);
+    assert_eq!(
+        snapshot.session.state,
+        WorkflowExecutionSessionState::IdleUnloaded
+    );
     assert_eq!(snapshot.items.len(), 1);
     assert_eq!(
         snapshot.items[0].status,
-        WorkflowSessionQueueItemStatus::Pending
+        WorkflowExecutionSessionQueueItemStatus::Pending
     );
     assert_eq!(
         snapshot.items[0].scheduler_decision_reason,

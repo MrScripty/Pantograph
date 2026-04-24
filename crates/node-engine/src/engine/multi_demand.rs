@@ -569,7 +569,10 @@ async fn demand_multiple_with_budget(
     budget: DemandExecutionBudget,
 ) -> Result<HashMap<NodeId, HashMap<String, serde_json::Value>>> {
     let node_memories =
-        super::workflow_session::bound_workflow_session_node_memory_view(workflow_executor).await;
+        super::workflow_execution_session::bound_workflow_execution_session_node_memory_view(
+            workflow_executor,
+        )
+        .await;
     let graph = workflow_executor.graph.read().await;
     let plan = DemandMultiplePlan::from_requested_targets(node_ids, &graph);
     workflow_executor
@@ -588,7 +591,8 @@ async fn demand_multiple_with_budget(
     drop(demand_engine);
     drop(graph);
 
-    super::workflow_session::sync_bound_session_node_memory_from_cache(workflow_executor).await;
+    super::workflow_execution_session::sync_bound_session_node_memory_from_cache(workflow_executor)
+        .await;
     Ok(outputs)
 }
 

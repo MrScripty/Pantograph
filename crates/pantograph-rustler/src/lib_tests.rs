@@ -226,7 +226,7 @@ async fn test_rustler_workflow_host_contract_success() {
 #[tokio::test(flavor = "current_thread")]
 #[cfg(feature = "frontend-http")]
 #[ignore = "requires local TCP bind permissions in test environment"]
-async fn test_rustler_workflow_session_host_contract_preserves_cancelled_envelope() {
+async fn test_rustler_workflow_execution_session_host_contract_preserves_cancelled_envelope() {
     let _guard = CWD_LOCK.lock().await;
     let workflow_id = "wf_rustler_session_cancelled";
     let root = create_temp_workflow_root(workflow_id);
@@ -243,9 +243,9 @@ async fn test_rustler_workflow_session_host_contract_preserves_cancelled_envelop
         .expect("frontend HTTP host");
     let service = WorkflowService::new();
     let created = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            pantograph_workflow_service::WorkflowSessionCreateRequest {
+            pantograph_workflow_service::WorkflowExecutionSessionCreateRequest {
                 workflow_id: workflow_id.to_string(),
                 usage_profile: None,
                 keep_alive: false,
@@ -255,9 +255,9 @@ async fn test_rustler_workflow_session_host_contract_preserves_cancelled_envelop
         .expect("create session");
 
     let err = service
-        .run_workflow_session(
+        .run_workflow_execution_session(
             &host,
-            pantograph_workflow_service::WorkflowSessionRunRequest {
+            pantograph_workflow_service::WorkflowExecutionSessionRunRequest {
                 session_id: created.session_id,
                 inputs: vec![pantograph_workflow_service::WorkflowPortBinding {
                     node_id: "text-input-1".to_string(),
@@ -292,7 +292,8 @@ async fn test_rustler_workflow_session_host_contract_preserves_cancelled_envelop
 #[tokio::test(flavor = "current_thread")]
 #[cfg(feature = "frontend-http")]
 #[ignore = "requires local TCP bind permissions in test environment"]
-async fn test_rustler_workflow_session_host_contract_preserves_invalid_request_envelope() {
+async fn test_rustler_workflow_execution_session_host_contract_preserves_invalid_request_envelope()
+{
     let _guard = CWD_LOCK.lock().await;
     let workflow_id = "wf_rustler_session_invalid_request";
     let root = create_temp_workflow_root(workflow_id);
@@ -309,9 +310,9 @@ async fn test_rustler_workflow_session_host_contract_preserves_invalid_request_e
         .expect("frontend HTTP host");
     let service = WorkflowService::new();
     let created = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            pantograph_workflow_service::WorkflowSessionCreateRequest {
+            pantograph_workflow_service::WorkflowExecutionSessionCreateRequest {
                 workflow_id: workflow_id.to_string(),
                 usage_profile: None,
                 keep_alive: false,
@@ -321,9 +322,9 @@ async fn test_rustler_workflow_session_host_contract_preserves_invalid_request_e
         .expect("create session");
 
     let err = service
-        .run_workflow_session(
+        .run_workflow_execution_session(
             &host,
-            pantograph_workflow_service::WorkflowSessionRunRequest {
+            pantograph_workflow_service::WorkflowExecutionSessionRunRequest {
                 session_id: created.session_id,
                 inputs: vec![pantograph_workflow_service::WorkflowPortBinding {
                     node_id: "text-input-1".to_string(),

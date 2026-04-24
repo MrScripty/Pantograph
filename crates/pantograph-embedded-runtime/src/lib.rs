@@ -35,9 +35,9 @@ mod runtime_registry_lifecycle;
 mod runtime_registry_observations;
 pub mod task_executor;
 pub mod technical_fit;
+mod workflow_execution_session_execution;
 pub mod workflow_runtime;
 mod workflow_scheduler_diagnostics;
-mod workflow_session_execution;
 
 pub use embedded_edit_session_execution::EditSessionGraphExecutionOutcome;
 pub use host_runtime::HostRuntimeModeSnapshot;
@@ -82,7 +82,8 @@ pub struct EmbeddedRuntime {
     workflow_service: SharedWorkflowService,
     runtime_registry: Option<SharedRuntimeRegistry>,
     session_runtime_reservations: Arc<Mutex<HashMap<String, u64>>>,
-    session_executions: Arc<workflow_session_execution::WorkflowSessionExecutionStore>,
+    session_executions:
+        Arc<workflow_execution_session_execution::WorkflowExecutionSessionExecutionStore>,
     rag_backend: Option<Arc<dyn RagBackend>>,
     python_runtime: Arc<dyn PythonRuntimeAdapter>,
     additional_runtime_capabilities: Vec<WorkflowRuntimeCapability>,
@@ -96,7 +97,8 @@ pub(crate) struct EmbeddedWorkflowHost {
     extensions: SharedExtensions,
     runtime_registry: Option<SharedRuntimeRegistry>,
     session_runtime_reservations: Arc<Mutex<HashMap<String, u64>>>,
-    session_executions: Arc<workflow_session_execution::WorkflowSessionExecutionStore>,
+    session_executions:
+        Arc<workflow_execution_session_execution::WorkflowExecutionSessionExecutionStore>,
     rag_backend: Option<Arc<dyn RagBackend>>,
     python_runtime: Arc<dyn PythonRuntimeAdapter>,
     additional_runtime_capabilities: Vec<WorkflowRuntimeCapability>,

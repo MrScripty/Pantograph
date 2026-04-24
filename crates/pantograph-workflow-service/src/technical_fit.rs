@@ -217,7 +217,7 @@ impl WorkflowService {
             .await
     }
 
-    pub(crate) async fn workflow_session_runtime_preflight_assessment<H: WorkflowHost>(
+    pub(crate) async fn workflow_execution_session_runtime_preflight_assessment<H: WorkflowHost>(
         &self,
         host: &H,
         session_id: &str,
@@ -315,7 +315,7 @@ impl WorkflowService {
         ))
     }
 
-    pub async fn workflow_session_technical_fit_request<H: WorkflowHost>(
+    pub async fn workflow_execution_session_technical_fit_request<H: WorkflowHost>(
         &self,
         host: &H,
         session_id: &str,

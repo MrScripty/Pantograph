@@ -89,7 +89,7 @@ impl GraphSessionStore {
             memory_impact.clone(),
         );
         let memory_impact = phase6_memory_impact_projection(memory_impact);
-        let workflow_session_state = state.mutation_session_state_view(
+        let workflow_execution_session_state = state.mutation_session_state_view(
             &request.session_id,
             Some(&workflow_event),
             memory_impact,
@@ -99,7 +99,7 @@ impl GraphSessionStore {
             graph_revision: state.graph.compute_fingerprint(),
             graph: Some(state.graph.clone()),
             workflow_event: Some(workflow_event),
-            workflow_session_state: Some(workflow_session_state),
+            workflow_execution_session_state: Some(workflow_execution_session_state),
             rejection: None,
         })
     }
@@ -145,7 +145,7 @@ impl GraphSessionStore {
             memory_impact.clone(),
         );
         let memory_impact = phase6_memory_impact_projection(memory_impact);
-        let workflow_session_state = state.mutation_session_state_view(
+        let workflow_execution_session_state = state.mutation_session_state_view(
             &request.session_id,
             Some(&workflow_event),
             memory_impact,
@@ -157,7 +157,7 @@ impl GraphSessionStore {
             inserted_node_id: Some(inserted_node.id),
             graph: Some(state.graph.clone()),
             workflow_event: Some(workflow_event),
-            workflow_session_state: Some(workflow_session_state),
+            workflow_execution_session_state: Some(workflow_execution_session_state),
             rejection: None,
         })
     }
@@ -234,7 +234,7 @@ impl GraphSessionStore {
             memory_impact.clone(),
         );
         let memory_impact = phase6_memory_impact_projection(memory_impact);
-        let workflow_session_state = state.mutation_session_state_view(
+        let workflow_execution_session_state = state.mutation_session_state_view(
             &request.session_id,
             Some(&workflow_event),
             memory_impact,
@@ -247,7 +247,7 @@ impl GraphSessionStore {
             bridge: Some(bridge),
             graph: Some(state.graph.clone()),
             workflow_event: Some(workflow_event),
-            workflow_session_state: Some(workflow_session_state),
+            workflow_execution_session_state: Some(workflow_execution_session_state),
             rejection: None,
         })
     }

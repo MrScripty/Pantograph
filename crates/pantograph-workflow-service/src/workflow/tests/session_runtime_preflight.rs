@@ -1,7 +1,7 @@
 use super::*;
 
 #[tokio::test]
-async fn workflow_session_runtime_preflight_is_cached_until_graph_changes() {
+async fn workflow_execution_session_runtime_preflight_is_cached_until_graph_changes() {
     let workflow_capabilities_calls = Arc::new(AtomicUsize::new(0));
     let runtime_capabilities_calls = Arc::new(AtomicUsize::new(0));
     let graph_fingerprint = Arc::new(Mutex::new("graph-a".to_string()));
@@ -15,9 +15,9 @@ async fn workflow_session_runtime_preflight_is_cached_until_graph_changes() {
     let service = WorkflowService::with_max_sessions(1);
 
     let created = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-1".to_string(),
                 usage_profile: None,
                 keep_alive: false,
@@ -27,9 +27,9 @@ async fn workflow_session_runtime_preflight_is_cached_until_graph_changes() {
         .expect("create session");
 
     service
-        .run_workflow_session(
+        .run_workflow_execution_session(
             &host,
-            WorkflowSessionRunRequest {
+            WorkflowExecutionSessionRunRequest {
                 session_id: created.session_id.clone(),
                 inputs: Vec::new(),
                 output_targets: None,
@@ -44,9 +44,9 @@ async fn workflow_session_runtime_preflight_is_cached_until_graph_changes() {
     assert_eq!(workflow_capabilities_calls.load(Ordering::SeqCst), 1);
 
     service
-        .run_workflow_session(
+        .run_workflow_execution_session(
             &host,
-            WorkflowSessionRunRequest {
+            WorkflowExecutionSessionRunRequest {
                 session_id: created.session_id.clone(),
                 inputs: Vec::new(),
                 output_targets: None,
@@ -70,9 +70,9 @@ async fn workflow_session_runtime_preflight_is_cached_until_graph_changes() {
         .expect("graph fingerprint lock poisoned") = "graph-b".to_string();
 
     service
-        .run_workflow_session(
+        .run_workflow_execution_session(
             &host,
-            WorkflowSessionRunRequest {
+            WorkflowExecutionSessionRunRequest {
                 session_id: created.session_id,
                 inputs: Vec::new(),
                 output_targets: None,
@@ -92,7 +92,8 @@ async fn workflow_session_runtime_preflight_is_cached_until_graph_changes() {
 }
 
 #[tokio::test]
-async fn workflow_session_runtime_preflight_cache_invalidates_on_override_selection_change() {
+async fn workflow_execution_session_runtime_preflight_cache_invalidates_on_override_selection_change(
+) {
     let workflow_capabilities_calls = Arc::new(AtomicUsize::new(0));
     let runtime_capabilities_calls = Arc::new(AtomicUsize::new(0));
     let technical_fit_requests = Arc::new(Mutex::new(Vec::new()));
@@ -105,9 +106,9 @@ async fn workflow_session_runtime_preflight_cache_invalidates_on_override_select
     let service = WorkflowService::with_max_sessions(1);
 
     let created = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-1".to_string(),
                 usage_profile: None,
                 keep_alive: false,
@@ -117,9 +118,9 @@ async fn workflow_session_runtime_preflight_cache_invalidates_on_override_select
         .expect("create session");
 
     service
-        .run_workflow_session(
+        .run_workflow_execution_session(
             &host,
-            WorkflowSessionRunRequest {
+            WorkflowExecutionSessionRunRequest {
                 session_id: created.session_id.clone(),
                 inputs: Vec::new(),
                 output_targets: None,
@@ -136,9 +137,9 @@ async fn workflow_session_runtime_preflight_cache_invalidates_on_override_select
         .expect("first run");
 
     service
-        .run_workflow_session(
+        .run_workflow_execution_session(
             &host,
-            WorkflowSessionRunRequest {
+            WorkflowExecutionSessionRunRequest {
                 session_id: created.session_id,
                 inputs: Vec::new(),
                 output_targets: None,
@@ -200,9 +201,9 @@ async fn keep_alive_session_create_blocks_when_runtime_preflight_fails() {
     let service = WorkflowService::with_max_sessions(1);
 
     let err = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-1".to_string(),
                 usage_profile: Some("interactive".to_string()),
                 keep_alive: true,
@@ -243,9 +244,9 @@ async fn keep_alive_enable_blocks_when_runtime_preflight_fails() {
     );
     let service = WorkflowService::with_max_sessions(1);
     let created = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-1".to_string(),
                 usage_profile: Some("interactive".to_string()),
                 keep_alive: false,
@@ -255,9 +256,9 @@ async fn keep_alive_enable_blocks_when_runtime_preflight_fails() {
         .expect("create unloaded session");
 
     let err = service
-        .workflow_set_session_keep_alive(
+        .workflow_set_execution_session_keep_alive(
             &host,
-            WorkflowSessionKeepAliveRequest {
+            WorkflowExecutionSessionKeepAliveRequest {
                 session_id: created.session_id.clone(),
                 keep_alive: true,
             },
@@ -272,6 +273,6 @@ async fn keep_alive_enable_blocks_when_runtime_preflight_fails() {
         .expect("session store lock poisoned")
         .session_summary(&created.session_id)
         .expect("session summary after failed keep-alive enable");
-    assert_eq!(summary.state, WorkflowSessionState::IdleUnloaded);
+    assert_eq!(summary.state, WorkflowExecutionSessionState::IdleUnloaded);
     assert!(!summary.keep_alive);
 }

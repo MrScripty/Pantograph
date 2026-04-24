@@ -1,20 +1,20 @@
 use super::*;
 
 #[tokio::test]
-async fn workflow_get_scheduler_snapshot_returns_workflow_session_summary() {
+async fn workflow_get_scheduler_snapshot_returns_workflow_execution_session_summary() {
     let host = MockWorkflowHost::new(8, 1024);
     let service = WorkflowService::new();
     let created = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-1".to_string(),
                 usage_profile: Some("interactive".to_string()),
                 keep_alive: false,
             },
         )
         .await
-        .expect("create workflow session");
+        .expect("create workflow execution session");
 
     let snapshot = service
         .workflow_get_scheduler_snapshot(WorkflowSchedulerSnapshotRequest {
@@ -25,7 +25,10 @@ async fn workflow_get_scheduler_snapshot_returns_workflow_session_summary() {
 
     assert_eq!(snapshot.workflow_id.as_deref(), Some("wf-1"));
     assert_eq!(snapshot.session_id, created.session_id);
-    assert_eq!(snapshot.session.session_kind, WorkflowSessionKind::Workflow);
+    assert_eq!(
+        snapshot.session.session_kind,
+        WorkflowExecutionSessionKind::Workflow
+    );
     assert_eq!(snapshot.session.workflow_id, "wf-1");
     assert_eq!(
         snapshot.session.usage_profile.as_deref(),
@@ -54,11 +57,11 @@ async fn workflow_get_scheduler_snapshot_returns_edit_session_lifecycle() {
     assert_eq!(idle_snapshot.workflow_id, None);
     assert_eq!(
         idle_snapshot.session.session_kind,
-        WorkflowSessionKind::Edit
+        WorkflowExecutionSessionKind::Edit
     );
     assert_eq!(
         idle_snapshot.session.state,
-        WorkflowSessionState::IdleLoaded
+        WorkflowExecutionSessionState::IdleLoaded
     );
     assert_eq!(idle_snapshot.session.queued_runs, 0);
     assert_eq!(idle_snapshot.session.run_count, 0);
@@ -78,17 +81,17 @@ async fn workflow_get_scheduler_snapshot_returns_edit_session_lifecycle() {
         .expect("running edit snapshot");
     assert_eq!(
         running_snapshot.session.session_kind,
-        WorkflowSessionKind::Edit
+        WorkflowExecutionSessionKind::Edit
     );
     assert_eq!(
         running_snapshot.session.state,
-        WorkflowSessionState::Running
+        WorkflowExecutionSessionState::Running
     );
     assert_eq!(running_snapshot.session.queued_runs, 1);
     assert_eq!(running_snapshot.items.len(), 1);
     assert_eq!(
         running_snapshot.items[0].status,
-        WorkflowSessionQueueItemStatus::Running
+        WorkflowExecutionSessionQueueItemStatus::Running
     );
     let started_at_ms = running_snapshot.items[0]
         .enqueued_at_ms
@@ -119,7 +122,7 @@ async fn workflow_get_scheduler_snapshot_returns_edit_session_lifecycle() {
         .expect("completed edit snapshot");
     assert_eq!(
         completed_snapshot.session.state,
-        WorkflowSessionState::IdleLoaded
+        WorkflowExecutionSessionState::IdleLoaded
     );
     assert_eq!(completed_snapshot.session.queued_runs, 0);
     assert_eq!(completed_snapshot.session.run_count, 1);
@@ -132,16 +135,16 @@ async fn workflow_get_scheduler_snapshot_exposes_single_visible_queue_run_as_tra
     let host = MockWorkflowHost::new(8, 1024);
     let service = WorkflowService::new();
     let created = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-1".to_string(),
                 usage_profile: None,
                 keep_alive: false,
             },
         )
         .await
-        .expect("create workflow session");
+        .expect("create workflow execution session");
 
     {
         let mut store = service
@@ -151,7 +154,7 @@ async fn workflow_get_scheduler_snapshot_exposes_single_visible_queue_run_as_tra
         store
             .enqueue_run(
                 &created.session_id,
-                &WorkflowSessionRunRequest {
+                &WorkflowExecutionSessionRunRequest {
                     session_id: created.session_id.clone(),
                     inputs: Vec::new(),
                     output_targets: None,
@@ -174,7 +177,7 @@ async fn workflow_get_scheduler_snapshot_exposes_single_visible_queue_run_as_tra
     assert_eq!(snapshot.items.len(), 1);
     assert_eq!(
         snapshot.items[0].status,
-        WorkflowSessionQueueItemStatus::Pending
+        WorkflowExecutionSessionQueueItemStatus::Pending
     );
 }
 
@@ -183,16 +186,16 @@ async fn workflow_get_scheduler_snapshot_reports_bypassed_queue_head_for_warm_re
     let host = MockWorkflowHost::new(8, 1024);
     let service = WorkflowService::new();
     let created = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-1".to_string(),
                 usage_profile: Some("interactive".to_string()),
                 keep_alive: true,
             },
         )
         .await
-        .expect("create workflow session");
+        .expect("create workflow execution session");
 
     let (cold_head_queue_id, warm_queue_id) = {
         let mut store = service
@@ -212,7 +215,7 @@ async fn workflow_get_scheduler_snapshot_reports_bypassed_queue_head_for_warm_re
         let cold_head_queue_id = store
             .enqueue_run(
                 &created.session_id,
-                &WorkflowSessionRunRequest {
+                &WorkflowExecutionSessionRunRequest {
                     session_id: created.session_id.clone(),
                     inputs: Vec::new(),
                     output_targets: None,
@@ -229,7 +232,7 @@ async fn workflow_get_scheduler_snapshot_reports_bypassed_queue_head_for_warm_re
         let warm_queue_id = store
             .enqueue_run(
                 &created.session_id,
-                &WorkflowSessionRunRequest {
+                &WorkflowExecutionSessionRunRequest {
                     session_id: created.session_id.clone(),
                     inputs: Vec::new(),
                     output_targets: None,
@@ -270,16 +273,16 @@ async fn workflow_get_scheduler_snapshot_omits_trace_execution_for_ambiguous_pen
     let host = MockWorkflowHost::new(8, 1024);
     let service = WorkflowService::new();
     let created = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-1".to_string(),
                 usage_profile: None,
                 keep_alive: false,
             },
         )
         .await
-        .expect("create workflow session");
+        .expect("create workflow execution session");
 
     {
         let mut store = service
@@ -290,7 +293,7 @@ async fn workflow_get_scheduler_snapshot_omits_trace_execution_for_ambiguous_pen
             store
                 .enqueue_run(
                     &created.session_id,
-                    &WorkflowSessionRunRequest {
+                    &WorkflowExecutionSessionRunRequest {
                         session_id: created.session_id.clone(),
                         inputs: Vec::new(),
                         output_targets: None,
@@ -316,5 +319,5 @@ async fn workflow_get_scheduler_snapshot_omits_trace_execution_for_ambiguous_pen
     assert!(snapshot
         .items
         .iter()
-        .all(|item| item.status == WorkflowSessionQueueItemStatus::Pending));
+        .all(|item| item.status == WorkflowExecutionSessionQueueItemStatus::Pending));
 }

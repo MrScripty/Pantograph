@@ -19,8 +19,8 @@ fn shutdown_window_runtime(window: &Window) {
     let gateway = app
         .try_state::<SharedGateway>()
         .map(|state| state.inner().clone());
-    let workflow_session_cleanup_worker = app
-        .try_state::<workflow::commands::SharedWorkflowSessionStaleCleanupWorker>()
+    let workflow_execution_session_cleanup_worker = app
+        .try_state::<workflow::commands::SharedWorkflowExecutionSessionStaleCleanupWorker>()
         .map(|state| state.inner().clone());
     let app_task_registry = app
         .try_state::<SharedAppTaskRegistry>()
@@ -48,8 +48,10 @@ fn shutdown_window_runtime(window: &Window) {
             recovery_manager.stop_auto_recovery_task();
         }
 
-        if let Some(workflow_session_cleanup_worker) = workflow_session_cleanup_worker {
-            workflow_session_cleanup_worker.shutdown().await;
+        if let Some(workflow_execution_session_cleanup_worker) =
+            workflow_execution_session_cleanup_worker
+        {
+            workflow_execution_session_cleanup_worker.shutdown().await;
         }
 
         if let Some(gateway) = gateway {

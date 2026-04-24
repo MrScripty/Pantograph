@@ -6,8 +6,8 @@ use pantograph_embedded_runtime::workflow_runtime::{
 };
 use pantograph_embedded_runtime::ManagedRuntimeManagerRuntimeView;
 use pantograph_workflow_service::{
-    graph::WorkflowGraphSessionStateView, WorkflowSchedulerSnapshotDiagnostics,
-    WorkflowServiceError, WorkflowSessionQueueItem, WorkflowSessionSummary,
+    graph::WorkflowGraphSessionStateView, WorkflowExecutionSessionQueueItem,
+    WorkflowExecutionSessionSummary, WorkflowSchedulerSnapshotDiagnostics, WorkflowServiceError,
     WorkflowTraceNodeStatus, WorkflowTraceRuntimeMetrics, WorkflowTraceStatus,
 };
 use serde::{Deserialize, Serialize};
@@ -305,8 +305,8 @@ pub struct DiagnosticsSchedulerSnapshot {
     #[serde(default)]
     pub captured_at_ms: Option<u64>,
     #[serde(default)]
-    pub session: Option<WorkflowSessionSummary>,
-    pub items: Vec<WorkflowSessionQueueItem>,
+    pub session: Option<WorkflowExecutionSessionSummary>,
+    pub items: Vec<WorkflowExecutionSessionQueueItem>,
     #[serde(default)]
     pub diagnostics: Option<WorkflowSchedulerSnapshotDiagnostics>,
     #[serde(default)]

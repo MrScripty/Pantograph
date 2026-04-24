@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use pantograph_workflow_service::graph::{WorkflowDerivedGraph, WorkflowSessionKind};
+use pantograph_workflow_service::graph::{WorkflowDerivedGraph, WorkflowExecutionSessionKind};
 
 use super::*;
 

@@ -1,7 +1,7 @@
 use super::*;
 
-fn empty_run_request() -> WorkflowSessionRunRequest {
-    WorkflowSessionRunRequest {
+fn empty_run_request() -> WorkflowExecutionSessionRunRequest {
+    WorkflowExecutionSessionRunRequest {
         session_id: "ignored".to_string(),
         inputs: Vec::new(),
         output_targets: None,
@@ -14,7 +14,7 @@ fn empty_run_request() -> WorkflowSessionRunRequest {
 
 #[test]
 fn admission_input_marks_loaded_runtime_reuse_as_incompatible_when_override_diverges() {
-    let mut store = WorkflowSessionStore::new(1, 1);
+    let mut store = WorkflowExecutionSessionStore::new(1, 1);
     let session_id = store
         .create_session(
             "wf-1".to_string(),
@@ -38,7 +38,7 @@ fn admission_input_marks_loaded_runtime_reuse_as_incompatible_when_override_dive
         .expect("enqueue run");
 
     let state = store.active.get(&session_id).expect("session state");
-    let input = WorkflowSessionStore::admission_input_from_state(state);
+    let input = WorkflowExecutionSessionStore::admission_input_from_state(state);
     let candidate = input
         .candidates
         .iter()
@@ -47,18 +47,18 @@ fn admission_input_marks_loaded_runtime_reuse_as_incompatible_when_override_dive
 
     assert_eq!(
         input.runtime_posture,
-        WorkflowSessionAdmissionRuntimePosture::Loaded
+        WorkflowExecutionSessionAdmissionRuntimePosture::Loaded
     );
     assert!(!candidate.affine_runtime_reuse);
     assert_eq!(
         candidate.warm_session_compatibility,
-        WorkflowSessionWarmCompatibility::Incompatible
+        WorkflowExecutionSessionWarmCompatibility::Incompatible
     );
 }
 
 #[test]
 fn admission_input_marks_loaded_runtime_reuse_as_compatible_without_override_divergence() {
-    let mut store = WorkflowSessionStore::new(1, 1);
+    let mut store = WorkflowExecutionSessionStore::new(1, 1);
     let session_id = store
         .create_session(
             "wf-1".to_string(),
@@ -77,7 +77,7 @@ fn admission_input_marks_loaded_runtime_reuse_as_compatible_without_override_div
         .expect("enqueue run");
 
     let state = store.active.get(&session_id).expect("session state");
-    let input = WorkflowSessionStore::admission_input_from_state(state);
+    let input = WorkflowExecutionSessionStore::admission_input_from_state(state);
     let candidate = input
         .candidates
         .iter()
@@ -87,6 +87,6 @@ fn admission_input_marks_loaded_runtime_reuse_as_compatible_without_override_div
     assert!(candidate.affine_runtime_reuse);
     assert_eq!(
         candidate.warm_session_compatibility,
-        WorkflowSessionWarmCompatibility::Compatible
+        WorkflowExecutionSessionWarmCompatibility::Compatible
     );
 }

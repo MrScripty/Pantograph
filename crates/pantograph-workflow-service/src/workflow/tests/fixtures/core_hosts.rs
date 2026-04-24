@@ -83,7 +83,7 @@ pub(in crate::workflow::tests) struct InspectionHost {
 
 #[async_trait]
 impl WorkflowHost for InspectionHost {
-    async fn workflow_session_inspection_state(
+    async fn workflow_execution_session_inspection_state(
         &self,
         session_id: &str,
         workflow_id: &str,

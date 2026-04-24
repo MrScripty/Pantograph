@@ -5,9 +5,9 @@ use std::time::Duration;
 use node_engine::WorkflowGraph;
 use pantograph_runtime_registry::{RuntimeReservationRequirements, RuntimeRetentionHint};
 use pantograph_workflow_service::{
-    WorkflowHost, WorkflowOutputTarget, WorkflowPortBinding, WorkflowRuntimeRequirements,
-    WorkflowServiceError, WorkflowSessionRetentionHint, WorkflowSessionRuntimeSelectionTarget,
-    WorkflowSessionRuntimeUnloadCandidate, WorkflowSessionState,
+    WorkflowExecutionSessionRetentionHint, WorkflowExecutionSessionRuntimeSelectionTarget,
+    WorkflowExecutionSessionRuntimeUnloadCandidate, WorkflowExecutionSessionState, WorkflowHost,
+    WorkflowOutputTarget, WorkflowPortBinding, WorkflowRuntimeRequirements, WorkflowServiceError,
 };
 
 use crate::{
@@ -71,11 +71,11 @@ impl EmbeddedWorkflowHost {
     }
 
     pub(crate) fn runtime_retention_hint(
-        retention_hint: WorkflowSessionRetentionHint,
+        retention_hint: WorkflowExecutionSessionRetentionHint,
     ) -> RuntimeRetentionHint {
         match retention_hint {
-            WorkflowSessionRetentionHint::Ephemeral => RuntimeRetentionHint::Ephemeral,
-            WorkflowSessionRetentionHint::KeepAlive => RuntimeRetentionHint::KeepAlive,
+            WorkflowExecutionSessionRetentionHint::Ephemeral => RuntimeRetentionHint::Ephemeral,
+            WorkflowExecutionSessionRetentionHint::KeepAlive => RuntimeRetentionHint::KeepAlive,
         }
     }
 
@@ -132,9 +132,9 @@ impl EmbeddedWorkflowHost {
         &self,
         session_id: &str,
         keep_alive: bool,
-        session_state: WorkflowSessionState,
+        session_state: WorkflowExecutionSessionState,
     ) -> Result<(), WorkflowServiceError> {
-        if session_state == WorkflowSessionState::IdleUnloaded {
+        if session_state == WorkflowExecutionSessionState::IdleUnloaded {
             return Ok(());
         }
 
@@ -159,9 +159,9 @@ impl EmbeddedWorkflowHost {
             runtime_registry.as_ref(),
             reservation_id,
             Self::runtime_retention_hint(if keep_alive {
-                WorkflowSessionRetentionHint::KeepAlive
+                WorkflowExecutionSessionRetentionHint::KeepAlive
             } else {
-                WorkflowSessionRetentionHint::Ephemeral
+                WorkflowExecutionSessionRetentionHint::Ephemeral
             }),
         )
         .map_err(runtime_registry_errors::workflow_service_error_from_runtime_registry)?;
@@ -190,7 +190,7 @@ impl EmbeddedWorkflowHost {
         session_id: &str,
         workflow_id: &str,
         usage_profile: Option<&str>,
-        retention_hint: WorkflowSessionRetentionHint,
+        retention_hint: WorkflowExecutionSessionRetentionHint,
     ) -> Result<(), WorkflowServiceError> {
         let Some(runtime_registry) = self.runtime_registry.as_ref() else {
             return Ok(());
@@ -462,9 +462,9 @@ impl EmbeddedWorkflowHost {
     }
 
     pub(crate) fn fallback_runtime_unload_candidate(
-        target: &WorkflowSessionRuntimeSelectionTarget,
-        candidates: &[WorkflowSessionRuntimeUnloadCandidate],
-    ) -> Option<WorkflowSessionRuntimeUnloadCandidate> {
+        target: &WorkflowExecutionSessionRuntimeSelectionTarget,
+        candidates: &[WorkflowExecutionSessionRuntimeUnloadCandidate],
+    ) -> Option<WorkflowExecutionSessionRuntimeUnloadCandidate> {
         pantograph_workflow_service::select_runtime_unload_candidate_by_affinity(target, candidates)
     }
 }

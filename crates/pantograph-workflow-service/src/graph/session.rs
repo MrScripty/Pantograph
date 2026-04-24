@@ -6,8 +6,8 @@ use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
 
 use crate::workflow::{
-    scheduler_snapshot_trace_execution_id, WorkflowSchedulerSnapshotResponse, WorkflowServiceError,
-    WorkflowSessionQueueItem, WorkflowSessionSummary,
+    scheduler_snapshot_trace_execution_id, WorkflowExecutionSessionQueueItem,
+    WorkflowExecutionSessionSummary, WorkflowSchedulerSnapshotResponse, WorkflowServiceError,
 };
 
 use super::canonicalization::canonicalize_workflow_graph;
@@ -17,7 +17,7 @@ use super::group_mutation::{
 use super::memory_impact::graph_memory_impact_from_graph_change;
 use super::registry::NodeRegistry;
 use super::session_contract::{
-    build_workflow_session_state_view, resolve_workflow_session_memory_impact,
+    build_workflow_execution_session_state_view, resolve_workflow_execution_session_memory_impact,
     WorkflowGraphEditSessionGraphResponse, WorkflowGraphSessionStateProjection,
     WorkflowGraphSessionStateView,
 };
@@ -29,13 +29,13 @@ use super::session_graph::{
 };
 use super::session_runtime::GraphEditSessionRuntime;
 use super::session_types::{
-    UndoRedoState, WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest,
-    WorkflowGraphCreateGroupRequest, WorkflowGraphEditSessionCloseResponse,
-    WorkflowGraphEditSessionCreateResponse, WorkflowGraphEditSessionGraphRequest,
-    WorkflowGraphRemoveEdgeRequest, WorkflowGraphRemoveNodeRequest,
-    WorkflowGraphUndoRedoStateResponse, WorkflowGraphUngroupRequest,
-    WorkflowGraphUpdateGroupPortsRequest, WorkflowGraphUpdateNodeDataRequest,
-    WorkflowGraphUpdateNodePositionRequest, WorkflowSessionKind,
+    UndoRedoState, WorkflowExecutionSessionKind, WorkflowGraphAddEdgeRequest,
+    WorkflowGraphAddNodeRequest, WorkflowGraphCreateGroupRequest,
+    WorkflowGraphEditSessionCloseResponse, WorkflowGraphEditSessionCreateResponse,
+    WorkflowGraphEditSessionGraphRequest, WorkflowGraphRemoveEdgeRequest,
+    WorkflowGraphRemoveNodeRequest, WorkflowGraphUndoRedoStateResponse,
+    WorkflowGraphUngroupRequest, WorkflowGraphUpdateGroupPortsRequest,
+    WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest,
 };
 use super::types::WorkflowGraph;
 #[cfg(test)]
@@ -115,7 +115,10 @@ impl GraphEditSession {
         let projection =
             resolved_phase6_memory_impact_projection(workflow_event.as_ref(), projection.as_ref());
         self.last_memory_impact = projection.as_ref().and_then(|projection| {
-            resolve_workflow_session_memory_impact(workflow_event.as_ref(), Some(projection))
+            resolve_workflow_execution_session_memory_impact(
+                workflow_event.as_ref(),
+                Some(projection),
+            )
         });
         build_graph_session_response_with_projection(
             session_id,
@@ -179,11 +182,11 @@ impl GraphEditSession {
         }
     }
 
-    fn session_summary(&self, session_id: &str) -> WorkflowSessionSummary {
+    fn session_summary(&self, session_id: &str) -> WorkflowExecutionSessionSummary {
         self.runtime.session_summary(session_id)
     }
 
-    fn queue_items(&self) -> Vec<WorkflowSessionQueueItem> {
+    fn queue_items(&self) -> Vec<WorkflowExecutionSessionQueueItem> {
         self.runtime.queue_items()
     }
 
@@ -204,9 +207,9 @@ impl GraphEditSession {
         let projection =
             resolved_phase6_memory_impact_projection(workflow_event, projection.as_ref());
         self.last_memory_impact = projection.as_ref().and_then(|projection| {
-            resolve_workflow_session_memory_impact(workflow_event, Some(projection))
+            resolve_workflow_execution_session_memory_impact(workflow_event, Some(projection))
         });
-        build_workflow_session_state_view(
+        build_workflow_execution_session_state_view(
             session_id,
             &self.graph.compute_fingerprint(),
             workflow_event,
@@ -244,7 +247,8 @@ fn resolved_phase6_memory_impact_projection(
     workflow_event: Option<&node_engine::WorkflowEvent>,
     projection: Option<&WorkflowGraphSessionStateProjection>,
 ) -> Option<WorkflowGraphSessionStateProjection> {
-    let resolved_memory_impact = resolve_workflow_session_memory_impact(workflow_event, projection);
+    let resolved_memory_impact =
+        resolve_workflow_execution_session_memory_impact(workflow_event, projection);
     match projection.cloned() {
         Some(mut projection) => {
             projection.memory_impact = resolved_memory_impact;
@@ -294,7 +298,7 @@ impl GraphSessionStore {
             .insert(session_id.clone(), session);
         WorkflowGraphEditSessionCreateResponse {
             session_id,
-            session_kind: WorkflowSessionKind::Edit,
+            session_kind: WorkflowExecutionSessionKind::Edit,
             graph_revision,
         }
     }

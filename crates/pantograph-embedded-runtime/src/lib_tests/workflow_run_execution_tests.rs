@@ -45,7 +45,7 @@ async fn test_runtime_run_and_session_execution() {
     assert_eq!(run_response.outputs[0].value, serde_json::json!("hello"));
 
     let created = runtime
-        .create_workflow_session(WorkflowSessionCreateRequest {
+        .create_workflow_execution_session(WorkflowExecutionSessionCreateRequest {
             workflow_id: "runtime-text".to_string(),
             usage_profile: None,
             keep_alive: false,
@@ -54,7 +54,7 @@ async fn test_runtime_run_and_session_execution() {
         .expect("create session");
 
     let session_response = runtime
-        .run_workflow_session(WorkflowSessionRunRequest {
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: created.session_id.clone(),
             inputs: vec![WorkflowPortBinding {
                 node_id: "text-input-1".to_string(),
@@ -79,7 +79,7 @@ async fn test_runtime_run_and_session_execution() {
     );
 
     runtime
-        .close_workflow_session(WorkflowSessionCloseRequest {
+        .close_workflow_execution_session(WorkflowExecutionSessionCloseRequest {
             session_id: created.session_id,
         })
         .await
@@ -176,7 +176,7 @@ async fn embedded_workflow_host_run_workflow_returns_cancelled_for_precancelled_
             }]),
             WorkflowRunOptions {
                 timeout_ms: None,
-                workflow_session_id: None,
+                workflow_execution_session_id: None,
             },
             run_handle,
         )
@@ -218,7 +218,7 @@ async fn workflow_run_session_returns_invalid_request_for_human_input_workflow()
     .with_runtime_registry(Arc::new(RuntimeRegistry::new()));
 
     let created = runtime
-        .create_workflow_session(WorkflowSessionCreateRequest {
+        .create_workflow_execution_session(WorkflowExecutionSessionCreateRequest {
             workflow_id: "interactive-human-input".to_string(),
             usage_profile: Some("interactive".to_string()),
             keep_alive: false,
@@ -227,7 +227,7 @@ async fn workflow_run_session_returns_invalid_request_for_human_input_workflow()
         .expect("create interactive session");
 
     let error = runtime
-        .run_workflow_session(WorkflowSessionRunRequest {
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: created.session_id,
             inputs: Vec::new(),
             output_targets: Some(vec![WorkflowOutputTarget {
@@ -240,7 +240,9 @@ async fn workflow_run_session_returns_invalid_request_for_human_input_workflow()
             run_id: Some("run-human-input-session".to_string()),
         })
         .await
-        .expect_err("interactive workflow session run should fail for non-streaming callers");
+        .expect_err(
+            "interactive workflow execution session run should fail for non-streaming callers",
+        );
 
     match error {
         WorkflowServiceError::InvalidRequest(message) => {

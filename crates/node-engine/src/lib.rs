@@ -79,8 +79,8 @@ pub use core_executor::{resolve_node_type, CoreTaskExecutor};
 pub use engine::{
     CacheStats, CachedOutput, DemandEngine, GraphMemoryImpactSummary, NodeMemoryCompatibility,
     NodeMemoryCompatibilitySnapshot, NodeMemoryIdentity, NodeMemorySnapshot, NodeMemoryStatus,
-    TaskExecutor, WorkflowExecutor, WorkflowSessionCheckpointSummary,
-    WorkflowSessionResidencyState,
+    TaskExecutor, WorkflowExecutionSessionCheckpointSummary,
+    WorkflowExecutionSessionResidencyState, WorkflowExecutor,
 };
 pub use error::{NodeEngineError, Result};
 pub use events::{

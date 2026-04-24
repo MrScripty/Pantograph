@@ -23,7 +23,7 @@ async fn keep_alive_session_retains_checkpoint_across_capacity_rebalance() {
     );
 
     let first = runtime
-        .create_workflow_session(WorkflowSessionCreateRequest {
+        .create_workflow_execution_session(WorkflowExecutionSessionCreateRequest {
             workflow_id: "runtime-text".to_string(),
             usage_profile: Some("interactive".to_string()),
             keep_alive: true,
@@ -32,7 +32,7 @@ async fn keep_alive_session_retains_checkpoint_across_capacity_rebalance() {
         .expect("create first keep-alive session");
 
     let first_output = runtime
-        .run_workflow_session(WorkflowSessionRunRequest {
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: first.session_id.clone(),
             inputs: vec![WorkflowPortBinding {
                 node_id: "text-input-1".to_string(),
@@ -60,7 +60,7 @@ async fn keep_alive_session_retains_checkpoint_across_capacity_rebalance() {
     {
         let executor = first_executor.lock().await;
         executor
-            .record_workflow_session_node_memory(synthetic_kv_node_memory_snapshot(
+            .record_workflow_execution_session_node_memory(synthetic_kv_node_memory_snapshot(
                 &first.session_id,
                 "kv-memory",
                 "cache-session-1",
@@ -72,7 +72,7 @@ async fn keep_alive_session_retains_checkpoint_across_capacity_rebalance() {
         &runtime.host(),
         &first.session_id,
         "runtime-text",
-        pantograph_workflow_service::WorkflowSessionUnloadReason::CapacityRebalance,
+        pantograph_workflow_service::WorkflowExecutionSessionUnloadReason::CapacityRebalance,
     )
     .await
     .expect("checkpoint keep-alive session for capacity rebalance");
@@ -80,13 +80,13 @@ async fn keep_alive_session_retains_checkpoint_across_capacity_rebalance() {
     let checkpointed_summary = {
         let executor = first_executor.lock().await;
         executor
-            .workflow_session_checkpoint_summary(&first.session_id)
+            .workflow_execution_session_checkpoint_summary(&first.session_id)
             .await
     };
     assert!(checkpointed_summary.checkpoint_available);
     assert_eq!(
         checkpointed_summary.residency,
-        node_engine::WorkflowSessionResidencyState::CheckpointedButUnloaded
+        node_engine::WorkflowExecutionSessionResidencyState::CheckpointedButUnloaded
     );
     assert!(
         checkpointed_summary.preserved_node_count >= 2,
@@ -95,7 +95,7 @@ async fn keep_alive_session_retains_checkpoint_across_capacity_rebalance() {
     let checkpointed_snapshots = {
         let executor = first_executor.lock().await;
         executor
-            .workflow_session_node_memory_snapshots(&first.session_id)
+            .workflow_execution_session_node_memory_snapshots(&first.session_id)
             .await
     };
     assert!(
@@ -111,7 +111,7 @@ async fn keep_alive_session_retains_checkpoint_across_capacity_rebalance() {
     );
 
     let resumed_output = runtime
-        .run_workflow_session(WorkflowSessionRunRequest {
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: first.session_id.clone(),
             inputs: Vec::new(),
             output_targets: Some(vec![WorkflowOutputTarget {
@@ -137,18 +137,18 @@ async fn keep_alive_session_retains_checkpoint_across_capacity_rebalance() {
     let resumed_summary = {
         let executor = resumed_executor.lock().await;
         executor
-            .workflow_session_checkpoint_summary(&first.session_id)
+            .workflow_execution_session_checkpoint_summary(&first.session_id)
             .await
     };
     assert!(!resumed_summary.checkpoint_available);
     assert_eq!(
         resumed_summary.residency,
-        node_engine::WorkflowSessionResidencyState::Warm
+        node_engine::WorkflowExecutionSessionResidencyState::Warm
     );
     let resumed_snapshots = {
         let executor = resumed_executor.lock().await;
         executor
-            .workflow_session_node_memory_snapshots(&first.session_id)
+            .workflow_execution_session_node_memory_snapshots(&first.session_id)
             .await
     };
     assert!(
@@ -164,7 +164,7 @@ async fn keep_alive_session_retains_checkpoint_across_capacity_rebalance() {
     );
 
     runtime
-        .close_workflow_session(WorkflowSessionCloseRequest {
+        .close_workflow_execution_session(WorkflowExecutionSessionCloseRequest {
             session_id: first.session_id.clone(),
         })
         .await
@@ -194,7 +194,7 @@ async fn scheduler_driven_rebalance_checkpoints_keep_alive_session() {
     );
 
     let keep_alive = runtime
-        .create_workflow_session(WorkflowSessionCreateRequest {
+        .create_workflow_execution_session(WorkflowExecutionSessionCreateRequest {
             workflow_id: "runtime-text".to_string(),
             usage_profile: Some("interactive".to_string()),
             keep_alive: true,
@@ -203,7 +203,7 @@ async fn scheduler_driven_rebalance_checkpoints_keep_alive_session() {
         .expect("create keep-alive session");
 
     let first_output = runtime
-        .run_workflow_session(WorkflowSessionRunRequest {
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: keep_alive.session_id.clone(),
             inputs: vec![WorkflowPortBinding {
                 node_id: "text-input-1".to_string(),
@@ -230,7 +230,7 @@ async fn scheduler_driven_rebalance_checkpoints_keep_alive_session() {
         .expect("keep-alive executor should exist");
 
     let one_shot = runtime
-        .create_workflow_session(WorkflowSessionCreateRequest {
+        .create_workflow_execution_session(WorkflowExecutionSessionCreateRequest {
             workflow_id: "runtime-text".to_string(),
             usage_profile: Some("batch".to_string()),
             keep_alive: false,
@@ -239,7 +239,7 @@ async fn scheduler_driven_rebalance_checkpoints_keep_alive_session() {
         .expect("create one-shot session");
 
     let second_output = runtime
-        .run_workflow_session(WorkflowSessionRunRequest {
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: one_shot.session_id.clone(),
             inputs: vec![WorkflowPortBinding {
                 node_id: "text-input-1".to_string(),
@@ -262,13 +262,13 @@ async fn scheduler_driven_rebalance_checkpoints_keep_alive_session() {
     let checkpointed_summary = {
         let executor = keep_alive_executor.lock().await;
         executor
-            .workflow_session_checkpoint_summary(&keep_alive.session_id)
+            .workflow_execution_session_checkpoint_summary(&keep_alive.session_id)
             .await
     };
     assert!(checkpointed_summary.checkpoint_available);
     assert_eq!(
         checkpointed_summary.residency,
-        node_engine::WorkflowSessionResidencyState::CheckpointedButUnloaded
+        node_engine::WorkflowExecutionSessionResidencyState::CheckpointedButUnloaded
     );
     assert!(
         checkpointed_summary.preserved_node_count >= 2,
@@ -276,7 +276,7 @@ async fn scheduler_driven_rebalance_checkpoints_keep_alive_session() {
     );
 
     let resumed_output = runtime
-        .run_workflow_session(WorkflowSessionRunRequest {
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: keep_alive.session_id.clone(),
             inputs: Vec::new(),
             output_targets: Some(vec![WorkflowOutputTarget {
@@ -302,23 +302,23 @@ async fn scheduler_driven_rebalance_checkpoints_keep_alive_session() {
     let resumed_summary = {
         let executor = resumed_executor.lock().await;
         executor
-            .workflow_session_checkpoint_summary(&keep_alive.session_id)
+            .workflow_execution_session_checkpoint_summary(&keep_alive.session_id)
             .await
     };
     assert!(!resumed_summary.checkpoint_available);
     assert_eq!(
         resumed_summary.residency,
-        node_engine::WorkflowSessionResidencyState::Warm
+        node_engine::WorkflowExecutionSessionResidencyState::Warm
     );
 
     runtime
-        .close_workflow_session(WorkflowSessionCloseRequest {
+        .close_workflow_execution_session(WorkflowExecutionSessionCloseRequest {
             session_id: keep_alive.session_id.clone(),
         })
         .await
         .expect("close resumed keep-alive session");
     runtime
-        .close_workflow_session(WorkflowSessionCloseRequest {
+        .close_workflow_execution_session(WorkflowExecutionSessionCloseRequest {
             session_id: one_shot.session_id.clone(),
         })
         .await
@@ -348,7 +348,7 @@ async fn repeated_capacity_unload_keeps_checkpoint_identity_and_keep_alive_disab
     );
 
     let session = runtime
-        .create_workflow_session(WorkflowSessionCreateRequest {
+        .create_workflow_execution_session(WorkflowExecutionSessionCreateRequest {
             workflow_id: "runtime-text".to_string(),
             usage_profile: Some("interactive".to_string()),
             keep_alive: true,
@@ -357,7 +357,7 @@ async fn repeated_capacity_unload_keeps_checkpoint_identity_and_keep_alive_disab
         .expect("create keep-alive session");
 
     runtime
-        .run_workflow_session(WorkflowSessionRunRequest {
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session.session_id.clone(),
             inputs: vec![WorkflowPortBinding {
                 node_id: "text-input-1".to_string(),
@@ -386,14 +386,14 @@ async fn repeated_capacity_unload_keeps_checkpoint_identity_and_keep_alive_disab
         &runtime.host(),
         &session.session_id,
         "runtime-text",
-        pantograph_workflow_service::WorkflowSessionUnloadReason::CapacityRebalance,
+        pantograph_workflow_service::WorkflowExecutionSessionUnloadReason::CapacityRebalance,
     )
     .await
     .expect("first capacity unload");
     let first_summary = {
         let executor = executor.lock().await;
         executor
-            .workflow_session_checkpoint_summary(&session.session_id)
+            .workflow_execution_session_checkpoint_summary(&session.session_id)
             .await
     };
 
@@ -403,14 +403,14 @@ async fn repeated_capacity_unload_keeps_checkpoint_identity_and_keep_alive_disab
         &runtime.host(),
         &session.session_id,
         "runtime-text",
-        pantograph_workflow_service::WorkflowSessionUnloadReason::CapacityRebalance,
+        pantograph_workflow_service::WorkflowExecutionSessionUnloadReason::CapacityRebalance,
     )
     .await
     .expect("second capacity unload should be idempotent");
     let second_summary = {
         let executor = executor.lock().await;
         executor
-            .workflow_session_checkpoint_summary(&session.session_id)
+            .workflow_execution_session_checkpoint_summary(&session.session_id)
             .await
     };
 
@@ -421,11 +421,11 @@ async fn repeated_capacity_unload_keeps_checkpoint_identity_and_keep_alive_disab
     );
     assert_eq!(
         second_summary.residency,
-        node_engine::WorkflowSessionResidencyState::CheckpointedButUnloaded
+        node_engine::WorkflowExecutionSessionResidencyState::CheckpointedButUnloaded
     );
 
     runtime
-        .workflow_set_session_keep_alive(WorkflowSessionKeepAliveRequest {
+        .workflow_set_execution_session_keep_alive(WorkflowExecutionSessionKeepAliveRequest {
             session_id: session.session_id.clone(),
             keep_alive: false,
         })

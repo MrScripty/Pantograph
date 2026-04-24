@@ -1,10 +1,10 @@
-use crate::scheduler::WorkflowSessionPreflightCache;
+use crate::scheduler::WorkflowExecutionSessionPreflightCache;
 use crate::technical_fit::WorkflowTechnicalFitOverride;
 
 use super::{
+    WorkflowExecutionSessionRetentionHint, WorkflowExecutionSessionRuntimeSelectionTarget,
+    WorkflowExecutionSessionRuntimeUnloadCandidate, WorkflowExecutionSessionUnloadReason,
     WorkflowHost, WorkflowRuntimeCapability, WorkflowService, WorkflowServiceError,
-    WorkflowSessionRetentionHint, WorkflowSessionRuntimeSelectionTarget,
-    WorkflowSessionRuntimeUnloadCandidate, WorkflowSessionUnloadReason,
 };
 
 fn compute_runtime_capability_fingerprint(
@@ -42,15 +42,15 @@ impl WorkflowService {
         enum RuntimeDecision {
             Ready,
             SelectUnloadCandidate {
-                target: WorkflowSessionRuntimeSelectionTarget,
-                candidates: Vec<WorkflowSessionRuntimeUnloadCandidate>,
+                target: WorkflowExecutionSessionRuntimeSelectionTarget,
+                candidates: Vec<WorkflowExecutionSessionRuntimeUnloadCandidate>,
                 loaded_session_count: usize,
                 max_loaded_sessions: usize,
             },
             LoadTarget {
                 workflow_id: String,
                 usage_profile: Option<String>,
-                retention_hint: WorkflowSessionRetentionHint,
+                retention_hint: WorkflowExecutionSessionRetentionHint,
             },
         }
 
@@ -70,7 +70,7 @@ impl WorkflowService {
                 } else if store.loaded_session_count() >= store.max_loaded_sessions {
                     let loaded_session_count = store.loaded_session_count();
                     RuntimeDecision::SelectUnloadCandidate {
-                        target: WorkflowSessionRuntimeSelectionTarget {
+                        target: WorkflowExecutionSessionRuntimeSelectionTarget {
                             session_id: session_id.to_string(),
                             workflow_id: target.workflow_id.clone(),
                             usage_profile: target.usage_profile.clone(),
@@ -86,9 +86,9 @@ impl WorkflowService {
                         workflow_id: target.workflow_id.clone(),
                         usage_profile: target.usage_profile.clone(),
                         retention_hint: if target.keep_alive {
-                            WorkflowSessionRetentionHint::KeepAlive
+                            WorkflowExecutionSessionRetentionHint::KeepAlive
                         } else {
-                            WorkflowSessionRetentionHint::Ephemeral
+                            WorkflowExecutionSessionRetentionHint::Ephemeral
                         },
                     }
                 }
@@ -115,7 +115,7 @@ impl WorkflowService {
                     host.unload_session_runtime(
                         &candidate.session_id,
                         &candidate.workflow_id,
-                        WorkflowSessionUnloadReason::CapacityRebalance,
+                        WorkflowExecutionSessionUnloadReason::CapacityRebalance,
                     )
                     .await?;
                     if let Ok(mut store) = self.session_store.lock() {
@@ -150,7 +150,7 @@ impl WorkflowService {
         session_id: &str,
         workflow_id: &str,
         override_selection: Option<WorkflowTechnicalFitOverride>,
-    ) -> Result<WorkflowSessionPreflightCache, WorkflowServiceError> {
+    ) -> Result<WorkflowExecutionSessionPreflightCache, WorkflowServiceError> {
         let graph_fingerprint = host.workflow_graph_fingerprint(workflow_id).await?;
         let runtime_capabilities = host.runtime_capabilities().await?;
         let runtime_capability_fingerprint =
@@ -172,14 +172,14 @@ impl WorkflowService {
 
         let capabilities = host.workflow_capabilities(workflow_id).await?;
         let runtime_preflight = self
-            .workflow_session_runtime_preflight_assessment(
+            .workflow_execution_session_runtime_preflight_assessment(
                 host,
                 session_id,
                 &capabilities,
                 override_selection.clone(),
             )
             .await?;
-        let cache = WorkflowSessionPreflightCache {
+        let cache = WorkflowExecutionSessionPreflightCache {
             graph_fingerprint,
             runtime_capability_fingerprint,
             override_selection,

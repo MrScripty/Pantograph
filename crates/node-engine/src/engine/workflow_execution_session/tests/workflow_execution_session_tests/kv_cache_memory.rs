@@ -47,7 +47,7 @@ async fn sync_bound_session_node_memory_from_cache_projects_kv_cache_reference()
     });
 
     let executor = WorkflowExecutor::new("exec-1", graph, Arc::new(NullEventSink));
-    bind_workflow_session(&executor, "session-1").await;
+    bind_workflow_execution_session(&executor, "session-1").await;
 
     executor
         .demand(&"llm".to_string(), &KvCacheProducingTaskExecutor)
@@ -55,7 +55,7 @@ async fn sync_bound_session_node_memory_from_cache_projects_kv_cache_reference()
         .expect("run kv-producing demand");
     sync_bound_session_node_memory_from_cache(&executor).await;
 
-    let snapshots = workflow_session_node_memory_snapshots(&executor, "session-1").await;
+    let snapshots = workflow_execution_session_node_memory_snapshots(&executor, "session-1").await;
     assert_eq!(snapshots.len(), 1);
     assert_eq!(
         snapshots[0].indirect_state_reference,
@@ -237,7 +237,7 @@ impl TaskExecutor for KvCacheReusingTaskExecutor {
 async fn rerun_projects_preserved_kv_cache_reference_back_into_inputs() {
     let executor = WorkflowExecutor::new("exec-1", single_node_graph(), Arc::new(NullEventSink));
     let task_executor = KvCacheReusingTaskExecutor::new();
-    bind_workflow_session(&executor, "session-1").await;
+    bind_workflow_execution_session(&executor, "session-1").await;
 
     let first_outputs = executor
         .demand(&"memory".to_string(), &task_executor)
@@ -278,14 +278,14 @@ async fn rerun_projects_preserved_kv_cache_reference_back_into_inputs() {
 async fn invalidated_node_memory_does_not_project_preserved_kv_cache_back_into_inputs() {
     let executor = WorkflowExecutor::new("exec-1", single_node_graph(), Arc::new(NullEventSink));
     let task_executor = KvCacheReusingTaskExecutor::new();
-    bind_workflow_session(&executor, "session-1").await;
+    bind_workflow_execution_session(&executor, "session-1").await;
 
     executor
         .demand(&"memory".to_string(), &task_executor)
         .await
         .expect("first run should succeed");
 
-    reconcile_workflow_session_node_memory(
+    reconcile_workflow_execution_session_node_memory(
         &executor,
         "session-1",
         &GraphMemoryImpactSummary {
@@ -315,7 +315,7 @@ async fn suffix_only_rerun_reuses_graph_wired_kv_without_rerunning_prefix() {
     let executor =
         WorkflowExecutor::new("exec-1", kv_suffix_reuse_graph(), Arc::new(NullEventSink));
     let task_executor = KvSuffixReuseTaskExecutor::default();
-    bind_workflow_session(&executor, "session-1").await;
+    bind_workflow_execution_session(&executor, "session-1").await;
 
     let first_outputs = executor
         .demand(&"suffix-llm".to_string(), &task_executor)

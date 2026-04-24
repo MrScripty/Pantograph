@@ -29,8 +29,8 @@ pub use session::GraphSessionStore;
 pub use session_contract::{WorkflowGraphEditSessionGraphResponse, WorkflowGraphSessionStateView};
 pub use session_graph::convert_graph_to_node_engine;
 pub use session_types::{
-    UndoRedoState, WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest,
-    WorkflowGraphConnectRequest, WorkflowGraphCreateGroupRequest,
+    UndoRedoState, WorkflowExecutionSessionKind, WorkflowGraphAddEdgeRequest,
+    WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest, WorkflowGraphCreateGroupRequest,
     WorkflowGraphEditSessionCloseRequest, WorkflowGraphEditSessionCloseResponse,
     WorkflowGraphEditSessionCreateRequest, WorkflowGraphEditSessionCreateResponse,
     WorkflowGraphEditSessionGraphRequest, WorkflowGraphGetConnectionCandidatesRequest,
@@ -39,7 +39,7 @@ pub use session_types::{
     WorkflowGraphRemoveNodeRequest, WorkflowGraphUndoRedoStateRequest,
     WorkflowGraphUndoRedoStateResponse, WorkflowGraphUngroupRequest,
     WorkflowGraphUpdateGroupPortsRequest, WorkflowGraphUpdateNodeDataRequest,
-    WorkflowGraphUpdateNodePositionRequest, WorkflowSessionKind,
+    WorkflowGraphUpdateNodePositionRequest,
 };
 pub use types::{
     ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse, ConnectionRejection,

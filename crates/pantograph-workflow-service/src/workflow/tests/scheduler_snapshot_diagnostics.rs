@@ -5,16 +5,16 @@ async fn workflow_get_scheduler_snapshot_exposes_next_admission_diagnostics() {
     let host = MockWorkflowHost::new(8, 1024);
     let service = WorkflowService::with_capacity_limits(2, 1);
     let created = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-1".to_string(),
                 usage_profile: Some("interactive".to_string()),
                 keep_alive: false,
             },
         )
         .await
-        .expect("create workflow session");
+        .expect("create workflow execution session");
 
     let queue_id = {
         let mut store = service
@@ -24,7 +24,7 @@ async fn workflow_get_scheduler_snapshot_exposes_next_admission_diagnostics() {
         store
             .enqueue_run(
                 &created.session_id,
-                &WorkflowSessionRunRequest {
+                &WorkflowExecutionSessionRunRequest {
                     session_id: created.session_id.clone(),
                     inputs: Vec::new(),
                     output_targets: None,
@@ -94,9 +94,9 @@ async fn workflow_get_scheduler_snapshot_merges_runtime_registry_diagnostics_fro
         .expect("scheduler diagnostics provider should be installed");
 
     let loaded = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-loaded".to_string(),
                 usage_profile: Some("interactive".to_string()),
                 keep_alive: true,
@@ -105,9 +105,9 @@ async fn workflow_get_scheduler_snapshot_merges_runtime_registry_diagnostics_fro
         .await
         .expect("create loaded session");
     let created = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-queued".to_string(),
                 usage_profile: Some("interactive".to_string()),
                 keep_alive: false,
@@ -124,7 +124,7 @@ async fn workflow_get_scheduler_snapshot_merges_runtime_registry_diagnostics_fro
         store
             .enqueue_run(
                 &created.session_id,
-                &WorkflowSessionRunRequest {
+                &WorkflowExecutionSessionRunRequest {
                     session_id: created.session_id.clone(),
                     inputs: Vec::new(),
                     output_targets: None,
@@ -183,9 +183,9 @@ async fn workflow_get_scheduler_snapshot_marks_rebalance_required_when_idle_runt
     let host = MockWorkflowHost::new(8, 1024);
     let service = WorkflowService::with_capacity_limits(3, 1);
     let _loaded = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-loaded".to_string(),
                 usage_profile: Some("interactive".to_string()),
                 keep_alive: true,
@@ -194,9 +194,9 @@ async fn workflow_get_scheduler_snapshot_marks_rebalance_required_when_idle_runt
         .await
         .expect("create loaded session");
     let created = service
-        .create_workflow_session(
+        .create_workflow_execution_session(
             &host,
-            WorkflowSessionCreateRequest {
+            WorkflowExecutionSessionCreateRequest {
                 workflow_id: "wf-queued".to_string(),
                 usage_profile: Some("interactive".to_string()),
                 keep_alive: false,
@@ -213,7 +213,7 @@ async fn workflow_get_scheduler_snapshot_marks_rebalance_required_when_idle_runt
         store
             .enqueue_run(
                 &created.session_id,
-                &WorkflowSessionRunRequest {
+                &WorkflowExecutionSessionRunRequest {
                     session_id: created.session_id.clone(),
                     inputs: Vec::new(),
                     output_targets: None,
@@ -243,7 +243,7 @@ async fn workflow_get_scheduler_snapshot_marks_rebalance_required_when_idle_runt
     );
     assert_eq!(
         snapshot.session.state,
-        WorkflowSessionState::IdleUnloaded,
+        WorkflowExecutionSessionState::IdleUnloaded,
         "the queued session should still be unloaded before admission"
     );
 }

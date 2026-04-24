@@ -2,14 +2,15 @@ use super::*;
 
 pub(in crate::workflow::tests) struct SelectingRuntimeHost {
     pub(in crate::workflow::tests) selected_session_id: String,
-    pub(in crate::workflow::tests) unloads: Arc<Mutex<Vec<(String, WorkflowSessionUnloadReason)>>>,
+    pub(in crate::workflow::tests) unloads:
+        Arc<Mutex<Vec<(String, WorkflowExecutionSessionUnloadReason)>>>,
     pub(in crate::workflow::tests) capabilities: WorkflowHostCapabilities,
 }
 
 impl SelectingRuntimeHost {
     pub(in crate::workflow::tests) fn new(
         selected_session_id: String,
-        unloads: Arc<Mutex<Vec<(String, WorkflowSessionUnloadReason)>>>,
+        unloads: Arc<Mutex<Vec<(String, WorkflowExecutionSessionUnloadReason)>>>,
     ) -> Self {
         Self {
             selected_session_id,
@@ -105,9 +106,9 @@ impl WorkflowHost for SelectingRuntimeHost {
 
     async fn select_runtime_unload_candidate(
         &self,
-        _target: &WorkflowSessionRuntimeSelectionTarget,
-        candidates: &[WorkflowSessionRuntimeUnloadCandidate],
-    ) -> Result<Option<WorkflowSessionRuntimeUnloadCandidate>, WorkflowServiceError> {
+        _target: &WorkflowExecutionSessionRuntimeSelectionTarget,
+        candidates: &[WorkflowExecutionSessionRuntimeUnloadCandidate],
+    ) -> Result<Option<WorkflowExecutionSessionRuntimeUnloadCandidate>, WorkflowServiceError> {
         Ok(candidates
             .iter()
             .find(|candidate| candidate.session_id == self.selected_session_id)
@@ -118,7 +119,7 @@ impl WorkflowHost for SelectingRuntimeHost {
         &self,
         session_id: &str,
         _workflow_id: &str,
-        reason: WorkflowSessionUnloadReason,
+        reason: WorkflowExecutionSessionUnloadReason,
     ) -> Result<(), WorkflowServiceError> {
         self.unloads
             .lock()
@@ -132,7 +133,7 @@ impl WorkflowHost for SelectingRuntimeHost {
         _session_id: &str,
         _workflow_id: &str,
         _usage_profile: Option<&str>,
-        _retention_hint: WorkflowSessionRetentionHint,
+        _retention_hint: WorkflowExecutionSessionRetentionHint,
     ) -> Result<(), WorkflowServiceError> {
         Ok(())
     }
@@ -194,7 +195,7 @@ impl WorkflowHost for AffinityRuntimeHost {
         &self,
         session_id: &str,
         _workflow_id: &str,
-        _reason: WorkflowSessionUnloadReason,
+        _reason: WorkflowExecutionSessionUnloadReason,
     ) -> Result<(), WorkflowServiceError> {
         self.unloads
             .lock()
@@ -208,7 +209,7 @@ impl WorkflowHost for AffinityRuntimeHost {
         _session_id: &str,
         _workflow_id: &str,
         _usage_profile: Option<&str>,
-        _retention_hint: WorkflowSessionRetentionHint,
+        _retention_hint: WorkflowExecutionSessionRetentionHint,
     ) -> Result<(), WorkflowServiceError> {
         Ok(())
     }

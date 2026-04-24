@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use crate::graph::GraphSessionStore;
-use crate::scheduler::WorkflowSessionStore;
+use crate::scheduler::WorkflowExecutionSessionStore;
 
 use super::{
     SqliteAttributionStore, WorkflowSchedulerDiagnosticsProvider, WorkflowService,
@@ -27,7 +27,7 @@ impl WorkflowService {
 
     pub fn with_capacity_limits(max_sessions: usize, max_loaded_sessions: usize) -> Self {
         Self {
-            session_store: Arc::new(Mutex::new(WorkflowSessionStore::new(
+            session_store: Arc::new(Mutex::new(WorkflowExecutionSessionStore::new(
                 max_sessions,
                 max_loaded_sessions,
             ))),
@@ -75,7 +75,8 @@ impl WorkflowService {
 
     pub(crate) fn session_store_guard(
         &self,
-    ) -> Result<std::sync::MutexGuard<'_, WorkflowSessionStore>, WorkflowServiceError> {
+    ) -> Result<std::sync::MutexGuard<'_, WorkflowExecutionSessionStore>, WorkflowServiceError>
+    {
         self.session_store
             .lock()
             .map_err(|_| WorkflowServiceError::Internal("session store lock poisoned".to_string()))

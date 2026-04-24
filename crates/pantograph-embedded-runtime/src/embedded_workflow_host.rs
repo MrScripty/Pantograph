@@ -8,17 +8,16 @@ use pantograph_runtime_registry::RuntimeRegistryError;
 use pantograph_workflow_service::capabilities;
 use pantograph_workflow_service::graph::WorkflowGraphSessionStateView;
 use pantograph_workflow_service::{
-    WorkflowHost, WorkflowHostModelDescriptor, WorkflowOutputTarget, WorkflowPortBinding,
-    WorkflowRunOptions, WorkflowRuntimeCapability, WorkflowServiceError,
-    WorkflowSessionRetentionHint, WorkflowSessionRuntimeSelectionTarget,
-    WorkflowSessionRuntimeUnloadCandidate, WorkflowTechnicalFitDecision,
-    WorkflowTechnicalFitRequest,
+    WorkflowExecutionSessionRetentionHint, WorkflowExecutionSessionRuntimeSelectionTarget,
+    WorkflowExecutionSessionRuntimeUnloadCandidate, WorkflowHost, WorkflowHostModelDescriptor,
+    WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunOptions, WorkflowRuntimeCapability,
+    WorkflowServiceError, WorkflowTechnicalFitDecision, WorkflowTechnicalFitRequest,
 };
 use uuid::Uuid;
 
 use crate::{
     apply_runtime_extensions_for_execution, python_runtime, runtime_capabilities, runtime_registry,
-    runtime_registry_errors, task_executor, technical_fit, workflow_session_execution,
+    runtime_registry_errors, task_executor, technical_fit, workflow_execution_session_execution,
     EmbeddedWorkflowHost, HostRuntimeModeSnapshot, RuntimeExtensionsSnapshot,
 };
 
@@ -110,7 +109,7 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         session_id: &str,
         workflow_id: &str,
         usage_profile: Option<&str>,
-        retention_hint: WorkflowSessionRetentionHint,
+        retention_hint: WorkflowExecutionSessionRetentionHint,
     ) -> Result<bool, WorkflowServiceError> {
         let Some(runtime_registry) = self.runtime_registry.as_ref() else {
             return Ok(true);
@@ -149,7 +148,7 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         session_id: &str,
         workflow_id: &str,
         usage_profile: Option<&str>,
-        retention_hint: WorkflowSessionRetentionHint,
+        retention_hint: WorkflowExecutionSessionRetentionHint,
     ) -> Result<(), WorkflowServiceError> {
         self.ensure_workflow_runtime_ready_for_session_load(workflow_id)
             .await?;
@@ -161,10 +160,10 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         &self,
         session_id: &str,
         _workflow_id: &str,
-        reason: pantograph_workflow_service::WorkflowSessionUnloadReason,
+        reason: pantograph_workflow_service::WorkflowExecutionSessionUnloadReason,
     ) -> Result<(), WorkflowServiceError> {
         self.release_loaded_session_runtime(session_id).await?;
-        workflow_session_execution::apply_session_execution_unload_transition(
+        workflow_execution_session_execution::apply_session_execution_unload_transition(
             &self.session_executions,
             session_id,
             reason,
@@ -174,9 +173,9 @@ impl WorkflowHost for EmbeddedWorkflowHost {
 
     async fn select_runtime_unload_candidate(
         &self,
-        target: &WorkflowSessionRuntimeSelectionTarget,
-        candidates: &[WorkflowSessionRuntimeUnloadCandidate],
-    ) -> Result<Option<WorkflowSessionRuntimeUnloadCandidate>, WorkflowServiceError> {
+        target: &WorkflowExecutionSessionRuntimeSelectionTarget,
+        candidates: &[WorkflowExecutionSessionRuntimeUnloadCandidate],
+    ) -> Result<Option<WorkflowExecutionSessionRuntimeUnloadCandidate>, WorkflowServiceError> {
         let Some(runtime_registry) = self.runtime_registry.as_ref() else {
             return Ok(Self::fallback_runtime_unload_candidate(target, candidates));
         };
@@ -205,7 +204,7 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         technical_fit::workflow_technical_fit_decision(self, request).await
     }
 
-    async fn workflow_session_inspection_state(
+    async fn workflow_execution_session_inspection_state(
         &self,
         session_id: &str,
         workflow_id: &str,
@@ -218,13 +217,13 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         }
 
         let executor = entry.executor.lock().await;
-        let residency = executor.workflow_session_residency().await;
+        let residency = executor.workflow_execution_session_residency().await;
         let node_memory = executor
-            .workflow_session_node_memory_snapshots(session_id)
+            .workflow_execution_session_node_memory_snapshots(session_id)
             .await;
         let checkpoint = Some(
             executor
-                .workflow_session_checkpoint_summary(session_id)
+                .workflow_execution_session_checkpoint_summary(session_id)
                 .await,
         );
         Ok(Some(WorkflowGraphSessionStateView::new(
@@ -243,11 +242,13 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         run_options: WorkflowRunOptions,
         run_handle: pantograph_workflow_service::WorkflowRunHandle,
     ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
-        if let Some(workflow_session_id) = run_options.workflow_session_id.as_deref() {
-            return workflow_session_execution::run_session_workflow(
+        if let Some(workflow_execution_session_id) =
+            run_options.workflow_execution_session_id.as_deref()
+        {
+            return workflow_execution_session_execution::run_session_workflow(
                 self,
                 workflow_id,
-                workflow_session_id,
+                workflow_execution_session_id,
                 inputs,
                 output_targets,
                 run_handle,

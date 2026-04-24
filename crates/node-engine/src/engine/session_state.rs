@@ -3,10 +3,10 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
-/// Backend-owned workflow-session runtime residency states.
+/// Backend-owned workflow execution session runtime residency states.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum WorkflowSessionResidencyState {
+pub enum WorkflowExecutionSessionResidencyState {
     Active,
     Warm,
     CheckpointedButUnloaded,
@@ -33,7 +33,7 @@ pub enum NodeMemoryStatus {
     Invalidated,
 }
 
-/// Stable node-memory identity for one node in one workflow session.
+/// Stable node-memory identity for one node in one workflow execution session.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct NodeMemoryIdentity {
@@ -144,24 +144,24 @@ impl GraphMemoryImpactSummary {
     }
 }
 
-/// Bounded session-checkpoint summary for workflow-session continuity.
+/// Bounded session-checkpoint summary for workflow execution session continuity.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub struct WorkflowSessionCheckpointSummary {
+pub struct WorkflowExecutionSessionCheckpointSummary {
     pub session_id: String,
     pub graph_revision: String,
-    pub residency: WorkflowSessionResidencyState,
+    pub residency: WorkflowExecutionSessionResidencyState,
     pub checkpoint_available: bool,
     pub preserved_node_count: usize,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub checkpointed_at_ms: Option<u64>,
 }
 
-impl WorkflowSessionCheckpointSummary {
+impl WorkflowExecutionSessionCheckpointSummary {
     pub fn unavailable(
         session_id: impl Into<String>,
         graph_revision: impl Into<String>,
-        residency: WorkflowSessionResidencyState,
+        residency: WorkflowExecutionSessionResidencyState,
     ) -> Self {
         Self {
             session_id: session_id.into(),
@@ -177,8 +177,8 @@ impl WorkflowSessionCheckpointSummary {
 /// Private executor-owned Phase 6 session-state scaffold.
 #[derive(Debug)]
 pub(crate) struct WorkflowExecutorSessionState {
-    residency: RwLock<WorkflowSessionResidencyState>,
-    bound_workflow_session_id: RwLock<Option<String>>,
+    residency: RwLock<WorkflowExecutionSessionResidencyState>,
+    bound_workflow_execution_session_id: RwLock<Option<String>>,
     node_memories: RwLock<HashMap<String, HashMap<String, NodeMemorySnapshot>>>,
     checkpoints: RwLock<HashMap<String, u64>>,
 }
@@ -186,31 +186,38 @@ pub(crate) struct WorkflowExecutorSessionState {
 impl WorkflowExecutorSessionState {
     pub(crate) fn new() -> Self {
         Self {
-            residency: RwLock::new(WorkflowSessionResidencyState::Active),
-            bound_workflow_session_id: RwLock::new(None),
+            residency: RwLock::new(WorkflowExecutionSessionResidencyState::Active),
+            bound_workflow_execution_session_id: RwLock::new(None),
             node_memories: RwLock::new(HashMap::new()),
             checkpoints: RwLock::new(HashMap::new()),
         }
     }
 
-    pub(crate) async fn residency(&self) -> WorkflowSessionResidencyState {
+    pub(crate) async fn residency(&self) -> WorkflowExecutionSessionResidencyState {
         self.residency.read().await.clone()
     }
 
-    pub(crate) async fn set_residency(&self, state: WorkflowSessionResidencyState) {
+    pub(crate) async fn set_residency(&self, state: WorkflowExecutionSessionResidencyState) {
         *self.residency.write().await = state;
     }
 
-    pub(crate) async fn bind_workflow_session(&self, workflow_session_id: String) {
-        *self.bound_workflow_session_id.write().await = Some(workflow_session_id);
+    pub(crate) async fn bind_workflow_execution_session(
+        &self,
+        workflow_execution_session_id: String,
+    ) {
+        *self.bound_workflow_execution_session_id.write().await =
+            Some(workflow_execution_session_id);
     }
 
-    pub(crate) async fn bound_workflow_session_id(&self) -> Option<String> {
-        self.bound_workflow_session_id.read().await.clone()
+    pub(crate) async fn bound_workflow_execution_session_id(&self) -> Option<String> {
+        self.bound_workflow_execution_session_id
+            .read()
+            .await
+            .clone()
     }
 
-    pub(crate) async fn clear_bound_workflow_session(&self) {
-        *self.bound_workflow_session_id.write().await = None;
+    pub(crate) async fn clear_bound_workflow_execution_session(&self) {
+        *self.bound_workflow_execution_session_id.write().await = None;
     }
 
     pub(crate) async fn record_node_memory(&self, snapshot: NodeMemorySnapshot) {
@@ -225,31 +232,37 @@ impl WorkflowExecutorSessionState {
 
     pub(crate) async fn node_memory_snapshots(
         &self,
-        workflow_session_id: &str,
+        workflow_execution_session_id: &str,
     ) -> Vec<NodeMemorySnapshot> {
         let mut snapshots = self
             .node_memories
             .read()
             .await
-            .get(workflow_session_id)
+            .get(workflow_execution_session_id)
             .map(|records| records.values().cloned().collect::<Vec<_>>())
             .unwrap_or_default();
         snapshots.sort_by(|left, right| left.identity.node_id.cmp(&right.identity.node_id));
         snapshots
     }
 
-    pub(crate) async fn clear_node_memory(&self, workflow_session_id: &str) {
-        self.node_memories.write().await.remove(workflow_session_id);
-        self.checkpoints.write().await.remove(workflow_session_id);
+    pub(crate) async fn clear_node_memory(&self, workflow_execution_session_id: &str) {
+        self.node_memories
+            .write()
+            .await
+            .remove(workflow_execution_session_id);
+        self.checkpoints
+            .write()
+            .await
+            .remove(workflow_execution_session_id);
     }
 
     pub(crate) async fn reconcile_node_memory(
         &self,
-        workflow_session_id: &str,
+        workflow_execution_session_id: &str,
         memory_impact: &GraphMemoryImpactSummary,
     ) {
         let mut node_memories = self.node_memories.write().await;
-        let Some(session_memories) = node_memories.get_mut(workflow_session_id) else {
+        let Some(session_memories) = node_memories.get_mut(workflow_execution_session_id) else {
             return;
         };
 
@@ -276,35 +289,44 @@ impl WorkflowExecutorSessionState {
 
         let remove_checkpoint = session_memories.is_empty();
         if remove_checkpoint {
-            node_memories.remove(workflow_session_id);
+            node_memories.remove(workflow_execution_session_id);
         }
         drop(node_memories);
 
         if remove_checkpoint {
-            self.checkpoints.write().await.remove(workflow_session_id);
+            self.checkpoints
+                .write()
+                .await
+                .remove(workflow_execution_session_id);
         }
     }
 
-    pub(crate) async fn mark_checkpoint_available(&self, workflow_session_id: &str) {
+    pub(crate) async fn mark_checkpoint_available(&self, workflow_execution_session_id: &str) {
         self.checkpoints
             .write()
             .await
-            .entry(workflow_session_id.to_string())
+            .entry(workflow_execution_session_id.to_string())
             .or_insert_with(crate::events::unix_timestamp_ms);
     }
 
-    pub(crate) async fn clear_checkpoint(&self, workflow_session_id: &str) {
-        self.checkpoints.write().await.remove(workflow_session_id);
+    pub(crate) async fn clear_checkpoint(&self, workflow_execution_session_id: &str) {
+        self.checkpoints
+            .write()
+            .await
+            .remove(workflow_execution_session_id);
     }
 
     pub(crate) async fn checkpoint_summary(
         &self,
-        workflow_session_id: &str,
+        workflow_execution_session_id: &str,
         graph_revision: &str,
-    ) -> WorkflowSessionCheckpointSummary {
-        let preserved_node_count = self.node_memory_snapshots(workflow_session_id).await.len();
-        let mut summary = WorkflowSessionCheckpointSummary::unavailable(
-            workflow_session_id,
+    ) -> WorkflowExecutionSessionCheckpointSummary {
+        let preserved_node_count = self
+            .node_memory_snapshots(workflow_execution_session_id)
+            .await
+            .len();
+        let mut summary = WorkflowExecutionSessionCheckpointSummary::unavailable(
+            workflow_execution_session_id,
             graph_revision,
             self.residency().await,
         );
@@ -313,7 +335,7 @@ impl WorkflowExecutorSessionState {
             .checkpoints
             .read()
             .await
-            .get(workflow_session_id)
+            .get(workflow_execution_session_id)
             .copied()
         {
             summary.checkpoint_available = true;
@@ -328,8 +350,8 @@ mod tests {
     use super::{
         GraphMemoryImpactSummary, NodeMemoryCompatibility, NodeMemoryCompatibilitySnapshot,
         NodeMemoryIdentity, NodeMemoryIndirectStateReference, NodeMemoryRestoreStrategy,
-        NodeMemorySnapshot, NodeMemoryStatus, WorkflowExecutorSessionState,
-        WorkflowSessionCheckpointSummary, WorkflowSessionResidencyState,
+        NodeMemorySnapshot, NodeMemoryStatus, WorkflowExecutionSessionCheckpointSummary,
+        WorkflowExecutionSessionResidencyState, WorkflowExecutorSessionState,
     };
 
     #[test]
@@ -384,15 +406,18 @@ mod tests {
 
     #[test]
     fn unavailable_checkpoint_summary_has_no_timestamp() {
-        let summary = WorkflowSessionCheckpointSummary::unavailable(
+        let summary = WorkflowExecutionSessionCheckpointSummary::unavailable(
             "session-1",
             "graph-rev-1",
-            WorkflowSessionResidencyState::Warm,
+            WorkflowExecutionSessionResidencyState::Warm,
         );
 
         assert_eq!(summary.session_id, "session-1");
         assert_eq!(summary.graph_revision, "graph-rev-1");
-        assert_eq!(summary.residency, WorkflowSessionResidencyState::Warm);
+        assert_eq!(
+            summary.residency,
+            WorkflowExecutionSessionResidencyState::Warm
+        );
         assert!(!summary.checkpoint_available);
         assert_eq!(summary.preserved_node_count, 0);
         assert_eq!(summary.checkpointed_at_ms, None);
@@ -450,29 +475,31 @@ mod tests {
 
         assert_eq!(
             state.residency().await,
-            WorkflowSessionResidencyState::Active
+            WorkflowExecutionSessionResidencyState::Active
         );
         state
-            .set_residency(WorkflowSessionResidencyState::CheckpointedButUnloaded)
+            .set_residency(WorkflowExecutionSessionResidencyState::CheckpointedButUnloaded)
             .await;
         assert_eq!(
             state.residency().await,
-            WorkflowSessionResidencyState::CheckpointedButUnloaded
+            WorkflowExecutionSessionResidencyState::CheckpointedButUnloaded
         );
     }
 
     #[tokio::test]
-    async fn executor_session_state_tracks_bound_workflow_session_identity() {
+    async fn executor_session_state_tracks_bound_workflow_execution_session_identity() {
         let state = WorkflowExecutorSessionState::new();
 
-        assert_eq!(state.bound_workflow_session_id().await, None);
-        state.bind_workflow_session("session-1".to_string()).await;
+        assert_eq!(state.bound_workflow_execution_session_id().await, None);
+        state
+            .bind_workflow_execution_session("session-1".to_string())
+            .await;
         assert_eq!(
-            state.bound_workflow_session_id().await,
+            state.bound_workflow_execution_session_id().await,
             Some("session-1".to_string())
         );
-        state.clear_bound_workflow_session().await;
-        assert_eq!(state.bound_workflow_session_id().await, None);
+        state.clear_bound_workflow_execution_session().await;
+        assert_eq!(state.bound_workflow_execution_session_id().await, None);
     }
 
     #[tokio::test]
@@ -482,7 +509,10 @@ mod tests {
 
         assert_eq!(summary.session_id, "session-1");
         assert_eq!(summary.graph_revision, "graph-1");
-        assert_eq!(summary.residency, WorkflowSessionResidencyState::Active);
+        assert_eq!(
+            summary.residency,
+            WorkflowExecutionSessionResidencyState::Active
+        );
         assert!(!summary.checkpoint_available);
     }
 

@@ -253,6 +253,35 @@ verification commands selected below.
   internal scheduler/execution-session APIs still carry workflow-session naming
   and need to be made internal or renamed before the stage-end gate can pass.
 
+### 2026-04-24 Execution-Session Terminology Cutover Progress
+
+- Renamed the remaining scheduler/runtime `WorkflowSession*` public Rust
+  contracts to `WorkflowExecutionSession*` across workflow-service,
+  embedded-runtime, Tauri diagnostics, and node-engine residency/checkpoint
+  helpers.
+- Renamed serialized scheduler and graph-state fields from
+  `workflow_session_*` to `workflow_execution_session_*`, including
+  inspection-state projections and `WorkflowRunOptions` execution-session
+  affinity.
+- Renamed node-engine and embedded-runtime private execution-session modules so
+  source paths no longer carry the legacy workflow-session vocabulary.
+- Verified that the old Rust source vocabulary is absent with:
+  `rg -n "WorkflowSession|create_workflow_session|run_workflow_session|close_workflow_session|workflow_get_session_status|workflow_get_session_inspection|workflow_list_session_queue|workflow_cancel_session_queue_item|workflow_reprioritize_session_queue_item|workflow_set_session_keep_alive|workflow_cleanup_stale_sessions|spawn_workflow_session_stale_cleanup_worker" crates src-tauri -g '*.rs'`
+  and
+  `rg -n "workflow_session|workflow-session|workflow session|Workflow session" crates src-tauri -g '*.rs'`.
+- Verification: `cargo fmt --all -- --check`,
+  `cargo check --workspace --all-features`,
+  `cargo test -p pantograph-workflow-service`,
+  `cargo test -p pantograph-embedded-runtime workflow_runtime`,
+  `cargo test -p pantograph-uniffi --features frontend-http`,
+  `cargo test -p node-engine workflow_execution_session`, and
+  `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+  passed.
+- Remaining Stage `01` cutover work: apply the stage-end gate and decide
+  whether the renamed execution-session scheduler controls remain an internal
+  native surface for runtime management or need further restriction before
+  moving to Stage `02`.
+
 ## Required Identity Chain
 
 ```text

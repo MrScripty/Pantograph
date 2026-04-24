@@ -148,7 +148,7 @@ pub struct WorkflowConfig {
     /// Optional limit on how many session runtimes may remain loaded at once.
     ///
     /// `None` preserves the workflow-service default, which currently matches
-    /// workflow session capacity.
+    /// workflow execution session capacity.
     #[serde(default)]
     pub max_loaded_sessions: Option<usize>,
 }

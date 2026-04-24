@@ -10,8 +10,8 @@ use pantograph_embedded_runtime::{
     HostRuntimeModeSnapshot,
 };
 use pantograph_workflow_service::{
-    WorkflowCapabilitiesRequest, WorkflowSchedulerSnapshotRequest,
-    WorkflowSessionInspectionRequest, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
+    WorkflowCapabilitiesRequest, WorkflowExecutionSessionInspectionRequest,
+    WorkflowSchedulerSnapshotRequest, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
 };
 use tauri::{AppHandle, Manager, State};
 
@@ -103,9 +103,11 @@ pub async fn workflow_diagnostics_snapshot_response(
             runtime
                 .as_ref()
                 .expect("runtime is constructed when session inspection is requested")
-                .workflow_get_session_inspection(WorkflowSessionInspectionRequest {
-                    session_id: session_id.to_string(),
-                })
+                .workflow_get_execution_session_inspection(
+                    WorkflowExecutionSessionInspectionRequest {
+                        session_id: session_id.to_string(),
+                    },
+                )
                 .await,
         )
     } else {
@@ -170,7 +172,7 @@ pub async fn workflow_diagnostics_snapshot_response(
             capabilities_result,
             current_session_state: session_inspection_result
                 .and_then(Result::ok)
-                .and_then(|response| response.workflow_session_state),
+                .and_then(|response| response.workflow_execution_session_state),
             runtime_trace_metrics: runtime_projection.trace_runtime_metrics,
             active_model_target: runtime_projection.active_model_target,
             embedding_model_target: runtime_projection.embedding_model_target,

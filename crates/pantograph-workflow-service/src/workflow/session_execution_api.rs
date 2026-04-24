@@ -6,18 +6,18 @@ use super::validation::{
     validate_bindings, validate_output_targets, validate_timeout_ms, validate_workflow_id,
 };
 use super::{
-    WorkflowHost, WorkflowRunRequest, WorkflowRunResponse, WorkflowSchedulerDecisionReason,
-    WorkflowService, WorkflowServiceError, WorkflowSessionCreateRequest,
-    WorkflowSessionCreateResponse, WorkflowSessionRetentionHint, WorkflowSessionRunRequest,
-    WorkflowSessionUnloadReason,
+    WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionCreateResponse,
+    WorkflowExecutionSessionRetentionHint, WorkflowExecutionSessionRunRequest,
+    WorkflowExecutionSessionUnloadReason, WorkflowHost, WorkflowRunRequest, WorkflowRunResponse,
+    WorkflowSchedulerDecisionReason, WorkflowService, WorkflowServiceError,
 };
 
 impl WorkflowService {
-    pub async fn create_workflow_session<H: WorkflowHost>(
+    pub async fn create_workflow_execution_session<H: WorkflowHost>(
         &self,
         host: &H,
-        request: WorkflowSessionCreateRequest,
-    ) -> Result<WorkflowSessionCreateResponse, WorkflowServiceError> {
+        request: WorkflowExecutionSessionCreateRequest,
+    ) -> Result<WorkflowExecutionSessionCreateResponse, WorkflowServiceError> {
         validate_workflow_id(&request.workflow_id)?;
         host.validate_workflow(&request.workflow_id).await?;
 
@@ -48,16 +48,16 @@ impl WorkflowService {
             }
         }
 
-        Ok(WorkflowSessionCreateResponse {
+        Ok(WorkflowExecutionSessionCreateResponse {
             session_id,
             runtime_capabilities: host.runtime_capabilities().await?,
         })
     }
 
-    pub async fn run_workflow_session<H: WorkflowHost>(
+    pub async fn run_workflow_execution_session<H: WorkflowHost>(
         &self,
         host: &H,
-        request: WorkflowSessionRunRequest,
+        request: WorkflowExecutionSessionRunRequest,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
         let session_id = request.session_id.trim().to_string();
         if session_id.is_empty() {
@@ -87,9 +87,9 @@ impl WorkflowService {
             };
             if let Some(session) = session_ready_to_load {
                 let retention_hint = if session.keep_alive {
-                    WorkflowSessionRetentionHint::KeepAlive
+                    WorkflowExecutionSessionRetentionHint::KeepAlive
                 } else {
-                    WorkflowSessionRetentionHint::Ephemeral
+                    WorkflowExecutionSessionRetentionHint::Ephemeral
                 };
                 if !host
                     .can_load_session_runtime(
@@ -171,7 +171,7 @@ impl WorkflowService {
             host.unload_session_runtime(
                 &session_id,
                 &finish_state.workflow_id,
-                WorkflowSessionUnloadReason::KeepAliveDisabled,
+                WorkflowExecutionSessionUnloadReason::KeepAliveDisabled,
             )
             .await?;
         }

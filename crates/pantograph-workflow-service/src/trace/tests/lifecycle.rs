@@ -71,17 +71,17 @@ fn workflow_trace_store_resets_attempt_state_when_run_restarts_after_failure() {
             workflow_id: Some("wf-1".to_string()),
             session_id: "session-1".to_string(),
             captured_at_ms: 126,
-            session: Some(crate::workflow::WorkflowSessionSummary {
+            session: Some(crate::workflow::WorkflowExecutionSessionSummary {
                 session_id: "session-1".to_string(),
                 workflow_id: "wf-1".to_string(),
-                session_kind: crate::graph::WorkflowSessionKind::Workflow,
+                session_kind: crate::graph::WorkflowExecutionSessionKind::Workflow,
                 usage_profile: None,
                 keep_alive: false,
-                state: crate::workflow::WorkflowSessionState::Running,
+                state: crate::workflow::WorkflowExecutionSessionState::Running,
                 queued_runs: 0,
                 run_count: 1,
             }),
-            items: vec![crate::workflow::WorkflowSessionQueueItem {
+            items: vec![crate::workflow::WorkflowExecutionSessionQueueItem {
                 queue_id: "queue-1".to_string(),
                 run_id: Some("exec-1".to_string()),
                 enqueued_at_ms: Some(90),
@@ -90,7 +90,7 @@ fn workflow_trace_store_resets_attempt_state_when_run_restarts_after_failure() {
                 queue_position: None,
                 scheduler_admission_outcome: None,
                 scheduler_decision_reason: None,
-                status: crate::workflow::WorkflowSessionQueueItemStatus::Running,
+                status: crate::workflow::WorkflowExecutionSessionQueueItemStatus::Running,
             }],
             diagnostics: None,
             error: None,

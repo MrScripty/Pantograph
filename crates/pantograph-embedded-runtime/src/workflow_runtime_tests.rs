@@ -2,10 +2,11 @@ use crate::runtime_health::RuntimeHealthAssessmentSnapshot;
 use crate::HostRuntimeModeSnapshot;
 use async_trait::async_trait;
 use pantograph_runtime_registry::RuntimeRegistry;
-use pantograph_workflow_service::graph::WorkflowSessionKind;
+use pantograph_workflow_service::graph::WorkflowExecutionSessionKind;
 use pantograph_workflow_service::{
-    WorkflowCapabilitiesResponse, WorkflowSchedulerSnapshotResponse, WorkflowSessionQueueItem,
-    WorkflowSessionState, WorkflowSessionSummary, WorkflowTraceRuntimeMetrics,
+    WorkflowCapabilitiesResponse, WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionState,
+    WorkflowExecutionSessionSummary, WorkflowSchedulerSnapshotResponse,
+    WorkflowTraceRuntimeMetrics,
 };
 
 use super::{

@@ -40,8 +40,14 @@ async fn workflow_scheduler_snapshot_response_reads_backend_owned_service_snapsh
 
     assert_eq!(snapshot.session_id, created.session_id);
     assert_eq!(snapshot.workflow_id, None);
-    assert_eq!(snapshot.session.session_kind, WorkflowSessionKind::Edit);
-    assert_eq!(snapshot.session.state, WorkflowSessionState::IdleLoaded);
+    assert_eq!(
+        snapshot.session.session_kind,
+        WorkflowExecutionSessionKind::Edit
+    );
+    assert_eq!(
+        snapshot.session.state,
+        WorkflowExecutionSessionState::IdleLoaded
+    );
     assert!(snapshot.items.is_empty());
 }
 
@@ -58,7 +64,7 @@ fn workflow_trace_snapshot_response_reads_backend_owned_trace_snapshot() {
             session_id: "session-1".to_string(),
             trace_execution_id: Some("run-1".to_string()),
             session: running_session_summary(),
-            items: vec![WorkflowSessionQueueItem {
+            items: vec![WorkflowExecutionSessionQueueItem {
                 queue_id: "queue-1".to_string(),
                 run_id: Some("run-1".to_string()),
                 enqueued_at_ms: Some(100),
@@ -67,7 +73,7 @@ fn workflow_trace_snapshot_response_reads_backend_owned_trace_snapshot() {
                 queue_position: None,
                 scheduler_admission_outcome: None,
                 scheduler_decision_reason: None,
-                status: WorkflowSessionQueueItemStatus::Running,
+                status: WorkflowExecutionSessionQueueItemStatus::Running,
             }],
             diagnostics: None,
         }),
@@ -110,7 +116,7 @@ fn workflow_trace_snapshot_response_filters_by_backend_session_id() {
             session_id: "session-1".to_string(),
             trace_execution_id: Some("run-1".to_string()),
             session: running_session_summary(),
-            items: vec![WorkflowSessionQueueItem {
+            items: vec![WorkflowExecutionSessionQueueItem {
                 queue_id: "queue-1".to_string(),
                 run_id: Some("run-1".to_string()),
                 enqueued_at_ms: Some(100),
@@ -119,7 +125,7 @@ fn workflow_trace_snapshot_response_filters_by_backend_session_id() {
                 queue_position: None,
                 scheduler_admission_outcome: None,
                 scheduler_decision_reason: None,
-                status: WorkflowSessionQueueItemStatus::Running,
+                status: WorkflowExecutionSessionQueueItemStatus::Running,
             }],
             diagnostics: None,
         }),

@@ -3,17 +3,18 @@ use pantograph_workflow_service::{
     ClientRegistrationResponse, ClientSessionOpenRequest, ClientSessionOpenResponse,
     ClientSessionRecord, ClientSessionResumeRequest, WorkflowAttributedRunRequest,
     WorkflowAttributedRunResponse, WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse,
+    WorkflowExecutionSessionCloseRequest, WorkflowExecutionSessionCloseResponse,
+    WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionCreateResponse,
+    WorkflowExecutionSessionInspectionRequest, WorkflowExecutionSessionInspectionResponse,
+    WorkflowExecutionSessionKeepAliveRequest, WorkflowExecutionSessionKeepAliveResponse,
+    WorkflowExecutionSessionQueueCancelRequest, WorkflowExecutionSessionQueueCancelResponse,
+    WorkflowExecutionSessionQueueListRequest, WorkflowExecutionSessionQueueListResponse,
+    WorkflowExecutionSessionQueueReprioritizeRequest,
+    WorkflowExecutionSessionQueueReprioritizeResponse, WorkflowExecutionSessionRunRequest,
+    WorkflowExecutionSessionStaleCleanupRequest, WorkflowExecutionSessionStaleCleanupResponse,
+    WorkflowExecutionSessionStatusRequest, WorkflowExecutionSessionStatusResponse,
     WorkflowIoRequest, WorkflowIoResponse, WorkflowPreflightRequest, WorkflowPreflightResponse,
-    WorkflowRunRequest, WorkflowRunResponse, WorkflowServiceError, WorkflowSessionCloseRequest,
-    WorkflowSessionCloseResponse, WorkflowSessionCreateRequest, WorkflowSessionCreateResponse,
-    WorkflowSessionInspectionRequest, WorkflowSessionInspectionResponse,
-    WorkflowSessionKeepAliveRequest, WorkflowSessionKeepAliveResponse,
-    WorkflowSessionQueueCancelRequest, WorkflowSessionQueueCancelResponse,
-    WorkflowSessionQueueListRequest, WorkflowSessionQueueListResponse,
-    WorkflowSessionQueueReprioritizeRequest, WorkflowSessionQueueReprioritizeResponse,
-    WorkflowSessionRunRequest, WorkflowSessionStaleCleanupRequest,
-    WorkflowSessionStaleCleanupResponse, WorkflowSessionStatusRequest,
-    WorkflowSessionStatusResponse,
+    WorkflowRunRequest, WorkflowRunResponse, WorkflowServiceError,
 };
 
 use crate::EmbeddedRuntime;
@@ -99,96 +100,96 @@ impl EmbeddedRuntime {
             .await
     }
 
-    pub async fn create_workflow_session(
+    pub async fn create_workflow_execution_session(
         &self,
-        request: WorkflowSessionCreateRequest,
-    ) -> Result<WorkflowSessionCreateResponse, WorkflowServiceError> {
+        request: WorkflowExecutionSessionCreateRequest,
+    ) -> Result<WorkflowExecutionSessionCreateResponse, WorkflowServiceError> {
         self.workflow_service
-            .create_workflow_session(&self.host(), request)
+            .create_workflow_execution_session(&self.host(), request)
             .await
     }
 
-    pub async fn run_workflow_session(
+    pub async fn run_workflow_execution_session(
         &self,
-        request: WorkflowSessionRunRequest,
+        request: WorkflowExecutionSessionRunRequest,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
         self.workflow_service
-            .run_workflow_session(&self.host(), request)
+            .run_workflow_execution_session(&self.host(), request)
             .await
     }
 
-    pub async fn close_workflow_session(
+    pub async fn close_workflow_execution_session(
         &self,
-        request: WorkflowSessionCloseRequest,
-    ) -> Result<WorkflowSessionCloseResponse, WorkflowServiceError> {
+        request: WorkflowExecutionSessionCloseRequest,
+    ) -> Result<WorkflowExecutionSessionCloseResponse, WorkflowServiceError> {
         self.workflow_service
-            .close_workflow_session(&self.host(), request)
+            .close_workflow_execution_session(&self.host(), request)
             .await
     }
 
-    pub async fn workflow_get_session_status(
+    pub async fn workflow_get_execution_session_status(
         &self,
-        request: WorkflowSessionStatusRequest,
-    ) -> Result<WorkflowSessionStatusResponse, WorkflowServiceError> {
+        request: WorkflowExecutionSessionStatusRequest,
+    ) -> Result<WorkflowExecutionSessionStatusResponse, WorkflowServiceError> {
         self.workflow_service
-            .workflow_get_session_status(request)
+            .workflow_get_execution_session_status(request)
             .await
     }
 
-    pub async fn workflow_get_session_inspection(
+    pub async fn workflow_get_execution_session_inspection(
         &self,
-        request: WorkflowSessionInspectionRequest,
-    ) -> Result<WorkflowSessionInspectionResponse, WorkflowServiceError> {
+        request: WorkflowExecutionSessionInspectionRequest,
+    ) -> Result<WorkflowExecutionSessionInspectionResponse, WorkflowServiceError> {
         let host = self.host();
         self.workflow_service
-            .workflow_get_session_inspection(&host, request)
+            .workflow_get_execution_session_inspection(&host, request)
             .await
     }
 
-    pub async fn workflow_list_session_queue(
+    pub async fn workflow_list_execution_session_queue(
         &self,
-        request: WorkflowSessionQueueListRequest,
-    ) -> Result<WorkflowSessionQueueListResponse, WorkflowServiceError> {
+        request: WorkflowExecutionSessionQueueListRequest,
+    ) -> Result<WorkflowExecutionSessionQueueListResponse, WorkflowServiceError> {
         self.workflow_service
-            .workflow_list_session_queue(request)
+            .workflow_list_execution_session_queue(request)
             .await
     }
 
-    pub async fn workflow_cleanup_stale_sessions(
+    pub async fn workflow_cleanup_stale_execution_sessions(
         &self,
-        request: WorkflowSessionStaleCleanupRequest,
-    ) -> Result<WorkflowSessionStaleCleanupResponse, WorkflowServiceError> {
+        request: WorkflowExecutionSessionStaleCleanupRequest,
+    ) -> Result<WorkflowExecutionSessionStaleCleanupResponse, WorkflowServiceError> {
         self.workflow_service
-            .workflow_cleanup_stale_sessions(request)
+            .workflow_cleanup_stale_execution_sessions(request)
             .await
     }
 
-    pub async fn workflow_cancel_session_queue_item(
+    pub async fn workflow_cancel_execution_session_queue_item(
         &self,
-        request: WorkflowSessionQueueCancelRequest,
-    ) -> Result<WorkflowSessionQueueCancelResponse, WorkflowServiceError> {
+        request: WorkflowExecutionSessionQueueCancelRequest,
+    ) -> Result<WorkflowExecutionSessionQueueCancelResponse, WorkflowServiceError> {
         self.workflow_service
-            .workflow_cancel_session_queue_item(request)
+            .workflow_cancel_execution_session_queue_item(request)
             .await
     }
 
-    pub async fn workflow_reprioritize_session_queue_item(
+    pub async fn workflow_reprioritize_execution_session_queue_item(
         &self,
-        request: WorkflowSessionQueueReprioritizeRequest,
-    ) -> Result<WorkflowSessionQueueReprioritizeResponse, WorkflowServiceError> {
+        request: WorkflowExecutionSessionQueueReprioritizeRequest,
+    ) -> Result<WorkflowExecutionSessionQueueReprioritizeResponse, WorkflowServiceError> {
         self.workflow_service
-            .workflow_reprioritize_session_queue_item(request)
+            .workflow_reprioritize_execution_session_queue_item(request)
             .await
     }
 
-    pub async fn workflow_set_session_keep_alive(
+    pub async fn workflow_set_execution_session_keep_alive(
         &self,
-        request: WorkflowSessionKeepAliveRequest,
-    ) -> Result<WorkflowSessionKeepAliveResponse, WorkflowServiceError> {
+        request: WorkflowExecutionSessionKeepAliveRequest,
+    ) -> Result<WorkflowExecutionSessionKeepAliveResponse, WorkflowServiceError> {
         let host = self.host();
         let response = self
             .workflow_service
-            .workflow_set_session_keep_alive(&host, request)
+            .workflow_set_execution_session_keep_alive(&host, request)
             .await?;
         host.sync_loaded_session_runtime_retention_hint(
             &response.session_id,

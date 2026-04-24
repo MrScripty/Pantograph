@@ -5,9 +5,9 @@ use super::super::{
     PriorityThenFifoSchedulerPolicy, WorkflowSchedulerDecisionReason,
     WorkflowSchedulerRuntimeCapacityPressure, WorkflowSchedulerSnapshotDiagnostics,
 };
-use super::{unix_timestamp_ms, WorkflowSessionStore};
+use super::{unix_timestamp_ms, WorkflowExecutionSessionStore};
 
-impl WorkflowSessionStore {
+impl WorkflowExecutionSessionStore {
     pub(crate) fn scheduler_snapshot_diagnostics(
         &self,
         session_id: &str,

@@ -34,9 +34,9 @@ use pantograph_runtime_registry::{
     RuntimeReservationRequest, RuntimeReservationRequirements, RuntimeRetentionHint,
 };
 use pantograph_workflow_service::{
-    WorkflowSchedulerRuntimeDiagnosticsRequest, WorkflowSchedulerRuntimeRegistryDiagnostics,
-    WorkflowSchedulerRuntimeWarmupDecision, WorkflowSchedulerRuntimeWarmupReason,
-    WorkflowSessionRuntimeUnloadCandidate,
+    WorkflowExecutionSessionRuntimeUnloadCandidate, WorkflowSchedulerRuntimeDiagnosticsRequest,
+    WorkflowSchedulerRuntimeRegistryDiagnostics, WorkflowSchedulerRuntimeWarmupDecision,
+    WorkflowSchedulerRuntimeWarmupReason,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -153,7 +153,7 @@ pub fn scheduler_runtime_registry_diagnostics(
 
 pub fn runtime_registry_reclaim_candidate_for_sessions(
     runtime_registry: &RuntimeRegistry,
-    candidates: &[WorkflowSessionRuntimeUnloadCandidate],
+    candidates: &[WorkflowExecutionSessionRuntimeUnloadCandidate],
 ) -> Option<(String, String)> {
     let candidates_by_session_id = candidates
         .iter()

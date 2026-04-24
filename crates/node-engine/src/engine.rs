@@ -89,13 +89,13 @@ mod node_preparation;
 mod output_cache;
 mod session_state;
 mod single_demand;
-mod workflow_session;
+mod workflow_execution_session;
 
 pub use session_state::{
     GraphMemoryImpactSummary, NodeMemoryCompatibility, NodeMemoryCompatibilitySnapshot,
     NodeMemoryIdentity, NodeMemoryIndirectStateReference, NodeMemoryRestoreStrategy,
-    NodeMemorySnapshot, NodeMemoryStatus, WorkflowSessionCheckpointSummary,
-    WorkflowSessionResidencyState,
+    NodeMemorySnapshot, NodeMemoryStatus, WorkflowExecutionSessionCheckpointSummary,
+    WorkflowExecutionSessionResidencyState,
 };
 
 /// Trait for executing a single node/task
@@ -413,7 +413,7 @@ pub struct WorkflowExecutor {
     event_sink: Arc<dyn EventSink>,
     /// The workflow graph
     graph: Arc<RwLock<WorkflowGraph>>,
-    /// Phase 6 session-state scaffold for workflow-session residency and
+    /// Phase 6 session-state scaffold for workflow execution session residency and
     /// checkpoint integration.
     session_state: Arc<session_state::WorkflowExecutorSessionState>,
     /// Execution ID
@@ -476,85 +476,129 @@ impl WorkflowExecutor {
         &self.graph
     }
 
-    /// Return the current workflow-session residency state used by the Phase 6
+    /// Return the current workflow execution session residency state used by the Phase 6
     /// checkpoint scaffold.
-    pub async fn workflow_session_residency(&self) -> WorkflowSessionResidencyState {
-        workflow_session::workflow_session_residency(self).await
+    pub async fn workflow_execution_session_residency(
+        &self,
+    ) -> WorkflowExecutionSessionResidencyState {
+        workflow_execution_session::workflow_execution_session_residency(self).await
     }
 
-    /// Bind this executor to one logical workflow session so later Phase 6
+    /// Bind this executor to one logical workflow execution session so later Phase 6
     /// node-memory reads and writes do not infer session identity from
     /// transport-local execution ids.
-    pub async fn bind_workflow_session(&self, workflow_session_id: impl Into<String>) {
-        workflow_session::bind_workflow_session(self, workflow_session_id).await;
-    }
-
-    /// Return the currently bound logical workflow session id, if any.
-    pub async fn bound_workflow_session_id(&self) -> Option<String> {
-        workflow_session::bound_workflow_session_id(self).await
-    }
-
-    /// Clear the current logical workflow session binding from this executor.
-    pub async fn clear_bound_workflow_session(&self) {
-        workflow_session::clear_bound_workflow_session(self).await;
-    }
-
-    /// Update the workflow-session residency state used by the Phase 6
-    /// checkpoint scaffold.
-    pub async fn set_workflow_session_residency(&self, state: WorkflowSessionResidencyState) {
-        workflow_session::set_workflow_session_residency(self, state).await;
-    }
-
-    /// Return the current bounded checkpoint summary for a workflow session.
-    pub async fn workflow_session_checkpoint_summary(
+    pub async fn bind_workflow_execution_session(
         &self,
-        workflow_session_id: &str,
-    ) -> WorkflowSessionCheckpointSummary {
-        workflow_session::workflow_session_checkpoint_summary(self, workflow_session_id).await
+        workflow_execution_session_id: impl Into<String>,
+    ) {
+        workflow_execution_session::bind_workflow_execution_session(
+            self,
+            workflow_execution_session_id,
+        )
+        .await;
     }
 
-    /// Mark the bound workflow session as having a backend-owned checkpoint
+    /// Return the currently bound logical workflow execution session id, if any.
+    pub async fn bound_workflow_execution_session_id(&self) -> Option<String> {
+        workflow_execution_session::bound_workflow_execution_session_id(self).await
+    }
+
+    /// Clear the current logical workflow execution session binding from this executor.
+    pub async fn clear_bound_workflow_execution_session(&self) {
+        workflow_execution_session::clear_bound_workflow_execution_session(self).await;
+    }
+
+    /// Update the workflow execution session residency state used by the Phase 6
+    /// checkpoint scaffold.
+    pub async fn set_workflow_execution_session_residency(
+        &self,
+        state: WorkflowExecutionSessionResidencyState,
+    ) {
+        workflow_execution_session::set_workflow_execution_session_residency(self, state).await;
+    }
+
+    /// Return the current bounded checkpoint summary for a workflow execution session.
+    pub async fn workflow_execution_session_checkpoint_summary(
+        &self,
+        workflow_execution_session_id: &str,
+    ) -> WorkflowExecutionSessionCheckpointSummary {
+        workflow_execution_session::workflow_execution_session_checkpoint_summary(
+            self,
+            workflow_execution_session_id,
+        )
+        .await
+    }
+
+    /// Mark the bound workflow execution session as having a backend-owned checkpoint
     /// artifact available for restore.
-    pub async fn mark_workflow_session_checkpoint_available(&self, workflow_session_id: &str) {
-        workflow_session::mark_workflow_session_checkpoint_available(self, workflow_session_id)
-            .await;
+    pub async fn mark_workflow_execution_session_checkpoint_available(
+        &self,
+        workflow_execution_session_id: &str,
+    ) {
+        workflow_execution_session::mark_workflow_execution_session_checkpoint_available(
+            self,
+            workflow_execution_session_id,
+        )
+        .await;
     }
 
-    /// Clear any backend-owned checkpoint marker for one workflow session.
-    pub async fn clear_workflow_session_checkpoint(&self, workflow_session_id: &str) {
-        workflow_session::clear_workflow_session_checkpoint(self, workflow_session_id).await;
+    /// Clear any backend-owned checkpoint marker for one workflow execution session.
+    pub async fn clear_workflow_execution_session_checkpoint(
+        &self,
+        workflow_execution_session_id: &str,
+    ) {
+        workflow_execution_session::clear_workflow_execution_session_checkpoint(
+            self,
+            workflow_execution_session_id,
+        )
+        .await;
     }
 
     /// Return the backend-owned logical node-memory snapshots for one workflow
     /// session.
-    pub async fn workflow_session_node_memory_snapshots(
+    pub async fn workflow_execution_session_node_memory_snapshots(
         &self,
-        workflow_session_id: &str,
+        workflow_execution_session_id: &str,
     ) -> Vec<NodeMemorySnapshot> {
-        workflow_session::workflow_session_node_memory_snapshots(self, workflow_session_id).await
+        workflow_execution_session::workflow_execution_session_node_memory_snapshots(
+            self,
+            workflow_execution_session_id,
+        )
+        .await
     }
 
     /// Record or replace the logical node-memory snapshot for one node in one
-    /// workflow session.
-    pub async fn record_workflow_session_node_memory(&self, snapshot: NodeMemorySnapshot) {
-        workflow_session::record_workflow_session_node_memory(self, snapshot).await;
+    /// workflow execution session.
+    pub async fn record_workflow_execution_session_node_memory(
+        &self,
+        snapshot: NodeMemorySnapshot,
+    ) {
+        workflow_execution_session::record_workflow_execution_session_node_memory(self, snapshot)
+            .await;
     }
 
-    /// Clear all recorded logical node memory for one workflow session.
-    pub async fn clear_workflow_session_node_memory(&self, workflow_session_id: &str) {
-        workflow_session::clear_workflow_session_node_memory(self, workflow_session_id).await;
+    /// Clear all recorded logical node memory for one workflow execution session.
+    pub async fn clear_workflow_execution_session_node_memory(
+        &self,
+        workflow_execution_session_id: &str,
+    ) {
+        workflow_execution_session::clear_workflow_execution_session_node_memory(
+            self,
+            workflow_execution_session_id,
+        )
+        .await;
     }
 
     /// Apply backend-owned graph memory impact reconciliation rules to one
-    /// workflow session's recorded node memory.
-    pub async fn reconcile_workflow_session_node_memory(
+    /// workflow execution session's recorded node memory.
+    pub async fn reconcile_workflow_execution_session_node_memory(
         &self,
-        workflow_session_id: &str,
+        workflow_execution_session_id: &str,
         memory_impact: &GraphMemoryImpactSummary,
     ) {
-        workflow_session::reconcile_workflow_session_node_memory(
+        workflow_execution_session::reconcile_workflow_execution_session_node_memory(
             self,
-            workflow_session_id,
+            workflow_execution_session_id,
             memory_impact,
         )
         .await;

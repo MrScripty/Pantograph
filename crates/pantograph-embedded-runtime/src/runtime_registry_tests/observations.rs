@@ -633,7 +633,7 @@ fn scheduler_runtime_registry_diagnostics_reports_start_runtime_without_loaded_c
             keep_alive: false,
             runtime_loaded: false,
             next_admission_queue_id: Some("queue-1".to_string()),
-            reclaim_candidates: vec![WorkflowSessionRuntimeUnloadCandidate {
+            reclaim_candidates: vec![WorkflowExecutionSessionRuntimeUnloadCandidate {
                 session_id: "session-loaded".to_string(),
                 workflow_id: "wf-loaded".to_string(),
                 keep_alive: false,

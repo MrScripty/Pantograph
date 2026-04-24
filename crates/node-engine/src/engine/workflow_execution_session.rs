@@ -1,118 +1,130 @@
 use super::{
     GraphMemoryImpactSummary, NodeMemoryIdentity, NodeMemoryIndirectStateReference,
-    NodeMemoryRestoreStrategy, NodeMemorySnapshot, NodeMemoryStatus, WorkflowExecutor,
-    WorkflowSessionCheckpointSummary, WorkflowSessionResidencyState,
+    NodeMemoryRestoreStrategy, NodeMemorySnapshot, NodeMemoryStatus,
+    WorkflowExecutionSessionCheckpointSummary, WorkflowExecutionSessionResidencyState,
+    WorkflowExecutor,
 };
 use crate::error::Result;
 use crate::types::NodeId;
 
-pub(super) async fn workflow_session_residency(
+pub(super) async fn workflow_execution_session_residency(
     executor: &WorkflowExecutor,
-) -> WorkflowSessionResidencyState {
+) -> WorkflowExecutionSessionResidencyState {
     executor.session_state.residency().await
 }
 
-pub(super) async fn bind_workflow_session(
+pub(super) async fn bind_workflow_execution_session(
     executor: &WorkflowExecutor,
-    workflow_session_id: impl Into<String>,
+    workflow_execution_session_id: impl Into<String>,
 ) {
     executor
         .session_state
-        .bind_workflow_session(workflow_session_id.into())
+        .bind_workflow_execution_session(workflow_execution_session_id.into())
         .await;
 }
 
-pub(super) async fn bound_workflow_session_id(executor: &WorkflowExecutor) -> Option<String> {
-    executor.session_state.bound_workflow_session_id().await
-}
-
-pub(super) async fn clear_bound_workflow_session(executor: &WorkflowExecutor) {
-    executor.session_state.clear_bound_workflow_session().await;
-}
-
-pub(super) async fn set_workflow_session_residency(
+pub(super) async fn bound_workflow_execution_session_id(
     executor: &WorkflowExecutor,
-    state: WorkflowSessionResidencyState,
+) -> Option<String> {
+    executor
+        .session_state
+        .bound_workflow_execution_session_id()
+        .await
+}
+
+pub(super) async fn clear_bound_workflow_execution_session(executor: &WorkflowExecutor) {
+    executor
+        .session_state
+        .clear_bound_workflow_execution_session()
+        .await;
+}
+
+pub(super) async fn set_workflow_execution_session_residency(
+    executor: &WorkflowExecutor,
+    state: WorkflowExecutionSessionResidencyState,
 ) {
     executor.session_state.set_residency(state).await;
 }
 
-pub(super) async fn workflow_session_checkpoint_summary(
+pub(super) async fn workflow_execution_session_checkpoint_summary(
     executor: &WorkflowExecutor,
-    workflow_session_id: &str,
-) -> WorkflowSessionCheckpointSummary {
+    workflow_execution_session_id: &str,
+) -> WorkflowExecutionSessionCheckpointSummary {
     let graph_revision = executor.graph.read().await.id.clone();
     executor
         .session_state
-        .checkpoint_summary(workflow_session_id, &graph_revision)
+        .checkpoint_summary(workflow_execution_session_id, &graph_revision)
         .await
 }
 
-pub(super) async fn mark_workflow_session_checkpoint_available(
+pub(super) async fn mark_workflow_execution_session_checkpoint_available(
     executor: &WorkflowExecutor,
-    workflow_session_id: &str,
+    workflow_execution_session_id: &str,
 ) {
     executor
         .session_state
-        .mark_checkpoint_available(workflow_session_id)
+        .mark_checkpoint_available(workflow_execution_session_id)
         .await;
 }
 
-pub(super) async fn clear_workflow_session_checkpoint(
+pub(super) async fn clear_workflow_execution_session_checkpoint(
     executor: &WorkflowExecutor,
-    workflow_session_id: &str,
+    workflow_execution_session_id: &str,
 ) {
     executor
         .session_state
-        .clear_checkpoint(workflow_session_id)
+        .clear_checkpoint(workflow_execution_session_id)
         .await;
 }
 
-pub(super) async fn workflow_session_node_memory_snapshots(
+pub(super) async fn workflow_execution_session_node_memory_snapshots(
     executor: &WorkflowExecutor,
-    workflow_session_id: &str,
+    workflow_execution_session_id: &str,
 ) -> Vec<NodeMemorySnapshot> {
     executor
         .session_state
-        .node_memory_snapshots(workflow_session_id)
+        .node_memory_snapshots(workflow_execution_session_id)
         .await
 }
 
-pub(super) async fn record_workflow_session_node_memory(
+pub(super) async fn record_workflow_execution_session_node_memory(
     executor: &WorkflowExecutor,
     snapshot: NodeMemorySnapshot,
 ) {
     executor.session_state.record_node_memory(snapshot).await;
 }
 
-pub(super) async fn clear_workflow_session_node_memory(
+pub(super) async fn clear_workflow_execution_session_node_memory(
     executor: &WorkflowExecutor,
-    workflow_session_id: &str,
+    workflow_execution_session_id: &str,
 ) {
     executor
         .session_state
-        .clear_node_memory(workflow_session_id)
+        .clear_node_memory(workflow_execution_session_id)
         .await;
 }
 
-pub(super) async fn reconcile_workflow_session_node_memory(
+pub(super) async fn reconcile_workflow_execution_session_node_memory(
     executor: &WorkflowExecutor,
-    workflow_session_id: &str,
+    workflow_execution_session_id: &str,
     memory_impact: &GraphMemoryImpactSummary,
 ) {
     executor
         .session_state
-        .reconcile_node_memory(workflow_session_id, memory_impact)
+        .reconcile_node_memory(workflow_execution_session_id, memory_impact)
         .await;
 }
 
-pub(super) async fn bound_workflow_session_node_memory_view(
+pub(super) async fn bound_workflow_execution_session_node_memory_view(
     executor: &WorkflowExecutor,
 ) -> Option<std::collections::HashMap<NodeId, NodeMemorySnapshot>> {
-    let workflow_session_id = executor.session_state.bound_workflow_session_id().await?;
+    let workflow_execution_session_id = executor
+        .session_state
+        .bound_workflow_execution_session_id()
+        .await?;
     let snapshots = executor
         .session_state
-        .node_memory_snapshots(&workflow_session_id)
+        .node_memory_snapshots(&workflow_execution_session_id)
         .await;
     if snapshots.is_empty() {
         return None;
@@ -135,7 +147,11 @@ pub(super) fn inject_node_memory_input(
 }
 
 pub(super) async fn sync_bound_session_node_memory_from_cache(executor: &WorkflowExecutor) {
-    let Some(workflow_session_id) = executor.session_state.bound_workflow_session_id().await else {
+    let Some(workflow_execution_session_id) = executor
+        .session_state
+        .bound_workflow_execution_session_id()
+        .await
+    else {
         return;
     };
 
@@ -147,7 +163,7 @@ pub(super) async fn sync_bound_session_node_memory_from_cache(executor: &Workflo
             .iter()
             .filter_map(|(node_id, cached)| {
                 node_memory_snapshot_from_cache_entry(
-                    &workflow_session_id,
+                    &workflow_execution_session_id,
                     node_id,
                     cached,
                     demand_engine.last_inputs.get(node_id),
@@ -163,7 +179,7 @@ pub(super) async fn sync_bound_session_node_memory_from_cache(executor: &Workflo
 }
 
 fn node_memory_snapshot_from_cache_entry(
-    workflow_session_id: &str,
+    workflow_execution_session_id: &str,
     node_id: &NodeId,
     cached: &super::CachedOutput,
     input_snapshot: Option<&serde_json::Value>,
@@ -172,7 +188,7 @@ fn node_memory_snapshot_from_cache_entry(
     let node = graph.find_node(node_id)?;
     Some(NodeMemorySnapshot {
         identity: NodeMemoryIdentity {
-            session_id: workflow_session_id.to_string(),
+            session_id: workflow_execution_session_id.to_string(),
             node_id: node.id.clone(),
             node_type: node.node_type.clone(),
             schema_version: node_schema_version(&node.data),
@@ -293,14 +309,16 @@ mod tests {
     use crate::TaskExecutor;
 
     use super::{
-        bind_workflow_session, bound_workflow_session_id, clear_bound_workflow_session,
-        clear_workflow_session_checkpoint, clear_workflow_session_node_memory,
-        mark_workflow_session_checkpoint_available, reconcile_workflow_session_node_memory,
-        record_workflow_session_node_memory, set_workflow_session_residency,
-        sync_bound_session_node_memory_from_cache, workflow_session_checkpoint_summary,
-        workflow_session_node_memory_snapshots, workflow_session_residency,
-        GraphMemoryImpactSummary, NodeMemorySnapshot, WorkflowExecutor,
-        WorkflowSessionResidencyState,
+        bind_workflow_execution_session, bound_workflow_execution_session_id,
+        clear_bound_workflow_execution_session, clear_workflow_execution_session_checkpoint,
+        clear_workflow_execution_session_node_memory,
+        mark_workflow_execution_session_checkpoint_available,
+        reconcile_workflow_execution_session_node_memory,
+        record_workflow_execution_session_node_memory, set_workflow_execution_session_residency,
+        sync_bound_session_node_memory_from_cache, workflow_execution_session_checkpoint_summary,
+        workflow_execution_session_node_memory_snapshots, workflow_execution_session_residency,
+        GraphMemoryImpactSummary, NodeMemorySnapshot, WorkflowExecutionSessionResidencyState,
+        WorkflowExecutor,
     };
     use crate::{NodeMemoryCompatibility, NodeMemoryCompatibilitySnapshot};
 
@@ -507,10 +525,10 @@ mod tests {
         }
     }
 
-    #[path = "workflow_session_tests/kv_cache_memory.rs"]
+    #[path = "workflow_execution_session_tests/kv_cache_memory.rs"]
     mod kv_cache_memory;
-    #[path = "workflow_session_tests/memory_reconciliation.rs"]
+    #[path = "workflow_execution_session_tests/memory_reconciliation.rs"]
     mod memory_reconciliation;
-    #[path = "workflow_session_tests/session_helpers.rs"]
+    #[path = "workflow_execution_session_tests/session_helpers.rs"]
     mod session_helpers;
 }

@@ -55,22 +55,25 @@ fn clear_history_reconciles_restarted_backend_trace_and_runtime_snapshots() {
     assert!(cleared.runs_by_id.is_empty());
     assert!(cleared.run_order.is_empty());
 
-    let projection = store.record_scheduler_snapshot(WorkflowSchedulerSnapshotRecord {
-        workflow_id: Some("wf-1".to_string()),
-        execution_id: "restored-exec".to_string(),
-        session_id: "session-1".to_string(),
-        captured_at_ms: 2_000,
-        session: Some(pantograph_workflow_service::WorkflowSessionSummary {
+    let projection =
+        store.record_scheduler_snapshot(WorkflowSchedulerSnapshotRecord {
+            workflow_id: Some("wf-1".to_string()),
+            execution_id: "restored-exec".to_string(),
             session_id: "session-1".to_string(),
-            workflow_id: "wf-1".to_string(),
-            session_kind: WorkflowSessionKind::Workflow,
-            usage_profile: Some("interactive".to_string()),
-            keep_alive: true,
-            state: pantograph_workflow_service::WorkflowSessionState::Running,
-            queued_runs: 1,
-            run_count: 1,
-        }),
-        items: vec![pantograph_workflow_service::WorkflowSessionQueueItem {
+            captured_at_ms: 2_000,
+            session: Some(
+                pantograph_workflow_service::WorkflowExecutionSessionSummary {
+                    session_id: "session-1".to_string(),
+                    workflow_id: "wf-1".to_string(),
+                    session_kind: WorkflowExecutionSessionKind::Workflow,
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: true,
+                    state: pantograph_workflow_service::WorkflowExecutionSessionState::Running,
+                    queued_runs: 1,
+                    run_count: 1,
+                },
+            ),
+            items: vec![pantograph_workflow_service::WorkflowExecutionSessionQueueItem {
             queue_id: "queue-1".to_string(),
             run_id: Some("restored-exec".to_string()),
             enqueued_at_ms: Some(1_950),
@@ -79,11 +82,11 @@ fn clear_history_reconciles_restarted_backend_trace_and_runtime_snapshots() {
             queue_position: None,
             scheduler_admission_outcome: None,
             scheduler_decision_reason: None,
-            status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
+            status: pantograph_workflow_service::WorkflowExecutionSessionQueueItemStatus::Running,
         }],
-        diagnostics: None,
-        error: None,
-    });
+            diagnostics: None,
+            error: None,
+        });
 
     assert_eq!(projection.run_order, vec!["restored-exec".to_string()]);
     assert!(!projection.runs_by_id.contains_key("stale-exec"));
@@ -398,27 +401,32 @@ fn replayed_backend_scheduler_and_runtime_snapshots_do_not_duplicate_trace() {
         execution_id: "exec-1".to_string(),
         session_id: "session-1".to_string(),
         captured_at_ms: 1_000,
-        session: Some(pantograph_workflow_service::WorkflowSessionSummary {
-            session_id: "session-1".to_string(),
-            workflow_id: "wf-1".to_string(),
-            session_kind: WorkflowSessionKind::Workflow,
-            usage_profile: Some("interactive".to_string()),
-            keep_alive: true,
-            state: pantograph_workflow_service::WorkflowSessionState::Running,
-            queued_runs: 1,
-            run_count: 1,
-        }),
-        items: vec![pantograph_workflow_service::WorkflowSessionQueueItem {
-            queue_id: "queue-1".to_string(),
-            run_id: Some("exec-1".to_string()),
-            enqueued_at_ms: Some(900),
-            dequeued_at_ms: Some(930),
-            priority: 1,
-            queue_position: None,
-            scheduler_admission_outcome: None,
-            scheduler_decision_reason: None,
-            status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
-        }],
+        session: Some(
+            pantograph_workflow_service::WorkflowExecutionSessionSummary {
+                session_id: "session-1".to_string(),
+                workflow_id: "wf-1".to_string(),
+                session_kind: WorkflowExecutionSessionKind::Workflow,
+                usage_profile: Some("interactive".to_string()),
+                keep_alive: true,
+                state: pantograph_workflow_service::WorkflowExecutionSessionState::Running,
+                queued_runs: 1,
+                run_count: 1,
+            },
+        ),
+        items: vec![
+            pantograph_workflow_service::WorkflowExecutionSessionQueueItem {
+                queue_id: "queue-1".to_string(),
+                run_id: Some("exec-1".to_string()),
+                enqueued_at_ms: Some(900),
+                dequeued_at_ms: Some(930),
+                priority: 1,
+                queue_position: None,
+                scheduler_admission_outcome: None,
+                scheduler_decision_reason: None,
+                status:
+                    pantograph_workflow_service::WorkflowExecutionSessionQueueItemStatus::Running,
+            },
+        ],
         diagnostics: None,
         error: None,
     });
@@ -461,27 +469,32 @@ fn replayed_backend_scheduler_and_runtime_snapshots_do_not_duplicate_trace() {
         execution_id: "exec-1".to_string(),
         session_id: "session-1".to_string(),
         captured_at_ms: 1_100,
-        session: Some(pantograph_workflow_service::WorkflowSessionSummary {
-            session_id: "session-1".to_string(),
-            workflow_id: "wf-1".to_string(),
-            session_kind: WorkflowSessionKind::Workflow,
-            usage_profile: Some("interactive".to_string()),
-            keep_alive: true,
-            state: pantograph_workflow_service::WorkflowSessionState::Running,
-            queued_runs: 1,
-            run_count: 1,
-        }),
-        items: vec![pantograph_workflow_service::WorkflowSessionQueueItem {
-            queue_id: "queue-1".to_string(),
-            run_id: Some("exec-1".to_string()),
-            enqueued_at_ms: Some(900),
-            dequeued_at_ms: Some(940),
-            priority: 1,
-            queue_position: None,
-            scheduler_admission_outcome: None,
-            scheduler_decision_reason: None,
-            status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
-        }],
+        session: Some(
+            pantograph_workflow_service::WorkflowExecutionSessionSummary {
+                session_id: "session-1".to_string(),
+                workflow_id: "wf-1".to_string(),
+                session_kind: WorkflowExecutionSessionKind::Workflow,
+                usage_profile: Some("interactive".to_string()),
+                keep_alive: true,
+                state: pantograph_workflow_service::WorkflowExecutionSessionState::Running,
+                queued_runs: 1,
+                run_count: 1,
+            },
+        ),
+        items: vec![
+            pantograph_workflow_service::WorkflowExecutionSessionQueueItem {
+                queue_id: "queue-1".to_string(),
+                run_id: Some("exec-1".to_string()),
+                enqueued_at_ms: Some(900),
+                dequeued_at_ms: Some(940),
+                priority: 1,
+                queue_position: None,
+                scheduler_admission_outcome: None,
+                scheduler_decision_reason: None,
+                status:
+                    pantograph_workflow_service::WorkflowExecutionSessionQueueItemStatus::Running,
+            },
+        ],
         diagnostics: None,
         error: None,
     });

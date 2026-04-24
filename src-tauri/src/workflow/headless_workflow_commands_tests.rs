@@ -11,17 +11,17 @@ use crate::workflow::headless_diagnostics::{
     workflow_scheduler_snapshot_response, workflow_trace_snapshot_response,
     HeadlessRuntimeSnapshotInput, WorkflowDiagnosticsSnapshotProjectionInput,
 };
-use pantograph_workflow_service::graph::WorkflowSessionKind;
+use pantograph_workflow_service::graph::WorkflowExecutionSessionKind;
 use pantograph_workflow_service::{
     WorkflowCapabilitiesResponse, WorkflowCapabilityModel, WorkflowErrorCode, WorkflowErrorDetails,
-    WorkflowErrorEnvelope, WorkflowGraph, WorkflowGraphEditSessionCreateRequest,
+    WorkflowErrorEnvelope, WorkflowExecutionSessionQueueItem,
+    WorkflowExecutionSessionQueueItemStatus, WorkflowExecutionSessionState,
+    WorkflowExecutionSessionSummary, WorkflowGraph, WorkflowGraphEditSessionCreateRequest,
     WorkflowRuntimeRequirements, WorkflowSchedulerErrorDetails,
     WorkflowSchedulerRuntimeRegistryDiagnostics, WorkflowSchedulerRuntimeWarmupDecision,
     WorkflowSchedulerRuntimeWarmupReason, WorkflowSchedulerSnapshotDiagnostics,
     WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse, WorkflowService,
-    WorkflowServiceError, WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus,
-    WorkflowSessionState, WorkflowSessionSummary, WorkflowTraceRuntimeMetrics,
-    WorkflowTraceSnapshotRequest,
+    WorkflowServiceError, WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest,
 };
 
 macro_rules! workflow_projection {
@@ -69,14 +69,14 @@ fn workflow_error_json(error: WorkflowServiceError) -> String {
     super::workflow_error_json(error)
 }
 
-fn running_session_summary() -> WorkflowSessionSummary {
-    WorkflowSessionSummary {
+fn running_session_summary() -> WorkflowExecutionSessionSummary {
+    WorkflowExecutionSessionSummary {
         session_id: "session-1".to_string(),
         workflow_id: "wf-1".to_string(),
-        session_kind: WorkflowSessionKind::Workflow,
+        session_kind: WorkflowExecutionSessionKind::Workflow,
         usage_profile: Some("interactive".to_string()),
         keep_alive: true,
-        state: WorkflowSessionState::Running,
+        state: WorkflowExecutionSessionState::Running,
         queued_runs: 1,
         run_count: 2,
     }

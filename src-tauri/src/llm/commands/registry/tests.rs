@@ -20,9 +20,9 @@ use crate::workflow::diagnostics::{
     SharedWorkflowDiagnosticsStore, WorkflowRuntimeSnapshotRecord, WorkflowSchedulerSnapshotRecord,
 };
 use pantograph_workflow_service::{
-    graph::WorkflowSessionKind, WorkflowCapabilitiesResponse, WorkflowServiceError,
-    WorkflowSessionState, WorkflowSessionSummary, WorkflowTraceRuntimeMetrics,
-    WorkflowTraceSnapshotRequest,
+    graph::WorkflowExecutionSessionKind, WorkflowCapabilitiesResponse,
+    WorkflowExecutionSessionState, WorkflowExecutionSessionSummary, WorkflowServiceError,
+    WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest,
 };
 
 struct MockProcessHandle;
@@ -222,13 +222,13 @@ async fn runtime_debug_snapshot_includes_synced_runtime_and_recovery_state() {
             execution_id: "execution-debug".to_string(),
             session_id: "session-debug".to_string(),
             captured_at_ms: 456,
-            session: Some(WorkflowSessionSummary {
+            session: Some(WorkflowExecutionSessionSummary {
                 session_id: "session-debug".to_string(),
                 workflow_id: "workflow-debug".to_string(),
-                session_kind: WorkflowSessionKind::Workflow,
+                session_kind: WorkflowExecutionSessionKind::Workflow,
                 usage_profile: None,
                 keep_alive: false,
-                state: WorkflowSessionState::Running,
+                state: WorkflowExecutionSessionState::Running,
                 queued_runs: 0,
                 run_count: 1,
             }),
@@ -377,27 +377,30 @@ async fn runtime_debug_snapshot_preserves_backend_trace_and_scheduler_contracts(
         execution_id: "execution-debug".to_string(),
         session_id: "session-debug".to_string(),
         captured_at_ms: 456,
-        session: Some(WorkflowSessionSummary {
+        session: Some(WorkflowExecutionSessionSummary {
             session_id: "session-debug".to_string(),
             workflow_id: "workflow-debug".to_string(),
-            session_kind: WorkflowSessionKind::Workflow,
+            session_kind: WorkflowExecutionSessionKind::Workflow,
             usage_profile: Some("interactive".to_string()),
             keep_alive: true,
-            state: WorkflowSessionState::Running,
+            state: WorkflowExecutionSessionState::Running,
             queued_runs: 1,
             run_count: 1,
         }),
-        items: vec![pantograph_workflow_service::WorkflowSessionQueueItem {
-            queue_id: "queue-1".to_string(),
-            run_id: Some("execution-debug".to_string()),
-            enqueued_at_ms: Some(400),
-            dequeued_at_ms: Some(430),
-            priority: 3,
-            queue_position: None,
-            scheduler_admission_outcome: None,
-            scheduler_decision_reason: None,
-            status: pantograph_workflow_service::WorkflowSessionQueueItemStatus::Running,
-        }],
+        items: vec![
+            pantograph_workflow_service::WorkflowExecutionSessionQueueItem {
+                queue_id: "queue-1".to_string(),
+                run_id: Some("execution-debug".to_string()),
+                enqueued_at_ms: Some(400),
+                dequeued_at_ms: Some(430),
+                priority: 3,
+                queue_position: None,
+                scheduler_admission_outcome: None,
+                scheduler_decision_reason: None,
+                status:
+                    pantograph_workflow_service::WorkflowExecutionSessionQueueItemStatus::Running,
+            },
+        ],
         diagnostics: None,
         error: None,
     });

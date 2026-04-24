@@ -6,9 +6,9 @@ use std::path::PathBuf;
 use crate::capabilities;
 use crate::graph::WorkflowGraphSessionStateView;
 use crate::scheduler::{
-    select_runtime_unload_candidate_by_affinity, WorkflowSchedulerRuntimeRegistryDiagnostics,
-    WorkflowSessionRetentionHint, WorkflowSessionRuntimeSelectionTarget,
-    WorkflowSessionRuntimeUnloadCandidate, WorkflowSessionUnloadReason,
+    select_runtime_unload_candidate_by_affinity, WorkflowExecutionSessionRetentionHint,
+    WorkflowExecutionSessionRuntimeSelectionTarget, WorkflowExecutionSessionRuntimeUnloadCandidate,
+    WorkflowExecutionSessionUnloadReason, WorkflowSchedulerRuntimeRegistryDiagnostics,
 };
 use crate::technical_fit::{WorkflowTechnicalFitDecision, WorkflowTechnicalFitRequest};
 
@@ -186,7 +186,7 @@ pub trait WorkflowHost: Send + Sync {
         _session_id: &str,
         _workflow_id: &str,
         _usage_profile: Option<&str>,
-        _retention_hint: WorkflowSessionRetentionHint,
+        _retention_hint: WorkflowExecutionSessionRetentionHint,
     ) -> Result<bool, WorkflowServiceError> {
         Ok(true)
     }
@@ -196,7 +196,7 @@ pub trait WorkflowHost: Send + Sync {
         _session_id: &str,
         _workflow_id: &str,
         _usage_profile: Option<&str>,
-        _retention_hint: WorkflowSessionRetentionHint,
+        _retention_hint: WorkflowExecutionSessionRetentionHint,
     ) -> Result<(), WorkflowServiceError> {
         Ok(())
     }
@@ -206,16 +206,16 @@ pub trait WorkflowHost: Send + Sync {
         &self,
         _session_id: &str,
         _workflow_id: &str,
-        _reason: WorkflowSessionUnloadReason,
+        _reason: WorkflowExecutionSessionUnloadReason,
     ) -> Result<(), WorkflowServiceError> {
         Ok(())
     }
 
     async fn select_runtime_unload_candidate(
         &self,
-        target: &WorkflowSessionRuntimeSelectionTarget,
-        candidates: &[WorkflowSessionRuntimeUnloadCandidate],
-    ) -> Result<Option<WorkflowSessionRuntimeUnloadCandidate>, WorkflowServiceError> {
+        target: &WorkflowExecutionSessionRuntimeSelectionTarget,
+        candidates: &[WorkflowExecutionSessionRuntimeUnloadCandidate],
+    ) -> Result<Option<WorkflowExecutionSessionRuntimeUnloadCandidate>, WorkflowServiceError> {
         Ok(select_runtime_unload_candidate_by_affinity(
             target, candidates,
         ))
@@ -228,9 +228,9 @@ pub trait WorkflowHost: Send + Sync {
         Ok(None)
     }
 
-    /// Optional backend-owned live workflow-session inspection surface for
+    /// Optional backend-owned live workflow execution session inspection surface for
     /// node memory, checkpoint, and residency state.
-    async fn workflow_session_inspection_state(
+    async fn workflow_execution_session_inspection_state(
         &self,
         _session_id: &str,
         _workflow_id: &str,
@@ -249,7 +249,7 @@ pub struct WorkflowSchedulerRuntimeDiagnosticsRequest {
     pub keep_alive: bool,
     pub runtime_loaded: bool,
     pub next_admission_queue_id: Option<String>,
-    pub reclaim_candidates: Vec<WorkflowSessionRuntimeUnloadCandidate>,
+    pub reclaim_candidates: Vec<WorkflowExecutionSessionRuntimeUnloadCandidate>,
 }
 
 /// Optional backend provider for additive scheduler diagnostics that require

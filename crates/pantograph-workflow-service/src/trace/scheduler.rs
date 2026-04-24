@@ -1,6 +1,7 @@
 use crate::workflow::{
-    WorkflowSchedulerAdmissionOutcome, WorkflowSchedulerDecisionReason, WorkflowSessionQueueItem,
-    WorkflowSessionQueueItemStatus, WorkflowSessionState, WorkflowSessionSummary,
+    WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionQueueItemStatus,
+    WorkflowExecutionSessionState, WorkflowExecutionSessionSummary,
+    WorkflowSchedulerAdmissionOutcome, WorkflowSchedulerDecisionReason,
 };
 use crate::WorkflowSchedulerSnapshotDiagnostics;
 
@@ -8,8 +9,8 @@ pub(super) fn apply_scheduler_snapshot(
     trace: &mut super::store::WorkflowTraceRunState,
     execution_id: &str,
     session_id: &str,
-    session: Option<&WorkflowSessionSummary>,
-    items: &[WorkflowSessionQueueItem],
+    session: Option<&WorkflowExecutionSessionSummary>,
+    items: &[WorkflowExecutionSessionQueueItem],
     diagnostics: Option<&WorkflowSchedulerSnapshotDiagnostics>,
     error: Option<&str>,
 ) {
@@ -30,24 +31,24 @@ pub(super) fn apply_scheduler_snapshot(
 
     let matched_item = matched_queue_item(execution_id, items);
     let pending_visible = matched_item
-        .map(|item| item.status == WorkflowSessionQueueItemStatus::Pending)
+        .map(|item| item.status == WorkflowExecutionSessionQueueItemStatus::Pending)
         .unwrap_or_else(|| {
             session
                 .map(|summary| summary.queued_runs > 0)
                 .unwrap_or(false)
                 || items
                     .iter()
-                    .any(|item| item.status == WorkflowSessionQueueItemStatus::Pending)
+                    .any(|item| item.status == WorkflowExecutionSessionQueueItemStatus::Pending)
         });
     let running_visible = matched_item
-        .map(|item| item.status == WorkflowSessionQueueItemStatus::Running)
+        .map(|item| item.status == WorkflowExecutionSessionQueueItemStatus::Running)
         .unwrap_or_else(|| {
             matches!(
                 session.map(|summary| summary.state),
-                Some(WorkflowSessionState::Running)
+                Some(WorkflowExecutionSessionState::Running)
             ) || items
                 .iter()
-                .any(|item| item.status == WorkflowSessionQueueItemStatus::Running)
+                .any(|item| item.status == WorkflowExecutionSessionQueueItemStatus::Running)
         });
 
     if pending_visible {
@@ -97,16 +98,16 @@ pub(super) fn apply_scheduler_snapshot(
 
 fn scheduler_admission_outcome(
     execution_id: &str,
-    session: Option<&WorkflowSessionSummary>,
-    items: &[WorkflowSessionQueueItem],
+    session: Option<&WorkflowExecutionSessionSummary>,
+    items: &[WorkflowExecutionSessionQueueItem],
 ) -> Option<String> {
     let matched_item = matched_queue_item(execution_id, items);
     let outcome = if let Some(item) = matched_item {
         item.scheduler_admission_outcome.or(match item.status {
-            WorkflowSessionQueueItemStatus::Pending => {
+            WorkflowExecutionSessionQueueItemStatus::Pending => {
                 Some(WorkflowSchedulerAdmissionOutcome::Queued)
             }
-            WorkflowSessionQueueItemStatus::Running => {
+            WorkflowExecutionSessionQueueItemStatus::Running => {
                 Some(WorkflowSchedulerAdmissionOutcome::Admitted)
             }
         })
@@ -116,13 +117,13 @@ fn scheduler_admission_outcome(
             .unwrap_or(false)
             || items
                 .iter()
-                .any(|item| item.status == WorkflowSessionQueueItemStatus::Pending);
+                .any(|item| item.status == WorkflowExecutionSessionQueueItemStatus::Pending);
         let running_visible = matches!(
             session.map(|summary| summary.state),
-            Some(WorkflowSessionState::Running)
+            Some(WorkflowExecutionSessionState::Running)
         ) || items
             .iter()
-            .any(|item| item.status == WorkflowSessionQueueItemStatus::Running);
+            .any(|item| item.status == WorkflowExecutionSessionQueueItemStatus::Running);
 
         if running_visible {
             Some(WorkflowSchedulerAdmissionOutcome::Admitted)
@@ -138,16 +139,16 @@ fn scheduler_admission_outcome(
 
 fn scheduler_decision_reason(
     execution_id: &str,
-    session: Option<&WorkflowSessionSummary>,
-    items: &[WorkflowSessionQueueItem],
+    session: Option<&WorkflowExecutionSessionSummary>,
+    items: &[WorkflowExecutionSessionQueueItem],
 ) -> Option<String> {
     let matched_item = matched_queue_item(execution_id, items);
     let reason = if let Some(item) = matched_item {
         item.scheduler_decision_reason.or(match item.status {
-            WorkflowSessionQueueItemStatus::Pending => {
+            WorkflowExecutionSessionQueueItemStatus::Pending => {
                 Some(WorkflowSchedulerDecisionReason::MatchedPendingItem)
             }
-            WorkflowSessionQueueItemStatus::Running => {
+            WorkflowExecutionSessionQueueItemStatus::Running => {
                 Some(WorkflowSchedulerDecisionReason::MatchedRunningItem)
             }
         })
@@ -157,13 +158,13 @@ fn scheduler_decision_reason(
             .unwrap_or(false)
             || items
                 .iter()
-                .any(|item| item.status == WorkflowSessionQueueItemStatus::Pending);
+                .any(|item| item.status == WorkflowExecutionSessionQueueItemStatus::Pending);
         let running_visible = matches!(
             session.map(|summary| summary.state),
-            Some(WorkflowSessionState::Running)
+            Some(WorkflowExecutionSessionState::Running)
         ) || items
             .iter()
-            .any(|item| item.status == WorkflowSessionQueueItemStatus::Running);
+            .any(|item| item.status == WorkflowExecutionSessionQueueItemStatus::Running);
 
         if running_visible && pending_visible {
             Some(WorkflowSchedulerDecisionReason::SessionRunningWithBacklog)
@@ -173,13 +174,13 @@ fn scheduler_decision_reason(
             Some(WorkflowSchedulerDecisionReason::SessionQueued)
         } else {
             match session.map(|summary| summary.state) {
-                Some(WorkflowSessionState::IdleLoaded) => {
+                Some(WorkflowExecutionSessionState::IdleLoaded) => {
                     Some(WorkflowSchedulerDecisionReason::IdleLoaded)
                 }
-                Some(WorkflowSessionState::IdleUnloaded) => {
+                Some(WorkflowExecutionSessionState::IdleUnloaded) => {
                     Some(WorkflowSchedulerDecisionReason::IdleUnloaded)
                 }
-                Some(WorkflowSessionState::Running) | None => None,
+                Some(WorkflowExecutionSessionState::Running) | None => None,
             }
         }
     }?;
@@ -189,8 +190,8 @@ fn scheduler_decision_reason(
 
 fn matched_queue_item<'a>(
     execution_id: &str,
-    items: &'a [WorkflowSessionQueueItem],
-) -> Option<&'a WorkflowSessionQueueItem> {
+    items: &'a [WorkflowExecutionSessionQueueItem],
+) -> Option<&'a WorkflowExecutionSessionQueueItem> {
     items
         .iter()
         .find(|item| item.run_id.as_deref() == Some(execution_id))

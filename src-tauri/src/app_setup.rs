@@ -104,22 +104,22 @@ pub fn run_app() -> AppStartupResult<()> {
             move |app| {
                 let workflow_service_for_cleanup = workflow_service.clone();
                 let runtime_handle = tauri::async_runtime::handle().inner().clone();
-                let workflow_session_cleanup_worker =
+                let workflow_execution_session_cleanup_worker =
                     workflow_service_for_cleanup
                         .clone()
-                        .spawn_workflow_session_stale_cleanup_worker_with_handle(
-                            pantograph_workflow_service::WorkflowSessionStaleCleanupWorkerConfig::default(
+                        .spawn_workflow_execution_session_stale_cleanup_worker_with_handle(
+                            pantograph_workflow_service::WorkflowExecutionSessionStaleCleanupWorkerConfig::default(
                             ),
                             runtime_handle,
                         )
                         .map_err(|error| {
                             startup_error(format!(
-                                "failed to start workflow-session stale cleanup worker: {error}"
+                                "failed to start workflow execution session stale cleanup worker: {error}"
                             ))
                         })?;
-                let workflow_session_cleanup_worker: workflow::commands::SharedWorkflowSessionStaleCleanupWorker =
-                    Arc::new(workflow_session_cleanup_worker);
-                app.manage(workflow_session_cleanup_worker);
+                let workflow_execution_session_cleanup_worker: workflow::commands::SharedWorkflowExecutionSessionStaleCleanupWorker =
+                    Arc::new(workflow_execution_session_cleanup_worker);
+                app.manage(workflow_execution_session_cleanup_worker);
 
                 let app_data_dir = app.path().app_data_dir().map_err(|error| {
                     startup_error(format!("failed to resolve app data dir: {error}"))
@@ -349,20 +349,20 @@ pub fn run_app() -> AppStartupResult<()> {
             crate::workflow::commands::workflow_create_session,
             crate::workflow::commands::workflow_run_session,
             crate::workflow::commands::workflow_close_session,
-            crate::workflow::commands::workflow_get_session_status,
-            crate::workflow::commands::workflow_list_session_queue,
-            crate::workflow::commands::workflow_cleanup_stale_sessions,
+            crate::workflow::commands::workflow_get_execution_session_status,
+            crate::workflow::commands::workflow_list_execution_session_queue,
+            crate::workflow::commands::workflow_cleanup_stale_execution_sessions,
             crate::workflow::commands::workflow_get_scheduler_snapshot,
             crate::workflow::commands::workflow_get_diagnostics_snapshot,
             crate::workflow::commands::workflow_get_trace_snapshot,
             crate::workflow::commands::workflow_clear_diagnostics_history,
-            crate::workflow::commands::workflow_cancel_session_queue_item,
-            crate::workflow::commands::workflow_reprioritize_session_queue_item,
-            crate::workflow::commands::workflow_set_session_keep_alive,
+            crate::workflow::commands::workflow_cancel_execution_session_queue_item,
+            crate::workflow::commands::workflow_reprioritize_execution_session_queue_item,
+            crate::workflow::commands::workflow_set_execution_session_keep_alive,
             // Node-engine workflow commands (Phase 5)
             crate::workflow::workflow_execution_tauri_commands::execute_workflow_v2,
-            crate::workflow::workflow_execution_tauri_commands::create_workflow_session,
-            crate::workflow::workflow_execution_tauri_commands::run_workflow_session,
+            crate::workflow::workflow_execution_tauri_commands::create_workflow_execution_session,
+            crate::workflow::workflow_execution_tauri_commands::run_workflow_execution_session,
             crate::workflow::workflow_execution_tauri_commands::get_undo_redo_state,
             crate::workflow::workflow_execution_tauri_commands::undo_workflow,
             crate::workflow::workflow_execution_tauri_commands::redo_workflow,

@@ -302,7 +302,7 @@ pub async fn get_execution_graph(
         .map_err(|e| e.to_envelope_json())
 }
 
-pub async fn create_workflow_session(
+pub async fn create_workflow_execution_session(
     graph: WorkflowGraph,
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<pantograph_workflow_service::WorkflowGraphEditSessionCreateResponse, String> {

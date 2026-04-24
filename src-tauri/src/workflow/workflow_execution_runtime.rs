@@ -42,7 +42,7 @@ pub struct ExecuteWorkflowV2Input<'a> {
     pub channel: Channel<WorkflowEvent>,
 }
 
-pub struct RunWorkflowSessionInput<'a> {
+pub struct RunWorkflowExecutionSessionInput<'a> {
     pub app: AppHandle,
     pub session_id: String,
     pub state: WorkflowExecutionRuntimeState<'a>,
@@ -335,8 +335,10 @@ pub async fn execute_workflow_v2(input: ExecuteWorkflowV2Input<'_>) -> Result<St
     Ok(execution_id)
 }
 
-pub async fn run_workflow_session(input: RunWorkflowSessionInput<'_>) -> Result<(), String> {
-    let RunWorkflowSessionInput {
+pub async fn run_workflow_execution_session(
+    input: RunWorkflowExecutionSessionInput<'_>,
+) -> Result<(), String> {
+    let RunWorkflowExecutionSessionInput {
         app,
         session_id,
         state,

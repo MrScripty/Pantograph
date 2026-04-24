@@ -49,7 +49,7 @@ async fn create_session_returns_backend_owned_edit_kind() {
 
     let session = store.create_session(sample_graph()).await;
 
-    assert_eq!(session.session_kind, WorkflowSessionKind::Edit);
+    assert_eq!(session.session_kind, WorkflowExecutionSessionKind::Edit);
     assert!(!session.session_id.is_empty());
     assert!(!session.graph_revision.is_empty());
 }
@@ -91,8 +91,8 @@ async fn update_node_data_merges_patch_into_existing_data() {
             && dirty_tasks == &vec!["text-input".to_string(), "text-output".to_string()]
     ));
     let memory_impact = response
-        .workflow_session_state
-        .expect("workflow session state")
+        .workflow_execution_session_state
+        .expect("workflow execution session state")
         .memory_impact
         .expect("memory impact");
     assert!(!memory_impact.fallback_to_full_invalidation);
@@ -159,8 +159,8 @@ async fn update_node_position_updates_session_graph() {
     ));
     assert_eq!(
         response
-            .workflow_session_state
-            .expect("workflow session state")
+            .workflow_execution_session_state
+            .expect("workflow execution session state")
             .memory_impact,
         None
     );
@@ -193,8 +193,8 @@ async fn remove_node_prunes_attached_edges() {
             && dirty_tasks == &vec!["text-output".to_string()]
     ));
     let memory_impact = response
-        .workflow_session_state
-        .expect("workflow session state")
+        .workflow_execution_session_state
+        .expect("workflow execution session state")
         .memory_impact
         .expect("memory impact");
     assert_eq!(memory_impact.node_decisions.len(), 1);
@@ -265,8 +265,8 @@ async fn get_session_graph_replays_last_memory_impact_until_a_non_invalidating_e
         .await
         .expect("get session graph after data edit");
     let memory_impact = after_data_edit
-        .workflow_session_state
-        .expect("workflow session state")
+        .workflow_execution_session_state
+        .expect("workflow execution session state")
         .memory_impact
         .expect("memory impact");
     assert_eq!(memory_impact.node_decisions.len(), 2);
@@ -287,8 +287,8 @@ async fn get_session_graph_replays_last_memory_impact_until_a_non_invalidating_e
         .expect("get session graph after position edit");
     assert_eq!(
         after_position_edit
-            .workflow_session_state
-            .expect("workflow session state")
+            .workflow_execution_session_state
+            .expect("workflow execution session state")
             .memory_impact,
         None
     );
@@ -331,9 +331,9 @@ async fn insert_node_on_edge_replaces_original_edge_in_session_graph() {
         }) if workflow_id == session_id && execution_id == session_id
     ));
     let response_memory_impact = response
-        .workflow_session_state
+        .workflow_execution_session_state
         .clone()
-        .expect("workflow session state")
+        .expect("workflow execution session state")
         .memory_impact
         .expect("memory impact");
     assert!(response_memory_impact
@@ -346,8 +346,8 @@ async fn insert_node_on_edge_replaces_original_edge_in_session_graph() {
         .await
         .expect("get session graph after insert");
     let memory_impact = snapshot
-        .workflow_session_state
-        .expect("workflow session state")
+        .workflow_execution_session_state
+        .expect("workflow execution session state")
         .memory_impact
         .expect("memory impact");
     assert!(!memory_impact.node_decisions.is_empty());
@@ -397,9 +397,9 @@ async fn connect_persists_memory_impact_for_later_session_snapshot() {
         }) if !memory_impact.node_decisions.is_empty()
     ));
     let response_memory_impact = response
-        .workflow_session_state
+        .workflow_execution_session_state
         .clone()
-        .expect("workflow session state")
+        .expect("workflow execution session state")
         .memory_impact
         .expect("memory impact");
     assert_eq!(response_memory_impact.node_decisions.len(), 1);
@@ -413,8 +413,8 @@ async fn connect_persists_memory_impact_for_later_session_snapshot() {
         .await
         .expect("get session graph after connect");
     let memory_impact = snapshot
-        .workflow_session_state
-        .expect("workflow session state")
+        .workflow_execution_session_state
+        .expect("workflow execution session state")
         .memory_impact
         .expect("memory impact");
     assert_eq!(memory_impact.node_decisions.len(), 1);

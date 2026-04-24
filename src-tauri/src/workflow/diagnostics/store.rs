@@ -3,10 +3,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use pantograph_embedded_runtime::ManagedRuntimeManagerRuntimeView;
 use pantograph_workflow_service::{
-    WorkflowCapabilitiesResponse, WorkflowGraph, WorkflowServiceError, WorkflowSessionQueueItem,
-    WorkflowSessionSummary, WorkflowTraceEvent, WorkflowTraceRuntimeMetrics,
-    WorkflowTraceRuntimeSelection, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
-    WorkflowTraceStore,
+    WorkflowCapabilitiesResponse, WorkflowExecutionSessionQueueItem,
+    WorkflowExecutionSessionSummary, WorkflowGraph, WorkflowServiceError, WorkflowTraceEvent,
+    WorkflowTraceRuntimeMetrics, WorkflowTraceRuntimeSelection, WorkflowTraceSnapshotRequest,
+    WorkflowTraceSnapshotResponse, WorkflowTraceStore,
 };
 use parking_lot::Mutex;
 
@@ -47,8 +47,8 @@ pub struct WorkflowSchedulerSnapshotRecord {
     pub execution_id: String,
     pub session_id: String,
     pub captured_at_ms: u64,
-    pub session: Option<WorkflowSessionSummary>,
-    pub items: Vec<WorkflowSessionQueueItem>,
+    pub session: Option<WorkflowExecutionSessionSummary>,
+    pub items: Vec<WorkflowExecutionSessionQueueItem>,
     pub diagnostics: Option<pantograph_workflow_service::WorkflowSchedulerSnapshotDiagnostics>,
     pub error: Option<String>,
 }
@@ -70,8 +70,8 @@ pub struct WorkflowRuntimeSnapshotUpdate {
 pub struct WorkflowSchedulerSnapshotUpdate {
     pub workflow_id: Option<String>,
     pub session_id: Option<String>,
-    pub session: Option<WorkflowSessionSummary>,
-    pub items: Vec<WorkflowSessionQueueItem>,
+    pub session: Option<WorkflowExecutionSessionSummary>,
+    pub items: Vec<WorkflowExecutionSessionQueueItem>,
     pub diagnostics: Option<pantograph_workflow_service::WorkflowSchedulerSnapshotDiagnostics>,
     pub last_error: Option<String>,
     pub captured_at_ms: u64,

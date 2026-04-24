@@ -23,9 +23,9 @@ pub type SharedNodeRegistry = Arc<node_engine::NodeRegistry>;
 pub type SharedExtensions = Arc<RwLock<node_engine::ExecutorExtensions>>;
 /// Shared headless workflow service state (session-aware).
 pub type SharedWorkflowService = Arc<pantograph_workflow_service::WorkflowService>;
-/// Shared backend-owned stale workflow-session cleanup worker.
-pub type SharedWorkflowSessionStaleCleanupWorker =
-    Arc<pantograph_workflow_service::WorkflowSessionStaleCleanupWorker>;
+/// Shared backend-owned stale workflow execution session cleanup worker.
+pub type SharedWorkflowExecutionSessionStaleCleanupWorker =
+    Arc<pantograph_workflow_service::WorkflowExecutionSessionStaleCleanupWorker>;
 /// Shared backend-owned diagnostics projection store.
 pub type SharedWorkflowDiagnosticsStore = Arc<super::diagnostics::WorkflowDiagnosticsStore>;
 /// Shared filesystem-backed workflow graph store.
@@ -177,13 +177,13 @@ pub async fn workflow_preflight(
 
 #[command]
 pub async fn workflow_create_session(
-    request: pantograph_workflow_service::WorkflowSessionCreateRequest,
+    request: pantograph_workflow_service::WorkflowExecutionSessionCreateRequest,
     app: AppHandle,
     gateway: State<'_, SharedGateway>,
     runtime_registry: State<'_, SharedRuntimeRegistry>,
     extensions: State<'_, SharedExtensions>,
     workflow_service: State<'_, SharedWorkflowService>,
-) -> Result<pantograph_workflow_service::WorkflowSessionCreateResponse, String> {
+) -> Result<pantograph_workflow_service::WorkflowExecutionSessionCreateResponse, String> {
     super::headless_workflow_commands::workflow_create_session(
         request,
         app,
@@ -197,7 +197,7 @@ pub async fn workflow_create_session(
 
 #[command]
 pub async fn workflow_run_session(
-    request: pantograph_workflow_service::WorkflowSessionRunRequest,
+    request: pantograph_workflow_service::WorkflowExecutionSessionRunRequest,
     app: AppHandle,
     gateway: State<'_, SharedGateway>,
     runtime_registry: State<'_, SharedRuntimeRegistry>,
@@ -219,13 +219,13 @@ pub async fn workflow_run_session(
 
 #[command]
 pub async fn workflow_close_session(
-    request: pantograph_workflow_service::WorkflowSessionCloseRequest,
+    request: pantograph_workflow_service::WorkflowExecutionSessionCloseRequest,
     app: AppHandle,
     gateway: State<'_, SharedGateway>,
     runtime_registry: State<'_, SharedRuntimeRegistry>,
     extensions: State<'_, SharedExtensions>,
     workflow_service: State<'_, SharedWorkflowService>,
-) -> Result<pantograph_workflow_service::WorkflowSessionCloseResponse, String> {
+) -> Result<pantograph_workflow_service::WorkflowExecutionSessionCloseResponse, String> {
     super::headless_workflow_commands::workflow_close_session(
         request,
         app,
@@ -238,28 +238,39 @@ pub async fn workflow_close_session(
 }
 
 #[command]
-pub async fn workflow_get_session_status(
-    request: pantograph_workflow_service::WorkflowSessionStatusRequest,
+pub async fn workflow_get_execution_session_status(
+    request: pantograph_workflow_service::WorkflowExecutionSessionStatusRequest,
     workflow_service: State<'_, SharedWorkflowService>,
-) -> Result<pantograph_workflow_service::WorkflowSessionStatusResponse, String> {
-    super::headless_workflow_commands::workflow_get_session_status(request, workflow_service).await
+) -> Result<pantograph_workflow_service::WorkflowExecutionSessionStatusResponse, String> {
+    super::headless_workflow_commands::workflow_get_execution_session_status(
+        request,
+        workflow_service,
+    )
+    .await
 }
 
 #[command]
-pub async fn workflow_list_session_queue(
-    request: pantograph_workflow_service::WorkflowSessionQueueListRequest,
+pub async fn workflow_list_execution_session_queue(
+    request: pantograph_workflow_service::WorkflowExecutionSessionQueueListRequest,
     workflow_service: State<'_, SharedWorkflowService>,
-) -> Result<pantograph_workflow_service::WorkflowSessionQueueListResponse, String> {
-    super::headless_workflow_commands::workflow_list_session_queue(request, workflow_service).await
+) -> Result<pantograph_workflow_service::WorkflowExecutionSessionQueueListResponse, String> {
+    super::headless_workflow_commands::workflow_list_execution_session_queue(
+        request,
+        workflow_service,
+    )
+    .await
 }
 
 #[command]
-pub async fn workflow_cleanup_stale_sessions(
-    request: pantograph_workflow_service::WorkflowSessionStaleCleanupRequest,
+pub async fn workflow_cleanup_stale_execution_sessions(
+    request: pantograph_workflow_service::WorkflowExecutionSessionStaleCleanupRequest,
     workflow_service: State<'_, SharedWorkflowService>,
-) -> Result<pantograph_workflow_service::WorkflowSessionStaleCleanupResponse, String> {
-    super::headless_workflow_commands::workflow_cleanup_stale_sessions(request, workflow_service)
-        .await
+) -> Result<pantograph_workflow_service::WorkflowExecutionSessionStaleCleanupResponse, String> {
+    super::headless_workflow_commands::workflow_cleanup_stale_execution_sessions(
+        request,
+        workflow_service,
+    )
+    .await
 }
 
 #[command]
@@ -272,20 +283,11 @@ pub async fn workflow_get_scheduler_snapshot(
 }
 
 #[command]
-pub async fn workflow_cancel_session_queue_item(
-    request: pantograph_workflow_service::WorkflowSessionQueueCancelRequest,
+pub async fn workflow_cancel_execution_session_queue_item(
+    request: pantograph_workflow_service::WorkflowExecutionSessionQueueCancelRequest,
     workflow_service: State<'_, SharedWorkflowService>,
-) -> Result<pantograph_workflow_service::WorkflowSessionQueueCancelResponse, String> {
-    super::headless_workflow_commands::workflow_cancel_session_queue_item(request, workflow_service)
-        .await
-}
-
-#[command]
-pub async fn workflow_reprioritize_session_queue_item(
-    request: pantograph_workflow_service::WorkflowSessionQueueReprioritizeRequest,
-    workflow_service: State<'_, SharedWorkflowService>,
-) -> Result<pantograph_workflow_service::WorkflowSessionQueueReprioritizeResponse, String> {
-    super::headless_workflow_commands::workflow_reprioritize_session_queue_item(
+) -> Result<pantograph_workflow_service::WorkflowExecutionSessionQueueCancelResponse, String> {
+    super::headless_workflow_commands::workflow_cancel_execution_session_queue_item(
         request,
         workflow_service,
     )
@@ -293,15 +295,28 @@ pub async fn workflow_reprioritize_session_queue_item(
 }
 
 #[command]
-pub async fn workflow_set_session_keep_alive(
-    request: pantograph_workflow_service::WorkflowSessionKeepAliveRequest,
+pub async fn workflow_reprioritize_execution_session_queue_item(
+    request: pantograph_workflow_service::WorkflowExecutionSessionQueueReprioritizeRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<pantograph_workflow_service::WorkflowExecutionSessionQueueReprioritizeResponse, String>
+{
+    super::headless_workflow_commands::workflow_reprioritize_execution_session_queue_item(
+        request,
+        workflow_service,
+    )
+    .await
+}
+
+#[command]
+pub async fn workflow_set_execution_session_keep_alive(
+    request: pantograph_workflow_service::WorkflowExecutionSessionKeepAliveRequest,
     app: AppHandle,
     gateway: State<'_, SharedGateway>,
     runtime_registry: State<'_, SharedRuntimeRegistry>,
     extensions: State<'_, SharedExtensions>,
     workflow_service: State<'_, SharedWorkflowService>,
-) -> Result<pantograph_workflow_service::WorkflowSessionKeepAliveResponse, String> {
-    super::headless_workflow_commands::workflow_set_session_keep_alive(
+) -> Result<pantograph_workflow_service::WorkflowExecutionSessionKeepAliveResponse, String> {
+    super::headless_workflow_commands::workflow_set_execution_session_keep_alive(
         request,
         app,
         gateway,

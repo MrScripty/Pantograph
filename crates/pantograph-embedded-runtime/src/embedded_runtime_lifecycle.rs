@@ -11,7 +11,7 @@ use pantograph_workflow_service::WorkflowService;
 use tokio::sync::RwLock;
 
 use crate::{
-    runtime_capabilities, runtime_registry, workflow_session_execution, EmbeddedRuntime,
+    runtime_capabilities, runtime_registry, workflow_execution_session_execution, EmbeddedRuntime,
     EmbeddedRuntimeConfig, EmbeddedWorkflowHost, EmbeddedWorkflowSchedulerDiagnosticsProvider,
     HostRuntimeModeSnapshot, ProcessPythonRuntimeAdapter, PythonRuntimeAdapter, RagBackend,
     SharedExtensions, SharedWorkflowService,
@@ -39,7 +39,7 @@ impl EmbeddedRuntime {
             runtime_registry: None,
             session_runtime_reservations: Arc::new(Mutex::new(HashMap::new())),
             session_executions: Arc::new(
-                workflow_session_execution::WorkflowSessionExecutionStore::new(),
+                workflow_execution_session_execution::WorkflowExecutionSessionExecutionStore::new(),
             ),
             rag_backend,
             python_runtime,
@@ -209,7 +209,7 @@ impl EmbeddedRuntime {
     pub async fn shutdown(&self) {
         if let Err(error) = self.workflow_service.invalidate_all_session_runtimes() {
             log::warn!(
-                "failed to invalidate workflow session runtimes before shutdown: {}",
+                "failed to invalidate workflow execution session runtimes before shutdown: {}",
                 error
             );
         }

@@ -224,7 +224,7 @@ async fn execute_edit_session_graph_restore_keeps_scheduler_runtime_registry_dia
     );
 
     let loaded = runtime
-        .create_workflow_session(WorkflowSessionCreateRequest {
+        .create_workflow_execution_session(WorkflowExecutionSessionCreateRequest {
             workflow_id: "runtime-text".to_string(),
             usage_profile: Some("interactive".to_string()),
             keep_alive: true,
@@ -244,7 +244,7 @@ async fn execute_edit_session_graph_restore_keeps_scheduler_runtime_registry_dia
             keep_alive: false,
             runtime_loaded: false,
             next_admission_queue_id: Some("queue-after-restore".to_string()),
-            reclaim_candidates: vec![WorkflowSessionRuntimeUnloadCandidate {
+            reclaim_candidates: vec![WorkflowExecutionSessionRuntimeUnloadCandidate {
                 session_id: loaded.session_id.clone(),
                 workflow_id: "runtime-text".to_string(),
                 usage_profile: Some("interactive".to_string()),

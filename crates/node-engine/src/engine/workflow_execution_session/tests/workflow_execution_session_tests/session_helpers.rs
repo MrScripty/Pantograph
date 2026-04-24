@@ -1,7 +1,7 @@
 use super::*;
 
 #[tokio::test]
-async fn executor_workflow_session_helpers_preserve_graph_revision_and_residency() {
+async fn executor_workflow_execution_session_helpers_preserve_graph_revision_and_residency() {
     let executor = WorkflowExecutor::new(
         "exec-1",
         crate::types::WorkflowGraph::new("graph-1", "Graph"),
@@ -9,44 +9,46 @@ async fn executor_workflow_session_helpers_preserve_graph_revision_and_residency
     );
 
     assert_eq!(
-        workflow_session_residency(&executor).await,
-        WorkflowSessionResidencyState::Active
+        workflow_execution_session_residency(&executor).await,
+        WorkflowExecutionSessionResidencyState::Active
     );
 
-    set_workflow_session_residency(
+    set_workflow_execution_session_residency(
         &executor,
-        WorkflowSessionResidencyState::CheckpointedButUnloaded,
+        WorkflowExecutionSessionResidencyState::CheckpointedButUnloaded,
     )
     .await;
 
-    let summary = workflow_session_checkpoint_summary(&executor, "session-1").await;
+    let summary = workflow_execution_session_checkpoint_summary(&executor, "session-1").await;
     assert_eq!(summary.session_id, "session-1");
     assert_eq!(summary.graph_revision, "graph-1");
     assert_eq!(
         summary.residency,
-        WorkflowSessionResidencyState::CheckpointedButUnloaded
+        WorkflowExecutionSessionResidencyState::CheckpointedButUnloaded
     );
     assert!(!summary.checkpoint_available);
 
-    mark_workflow_session_checkpoint_available(&executor, "session-1").await;
-    let checkpointed_summary = workflow_session_checkpoint_summary(&executor, "session-1").await;
+    mark_workflow_execution_session_checkpoint_available(&executor, "session-1").await;
+    let checkpointed_summary =
+        workflow_execution_session_checkpoint_summary(&executor, "session-1").await;
     assert!(checkpointed_summary.checkpoint_available);
     assert!(checkpointed_summary.checkpointed_at_ms.is_some());
 
-    clear_workflow_session_checkpoint(&executor, "session-1").await;
-    let cleared_summary = workflow_session_checkpoint_summary(&executor, "session-1").await;
+    clear_workflow_execution_session_checkpoint(&executor, "session-1").await;
+    let cleared_summary =
+        workflow_execution_session_checkpoint_summary(&executor, "session-1").await;
     assert!(!cleared_summary.checkpoint_available);
 }
 
 #[tokio::test]
-async fn executor_workflow_session_helpers_round_trip_node_memory_snapshots() {
+async fn executor_workflow_execution_session_helpers_round_trip_node_memory_snapshots() {
     let executor = WorkflowExecutor::new(
         "exec-1",
         crate::types::WorkflowGraph::new("graph-1", "Graph"),
         Arc::new(NullEventSink),
     );
 
-    record_workflow_session_node_memory(
+    record_workflow_execution_session_node_memory(
         &executor,
         NodeMemorySnapshot {
             identity: crate::engine::NodeMemoryIdentity {
@@ -65,40 +67,41 @@ async fn executor_workflow_session_helpers_round_trip_node_memory_snapshots() {
     )
     .await;
 
-    let snapshots = workflow_session_node_memory_snapshots(&executor, "session-1").await;
+    let snapshots = workflow_execution_session_node_memory_snapshots(&executor, "session-1").await;
     assert_eq!(snapshots.len(), 1);
     assert_eq!(snapshots[0].identity.node_id, "node-a");
 
-    clear_workflow_session_node_memory(&executor, "session-1").await;
+    clear_workflow_execution_session_node_memory(&executor, "session-1").await;
     assert!(
-        workflow_session_node_memory_snapshots(&executor, "session-1")
+        workflow_execution_session_node_memory_snapshots(&executor, "session-1")
             .await
             .is_empty()
     );
 }
 
 #[tokio::test]
-async fn executor_workflow_session_helpers_bind_and_clear_workflow_session_identity() {
+async fn executor_workflow_execution_session_helpers_bind_and_clear_workflow_execution_session_identity(
+) {
     let executor = WorkflowExecutor::new(
         "exec-1",
         crate::types::WorkflowGraph::new("graph-1", "Graph"),
         Arc::new(NullEventSink),
     );
 
-    assert_eq!(bound_workflow_session_id(&executor).await, None);
-    bind_workflow_session(&executor, "session-1").await;
+    assert_eq!(bound_workflow_execution_session_id(&executor).await, None);
+    bind_workflow_execution_session(&executor, "session-1").await;
     assert_eq!(
-        bound_workflow_session_id(&executor).await,
+        bound_workflow_execution_session_id(&executor).await,
         Some("session-1".to_string())
     );
-    clear_bound_workflow_session(&executor).await;
-    assert_eq!(bound_workflow_session_id(&executor).await, None);
+    clear_bound_workflow_execution_session(&executor).await;
+    assert_eq!(bound_workflow_execution_session_id(&executor).await, None);
 }
 
 #[tokio::test]
 async fn sync_bound_session_node_memory_from_cache_projects_all_cached_nodes() {
     let executor = WorkflowExecutor::new("exec-1", linear_graph(), Arc::new(NullEventSink));
-    bind_workflow_session(&executor, "session-1").await;
+    bind_workflow_execution_session(&executor, "session-1").await;
 
     executor
         .demand(&"c".to_string(), &SnapshotTaskExecutor)
@@ -106,7 +109,7 @@ async fn sync_bound_session_node_memory_from_cache_projects_all_cached_nodes() {
         .expect("demand graph");
     sync_bound_session_node_memory_from_cache(&executor).await;
 
-    let snapshots = workflow_session_node_memory_snapshots(&executor, "session-1").await;
+    let snapshots = workflow_execution_session_node_memory_snapshots(&executor, "session-1").await;
     assert_eq!(snapshots.len(), 3);
     assert_eq!(
         snapshots
@@ -141,16 +144,17 @@ async fn sync_bound_session_node_memory_from_cache_projects_all_cached_nodes() {
 }
 
 #[tokio::test]
-async fn repeated_runs_replace_node_memory_for_the_same_workflow_session() {
+async fn repeated_runs_replace_node_memory_for_the_same_workflow_execution_session() {
     let executor = WorkflowExecutor::new("exec-1", linear_graph(), Arc::new(NullEventSink));
     let task_executor = SequencedSnapshotTaskExecutor::new();
-    bind_workflow_session(&executor, "session-1").await;
+    bind_workflow_execution_session(&executor, "session-1").await;
 
     executor
         .demand(&"c".to_string(), &task_executor)
         .await
         .expect("run first demand");
-    let first_snapshots = workflow_session_node_memory_snapshots(&executor, "session-1").await;
+    let first_snapshots =
+        workflow_execution_session_node_memory_snapshots(&executor, "session-1").await;
     assert_eq!(first_snapshots.len(), 3);
     assert_eq!(
         first_snapshots[2].output_snapshot,
@@ -172,7 +176,8 @@ async fn repeated_runs_replace_node_memory_for_the_same_workflow_session() {
         .await
         .expect("run second demand");
 
-    let second_snapshots = workflow_session_node_memory_snapshots(&executor, "session-1").await;
+    let second_snapshots =
+        workflow_execution_session_node_memory_snapshots(&executor, "session-1").await;
     assert_eq!(second_snapshots.len(), 3);
     assert_eq!(
         second_snapshots

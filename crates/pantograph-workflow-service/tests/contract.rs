@@ -1,15 +1,16 @@
 use async_trait::async_trait;
-use pantograph_workflow_service::graph::WorkflowSessionKind;
+use pantograph_workflow_service::graph::WorkflowExecutionSessionKind;
 use pantograph_workflow_service::{
-    WorkflowCapabilitiesRequest, WorkflowCapabilityModel, WorkflowHost, WorkflowHostCapabilities,
-    WorkflowIoNode, WorkflowIoPort, WorkflowIoRequest, WorkflowIoResponse, WorkflowOutputTarget,
+    WorkflowCapabilitiesRequest, WorkflowCapabilityModel, WorkflowExecutionSessionQueueItem,
+    WorkflowExecutionSessionQueueItemStatus, WorkflowExecutionSessionState,
+    WorkflowExecutionSessionSummary, WorkflowHost, WorkflowHostCapabilities, WorkflowIoNode,
+    WorkflowIoPort, WorkflowIoRequest, WorkflowIoResponse, WorkflowOutputTarget,
     WorkflowPortBinding, WorkflowPreflightRequest, WorkflowRunRequest, WorkflowRuntimeCapability,
     WorkflowRuntimeInstallState, WorkflowRuntimeRequirements, WorkflowRuntimeSourceKind,
     WorkflowSchedulerSnapshotResponse, WorkflowService, WorkflowServiceError,
-    WorkflowSessionQueueItem, WorkflowSessionQueueItemStatus, WorkflowSessionState,
-    WorkflowSessionSummary, WorkflowTraceNodeRecord, WorkflowTraceNodeStatus,
-    WorkflowTraceQueueMetrics, WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest,
-    WorkflowTraceSnapshotResponse, WorkflowTraceStatus, WorkflowTraceSummary,
+    WorkflowTraceNodeRecord, WorkflowTraceNodeStatus, WorkflowTraceQueueMetrics,
+    WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
+    WorkflowTraceStatus, WorkflowTraceSummary,
 };
 
 struct ContractHost;
@@ -466,17 +467,17 @@ fn workflow_scheduler_snapshot_response_contract_snapshot() {
         workflow_id: Some("wf-1".to_string()),
         session_id: "session-1".to_string(),
         trace_execution_id: Some("run-1".to_string()),
-        session: WorkflowSessionSummary {
+        session: WorkflowExecutionSessionSummary {
             session_id: "session-1".to_string(),
             workflow_id: "wf-1".to_string(),
-            session_kind: WorkflowSessionKind::Workflow,
+            session_kind: WorkflowExecutionSessionKind::Workflow,
             usage_profile: Some("interactive".to_string()),
             keep_alive: true,
-            state: WorkflowSessionState::Running,
+            state: WorkflowExecutionSessionState::Running,
             queued_runs: 1,
             run_count: 2,
         },
-        items: vec![WorkflowSessionQueueItem {
+        items: vec![WorkflowExecutionSessionQueueItem {
             queue_id: "queue-1".to_string(),
             run_id: Some("run-1".to_string()),
             enqueued_at_ms: Some(100),
@@ -485,7 +486,7 @@ fn workflow_scheduler_snapshot_response_contract_snapshot() {
             queue_position: None,
             scheduler_admission_outcome: None,
             scheduler_decision_reason: None,
-            status: WorkflowSessionQueueItemStatus::Running,
+            status: WorkflowExecutionSessionQueueItemStatus::Running,
         }],
         diagnostics: None,
     };
