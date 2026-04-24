@@ -43,7 +43,9 @@ In scope:
 Out of scope:
 
 - source-code implementation
-- exact crate names, storage engine selection, or binding generator finalization
+- exact source-code edits before the applicable stage-start gate passes
+- changing crate ownership, storage engine selection, or binding generator
+  direction without updating the owning numbered stage plan first
 - detailed GUI layout or visual design
 
 ## Core Decision
@@ -148,10 +150,16 @@ Owns presentation:
 - node inspector rendering
 - port editor UI
 - diagnostics views
+- client/session/bucket/run attribution history views
 - user actions submitted back to backend graph/edit APIs
 
 The GUI renders backend-owned contracts and projections. It must not invent
 effective port shape or business semantics.
+
+Diagnostics and attribution history GUI surfaces must render backend-owned
+client, session lifecycle, bucket, workflow-run, and usage ledger projections.
+The GUI may request bucket creation or non-default bucket deletion, but it must
+wait for backend confirmation before changing displayed backend-owned state.
 
 ## Implementation Order
 
@@ -167,6 +175,34 @@ Each implementation stage must start by applying
 `09-stage-end-refactor-gate.md` before the next numbered stage begins.
 If the start gate determines that a stage needs parallel workers, the stage
 must first be expanded using `10-concurrent-phased-implementation.md`.
+
+## Recorded Implementation Decisions
+
+- Stage `01` adds `pantograph-runtime-attribution` as the canonical
+  attribution owner with digest-only credentials, Pantograph-owned durable
+  buckets scoped to client namespaces, session lifecycle records, single-owner
+  session transitions, and SQLite persistence. The existing
+  `pantograph-runtime-identity` crate remains limited to runtime/backend alias
+  normalization.
+- Stage `02` adds `pantograph-node-contracts` as the canonical node contract,
+  effective contract, compatibility, and discovery owner.
+- Stage `03` uses `pantograph-embedded-runtime` as the runtime execution
+  context, managed capability, baseline diagnostics, lifecycle, and guarantee
+  owner.
+- Stage `04` adds `pantograph-diagnostics-ledger` as the durable
+  model/license usage ledger owner with SQLite persistence for the first
+  implementation.
+- Stage `05` keeps composition semantics in `pantograph-node-contracts`,
+  concrete node factoring in `workflow-nodes`, runtime lineage in
+  `pantograph-embedded-runtime`, and one-time saved-workflow upgrade use cases
+  in `pantograph-workflow-service`. Old workflow-session and graph-contract
+  surfaces are cleanly upgraded or removed; this plan set does not preserve
+  backward-compatible residual APIs for replaced systems.
+- Stage `06` keeps host bindings as projections through `pantograph-uniffi`
+  for non-BEAM lanes and `pantograph-rustler` for Elixir/BEAM. Native Rust is
+  resolved first as the base API, then C#, Python, and BEAM project that API
+  with language-native tests and documented support tiers strong enough to make
+  future binding additions repeatable.
 
 ## Tasks
 
@@ -186,6 +222,28 @@ must first be expanded using `10-concurrent-phased-implementation.md`.
 - Apply the stage-end refactor gate after each implementation stage and record
   whether no refactor was needed, an in-scope touched-file refactor was
   completed, or broader refactor pressure requires a separate plan.
+- Create or update ADRs at the completion of the stage that first implements an
+  architecture-defining decision from this plan set.
+
+## ADR Checkpoints
+
+- Stage `01`: ADR required for durable attribution ownership, SQLite
+  attribution persistence, digest-only credential storage, Pantograph-owned
+  bucket namespace semantics, and session lifecycle records.
+- Stage `02`: ADR required for `pantograph-node-contracts`-owned canonical
+  node contracts,
+  effective contract resolution, and backend-owned discovery semantics.
+- Stage `03`: ADR required for runtime-owned observability, managed capability
+  routing, cancellation/progress lifecycle ownership, and guarantee
+  classification.
+- Stage `04`: ADR required for SQLite diagnostics ledger persistence,
+  time-of-use license snapshots, typed output measurements, and retention
+  policy.
+- Stage `05`: ADR required for composed-node trace preservation and saved
+  workflow migration strategy when contract factoring changes persisted graph
+  behavior.
+- Stage `06`: ADR required for binding projection architecture, supported host
+  tiers, generated artifact/version matching, and unsupported lane policy.
 
 ## Standards Gates
 
@@ -196,6 +254,13 @@ must first be expanded using `10-concurrent-phased-implementation.md`.
 - Interop boundaries must validate inputs and preserve wire-format alignment.
 - GUI state must render backend-owned facts and avoid optimistic mutation of
   backend-owned graph state.
+- Rust implementation stages must include formatting, clippy, targeted tests,
+  doctests, all-features checks, and public feature-contract checks required by
+  the Rust tooling standards unless a repo-owned equivalent is recorded at
+  stage start.
+- New dependencies must be owned by the narrowest crate that uses them and must
+  record transitive cost, feature selection, audit, linking, and release impact
+  before manifest edits.
 
 ## Affected Structured Contracts And Persisted Artifacts
 

@@ -44,10 +44,10 @@ Do not use parallel workers when:
 
 ## Required Artifact Layout
 
-For a concurrent stage, create artifacts under:
+For a concurrent stage, create artifacts under this plan directory:
 
 ```text
-./implementation-waves/<stage-slug>/
+docs/plans/pantograph-execution-platform/implementation-waves/<stage-slug>/
 ├── README.md
 ├── coordination-ledger.md
 ├── waves/

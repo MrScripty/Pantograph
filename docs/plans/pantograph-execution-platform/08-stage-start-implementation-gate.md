@@ -75,6 +75,9 @@ Complete these checks before implementation starts:
    plan before editing.
 10. Confirm whether implementation will be single-worker or needs explicit
     concurrent-worker planning.
+11. Confirm the stage has Rust baseline verification or a recorded repo-owned
+    equivalent for formatting, clippy, targeted tests, doctests, feature
+    checks, and dependency/audit checks when dependencies change.
 
 ## Worktree Hygiene Rules
 
@@ -169,6 +172,8 @@ Record at least:
 - start outcome
 - assumptions recorded before editing
 - verification commands expected for the stage
+- dependency additions or feature changes and the dependency-standard checks
+  required before editing manifests
 - known blockers or re-plan triggers
 
 ## Verification

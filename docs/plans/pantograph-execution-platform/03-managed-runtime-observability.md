@@ -6,6 +6,11 @@ Route standard node execution through a runtime-created context so ordinary
 nodes get diagnostics, attribution, cancellation, progress, and guarantee
 classification without node-authored boilerplate.
 
+## Implementation Readiness Status
+
+Ready for stage-start preflight after stages `01` and `02` are complete and
+their stage-end refactor gates have been recorded.
+
 ## Type Families To Define
 
 ### Execution Types
@@ -29,6 +34,55 @@ classification without node-authored boilerplate.
 - `DiagnosticsCapability`
 - `ExternalToolCapability`
 
+## Implementation Decisions
+
+### Runtime Ownership
+
+- `crates/pantograph-embedded-runtime` owns `NodeExecutionContext`, managed
+  capability routing, baseline diagnostics emission, cancellation/progress
+  handles, lineage context, and guarantee classification.
+- `crates/node-engine` remains a lower-level execution helper only where its
+  existing abstractions are useful. It must not become the owner of durable
+  attribution, diagnostics meaning, or binding projection semantics.
+- `crates/pantograph-workflow-service` creates workflow runs before scheduling
+  and calls into the embedded runtime with already-resolved attribution.
+- Node implementation crates receive a runtime-created context. They do not
+  receive raw client/session/bucket/run ids as trusted arguments.
+
+### Async And Lifecycle Decision
+
+- Runtime creation belongs in product composition roots or service wiring, not
+  in reusable library constructors.
+- The embedded runtime owns spawned node tasks through tracked handles,
+  `JoinSet`, or an equivalent task tracker.
+- Cancellation, timeout, retry, progress, and attempt state have one lifecycle
+  owner in the embedded runtime.
+- Baseline diagnostics are emitted by scheduler/context wrappers before and
+  after node invocation, not by normal node code.
+- Task panic and cancellation paths are classified at the runtime lifecycle
+  owner and surfaced through diagnostics rather than being swallowed.
+
+### Diagnostics Retention Decision
+
+- Stage `03` owns transient runtime trace diagnostics and persisted run indexes
+  only where needed to correlate live traces to workflow runs.
+- Durable compliance ledger records are stage `04`; stage `03` may define the
+  guarantee and event DTOs needed by that ledger but must not complete the
+  model/license ledger early.
+
+### Guarantee Classification Decision
+
+- The runtime assigns `NodeExecutionGuarantee` for every standard node attempt.
+- `managed_full` requires resolved attribution, effective contract reference,
+  runtime-created context, baseline lifecycle events, and managed capability
+  routing for applicable model/resource/tool calls.
+- `managed_partial` requires explicit unavailable measurement or capability
+  facts.
+- `escape_hatch_detected` is used when runtime-mediated escape hatches are
+  exercised.
+- `unsafe_or_unobserved` is used when required runtime ownership cannot be
+  proven.
+
 ## Managed Execution Flow
 
 ```text
@@ -40,13 +94,17 @@ resolve workflow run attribution
   -> invoke node execution logic
   -> route model/resource/cache/tool calls through managed capabilities
   -> capture output summaries and direct model output measurements
-  -> persist model/license usage records when applicable
+  -> submit model/license usage facts through the Stage 04 ledger trait when available
   -> emit completion or failure event
   -> publish diagnostics projections
 ```
 
 Node authors should not manually perform attribution, baseline diagnostics,
 license tracking, or output-measurement steps.
+
+Stage `03` may define and emit the runtime facts needed by the durable ledger,
+but it must not implement durable model/license ledger storage. Persistence
+belongs to Stage `04`.
 
 ## Runtime Trace Diagnostics
 
@@ -129,13 +187,74 @@ Reduced-guarantee records must never be presented as complete compliance data.
 
 ## Tasks
 
-- Decide which crate owns runtime execution context and managed capabilities.
+- Implement runtime execution context and managed capabilities in
+  `pantograph-embedded-runtime`.
 - Create `NodeExecutionContext` or equivalent.
 - Inject attribution, cancellation, progress, diagnostics, and lineage context.
 - Ensure start/completion/failure events are emitted for ordinary nodes.
 - Capture input and output summaries from contracts and runtime facts.
 - Classify execution guarantee level for managed and escape-hatch paths.
 - Record decomposition targets for any oversized files touched by the work.
+
+## Intended Write Set
+
+- Primary:
+  - `crates/pantograph-embedded-runtime/`
+- Adjacent only if required by existing call sites:
+  - `crates/node-engine/`
+  - `crates/pantograph-workflow-service/`
+  - `crates/workflow-nodes/`
+- Forbidden for this stage unless the plan is updated first:
+  - host binding generation
+  - durable model/license ledger queries
+  - GUI diagnostics views
+
+## Existing Code Impact
+
+- `crates/pantograph-embedded-runtime/src/workflow_runtime.rs` currently builds
+  workflow execution diagnostics snapshots from scheduler and runtime facts.
+  Stage `03` should extend this path into runtime-created node execution
+  context and baseline node lifecycle events rather than adding diagnostics
+  calls to ordinary nodes.
+- `crates/pantograph-embedded-runtime/src/workflow_session_execution.rs`
+  currently owns warm workflow executor reuse keyed by workflow session id.
+  Stage `03` must separate that internal workflow-session execution cache from
+  durable client/session/bucket/run attribution resolved in stage `01`.
+- `crates/pantograph-workflow-service/src/scheduler/store_diagnostics.rs`
+  and scheduler DTOs already expose scheduler snapshots. Stage `03` must keep
+  scheduler diagnostics backend-owned while adding node-level context and
+  guarantee classification.
+- `crates/node-engine/src/events/` and `crates/node-engine/src/engine/` already
+  produce lower-level workflow events. Stage `03` must decide whether to adapt
+  those events into runtime-managed baseline diagnostics or replace them at the
+  embedded-runtime boundary; node-engine must not become the owner of durable
+  attribution or compliance semantics.
+
+## Verification Commands
+
+Expected stage verification:
+
+```bash
+cargo test -p pantograph-embedded-runtime
+cargo test -p node-engine
+cargo check --workspace --all-features
+```
+
+If workflow-service scheduling integration is touched, also run:
+
+```bash
+cargo test -p pantograph-workflow-service
+```
+
+Stage completion also requires the Rust baseline verification from
+`RUST-TOOLING-STANDARDS.md` unless the stage-start report records an existing
+repo-owned equivalent:
+
+```bash
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test --workspace --doc
+```
 
 ## Verification
 

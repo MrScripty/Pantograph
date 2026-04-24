@@ -22,6 +22,7 @@ binding projections.
 | `08-stage-start-implementation-gate.md` | Instructions for validating plan readiness, worktree hygiene, verification, and commit boundaries before each stage begins. |
 | `09-stage-end-refactor-gate.md` | Instructions for deciding whether each implementation stage needs a standards refactor before the next stage begins. |
 | `10-concurrent-phased-implementation.md` | Artifact layout and rules for converting a stage into safe phased parallel implementation waves when warranted. |
+| `implementation-waves/` | Stage-specific concurrent implementation wave specs, coordination ledgers, and worker report paths. |
 
 ## Problem
 
@@ -82,9 +83,80 @@ of maintaining a single oversized `final-plan.md`.
 - `Reason: These files are staged plans, not frozen architecture decisions.`
 - `Revisit trigger: The canonical node contract crate boundary is finalized.`
 
+## Implementation Entry Point
+
+Start implementation from this file.
+
+Execution order:
+
+1. Read this `README.md`.
+2. Read `00-overview-and-boundaries.md`.
+3. Read `08-stage-start-implementation-gate.md`.
+4. Read `10-concurrent-phased-implementation.md` and
+   `implementation-waves/README.md` before deciding how the stage will be
+   implemented.
+5. Select the first incomplete numbered implementation stage, beginning with
+   `01-client-session-bucket-run-attribution.md`.
+6. Read the selected stage plan and the matching
+   `implementation-waves/<stage-slug>/README.md`.
+7. Apply `08-stage-start-implementation-gate.md` before editing source code,
+   tests, configs, manifests, generated files, or build metadata.
+8. If the start gate selects concurrent implementation, use the matching folder
+   under `implementation-waves/<stage-slug>/` before launching workers.
+9. Implement one logical step or one approved worker wave at a time.
+10. Record progress, findings, verification, deviations, and discovered bugs in
+   the selected stage plan, the stage coordination ledger, or the assigned
+   worker report before continuing.
+11. Commit each completed logical step atomically after its required
+   verification passes, following `COMMIT-STANDARDS.md`.
+12. Do not begin the next logical step with dirty source, test, config, manifest,
+   lockfile, generated, or build files left behind from the previous step.
+13. Apply `09-stage-end-refactor-gate.md` after the stage implementation and
+    verification complete, before starting the next numbered stage.
+
+Use the execution prompt at
+`/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/prompts/implement-plan.md`
+for every numbered implementation stage. That prompt is authoritative for the
+implementation loop: read plan and standards, inspect git status, apply
+worktree hygiene, implement one logical step at a time, verify, update plan
+status, commit atomically, handle unexpected issues through re-planning, and
+close with a verification summary.
+
+Dirty worktree rule:
+
+- Dirty implementation files that overlap the selected stage write set block
+  implementation unless explicitly allowed.
+- Unrelated dirty files must not be reverted, reformatted, or overwritten.
+- Completed logical steps must not leave unresolved dirty implementation files
+  before the next step starts.
+
+Progress record locations:
+
+- Stage-level progress and re-plan decisions: the selected numbered stage plan
+  or its implementation notes.
+- Concurrent wave status and integration decisions:
+  `implementation-waves/<stage-slug>/coordination-ledger.md`.
+- Worker findings, skipped checks, unexpected bugs, and verification notes:
+  the assigned `implementation-waves/<stage-slug>/reports/wave-XX-worker-*.md`
+  file.
+
 ## Usage Examples
 
-Read the files in numeric order when planning implementation:
+For implementation, read the gate and concurrency rules before executing any
+numbered stage:
+
+```text
+README.md
+00-overview-and-boundaries.md
+08-stage-start-implementation-gate.md
+10-concurrent-phased-implementation.md
+implementation-waves/README.md
+01-client-session-bucket-run-attribution.md
+implementation-waves/01-client-session-bucket-run-attribution/README.md
+```
+
+The numbered plan files remain dependency-ordered by architecture stage, not by
+the complete implementation reading sequence:
 
 ```text
 00-overview-and-boundaries.md
@@ -98,7 +170,13 @@ Read the files in numeric order when planning implementation:
 08-stage-start-implementation-gate.md
 09-stage-end-refactor-gate.md
 10-concurrent-phased-implementation.md
+implementation-waves/
 ```
+
+For each implementation stage, apply `08-stage-start-implementation-gate.md`
+before source edits. If concurrent implementation is selected, use the matching
+stage folder under `implementation-waves/`. After implementation, apply
+`09-stage-end-refactor-gate.md` before starting the next numbered stage.
 
 ## API Consumer Contract
 
