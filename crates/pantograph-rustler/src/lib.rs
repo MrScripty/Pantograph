@@ -126,68 +126,42 @@ fn frontend_http_workflow_preflight(
 
 #[cfg(feature = "frontend-http")]
 #[rustler::nif(schedule = "DirtyCpu")]
-fn frontend_http_workflow_create_session(
+fn frontend_http_workflow_register_attribution_client(request_json: String) -> NifResult<String> {
+    frontend_http_nifs::workflow_register_attribution_client(request_json)
+}
+
+#[cfg(feature = "frontend-http")]
+#[rustler::nif(schedule = "DirtyCpu")]
+fn frontend_http_workflow_open_client_session(request_json: String) -> NifResult<String> {
+    frontend_http_nifs::workflow_open_client_session(request_json)
+}
+
+#[cfg(feature = "frontend-http")]
+#[rustler::nif(schedule = "DirtyCpu")]
+fn frontend_http_workflow_resume_client_session(request_json: String) -> NifResult<String> {
+    frontend_http_nifs::workflow_resume_client_session(request_json)
+}
+
+#[cfg(feature = "frontend-http")]
+#[rustler::nif(schedule = "DirtyCpu")]
+fn frontend_http_workflow_create_client_bucket(request_json: String) -> NifResult<String> {
+    frontend_http_nifs::workflow_create_client_bucket(request_json)
+}
+
+#[cfg(feature = "frontend-http")]
+#[rustler::nif(schedule = "DirtyCpu")]
+fn frontend_http_workflow_delete_client_bucket(request_json: String) -> NifResult<String> {
+    frontend_http_nifs::workflow_delete_client_bucket(request_json)
+}
+
+#[cfg(feature = "frontend-http")]
+#[rustler::nif(schedule = "DirtyCpu")]
+fn frontend_http_workflow_run_attributed(
     base_url: String,
     request_json: String,
     pumas_resource: Option<ResourceArc<PumasApiResource>>,
 ) -> NifResult<String> {
-    frontend_http_nifs::workflow_create_session(base_url, request_json, pumas_resource)
-}
-
-#[cfg(feature = "frontend-http")]
-#[rustler::nif(schedule = "DirtyCpu")]
-fn frontend_http_workflow_run_session(
-    base_url: String,
-    request_json: String,
-    pumas_resource: Option<ResourceArc<PumasApiResource>>,
-) -> NifResult<String> {
-    frontend_http_nifs::workflow_run_session(base_url, request_json, pumas_resource)
-}
-
-#[cfg(feature = "frontend-http")]
-#[rustler::nif(schedule = "DirtyCpu")]
-fn frontend_http_workflow_close_session(
-    base_url: String,
-    request_json: String,
-    pumas_resource: Option<ResourceArc<PumasApiResource>>,
-) -> NifResult<String> {
-    frontend_http_nifs::workflow_close_session(base_url, request_json, pumas_resource)
-}
-
-#[cfg(feature = "frontend-http")]
-#[rustler::nif(schedule = "DirtyCpu")]
-fn frontend_http_workflow_get_session_status(request_json: String) -> NifResult<String> {
-    frontend_http_nifs::workflow_get_session_status(request_json)
-}
-
-#[cfg(feature = "frontend-http")]
-#[rustler::nif(schedule = "DirtyCpu")]
-fn frontend_http_workflow_list_session_queue(request_json: String) -> NifResult<String> {
-    frontend_http_nifs::workflow_list_session_queue(request_json)
-}
-
-#[cfg(feature = "frontend-http")]
-#[rustler::nif(schedule = "DirtyCpu")]
-fn frontend_http_workflow_cancel_session_queue_item(request_json: String) -> NifResult<String> {
-    frontend_http_nifs::workflow_cancel_session_queue_item(request_json)
-}
-
-#[cfg(feature = "frontend-http")]
-#[rustler::nif(schedule = "DirtyCpu")]
-fn frontend_http_workflow_reprioritize_session_queue_item(
-    request_json: String,
-) -> NifResult<String> {
-    frontend_http_nifs::workflow_reprioritize_session_queue_item(request_json)
-}
-
-#[cfg(feature = "frontend-http")]
-#[rustler::nif(schedule = "DirtyCpu")]
-fn frontend_http_workflow_set_session_keep_alive(
-    base_url: String,
-    request_json: String,
-    pumas_resource: Option<ResourceArc<PumasApiResource>>,
-) -> NifResult<String> {
-    frontend_http_nifs::workflow_set_session_keep_alive(base_url, request_json, pumas_resource)
+    frontend_http_nifs::workflow_run_attributed(base_url, request_json, pumas_resource)
 }
 
 // ============================================================================

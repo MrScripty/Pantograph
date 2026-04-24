@@ -15,10 +15,6 @@ use pantograph_workflow_service::{
     WorkflowGraphRemoveNodeRequest, WorkflowGraphSaveRequest, WorkflowGraphUndoRedoStateRequest,
     WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest, WorkflowIoRequest,
     WorkflowPreflightRequest, WorkflowRunRequest, WorkflowService, WorkflowServiceError,
-    WorkflowSessionCloseRequest, WorkflowSessionCreateRequest, WorkflowSessionKeepAliveRequest,
-    WorkflowSessionQueueCancelRequest, WorkflowSessionQueueListRequest,
-    WorkflowSessionQueueReprioritizeRequest, WorkflowSessionRunRequest,
-    WorkflowSessionStatusRequest,
 };
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -211,109 +207,6 @@ impl FfiPantographRuntime {
         let response = self
             .runtime
             .workflow_preflight(request)
-            .await
-            .map_err(map_workflow_service_error)?;
-        serialize_response(&response)
-    }
-
-    /// Create a workflow session and return WorkflowSessionCreateResponse JSON.
-    pub async fn workflow_create_session(&self, request_json: String) -> Result<String, FfiError> {
-        let request: WorkflowSessionCreateRequest = parse_request(request_json)?;
-        let response = self
-            .runtime
-            .create_workflow_session(request)
-            .await
-            .map_err(map_workflow_service_error)?;
-        serialize_response(&response)
-    }
-
-    /// Run an existing workflow session and return WorkflowRunResponse JSON.
-    pub async fn workflow_run_session(&self, request_json: String) -> Result<String, FfiError> {
-        let request: WorkflowSessionRunRequest = parse_request(request_json)?;
-        let response = self
-            .runtime
-            .run_workflow_session(request)
-            .await
-            .map_err(map_workflow_service_error)?;
-        serialize_response(&response)
-    }
-
-    /// Close a workflow session and return WorkflowSessionCloseResponse JSON.
-    pub async fn workflow_close_session(&self, request_json: String) -> Result<String, FfiError> {
-        let request: WorkflowSessionCloseRequest = parse_request(request_json)?;
-        let response = self
-            .runtime
-            .close_workflow_session(request)
-            .await
-            .map_err(map_workflow_service_error)?;
-        serialize_response(&response)
-    }
-
-    /// Return WorkflowSessionStatusResponse JSON.
-    pub async fn workflow_get_session_status(
-        &self,
-        request_json: String,
-    ) -> Result<String, FfiError> {
-        let request: WorkflowSessionStatusRequest = parse_request(request_json)?;
-        let response = self
-            .runtime
-            .workflow_get_session_status(request)
-            .await
-            .map_err(map_workflow_service_error)?;
-        serialize_response(&response)
-    }
-
-    /// Return WorkflowSessionQueueListResponse JSON.
-    pub async fn workflow_list_session_queue(
-        &self,
-        request_json: String,
-    ) -> Result<String, FfiError> {
-        let request: WorkflowSessionQueueListRequest = parse_request(request_json)?;
-        let response = self
-            .runtime
-            .workflow_list_session_queue(request)
-            .await
-            .map_err(map_workflow_service_error)?;
-        serialize_response(&response)
-    }
-
-    /// Cancel a queued workflow-session run and return WorkflowSessionQueueCancelResponse JSON.
-    pub async fn workflow_cancel_session_queue_item(
-        &self,
-        request_json: String,
-    ) -> Result<String, FfiError> {
-        let request: WorkflowSessionQueueCancelRequest = parse_request(request_json)?;
-        let response = self
-            .runtime
-            .workflow_cancel_session_queue_item(request)
-            .await
-            .map_err(map_workflow_service_error)?;
-        serialize_response(&response)
-    }
-
-    /// Reprioritize a queued workflow-session run and return response JSON.
-    pub async fn workflow_reprioritize_session_queue_item(
-        &self,
-        request_json: String,
-    ) -> Result<String, FfiError> {
-        let request: WorkflowSessionQueueReprioritizeRequest = parse_request(request_json)?;
-        let response = self
-            .runtime
-            .workflow_reprioritize_session_queue_item(request)
-            .await
-            .map_err(map_workflow_service_error)?;
-        serialize_response(&response)
-    }
-
-    /// Update workflow-session keep-alive state and return WorkflowSessionKeepAliveResponse JSON.
-    pub async fn workflow_set_session_keep_alive(
-        &self,
-        request_json: String,
-    ) -> Result<String, FfiError> {
-        let request: WorkflowSessionKeepAliveRequest = parse_request(request_json)?;
-        let response = self
-            .runtime
-            .workflow_set_session_keep_alive(request)
             .await
             .map_err(map_workflow_service_error)?;
         serialize_response(&response)

@@ -246,7 +246,7 @@ fn workflow_error_envelope(err: FfiError) -> WorkflowErrorEnvelope {
 }
 
 #[tokio::test]
-async fn direct_runtime_runs_workflow_and_session_from_json() {
+async fn direct_runtime_runs_workflow_from_json() {
     let workflow_id = "uniffi-runtime-text";
     let root = create_temp_root(workflow_id);
 
@@ -284,48 +284,6 @@ async fn direct_runtime_runs_workflow_and_session_from_json() {
         serde_json::from_str(&run_response_json).expect("parse run response");
     assert_eq!(run_response["outputs"][0]["value"], "direct run");
 
-    let create_response_json = runtime
-        .workflow_create_session(
-            serde_json::json!({
-                "workflow_id": workflow_id,
-                "keep_alive": false
-            })
-            .to_string(),
-        )
-        .await
-        .expect("create session");
-    let session_id = serde_json::from_str::<serde_json::Value>(&create_response_json)
-        .expect("parse create response")["session_id"]
-        .as_str()
-        .expect("session_id")
-        .to_string();
-
-    let session_response_json = runtime
-        .workflow_run_session(
-            serde_json::json!({
-                "session_id": session_id,
-                "inputs": [{
-                    "node_id": "text-input-1",
-                    "port_id": "text",
-                    "value": "session run"
-                }],
-                "output_targets": [{
-                    "node_id": "text-output-1",
-                    "port_id": "text"
-                }]
-            })
-            .to_string(),
-        )
-        .await
-        .expect("run session");
-    let session_response: serde_json::Value =
-        serde_json::from_str(&session_response_json).expect("parse session response");
-    assert_eq!(session_response["outputs"][0]["value"], "session run");
-
-    runtime
-        .workflow_close_session(serde_json::json!({ "session_id": session_id }).to_string())
-        .await
-        .expect("close session");
     runtime.shutdown().await;
 
     let _ = std::fs::remove_dir_all(root);
@@ -468,72 +426,6 @@ async fn direct_runtime_runs_attributed_workflow_from_json() {
         serde_json::Value::String(client_session_id.to_string())
     );
 
-    runtime.shutdown().await;
-    let _ = std::fs::remove_dir_all(root);
-}
-
-#[tokio::test]
-async fn direct_runtime_workflow_run_session_preserves_invalid_request_envelope() {
-    let workflow_id = "uniffi-runtime-interactive-session";
-    let root = create_temp_root(workflow_id);
-    write_human_input_workflow(&root, workflow_id);
-
-    let runtime = FfiPantographRuntime::new(
-        FfiEmbeddedRuntimeConfig {
-            app_data_dir: root.join("app-data").to_string_lossy().into_owned(),
-            project_root: root.to_string_lossy().into_owned(),
-            workflow_roots: Vec::new(),
-            max_loaded_sessions: None,
-        },
-        None,
-    )
-    .await
-    .expect("runtime");
-
-    let create_response_json = runtime
-        .workflow_create_session(
-            serde_json::json!({
-                "workflow_id": workflow_id,
-                "usage_profile": "interactive",
-                "keep_alive": false
-            })
-            .to_string(),
-        )
-        .await
-        .expect("create session");
-    let session_id = serde_json::from_str::<serde_json::Value>(&create_response_json)
-        .expect("parse create response")["session_id"]
-        .as_str()
-        .expect("session_id")
-        .to_string();
-
-    let err = runtime
-        .workflow_run_session(
-            serde_json::json!({
-                "session_id": session_id,
-                "inputs": [],
-                "output_targets": [{
-                    "node_id": "text-output-1",
-                    "port_id": "text"
-                }],
-                "run_id": "run-human-input-session"
-            })
-            .to_string(),
-        )
-        .await
-        .expect_err("interactive session run should preserve invalid-request envelope");
-
-    let envelope = workflow_error_envelope(err);
-    assert_eq!(envelope.code, WorkflowErrorCode::InvalidRequest);
-    assert_eq!(
-        envelope.message,
-        "workflow 'uniffi-runtime-interactive-session' requires interactive input at node 'human-input-1'"
-    );
-
-    runtime
-        .workflow_close_session(serde_json::json!({ "session_id": session_id }).to_string())
-        .await
-        .expect("close session");
     runtime.shutdown().await;
     let _ = std::fs::remove_dir_all(root);
 }

@@ -2,8 +2,8 @@
 
 ## Status
 
-Wave `01` complete. Wave `02` partially integrated; legacy
-workflow-session public API removal remains pending.
+Wave `01` complete. Wave `02` partially integrated; workflow-service and
+embedded-runtime scheduler/execution-session internalization remains pending.
 
 ## Branch Or Worktree Strategy
 
@@ -17,7 +17,7 @@ workflow-session public API removal remains pending.
 | Wave | Status | Integration Notes |
 | ---- | ------ | ----------------- |
 | `wave-01` | Complete | Stage-start report, contract freeze, cutover inventory, and dependency review recorded in `01-client-session-bucket-run-attribution.md`. |
-| `wave-02` | Partial | Attribution storage, workflow-service attributed runs, bucket selection, and UniFFI JSON boundary projection are integrated; public workflow-session removal remains pending. |
+| `wave-02` | Partial | Attribution storage, workflow-service attributed runs, bucket selection, UniFFI JSON boundary projection, and UniFFI/Rustler public workflow-session binding cutover are integrated; workflow-service and embedded-runtime scheduler/execution-session internalization remains pending. |
 | `wave-03` | Pending | Host-owned integration and stage-end gate. |
 
 ## Worker Reports
@@ -52,6 +52,9 @@ workflow-session public API removal remains pending.
   embedded-runtime, and UniFFI so JSON callers can register clients, open or
   resume durable client sessions, create or delete buckets, and run attributed
   workflows before the legacy workflow-session API is removed.
+- 2026-04-24: UniFFI and Rustler frontend public workflow-session wrappers were
+  removed from the binding surface. Rustler now exposes the same durable
+  attribution frontend-HTTP operations as UniFFI.
 
 ## Verification Results
 
@@ -83,3 +86,12 @@ workflow-session public API removal remains pending.
   `cargo test -p pantograph-uniffi --features frontend-http`,
   `cargo check --workspace --all-features`, and
   `cargo clippy --workspace --all-targets --all-features -- -D warnings`.
+- 2026-04-24: Binding workflow-session cutover verification passed:
+  `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-uniffi --features frontend-http`,
+  `cargo check -p pantograph_rustler --features frontend-http`,
+  `cargo check --workspace --all-features`, and
+  `cargo clippy --workspace --all-targets --all-features -- -D warnings`.
+  `cargo test -p pantograph_rustler --features frontend-http` was attempted
+  and failed during test binary linking on unresolved Erlang NIF symbols
+  (`enif_*`), which is an existing Rustler test-link environment limitation.

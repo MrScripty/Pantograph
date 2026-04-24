@@ -96,23 +96,6 @@ where
     workflow_serialize_response(&response)
 }
 
-pub(crate) fn workflow_run_scheduler_request<Request, Response, Fut>(
-    request_json: String,
-    execute: impl FnOnce(Request) -> Fut,
-) -> NifResult<String>
-where
-    Request: serde::de::DeserializeOwned,
-    Response: serde::Serialize,
-    Fut: std::future::Future<Output = Result<Response, WorkflowServiceError>>,
-{
-    let request: Request = workflow_parse_request(&request_json)?;
-    let runtime = workflow_runtime()?;
-    let response = runtime
-        .block_on(execute(request))
-        .map_err(map_workflow_service_error)?;
-    workflow_serialize_response(&response)
-}
-
 #[cfg(test)]
 mod tests {
     use pantograph_workflow_service::{WorkflowErrorCode, WorkflowErrorEnvelope};

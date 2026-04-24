@@ -226,6 +226,33 @@ verification commands selected below.
   points still exist in workflow-service, UniFFI, and Rustler and must be
   removed, replaced, or made internal before the stage-end gate can pass.
 
+### 2026-04-24 Binding Workflow-Session Cutover Progress
+
+- Removed UniFFI embedded-runtime and frontend-HTTP public workflow-session
+  JSON wrappers so bindings no longer expose workflow-session ids as a public
+  caller contract.
+- Removed Rustler frontend-HTTP workflow-session NIFs and replaced that public
+  surface with durable attribution NIFs for client registration, durable
+  client-session open/resume, bucket create/delete, and attributed workflow
+  execution.
+- Configured Rustler's frontend-HTTP workflow service with an ephemeral
+  attribution store, matching the UniFFI frontend-HTTP attribution boundary.
+- Removed binding tests that asserted the legacy workflow-session public
+  surface and kept direct workflow-run plus attributed workflow-run coverage.
+- Verification: `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-uniffi --features frontend-http`,
+  `cargo check -p pantograph_rustler --features frontend-http`,
+  `cargo check --workspace --all-features`, and
+  `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+  passed.
+- Known verification limitation: `cargo test -p pantograph_rustler --features
+  frontend-http` still fails during test binary linking with unresolved Erlang
+  NIF symbols such as `enif_send`; this is an existing Rustler test-link
+  environment limitation, not a compile error from the binding cutover.
+- Remaining Stage `01` cutover work: workflow-service and embedded-runtime
+  internal scheduler/execution-session APIs still carry workflow-session naming
+  and need to be made internal or renamed before the stage-end gate can pass.
+
 ## Required Identity Chain
 
 ```text
