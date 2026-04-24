@@ -1,7 +1,10 @@
 use pantograph_workflow_service::{
-    WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse, WorkflowIoRequest,
-    WorkflowIoResponse, WorkflowPreflightRequest, WorkflowPreflightResponse, WorkflowRunRequest,
-    WorkflowRunResponse, WorkflowServiceError, WorkflowSessionCloseRequest,
+    BucketCreateRequest, BucketDeleteRequest, BucketRecord, ClientRegistrationRequest,
+    ClientRegistrationResponse, ClientSessionOpenRequest, ClientSessionOpenResponse,
+    ClientSessionRecord, ClientSessionResumeRequest, WorkflowAttributedRunRequest,
+    WorkflowAttributedRunResponse, WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse,
+    WorkflowIoRequest, WorkflowIoResponse, WorkflowPreflightRequest, WorkflowPreflightResponse,
+    WorkflowRunRequest, WorkflowRunResponse, WorkflowServiceError, WorkflowSessionCloseRequest,
     WorkflowSessionCloseResponse, WorkflowSessionCreateRequest, WorkflowSessionCreateResponse,
     WorkflowSessionInspectionRequest, WorkflowSessionInspectionResponse,
     WorkflowSessionKeepAliveRequest, WorkflowSessionKeepAliveResponse,
@@ -16,6 +19,50 @@ use pantograph_workflow_service::{
 use crate::EmbeddedRuntime;
 
 impl EmbeddedRuntime {
+    pub fn register_attribution_client(
+        &self,
+        request: ClientRegistrationRequest,
+    ) -> Result<ClientRegistrationResponse, WorkflowServiceError> {
+        self.workflow_service.register_attribution_client(request)
+    }
+
+    pub fn open_client_session(
+        &self,
+        request: ClientSessionOpenRequest,
+    ) -> Result<ClientSessionOpenResponse, WorkflowServiceError> {
+        self.workflow_service.open_client_session(request)
+    }
+
+    pub fn resume_client_session(
+        &self,
+        request: ClientSessionResumeRequest,
+    ) -> Result<ClientSessionRecord, WorkflowServiceError> {
+        self.workflow_service.resume_client_session(request)
+    }
+
+    pub fn create_client_bucket(
+        &self,
+        request: BucketCreateRequest,
+    ) -> Result<BucketRecord, WorkflowServiceError> {
+        self.workflow_service.create_client_bucket(request)
+    }
+
+    pub fn delete_client_bucket(
+        &self,
+        request: BucketDeleteRequest,
+    ) -> Result<BucketRecord, WorkflowServiceError> {
+        self.workflow_service.delete_client_bucket(request)
+    }
+
+    pub async fn workflow_run_attributed(
+        &self,
+        request: WorkflowAttributedRunRequest,
+    ) -> Result<WorkflowAttributedRunResponse, WorkflowServiceError> {
+        self.workflow_service
+            .workflow_run_attributed(&self.host(), request)
+            .await
+    }
+
     pub async fn workflow_run(
         &self,
         request: WorkflowRunRequest,

@@ -2,9 +2,11 @@ use std::sync::{Arc, LazyLock};
 
 use pantograph_frontend_http_adapter::FrontendHttpWorkflowHost;
 use pantograph_workflow_service::{
-    WorkflowCapabilitiesRequest, WorkflowErrorCode, WorkflowErrorEnvelope,
-    WorkflowPreflightRequest, WorkflowRunRequest, WorkflowService, WorkflowServiceError,
-    WorkflowSessionCloseRequest, WorkflowSessionCreateRequest, WorkflowSessionKeepAliveRequest,
+    BucketCreateRequest, BucketDeleteRequest, ClientRegistrationRequest, ClientSessionOpenRequest,
+    ClientSessionResumeRequest, WorkflowAttributedRunRequest, WorkflowCapabilitiesRequest,
+    WorkflowErrorCode, WorkflowErrorEnvelope, WorkflowPreflightRequest, WorkflowRunRequest,
+    WorkflowService, WorkflowServiceError, WorkflowSessionCloseRequest,
+    WorkflowSessionCreateRequest, WorkflowSessionKeepAliveRequest,
     WorkflowSessionQueueCancelRequest, WorkflowSessionQueueListRequest,
     WorkflowSessionQueueReprioritizeRequest, WorkflowSessionRunRequest,
     WorkflowSessionStatusRequest,
@@ -12,7 +14,10 @@ use pantograph_workflow_service::{
 
 use super::{FfiError, FfiPumasApi};
 
-static WORKFLOW_SERVICE: LazyLock<WorkflowService> = LazyLock::new(WorkflowService::new);
+static WORKFLOW_SERVICE: LazyLock<WorkflowService> = LazyLock::new(|| {
+    WorkflowService::with_ephemeral_attribution_store()
+        .expect("frontend HTTP attribution store should initialize")
+});
 
 fn map_workflow_service_error(err: WorkflowServiceError) -> FfiError {
     FfiError::Other {
@@ -87,6 +92,89 @@ pub async fn frontend_http_workflow_run(
     let host = build_frontend_http_host(base_url, pumas_api)?;
     let response = WORKFLOW_SERVICE
         .workflow_run(&host, request)
+        .await
+        .map_err(map_workflow_service_error)?;
+
+    workflow_serialize_response(&response)
+}
+
+/// Register a frontend HTTP attribution client and return ClientRegistrationResponse JSON.
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn frontend_http_workflow_register_attribution_client(
+    request_json: String,
+) -> Result<String, FfiError> {
+    let request: ClientRegistrationRequest = workflow_parse_request(&request_json)?;
+    let response = WORKFLOW_SERVICE
+        .register_attribution_client(request)
+        .map_err(map_workflow_service_error)?;
+
+    workflow_serialize_response(&response)
+}
+
+/// Open a durable frontend HTTP client session and return ClientSessionOpenResponse JSON.
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn frontend_http_workflow_open_client_session(
+    request_json: String,
+) -> Result<String, FfiError> {
+    let request: ClientSessionOpenRequest = workflow_parse_request(&request_json)?;
+    let response = WORKFLOW_SERVICE
+        .open_client_session(request)
+        .map_err(map_workflow_service_error)?;
+
+    workflow_serialize_response(&response)
+}
+
+/// Resume a durable frontend HTTP client session and return ClientSessionRecord JSON.
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn frontend_http_workflow_resume_client_session(
+    request_json: String,
+) -> Result<String, FfiError> {
+    let request: ClientSessionResumeRequest = workflow_parse_request(&request_json)?;
+    let response = WORKFLOW_SERVICE
+        .resume_client_session(request)
+        .map_err(map_workflow_service_error)?;
+
+    workflow_serialize_response(&response)
+}
+
+/// Create a durable frontend HTTP client bucket and return BucketRecord JSON.
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn frontend_http_workflow_create_client_bucket(
+    request_json: String,
+) -> Result<String, FfiError> {
+    let request: BucketCreateRequest = workflow_parse_request(&request_json)?;
+    let response = WORKFLOW_SERVICE
+        .create_client_bucket(request)
+        .map_err(map_workflow_service_error)?;
+
+    workflow_serialize_response(&response)
+}
+
+/// Delete a durable frontend HTTP client bucket and return BucketRecord JSON.
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn frontend_http_workflow_delete_client_bucket(
+    request_json: String,
+) -> Result<String, FfiError> {
+    let request: BucketDeleteRequest = workflow_parse_request(&request_json)?;
+    let response = WORKFLOW_SERVICE
+        .delete_client_bucket(request)
+        .map_err(map_workflow_service_error)?;
+
+    workflow_serialize_response(&response)
+}
+
+/// Execute an attributed frontend HTTP workflow run and return response JSON.
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn frontend_http_workflow_run_attributed(
+    base_url: String,
+    request_json: String,
+    pumas_api: Option<Arc<FfiPumasApi>>,
+) -> Result<String, FfiError> {
+    let request: WorkflowAttributedRunRequest = workflow_parse_request(&request_json)?;
+
+    let host = build_frontend_http_host(base_url, pumas_api)?;
+    let response = WORKFLOW_SERVICE
+        .workflow_run_attributed(&host, request)
         .await
         .map_err(map_workflow_service_error)?;
 

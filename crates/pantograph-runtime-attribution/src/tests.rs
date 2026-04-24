@@ -250,6 +250,64 @@ fn credential_records_do_not_persist_raw_secret() {
 }
 
 #[test]
+fn attribution_boundary_json_round_trips_without_debug_secret_leak() {
+    let registration = ClientRegistrationResponse {
+        client: crate::records::ClientRecord {
+            client_id: crate::ClientId::try_from("client_boundary".to_string()).expect("client id"),
+            display_name: Some("boundary client".to_string()),
+            metadata_json: None,
+            status: crate::ClientStatus::Active,
+            created_at_ms: 1,
+        },
+        credential: crate::ClientCredential {
+            client_credential_id: crate::ClientCredentialId::try_from("cred_boundary".to_string())
+                .expect("credential id"),
+            client_id: crate::ClientId::try_from("client_boundary".to_string()).expect("client id"),
+            status: crate::ClientCredentialStatus::Active,
+            created_at_ms: 1,
+            revoked_at_ms: None,
+        },
+        credential_secret: CredentialSecret::from_boundary_secret("boundary-secret")
+            .expect("secret"),
+    };
+
+    let serialized = serde_json::to_value(&registration).expect("serialize registration");
+    assert_eq!(serialized["credential_secret"], "boundary-secret");
+    assert_eq!(
+        format!("{:?}", registration.credential_secret),
+        "CredentialSecret(<redacted>)"
+    );
+
+    let proof: CredentialProofRequest = serde_json::from_value(serde_json::json!({
+        "credential_id": "cred_boundary",
+        "secret": "boundary-secret"
+    }))
+    .expect("deserialize proof");
+    assert_eq!(proof.secret.expose_secret(), "boundary-secret");
+
+    let explicit: BucketSelection = serde_json::from_value(serde_json::json!({
+        "type": "explicit",
+        "bucket_id": "bucket_boundary"
+    }))
+    .expect("deserialize explicit bucket");
+    assert!(matches!(explicit, BucketSelection::Explicit(_)));
+
+    let default = serde_json::to_value(BucketSelection::Default).expect("serialize default");
+    assert_eq!(default, serde_json::json!({ "type": "default" }));
+}
+
+#[test]
+fn attribution_boundary_json_rejects_malformed_secret() {
+    let err = serde_json::from_value::<CredentialProofRequest>(serde_json::json!({
+        "credential_id": "cred_boundary",
+        "secret": "bad\nsecret"
+    }))
+    .expect_err("control characters rejected");
+
+    assert!(err.to_string().contains("credential.secret"));
+}
+
+#[test]
 fn unsupported_schema_version_fails_closed() {
     let conn = Connection::open_in_memory().expect("conn");
     conn.execute(

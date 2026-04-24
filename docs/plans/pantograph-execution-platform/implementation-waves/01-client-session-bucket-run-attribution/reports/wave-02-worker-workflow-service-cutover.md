@@ -7,6 +7,14 @@ Partial.
 ## Write Set
 
 - `Cargo.lock`
+- `crates/pantograph-embedded-runtime/src/embedded_workflow_service_api.rs`
+- `crates/pantograph-runtime-attribution/Cargo.toml`
+- `crates/pantograph-runtime-attribution/src/records.rs`
+- `crates/pantograph-runtime-attribution/src/tests.rs`
+- `crates/pantograph-uniffi/src/frontend_http.rs`
+- `crates/pantograph-uniffi/src/lib_tests.rs`
+- `crates/pantograph-uniffi/src/runtime.rs`
+- `crates/pantograph-uniffi/src/runtime_tests.rs`
 - `crates/pantograph-workflow-service/Cargo.toml`
 - `crates/pantograph-workflow-service/src/lib.rs`
 - `crates/pantograph-workflow-service/src/workflow.rs`
@@ -38,15 +46,29 @@ Partial.
   re-exported the bucket request/record types needed by native callers.
 - Added a targeted attributed-run test for explicit backend-owned bucket
   selection.
+- Added JSON boundary support for attribution requests/responses, including
+  bounded credential-secret parsing and explicit/default bucket-selection
+  serialization.
+- Added embedded-runtime facade methods and UniFFI embedded/frontend-HTTP JSON
+  methods for client registration, durable client-session open/resume, client
+  bucket create/delete, and attributed workflow runs.
+- Configured UniFFI-owned workflow services with ephemeral attribution stores
+  so the new JSON boundary methods can execute without caller-managed service
+  wiring.
+- Added UniFFI tests covering direct embedded-runtime and frontend-HTTP
+  attributed workflow runs through JSON contracts.
 
 ## Verification
 
 - `cargo fmt --all -- --check`
+- `cargo test -p pantograph-runtime-attribution`
 - `cargo test -p pantograph-workflow-service attribution`
 - `cargo clippy -p pantograph-workflow-service --all-targets -- -D warnings`
 - `cargo test -p pantograph-workflow-service`
 - `cargo check --workspace --all-features`
 - `cargo test -p pantograph-workflow-service workflow_run`
+- `cargo test -p pantograph-uniffi --features frontend-http`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
 
 All commands passed.
 
@@ -55,6 +77,11 @@ All commands passed.
 - This slice does not yet remove or internalize legacy workflow-session public
   APIs. It introduces the durable-attribution workflow-run path first so the
   service has a tested native Rust target before adapter and binding cutover.
+- The host extended the Wave `02` report with boundary-projection edits because
+  the durable attribution request types needed JSON-safe credential parsing
+  before binding façades could call the service. Legacy public workflow-session
+  removal remains a separate follow-up rather than being hidden behind
+  compatibility wrappers.
 
 ## Follow-Ups
 

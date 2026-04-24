@@ -2,7 +2,8 @@
 
 ## Status
 
-Wave `01` complete. Wave `02` ready to start.
+Wave `01` complete. Wave `02` partially integrated; legacy
+workflow-session public API removal remains pending.
 
 ## Branch Or Worktree Strategy
 
@@ -16,7 +17,7 @@ Wave `01` complete. Wave `02` ready to start.
 | Wave | Status | Integration Notes |
 | ---- | ------ | ----------------- |
 | `wave-01` | Complete | Stage-start report, contract freeze, cutover inventory, and dependency review recorded in `01-client-session-bucket-run-attribution.md`. |
-| `wave-02` | Pending | Parallel implementation after wave 01 passes. |
+| `wave-02` | Partial | Attribution storage, workflow-service attributed runs, bucket selection, and UniFFI JSON boundary projection are integrated; public workflow-session removal remains pending. |
 | `wave-03` | Pending | Host-owned integration and stage-end gate. |
 
 ## Worker Reports
@@ -47,6 +48,10 @@ Wave `01` complete. Wave `02` ready to start.
 - 2026-04-24: Workflow-service now exposes native Rust client bucket
   create/delete operations backed by `pantograph-runtime-attribution`; explicit
   bucket selection is tested in attributed workflow runs.
+- 2026-04-24: The host added a boundary-projection slice across attribution,
+  embedded-runtime, and UniFFI so JSON callers can register clients, open or
+  resume durable client sessions, create or delete buckets, and run attributed
+  workflows before the legacy workflow-session API is removed.
 
 ## Verification Results
 
@@ -71,3 +76,10 @@ Wave `01` complete. Wave `02` ready to start.
   `cargo fmt --all -- --check`,
   `cargo test -p pantograph-workflow-service attribution`, and
   `cargo clippy -p pantograph-workflow-service --all-targets -- -D warnings`.
+- 2026-04-24: Attribution boundary projection verification passed:
+  `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-runtime-attribution`,
+  `cargo test -p pantograph-workflow-service`,
+  `cargo test -p pantograph-uniffi --features frontend-http`,
+  `cargo check --workspace --all-features`, and
+  `cargo clippy --workspace --all-targets --all-features -- -D warnings`.

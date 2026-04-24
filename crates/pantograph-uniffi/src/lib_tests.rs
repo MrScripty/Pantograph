@@ -11,7 +11,9 @@ use crate::{
 #[cfg(feature = "frontend-http")]
 use crate::{
     frontend_http_workflow_create_session, frontend_http_workflow_get_capabilities,
-    frontend_http_workflow_run, frontend_http_workflow_run_session,
+    frontend_http_workflow_open_client_session, frontend_http_workflow_register_attribution_client,
+    frontend_http_workflow_run, frontend_http_workflow_run_attributed,
+    frontend_http_workflow_run_session,
 };
 #[cfg(feature = "frontend-http")]
 use pantograph_frontend_http_adapter::{
@@ -346,6 +348,97 @@ fn test_workflow_run_contract_success() {
 
     assert_eq!(response.outputs.len(), 1);
     assert_eq!(response.outputs[0].node_id, "vector-output-1");
+}
+
+#[test]
+#[cfg(feature = "frontend-http")]
+fn test_workflow_run_attributed_contract_success() {
+    let _guard = CWD_LOCK.lock().expect("lock cwd");
+    let workflow_id = "wf_attributed_contract_success";
+    let root = create_temp_workflow_root(workflow_id);
+    let original_cwd = std::env::current_dir().expect("cwd");
+    std::env::set_current_dir(&root).expect("set cwd");
+
+    let payload = serde_json::json!({
+        "run_id": "host-run-ignored-by-attribution-wrapper",
+        "outputs": [{ "node_id": "vector-output-1", "port_id": "vector", "value": [0.3, 0.2, 0.1] }],
+        "timing_ms": 4
+    });
+    let (base_url, server_thread) = spawn_single_workflow_server(200, payload);
+    let runtime = tokio::runtime::Runtime::new().expect("runtime");
+
+    let registration_json = runtime
+        .block_on(frontend_http_workflow_register_attribution_client(
+            serde_json::json!({
+                "display_name": "frontend attributed client",
+                "metadata_json": null
+            })
+            .to_string(),
+        ))
+        .expect("register client");
+    let registration: serde_json::Value =
+        serde_json::from_str(&registration_json).expect("parse registration");
+    let credential_id = registration["credential"]["client_credential_id"]
+        .as_str()
+        .expect("credential id");
+    let credential_secret = registration["credential_secret"]
+        .as_str()
+        .expect("credential secret");
+
+    let open_json = runtime
+        .block_on(frontend_http_workflow_open_client_session(
+            serde_json::json!({
+                "credential": {
+                    "credential_id": credential_id,
+                    "secret": credential_secret
+                },
+                "takeover": false,
+                "reason": "frontend test launch"
+            })
+            .to_string(),
+        ))
+        .expect("open session");
+    let opened: serde_json::Value = serde_json::from_str(&open_json).expect("parse open");
+    let client_session_id = opened["session"]["client_session_id"]
+        .as_str()
+        .expect("client session id");
+
+    let response_json = runtime
+        .block_on(frontend_http_workflow_run_attributed(
+            base_url,
+            serde_json::json!({
+                "credential": {
+                    "credential_id": credential_id,
+                    "secret": credential_secret
+                },
+                "client_session_id": client_session_id,
+                "bucket_selection": { "type": "default" },
+                "run": {
+                    "workflow_id": workflow_id,
+                    "inputs": [{ "node_id": "text-input-1", "port_id": "text", "value": "hello world" }],
+                    "output_targets": [{ "node_id": "vector-output-1", "port_id": "vector" }]
+                }
+            })
+            .to_string(),
+            None,
+        ))
+        .expect("attributed workflow_run");
+    let response: serde_json::Value =
+        serde_json::from_str(&response_json).expect("parse attributed response");
+
+    server_thread.join().expect("join server");
+    std::env::set_current_dir(original_cwd).expect("restore cwd");
+    let _ = std::fs::remove_dir_all(root);
+
+    assert_eq!(
+        response["run"]["run_id"],
+        response["workflow_run"]["workflow_run_id"]
+    );
+    assert_eq!(
+        response["attribution"]["client_session_id"],
+        serde_json::Value::String(client_session_id.to_string())
+    );
+    assert_eq!(response["run"]["outputs"][0]["node_id"], "vector-output-1");
 }
 
 #[test]

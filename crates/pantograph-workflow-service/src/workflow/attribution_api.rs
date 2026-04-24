@@ -4,13 +4,14 @@ use pantograph_runtime_attribution::{
     ClientSessionOpenResponse, ClientSessionRecord, ClientSessionResumeRequest, WorkflowId,
     WorkflowRunAttribution, WorkflowRunRecord, WorkflowRunStartRequest,
 };
+use serde::{Deserialize, Serialize};
 
 use super::{
     AttributionRepository, WorkflowHost, WorkflowRunRequest, WorkflowRunResponse, WorkflowService,
     WorkflowServiceError,
 };
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WorkflowAttributedRunRequest {
     pub credential: pantograph_runtime_attribution::CredentialProofRequest,
     pub client_session_id: pantograph_runtime_attribution::ClientSessionId,
@@ -18,7 +19,7 @@ pub struct WorkflowAttributedRunRequest {
     pub run: WorkflowRunRequest,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WorkflowAttributedRunResponse {
     pub run: WorkflowRunResponse,
     pub workflow_run: WorkflowRunRecord,

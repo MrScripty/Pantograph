@@ -198,6 +198,34 @@ verification commands selected below.
   `cargo clippy -p pantograph-workflow-service --all-targets -- -D warnings`
   passed.
 
+### 2026-04-24 Attribution Boundary Projection Progress
+
+- Added JSON serialization support for attribution client registration,
+  credential proof, durable client-session open/resume, bucket create/delete,
+  bucket selection, and attributed workflow-run request/response contracts.
+- Added bounded boundary parsing for raw credential secrets. Credential
+  secrets remain redacted in `Debug`, response-only for registration, and
+  digest-only in persistence.
+- Added embedded-runtime facade methods for registering attribution clients,
+  opening/resuming durable client sessions, creating/deleting client buckets,
+  and running attributed workflows.
+- Configured UniFFI embedded-runtime and frontend-HTTP workflow services with
+  ephemeral attribution stores, then exposed JSON façade methods for the same
+  durable attribution operations.
+- Added direct embedded-runtime and frontend-HTTP UniFFI tests proving
+  attributed runs can be driven through JSON boundaries and that the returned
+  workflow run id is the backend-owned durable attribution run id.
+- Verification: `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-runtime-attribution`,
+  `cargo test -p pantograph-workflow-service`,
+  `cargo test -p pantograph-uniffi --features frontend-http`,
+  `cargo check --workspace --all-features`, and
+  `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+  passed.
+- Remaining Stage `01` cutover work: legacy workflow-session public entry
+  points still exist in workflow-service, UniFFI, and Rustler and must be
+  removed, replaced, or made internal before the stage-end gate can pass.
+
 ## Required Identity Chain
 
 ```text

@@ -274,8 +274,7 @@ async fn direct_runtime_runs_workflow_and_session_from_json() {
                 "output_targets": [{
                     "node_id": "text-output-1",
                     "port_id": "text"
-                }],
-                "run_id": "run-1"
+                }]
             })
             .to_string(),
         )
@@ -358,8 +357,7 @@ async fn direct_runtime_workflow_run_preserves_invalid_request_envelope() {
                 "output_targets": [{
                     "node_id": "text-output-1",
                     "port_id": "text"
-                }],
-                "run_id": "run-human-input"
+                }]
             })
             .to_string(),
         )
@@ -371,6 +369,103 @@ async fn direct_runtime_workflow_run_preserves_invalid_request_envelope() {
     assert_eq!(
         envelope.message,
         "workflow 'uniffi-runtime-interactive-run' requires interactive input at node 'human-input-1'"
+    );
+
+    runtime.shutdown().await;
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[tokio::test]
+async fn direct_runtime_runs_attributed_workflow_from_json() {
+    let workflow_id = "uniffi-runtime-attributed-text";
+    let root = create_temp_root(workflow_id);
+
+    let runtime = FfiPantographRuntime::new(
+        FfiEmbeddedRuntimeConfig {
+            app_data_dir: root.join("app-data").to_string_lossy().into_owned(),
+            project_root: root.to_string_lossy().into_owned(),
+            workflow_roots: Vec::new(),
+            max_loaded_sessions: None,
+        },
+        None,
+    )
+    .await
+    .expect("runtime");
+
+    let registration_json = runtime
+        .workflow_register_attribution_client(
+            serde_json::json!({
+                "display_name": "UniFFI attributed client",
+                "metadata_json": null
+            })
+            .to_string(),
+        )
+        .expect("register attribution client");
+    let registration: serde_json::Value =
+        serde_json::from_str(&registration_json).expect("parse registration");
+    let credential_id = registration["credential"]["client_credential_id"]
+        .as_str()
+        .expect("credential id");
+    let credential_secret = registration["credential_secret"]
+        .as_str()
+        .expect("credential secret");
+
+    let open_session_json = runtime
+        .workflow_open_client_session(
+            serde_json::json!({
+                "credential": {
+                    "credential_id": credential_id,
+                    "secret": credential_secret
+                },
+                "takeover": false,
+                "reason": "test launch"
+            })
+            .to_string(),
+        )
+        .expect("open client session");
+    let opened: serde_json::Value =
+        serde_json::from_str(&open_session_json).expect("parse open response");
+    let client_session_id = opened["session"]["client_session_id"]
+        .as_str()
+        .expect("client session id");
+
+    let response_json = runtime
+        .workflow_run_attributed(
+            serde_json::json!({
+                "credential": {
+                    "credential_id": credential_id,
+                    "secret": credential_secret
+                },
+                "client_session_id": client_session_id,
+                "bucket_selection": { "type": "default" },
+                "run": {
+                    "workflow_id": workflow_id,
+                    "inputs": [{
+                        "node_id": "text-input-1",
+                        "port_id": "text",
+                        "value": "attributed run"
+                    }],
+                    "output_targets": [{
+                        "node_id": "text-output-1",
+                        "port_id": "text"
+                    }]
+                }
+            })
+            .to_string(),
+        )
+        .await
+        .expect("attributed workflow run");
+    let response: serde_json::Value =
+        serde_json::from_str(&response_json).expect("parse attributed response");
+
+    assert_eq!(response["run"]["outputs"][0]["value"], "attributed run");
+    assert_eq!(
+        response["run"]["run_id"],
+        response["workflow_run"]["workflow_run_id"]
+    );
+    assert_eq!(
+        response["attribution"]["client_session_id"],
+        serde_json::Value::String(client_session_id.to_string())
     );
 
     runtime.shutdown().await;

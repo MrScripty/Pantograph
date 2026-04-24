@@ -1,9 +1,11 @@
 use std::fmt;
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use uuid::Uuid;
 
 use crate::{BucketId, ClientCredentialId, ClientId, ClientSessionId, WorkflowId, WorkflowRunId};
+
+const MAX_CREDENTIAL_SECRET_LEN: usize = 256;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -132,6 +134,28 @@ impl CredentialSecret {
         &self.0
     }
 
+    pub fn from_boundary_secret(value: impl Into<String>) -> Result<Self, crate::AttributionError> {
+        let value = value.into();
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            return Err(crate::AttributionError::MissingField {
+                field: "credential.secret",
+            });
+        }
+        if trimmed.len() > MAX_CREDENTIAL_SECRET_LEN {
+            return Err(crate::AttributionError::FieldTooLong {
+                field: "credential.secret",
+                max_len: MAX_CREDENTIAL_SECRET_LEN,
+            });
+        }
+        if trimmed.chars().any(char::is_control) {
+            return Err(crate::AttributionError::InvalidField {
+                field: "credential.secret",
+            });
+        }
+        Ok(Self(trimmed.to_string()))
+    }
+
     #[must_use]
     pub fn proof_request(&self, credential_id: ClientCredentialId) -> CredentialProofRequest {
         CredentialProofRequest {
@@ -146,25 +170,44 @@ impl CredentialSecret {
     }
 }
 
+impl Serialize for CredentialSecret {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self.expose_secret())
+    }
+}
+
+impl<'de> Deserialize<'de> for CredentialSecret {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        Self::from_boundary_secret(value).map_err(serde::de::Error::custom)
+    }
+}
+
 impl fmt::Debug for CredentialSecret {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("CredentialSecret(<redacted>)")
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CredentialProofRequest {
     pub credential_id: ClientCredentialId,
     pub secret: CredentialSecret,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ClientRegistrationRequest {
     pub display_name: Option<String>,
     pub metadata_json: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ClientRegistrationResponse {
     pub client: ClientRecord,
     pub credential: ClientCredential,
@@ -237,14 +280,14 @@ pub struct WorkflowRunAttribution {
     pub workflow_run_id: WorkflowRunId,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ClientSessionOpenRequest {
     pub credential: CredentialProofRequest,
     pub takeover: bool,
     pub reason: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ClientSessionOpenResponse {
     pub session: ClientSessionRecord,
     pub default_bucket: BucketRecord,
@@ -252,14 +295,14 @@ pub struct ClientSessionOpenResponse {
     pub superseded_session_id: Option<ClientSessionId>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ClientSessionResumeRequest {
     pub credential: CredentialProofRequest,
     pub client_session_id: ClientSessionId,
     pub reason: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ClientSessionDisconnectRequest {
     pub credential: CredentialProofRequest,
     pub client_session_id: ClientSessionId,
@@ -267,33 +310,34 @@ pub struct ClientSessionDisconnectRequest {
     pub reason: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ClientSessionExpireRequest {
     pub client_session_id: ClientSessionId,
     pub reason: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BucketCreateRequest {
     pub credential: CredentialProofRequest,
     pub name: String,
     pub metadata_json: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BucketDeleteRequest {
     pub credential: CredentialProofRequest,
     pub bucket_id: BucketId,
     pub reason: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "type", content = "bucket_id")]
 pub enum BucketSelection {
     Default,
     Explicit(BucketId),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkflowRunStartRequest {
     pub credential: CredentialProofRequest,
     pub client_session_id: ClientSessionId,

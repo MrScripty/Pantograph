@@ -4,17 +4,18 @@ use std::sync::Arc;
 use node_engine::ExecutorExtensions;
 use pantograph_embedded_runtime::{EmbeddedRuntime, EmbeddedRuntimeConfig};
 use pantograph_workflow_service::{
-    WorkflowCapabilitiesRequest, WorkflowErrorCode, WorkflowErrorEnvelope,
-    WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest,
-    WorkflowGraphEditSessionCloseRequest, WorkflowGraphEditSessionCreateRequest,
-    WorkflowGraphEditSessionGraphRequest, WorkflowGraphGetConnectionCandidatesRequest,
-    WorkflowGraphInsertNodeAndConnectRequest, WorkflowGraphInsertNodeOnEdgeRequest,
-    WorkflowGraphLoadRequest, WorkflowGraphPreviewNodeInsertOnEdgeRequest,
-    WorkflowGraphRemoveEdgeRequest, WorkflowGraphRemoveNodeRequest, WorkflowGraphSaveRequest,
-    WorkflowGraphUndoRedoStateRequest, WorkflowGraphUpdateNodeDataRequest,
-    WorkflowGraphUpdateNodePositionRequest, WorkflowIoRequest, WorkflowPreflightRequest,
-    WorkflowRunRequest, WorkflowService, WorkflowServiceError, WorkflowSessionCloseRequest,
-    WorkflowSessionCreateRequest, WorkflowSessionKeepAliveRequest,
+    BucketCreateRequest, BucketDeleteRequest, ClientRegistrationRequest, ClientSessionOpenRequest,
+    ClientSessionResumeRequest, WorkflowAttributedRunRequest, WorkflowCapabilitiesRequest,
+    WorkflowErrorCode, WorkflowErrorEnvelope, WorkflowGraphAddEdgeRequest,
+    WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest, WorkflowGraphEditSessionCloseRequest,
+    WorkflowGraphEditSessionCreateRequest, WorkflowGraphEditSessionGraphRequest,
+    WorkflowGraphGetConnectionCandidatesRequest, WorkflowGraphInsertNodeAndConnectRequest,
+    WorkflowGraphInsertNodeOnEdgeRequest, WorkflowGraphLoadRequest,
+    WorkflowGraphPreviewNodeInsertOnEdgeRequest, WorkflowGraphRemoveEdgeRequest,
+    WorkflowGraphRemoveNodeRequest, WorkflowGraphSaveRequest, WorkflowGraphUndoRedoStateRequest,
+    WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest, WorkflowIoRequest,
+    WorkflowPreflightRequest, WorkflowRunRequest, WorkflowService, WorkflowServiceError,
+    WorkflowSessionCloseRequest, WorkflowSessionCreateRequest, WorkflowSessionKeepAliveRequest,
     WorkflowSessionQueueCancelRequest, WorkflowSessionQueueListRequest,
     WorkflowSessionQueueReprioritizeRequest, WorkflowSessionRunRequest,
     WorkflowSessionStatusRequest,
@@ -78,7 +79,10 @@ impl FfiPantographRuntime {
                 .set(node_engine::extension_keys::PUMAS_API, api.api_arc());
         }
 
-        let workflow_service = Arc::new(WorkflowService::new());
+        let workflow_service = Arc::new(
+            WorkflowService::with_ephemeral_attribution_store()
+                .map_err(map_workflow_service_error)?,
+        );
         workflow_service
             .set_loaded_runtime_capacity_limit(config.max_loaded_sessions)
             .map_err(map_workflow_service_error)?;
@@ -107,6 +111,70 @@ impl FfiPantographRuntime {
         let response = self
             .runtime
             .workflow_run(request)
+            .await
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Register an attribution client and return ClientRegistrationResponse JSON.
+    pub fn workflow_register_attribution_client(
+        &self,
+        request_json: String,
+    ) -> Result<String, FfiError> {
+        let request: ClientRegistrationRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .register_attribution_client(request)
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Open a durable client session and return ClientSessionOpenResponse JSON.
+    pub fn workflow_open_client_session(&self, request_json: String) -> Result<String, FfiError> {
+        let request: ClientSessionOpenRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .open_client_session(request)
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Resume a durable client session and return ClientSessionRecord JSON.
+    pub fn workflow_resume_client_session(&self, request_json: String) -> Result<String, FfiError> {
+        let request: ClientSessionResumeRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .resume_client_session(request)
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Create a durable client bucket and return BucketRecord JSON.
+    pub fn workflow_create_client_bucket(&self, request_json: String) -> Result<String, FfiError> {
+        let request: BucketCreateRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .create_client_bucket(request)
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Delete a durable client bucket and return BucketRecord JSON.
+    pub fn workflow_delete_client_bucket(&self, request_json: String) -> Result<String, FfiError> {
+        let request: BucketDeleteRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .delete_client_bucket(request)
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Run a workflow with durable attribution and return WorkflowAttributedRunResponse JSON.
+    pub async fn workflow_run_attributed(&self, request_json: String) -> Result<String, FfiError> {
+        let request: WorkflowAttributedRunRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .workflow_run_attributed(request)
             .await
             .map_err(map_workflow_service_error)?;
         serialize_response(&response)
