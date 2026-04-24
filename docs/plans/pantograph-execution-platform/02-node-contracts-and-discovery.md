@@ -10,6 +10,88 @@ GUI authoring, or binding surfaces.
 Ready for stage-start preflight after stage `01` is complete and its
 stage-end refactor gate has been recorded.
 
+## Implementation Notes
+
+### 2026-04-24 Stage-Start Report
+
+- Selected stage: Stage `02`, node contracts and discovery.
+- Current branch: `main`.
+- Stage base: `4ba76c98`, the Stage `01` closeout commit.
+- Git status before implementation: unrelated asset changes only:
+  deleted `assets/3c842e69-080c-43ad-a9f0-14136e18761f.jpg`, deleted
+  `assets/grok-image-6c435c73-11b8-4dcf-a8b2-f2735cc0c5d3.png`, deleted
+  `assets/grok-image-e5979483-32c2-4cf5-b32f-53be66170132.png`,
+  untracked `assets/banner_3.jpg`, `assets/banner_3.png`,
+  `assets/github_social.jpg`, and `assets/reject/`.
+- Dirty-file overlap: none. Stage `02` implementation must not touch
+  `assets/`.
+- Standards reviewed through the execution-platform standards map:
+  `PLAN-STANDARDS.md`, `ARCHITECTURE-PATTERNS.md`,
+  `CODING-STANDARDS.md`, `DOCUMENTATION-STANDARDS.md`,
+  `TESTING-STANDARDS.md`, `CONCURRENCY-STANDARDS.md`,
+  `TOOLING-STANDARDS.md`, `INTEROP-STANDARDS.md`,
+  `LANGUAGE-BINDINGS-STANDARDS.md`, `SECURITY-STANDARDS.md`,
+  `DEPENDENCY-STANDARDS.md`, `COMMIT-STANDARDS.md`, and
+  `languages/rust/RUST-*.md`.
+- Intended Wave `02` write set:
+  `crates/pantograph-node-contracts/`, `crates/workflow-nodes/`,
+  `crates/pantograph-workflow-service/src/graph/`, and host-owned workspace
+  manifests/facades only when needed to add and expose the canonical contract
+  crate.
+- Adjacent inventory:
+  - `node-engine/src/types.rs` currently owns `PortDataType`,
+    `PortDefinition`, `NodeDefinition`, and compatibility helpers.
+  - `node-engine/src/descriptor.rs` currently describes executable task
+    metadata and still claims task metadata is the UI/validation source of
+    truth; Stage `02` must downgrade this to execution descriptor input.
+  - `node-engine/src/registry.rs` currently owns metadata lookup, category
+    grouping, and port option providers for executor registrations.
+  - `pantograph-workflow-service/src/graph/types.rs` duplicates node/port DTOs
+    and local compatibility rules for graph-authoring projections.
+  - `pantograph-workflow-service/src/graph/registry.rs` converts
+    `node_engine::TaskMetadata` into workflow-service definitions and maps
+    engine-only port types to GUI-facing types.
+  - `pantograph-workflow-service/src/graph/effective_definition.rs` currently
+    accepts dynamic definitions from `GraphNode.data["definition"]`; Stage
+    `02` must replace that host-local shape reconstruction with backend-owned
+    effective contracts and typed resolution diagnostics.
+  - `pantograph-rustler/src/workflow_graph_contract.rs` validates graphs
+    through `node_engine` directly and remains a later projection touchpoint.
+- Contract freeze:
+  - `NodeTypeId`, `NodeInstanceId`, and `PortId` are non-empty, trimmed,
+    validated string newtypes with generated constructors only where the
+    backend owns the id.
+  - Canonical port values are expressed through `PortValueType`,
+    `PortKind`, `PortCardinality`, `PortRequirement`, `PortVisibility`, and
+    explicit `PortConstraint` values.
+  - `NodeTypeContract` owns stable type id, category, label, description,
+    inputs, outputs, execution semantics, capability requirements, authoring
+    metadata, and optional contract version/digest.
+  - `EffectiveNodeContract` and `EffectivePortContract` are backend-published
+    projections for one node instance and carry
+    `ContractResolutionDiagnostics`; clients must not rebuild dynamic ports
+    from arbitrary node data.
+  - Compatibility returns structured diagnostics with source/target node and
+    port ids plus a typed rejection reason, not a bare boolean.
+- Start outcome: `ready_with_recorded_assumptions`.
+- Recorded assumptions:
+  - Wave `02` may be executed serially by the host in this shared workspace
+    when subagents are not explicitly authorized; the recorded worker write
+    sets and reports still apply.
+  - The first logical implementation step is the `canonical-contracts` slice:
+    add `pantograph-node-contracts`, validated ids, canonical DTOs,
+    compatibility diagnostics, tests, README, workspace wiring, and targeted
+    verification before integrating workflow-service projections.
+  - No new third-party dependency is expected for the first slice; if a
+    dependency becomes necessary, stop and record dependency-standard review
+    before editing manifests.
+- Expected verification for the first logical step:
+  `cargo test -p pantograph-node-contracts`,
+  `cargo fmt --all -- --check`, and
+  `cargo clippy -p pantograph-node-contracts --all-targets -- -D warnings`.
+- Expected Stage `02` verification remains the command set listed in
+  `Verification Commands`.
+
 ## Type Families To Define
 
 ### Identity Types
