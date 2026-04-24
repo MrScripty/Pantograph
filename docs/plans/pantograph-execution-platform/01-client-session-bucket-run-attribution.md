@@ -14,6 +14,112 @@ The remaining work before source edits is procedural rather than architectural:
 inspect worktree status, confirm the intended write set, and record the
 verification commands selected below.
 
+## Implementation Notes
+
+### 2026-04-24 Stage-Start Report
+
+- Selected stage: Stage `01`, client session, bucket, and workflow-run
+  attribution.
+- Current branch: `main`.
+- Git status before implementation: unrelated asset changes only:
+  deleted `assets/3c842e69-080c-43ad-a9f0-14136e18761f.jpg`, deleted
+  `assets/grok-image-6c435c73-11b8-4dcf-a8b2-f2735cc0c5d3.png`, deleted
+  `assets/grok-image-e5979483-32c2-4cf5-b32f-53be66170132.png`,
+  untracked `assets/banner_3.jpg`, `assets/banner_3.png`,
+  `assets/github_social.jpg`, and `assets/reject/`.
+- Dirty-file overlap: none. Stage `01` implementation must not touch `assets/`.
+- Standards reviewed: `PLAN-STANDARDS.md`, `COMMIT-STANDARDS.md`,
+  `DEPENDENCY-STANDARDS.md`, `SECURITY-STANDARDS.md`,
+  `CONCURRENCY-STANDARDS.md`, `RUST-API-STANDARDS.md`,
+  `RUST-SECURITY-STANDARDS.md`, `RUST-DEPENDENCY-STANDARDS.md`, and
+  `RUST-TOOLING-STANDARDS.md`.
+- Intended Wave `02` write set:
+  `crates/pantograph-runtime-attribution/`,
+  `crates/pantograph-workflow-service/`, and host-owned workspace manifests
+  only for the reviewed attribution crate dependency additions.
+- Adjacent inventory for later cutover:
+  `crates/pantograph-uniffi/src/frontend_http.rs`,
+  `crates/pantograph-uniffi/src/runtime.rs`,
+  `crates/pantograph-rustler/src/frontend_http_nifs.rs`, and
+  `crates/pantograph-frontend-http-adapter/src/lib.rs` expose or parse current
+  workflow-session entry points and must be replaced, removed, or made internal
+  before Stage `01` completes.
+- Start outcome: `ready_with_recorded_assumptions`.
+- Recorded assumptions:
+  - Wave `02` may be executed serially by the host in this working tree when
+    subagents are not explicitly authorized; the non-overlapping write-set and
+    report rules still apply.
+  - The first logical implementation step is the
+    `attribution-domain-storage` slice, followed by targeted verification and
+    an atomic commit before workflow-service cutover begins.
+  - `pantograph-runtime-attribution` will use synchronous domain operations
+    over SQLite transactions and avoid holding unrelated locks across
+    persistence work.
+- Expected verification for the first logical step:
+  `cargo test -p pantograph-runtime-attribution`.
+- Expected Stage `01` verification remains the command set listed in
+  `Verification Commands`.
+
+### 2026-04-24 Contract Freeze
+
+- Attribution id newtypes: `ClientId`, `ClientCredentialId`,
+  `ClientSessionId`, `BucketId`, `WorkflowRunId`, `WorkflowId`, and
+  `UsageEventId`; each parses non-empty caller input at boundaries and exposes
+  generated constructors for backend-owned ids.
+- Lifecycle enums: `ClientStatus`, `ClientCredentialStatus`,
+  `ClientSessionLifecycleState`, `BucketStatus`, and `WorkflowRunStatus`.
+  Active client-session states are `Opening`, `Connected`, and
+  `DisconnectedGrace`.
+- Command/request names: `ClientRegistrationRequest`,
+  `CredentialProofRequest`, `ClientSessionOpenRequest`,
+  `ClientSessionResumeRequest`, `ClientSessionDisconnectRequest`,
+  `ClientSessionExpireRequest`, `ClientSessionTakeoverRequest`,
+  `BucketCreateRequest`, `BucketDeleteRequest`, `BucketSelection`, and
+  `WorkflowRunStartRequest`.
+- Error families: validation errors for malformed ids and bounded names,
+  credential errors for missing, malformed, revoked, or mismatched proofs,
+  lifecycle errors for duplicate active sessions, invalid transitions, and
+  expired sessions, bucket errors for collisions, cross-client selection,
+  default deletion, deletion protection, and unsupported rename, and storage
+  errors for migration, unsupported schema version, transaction, and
+  persistence failures.
+- SQLite schema outline:
+  `attribution_schema_migrations`, `clients`, `client_credentials`,
+  `client_sessions`, `session_lifecycle_records`, `buckets`,
+  `default_bucket_assignments`, and `workflow_runs`, with indexes for client,
+  session, bucket, workflow, and workflow-run diagnostics lookup.
+- Public workflow-session cutover inventory:
+  - `WorkflowSessionCreateRequest`, `WorkflowSessionRunRequest`,
+    `WorkflowSessionCloseRequest`, `WorkflowSessionStatusRequest`,
+    `WorkflowSessionQueueListRequest`, `WorkflowSessionQueueCancelRequest`,
+    `WorkflowSessionQueueReprioritizeRequest`,
+    `WorkflowSessionKeepAliveRequest`, `WorkflowSessionInspectionRequest`, and
+    stale-cleanup contracts are currently re-exported from
+    `crates/pantograph-workflow-service/src/lib.rs`.
+  - `WorkflowService::create_workflow_session`,
+    `WorkflowService::run_workflow_session`,
+    `WorkflowService::close_workflow_session`,
+    `WorkflowService::workflow_get_session_status`, queue operations,
+    keep-alive operations, and stale-cleanup worker entry points are current
+    public workflow-service session APIs.
+  - UniFFI and Rustler frontend wrappers expose the same workflow-session API
+    shape and must not remain compatibility aliases after durable
+    client-session APIs are introduced.
+- Dependency review before manifest edits:
+  - SQLite: `rusqlite` is already present in `Cargo.lock` at `0.32.1` through
+    `pumas-library`; Stage `01` may add a direct crate-local dependency to
+    `pantograph-runtime-attribution` using that locked version and SQLite
+    transaction APIs. No new transitive dependency family is expected from the
+    lockfile baseline.
+  - Credential digest: `blake3` is already present in `Cargo.lock` at `1.8.3`.
+    Stage `01` may add a direct crate-local dependency to store keyed or
+    salted digest bytes instead of raw bearer secrets. Raw credential material
+    remains response-only and must not be persisted or logged.
+  - Credential secret generation: reuse the existing workspace `uuid` crate
+    for backend-owned opaque ids and generated credential material in the first
+    slice; revisit before release if a stronger dedicated secret generator is
+    required by the security review.
+
 ## Required Identity Chain
 
 ```text

@@ -2,19 +2,20 @@
 
 ## Status
 
-Not started.
+Wave `01` complete. Wave `02` ready to start.
 
 ## Branch Or Worktree Strategy
 
-- Integration branch: record at stage start.
-- Worker worktrees: one isolated worktree or temporary clone per committing
-  worker branch.
+- Integration branch: `main`.
+- Worker worktrees: subagents are not explicitly authorized in this turn, so
+  the host will execute Wave `02` worker slices serially in the shared
+  workspace unless authorization changes.
 
 ## Wave Status
 
 | Wave | Status | Integration Notes |
 | ---- | ------ | ----------------- |
-| `wave-01` | Pending | Host-owned preflight and contract freeze. |
+| `wave-01` | Complete | Stage-start report, contract freeze, cutover inventory, and dependency review recorded in `01-client-session-bucket-run-attribution.md`. |
 | `wave-02` | Pending | Parallel implementation after wave 01 passes. |
 | `wave-03` | Pending | Host-owned integration and stage-end gate. |
 
@@ -27,8 +28,16 @@ Not started.
 
 ## Decisions
 
-- None recorded.
+- 2026-04-24: Stage-start outcome is `ready_with_recorded_assumptions`.
+- 2026-04-24: Existing dirty files are unrelated `assets/` changes and do not
+  overlap the Stage `01` write set.
+- 2026-04-24: `rusqlite` and `blake3` are already present in `Cargo.lock`;
+  Wave `02` may add direct crate-local dependencies for
+  `pantograph-runtime-attribution`.
+- 2026-04-24: Without explicit subagent authorization, the host may implement
+  Wave `02` slices serially while preserving the recorded write boundaries.
 
 ## Verification Results
 
-- None recorded.
+- 2026-04-24: Wave `01` verification passed by inspection: start outcome is
+  recorded and Wave `02` write sets remain non-overlapping.
