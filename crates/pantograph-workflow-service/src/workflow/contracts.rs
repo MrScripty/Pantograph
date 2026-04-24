@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use pantograph_runtime_attribution::AttributionError;
+
 use crate::technical_fit::{WorkflowTechnicalFitDecision, WorkflowTechnicalFitOverride};
 
 /// Node/port value binding used for workflow inputs and outputs.
@@ -472,6 +474,17 @@ pub enum WorkflowServiceError {
 
     #[error("internal_error: {0}")]
     Internal(String),
+}
+
+impl From<AttributionError> for WorkflowServiceError {
+    fn from(error: AttributionError) -> Self {
+        match error {
+            AttributionError::Storage(_) | AttributionError::UnsupportedSchemaVersion { .. } => {
+                Self::Internal(error.to_string())
+            }
+            _ => Self::InvalidRequest(error.to_string()),
+        }
+    }
 }
 
 impl WorkflowServiceError {

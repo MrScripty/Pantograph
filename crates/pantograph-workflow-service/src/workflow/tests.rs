@@ -14,6 +14,7 @@ use tokio::sync::Notify;
 mod fixtures;
 use fixtures::*;
 
+mod attribution;
 mod contracts;
 mod runtime_preflight;
 mod scheduler_snapshot;

@@ -3,7 +3,10 @@ use std::sync::{Arc, Mutex};
 use crate::graph::GraphSessionStore;
 use crate::scheduler::WorkflowSessionStore;
 
-use super::{WorkflowSchedulerDiagnosticsProvider, WorkflowService, WorkflowServiceError};
+use super::{
+    SqliteAttributionStore, WorkflowSchedulerDiagnosticsProvider, WorkflowService,
+    WorkflowServiceError,
+};
 
 const DEFAULT_MAX_SESSIONS: usize = 8;
 
@@ -29,8 +32,20 @@ impl WorkflowService {
                 max_loaded_sessions,
             ))),
             graph_session_store: Arc::new(GraphSessionStore::new()),
+            attribution_store: None,
             scheduler_diagnostics_provider: Arc::new(Mutex::new(None)),
         }
+    }
+
+    pub fn with_attribution_store(mut self, store: SqliteAttributionStore) -> Self {
+        self.attribution_store = Some(Arc::new(Mutex::new(store)));
+        self
+    }
+
+    pub fn with_ephemeral_attribution_store() -> Result<Self, WorkflowServiceError> {
+        Ok(Self::new().with_attribution_store(
+            SqliteAttributionStore::open_in_memory().map_err(WorkflowServiceError::from)?,
+        ))
     }
 
     pub fn set_scheduler_diagnostics_provider(
@@ -64,5 +79,18 @@ impl WorkflowService {
         self.session_store
             .lock()
             .map_err(|_| WorkflowServiceError::Internal("session store lock poisoned".to_string()))
+    }
+
+    pub(crate) fn attribution_store_guard(
+        &self,
+    ) -> Result<std::sync::MutexGuard<'_, SqliteAttributionStore>, WorkflowServiceError> {
+        let Some(store) = self.attribution_store.as_ref() else {
+            return Err(WorkflowServiceError::Internal(
+                "attribution store is not configured".to_string(),
+            ));
+        };
+        store.lock().map_err(|_| {
+            WorkflowServiceError::Internal("attribution store lock poisoned".to_string())
+        })
     }
 }

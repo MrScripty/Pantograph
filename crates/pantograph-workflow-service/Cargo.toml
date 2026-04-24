@@ -24,6 +24,7 @@ parking_lot.workspace = true
 # Shared framework/domain crates
 node-engine = { path = "../node-engine" }
 workflow-nodes = { path = "../workflow-nodes", features = ["model-library"] }
+pantograph-runtime-attribution = { path = "../pantograph-runtime-attribution" }
 pantograph-runtime-identity = { path = "../pantograph-runtime-identity" }
 
 [dev-dependencies]

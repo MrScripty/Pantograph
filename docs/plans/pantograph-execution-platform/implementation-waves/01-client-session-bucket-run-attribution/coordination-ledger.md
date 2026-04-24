@@ -24,7 +24,7 @@ Wave `01` complete. Wave `02` ready to start.
 | Worker | Report Path | Status |
 | ------ | ----------- | ------ |
 | attribution-domain-storage | `reports/wave-02-worker-attribution-domain-storage.md` | Complete |
-| workflow-service-cutover | `reports/wave-02-worker-workflow-service-cutover.md` | Pending |
+| workflow-service-cutover | `reports/wave-02-worker-workflow-service-cutover.md` | Partial |
 
 ## Decisions
 
@@ -38,6 +38,9 @@ Wave `01` complete. Wave `02` ready to start.
   Wave `02` slices serially while preserving the recorded write boundaries.
 - 2026-04-24: The host implemented `attribution-domain-storage` locally in the
   shared workspace because no subagent authorization was given.
+- 2026-04-24: The host implemented the first workflow-service cutover slice
+  locally: native Rust attributed workflow-run orchestration. Legacy
+  workflow-session public API removal remains pending.
 
 ## Verification Results
 
@@ -47,3 +50,9 @@ Wave `01` complete. Wave `02` ready to start.
   `cargo fmt --all -- --check` and
   `cargo test -p pantograph-runtime-attribution`, and
   `cargo clippy -p pantograph-runtime-attribution --all-targets -- -D warnings`.
+- 2026-04-24: `workflow-service-cutover` partial verification passed:
+  `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-workflow-service attribution`,
+  `cargo clippy -p pantograph-workflow-service --all-targets -- -D warnings`,
+  `cargo test -p pantograph-workflow-service`, and
+  `cargo check --workspace --all-features`.

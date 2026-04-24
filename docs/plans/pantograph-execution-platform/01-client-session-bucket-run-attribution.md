@@ -142,6 +142,33 @@ verification commands selected below.
   `cargo clippy -p pantograph-runtime-attribution --all-targets -- -D warnings`
   passed.
 
+### 2026-04-24 Wave 02 Workflow-Service Cutover Progress
+
+- Added `pantograph-runtime-attribution` as a direct
+  `pantograph-workflow-service` dependency so workflow orchestration can
+  consume backend-owned attribution records instead of caller-authored run ids.
+- Added optional workflow-service attribution-store wiring with
+  `with_attribution_store`, `with_ephemeral_attribution_store`, and an internal
+  attribution-store guard. Existing `WorkflowService::new` remains available
+  for non-attributed callers while the public cutover proceeds.
+- Added native Rust workflow-service methods for registering attribution
+  clients, opening/resuming durable client sessions, and running an attributed
+  workflow.
+- Added `WorkflowAttributedRunRequest` and `WorkflowAttributedRunResponse`.
+  The attributed run path rejects caller-supplied `run_id`, creates a
+  durable `WorkflowRunRecord` through `pantograph-runtime-attribution`, and
+  passes the backend-generated run id into host execution.
+- Added targeted tests proving attributed workflow runs use backend-owned run
+  ids and reject caller-supplied run ids.
+- Verification: `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-workflow-service attribution`,
+  `cargo clippy -p pantograph-workflow-service --all-targets -- -D warnings`,
+  `cargo test -p pantograph-workflow-service`, and
+  `cargo check --workspace --all-features` passed.
+- Remaining Stage `01` cutover work: old workflow-session public entry points
+  are still present and must be removed, replaced, or made internal in a later
+  logical step before Stage `01` completion.
+
 ## Required Identity Chain
 
 ```text

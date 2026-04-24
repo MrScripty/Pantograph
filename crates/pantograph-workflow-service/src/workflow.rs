@@ -15,6 +15,7 @@ use crate::technical_fit::WorkflowTechnicalFitOverride;
 #[cfg(test)]
 use crate::technical_fit::{WorkflowTechnicalFitDecision, WorkflowTechnicalFitRequest};
 
+mod attribution_api;
 mod contracts;
 mod graph_api;
 mod host;
@@ -29,6 +30,7 @@ mod session_runtime;
 mod validation;
 mod workflow_run_api;
 
+pub use self::attribution_api::{WorkflowAttributedRunRequest, WorkflowAttributedRunResponse};
 pub use self::contracts::*;
 pub use self::host::{
     WorkflowHost, WorkflowSchedulerDiagnosticsProvider, WorkflowSchedulerRuntimeDiagnosticsRequest,
@@ -36,6 +38,13 @@ pub use self::host::{
 pub(crate) use self::runtime_preflight::runtime_issue_for_capability;
 pub use self::runtime_preflight::{evaluate_runtime_preflight, format_runtime_not_ready_message};
 pub(crate) use self::validation::validate_workflow_id;
+
+pub use pantograph_runtime_attribution::{
+    AttributionRepository, BucketSelection, ClientRegistrationRequest, ClientRegistrationResponse,
+    ClientSessionOpenRequest, ClientSessionOpenResponse, ClientSessionRecord,
+    ClientSessionResumeRequest, CredentialProofRequest, CredentialSecret, SqliteAttributionStore,
+    WorkflowRunAttribution, WorkflowRunRecord,
+};
 
 #[cfg(test)]
 use crate::graph::WorkflowSessionKind;
@@ -66,6 +75,7 @@ pub use crate::scheduler::{
 pub struct WorkflowService {
     session_store: Arc<Mutex<WorkflowSessionStore>>,
     graph_session_store: Arc<GraphSessionStore>,
+    attribution_store: Option<Arc<Mutex<SqliteAttributionStore>>>,
     scheduler_diagnostics_provider:
         Arc<Mutex<Option<Arc<dyn WorkflowSchedulerDiagnosticsProvider>>>>,
 }
