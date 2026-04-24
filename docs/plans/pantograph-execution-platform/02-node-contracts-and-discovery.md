@@ -244,6 +244,26 @@ stage-end refactor gate has been recorded.
   GUI adapters.
 - Updated the ADR index with the Stage `02` node-contract ownership decision.
 
+### 2026-04-24 Stage-End Verification And Gate
+
+- Final Stage `02` verification passed:
+  `cargo test -p pantograph-node-contracts`,
+  `cargo test -p workflow-nodes`,
+  `cargo test -p pantograph-workflow-service`,
+  `cargo check --workspace --all-features`,
+  `cargo fmt --all -- --check`,
+  `cargo clippy --workspace --all-targets --all-features -- -D warnings`, and
+  `cargo test --workspace --doc`.
+- Stage-end refactor gate outcome: `not_warranted`.
+- Touched-file source command: `git diff --name-only 4ba76c98...HEAD`.
+- Gate decision: touched files already received in-scope ownership alignment,
+  DTO projection cleanup, binding validation routing, README updates, ADR-006,
+  and targeted regression tests during implementation; remaining aggregate
+  candidate diagnostic collection and Rustler test-link behavior are recorded
+  follow-ups rather than standards drift requiring an in-stage refactor.
+- Dirty-file overlap at closeout: none. Existing unrelated `assets/` deletes
+  and untracked assets remain outside the Stage `02` write set.
+
 ## Type Families To Define
 
 ### Identity Types

@@ -2,9 +2,8 @@
 
 ## Status
 
-Wave `01` complete. Wave `02` is partially integrated; the
-`canonical-contracts`, `workflow-nodes-registration`, and
-`workflow-service-projections` slices are complete.
+Stage `02` complete. Wave `01`, Wave `02`, and Wave `03` are integrated, and
+the stage-end gate outcome is recorded as `not_warranted`.
 
 ## Branch Or Worktree Strategy
 
@@ -18,8 +17,8 @@ Wave `01` complete. Wave `02` is partially integrated; the
 | Wave | Status | Integration Notes |
 | ---- | ------ | ----------------- |
 | `wave-01` | Complete | Stage-start report, contract freeze, and current ownership inventory recorded in `02-node-contracts-and-discovery.md`. |
-| `wave-02` | Partial | Canonical contract crate, workflow-nodes registration, workflow-service projection integration, effective-contract resolution, direct incompatible connection diagnostics, and binding workflow validation projection are integrated; aggregate candidate diagnostics remain a design follow-up. |
-| `wave-03` | Partial | Node-engine documentation alignment and ADR-006 are integrated; final verification and stage-end gate remain. |
+| `wave-02` | Complete | Canonical contract crate, workflow-nodes registration, workflow-service projection integration, effective-contract resolution, direct incompatible connection diagnostics, and binding workflow validation projection are integrated; aggregate candidate diagnostics remain a design follow-up. |
+| `wave-03` | Complete | ADR-006, node-engine documentation alignment, final verification, and stage-end gate are complete. |
 
 ## Worker Reports
 
@@ -72,6 +71,10 @@ Wave `01` complete. Wave `02` is partially integrated; the
 - 2026-04-24: Wave `03` documentation alignment added ADR-006 for canonical
   node contract ownership and updated node-engine READMEs to identify
   descriptors as execution inputs, not GUI/binding contract owners.
+- 2026-04-24: Stage-end refactor gate outcome is `not_warranted`. Touched-file
+  review used `git diff --name-only 4ba76c98...HEAD`; remaining aggregate
+  candidate diagnostics and Rustler NIF test-link behavior are recorded
+  follow-ups rather than in-scope standards refactor blockers.
 
 ## Verification Results
 
@@ -116,3 +119,11 @@ Wave `01` complete. Wave `02` is partially integrated; the
   missing Erlang NIF symbols, observed on `cargo test -p pantograph_rustler
   test_validation_empty_graph`; type checking and clippy for the Rustler crate
   pass.
+- 2026-04-24: Final Stage `02` verification passed:
+  `cargo test -p pantograph-node-contracts`,
+  `cargo test -p workflow-nodes`,
+  `cargo test -p pantograph-workflow-service`,
+  `cargo check --workspace --all-features`,
+  `cargo fmt --all -- --check`,
+  `cargo clippy --workspace --all-targets --all-features -- -D warnings`, and
+  `cargo test --workspace --doc`.
