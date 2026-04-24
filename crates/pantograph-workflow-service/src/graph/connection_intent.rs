@@ -39,6 +39,23 @@ fn node_label(node: &GraphNode, definition: &NodeDefinition) -> String {
         .unwrap_or_else(|| definition.label.clone())
 }
 
+fn effective_definition_error_message(role: &str, error: EffectiveDefinitionError) -> String {
+    match error {
+        EffectiveDefinitionError::UnknownNodeType(node_type) => {
+            format!("{role} node type '{node_type}' is unknown")
+        }
+        EffectiveDefinitionError::InvalidNodeId { node_id, message } => {
+            format!("{role} node id '{node_id}' is invalid: {message}")
+        }
+        EffectiveDefinitionError::InvalidNodeType { node_type, message } => {
+            format!("{role} node type '{node_type}' is invalid: {message}")
+        }
+        EffectiveDefinitionError::InvalidDynamicDefinition { message } => {
+            format!("{role} node dynamic definition is invalid: {message}")
+        }
+    }
+}
+
 fn resolve_output_anchor<'a>(
     graph: &'a WorkflowGraph,
     registry: &'a NodeRegistry,
@@ -50,12 +67,11 @@ fn resolve_output_anchor<'a>(
             reason: ConnectionRejectionReason::UnknownSourceAnchor,
             message: format!("source node '{}' was not found", anchor.node_id),
         })?;
-    let definition = effective_node_definition(node, registry).map_err(|error| match error {
-        EffectiveDefinitionError::UnknownNodeType(node_type) => ConnectionRejection {
+    let definition =
+        effective_node_definition(node, registry).map_err(|error| ConnectionRejection {
             reason: ConnectionRejectionReason::UnknownSourceAnchor,
-            message: format!("source node type '{}' is unknown", node_type),
-        },
-    })?;
+            message: effective_definition_error_message("source", error),
+        })?;
     let port = definition
         .outputs
         .iter()
@@ -83,12 +99,11 @@ fn resolve_input_anchor<'a>(
             reason: ConnectionRejectionReason::UnknownTargetAnchor,
             message: format!("target node '{}' was not found", anchor.node_id),
         })?;
-    let definition = effective_node_definition(node, registry).map_err(|error| match error {
-        EffectiveDefinitionError::UnknownNodeType(node_type) => ConnectionRejection {
+    let definition =
+        effective_node_definition(node, registry).map_err(|error| ConnectionRejection {
             reason: ConnectionRejectionReason::UnknownTargetAnchor,
-            message: format!("target node type '{}' is unknown", node_type),
-        },
-    })?;
+            message: effective_definition_error_message("target", error),
+        })?;
     let port = definition
         .inputs
         .iter()

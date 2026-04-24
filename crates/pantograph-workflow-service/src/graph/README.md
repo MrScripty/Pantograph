@@ -11,8 +11,8 @@ and persistence abstractions so adapters do not implement graph business logic.
 | ----------- | ----------- |
 | `mod.rs` | Public exports for graph-edit contracts and helper modules. |
 | `types.rs` | Graph DTOs, edit-session request/response types, and persisted workflow file shapes. |
-| `registry.rs` | Built-in node-definition discovery and node-engine metadata conversion. |
-| `effective_definition.rs` | Merges registry metadata with additive per-node definition overlays before validation or candidate lookup. |
+| `registry.rs` | Built-in node-definition discovery and canonical node-contract projection. |
+| `effective_definition.rs` | Resolves backend-owned effective node contracts and projects them into graph DTOs before validation or candidate lookup. |
 | `validation.rs` | Shared connection compatibility helpers used by graph-edit flows. |
 | `connection_intent.rs` | Canonical candidate-discovery and revision-aware connection/insert validation. |
 | `connection_insert.rs` | Internal node-insert, edge-insert preview, and edge-bridge helpers used by `connection_intent.rs` while preserving the public graph-edit facade. |
@@ -46,10 +46,11 @@ business-logic owners.
 Define a dedicated graph-editing module inside `pantograph-workflow-service`
 that owns graph contracts, edit-session orchestration, and persistence
 abstractions. Host adapters may expose those operations over IPC/FFI/HTTP, but
-the logic and contracts live here. Dynamic per-node port overlays are resolved
-through `effective_definition.rs`, which starts from the registry definition and
-applies additive `inputs`/`outputs` overrides from persisted node data only
-when the node type matches.
+the logic and contracts live here. Node definitions are projected from
+backend-owned `pantograph-node-contracts` records. Dynamic per-node port
+overlays are resolved through `effective_definition.rs` as
+`EffectiveNodeContract` values, then projected back to workflow-service DTOs
+for existing graph-edit callers.
 
 ## Alternatives Rejected
 - Keep graph editing in Tauri and expose only execution in core.
@@ -107,9 +108,10 @@ when the node type matches.
 - Persisted derived graph metadata is advisory and must be recomputed when stale.
 - Filesystem workflow load path validation is tested at `FileSystemWorkflowGraphStore`;
   transport adapters must not keep parallel path-boundary implementations.
-- Dynamic `node.data.definition` overlays may add ports for a specific node
-  instance, but they must not invalidate the registry node type or silently
-  remove unrelated static ports.
+- Dynamic `node.data.definition` overlays may add or override ports for a
+  specific node instance through backend-owned effective contracts, but they
+  must not invalidate the registry node type or silently remove unrelated
+  static ports.
 - Graph DTO defaults should derive from the declared enum default when the
   public default remains the first-class reactive mode.
 - Revision comparison and canonical definition fallbacks should use eager,
@@ -158,5 +160,6 @@ let response = service
 - `WorkflowGraph.derived_graph` is volatile advisory metadata and may be regenerated.
 - `WorkflowGraphMetadata.id` is derived from the persisted filename stem when listed from a store.
 - `node.data.definition.inputs` and `node.data.definition.outputs` are additive
-  per-node overlays consumed during connection intent and validation; consumers
-  must preserve stable port IDs when persisting them.
+  per-node overlays resolved into `EffectiveNodeContract` during connection
+  intent and validation; consumers must preserve stable port IDs when
+  persisting them.

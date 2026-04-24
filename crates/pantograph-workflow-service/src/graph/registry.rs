@@ -4,16 +4,16 @@ use super::types::{
     ExecutionMode, IoBindingOrigin, NodeCategory, NodeDefinition, PortDataType, PortDefinition,
 };
 
-fn convert_contract(contract: pantograph_node_contracts::NodeTypeContract) -> NodeDefinition {
+fn convert_contract(contract: &pantograph_node_contracts::NodeTypeContract) -> NodeDefinition {
     let category = convert_category(contract.category);
     NodeDefinition {
         node_type: contract.node_type.as_str().to_string(),
         category: category.clone(),
-        label: contract.label,
-        description: contract.description,
+        label: contract.label.clone(),
+        description: contract.description.clone(),
         io_binding_origin: determine_io_binding_origin(contract.node_type.as_str(), &category),
-        inputs: contract.inputs.into_iter().map(convert_port).collect(),
-        outputs: contract.outputs.into_iter().map(convert_port).collect(),
+        inputs: contract.inputs.iter().map(convert_port).collect(),
+        outputs: contract.outputs.iter().map(convert_port).collect(),
         execution_mode: convert_execution_mode(contract.execution_semantics),
     }
 }
@@ -57,10 +57,10 @@ fn convert_execution_mode(
     }
 }
 
-fn convert_port(port: pantograph_node_contracts::PortContract) -> PortDefinition {
+pub(super) fn convert_port(port: &pantograph_node_contracts::PortContract) -> PortDefinition {
     PortDefinition {
         id: port.id.as_str().to_string(),
-        label: port.label,
+        label: port.label.clone(),
         data_type: PortDataType::from_contract_value_type(port.value_type),
         required: matches!(
             port.requirement,
@@ -82,22 +82,35 @@ pub fn validate_workflow_connection(
 
 pub struct NodeRegistry {
     definitions: HashMap<String, NodeDefinition>,
+    contracts: HashMap<String, pantograph_node_contracts::NodeTypeContract>,
 }
 
 impl NodeRegistry {
     pub fn new() -> Self {
         let mut definitions = HashMap::new();
+        let mut contracts_by_type = HashMap::new();
         let contracts = workflow_nodes::builtin_node_contracts()
             .expect("built-in workflow node descriptors must project to canonical contracts");
         for contract in contracts {
-            let def = convert_contract(contract);
+            let def = convert_contract(&contract);
+            contracts_by_type.insert(def.node_type.clone(), contract);
             definitions.insert(def.node_type.clone(), def);
         }
-        Self { definitions }
+        Self {
+            definitions,
+            contracts: contracts_by_type,
+        }
     }
 
     pub fn get_definition(&self, node_type: &str) -> Option<&NodeDefinition> {
         self.definitions.get(node_type)
+    }
+
+    pub fn get_contract(
+        &self,
+        node_type: &str,
+    ) -> Option<&pantograph_node_contracts::NodeTypeContract> {
+        self.contracts.get(node_type)
     }
 
     pub fn all_definitions(&self) -> Vec<NodeDefinition> {

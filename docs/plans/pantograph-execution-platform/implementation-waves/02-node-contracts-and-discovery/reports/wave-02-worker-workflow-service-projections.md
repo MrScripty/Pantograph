@@ -29,6 +29,12 @@ Complete.
   owns separate compatibility semantics.
 - Kept the existing workflow-service DTO boundary stable for current callers
   while making it a projection over canonical contracts.
+- Added a follow-up effective-contract resolution pass that stores canonical
+  `NodeTypeContract` records in `NodeRegistry`, resolves per-node dynamic port
+  overlays as `EffectiveNodeContract` values, and only then projects effective
+  ports into existing workflow-service DTOs.
+- Added canonical merge semantics that preserve unrelated static ports while
+  allowing dynamic overlays to add or override ports by stable port id.
 
 ## Verification
 
@@ -36,15 +42,13 @@ Complete.
 - `cargo check --workspace --all-features`
 - `cargo fmt --all -- --check`
 - `cargo clippy -p pantograph-workflow-service --all-targets -- -D warnings`
+- `cargo test -p pantograph-node-contracts`
+- `cargo clippy -p pantograph-node-contracts --all-targets -- -D warnings`
 
 All commands passed.
 
 ## Deviations
 
-- This slice does not yet replace dynamic `GraphNode.data["definition"]`
-  parsing in `effective_definition.rs`. That remains the next Stage `02`
-  integration step so backend-published `EffectiveNodeContract` projections
-  can carry typed contract-resolution diagnostics.
 - Connection mutation APIs still return existing workflow-service rejection DTOs
   where applicable. The compatibility decision now comes from canonical
   `PortValueType` rules, but structured rejection projection remains a follow-up
@@ -52,8 +56,6 @@ All commands passed.
 
 ## Follow-Ups
 
-- Replace host-local effective definition reconstruction with canonical
-  `EffectiveNodeContract` resolution.
 - Project structured compatibility diagnostics into connection candidates and
   rejection responses.
 - Update binding-facing graph validation to consume backend-owned contract

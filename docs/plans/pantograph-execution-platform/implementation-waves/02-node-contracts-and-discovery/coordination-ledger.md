@@ -18,7 +18,7 @@ Wave `01` complete. Wave `02` is partially integrated; the
 | Wave | Status | Integration Notes |
 | ---- | ------ | ----------------- |
 | `wave-01` | Complete | Stage-start report, contract freeze, and current ownership inventory recorded in `02-node-contracts-and-discovery.md`. |
-| `wave-02` | Partial | Canonical contract crate, workflow-nodes registration, and workflow-service projection integration are integrated; effective-contract and typed rejection surfaces remain pending. |
+| `wave-02` | Partial | Canonical contract crate, workflow-nodes registration, workflow-service projection integration, and effective-contract resolution are integrated; typed rejection surfaces remain pending. |
 | `wave-03` | Pending | Host-owned integration and gate. |
 
 ## Worker Reports
@@ -56,6 +56,10 @@ Wave `01` complete. Wave `02` is partially integrated; the
   canonical `NodeTypeContract` records from `workflow-nodes`, preserve
   canonical extended value types in projections, and delegate compatibility
   checks to `pantograph-node-contracts`.
+- 2026-04-24: The host implemented the effective-contract resolution follow-up
+  locally in the shared workspace. Dynamic `GraphNode.data["definition"]`
+  overlays now resolve through canonical `EffectiveNodeContract` semantics and
+  retain static ports unless explicitly overridden by stable port id.
 
 ## Verification Results
 
@@ -77,3 +81,10 @@ Wave `01` complete. Wave `02` is partially integrated; the
   `cargo check --workspace --all-features`,
   `cargo fmt --all -- --check`, and
   `cargo clippy -p pantograph-workflow-service --all-targets -- -D warnings`.
+- 2026-04-24: effective-contract resolution verification passed:
+  `cargo test -p pantograph-node-contracts`,
+  `cargo test -p pantograph-workflow-service`,
+  `cargo check --workspace --all-features`,
+  `cargo fmt --all -- --check`,
+  `cargo clippy -p pantograph-node-contracts --all-targets -- -D warnings`,
+  and `cargo clippy -p pantograph-workflow-service --all-targets -- -D warnings`.

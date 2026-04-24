@@ -506,6 +506,92 @@ impl EffectiveNodeContract {
             diagnostics: ContractResolutionDiagnostics::default(),
         }
     }
+
+    pub fn from_static_with_dynamic_ports(
+        context: NodeInstanceContext,
+        static_contract: NodeTypeContract,
+        dynamic_inputs: Option<Vec<PortContract>>,
+        dynamic_outputs: Option<Vec<PortContract>>,
+    ) -> Result<Self, NodeContractError> {
+        static_contract.validate()?;
+        validate_dynamic_ports(dynamic_inputs.as_deref(), PortKind::Input)?;
+        validate_dynamic_ports(dynamic_outputs.as_deref(), PortKind::Output)?;
+
+        let has_dynamic_inputs = dynamic_inputs.is_some();
+        let has_dynamic_outputs = dynamic_outputs.is_some();
+        let inputs = merge_effective_ports(
+            static_contract.inputs.clone(),
+            dynamic_inputs.unwrap_or_default(),
+        );
+        let outputs = merge_effective_ports(
+            static_contract.outputs.clone(),
+            dynamic_outputs.unwrap_or_default(),
+        );
+        let mut diagnostics = ContractResolutionDiagnostics::default();
+        if has_dynamic_inputs || has_dynamic_outputs {
+            diagnostics
+                .expansion_reasons
+                .push(ContractExpansionReason::DynamicConfiguration);
+        }
+
+        Ok(Self {
+            context,
+            static_contract,
+            inputs,
+            outputs,
+            diagnostics,
+        })
+    }
+}
+
+fn validate_dynamic_ports(
+    ports: Option<&[PortContract]>,
+    expected: PortKind,
+) -> Result<(), NodeContractError> {
+    for port in ports.unwrap_or_default() {
+        port.validate()?;
+        if port.kind != expected {
+            return Err(NodeContractError::WrongPortKind {
+                port_id: port.id.clone(),
+                expected,
+                actual: port.kind,
+            });
+        }
+    }
+    Ok(())
+}
+
+fn merge_effective_ports(
+    static_ports: Vec<PortContract>,
+    dynamic_ports: Vec<PortContract>,
+) -> Vec<EffectivePortContract> {
+    let mut merged = static_ports
+        .into_iter()
+        .map(|base| EffectivePortContract {
+            base,
+            expansion_reasons: vec![ContractExpansionReason::StaticContract],
+        })
+        .collect::<Vec<_>>();
+
+    for dynamic_port in dynamic_ports {
+        if let Some(existing) = merged
+            .iter_mut()
+            .find(|port| port.base.id == dynamic_port.id)
+        {
+            existing.base = dynamic_port;
+            existing.expansion_reasons = vec![
+                ContractExpansionReason::StaticContract,
+                ContractExpansionReason::DynamicConfiguration,
+            ];
+        } else {
+            merged.push(EffectivePortContract {
+                base: dynamic_port,
+                expansion_reasons: vec![ContractExpansionReason::DynamicConfiguration],
+            });
+        }
+    }
+
+    merged
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -821,6 +907,59 @@ mod tests {
             vec![ContractExpansionReason::StaticContract]
         );
         assert!(effective.diagnostics.warnings.is_empty());
+    }
+
+    #[test]
+    fn effective_contract_merges_dynamic_ports_without_dropping_static_ports() {
+        let static_contract = test_contract();
+        let context = NodeInstanceContext {
+            node_instance_id: id("llm-1"),
+            node_type: id("llm-inference"),
+            graph_revision: None,
+            configuration: None,
+        };
+        let dynamic_inputs = vec![
+            PortContract::input(
+                id("prompt"),
+                "Prompt Override",
+                PortValueType::String,
+                PortRequirement::Required,
+            ),
+            PortContract::input(
+                id("temperature"),
+                "Temperature",
+                PortValueType::Number,
+                PortRequirement::Optional,
+            ),
+        ];
+
+        let effective = EffectiveNodeContract::from_static_with_dynamic_ports(
+            context,
+            static_contract,
+            Some(dynamic_inputs),
+            None,
+        )
+        .expect("effective contract");
+
+        assert_eq!(effective.inputs.len(), 2);
+        assert_eq!(effective.inputs[0].base.label, "Prompt Override");
+        assert_eq!(
+            effective.inputs[0].expansion_reasons,
+            vec![
+                ContractExpansionReason::StaticContract,
+                ContractExpansionReason::DynamicConfiguration
+            ]
+        );
+        assert_eq!(effective.inputs[1].base.id.as_str(), "temperature");
+        assert_eq!(
+            effective.inputs[1].expansion_reasons,
+            vec![ContractExpansionReason::DynamicConfiguration]
+        );
+        assert_eq!(
+            effective.diagnostics.expansion_reasons,
+            vec![ContractExpansionReason::DynamicConfiguration]
+        );
+        assert_eq!(effective.outputs.len(), 1);
     }
 
     #[test]

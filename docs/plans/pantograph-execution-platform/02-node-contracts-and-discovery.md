@@ -167,6 +167,29 @@ stage-end refactor gate has been recorded.
   `GraphNode.data["definition"]` reconstruction and connection rejection
   surfaces with backend-owned effective contracts and typed diagnostics.
 
+### 2026-04-24 Wave 02 Effective Contract Resolution Progress
+
+- Added canonical effective-contract merge behavior to
+  `pantograph-node-contracts` so dynamic ports are resolved into
+  `EffectiveNodeContract` values without dropping unrelated static ports.
+- Extended workflow-service `NodeRegistry` to retain canonical
+  `NodeTypeContract` records alongside existing DTO projections.
+- Replaced direct `GraphNode.data["definition"]` reconstruction in
+  workflow-service with an `effective_node_contract` resolver that validates
+  node ids, converts dynamic port overlays into canonical `PortContract`
+  records, records typed resolution diagnostics, and then projects the
+  effective contract to existing graph DTOs for current callers.
+- Preserved existing graph-edit DTO compatibility while moving dynamic shape
+  semantics behind the canonical effective-contract API.
+- Verification: `cargo test -p pantograph-node-contracts`,
+  `cargo test -p pantograph-workflow-service`,
+  `cargo check --workspace --all-features`, `cargo fmt --all -- --check`,
+  `cargo clippy -p pantograph-node-contracts --all-targets -- -D warnings`,
+  and `cargo clippy -p pantograph-workflow-service --all-targets -- -D warnings`
+  passed.
+- Remaining Wave `02` work: project structured compatibility diagnostics into
+  connection candidate and rejection response surfaces.
+
 ## Type Families To Define
 
 ### Identity Types
