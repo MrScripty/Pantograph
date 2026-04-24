@@ -15,7 +15,7 @@ into a broader standards-reviewed plan covering:
 - shared backend-owned binding contract ownership
 - C# binding hardening
 - Python binding introduction as a real host-consumer lane
-- BEAM/Rustler verification as a specialized host lane
+- Elixir/BEAM Rustler verification as a specialized host lane
 
 The roadmap should summarize status and point here for binding-platform
 milestone detail. Binding-specific subplans may exist for individual host
@@ -25,14 +25,15 @@ scope, sequencing, support tiers, and verification expectations.
 Canonical plan path:
 `docs/plans/pantograph-binding-platform/final-plan.md`.
 
-The BEAM/Rustler lane is no longer blocked on NIF compilation. The Rustler
-crate now compiles and builds successfully, and the in-repo Mix/ExUnit smoke
-harness proves real NIF loading plus initial graph/error contract behavior under
-BEAM. The remaining BEAM-specific issue relevant to this broader bindings plan
-is narrower: raw `cargo test -p pantograph_rustler` is still not an
-authoritative host verification path for NIF-bound behavior, and the existing
-BEAM harness is not yet broad enough to justify the current Rustler README's
-broad `supported` tier without a support-tier reconciliation pass.
+The Elixir/BEAM Rustler lane is no longer blocked on NIF compilation. The
+Rustler crate now compiles and builds successfully, and the in-repo Mix/ExUnit
+smoke harness proves real NIF loading plus initial graph/error contract
+behavior under BEAM. The remaining Elixir/BEAM-specific issue relevant to this
+broader bindings plan is narrower: raw `cargo test -p pantograph_rustler` is
+still not an authoritative host verification path for NIF-bound behavior, and
+the existing BEAM harness is not yet broad enough to justify the current
+Rustler README's broad `supported` tier without a support-tier reconciliation
+pass.
 
 Since the first version of this plan was written, binding-adjacent docs and
 wrappers have moved forward:
@@ -84,10 +85,11 @@ API.
 
 - Pantograph headless native binding surface exposed through
   `crates/pantograph-uniffi`
-- Rustler/BEAM wrapper surface exposed through `crates/pantograph-rustler`
+- Rustler-backed Elixir/BEAM wrapper surface exposed through
+  `crates/pantograph-rustler`
 - Client-facing workflow/session/graph APIs intended for external host
   applications
-- Binding support-tier policy for C#, Python, and BEAM
+- Binding support-tier policy for C#, Python, and Elixir/BEAM
 - Shared backend-owned contract extraction when multiple bindings need the same
   semantics
 - Native-library packaging, generated binding packaging, and host-language
@@ -122,17 +124,20 @@ incomplete:
 - Python is mentioned as a potential UniFFI host language, but not yet treated
   as a first-class client binding with its own packaged flow and host-language
   tests
-- BEAM/Rustler verification has historically been scoped narrowly around NIF
-  loading rather than integrated into a broader binding strategy; the baseline
-  local smoke harness now exists, but broader event, callback, session, and
-  error-envelope coverage plus support-tier positioning still need to be
-  integrated into the larger bindings plan
+- Elixir/BEAM Rustler verification has historically been scoped narrowly
+  around NIF loading rather than integrated into a broader binding strategy;
+  the baseline local smoke harness now exists, but broader event, callback,
+  session, and error-envelope coverage plus support-tier positioning still need
+  to be integrated into the larger bindings plan
 - the plan artifact itself must now live under `docs/` and stop using a
   repository-root path if it is going to remain standards-compliant source of
   truth
 - shipped C# package docs, quickstart docs, and generated manifests are part
   of the external consumer contract, but earlier drafts of this plan did not
   treat them as first-class affected artifacts
+- the headless graph-authoring surface still relies partly on out-of-band node
+  knowledge because the direct binding lane does not yet expose backend-owned
+  node-definition and port-option discovery from the registry
 - immediate wrapper insertion points are already oversized enough that more
   binding work would deepen existing standards violations if it lands without
   decomposition
@@ -156,6 +161,9 @@ backend-owned contract layers.
   clients; internal wrapper crate names do not become product identity.
 - Backend/service/runtime crates own canonical workflow, session, graph, and
   error semantics.
+- Supported graph-authoring bindings must expose backend-owned node-definition
+  and dynamic port-option discovery rather than requiring host-maintained node
+  catalogs.
 - UniFFI and Rustler remain Layer 2 wrappers only.
 - Generated host bindings remain generated artifacts and are never hand-edited.
 - Different host languages may expose different supported subsets if the
@@ -175,9 +183,12 @@ classify, and document behind current facades before considering API breaks.
   host-language smoke coverage, and packaged quickstart checks.
 - Python should be treated as a distinct host-consumer binding lane, not
   conflated with the out-of-process Python worker/runtime separation work.
-- BEAM/Rustler should be treated as unreconciled until the current broad
-  `Supported` README row is either narrowed/downgraded or backed by expanded
-  host-side event, callback, error-envelope, and session coverage.
+- Elixir should be the product-facing host-language framing for the BEAM lane;
+  Rustler remains the implementation mechanism, and BEAM/OTP lifecycle details
+  remain part of that lane's runtime contract.
+- Elixir/BEAM should be treated as unreconciled until the current broad
+  Rustler `Supported` README row is either narrowed/downgraded or backed by
+  expanded host-side event, callback, error-envelope, and session coverage.
 - The current headless JSON DTO flow through `pantograph-workflow-service`
   remains the most realistic starting point for cross-language bindings.
 
@@ -205,7 +216,9 @@ classify, and document behind current facades before considering API breaks.
 
 - Pantograph headless host-client workflow/session/graph request and response
   contracts
-- Binding support-tier matrix for C#, Python, and BEAM
+- Headless graph-authoring discovery contracts for backend-owned node
+  definitions, queryable ports, and port-option lookup
+- Binding support-tier matrix for C#, Python, and Elixir/BEAM
 - Generated host binding package expectations and native library pairing rules
 - Wrapper-local error and event projection contracts
 - Any shared backend-owned binding helper contracts extracted for reuse across
@@ -224,7 +237,7 @@ classify, and document behind current facades before considering API breaks.
 - `bindings/beam/pantograph_native_smoke/README.md`
 - `crates/pantograph-uniffi/README.md`
 - `crates/pantograph-rustler/README.md`
-- Any new `bindings/python/` documentation or expanded BEAM harness
+- Any new `bindings/python/` documentation or expanded Elixir/BEAM harness
   documentation introduced by implementation
 - `.github/workflows/headless-embedding-contract.yml`
 - `scripts/package-uniffi-csharp-artifacts.sh`
@@ -289,8 +302,8 @@ native binding support, it must define:
   be isolated per suite to avoid state leakage.
 - Python binding tests must not blur the boundary between the Python host
   binding lane and the out-of-process Python worker/runtime lane.
-- BEAM harnesses must document NIF load/unload lifecycle ownership and avoid
-  global runtime leakage across repeated test runs.
+- Elixir/BEAM harnesses must document NIF load/unload lifecycle ownership and
+  avoid global runtime leakage across repeated test runs.
 - Event or callback delivery policies must document startup, shutdown, and
   unsubscribe behavior per host lane.
 
@@ -314,6 +327,7 @@ native binding support, it must define:
 | Pantograph exports too much internal surface as public binding API | High | Freeze a curated client-facing surface before adding more host-language packaging |
 | Wrapper crates continue absorbing canonical semantics | High | Extract reusable contract shaping into backend-owned or binding-neutral helpers |
 | Python host bindings are confused with Python worker/runtime concerns | High | Document separate ownership, package identity, and verification lanes |
+| Elixir product binding semantics are conflated with Rustler implementation details | Medium | Document Elixir as the host lane and Rustler as the wrapper mechanism |
 | Supported bindings drift because only Rust-side or only host-side tests exist | High | Require both native-language and host-language tests for supported bindings |
 | Oversized wrapper files make future binding work unreviewable | High | Make decomposition an early milestone before widening the surface |
 | README support tiers overstate host-language verification | High | Reconcile support tiers before promoting or packaging public binding contracts |
@@ -414,14 +428,15 @@ Corrections applied:
 
 - Reconcile the existing support-tier tables before changing code. In
   particular, either narrow/downgrade the current broad Rustler `Supported`
-  surface or add the missing BEAM host-language verification needed to justify
-  it.
+  surface or add the missing Elixir/BEAM host-language verification needed to
+  justify it.
 - Treat C# as the first likely `supported` binding lane after reconciliation
   because it has generated/package/runtime smoke coverage and CI packaging.
 - Treat Python as the next candidate lane, but keep it explicitly separate from
   the Python worker/runtime sidecar concerns.
-- Keep BEAM as a specialized lane focused on real host-boundary verification
-  and curated surface selection, not blanket parity with UniFFI exports.
+- Keep Elixir/BEAM as a specialized lane focused on real host-boundary
+  verification and curated surface selection, not blanket parity with UniFFI
+  exports.
 - Do not advertise Windows or macOS native binding artifacts as supported until
   the plan defines their target status and CI/package verification path.
 
@@ -435,6 +450,10 @@ Corrections applied:
   workflow sessions, workflow graph authoring, shutdown/lifecycle calls, and
   every other surface currently labeled `supported` in host-facing READMEs or
   shipped package docs.
+- Decide whether backend-owned node-definition discovery, queryable-port
+  discovery, and port-option discovery are part of the minimum supported graph
+  authoring surface for each host lane, and document any temporary gaps
+  explicitly instead of relying on implicit out-of-band node knowledge.
 - Reconcile existing support-tier claims in `crates/pantograph-uniffi/README.md`
   and `crates/pantograph-rustler/README.md` with this plan, the shipped C#
   artifact docs, and the roadmap.
@@ -447,9 +466,10 @@ Corrections applied:
   rationale and verification plan or downgrade/reclassify it.
 - Record the initial reconciled matrix. Expected starting point:
   C# over the direct `pantograph_headless`/UniFFI runtime path is candidate
-  `supported`; Python host bindings are candidate `experimental`; BEAM/Rustler
-  is candidate `experimental` unless the existing broad `Supported` row is
-  backed by expanded BEAM host verification in the same milestone.
+  `supported`; Python host bindings are candidate `experimental`;
+  Elixir/BEAM over Rustler is candidate `experimental` unless the existing
+  broad Rustler `Supported` row is backed by expanded Elixir/BEAM host
+  verification in the same milestone.
 - Mark non-client/internal capabilities that wrappers must not expose as part
   of the public binding contract without a later explicit decision.
 - Mark legacy in-memory workflow engine, frontend-HTTP exports, debug/admin
@@ -469,8 +489,12 @@ Corrections applied:
 - Confirm every included public capability has an external consumer rationale.
 - Confirm no README claims `supported` for a surface that lacks both native-side
   and host-language verification required by the testing standards.
-- Confirm any BEAM surface that remains `supported` is explicitly justified and
-  no longer inherited implicitly from the older broad Rustler README row.
+- Confirm any graph-authoring surface labeled `supported` does not depend on a
+  host-maintained node catalog when the same backend registry data can be
+  exposed through bindings.
+- Confirm any Elixir/BEAM surface that remains `supported` is explicitly
+  justified and no longer inherited implicitly from the older broad Rustler
+  README row.
 - Confirm current `supported`, `experimental`, and `internal-only` labels state
   packaging, versioning, and host-test expectations.
 - Confirm the canonical source-of-truth path for this plan is under `docs/`
@@ -518,6 +542,9 @@ Corrections applied:
   confirms it.
 - Freeze the supported C# consumer contract around the curated headless
   workflow/session/graph surface.
+- Add backend-owned node-definition discovery and dynamic port-option discovery
+  to the direct headless graph-authoring contract before that graph-authoring
+  surface is classified as fully supported.
 - Extend verification beyond the current session success smoke to include
   host-language contract assertions for representative validation, malformed
   request, missing workflow/session, and backend-owned error-envelope paths.
@@ -536,6 +563,8 @@ Corrections applied:
   behavior used by the C# lane.
 - Host-language C# tests or smokes compile the generated binding, load the
   matching native library, and exercise representative supported calls.
+- Supported graph-authoring smoke coverage proves clients can discover node
+  definitions and queryable port options without an out-of-band node catalog.
 - At least one packaged-artifact acceptance path remains green.
 - The headless binding CI matrix matches the documented C# platform support
   claim.
@@ -570,21 +599,23 @@ Corrections applied:
 - Python generation, import/load, and package/native pairing are reproducible
   from documented commands and do not require hand-editing generated files.
 
-### Milestone 5: BEAM / Rustler Lane
+### Milestone 5: Elixir / BEAM / Rustler Lane
 
 #### Tasks
 
+- Define Elixir as the product-facing host binding identity and Rustler as the
+  implementation mechanism for the BEAM lane.
 - Reconcile the current Rustler README support-tier table with Milestone 1.
   Either narrow/downgrade broad `Supported` claims or add the host-language
   verification needed to justify them.
-- Keep only the curated client-facing or explicitly justified BEAM surface in
-  scope for Rustler.
+- Keep only the curated client-facing or explicitly justified Elixir/BEAM
+  surface in scope for Rustler.
 - Extract pure-Rust contract-shaping logic out of the Rustler boundary where it
   is reusable or backend-owned.
-- Expand the existing BEAM-hosted verification harness beyond NIF load,
+- Expand the existing Elixir/BEAM-hosted verification harness beyond NIF load,
   workflow graph roundtrip, validation errors, and parse errors to cover the
-  reconciled BEAM support tier.
-- Add host-side BEAM assertions for representative event, callback,
+  reconciled Elixir/BEAM support tier.
+- Add host-side Elixir/BEAM assertions for representative event, callback,
   error-envelope, resource lifecycle, and session behavior if those surfaces
   remain public or supported.
 - Add CI or documented local gating for the BEAM harness where the required
@@ -595,13 +626,13 @@ Corrections applied:
 #### Verification
 
 - Rust/native tests cover extracted helper logic without BEAM linkage.
-- BEAM host-language tests load the real NIF and assert representative contract
-  behavior end to end.
-- BEAM-only coverage remains focused on the curated supported surface instead
-  of wrapper-internal parity for its own sake.
+- Elixir/BEAM host-language tests load the real NIF and assert representative
+  contract behavior end to end.
+- Elixir/BEAM-only coverage remains focused on the curated supported surface
+  instead of wrapper-internal parity for its own sake.
 - The Rustler README no longer says direct `cargo test -p pantograph_rustler`
   is waiting on a harness without acknowledging the current Mix/ExUnit baseline.
-- Any BEAM surface left as `supported` has native helper coverage plus
+- Any Elixir/BEAM surface left as `supported` has native helper coverage plus
   host-language smoke/acceptance coverage through the real NIF.
 
 ### Milestone 6: Packaging, Cross-Platform, Documentation, And Source-of-Truth Reconciliation
@@ -643,8 +674,8 @@ Corrections applied:
 
 - The curated surface review shows that existing exports should be split into
   multiple support tiers or product identities.
-- Python or BEAM host-lane requirements introduce tooling or packaging costs
-  that materially change sequencing.
+- Python or Elixir/BEAM host-lane requirements introduce tooling or packaging
+  costs that materially change sequencing.
 - Shared helper extraction requires a new backend-owned crate instead of
   module-level extraction.
 - C# is not ready for `supported` status once stronger host-language contract
@@ -660,7 +691,7 @@ Corrections applied:
 
 - Pantograph has a documented curated binding surface and support-tier policy.
 - Supported bindings have both native-language and host-language verification.
-- C#, Python, and BEAM each have explicit scope, support tier, and test
+- C#, Python, and Elixir/BEAM each have explicit scope, support tier, and test
   expectations recorded in the source of truth.
 - The canonical binding-platform source of truth lives under `docs/plans/`, and
   active roadmap/subplan references point there instead of the repository root.

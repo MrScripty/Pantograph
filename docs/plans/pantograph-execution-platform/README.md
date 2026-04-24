@@ -31,7 +31,7 @@ and identity decisions.
 
 ## Constraints
 
-- The plans consume the requirement files in `docs/requirements/`.
+- The plans consume the requirement files in `../../requirements/`.
 - Native Rust remains the canonical application API.
 - C#, Python, and Elixir/BEAM bindings project backend-owned contracts instead
   of defining host-local node semantics.
@@ -42,7 +42,7 @@ and identity decisions.
 
 ## Decision
 
-Use `docs/plans/pantograph-execution-platform/` as the source directory for
+Use `./` as the source directory for
 this work. Keep plan files numbered by implementation dependency order instead
 of maintaining a single oversized `final-plan.md`.
 
@@ -70,9 +70,9 @@ of maintaining a single oversized `final-plan.md`.
 
 ## Dependencies
 
-**Internal:** `docs/requirements/`, `docs/headless-embedding-api-v1.md`,
-`docs/headless-native-bindings.md`,
-`docs/plans/pantograph-binding-platform/final-plan.md`.
+**Internal:** `../../requirements/`, `../../headless-embedding-api-v1.md`,
+`../../headless-native-bindings.md`,
+`../../plans/pantograph-binding-platform/final-plan.md`.
 
 **External:** `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/`.
 

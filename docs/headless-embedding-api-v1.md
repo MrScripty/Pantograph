@@ -13,6 +13,9 @@ Define a stable, Rust-first headless workflow API for external consumers embeddi
   `pantograph-frontend-http-adapter` for modular standalone GUI hosting.
 - UniFFI/Rustler HTTP workflow exports are feature-gated (`frontend-http`) and
   are not part of the default headless API surface.
+- Native Rust is the canonical application API. C#, Python, and Elixir
+  bindings must expose projections of this contract according to their
+  documented support tiers rather than defining alternate workflow semantics.
 
 ## Design Principles
 - Rust-first application API, transport-agnostic.
@@ -21,6 +24,9 @@ Define a stable, Rust-first headless workflow API for external consumers embeddi
 - No embedding-specific top-level response fields.
 - Capability computation is backend-owned in workflow service, with adapters as
   transport/wiring only.
+- Graph-authoring clients must discover node definitions and dynamic port
+  option sources from backend-owned registry data rather than out-of-band node
+  catalogs.
 
 ## Operations
 
@@ -110,6 +116,34 @@ or a structured rejection.
 ### 28) `workflow_graph_insert_node_and_connect`
 Atomically insert a compatible node type and connect it, or return a structured
 rejection.
+
+## Required Follow-On Graph Authoring Additions
+
+The generic graph mutation contract above is the right long-term direction, but
+it is not sufficient on its own for standards-complete external graph authoring.
+Headless consumers should not need a separate application-local node catalog to
+know which node types exist, what their ports look like, or which ports support
+backend-driven option discovery.
+
+Required follow-on additions for the headless contract:
+
+- `workflow_graph_get_node_definitions`
+  Returns the backend-owned node-definition set projected from the canonical
+  registry.
+- `workflow_graph_get_node_definitions_by_category`
+  Returns the same backend-owned node definitions grouped for palette/discovery
+  use cases.
+- `workflow_graph_get_node_definition`
+  Returns one backend-owned node definition by stable `node_type`.
+- `workflow_graph_get_queryable_ports`
+  Returns the `(node_type, port_id)` pairs that have backend-owned port-option
+  providers.
+- `workflow_graph_query_port_options`
+  Returns backend-owned selectable options for a queryable port.
+
+These additions are required so node-system evolution can remain backend-owned.
+Node additions or contract refinements should not require headless API changes
+when the generic graph mutation surface remains sufficient.
 
 ## Request Contract: `WorkflowRunRequest`
 
@@ -399,7 +433,8 @@ Recommended client flow:
 - `workflow_get_io` -> `workflow_preflight` -> `workflow_run`
 
 Recommended graph-edit client flow:
-- `workflow_graph_create_edit_session` -> graph mutation commands ->
+- registry discovery methods -> `workflow_graph_create_edit_session` -> graph
+  mutation commands ->
   `workflow_graph_get_edit_session_graph` as needed -> `workflow_graph_save`
 
 ## Error Model

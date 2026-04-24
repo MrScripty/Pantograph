@@ -8,12 +8,12 @@ Last updated: 2026-04-23.
 
 ## Source Documents
 
-- `docs/requirements/pantograph-node-system.md`
-- `docs/requirements/pantograph-client-sessions-buckets-model-license-diagnostics.md`
-- `DIAGNOSTICS-MODEL-LICENSE-USAGE.md`
-- `docs/headless-embedding-api-v1.md`
-- `docs/headless-native-bindings.md`
-- `docs/plans/pantograph-binding-platform/final-plan.md`
+- `../../requirements/pantograph-node-system.md`
+- `../../requirements/pantograph-client-sessions-buckets-model-license-diagnostics.md`
+- `../../../DIAGNOSTICS-MODEL-LICENSE-USAGE.md`
+- `../../headless-embedding-api-v1.md`
+- `../../headless-native-bindings.md`
+- `../../plans/pantograph-binding-platform/final-plan.md`
 - `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/`
 
 ## Objective

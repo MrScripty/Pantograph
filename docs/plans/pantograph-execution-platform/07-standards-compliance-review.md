@@ -136,7 +136,7 @@ Out of scope:
 - The plans intentionally do not choose exact crate names, storage engines, or
   binding generators beyond established direction. Those decisions need smaller
   implementation plans or ADRs before code changes.
-- The root `DIAGNOSTICS-MODEL-LICENSE-USAGE.md` remains outside `docs/` because
+- The root `../../../DIAGNOSTICS-MODEL-LICENSE-USAGE.md` remains outside `docs/` because
   it was requested as a root orientation document. It should stay short and
   point into `docs/` for durable planning details.
 - `LAUNCHER-STANDARDS.md` does not directly change these plan files, but any

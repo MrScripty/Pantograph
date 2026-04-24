@@ -27,7 +27,7 @@ Out of scope:
 - refactors that require changing ownership boundaries beyond the stage's
   touched files
 - launching a broad refactor without first creating a dedicated
-  `docs/refactors/<refactor-slug>/` plan
+  `../../refactors/<refactor-slug>/` plan
 
 ## Source Prompt
 
@@ -70,7 +70,7 @@ git status --short
 
 If a standards issue clearly requires changing untouched files, do not silently
 expand the refactor. Record the issue as out of scope and create or update a
-dedicated refactor plan under `docs/refactors/<refactor-slug>/`.
+dedicated refactor plan under `../../refactors/<refactor-slug>/`.
 
 ## Decision Flow
 
@@ -134,7 +134,7 @@ When the outcome is `in_scope_refactor`:
 When the outcome is `separate_refactor_plan_required`, create Markdown planning
 artifacts under:
 
-`docs/refactors/<refactor-slug>/`
+`../../refactors/<refactor-slug>/`
 
 Use the broad refactor prompt's artifact layout when warranted:
 
@@ -199,5 +199,5 @@ Record at least:
 
 - Every implementation stage closes with a recorded gate outcome.
 - In-scope refactors are completed and verified before the next stage begins.
-- Broader refactor pressure is moved into a dedicated `docs/refactors/` plan
+- Broader refactor pressure is moved into a dedicated `../../refactors/` plan
   instead of being mixed into the next feature stage.

@@ -18,6 +18,26 @@ Host app
 The boundary accepts and returns JSON strings for workflow service DTOs. Those
 DTOs are the shared Pantograph service contract used by the embedded runtime.
 
+## Host Binding Direction
+
+The native Rust API is the canonical headless integration contract. C# and
+Python bindings are host-language projections over the `pantograph_headless`
+product-native library. Elixir/BEAM uses the Rustler lane, but it must still
+project the same backend-owned workflow service contracts rather than defining
+alternate workflow semantics.
+
+Required direction:
+
+- host bindings must remain thin adapters over backend-owned contracts
+- host bindings must not introduce alternate node catalogs, graph semantics, or
+  diagnostics semantics
+- generated or wrapper host packages must document their support tier,
+  platform support, lifecycle expectations, and native-library pairing rules
+- Python host bindings are distinct from Python-backed workflow nodes and the
+  process Python sidecar
+- Elixir is the product-facing host language for the Rustler/BEAM lane; Rustler
+  is the wrapper mechanism, not a separate product contract
+
 ## Required Runtime Flow
 
 Workflow execution clients should use sessions:
@@ -50,6 +70,29 @@ Headless clients can author persisted Pantograph workflows without the GUI:
 
 Graph edit sessions and workflow execution sessions are separate resources.
 Create both deliberately; do not use one ID where the other is expected.
+
+## Graph Authoring Contract Direction
+
+Graph mutation methods are intentionally generic. Host applications should not
+need a hand-maintained node catalog or hardcoded composition table every time
+Pantograph adds or refines node types.
+
+Required direction for the headless binding contract:
+
+- bindings must expose backend-owned node-definition discovery projected from
+  the registry
+- bindings must expose backend-owned queryable-port and port-option discovery
+  for dynamic authoring surfaces
+- host applications should build palettes, inspectors, and insert flows from
+  backend-discovered node metadata rather than out-of-band node knowledge
+
+Current gap:
+
+- the direct headless runtime already exposes generic graph mutation helpers,
+  but the registry-backed node-definition and port-option discovery surface is
+  still a required follow-on contract addition
+- until that discovery surface lands, external graph-authoring support should
+  be treated as incomplete and should not be described as fully backend-driven
 
 ## C# Artifact Layout
 

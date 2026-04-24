@@ -47,7 +47,7 @@ Do not use parallel workers when:
 For a concurrent stage, create artifacts under:
 
 ```text
-docs/plans/pantograph-execution-platform/implementation-waves/<stage-slug>/
+./implementation-waves/<stage-slug>/
 ├── README.md
 ├── coordination-ledger.md
 ├── waves/

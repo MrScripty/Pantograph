@@ -263,6 +263,29 @@ Required capabilities:
 The GUI should remain a renderer over backend-owned diagnostics projections, in
 the same general spirit as current diagnostics surfaces.
 
+## Diagnostics API and Binding Requirements
+
+Persistent usage diagnostics must not be GUI-only. Native Rust consumers and
+supported host-language bindings need backend-owned query surfaces over the same
+stored diagnostics facts.
+
+Required direction:
+
+- the native Rust API must expose typed query operations for client, session,
+  bucket, workflow run, model, license, and time-range diagnostics
+- C#, Python, and Elixir bindings must expose supported projections of those
+  diagnostics queries when their support tier includes workflow execution
+- host bindings must not reconstruct model/license usage by parsing transient
+  trace text or static workflow graphs
+- diagnostics query responses must preserve stable ids needed to correlate
+  usage records back to clients, sessions, buckets, workflow runs, nodes, and
+  ports
+- unsupported or experimental host-language diagnostics gaps must be documented
+  as support-tier limitations
+- GUI diagnostics views must consume the same backend-owned projections that
+  external API and binding consumers can rely on, unless a GUI-only projection
+  is explicitly documented as presentation-only
+
 ## Required Invariants
 
 - A client may have at most one active session at a time.

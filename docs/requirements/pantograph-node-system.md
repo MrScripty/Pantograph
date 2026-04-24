@@ -57,6 +57,8 @@ discipline, runtime traceability, or codebase standards compliance.
 - Make node and port contracts first-class backend-owned artifacts.
 - Improve node composability without turning the graph into a stringly typed
   or weakly validated system.
+- Make ordinary node authoring feel like defining a typed contract plus
+  execution logic, not repeatedly wiring platform diagnostics by hand.
 - Support finer-grained factoring for reusable workflow building blocks.
 - Preserve or improve Pantograph's current execution observability and
   diagnostics quality.
@@ -161,6 +163,52 @@ Required direction:
 - any dynamic port expansion must be explainable and reproducible from backend
   facts
 
+## Registry Discovery Requirements
+
+Pantograph must not require graph-authoring clients to keep an application-local
+catalog of node types, port shapes, or queryable option sources that can drift
+from backend reality.
+
+Required direction:
+
+- external graph-authoring APIs and bindings must expose backend-owned node
+  definition discovery from the canonical registry
+- external graph-authoring APIs and bindings must expose backend-owned port
+  option discovery for ports with dynamic option providers
+- graph-authoring clients must be able to discover which ports are queryable
+  without trial-and-error probing
+- clients must not be required to hardcode node composition rules or maintain
+  out-of-band copies of node authoring metadata
+- adapter-facing discovery DTOs may reshape the backend contract for transport
+  purposes, but they must remain projections of backend-owned registry facts
+- adding, removing, or refining node types should not require binding-surface
+  changes when the existing generic graph-authoring operations remain valid
+- if a host surface lacks registry-backed discovery, that gap must be treated
+  as incomplete graph-authoring support rather than acceptable steady state
+
+## Binding-Facing Node System Requirements
+
+The node system must be usable from the native Rust API and supported
+host-language bindings without each host needing a separate node model.
+
+Required direction:
+
+- native Rust APIs own the canonical node-system semantics
+- C#, Python, and Elixir bindings must consume projected views of the same
+  backend-owned node contracts rather than maintaining host-local catalogs
+- binding surfaces may expose host-idiomatic wrappers, but they must preserve
+  stable node type ids, stable port ids, validation outcomes, and diagnostics
+  correlation ids
+- graph authoring through a binding must support the same registry-backed
+  discovery flow required of GUI and native Rust authoring clients
+- supported binding lanes must be able to explain connection rejections,
+  effective contract expansion, and runtime failures using backend-produced
+  diagnostics rather than host-side inference
+- binding-specific gaps must be represented as support-tier limitations, not as
+  alternate semantics for the same node system
+- adding a node type must not require C#, Python, or Elixir source changes when
+  the existing generic discovery and graph mutation contracts remain sufficient
+
 ## Port Authoring Requirements
 
 Pantograph must improve port authoring so ports carry enough information to
@@ -237,6 +285,8 @@ Required capabilities:
   behavior
 - composition must not hide critical runtime facts needed for debugging,
   validation, or attribution
+- external graph-authoring clients must be able to compose graphs from
+  backend-discovered node contracts rather than frontend-maintained node lists
 
 ## Node Authoring Ergonomics Requirements
 
@@ -253,10 +303,33 @@ Required direction:
 - baseline platform behavior such as execution tracing, failure capture,
   attribution, and required observability must be injected by the runtime
   boundary rather than manually repeated in each node
+- node authors should not have to manually attach stable node/run/session
+  attribution to normal diagnostics emitted by the platform
+- node authors should not have to manually measure standard model outputs when
+  execution occurs through framework-managed model/runtime capabilities
 - the platform may require node authors to use framework-owned capabilities for
   important side effects where mandatory system behavior depends on those calls
 - ergonomics improvements must not weaken Pantograph's ability to enforce
   backend-owned diagnostics and attribution requirements
+
+## Managed Capability Requirements
+
+Pantograph must make the high-guarantee path the easy path for node authors.
+
+Required direction:
+
+- node execution should receive framework-owned capabilities for model
+  invocation, file/resource access, progress reporting, cancellation, and other
+  side effects whose use affects diagnostics or attribution guarantees
+- framework-owned capabilities must automatically carry node, run, session, and
+  lineage context where those facts are known
+- direct model execution that bypasses managed capabilities must be detectable
+  or explicitly unsupported for normal nodes
+- capability APIs must be designed so node authors can remain focused on domain
+  execution logic while the runtime preserves observability, cancellation, and
+  output-measurement invariants
+- capability contracts used by nodes must remain backend-owned and testable
+  independently from GUI, C#, Python, or Elixir binding layers
 
 ## Implicit Baseline Observability Requirements
 
