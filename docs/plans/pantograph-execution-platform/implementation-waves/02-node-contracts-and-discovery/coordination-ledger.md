@@ -2,8 +2,8 @@
 
 ## Status
 
-Wave `01` complete. Wave `02` is ready to begin with the
-`canonical-contracts` slice.
+Wave `01` complete. Wave `02` is partially integrated; the
+`canonical-contracts` slice is complete.
 
 ## Branch Or Worktree Strategy
 
@@ -17,14 +17,14 @@ Wave `01` complete. Wave `02` is ready to begin with the
 | Wave | Status | Integration Notes |
 | ---- | ------ | ----------------- |
 | `wave-01` | Complete | Stage-start report, contract freeze, and current ownership inventory recorded in `02-node-contracts-and-discovery.md`. |
-| `wave-02` | Pending | Parallel canonical crate and projection integration. |
+| `wave-02` | Partial | Canonical contract crate is integrated; workflow-nodes registration and workflow-service projection integration remain pending. |
 | `wave-03` | Pending | Host-owned integration and gate. |
 
 ## Worker Reports
 
 | Worker | Report Path | Status |
 | ------ | ----------- | ------ |
-| canonical-contracts | `reports/wave-02-worker-canonical-contracts.md` | Pending |
+| canonical-contracts | `reports/wave-02-worker-canonical-contracts.md` | Complete |
 | workflow-service-projections | `reports/wave-02-worker-workflow-service-projections.md` | Pending |
 | workflow-nodes-registration | `reports/wave-02-worker-workflow-nodes-registration.md` | Pending |
 
@@ -42,9 +42,18 @@ Wave `01` complete. Wave `02` is ready to begin with the
 - 2026-04-24: No new third-party dependency is expected for the first slice. If
   one becomes necessary, implementation stops for dependency-standard review
   before manifest edits.
+- 2026-04-24: The host implemented `canonical-contracts` locally in the shared
+  workspace because no subagent authorization was given. The slice adds
+  `pantograph-node-contracts` and workspace wiring only; workflow-service and
+  workflow-nodes integration remain separate follow-up slices.
 
 ## Verification Results
 
 - 2026-04-24: Wave `01` verification passed by inspection: start outcome is
   recorded, dirty files are unrelated, and Wave `02` write sets are
   non-overlapping.
+- 2026-04-24: `canonical-contracts` verification passed:
+  `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-node-contracts`,
+  `cargo clippy -p pantograph-node-contracts --all-targets -- -D warnings`,
+  and `cargo check --workspace --all-features`.

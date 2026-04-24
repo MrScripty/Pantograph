@@ -92,6 +92,34 @@ stage-end refactor gate has been recorded.
 - Expected Stage `02` verification remains the command set listed in
   `Verification Commands`.
 
+### 2026-04-24 Wave 02 Canonical Contracts Progress
+
+- Added `crates/pantograph-node-contracts` as the backend-owned canonical node
+  contract crate.
+- Implemented validated `NodeTypeId`, `NodeInstanceId`, and `PortId` newtypes
+  with backend-owned generated constructors and boundary parsing.
+- Implemented canonical node and port DTOs:
+  `NodeTypeContract`, `PortContract`, `PortKind`, `PortCardinality`,
+  `PortRequirement`, `PortVisibility`, `PortValueType`, `PortConstraint`,
+  `EditorHint`, `NodeExecutionSemantics`, `NodeCapabilityRequirement`, and
+  `NodeAuthoringMetadata`.
+- Implemented effective-contract DTOs:
+  `NodeInstanceContext`, `EffectiveNodeContract`, `EffectivePortContract`,
+  `ContractExpansionReason`, and `ContractResolutionDiagnostics`.
+- Implemented structured compatibility checks that return a
+  `CompatibilityResult` with a typed `ConnectionRejectionDiagnostic` instead
+  of a bare boolean.
+- Added README coverage for the new crate boundary and tests for id parsing,
+  generated ids, compatibility rules, structured rejections, port direction
+  validation, effective static contracts, and JSON shape.
+- Verification: `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-node-contracts`,
+  `cargo clippy -p pantograph-node-contracts --all-targets -- -D warnings`,
+  and `cargo check --workspace --all-features` passed.
+- Remaining Wave `02` work: convert concrete workflow-node registrations into
+  canonical contracts and route workflow-service graph projections through the
+  new crate.
+
 ## Type Families To Define
 
 ### Identity Types
