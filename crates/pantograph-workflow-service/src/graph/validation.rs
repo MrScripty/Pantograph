@@ -1,5 +1,8 @@
 use super::types::PortDataType;
 
 pub fn validate_connection(source_type: &PortDataType, target_type: &PortDataType) -> bool {
-    source_type.is_compatible_with(target_type)
+    source_type
+        .to_contract_value_type()
+        .compatibility_with(target_type.to_contract_value_type())
+        .is_compatible()
 }

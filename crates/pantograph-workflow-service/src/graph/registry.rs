@@ -4,17 +4,17 @@ use super::types::{
     ExecutionMode, IoBindingOrigin, NodeCategory, NodeDefinition, PortDataType, PortDefinition,
 };
 
-fn convert_metadata(meta: node_engine::TaskMetadata) -> NodeDefinition {
-    let category = convert_category(meta.category);
+fn convert_contract(contract: pantograph_node_contracts::NodeTypeContract) -> NodeDefinition {
+    let category = convert_category(contract.category);
     NodeDefinition {
-        node_type: meta.node_type.clone(),
+        node_type: contract.node_type.as_str().to_string(),
         category: category.clone(),
-        label: meta.label,
-        description: meta.description,
-        io_binding_origin: determine_io_binding_origin(&meta.node_type, &category),
-        inputs: meta.inputs.into_iter().map(convert_port).collect(),
-        outputs: meta.outputs.into_iter().map(convert_port).collect(),
-        execution_mode: convert_execution_mode(meta.execution_mode),
+        label: contract.label,
+        description: contract.description,
+        io_binding_origin: determine_io_binding_origin(contract.node_type.as_str(), &category),
+        inputs: contract.inputs.into_iter().map(convert_port).collect(),
+        outputs: contract.outputs.into_iter().map(convert_port).collect(),
+        execution_mode: convert_execution_mode(contract.execution_semantics),
     }
 }
 
@@ -36,59 +36,40 @@ fn determine_io_binding_origin(node_type: &str, category: &NodeCategory) -> IoBi
     }
 }
 
-fn convert_category(cat: node_engine::NodeCategory) -> NodeCategory {
+fn convert_category(cat: pantograph_node_contracts::NodeCategory) -> NodeCategory {
     match cat {
-        node_engine::NodeCategory::Input => NodeCategory::Input,
-        node_engine::NodeCategory::Output => NodeCategory::Output,
-        node_engine::NodeCategory::Processing => NodeCategory::Processing,
-        node_engine::NodeCategory::Control => NodeCategory::Control,
-        node_engine::NodeCategory::Tool => NodeCategory::Tool,
+        pantograph_node_contracts::NodeCategory::Input => NodeCategory::Input,
+        pantograph_node_contracts::NodeCategory::Output => NodeCategory::Output,
+        pantograph_node_contracts::NodeCategory::Processing => NodeCategory::Processing,
+        pantograph_node_contracts::NodeCategory::Control => NodeCategory::Control,
+        pantograph_node_contracts::NodeCategory::Tool => NodeCategory::Tool,
     }
 }
 
-fn convert_execution_mode(mode: node_engine::ExecutionMode) -> ExecutionMode {
+fn convert_execution_mode(
+    mode: pantograph_node_contracts::NodeExecutionSemantics,
+) -> ExecutionMode {
     match mode {
-        node_engine::ExecutionMode::Batch => ExecutionMode::Reactive,
-        node_engine::ExecutionMode::Stream => ExecutionMode::Stream,
-        node_engine::ExecutionMode::Reactive => ExecutionMode::Reactive,
-        node_engine::ExecutionMode::Manual => ExecutionMode::Manual,
+        pantograph_node_contracts::NodeExecutionSemantics::Batch => ExecutionMode::Reactive,
+        pantograph_node_contracts::NodeExecutionSemantics::Stream => ExecutionMode::Stream,
+        pantograph_node_contracts::NodeExecutionSemantics::Reactive => ExecutionMode::Reactive,
+        pantograph_node_contracts::NodeExecutionSemantics::Manual => ExecutionMode::Manual,
     }
 }
 
-fn convert_port(port: node_engine::PortMetadata) -> PortDefinition {
+fn convert_port(port: pantograph_node_contracts::PortContract) -> PortDefinition {
     PortDefinition {
-        id: port.id,
+        id: port.id.as_str().to_string(),
         label: port.label,
-        data_type: convert_data_type(port.data_type),
-        required: port.required,
-        multiple: port.multiple,
-    }
-}
-
-fn convert_data_type(dt: node_engine::PortDataType) -> PortDataType {
-    match dt {
-        node_engine::PortDataType::Any => PortDataType::Any,
-        node_engine::PortDataType::String => PortDataType::String,
-        node_engine::PortDataType::Image => PortDataType::Image,
-        node_engine::PortDataType::Audio => PortDataType::Audio,
-        node_engine::PortDataType::AudioStream => PortDataType::AudioStream,
-        node_engine::PortDataType::Component => PortDataType::Component,
-        node_engine::PortDataType::Stream => PortDataType::Stream,
-        node_engine::PortDataType::Prompt => PortDataType::Prompt,
-        node_engine::PortDataType::Tools => PortDataType::Tools,
-        node_engine::PortDataType::Embedding => PortDataType::Embedding,
-        node_engine::PortDataType::Document => PortDataType::Document,
-        node_engine::PortDataType::Json => PortDataType::Json,
-        node_engine::PortDataType::KvCache => PortDataType::KvCache,
-        node_engine::PortDataType::Boolean => PortDataType::Boolean,
-        node_engine::PortDataType::Number => PortDataType::Number,
-        node_engine::PortDataType::VectorDb => PortDataType::VectorDb,
-        node_engine::PortDataType::ModelHandle => PortDataType::String,
-        node_engine::PortDataType::EmbeddingHandle => PortDataType::String,
-        node_engine::PortDataType::DatabaseHandle => PortDataType::String,
-        node_engine::PortDataType::Vector => PortDataType::Embedding,
-        node_engine::PortDataType::Tensor => PortDataType::Json,
-        node_engine::PortDataType::AudioSamples => PortDataType::Audio,
+        data_type: PortDataType::from_contract_value_type(port.value_type),
+        required: matches!(
+            port.requirement,
+            pantograph_node_contracts::PortRequirement::Required
+        ),
+        multiple: matches!(
+            port.cardinality,
+            pantograph_node_contracts::PortCardinality::Multiple
+        ),
     }
 }
 
@@ -106,9 +87,10 @@ pub struct NodeRegistry {
 impl NodeRegistry {
     pub fn new() -> Self {
         let mut definitions = HashMap::new();
-        let engine_registry = node_engine::NodeRegistry::with_builtins();
-        for meta in engine_registry.all_metadata() {
-            let def = convert_metadata(meta.clone());
+        let contracts = workflow_nodes::builtin_node_contracts()
+            .expect("built-in workflow node descriptors must project to canonical contracts");
+        for contract in contracts {
+            let def = convert_contract(contract);
             definitions.insert(def.node_type.clone(), def);
         }
         Self { definitions }

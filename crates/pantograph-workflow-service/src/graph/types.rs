@@ -21,37 +21,80 @@ pub enum PortDataType {
     Boolean,
     Number,
     VectorDb,
+    ModelHandle,
+    EmbeddingHandle,
+    DatabaseHandle,
+    Vector,
+    Tensor,
+    AudioSamples,
 }
 
 impl PortDataType {
     pub fn is_compatible_with(&self, target: &PortDataType) -> bool {
-        if *self == PortDataType::Any || *target == PortDataType::Any {
-            return true;
+        self.to_contract_value_type()
+            .is_compatible_with(target.to_contract_value_type())
+    }
+
+    pub fn to_contract_value_type(&self) -> pantograph_node_contracts::PortValueType {
+        match self {
+            PortDataType::Any => pantograph_node_contracts::PortValueType::Any,
+            PortDataType::String => pantograph_node_contracts::PortValueType::String,
+            PortDataType::Image => pantograph_node_contracts::PortValueType::Image,
+            PortDataType::Audio => pantograph_node_contracts::PortValueType::Audio,
+            PortDataType::AudioStream => pantograph_node_contracts::PortValueType::AudioStream,
+            PortDataType::Component => pantograph_node_contracts::PortValueType::Component,
+            PortDataType::Stream => pantograph_node_contracts::PortValueType::Stream,
+            PortDataType::Prompt => pantograph_node_contracts::PortValueType::Prompt,
+            PortDataType::Tools => pantograph_node_contracts::PortValueType::Tools,
+            PortDataType::Embedding => pantograph_node_contracts::PortValueType::Embedding,
+            PortDataType::Document => pantograph_node_contracts::PortValueType::Document,
+            PortDataType::Json => pantograph_node_contracts::PortValueType::Json,
+            PortDataType::KvCache => pantograph_node_contracts::PortValueType::KvCache,
+            PortDataType::Boolean => pantograph_node_contracts::PortValueType::Boolean,
+            PortDataType::Number => pantograph_node_contracts::PortValueType::Number,
+            PortDataType::VectorDb => pantograph_node_contracts::PortValueType::VectorDb,
+            PortDataType::ModelHandle => pantograph_node_contracts::PortValueType::ModelHandle,
+            PortDataType::EmbeddingHandle => {
+                pantograph_node_contracts::PortValueType::EmbeddingHandle
+            }
+            PortDataType::DatabaseHandle => {
+                pantograph_node_contracts::PortValueType::DatabaseHandle
+            }
+            PortDataType::Vector => pantograph_node_contracts::PortValueType::Vector,
+            PortDataType::Tensor => pantograph_node_contracts::PortValueType::Tensor,
+            PortDataType::AudioSamples => pantograph_node_contracts::PortValueType::AudioSamples,
         }
-        if self == target {
-            return true;
+    }
+
+    pub fn from_contract_value_type(value_type: pantograph_node_contracts::PortValueType) -> Self {
+        match value_type {
+            pantograph_node_contracts::PortValueType::Any => PortDataType::Any,
+            pantograph_node_contracts::PortValueType::String => PortDataType::String,
+            pantograph_node_contracts::PortValueType::Image => PortDataType::Image,
+            pantograph_node_contracts::PortValueType::Audio => PortDataType::Audio,
+            pantograph_node_contracts::PortValueType::AudioStream => PortDataType::AudioStream,
+            pantograph_node_contracts::PortValueType::Component => PortDataType::Component,
+            pantograph_node_contracts::PortValueType::Stream => PortDataType::Stream,
+            pantograph_node_contracts::PortValueType::Prompt => PortDataType::Prompt,
+            pantograph_node_contracts::PortValueType::Tools => PortDataType::Tools,
+            pantograph_node_contracts::PortValueType::Embedding => PortDataType::Embedding,
+            pantograph_node_contracts::PortValueType::Document => PortDataType::Document,
+            pantograph_node_contracts::PortValueType::Json => PortDataType::Json,
+            pantograph_node_contracts::PortValueType::KvCache => PortDataType::KvCache,
+            pantograph_node_contracts::PortValueType::Boolean => PortDataType::Boolean,
+            pantograph_node_contracts::PortValueType::Number => PortDataType::Number,
+            pantograph_node_contracts::PortValueType::VectorDb => PortDataType::VectorDb,
+            pantograph_node_contracts::PortValueType::ModelHandle => PortDataType::ModelHandle,
+            pantograph_node_contracts::PortValueType::EmbeddingHandle => {
+                PortDataType::EmbeddingHandle
+            }
+            pantograph_node_contracts::PortValueType::DatabaseHandle => {
+                PortDataType::DatabaseHandle
+            }
+            pantograph_node_contracts::PortValueType::Vector => PortDataType::Vector,
+            pantograph_node_contracts::PortValueType::Tensor => PortDataType::Tensor,
+            pantograph_node_contracts::PortValueType::AudioSamples => PortDataType::AudioSamples,
         }
-        if matches!(
-            (self, target),
-            (PortDataType::String, PortDataType::Prompt)
-                | (PortDataType::Prompt, PortDataType::String)
-        ) {
-            return true;
-        }
-        if matches!(
-            (self, target),
-            (PortDataType::AudioStream, PortDataType::Stream)
-                | (PortDataType::Stream, PortDataType::AudioStream)
-        ) {
-            return true;
-        }
-        if *target == PortDataType::String {
-            return matches!(
-                self,
-                PortDataType::Json | PortDataType::Number | PortDataType::Boolean
-            );
-        }
-        false
     }
 }
 

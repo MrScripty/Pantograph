@@ -146,6 +146,27 @@ stage-end refactor gate has been recorded.
   effective contracts, connection candidates, and compatibility rejections
   through `pantograph-node-contracts`.
 
+### 2026-04-24 Wave 02 Workflow-Service Projection Progress
+
+- Added a direct `pantograph-workflow-service` dependency on
+  `pantograph-node-contracts`.
+- Routed built-in workflow graph definitions through
+  `workflow_nodes::builtin_node_contracts` so workflow-service consumes
+  canonical `NodeTypeContract` records instead of converting
+  `node_engine::TaskMetadata` directly.
+- Preserved canonical value type facts in workflow-service projections by
+  adding explicit GUI-facing variants for model handles, embedding handles,
+  database handles, vectors, tensors, and audio samples.
+- Replaced workflow-service local port compatibility rules with canonical
+  `PortValueType` compatibility checks from `pantograph-node-contracts`.
+- Verification: `cargo test -p pantograph-workflow-service`,
+  `cargo check --workspace --all-features`, `cargo fmt --all -- --check`, and
+  `cargo clippy -p pantograph-workflow-service --all-targets -- -D warnings`
+  passed.
+- Remaining Wave `02` work: replace dynamic
+  `GraphNode.data["definition"]` reconstruction and connection rejection
+  surfaces with backend-owned effective contracts and typed diagnostics.
+
 ## Type Families To Define
 
 ### Identity Types
