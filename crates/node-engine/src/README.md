@@ -2,9 +2,10 @@
 
 ## Purpose
 This directory contains Pantograph's workflow execution and descriptor core. It
-turns node definitions into runnable behavior, validates graph/runtime inputs,
-and keeps execution dispatch aligned with the contracts published by
-`workflow-nodes`.
+turns execution descriptors into runnable behavior, validates execution/runtime
+inputs, and keeps execution dispatch aligned with descriptors published by
+`workflow-nodes`. Canonical graph-authoring contracts are owned by
+`pantograph-node-contracts` and projected through workflow-service.
 
 ## Contents
 | File/Folder | Description |
@@ -40,8 +41,8 @@ and embeddings into reranking, execution dispatch must preserve semantic
 boundaries instead of forcing new workloads through incompatible legacy paths.
 
 ## Constraints
-- Node descriptors are shared across frontend, backend, and saved workflow
-  artifacts, so runtime assumptions must stay append-only.
+- Node descriptors feed execution and canonical contract projection, so runtime
+  assumptions must stay append-only.
 - Execution helpers must tolerate heterogeneous port payloads while still
   normalizing them into typed backend requests.
 - Task-type inference drives dependency/runtime selection, so incorrect
@@ -58,6 +59,8 @@ document parsing and task classification instead of overloading
 graph-mutation and incremental-demand workflow events, so adapters only
 translate emitted execution facts instead of inferring graph-change semantics
 locally.
+Graph-authoring, GUI, and binding contract semantics are not owned here; they
+are resolved through `pantograph-node-contracts` projections.
 
 ## Alternatives Rejected
 - Reusing the generic llama.cpp inference node for reranking.
@@ -106,9 +109,9 @@ locally.
 - Task-type inference must reflect execution semantics, not UI naming.
 - Input normalization may be permissive for additive compatibility, but output
   shapes must stay stable once published.
-- `PortDataType::String` remains self-compatible, while also accepting
-  `Prompt`, `Json`, `Number`, and `Boolean` sources where legacy string-backed
-  ports still need additive coercion during graph validation.
+- `PortDataType` remains execution descriptor input. Graph-authoring
+  compatibility is projected through `pantograph-node-contracts::PortValueType`
+  so GUI and binding consumers do not duplicate node-engine rules.
 - Boolean setting readers in `core_executor/settings.rs` remain an
   inference-node helper contract; audio-only builds may compile that module,
   but they must not force those inference-only readers to count as live
@@ -147,6 +150,7 @@ the crate manifest.
 
 ## Related ADRs
 - `docs/adr/ADR-001-headless-embedding-service-boundary.md`
+- `docs/adr/ADR-006-canonical-node-contract-ownership.md`
 
 ## Usage Examples
 ```rust
@@ -155,16 +159,19 @@ use node_engine::core_executor::CoreNodeExecutor;
 
 ## API Consumer Contract
 - Hosts call into the engine/executor surface with workflow graphs whose node
-  types and port IDs match descriptor inventory.
+  types and port IDs have already been validated against backend-owned node
+  contracts where graph-authoring validation is required.
 - Execution errors distinguish invalid workflow input from backend/runtime
   failures where possible.
 - Disabled node behavior, including `tool-executor`, must surface as execution
   errors rather than successful placeholder outputs.
 - Additive node inputs may be accepted for compatibility, but callers should
-  prefer the canonical descriptor fields when constructing new workflows.
+  prefer the canonical `pantograph-node-contracts` projections when
+  constructing new graph-authoring workflows.
 
 ## Structured Producer Contract
-- Built-in node descriptors and execution dispatch must evolve together.
+- Built-in node descriptors, canonical contract projection, and execution
+  dispatch must evolve together.
 - Task metadata such as `taskTypePrimary` is machine-consumed by dependency
   selection and must remain stable once introduced.
 - Reranker outputs are published as ordered result lists plus convenience fields

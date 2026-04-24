@@ -19,7 +19,7 @@ Wave `01` complete. Wave `02` is partially integrated; the
 | ---- | ------ | ----------------- |
 | `wave-01` | Complete | Stage-start report, contract freeze, and current ownership inventory recorded in `02-node-contracts-and-discovery.md`. |
 | `wave-02` | Partial | Canonical contract crate, workflow-nodes registration, workflow-service projection integration, effective-contract resolution, direct incompatible connection diagnostics, and binding workflow validation projection are integrated; aggregate candidate diagnostics remain a design follow-up. |
-| `wave-03` | Pending | Host-owned integration and gate. |
+| `wave-03` | Partial | Node-engine documentation alignment and ADR-006 are integrated; final verification and stage-end gate remain. |
 
 ## Worker Reports
 
@@ -69,6 +69,9 @@ Wave `01` complete. Wave `02` is partially integrated; the
   now convert binding graph JSON into workflow-service graph DTOs and validate
   through backend-owned node contracts instead of calling node-engine workflow
   validation directly.
+- 2026-04-24: Wave `03` documentation alignment added ADR-006 for canonical
+  node contract ownership and updated node-engine READMEs to identify
+  descriptors as execution inputs, not GUI/binding contract owners.
 
 ## Verification Results
 

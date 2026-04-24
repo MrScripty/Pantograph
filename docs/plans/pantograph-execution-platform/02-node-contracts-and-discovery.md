@@ -234,6 +234,16 @@ stage-end refactor gate has been recorded.
   be the existing Rustler test-link environment constraint rather than a Rust
   type-checking failure.
 
+### 2026-04-24 Wave 03 Documentation And ADR Progress
+
+- Updated `node-engine` documentation to frame task metadata and descriptors as
+  execution inputs rather than canonical GUI or binding node contracts.
+- Added `docs/adr/ADR-006-canonical-node-contract-ownership.md` to record
+  canonical node contract ownership in `pantograph-node-contracts` and
+  projection responsibilities for workflow-service, node-engine, bindings, and
+  GUI adapters.
+- Updated the ADR index with the Stage `02` node-contract ownership decision.
+
 ## Type Families To Define
 
 ### Identity Types

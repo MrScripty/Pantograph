@@ -3,10 +3,12 @@
 Core workflow graph execution engine for Pantograph.
 
 ## Purpose
-This crate owns graph primitives, node descriptors, validation, execution
+This crate owns graph primitives, execution descriptors, execution
 orchestration, undo/redo state, and backend workflow events. The boundary exists
 so workflow execution semantics stay reusable by services, embedded runtime,
-bindings, and tests without importing Tauri or frontend modules.
+bindings, and tests without importing Tauri or frontend modules. Canonical
+graph-authoring node contracts live in `pantograph-node-contracts` and are
+projected through workflow-service before reaching GUI or binding surfaces.
 
 ## Contents
 | File/Folder | Description |
@@ -22,8 +24,11 @@ rebuild execution and graph mutation behavior locally.
 
 ## Constraints
 - Keep UI and transport concerns out of graph execution.
-- Preserve descriptor and event contracts consumed by workflow service and
-  binding crates.
+- Preserve execution descriptor and event contracts consumed by workflow
+  service and binding crates.
+- Do not treat task metadata as the canonical GUI or binding contract; it is an
+  execution descriptor input that must be projected into
+  `pantograph-node-contracts` first.
 - Feature-gated runtime integrations must not make the core graph APIs depend
   on every optional backend.
 - Public graph and event DTOs may be persisted by saved workflows or consumed
@@ -46,6 +51,9 @@ host-agnostic application operations.
 ## Invariants
 - Graph validation and execution events are backend-owned.
 - Built-in node dispatch must match descriptor inventory from `workflow-nodes`.
+- GUI, binding, and graph-authoring validation must consume
+  `pantograph-node-contracts` projections rather than direct `node-engine`
+  metadata.
 - Optional features must preserve the base crate's ability to compile without
   optional runtime integrations.
 - Blocking or runtime-specific execution must stay isolated from pure graph
@@ -69,18 +77,15 @@ consumers.
 - Graph/event DTOs become generated schemas for non-Rust consumers.
 
 ## Dependencies
-**Internal:** `pantograph-runtime-identity`, optional `inference`, and
+**Internal:** `pantograph-runtime-identity`, optional `inference`,
+`pantograph-node-contracts` through workflow-service projections, and
 `workflow-nodes` consumers through the workspace.
 
 **External:** `graph-flow`, `tokio`, `serde`, `serde_json`, `thiserror`,
 `log`, `inventory`, `uuid`, and optional runtime dependencies.
 
 ## Related ADRs
-- `None identified as of 2026-04-21.`
-- `Reason: This crate predates the current ADR set and documents an existing
-  execution boundary.`
-- `Revisit trigger: A future refactor changes graph execution ownership or
-  introduces a persisted graph/event schema.`
+- `docs/adr/ADR-006-canonical-node-contract-ownership.md`
 
 ## Usage Examples
 ```rust
@@ -101,8 +106,10 @@ let graph = WorkflowGraph::default();
   migration is accepted.
 
 ## Structured Producer Contract
-- Stable fields: graph DTOs, node descriptors, events, and undo/redo payloads
-  are machine-consumed by workflow service, frontend projections, and bindings.
+- Stable fields: graph DTOs, execution descriptors, events, and undo/redo
+  payloads are machine-consumed by workflow service and runtime execution.
+  GUI/frontend/binding node contract semantics are projected from
+  `pantograph-node-contracts`.
 - Defaults: missing optional fields must preserve existing workflow behavior.
 - Enums and labels: node categories, port data types, and execution states are
   semantic contracts.
