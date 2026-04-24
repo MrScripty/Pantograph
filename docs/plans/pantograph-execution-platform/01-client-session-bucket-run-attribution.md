@@ -282,6 +282,39 @@ verification commands selected below.
   native surface for runtime management or need further restriction before
   moving to Stage `02`.
 
+### 2026-04-24 Wave 03 Integration And Stage-End Gate
+
+- Added `docs/adr/ADR-005-durable-runtime-attribution.md` to freeze durable
+  attribution ownership, SQLite persistence, digest-only credential storage,
+  Pantograph-owned bucket namespace semantics, and execution-session
+  terminology.
+- Updated the ADR index and execution-platform README traceability to point at
+  the accepted Stage `01` ADR.
+- Renamed the remaining Tauri command wrappers for creating, running, and
+  closing scheduler-managed sessions to execution-session command names. These
+  remain transport adapters over workflow-service and embedded-runtime APIs;
+  no scheduler, attribution, or execution policy moved into Tauri.
+- Stage-end gate touched-file source:
+  `git diff --name-only 51a78761..HEAD`, which reported 134 stage-touched
+  files across attribution storage, workflow-service orchestration,
+  embedded-runtime projection, node-engine execution-session helpers, UniFFI,
+  Rustler, Tauri adapters, manifests, tests, plans, and ADR docs.
+- Stage-end gate outcome: `not_warranted`. The touched files already received
+  the in-scope terminology cleanup required by Stage `01`; remaining broader
+  concerns are future-stage work rather than standards drift introduced by this
+  stage.
+- Residual decision: non-attributed local workflow execution remains available
+  for direct execution and compatibility, but it rejects caller-supplied run ids
+  and must not be treated as durable diagnostics attribution unless it creates
+  a `WorkflowRunRecord` through `pantograph-runtime-attribution`.
+- Final Stage `01` verification passed:
+  `cargo test -p pantograph-runtime-attribution`,
+  `cargo test -p pantograph-workflow-service`,
+  `cargo check --workspace --all-features`,
+  `cargo fmt --all -- --check`,
+  `cargo clippy --workspace --all-targets --all-features -- -D warnings`, and
+  `cargo test --workspace --doc`.
+
 ## Required Identity Chain
 
 ```text

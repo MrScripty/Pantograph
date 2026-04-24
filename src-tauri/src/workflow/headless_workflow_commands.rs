@@ -124,7 +124,7 @@ pub async fn workflow_preflight(
         .map_err(workflow_error_json)
 }
 
-pub async fn workflow_create_session(
+pub async fn workflow_create_execution_session(
     request: WorkflowExecutionSessionCreateRequest,
     app: AppHandle,
     gateway: State<'_, SharedGateway>,
@@ -147,7 +147,7 @@ pub async fn workflow_create_session(
         .map_err(workflow_error_json)
 }
 
-pub async fn workflow_run_session(
+pub async fn workflow_run_execution_session(
     request: WorkflowExecutionSessionRunRequest,
     app: AppHandle,
     gateway: State<'_, SharedGateway>,
@@ -171,7 +171,7 @@ pub async fn workflow_run_session(
         .map_err(workflow_error_json)
 }
 
-pub async fn workflow_close_session(
+pub async fn workflow_close_execution_session(
     request: WorkflowExecutionSessionCloseRequest,
     app: AppHandle,
     gateway: State<'_, SharedGateway>,

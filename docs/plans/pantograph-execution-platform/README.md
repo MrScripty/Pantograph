@@ -79,9 +79,12 @@ of maintaining a single oversized `final-plan.md`.
 
 ## Related ADRs
 
-- `None identified as of 2026-04-23.`
-- `Reason: These files are staged plans, not frozen architecture decisions.`
-- `Revisit trigger: The canonical node contract crate boundary is finalized.`
+- `../../adr/ADR-005-durable-runtime-attribution.md`
+- `Reason: Stage 01 accepted durable runtime attribution ownership, SQLite
+  persistence, credential storage, bucket semantics, and execution-session
+  terminology decisions.`
+- `Revisit trigger: Later execution-platform stages supersede or extend the
+  attribution boundary.`
 
 ## Implementation Entry Point
 

@@ -195,7 +195,7 @@ async fn embedded_workflow_host_run_workflow_returns_cancelled_for_precancelled_
 }
 
 #[tokio::test]
-async fn workflow_run_session_returns_invalid_request_for_human_input_workflow() {
+async fn workflow_run_execution_session_returns_invalid_request_for_human_input_workflow() {
     let temp = TempDir::new().expect("temp dir");
     write_human_input_workflow(temp.path(), "interactive-human-input");
 

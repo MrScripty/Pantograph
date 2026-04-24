@@ -176,7 +176,7 @@ pub async fn workflow_preflight(
 }
 
 #[command]
-pub async fn workflow_create_session(
+pub async fn workflow_create_execution_session(
     request: pantograph_workflow_service::WorkflowExecutionSessionCreateRequest,
     app: AppHandle,
     gateway: State<'_, SharedGateway>,
@@ -184,7 +184,7 @@ pub async fn workflow_create_session(
     extensions: State<'_, SharedExtensions>,
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<pantograph_workflow_service::WorkflowExecutionSessionCreateResponse, String> {
-    super::headless_workflow_commands::workflow_create_session(
+    super::headless_workflow_commands::workflow_create_execution_session(
         request,
         app,
         gateway,
@@ -196,7 +196,7 @@ pub async fn workflow_create_session(
 }
 
 #[command]
-pub async fn workflow_run_session(
+pub async fn workflow_run_execution_session(
     request: pantograph_workflow_service::WorkflowExecutionSessionRunRequest,
     app: AppHandle,
     gateway: State<'_, SharedGateway>,
@@ -205,7 +205,7 @@ pub async fn workflow_run_session(
     rag_manager: State<'_, SharedRagManager>,
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<pantograph_workflow_service::WorkflowRunResponse, String> {
-    super::headless_workflow_commands::workflow_run_session(
+    super::headless_workflow_commands::workflow_run_execution_session(
         request,
         app,
         gateway,
@@ -218,7 +218,7 @@ pub async fn workflow_run_session(
 }
 
 #[command]
-pub async fn workflow_close_session(
+pub async fn workflow_close_execution_session(
     request: pantograph_workflow_service::WorkflowExecutionSessionCloseRequest,
     app: AppHandle,
     gateway: State<'_, SharedGateway>,
@@ -226,7 +226,7 @@ pub async fn workflow_close_session(
     extensions: State<'_, SharedExtensions>,
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<pantograph_workflow_service::WorkflowExecutionSessionCloseResponse, String> {
-    super::headless_workflow_commands::workflow_close_session(
+    super::headless_workflow_commands::workflow_close_execution_session(
         request,
         app,
         gateway,

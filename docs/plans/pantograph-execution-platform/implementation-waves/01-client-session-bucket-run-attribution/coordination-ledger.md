@@ -2,9 +2,8 @@
 
 ## Status
 
-Wave `01` complete. Wave `02` is integrated through durable attribution,
-binding cutover, and execution-session terminology cleanup. Stage-end review
-remains pending before moving to Stage `02`.
+Stage `01` complete. Wave `01`, Wave `02`, and Wave `03` are integrated, and
+the stage-end gate outcome is recorded as `not_warranted`.
 
 ## Branch Or Worktree Strategy
 
@@ -19,7 +18,7 @@ remains pending before moving to Stage `02`.
 | ---- | ------ | ----------------- |
 | `wave-01` | Complete | Stage-start report, contract freeze, cutover inventory, and dependency review recorded in `01-client-session-bucket-run-attribution.md`. |
 | `wave-02` | Integrated | Attribution storage, workflow-service attributed runs, bucket selection, UniFFI JSON boundary projection, UniFFI/Rustler public workflow-session binding cutover, and execution-session terminology cleanup are integrated. |
-| `wave-03` | Pending | Host-owned integration and stage-end gate. |
+| `wave-03` | Complete | ADR-005, final verification, public API cutover vocabulary checks, Tauri adapter command-name cleanup, and stage-end gate are complete. |
 
 ## Worker Reports
 
@@ -60,6 +59,17 @@ remains pending before moving to Stage `02`.
   and node-engine scheduler/runtime workflow-session terminology was renamed
   to execution-session terminology. The old workflow-session Rust source
   vocabulary no longer appears under `crates/` or `src-tauri/`.
+- 2026-04-24: Tauri command wrappers for creating, running, and closing
+  scheduler-managed sessions were renamed to execution-session command names.
+  Tauri remains adapter-only; attribution policy, scheduler policy, and
+  execution semantics remain in backend crates.
+- 2026-04-24: Accepted
+  `docs/adr/ADR-005-durable-runtime-attribution.md` as the Stage `01`
+  architecture decision record.
+- 2026-04-24: Stage-end gate outcome is `not_warranted`. The touched files
+  already received the in-scope terminology cleanup required before Stage `02`;
+  remaining work is covered by later execution-platform stages or ADR revisit
+  triggers.
 
 ## Verification Results
 
@@ -111,3 +121,10 @@ remains pending before moving to Stage `02`.
   Source vocabulary checks for legacy `WorkflowSession*` and
   `workflow_session` forms under `crates/` and `src-tauri/` returned no
   matches.
+- 2026-04-24: Final Stage `01` verification passed:
+  `cargo test -p pantograph-runtime-attribution`,
+  `cargo test -p pantograph-workflow-service`,
+  `cargo check --workspace --all-features`,
+  `cargo fmt --all -- --check`,
+  `cargo clippy --workspace --all-targets --all-features -- -D warnings`, and
+  `cargo test --workspace --doc`.

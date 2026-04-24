@@ -76,6 +76,9 @@ Integrated.
   from `workflow_session_*` to `workflow_execution_session_*`.
 - Renamed private node-engine and embedded-runtime module paths that still
   carried legacy workflow-session terminology.
+- Renamed Tauri create/run/close command wrappers to execution-session command
+  names while keeping Tauri as a thin adapter over backend-owned service and
+  runtime APIs.
 
 ## Verification
 
