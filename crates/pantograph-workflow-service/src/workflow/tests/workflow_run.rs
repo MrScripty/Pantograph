@@ -20,15 +20,39 @@ async fn workflow_run_returns_host_outputs() {
                 }]),
                 override_selection: None,
                 timeout_ms: None,
-                run_id: Some("run-xyz".to_string()),
+                run_id: None,
             },
         )
         .await
         .expect("workflow_run");
 
-    assert_eq!(response.run_id, "run-xyz");
+    assert!(!response.run_id.trim().is_empty());
     assert_eq!(response.outputs.len(), 1);
     assert_eq!(response.outputs[0].value, serde_json::json!("hello world"));
+}
+
+#[tokio::test]
+async fn workflow_run_rejects_caller_supplied_run_id() {
+    let host = MockWorkflowHost::new(10, 256);
+    let service = WorkflowService::new();
+
+    let err = service
+        .workflow_run(
+            &host,
+            WorkflowRunRequest {
+                workflow_id: "wf-1".to_string(),
+                inputs: Vec::new(),
+                output_targets: None,
+                override_selection: None,
+                timeout_ms: None,
+                run_id: Some("caller-run".to_string()),
+            },
+        )
+        .await
+        .expect_err("caller-owned run id rejected");
+
+    assert!(matches!(err, WorkflowServiceError::InvalidRequest(_)));
+    assert!(err.to_string().contains("run_id is backend-owned"));
 }
 
 #[tokio::test]

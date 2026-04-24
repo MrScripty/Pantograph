@@ -25,6 +25,18 @@ impl WorkflowService {
         host: &H,
         request: WorkflowRunRequest,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
+        if request
+            .run_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|run_id| !run_id.is_empty())
+            .is_some()
+        {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "run_id is backend-owned and cannot be supplied by workflow_run callers"
+                    .to_string(),
+            ));
+        }
         self.workflow_run_internal(host, request, None, None).await
     }
 

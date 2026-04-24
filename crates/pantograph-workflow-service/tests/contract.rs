@@ -158,15 +158,18 @@ async fn workflow_run_contract_snapshot() {
                 }]),
                 override_selection: None,
                 timeout_ms: None,
-                run_id: Some("run-123".to_string()),
+                run_id: None,
             },
         )
         .await
         .expect("workflow_run response");
 
     let value = serde_json::to_value(response).expect("serialize response");
+    assert!(value["run_id"]
+        .as_str()
+        .is_some_and(|run_id| !run_id.is_empty()));
     let expected = serde_json::json!({
-        "run_id": "run-123",
+        "run_id": value["run_id"],
         "outputs": [
             {
                 "node_id": "vector-output-1",

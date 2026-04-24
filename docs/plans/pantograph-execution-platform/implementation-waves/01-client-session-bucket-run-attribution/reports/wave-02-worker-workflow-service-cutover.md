@@ -30,6 +30,10 @@ Partial.
   store before host execution starts.
 - Added targeted tests for backend-owned run-id propagation and caller-run-id
   rejection.
+- Hardened the public generic `WorkflowService::workflow_run` boundary so
+  caller-supplied `run_id` values are rejected instead of accepted as trusted
+  attribution. The internal execution helper still receives backend-generated
+  ids from the service-owned and attributed execution paths.
 
 ## Verification
 
@@ -38,6 +42,7 @@ Partial.
 - `cargo clippy -p pantograph-workflow-service --all-targets -- -D warnings`
 - `cargo test -p pantograph-workflow-service`
 - `cargo check --workspace --all-features`
+- `cargo test -p pantograph-workflow-service workflow_run`
 
 All commands passed.
 

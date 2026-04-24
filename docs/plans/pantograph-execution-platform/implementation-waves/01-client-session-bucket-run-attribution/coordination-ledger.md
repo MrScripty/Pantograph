@@ -41,6 +41,9 @@ Wave `01` complete. Wave `02` ready to start.
 - 2026-04-24: The host implemented the first workflow-service cutover slice
   locally: native Rust attributed workflow-run orchestration. Legacy
   workflow-session public API removal remains pending.
+- 2026-04-24: Public generic `workflow_run` now rejects caller-authored run ids;
+  backend-generated ids remain available through the service-owned execution
+  path and attributed run orchestration.
 
 ## Verification Results
 
@@ -56,3 +59,8 @@ Wave `01` complete. Wave `02` ready to start.
   `cargo clippy -p pantograph-workflow-service --all-targets -- -D warnings`,
   `cargo test -p pantograph-workflow-service`, and
   `cargo check --workspace --all-features`.
+- 2026-04-24: Workflow run boundary hardening verification passed:
+  `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-workflow-service workflow_run`,
+  `cargo test -p pantograph-workflow-service`, and
+  `cargo clippy -p pantograph-workflow-service --all-targets -- -D warnings`.
