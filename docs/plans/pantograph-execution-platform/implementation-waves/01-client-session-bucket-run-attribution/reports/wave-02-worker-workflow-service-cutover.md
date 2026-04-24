@@ -34,6 +34,10 @@ Partial.
   caller-supplied `run_id` values are rejected instead of accepted as trusted
   attribution. The internal execution helper still receives backend-generated
   ids from the service-owned and attributed execution paths.
+- Exposed workflow-service native Rust client bucket create/delete methods and
+  re-exported the bucket request/record types needed by native callers.
+- Added a targeted attributed-run test for explicit backend-owned bucket
+  selection.
 
 ## Verification
 

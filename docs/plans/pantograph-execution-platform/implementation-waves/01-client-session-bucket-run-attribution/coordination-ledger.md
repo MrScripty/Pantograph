@@ -44,6 +44,9 @@ Wave `01` complete. Wave `02` ready to start.
 - 2026-04-24: Public generic `workflow_run` now rejects caller-authored run ids;
   backend-generated ids remain available through the service-owned execution
   path and attributed run orchestration.
+- 2026-04-24: Workflow-service now exposes native Rust client bucket
+  create/delete operations backed by `pantograph-runtime-attribution`; explicit
+  bucket selection is tested in attributed workflow runs.
 
 ## Verification Results
 
@@ -63,4 +66,8 @@ Wave `01` complete. Wave `02` ready to start.
   `cargo fmt --all -- --check`,
   `cargo test -p pantograph-workflow-service workflow_run`,
   `cargo test -p pantograph-workflow-service`, and
+  `cargo clippy -p pantograph-workflow-service --all-targets -- -D warnings`.
+- 2026-04-24: Workflow-service bucket selection verification passed:
+  `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-workflow-service attribution`, and
   `cargo clippy -p pantograph-workflow-service --all-targets -- -D warnings`.

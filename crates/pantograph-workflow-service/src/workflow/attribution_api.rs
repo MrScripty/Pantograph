@@ -1,8 +1,8 @@
 use pantograph_runtime_attribution::{
-    BucketSelection, ClientRegistrationRequest, ClientRegistrationResponse,
-    ClientSessionOpenRequest, ClientSessionOpenResponse, ClientSessionRecord,
-    ClientSessionResumeRequest, WorkflowId, WorkflowRunAttribution, WorkflowRunRecord,
-    WorkflowRunStartRequest,
+    BucketCreateRequest, BucketDeleteRequest, BucketRecord, BucketSelection,
+    ClientRegistrationRequest, ClientRegistrationResponse, ClientSessionOpenRequest,
+    ClientSessionOpenResponse, ClientSessionRecord, ClientSessionResumeRequest, WorkflowId,
+    WorkflowRunAttribution, WorkflowRunRecord, WorkflowRunStartRequest,
 };
 
 use super::{
@@ -53,6 +53,26 @@ impl WorkflowService {
         let mut store = self.attribution_store_guard()?;
         store
             .resume_session(request)
+            .map_err(WorkflowServiceError::from)
+    }
+
+    pub fn create_client_bucket(
+        &self,
+        request: BucketCreateRequest,
+    ) -> Result<BucketRecord, WorkflowServiceError> {
+        let mut store = self.attribution_store_guard()?;
+        store
+            .create_bucket(request)
+            .map_err(WorkflowServiceError::from)
+    }
+
+    pub fn delete_client_bucket(
+        &self,
+        request: BucketDeleteRequest,
+    ) -> Result<BucketRecord, WorkflowServiceError> {
+        let mut store = self.attribution_store_guard()?;
+        store
+            .delete_bucket(request)
             .map_err(WorkflowServiceError::from)
     }
 

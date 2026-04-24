@@ -40,10 +40,11 @@ pub use self::runtime_preflight::{evaluate_runtime_preflight, format_runtime_not
 pub(crate) use self::validation::validate_workflow_id;
 
 pub use pantograph_runtime_attribution::{
-    AttributionRepository, BucketSelection, ClientRegistrationRequest, ClientRegistrationResponse,
-    ClientSessionOpenRequest, ClientSessionOpenResponse, ClientSessionRecord,
-    ClientSessionResumeRequest, CredentialProofRequest, CredentialSecret, SqliteAttributionStore,
-    WorkflowRunAttribution, WorkflowRunRecord,
+    AttributionRepository, BucketCreateRequest, BucketDeleteRequest, BucketRecord, BucketSelection,
+    ClientRegistrationRequest, ClientRegistrationResponse, ClientSessionOpenRequest,
+    ClientSessionOpenResponse, ClientSessionRecord, ClientSessionResumeRequest,
+    CredentialProofRequest, CredentialSecret, SqliteAttributionStore, WorkflowRunAttribution,
+    WorkflowRunRecord,
 };
 
 #[cfg(test)]

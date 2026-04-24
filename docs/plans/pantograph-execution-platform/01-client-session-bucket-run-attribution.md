@@ -183,6 +183,21 @@ verification commands selected below.
   `cargo clippy -p pantograph-workflow-service --all-targets -- -D warnings`
   passed.
 
+### 2026-04-24 Workflow-Service Bucket Selection Progress
+
+- Added native Rust workflow-service methods for creating and deleting
+  Pantograph-owned client buckets through the configured attribution store.
+- Re-exported bucket request and record types from workflow-service so native
+  Rust callers can request explicit non-default bucket selection without
+  importing attribution storage internals.
+- Added an attributed workflow-run test proving explicit backend-owned buckets
+  are persisted by the attribution store and propagated into
+  `WorkflowRunRecord` and `WorkflowRunAttribution`.
+- Verification: `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-workflow-service attribution`, and
+  `cargo clippy -p pantograph-workflow-service --all-targets -- -D warnings`
+  passed.
+
 ## Required Identity Chain
 
 ```text
