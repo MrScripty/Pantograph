@@ -1,4 +1,4 @@
-use super::types::WorkflowGraph;
+use super::types::{GraphEdge, GraphNode, Position, WorkflowGraph};
 use uuid::Uuid;
 
 pub(super) fn hydrate_embedding_emit_metadata_flags(mut graph: WorkflowGraph) -> WorkflowGraph {
@@ -74,6 +74,36 @@ pub fn convert_graph_to_node_engine(graph: &WorkflowGraph) -> node_engine::Workf
     }
 
     ne_graph
+}
+
+pub fn convert_graph_from_node_engine(graph: &node_engine::WorkflowGraph) -> WorkflowGraph {
+    WorkflowGraph {
+        nodes: graph
+            .nodes
+            .iter()
+            .map(|node| GraphNode {
+                id: node.id.clone(),
+                node_type: node.node_type.clone(),
+                position: Position {
+                    x: node.position.0,
+                    y: node.position.1,
+                },
+                data: node.data.clone(),
+            })
+            .collect(),
+        edges: graph
+            .edges
+            .iter()
+            .map(|edge| GraphEdge {
+                id: edge.id.clone(),
+                source: edge.source.clone(),
+                source_handle: edge.source_handle.clone(),
+                target: edge.target.clone(),
+                target_handle: edge.target_handle.clone(),
+            })
+            .collect(),
+        derived_graph: None,
+    }
 }
 
 pub(super) fn merge_node_data(existing: &mut serde_json::Value, patch: serde_json::Value) {

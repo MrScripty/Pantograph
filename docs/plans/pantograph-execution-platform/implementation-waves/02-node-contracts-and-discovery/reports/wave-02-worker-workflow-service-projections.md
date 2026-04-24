@@ -38,6 +38,9 @@ Complete.
 - Added direct compatibility diagnostic projection so incompatible direct
   connection rejections expose canonical source/target node ids, port ids,
   value types, rejection reason, and message under `contract_diagnostic`.
+- Added workflow-service contract validation for binding graph JSON and routed
+  Rustler/UniFFI workflow validation through that backend-owned projection
+  instead of direct `node_engine::validation` policy.
 
 ## Verification
 
@@ -47,6 +50,10 @@ Complete.
 - `cargo clippy -p pantograph-workflow-service --all-targets -- -D warnings`
 - `cargo test -p pantograph-node-contracts`
 - `cargo clippy -p pantograph-node-contracts --all-targets -- -D warnings`
+- `cargo test -p pantograph-workflow-service graph::contract_validation`
+- `cargo test -p pantograph-uniffi test_validate_empty_workflow`
+- `cargo check -p pantograph_rustler -p pantograph-uniffi`
+- `cargo clippy -p pantograph-workflow-service -p pantograph-uniffi -p pantograph_rustler --all-targets -- -D warnings`
 
 All commands passed.
 
@@ -59,6 +66,9 @@ All commands passed.
 - Aggregate no-compatible insert/candidate summaries still return coarse
   workflow-service reasons rather than a list of every suppressed compatibility
   diagnostic.
+- `cargo test -p pantograph_rustler test_validation_empty_graph` still fails
+  during test binary linking on missing Erlang NIF symbols such as
+  `enif_release_resource`; Rustler type checking and clippy pass.
 
 ## Follow-Ups
 

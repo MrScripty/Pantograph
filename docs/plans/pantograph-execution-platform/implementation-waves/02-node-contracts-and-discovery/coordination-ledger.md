@@ -18,7 +18,7 @@ Wave `01` complete. Wave `02` is partially integrated; the
 | Wave | Status | Integration Notes |
 | ---- | ------ | ----------------- |
 | `wave-01` | Complete | Stage-start report, contract freeze, and current ownership inventory recorded in `02-node-contracts-and-discovery.md`. |
-| `wave-02` | Partial | Canonical contract crate, workflow-nodes registration, workflow-service projection integration, effective-contract resolution, and direct incompatible connection diagnostics are integrated; aggregate candidate diagnostics remain a design follow-up. |
+| `wave-02` | Partial | Canonical contract crate, workflow-nodes registration, workflow-service projection integration, effective-contract resolution, direct incompatible connection diagnostics, and binding workflow validation projection are integrated; aggregate candidate diagnostics remain a design follow-up. |
 | `wave-03` | Pending | Host-owned integration and gate. |
 
 ## Worker Reports
@@ -64,6 +64,11 @@ Wave `01` complete. Wave `02` is partially integrated; the
   locally in the shared workspace. Incompatible direct connection rejections
   now include canonical source/target ids, port ids, value types, reason, and
   message under `contract_diagnostic`.
+- 2026-04-24: The host implemented binding workflow validation projection
+  locally in the shared workspace. Rustler and UniFFI workflow JSON validation
+  now convert binding graph JSON into workflow-service graph DTOs and validate
+  through backend-owned node contracts instead of calling node-engine workflow
+  validation directly.
 
 ## Verification Results
 
@@ -97,3 +102,14 @@ Wave `01` complete. Wave `02` is partially integrated; the
   `cargo check --workspace --all-features`,
   `cargo fmt --all -- --check`, and
   `cargo clippy -p pantograph-workflow-service --all-targets -- -D warnings`.
+- 2026-04-24: binding workflow validation projection verification passed:
+  `cargo test -p pantograph-workflow-service graph::contract_validation`,
+  `cargo test -p pantograph-uniffi test_validate_empty_workflow`,
+  `cargo check -p pantograph_rustler -p pantograph-uniffi`,
+  `cargo check --workspace --all-features`,
+  `cargo fmt --all -- --check`, and
+  `cargo clippy -p pantograph-workflow-service -p pantograph-uniffi -p pantograph_rustler --all-targets -- -D warnings`.
+- 2026-04-24: Rustler targeted test execution remains blocked at link time by
+  missing Erlang NIF symbols, observed on `cargo test -p pantograph_rustler
+  test_validation_empty_graph`; type checking and clippy for the Rustler crate
+  pass.

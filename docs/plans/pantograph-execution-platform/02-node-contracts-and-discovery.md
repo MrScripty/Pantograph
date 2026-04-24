@@ -210,6 +210,30 @@ stage-end refactor gate has been recorded.
   insert path" and candidate filtering responses should expose a collection of
   suppressed diagnostics or remain coarse graph-authoring summaries.
 
+### 2026-04-24 Wave 02 Binding Validation Projection Progress
+
+- Added workflow-service `validate_workflow_graph_contract` to validate
+  workflow graph JSON against backend-owned node contracts, effective
+  definitions, canonical compatibility checks, target capacity, duplicate ids,
+  missing nodes/ports, and cycles.
+- Added `convert_graph_from_node_engine` so existing binding JSON surfaces can
+  reuse workflow-service graph contract validation without retaining
+  node-engine as the binding validation policy owner.
+- Routed Rustler and UniFFI workflow JSON validation entry points through
+  workflow-service contract validation and `NodeRegistry` instead of direct
+  `node_engine::validation::validate_workflow` calls.
+- Verification: `cargo test -p pantograph-workflow-service graph::contract_validation`,
+  `cargo test -p pantograph-uniffi test_validate_empty_workflow`,
+  `cargo check -p pantograph_rustler -p pantograph-uniffi`,
+  `cargo check --workspace --all-features`, `cargo fmt --all -- --check`, and
+  `cargo clippy -p pantograph-workflow-service -p pantograph-uniffi -p pantograph_rustler --all-targets -- -D warnings`
+  passed.
+- Verification limitation: `cargo test -p pantograph_rustler
+  test_validation_empty_graph` still fails during test binary linking on
+  missing Erlang NIF symbols such as `enif_release_resource`, which appears to
+  be the existing Rustler test-link environment constraint rather than a Rust
+  type-checking failure.
+
 ## Type Families To Define
 
 ### Identity Types

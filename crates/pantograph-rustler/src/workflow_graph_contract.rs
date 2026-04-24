@@ -1,4 +1,7 @@
 use node_engine::{GraphEdge, GraphNode, WorkflowGraph};
+use pantograph_workflow_service::{
+    convert_graph_from_node_engine, validate_workflow_graph_contract, NodeRegistry,
+};
 use rustler::{Error, NifResult};
 
 fn parse_error(message: impl Into<String>) -> Error {
@@ -104,7 +107,8 @@ pub(crate) fn workflow_update_node_data_json(
 
 pub(crate) fn workflow_validate_json(graph_json: String) -> NifResult<Vec<String>> {
     let graph = parse_graph(&graph_json)?;
-    let errors = node_engine::validation::validate_workflow(&graph, None);
+    let graph = convert_graph_from_node_engine(&graph);
+    let registry = NodeRegistry::new();
 
-    Ok(errors.iter().map(|error| error.to_string()).collect())
+    Ok(validate_workflow_graph_contract(&graph, &registry))
 }

@@ -25,6 +25,9 @@ use std::sync::Arc;
 use node_engine::{
     EventSink, OrchestrationGraph, OrchestrationStore, WorkflowExecutor, WorkflowGraph,
 };
+use pantograph_workflow_service::{
+    convert_graph_from_node_engine, validate_workflow_graph_contract, NodeRegistry,
+};
 use tokio::sync::RwLock;
 
 #[cfg(feature = "embedded-runtime")]
@@ -225,8 +228,9 @@ pub fn validate_workflow_json(graph_json: String) -> Result<Vec<String>, FfiErro
         serde_json::from_str(&graph_json).map_err(|e| FfiError::Serialization {
             message: e.to_string(),
         })?;
-    let errors = node_engine::validation::validate_workflow(&graph, None);
-    Ok(errors.iter().map(|e| e.to_string()).collect())
+    let graph = convert_graph_from_node_engine(&graph);
+    let registry = NodeRegistry::new();
+    Ok(validate_workflow_graph_contract(&graph, &registry))
 }
 
 /// Validate an orchestration graph JSON string, returning error messages.
