@@ -18,7 +18,7 @@ Wave `01` complete. Wave `02` is partially integrated; the
 | Wave | Status | Integration Notes |
 | ---- | ------ | ----------------- |
 | `wave-01` | Complete | Stage-start report, contract freeze, and current ownership inventory recorded in `02-node-contracts-and-discovery.md`. |
-| `wave-02` | Partial | Canonical contract crate, workflow-nodes registration, workflow-service projection integration, and effective-contract resolution are integrated; typed rejection surfaces remain pending. |
+| `wave-02` | Partial | Canonical contract crate, workflow-nodes registration, workflow-service projection integration, effective-contract resolution, and direct incompatible connection diagnostics are integrated; aggregate candidate diagnostics remain a design follow-up. |
 | `wave-03` | Pending | Host-owned integration and gate. |
 
 ## Worker Reports
@@ -60,6 +60,10 @@ Wave `01` complete. Wave `02` is partially integrated; the
   locally in the shared workspace. Dynamic `GraphNode.data["definition"]`
   overlays now resolve through canonical `EffectiveNodeContract` semantics and
   retain static ports unless explicitly overridden by stable port id.
+- 2026-04-24: The host implemented direct compatibility diagnostic projection
+  locally in the shared workspace. Incompatible direct connection rejections
+  now include canonical source/target ids, port ids, value types, reason, and
+  message under `contract_diagnostic`.
 
 ## Verification Results
 
@@ -88,3 +92,8 @@ Wave `01` complete. Wave `02` is partially integrated; the
   `cargo fmt --all -- --check`,
   `cargo clippy -p pantograph-node-contracts --all-targets -- -D warnings`,
   and `cargo clippy -p pantograph-workflow-service --all-targets -- -D warnings`.
+- 2026-04-24: direct compatibility diagnostic projection verification passed:
+  `cargo test -p pantograph-workflow-service`,
+  `cargo check --workspace --all-features`,
+  `cargo fmt --all -- --check`, and
+  `cargo clippy -p pantograph-workflow-service --all-targets -- -D warnings`.

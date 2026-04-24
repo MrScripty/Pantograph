@@ -2,7 +2,7 @@ use serde_json::Value;
 
 use pantograph_node_contracts::{
     ContractResolutionWarning, EffectiveNodeContract, NodeInstanceContext, NodeInstanceId,
-    NodeTypeId, PortCardinality, PortContract, PortKind, PortRequirement, PortVisibility,
+    NodeTypeId, PortContract, PortKind,
 };
 
 use super::registry::{convert_port, NodeRegistry};
@@ -145,31 +145,11 @@ fn workflow_port_to_contract(
     port: PortDefinition,
     kind: PortKind,
 ) -> Result<PortContract, EffectiveDefinitionError> {
-    Ok(PortContract {
-        id: port
-            .id
-            .parse()
-            .map_err(|error: pantograph_node_contracts::NodeContractError| {
-                EffectiveDefinitionError::InvalidDynamicDefinition {
-                    message: format!("dynamic port id '{}' is invalid: {error}", port.id),
-                }
-            })?,
-        kind,
-        label: port.label,
-        value_type: port.data_type.to_contract_value_type(),
-        requirement: if port.required {
-            PortRequirement::Required
-        } else {
-            PortRequirement::Optional
-        },
-        cardinality: if port.multiple {
-            PortCardinality::Multiple
-        } else {
-            PortCardinality::Single
-        },
-        visibility: PortVisibility::Public,
-        constraints: Vec::new(),
-        editor_hints: Vec::new(),
+    let port_id = port.id.clone();
+    port.to_contract_port(kind).map_err(|error| {
+        EffectiveDefinitionError::InvalidDynamicDefinition {
+            message: format!("dynamic port '{port_id}' is invalid: {error}"),
+        }
     })
 }
 

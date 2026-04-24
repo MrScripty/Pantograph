@@ -109,6 +109,34 @@ pub struct PortDefinition {
     pub multiple: bool,
 }
 
+impl PortDefinition {
+    pub fn to_contract_port(
+        &self,
+        kind: pantograph_node_contracts::PortKind,
+    ) -> Result<pantograph_node_contracts::PortContract, pantograph_node_contracts::NodeContractError>
+    {
+        Ok(pantograph_node_contracts::PortContract {
+            id: self.id.parse()?,
+            kind,
+            label: self.label.clone(),
+            value_type: self.data_type.to_contract_value_type(),
+            requirement: if self.required {
+                pantograph_node_contracts::PortRequirement::Required
+            } else {
+                pantograph_node_contracts::PortRequirement::Optional
+            },
+            cardinality: if self.multiple {
+                pantograph_node_contracts::PortCardinality::Multiple
+            } else {
+                pantograph_node_contracts::PortCardinality::Single
+            },
+            visibility: pantograph_node_contracts::PortVisibility::Public,
+            constraints: Vec::new(),
+            editor_hints: Vec::new(),
+        })
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum NodeCategory {
@@ -273,6 +301,8 @@ pub enum ConnectionRejectionReason {
 pub struct ConnectionRejection {
     pub reason: ConnectionRejectionReason,
     pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contract_diagnostic: Option<Box<pantograph_node_contracts::ConnectionRejectionDiagnostic>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

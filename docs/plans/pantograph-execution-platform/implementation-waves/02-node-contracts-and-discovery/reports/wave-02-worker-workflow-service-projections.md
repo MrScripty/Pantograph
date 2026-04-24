@@ -35,6 +35,9 @@ Complete.
   ports into existing workflow-service DTOs.
 - Added canonical merge semantics that preserve unrelated static ports while
   allowing dynamic overlays to add or override ports by stable port id.
+- Added direct compatibility diagnostic projection so incompatible direct
+  connection rejections expose canonical source/target node ids, port ids,
+  value types, rejection reason, and message under `contract_diagnostic`.
 
 ## Verification
 
@@ -51,12 +54,16 @@ All commands passed.
 
 - Connection mutation APIs still return existing workflow-service rejection DTOs
   where applicable. The compatibility decision now comes from canonical
-  `PortValueType` rules, but structured rejection projection remains a follow-up
-  slice.
+  `PortValueType` rules, and direct incompatible type failures include a
+  canonical `contract_diagnostic`.
+- Aggregate no-compatible insert/candidate summaries still return coarse
+  workflow-service reasons rather than a list of every suppressed compatibility
+  diagnostic.
 
 ## Follow-Ups
 
-- Project structured compatibility diagnostics into connection candidates and
-  rejection responses.
+- Decide whether aggregate no-compatible insert/candidate summaries should
+  expose suppressed compatibility diagnostics or remain coarse graph-authoring
+  summaries.
 - Update binding-facing graph validation to consume backend-owned contract
   projections instead of direct `node_engine` semantics.

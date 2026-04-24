@@ -8,7 +8,7 @@ use super::types::{
     GraphEdge, GraphNode, InsertableNodeTypeCandidate, NodeDefinition, PortDefinition,
     WorkflowGraph,
 };
-use super::validation::validate_connection;
+use super::validation::{check_connection_ports, validate_connection};
 
 #[path = "connection_insert.rs"]
 mod connection_insert;
@@ -66,11 +66,13 @@ fn resolve_output_anchor<'a>(
         .ok_or_else(|| ConnectionRejection {
             reason: ConnectionRejectionReason::UnknownSourceAnchor,
             message: format!("source node '{}' was not found", anchor.node_id),
+            contract_diagnostic: None,
         })?;
     let definition =
         effective_node_definition(node, registry).map_err(|error| ConnectionRejection {
             reason: ConnectionRejectionReason::UnknownSourceAnchor,
             message: effective_definition_error_message("source", error),
+            contract_diagnostic: None,
         })?;
     let port = definition
         .outputs
@@ -83,6 +85,7 @@ fn resolve_output_anchor<'a>(
                 "source anchor '{}.{}' was not found",
                 anchor.node_id, anchor.port_id
             ),
+            contract_diagnostic: None,
         })?;
 
     Ok(ResolvedOutputAnchor { node, port })
@@ -98,11 +101,13 @@ fn resolve_input_anchor<'a>(
         .ok_or_else(|| ConnectionRejection {
             reason: ConnectionRejectionReason::UnknownTargetAnchor,
             message: format!("target node '{}' was not found", anchor.node_id),
+            contract_diagnostic: None,
         })?;
     let definition =
         effective_node_definition(node, registry).map_err(|error| ConnectionRejection {
             reason: ConnectionRejectionReason::UnknownTargetAnchor,
             message: effective_definition_error_message("target", error),
+            contract_diagnostic: None,
         })?;
     let port = definition
         .inputs
@@ -115,6 +120,7 @@ fn resolve_input_anchor<'a>(
                 "target anchor '{}.{}' was not found",
                 anchor.node_id, anchor.port_id
             ),
+            contract_diagnostic: None,
         })?;
 
     Ok(ResolvedInputAnchor { node, port })
@@ -132,6 +138,7 @@ fn ensure_graph_revision(
                 "graph revision '{}' is stale; current revision is '{}'",
                 graph_revision, current_revision
             ),
+            contract_diagnostic: None,
         });
     }
 
@@ -149,6 +156,7 @@ fn resolve_edge<'a>(
         .ok_or_else(|| ConnectionRejection {
             reason: ConnectionRejectionReason::UnknownEdge,
             message: format!("edge '{}' was not found", edge_id),
+            contract_diagnostic: None,
         })
 }
 
@@ -195,6 +203,7 @@ fn evaluate_connection(
                 target_anchor.node_id,
                 target_anchor.port_id
             ),
+            contract_diagnostic: None,
         });
     }
 
@@ -202,6 +211,7 @@ fn evaluate_connection(
         return Err(ConnectionRejection {
             reason: ConnectionRejectionReason::SelfConnection,
             message: format!("node '{}' cannot connect to itself", source.node.id),
+            contract_diagnostic: None,
         });
     }
 
@@ -217,16 +227,35 @@ fn evaluate_connection(
                 "target input '{}.{}' is already occupied",
                 target.node.id, target.port.id
             ),
+            contract_diagnostic: None,
         });
     }
 
-    if !validate_connection(&source.port.data_type, &target.port.data_type) {
+    let compatibility =
+        check_connection_ports(&source.node.id, &source.port, &target.node.id, &target.port)
+            .map_err(|error| ConnectionRejection {
+                reason: ConnectionRejectionReason::IncompatibleTypes,
+                message: format!(
+                    "connection '{}.{}' -> '{}.{}' could not be checked: {}",
+                    source.node.id, source.port.id, target.node.id, target.port.id, error
+                ),
+                contract_diagnostic: None,
+            })?;
+    if !compatibility.is_compatible() {
+        let diagnostic = compatibility.rejection;
+        let message = diagnostic.as_ref().map_or_else(
+            || {
+                format!(
+                    "source type '{:?}' is not compatible with target type '{:?}'",
+                    source.port.data_type, target.port.data_type
+                )
+            },
+            |diagnostic| diagnostic.message.clone(),
+        );
         return Err(ConnectionRejection {
             reason: ConnectionRejectionReason::IncompatibleTypes,
-            message: format!(
-                "source type '{:?}' is not compatible with target type '{:?}'",
-                source.port.data_type, target.port.data_type
-            ),
+            message,
+            contract_diagnostic: diagnostic.map(Box::new),
         });
     }
 
@@ -237,6 +266,7 @@ fn evaluate_connection(
                 "connection '{}.{}' -> '{}.{}' would create a cycle",
                 source.node.id, source.port.id, target.node.id, target.port.id
             ),
+            contract_diagnostic: None,
         });
     }
 
@@ -504,6 +534,61 @@ mod tests {
             result.is_ok(),
             "dynamic expand input should accept number output"
         );
+    }
+
+    #[test]
+    fn commit_connection_rejects_incompatible_types_with_contract_diagnostic() {
+        let registry = NodeRegistry::new();
+        let graph = WorkflowGraph {
+            nodes: vec![
+                GraphNode {
+                    id: "image".into(),
+                    node_type: "image-input".into(),
+                    position: Position { x: 0.0, y: 0.0 },
+                    data: serde_json::json!({}),
+                },
+                GraphNode {
+                    id: "text".into(),
+                    node_type: "text-output".into(),
+                    position: Position { x: 100.0, y: 0.0 },
+                    data: serde_json::json!({}),
+                },
+            ],
+            edges: Vec::new(),
+            derived_graph: None,
+        };
+        let revision = graph.compute_fingerprint();
+
+        let rejection = commit_connection(
+            &graph,
+            &registry,
+            &revision,
+            &ConnectionAnchor {
+                node_id: "image".into(),
+                port_id: "image".into(),
+            },
+            &ConnectionAnchor {
+                node_id: "text".into(),
+                port_id: "text".into(),
+            },
+        )
+        .expect_err("image output should not connect to text input");
+
+        assert_eq!(
+            rejection.reason,
+            ConnectionRejectionReason::IncompatibleTypes
+        );
+        let diagnostic = rejection
+            .contract_diagnostic
+            .expect("canonical rejection diagnostic");
+        assert_eq!(
+            diagnostic.reason,
+            pantograph_node_contracts::ConnectionRejectionReason::IncompatibleTypes
+        );
+        assert_eq!(diagnostic.source_node_id.as_str(), "image");
+        assert_eq!(diagnostic.source_port_id.as_str(), "image");
+        assert_eq!(diagnostic.target_node_id.as_str(), "text");
+        assert_eq!(diagnostic.target_port_id.as_str(), "text");
     }
 
     #[test]

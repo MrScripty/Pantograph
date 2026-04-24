@@ -94,6 +94,9 @@ for existing graph-edit callers.
   the same additive backend-owned `workflow_event` and
   `workflow_session_state` projection as graph snapshot mutations so transport
   clients do not need a second read to observe mutation impact facts.
+- Direct incompatible connection rejections should include a backend-owned
+  `contract_diagnostic` projection when canonical type compatibility produced a
+  typed rejection.
 - Edit-session connection and insertion API methods stay in
   `session_connection_api.rs` so revision-aware connection orchestration and
   insertion response projection remain separate from lifecycle and basic graph
@@ -151,7 +154,9 @@ let response = service
   identity and session kind; transport adapters must not hardcode that
   classification locally.
 - Treat `graph_revision` as an opaque concurrency token.
-- Expect structured rejection for stale revisions or incompatible connections.
+- Expect structured rejection for stale revisions or incompatible connections;
+  incompatible type rejections may include a canonical `contract_diagnostic`
+  with source/target node ids, port ids, value types, and rejection reason.
 - Persist graphs explicitly through a `WorkflowGraphStore`; mutations do not autosave.
 
 ## Structured Producer Contract

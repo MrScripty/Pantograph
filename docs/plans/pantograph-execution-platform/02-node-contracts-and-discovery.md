@@ -190,6 +190,26 @@ stage-end refactor gate has been recorded.
 - Remaining Wave `02` work: project structured compatibility diagnostics into
   connection candidate and rejection response surfaces.
 
+### 2026-04-24 Wave 02 Compatibility Diagnostic Projection Progress
+
+- Added a workflow-service `PortDefinition` to `PortContract` projection helper
+  so graph validation can build canonical compatibility checks without
+  reimplementing port semantics.
+- Added `check_connection_ports` to route direct connection validation through
+  canonical `CompatibilityCheck` and `check_compatibility` diagnostics.
+- Extended `ConnectionRejection` with an optional `contract_diagnostic` field
+  carrying the canonical source/target node ids, port ids, value types,
+  rejection reason, and diagnostic message for incompatible direct connections.
+- Added regression coverage proving an image output rejected against a text
+  input includes the canonical typed rejection diagnostic.
+- Verification: `cargo test -p pantograph-workflow-service`,
+  `cargo check --workspace --all-features`, `cargo fmt --all -- --check`, and
+  `cargo clippy -p pantograph-workflow-service --all-targets -- -D warnings`
+  passed.
+- Remaining Stage `02` follow-up: decide whether aggregate "no compatible
+  insert path" and candidate filtering responses should expose a collection of
+  suppressed diagnostics or remain coarse graph-authoring summaries.
+
 ## Type Families To Define
 
 ### Identity Types

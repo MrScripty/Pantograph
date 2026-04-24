@@ -46,6 +46,7 @@ fn resolve_insert_definition<'a>(
         .ok_or_else(|| ConnectionRejection {
             reason: ConnectionRejectionReason::UnknownInsertNodeType,
             message: format!("node type '{}' is not registered", node_type),
+            contract_diagnostic: None,
         })
 }
 
@@ -119,6 +120,7 @@ fn resolve_edge_insertion_bridge(
                 "node type '{}' has no input compatible with '{:?}'",
                 definition.node_type, source.port.data_type
             ),
+            contract_diagnostic: None,
         });
     }
 
@@ -192,6 +194,7 @@ fn resolve_edge_insertion_bridge(
             "node type '{}' has no valid path between edge '{}'",
             definition.node_type, edge_id
         ),
+        contract_diagnostic: None,
     })
 }
 
@@ -221,6 +224,7 @@ pub fn insert_node_and_connect(
                 "node type '{}' has no input compatible with '{:?}'",
                 node_type, source.port.data_type
             ),
+            contract_diagnostic: None,
         });
     }
 
