@@ -120,6 +120,28 @@ verification commands selected below.
     slice; revisit before release if a stronger dedicated secret generator is
     required by the security review.
 
+### 2026-04-24 Wave 02 Attribution Domain/Storage Progress
+
+- Added `crates/pantograph-runtime-attribution` as the durable attribution
+  owner for validated ids, client and credential records, client-session
+  lifecycle records, bucket records, default bucket assignments, workflow-run
+  attribution records, typed errors, and SQLite-backed state transitions.
+- Implemented schema version `1` with fail-closed unsupported-version checks,
+  foreign keys, one-active-session-per-client uniqueness, per-client active
+  bucket-name uniqueness, default-bucket assignments, workflow-run indexes, and
+  append-only lifecycle history.
+- Implemented digest-only credential persistence using per-credential salt plus
+  `blake3`; raw credential secrets are generated as response-only values and
+  redacted from `Debug`.
+- Implemented registration, credential verification, open/resume/disconnect/
+  expire/takeover session flows, default bucket creation, non-default bucket
+  create/delete protections, default and explicit bucket selection, and
+  workflow-run creation before execution scheduling.
+- Verification: `cargo fmt --all -- --check`,
+  `cargo test -p pantograph-runtime-attribution`, and
+  `cargo clippy -p pantograph-runtime-attribution --all-targets -- -D warnings`
+  passed.
+
 ## Required Identity Chain
 
 ```text

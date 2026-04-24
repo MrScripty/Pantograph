@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/inference",
     "crates/node-engine",
+    "crates/pantograph-runtime-attribution",
     "crates/pantograph-runtime-identity",
     "crates/pantograph-runtime-registry",
     "crates/pantograph-embedded-runtime",
@@ -16,6 +17,7 @@ members = [
 default-members = [
     "crates/inference",
     "crates/node-engine",
+    "crates/pantograph-runtime-attribution",
     "crates/pantograph-runtime-identity",
     "crates/pantograph-runtime-registry",
     "crates/pantograph-embedded-runtime",

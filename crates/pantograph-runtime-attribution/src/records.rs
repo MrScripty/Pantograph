@@ -1,0 +1,302 @@
+use std::fmt;
+
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+use crate::{BucketId, ClientCredentialId, ClientId, ClientSessionId, WorkflowId, WorkflowRunId};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ClientStatus {
+    Active,
+    Disabled,
+}
+
+impl ClientStatus {
+    pub(crate) fn as_db(self) -> &'static str {
+        match self {
+            Self::Active => "active",
+            Self::Disabled => "disabled",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ClientCredentialStatus {
+    Active,
+    Revoked,
+}
+
+impl ClientCredentialStatus {
+    pub(crate) fn as_db(self) -> &'static str {
+        match self {
+            Self::Active => "active",
+            Self::Revoked => "revoked",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ClientSessionLifecycleState {
+    Opening,
+    Connected,
+    DisconnectedGrace,
+    Expired,
+    TakenOver,
+    Closed,
+}
+
+impl ClientSessionLifecycleState {
+    #[must_use]
+    pub fn is_active(self) -> bool {
+        matches!(
+            self,
+            Self::Opening | Self::Connected | Self::DisconnectedGrace
+        )
+    }
+
+    pub(crate) fn as_db(self) -> &'static str {
+        match self {
+            Self::Opening => "opening",
+            Self::Connected => "connected",
+            Self::DisconnectedGrace => "disconnected_grace",
+            Self::Expired => "expired",
+            Self::TakenOver => "taken_over",
+            Self::Closed => "closed",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BucketStatus {
+    Active,
+    Deleted,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowRunStatus {
+    Running,
+    Completed,
+    Failed,
+    Cancelled,
+}
+
+impl WorkflowRunStatus {
+    pub(crate) fn as_db(self) -> &'static str {
+        match self {
+            Self::Running => "running",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+            Self::Cancelled => "cancelled",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ClientRecord {
+    pub client_id: ClientId,
+    pub display_name: Option<String>,
+    pub metadata_json: Option<String>,
+    pub status: ClientStatus,
+    pub created_at_ms: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ClientCredential {
+    pub client_credential_id: ClientCredentialId,
+    pub client_id: ClientId,
+    pub status: ClientCredentialStatus,
+    pub created_at_ms: i64,
+    pub revoked_at_ms: Option<i64>,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct CredentialSecret(String);
+
+impl CredentialSecret {
+    #[must_use]
+    pub fn generate() -> Self {
+        Self(format!(
+            "pcta_{}{}",
+            Uuid::new_v4().simple(),
+            Uuid::new_v4().simple()
+        ))
+    }
+
+    #[must_use]
+    pub fn expose_secret(&self) -> &str {
+        &self.0
+    }
+
+    #[must_use]
+    pub fn proof_request(&self, credential_id: ClientCredentialId) -> CredentialProofRequest {
+        CredentialProofRequest {
+            credential_id,
+            secret: self.clone(),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn from_raw_for_test(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+}
+
+impl fmt::Debug for CredentialSecret {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("CredentialSecret(<redacted>)")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CredentialProofRequest {
+    pub credential_id: ClientCredentialId,
+    pub secret: CredentialSecret,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClientRegistrationRequest {
+    pub display_name: Option<String>,
+    pub metadata_json: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClientRegistrationResponse {
+    pub client: ClientRecord,
+    pub credential: ClientCredential,
+    pub credential_secret: CredentialSecret,
+}
+
+impl ClientRegistrationResponse {
+    #[must_use]
+    pub fn credential_proof_request(&self) -> CredentialProofRequest {
+        self.credential_secret
+            .proof_request(self.credential.client_credential_id.clone())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ClientSessionRecord {
+    pub client_session_id: ClientSessionId,
+    pub client_id: ClientId,
+    pub opened_at_ms: i64,
+    pub latest_lifecycle_state: ClientSessionLifecycleState,
+    pub grace_deadline_ms: Option<i64>,
+    pub superseded_by_session_id: Option<ClientSessionId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SessionLifecycleRecord {
+    pub event_id: String,
+    pub client_session_id: ClientSessionId,
+    pub lifecycle_state: ClientSessionLifecycleState,
+    pub occurred_at_ms: i64,
+    pub reason: Option<String>,
+    pub related_session_id: Option<ClientSessionId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BucketRecord {
+    pub bucket_id: BucketId,
+    pub client_id: ClientId,
+    pub name: String,
+    pub metadata_json: Option<String>,
+    pub created_at_ms: i64,
+    pub deleted_at_ms: Option<i64>,
+    pub deletion_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DefaultBucketAssignment {
+    pub client_session_id: ClientSessionId,
+    pub bucket_id: BucketId,
+    pub assigned_at_ms: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkflowRunRecord {
+    pub workflow_run_id: WorkflowRunId,
+    pub workflow_id: WorkflowId,
+    pub client_id: ClientId,
+    pub client_session_id: ClientSessionId,
+    pub bucket_id: BucketId,
+    pub status: WorkflowRunStatus,
+    pub started_at_ms: i64,
+    pub completed_at_ms: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkflowRunAttribution {
+    pub client_id: ClientId,
+    pub client_session_id: ClientSessionId,
+    pub bucket_id: BucketId,
+    pub workflow_run_id: WorkflowRunId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClientSessionOpenRequest {
+    pub credential: CredentialProofRequest,
+    pub takeover: bool,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClientSessionOpenResponse {
+    pub session: ClientSessionRecord,
+    pub default_bucket: BucketRecord,
+    pub default_bucket_assignment: DefaultBucketAssignment,
+    pub superseded_session_id: Option<ClientSessionId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClientSessionResumeRequest {
+    pub credential: CredentialProofRequest,
+    pub client_session_id: ClientSessionId,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClientSessionDisconnectRequest {
+    pub credential: CredentialProofRequest,
+    pub client_session_id: ClientSessionId,
+    pub grace_deadline_ms: i64,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClientSessionExpireRequest {
+    pub client_session_id: ClientSessionId,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BucketCreateRequest {
+    pub credential: CredentialProofRequest,
+    pub name: String,
+    pub metadata_json: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BucketDeleteRequest {
+    pub credential: CredentialProofRequest,
+    pub bucket_id: BucketId,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BucketSelection {
+    Default,
+    Explicit(BucketId),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkflowRunStartRequest {
+    pub credential: CredentialProofRequest,
+    pub client_session_id: ClientSessionId,
+    pub workflow_id: WorkflowId,
+    pub bucket_selection: BucketSelection,
+}

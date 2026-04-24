@@ -7293,6 +7293,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "pantograph-runtime-attribution"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "chrono",
+ "rusqlite",
+ "serde",
+ "tempfile",
+ "thiserror 1.0.69",
+ "uuid",
+]
+
+[[package]]
 name = "pantograph-runtime-identity"
 version = "0.1.0"
 

@@ -1,0 +1,23 @@
+[package]
+name = "pantograph-runtime-attribution"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Durable client, session, bucket, and workflow-run attribution for Pantograph"
+
+[lints]
+workspace = true
+
+[dependencies]
+blake3 = "1.8.3"
+chrono.workspace = true
+rusqlite = { version = "0.32.1", features = ["bundled"] }
+serde.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

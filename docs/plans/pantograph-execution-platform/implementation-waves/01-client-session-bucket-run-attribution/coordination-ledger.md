@@ -23,7 +23,7 @@ Wave `01` complete. Wave `02` ready to start.
 
 | Worker | Report Path | Status |
 | ------ | ----------- | ------ |
-| attribution-domain-storage | `reports/wave-02-worker-attribution-domain-storage.md` | Pending |
+| attribution-domain-storage | `reports/wave-02-worker-attribution-domain-storage.md` | Complete |
 | workflow-service-cutover | `reports/wave-02-worker-workflow-service-cutover.md` | Pending |
 
 ## Decisions
@@ -36,8 +36,14 @@ Wave `01` complete. Wave `02` ready to start.
   `pantograph-runtime-attribution`.
 - 2026-04-24: Without explicit subagent authorization, the host may implement
   Wave `02` slices serially while preserving the recorded write boundaries.
+- 2026-04-24: The host implemented `attribution-domain-storage` locally in the
+  shared workspace because no subagent authorization was given.
 
 ## Verification Results
 
 - 2026-04-24: Wave `01` verification passed by inspection: start outcome is
   recorded and Wave `02` write sets remain non-overlapping.
+- 2026-04-24: `attribution-domain-storage` verification passed:
+  `cargo fmt --all -- --check` and
+  `cargo test -p pantograph-runtime-attribution`, and
+  `cargo clippy -p pantograph-runtime-attribution --all-targets -- -D warnings`.
