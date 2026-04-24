@@ -11,6 +11,7 @@
 //! - **Storage**: Nodes for file and database operations
 //! - **Control**: Nodes for control flow (loops, conditionals)
 
+pub mod contracts;
 pub mod control;
 pub mod input;
 pub mod output;
@@ -21,6 +22,7 @@ pub mod system;
 pub mod tool;
 
 // Re-export all tasks for convenience
+pub use contracts::{builtin_node_contracts, task_metadata_to_contract};
 pub use control::*;
 pub use input::*;
 pub use output::*;

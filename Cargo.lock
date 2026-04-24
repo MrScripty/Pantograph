@@ -12517,6 +12517,7 @@ dependencies = [
  "inventory",
  "log",
  "node-engine",
+ "pantograph-node-contracts",
  "pumas-library",
  "reqwest",
  "serde",

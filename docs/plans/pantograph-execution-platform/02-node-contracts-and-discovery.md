@@ -120,6 +120,32 @@ stage-end refactor gate has been recorded.
   canonical contracts and route workflow-service graph projections through the
   new crate.
 
+### 2026-04-24 Wave 02 Workflow-Nodes Registration Progress
+
+- Added a direct `workflow-nodes` dependency on `pantograph-node-contracts`.
+- Added `workflow_nodes::builtin_node_contracts` and
+  `workflow_nodes::task_metadata_to_contract` to project concrete built-in
+  `node_engine::TaskMetadata` descriptors into canonical
+  `NodeTypeContract` records.
+- Preserved concrete descriptor facts while moving semantic projection into the
+  canonical contract model: port directions, requirements, cardinality, value
+  types, execution semantics, category tags, and selected capability
+  requirements.
+- Preserved engine-only value types such as model handles and tensors as
+  canonical `PortValueType` variants rather than downcasting them to generic
+  GUI strings.
+- Added workflow-nodes tests proving all built-in descriptors have valid
+  canonical contracts, common port directions/value types are preserved,
+  extended engine value types survive projection, and invalid descriptor ids
+  are rejected by canonical id validation.
+- Verification: `cargo fmt --all -- --check`,
+  `cargo test -p workflow-nodes`,
+  `cargo clippy -p workflow-nodes --all-targets -- -D warnings`, and
+  `cargo check --workspace --all-features` passed.
+- Remaining Wave `02` work: route workflow-service graph definitions,
+  effective contracts, connection candidates, and compatibility rejections
+  through `pantograph-node-contracts`.
+
 ## Type Families To Define
 
 ### Identity Types

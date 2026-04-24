@@ -3,7 +3,7 @@
 ## Status
 
 Wave `01` complete. Wave `02` is partially integrated; the
-`canonical-contracts` slice is complete.
+`canonical-contracts` and `workflow-nodes-registration` slices are complete.
 
 ## Branch Or Worktree Strategy
 
@@ -17,7 +17,7 @@ Wave `01` complete. Wave `02` is partially integrated; the
 | Wave | Status | Integration Notes |
 | ---- | ------ | ----------------- |
 | `wave-01` | Complete | Stage-start report, contract freeze, and current ownership inventory recorded in `02-node-contracts-and-discovery.md`. |
-| `wave-02` | Partial | Canonical contract crate is integrated; workflow-nodes registration and workflow-service projection integration remain pending. |
+| `wave-02` | Partial | Canonical contract crate and workflow-nodes registration are integrated; workflow-service projection integration remains pending. |
 | `wave-03` | Pending | Host-owned integration and gate. |
 
 ## Worker Reports
@@ -26,7 +26,7 @@ Wave `01` complete. Wave `02` is partially integrated; the
 | ------ | ----------- | ------ |
 | canonical-contracts | `reports/wave-02-worker-canonical-contracts.md` | Complete |
 | workflow-service-projections | `reports/wave-02-worker-workflow-service-projections.md` | Pending |
-| workflow-nodes-registration | `reports/wave-02-worker-workflow-nodes-registration.md` | Pending |
+| workflow-nodes-registration | `reports/wave-02-worker-workflow-nodes-registration.md` | Complete |
 
 ## Decisions
 
@@ -46,6 +46,10 @@ Wave `01` complete. Wave `02` is partially integrated; the
   workspace because no subagent authorization was given. The slice adds
   `pantograph-node-contracts` and workspace wiring only; workflow-service and
   workflow-nodes integration remain separate follow-up slices.
+- 2026-04-24: The host implemented `workflow-nodes-registration` locally in
+  the shared workspace. Concrete built-in descriptors now project into
+  canonical `NodeTypeContract` records through `workflow-nodes` without making
+  `node-engine` the semantic owner of GUI or binding contracts.
 
 ## Verification Results
 
@@ -57,3 +61,8 @@ Wave `01` complete. Wave `02` is partially integrated; the
   `cargo test -p pantograph-node-contracts`,
   `cargo clippy -p pantograph-node-contracts --all-targets -- -D warnings`,
   and `cargo check --workspace --all-features`.
+- 2026-04-24: `workflow-nodes-registration` verification passed:
+  `cargo fmt --all -- --check`,
+  `cargo test -p workflow-nodes`,
+  `cargo clippy -p workflow-nodes --all-targets -- -D warnings`, and
+  `cargo check --workspace --all-features`.

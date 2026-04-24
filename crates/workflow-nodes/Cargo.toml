@@ -14,6 +14,7 @@ workspace = true
 [dependencies]
 # Framework
 node-engine = { path = "../node-engine" }
+pantograph-node-contracts = { path = "../pantograph-node-contracts" }
 graph-flow.workspace = true
 
 # Model management (optional — enable via `model-library` feature)
