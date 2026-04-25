@@ -2,13 +2,14 @@
 
 ## Status
 
-Not started.
+Stage `05` in progress. Wave `01` is complete and Wave `02` implementation
+slices are ready to begin.
 
 ## Wave Status
 
 | Wave | Status | Integration Notes |
 | ---- | ------ | ----------------- |
-| `wave-01` | Pending | Host-owned inventory and upgrade policy freeze. |
+| `wave-01` | Complete | Stage-start report, node/port inventory, saved-workflow artifact inventory, classification freeze, migration output semantics, and Wave `02` write boundaries recorded in `05-composition-factoring-and-migration.md`. |
 | `wave-02` | Pending | Parallel contracts, factoring, and lineage. |
 | `wave-03` | Pending | Host-owned migration integration and gate. |
 
@@ -22,8 +23,43 @@ Not started.
 
 ## Decisions
 
-- None recorded.
+- 2026-04-24: Stage-start outcome is
+  `ready_with_recorded_assumptions`.
+- 2026-04-24: Existing dirty files are unrelated `assets/` changes and do not
+  overlap the Stage `05` write set.
+- 2026-04-24: Stage `01`, Stage `02`, Stage `03`, and Stage `04` are
+  integrated and their stage-end refactor gates are recorded as
+  `not_warranted`.
+- 2026-04-24: Without explicit subagent authorization, the host may implement
+  Wave `02` slices serially while preserving the recorded worker boundaries.
+- 2026-04-24: The built-in node type inventory is frozen at 45 workflow-node
+  descriptors discovered from `crates/workflow-nodes/src/`, plus the
+  workflow-service-owned `node-group` graph grouping surface.
+- 2026-04-24: Existing saved workflow artifact inventory includes
+  `src/templates/workflows/gguf-reranker-workflow.json`, embedded-runtime
+  graph fixtures, and workflow-service inline graph/session fixtures.
+- 2026-04-24: Existing migration behavior canonicalizes legacy
+  `system-prompt` nodes to `text-input` and rewrites legacy `prompt` handles
+  to `text`.
+- 2026-04-24: Classification freeze: simple input/output/control/storage/
+  system utility nodes and specialized model-producing nodes remain primitive;
+  `node-group` and `tool-loop` become stable composed authoring contracts with
+  primitive trace preservation; `vision-analysis` and future unmanaged direct
+  model execution nodes require split-or-reject migration policy before they
+  can be treated as complete managed primitives.
+- 2026-04-24: Migration outcomes are frozen as `upgraded`, `regenerated`, or
+  `typed_rejection`. Temporary compatibility projections are allowed only
+  inside migration code and must not remain public semantics after migration.
+- 2026-04-24: Wave `02` non-overlap boundary is frozen:
+  `composition-contracts` owns canonical contract metadata and migration error
+  types, `workflow-nodes-factoring` owns concrete descriptor changes and
+  workflow-node README coverage, and `runtime-lineage` owns embedded-runtime
+  composed-parent lineage projection.
 
 ## Verification Results
 
-- None recorded.
+- 2026-04-24: Wave `01` verification passed by inspection: start outcome is
+  recorded, dirty files are unrelated, prior-stage gates are recorded,
+  node/port and saved-workflow artifact inventory is recorded,
+  keep/split/compose classification is frozen, migration output semantics are
+  frozen, and Wave `02` write boundaries are explicit.
