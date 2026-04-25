@@ -1,6 +1,8 @@
 use crate::{
     DiagnosticsLedgerError, DiagnosticsProjection, DiagnosticsQuery, DiagnosticsRetentionPolicy,
-    ModelLicenseUsageEvent, PruneUsageEventsCommand, PruneUsageEventsResult,
+    ModelLicenseUsageEvent, PruneTimingObservationsCommand, PruneTimingObservationsResult,
+    PruneUsageEventsCommand, PruneUsageEventsResult, WorkflowTimingExpectation,
+    WorkflowTimingExpectationQuery, WorkflowTimingObservation,
 };
 
 pub trait DiagnosticsLedgerRepository {
@@ -20,4 +22,19 @@ pub trait DiagnosticsLedgerRepository {
         &mut self,
         command: PruneUsageEventsCommand,
     ) -> Result<PruneUsageEventsResult, DiagnosticsLedgerError>;
+
+    fn record_timing_observation(
+        &mut self,
+        observation: WorkflowTimingObservation,
+    ) -> Result<(), DiagnosticsLedgerError>;
+
+    fn timing_expectation(
+        &self,
+        query: WorkflowTimingExpectationQuery,
+    ) -> Result<WorkflowTimingExpectation, DiagnosticsLedgerError>;
+
+    fn prune_timing_observations(
+        &mut self,
+        command: PruneTimingObservationsCommand,
+    ) -> Result<PruneTimingObservationsResult, DiagnosticsLedgerError>;
 }

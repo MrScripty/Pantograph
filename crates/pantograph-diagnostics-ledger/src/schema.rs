@@ -4,8 +4,8 @@ use crate::records::{RetentionClass, DEFAULT_STANDARD_RETENTION_DAYS};
 use crate::util::now_ms;
 use crate::DiagnosticsLedgerError;
 
-pub(crate) const SCHEMA_VERSION: i64 = 1;
-const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v1";
+pub(crate) const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v2";
 
 pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {
     tx.execute_batch(
@@ -111,6 +111,7 @@ pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedger
         );
         "#,
     )?;
+    apply_timing_schema(tx)?;
     tx.execute(
         "INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
          VALUES (?1, ?2, ?3)",
@@ -127,6 +128,67 @@ pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedger
             now_ms(),
             "Default local model/license usage retention policy"
         ],
+    )?;
+    Ok(())
+}
+
+pub(crate) fn migrate_schema(
+    conn: &mut Connection,
+    found: i64,
+) -> Result<(), DiagnosticsLedgerError> {
+    if found > SCHEMA_VERSION {
+        return Err(DiagnosticsLedgerError::UnsupportedSchemaVersion { found });
+    }
+    if found == SCHEMA_VERSION {
+        return Ok(());
+    }
+
+    let tx = conn.transaction()?;
+    if found < 2 {
+        apply_timing_schema(&tx)?;
+        tx.execute(
+            "INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
+             VALUES (?1, ?2, ?3)",
+            params![SCHEMA_VERSION, now_ms(), SCHEMA_CHECKSUM],
+        )?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+fn apply_timing_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {
+    tx.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS workflow_timing_observations (
+            observation_key TEXT PRIMARY KEY,
+            observation_scope TEXT NOT NULL,
+            execution_id TEXT NOT NULL,
+            workflow_id TEXT NOT NULL,
+            workflow_name TEXT,
+            graph_fingerprint TEXT NOT NULL,
+            node_id TEXT,
+            node_type TEXT,
+            runtime_id TEXT,
+            status TEXT NOT NULL,
+            started_at_ms INTEGER NOT NULL,
+            ended_at_ms INTEGER NOT NULL,
+            duration_ms INTEGER NOT NULL,
+            recorded_at_ms INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_workflow_timing_lookup
+            ON workflow_timing_observations(
+                observation_scope,
+                workflow_id,
+                graph_fingerprint,
+                node_id,
+                node_type,
+                runtime_id,
+                status,
+                recorded_at_ms
+            );
+        CREATE INDEX IF NOT EXISTS idx_workflow_timing_retention
+            ON workflow_timing_observations(recorded_at_ms);
+        "#,
     )?;
     Ok(())
 }

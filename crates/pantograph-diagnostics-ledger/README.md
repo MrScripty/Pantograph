@@ -26,8 +26,8 @@ trace storage while still accepting finalized trace-derived observations.
 The initial implementation uses bundled SQLite through `rusqlite`, matching the
 attribution persistence boundary. Version `1` stores schema migrations, usage
 events, license snapshots, typed output measurements, lineage rows, and
-retention policy records. Version `2` is reserved for workflow timing
-observations and timing expectation lookup.
+retention policy records. Version `2` adds workflow timing observations,
+idempotent observation keys, lookup indexes, and timing expectation projection.
 
 Retention is explicit. The default local policy keeps `standard` usage events
 for 365 days. Pruning deletes complete eligible events and associated rows in

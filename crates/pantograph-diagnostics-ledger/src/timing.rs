@@ -144,6 +144,17 @@ pub struct WorkflowTimingExpectation {
     pub typical_max_duration_ms: Option<u64>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PruneTimingObservationsCommand {
+    pub prune_recorded_before_ms: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PruneTimingObservationsResult {
+    pub pruned_observation_count: u64,
+    pub prune_recorded_before_ms: i64,
+}
+
 impl WorkflowTimingExpectation {
     pub fn from_completed_durations(
         query: &WorkflowTimingExpectationQuery,

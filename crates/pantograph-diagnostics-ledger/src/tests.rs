@@ -6,10 +6,11 @@ use rusqlite::Connection;
 use crate::{
     DiagnosticsLedgerError, DiagnosticsLedgerRepository, DiagnosticsQuery, ExecutionGuaranteeLevel,
     LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement,
-    OutputMeasurementUnavailableReason, OutputModality, PruneUsageEventsCommand, RetentionClass,
-    SqliteDiagnosticsLedger, UsageEventStatus, UsageLineage, WorkflowTimingExpectation,
-    WorkflowTimingExpectationComparison, WorkflowTimingExpectationQuery,
-    WorkflowTimingObservationScope, DEFAULT_STANDARD_RETENTION_DAYS,
+    OutputMeasurementUnavailableReason, OutputModality, PruneTimingObservationsCommand,
+    PruneUsageEventsCommand, RetentionClass, SqliteDiagnosticsLedger, UsageEventStatus,
+    UsageLineage, WorkflowTimingExpectation, WorkflowTimingExpectationComparison,
+    WorkflowTimingExpectationQuery, WorkflowTimingObservation, WorkflowTimingObservationScope,
+    WorkflowTimingObservationStatus, DEFAULT_STANDARD_RETENTION_DAYS,
 };
 
 #[test]
@@ -132,6 +133,106 @@ fn persisted_events_survive_reopen() {
 }
 
 #[test]
+fn persisted_timing_observations_survive_reopen_and_project_expectations() {
+    let temp = tempfile::NamedTempFile::new().expect("temp file");
+    let path = temp.path().to_path_buf();
+
+    {
+        let mut ledger = SqliteDiagnosticsLedger::open(&path).expect("ledger opens");
+        for (index, duration_ms) in [100, 200, 220, 300, 500].into_iter().enumerate() {
+            ledger
+                .record_timing_observation(sample_timing_observation(index, duration_ms))
+                .expect("timing observation is recorded");
+        }
+    }
+
+    let ledger = SqliteDiagnosticsLedger::open(&path).expect("ledger reopens");
+    let expectation = ledger
+        .timing_expectation(sample_timing_query(Some(450)))
+        .expect("timing expectation projects");
+
+    assert_eq!(expectation.sample_count, 5);
+    assert_eq!(
+        expectation.comparison,
+        WorkflowTimingExpectationComparison::SlowerThanExpected
+    );
+    assert_eq!(expectation.median_duration_ms, Some(220));
+    assert_eq!(expectation.typical_min_duration_ms, Some(200));
+    assert_eq!(expectation.typical_max_duration_ms, Some(300));
+}
+
+#[test]
+fn duplicate_timing_observation_does_not_inflate_history() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    let observation = sample_timing_observation(1, 200);
+
+    ledger
+        .record_timing_observation(observation.clone())
+        .expect("timing observation is recorded");
+    ledger
+        .record_timing_observation(observation)
+        .expect("duplicate timing observation is ignored");
+
+    let expectation = ledger
+        .timing_expectation(sample_timing_query(Some(200)))
+        .expect("timing expectation projects");
+
+    assert_eq!(expectation.sample_count, 1);
+    assert_eq!(
+        expectation.comparison,
+        WorkflowTimingExpectationComparison::InsufficientHistory
+    );
+}
+
+#[test]
+fn prune_timing_observations_deletes_old_observations() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    let mut old = sample_timing_observation(1, 200);
+    old.recorded_at_ms = 10;
+    let mut retained = sample_timing_observation(2, 300);
+    retained.recorded_at_ms = 100;
+
+    ledger
+        .record_timing_observation(old)
+        .expect("old observation is recorded");
+    ledger
+        .record_timing_observation(retained)
+        .expect("retained observation is recorded");
+
+    let result = ledger
+        .prune_timing_observations(PruneTimingObservationsCommand {
+            prune_recorded_before_ms: 50,
+        })
+        .expect("timing prune succeeds");
+
+    assert_eq!(result.pruned_observation_count, 1);
+    let expectation = ledger
+        .timing_expectation(sample_timing_query(Some(300)))
+        .expect("timing expectation projects");
+    assert_eq!(expectation.sample_count, 1);
+}
+
+#[test]
+fn existing_v1_schema_migrates_to_timing_observation_schema() {
+    let conn = Connection::open_in_memory().expect("connection opens");
+    conn.execute_batch(
+        "CREATE TABLE ledger_schema_migrations (
+            version INTEGER PRIMARY KEY,
+            applied_at_ms INTEGER NOT NULL,
+            checksum TEXT NOT NULL
+        );
+        INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
+        VALUES (1, 0, 'pantograph-diagnostics-ledger-v1');",
+    )
+    .expect("v1 schema marker is installed");
+
+    let mut ledger = SqliteDiagnosticsLedger::from_connection(conn).expect("ledger migrates");
+    ledger
+        .record_timing_observation(sample_timing_observation(1, 200))
+        .expect("timing observation can be recorded after migration");
+}
+
+#[test]
 fn unsupported_schema_version_is_rejected() {
     let conn = Connection::open_in_memory().expect("connection opens");
     conn.execute_batch(
@@ -222,6 +323,25 @@ fn sample_timing_query(current_duration_ms: Option<u64>) -> WorkflowTimingExpect
         node_type: Some("text-generation".to_string()),
         runtime_id: Some("llama.cpp".to_string()),
         current_duration_ms,
+    }
+}
+
+fn sample_timing_observation(index: usize, duration_ms: u64) -> WorkflowTimingObservation {
+    WorkflowTimingObservation {
+        observation_key: format!("node:exec-{index}:node-1"),
+        scope: WorkflowTimingObservationScope::Node,
+        execution_id: format!("exec-{index}"),
+        workflow_id: "workflow_alpha".to_string(),
+        workflow_name: Some("Workflow Alpha".to_string()),
+        graph_fingerprint: "graph_alpha".to_string(),
+        node_id: Some("node-1".to_string()),
+        node_type: Some("text-generation".to_string()),
+        runtime_id: Some("llama.cpp".to_string()),
+        status: WorkflowTimingObservationStatus::Completed,
+        started_at_ms: 1_000,
+        ended_at_ms: 1_000 + duration_ms as i64,
+        duration_ms,
+        recorded_at_ms: 2_000 + index as i64,
     }
 }
 
