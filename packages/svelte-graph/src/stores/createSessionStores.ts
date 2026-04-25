@@ -43,6 +43,7 @@ export interface SessionStores {
   availableWorkflows: ReturnType<typeof writable<WorkflowMetadata[]>>;
   currentSessionId: ReturnType<typeof writable<string | null>>;
   currentSessionKind: ReturnType<typeof writable<SessionKind | null>>;
+  graphSessionError: ReturnType<typeof writable<string | null>>;
 
   // Derived stores
   isReadOnly: ReturnType<typeof derived>;
@@ -73,6 +74,7 @@ export function createSessionStores(
   const availableWorkflows = writable<WorkflowMetadata[]>([]);
   const currentSessionId = writable<string | null>(null);
   const currentSessionKind = writable<SessionKind | null>(null);
+  const graphSessionError = writable<string | null>(null);
 
   // --- Derived ---
   const isReadOnly = derived(currentGraphType, ($type) => $type === 'system');
@@ -87,17 +89,30 @@ export function createSessionStores(
 
   // --- Actions ---
 
+  function normalizeError(error: unknown): string {
+    if (error instanceof Error && error.message.trim().length > 0) {
+      return error.message;
+    }
+    if (typeof error === 'string' && error.trim().length > 0) {
+      return error;
+    }
+    return String(error);
+  }
+
   async function refreshWorkflowList(): Promise<void> {
     try {
       const workflows = await backend.listWorkflows();
       availableWorkflows.set(workflows);
+      graphSessionError.set(null);
     } catch (error) {
       console.error('Failed to load workflow list:', error);
+      graphSessionError.set(`Failed to load workflow list: ${normalizeError(error)}`);
       availableWorkflows.set([]);
     }
   }
 
   async function loadWorkflowByName(name: string): Promise<boolean> {
+    graphSessionError.set(null);
     try {
       // Ensure node definitions are loaded
       if (get(workflowStores.nodeDefinitions).length === 0) {
@@ -109,9 +124,8 @@ export function createSessionStores(
       const file = await backend.loadWorkflow(path);
       const session = await backend.createSession(file.graph);
       applySessionHandle(session);
-      const sessionGraph = await backend.getExecutionGraph(session.session_id);
 
-      workflowStores.loadWorkflow(sessionGraph, file.metadata);
+      workflowStores.loadWorkflow(file.graph, file.metadata);
 
       // Call optional hook for consumer-specific post-load behavior
       if (options?.onWorkflowLoaded && file.metadata) {
@@ -130,6 +144,7 @@ export function createSessionStores(
       return true;
     } catch (error) {
       console.error(`[sessionStores] Failed to load workflow "${name}":`, error);
+      graphSessionError.set(`Failed to load workflow "${name}": ${normalizeError(error)}`);
       return false;
     }
   }
@@ -207,6 +222,7 @@ export function createSessionStores(
 
   return {
     currentGraphId, currentGraphType, currentGraphName, availableWorkflows, currentSessionId, currentSessionKind,
+    graphSessionError,
     isReadOnly, currentGraphInfo,
     refreshWorkflowList, loadWorkflowByName, createNewWorkflow,
     saveLastGraph, loadLastGraph, switchGraph,

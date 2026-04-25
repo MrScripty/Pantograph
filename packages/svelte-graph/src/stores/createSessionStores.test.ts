@@ -14,11 +14,11 @@ import type {
 import type { ViewStores } from './createViewStores.ts';
 import type { WorkflowStores } from './createWorkflowStores.ts';
 
-function createBackendStub(): WorkflowBackend {
+function createBackendStub(overrides: Partial<WorkflowBackend> = {}): WorkflowBackend {
   let sessionCounter = 0;
   const definitions: NodeDefinition[] = [];
 
-  return {
+  const backend: WorkflowBackend = {
     async getNodeDefinitions() {
       return definitions;
     },
@@ -111,20 +111,31 @@ function createBackendStub(): WorkflowBackend {
       return () => {};
     },
   };
+  return { ...backend, ...overrides };
+}
+
+function createWorkflowStoresStub(
+  onLoadWorkflow: (graph: WorkflowGraph, metadata?: WorkflowMetadata) => void = () => {},
+): WorkflowStores {
+  return {
+    nodeDefinitions: writable<NodeDefinition[]>([]),
+    setActiveSessionId() {},
+    clearWorkflow() {},
+    loadWorkflow: onLoadWorkflow,
+  } as Pick<WorkflowStores, 'nodeDefinitions' | 'setActiveSessionId' | 'clearWorkflow' | 'loadWorkflow'> as WorkflowStores;
+}
+
+function createViewStoresStub(): ViewStores {
+  return {
+    groupStack: writable<string[]>([]),
+    async tabOutOfGroup() {},
+  } as Pick<ViewStores, 'groupStack' | 'tabOutOfGroup'> as ViewStores;
 }
 
 test('createSessionStores tracks edit session kind for editor-owned sessions', async () => {
   const backend = createBackendStub();
-  const workflowStores = {
-    nodeDefinitions: writable<NodeDefinition[]>([]),
-    setActiveSessionId() {},
-    clearWorkflow() {},
-    loadWorkflow() {},
-  } as Pick<WorkflowStores, 'nodeDefinitions' | 'setActiveSessionId' | 'clearWorkflow' | 'loadWorkflow'> as WorkflowStores;
-  const viewStores = {
-    groupStack: writable<string[]>([]),
-    async tabOutOfGroup() {},
-  } as Pick<ViewStores, 'groupStack' | 'tabOutOfGroup'> as ViewStores;
+  const workflowStores = createWorkflowStoresStub();
+  const viewStores = createViewStoresStub();
   const sessionStores = createSessionStores(backend, workflowStores, viewStores);
 
   assert.equal(get(sessionStores.currentSessionKind), null);
@@ -134,4 +145,71 @@ test('createSessionStores tracks edit session kind for editor-owned sessions', a
 
   assert.equal(get(sessionStores.currentSessionKind), 'edit');
   assert.match(get(sessionStores.currentSessionId) ?? '', /^stub-session-/);
+});
+
+test('loadWorkflowByName renders the loaded file graph after creating an edit session', async () => {
+  const loadedGraph = {
+    nodes: [
+      {
+        id: 'loaded-node',
+        node_type: 'text-input',
+        position: { x: 1, y: 2 },
+        data: {},
+      },
+    ],
+    edges: [],
+  } satisfies WorkflowGraph;
+  let renderedGraph: WorkflowGraph | null = null;
+  const backend = createBackendStub({
+    async loadWorkflow(path: string) {
+      assert.equal(path, '.pantograph/workflows/saved-flow.json');
+      return {
+        version: '1.0',
+        metadata: {
+          id: 'saved-flow',
+          name: 'Saved Flow',
+          created: '',
+          modified: '',
+        },
+        graph: loadedGraph,
+      };
+    },
+    async getExecutionGraph() {
+      throw new Error('session graph refresh should not block initial render');
+    },
+  });
+  const workflowStores = createWorkflowStoresStub((graph) => {
+    renderedGraph = graph;
+  });
+  const sessionStores = createSessionStores(backend, workflowStores, createViewStoresStub());
+
+  const loaded = await sessionStores.loadWorkflowByName('saved-flow');
+
+  assert.equal(loaded, true);
+  assert.equal(get(sessionStores.graphSessionError), null);
+  assert.deepEqual(renderedGraph, loadedGraph);
+  assert.equal(get(sessionStores.currentGraphId), 'saved-flow');
+  assert.equal(get(sessionStores.currentGraphName), 'Saved Flow');
+  assert.match(get(sessionStores.currentSessionId) ?? '', /^stub-session-/);
+});
+
+test('loadWorkflowByName exposes backend failures through graphSessionError', async () => {
+  const backend = createBackendStub({
+    async loadWorkflow() {
+      throw new Error('workflow file missing');
+    },
+  });
+  const sessionStores = createSessionStores(
+    backend,
+    createWorkflowStoresStub(),
+    createViewStoresStub(),
+  );
+
+  const loaded = await sessionStores.loadWorkflowByName('missing-flow');
+
+  assert.equal(loaded, false);
+  assert.equal(
+    get(sessionStores.graphSessionError),
+    'Failed to load workflow "missing-flow": workflow file missing',
+  );
 });

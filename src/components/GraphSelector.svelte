@@ -4,24 +4,53 @@
     currentGraphName,
     currentGraphType,
     availableWorkflows,
+    graphSessionError,
     SYSTEM_GRAPHS,
     switchGraph,
     refreshWorkflowList,
     type GraphType,
   } from '../stores/graphSessionStore';
   let isOpen = $state(false);
+  let isSwitching = $state(false);
+  let localError: string | null = $state(null);
   let dropdownRef: HTMLDivElement | null = $state(null);
+
+  function normalizeError(error: unknown): string {
+    if (error instanceof Error && error.message.trim().length > 0) {
+      return error.message;
+    }
+    if (typeof error === 'string' && error.trim().length > 0) {
+      return error;
+    }
+    return String(error);
+  }
 
   function handleToggle() {
     if (!isOpen) {
+      localError = null;
       refreshWorkflowList();
     }
     isOpen = !isOpen;
   }
 
-  function handleSelect(id: string, type: GraphType) {
-    switchGraph(id, type);
-    isOpen = false;
+  async function handleSelect(id: string, type: GraphType) {
+    if (isSwitching) return;
+
+    localError = null;
+    isSwitching = true;
+    try {
+      const loaded = await switchGraph(id, type);
+      if (loaded) {
+        isOpen = false;
+        return;
+      }
+      localError = $graphSessionError ?? `Failed to load ${type} "${id}".`;
+    } catch (error) {
+      localError = `Failed to load ${type} "${id}": ${normalizeError(error)}`;
+      console.error('[GraphSelector] Failed to switch graph:', error);
+    } finally {
+      isSwitching = false;
+    }
   }
 
   function handleClickOutside(event: MouseEvent) {
@@ -67,6 +96,12 @@
     <div
       class="dropdown absolute top-full left-0 mt-1 w-64 bg-neutral-800 border border-neutral-600 rounded shadow-lg z-50 overflow-hidden"
     >
+      {#if localError || $graphSessionError}
+        <div class="px-3 py-2 text-xs text-red-200 bg-red-950/80 border-b border-red-800" title={localError ?? $graphSessionError ?? ''}>
+          {localError ?? $graphSessionError}
+        </div>
+      {/if}
+
       <!-- Workflows Section -->
       <div class="section">
         <div class="section-header px-3 py-2 text-xs text-neutral-400 uppercase tracking-wider bg-neutral-900">
@@ -79,7 +114,9 @@
             <button type="button"
               class="w-full px-3 py-2 text-left text-sm hover:bg-neutral-700 transition-colors flex items-center gap-2"
               class:bg-neutral-700={$currentGraphId === workflow.id && $currentGraphType === 'workflow'}
+              class:opacity-60={isSwitching}
               onclick={() => handleSelect(workflow.id ?? workflow.name, 'workflow')}
+              disabled={isSwitching}
             >
               <span class="text-neutral-300 flex-1 truncate">{workflow.name}</span>
               {#if $currentGraphId === workflow.id && $currentGraphType === 'workflow'}
@@ -105,7 +142,9 @@
           <button type="button"
             class="w-full px-3 py-2 text-left text-sm hover:bg-neutral-700 transition-colors flex items-center gap-2"
             class:bg-neutral-700={$currentGraphId === graph.id && $currentGraphType === 'system'}
+            class:opacity-60={isSwitching}
             onclick={() => handleSelect(graph.id, 'system')}
+            disabled={isSwitching}
           >
             <span class="text-neutral-300 flex-1 truncate">{graph.name}</span>
             <span class="text-xs text-neutral-500">(read-only)</span>

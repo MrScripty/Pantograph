@@ -16,6 +16,7 @@ export const currentGraphName = sessionStores.currentGraphName;
 export const availableWorkflows = sessionStores.availableWorkflows;
 export const currentSessionId = sessionStores.currentSessionId;
 export const currentSessionKind = sessionStores.currentSessionKind;
+export const graphSessionError = sessionStores.graphSessionError;
 
 // --- Re-export derived stores ---
 export const isReadOnly = sessionStores.isReadOnly;
