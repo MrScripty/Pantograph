@@ -5,6 +5,8 @@ import {
   formatDiagnosticsBytes,
   formatDiagnosticsDuration,
   formatDiagnosticsPercent,
+  formatTimingExpectationDetail,
+  formatTimingExpectationSummary,
   formatCheckpointSummary,
   formatNodeMemoryCompatibilityLabel,
   formatNodeMemoryStatusLabel,
@@ -15,6 +17,7 @@ import {
   getRuntimeInstallStateClasses,
   getRunNodeStatusCounts,
   getSchedulerStateClasses,
+  getTimingExpectationClasses,
 } from './presenters.ts';
 import type { DiagnosticsRunTrace } from '../../services/diagnostics/types.ts';
 
@@ -118,6 +121,35 @@ test('formatDiagnosticsPercent and status classes expose stable labels', () => {
   assert.equal(formatDiagnosticsPercent(null), 'No progress');
   assert.equal(formatDiagnosticsPercent(0.523), '52%');
   assert.match(getDiagnosticsStatusClasses('waiting'), /amber/);
+});
+
+test('timing expectation presenters expose duration comparison labels', () => {
+  assert.equal(formatTimingExpectationSummary(null), 'No timing history');
+  assert.equal(formatTimingExpectationDetail(null), 'No comparable completed runs yet');
+  assert.match(getTimingExpectationClasses('slower_than_expected'), /amber/);
+
+  assert.equal(
+    formatTimingExpectationSummary({
+      comparison: 'slower_than_expected',
+      sampleCount: 5,
+      currentDurationMs: 450,
+      medianDurationMs: 220,
+      typicalMinDurationMs: 200,
+      typicalMaxDurationMs: 300,
+    }),
+    'Slower than usual',
+  );
+  assert.equal(
+    formatTimingExpectationDetail({
+      comparison: 'within_expected_range',
+      sampleCount: 5,
+      currentDurationMs: 220,
+      medianDurationMs: 220,
+      typicalMinDurationMs: 200,
+      typicalMaxDurationMs: 300,
+    }),
+    'Typical 200 ms-300 ms | median 220 ms | n=5',
+  );
 });
 
 test('byte and runtime or scheduler label helpers expose readable labels', () => {

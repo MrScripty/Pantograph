@@ -3,9 +3,10 @@
     DiagnosticsNodeTrace,
     DiagnosticsRunTrace,
   } from '../../services/diagnostics/types';
+  import DiagnosticsNodeDetail from './DiagnosticsNodeDetail.svelte';
+  import DiagnosticsTimingExpectation from './DiagnosticsTimingExpectation.svelte';
   import {
     formatDiagnosticsDuration,
-    formatDiagnosticsPercent,
     formatDiagnosticsTimestamp,
     getDiagnosticsStatusClasses,
     getRunNodeStatusCounts,
@@ -170,7 +171,7 @@
               <th class="px-4 py-3 font-medium">Node</th>
               <th class="px-4 py-3 font-medium">Status</th>
               <th class="px-4 py-3 font-medium">Duration</th>
-              <th class="px-4 py-3 font-medium">Progress</th>
+              <th class="px-4 py-3 font-medium">Expected</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-neutral-900">
@@ -192,7 +193,9 @@
                   </span>
                 </td>
                 <td class="px-4 py-3 text-neutral-300">{formatDiagnosticsDuration(node.durationMs)}</td>
-                <td class="px-4 py-3 text-neutral-300">{formatDiagnosticsPercent(node.lastProgress)}</td>
+                <td class="px-4 py-3 text-neutral-300">
+                  <DiagnosticsTimingExpectation expectation={node.timingExpectation ?? null} />
+                </td>
               </tr>
             {/each}
           </tbody>
@@ -200,59 +203,7 @@
       </div>
     </section>
 
-    <section class="rounded-xl border border-neutral-800 bg-neutral-950/80 p-4">
-      <div class="text-sm font-medium text-neutral-100">
-        {selectedNode ? `Node ${selectedNode.nodeId}` : 'Node Detail'}
-      </div>
-      {#if selectedNode}
-        <div class="mt-3 space-y-3 text-sm text-neutral-300">
-          <div class="flex items-center justify-between gap-3">
-            <span>Status</span>
-            <span class={`inline-flex rounded-full border px-2 py-1 text-xs font-medium ${getDiagnosticsStatusClasses(selectedNode.status)}`}>
-              {selectedNode.status}
-            </span>
-          </div>
-          <div class="flex items-center justify-between gap-3">
-            <span>Started</span>
-            <span>{formatDiagnosticsTimestamp(selectedNode.startedAtMs)}</span>
-          </div>
-          <div class="flex items-center justify-between gap-3">
-            <span>Ended</span>
-            <span>{formatDiagnosticsTimestamp(selectedNode.endedAtMs)}</span>
-          </div>
-          <div class="flex items-center justify-between gap-3">
-            <span>Duration</span>
-            <span>{formatDiagnosticsDuration(selectedNode.durationMs)}</span>
-          </div>
-          <div class="flex items-center justify-between gap-3">
-            <span>Progress</span>
-            <span>{formatDiagnosticsPercent(selectedNode.lastProgress)}</span>
-          </div>
-          <div class="flex items-center justify-between gap-3">
-            <span>Stream Events</span>
-            <span>{selectedNode.streamEventCount}</span>
-          </div>
-          <div class="flex items-center justify-between gap-3">
-            <span>Total Events</span>
-            <span>{selectedNode.eventCount}</span>
-          </div>
-          {#if selectedNode.lastMessage}
-            <div class="rounded-lg border border-neutral-800 bg-neutral-900/80 px-3 py-2 text-xs text-neutral-300">
-              {selectedNode.lastMessage}
-            </div>
-          {/if}
-          {#if selectedNode.error}
-            <div class="rounded-lg border border-red-900/80 bg-red-950/40 px-3 py-2 text-xs text-red-200">
-              {selectedNode.error}
-            </div>
-          {/if}
-        </div>
-      {:else}
-        <div class="mt-3 rounded-xl border border-dashed border-neutral-800 bg-neutral-950/60 px-4 py-6 text-sm text-neutral-500">
-          Select a node row to inspect its duration, progress, messages, and error state.
-        </div>
-      {/if}
-    </section>
+    <DiagnosticsNodeDetail node={selectedNode} />
   </div>
 </div>
 

@@ -1,8 +1,8 @@
 <script lang="ts">
   import type { DiagnosticsRunTrace } from '../../services/diagnostics/types';
+  import DiagnosticsTimingExpectation from './DiagnosticsTimingExpectation.svelte';
   import {
     formatDiagnosticsDuration,
-    formatDiagnosticsPercent,
     formatDiagnosticsTimestamp,
     getDiagnosticsStatusClasses,
   } from './presenters';
@@ -26,8 +26,8 @@
     startedAtMs: number | null;
     endedAtMs: number | null;
     durationMs: number | null;
-    lastProgress: number | null;
     lastMessage: string | null;
+    timingExpectation: DiagnosticsRunTrace['nodes'][string]['timingExpectation'];
     barLeft: number;
     barWidth: number;
   };
@@ -80,7 +80,7 @@
         <button
           type="button"
           class:selected-row={selectedNodeId === node.nodeId}
-          class="grid w-full grid-cols-[15rem_minmax(0,1fr)_9rem] items-center gap-4 px-4 py-3 text-left transition-colors hover:bg-neutral-900/80"
+          class="grid w-full grid-cols-[15rem_minmax(0,1fr)_12rem] items-center gap-4 px-4 py-3 text-left transition-colors hover:bg-neutral-900/80"
           onclick={() => onSelectNode(node.nodeId)}
         >
           <div class="min-w-0">
@@ -113,7 +113,7 @@
 
           <div class="text-right text-xs text-neutral-400">
             <div>{formatDiagnosticsDuration(node.durationMs)}</div>
-            <div>{formatDiagnosticsPercent(node.lastProgress)}</div>
+            <DiagnosticsTimingExpectation expectation={node.timingExpectation ?? null} align="right" />
           </div>
         </button>
       {/each}

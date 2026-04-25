@@ -261,18 +261,18 @@ without moving ownership to Tauri or the frontend.
 misleading universal progress copy.
 
 **Tasks:**
-- [ ] Update TypeScript diagnostics DTOs to mirror backend timing expectation
+- [x] Update TypeScript diagnostics DTOs to mirror backend timing expectation
   fields.
-- [ ] Replace `formatDiagnosticsPercent()` usage in overview and timeline with
+- [x] Replace `formatDiagnosticsPercent()` usage in overview and timeline with
   duration/timing expectation presenters.
-- [ ] Remove the primary `Progress` row/column or rename any retained scalar
+- [x] Remove the primary `Progress` row/column or rename any retained scalar
   field to `Reported Progress` only where node-specific progress detail exists.
-- [ ] Render limited/no-history states explicitly without implying an error.
-- [ ] Add visual indicators for faster/slower/within-range states using the
+- [x] Render limited/no-history states explicitly without implying an error.
+- [x] Add visual indicators for faster/slower/within-range states using the
   existing restrained diagnostics style.
-- [ ] Keep Svelte files declarative and extract presenter helpers if component
+- [x] Keep Svelte files declarative and extract presenter helpers if component
   size grows past standards thresholds.
-- [ ] Update `src/components/diagnostics/README.md`.
+- [x] Update `src/components/diagnostics/README.md`.
 
 **Verification:**
 - `npm run typecheck`
@@ -284,7 +284,7 @@ misleading universal progress copy.
 - Accessibility review for indicator labels and non-color-only status
   communication.
 
-**Status:** Not started.
+**Status:** Complete.
 
 ### Milestone 5: Standards Compliance Refactor Pass
 
@@ -395,6 +395,12 @@ the applicable standards after the feature works.
   diagnostics_projection_exposes_backend_timing_expectation`,
   `cargo test -p pantograph-diagnostics-ledger`, `cargo test -p
   pantograph-workflow-service`, and `npm run typecheck`.
+- 2026-04-25: Milestone 4 completed. Frontend diagnostics now render expected
+  duration badges in overview and timeline views, show optional scalar progress
+  only as `Reported Progress` in node detail, and extracted selected-node
+  detail/timing badge components so `DiagnosticsOverview.svelte` is below the
+  250-line UI review trigger. Verification: `npm run typecheck` and
+  `npm run test:frontend`.
 
 ## Commit Cadence Notes
 

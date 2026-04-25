@@ -11,6 +11,8 @@ logic.
 | ----------- | ----------- |
 | `DiagnosticsPanel.svelte` | Shell component that renders the bottom diagnostics panel, retained run list, and all diagnostics tabs. |
 | `DiagnosticsOverview.svelte` | Overview tab with run-level summary cards and node detail panels. |
+| `DiagnosticsNodeDetail.svelte` | Focused selected-node inspector that renders lifecycle, duration expectation, optional reported progress, messages, and errors. |
+| `DiagnosticsTimingExpectation.svelte` | Small reusable duration-expectation badge used by overview and timeline views. |
 | `DiagnosticsTimeline.svelte` | Timeline tab that visualizes relative node spans inside a selected run. |
 | `DiagnosticsEvents.svelte` | Events tab that shows retained workflow events and raw payload details. |
 | `DiagnosticsScheduler.svelte` | Scheduler tab that renders session state and queue ordering from workflow service diagnostics snapshots. |
@@ -43,7 +45,9 @@ second owner of workflow transport state.
 Render the diagnostics surface as a bottom panel under the workflow graph.
 `DiagnosticsPanel.svelte` owns panel composition and delegates each active tab
 to focused child components. Formatting logic stays in `presenters.ts` so Svelte
-files mostly express layout and interaction.
+files mostly express layout and interaction. Duration expectation rendering is
+shared through `DiagnosticsTimingExpectation.svelte` so the overview and
+timeline views do not reinterpret backend timing fields independently.
 
 ## Alternatives Rejected
 - Add diagnostics as a third top-level app mode.
@@ -59,6 +63,8 @@ files mostly express layout and interaction.
 - Tab switching and node/run selection use exported diagnostics store commands.
 - Runtime, scheduler, and graph inspection rendering should stay read-only over
   store snapshots, not call workflow commands directly from the component tree.
+- Duration expectation badges render backend-projected timing history only.
+  Components must not calculate historical baselines from local run lists.
 - Scheduler copy and layout should remain valid when queue ordering is
   synthesized for single-run edit sessions rather than backed by a real
   workflow-service queue.
@@ -96,6 +102,9 @@ files mostly express layout and interaction.
   selection changes back through callbacks or the store facade.
 - Presentation helpers in `presenters.ts` should stay pure so they remain easy
   to test and safe to reuse across tabs.
+- Generic diagnostics progress is not a universal node state. Optional reported
+  progress may be shown only as node-specific telemetry when the backend
+  reports it.
 
 ## Structured Producer Contract
 - None.

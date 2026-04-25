@@ -2,6 +2,8 @@ import type {
   DiagnosticsNodeStatus,
   DiagnosticsRunTrace,
   DiagnosticsRunStatus,
+  WorkflowTimingExpectation,
+  WorkflowTimingExpectationComparison,
 } from '../../services/diagnostics/types';
 import type {
   GraphMemoryImpactSummary,
@@ -52,6 +54,61 @@ export function formatDiagnosticsPercent(progress: number | null): string {
     return 'No progress';
   }
   return `${Math.round(progress * 100)}%`;
+}
+
+export function formatTimingExpectationSummary(
+  expectation: WorkflowTimingExpectation | null | undefined,
+): string {
+  if (!expectation) {
+    return 'No timing history';
+  }
+  switch (expectation.comparison) {
+    case 'insufficient_history':
+      return 'Limited history';
+    case 'no_current_duration':
+      return 'Typical duration';
+    case 'faster_than_expected':
+      return 'Faster than usual';
+    case 'within_expected_range':
+      return 'Within usual range';
+    case 'slower_than_expected':
+      return 'Slower than usual';
+  }
+}
+
+export function formatTimingExpectationDetail(
+  expectation: WorkflowTimingExpectation | null | undefined,
+): string {
+  if (!expectation) {
+    return 'No comparable completed runs yet';
+  }
+  if (
+    expectation.medianDurationMs === null ||
+    expectation.typicalMinDurationMs === null ||
+    expectation.typicalMaxDurationMs === null
+  ) {
+    return `${expectation.sampleCount} comparable run${expectation.sampleCount === 1 ? '' : 's'}`;
+  }
+
+  return `Typical ${formatDiagnosticsDuration(expectation.typicalMinDurationMs)}-${formatDiagnosticsDuration(expectation.typicalMaxDurationMs)} | median ${formatDiagnosticsDuration(expectation.medianDurationMs)} | n=${expectation.sampleCount}`;
+}
+
+export function getTimingExpectationClasses(
+  comparison: WorkflowTimingExpectationComparison | null | undefined,
+): string {
+  switch (comparison) {
+    case 'faster_than_expected':
+      return 'bg-emerald-950/80 text-emerald-200 border-emerald-800';
+    case 'within_expected_range':
+      return 'bg-cyan-950/80 text-cyan-200 border-cyan-800';
+    case 'slower_than_expected':
+      return 'bg-amber-950/80 text-amber-200 border-amber-800';
+    case 'insufficient_history':
+    case 'no_current_duration':
+    case null:
+    case undefined:
+      return 'bg-neutral-900 text-neutral-300 border-neutral-700';
+  }
 }
 
 export function formatDiagnosticsBytes(bytes: number): string {
