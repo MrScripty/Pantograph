@@ -348,8 +348,8 @@ impl WorkflowTraceStore {
                 terminal_timing_observations(&state, event, timestamp_ms),
             )
         };
-        let snapshot = self.enrich_timing(snapshot);
         self.record_timing_observations(observations);
+        let snapshot = self.enrich_timing(snapshot);
         snapshot
     }
 

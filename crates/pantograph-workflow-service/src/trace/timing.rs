@@ -134,6 +134,7 @@ fn trace_timing_expectation(
             node_type: None,
             runtime_id: trace.runtime.runtime_id.clone(),
             current_duration_ms: trace_current_duration(trace, now_ms),
+            current_duration_is_complete: trace.ended_at_ms.is_some(),
         })
         .ok()
 }
@@ -157,6 +158,7 @@ fn node_timing_expectation_projection(
             node_type: node.node_type.clone(),
             runtime_id: runtime_id.map(str::to_string),
             current_duration_ms: node_current_duration(node, now_ms),
+            current_duration_is_complete: node.ended_at_ms.is_some(),
         })
         .ok()
 }

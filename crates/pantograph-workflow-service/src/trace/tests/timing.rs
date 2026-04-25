@@ -21,11 +21,35 @@ fn workflow_trace_store_projects_timing_expectation_from_prior_history() {
         .as_ref()
         .expect("node timing expectation");
 
-    assert_eq!(expectation.sample_count, 3);
+    assert_eq!(expectation.sample_count, 4);
     assert_eq!(
         expectation.comparison,
         WorkflowTimingExpectationComparison::SlowerThanExpected
     );
+    assert_eq!(expectation.median_duration_ms, Some(300));
+    assert_eq!(expectation.typical_min_duration_ms, Some(200));
+    assert_eq!(expectation.typical_max_duration_ms, Some(300));
+}
+
+#[test]
+fn workflow_trace_store_includes_completed_run_in_returned_timing_expectation() {
+    let store = WorkflowTraceStore::with_timing_ledger(
+        10,
+        SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens"),
+    );
+
+    record_completed_timing_run(&store, "exec-1", 1_000, 100);
+    record_completed_timing_run(&store, "exec-2", 2_000, 200);
+    let snapshot = record_completed_timing_run(&store, "exec-3", 3_000, 300);
+
+    let trace = snapshot.traces.first().expect("current trace");
+    let node = trace.nodes.first().expect("current node");
+    let expectation = node
+        .timing_expectation
+        .as_ref()
+        .expect("node timing expectation");
+
+    assert_eq!(expectation.sample_count, 3);
     assert_eq!(expectation.median_duration_ms, Some(200));
     assert_eq!(expectation.typical_min_duration_ms, Some(200));
     assert_eq!(expectation.typical_max_duration_ms, Some(300));

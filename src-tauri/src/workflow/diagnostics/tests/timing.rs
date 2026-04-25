@@ -19,12 +19,12 @@ fn diagnostics_projection_exposes_backend_timing_expectation() {
         .as_ref()
         .expect("timing expectation");
 
-    assert_eq!(expectation.sample_count, 3);
+    assert_eq!(expectation.sample_count, 4);
     assert_eq!(
         expectation.comparison,
         pantograph_workflow_service::WorkflowTimingExpectationComparison::SlowerThanExpected
     );
-    assert_eq!(expectation.median_duration_ms, Some(200));
+    assert_eq!(expectation.median_duration_ms, Some(300));
     assert_eq!(expectation.typical_min_duration_ms, Some(200));
     assert_eq!(expectation.typical_max_duration_ms, Some(300));
 }
@@ -57,13 +57,13 @@ fn diagnostics_projection_serializes_timing_expectation_as_camel_case() {
         expectation
             .get("sampleCount")
             .and_then(|value| value.as_u64()),
-        Some(3)
+        Some(4)
     );
     assert_eq!(
         expectation
             .get("medianDurationMs")
             .and_then(|value| value.as_u64()),
-        Some(200)
+        Some(300)
     );
     assert!(expectation.get("sample_count").is_none());
     assert!(expectation.get("median_duration_ms").is_none());

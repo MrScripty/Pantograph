@@ -39,3 +39,6 @@ first-class state and must not infer progress from a missing expectation.
 Optional match fields such as runtime identity refine timing comparisons when
 available, but unknown historical values remain comparable instead of resetting
 history when later diagnostics include richer runtime facts.
+Incomplete elapsed durations may report `within_expected_range` or
+`slower_than_expected`; only completed durations can be classified as
+`faster_than_expected`.

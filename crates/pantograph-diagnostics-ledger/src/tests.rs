@@ -349,6 +349,28 @@ fn timing_expectation_classifies_current_duration_against_typical_range() {
     );
 }
 
+#[test]
+fn timing_expectation_does_not_report_incomplete_duration_as_faster_than_usual() {
+    let mut query = sample_timing_query(Some(120));
+    query.current_duration_is_complete = false;
+
+    let expectation =
+        WorkflowTimingExpectation::from_completed_durations(&query, vec![100, 200, 220, 300, 500]);
+
+    assert_eq!(
+        expectation.comparison,
+        WorkflowTimingExpectationComparison::WithinExpectedRange
+    );
+
+    query.current_duration_ms = Some(550);
+    let overdue =
+        WorkflowTimingExpectation::from_completed_durations(&query, vec![100, 200, 220, 300, 500]);
+    assert_eq!(
+        overdue.comparison,
+        WorkflowTimingExpectationComparison::SlowerThanExpected
+    );
+}
+
 fn sample_timing_query(current_duration_ms: Option<u64>) -> WorkflowTimingExpectationQuery {
     WorkflowTimingExpectationQuery {
         scope: WorkflowTimingObservationScope::Node,
@@ -358,6 +380,7 @@ fn sample_timing_query(current_duration_ms: Option<u64>) -> WorkflowTimingExpect
         node_type: Some("text-generation".to_string()),
         runtime_id: Some("llama.cpp".to_string()),
         current_duration_ms,
+        current_duration_is_complete: true,
     }
 }
 

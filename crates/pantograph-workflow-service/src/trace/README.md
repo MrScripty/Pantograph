@@ -161,3 +161,7 @@ let response = trace_store.snapshot(&WorkflowTraceSnapshotRequest::default())?;
 - `timing_expectation` fields are optional duration-comparison projections.
   They are not progress percentages and consumers must render insufficient
   history explicitly.
+- Terminal workflow events persist timing observations before the returned
+  snapshot is enriched, so a completed run can contribute to the history shown
+  after completion. In-progress elapsed durations must not be classified as
+  faster than usual.

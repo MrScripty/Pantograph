@@ -119,6 +119,7 @@ pub struct WorkflowTimingExpectationQuery {
     pub node_type: Option<String>,
     pub runtime_id: Option<String>,
     pub current_duration_ms: Option<u64>,
+    pub current_duration_is_complete: bool,
 }
 
 impl WorkflowTimingExpectationQuery {
@@ -179,15 +180,22 @@ impl WorkflowTimingExpectation {
         let typical_min_duration_ms = percentile_nearest_rank(&durations_ms, 25);
         let median_duration_ms = percentile_nearest_rank(&durations_ms, 50);
         let typical_max_duration_ms = percentile_nearest_rank(&durations_ms, 75);
-        let comparison = match query.current_duration_ms {
-            Some(current_duration_ms) if current_duration_ms < typical_min_duration_ms => {
-                WorkflowTimingExpectationComparison::FasterThanExpected
-            }
-            Some(current_duration_ms) if current_duration_ms > typical_max_duration_ms => {
+        let comparison = match (
+            query.current_duration_ms,
+            query.current_duration_is_complete,
+        ) {
+            (Some(current_duration_ms), false) if current_duration_ms > typical_max_duration_ms => {
                 WorkflowTimingExpectationComparison::SlowerThanExpected
             }
-            Some(_) => WorkflowTimingExpectationComparison::WithinExpectedRange,
-            None => WorkflowTimingExpectationComparison::NoCurrentDuration,
+            (Some(_), false) => WorkflowTimingExpectationComparison::WithinExpectedRange,
+            (Some(current_duration_ms), true) if current_duration_ms < typical_min_duration_ms => {
+                WorkflowTimingExpectationComparison::FasterThanExpected
+            }
+            (Some(current_duration_ms), true) if current_duration_ms > typical_max_duration_ms => {
+                WorkflowTimingExpectationComparison::SlowerThanExpected
+            }
+            (Some(_), true) => WorkflowTimingExpectationComparison::WithinExpectedRange,
+            (None, _) => WorkflowTimingExpectationComparison::NoCurrentDuration,
         };
 
         Self {
