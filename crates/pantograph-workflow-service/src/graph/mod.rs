@@ -5,6 +5,8 @@ mod effective_definition;
 mod group_mutation;
 mod memory_impact;
 mod persistence;
+#[cfg(test)]
+mod persistence_tests;
 mod registry;
 mod session;
 mod session_contract;
@@ -16,7 +18,7 @@ mod types;
 mod validation;
 
 pub use canonicalization::{
-    canonicalize_workflow_graph_with_migrations, WorkflowGraphCanonicalizationResult,
+    WorkflowGraphCanonicalizationResult, canonicalize_workflow_graph_with_migrations,
 };
 pub use connection_intent::{
     commit_connection, connection_candidates, insert_node_and_connect, insert_node_on_edge,
@@ -30,7 +32,7 @@ pub use persistence::{
     WorkflowGraphListResponse, WorkflowGraphLoadRequest, WorkflowGraphSaveRequest,
     WorkflowGraphSaveResponse, WorkflowGraphStore,
 };
-pub use registry::{validate_workflow_connection, NodeRegistry};
+pub use registry::{NodeRegistry, validate_workflow_connection};
 pub use session::GraphSessionStore;
 pub use session_contract::{WorkflowGraphEditSessionGraphResponse, WorkflowGraphSessionStateView};
 pub use session_graph::{convert_graph_from_node_engine, convert_graph_to_node_engine};

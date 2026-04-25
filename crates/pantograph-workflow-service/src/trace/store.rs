@@ -163,10 +163,12 @@ impl WorkflowTraceState {
         }
 
         if let Some(trace) = self.traces_by_id.get_mut(execution_id) {
-            if trace.workflow_id.is_none() {
+            if context.workflow_id.is_some() {
                 trace.workflow_id = context.workflow_id.clone();
             }
-            trace.workflow_name = context.workflow_name.clone();
+            if context.workflow_name.is_some() {
+                trace.workflow_name = context.workflow_name.clone();
+            }
         }
     }
 

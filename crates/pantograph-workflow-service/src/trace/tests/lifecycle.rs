@@ -142,17 +142,17 @@ fn workflow_trace_store_resets_attempt_state_when_run_restarts_after_failure() {
 }
 
 #[test]
-fn workflow_trace_store_corrects_existing_trace_workflow_name_metadata() {
+fn workflow_trace_store_corrects_existing_trace_workflow_metadata() {
     let store = WorkflowTraceStore::new(10);
     store.set_execution_metadata(
         "exec-1",
-        Some("wf-1".to_string()),
+        Some("session-1".to_string()),
         Some("Untitled Workflow".to_string()),
     );
     store.record_event(
         &WorkflowTraceEvent::RunStarted {
             execution_id: "exec-1".to_string(),
-            workflow_id: Some("wf-1".to_string()),
+            workflow_id: Some("session-1".to_string()),
             node_count: 0,
         },
         100,
@@ -173,10 +173,9 @@ fn workflow_trace_store_corrects_existing_trace_workflow_name_metadata() {
         })
         .expect("trace snapshot");
 
-    assert_eq!(
-        snapshot.traces[0].workflow_name.as_deref(),
-        Some("Workflow A")
-    );
+    let trace = &snapshot.traces[0];
+    assert_eq!(trace.workflow_id.as_deref(), Some("wf-1"));
+    assert_eq!(trace.workflow_name.as_deref(), Some("Workflow A"));
 }
 
 #[test]
