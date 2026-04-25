@@ -8,6 +8,7 @@ mod records;
 mod repository;
 mod schema;
 mod sqlite;
+mod timing;
 mod util;
 
 pub use error::DiagnosticsLedgerError;
@@ -20,6 +21,11 @@ pub use records::{
 };
 pub use repository::DiagnosticsLedgerRepository;
 pub use sqlite::SqliteDiagnosticsLedger;
+pub use timing::{
+    WorkflowTimingExpectation, WorkflowTimingExpectationComparison, WorkflowTimingExpectationQuery,
+    WorkflowTimingObservation, WorkflowTimingObservationScope, WorkflowTimingObservationStatus,
+    MIN_TIMING_EXPECTATION_SAMPLE_COUNT,
+};
 
 #[cfg(test)]
 mod tests;

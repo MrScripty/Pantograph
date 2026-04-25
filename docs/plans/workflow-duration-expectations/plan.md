@@ -180,14 +180,14 @@ workflow can provide a useful expected range.
 storage or UI.
 
 **Tasks:**
-- [ ] Define timing expectation DTOs with enum classifications such as
+- [x] Define timing expectation DTOs with enum classifications such as
   `insufficient_history`, `within_expected_range`, `faster_than_expected`, and
   `slower_than_expected`.
-- [ ] Define observation match keys for run-level and node-level history.
-- [ ] Define minimum sample count and percentile range policy.
-- [ ] Decide whether timing history extends `pantograph-diagnostics-ledger` or
+- [x] Define observation match keys for run-level and node-level history.
+- [x] Define minimum sample count and percentile range policy.
+- [x] Decide whether timing history extends `pantograph-diagnostics-ledger` or
   gets a focused sibling persistence boundary.
-- [ ] Record the clear-history and retention policy for timing observations.
+- [x] Record the clear-history and retention policy for timing observations.
 - [ ] Update this plan if the storage-boundary decision changes affected files.
 
 **Verification:**
@@ -198,7 +198,7 @@ storage or UI.
 - Review against `DOCUMENTATION-STANDARDS.md` structured producer contract
   requirements.
 
-**Status:** Not started.
+**Status:** Complete.
 
 ### Milestone 2: Persist Timing Observations
 
@@ -369,6 +369,12 @@ the applicable standards after the feature works.
 - 2026-04-25: Plan created. Existing unrelated dirty files were present before
   this plan and must remain untouched unless the user explicitly assigns them
   to this work.
+- 2026-04-25: Milestone 1 completed. Timing history will extend
+  `pantograph-diagnostics-ledger` because it already owns durable diagnostics
+  SQLite storage. Added typed timing observation/query/expectation contracts,
+  minimum sample-count policy, percentile range classification, and pure ledger
+  tests for insufficient, faster, within-range, and slower states. Verification:
+  `cargo test -p pantograph-diagnostics-ledger`.
 
 ## Commit Cadence Notes
 

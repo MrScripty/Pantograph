@@ -1,30 +1,38 @@
 # pantograph-diagnostics-ledger
 
-Durable model and license usage ledger for Pantograph.
+Durable diagnostics ledger for Pantograph.
 
 This crate owns persisted model/license usage events, time-of-use license
-snapshots, typed direct-output measurements, usage lineage, bounded query DTOs,
-and retention/pruning commands. It is intentionally separate from transient
-runtime trace storage.
+snapshots, typed direct-output measurements, usage lineage, workflow timing
+observations, timing expectation contracts, bounded query DTOs, and
+retention/pruning commands. It is intentionally separate from transient runtime
+trace storage while still accepting finalized trace-derived observations.
 
 ## Ownership
 
 - `pantograph-diagnostics-ledger` owns durable SQLite storage and query
-  semantics for model/license usage records.
+  semantics for model/license usage records and finalized workflow timing
+  observations.
 - `pantograph-embedded-runtime` submits validated usage facts through the
   ledger trait. Ordinary node implementations do not author compliance ledger
   records directly.
 - `pantograph-workflow-service` may expose application-level query use cases by
-  delegating to this crate.
+  delegating to this crate, including timing expectation projections derived
+  from canonical workflow trace state.
 - GUI and binding layers consume projections only.
 
 ## Persistence
 
-The initial implementation uses bundled SQLite through `rusqlite`, matching
-the attribution persistence boundary. Version `1` stores schema migrations,
-usage events, license snapshots, typed output measurements, lineage rows, and
-retention policy records.
+The initial implementation uses bundled SQLite through `rusqlite`, matching the
+attribution persistence boundary. Version `1` stores schema migrations, usage
+events, license snapshots, typed output measurements, lineage rows, and
+retention policy records. Version `2` is reserved for workflow timing
+observations and timing expectation lookup.
 
 Retention is explicit. The default local policy keeps `standard` usage events
 for 365 days. Pruning deletes complete eligible events and associated rows in
 one transaction and never rewrites retained historical facts.
+
+Timing expectations are ranges over comparable completed observations, not
+generic progress percentages. Consumers must treat insufficient history as a
+first-class state and must not infer progress from a missing expectation.

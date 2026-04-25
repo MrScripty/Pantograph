@@ -7,7 +7,9 @@ use crate::{
     DiagnosticsLedgerError, DiagnosticsLedgerRepository, DiagnosticsQuery, ExecutionGuaranteeLevel,
     LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement,
     OutputMeasurementUnavailableReason, OutputModality, PruneUsageEventsCommand, RetentionClass,
-    SqliteDiagnosticsLedger, UsageEventStatus, UsageLineage, DEFAULT_STANDARD_RETENTION_DAYS,
+    SqliteDiagnosticsLedger, UsageEventStatus, UsageLineage, WorkflowTimingExpectation,
+    WorkflowTimingExpectationComparison, WorkflowTimingExpectationQuery,
+    WorkflowTimingObservationScope, DEFAULT_STANDARD_RETENTION_DAYS,
 };
 
 #[test]
@@ -159,6 +161,68 @@ fn retention_policy_uses_standard_local_default() {
 
     assert_eq!(policy.retention_class, RetentionClass::Standard);
     assert_eq!(policy.retention_days, DEFAULT_STANDARD_RETENTION_DAYS);
+}
+
+#[test]
+fn timing_expectation_reports_insufficient_history_until_minimum_samples_exist() {
+    let query = sample_timing_query(Some(150));
+
+    let expectation = WorkflowTimingExpectation::from_completed_durations(&query, vec![100, 200]);
+
+    assert_eq!(
+        expectation.comparison,
+        WorkflowTimingExpectationComparison::InsufficientHistory
+    );
+    assert_eq!(expectation.sample_count, 2);
+    assert_eq!(expectation.current_duration_ms, Some(150));
+    assert_eq!(expectation.median_duration_ms, None);
+    assert_eq!(expectation.typical_min_duration_ms, None);
+    assert_eq!(expectation.typical_max_duration_ms, None);
+}
+
+#[test]
+fn timing_expectation_classifies_current_duration_against_typical_range() {
+    let within = WorkflowTimingExpectation::from_completed_durations(
+        &sample_timing_query(Some(220)),
+        vec![100, 200, 220, 300, 500],
+    );
+    assert_eq!(
+        within.comparison,
+        WorkflowTimingExpectationComparison::WithinExpectedRange
+    );
+    assert_eq!(within.median_duration_ms, Some(220));
+    assert_eq!(within.typical_min_duration_ms, Some(200));
+    assert_eq!(within.typical_max_duration_ms, Some(300));
+
+    let faster = WorkflowTimingExpectation::from_completed_durations(
+        &sample_timing_query(Some(120)),
+        vec![100, 200, 220, 300, 500],
+    );
+    assert_eq!(
+        faster.comparison,
+        WorkflowTimingExpectationComparison::FasterThanExpected
+    );
+
+    let slower = WorkflowTimingExpectation::from_completed_durations(
+        &sample_timing_query(Some(450)),
+        vec![100, 200, 220, 300, 500],
+    );
+    assert_eq!(
+        slower.comparison,
+        WorkflowTimingExpectationComparison::SlowerThanExpected
+    );
+}
+
+fn sample_timing_query(current_duration_ms: Option<u64>) -> WorkflowTimingExpectationQuery {
+    WorkflowTimingExpectationQuery {
+        scope: WorkflowTimingObservationScope::Node,
+        workflow_id: "workflow_alpha".to_string(),
+        graph_fingerprint: "graph_alpha".to_string(),
+        node_id: Some("node-1".to_string()),
+        node_type: Some("text-generation".to_string()),
+        runtime_id: Some("llama.cpp".to_string()),
+        current_duration_ms,
+    }
 }
 
 fn sample_event(
