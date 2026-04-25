@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use pantograph_workflow_service::{
-    WorkflowCapabilityModel, WorkflowHost, WorkflowHostCapabilities, WorkflowOutputTarget,
-    WorkflowPortBinding, WorkflowRunRequest, WorkflowRuntimeCapability,
+    WorkflowCapabilityModel, WorkflowExecutionSessionCreateRequest,
+    WorkflowExecutionSessionRunRequest, WorkflowHost, WorkflowHostCapabilities,
+    WorkflowOutputTarget, WorkflowPortBinding, WorkflowRuntimeCapability,
     WorkflowRuntimeInstallState, WorkflowRuntimeRequirements, WorkflowRuntimeSourceKind,
     WorkflowService, WorkflowServiceError,
 };
@@ -97,12 +98,22 @@ impl WorkflowHost for ExampleHost {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let service = WorkflowService::new();
     let host = ExampleHost;
+    let session = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "embedding-default".to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await?;
 
     let response = service
-        .workflow_run(
+        .run_workflow_execution_session(
             &host,
-            WorkflowRunRequest {
-                workflow_id: "embedding-default".to_string(),
+            WorkflowExecutionSessionRunRequest {
+                session_id: session.session_id,
                 inputs: vec![WorkflowPortBinding {
                     node_id: "text-input-1".to_string(),
                     port_id: "text".to_string(),
@@ -115,6 +126,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 override_selection: None,
                 timeout_ms: None,
                 run_id: Some("example-run-1".to_string()),
+                priority: None,
             },
         )
         .await?;

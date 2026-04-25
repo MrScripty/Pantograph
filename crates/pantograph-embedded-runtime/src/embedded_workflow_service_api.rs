@@ -1,20 +1,19 @@
 use pantograph_workflow_service::{
     BucketCreateRequest, BucketDeleteRequest, BucketRecord, ClientRegistrationRequest,
     ClientRegistrationResponse, ClientSessionOpenRequest, ClientSessionOpenResponse,
-    ClientSessionRecord, ClientSessionResumeRequest, WorkflowAttributedRunRequest,
-    WorkflowAttributedRunResponse, WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse,
-    WorkflowExecutionSessionCloseRequest, WorkflowExecutionSessionCloseResponse,
-    WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionCreateResponse,
-    WorkflowExecutionSessionInspectionRequest, WorkflowExecutionSessionInspectionResponse,
-    WorkflowExecutionSessionKeepAliveRequest, WorkflowExecutionSessionKeepAliveResponse,
-    WorkflowExecutionSessionQueueCancelRequest, WorkflowExecutionSessionQueueCancelResponse,
-    WorkflowExecutionSessionQueueListRequest, WorkflowExecutionSessionQueueListResponse,
-    WorkflowExecutionSessionQueueReprioritizeRequest,
+    ClientSessionRecord, ClientSessionResumeRequest, WorkflowCapabilitiesRequest,
+    WorkflowCapabilitiesResponse, WorkflowExecutionSessionCloseRequest,
+    WorkflowExecutionSessionCloseResponse, WorkflowExecutionSessionCreateRequest,
+    WorkflowExecutionSessionCreateResponse, WorkflowExecutionSessionInspectionRequest,
+    WorkflowExecutionSessionInspectionResponse, WorkflowExecutionSessionKeepAliveRequest,
+    WorkflowExecutionSessionKeepAliveResponse, WorkflowExecutionSessionQueueCancelRequest,
+    WorkflowExecutionSessionQueueCancelResponse, WorkflowExecutionSessionQueueListRequest,
+    WorkflowExecutionSessionQueueListResponse, WorkflowExecutionSessionQueueReprioritizeRequest,
     WorkflowExecutionSessionQueueReprioritizeResponse, WorkflowExecutionSessionRunRequest,
     WorkflowExecutionSessionStaleCleanupRequest, WorkflowExecutionSessionStaleCleanupResponse,
     WorkflowExecutionSessionStatusRequest, WorkflowExecutionSessionStatusResponse,
     WorkflowIoRequest, WorkflowIoResponse, WorkflowPreflightRequest, WorkflowPreflightResponse,
-    WorkflowRunRequest, WorkflowRunResponse, WorkflowServiceError,
+    WorkflowRunResponse, WorkflowServiceError,
 };
 
 use crate::EmbeddedRuntime;
@@ -53,24 +52,6 @@ impl EmbeddedRuntime {
         request: BucketDeleteRequest,
     ) -> Result<BucketRecord, WorkflowServiceError> {
         self.workflow_service.delete_client_bucket(request)
-    }
-
-    pub async fn workflow_run_attributed(
-        &self,
-        request: WorkflowAttributedRunRequest,
-    ) -> Result<WorkflowAttributedRunResponse, WorkflowServiceError> {
-        self.workflow_service
-            .workflow_run_attributed(&self.host(), request)
-            .await
-    }
-
-    pub async fn workflow_run(
-        &self,
-        request: WorkflowRunRequest,
-    ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
-        self.workflow_service
-            .workflow_run(&self.host(), request)
-            .await
     }
 
     pub async fn workflow_get_capabilities(

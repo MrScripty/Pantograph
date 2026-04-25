@@ -20,26 +20,6 @@ use super::{
 const WORKFLOW_CANCEL_GRACE_WINDOW_MS: u64 = 250;
 
 impl WorkflowService {
-    pub async fn workflow_run<H: WorkflowHost>(
-        &self,
-        host: &H,
-        request: WorkflowRunRequest,
-    ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
-        if request
-            .run_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|run_id| !run_id.is_empty())
-            .is_some()
-        {
-            return Err(WorkflowServiceError::InvalidRequest(
-                "run_id is backend-owned and cannot be supplied by workflow_run callers"
-                    .to_string(),
-            ));
-        }
-        self.workflow_run_internal(host, request, None, None).await
-    }
-
     pub(super) async fn workflow_run_internal<H: WorkflowHost>(
         &self,
         host: &H,

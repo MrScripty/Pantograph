@@ -65,8 +65,8 @@ capability derivation coverage now lives in
 `workflow/tests/workflow_capabilities.rs`. Workflow I/O discovery and validation
 coverage now lives in `workflow/tests/workflow_io.rs`, and workflow preflight
 coverage now lives in `workflow/tests/workflow_preflight.rs`. Runtime preflight
-policy coverage now lives in `workflow/tests/runtime_preflight.rs`. Generic
-workflow run facade coverage now lives in `workflow/tests/workflow_run.rs`.
+policy coverage now lives in `workflow/tests/runtime_preflight.rs`. Private
+workflow run implementation coverage now lives in `workflow/tests/workflow_run.rs`.
 Workflow DTO serialization and error-envelope coverage now lives in
 `workflow/tests/contracts.rs`. Workflow session execution and retention-hint
 coverage now lives in `workflow/tests/session_execution.rs`. Session and
@@ -149,14 +149,16 @@ for storage and query semantics.
 
 ## Usage Examples
 ```rust
-use pantograph_workflow_service::{WorkflowRunRequest, WorkflowService};
+use pantograph_workflow_service::{
+    WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionRunRequest, WorkflowService,
+};
 ```
 
 ## API Consumer Contract
 - Inputs: public request DTOs, workflow ids, graph edit/session ids,
   host-trait implementations, runtime capabilities, and technical-fit override
   selections.
-- Outputs: public response DTOs for runs, capabilities, IO discovery,
+- Outputs: public response DTOs for session runs, capabilities, IO discovery,
   preflight, sessions, queues, graph mutations, traces, and diagnostics.
 - Lifecycle: hosts create a service, call workflow/session operations, and
   explicitly close sessions; the service owns scheduler and graph-session state.

@@ -213,14 +213,24 @@ async fn workflow_preflight_blocks_selected_runtime_failed_after_restart() {
         .await
         .expect("workflow preflight");
     assert!(!preflight.can_run);
-    assert!(preflight
-        .blocking_runtime_issues
-        .iter()
-        .any(|issue| issue.message.contains("validation failed")));
+    assert!(
+        preflight
+            .blocking_runtime_issues
+            .iter()
+            .any(|issue| issue.message.contains("validation failed"))
+    );
 
-    let error = runtime
-        .workflow_run(WorkflowRunRequest {
+    let session = runtime
+        .create_workflow_execution_session(WorkflowExecutionSessionCreateRequest {
             workflow_id: "runtime-text".to_string(),
+            usage_profile: None,
+            keep_alive: false,
+        })
+        .await
+        .expect("create workflow execution session");
+    let error = runtime
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
+            session_id: session.session_id,
             inputs: Vec::new(),
             output_targets: Some(vec![WorkflowOutputTarget {
                 node_id: "text-output-1".to_string(),
@@ -228,6 +238,7 @@ async fn workflow_preflight_blocks_selected_runtime_failed_after_restart() {
             }]),
             override_selection: None,
             timeout_ms: None,
+            priority: None,
             run_id: None,
         })
         .await
@@ -279,10 +290,12 @@ async fn workflow_preflight_blocks_interrupted_runtime_job_after_restart() {
         Some(pantograph_workflow_service::WorkflowRuntimeReadinessState::Failed)
     );
     assert!(!runtime_capability.configured);
-    assert!(runtime_capability
-        .unavailable_reason
-        .as_deref()
-        .is_some_and(|reason| reason.contains("reconciled during startup")));
+    assert!(
+        runtime_capability
+            .unavailable_reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("reconciled during startup"))
+    );
 
     let preflight = runtime
         .workflow_preflight(WorkflowPreflightRequest {
@@ -294,14 +307,24 @@ async fn workflow_preflight_blocks_interrupted_runtime_job_after_restart() {
         .await
         .expect("workflow preflight");
     assert!(!preflight.can_run);
-    assert!(preflight
-        .blocking_runtime_issues
-        .iter()
-        .any(|issue| issue.message.contains("reconciled during startup")));
+    assert!(
+        preflight
+            .blocking_runtime_issues
+            .iter()
+            .any(|issue| issue.message.contains("reconciled during startup"))
+    );
 
-    let error = runtime
-        .workflow_run(WorkflowRunRequest {
+    let session = runtime
+        .create_workflow_execution_session(WorkflowExecutionSessionCreateRequest {
             workflow_id: "runtime-text".to_string(),
+            usage_profile: None,
+            keep_alive: false,
+        })
+        .await
+        .expect("create workflow execution session");
+    let error = runtime
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
+            session_id: session.session_id,
             inputs: Vec::new(),
             output_targets: Some(vec![WorkflowOutputTarget {
                 node_id: "text-output-1".to_string(),
@@ -309,6 +332,7 @@ async fn workflow_preflight_blocks_interrupted_runtime_job_after_restart() {
             }]),
             override_selection: None,
             timeout_ms: None,
+            priority: None,
             run_id: None,
         })
         .await

@@ -98,7 +98,7 @@ Use a crate by its package name rather than by reaching into another crate's
 implementation directory:
 
 ```rust
-use pantograph_workflow_service::workflow::WorkflowRunRequest;
+use pantograph_workflow_service::workflow::WorkflowExecutionSessionRunRequest;
 ```
 
 ## API Consumer Contract

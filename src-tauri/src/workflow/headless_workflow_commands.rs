@@ -15,8 +15,8 @@ use pantograph_workflow_service::{
     WorkflowExecutionSessionStaleCleanupRequest, WorkflowExecutionSessionStaleCleanupResponse,
     WorkflowExecutionSessionStatusRequest, WorkflowExecutionSessionStatusResponse,
     WorkflowIoRequest, WorkflowIoResponse, WorkflowPreflightRequest, WorkflowPreflightResponse,
-    WorkflowRunRequest, WorkflowRunResponse, WorkflowSchedulerSnapshotRequest,
-    WorkflowSchedulerSnapshotResponse, WorkflowServiceError,
+    WorkflowRunResponse, WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse,
+    WorkflowServiceError,
 };
 use tauri::{AppHandle, State};
 
@@ -29,30 +29,6 @@ pub(crate) use super::headless_runtime::build_runtime;
 
 fn workflow_error_json(error: WorkflowServiceError) -> String {
     error.to_envelope_json()
-}
-
-pub async fn workflow_run(
-    request: WorkflowRunRequest,
-    app: AppHandle,
-    gateway: State<'_, SharedGateway>,
-    runtime_registry: State<'_, SharedRuntimeRegistry>,
-    extensions: State<'_, SharedExtensions>,
-    rag_manager: State<'_, SharedRagManager>,
-    workflow_service: State<'_, SharedWorkflowService>,
-) -> Result<WorkflowRunResponse, String> {
-    let runtime = build_runtime(
-        &app,
-        gateway.inner(),
-        runtime_registry.inner(),
-        extensions.inner(),
-        workflow_service.inner(),
-        Some(rag_manager.inner()),
-    )
-    .await?;
-    runtime
-        .workflow_run(request)
-        .await
-        .map_err(workflow_error_json)
 }
 
 pub async fn workflow_get_capabilities(

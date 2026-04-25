@@ -96,16 +96,6 @@ mod atoms {
 
 #[cfg(feature = "frontend-http")]
 #[rustler::nif(schedule = "DirtyCpu")]
-fn frontend_http_workflow_run(
-    base_url: String,
-    request_json: String,
-    pumas_resource: Option<ResourceArc<PumasApiResource>>,
-) -> NifResult<String> {
-    frontend_http_nifs::workflow_run(base_url, request_json, pumas_resource)
-}
-
-#[cfg(feature = "frontend-http")]
-#[rustler::nif(schedule = "DirtyCpu")]
 fn frontend_http_workflow_get_capabilities(
     base_url: String,
     request_json: String,
@@ -152,16 +142,6 @@ fn frontend_http_workflow_create_client_bucket(request_json: String) -> NifResul
 #[rustler::nif(schedule = "DirtyCpu")]
 fn frontend_http_workflow_delete_client_bucket(request_json: String) -> NifResult<String> {
     frontend_http_nifs::workflow_delete_client_bucket(request_json)
-}
-
-#[cfg(feature = "frontend-http")]
-#[rustler::nif(schedule = "DirtyCpu")]
-fn frontend_http_workflow_run_attributed(
-    base_url: String,
-    request_json: String,
-    pumas_resource: Option<ResourceArc<PumasApiResource>>,
-) -> NifResult<String> {
-    frontend_http_nifs::workflow_run_attributed(base_url, request_json, pumas_resource)
 }
 
 // ============================================================================

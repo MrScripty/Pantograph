@@ -101,37 +101,37 @@ capacity control, queue diagnostics, and trace attribution.
 bypass APIs.
 
 **Tasks:**
-- [ ] Identify canonical scheduler DTOs and command names for public runs.
-- [ ] Record no-compatibility decision for direct `workflow_run` and
+- [x] Identify canonical scheduler DTOs and command names for public runs.
+- [x] Record no-compatibility decision for direct `workflow_run` and
   `executeWorkflow(graph)` facades.
-- [ ] Decide allowed private/internal runtime helper names and visibility.
-- [ ] Update plan execution notes with the final contract decision.
+- [x] Decide allowed private/internal runtime helper names and visibility.
+- [x] Update plan execution notes with the final contract decision.
 
 **Verification:**
 - Review public exports in `crates/pantograph-workflow-service/src/lib.rs`.
 - Review Tauri command registration in `src-tauri/src/app_setup.rs`.
 - Review frontend `WorkflowBackend` type surface.
 
-**Status:** Not started.
+**Status:** Complete.
 
 ### Milestone 2: Remove Rust Core Direct-Run Public API
 
 **Goal:** Make the workflow service public API scheduler-only.
 
 **Tasks:**
-- [ ] Remove or privatize `WorkflowService::workflow_run`.
-- [ ] Keep `workflow_run_internal` private to scheduler-owned code.
-- [ ] Update attribution and preflight paths so no public run path calls host
+- [x] Remove or privatize `WorkflowService::workflow_run`.
+- [x] Keep `workflow_run_internal` private to scheduler-owned code.
+- [x] Update attribution and preflight paths so no public run path calls host
   execution without scheduler admission.
-- [ ] Update workflow service tests from direct run APIs to scheduler session
+- [x] Update workflow service tests from direct run APIs to scheduler session
   APIs.
-- [ ] Update workflow service README API contract.
+- [x] Update workflow service README API contract.
 
 **Verification:**
 - `cargo test -p pantograph-workflow-service`
 - Search check for forbidden public direct run surface in workflow-service.
 
-**Status:** Not started.
+**Status:** Complete.
 
 ### Milestone 3: Remove Tauri And Frontend Raw-Graph Execution
 
@@ -160,12 +160,12 @@ workflow graph outside scheduler-visible session lifecycle.
 **Goal:** Make all host-facing bindings expose scheduler-backed execution only.
 
 **Tasks:**
-- [ ] Remove UniFFI direct `workflow_run` export and tests.
-- [ ] Remove Rustler/frontend HTTP direct `workflow_run` export and tests.
-- [ ] Expose scheduler session create/run/close paths as the supported binding
+- [x] Remove UniFFI direct `workflow_run` export and tests.
+- [x] Remove Rustler/frontend HTTP direct `workflow_run` export and tests.
+- [x] Expose scheduler session create/run/close paths as the supported binding
   execution surface.
-- [ ] Update binding and adapter README API consumer contracts.
-- [ ] Update generated or host-language smoke tests as required by binding
+- [x] Update binding and adapter README API consumer contracts.
+- [x] Update generated or host-language smoke tests as required by binding
   standards.
 
 **Verification:**
@@ -173,7 +173,7 @@ workflow graph outside scheduler-visible session lifecycle.
 - Host-language smoke tests where existing harnesses support them.
 - Search check for forbidden exported direct run names.
 
-**Status:** Not started.
+**Status:** Complete.
 
 ### Milestone 5: Guardrails And Documentation
 
@@ -203,6 +203,11 @@ scheduler invariant visible to maintainers.
   package toolbar run actions now require an active backend-owned session and
   use `runSession(sessionId)` only. Tauri `execute_workflow_v2` is no longer a
   registered invoke command.
+- 2026-04-25: Removed public direct workflow run APIs from workflow-service,
+  embedded runtime, Tauri headless commands, UniFFI, Rustler, and frontend HTTP
+  binding exports. `workflow_run_internal` remains private scheduler-owned
+  implementation detail used only after session queue admission. No
+  compatibility facade was added.
 
 ## Commit Cadence Notes
 

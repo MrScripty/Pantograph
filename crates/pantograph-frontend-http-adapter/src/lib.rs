@@ -12,10 +12,10 @@ use pantograph_runtime_identity::{
     backend_key_aliases, normalize_runtime_identifier_with_fallback,
 };
 use pantograph_workflow_service::{
-    capabilities, WorkflowErrorCode, WorkflowErrorDetails, WorkflowErrorEnvelope, WorkflowHost,
+    WorkflowErrorCode, WorkflowErrorDetails, WorkflowErrorEnvelope, WorkflowHost,
     WorkflowHostModelDescriptor, WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunHandle,
     WorkflowRunOptions, WorkflowRuntimeCapability, WorkflowRuntimeInstallState,
-    WorkflowRuntimeSourceKind, WorkflowServiceError,
+    WorkflowRuntimeSourceKind, WorkflowServiceError, capabilities,
 };
 
 pub const DEFAULT_BACKEND_NAME: &str = "openai-compatible";
@@ -354,12 +354,56 @@ fn normalize_base_url(raw_base_url: String) -> Result<String, FrontendHttpWorkfl
 mod tests {
     use super::*;
     use pantograph_workflow_service::{
-        WorkflowErrorCode, WorkflowOutputTarget, WorkflowRunRequest, WorkflowService,
-        WorkflowServiceError,
+        WorkflowErrorCode, WorkflowExecutionSessionCreateRequest,
+        WorkflowExecutionSessionRunRequest, WorkflowOutputTarget, WorkflowRunRequest,
+        WorkflowRunResponse, WorkflowService, WorkflowServiceError,
     };
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+    #[async_trait::async_trait]
+    trait WorkflowServiceSessionRunExt {
+        async fn workflow_run(
+            &self,
+            host: &FrontendHttpWorkflowHost,
+            request: WorkflowRunRequest,
+        ) -> Result<WorkflowRunResponse, WorkflowServiceError>;
+    }
+
+    #[async_trait::async_trait]
+    impl WorkflowServiceSessionRunExt for WorkflowService {
+        async fn workflow_run(
+            &self,
+            host: &FrontendHttpWorkflowHost,
+            request: WorkflowRunRequest,
+        ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
+            let session = self
+                .create_workflow_execution_session(
+                    host,
+                    WorkflowExecutionSessionCreateRequest {
+                        workflow_id: request.workflow_id,
+                        usage_profile: None,
+                        keep_alive: false,
+                    },
+                )
+                .await?;
+
+            self.run_workflow_execution_session(
+                host,
+                WorkflowExecutionSessionRunRequest {
+                    session_id: session.session_id,
+                    inputs: request.inputs,
+                    output_targets: request.output_targets,
+                    override_selection: request.override_selection,
+                    timeout_ms: request.timeout_ms,
+                    run_id: request.run_id,
+                    priority: None,
+                },
+            )
+            .await
+        }
+    }
 
     #[test]
     fn parse_workflow_outputs_payload_rejects_missing_fields() {
@@ -439,6 +483,7 @@ mod tests {
                         "data": {
                             "definition": {
                                 "category": "output",
+                                "io_binding_origin": "client_session",
                                 "outputs": [
                                     {
                                         "id": "vector",
@@ -724,9 +769,10 @@ mod tests {
 
         server_thread.join().expect("join server");
         assert!(matches!(err, WorkflowServiceError::Internal(_)));
-        assert!(err
-            .to_string()
-            .contains("expected workflow error envelope JSON"));
+        assert!(
+            err.to_string()
+                .contains("expected workflow error envelope JSON")
+        );
     }
 
     #[tokio::test]
@@ -850,8 +896,10 @@ mod tests {
 
         server_thread.join().expect("join server");
         assert!(matches!(error, WorkflowServiceError::Internal(_)));
-        assert!(error
-            .to_string()
-            .contains("expected workflow error envelope JSON"));
+        assert!(
+            error
+                .to_string()
+                .contains("expected workflow error envelope JSON")
+        );
     }
 }

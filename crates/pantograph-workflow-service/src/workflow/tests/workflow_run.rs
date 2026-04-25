@@ -1,5 +1,15 @@
 use super::*;
 
+impl WorkflowService {
+    async fn workflow_run<H: WorkflowHost>(
+        &self,
+        host: &H,
+        request: WorkflowRunRequest,
+    ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
+        self.workflow_run_internal(host, request, None, None).await
+    }
+}
+
 #[tokio::test]
 async fn workflow_run_returns_host_outputs() {
     let host = MockWorkflowHost::new(10, 256);
@@ -29,30 +39,6 @@ async fn workflow_run_returns_host_outputs() {
     assert!(!response.run_id.trim().is_empty());
     assert_eq!(response.outputs.len(), 1);
     assert_eq!(response.outputs[0].value, serde_json::json!("hello world"));
-}
-
-#[tokio::test]
-async fn workflow_run_rejects_caller_supplied_run_id() {
-    let host = MockWorkflowHost::new(10, 256);
-    let service = WorkflowService::new();
-
-    let err = service
-        .workflow_run(
-            &host,
-            WorkflowRunRequest {
-                workflow_id: "wf-1".to_string(),
-                inputs: Vec::new(),
-                output_targets: None,
-                override_selection: None,
-                timeout_ms: None,
-                run_id: Some("caller-run".to_string()),
-            },
-        )
-        .await
-        .expect_err("caller-owned run id rejected");
-
-    assert!(matches!(err, WorkflowServiceError::InvalidRequest(_)));
-    assert!(err.to_string().contains("run_id is backend-owned"));
 }
 
 #[tokio::test]
@@ -123,9 +109,10 @@ async fn workflow_run_honors_blocking_backend_technical_fit_decision() {
         .expect_err("technical-fit decision should block run");
 
     assert!(matches!(err, WorkflowServiceError::RuntimeNotReady(_)));
-    assert!(err
-        .to_string()
-        .contains("technical-fit could not select a ready runtime"));
+    assert!(
+        err.to_string()
+            .contains("technical-fit could not select a ready runtime")
+    );
 }
 
 #[tokio::test]
@@ -149,9 +136,10 @@ async fn workflow_run_returns_internal_when_host_emits_invalid_output_shape() {
         .expect_err("invalid host output should be internal");
 
     assert!(matches!(err, WorkflowServiceError::Internal(_)));
-    assert!(err
-        .to_string()
-        .contains("outputs.0.port_id must be non-empty"));
+    assert!(
+        err.to_string()
+            .contains("outputs.0.port_id must be non-empty")
+    );
 }
 
 #[tokio::test]
@@ -351,9 +339,10 @@ async fn workflow_run_returns_output_not_produced_when_target_missing() {
         .expect_err("expected output_not_produced");
 
     assert!(matches!(err, WorkflowServiceError::OutputNotProduced(_)));
-    assert!(err
-        .to_string()
-        .contains("requested output target 'text-output-1.text' was not produced"));
+    assert!(
+        err.to_string()
+            .contains("requested output target 'text-output-1.text' was not produced")
+    );
 }
 
 #[tokio::test]

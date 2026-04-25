@@ -5,24 +5,23 @@ use node_engine::ExecutorExtensions;
 use pantograph_embedded_runtime::{EmbeddedRuntime, EmbeddedRuntimeConfig};
 use pantograph_workflow_service::{
     BucketCreateRequest, BucketDeleteRequest, ClientRegistrationRequest, ClientSessionOpenRequest,
-    ClientSessionResumeRequest, NodeRegistry as WorkflowNodeRegistry, WorkflowAttributedRunRequest,
-    WorkflowCapabilitiesRequest, WorkflowErrorCode, WorkflowErrorEnvelope,
-    WorkflowExecutionSessionCloseRequest, WorkflowExecutionSessionCreateRequest,
-    WorkflowExecutionSessionKeepAliveRequest, WorkflowExecutionSessionQueueCancelRequest,
-    WorkflowExecutionSessionQueueListRequest, WorkflowExecutionSessionQueueReprioritizeRequest,
-    WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionStatusRequest,
-    WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest,
-    WorkflowGraphEditSessionCloseRequest, WorkflowGraphEditSessionCreateRequest,
-    WorkflowGraphEditSessionGraphRequest, WorkflowGraphGetConnectionCandidatesRequest,
-    WorkflowGraphInsertNodeAndConnectRequest, WorkflowGraphInsertNodeOnEdgeRequest,
-    WorkflowGraphLoadRequest, WorkflowGraphPreviewNodeInsertOnEdgeRequest,
-    WorkflowGraphRemoveEdgeRequest, WorkflowGraphRemoveNodeRequest, WorkflowGraphSaveRequest,
-    WorkflowGraphUndoRedoStateRequest, WorkflowGraphUpdateNodeDataRequest,
-    WorkflowGraphUpdateNodePositionRequest, WorkflowIoRequest, WorkflowPreflightRequest,
-    WorkflowRunRequest, WorkflowService, WorkflowServiceError,
+    ClientSessionResumeRequest, NodeRegistry as WorkflowNodeRegistry, WorkflowCapabilitiesRequest,
+    WorkflowErrorCode, WorkflowErrorEnvelope, WorkflowExecutionSessionCloseRequest,
+    WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionKeepAliveRequest,
+    WorkflowExecutionSessionQueueCancelRequest, WorkflowExecutionSessionQueueListRequest,
+    WorkflowExecutionSessionQueueReprioritizeRequest, WorkflowExecutionSessionRunRequest,
+    WorkflowExecutionSessionStatusRequest, WorkflowGraphAddEdgeRequest,
+    WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest, WorkflowGraphEditSessionCloseRequest,
+    WorkflowGraphEditSessionCreateRequest, WorkflowGraphEditSessionGraphRequest,
+    WorkflowGraphGetConnectionCandidatesRequest, WorkflowGraphInsertNodeAndConnectRequest,
+    WorkflowGraphInsertNodeOnEdgeRequest, WorkflowGraphLoadRequest,
+    WorkflowGraphPreviewNodeInsertOnEdgeRequest, WorkflowGraphRemoveEdgeRequest,
+    WorkflowGraphRemoveNodeRequest, WorkflowGraphSaveRequest, WorkflowGraphUndoRedoStateRequest,
+    WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest, WorkflowIoRequest,
+    WorkflowPreflightRequest, WorkflowService, WorkflowServiceError,
 };
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use tokio::sync::RwLock;
 
 use crate::{FfiError, FfiPumasApi};
@@ -117,17 +116,6 @@ impl FfiPantographRuntime {
         self.runtime.shutdown().await;
     }
 
-    /// Run a workflow and return WorkflowRunResponse JSON.
-    pub async fn workflow_run(&self, request_json: String) -> Result<String, FfiError> {
-        let request: WorkflowRunRequest = parse_request(request_json)?;
-        let response = self
-            .runtime
-            .workflow_run(request)
-            .await
-            .map_err(map_workflow_service_error)?;
-        serialize_response(&response)
-    }
-
     /// Register an attribution client and return ClientRegistrationResponse JSON.
     pub fn workflow_register_attribution_client(
         &self,
@@ -177,17 +165,6 @@ impl FfiPantographRuntime {
         let response = self
             .runtime
             .delete_client_bucket(request)
-            .map_err(map_workflow_service_error)?;
-        serialize_response(&response)
-    }
-
-    /// Run a workflow with durable attribution and return WorkflowAttributedRunResponse JSON.
-    pub async fn workflow_run_attributed(&self, request_json: String) -> Result<String, FfiError> {
-        let request: WorkflowAttributedRunRequest = parse_request(request_json)?;
-        let response = self
-            .runtime
-            .workflow_run_attributed(request)
-            .await
             .map_err(map_workflow_service_error)?;
         serialize_response(&response)
     }

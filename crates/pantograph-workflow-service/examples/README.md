@@ -11,7 +11,7 @@ runtime composition.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `rust_host_workflow_run.rs` | Minimal fake-host workflow run example that prints a serialized response. |
+| `rust_host_workflow_run.rs` | Minimal fake-host scheduler session-run example that prints a serialized response. |
 
 ## Problem
 The workflow service is host-agnostic, but consumers still need a concrete

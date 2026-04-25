@@ -246,7 +246,7 @@ fn workflow_error_envelope(err: FfiError) -> WorkflowErrorEnvelope {
 }
 
 #[tokio::test]
-async fn direct_runtime_runs_workflow_from_json() {
+async fn direct_runtime_runs_workflow_session_from_json() {
     let workflow_id = "uniffi-runtime-text";
     let root = create_temp_root(workflow_id);
 
@@ -261,28 +261,6 @@ async fn direct_runtime_runs_workflow_from_json() {
     )
     .await
     .expect("runtime");
-
-    let run_response_json = runtime
-        .workflow_run(
-            serde_json::json!({
-                "workflow_id": workflow_id,
-                "inputs": [{
-                    "node_id": "text-input-1",
-                    "port_id": "text",
-                    "value": "direct run"
-                }],
-                "output_targets": [{
-                    "node_id": "text-output-1",
-                    "port_id": "text"
-                }]
-            })
-            .to_string(),
-        )
-        .await
-        .expect("workflow run");
-    let run_response: serde_json::Value =
-        serde_json::from_str(&run_response_json).expect("parse run response");
-    assert_eq!(run_response["outputs"][0]["value"], "direct run");
 
     let create_session_json = runtime
         .workflow_create_session(
@@ -363,7 +341,7 @@ async fn direct_runtime_runs_workflow_from_json() {
 }
 
 #[tokio::test]
-async fn direct_runtime_workflow_run_preserves_invalid_request_envelope() {
+async fn direct_runtime_workflow_session_run_preserves_invalid_request_envelope() {
     let workflow_id = "uniffi-runtime-interactive-run";
     let root = create_temp_root(workflow_id);
     write_human_input_workflow(&root, workflow_id);
@@ -380,10 +358,25 @@ async fn direct_runtime_workflow_run_preserves_invalid_request_envelope() {
     .await
     .expect("runtime");
 
-    let err = runtime
-        .workflow_run(
+    let create_session_json = runtime
+        .workflow_create_session(
             serde_json::json!({
-                "workflow_id": workflow_id,
+                "workflow_id": workflow_id
+            })
+            .to_string(),
+        )
+        .await
+        .expect("create execution session");
+    let create_session: serde_json::Value =
+        serde_json::from_str(&create_session_json).expect("parse create session");
+    let session_id = create_session["session_id"]
+        .as_str()
+        .expect("execution session id");
+
+    let err = runtime
+        .workflow_run_session(
+            serde_json::json!({
+                "session_id": session_id,
                 "inputs": [],
                 "output_targets": [{
                     "node_id": "text-output-1",
@@ -393,7 +386,7 @@ async fn direct_runtime_workflow_run_preserves_invalid_request_envelope() {
             .to_string(),
         )
         .await
-        .expect_err("interactive workflow run should preserve invalid-request envelope");
+        .expect_err("interactive workflow session run should preserve invalid-request envelope");
 
     let envelope = workflow_error_envelope(err);
     assert_eq!(envelope.code, WorkflowErrorCode::InvalidRequest);
@@ -407,7 +400,7 @@ async fn direct_runtime_workflow_run_preserves_invalid_request_envelope() {
 }
 
 #[tokio::test]
-async fn direct_runtime_runs_attributed_workflow_from_json() {
+async fn direct_runtime_exposes_attribution_client_session_json() {
     let workflow_id = "uniffi-runtime-attributed-text";
     let root = create_temp_root(workflow_id);
 
@@ -456,48 +449,7 @@ async fn direct_runtime_runs_attributed_workflow_from_json() {
         .expect("open client session");
     let opened: serde_json::Value =
         serde_json::from_str(&open_session_json).expect("parse open response");
-    let client_session_id = opened["session"]["client_session_id"]
-        .as_str()
-        .expect("client session id");
-
-    let response_json = runtime
-        .workflow_run_attributed(
-            serde_json::json!({
-                "credential": {
-                    "credential_id": credential_id,
-                    "secret": credential_secret
-                },
-                "client_session_id": client_session_id,
-                "bucket_selection": { "type": "default" },
-                "run": {
-                    "workflow_id": workflow_id,
-                    "inputs": [{
-                        "node_id": "text-input-1",
-                        "port_id": "text",
-                        "value": "attributed run"
-                    }],
-                    "output_targets": [{
-                        "node_id": "text-output-1",
-                        "port_id": "text"
-                    }]
-                }
-            })
-            .to_string(),
-        )
-        .await
-        .expect("attributed workflow run");
-    let response: serde_json::Value =
-        serde_json::from_str(&response_json).expect("parse attributed response");
-
-    assert_eq!(response["run"]["outputs"][0]["value"], "attributed run");
-    assert_eq!(
-        response["run"]["run_id"],
-        response["workflow_run"]["workflow_run_id"]
-    );
-    assert_eq!(
-        response["attribution"]["client_session_id"],
-        serde_json::Value::String(client_session_id.to_string())
-    );
+    assert!(opened["session"]["client_session_id"].as_str().is_some());
 
     runtime.shutdown().await;
     let _ = std::fs::remove_dir_all(root);
@@ -543,11 +495,13 @@ async fn direct_runtime_exposes_workflow_graph_persistence_and_edit_session() {
     let list_response_json = runtime.workflow_graph_list().expect("list workflow graphs");
     let list_response: serde_json::Value =
         serde_json::from_str(&list_response_json).expect("parse list response");
-    assert!(list_response["workflows"]
-        .as_array()
-        .expect("workflows")
-        .iter()
-        .any(|metadata| metadata["id"] == "Native Edited Workflow"));
+    assert!(
+        list_response["workflows"]
+            .as_array()
+            .expect("workflows")
+            .iter()
+            .any(|metadata| metadata["id"] == "Native Edited Workflow")
+    );
 
     let load_response_json = runtime
         .workflow_graph_load(serde_json::json!({ "path": path }).to_string())
@@ -644,11 +598,13 @@ async fn direct_runtime_exposes_backend_owned_graph_authoring_discovery() {
         .expect("list node definitions");
     let definitions: serde_json::Value =
         serde_json::from_str(&definitions_json).expect("parse definitions");
-    assert!(definitions
-        .as_array()
-        .expect("definitions")
-        .iter()
-        .any(|definition| definition["node_type"] == "text-input"));
+    assert!(
+        definitions
+            .as_array()
+            .expect("definitions")
+            .iter()
+            .any(|definition| definition["node_type"] == "text-input")
+    );
 
     let text_input_json = runtime
         .workflow_graph_get_node_definition("text-input".to_string())
@@ -656,33 +612,39 @@ async fn direct_runtime_exposes_backend_owned_graph_authoring_discovery() {
     let text_input: serde_json::Value =
         serde_json::from_str(&text_input_json).expect("parse text-input definition");
     assert_eq!(text_input["category"], "input");
-    assert!(text_input["outputs"]
-        .as_array()
-        .expect("outputs")
-        .iter()
-        .any(|port| port["id"] == "text"));
+    assert!(
+        text_input["outputs"]
+            .as_array()
+            .expect("outputs")
+            .iter()
+            .any(|port| port["id"] == "text")
+    );
 
     let grouped_json = runtime
         .workflow_graph_get_node_definitions_by_category()
         .expect("group node definitions");
     let grouped: serde_json::Value =
         serde_json::from_str(&grouped_json).expect("parse grouped definitions");
-    assert!(grouped["input"]
-        .as_array()
-        .expect("input category")
-        .iter()
-        .any(|definition| definition["node_type"] == "text-input"));
+    assert!(
+        grouped["input"]
+            .as_array()
+            .expect("input category")
+            .iter()
+            .any(|definition| definition["node_type"] == "text-input")
+    );
 
     let queryable_json = runtime
         .workflow_graph_get_queryable_ports()
         .expect("queryable ports");
     let queryable: serde_json::Value =
         serde_json::from_str(&queryable_json).expect("parse queryable ports");
-    assert!(queryable
-        .as_array()
-        .expect("queryable ports")
-        .iter()
-        .any(|port| port["node_type"] == "puma-lib" && port["port_id"] == "model_path"));
+    assert!(
+        queryable
+            .as_array()
+            .expect("queryable ports")
+            .iter()
+            .any(|port| port["node_type"] == "puma-lib" && port["port_id"] == "model_path")
+    );
 
     let missing = runtime
         .workflow_graph_get_node_definition("missing-node".to_string())
@@ -701,9 +663,11 @@ async fn direct_runtime_exposes_backend_owned_graph_authoring_discovery() {
         .expect_err("non-queryable port should be rejected");
     let envelope = workflow_error_envelope(missing_options);
     assert_eq!(envelope.code, WorkflowErrorCode::InvalidRequest);
-    assert!(envelope
-        .message
-        .contains("No options provider for text-input:text"));
+    assert!(
+        envelope
+            .message
+            .contains("No options provider for text-input:text")
+    );
 
     runtime.shutdown().await;
     let _ = std::fs::remove_dir_all(root);

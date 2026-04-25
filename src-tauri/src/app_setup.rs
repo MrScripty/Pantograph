@@ -343,7 +343,6 @@ pub fn run_app() -> AppStartupResult<()> {
             crate::workflow::commands::list_workflows,
             crate::workflow::workflow_persistence_commands::delete_workflow,
             // Headless workflow API commands
-            crate::workflow::commands::workflow_run,
             crate::workflow::commands::workflow_get_capabilities,
             crate::workflow::commands::workflow_get_io,
             crate::workflow::commands::workflow_preflight,

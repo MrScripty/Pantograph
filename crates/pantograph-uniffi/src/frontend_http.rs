@@ -3,9 +3,8 @@ use std::sync::{Arc, LazyLock};
 use pantograph_frontend_http_adapter::FrontendHttpWorkflowHost;
 use pantograph_workflow_service::{
     BucketCreateRequest, BucketDeleteRequest, ClientRegistrationRequest, ClientSessionOpenRequest,
-    ClientSessionResumeRequest, WorkflowAttributedRunRequest, WorkflowCapabilitiesRequest,
-    WorkflowErrorCode, WorkflowErrorEnvelope, WorkflowPreflightRequest, WorkflowRunRequest,
-    WorkflowService, WorkflowServiceError,
+    ClientSessionResumeRequest, WorkflowCapabilitiesRequest, WorkflowErrorCode,
+    WorkflowErrorEnvelope, WorkflowPreflightRequest, WorkflowService, WorkflowServiceError,
 };
 
 use super::{FfiError, FfiPumasApi};
@@ -76,24 +75,6 @@ fn build_frontend_http_host(
     })
 }
 
-/// Execute frontend HTTP workflow contract (`workflow_run`) and return response JSON.
-#[uniffi::export(async_runtime = "tokio")]
-pub async fn frontend_http_workflow_run(
-    base_url: String,
-    request_json: String,
-    pumas_api: Option<Arc<FfiPumasApi>>,
-) -> Result<String, FfiError> {
-    let request: WorkflowRunRequest = workflow_parse_request(&request_json)?;
-
-    let host = build_frontend_http_host(base_url, pumas_api)?;
-    let response = WORKFLOW_SERVICE
-        .workflow_run(&host, request)
-        .await
-        .map_err(map_workflow_service_error)?;
-
-    workflow_serialize_response(&response)
-}
-
 /// Register a frontend HTTP attribution client and return ClientRegistrationResponse JSON.
 #[uniffi::export(async_runtime = "tokio")]
 pub async fn frontend_http_workflow_register_attribution_client(
@@ -154,24 +135,6 @@ pub async fn frontend_http_workflow_delete_client_bucket(
     let request: BucketDeleteRequest = workflow_parse_request(&request_json)?;
     let response = WORKFLOW_SERVICE
         .delete_client_bucket(request)
-        .map_err(map_workflow_service_error)?;
-
-    workflow_serialize_response(&response)
-}
-
-/// Execute an attributed frontend HTTP workflow run and return response JSON.
-#[uniffi::export(async_runtime = "tokio")]
-pub async fn frontend_http_workflow_run_attributed(
-    base_url: String,
-    request_json: String,
-    pumas_api: Option<Arc<FfiPumasApi>>,
-) -> Result<String, FfiError> {
-    let request: WorkflowAttributedRunRequest = workflow_parse_request(&request_json)?;
-
-    let host = build_frontend_http_host(base_url, pumas_api)?;
-    let response = WORKFLOW_SERVICE
-        .workflow_run_attributed(&host, request)
-        .await
         .map_err(map_workflow_service_error)?;
 
     workflow_serialize_response(&response)

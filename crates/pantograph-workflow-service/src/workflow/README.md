@@ -25,7 +25,7 @@ public exports out of the service crate.
 | `tests/` | Behavior-focused workflow facade test modules split from the legacy monolithic test module. |
 | `tests.rs` | Legacy workflow facade and scheduler/session behavior tests extracted from the root facade file. |
 | `validation.rs` | Request, binding, output-target, and produced-output validation helpers shared by facade operations. |
-| `workflow_run_api.rs` | Generic workflow run facade, run timeout handling, output validation, and internal session-run handoff. |
+| `workflow_run_api.rs` | Scheduler-owned workflow run internals, run timeout handling, output validation, and private session-run handoff. |
 
 ## Problem
 `src/workflow.rs` remains a large public facade with service methods. Public

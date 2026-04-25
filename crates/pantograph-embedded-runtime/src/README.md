@@ -30,7 +30,7 @@ packages.
 | `lib_tests/session_checkpoint_recovery_tests.rs` | Embedded keep-alive workflow-session checkpoint recovery tests split out of the legacy root test module. |
 | `lib_tests/session_execution_state_tests.rs` | Embedded keep-alive workflow-session execution state tests split out of the legacy root test module. |
 | `lib_tests/session_runtime_lifecycle_tests.rs` | Embedded workflow-session runtime lifecycle integration tests split out of the legacy root test module. |
-| `lib_tests/workflow_run_execution_tests.rs` | Embedded workflow-run and session-run execution integration tests split out of the legacy root test module. |
+| `lib_tests/workflow_run_execution_tests.rs` | Embedded scheduler session-run execution integration tests split out of the legacy root test module. |
 | `lib.rs` | Composes the embedded runtime, workflow service, shared extensions, and public crate exports used by Tauri and standalone hosts. |
 | `model_dependencies.rs` | Resolves Pantograph model dependency requirements and binds workflow requests to Pumas-backed execution facts. |
 | `model_dependency_activity.rs` | Defines dependency activity event payloads, emitters, and request context projection shared by resolver phases and install streams. |
@@ -185,12 +185,12 @@ embedded-runtime crate.
   `lib_tests/session_runtime_lifecycle_tests.rs` so reservation lifecycle,
   warmup/preflight, unload, and non-keep-alive release behavior follow the
   production workflow-session runtime boundary.
-- Workflow-run and session-run execution integration tests stay in
-  `lib_tests/workflow_run_execution_tests.rs` so public run facades,
+- Workflow session-run execution integration tests stay in
+  `lib_tests/workflow_run_execution_tests.rs` so scheduler-owned execution,
   cancellation, human-input validation, and Python sidecar runtime observation
   follow the production workflow execution boundary.
 - Interactive-input invalid-request errors from keep-alive session execution
-  must preserve the workflow id in the message, matching direct workflow-run
+  must preserve the workflow id in the message, matching scheduler session-run
   behavior so bindings do not drift on caller-visible error envelopes.
 - Keep-alive workflow-session execution state tests stay in
   `lib_tests/session_execution_state_tests.rs` so backend executor reuse,

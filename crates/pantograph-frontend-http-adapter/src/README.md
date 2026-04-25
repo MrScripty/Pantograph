@@ -33,10 +33,10 @@ implements `WorkflowHost`.
 - Backend-owned cancellation envelopes must stay distinct from timeout
   envelopes; this adapter must not rewrite `cancelled` into
   `runtime_timeout`.
-- The actual `workflow_run` transport path must preserve backend-owned
+- The scheduler-owned session run transport path must preserve backend-owned
   `cancelled` envelopes as `WorkflowServiceError::Cancelled`, not just the
   lower-level envelope mapper helpers.
-- The actual `workflow_run` transport path must also preserve backend-owned
+- The scheduler-owned session run transport path must also preserve backend-owned
   interactive `invalid_request` envelopes as `WorkflowServiceError::InvalidRequest`
   rather than masking them as generic runtime or transport failures.
 - Scheduler error details are the only currently supported envelope detail

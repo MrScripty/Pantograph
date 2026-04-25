@@ -1,5 +1,32 @@
 use super::*;
 
+async fn run_workflow_through_scheduler(
+    runtime: &EmbeddedRuntime,
+    workflow_id: &str,
+    inputs: Vec<WorkflowPortBinding>,
+    output_targets: Option<Vec<WorkflowOutputTarget>>,
+) -> Result<WorkflowRunResponse, WorkflowServiceError> {
+    let created = runtime
+        .create_workflow_execution_session(WorkflowExecutionSessionCreateRequest {
+            workflow_id: workflow_id.to_string(),
+            usage_profile: None,
+            keep_alive: false,
+        })
+        .await?;
+
+    runtime
+        .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
+            session_id: created.session_id,
+            inputs,
+            output_targets,
+            override_selection: None,
+            timeout_ms: None,
+            priority: None,
+            run_id: None,
+        })
+        .await
+}
+
 #[tokio::test]
 async fn test_runtime_run_and_session_execution() {
     let temp = TempDir::new().expect("temp dir");
@@ -23,24 +50,21 @@ async fn test_runtime_run_and_session_execution() {
     )
     .with_runtime_registry(Arc::new(RuntimeRegistry::new()));
 
-    let run_response = runtime
-        .workflow_run(WorkflowRunRequest {
-            workflow_id: "runtime-text".to_string(),
-            inputs: vec![WorkflowPortBinding {
-                node_id: "text-input-1".to_string(),
-                port_id: "text".to_string(),
-                value: serde_json::json!("hello"),
-            }],
-            output_targets: Some(vec![WorkflowOutputTarget {
-                node_id: "text-output-1".to_string(),
-                port_id: "text".to_string(),
-            }]),
-            override_selection: None,
-            timeout_ms: None,
-            run_id: None,
-        })
-        .await
-        .expect("workflow run");
+    let run_response = run_workflow_through_scheduler(
+        &runtime,
+        "runtime-text",
+        vec![WorkflowPortBinding {
+            node_id: "text-input-1".to_string(),
+            port_id: "text".to_string(),
+            value: serde_json::json!("hello"),
+        }],
+        Some(vec![WorkflowOutputTarget {
+            node_id: "text-output-1".to_string(),
+            port_id: "text".to_string(),
+        }]),
+    )
+    .await
+    .expect("workflow run through scheduler");
     assert_eq!(run_response.outputs.len(), 1);
     assert_eq!(run_response.outputs[0].value, serde_json::json!("hello"));
 
@@ -84,55 +108,6 @@ async fn test_runtime_run_and_session_execution() {
         })
         .await
         .expect("close session");
-}
-
-#[tokio::test]
-async fn workflow_run_returns_invalid_request_for_human_input_workflow() {
-    let temp = TempDir::new().expect("temp dir");
-    write_human_input_workflow(temp.path(), "interactive-human-input");
-
-    let app_data_dir = temp.path().join("app-data");
-    std::fs::create_dir_all(&app_data_dir).expect("app data dir");
-    install_fake_default_runtime(&app_data_dir);
-
-    let runtime = EmbeddedRuntime::with_default_python_runtime(
-        EmbeddedRuntimeConfig {
-            app_data_dir,
-            project_root: temp.path().to_path_buf(),
-            workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
-            max_loaded_sessions: None,
-        },
-        Arc::new(inference::InferenceGateway::new()),
-        Arc::new(RwLock::new(ExecutorExtensions::new())),
-        Arc::new(WorkflowService::new()),
-        None,
-    )
-    .with_runtime_registry(Arc::new(RuntimeRegistry::new()));
-
-    let error = runtime
-        .workflow_run(WorkflowRunRequest {
-            workflow_id: "interactive-human-input".to_string(),
-            inputs: Vec::new(),
-            output_targets: Some(vec![WorkflowOutputTarget {
-                node_id: "human-input-1".to_string(),
-                port_id: "value".to_string(),
-            }]),
-            override_selection: None,
-            timeout_ms: None,
-            run_id: None,
-        })
-        .await
-        .expect_err("interactive workflow run should fail for non-streaming callers");
-
-    match error {
-        WorkflowServiceError::InvalidRequest(message) => {
-            assert!(
-                message.contains("interactive") || message.contains("input"),
-                "unexpected invalid-request message: {message}"
-            );
-        }
-        other => panic!("expected invalid request error, got {other:?}"),
-    }
 }
 
 #[tokio::test]
@@ -282,24 +257,21 @@ async fn test_runtime_routes_diffusion_workflow_through_python_adapter() {
     )
     .with_runtime_registry(Arc::new(RuntimeRegistry::new()));
 
-    let response = runtime
-        .workflow_run(WorkflowRunRequest {
-            workflow_id: "runtime-diffusion".to_string(),
-            inputs: vec![WorkflowPortBinding {
-                node_id: "text-input-1".to_string(),
-                port_id: "text".to_string(),
-                value: serde_json::json!("a tiny painted robot"),
-            }],
-            output_targets: Some(vec![WorkflowOutputTarget {
-                node_id: "image-output-1".to_string(),
-                port_id: "image".to_string(),
-            }]),
-            override_selection: None,
-            timeout_ms: None,
-            run_id: None,
-        })
-        .await
-        .expect("workflow run");
+    let response = run_workflow_through_scheduler(
+        &runtime,
+        "runtime-diffusion",
+        vec![WorkflowPortBinding {
+            node_id: "text-input-1".to_string(),
+            port_id: "text".to_string(),
+            value: serde_json::json!("a tiny painted robot"),
+        }],
+        Some(vec![WorkflowOutputTarget {
+            node_id: "image-output-1".to_string(),
+            port_id: "image".to_string(),
+        }]),
+    )
+    .await
+    .expect("workflow run through scheduler");
 
     assert_eq!(response.outputs.len(), 1);
     assert_eq!(response.outputs[0].node_id, "image-output-1");
@@ -345,24 +317,21 @@ async fn test_runtime_run_reconciles_python_sidecar_runtime_into_registry() {
     )
     .with_runtime_registry(runtime_registry.clone());
 
-    runtime
-        .workflow_run(WorkflowRunRequest {
-            workflow_id: "runtime-diffusion".to_string(),
-            inputs: vec![WorkflowPortBinding {
-                node_id: "text-input-1".to_string(),
-                port_id: "text".to_string(),
-                value: serde_json::json!("a tiny painted robot"),
-            }],
-            output_targets: Some(vec![WorkflowOutputTarget {
-                node_id: "image-output-1".to_string(),
-                port_id: "image".to_string(),
-            }]),
-            override_selection: None,
-            timeout_ms: None,
-            run_id: None,
-        })
-        .await
-        .expect("workflow run");
+    run_workflow_through_scheduler(
+        &runtime,
+        "runtime-diffusion",
+        vec![WorkflowPortBinding {
+            node_id: "text-input-1".to_string(),
+            port_id: "text".to_string(),
+            value: serde_json::json!("a tiny painted robot"),
+        }],
+        Some(vec![WorkflowOutputTarget {
+            node_id: "image-output-1".to_string(),
+            port_id: "image".to_string(),
+        }]),
+    )
+    .await
+    .expect("workflow run through scheduler");
 
     let snapshot = runtime_registry.snapshot();
     let pytorch = snapshot

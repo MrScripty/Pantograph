@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use tauri::{command, AppHandle, State};
+use tauri::{AppHandle, State, command};
 use tokio::sync::RwLock;
 
 use crate::agent::rag::SharedRagManager;
@@ -90,28 +90,6 @@ pub fn list_workflows(
         .workflow_graph_list(workflow_graph_store.inner().as_ref())
         .map(|response| response.workflows)
         .map_err(|e| e.to_envelope_json())
-}
-
-#[command]
-pub async fn workflow_run(
-    request: pantograph_workflow_service::WorkflowRunRequest,
-    app: AppHandle,
-    gateway: State<'_, SharedGateway>,
-    runtime_registry: State<'_, SharedRuntimeRegistry>,
-    extensions: State<'_, SharedExtensions>,
-    rag_manager: State<'_, SharedRagManager>,
-    workflow_service: State<'_, SharedWorkflowService>,
-) -> Result<pantograph_workflow_service::WorkflowRunResponse, String> {
-    super::headless_workflow_commands::workflow_run(
-        request,
-        app,
-        gateway,
-        runtime_registry,
-        extensions,
-        rag_manager,
-        workflow_service,
-    )
-    .await
 }
 
 #[command]

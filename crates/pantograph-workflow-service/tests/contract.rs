@@ -1,11 +1,12 @@
 use async_trait::async_trait;
 use pantograph_workflow_service::graph::WorkflowExecutionSessionKind;
 use pantograph_workflow_service::{
-    WorkflowCapabilitiesRequest, WorkflowCapabilityModel, WorkflowExecutionSessionQueueItem,
-    WorkflowExecutionSessionQueueItemStatus, WorkflowExecutionSessionState,
+    WorkflowCapabilitiesRequest, WorkflowCapabilityModel, WorkflowExecutionSessionCreateRequest,
+    WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionQueueItemStatus,
+    WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionState,
     WorkflowExecutionSessionSummary, WorkflowHost, WorkflowHostCapabilities, WorkflowIoNode,
     WorkflowIoPort, WorkflowIoRequest, WorkflowIoResponse, WorkflowOutputTarget,
-    WorkflowPortBinding, WorkflowPreflightRequest, WorkflowRunRequest, WorkflowRuntimeCapability,
+    WorkflowPortBinding, WorkflowPreflightRequest, WorkflowRuntimeCapability,
     WorkflowRuntimeInstallState, WorkflowRuntimeRequirements, WorkflowRuntimeSourceKind,
     WorkflowSchedulerSnapshotResponse, WorkflowService, WorkflowServiceError,
     WorkflowTraceNodeRecord, WorkflowTraceNodeStatus, WorkflowTraceQueueMetrics,
@@ -142,12 +143,23 @@ impl WorkflowHost for ContractHost {
 async fn workflow_run_contract_snapshot() {
     let service = WorkflowService::new();
     let host = ContractHost;
+    let session = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "wf-1".to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("session create response");
 
     let response = service
-        .workflow_run(
+        .run_workflow_execution_session(
             &host,
-            WorkflowRunRequest {
-                workflow_id: "wf-1".to_string(),
+            WorkflowExecutionSessionRunRequest {
+                session_id: session.session_id,
                 inputs: vec![WorkflowPortBinding {
                     node_id: "text-input-1".to_string(),
                     port_id: "text".to_string(),
@@ -160,15 +172,18 @@ async fn workflow_run_contract_snapshot() {
                 override_selection: None,
                 timeout_ms: None,
                 run_id: None,
+                priority: None,
             },
         )
         .await
-        .expect("workflow_run response");
+        .expect("session workflow run response");
 
     let value = serde_json::to_value(response).expect("serialize response");
-    assert!(value["run_id"]
-        .as_str()
-        .is_some_and(|run_id| !run_id.is_empty()));
+    assert!(
+        value["run_id"]
+            .as_str()
+            .is_some_and(|run_id| !run_id.is_empty())
+    );
     let expected = serde_json::json!({
         "run_id": value["run_id"],
         "outputs": [
@@ -573,12 +588,23 @@ fn workflow_trace_snapshot_request_rejects_blank_contract_filter() {
 async fn workflow_run_rejects_non_discovered_output_target_contract() {
     let service = WorkflowService::new();
     let host = ContractHost;
+    let session = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "wf-1".to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("session create response");
 
     let err = service
-        .workflow_run(
+        .run_workflow_execution_session(
             &host,
-            WorkflowRunRequest {
-                workflow_id: "wf-1".to_string(),
+            WorkflowExecutionSessionRunRequest {
+                session_id: session.session_id,
                 inputs: Vec::new(),
                 output_targets: Some(vec![WorkflowOutputTarget {
                     node_id: "vector-output-1".to_string(),
@@ -587,6 +613,7 @@ async fn workflow_run_rejects_non_discovered_output_target_contract() {
                 override_selection: None,
                 timeout_ms: None,
                 run_id: None,
+                priority: None,
             },
         )
         .await

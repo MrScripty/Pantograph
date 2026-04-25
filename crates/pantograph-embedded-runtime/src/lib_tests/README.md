@@ -48,7 +48,7 @@ fixtures and provide a safe first boundary.
 | `session_checkpoint_recovery_tests.rs` | Integration tests for keeping workflow-session checkpoints intact across failed restore, runtime-not-ready resume, and scheduler reclaim recovery. |
 | `session_execution_state_tests.rs` | Integration tests for keep-alive workflow-session executor reuse, carried inputs, graph-change reconciliation, and inspection state. |
 | `session_runtime_lifecycle_tests.rs` | Integration tests for embedded workflow-session runtime reservation, warmup, preflight, unload, and non-keep-alive release behavior. |
-| `workflow_run_execution_tests.rs` | Integration tests for embedded workflow runs, session runs, cancellation, human-input validation, and Python sidecar runtime observation. |
+| `workflow_run_execution_tests.rs` | Integration tests for embedded scheduler session runs, cancellation, human-input validation, and Python sidecar runtime observation. |
 
 ## Invariants
 - Test modules in this directory may use `super::*` to share the legacy

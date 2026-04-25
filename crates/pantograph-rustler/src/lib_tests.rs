@@ -195,23 +195,38 @@ async fn test_rustler_workflow_host_contract_success() {
 
     let host = crate::workflow_host_contract::build_frontend_http_host(base_url, None)
         .expect("frontend HTTP host");
-    let request = pantograph_workflow_service::WorkflowRunRequest {
-        workflow_id: workflow_id.to_string(),
-        inputs: vec![pantograph_workflow_service::WorkflowPortBinding {
-            node_id: "text-input-1".to_string(),
-            port_id: "text".to_string(),
-            value: serde_json::json!("hello world"),
-        }],
-        output_targets: Some(vec![pantograph_workflow_service::WorkflowOutputTarget {
-            node_id: "vector-output-1".to_string(),
-            port_id: "vector".to_string(),
-        }]),
-        override_selection: None,
-        timeout_ms: None,
-        run_id: None,
-    };
-    let response = WorkflowService::new()
-        .workflow_run(&host, request)
+    let service = WorkflowService::new();
+    let session = service
+        .create_workflow_execution_session(
+            &host,
+            pantograph_workflow_service::WorkflowExecutionSessionCreateRequest {
+                workflow_id: workflow_id.to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create execution session");
+    let response = service
+        .run_workflow_execution_session(
+            &host,
+            pantograph_workflow_service::WorkflowExecutionSessionRunRequest {
+                session_id: session.session_id,
+                inputs: vec![pantograph_workflow_service::WorkflowPortBinding {
+                    node_id: "text-input-1".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("hello world"),
+                }],
+                output_targets: Some(vec![pantograph_workflow_service::WorkflowOutputTarget {
+                    node_id: "vector-output-1".to_string(),
+                    port_id: "vector".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                run_id: None,
+                priority: None,
+            },
+        )
         .await
         .expect("run workflow");
 

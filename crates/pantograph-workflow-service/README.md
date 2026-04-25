@@ -70,11 +70,13 @@ should be preserved until a breaking API change is explicitly accepted.
 
 ## Usage Examples
 ```rust
-use pantograph_workflow_service::workflow::WorkflowRunRequest;
+use pantograph_workflow_service::workflow::{
+    WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionRunRequest,
+};
 ```
 
 ## API Consumer Contract
-- Inputs: workflow run/session/graph/diagnostics request DTOs and host trait
+- Inputs: workflow session/graph/diagnostics request DTOs and host trait
   implementations.
 - Outputs: response DTOs, graph mutation responses, diagnostics snapshots,
   queue state, and typed workflow service errors.
