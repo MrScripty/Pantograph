@@ -16,6 +16,10 @@ Pantograph execution-platform stages.
 | `05-composition-factoring-and-migration/` | Composition, node factoring, and clean workflow upgrade waves. |
 | `06-binding-projections-and-verification/` | Native Rust base API projection and host binding verification waves. |
 
+Stage `07` standards compliance review did not receive an implementation-wave
+folder because its stage-start gate selected single-worker documentation review
+instead of concurrent implementation.
+
 ## Problem
 
 The execution-platform plan spans multiple crates and support surfaces. The
@@ -48,11 +52,13 @@ report placeholders so implementation can begin from explicit worker contracts.
 
 ## Invariants
 
-- Execute one stage at a time.
+- Execute one implementation stage at a time.
 - Execute one wave at a time inside the selected stage.
 - Integrate worker outputs one at a time.
 - Read worker reports before integration.
 - Update the stage coordination ledger after each integration.
+- Stages whose start gate selects single-worker execution do not require a
+  stage-specific implementation-wave folder.
 
 ## Revisit Triggers
 
@@ -94,7 +100,7 @@ For Stage `02`, read:
 
 ## Structured Producer Contract
 
-- Each stage folder must contain `README.md`, `coordination-ledger.md`,
-  `waves/`, and `reports/`.
+- Each concurrent stage folder must contain `README.md`,
+  `coordination-ledger.md`, `waves/`, and `reports/`.
 - Wave files use `wave-XX.md` names and define objective, write sets,
   forbidden files, verification, report paths, and integration order.

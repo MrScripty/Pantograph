@@ -83,8 +83,23 @@ of maintaining a single oversized `final-plan.md`.
 - `Reason: Stage 01 accepted durable runtime attribution ownership, SQLite
   persistence, credential storage, bucket semantics, and execution-session
   terminology decisions.`
-- `Revisit trigger: Later execution-platform stages supersede or extend the
-  attribution boundary.`
+- `../../adr/ADR-006-canonical-node-contract-ownership.md`
+- `Reason: Stage 02 accepted canonical node contract, effective contract, and
+  backend-owned discovery ownership.`
+- `../../adr/ADR-007-managed-runtime-observability-ownership.md`
+- `Reason: Stage 03 accepted runtime-owned observability, managed capability,
+  cancellation, progress, and guarantee classification ownership.`
+- `../../adr/ADR-008-durable-model-license-diagnostics-ledger.md`
+- `Reason: Stage 04 accepted durable model/license diagnostics ledger
+  ownership, SQLite persistence, retention, and query projection boundaries.`
+- `../../adr/ADR-009-composed-node-contracts-and-migration.md`
+- `Reason: Stage 05 accepted composed-node contract ownership, primitive trace
+  preservation, runtime lineage, and saved-workflow migration behavior.`
+- `../../adr/ADR-010-binding-projection-ownership-and-support-tiers.md`
+- `Reason: Stage 06 accepted binding projection ownership, generated artifact
+  policy, and evidence-based host support tiers.`
+- `Revisit trigger: Future execution-platform work changes one of these
+  ownership boundaries or supersedes an accepted stage decision.`
 
 ## Implementation Entry Point
 
@@ -184,9 +199,10 @@ stage folder under `implementation-waves/`. After implementation, apply
 ## API Consumer Contract
 
 - This directory does not expose runtime APIs.
-- The plans describe future API and binding contracts, but those contracts are
-  not live until implemented in the owning crates and documented in their API
-  surfaces.
+- The completed stages describe implemented API and binding contracts where the
+  owning crates, ADRs, and module documentation now expose them. Historical
+  future-tense notes remain audit context and are superseded by the latest
+  implementation progress sections and ADRs when they conflict.
 - Compatibility expectations are defined in the numbered plan files.
 
 ## Structured Producer Contract

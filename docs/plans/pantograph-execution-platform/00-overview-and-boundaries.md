@@ -2,9 +2,13 @@
 
 ## Status
 
-Draft.
+Implemented plan set.
 
-Last updated: 2026-04-23.
+Last updated: 2026-04-25.
+
+Stage `01` through Stage `07` are implemented and committed. Stage `08`
+through Stage `10` remain reusable gate and coordination instructions for
+future execution-platform changes.
 
 ## Source Documents
 
@@ -169,12 +173,37 @@ wait for backend confirmation before changing displayed backend-owned state.
 4. Model/license diagnostics ledger.
 5. Composition, factoring, and migration.
 6. Binding projections and host verification.
+7. Standards compliance review and plan-set closeout.
 
 Each implementation stage must start by applying
 `08-stage-start-implementation-gate.md` and finish by applying
 `09-stage-end-refactor-gate.md` before the next numbered stage begins.
 If the start gate determines that a stage needs parallel workers, the stage
 must first be expanded using `10-concurrent-phased-implementation.md`.
+
+## Implementation Closeout
+
+- Stage `01`: complete. ADR-005 records durable runtime attribution ownership,
+  SQLite persistence, digest-only credentials, bucket namespace semantics, and
+  execution-session terminology.
+- Stage `02`: complete. ADR-006 records canonical node contract ownership,
+  effective contracts, backend-owned discovery, and projection boundaries.
+- Stage `03`: complete. ADR-007 records runtime-owned observability, managed
+  capability routing, cancellation/progress lifecycle ownership, and guarantee
+  classification.
+- Stage `04`: complete. ADR-008 records durable model/license diagnostics
+  ledger ownership, SQLite persistence, retention/pruning, runtime submission,
+  and workflow query projection boundaries.
+- Stage `05`: complete with a separate refactor plan recorded and implemented
+  before Stage `06` closeout. ADR-009 records composed-node contracts,
+  primitive trace preservation, runtime lineage, and saved-workflow migration.
+- Stage `06`: complete. ADR-010 records binding projection ownership,
+  generated artifact policy, and support tiers. C# is supported for verified
+  generated/native surfaces, Python remains unsupported, and BEAM remains
+  experimental on hosts without `mix` smoke coverage.
+- Stage `07`: complete. The standards compliance review reconciles residual
+  risks with completed implementation evidence and records a `not_warranted`
+  stage-end refactor gate outcome.
 
 ## Recorded Implementation Decisions
 
@@ -200,9 +229,10 @@ must first be expanded using `10-concurrent-phased-implementation.md`.
   backward-compatible residual APIs for replaced systems.
 - Stage `06` keeps host bindings as projections through `pantograph-uniffi`
   for non-BEAM lanes and `pantograph-rustler` for Elixir/BEAM. Native Rust is
-  resolved first as the base API, then C#, Python, and BEAM project that API
-  with language-native tests and documented support tiers strong enough to make
-  future binding additions repeatable.
+  resolved first as the base API. C# projects verified generated/native
+  surfaces, Python remains unsupported until a real generated/native package and
+  import/load smoke exist, and BEAM remains experimental until host smoke can
+  run with `mix`.
 
 ## Tasks
 
@@ -227,23 +257,18 @@ must first be expanded using `10-concurrent-phased-implementation.md`.
 
 ## ADR Checkpoints
 
-- Stage `01`: ADR required for durable attribution ownership, SQLite
-  attribution persistence, digest-only credential storage, Pantograph-owned
-  bucket namespace semantics, and session lifecycle records.
-- Stage `02`: ADR required for `pantograph-node-contracts`-owned canonical
-  node contracts,
-  effective contract resolution, and backend-owned discovery semantics.
-- Stage `03`: ADR required for runtime-owned observability, managed capability
-  routing, cancellation/progress lifecycle ownership, and guarantee
-  classification.
-- Stage `04`: ADR required for SQLite diagnostics ledger persistence,
-  time-of-use license snapshots, typed output measurements, and retention
-  policy.
-- Stage `05`: ADR required for composed-node trace preservation and saved
-  workflow migration strategy when contract factoring changes persisted graph
-  behavior.
-- Stage `06`: ADR required for binding projection architecture, supported host
-  tiers, generated artifact/version matching, and unsupported lane policy.
+- Stage `01`: completed by
+  `../../adr/ADR-005-durable-runtime-attribution.md`.
+- Stage `02`: completed by
+  `../../adr/ADR-006-canonical-node-contract-ownership.md`.
+- Stage `03`: completed by
+  `../../adr/ADR-007-managed-runtime-observability-ownership.md`.
+- Stage `04`: completed by
+  `../../adr/ADR-008-durable-model-license-diagnostics-ledger.md`.
+- Stage `05`: completed by
+  `../../adr/ADR-009-composed-node-contracts-and-migration.md`.
+- Stage `06`: completed by
+  `../../adr/ADR-010-binding-projection-ownership-and-support-tiers.md`.
 
 ## Standards Gates
 
