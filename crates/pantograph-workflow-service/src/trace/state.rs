@@ -323,5 +323,6 @@ fn create_trace_node_record(node_id: &str, node_type: Option<String>) -> Workflo
         stream_event_count: 0,
         last_error: None,
         last_progress_detail: None,
+        timing_expectation: None,
     }
 }

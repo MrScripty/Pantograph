@@ -1,13 +1,14 @@
 use std::collections::HashMap;
 
 use node_engine::GraphMemoryImpactSummary;
+use pantograph_diagnostics_ledger::WorkflowTimingExpectation;
 use serde::{Deserialize, Serialize};
 
+use crate::WorkflowSchedulerSnapshotDiagnostics;
 use crate::workflow::{
     WorkflowCapabilitiesResponse, WorkflowExecutionSessionQueueItem,
     WorkflowExecutionSessionSummary, WorkflowServiceError,
 };
-use crate::WorkflowSchedulerSnapshotDiagnostics;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -92,6 +93,8 @@ pub struct WorkflowTraceNodeRecord {
     pub last_error: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_progress_detail: Option<node_engine::TaskProgressDetail>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timing_expectation: Option<WorkflowTimingExpectation>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -134,6 +137,8 @@ pub struct WorkflowTraceSummary {
     pub last_error: Option<String>,
     #[serde(default)]
     pub nodes: Vec<WorkflowTraceNodeRecord>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timing_expectation: Option<WorkflowTimingExpectation>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

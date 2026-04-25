@@ -208,7 +208,7 @@ idempotently.
 **Tasks:**
 - [x] Add SQLite schema/migration for timing observations or a new focused
   timing-history store.
-- [ ] Persist run and node observations from backend-owned terminal trace
+- [x] Persist run and node observations from backend-owned terminal trace
   state.
 - [x] Store execution id and node id idempotency keys to prevent duplicate
   observation counts.
@@ -224,7 +224,7 @@ idempotently.
   schema version, idempotent writes, and retention pruning.
 - Global-state/durable-resource isolation review from `TESTING-STANDARDS.md`.
 
-**Status:** In progress.
+**Status:** Complete.
 
 ### Milestone 3: Project Timing Expectations Into Workflow Diagnostics
 
@@ -381,6 +381,11 @@ the applicable standards after the feature works.
   observations, and timing retention pruning. Trace terminal-event submission
   remains for the next slice. Verification:
   `cargo test -p pantograph-diagnostics-ledger`.
+- 2026-04-25: Milestone 2 completed. `WorkflowTraceStore` can now be
+  configured with a diagnostics ledger, records run/node timing observations at
+  run-terminal boundaries, enriches snapshots from prior completed timing
+  history, and keeps SQLite writes outside the trace-state lock. Verification:
+  `cargo test -p pantograph-workflow-service`.
 
 ## Commit Cadence Notes
 

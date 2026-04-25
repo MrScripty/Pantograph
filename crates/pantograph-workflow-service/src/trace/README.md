@@ -15,6 +15,7 @@ frontend code.
 | `state.rs` | Owns trace run-state creation, restart resets, and event-application helpers. |
 | `types.rs` | Canonical workflow trace DTOs, event enums, and request/response contracts. |
 | `store.rs` | Owns retained trace state, replay behavior, request filtering, and snapshot generation. |
+| `timing.rs` | Projects durable timing expectations from prior completed observations and creates idempotent timing observations from terminal trace state. |
 | `runtime.rs` | Applies runtime snapshot events to canonical workflow trace state. |
 | `scheduler.rs` | Applies scheduler snapshot events to canonical workflow trace state. |
 | `tests.rs` | Trace DTO serialization, runtime inference, lifecycle reason, snapshot filtering, replay, scheduler attribution, waiting/resume, and dirty-task tests extracted from the module entrypoint. |
@@ -43,7 +44,8 @@ Keep canonical workflow trace ownership in `pantograph-workflow-service`.
 `types.rs` freezes the transport-safe trace vocabulary, `store.rs` owns the
 in-memory retained trace state and facade, `query.rs` owns backend trace
 filtering and unique-match runtime selection, `state.rs` owns run-state
-creation and event application, and `runtime.rs` plus `scheduler.rs` apply
+creation and event application, `timing.rs` owns timing-observation projection
+and duration expectation enrichment, and `runtime.rs` plus `scheduler.rs` apply
 backend-owned runtime/scheduler facts into the canonical run state. The
 canonical trace snapshot filter model is
 `execution_id`, `session_id`, `workflow_id`, `workflow_name`, plus
@@ -80,6 +82,10 @@ they do not own trace lifecycle rules.
   input; scheduler projection consumes measured queue item/session facts only.
 - Recovery or replay updates for the same execution id update one canonical run
   record in place.
+- Timing expectations are projected from durable prior completed observations.
+  The active execution is not recorded until after its terminal snapshot is
+  enriched, so completion diagnostics compare against previous history rather
+  than including themselves in their baseline.
 - Trace DTO serialization, runtime inference, lifecycle reason, snapshot
   filtering, replay, baseline scheduler attribution, waiting/resume, and
   dirty-task tests stay indexed by `tests.rs`, while larger lifecycle/restart
@@ -124,6 +130,9 @@ let response = trace_store.snapshot(&WorkflowTraceSnapshotRequest::default())?;
 - `snapshot()` trims surrounding whitespace from optional filters and rejects
   blank filter values instead of silently inventing adapter-local fallback
   semantics.
+- `snapshot()` may include optional timing expectations when a diagnostics
+  ledger is configured. Missing timing expectations mean history is unavailable
+  or insufficient, not that a node failed to run.
 - `snapshot_all()` and `clear_history()` operate on the retained in-memory
   trace set owned by this directory.
 - Callers may set execution metadata and graph context additively before or
@@ -149,3 +158,6 @@ let response = trace_store.snapshot(&WorkflowTraceSnapshotRequest::default())?;
   impact summary are backend-owned trace facts. Adapters may cache or replay
   them for live presentation, but they must not become the canonical owner of
   graph-reconciliation history.
+- `timing_expectation` fields are optional duration-comparison projections.
+  They are not progress percentages and consumers must render insufficient
+  history explicitly.

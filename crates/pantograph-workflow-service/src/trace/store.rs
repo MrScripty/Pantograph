@@ -1,12 +1,14 @@
 use std::collections::{BTreeMap, HashMap};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use pantograph_diagnostics_ledger::SqliteDiagnosticsLedger;
 use parking_lot::Mutex;
 
 use crate::workflow::WorkflowServiceError;
 
 use super::query::{runtime_metrics_selection, snapshot_for_request};
 use super::state::{apply_trace_event, create_trace_run_state};
+use super::timing::{enrich_snapshot_timing, terminal_timing_observations};
 use super::types::{
     WorkflowTraceEvent, WorkflowTraceGraphContext, WorkflowTraceNodeRecord,
     WorkflowTraceQueueMetrics, WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest,
@@ -85,13 +87,14 @@ impl WorkflowTraceRunState {
             waiting_for_input: self.waiting_for_input,
             last_error: self.last_error.clone(),
             nodes: self.nodes_by_id.values().cloned().collect(),
+            timing_expectation: None,
         }
     }
 }
 
 #[derive(Debug, Clone)]
-struct WorkflowTraceState {
-    traces_by_id: BTreeMap<String, WorkflowTraceRunState>,
+pub(super) struct WorkflowTraceState {
+    pub(super) traces_by_id: BTreeMap<String, WorkflowTraceRunState>,
     trace_order: Vec<String>,
     execution_contexts: HashMap<String, WorkflowTraceExecutionContext>,
     retained_trace_limit: usize,
@@ -250,9 +253,9 @@ impl WorkflowTraceState {
     }
 }
 
-#[derive(Debug)]
 pub struct WorkflowTraceStore {
     state: Mutex<WorkflowTraceState>,
+    timing_ledger: Option<Mutex<SqliteDiagnosticsLedger>>,
 }
 
 impl Default for WorkflowTraceStore {
@@ -265,6 +268,17 @@ impl WorkflowTraceStore {
     pub fn new(retained_trace_limit: usize) -> Self {
         Self {
             state: Mutex::new(WorkflowTraceState::new(retained_trace_limit)),
+            timing_ledger: None,
+        }
+    }
+
+    pub fn with_timing_ledger(
+        retained_trace_limit: usize,
+        timing_ledger: SqliteDiagnosticsLedger,
+    ) -> Self {
+        Self {
+            state: Mutex::new(WorkflowTraceState::new(retained_trace_limit)),
+            timing_ledger: Some(Mutex::new(timing_ledger)),
         }
     }
 
@@ -274,11 +288,13 @@ impl WorkflowTraceStore {
     ) -> Result<WorkflowTraceSnapshotResponse, WorkflowServiceError> {
         let request = request.normalized();
         request.validate()?;
-        Ok(self.state.lock().snapshot(&request))
+        let snapshot = self.state.lock().snapshot(&request);
+        Ok(self.enrich_timing(snapshot))
     }
 
     pub fn snapshot_all(&self) -> WorkflowTraceSnapshotResponse {
-        self.state.lock().snapshot_all()
+        let snapshot = self.state.lock().snapshot_all();
+        self.enrich_timing(snapshot)
     }
 
     pub fn select_runtime_metrics(
@@ -293,7 +309,9 @@ impl WorkflowTraceStore {
     pub fn clear_history(&self) -> WorkflowTraceSnapshotResponse {
         let mut state = self.state.lock();
         state.clear_history();
-        state.snapshot_all()
+        let snapshot = state.snapshot_all();
+        drop(state);
+        self.enrich_timing(snapshot)
     }
 
     pub fn set_execution_metadata(
@@ -322,9 +340,17 @@ impl WorkflowTraceStore {
         event: &WorkflowTraceEvent,
         timestamp_ms: u64,
     ) -> WorkflowTraceSnapshotResponse {
-        let mut state = self.state.lock();
-        state.record_event(event, timestamp_ms);
-        state.snapshot_all()
+        let (snapshot, observations) = {
+            let mut state = self.state.lock();
+            state.record_event(event, timestamp_ms);
+            (
+                state.snapshot_all(),
+                terminal_timing_observations(&state, event, timestamp_ms),
+            )
+        };
+        let snapshot = self.enrich_timing(snapshot);
+        self.record_timing_observations(observations);
+        snapshot
     }
 
     pub fn record_event_now(&self, event: &WorkflowTraceEvent) -> WorkflowTraceRecordResult {
@@ -333,5 +359,35 @@ impl WorkflowTraceStore {
             snapshot: self.record_event(event, recorded_at_ms),
             recorded_at_ms,
         }
+    }
+
+    fn record_timing_observations(
+        &self,
+        observations: Vec<pantograph_diagnostics_ledger::WorkflowTimingObservation>,
+    ) {
+        if observations.is_empty() {
+            return;
+        }
+        let Some(ledger) = self.timing_ledger.as_ref() else {
+            return;
+        };
+        let mut ledger = ledger.lock();
+        for observation in observations {
+            let _ = pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::record_timing_observation(
+                &mut *ledger,
+                observation,
+            );
+        }
+    }
+
+    fn enrich_timing(
+        &self,
+        snapshot: WorkflowTraceSnapshotResponse,
+    ) -> WorkflowTraceSnapshotResponse {
+        let Some(ledger) = self.timing_ledger.as_ref() else {
+            return snapshot;
+        };
+        let ledger = ledger.lock();
+        enrich_snapshot_timing(snapshot, &*ledger, unix_timestamp_ms())
     }
 }

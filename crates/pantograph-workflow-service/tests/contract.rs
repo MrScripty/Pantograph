@@ -389,7 +389,9 @@ fn workflow_trace_contract_snapshot() {
                 stream_event_count: 1,
                 last_error: None,
                 last_progress_detail: None,
+                timing_expectation: None,
             }],
+            timing_expectation: None,
         }],
         retained_trace_limit: 200,
     };

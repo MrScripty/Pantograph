@@ -3,6 +3,7 @@ mod runtime;
 mod scheduler;
 mod state;
 mod store;
+mod timing;
 mod types;
 
 pub use store::{WorkflowTraceRecordResult, WorkflowTraceStore};
