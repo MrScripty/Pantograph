@@ -53,6 +53,7 @@ implements `WorkflowHost`.
 
 ## Related ADRs
 - `docs/adr/ADR-001-headless-embedding-service-boundary.md`
+- `docs/adr/ADR-011-scheduler-only-workflow-execution.md`
 
 ## Usage Examples
 ```rust

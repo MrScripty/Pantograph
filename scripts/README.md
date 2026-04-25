@@ -11,6 +11,7 @@ main app entrypoint.
 | `check-runtime-redistributables-smoke.sh` | Verifies a built Pantograph release artifact exists, then runs the bounded managed-runtime contract smoke that covers runtime-manager view projection, workflow preflight blocking, and diagnostics projection. |
 | `check-decision-traceability.sh` | Enforces source-directory README/ADR decision traceability for changed source directories, with repo-specific host-facing and structured-producer paths plus a grep fallback when `ripgrep` is unavailable. |
 | `check-no-python-linkage.sh` | Verifies the runtime-separation guarantee that Pantograph no longer links Python in-process. |
+| `check-scheduler-only-workflow-execution.sh` | Fails when public Rust, Tauri, binding, or frontend source reintroduces direct workflow execution APIs outside scheduler session execution. |
 | `check-rustler-beam-smoke.sh` | Builds `pantograph_rustler`, verifies the local BEAM toolchain exists, and runs the Mix smoke harness under `bindings/beam/pantograph_native_smoke/`. |
 | `check-packaged-csharp-quickstart.sh` | Compiles the artifact-staged C# quickstart against the generated binding with Roslyn and .NET reference assemblies, then runs the authoring path against the packaged native library; does not restore NuGet packages. |
 | `check-uniffi-csharp-diffusion-smoke.sh` | Opt-in generated-C#/native-runtime session diffusion smoke; requires a local diffusers model directory and Python environment. |
@@ -58,6 +59,8 @@ can be debugged without the full app UI in the loop.
 - Smoke tests target real Pantograph worker/runtime modules, not forks of that
   logic.
 - C# runtime execution smokes create workflow sessions before submitting runs.
+- Public workflow execution validation rejects direct run APIs; callers must use
+  scheduler session create/run/close surfaces.
 - Validation scripts remain developer tools, not product runtime entrypoints.
 
 ## Revisit Triggers
@@ -72,12 +75,11 @@ and repo-local build configuration.
 specific script being executed.
 
 ## Related ADRs
-None.
-Reason: scripts are developer tooling entrypoints that support documented
-runtime and binding decisions but do not currently own an architecture decision
-record.
-Revisit trigger: a script becomes the authoritative implementation of a release
-or runtime-boundary decision.
+- `docs/adr/ADR-011-scheduler-only-workflow-execution.md`
+- Reason: the scheduler-only guardrail script enforces the public workflow
+  execution boundary frozen by the ADR.
+- Revisit trigger: workflow execution exposes a new public transport or binding
+  surface that must be covered by guardrail scans.
 
 ## Usage Examples
 ```bash
@@ -89,6 +91,7 @@ npm run format:check
 npm run release:sbom -- 0.1.0
 ./scripts/check-decision-traceability.sh
 ./scripts/check-no-python-linkage.sh
+./scripts/check-scheduler-only-workflow-execution.sh
 ./scripts/check-rustler-beam-smoke.sh
 ./scripts/generate-release-sbom.sh 0.1.0
 ./scripts/check-runtime-redistributables-smoke.sh

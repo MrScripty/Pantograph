@@ -428,6 +428,10 @@ adapter.
   owner of the planned `RuntimeRegistry` policy layer.
 - Revisit trigger: runtime-registry implementation requires this crate to
   expose a new host-facing facade or changes its ownership boundary.
+- `docs/adr/ADR-011-scheduler-only-workflow-execution.md`
+- Reason: it freezes public workflow execution through scheduler-owned
+  workflow execution sessions.
+- Revisit trigger: embedded runtime adds a new public execution surface.
 
 ## Usage Examples
 ```rust

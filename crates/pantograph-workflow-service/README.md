@@ -67,6 +67,7 @@ should be preserved until a breaking API change is explicitly accepted.
 ## Related ADRs
 - `docs/adr/ADR-001-headless-embedding-service-boundary.md`
 - `docs/adr/ADR-002-runtime-registry-ownership-and-lifecycle.md`
+- `docs/adr/ADR-011-scheduler-only-workflow-execution.md`
 
 ## Usage Examples
 ```rust

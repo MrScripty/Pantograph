@@ -181,11 +181,11 @@ workflow graph outside scheduler-visible session lifecycle.
 scheduler invariant visible to maintainers.
 
 **Tasks:**
-- [ ] Add or update an ADR for scheduler-only workflow execution.
-- [ ] Add a repo check or focused test that scans public/frontend/binding
+- [x] Add or update an ADR for scheduler-only workflow execution.
+- [x] Add a repo check or focused test that scans public/frontend/binding
   surfaces for forbidden direct execution APIs.
-- [ ] Update examples to use scheduler session APIs.
-- [ ] Record deferred follow-up refactors below.
+- [x] Update examples to use scheduler session APIs.
+- [x] Record deferred follow-up refactors below.
 
 **Verification:**
 - Documentation traceability review.
@@ -193,7 +193,7 @@ scheduler invariant visible to maintainers.
   APIs are present.
 - `git diff --check`
 
-**Status:** Not started.
+**Status:** Complete.
 
 ## Execution Notes
 
@@ -208,6 +208,10 @@ scheduler invariant visible to maintainers.
   binding exports. `workflow_run_internal` remains private scheduler-owned
   implementation detail used only after session queue admission. No
   compatibility facade was added.
+- 2026-04-25: Added ADR-011 for scheduler-only workflow execution and a
+  source-surface guardrail script that fails on direct public workflow execution
+  APIs in Rust, Tauri, binding, or frontend code. UniFFI metadata validation now
+  rejects the removed `workflow_run` binding.
 
 ## Commit Cadence Notes
 

@@ -39,9 +39,18 @@ require_metadata() {
   fi
 }
 
+reject_metadata() {
+  local needle="$1"
+  if grep -Fq "$needle" "$repr_path"; then
+    echo "UniFFI metadata includes forbidden binding item: $needle" >&2
+    echo "Metadata dump: $repr_path" >&2
+    exit 1
+  fi
+}
+
 require_metadata 'name: "FfiEmbeddedRuntimeConfig"'
 require_metadata 'name: "FfiPantographRuntime"'
-require_metadata 'name: "workflow_run"'
+reject_metadata 'name: "workflow_run"'
 require_metadata 'name: "workflow_get_capabilities"'
 require_metadata 'name: "workflow_get_io"'
 require_metadata 'name: "workflow_preflight"'
