@@ -26,8 +26,9 @@ pub use connection_intent::{
 pub use contract_validation::validate_workflow_graph_contract;
 pub use memory_impact::graph_memory_impact_from_node_engine_graph_change;
 pub use persistence::{
-    FileSystemWorkflowGraphStore, WorkflowGraphListResponse, WorkflowGraphLoadRequest,
-    WorkflowGraphSaveRequest, WorkflowGraphSaveResponse, WorkflowGraphStore,
+    FileSystemWorkflowGraphStore, WorkflowGraphDeleteRequest, WorkflowGraphDeleteResponse,
+    WorkflowGraphListResponse, WorkflowGraphLoadRequest, WorkflowGraphSaveRequest,
+    WorkflowGraphSaveResponse, WorkflowGraphStore,
 };
 pub use registry::{validate_workflow_connection, NodeRegistry};
 pub use session::GraphSessionStore;

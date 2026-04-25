@@ -2,12 +2,12 @@ use crate::graph::{
     ConnectionCandidatesResponse, ConnectionCommitResponse, EdgeInsertionPreviewResponse,
     InsertNodeConnectionResponse, InsertNodeOnEdgeResponse, WorkflowFile, WorkflowGraph,
     WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest,
-    WorkflowGraphCreateGroupRequest, WorkflowGraphEditSessionCloseRequest,
-    WorkflowGraphEditSessionCloseResponse, WorkflowGraphEditSessionCreateRequest,
-    WorkflowGraphEditSessionCreateResponse, WorkflowGraphEditSessionGraphRequest,
-    WorkflowGraphEditSessionGraphResponse, WorkflowGraphGetConnectionCandidatesRequest,
-    WorkflowGraphInsertNodeAndConnectRequest, WorkflowGraphInsertNodeOnEdgeRequest,
-    WorkflowGraphListResponse, WorkflowGraphLoadRequest,
+    WorkflowGraphCreateGroupRequest, WorkflowGraphDeleteRequest, WorkflowGraphDeleteResponse,
+    WorkflowGraphEditSessionCloseRequest, WorkflowGraphEditSessionCloseResponse,
+    WorkflowGraphEditSessionCreateRequest, WorkflowGraphEditSessionCreateResponse,
+    WorkflowGraphEditSessionGraphRequest, WorkflowGraphEditSessionGraphResponse,
+    WorkflowGraphGetConnectionCandidatesRequest, WorkflowGraphInsertNodeAndConnectRequest,
+    WorkflowGraphInsertNodeOnEdgeRequest, WorkflowGraphListResponse, WorkflowGraphLoadRequest,
     WorkflowGraphPreviewNodeInsertOnEdgeRequest, WorkflowGraphRemoveEdgeRequest,
     WorkflowGraphRemoveNodeRequest, WorkflowGraphSaveRequest, WorkflowGraphSaveResponse,
     WorkflowGraphStore, WorkflowGraphUndoRedoStateRequest, WorkflowGraphUndoRedoStateResponse,
@@ -193,6 +193,15 @@ impl WorkflowService {
     ) -> Result<WorkflowGraphListResponse, WorkflowServiceError> {
         let workflows = store.list_workflows()?;
         Ok(WorkflowGraphListResponse { workflows })
+    }
+
+    pub fn workflow_graph_delete<S: WorkflowGraphStore>(
+        &self,
+        store: &S,
+        request: WorkflowGraphDeleteRequest,
+    ) -> Result<WorkflowGraphDeleteResponse, WorkflowServiceError> {
+        store.delete_workflow(request.name)?;
+        Ok(WorkflowGraphDeleteResponse {})
     }
 
     pub async fn workflow_graph_get_runtime_snapshot(

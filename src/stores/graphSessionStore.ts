@@ -25,6 +25,7 @@ export const currentGraphInfo = sessionStores.currentGraphInfo;
 // --- Re-export actions ---
 export const refreshWorkflowList = sessionStores.refreshWorkflowList;
 export const loadWorkflowByName = sessionStores.loadWorkflowByName;
+export const deleteWorkflowByName = sessionStores.deleteWorkflowByName;
 export const createNewWorkflow = sessionStores.createNewWorkflow;
 export const saveLastGraph = sessionStores.saveLastGraph;
 

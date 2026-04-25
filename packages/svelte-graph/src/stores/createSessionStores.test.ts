@@ -213,3 +213,67 @@ test('loadWorkflowByName exposes backend failures through graphSessionError', as
     'Failed to load workflow "missing-flow": workflow file missing',
   );
 });
+
+test('deleteWorkflowByName deletes current workflow after backend confirmation', async () => {
+  const calls: string[] = [];
+  const backend = createBackendStub({
+    async loadWorkflow() {
+      return {
+        version: '1.0',
+        metadata: {
+          id: 'saved-flow',
+          name: 'Saved Flow',
+          created: '',
+          modified: '',
+        },
+        graph: { nodes: [], edges: [] },
+      };
+    },
+    async listWorkflows() {
+      calls.push('list');
+      return [] satisfies WorkflowMetadata[];
+    },
+    async deleteWorkflow(name: string) {
+      calls.push(`delete:${name}`);
+    },
+  });
+  let cleared = false;
+  const workflowStores = {
+    ...createWorkflowStoresStub(),
+    clearWorkflow() {
+      cleared = true;
+    },
+  } as WorkflowStores;
+  const sessionStores = createSessionStores(backend, workflowStores, createViewStoresStub());
+
+  await sessionStores.loadWorkflowByName('saved-flow');
+  const deleted = await sessionStores.deleteWorkflowByName('saved-flow');
+
+  assert.equal(deleted, true);
+  assert.deepEqual(calls, ['delete:saved-flow', 'list']);
+  assert.equal(cleared, true);
+  assert.equal(get(sessionStores.currentGraphName), 'Untitled Workflow');
+  assert.match(get(sessionStores.currentSessionId) ?? '', /^stub-session-/);
+  assert.equal(get(sessionStores.graphSessionError), null);
+});
+
+test('deleteWorkflowByName keeps current graph when backend deletion fails', async () => {
+  const backend = createBackendStub({
+    async deleteWorkflow() {
+      throw new Error('delete denied');
+    },
+  });
+  const sessionStores = createSessionStores(
+    backend,
+    createWorkflowStoresStub(),
+    createViewStoresStub(),
+  );
+
+  const deleted = await sessionStores.deleteWorkflowByName('saved-flow');
+
+  assert.equal(deleted, false);
+  assert.equal(
+    get(sessionStores.graphSessionError),
+    'Failed to delete workflow "saved-flow": delete denied',
+  );
+});

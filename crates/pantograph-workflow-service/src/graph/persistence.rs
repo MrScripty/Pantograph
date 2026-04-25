@@ -66,6 +66,8 @@ pub trait WorkflowGraphStore: Send + Sync {
     fn load_workflow(&self, path: String) -> Result<WorkflowFile, WorkflowServiceError>;
 
     fn list_workflows(&self) -> Result<Vec<WorkflowGraphMetadata>, WorkflowServiceError>;
+
+    fn delete_workflow(&self, name: String) -> Result<(), WorkflowServiceError>;
 }
 
 #[derive(Debug, Clone)]
@@ -133,6 +135,28 @@ fn resolve_runtime_project_root() -> Option<PathBuf> {
         .find_map(|seed| find_project_root_from(&seed))
 }
 
+fn sanitized_workflow_file_stem(name: &str) -> Result<String, WorkflowServiceError> {
+    let safe_name: String = name
+        .trim()
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' || c == ' ' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+
+    if safe_name.is_empty() {
+        return Err(WorkflowServiceError::InvalidRequest(
+            "Workflow name cannot be empty".to_string(),
+        ));
+    }
+
+    Ok(safe_name)
+}
+
 impl WorkflowGraphStore for FileSystemWorkflowGraphStore {
     fn save_workflow(
         &self,
@@ -144,17 +168,7 @@ impl WorkflowGraphStore for FileSystemWorkflowGraphStore {
         sanitize_workflow_graph_persistence_state(&mut graph);
         graph.refresh_derived_graph();
 
-        let safe_name: String = name
-            .chars()
-            .map(|c| {
-                if c.is_alphanumeric() || c == '-' || c == '_' || c == ' ' {
-                    c
-                } else {
-                    '_'
-                }
-            })
-            .collect();
-
+        let safe_name = sanitized_workflow_file_stem(&name)?;
         let file_path = workflows_dir.join(format!("{}.json", safe_name));
 
         let workflow_file = if file_path.exists() {
@@ -229,6 +243,23 @@ impl WorkflowGraphStore for FileSystemWorkflowGraphStore {
         workflows.sort_by(|a, b| b.modified.cmp(&a.modified));
         Ok(workflows)
     }
+
+    fn delete_workflow(&self, name: String) -> Result<(), WorkflowServiceError> {
+        let workflows_dir = self.workflows_dir()?;
+        let safe_name = sanitized_workflow_file_stem(&name)?;
+        let file_path = workflows_dir.join(format!("{}.json", safe_name));
+
+        if !file_path.exists() {
+            return Err(WorkflowServiceError::InvalidRequest(format!(
+                "Workflow '{}' does not exist",
+                name
+            )));
+        }
+
+        fs::remove_file(&file_path).map_err(|e| {
+            WorkflowServiceError::Internal(format!("Failed to delete workflow file: {}", e))
+        })
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
@@ -255,6 +286,16 @@ pub struct WorkflowGraphLoadRequest {
 pub struct WorkflowGraphListResponse {
     pub workflows: Vec<WorkflowGraphMetadata>,
 }
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowGraphDeleteRequest {
+    pub name: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowGraphDeleteResponse {}
 
 #[cfg(test)]
 mod tests {
@@ -373,6 +414,41 @@ mod tests {
         assert!(!data.contains_key("dependency_requirements"));
         assert!(!data.contains_key("inference_settings"));
         assert!(!data.contains_key("recommended_backend"));
+    }
+
+    #[test]
+    fn delete_workflow_removes_sanitized_workflow_file() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let store = FileSystemWorkflowGraphStore::new(temp.path());
+        let graph = WorkflowGraph {
+            nodes: Vec::new(),
+            edges: Vec::new(),
+            derived_graph: None,
+        };
+
+        let path = store
+            .save_workflow("Unsafe/Name".to_string(), graph)
+            .expect("save workflow");
+
+        assert!(Path::new(&path).exists());
+
+        store
+            .delete_workflow("Unsafe/Name".to_string())
+            .expect("delete workflow");
+
+        assert!(!Path::new(&path).exists());
+    }
+
+    #[test]
+    fn delete_workflow_rejects_missing_workflow() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let store = FileSystemWorkflowGraphStore::new(temp.path());
+
+        let err = store
+            .delete_workflow("Missing".to_string())
+            .expect_err("missing workflow should fail");
+
+        assert!(matches!(err, WorkflowServiceError::InvalidRequest(_)));
     }
 
     #[test]

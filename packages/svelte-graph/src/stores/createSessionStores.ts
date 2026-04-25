@@ -52,6 +52,7 @@ export interface SessionStores {
   // Actions
   refreshWorkflowList: () => Promise<void>;
   loadWorkflowByName: (name: string) => Promise<boolean>;
+  deleteWorkflowByName: (name: string) => Promise<boolean>;
   createNewWorkflow: () => Promise<void>;
   saveLastGraph: (id: string, type: GraphType) => void;
   loadLastGraph: () => Promise<void>;
@@ -162,6 +163,29 @@ export function createSessionStores(
     currentGraphName.set('Untitled Workflow');
   }
 
+  async function deleteWorkflowByName(name: string): Promise<boolean> {
+    graphSessionError.set(null);
+    try {
+      await backend.deleteWorkflow(name);
+      await refreshWorkflowList();
+
+      const deletedCurrentWorkflow =
+        get(currentGraphType) === 'workflow'
+        && (get(currentGraphId) === name || get(currentGraphName) === name);
+
+      if (deletedCurrentWorkflow) {
+        clearLastGraph(name, 'workflow');
+        await createNewWorkflow();
+      }
+
+      return true;
+    } catch (error) {
+      console.error(`[sessionStores] Failed to delete workflow "${name}":`, error);
+      graphSessionError.set(`Failed to delete workflow "${name}": ${normalizeError(error)}`);
+      return false;
+    }
+  }
+
   function saveLastGraph(id: string, type: GraphType): void {
     if (!storageKey) return;
     try {
@@ -180,6 +204,18 @@ export function createSessionStores(
       // localStorage might not be available or corrupted
     }
     return null;
+  }
+
+  function clearLastGraph(id: string, type: GraphType): void {
+    if (!storageKey) return;
+    try {
+      const last = getLastGraph();
+      if (last?.id === id && last.type === type) {
+        localStorage.removeItem(storageKey);
+      }
+    } catch {
+      // localStorage might not be available
+    }
   }
 
   async function loadLastGraph(): Promise<void> {
@@ -224,7 +260,7 @@ export function createSessionStores(
     currentGraphId, currentGraphType, currentGraphName, availableWorkflows, currentSessionId, currentSessionKind,
     graphSessionError,
     isReadOnly, currentGraphInfo,
-    refreshWorkflowList, loadWorkflowByName, createNewWorkflow,
+    refreshWorkflowList, loadWorkflowByName, deleteWorkflowByName, createNewWorkflow,
     saveLastGraph, loadLastGraph, switchGraph,
   };
 }

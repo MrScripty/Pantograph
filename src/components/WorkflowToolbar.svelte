@@ -1,11 +1,11 @@
 <script lang="ts">
+  import { Activity, CircleHelp, Loader2, Play } from 'lucide-svelte';
   import {
     workflowGraph,
     isDirty,
     isExecuting,
     setNodeExecutionState,
     resetExecutionStates,
-    clearWorkflow,
     edges,
     updateNodeRuntimeData,
     clearNodeRuntimeData,
@@ -15,12 +15,7 @@
   } from '../stores/workflowStore';
   import {
     isReadOnly,
-    currentGraphId,
-    currentGraphName,
     currentSessionId,
-    createNewWorkflow,
-    saveLastGraph,
-    refreshWorkflowList,
   } from '../stores/graphSessionStore';
   import { workflowService } from '../services/workflow/WorkflowService';
   import type { WorkflowEvent } from '../services/workflow/types';
@@ -29,11 +24,10 @@
   } from './nodes/workflow/audioOutputState';
   import { applyWorkflowToolbarEvent } from './workflowToolbarEvents.ts';
   import { get } from 'svelte/store';
-  import GraphSelector from './GraphSelector.svelte';
+  import WorkflowPersistenceControls from './WorkflowPersistenceControls.svelte';
   import { diagnosticsSnapshot, toggleDiagnosticsPanel } from '../stores/diagnosticsStore';
   import { formatDiagnosticsDuration, getDiagnosticsStatusClasses } from './diagnostics/presenters';
 
-  let workflowName = $derived($currentGraphName || 'Untitled Workflow');
   let workflowError = $state<string | null>(null);
   let selectedDiagnosticsRun = $derived($diagnosticsSnapshot.selectedRun);
   let diagnosticsPanelOpen = $derived($diagnosticsSnapshot.state.panelOpen);
@@ -150,80 +144,11 @@
     }
   }
 
-  async function handleSave() {
-    const name = prompt('Workflow name:', workflowName);
-    if (!name) return;
-
-    try {
-      await workflowService.saveWorkflow(name, $workflowGraph);
-      isDirty.set(false);
-
-      // Update frontend state to match saved workflow
-      currentGraphId.set(name);
-      currentGraphName.set(name);
-      saveLastGraph(name, 'workflow');
-      await refreshWorkflowList();
-    } catch (error) {
-      console.error('Failed to save workflow:', error);
-    }
-  }
-
-  function handleNew() {
-    if ($isReadOnly) return;
-    if ($isDirty && !confirm('Discard unsaved changes?')) return;
-    createNewWorkflow();
-  }
-
-  function handleClear() {
-    if ($isReadOnly) return;
-    if (!confirm('Clear all nodes?')) return;
-    clearWorkflow();
-  }
 </script>
 
 <div>
   <div class="workflow-toolbar h-12 px-4 bg-neutral-900 border-b border-neutral-700 flex items-center justify-between">
-    <div class="flex items-center gap-3">
-      <GraphSelector />
-
-      <div class="h-6 w-px bg-neutral-700"></div>
-
-      <div class="flex items-center gap-2">
-        <button type="button"
-          class="px-3 py-1.5 text-sm bg-neutral-800 border border-neutral-600 rounded text-neutral-200 transition-colors"
-          class:hover:bg-neutral-700={!$isReadOnly}
-          class:opacity-50={$isReadOnly}
-          class:cursor-not-allowed={$isReadOnly}
-          onclick={handleNew}
-          disabled={$isReadOnly}
-          title={$isReadOnly ? 'Cannot create new in read-only mode' : 'New Workflow'}
-        >
-          [+] New
-        </button>
-        <button type="button"
-          class="px-3 py-1.5 text-sm bg-neutral-800 border border-neutral-600 rounded text-neutral-200 transition-colors"
-          class:hover:bg-neutral-700={!$isReadOnly}
-          class:opacity-50={$isReadOnly}
-          class:cursor-not-allowed={$isReadOnly}
-          onclick={handleSave}
-          disabled={$isReadOnly}
-          title={$isReadOnly ? 'Cannot save read-only graph' : 'Save Workflow'}
-        >
-          [S] Save
-        </button>
-        <button type="button"
-          class="px-3 py-1.5 text-sm bg-neutral-800 border border-neutral-600 rounded text-neutral-200 transition-colors hover:bg-red-900"
-          class:opacity-50={$isReadOnly}
-          class:cursor-not-allowed={$isReadOnly}
-          class:hover:bg-transparent={$isReadOnly}
-          onclick={handleClear}
-          disabled={$isReadOnly}
-          title={$isReadOnly ? 'Cannot clear read-only graph' : 'Clear All'}
-        >
-          [X] Clear
-        </button>
-      </div>
-    </div>
+    <WorkflowPersistenceControls />
 
     <div class="flex items-center gap-2">
       {#if $isReadOnly}
@@ -242,7 +167,8 @@
         onclick={toggleDiagnosticsPanel}
         title="Toggle workflow diagnostics panel"
       >
-        [::] Diagnostics
+        <Activity size={14} aria-hidden="true" class="inline-block align-[-2px] mr-1" />
+        Diagnostics
       </button>
 
       {#if selectedDiagnosticsRun}
@@ -266,12 +192,15 @@
       >
         {#if $isExecuting}
           {#if waitingForInput}
-            [?] Waiting...
+            <CircleHelp size={14} aria-hidden="true" class="inline-block align-[-2px] mr-1" />
+            Waiting...
           {:else}
-            [||] Running...
+            <Loader2 size={14} aria-hidden="true" class="inline-block align-[-2px] mr-1" />
+            Running...
           {/if}
         {:else}
-          [>] Run
+          <Play size={14} aria-hidden="true" class="inline-block align-[-2px] mr-1" />
+          Run
         {/if}
       </button>
     </div>
