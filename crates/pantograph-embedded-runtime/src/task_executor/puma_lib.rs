@@ -37,6 +37,61 @@ impl TauriTaskExecutor {
         }
     }
 
+    fn normalized_puma_lib_model_name(value: &str) -> String {
+        value
+            .chars()
+            .filter(|ch| ch.is_ascii_alphanumeric())
+            .flat_map(char::to_lowercase)
+            .collect()
+    }
+
+    fn puma_lib_record_matches_name(record: &pumas_library::ModelRecord, requested: &str) -> bool {
+        let requested = Self::normalized_puma_lib_model_name(requested);
+        if requested.is_empty() {
+            return false;
+        }
+
+        [
+            record.id.as_str(),
+            record.official_name.as_str(),
+            record.cleaned_name.as_str(),
+        ]
+        .into_iter()
+        .any(|candidate| Self::normalized_puma_lib_model_name(candidate) == requested)
+    }
+
+    async fn find_puma_lib_model_by_name(
+        api: &Arc<pumas_library::PumasApi>,
+        model_name: &str,
+    ) -> std::result::Result<Option<pumas_library::ModelRecord>, String> {
+        let models = api
+            .list_models()
+            .await
+            .map_err(|error| format!("Failed to list Puma-Lib models: {error}"))?;
+        Ok(models
+            .into_iter()
+            .find(|record| Self::puma_lib_record_matches_name(record, model_name)))
+    }
+
+    async fn resolve_puma_lib_model_record(
+        api: &Arc<pumas_library::PumasApi>,
+        model_id: Option<&str>,
+        model_name: Option<&str>,
+    ) -> std::result::Result<Option<pumas_library::ModelRecord>, String> {
+        if let Some(model_id) = model_id {
+            return api
+                .get_model(model_id)
+                .await
+                .map_err(|error| format!("Failed to query Puma-Lib model '{model_id}': {error}"));
+        }
+
+        if let Some(model_name) = model_name {
+            return Self::find_puma_lib_model_by_name(api, model_name).await;
+        }
+
+        Ok(None)
+    }
+
     pub(super) async fn execute_puma_lib(
         &self,
         inputs: &HashMap<String, serde_json::Value>,
@@ -45,7 +100,10 @@ impl TauriTaskExecutor {
         let mut model_path =
             Self::read_optional_input_string_aliases(inputs, &["model_path", "modelPath"])
                 .unwrap_or_default();
-        let model_id = Self::read_optional_input_string_aliases(inputs, &["model_id", "modelId"]);
+        let mut model_id =
+            Self::read_optional_input_string_aliases(inputs, &["model_id", "modelId"]);
+        let model_name =
+            Self::read_optional_input_string_aliases(inputs, &["model_name", "modelName"]);
         let mut model_type =
             Self::read_optional_input_string_aliases(inputs, &["model_type", "modelType"]);
         let mut task_type_primary = Self::read_optional_input_string_aliases(
@@ -59,12 +117,18 @@ impl TauriTaskExecutor {
             &["recommended_backend", "recommendedBackend"],
         );
 
-        if let (Some(model_id), Some(api)) = (
-            model_id.as_deref(),
-            extensions.get::<Arc<pumas_library::PumasApi>>(extension_keys::PUMAS_API),
-        ) {
-            match api.get_model(model_id).await {
+        if let Some(api) = extensions.get::<Arc<pumas_library::PumasApi>>(extension_keys::PUMAS_API)
+        {
+            let requested_model_id = model_id.clone();
+            match Self::resolve_puma_lib_model_record(
+                &api,
+                requested_model_id.as_deref(),
+                model_name.as_deref(),
+            )
+            .await
+            {
                 Ok(Some(model)) => {
+                    model_id = Some(model.id.clone());
                     if !model.path.trim().is_empty() {
                         model_path = model.path.clone();
                     }
@@ -109,7 +173,7 @@ impl TauriTaskExecutor {
                         }
                     }
 
-                    match api.resolve_model_execution_descriptor(model_id).await {
+                    match api.resolve_model_execution_descriptor(&model.id).await {
                         Ok(descriptor) => {
                             if !descriptor.entry_path.trim().is_empty() {
                                 model_path = descriptor.entry_path;
@@ -125,23 +189,29 @@ impl TauriTaskExecutor {
                         Err(error) => {
                             log::warn!(
                                 "Puma-Lib execution descriptor lookup failed for '{}': {}",
-                                model_id,
+                                model.id,
                                 error
                             );
                         }
                     }
                 }
                 Ok(None) => {
-                    log::warn!(
-                        "Puma-Lib model '{}' was not found during workflow execution; using saved node data",
-                        model_id
-                    );
+                    if let Some(model_id) = requested_model_id.as_deref() {
+                        log::warn!(
+                            "Puma-Lib model '{}' was not found during workflow execution; using saved node data",
+                            model_id
+                        );
+                    } else if let Some(model_name) = model_name.as_deref() {
+                        log::warn!(
+                            "Puma-Lib model named '{}' was not found during workflow execution; using saved node data",
+                            model_name
+                        );
+                    }
                 }
                 Err(error) => {
                     log::warn!(
-                        "Puma-Lib lookup failed for '{}': {}; using saved node data",
-                        model_id,
-                        error
+                        "Puma-Lib lookup failed during workflow execution: {}; using saved node data",
+                        error,
                     );
                 }
             }

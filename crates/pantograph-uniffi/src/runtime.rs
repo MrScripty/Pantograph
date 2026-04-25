@@ -20,8 +20,8 @@ use pantograph_workflow_service::{
     WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest, WorkflowIoRequest,
     WorkflowPreflightRequest, WorkflowService, WorkflowServiceError,
 };
-use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 use tokio::sync::RwLock;
 
 use crate::{FfiError, FfiPumasApi};

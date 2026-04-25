@@ -109,10 +109,9 @@ async fn workflow_run_honors_blocking_backend_technical_fit_decision() {
         .expect_err("technical-fit decision should block run");
 
     assert!(matches!(err, WorkflowServiceError::RuntimeNotReady(_)));
-    assert!(
-        err.to_string()
-            .contains("technical-fit could not select a ready runtime")
-    );
+    assert!(err
+        .to_string()
+        .contains("technical-fit could not select a ready runtime"));
 }
 
 #[tokio::test]
@@ -136,10 +135,9 @@ async fn workflow_run_returns_internal_when_host_emits_invalid_output_shape() {
         .expect_err("invalid host output should be internal");
 
     assert!(matches!(err, WorkflowServiceError::Internal(_)));
-    assert!(
-        err.to_string()
-            .contains("outputs.0.port_id must be non-empty")
-    );
+    assert!(err
+        .to_string()
+        .contains("outputs.0.port_id must be non-empty"));
 }
 
 #[tokio::test]
@@ -339,10 +337,9 @@ async fn workflow_run_returns_output_not_produced_when_target_missing() {
         .expect_err("expected output_not_produced");
 
     assert!(matches!(err, WorkflowServiceError::OutputNotProduced(_)));
-    assert!(
-        err.to_string()
-            .contains("requested output target 'text-output-1.text' was not produced")
-    );
+    assert!(err
+        .to_string()
+        .contains("requested output target 'text-output-1.text' was not produced"));
 }
 
 #[tokio::test]

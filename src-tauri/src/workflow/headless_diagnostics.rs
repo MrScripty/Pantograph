@@ -12,10 +12,9 @@ use super::diagnostics::{
 };
 use pantograph_embedded_runtime::ManagedRuntimeManagerRuntimeView;
 use pantograph_workflow_service::{
-    WorkflowCapabilitiesResponse, WorkflowGraph, WorkflowSchedulerSnapshotRequest,
-    WorkflowSchedulerSnapshotResponse, WorkflowServiceError, WorkflowTraceRuntimeMetrics,
-    WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
-    graph::WorkflowGraphSessionStateView,
+    graph::WorkflowGraphSessionStateView, WorkflowCapabilitiesResponse, WorkflowGraph,
+    WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse, WorkflowServiceError,
+    WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
 };
 
 pub(crate) fn workflow_error_json(error: WorkflowServiceError) -> String {

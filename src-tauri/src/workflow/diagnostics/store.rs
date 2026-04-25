@@ -11,10 +11,10 @@ use pantograph_workflow_service::{
 use parking_lot::Mutex;
 
 use super::attempts::{
-    OverlayRecordDecision, overlay_record_decision, trace_attempt_state_for_execution,
-    trace_attempt_state_in_snapshot, trace_event_execution_id,
+    overlay_record_decision, trace_attempt_state_for_execution, trace_attempt_state_in_snapshot,
+    trace_event_execution_id, OverlayRecordDecision,
 };
-use super::overlay::{WorkflowDiagnosticsState, event_execution_id, record_diagnostics_overlay};
+use super::overlay::{event_execution_id, record_diagnostics_overlay, WorkflowDiagnosticsState};
 use super::trace::{graph_trace_context, workflow_trace_event};
 use super::types::{
     DiagnosticsRuntimeLifecycleSnapshot, DiagnosticsRuntimeSnapshot,

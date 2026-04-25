@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use tauri::{AppHandle, Manager, State, ipc::Channel};
+use tauri::{ipc::Channel, AppHandle, Manager, State};
 
 use crate::agent::rag::SharedRagManager;
 use crate::llm::startup::build_resolved_embedding_request;
@@ -10,8 +10,8 @@ pub(crate) use pantograph_embedded_runtime::workflow_runtime::unix_timestamp_ms;
 use pantograph_embedded_runtime::{
     list_managed_runtime_manager_runtimes,
     workflow_runtime::{
-        WorkflowExecutionDiagnosticsSyncInput,
         build_workflow_execution_diagnostics_snapshot_with_registry_sync,
+        WorkflowExecutionDiagnosticsSyncInput,
     },
 };
 use pantograph_workflow_service::{WorkflowCapabilitiesRequest, WorkflowGraph};
@@ -101,6 +101,32 @@ fn persisted_workflow_id_for_runtime_capabilities<'a>(
     workflow_id: &'a str,
 ) -> Option<&'a str> {
     (workflow_id != session_id).then_some(workflow_id)
+}
+
+async fn workflow_id_for_runtime_events(
+    workflow_service: &SharedWorkflowService,
+    session_id: &str,
+) -> String {
+    workflow_service
+        .workflow_get_scheduler_snapshot(
+            pantograph_workflow_service::WorkflowSchedulerSnapshotRequest {
+                session_id: session_id.to_string(),
+            },
+        )
+        .await
+        .map(|snapshot| {
+            snapshot
+                .workflow_id
+                .unwrap_or_else(|| snapshot.session.workflow_id)
+        })
+        .unwrap_or_else(|error| {
+            log::debug!(
+                "Falling back to session id for runtime events because scheduler snapshot is unavailable for session '{}': {}",
+                session_id,
+                error
+            );
+            session_id.to_string()
+        })
 }
 
 async fn emit_diagnostics_snapshots(input: DiagnosticsEmissionInput<'_>) {
@@ -266,11 +292,16 @@ async fn run_session_graph_snapshot(input: SessionGraphSnapshotInput<'_>) -> Res
 
     diagnostics_store.set_execution_graph(&session_id, &session_graph);
 
-    let event_adapter = Arc::new(TauriEventAdapter::new(
-        channel,
-        &session_id,
-        diagnostics_store.inner().clone(),
-    ));
+    let event_workflow_id =
+        workflow_id_for_runtime_events(workflow_service.inner(), &session_id).await;
+    let event_adapter = Arc::new(
+        TauriEventAdapter::new(
+            channel,
+            event_workflow_id,
+            diagnostics_store.inner().clone(),
+        )
+        .with_execution_graph(session_graph.clone()),
+    );
     let guard = config.read().await;
     let device = guard.device.clone();
     drop(guard);

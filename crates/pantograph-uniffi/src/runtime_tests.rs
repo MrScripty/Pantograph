@@ -495,13 +495,11 @@ async fn direct_runtime_exposes_workflow_graph_persistence_and_edit_session() {
     let list_response_json = runtime.workflow_graph_list().expect("list workflow graphs");
     let list_response: serde_json::Value =
         serde_json::from_str(&list_response_json).expect("parse list response");
-    assert!(
-        list_response["workflows"]
-            .as_array()
-            .expect("workflows")
-            .iter()
-            .any(|metadata| metadata["id"] == "Native Edited Workflow")
-    );
+    assert!(list_response["workflows"]
+        .as_array()
+        .expect("workflows")
+        .iter()
+        .any(|metadata| metadata["id"] == "Native Edited Workflow"));
 
     let load_response_json = runtime
         .workflow_graph_load(serde_json::json!({ "path": path }).to_string())
@@ -598,13 +596,11 @@ async fn direct_runtime_exposes_backend_owned_graph_authoring_discovery() {
         .expect("list node definitions");
     let definitions: serde_json::Value =
         serde_json::from_str(&definitions_json).expect("parse definitions");
-    assert!(
-        definitions
-            .as_array()
-            .expect("definitions")
-            .iter()
-            .any(|definition| definition["node_type"] == "text-input")
-    );
+    assert!(definitions
+        .as_array()
+        .expect("definitions")
+        .iter()
+        .any(|definition| definition["node_type"] == "text-input"));
 
     let text_input_json = runtime
         .workflow_graph_get_node_definition("text-input".to_string())
@@ -612,39 +608,33 @@ async fn direct_runtime_exposes_backend_owned_graph_authoring_discovery() {
     let text_input: serde_json::Value =
         serde_json::from_str(&text_input_json).expect("parse text-input definition");
     assert_eq!(text_input["category"], "input");
-    assert!(
-        text_input["outputs"]
-            .as_array()
-            .expect("outputs")
-            .iter()
-            .any(|port| port["id"] == "text")
-    );
+    assert!(text_input["outputs"]
+        .as_array()
+        .expect("outputs")
+        .iter()
+        .any(|port| port["id"] == "text"));
 
     let grouped_json = runtime
         .workflow_graph_get_node_definitions_by_category()
         .expect("group node definitions");
     let grouped: serde_json::Value =
         serde_json::from_str(&grouped_json).expect("parse grouped definitions");
-    assert!(
-        grouped["input"]
-            .as_array()
-            .expect("input category")
-            .iter()
-            .any(|definition| definition["node_type"] == "text-input")
-    );
+    assert!(grouped["input"]
+        .as_array()
+        .expect("input category")
+        .iter()
+        .any(|definition| definition["node_type"] == "text-input"));
 
     let queryable_json = runtime
         .workflow_graph_get_queryable_ports()
         .expect("queryable ports");
     let queryable: serde_json::Value =
         serde_json::from_str(&queryable_json).expect("parse queryable ports");
-    assert!(
-        queryable
-            .as_array()
-            .expect("queryable ports")
-            .iter()
-            .any(|port| port["node_type"] == "puma-lib" && port["port_id"] == "model_path")
-    );
+    assert!(queryable
+        .as_array()
+        .expect("queryable ports")
+        .iter()
+        .any(|port| port["node_type"] == "puma-lib" && port["port_id"] == "model_path"));
 
     let missing = runtime
         .workflow_graph_get_node_definition("missing-node".to_string())
@@ -663,11 +653,9 @@ async fn direct_runtime_exposes_backend_owned_graph_authoring_discovery() {
         .expect_err("non-queryable port should be rejected");
     let envelope = workflow_error_envelope(missing_options);
     assert_eq!(envelope.code, WorkflowErrorCode::InvalidRequest);
-    assert!(
-        envelope
-            .message
-            .contains("No options provider for text-input:text")
-    );
+    assert!(envelope
+        .message
+        .contains("No options provider for text-input:text"));
 
     runtime.shutdown().await;
     let _ = std::fs::remove_dir_all(root);

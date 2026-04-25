@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::util::{validate_optional_text, validate_required_text, MAX_ID_LEN};
 use crate::DiagnosticsLedgerError;
-use crate::util::{MAX_ID_LEN, validate_optional_text, validate_required_text};
 
 pub const MIN_TIMING_EXPECTATION_SAMPLE_COUNT: usize = 3;
 

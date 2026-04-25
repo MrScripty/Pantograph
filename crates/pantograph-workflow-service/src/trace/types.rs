@@ -4,11 +4,11 @@ use node_engine::GraphMemoryImpactSummary;
 use pantograph_diagnostics_ledger::WorkflowTimingExpectation;
 use serde::{Deserialize, Serialize};
 
-use crate::WorkflowSchedulerSnapshotDiagnostics;
 use crate::workflow::{
     WorkflowCapabilitiesResponse, WorkflowExecutionSessionQueueItem,
     WorkflowExecutionSessionSummary, WorkflowServiceError,
 };
+use crate::WorkflowSchedulerSnapshotDiagnostics;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]

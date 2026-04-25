@@ -3,7 +3,7 @@ use std::path::Path;
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, UsageEventId, WorkflowId, WorkflowRunId,
 };
-use rusqlite::{Connection, Row, params};
+use rusqlite::{params, Connection, Row};
 
 mod timing_sqlite;
 
@@ -13,7 +13,7 @@ use crate::records::{
     PruneUsageEventsCommand, PruneUsageEventsResult, RetentionClass, UsageEventStatus,
     UsageLineage,
 };
-use crate::schema::{SCHEMA_VERSION, apply_schema, current_schema_version, migrate_schema};
+use crate::schema::{apply_schema, current_schema_version, migrate_schema, SCHEMA_VERSION};
 use crate::timing::{
     PruneTimingObservationsCommand, PruneTimingObservationsResult, WorkflowTimingExpectation,
     WorkflowTimingExpectationQuery, WorkflowTimingObservation,

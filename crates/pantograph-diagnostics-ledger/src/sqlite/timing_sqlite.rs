@@ -1,12 +1,12 @@
 use rusqlite::params;
 
 use super::SqliteDiagnosticsLedger;
-use crate::DiagnosticsLedgerError;
 use crate::timing::{
-    MIN_TIMING_EXPECTATION_SAMPLE_COUNT, PruneTimingObservationsCommand,
-    PruneTimingObservationsResult, WorkflowTimingExpectation, WorkflowTimingExpectationQuery,
-    WorkflowTimingObservation, WorkflowTimingObservationStatus,
+    PruneTimingObservationsCommand, PruneTimingObservationsResult, WorkflowTimingExpectation,
+    WorkflowTimingExpectationQuery, WorkflowTimingObservation, WorkflowTimingObservationStatus,
+    MIN_TIMING_EXPECTATION_SAMPLE_COUNT,
 };
+use crate::DiagnosticsLedgerError;
 
 pub(super) fn record_timing_observation(
     ledger: &mut SqliteDiagnosticsLedger,
