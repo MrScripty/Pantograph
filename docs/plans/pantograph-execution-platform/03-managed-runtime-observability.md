@@ -11,6 +11,98 @@ classification without node-authored boilerplate.
 Ready for stage-start preflight after stages `01` and `02` are complete and
 their stage-end refactor gates have been recorded.
 
+## Implementation Notes
+
+### 2026-04-24 Stage-Start Report
+
+- Selected stage: Stage `03`, managed runtime observability.
+- Current branch: `main`.
+- Stage base: `41f30685`, the Stage `02` closeout commit.
+- Prior-stage gates: Stage `01` and Stage `02` coordination ledgers record
+  complete wave integration and stage-end refactor gate outcomes of
+  `not_warranted`.
+- Git status before implementation: unrelated asset changes only:
+  deleted `assets/3c842e69-080c-43ad-a9f0-14136e18761f.jpg`, deleted
+  `assets/grok-image-6c435c73-11b8-4dcf-a8b2-f2735cc0c5d3.png`, deleted
+  `assets/grok-image-e5979483-32c2-4cf5-b32f-53be66170132.png`,
+  untracked `assets/banner_3.jpg`, `assets/banner_3.png`,
+  `assets/github_social.jpg`, and `assets/reject/`.
+- Dirty-file overlap: none. Stage `03` implementation must not touch
+  `assets/`.
+- Standards reviewed through the execution-platform standards map:
+  `PLAN-STANDARDS.md`, `ARCHITECTURE-PATTERNS.md`,
+  `CODING-STANDARDS.md`, `DOCUMENTATION-STANDARDS.md`,
+  `TESTING-STANDARDS.md`, `CONCURRENCY-STANDARDS.md`,
+  `TOOLING-STANDARDS.md`, `DEPENDENCY-STANDARDS.md`,
+  `COMMIT-STANDARDS.md`, `languages/rust/RUST-API-STANDARDS.md`,
+  `languages/rust/RUST-ASYNC-STANDARDS.md`, and
+  `languages/rust/RUST-TOOLING-STANDARDS.md`.
+- Intended Wave `02` write set:
+  `crates/pantograph-embedded-runtime/src/` context, managed capability,
+  diagnostics projection, cancellation/progress, guarantee, lifecycle, tests,
+  README, and public facade exports when required.
+- Adjacent write set only if required by existing call sites:
+  `crates/node-engine/src/events/`, `crates/node-engine/src/engine/`, and
+  `crates/pantograph-workflow-service/src/scheduler/`.
+- Forbidden write set for this stage unless the plan is updated first:
+  `crates/pantograph-diagnostics-ledger/`, host binding generation, GUI
+  diagnostics views, and durable model/license ledger query or storage code.
+- Runtime inventory:
+  - `crates/pantograph-embedded-runtime/src/workflow_runtime.rs` currently owns
+    workflow execution diagnostics snapshots, runtime lifecycle projection,
+    model-target shaping, and registry reconciliation.
+  - `crates/pantograph-embedded-runtime/src/runtime_capabilities.rs` currently
+    maps runtime facts into workflow runtime capabilities but does not yet
+    provide per-node managed capability handles.
+  - `crates/pantograph-embedded-runtime/src/workflow_execution_session_execution.rs`
+    owns keep-alive workflow executor reuse keyed by execution-session ids and
+    must remain separate from durable client/session/bucket/run attribution.
+  - `crates/node-engine/src/events/contract.rs` exposes low-level
+    `WorkflowEvent` variants for workflow/task lifecycle, waiting-for-input,
+    progress, stream, and graph mutation events.
+  - `crates/node-engine/src/engine/execution_events.rs` emits demand-level
+    task started, waiting-for-input, and completed events.
+  - `crates/pantograph-workflow-service/src/scheduler/store_diagnostics.rs`
+    owns scheduler queue/runtime-capacity diagnostics and remains
+    backend-owned.
+- Event adaptation decision:
+  - Stage `03` adapts node-engine `WorkflowEvent` task lifecycle, progress,
+    waiting-for-input, stream, and graph mutation facts as low-level execution
+    inputs when available.
+  - The embedded runtime owns enriched node execution diagnostics, attribution
+    context, guarantee classification, managed capability routing facts,
+    cancellation/progress handles, and lineage projection.
+  - Node-engine events must not become the canonical owner of durable
+    attribution, compliance meaning, guarantee policy, or host binding
+    projections.
+  - Missing runtime-owned baseline events are added at the embedded-runtime
+    wrapper/context boundary rather than by requiring ordinary node code to
+    emit diagnostics manually.
+- Durable ledger boundary: Stage `03` may define transient runtime facts and
+  Stage `04` ledger-facing DTOs/traits if needed, but it must not implement
+  durable model/license ledger persistence or queries.
+- Start outcome: `ready_with_recorded_assumptions`.
+- Recorded assumptions:
+  - Wave `02` may be executed serially by the host in this shared workspace
+    when subagents are not explicitly authorized; the recorded worker write
+    sets and reports still apply.
+  - The first logical implementation step is the
+    `runtime-context-capabilities` slice: add runtime-created
+    `NodeExecutionContext`, execution input/output/error/result contracts,
+    managed capability traits, lineage context, and focused tests in
+    `pantograph-embedded-runtime`.
+  - No new third-party dependency is expected for the first slice. If a
+    dependency becomes necessary, stop and record dependency-standard review
+    before editing manifests.
+  - Public facade exports and workspace manifests are host-owned and will be
+    edited only when needed to expose implemented runtime contracts.
+- Expected verification for the first logical step:
+  `cargo test -p pantograph-embedded-runtime`,
+  `cargo fmt --all -- --check`, and
+  `cargo clippy -p pantograph-embedded-runtime --all-targets -- -D warnings`.
+- Expected Stage `03` verification remains the command set listed in
+  `Verification Commands`.
+
 ## Type Families To Define
 
 ### Execution Types
