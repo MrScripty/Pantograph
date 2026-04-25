@@ -18,7 +18,7 @@ are recorded in `03-managed-runtime-observability.md`.
 | Wave | Status | Integration Notes |
 | ---- | ------ | ----------------- |
 | `wave-01` | Complete | Stage-start report, event adaptation decision, durable ledger boundary, and serial execution assumption recorded in `03-managed-runtime-observability.md`. |
-| `wave-02` | In progress | Runtime context and managed capability contracts are integrated locally; diagnostics event adaptation and cancellation/progress/guarantee wiring remain. |
+| `wave-02` | In progress | Runtime context/capability contracts and diagnostics event adaptation are integrated locally; cancellation/progress/guarantee execution-path wiring remains. |
 | `wave-03` | Pending | Host-owned integration and gate. |
 
 ## Worker Reports
@@ -26,7 +26,7 @@ are recorded in `03-managed-runtime-observability.md`.
 | Worker | Report Path | Status |
 | ------ | ----------- | ------ |
 | runtime-context-capabilities | `reports/wave-02-worker-runtime-context-capabilities.md` | Complete |
-| diagnostics-event-adapter | `reports/wave-02-worker-diagnostics-event-adapter.md` | Pending |
+| diagnostics-event-adapter | `reports/wave-02-worker-diagnostics-event-adapter.md` | Complete |
 | cancellation-progress-guarantee | `reports/wave-02-worker-cancellation-progress-guarantee.md` | Pending |
 
 ## Decisions
@@ -63,6 +63,11 @@ are recorded in `03-managed-runtime-observability.md`.
 - 2026-04-24: Decomposition review split the initial combined
   context/capability/test module into focused sibling modules before commit to
   keep touched source files below the 500-line standards trigger.
+- 2026-04-24: The host implemented `diagnostics-event-adapter` locally in the
+  shared workspace. The slice adds transient runtime-owned node diagnostics
+  DTOs and adapts node-engine lifecycle/progress/stream/cancellation facts into
+  enriched attribution, contract, lineage, and guarantee events without adding
+  durable ledger storage.
 
 ## Verification Results
 
@@ -79,3 +84,8 @@ are recorded in `03-managed-runtime-observability.md`.
   this environment. The new `node_execution` tests passed; the package suite
   still reports Pumas SQLite read-only database failures and older
   workflow-run fixture failures where callers supply backend-owned run ids.
+- 2026-04-24: `diagnostics-event-adapter` verification passed:
+  `cargo test -p pantograph-embedded-runtime node_execution_diagnostics`,
+  `cargo check -p pantograph-embedded-runtime`,
+  `cargo fmt --all -- --check`, and
+  `cargo clippy -p pantograph-embedded-runtime --all-targets -- -D warnings`.

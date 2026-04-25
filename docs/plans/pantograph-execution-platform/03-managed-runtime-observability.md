@@ -144,6 +144,30 @@ their stage-end refactor gates have been recorded.
   scheduler/runtime/node-engine facts and wire cancellation/progress/guarantee
   behavior into execution paths.
 
+### 2026-04-24 Wave 02 Diagnostics Event Adapter Progress
+
+- Added `crates/pantograph-embedded-runtime/src/node_execution_diagnostics.rs`
+  and focused diagnostics adapter tests.
+- Implemented transient `NodeExecutionDiagnosticEvent` and
+  `NodeExecutionDiagnosticEventKind` DTOs for runtime-owned node diagnostics.
+- Implemented `adapt_node_engine_diagnostic_event` to enrich node-engine task
+  lifecycle, waiting-for-input, progress, stream, workflow cancellation,
+  graph-modified, and incremental-execution events with runtime attribution,
+  workflow id, node id/type, attempt, contract version/digest, lineage, and
+  guarantee context.
+- Captured output summaries from effective output port contracts for completed
+  and stream events without implementing durable ledger storage.
+- Updated the embedded-runtime public facade and source README to expose and
+  document the transient diagnostics adapter.
+- Verification passed:
+  `cargo test -p pantograph-embedded-runtime node_execution_diagnostics`,
+  `cargo check -p pantograph-embedded-runtime`,
+  `cargo fmt --all -- --check`, and
+  `cargo clippy -p pantograph-embedded-runtime --all-targets -- -D warnings`.
+- Remaining Wave `02` work: wire cancellation/progress/guarantee behavior into
+  execution paths so ordinary node execution produces these baseline facts
+  through the runtime wrapper.
+
 ## Type Families To Define
 
 ### Execution Types

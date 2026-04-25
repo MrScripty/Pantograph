@@ -21,6 +21,7 @@ pub mod host_runtime;
 pub mod managed_runtime_manager;
 pub mod model_dependencies;
 mod node_execution;
+mod node_execution_diagnostics;
 pub mod python_runtime;
 mod python_runtime_execution;
 pub mod rag;
@@ -58,6 +59,10 @@ pub use node_execution::{
     NodeExecutionGuaranteeEvidence, NodeExecutionInput, NodeExecutionOutput, NodeExecutionResult,
     NodeLineageContext, NodeManagedCapabilities, NodeOutputSummary, NodeProgressEvent,
     NodeProgressHandle, ResourceAccessCapability,
+};
+pub use node_execution_diagnostics::{
+    adapt_node_engine_diagnostic_event, NodeExecutionDiagnosticEvent,
+    NodeExecutionDiagnosticEventKind,
 };
 pub use python_runtime::{
     ProcessPythonRuntimeAdapter, PythonNodeExecutionRequest, PythonRuntimeAdapter,

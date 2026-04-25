@@ -40,6 +40,8 @@ packages.
 | `model_dependencies_tests.rs` | Pantograph model dependency resolver tests and Pumas descriptor fixture helpers extracted from the production resolver module. |
 | `node_execution.rs` | Defines runtime-created node execution context, cancellation/progress handles, output summaries, lineage context, and guarantee classification. |
 | `node_execution_capabilities.rs` | Defines managed capability route contracts and typed capability wrappers for model, resource, cache, progress, diagnostics, and external-tool access. |
+| `node_execution_diagnostics.rs` | Adapts node-engine workflow events into enriched transient runtime-owned node diagnostics with attribution, contract, lineage, and guarantee context. |
+| `node_execution_diagnostics_tests.rs` | Focused diagnostics adapter tests for lifecycle, output summary, progress, stream, failure, cancellation, and filtering behavior. |
 | `node_execution_tests.rs` | Focused runtime-created node execution context, managed capability routing, cancellation, progress, output summary, and guarantee classification tests. |
 | `python_runtime_execution.rs` | Owns captured execution metadata for Python-backed runtime runs so workflow diagnostics and registry projection can reuse one recorder contract outside the task-executor facade. |
 | `task_executor.rs` | Hosts the Pantograph-specific task executor facade, construction, extension keys, and node-type dispatch while preserving core-node fallthrough. |
