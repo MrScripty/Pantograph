@@ -228,7 +228,7 @@ async fn workflow_preflight_blocks_selected_runtime_failed_after_restart() {
             }]),
             override_selection: None,
             timeout_ms: None,
-            run_id: Some("failed-selected-runtime".to_string()),
+            run_id: None,
         })
         .await
         .expect_err("workflow run should fail when selected runtime failed validation");
@@ -309,7 +309,7 @@ async fn workflow_preflight_blocks_interrupted_runtime_job_after_restart() {
             }]),
             override_selection: None,
             timeout_ms: None,
-            run_id: Some("interrupted-runtime-job".to_string()),
+            run_id: None,
         })
         .await
         .expect_err("workflow run should fail when restart reconciles an interrupted runtime job");

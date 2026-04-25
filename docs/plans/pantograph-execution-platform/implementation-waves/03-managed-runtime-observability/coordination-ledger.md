@@ -2,9 +2,8 @@
 
 ## Status
 
-Stage `03` in progress. Wave `01` is complete and Wave `02` implementation
-slices are integrated locally. Wave `03` integration, ADR, final verification,
-and stage-end gate remain.
+Stage `03` complete. Wave `01`, Wave `02`, and Wave `03` are integrated and
+the stage-end refactor gate outcome is recorded as `not_warranted`.
 
 ## Branch Or Worktree Strategy
 
@@ -19,7 +18,7 @@ and stage-end gate remain.
 | ---- | ------ | ----------------- |
 | `wave-01` | Complete | Stage-start report, event adaptation decision, durable ledger boundary, and serial execution assumption recorded in `03-managed-runtime-observability.md`. |
 | `wave-02` | Complete | Runtime context/capability contracts, diagnostics event adaptation, and cancellation/progress/guarantee recorder wiring are integrated locally. |
-| `wave-03` | Pending | Host-owned integration and gate. |
+| `wave-03` | Complete | ADR-007, final verification, stale fixture repair, and stage-end refactor gate are complete. |
 
 ## Worker Reports
 
@@ -73,6 +72,19 @@ and stage-end gate remain.
   original node-engine events and collects enriched diagnostics for registered
   runtime-created node contexts, including cancellation and reduced-guarantee
   classification.
+- 2026-04-24: ADR-007 freezes embedded-runtime ownership of managed runtime
+  observability: runtime-created node execution context, managed capabilities,
+  transient diagnostics, cancellation/progress lifecycle, and guarantee
+  classification.
+- 2026-04-24: Stale `pantograph-embedded-runtime` public `workflow_run` test
+  fixtures were corrected to omit caller-supplied run ids. This aligns the
+  tests with the Stage `01` backend-owned run-id contract and restores the full
+  package test suite.
+- 2026-04-24: Stage-end refactor gate outcome is `not_warranted`. Reviewed
+  touched files from `git diff --name-only 7d153f82...HEAD` plus current Wave
+  `03` files; source files stayed below the 500-line decomposition trigger and
+  no ownership, dependency, async, binding, or durable-ledger boundary refactor
+  is needed before Stage `04`.
 
 ## Verification Results
 
@@ -99,3 +111,12 @@ and stage-end gate remain.
   `cargo check -p pantograph-embedded-runtime`,
   `cargo fmt --all -- --check`, and
   `cargo clippy -p pantograph-embedded-runtime --all-targets -- -D warnings`.
+- 2026-04-24: Wave `03` package verification passed:
+  `cargo test -p pantograph-embedded-runtime`,
+  `cargo test -p node-engine`, and
+  `cargo test -p pantograph-workflow-service`.
+- 2026-04-24: Wave `03` workspace verification passed:
+  `cargo check --workspace --all-features`,
+  `cargo fmt --all -- --check`,
+  `cargo clippy --workspace --all-targets --all-features -- -D warnings`, and
+  `cargo test --workspace --doc`.

@@ -186,6 +186,44 @@ their stage-end refactor gates have been recorded.
   work moves to Wave `03`: final integration review, ADR, final verification,
   and stage-end refactor gate.
 
+### 2026-04-24 Wave 03 Integration And Closeout
+
+- Added `docs/adr/ADR-007-managed-runtime-observability-ownership.md` to freeze
+  embedded-runtime ownership of runtime-created node execution context, managed
+  capabilities, transient diagnostics, cancellation/progress lifecycle, and
+  guarantee classification.
+- Updated the ADR index so the Stage `03` observability boundary has the same
+  stable traceability as Stage `01` attribution and Stage `02` node contracts.
+- Repaired stale embedded-runtime test fixtures that supplied caller-owned
+  `run_id` values to public `workflow_run` calls. The fixture updates preserve
+  the Stage `01` rule that workflow run ids are backend-owned and restored the
+  full `pantograph-embedded-runtime` package suite.
+- Verification passed:
+  `cargo test -p pantograph-embedded-runtime`,
+  `cargo test -p node-engine`,
+  `cargo test -p pantograph-workflow-service`,
+  `cargo check --workspace --all-features`,
+  `cargo fmt --all -- --check`,
+  `cargo clippy --workspace --all-targets --all-features -- -D warnings`, and
+  `cargo test --workspace --doc`.
+- Stage-end refactor gate outcome: `not_warranted`.
+- Stage-end gate review source:
+  `git diff --name-only 7d153f82...HEAD` plus current uncommitted Wave `03`
+  files before closeout commit.
+- Touched source files stayed below the 500-line decomposition review trigger:
+  `node_execution.rs` 397 lines, `node_execution_capabilities.rs` 193 lines,
+  `node_execution_tests.rs` 219 lines, `node_execution_diagnostics.rs` 367
+  lines, `node_execution_diagnostics_tests.rs` 277 lines,
+  `runtime_preflight_tests.rs` 317 lines, and
+  `workflow_run_execution_tests.rs` 377 lines.
+- Applicable standards groups reviewed: planning/documentation,
+  architecture/coding, Rust API and async, testing/tooling,
+  security/dependencies, interop/bindings, and release/cross-platform.
+- Findings: Stage `03` changes are already split by runtime-context,
+  capability, diagnostics-adapter, recorder, and test responsibilities;
+  durable model/license ledger storage remains out of scope until Stage `04`;
+  no additional standards refactor is required before the next numbered stage.
+
 ## Type Families To Define
 
 ### Execution Types

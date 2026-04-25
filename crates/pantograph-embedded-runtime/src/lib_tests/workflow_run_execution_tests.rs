@@ -37,7 +37,7 @@ async fn test_runtime_run_and_session_execution() {
             }]),
             override_selection: None,
             timeout_ms: None,
-            run_id: Some("run-1".to_string()),
+            run_id: None,
         })
         .await
         .expect("workflow run");
@@ -119,7 +119,7 @@ async fn workflow_run_returns_invalid_request_for_human_input_workflow() {
             }]),
             override_selection: None,
             timeout_ms: None,
-            run_id: Some("run-human-input".to_string()),
+            run_id: None,
         })
         .await
         .expect_err("interactive workflow run should fail for non-streaming callers");
@@ -296,7 +296,7 @@ async fn test_runtime_routes_diffusion_workflow_through_python_adapter() {
             }]),
             override_selection: None,
             timeout_ms: None,
-            run_id: Some("diffusion-run-1".to_string()),
+            run_id: None,
         })
         .await
         .expect("workflow run");
@@ -359,7 +359,7 @@ async fn test_runtime_run_reconciles_python_sidecar_runtime_into_registry() {
             }]),
             override_selection: None,
             timeout_ms: None,
-            run_id: Some("diffusion-run-2".to_string()),
+            run_id: None,
         })
         .await
         .expect("workflow run");
