@@ -2,7 +2,7 @@
 
 ## Status
 
-Source coverage added locally; host smoke blocked by missing `mix`.
+Source coverage committed; host smoke blocked by missing `mix`.
 
 ## Scope
 

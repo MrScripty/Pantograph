@@ -2,7 +2,7 @@
 
 ## Status
 
-Complete locally. Commit is blocked because `.git` is mounted read-only.
+Complete and committed. BEAM host smoke remains blocked by missing `mix`.
 
 ## Scope
 

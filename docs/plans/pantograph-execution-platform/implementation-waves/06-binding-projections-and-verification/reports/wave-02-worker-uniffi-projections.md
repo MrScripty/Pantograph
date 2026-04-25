@@ -2,7 +2,7 @@
 
 ## Status
 
-Complete locally. Commit is blocked because `.git` is mounted read-only.
+Complete and committed.
 
 ## Scope
 
@@ -49,5 +49,5 @@ PANTOGRAPH_PACKAGE_PROFILE=debug ./scripts/package-uniffi-csharp-artifacts.sh
 ## Notes
 
 - No generated binding artifacts were edited.
-- Full C# artifact smoke and packaged quickstart checks remain pending for the
-  Stage `06` integration wave.
+- C# artifact smoke and packaged quickstart checks passed in the Stage `06`
+  host verification and integration waves.

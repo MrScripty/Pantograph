@@ -2,7 +2,7 @@
 
 ## Status
 
-Complete locally.
+Complete and committed.
 
 ## Scope
 
