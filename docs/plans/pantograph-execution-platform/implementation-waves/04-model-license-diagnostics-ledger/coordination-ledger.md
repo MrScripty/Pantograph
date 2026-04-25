@@ -2,9 +2,8 @@
 
 ## Status
 
-Stage `04` in progress. Wave `01` is complete and Wave `02` implementation
-slices are integrated locally. Wave `03` integration, ADR, final verification,
-and stage-end gate remain.
+Stage `04` complete. Wave `01`, Wave `02`, and Wave `03` are integrated and
+the stage-end refactor gate is recorded as `not_warranted`.
 
 ## Branch Or Worktree Strategy
 
@@ -19,7 +18,7 @@ and stage-end gate remain.
 | ---- | ------ | ----------------- |
 | `wave-01` | Complete | Stage-start report, SQLite dependency/linking review, schema freeze, retention default, pruning semantics, query bounds, and worker write boundaries recorded in `04-model-license-diagnostics-ledger.md`. |
 | `wave-02` | Complete | Ledger storage/retention, runtime ledger submission, and workflow-service query projections are integrated locally. |
-| `wave-03` | Pending | Host-owned integration and gate. |
+| `wave-03` | Complete | ADR, final verification, touched-file review, GUI/binding deferral check, and stage-end refactor gate recorded. |
 
 ## Worker Reports
 
@@ -83,6 +82,20 @@ and stage-end gate remain.
   service query method that delegates to `pantograph-diagnostics-ledger`,
   retention metadata projection, grouped summaries by model/license/guarantee,
   diagnostics-ledger error mapping, README coverage, and focused tests.
+- 2026-04-24: ADR-008 freezes durable model/license diagnostics ledger
+  ownership. `pantograph-diagnostics-ledger` owns persistence, query DTOs,
+  schema/migration, retention, and pruning; `pantograph-embedded-runtime`
+  submits validated managed model usage facts; `pantograph-workflow-service`
+  delegates queries and projects summaries; GUI and bindings consume
+  projections without reconstructing ledger semantics.
+- 2026-04-24: Stage `04` intentionally did not implement GUI diagnostics
+  views or host binding projections. The final touched-file review found no
+  GUI, binding, or frontend write-set changes.
+- 2026-04-24: Stage-end refactor gate outcome is `not_warranted`.
+  Implementation ownership is split across the intended crates, touched source
+  files are below the local refactor threshold, shared SQLite dependency
+  centralization is complete, and no duplicated ledger persistence or query
+  ownership was found.
 
 ## Verification Results
 
@@ -115,3 +128,13 @@ and stage-end gate remain.
   `cargo check -p pantograph-workflow-service`,
   `cargo clippy -p pantograph-workflow-service --all-targets -- -D warnings`,
   and `cargo test -p pantograph-workflow-service`.
+- 2026-04-24: Wave `03` final verification passed:
+  `cargo test -p pantograph-diagnostics-ledger`,
+  `cargo test -p pantograph-embedded-runtime`,
+  `cargo test -p pantograph-workflow-service`,
+  `cargo check --workspace --all-features`,
+  `cargo fmt --all -- --check`,
+  `cargo clippy --workspace --all-targets --all-features -- -D warnings`,
+  and `cargo test --workspace --doc`.
+- 2026-04-24: Stage `04` closeout verification passed. Unrelated dirty
+  `assets/` changes remain excluded from the stage scope.

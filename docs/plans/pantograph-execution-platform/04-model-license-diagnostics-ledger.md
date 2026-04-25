@@ -240,6 +240,37 @@ and their stage-end refactor gates have been recorded.
   Wave `03`: final integration review, ADR, final verification, and
   stage-end refactor gate.
 
+### 2026-04-24 Wave 03 Integration Closeout
+
+- Added `docs/adr/ADR-008-durable-model-license-diagnostics-ledger.md` to
+  freeze durable model/license diagnostics ledger ownership, SQLite
+  persistence, time-of-use license snapshots, typed measurements,
+  retention/pruning semantics, runtime submission, workflow query projections,
+  and GUI/binding consumer boundaries.
+- Updated the ADR index with the Stage `04` architecture decision.
+- Final verification passed:
+  `cargo test -p pantograph-diagnostics-ledger`,
+  `cargo test -p pantograph-embedded-runtime`,
+  `cargo test -p pantograph-workflow-service`,
+  `cargo check --workspace --all-features`,
+  `cargo fmt --all -- --check`,
+  `cargo clippy --workspace --all-targets --all-features -- -D warnings`,
+  and `cargo test --workspace --doc`.
+- Stage-end refactor gate outcome: `not_warranted`.
+  The Stage `04` implementation is already split across
+  `pantograph-diagnostics-ledger`, `pantograph-embedded-runtime`, and
+  `pantograph-workflow-service`; touched source files remain under the local
+  refactor threshold; dependency centralization is complete; and no duplicate
+  ledger persistence, runtime submission, or workflow projection ownership was
+  found during integration review.
+- GUI diagnostics views and host binding projections were not implemented in
+  Stage `04`. The final touched-file review found no GUI, binding, or frontend
+  write-set changes for this stage; those surfaces remain future consumers of
+  backend-owned workflow-service projections.
+- Unrelated `assets/` working-tree changes remain outside the Stage `04`
+  commit scope.
+- Stage `04` outcome: complete.
+
 ## Diagnostics Products
 
 Diagnostics has two related products:
