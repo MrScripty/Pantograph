@@ -36,3 +36,6 @@ one transaction and never rewrites retained historical facts.
 Timing expectations are ranges over comparable completed observations, not
 generic progress percentages. Consumers must treat insufficient history as a
 first-class state and must not infer progress from a missing expectation.
+Optional match fields such as runtime identity refine timing comparisons when
+available, but unknown historical values remain comparable instead of resetting
+history when later diagnostics include richer runtime facts.

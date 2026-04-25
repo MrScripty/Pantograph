@@ -4,13 +4,13 @@ use pantograph_runtime_attribution::{
 use rusqlite::Connection;
 
 use crate::{
-    DiagnosticsLedgerError, DiagnosticsLedgerRepository, DiagnosticsQuery, ExecutionGuaranteeLevel,
-    LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement,
-    OutputMeasurementUnavailableReason, OutputModality, PruneTimingObservationsCommand,
-    PruneUsageEventsCommand, RetentionClass, SqliteDiagnosticsLedger, UsageEventStatus,
-    UsageLineage, WorkflowTimingExpectation, WorkflowTimingExpectationComparison,
-    WorkflowTimingExpectationQuery, WorkflowTimingObservation, WorkflowTimingObservationScope,
-    WorkflowTimingObservationStatus, DEFAULT_STANDARD_RETENTION_DAYS,
+    DEFAULT_STANDARD_RETENTION_DAYS, DiagnosticsLedgerError, DiagnosticsLedgerRepository,
+    DiagnosticsQuery, ExecutionGuaranteeLevel, LicenseSnapshot, ModelIdentity,
+    ModelLicenseUsageEvent, ModelOutputMeasurement, OutputMeasurementUnavailableReason,
+    OutputModality, PruneTimingObservationsCommand, PruneUsageEventsCommand, RetentionClass,
+    SqliteDiagnosticsLedger, UsageEventStatus, UsageLineage, WorkflowTimingExpectation,
+    WorkflowTimingExpectationComparison, WorkflowTimingExpectationQuery, WorkflowTimingObservation,
+    WorkflowTimingObservationScope, WorkflowTimingObservationStatus,
 };
 
 #[test]
@@ -157,6 +157,41 @@ fn persisted_timing_observations_survive_reopen_and_project_expectations() {
         WorkflowTimingExpectationComparison::SlowerThanExpected
     );
     assert_eq!(expectation.median_duration_ms, Some(220));
+    assert_eq!(expectation.typical_min_duration_ms, Some(200));
+    assert_eq!(expectation.typical_max_duration_ms, Some(300));
+}
+
+#[test]
+fn timing_expectation_matches_unknown_optional_runtime_history() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    for (index, duration_ms) in [100, 200].into_iter().enumerate() {
+        let mut observation = sample_timing_observation(index, duration_ms);
+        observation.runtime_id = None;
+        ledger
+            .record_timing_observation(observation)
+            .expect("unknown runtime observation is recorded");
+    }
+    let mut matching_runtime = sample_timing_observation(3, 300);
+    matching_runtime.runtime_id = Some("llama.cpp".to_string());
+    ledger
+        .record_timing_observation(matching_runtime)
+        .expect("matching runtime observation is recorded");
+    let mut unrelated_runtime = sample_timing_observation(4, 500);
+    unrelated_runtime.runtime_id = Some("pytorch".to_string());
+    ledger
+        .record_timing_observation(unrelated_runtime)
+        .expect("unrelated runtime observation is recorded");
+
+    let expectation = ledger
+        .timing_expectation(sample_timing_query(Some(350)))
+        .expect("timing expectation projects");
+
+    assert_eq!(expectation.sample_count, 3);
+    assert_eq!(
+        expectation.comparison,
+        WorkflowTimingExpectationComparison::SlowerThanExpected
+    );
+    assert_eq!(expectation.median_duration_ms, Some(200));
     assert_eq!(expectation.typical_min_duration_ms, Some(200));
     assert_eq!(expectation.typical_max_duration_ms, Some(300));
 }
