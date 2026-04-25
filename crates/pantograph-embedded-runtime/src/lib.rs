@@ -22,6 +22,7 @@ pub mod managed_runtime_manager;
 pub mod model_dependencies;
 mod node_execution;
 mod node_execution_diagnostics;
+mod node_execution_ledger;
 pub mod python_runtime;
 mod python_runtime_execution;
 pub mod rag;
@@ -63,6 +64,9 @@ pub use node_execution::{
 pub use node_execution_diagnostics::{
     adapt_node_engine_diagnostic_event, NodeExecutionDiagnosticEvent,
     NodeExecutionDiagnosticEventKind, NodeExecutionDiagnosticsRecorder,
+};
+pub use node_execution_ledger::{
+    ManagedModelUsageSubmission, RuntimeLedgerSubmissionError, SubmittedModelUsageEvent,
 };
 pub use python_runtime::{
     ProcessPythonRuntimeAdapter, PythonNodeExecutionRequest, PythonRuntimeAdapter,

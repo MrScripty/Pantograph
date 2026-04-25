@@ -7273,6 +7273,7 @@ dependencies = [
  "log",
  "node-engine",
  "once_cell",
+ "pantograph-diagnostics-ledger",
  "pantograph-node-contracts",
  "pantograph-runtime-attribution",
  "pantograph-runtime-identity",

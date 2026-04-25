@@ -179,6 +179,37 @@ and their stage-end refactor gates have been recorded.
 - Remaining Wave `02` work: runtime ledger submission and workflow-service
   query projections.
 
+### 2026-04-24 Wave 02 Runtime Ledger Submission Progress
+
+- Added `crates/pantograph-embedded-runtime/src/node_execution_ledger.rs` as
+  the managed model usage submission boundary owned by the embedded runtime.
+- Added `ManagedModelUsageSubmission`, `SubmittedModelUsageEvent`, and
+  `RuntimeLedgerSubmissionError`.
+- Added `ModelExecutionCapability::build_usage_event` and
+  `ModelExecutionCapability::submit_usage_event` so durable ledger records are
+  built from runtime-created `NodeExecutionContext` values and matching model
+  execution capability routes.
+- The submission boundary projects Stage `01` attribution, workflow id, node
+  id/type, Stage `02` effective contract version/digest, output ports,
+  composed-node lineage, lineage segment metadata, model identity, license
+  snapshot, output measurement, status, timestamps, retention class, and
+  correlation id into `ModelLicenseUsageEvent`.
+- Stage `03` guarantee levels are mapped into durable ledger guarantee levels.
+  A managed-full context is downgraded to `managed_partial` when output
+  measurement facts include unavailable reasons.
+- Added tests for persisted submission, unavailable-measurement downgrade,
+  context/capability mismatch rejection, and unavailable capability rejection.
+- Updated embedded-runtime README coverage and public facade exports for the
+  runtime ledger submission boundary.
+- Verification passed:
+  `cargo fmt -p pantograph-embedded-runtime -p pantograph-diagnostics-ledger`,
+  `cargo test -p pantograph-embedded-runtime node_execution_ledger`,
+  `cargo check -p pantograph-embedded-runtime`,
+  `cargo clippy -p pantograph-embedded-runtime --all-targets -- -D warnings`,
+  and `cargo test -p pantograph-embedded-runtime`.
+- Remaining Wave `02` work: workflow-service query projections and final host
+  integration of ledger query use cases.
+
 ## Diagnostics Products
 
 Diagnostics has two related products:

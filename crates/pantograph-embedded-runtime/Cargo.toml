@@ -33,6 +33,7 @@ inference = { path = "../inference", default-features = false }
 node-engine = { path = "../node-engine", features = ["inference-nodes"] }
 workflow-nodes = { path = "../workflow-nodes", features = ["model-library"] }
 pantograph-workflow-service = { path = "../pantograph-workflow-service" }
+pantograph-diagnostics-ledger = { path = "../pantograph-diagnostics-ledger" }
 pantograph-node-contracts = { path = "../pantograph-node-contracts" }
 pantograph-runtime-attribution = { path = "../pantograph-runtime-attribution" }
 pantograph-runtime-identity = { path = "../pantograph-runtime-identity" }

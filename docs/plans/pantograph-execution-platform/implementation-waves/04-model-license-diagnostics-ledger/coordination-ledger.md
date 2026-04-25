@@ -17,7 +17,7 @@ slices are ready to begin from `ledger-storage-retention`.
 | Wave | Status | Integration Notes |
 | ---- | ------ | ----------------- |
 | `wave-01` | Complete | Stage-start report, SQLite dependency/linking review, schema freeze, retention default, pruning semantics, query bounds, and worker write boundaries recorded in `04-model-license-diagnostics-ledger.md`. |
-| `wave-02` | In Progress | `ledger-storage-retention` is integrated locally; runtime submission and workflow-service query projections remain. |
+| `wave-02` | In Progress | `ledger-storage-retention` and `runtime-ledger-submission` are integrated locally; workflow-service query projections remain. |
 | `wave-03` | Pending | Host-owned integration and gate. |
 
 ## Worker Reports
@@ -25,7 +25,7 @@ slices are ready to begin from `ledger-storage-retention`.
 | Worker | Report Path | Status |
 | ------ | ----------- | ------ |
 | ledger-storage-retention | `reports/wave-02-worker-ledger-storage-retention.md` | Complete |
-| runtime-ledger-submission | `reports/wave-02-worker-runtime-ledger-submission.md` | Pending |
+| runtime-ledger-submission | `reports/wave-02-worker-runtime-ledger-submission.md` | Complete |
 | workflow-service-query-projections | `reports/wave-02-worker-workflow-service-query-projections.md` | Pending |
 
 ## Decisions
@@ -70,6 +70,12 @@ slices are ready to begin from `ledger-storage-retention`.
 - 2026-04-24: `rusqlite` is now centralized in workspace dependencies and
   `pantograph-runtime-attribution` inherits it through `rusqlite.workspace =
   true`.
+- 2026-04-24: The host implemented `runtime-ledger-submission` locally in the
+  shared workspace. The slice adds an embedded-runtime managed model usage
+  submission boundary, durable event construction from runtime-created node
+  context and model capability routes, guarantee-level mapping, unavailable
+  measurement downgrade behavior, public facade exports, README coverage, and
+  focused tests.
 
 ## Verification Results
 
@@ -90,3 +96,9 @@ slices are ready to begin from `ledger-storage-retention`.
 - 2026-04-24: Full `cargo fmt --all` attempted during this slice failed
   because it tried to write a read-only file in the external Pumas checkout.
   Package-scoped formatting for touched crates passed.
+- 2026-04-24: `runtime-ledger-submission` verification passed:
+  `cargo fmt -p pantograph-embedded-runtime -p pantograph-diagnostics-ledger`,
+  `cargo test -p pantograph-embedded-runtime node_execution_ledger`,
+  `cargo check -p pantograph-embedded-runtime`,
+  `cargo clippy -p pantograph-embedded-runtime --all-targets -- -D warnings`,
+  and `cargo test -p pantograph-embedded-runtime`.
