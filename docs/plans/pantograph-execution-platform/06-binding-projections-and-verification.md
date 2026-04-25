@@ -212,6 +212,34 @@ The workspace check emitted existing `pumas-library` dead-code warnings outside
 this repo's current change set. Doctests emitted Cargo's expected note that doc
 tests are not supported for the Rustler `cdylib` crate type.
 
+### 2026-04-25 Wave 04 Binding Integration And Gate
+
+- Added `docs/adr/ADR-010-binding-projection-ownership-and-support-tiers.md`
+  to freeze binding projection ownership, generated artifact policy, and
+  evidence-based support tiers.
+- Updated `docs/headless-native-bindings.md` so graph-authoring discovery is no
+  longer documented as a current gap after the Stage `06` projections.
+- Confirmed support tiers match real host evidence:
+  - Native Rust: supported for implemented execution-platform surfaces.
+  - C#: supported for generated/native surfaces covered by smoke and packaged
+    quickstart verification.
+  - Python: unsupported until a real generated/native host package and
+    import/load smoke command exist.
+  - Elixir/BEAM: experimental on this host because `mix` is unavailable.
+- Recorded the stage-end refactor gate at
+  `implementation-waves/06-binding-projections-and-verification/reports/stage-end-refactor-gate.md`
+  with outcome `not_warranted`.
+- Reran artifact verification after updating packaged headless binding docs:
+
+```bash
+PANTOGRAPH_PACKAGE_PROFILE=debug ./scripts/package-uniffi-csharp-artifacts.sh
+./scripts/check-packaged-csharp-quickstart.sh
+cargo fmt --all -- --check
+```
+
+The packaging script emitted the existing CSharpier availability warning while
+still producing the C# binding, native library, and checksum artifacts.
+
 ## Binding Projection Types
 
 - `FfiNodeDefinition`

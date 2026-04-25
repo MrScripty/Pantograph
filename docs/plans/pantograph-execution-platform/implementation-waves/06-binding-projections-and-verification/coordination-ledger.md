@@ -11,7 +11,7 @@ In progress.
 | `wave-01` | Complete | Stage-start outcome recorded as `ready_with_recorded_assumptions`; C# is candidate supported, Python is unsupported, and BEAM is experimental until support-tier docs and host smoke coverage align. |
 | `wave-02` | Complete locally | UniFFI and Rustler discovery projections are integrated locally; commits are blocked by read-only `.git`. |
 | `wave-03` | Complete locally | C# generated-artifact smoke passed; Python remains unsupported; BEAM source smoke coverage is added but host smoke is blocked by missing `mix`. |
-| `wave-04` | Pending | Host-owned integration and gate. |
+| `wave-04` | Complete locally | ADR, headless binding docs, support-tier reconciliation, final verification, and stage-end refactor gate recorded. |
 
 ## Worker Reports
 
@@ -56,6 +56,11 @@ In progress.
   C# remains the only candidate supported non-Rust host lane after generated
   artifact and packaged quickstart verification. BEAM remains `experimental`
   until its host smoke can run with `mix`.
+- 2026-04-25: Wave `04` accepts
+  `docs/adr/ADR-010-binding-projection-ownership-and-support-tiers.md` as the
+  stable binding projection decision. Stage `06` closes with C# supported only
+  for verified generated/native surfaces, Python unsupported, and BEAM
+  experimental on this host.
 
 ## Verification Results
 
@@ -86,3 +91,9 @@ In progress.
   `cargo clippy --workspace --all-targets --all-features -- -D warnings` and
   `cargo test --workspace --doc`. Doctests emitted Cargo's expected note that
   doc tests are not supported for the Rustler `cdylib` crate type.
+- 2026-04-25 Stage-end refactor gate outcome:
+  `reports/stage-end-refactor-gate.md` records `not_warranted`.
+- 2026-04-25 Wave `04` artifact verification was rerun after updating
+  `docs/headless-native-bindings.md`: packaging, packaged quickstart, and
+  formatter checks passed. Packaging emitted the existing CSharpier availability
+  warning while still producing artifacts.

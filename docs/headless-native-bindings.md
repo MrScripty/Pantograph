@@ -86,13 +86,13 @@ Required direction for the headless binding contract:
 - host applications should build palettes, inspectors, and insert flows from
   backend-discovered node metadata rather than out-of-band node knowledge
 
-Current gap:
+Current surface:
 
-- the direct headless runtime already exposes generic graph mutation helpers,
-  but the registry-backed node-definition and port-option discovery surface is
-  still a required follow-on contract addition
-- until that discovery surface lands, external graph-authoring support should
-  be treated as incomplete and should not be described as fully backend-driven
+- the direct headless runtime exposes generic graph mutation helpers,
+  registry-backed node-definition discovery, category/grouped discovery,
+  queryable-port discovery, and port-option queries
+- supported external graph-authoring flows should treat these backend-discovered
+  facts as the source of truth instead of maintaining a host-local node catalog
 
 ## C# Artifact Layout
 
