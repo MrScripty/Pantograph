@@ -166,9 +166,7 @@ impl WorkflowTraceState {
             if trace.workflow_id.is_none() {
                 trace.workflow_id = context.workflow_id.clone();
             }
-            if trace.workflow_name.is_none() {
-                trace.workflow_name = context.workflow_name.clone();
-            }
+            trace.workflow_name = context.workflow_name.clone();
         }
     }
 
