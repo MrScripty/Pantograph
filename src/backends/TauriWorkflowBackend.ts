@@ -74,16 +74,6 @@ export class TauriWorkflowBackend implements WorkflowBackend {
     await invoke('remove_execution', { executionId: sessionId });
   }
 
-  // --- Execution ---
-
-  async executeWorkflow(graph: WorkflowGraph): Promise<void> {
-    this.channel = new Channel<WorkflowEvent>();
-    this.channel.onmessage = (event) => {
-      this.eventListeners.forEach((listener) => listener(event));
-    };
-    await invoke('execute_workflow_v2', { graph, channel: this.channel });
-  }
-
   // --- Graph Mutation ---
 
   async addNode(node: GraphNode, sessionId: string): Promise<WorkflowGraphMutationResponse> {

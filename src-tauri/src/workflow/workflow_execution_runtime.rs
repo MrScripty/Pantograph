@@ -14,9 +14,7 @@ use pantograph_embedded_runtime::{
         WorkflowExecutionDiagnosticsSyncInput,
     },
 };
-use pantograph_workflow_service::{
-    WorkflowCapabilitiesRequest, WorkflowGraph, WorkflowGraphEditSessionCreateRequest,
-};
+use pantograph_workflow_service::{WorkflowCapabilitiesRequest, WorkflowGraph};
 
 use super::commands::{SharedExtensions, SharedWorkflowService};
 use super::diagnostics::SharedWorkflowDiagnosticsStore;
@@ -33,13 +31,6 @@ pub struct WorkflowExecutionRuntimeState<'a> {
     pub extensions: State<'a, SharedExtensions>,
     pub workflow_service: State<'a, SharedWorkflowService>,
     pub diagnostics_store: State<'a, SharedWorkflowDiagnosticsStore>,
-}
-
-pub struct ExecuteWorkflowV2Input<'a> {
-    pub app: AppHandle,
-    pub graph: WorkflowGraph,
-    pub state: WorkflowExecutionRuntimeState<'a>,
-    pub channel: Channel<WorkflowEvent>,
 }
 
 pub struct RunWorkflowExecutionSessionInput<'a> {
@@ -352,38 +343,6 @@ async fn run_session_graph_snapshot(input: SessionGraphSnapshotInput<'_>) -> Res
     })
     .await;
     finalize_edit_session_execution(outcome.waiting_for_input, outcome.error)
-}
-
-pub async fn execute_workflow_v2(input: ExecuteWorkflowV2Input<'_>) -> Result<String, String> {
-    let ExecuteWorkflowV2Input {
-        app,
-        graph,
-        state,
-        channel,
-    } = input;
-    let session = state
-        .workflow_service
-        .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest {
-            graph,
-            workflow_id: None,
-        })
-        .await
-        .map_err(|e| e.to_envelope_json())?;
-    let execution_id = session.session_id.clone();
-    let session_graph = state
-        .workflow_service
-        .workflow_graph_get_runtime_snapshot(&execution_id)
-        .await
-        .map_err(|e| e.to_envelope_json())?;
-    run_session_graph_snapshot(SessionGraphSnapshotInput {
-        app,
-        session_id: execution_id.clone(),
-        session_graph,
-        state,
-        channel,
-    })
-    .await?;
-    Ok(execution_id)
 }
 
 pub async fn run_workflow_execution_session(

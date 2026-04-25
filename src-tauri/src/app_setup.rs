@@ -360,8 +360,7 @@ pub fn run_app() -> AppStartupResult<()> {
             crate::workflow::commands::workflow_cancel_execution_session_queue_item,
             crate::workflow::commands::workflow_reprioritize_execution_session_queue_item,
             crate::workflow::commands::workflow_set_execution_session_keep_alive,
-            // Node-engine workflow commands (Phase 5)
-            crate::workflow::workflow_execution_tauri_commands::execute_workflow_v2,
+            // Node-engine workflow session commands
             crate::workflow::workflow_execution_tauri_commands::create_workflow_execution_session,
             crate::workflow::workflow_execution_tauri_commands::run_workflow_execution_session,
             crate::workflow::workflow_execution_tauri_commands::get_undo_redo_state,

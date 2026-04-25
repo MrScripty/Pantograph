@@ -103,9 +103,9 @@ const candidates = await backend.getConnectionCandidates(
   mutation or connection-intent methods.
 - `createSession()` returns a backend-owned session handle so consumers do not
   invent local session classification rules.
-- `WorkflowBackend` consumers should also prefer `runSession(sessionId)` for
-  normal editor execution once a session exists; `executeWorkflow(graph)` is the
-  fallback path for raw graph snapshots without an active session owner.
+- `WorkflowBackend` consumers must run workflows through `runSession(sessionId)`;
+  raw graph execution is intentionally not part of the backend contract because
+  all runs must have a backend-owned session for scheduler diagnostics.
 - `getConnectionCandidates` accepts a source anchor plus optional graph revision
   and returns compatible existing targets plus insertable node types.
 - `connectAnchors` requires a graph revision and returns either

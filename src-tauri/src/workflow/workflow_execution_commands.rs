@@ -8,8 +8,7 @@ pub use super::workflow_edit_session::{
     update_node_position_in_execution,
 };
 pub use super::workflow_execution_runtime::{
-    execute_workflow_v2, run_workflow_execution_session, ExecuteWorkflowV2Input,
-    RunWorkflowExecutionSessionInput, WorkflowExecutionRuntimeState,
+    run_workflow_execution_session, RunWorkflowExecutionSessionInput, WorkflowExecutionRuntimeState,
 };
 
 #[cfg(test)]

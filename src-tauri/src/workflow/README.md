@@ -234,7 +234,8 @@ let snapshot = workflow_service
 
 ## API Consumer Contract
 - Frontend callers must create or load an execution session before calling the
-  session-scoped editing commands in this directory.
+  session-scoped editing or execution commands in this directory. Raw graph
+  execution commands are intentionally not registered as public Tauri invokes.
 - `get_connection_candidates` accepts a source anchor and optional graph
   revision, and returns compatible existing targets plus insertable node types.
 - `connect_anchors_in_execution` and `insert_node_and_connect_in_execution`

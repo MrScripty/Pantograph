@@ -1,7 +1,6 @@
 <script lang="ts">
   import { Activity, CircleHelp, Loader2, Play } from 'lucide-svelte';
   import {
-    workflowGraph,
     isDirty,
     isExecuting,
     setNodeExecutionState,
@@ -62,11 +61,10 @@
     currentUnsubscribe = workflowService.subscribeEvents(handleWorkflowEvent);
 
     try {
-      if ($currentSessionId) {
-        await workflowService.runSession($currentSessionId);
-      } else {
-        await workflowService.executeWorkflow($workflowGraph);
+      if (!$currentSessionId) {
+        throw new Error('No active workflow session');
       }
+      await workflowService.runSession($currentSessionId);
       // Don't unsubscribe here - wait for Completed/Failed events
     } catch (error) {
       console.error('Workflow execution failed:', error);

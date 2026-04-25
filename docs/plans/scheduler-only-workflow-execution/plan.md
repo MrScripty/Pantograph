@@ -153,7 +153,7 @@ workflow graph outside scheduler-visible session lifecycle.
 - `cargo check --manifest-path src-tauri/Cargo.toml`
 - Tauri search check for forbidden `execute_workflow_v2` registration.
 
-**Status:** Not started.
+**Status:** Complete.
 
 ### Milestone 4: Migrate Bindings And HTTP Adapter
 
@@ -199,6 +199,10 @@ scheduler invariant visible to maintainers.
 
 - 2026-04-25: Existing dirty source files were committed before this plan. The
   remaining dirty asset changes are unrelated and must stay untouched.
+- 2026-04-25: Removed frontend and Tauri raw-graph execution surfaces. GUI and
+  package toolbar run actions now require an active backend-owned session and
+  use `runSession(sessionId)` only. Tauri `execute_workflow_v2` is no longer a
+  registered invoke command.
 
 ## Commit Cadence Notes
 

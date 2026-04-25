@@ -33,11 +33,10 @@
     currentUnsubscribe = backend.subscribeEvents(handleWorkflowEvent);
 
     try {
-      if ($currentSessionId) {
-        await backend.runSession($currentSessionId);
-      } else {
-        await backend.executeWorkflow(get(workflowGraph));
+      if (!$currentSessionId) {
+        throw new Error('No active workflow session');
       }
+      await backend.runSession($currentSessionId);
     } catch (error) {
       console.error('Workflow execution failed:', error);
       isExecuting.set(false);

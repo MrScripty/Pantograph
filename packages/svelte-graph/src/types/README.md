@@ -94,6 +94,9 @@ function isAccepted(result: ConnectionCommitResponse): boolean {
 ## API Consumer Contract (Host-Facing Modules)
 - `WorkflowBackend` methods in `backend.ts` are the supported editing/session
   calls package consumers implement or call through adapters.
+- Workflow execution is session-scoped. Consumers must call
+  `runSession(sessionId)` with a backend-owned session id; raw graph execution
+  is intentionally absent from the transport contract.
 - Consumers must treat `graph_revision` as an opaque token and echo it back on
   revision-aware commit operations.
 - New transport methods should be additive; removing or renaming existing fields

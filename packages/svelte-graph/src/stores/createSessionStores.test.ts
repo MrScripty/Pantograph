@@ -34,7 +34,6 @@ function createBackendStub(overrides: Partial<WorkflowBackend> = {}): WorkflowBa
     },
     async runSession() {},
     async removeSession() {},
-    async executeWorkflow() {},
     async addNode() {
       return { graph: { nodes: [], edges: [] } };
     },

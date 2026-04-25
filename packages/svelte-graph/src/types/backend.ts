@@ -72,19 +72,11 @@ export interface WorkflowBackend {
    *  session handle rather than inferring session classification locally. */
   createSession(graph: WorkflowGraph, workflowId?: string | null): Promise<WorkflowSessionHandle>;
 
-  /** Run an existing session by demanding outputs from terminal nodes.
-   *  Consumers should prefer this over executeWorkflow when an active edit
-   *  session already owns the graph being rendered. */
+  /** Run an existing backend-owned session by demanding outputs from terminal nodes. */
   runSession(sessionId: string): Promise<void>;
 
   /** Clean up a session when done */
   removeSession(sessionId: string): Promise<void>;
-
-  // --- Execution ---
-
-  /** Execute a workflow from a raw graph snapshot (fire-and-forget, results
-   *  come via events). Prefer runSession for normal editor flows. */
-  executeWorkflow(graph: WorkflowGraph): Promise<void>;
 
   // --- Graph Mutation (session-scoped) ---
 

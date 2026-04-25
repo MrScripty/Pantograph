@@ -161,10 +161,6 @@ export class MockWorkflowBackend implements WorkflowBackend {
     this.sessions.delete(sessionId);
   }
 
-  async executeWorkflow(graph: WorkflowGraph): Promise<void> {
-    await this.simulateExecution(graph);
-  }
-
   async addNode(node: GraphNode, sessionId: string): Promise<WorkflowGraphMutationResponse> {
     const graph = this.sessions.get(sessionId);
     if (!graph) throw new Error(`Session not found: ${sessionId}`);

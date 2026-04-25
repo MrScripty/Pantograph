@@ -6,7 +6,7 @@ use crate::llm::{SharedAppConfig, SharedGateway, SharedRuntimeRegistry};
 use super::commands::{SharedExtensions, SharedWorkflowDiagnosticsStore, SharedWorkflowService};
 use super::events::WorkflowEvent;
 use super::workflow_execution_commands::{
-    ExecuteWorkflowV2Input, RunWorkflowExecutionSessionInput, WorkflowExecutionRuntimeState,
+    RunWorkflowExecutionSessionInput, WorkflowExecutionRuntimeState,
 };
 use pantograph_workflow_service::{
     ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse,
@@ -14,40 +14,6 @@ use pantograph_workflow_service::{
     InsertNodeOnEdgeResponse, InsertNodePositionHint, PortMapping, Position, UndoRedoState,
     WorkflowGraph, WorkflowGraphEditSessionGraphResponse,
 };
-
-#[command]
-#[expect(
-    clippy::too_many_arguments,
-    reason = "Tauri command entrypoint receives framework-injected state handles; internal execution code uses grouped request structs."
-)]
-pub async fn execute_workflow_v2(
-    app: AppHandle,
-    graph: WorkflowGraph,
-    gateway: State<'_, SharedGateway>,
-    runtime_registry: State<'_, SharedRuntimeRegistry>,
-    config: State<'_, SharedAppConfig>,
-    rag_manager: State<'_, SharedRagManager>,
-    extensions: State<'_, SharedExtensions>,
-    workflow_service: State<'_, SharedWorkflowService>,
-    diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
-    channel: Channel<WorkflowEvent>,
-) -> Result<String, String> {
-    super::workflow_execution_commands::execute_workflow_v2(ExecuteWorkflowV2Input {
-        app,
-        graph,
-        state: WorkflowExecutionRuntimeState {
-            gateway,
-            runtime_registry,
-            config,
-            rag_manager,
-            extensions,
-            workflow_service,
-            diagnostics_store,
-        },
-        channel,
-    })
-    .await
-}
 
 #[command]
 pub async fn get_undo_redo_state(

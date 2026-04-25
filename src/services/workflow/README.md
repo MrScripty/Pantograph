@@ -94,9 +94,9 @@ session ownership, mock branching, and legacy app-facing method shapes.
   and branch safely.
 - Mock-mode diagnostics projections must include the same projection context
   shape as native `workflow_get_diagnostics_snapshot` responses.
-- Starting a transient `executeWorkflow()` run must clear any stale prior run
-  execution id before the next execution-scoped event claims the active run
-  identity.
+- Workflow execution must use a backend-owned session. Raw graph execution is
+  not exposed because scheduler diagnostics and runtime admission depend on
+  session-scoped run lifecycle state.
 
 ## Revisit Triggers
 - The app graph and all remaining callers migrate to package backends directly.

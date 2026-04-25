@@ -1,5 +1,5 @@
 // Mock data for frontend development without Rust backend
-import type { NodeDefinition, WorkflowEvent, WorkflowGraph } from './types';
+import type { NodeDefinition } from './types';
 
 // NOTE: These mock definitions use snake_case to match Rust serde serialization
 export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
@@ -333,56 +333,6 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     execution_mode: 'stream',
   },
 ];
-
-export async function mockExecuteWorkflow(
-  graph: WorkflowGraph,
-  onEvent: (event: WorkflowEvent) => void
-): Promise<void> {
-  const executionId = `mock-run-${Date.now()}`;
-  onEvent({
-    type: 'Started',
-    data: { workflow_id: executionId, node_count: graph.nodes.length, execution_id: executionId },
-  });
-
-  // Sort nodes topologically (simplified - just process in order for mock)
-  for (const node of graph.nodes) {
-    onEvent({
-      type: 'NodeStarted',
-      data: { node_id: node.id, node_type: node.node_type, execution_id: executionId },
-    });
-
-    // Simulate processing time
-    await new Promise((resolve) => setTimeout(resolve, 500));
-
-    // Simulate streaming for LLM nodes
-    if (node.node_type === 'llm-inference' || node.node_type === 'tool-loop') {
-      const chunks = ['Hello', ', ', 'this is ', 'a mock ', 'response!'];
-      for (const chunk of chunks) {
-        onEvent({
-          type: 'NodeStream',
-          data: {
-            node_id: node.id,
-            port: 'stream',
-            chunk: { type: 'text', content: chunk },
-            execution_id: executionId,
-          },
-        });
-        await new Promise((resolve) => setTimeout(resolve, 150));
-      }
-    }
-
-    onEvent({
-      type: 'NodeCompleted',
-      data: {
-        node_id: node.id,
-        outputs: { response: 'Hello, this is a mock response!' },
-        execution_id: executionId,
-      },
-    });
-  }
-
-  onEvent({ type: 'Completed', data: { outputs: {}, execution_id: executionId } });
-}
 
 export function mockValidateConnection(sourceType: string, targetType: string): boolean {
   // Any accepts all types (snake_case to match Rust serde)

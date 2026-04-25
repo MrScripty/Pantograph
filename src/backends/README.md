@@ -93,11 +93,11 @@ const session = await backend.createSession({ nodes: [], edges: [] });
   and `removeEdge` return updated graphs for store synchronization.
 - `createGroup`, `ungroup`, and `updateGroupPorts` return updated graphs for
   the same store synchronization path.
-- Session lifecycle ordering remains: create/load session before graph mutation,
-  consume the returned backend session handle instead of hardcoding local
-  session classification,
-  use `runSession()` as the preferred execution path for an active editor
-  session, and remove the session when the consumer is done.
+- Session lifecycle ordering remains: create/load session before graph mutation
+  or execution, consume the returned backend session handle instead of
+  hardcoding local session classification, use `runSession()` as the only
+  execution path for an active editor session, and remove the session when the
+  consumer is done.
 - Compatibility policy is additive: new invoke-backed methods should extend the
   adapter without silently changing existing method semantics.
 

@@ -27,7 +27,6 @@ import type {
 } from './types.ts';
 import {
   MOCK_NODE_DEFINITIONS,
-  mockExecuteWorkflow,
   mockValidateConnection,
 } from './mocks.ts';
 import {
@@ -109,71 +108,6 @@ export class WorkflowService {
       sourceType,
       targetType,
     });
-  }
-
-  // --- Workflow Execution ---
-
-  /**
-   * Execute a workflow using the node-engine.
-   * This is a convenience wrapper around executeWorkflowV2.
-   */
-  async executeWorkflow(graph: WorkflowGraph): Promise<void> {
-    if (USE_MOCKS) {
-      this.currentExecutionId = null;
-      this.currentRunExecutionId = null;
-      return mockExecuteWorkflow(graph, (event) => {
-        this.publishEvent(event);
-      });
-    }
-
-    this.currentExecutionId = null;
-    this.currentRunExecutionId = null;
-    this.channel = new Channel<WorkflowEvent>();
-
-    this.channel.onmessage = (event) => {
-      this.publishEvent(event);
-    };
-
-    // Use execute_workflow_v2 (the node-engine based command)
-    await invoke('execute_workflow_v2', {
-      graph,
-      channel: this.channel,
-    });
-  }
-
-  // --- Workflow Execution V2 (Node-Engine Based) ---
-
-  /**
-   * Execute a workflow using the node-engine with demand-driven evaluation.
-   * Returns the execution ID which can be used for undo/redo and graph modifications.
-   */
-  async executeWorkflowV2(graph: WorkflowGraph): Promise<string> {
-    if (USE_MOCKS) {
-      // For mocks, fall back to legacy execution and return a fake ID
-      this.currentRunExecutionId = null;
-      await mockExecuteWorkflow(graph, (event) => {
-        this.publishEvent(event);
-      });
-      this.currentExecutionId ??= 'mock-execution-id';
-      this.currentRunExecutionId ??= this.currentExecutionId;
-      return this.currentExecutionId;
-    }
-
-    this.currentRunExecutionId = null;
-    this.channel = new Channel<WorkflowEvent>();
-
-    this.channel.onmessage = (event) => {
-      this.publishEvent(event);
-    };
-
-    const executionId = await invoke<string>('execute_workflow_v2', {
-      graph,
-      channel: this.channel,
-    });
-
-    this.currentExecutionId = executionId;
-    this.currentRunExecutionId = executionId;
-    return executionId;
   }
 
   /**

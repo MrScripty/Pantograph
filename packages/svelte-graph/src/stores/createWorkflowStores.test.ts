@@ -56,7 +56,6 @@ function createBackendStub(initialGraph: WorkflowGraph): WorkflowBackend {
     },
     async runSession() {},
     async removeSession() {},
-    async executeWorkflow() {},
     async addNode() {
       throw new Error('not implemented');
     },
