@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use pantograph_diagnostics_ledger::DiagnosticsLedgerError;
 use pantograph_runtime_attribution::AttributionError;
 
 use crate::technical_fit::{WorkflowTechnicalFitDecision, WorkflowTechnicalFitOverride};
@@ -483,6 +484,23 @@ impl From<AttributionError> for WorkflowServiceError {
                 Self::Internal(error.to_string())
             }
             _ => Self::InvalidRequest(error.to_string()),
+        }
+    }
+}
+
+impl From<DiagnosticsLedgerError> for WorkflowServiceError {
+    fn from(error: DiagnosticsLedgerError) -> Self {
+        match error {
+            DiagnosticsLedgerError::MissingField { .. }
+            | DiagnosticsLedgerError::FieldTooLong { .. }
+            | DiagnosticsLedgerError::InvalidField { .. }
+            | DiagnosticsLedgerError::InvalidTimeRange
+            | DiagnosticsLedgerError::QueryLimitExceeded { .. } => {
+                Self::InvalidRequest(error.to_string())
+            }
+            DiagnosticsLedgerError::UnsupportedSchemaVersion { .. }
+            | DiagnosticsLedgerError::Storage(_)
+            | DiagnosticsLedgerError::Serialization(_) => Self::Internal(error.to_string()),
         }
     }
 }

@@ -13,7 +13,7 @@ diagnostics reusable across Tauri, UniFFI, Rustler, and tests.
 | ----------- | ----------- |
 | `lib.rs` | Public module exports for the workflow service crate. |
 | `workflow.rs` | Public workflow facade exports, execution/session facade methods, and orchestration logic. |
-| `workflow/` | Private workflow contracts, host traits, graph API methods, capability/preflight API methods, workflow run and session execution API methods, queue and lifecycle API methods, service configuration, request validation, I/O derivation, runtime preflight, and session-runtime helpers extracted from the main facade. |
+| `workflow/` | Private workflow contracts, host traits, graph API methods, diagnostics ledger query methods, capability/preflight API methods, workflow run and session execution API methods, queue and lifecycle API methods, service configuration, request validation, I/O derivation, runtime preflight, and session-runtime helpers extracted from the main facade. |
 | `scheduler/` | Backend-owned workflow-session queue/store contracts used by the workflow facade. |
 | `trace/` | Workflow trace contracts, request validation, in-memory trace state, and runtime/scheduler snapshot merge helpers. |
 | `graph/` | Graph DTOs and session-kind contracts shared by service operations. |
@@ -51,8 +51,9 @@ facade in the workflow preflight API helper.
 Generic workflow run execution now lives behind the facade in the workflow run
 API helper.
 Service construction, capacity-limit configuration, diagnostics-provider setup,
-and the session-store guard now live in the workflow service configuration
-helper. The root workflow facade tests now live in `workflow/tests.rs`; shared
+diagnostics-ledger setup, and the session-store guard now live in the workflow
+service configuration helper. The root workflow facade tests now live in
+`workflow/tests.rs`; shared
 test fixture families now live under `workflow/tests/fixtures/` and are
 re-exported by `workflow/tests/fixtures.rs`. Scheduler snapshot facade coverage
 now lives in `workflow/tests/scheduler_snapshot.rs`, while scheduler admission,
@@ -86,6 +87,9 @@ reprioritization methods now live behind the facade in the workflow session
 queue API helper.
 Stale cleanup, stale cleanup worker, keep-alive, and close-session methods now
 live behind the facade in the workflow session lifecycle API helper.
+Model/license usage diagnostics query methods now live behind the facade in the
+workflow diagnostics API helper and delegate to `pantograph-diagnostics-ledger`
+for storage and query semantics.
 
 ## Alternatives Rejected
 - Keep workflow behavior in Tauri commands: rejected because native bindings
@@ -122,6 +126,9 @@ live behind the facade in the workflow session lifecycle API helper.
   scheduler-store access in the workflow session queue helper.
 - Session lifecycle API methods preserve the public facade while keeping
   cleanup, keep-alive, close, and runtime unload side effects together.
+- Diagnostics usage query API methods preserve the public facade while keeping
+  durable ledger storage and retention semantics in
+  `pantograph-diagnostics-ledger`.
 
 ## Revisit Triggers
 - Public workflow DTOs need versioning rather than additive migration.
@@ -131,7 +138,7 @@ live behind the facade in the workflow session lifecycle API helper.
 
 ## Dependencies
 **Internal:** `node-engine`, `workflow-nodes`, `pantograph-runtime-identity`,
-and sibling source modules in this crate.
+`pantograph-diagnostics-ledger`, and sibling source modules in this crate.
 
 **External:** `async-trait`, `serde`, `serde_json`, `thiserror`, `tokio`,
 `uuid`, `chrono`, and `parking_lot`.

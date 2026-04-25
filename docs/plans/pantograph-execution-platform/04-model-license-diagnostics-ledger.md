@@ -210,6 +210,36 @@ and their stage-end refactor gates have been recorded.
 - Remaining Wave `02` work: workflow-service query projections and final host
   integration of ledger query use cases.
 
+### 2026-04-24 Wave 02 Workflow Service Query Projections Progress
+
+- Added optional diagnostics ledger storage to `WorkflowService` using the same
+  backend-owned optional-store pattern as attribution storage.
+- Added `with_diagnostics_ledger`,
+  `with_ephemeral_diagnostics_ledger`, and an internal diagnostics ledger
+  guard.
+- Added workflow-service diagnostics DTOs:
+  `WorkflowDiagnosticsUsageQueryRequest`,
+  `WorkflowDiagnosticsUsageQueryResponse`, and
+  `WorkflowDiagnosticsUsageSummary`.
+- Added `workflow_diagnostics_usage_query` to validate query filter ids,
+  delegate durable usage event queries to `pantograph-diagnostics-ledger`,
+  attach retention policy metadata, expose pruned-usage context, and produce
+  grouped summaries by model, license, and guarantee level.
+- Added `WorkflowServiceError` mapping for diagnostics ledger errors so invalid
+  query bounds and malformed ids surface as invalid requests while
+  storage/schema errors remain internal.
+- Updated workflow-service README coverage and public facade exports.
+- Verification passed:
+  `cargo fmt -p pantograph-workflow-service -p pantograph-diagnostics-ledger -- --check`,
+  `cargo test -p pantograph-workflow-service workflow_diagnostics_usage_query`,
+  `cargo check -p pantograph-workflow-service`,
+  `cargo clippy -p pantograph-workflow-service --all-targets -- -D warnings`,
+  and `cargo test -p pantograph-workflow-service`.
+- Wave `02` ledger storage, runtime submission, and workflow-service query
+  projection slices are integrated locally. Remaining Stage `04` work moves to
+  Wave `03`: final integration review, ADR, final verification, and
+  stage-end refactor gate.
+
 ## Diagnostics Products
 
 Diagnostics has two related products:

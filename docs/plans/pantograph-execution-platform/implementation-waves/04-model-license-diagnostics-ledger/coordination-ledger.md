@@ -2,8 +2,9 @@
 
 ## Status
 
-Stage `04` in progress. Wave `01` is complete. Wave `02` implementation
-slices are ready to begin from `ledger-storage-retention`.
+Stage `04` in progress. Wave `01` is complete and Wave `02` implementation
+slices are integrated locally. Wave `03` integration, ADR, final verification,
+and stage-end gate remain.
 
 ## Branch Or Worktree Strategy
 
@@ -17,7 +18,7 @@ slices are ready to begin from `ledger-storage-retention`.
 | Wave | Status | Integration Notes |
 | ---- | ------ | ----------------- |
 | `wave-01` | Complete | Stage-start report, SQLite dependency/linking review, schema freeze, retention default, pruning semantics, query bounds, and worker write boundaries recorded in `04-model-license-diagnostics-ledger.md`. |
-| `wave-02` | In Progress | `ledger-storage-retention` and `runtime-ledger-submission` are integrated locally; workflow-service query projections remain. |
+| `wave-02` | Complete | Ledger storage/retention, runtime ledger submission, and workflow-service query projections are integrated locally. |
 | `wave-03` | Pending | Host-owned integration and gate. |
 
 ## Worker Reports
@@ -26,7 +27,7 @@ slices are ready to begin from `ledger-storage-retention`.
 | ------ | ----------- | ------ |
 | ledger-storage-retention | `reports/wave-02-worker-ledger-storage-retention.md` | Complete |
 | runtime-ledger-submission | `reports/wave-02-worker-runtime-ledger-submission.md` | Complete |
-| workflow-service-query-projections | `reports/wave-02-worker-workflow-service-query-projections.md` | Pending |
+| workflow-service-query-projections | `reports/wave-02-worker-workflow-service-query-projections.md` | Complete |
 
 ## Decisions
 
@@ -76,6 +77,12 @@ slices are ready to begin from `ledger-storage-retention`.
   context and model capability routes, guarantee-level mapping, unavailable
   measurement downgrade behavior, public facade exports, README coverage, and
   focused tests.
+- 2026-04-24: The host implemented `workflow-service-query-projections`
+  locally in the shared workspace. The slice adds optional diagnostics ledger
+  storage to `WorkflowService`, workflow diagnostics usage query DTOs, a
+  service query method that delegates to `pantograph-diagnostics-ledger`,
+  retention metadata projection, grouped summaries by model/license/guarantee,
+  diagnostics-ledger error mapping, README coverage, and focused tests.
 
 ## Verification Results
 
@@ -102,3 +109,9 @@ slices are ready to begin from `ledger-storage-retention`.
   `cargo check -p pantograph-embedded-runtime`,
   `cargo clippy -p pantograph-embedded-runtime --all-targets -- -D warnings`,
   and `cargo test -p pantograph-embedded-runtime`.
+- 2026-04-24: `workflow-service-query-projections` verification passed:
+  `cargo fmt -p pantograph-workflow-service -p pantograph-diagnostics-ledger -- --check`,
+  `cargo test -p pantograph-workflow-service workflow_diagnostics_usage_query`,
+  `cargo check -p pantograph-workflow-service`,
+  `cargo clippy -p pantograph-workflow-service --all-targets -- -D warnings`,
+  and `cargo test -p pantograph-workflow-service`.

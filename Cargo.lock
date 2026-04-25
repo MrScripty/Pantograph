@@ -7371,6 +7371,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "node-engine",
+ "pantograph-diagnostics-ledger",
  "pantograph-node-contracts",
  "pantograph-runtime-attribution",
  "pantograph-runtime-identity",

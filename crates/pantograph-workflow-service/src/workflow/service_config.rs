@@ -4,8 +4,8 @@ use crate::graph::GraphSessionStore;
 use crate::scheduler::WorkflowExecutionSessionStore;
 
 use super::{
-    SqliteAttributionStore, WorkflowSchedulerDiagnosticsProvider, WorkflowService,
-    WorkflowServiceError,
+    SqliteAttributionStore, SqliteDiagnosticsLedger, WorkflowSchedulerDiagnosticsProvider,
+    WorkflowService, WorkflowServiceError,
 };
 
 const DEFAULT_MAX_SESSIONS: usize = 8;
@@ -33,6 +33,7 @@ impl WorkflowService {
             ))),
             graph_session_store: Arc::new(GraphSessionStore::new()),
             attribution_store: None,
+            diagnostics_ledger: None,
             scheduler_diagnostics_provider: Arc::new(Mutex::new(None)),
         }
     }
@@ -42,9 +43,20 @@ impl WorkflowService {
         self
     }
 
+    pub fn with_diagnostics_ledger(mut self, ledger: SqliteDiagnosticsLedger) -> Self {
+        self.diagnostics_ledger = Some(Arc::new(Mutex::new(ledger)));
+        self
+    }
+
     pub fn with_ephemeral_attribution_store() -> Result<Self, WorkflowServiceError> {
         Ok(Self::new().with_attribution_store(
             SqliteAttributionStore::open_in_memory().map_err(WorkflowServiceError::from)?,
+        ))
+    }
+
+    pub fn with_ephemeral_diagnostics_ledger() -> Result<Self, WorkflowServiceError> {
+        Ok(Self::new().with_diagnostics_ledger(
+            SqliteDiagnosticsLedger::open_in_memory().map_err(WorkflowServiceError::from)?,
         ))
     }
 
@@ -92,6 +104,19 @@ impl WorkflowService {
         };
         store.lock().map_err(|_| {
             WorkflowServiceError::Internal("attribution store lock poisoned".to_string())
+        })
+    }
+
+    pub(crate) fn diagnostics_ledger_guard(
+        &self,
+    ) -> Result<std::sync::MutexGuard<'_, SqliteDiagnosticsLedger>, WorkflowServiceError> {
+        let Some(ledger) = self.diagnostics_ledger.as_ref() else {
+            return Err(WorkflowServiceError::Internal(
+                "diagnostics ledger is not configured".to_string(),
+            ));
+        };
+        ledger.lock().map_err(|_| {
+            WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
         })
     }
 }

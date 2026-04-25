@@ -16,6 +16,7 @@ use fixtures::*;
 
 mod attribution;
 mod contracts;
+mod diagnostics;
 mod runtime_preflight;
 mod scheduler_snapshot;
 mod scheduler_snapshot_diagnostics;

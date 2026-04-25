@@ -17,6 +17,7 @@ use crate::technical_fit::{WorkflowTechnicalFitDecision, WorkflowTechnicalFitReq
 
 mod attribution_api;
 mod contracts;
+mod diagnostics_api;
 mod graph_api;
 mod host;
 mod io_contract;
@@ -32,6 +33,10 @@ mod workflow_run_api;
 
 pub use self::attribution_api::{WorkflowAttributedRunRequest, WorkflowAttributedRunResponse};
 pub use self::contracts::*;
+pub use self::diagnostics_api::{
+    WorkflowDiagnosticsUsageQueryRequest, WorkflowDiagnosticsUsageQueryResponse,
+    WorkflowDiagnosticsUsageSummary,
+};
 pub use self::host::{
     WorkflowHost, WorkflowSchedulerDiagnosticsProvider, WorkflowSchedulerRuntimeDiagnosticsRequest,
 };
@@ -39,6 +44,7 @@ pub(crate) use self::runtime_preflight::runtime_issue_for_capability;
 pub use self::runtime_preflight::{evaluate_runtime_preflight, format_runtime_not_ready_message};
 pub(crate) use self::validation::validate_workflow_id;
 
+pub use pantograph_diagnostics_ledger::SqliteDiagnosticsLedger;
 pub use pantograph_runtime_attribution::{
     AttributionRepository, BucketCreateRequest, BucketDeleteRequest, BucketRecord, BucketSelection,
     ClientRegistrationRequest, ClientRegistrationResponse, ClientSessionOpenRequest,
@@ -78,6 +84,7 @@ pub struct WorkflowService {
     session_store: Arc<Mutex<WorkflowExecutionSessionStore>>,
     graph_session_store: Arc<GraphSessionStore>,
     attribution_store: Option<Arc<Mutex<SqliteAttributionStore>>>,
+    diagnostics_ledger: Option<Arc<Mutex<SqliteDiagnosticsLedger>>>,
     scheduler_diagnostics_provider:
         Arc<Mutex<Option<Arc<dyn WorkflowSchedulerDiagnosticsProvider>>>>,
 }

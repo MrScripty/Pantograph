@@ -27,6 +27,7 @@ workflow-nodes = { path = "../workflow-nodes", features = ["model-library"] }
 pantograph-runtime-attribution = { path = "../pantograph-runtime-attribution" }
 pantograph-runtime-identity = { path = "../pantograph-runtime-identity" }
 pantograph-node-contracts = { path = "../pantograph-node-contracts" }
+pantograph-diagnostics-ledger = { path = "../pantograph-diagnostics-ledger" }
 
 [dev-dependencies]
 tokio.workspace = true
