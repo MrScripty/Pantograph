@@ -16,6 +16,8 @@ ledger.
 - Optional fields such as node type and runtime id may narrow comparisons, but
   unknown historical values still match so timing history does not reset when
   later diagnostics include richer optional facts.
+- Runtime-refined lookups fall back to stable workflow/graph/node history when
+  the refined bucket has too little history for an expectation.
 
 ## Dependencies
 **Internal:** parent `sqlite.rs`, diagnostics ledger timing contracts, and the

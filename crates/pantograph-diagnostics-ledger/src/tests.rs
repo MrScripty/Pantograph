@@ -197,6 +197,31 @@ fn timing_expectation_matches_unknown_optional_runtime_history() {
 }
 
 #[test]
+fn timing_expectation_falls_back_when_runtime_refinement_has_too_little_history() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    for (index, duration_ms) in [100, 200, 300].into_iter().enumerate() {
+        let mut observation = sample_timing_observation(index, duration_ms);
+        observation.runtime_id = Some("pytorch".to_string());
+        ledger
+            .record_timing_observation(observation)
+            .expect("runtime observation is recorded");
+    }
+
+    let expectation = ledger
+        .timing_expectation(sample_timing_query(Some(250)))
+        .expect("timing expectation projects");
+
+    assert_eq!(expectation.sample_count, 3);
+    assert_eq!(
+        expectation.comparison,
+        WorkflowTimingExpectationComparison::WithinExpectedRange
+    );
+    assert_eq!(expectation.median_duration_ms, Some(200));
+    assert_eq!(expectation.typical_min_duration_ms, Some(200));
+    assert_eq!(expectation.typical_max_duration_ms, Some(300));
+}
+
+#[test]
 fn duplicate_timing_observation_does_not_inflate_history() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     let observation = sample_timing_observation(1, 200);

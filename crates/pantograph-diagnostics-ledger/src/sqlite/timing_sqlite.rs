@@ -3,8 +3,9 @@ use rusqlite::params;
 use super::SqliteDiagnosticsLedger;
 use crate::DiagnosticsLedgerError;
 use crate::timing::{
-    PruneTimingObservationsCommand, PruneTimingObservationsResult, WorkflowTimingExpectation,
-    WorkflowTimingExpectationQuery, WorkflowTimingObservation, WorkflowTimingObservationStatus,
+    MIN_TIMING_EXPECTATION_SAMPLE_COUNT, PruneTimingObservationsCommand,
+    PruneTimingObservationsResult, WorkflowTimingExpectation, WorkflowTimingExpectationQuery,
+    WorkflowTimingObservation, WorkflowTimingObservationStatus,
 };
 
 pub(super) fn record_timing_observation(
@@ -44,6 +45,21 @@ pub(super) fn timing_expectation(
     query: WorkflowTimingExpectationQuery,
 ) -> Result<WorkflowTimingExpectation, DiagnosticsLedgerError> {
     query.validate()?;
+    let mut durations_ms = query_completed_durations(ledger, &query, true)?;
+    if query.runtime_id.is_some() && durations_ms.len() < MIN_TIMING_EXPECTATION_SAMPLE_COUNT {
+        durations_ms = query_completed_durations(ledger, &query, false)?;
+    }
+    Ok(WorkflowTimingExpectation::from_completed_durations(
+        &query,
+        durations_ms,
+    ))
+}
+
+fn query_completed_durations(
+    ledger: &SqliteDiagnosticsLedger,
+    query: &WorkflowTimingExpectationQuery,
+    refine_runtime: bool,
+) -> Result<Vec<u64>, DiagnosticsLedgerError> {
     let mut stmt = ledger.conn.prepare(
         "SELECT duration_ms
          FROM workflow_timing_observations
@@ -56,6 +72,9 @@ pub(super) fn timing_expectation(
            AND status = ?7
          ORDER BY recorded_at_ms DESC",
     )?;
+    let runtime_id = refine_runtime
+        .then_some(query.runtime_id.as_deref())
+        .flatten();
     let rows = stmt.query_map(
         params![
             query.scope.as_db(),
@@ -63,7 +82,7 @@ pub(super) fn timing_expectation(
             query.graph_fingerprint.as_str(),
             query.node_id.as_deref(),
             query.node_type.as_deref(),
-            query.runtime_id.as_deref(),
+            runtime_id,
             WorkflowTimingObservationStatus::Completed.as_db(),
         ],
         |row| row.get::<_, i64>(0),
@@ -75,10 +94,7 @@ pub(super) fn timing_expectation(
             durations_ms.push(duration_ms as u64);
         }
     }
-    Ok(WorkflowTimingExpectation::from_completed_durations(
-        &query,
-        durations_ms,
-    ))
+    Ok(durations_ms)
 }
 
 pub(super) fn prune_timing_observations(
