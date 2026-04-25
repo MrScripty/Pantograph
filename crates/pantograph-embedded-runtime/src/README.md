@@ -38,7 +38,7 @@ packages.
 | `model_dependency_python.rs` | Owns Python environment lookup, pip package checks, package install stream capture, binding checks, and per-environment install locks for the dependency resolver. |
 | `model_dependency_requirements.rs` | Maps Pumas dependency requirement contracts into node-engine DTOs and applies validated user override patches. |
 | `model_dependencies_tests.rs` | Pantograph model dependency resolver tests and Pumas descriptor fixture helpers extracted from the production resolver module. |
-| `node_execution.rs` | Defines runtime-created node execution context, cancellation/progress handles, output summaries, lineage context, and guarantee classification. |
+| `node_execution.rs` | Defines runtime-created node execution context, cancellation/progress handles, output summaries, composed-parent lineage projection, and guarantee classification. |
 | `node_execution_capabilities.rs` | Defines managed capability route contracts and typed capability wrappers for model, resource, cache, progress, diagnostics, and external-tool access. |
 | `node_execution_diagnostics.rs` | Adapts node-engine workflow events into enriched transient runtime-owned node diagnostics with attribution, contract, lineage, and guarantee context, plus an event-sink recorder for collecting adapted diagnostics along execution paths. |
 | `node_execution_diagnostics_tests.rs` | Focused diagnostics adapter tests for lifecycle, output summary, progress, stream, failure, cancellation, and filtering behavior. |
@@ -166,6 +166,10 @@ embedded-runtime crate.
 - Workflow diagnostics snapshot builders group scheduler/runtime inputs into
   explicit input structs so registry synchronization and projection helpers do
   not grow long positional argument lists.
+- Runtime-created node lineage stays in `NodeLineageContext`. Composed-node
+  execution scopes must use its parent-stack projection helpers so primitive
+  diagnostics and ledger events preserve composed-parent context without GUI or
+  binding reconstruction.
 - Host helper and runtime-registry error-mapping unit tests stay in
   `lib_tests/host_helper_tests.rs`; continue splitting the remaining legacy
   integration tests by behavior area rather than growing `lib_tests.rs`.

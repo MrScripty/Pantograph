@@ -181,6 +181,27 @@ and their stage-end refactor gates have been recorded.
   `cargo clippy -p workflow-nodes --all-targets -- -D warnings`.
 - Remaining Wave `02` work: runtime lineage.
 
+### 2026-04-24 Wave 02 Runtime Lineage Progress
+
+- Added `NodeLineageContext` projection helpers in embedded runtime for
+  primitive execution and entering composed-node execution scopes.
+- Composed execution scopes now have a runtime-owned way to populate
+  `parent_composed_node_id`, `composed_node_stack`, and lineage segment
+  metadata before primitive diagnostics and ledger events are emitted.
+- Added tests for nested composed-parent stack projection and inherited
+  lineage segment behavior.
+- Updated embedded-runtime README coverage for composed-parent lineage
+  projection.
+- Verification passed:
+  `cargo fmt -p pantograph-embedded-runtime -- --check`,
+  `cargo test -p pantograph-embedded-runtime node_execution`,
+  `cargo check -p pantograph-embedded-runtime`, and
+  `cargo clippy -p pantograph-embedded-runtime --all-targets -- -D warnings`.
+- Wave `02` composition contracts, workflow-node factoring, and runtime
+  lineage slices are integrated locally. Remaining Stage `05` work moves to
+  Wave `03`: saved-workflow migration integration, release notes, ADR, final
+  verification, and stage-end refactor gate.
+
 ## Required Direction
 
 - Primitive nodes own narrow, coherent responsibilities.

@@ -2,15 +2,16 @@
 
 ## Status
 
-Stage `05` in progress. Wave `01` is complete and Wave `02` implementation
-slices are ready to begin.
+Stage `05` in progress. Wave `01` and Wave `02` implementation slices are
+integrated locally. Wave `03` migration integration, ADR, final verification,
+and stage-end gate remain.
 
 ## Wave Status
 
 | Wave | Status | Integration Notes |
 | ---- | ------ | ----------------- |
 | `wave-01` | Complete | Stage-start report, node/port inventory, saved-workflow artifact inventory, classification freeze, migration output semantics, and Wave `02` write boundaries recorded in `05-composition-factoring-and-migration.md`. |
-| `wave-02` | Pending | Parallel contracts, factoring, and lineage. |
+| `wave-02` | Complete | Composition contracts, workflow-node factoring, and runtime lineage are integrated locally. |
 | `wave-03` | Pending | Host-owned migration integration and gate. |
 
 ## Worker Reports
@@ -19,7 +20,7 @@ slices are ready to begin.
 | ------ | ----------- | ------ |
 | composition-contracts | `reports/wave-02-worker-composition-contracts.md` | Complete |
 | workflow-nodes-factoring | `reports/wave-02-worker-workflow-nodes-factoring.md` | Complete |
-| runtime-lineage | `reports/wave-02-worker-runtime-lineage.md` | Pending |
+| runtime-lineage | `reports/wave-02-worker-runtime-lineage.md` | Complete |
 
 ## Decisions
 
@@ -67,6 +68,10 @@ slices are ready to begin.
   `llm-inference`, `tool-executor`, and turn-state control nodes, crate-root
   exports, README coverage, and focused tests without changing primitive
   descriptor registration.
+- 2026-04-24: The host implemented `runtime-lineage` locally in the shared
+  workspace. The slice adds `NodeLineageContext` helpers for primitive lineage,
+  entering composed execution scopes, preserving composed-parent stacks,
+  carrying lineage segment metadata, README coverage, and focused tests.
 
 ## Verification Results
 
@@ -85,3 +90,8 @@ slices are ready to begin.
   `cargo test -p workflow-nodes`,
   `cargo check -p workflow-nodes`, and
   `cargo clippy -p workflow-nodes --all-targets -- -D warnings`.
+- 2026-04-24: `runtime-lineage` verification passed:
+  `cargo fmt -p pantograph-embedded-runtime -- --check`,
+  `cargo test -p pantograph-embedded-runtime node_execution`,
+  `cargo check -p pantograph-embedded-runtime`, and
+  `cargo clippy -p pantograph-embedded-runtime --all-targets -- -D warnings`.

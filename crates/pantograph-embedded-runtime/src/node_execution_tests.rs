@@ -212,6 +212,50 @@ fn context_rejects_zero_attempt() {
     );
 }
 
+#[test]
+fn lineage_context_projects_composed_parent_stack() {
+    let base = NodeLineageContext::primitive().with_lineage_segment("outer-segment");
+    let parent = NodeInstanceId::try_from("tool-loop".to_string()).expect("parent id");
+    let nested_parent =
+        NodeInstanceId::try_from("inner-composed-node".to_string()).expect("nested parent id");
+
+    let lineage = base
+        .enter_composed_node(parent.clone(), None)
+        .enter_composed_node(nested_parent.clone(), Some("inner-segment".to_string()));
+
+    assert_eq!(lineage.parent_composed_node_id, Some(nested_parent));
+    assert_eq!(
+        lineage.composed_parent_chain(),
+        &[
+            parent,
+            NodeInstanceId::try_from("inner-composed-node".to_string()).expect("nested parent id")
+        ]
+    );
+    assert_eq!(lineage.lineage_segment_id.as_deref(), Some("inner-segment"));
+}
+
+#[test]
+fn lineage_context_inherits_outer_segment_when_entering_parent_without_segment() {
+    let parent = NodeInstanceId::try_from("node-group".to_string()).expect("parent id");
+    let lineage = NodeLineageContext::primitive()
+        .with_lineage_segment("group-boundary")
+        .enter_composed_node(parent.clone(), None);
+
+    assert_eq!(lineage.parent_composed_node_id, Some(parent));
+    assert_eq!(
+        lineage
+            .composed_parent_chain()
+            .iter()
+            .map(|node_id| node_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["node-group"]
+    );
+    assert_eq!(
+        lineage.lineage_segment_id.as_deref(),
+        Some("group-boundary")
+    );
+}
+
 impl ManagedCapabilityRoute {
     fn workflow_run_id(&self) -> &WorkflowRunId {
         &self.attribution.workflow_run_id

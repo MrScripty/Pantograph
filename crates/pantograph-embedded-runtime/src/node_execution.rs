@@ -324,6 +324,35 @@ pub struct NodeLineageContext {
     pub lineage_segment_id: Option<String>,
 }
 
+impl NodeLineageContext {
+    pub fn primitive() -> Self {
+        Self::default()
+    }
+
+    pub fn enter_composed_node(
+        &self,
+        composed_node_id: NodeInstanceId,
+        lineage_segment_id: Option<String>,
+    ) -> Self {
+        let mut composed_node_stack = self.composed_node_stack.clone();
+        composed_node_stack.push(composed_node_id.clone());
+        Self {
+            parent_composed_node_id: Some(composed_node_id),
+            composed_node_stack,
+            lineage_segment_id: lineage_segment_id.or_else(|| self.lineage_segment_id.clone()),
+        }
+    }
+
+    pub fn with_lineage_segment(mut self, lineage_segment_id: impl Into<String>) -> Self {
+        self.lineage_segment_id = Some(lineage_segment_id.into());
+        self
+    }
+
+    pub fn composed_parent_chain(&self) -> &[NodeInstanceId] {
+        &self.composed_node_stack
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum NodeExecutionGuarantee {
