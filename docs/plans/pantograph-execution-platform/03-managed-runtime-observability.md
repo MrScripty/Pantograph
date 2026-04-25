@@ -208,8 +208,8 @@ their stage-end refactor gates have been recorded.
   `cargo test --workspace --doc`.
 - Stage-end refactor gate outcome: `not_warranted`.
 - Stage-end gate review source:
-  `git diff --name-only 7d153f82...HEAD` plus current uncommitted Wave `03`
-  files before closeout commit.
+  `git diff --name-only 7d153f82...HEAD` plus Wave `03` files that were still
+  uncommitted before the closeout commit.
 - Touched source files stayed below the 500-line decomposition review trigger:
   `node_execution.rs` 397 lines, `node_execution_capabilities.rs` 193 lines,
   `node_execution_tests.rs` 219 lines, `node_execution_diagnostics.rs` 367

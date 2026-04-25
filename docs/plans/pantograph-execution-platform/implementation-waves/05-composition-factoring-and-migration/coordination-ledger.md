@@ -10,7 +10,7 @@ module splits. Wave `01`, Wave `02`, and Wave `03` are integrated.
 | Wave | Status | Integration Notes |
 | ---- | ------ | ----------------- |
 | `wave-01` | Complete | Stage-start report, node/port inventory, saved-workflow artifact inventory, classification freeze, migration output semantics, and Wave `02` write boundaries recorded in `05-composition-factoring-and-migration.md`. |
-| `wave-02` | Complete | Composition contracts, workflow-node factoring, and runtime lineage are integrated locally. |
+| `wave-02` | Complete | Composition contracts, workflow-node factoring, and runtime lineage are integrated. |
 | `wave-03` | Complete | Saved-workflow migration record integration, release notes, ADR, final verification, and stage-end refactor gate recorded. |
 
 ## Worker Reports

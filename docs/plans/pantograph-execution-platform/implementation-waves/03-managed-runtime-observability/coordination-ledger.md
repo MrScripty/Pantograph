@@ -17,7 +17,7 @@ the stage-end refactor gate outcome is recorded as `not_warranted`.
 | Wave | Status | Integration Notes |
 | ---- | ------ | ----------------- |
 | `wave-01` | Complete | Stage-start report, event adaptation decision, durable ledger boundary, and serial execution assumption recorded in `03-managed-runtime-observability.md`. |
-| `wave-02` | Complete | Runtime context/capability contracts, diagnostics event adaptation, and cancellation/progress/guarantee recorder wiring are integrated locally. |
+| `wave-02` | Complete | Runtime context/capability contracts, diagnostics event adaptation, and cancellation/progress/guarantee recorder wiring are integrated. |
 | `wave-03` | Complete | ADR-007, final verification, stale fixture repair, and stage-end refactor gate are complete. |
 
 ## Worker Reports

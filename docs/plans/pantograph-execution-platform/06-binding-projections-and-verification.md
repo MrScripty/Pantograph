@@ -21,19 +21,21 @@ Stage-start outcome: `ready_with_recorded_assumptions`.
 
 - Stage `01` through Stage `05` implementation outputs are present. The Stage
   `05` stage-end refactor gate required the composition contract module split;
-  that split has been implemented and verified locally, but the commit is
-  blocked because `.git` is mounted read-only while the working tree root is
-  writable. The user explicitly directed continuation, so Wave `01` proceeds as
-  documentation-only stage-start work and code edits remain scoped away from
-  the dirty Stage `05` refactor files until git is writable again.
+  that split had been implemented and verified locally at stage start, but the
+  commit was temporarily blocked because `.git` was mounted read-only while the
+  working tree root was writable. The user explicitly directed continuation, so
+  Wave `01` proceeded as documentation-only stage-start work while code edits
+  remained scoped away from the dirty Stage `05` refactor files until git became
+  writable again.
 - Pre-existing unrelated dirty asset files remain outside this stage and must
   not be staged, reformatted, or reverted.
 - Existing dirty Stage `05` refactor files do not overlap the Wave `01` write
   set. They do block a normal clean stage transition and must be committed
   before any final Stage `06` completion claim.
 - Implementation remains sequential in this session. The wave plan defines
-  parallel UniFFI/Rustler lanes, but no subagents were authorized and the
-  current read-only `.git` mount prevents atomic worker integration commits.
+  parallel UniFFI/Rustler lanes, but no subagents were authorized. The read-only
+  `.git` mount at stage start prevented atomic worker integration commits at
+  that point.
 
 Frozen native Rust base API for Stage `06` projection:
 
@@ -190,8 +192,8 @@ fails immediately because `mix` is not installed on this machine.
 
 ### 2026-04-25 Wave 03 Host-Language Verification Progress
 
-- C# host verification is complete locally. The native smoke loads the real
-  generated/native artifact and now asserts generated access to backend-owned
+- C# host verification is complete and committed. The native smoke loads the
+  real generated/native artifact and now asserts generated access to backend-owned
   graph-authoring discovery. The package and packaged quickstart scripts pass
   without hand-editing generated artifacts.
 - Python remains `unsupported`. The host has `python3`, but the repository has

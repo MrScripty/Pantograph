@@ -23,7 +23,7 @@ projection ADR is recorded, and the stage-end refactor gate outcome is
 | rustler-projections | `reports/wave-02-worker-rustler-projections.md` | Complete; BEAM smoke remains blocked by missing `mix`. |
 | csharp-host-tests | `reports/wave-03-worker-csharp-host-tests.md` | Complete. |
 | python-host-tests | `reports/wave-03-worker-python-host-tests.md` | Complete as unsupported-lane reconciliation. |
-| beam-host-tests | `reports/wave-03-worker-beam-host-tests.md` | Source coverage complete locally; host smoke blocked by missing `mix`. |
+| beam-host-tests | `reports/wave-03-worker-beam-host-tests.md` | Source coverage complete; host smoke blocked by missing `mix`. |
 
 ## Decisions
 

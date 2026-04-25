@@ -17,7 +17,7 @@ the stage-end refactor gate is recorded as `not_warranted`.
 | Wave | Status | Integration Notes |
 | ---- | ------ | ----------------- |
 | `wave-01` | Complete | Stage-start report, SQLite dependency/linking review, schema freeze, retention default, pruning semantics, query bounds, and worker write boundaries recorded in `04-model-license-diagnostics-ledger.md`. |
-| `wave-02` | Complete | Ledger storage/retention, runtime ledger submission, and workflow-service query projections are integrated locally. |
+| `wave-02` | Complete | Ledger storage/retention, runtime ledger submission, and workflow-service query projections are integrated. |
 | `wave-03` | Complete | ADR, final verification, touched-file review, GUI/binding deferral check, and stage-end refactor gate recorded. |
 
 ## Worker Reports
