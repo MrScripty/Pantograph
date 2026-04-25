@@ -35,6 +35,16 @@ pub enum NodeContractError {
         expected: PortKind,
         actual: PortKind,
     },
+    #[error("composed contract references unknown internal node '{node_id}'")]
+    UnknownCompositionInternalNode { node_id: NodeInstanceId },
+    #[error("composed contract does not expose {kind:?} port '{port_id}'")]
+    UnknownCompositionExternalPort { port_id: PortId, kind: PortKind },
+    #[error("composed contract must map every external {kind:?} port; missing '{port_id}'")]
+    MissingCompositionPortMapping { port_id: PortId, kind: PortKind },
+    #[error("contract upgrade record must contain at least one change")]
+    MissingContractUpgradeChange,
+    #[error("typed rejection migration records require at least one diagnostic")]
+    MissingContractUpgradeDiagnostic,
 }
 
 macro_rules! contract_id {
@@ -444,6 +454,279 @@ impl NodeTypeContract {
     pub fn output(&self, port_id: &PortId) -> Option<&PortContract> {
         self.outputs.iter().find(|port| &port.id == port_id)
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct ComposedNodeContract {
+    pub external_contract: NodeTypeContract,
+    pub internal_graph: ComposedInternalGraph,
+    pub port_mappings: ComposedPortMappings,
+    pub trace_policy: ComposedTracePolicy,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upgrade_metadata: Option<ContractUpgradeRecord>,
+}
+
+impl ComposedNodeContract {
+    pub fn validate(&self) -> Result<(), NodeContractError> {
+        self.external_contract.validate()?;
+        self.internal_graph.validate()?;
+        self.port_mappings
+            .validate(&self.external_contract, &self.internal_graph)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct ComposedInternalGraph {
+    pub graph_id: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub nodes: Vec<ComposedInternalNode>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub edges: Vec<ComposedInternalEdge>,
+}
+
+impl ComposedInternalGraph {
+    pub fn validate(&self) -> Result<(), NodeContractError> {
+        validate_display_text("composed.graph_id", &self.graph_id, MAX_ID_LEN)?;
+        for node in &self.nodes {
+            validate_display_text("composed.node.label", &node.label, MAX_LABEL_LEN)?;
+        }
+        for edge in &self.edges {
+            self.require_node(&edge.source_node_id)?;
+            self.require_node(&edge.target_node_id)?;
+        }
+        Ok(())
+    }
+
+    fn contains_node(&self, node_id: &NodeInstanceId) -> bool {
+        self.nodes.iter().any(|node| &node.node_id == node_id)
+    }
+
+    fn require_node(&self, node_id: &NodeInstanceId) -> Result<(), NodeContractError> {
+        if self.contains_node(node_id) {
+            Ok(())
+        } else {
+            Err(NodeContractError::UnknownCompositionInternalNode {
+                node_id: node_id.clone(),
+            })
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct ComposedInternalNode {
+    pub node_id: NodeInstanceId,
+    pub node_type: NodeTypeId,
+    pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contract_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contract_digest: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct ComposedInternalEdge {
+    pub source_node_id: NodeInstanceId,
+    pub source_port_id: PortId,
+    pub target_node_id: NodeInstanceId,
+    pub target_port_id: PortId,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct ComposedPortMappings {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub inputs: Vec<ComposedPortMapping>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outputs: Vec<ComposedPortMapping>,
+}
+
+impl ComposedPortMappings {
+    pub fn validate(
+        &self,
+        external_contract: &NodeTypeContract,
+        internal_graph: &ComposedInternalGraph,
+    ) -> Result<(), NodeContractError> {
+        for port in &external_contract.inputs {
+            if !self
+                .inputs
+                .iter()
+                .any(|mapping| mapping.external_port_id == port.id)
+            {
+                return Err(NodeContractError::MissingCompositionPortMapping {
+                    port_id: port.id.clone(),
+                    kind: PortKind::Input,
+                });
+            }
+        }
+        for port in &external_contract.outputs {
+            if !self
+                .outputs
+                .iter()
+                .any(|mapping| mapping.external_port_id == port.id)
+            {
+                return Err(NodeContractError::MissingCompositionPortMapping {
+                    port_id: port.id.clone(),
+                    kind: PortKind::Output,
+                });
+            }
+        }
+        for mapping in &self.inputs {
+            require_external_port(
+                external_contract,
+                &mapping.external_port_id,
+                PortKind::Input,
+            )?;
+            internal_graph.require_node(&mapping.internal_node_id)?;
+        }
+        for mapping in &self.outputs {
+            require_external_port(
+                external_contract,
+                &mapping.external_port_id,
+                PortKind::Output,
+            )?;
+            internal_graph.require_node(&mapping.internal_node_id)?;
+        }
+        Ok(())
+    }
+}
+
+fn require_external_port(
+    contract: &NodeTypeContract,
+    port_id: &PortId,
+    kind: PortKind,
+) -> Result<(), NodeContractError> {
+    let found = match kind {
+        PortKind::Input => contract.input(port_id),
+        PortKind::Output => contract.output(port_id),
+    };
+    if found.is_some() {
+        Ok(())
+    } else {
+        Err(NodeContractError::UnknownCompositionExternalPort {
+            port_id: port_id.clone(),
+            kind,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct ComposedPortMapping {
+    pub external_port_id: PortId,
+    pub internal_node_id: NodeInstanceId,
+    pub internal_port_id: PortId,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ComposedTracePolicy {
+    PreservePrimitiveFacts,
+    SummarizeOnly,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct ContractUpgradeRecord {
+    pub node_type: NodeTypeId,
+    pub outcome: ContractUpgradeOutcome,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_contract_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_contract_digest: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_contract_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_contract_digest: Option<String>,
+    pub diagnostics_lineage: DiagnosticsLineagePolicy,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub changes: Vec<ContractUpgradeChange>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<ContractUpgradeDiagnostic>,
+}
+
+impl ContractUpgradeRecord {
+    pub fn validate(&self) -> Result<(), NodeContractError> {
+        if self.changes.is_empty() {
+            return Err(NodeContractError::MissingContractUpgradeChange);
+        }
+        if self.outcome == ContractUpgradeOutcome::TypedRejection && self.diagnostics.is_empty() {
+            return Err(NodeContractError::MissingContractUpgradeDiagnostic);
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum ContractUpgradeOutcome {
+    Upgraded,
+    Regenerated,
+    TypedRejection,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum DiagnosticsLineagePolicy {
+    PreservePrimitiveLineage,
+    RegenerateVolatileProjection,
+    RejectToAvoidSilentChange,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", tag = "type")]
+pub enum ContractUpgradeChange {
+    NodeTypeChanged {
+        node_id: NodeInstanceId,
+        from: NodeTypeId,
+        to: NodeTypeId,
+    },
+    PortIdChanged {
+        node_id: NodeInstanceId,
+        kind: PortKind,
+        from: PortId,
+        to: PortId,
+    },
+    PortAdded {
+        node_id: NodeInstanceId,
+        kind: PortKind,
+        port_id: PortId,
+    },
+    PortRemoved {
+        node_id: NodeInstanceId,
+        kind: PortKind,
+        port_id: PortId,
+    },
+    VolatileProjectionRegenerated {
+        projection: String,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct ContractUpgradeDiagnostic {
+    pub reason: ContractUpgradeRejectionReason,
+    pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub node_id: Option<NodeInstanceId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub node_type: Option<NodeTypeId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub port_id: Option<PortId>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum ContractUpgradeRejectionReason {
+    UnknownLegacyNodeType,
+    UnknownLegacyPort,
+    AmbiguousPortMapping,
+    BehaviorChangeWouldBeSilent,
+    PrimitiveLineageUnavailable,
+    UnsupportedLegacyContract,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -973,5 +1256,156 @@ mod tests {
 
         let parsed: NodeTypeContract = serde_json::from_value(value).expect("deserialize");
         assert_eq!(parsed.node_type.as_str(), "llm-inference");
+    }
+
+    fn composed_contract() -> ComposedNodeContract {
+        ComposedNodeContract {
+            external_contract: NodeTypeContract {
+                node_type: id("tool-loop"),
+                category: NodeCategory::Control,
+                label: "Tool Loop".to_string(),
+                description: "Runs a tool loop through primitive nodes".to_string(),
+                inputs: vec![PortContract::input(
+                    id("prompt"),
+                    "Prompt",
+                    PortValueType::Prompt,
+                    PortRequirement::Required,
+                )],
+                outputs: vec![PortContract::output(
+                    id("response"),
+                    "Response",
+                    PortValueType::String,
+                )],
+                execution_semantics: NodeExecutionSemantics::Stream,
+                capability_requirements: vec![NodeCapabilityRequirement::required("llm")],
+                authoring: NodeAuthoringMetadata::default(),
+                contract_version: Some("1".to_string()),
+                contract_digest: Some("digest-tool-loop-v1".to_string()),
+            },
+            internal_graph: ComposedInternalGraph {
+                graph_id: "tool-loop-internal-v1".to_string(),
+                nodes: vec![
+                    ComposedInternalNode {
+                        node_id: id("llm"),
+                        node_type: id("llm-inference"),
+                        label: "LLM".to_string(),
+                        contract_version: Some("1".to_string()),
+                        contract_digest: None,
+                    },
+                    ComposedInternalNode {
+                        node_id: id("tool-executor"),
+                        node_type: id("tool-executor"),
+                        label: "Tool Executor".to_string(),
+                        contract_version: Some("1".to_string()),
+                        contract_digest: None,
+                    },
+                ],
+                edges: vec![ComposedInternalEdge {
+                    source_node_id: id("llm"),
+                    source_port_id: id("tool_calls"),
+                    target_node_id: id("tool-executor"),
+                    target_port_id: id("tool_calls"),
+                }],
+            },
+            port_mappings: ComposedPortMappings {
+                inputs: vec![ComposedPortMapping {
+                    external_port_id: id("prompt"),
+                    internal_node_id: id("llm"),
+                    internal_port_id: id("prompt"),
+                }],
+                outputs: vec![ComposedPortMapping {
+                    external_port_id: id("response"),
+                    internal_node_id: id("llm"),
+                    internal_port_id: id("response"),
+                }],
+            },
+            trace_policy: ComposedTracePolicy::PreservePrimitiveFacts,
+            upgrade_metadata: None,
+        }
+    }
+
+    #[test]
+    fn composed_node_contract_validates_external_mapping_to_internal_graph() {
+        let contract = composed_contract();
+
+        contract.validate().expect("valid composed contract");
+
+        let value = serde_json::to_value(&contract).expect("serialize");
+        assert_eq!(value["trace_policy"], "preserve_primitive_facts");
+        assert_eq!(value["external_contract"]["node_type"], "tool-loop");
+        assert_eq!(
+            value["port_mappings"]["inputs"][0]["external_port_id"],
+            "prompt"
+        );
+    }
+
+    #[test]
+    fn composed_node_contract_rejects_missing_external_port_mapping() {
+        let mut contract = composed_contract();
+        contract.port_mappings.outputs.clear();
+
+        assert_eq!(
+            contract.validate().expect_err("missing output mapping"),
+            NodeContractError::MissingCompositionPortMapping {
+                port_id: id("response"),
+                kind: PortKind::Output,
+            }
+        );
+    }
+
+    #[test]
+    fn composed_node_contract_rejects_unknown_internal_mapping_node() {
+        let mut contract = composed_contract();
+        contract.port_mappings.inputs[0].internal_node_id = id("missing-node");
+
+        assert_eq!(
+            contract.validate().expect_err("unknown internal node"),
+            NodeContractError::UnknownCompositionInternalNode {
+                node_id: id("missing-node"),
+            }
+        );
+    }
+
+    #[test]
+    fn contract_upgrade_records_validate_outcomes_and_diagnostics() {
+        let valid = ContractUpgradeRecord {
+            node_type: id("system-prompt"),
+            outcome: ContractUpgradeOutcome::Upgraded,
+            source_contract_version: Some("legacy".to_string()),
+            source_contract_digest: None,
+            target_contract_version: Some("1".to_string()),
+            target_contract_digest: None,
+            diagnostics_lineage: DiagnosticsLineagePolicy::PreservePrimitiveLineage,
+            changes: vec![ContractUpgradeChange::NodeTypeChanged {
+                node_id: id("node-a"),
+                from: id("system-prompt"),
+                to: id("text-input"),
+            }],
+            diagnostics: Vec::new(),
+        };
+
+        valid.validate().expect("valid upgrade");
+
+        let missing_change = ContractUpgradeRecord {
+            changes: Vec::new(),
+            ..valid.clone()
+        };
+        assert_eq!(
+            missing_change.validate().expect_err("missing change"),
+            NodeContractError::MissingContractUpgradeChange
+        );
+
+        let missing_diagnostic = ContractUpgradeRecord {
+            outcome: ContractUpgradeOutcome::TypedRejection,
+            diagnostics_lineage: DiagnosticsLineagePolicy::RejectToAvoidSilentChange,
+            diagnostics: Vec::new(),
+            ..valid
+        };
+        assert_eq!(
+            missing_diagnostic
+                .validate()
+                .expect_err("typed rejection needs diagnostic"),
+            NodeContractError::MissingContractUpgradeDiagnostic
+        );
     }
 }

@@ -142,6 +142,27 @@ and their stage-end refactor gates have been recorded.
 - Wave `01` outcome: complete. Source implementation may begin with the
   `composition-contracts` slice.
 
+### 2026-04-24 Wave 02 Composition Contracts Progress
+
+- Added standalone composed-node contract DTOs to
+  `pantograph-node-contracts` without changing primitive `NodeTypeContract`
+  serialization.
+- Added external-to-internal composed port mapping types and validation over
+  external contracts and internal primitive graph node ids.
+- Added contract-upgrade and migration diagnostic DTOs for `upgraded`,
+  `regenerated`, and `typed_rejection` outcomes.
+- Added typed validation errors for missing or unknown composed mappings,
+  unknown internal composition nodes, missing upgrade changes, and typed
+  rejection records without diagnostics.
+- Updated `pantograph-node-contracts` README coverage for composed-node
+  mappings, primitive trace preservation, and contract upgrade records.
+- Verification passed:
+  `cargo fmt -p pantograph-node-contracts -- --check`,
+  `cargo test -p pantograph-node-contracts`,
+  `cargo check -p pantograph-node-contracts`, and
+  `cargo clippy -p pantograph-node-contracts --all-targets -- -D warnings`.
+- Remaining Wave `02` work: workflow-node factoring and runtime lineage.
+
 ## Required Direction
 
 - Primitive nodes own narrow, coherent responsibilities.

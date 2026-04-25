@@ -17,7 +17,7 @@ slices are ready to begin.
 
 | Worker | Report Path | Status |
 | ------ | ----------- | ------ |
-| composition-contracts | `reports/wave-02-worker-composition-contracts.md` | Pending |
+| composition-contracts | `reports/wave-02-worker-composition-contracts.md` | Complete |
 | workflow-nodes-factoring | `reports/wave-02-worker-workflow-nodes-factoring.md` | Pending |
 | runtime-lineage | `reports/wave-02-worker-runtime-lineage.md` | Pending |
 
@@ -55,6 +55,12 @@ slices are ready to begin.
   types, `workflow-nodes-factoring` owns concrete descriptor changes and
   workflow-node README coverage, and `runtime-lineage` owns embedded-runtime
   composed-parent lineage projection.
+- 2026-04-24: The host implemented `composition-contracts` locally in the
+  shared workspace. The slice adds standalone composed-node contract DTOs,
+  external-to-internal port mapping validation, contract-upgrade and migration
+  diagnostic DTOs, typed composition/migration validation errors, README
+  coverage, and focused tests without changing primitive `NodeTypeContract`
+  serialization.
 
 ## Verification Results
 
@@ -63,3 +69,8 @@ slices are ready to begin.
   node/port and saved-workflow artifact inventory is recorded,
   keep/split/compose classification is frozen, migration output semantics are
   frozen, and Wave `02` write boundaries are explicit.
+- 2026-04-24: `composition-contracts` verification passed:
+  `cargo fmt -p pantograph-node-contracts -- --check`,
+  `cargo test -p pantograph-node-contracts`,
+  `cargo check -p pantograph-node-contracts`, and
+  `cargo clippy -p pantograph-node-contracts --all-targets -- -D warnings`.

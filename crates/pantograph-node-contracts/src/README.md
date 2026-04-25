@@ -2,16 +2,16 @@
 
 ## Purpose
 
-`pantograph-node-contracts` owns Pantograph's canonical node and port
-contracts. It exists so workflow-service, runtime, GUI, and binding surfaces
-consume backend-owned discovery facts instead of duplicating node shape or
-compatibility rules.
+`pantograph-node-contracts` owns Pantograph's canonical node, port,
+composition, migration, and compatibility contracts. It exists so
+workflow-service, runtime, GUI, and binding surfaces consume backend-owned
+discovery facts instead of duplicating node shape or compatibility rules.
 
 ## Contents
 
 | File | Description |
 | ---- | ----------- |
-| `lib.rs` | Public canonical contract, effective contract, compatibility, and error API. |
+| `lib.rs` | Public canonical contract, composed-node mapping, migration, effective contract, compatibility, and error API. |
 
 ## Problem
 
@@ -33,10 +33,11 @@ produce compatibility answers that drift from backend execution semantics.
 
 ## Decision
 
-Keep canonical node-contract identity, DTOs, effective-contract projections,
-and compatibility diagnostics in this crate. Other crates convert their local
-execution descriptors into these contracts before exposing node definitions,
-connection candidates, or graph-authoring diagnostics.
+Keep canonical node-contract identity, DTOs, composed-node mappings,
+contract-upgrade records, effective-contract projections, and compatibility
+diagnostics in this crate. Other crates convert their local execution
+descriptors into these contracts before exposing node definitions, connection
+candidates, graph-authoring diagnostics, or saved-workflow migration results.
 
 ## Alternatives Rejected
 
@@ -51,6 +52,11 @@ connection candidates, or graph-authoring diagnostics.
 
 - `NodeTypeId`, `NodeInstanceId`, and `PortId` are validated before entering
   canonical contracts.
+- Composed nodes publish stable external contracts plus internal primitive
+  graph mappings; they do not collapse primitive execution facts into
+  presentation-only summaries.
+- Contract upgrades record explicit outcomes, changed node/port ids, lineage
+  policy, and typed rejection diagnostics for unmigratable artifacts.
 - Compatibility results carry structured source/target ids and typed rejection
   reasons.
 - Effective contracts include resolution diagnostics so callers can explain
@@ -84,6 +90,8 @@ connection candidates, or graph-authoring diagnostics.
 - Consumers parse caller-supplied ids through the validated id newtypes.
 - Consumers use `CompatibilityResult` instead of reimplementing type
   compatibility.
+- Consumers use `ComposedNodeContract` and `ContractUpgradeRecord` to inspect
+  composed authoring surfaces and saved-workflow upgrade behavior.
 - Consumers render `EffectiveNodeContract` and `ContractResolutionDiagnostics`
   as backend facts.
 
@@ -91,6 +99,10 @@ connection candidates, or graph-authoring diagnostics.
 
 - Concrete node registries provide `NodeTypeContract` values with stable port
   ids.
+- Composed-node producers provide external port mappings into internal
+  primitive graph nodes and preserve primitive trace policy.
+- Migration producers emit `ContractUpgradeRecord` values before rewriting,
+  regenerating, or rejecting saved workflow artifacts.
 - Effective-contract producers preserve the canonical static contract unless a
   backend-owned resolution reason explains the change.
 - Compatibility diagnostics should be safe to return to GUI, binding, and
