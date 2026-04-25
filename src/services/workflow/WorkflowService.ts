@@ -216,7 +216,7 @@ export class WorkflowService {
       };
     }
 
-    const session = await invoke<WorkflowSessionHandle>('create_workflow_session', { graph });
+    const session = await invoke<WorkflowSessionHandle>('create_workflow_execution_session', { graph });
     this.currentExecutionId = session.session_id;
     this.currentRunExecutionId = null;
     return session;
@@ -244,7 +244,7 @@ export class WorkflowService {
       this.publishEvent(event);
     };
 
-    await invoke('run_workflow_session', {
+    await invoke('run_workflow_execution_session', {
       sessionId: id,
       channel: this.channel,
     });

@@ -53,7 +53,7 @@ export class TauriWorkflowBackend implements WorkflowBackend {
   // --- Session Management ---
 
   async createSession(graph: WorkflowGraph): Promise<WorkflowSessionHandle> {
-    return invoke<WorkflowSessionHandle>('create_workflow_session', { graph });
+    return invoke<WorkflowSessionHandle>('create_workflow_execution_session', { graph });
   }
 
   async runSession(sessionId: string): Promise<void> {
@@ -61,7 +61,7 @@ export class TauriWorkflowBackend implements WorkflowBackend {
     this.channel.onmessage = (event) => {
       this.eventListeners.forEach((listener) => listener(event));
     };
-    await invoke('run_workflow_session', { sessionId, channel: this.channel });
+    await invoke('run_workflow_execution_session', { sessionId, channel: this.channel });
   }
 
   async removeSession(sessionId: string): Promise<void> {
