@@ -17,9 +17,10 @@ test('createEmptyDiagnosticsProjection includes backend-owned projection context
     relevantExecutionId: null,
     relevant: true,
   });
+  assert.equal(projection.workflowTimingHistory, null);
 });
 
-test('normalizeDiagnosticsProjection backfills context and preserves older session state payloads', () => {
+test('normalizeDiagnosticsProjection backfills legacy optional diagnostics fields', () => {
   const previous = createEmptyDiagnosticsProjection();
   previous.context = {
     requestedSessionId: 'session-1',
@@ -36,11 +37,19 @@ test('normalizeDiagnosticsProjection backfills context and preserves older sessi
     memory_impact: null,
     checkpoint: null,
   };
+  previous.workflowTimingHistory = {
+    workflowId: 'workflow-1',
+    workflowName: 'Workflow 1',
+    graphFingerprint: 'graph-1',
+    timingExpectation: null,
+    nodes: {},
+  };
   const incoming = {
     ...createEmptyDiagnosticsProjection(),
   };
   delete (incoming as Partial<typeof incoming>).context;
   delete (incoming as Partial<typeof incoming>).currentSessionState;
+  delete (incoming as Partial<typeof incoming>).workflowTimingHistory;
 
   const normalized = normalizeDiagnosticsProjection(incoming, previous);
 
@@ -53,6 +62,7 @@ test('normalizeDiagnosticsProjection backfills context and preserves older sessi
     relevant: true,
   });
   assert.equal(normalized.currentSessionState, previous.currentSessionState);
+  assert.equal(normalized.workflowTimingHistory, previous.workflowTimingHistory);
 });
 
 test('normalizeDiagnosticsProjection preserves backend relevance decisions', () => {

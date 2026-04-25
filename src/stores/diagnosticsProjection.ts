@@ -45,6 +45,7 @@ export function createEmptyDiagnosticsProjection(): WorkflowDiagnosticsProjectio
       lastError: null,
     },
     currentSessionState: null,
+    workflowTimingHistory: null,
     retainedEventLimit: 200,
   };
 }
@@ -79,6 +80,12 @@ export function normalizeDiagnosticsProjection(
     )
       ? incoming.currentSessionState
       : previous.currentSessionState,
+    workflowTimingHistory: Object.prototype.hasOwnProperty.call(
+      incoming,
+      'workflowTimingHistory',
+    )
+      ? incoming.workflowTimingHistory
+      : previous.workflowTimingHistory,
   };
 }
 

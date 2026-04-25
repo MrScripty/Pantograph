@@ -5,7 +5,8 @@ use pantograph_diagnostics_ledger::{
 
 use super::store::WorkflowTraceState;
 use super::types::{
-    WorkflowTraceEvent, WorkflowTraceNodeRecord, WorkflowTraceNodeStatus,
+    WorkflowTraceEvent, WorkflowTraceGraphContext, WorkflowTraceGraphTimingExpectations,
+    WorkflowTraceNodeRecord, WorkflowTraceNodeStatus, WorkflowTraceNodeTimingExpectation,
     WorkflowTraceSnapshotResponse, WorkflowTraceStatus, WorkflowTraceSummary,
 };
 
@@ -60,6 +61,65 @@ pub(super) fn enrich_snapshot_timing(
         }
     }
     snapshot
+}
+
+pub(super) fn graph_timing_expectations(
+    workflow_id: String,
+    workflow_name: Option<String>,
+    graph_context: &WorkflowTraceGraphContext,
+    ledger: Option<&SqliteDiagnosticsLedger>,
+) -> WorkflowTraceGraphTimingExpectations {
+    let timing_expectation =
+        graph_context
+            .graph_fingerprint
+            .as_ref()
+            .and_then(|graph_fingerprint| {
+                ledger?
+                    .timing_expectation(WorkflowTimingExpectationQuery {
+                        scope: WorkflowTimingObservationScope::Run,
+                        workflow_id: workflow_id.clone(),
+                        graph_fingerprint: graph_fingerprint.clone(),
+                        node_id: None,
+                        node_type: None,
+                        runtime_id: None,
+                        current_duration_ms: None,
+                        current_duration_is_complete: false,
+                    })
+                    .ok()
+            });
+    let mut nodes: Vec<_> = graph_context
+        .node_types_by_id
+        .iter()
+        .map(|(node_id, node_type)| WorkflowTraceNodeTimingExpectation {
+            node_id: node_id.clone(),
+            node_type: Some(node_type.clone()),
+            timing_expectation: graph_context.graph_fingerprint.as_ref().and_then(
+                |graph_fingerprint| {
+                    ledger?
+                        .timing_expectation(WorkflowTimingExpectationQuery {
+                            scope: WorkflowTimingObservationScope::Node,
+                            workflow_id: workflow_id.clone(),
+                            graph_fingerprint: graph_fingerprint.clone(),
+                            node_id: Some(node_id.clone()),
+                            node_type: Some(node_type.clone()),
+                            runtime_id: None,
+                            current_duration_ms: None,
+                            current_duration_is_complete: false,
+                        })
+                        .ok()
+                },
+            ),
+        })
+        .collect();
+    nodes.sort_by(|left, right| left.node_id.cmp(&right.node_id));
+
+    WorkflowTraceGraphTimingExpectations {
+        workflow_id,
+        workflow_name,
+        graph_fingerprint: graph_context.graph_fingerprint.clone(),
+        timing_expectation,
+        nodes,
+    }
 }
 
 fn run_timing_observation(

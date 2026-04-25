@@ -7,11 +7,12 @@ use pantograph_embedded_runtime::workflow_runtime::{
 };
 use pantograph_workflow_service::{
     WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionSummary,
-    WorkflowSchedulerSnapshotDiagnostics, WorkflowServiceError,
-    WorkflowTimingExpectationComparison, WorkflowTraceNodeStatus, WorkflowTraceRuntimeMetrics,
-    WorkflowTraceStatus, graph::WorkflowGraphSessionStateView,
+    WorkflowSchedulerSnapshotDiagnostics, WorkflowServiceError, WorkflowTraceNodeStatus,
+    WorkflowTraceRuntimeMetrics, WorkflowTraceStatus, graph::WorkflowGraphSessionStateView,
 };
 use serde::{Deserialize, Serialize};
+
+pub use super::timing::{DiagnosticsTimingExpectation, DiagnosticsWorkflowTimingHistory};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -111,36 +112,6 @@ pub struct DiagnosticsRunTrace {
     pub timing_expectation: Option<DiagnosticsTimingExpectation>,
     pub nodes: BTreeMap<String, DiagnosticsNodeTrace>,
     pub events: Vec<DiagnosticsEventRecord>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct DiagnosticsTimingExpectation {
-    pub comparison: WorkflowTimingExpectationComparison,
-    pub sample_count: usize,
-    #[serde(default)]
-    pub current_duration_ms: Option<u64>,
-    #[serde(default)]
-    pub median_duration_ms: Option<u64>,
-    #[serde(default)]
-    pub typical_min_duration_ms: Option<u64>,
-    #[serde(default)]
-    pub typical_max_duration_ms: Option<u64>,
-}
-
-impl From<&pantograph_workflow_service::WorkflowTimingExpectation>
-    for DiagnosticsTimingExpectation
-{
-    fn from(expectation: &pantograph_workflow_service::WorkflowTimingExpectation) -> Self {
-        Self {
-            comparison: expectation.comparison,
-            sample_count: expectation.sample_count,
-            current_duration_ms: expectation.current_duration_ms,
-            median_duration_ms: expectation.median_duration_ms,
-            typical_min_duration_ms: expectation.typical_min_duration_ms,
-            typical_max_duration_ms: expectation.typical_max_duration_ms,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -358,6 +329,8 @@ pub struct WorkflowDiagnosticsProjection {
     pub runtime: DiagnosticsRuntimeSnapshot,
     pub scheduler: DiagnosticsSchedulerSnapshot,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_timing_history: Option<DiagnosticsWorkflowTimingHistory>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub current_session_state: Option<WorkflowGraphSessionStateView>,
     pub retained_event_limit: usize,
 }
@@ -410,7 +383,7 @@ impl WorkflowDiagnosticsProjection {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowDiagnosticsSnapshotRequest {
     #[serde(default)]
@@ -419,6 +392,8 @@ pub struct WorkflowDiagnosticsSnapshotRequest {
     pub workflow_id: Option<String>,
     #[serde(default)]
     pub workflow_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_graph: Option<pantograph_workflow_service::WorkflowGraph>,
 }
 
 impl WorkflowDiagnosticsSnapshotRequest {
@@ -427,6 +402,7 @@ impl WorkflowDiagnosticsSnapshotRequest {
             session_id: normalize_optional_filter(&self.session_id),
             workflow_id: normalize_optional_filter(&self.workflow_id),
             workflow_name: normalize_optional_filter(&self.workflow_name),
+            workflow_graph: self.workflow_graph.clone(),
         }
     }
 

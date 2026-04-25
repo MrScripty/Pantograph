@@ -48,6 +48,20 @@ export interface WorkflowTimingExpectation {
   typicalMaxDurationMs: number | null;
 }
 
+export interface DiagnosticsWorkflowNodeTimingHistory {
+  nodeId: string;
+  nodeType: string | null;
+  timingExpectation?: WorkflowTimingExpectation | null;
+}
+
+export interface DiagnosticsWorkflowTimingHistory {
+  workflowId: string;
+  workflowName: string | null;
+  graphFingerprint: string | null;
+  timingExpectation?: WorkflowTimingExpectation | null;
+  nodes: Record<string, DiagnosticsWorkflowNodeTimingHistory>;
+}
+
 export interface DiagnosticsEventRecord {
   id: string;
   sequence: number;
@@ -165,6 +179,7 @@ export interface WorkflowDiagnosticsProjection {
   runtime: DiagnosticsRuntimeSnapshot;
   scheduler: DiagnosticsSchedulerSnapshot;
   currentSessionState: WorkflowGraphSessionStateView | null;
+  workflowTimingHistory: DiagnosticsWorkflowTimingHistory | null;
   retainedEventLimit: number;
 }
 

@@ -8,10 +8,11 @@ mod types;
 
 pub use store::{WorkflowTraceRecordResult, WorkflowTraceStore};
 pub use types::{
-    WorkflowTraceEvent, WorkflowTraceGraphContext, WorkflowTraceNodeRecord,
-    WorkflowTraceNodeStatus, WorkflowTraceQueueMetrics, WorkflowTraceRuntimeMetrics,
-    WorkflowTraceRuntimeSelection, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
-    WorkflowTraceStatus, WorkflowTraceSummary,
+    WorkflowTraceEvent, WorkflowTraceGraphContext, WorkflowTraceGraphTimingExpectations,
+    WorkflowTraceNodeRecord, WorkflowTraceNodeStatus, WorkflowTraceNodeTimingExpectation,
+    WorkflowTraceQueueMetrics, WorkflowTraceRuntimeMetrics, WorkflowTraceRuntimeSelection,
+    WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse, WorkflowTraceStatus,
+    WorkflowTraceSummary,
 };
 
 #[cfg(test)]

@@ -296,6 +296,7 @@ export class WorkflowService {
     workflowId?: string | null,
     workflowName?: string | null,
     sessionId?: string | null,
+    workflowGraph?: WorkflowGraph | null,
   ): Promise<WorkflowDiagnosticsProjection> {
     if (USE_MOCKS) {
       return {
@@ -334,6 +335,7 @@ export class WorkflowService {
           lastError: null,
         },
         currentSessionState: null,
+        workflowTimingHistory: null,
         retainedEventLimit: 200,
       };
     }
@@ -343,6 +345,7 @@ export class WorkflowService {
         workflow_id: workflowId ?? null,
         workflow_name: workflowName ?? null,
         session_id: sessionId ?? null,
+        workflow_graph: workflowGraph ?? null,
       },
     });
   }

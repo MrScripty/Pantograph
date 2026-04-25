@@ -13,6 +13,7 @@ logic.
 | `DiagnosticsOverview.svelte` | Overview tab with run-level summary cards and node detail panels. |
 | `DiagnosticsNodeDetail.svelte` | Focused selected-node inspector that renders lifecycle, duration expectation, optional reported progress, messages, and errors. |
 | `DiagnosticsTimingExpectation.svelte` | Small reusable duration-expectation badge used by overview and timeline views. |
+| `DiagnosticsWorkflowHistory.svelte` | Opened-workflow timing history view shown before a retained run is selected. |
 | `DiagnosticsTimeline.svelte` | Timeline tab that visualizes relative node spans inside a selected run. |
 | `DiagnosticsEvents.svelte` | Events tab that shows retained workflow events and raw payload details. |
 | `DiagnosticsScheduler.svelte` | Scheduler tab that renders session state and queue ordering from workflow service diagnostics snapshots. |
@@ -48,6 +49,9 @@ to focused child components. Formatting logic stays in `presenters.ts` so Svelte
 files mostly express layout and interaction. Duration expectation rendering is
 shared through `DiagnosticsTimingExpectation.svelte` so the overview and
 timeline views do not reinterpret backend timing fields independently.
+When no retained run is selected, `DiagnosticsWorkflowHistory.svelte` renders
+the backend-projected timing history for the opened workflow graph so previous
+diagnostics remain visible before a new run starts.
 
 ## Alternatives Rejected
 - Add diagnostics as a third top-level app mode.
@@ -65,6 +69,8 @@ timeline views do not reinterpret backend timing fields independently.
   store snapshots, not call workflow commands directly from the component tree.
 - Duration expectation badges render backend-projected timing history only.
   Components must not calculate historical baselines from local run lists.
+- Opened-workflow timing history must come from the diagnostics snapshot, not
+  from retained run rows or component-local cache.
 - Scheduler copy and layout should remain valid when queue ordering is
   synthesized for single-run edit sessions rather than backed by a real
   workflow-service queue.

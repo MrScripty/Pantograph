@@ -7,6 +7,7 @@
   import DiagnosticsRuntime from './DiagnosticsRuntime.svelte';
   import DiagnosticsScheduler from './DiagnosticsScheduler.svelte';
   import DiagnosticsTimeline from './DiagnosticsTimeline.svelte';
+  import DiagnosticsWorkflowHistory from './DiagnosticsWorkflowHistory.svelte';
   import {
     formatDiagnosticsDuration,
     formatDiagnosticsTimestamp,
@@ -144,9 +145,7 @@
           {:else if snapshot.state.activeTab === 'graph'}
             <DiagnosticsGraph state={snapshot.state} selectedRun={snapshot.selectedRun} />
           {:else if !snapshot.selectedRun}
-            <div class="flex h-full items-center justify-center px-6 text-center text-sm text-neutral-500">
-              Select a retained run to inspect its overview, timeline, and raw event stream.
-            </div>
+            <DiagnosticsWorkflowHistory history={snapshot.state.workflowTimingHistory} />
           {:else if snapshot.state.activeTab === 'overview'}
             <DiagnosticsOverview
               run={snapshot.selectedRun}

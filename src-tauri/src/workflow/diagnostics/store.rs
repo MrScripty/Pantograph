@@ -18,7 +18,8 @@ use super::overlay::{WorkflowDiagnosticsState, event_execution_id, record_diagno
 use super::trace::{graph_trace_context, workflow_trace_event};
 use super::types::{
     DiagnosticsRuntimeLifecycleSnapshot, DiagnosticsRuntimeSnapshot,
-    DiagnosticsRuntimeSnapshotInput, DiagnosticsSchedulerSnapshot, WorkflowDiagnosticsProjection,
+    DiagnosticsRuntimeSnapshotInput, DiagnosticsSchedulerSnapshot,
+    DiagnosticsWorkflowTimingHistory, WorkflowDiagnosticsProjection,
 };
 use crate::workflow::events::{
     WorkflowEvent, WorkflowRuntimeSnapshotEventInput, WorkflowSchedulerSnapshotEventInput,
@@ -163,6 +164,19 @@ impl WorkflowDiagnosticsStore {
     pub fn set_execution_graph(&self, execution_id: &str, graph: &WorkflowGraph) {
         self.trace_store
             .set_execution_graph_context(execution_id, &graph_trace_context(graph));
+    }
+
+    pub fn workflow_timing_history(
+        &self,
+        workflow_id: String,
+        workflow_name: Option<String>,
+        graph: &WorkflowGraph,
+    ) -> DiagnosticsWorkflowTimingHistory {
+        DiagnosticsWorkflowTimingHistory::from(&self.trace_store.graph_timing_expectations(
+            workflow_id,
+            workflow_name,
+            &graph_trace_context(graph),
+        ))
     }
 
     pub fn record_runtime_snapshot(

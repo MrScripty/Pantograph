@@ -69,6 +69,42 @@ fn diagnostics_projection_serializes_timing_expectation_as_camel_case() {
     assert!(expectation.get("median_duration_ms").is_none());
 }
 
+#[test]
+fn workflow_timing_history_reads_prior_runs_without_active_trace() {
+    let store = WorkflowDiagnosticsStore::with_default_timing_ledger(
+        pantograph_workflow_service::SqliteDiagnosticsLedger::open_in_memory()
+            .expect("ledger opens"),
+    );
+
+    record_completed_timing_run(&store, "exec-1", 1_000, 100);
+    record_completed_timing_run(&store, "exec-2", 2_000, 200);
+    record_completed_timing_run(&store, "exec-3", 3_000, 300);
+
+    let history = store.workflow_timing_history(
+        "wf-timing".to_string(),
+        Some("Timing Workflow".to_string()),
+        &sample_graph(),
+    );
+    let node = history.nodes.get("llm-1").expect("node history");
+    let expectation = node
+        .timing_expectation
+        .as_ref()
+        .expect("node timing expectation");
+
+    assert_eq!(history.workflow_id, "wf-timing");
+    assert_eq!(history.workflow_name.as_deref(), Some("Timing Workflow"));
+    assert_eq!(history.graph_fingerprint.as_deref(), Some("graph-123"));
+    assert_eq!(expectation.sample_count, 3);
+    assert_eq!(
+        expectation.comparison,
+        pantograph_workflow_service::WorkflowTimingExpectationComparison::NoCurrentDuration
+    );
+    assert_eq!(expectation.current_duration_ms, None);
+    assert_eq!(expectation.median_duration_ms, Some(200));
+    assert_eq!(expectation.typical_min_duration_ms, Some(200));
+    assert_eq!(expectation.typical_max_duration_ms, Some(300));
+}
+
 fn record_completed_timing_run(
     store: &WorkflowDiagnosticsStore,
     execution_id: &str,

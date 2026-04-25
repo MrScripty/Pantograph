@@ -45,8 +45,9 @@ Keep canonical workflow trace ownership in `pantograph-workflow-service`.
 in-memory retained trace state and facade, `query.rs` owns backend trace
 filtering and unique-match runtime selection, `state.rs` owns run-state
 creation and event application, `timing.rs` owns timing-observation projection
-and duration expectation enrichment, and `runtime.rs` plus `scheduler.rs` apply
-backend-owned runtime/scheduler facts into the canonical run state. The
+and duration expectation enrichment for retained traces and opened workflow
+graphs, and `runtime.rs` plus `scheduler.rs` apply backend-owned
+runtime/scheduler facts into the canonical run state. The
 canonical trace snapshot filter model is
 `execution_id`, `session_id`, `workflow_id`, `workflow_name`, plus
 `include_completed`, with whitespace trimming and blank-filter rejection applied
@@ -86,6 +87,8 @@ they do not own trace lifecycle rules.
   The active execution is not recorded until after its terminal snapshot is
   enriched, so completion diagnostics compare against previous history rather
   than including themselves in their baseline.
+- Opened-graph timing expectations are ledger projections keyed by workflow id
+  and graph fingerprint. They must not require an active execution id.
 - Trace DTO serialization, runtime inference, lifecycle reason, snapshot
   filtering, replay, baseline scheduler attribution, waiting/resume, and
   dirty-task tests stay indexed by `tests.rs`, while larger lifecycle/restart

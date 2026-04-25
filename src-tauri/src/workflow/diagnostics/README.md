@@ -108,8 +108,8 @@ let trace = diagnostics.trace_snapshot(Default::default())?;
   as projections over backend-owned trace and runtime data.
 - `WorkflowDiagnosticsProjection` returns `runs_by_id`, `run_order`, `runtime`,
   `scheduler`, backend-authored `context`, additive `current_session_state`,
-  timing expectation projections, and `retained_event_limit` with stable field
-  names.
+  opened-workflow timing history, timing expectation projections, and
+  `retained_event_limit` with stable field names.
 - `trace_snapshot()` validates backend-owned trace filters through
   `WorkflowTraceSnapshotRequest` instead of accepting arbitrary adapter-local
   filtering rules.
@@ -124,6 +124,9 @@ let trace = diagnostics.trace_snapshot(Default::default())?;
 - Timing expectations are backend-projected duration comparisons from
   workflow-service traces and the diagnostics ledger. Tauri transports them but
   must not calculate historical baselines locally.
+- `workflow_timing_history` may be requested with the opened workflow graph so
+  the GUI can display prior ledger diagnostics before a new execution trace
+  exists.
 
 ## Structured Producer Contract
 - `DiagnosticsRunTrace`, `DiagnosticsNodeTrace`, and related DTOs are
@@ -140,3 +143,6 @@ let trace = diagnostics.trace_snapshot(Default::default())?;
   must not infer stronger semantics from absence.
 - `timingExpectation` fields are optional and represent duration history, not
   generic workflow progress. Absence means no usable historical baseline.
+- `workflowTimingHistory` is an opened-graph projection from the same ledger
+  source as live run timing expectations. It is not tied to a retained
+  execution id.

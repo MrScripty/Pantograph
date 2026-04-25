@@ -50,10 +50,11 @@ pub use technical_fit::{
     WorkflowTechnicalFitSelectionMode, build_workflow_technical_fit_request,
 };
 pub use trace::{
-    WorkflowTraceEvent, WorkflowTraceGraphContext, WorkflowTraceNodeRecord,
-    WorkflowTraceNodeStatus, WorkflowTraceQueueMetrics, WorkflowTraceRecordResult,
-    WorkflowTraceRuntimeMetrics, WorkflowTraceRuntimeSelection, WorkflowTraceSnapshotRequest,
-    WorkflowTraceSnapshotResponse, WorkflowTraceStatus, WorkflowTraceStore, WorkflowTraceSummary,
+    WorkflowTraceEvent, WorkflowTraceGraphContext, WorkflowTraceGraphTimingExpectations,
+    WorkflowTraceNodeRecord, WorkflowTraceNodeStatus, WorkflowTraceNodeTimingExpectation,
+    WorkflowTraceQueueMetrics, WorkflowTraceRecordResult, WorkflowTraceRuntimeMetrics,
+    WorkflowTraceRuntimeSelection, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
+    WorkflowTraceStatus, WorkflowTraceStore, WorkflowTraceSummary,
 };
 pub use workflow::{
     BucketCreateRequest, BucketDeleteRequest, BucketRecord, BucketSelection,

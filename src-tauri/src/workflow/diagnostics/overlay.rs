@@ -89,6 +89,7 @@ impl WorkflowDiagnosticsState {
             run_order,
             runtime: self.runtime.clone(),
             scheduler: self.scheduler.clone(),
+            workflow_timing_history: None,
             current_session_state: None,
             retained_event_limit: self.retained_event_limit,
         }

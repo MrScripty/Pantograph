@@ -42,6 +42,21 @@ function createSnapshot(): DiagnosticsSnapshot {
   });
 }
 
+function clearMismatchedWorkflowTimingHistory(): void {
+  const history = latestProjection.workflowTimingHistory;
+  if (!history) {
+    return;
+  }
+
+  const graphFingerprint = latestWorkflowGraph?.derived_graph?.graph_fingerprint ?? null;
+  if (
+    history.workflowId !== latestWorkflowId ||
+    history.graphFingerprint !== graphFingerprint
+  ) {
+    latestProjection = { ...latestProjection, workflowTimingHistory: null };
+  }
+}
+
 function normalizeUiSelections(): void {
   if (
     uiState.selectedRunId !== null &&
@@ -73,11 +88,13 @@ function normalizeUiSelections(): void {
 
 function applyProjection(projection: WorkflowDiagnosticsProjection): void {
   latestProjection = normalizeDiagnosticsProjection(projection, latestProjection);
+  clearMismatchedWorkflowTimingHistory();
   normalizeUiSelections();
   diagnosticsSnapshotStore.set(createSnapshot());
 }
 
 function emitSnapshot(): void {
+  clearMismatchedWorkflowTimingHistory();
   normalizeUiSelections();
   diagnosticsSnapshotStore.set(createSnapshot());
 }
@@ -110,6 +127,7 @@ async function refreshDiagnosticsProjection(): Promise<void> {
       latestWorkflowId,
       latestWorkflowName,
       latestSessionId,
+      latestWorkflowGraph,
     );
     if (token !== refreshToken) {
       return;
@@ -157,8 +175,14 @@ function bindDiagnosticsStore(): void {
   });
 
   workflowGraphUnsubscribe = workflowGraph.subscribe((graph) => {
+    const previousFingerprint =
+      latestWorkflowGraph?.derived_graph?.graph_fingerprint ?? null;
     latestWorkflowGraph = graph as WorkflowGraph | null;
+    const nextFingerprint = latestWorkflowGraph?.derived_graph?.graph_fingerprint ?? null;
     emitSnapshot();
+    if (nextFingerprint !== previousFingerprint) {
+      void refreshDiagnosticsProjection();
+    }
   });
 
   workflowIdUnsubscribe = currentGraphId.subscribe((workflowId) => {

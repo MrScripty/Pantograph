@@ -148,6 +148,29 @@ pub struct WorkflowTraceGraphContext {
     pub node_types_by_id: HashMap<String, String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowTraceGraphTimingExpectations {
+    pub workflow_id: String,
+    #[serde(default)]
+    pub workflow_name: Option<String>,
+    #[serde(default)]
+    pub graph_fingerprint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timing_expectation: Option<WorkflowTimingExpectation>,
+    pub nodes: Vec<WorkflowTraceNodeTimingExpectation>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowTraceNodeTimingExpectation {
+    pub node_id: String,
+    #[serde(default)]
+    pub node_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timing_expectation: Option<WorkflowTimingExpectation>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum WorkflowTraceEvent {
     RunStarted {

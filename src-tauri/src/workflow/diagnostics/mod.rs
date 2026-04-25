@@ -7,6 +7,7 @@
 mod attempts;
 mod overlay;
 mod store;
+mod timing;
 mod trace;
 mod types;
 
@@ -20,8 +21,9 @@ pub(crate) use trace::node_engine_workflow_trace_event;
 pub use types::{
     DiagnosticsEventRecord, DiagnosticsNodeStatus, DiagnosticsNodeTrace, DiagnosticsRunStatus,
     DiagnosticsRunTrace, DiagnosticsRuntimeLifecycleSnapshot, DiagnosticsRuntimeSnapshot,
-    DiagnosticsSchedulerSnapshot, DiagnosticsTraceRuntimeMetrics, WorkflowDiagnosticsProjection,
-    WorkflowDiagnosticsProjectionContext, WorkflowDiagnosticsSnapshotRequest,
+    DiagnosticsSchedulerSnapshot, DiagnosticsTraceRuntimeMetrics, DiagnosticsWorkflowTimingHistory,
+    WorkflowDiagnosticsProjection, WorkflowDiagnosticsProjectionContext,
+    WorkflowDiagnosticsSnapshotRequest,
 };
 
 #[cfg(test)]

@@ -19,7 +19,7 @@ use crate::workflow::headless_diagnostics_transport::{
 };
 use pantograph_workflow_service::{WorkflowServiceError, WorkflowTraceSnapshotRequest};
 use serde::{Deserialize, Serialize};
-use tauri::{command, AppHandle, Manager, State};
+use tauri::{AppHandle, Manager, State, command};
 
 use crate::llm::runtime_registry::reclaim_runtime_and_sync_runtime_registry;
 use crate::llm::{SharedGateway, SharedRuntimeRegistry};
@@ -135,6 +135,7 @@ pub async fn get_runtime_debug_snapshot(
                     session_id: session_id_filter.clone(),
                     workflow_id: workflow_id_filter.clone(),
                     workflow_name: workflow_name_filter.clone(),
+                    workflow_graph: None,
                 },
             )
             .await?,

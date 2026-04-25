@@ -154,6 +154,7 @@ fn workflow_diagnostics_snapshot_request_normalizes_trimmed_filters() {
         session_id: Some("  session-1  ".to_string()),
         workflow_id: Some("   ".to_string()),
         workflow_name: Some("\tWorkflow 1\t".to_string()),
+        workflow_graph: None,
     }
     .normalized();
 
@@ -168,6 +169,7 @@ fn workflow_diagnostics_snapshot_request_rejects_blank_filters() {
         session_id: None,
         workflow_id: Some("   ".to_string()),
         workflow_name: None,
+        workflow_graph: None,
     }
     .normalized();
 

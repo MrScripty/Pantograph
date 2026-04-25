@@ -6,6 +6,7 @@ fn diagnostics_snapshot_request_still_allows_optional_scheduler_context() {
         session_id: Some("session-1".to_string()),
         workflow_id: Some("wf-1".to_string()),
         workflow_name: Some("Workflow 1".to_string()),
+        workflow_graph: None,
     };
 
     let value = serde_json::to_value(request).expect("serialize diagnostics request");

@@ -8,11 +8,14 @@ use crate::workflow::WorkflowServiceError;
 
 use super::query::{runtime_metrics_selection, snapshot_for_request};
 use super::state::{apply_trace_event, create_trace_run_state};
-use super::timing::{enrich_snapshot_timing, terminal_timing_observations};
+use super::timing::{
+    enrich_snapshot_timing, graph_timing_expectations, terminal_timing_observations,
+};
 use super::types::{
-    WorkflowTraceEvent, WorkflowTraceGraphContext, WorkflowTraceNodeRecord,
-    WorkflowTraceQueueMetrics, WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest,
-    WorkflowTraceSnapshotResponse, WorkflowTraceStatus, WorkflowTraceSummary,
+    WorkflowTraceEvent, WorkflowTraceGraphContext, WorkflowTraceGraphTimingExpectations,
+    WorkflowTraceNodeRecord, WorkflowTraceQueueMetrics, WorkflowTraceRuntimeMetrics,
+    WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse, WorkflowTraceStatus,
+    WorkflowTraceSummary,
 };
 use node_engine::GraphMemoryImpactSummary;
 
@@ -333,6 +336,16 @@ impl WorkflowTraceStore {
         self.state
             .lock()
             .set_execution_graph_context(execution_id, graph_context);
+    }
+
+    pub fn graph_timing_expectations(
+        &self,
+        workflow_id: String,
+        workflow_name: Option<String>,
+        graph_context: &WorkflowTraceGraphContext,
+    ) -> WorkflowTraceGraphTimingExpectations {
+        let ledger = self.timing_ledger.as_ref().map(|ledger| ledger.lock());
+        graph_timing_expectations(workflow_id, workflow_name, graph_context, ledger.as_deref())
     }
 
     pub fn record_event(
