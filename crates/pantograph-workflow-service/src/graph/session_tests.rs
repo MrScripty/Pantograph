@@ -1,7 +1,10 @@
 use super::super::types::InsertNodePositionHint;
 use super::*;
 use crate::graph::types::{ConnectionAnchor, GraphNode, Position};
-use crate::WorkflowExecutionSessionQueueItemStatus;
+use crate::{
+    WorkflowExecutionSessionQueueItemStatus, WorkflowGraphRemoveNodeRequest,
+    WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest,
+};
 
 fn sample_graph() -> WorkflowGraph {
     WorkflowGraph {

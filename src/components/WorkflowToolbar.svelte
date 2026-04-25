@@ -13,6 +13,7 @@
     clearStreamContent,
   } from '../stores/workflowStore';
   import {
+    currentGraphName,
     isReadOnly,
     currentSessionId,
   } from '../stores/graphSessionStore';
@@ -64,7 +65,7 @@
       if (!$currentSessionId) {
         throw new Error('No active workflow session');
       }
-      await workflowService.runSession($currentSessionId);
+      await workflowService.runSession($currentSessionId, $currentGraphName);
       // Don't unsubscribe here - wait for Completed/Failed events
     } catch (error) {
       console.error('Workflow execution failed:', error);

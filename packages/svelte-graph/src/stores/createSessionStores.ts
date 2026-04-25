@@ -123,10 +123,14 @@ export function createSessionStores(
 
       const path = `.pantograph/workflows/${name}.json`;
       const file = await backend.loadWorkflow(path);
+      const workflowName = file.metadata.name;
+      currentGraphId.set(name);
+      currentGraphType.set('workflow');
+      currentGraphName.set(workflowName);
+      workflowStores.loadWorkflow(file.graph, file.metadata);
+
       const session = await backend.createSession(file.graph, name);
       applySessionHandle(session);
-
-      workflowStores.loadWorkflow(file.graph, file.metadata);
 
       // Call optional hook for consumer-specific post-load behavior
       if (options?.onWorkflowLoaded && file.metadata) {
@@ -136,10 +140,6 @@ export function createSessionStores(
           console.warn('[sessionStores] onWorkflowLoaded hook failed:', error);
         }
       }
-
-      currentGraphId.set(name);
-      currentGraphType.set('workflow');
-      currentGraphName.set(file.metadata.name);
 
       saveLastGraph(name, 'workflow');
       return true;

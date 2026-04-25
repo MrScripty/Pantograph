@@ -36,6 +36,7 @@ pub struct WorkflowExecutionRuntimeState<'a> {
 pub struct RunWorkflowExecutionSessionInput<'a> {
     pub app: AppHandle,
     pub session_id: String,
+    pub workflow_name: Option<String>,
     pub state: WorkflowExecutionRuntimeState<'a>,
     pub channel: Channel<WorkflowEvent>,
 }
@@ -58,6 +59,7 @@ struct DiagnosticsEmissionInput<'a> {
 struct SessionGraphSnapshotInput<'a> {
     app: AppHandle,
     session_id: String,
+    workflow_name: Option<String>,
     session_graph: WorkflowGraph,
     state: WorkflowExecutionRuntimeState<'a>,
     channel: Channel<WorkflowEvent>,
@@ -114,11 +116,7 @@ async fn workflow_id_for_runtime_events(
             },
         )
         .await
-        .map(|snapshot| {
-            snapshot
-                .workflow_id
-                .unwrap_or_else(|| snapshot.session.workflow_id)
-        })
+        .map(|snapshot| snapshot.workflow_id.unwrap_or(snapshot.session.workflow_id))
         .unwrap_or_else(|error| {
             log::debug!(
                 "Falling back to session id for runtime events because scheduler snapshot is unavailable for session '{}': {}",
@@ -256,6 +254,7 @@ async fn run_session_graph_snapshot(input: SessionGraphSnapshotInput<'_>) -> Res
     let SessionGraphSnapshotInput {
         app,
         session_id,
+        workflow_name,
         session_graph,
         state,
         channel,
@@ -300,6 +299,7 @@ async fn run_session_graph_snapshot(input: SessionGraphSnapshotInput<'_>) -> Res
             event_workflow_id,
             diagnostics_store.inner().clone(),
         )
+        .with_workflow_name(workflow_name)
         .with_execution_graph(session_graph.clone()),
     );
     let guard = config.read().await;
@@ -382,6 +382,7 @@ pub async fn run_workflow_execution_session(
     let RunWorkflowExecutionSessionInput {
         app,
         session_id,
+        workflow_name,
         state,
         channel,
     } = input;
@@ -393,6 +394,7 @@ pub async fn run_workflow_execution_session(
     run_session_graph_snapshot(SessionGraphSnapshotInput {
         app,
         session_id,
+        workflow_name,
         session_graph,
         state,
         channel,

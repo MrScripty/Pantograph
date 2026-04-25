@@ -17,7 +17,8 @@ fn adapter_send_emits_primary_and_diagnostics_events() {
         captured.lock().expect("captured events lock").push(value);
         Ok(())
     });
-    let adapter = TauriEventAdapter::new(channel, "adapter-workflow", diagnostics_store);
+    let adapter = TauriEventAdapter::new(channel, "adapter-workflow", diagnostics_store)
+        .with_workflow_name(Some("Adapter Workflow".to_string()));
 
     EventSink::send(
         &adapter,
@@ -40,5 +41,9 @@ fn adapter_send_emits_primary_and_diagnostics_events() {
     assert_eq!(
         events[1]["data"]["snapshot"]["runsById"]["exec-1"]["workflowId"],
         "adapter-workflow"
+    );
+    assert_eq!(
+        events[1]["data"]["snapshot"]["runsById"]["exec-1"]["workflowName"],
+        "Adapter Workflow"
     );
 }

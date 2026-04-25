@@ -36,7 +36,7 @@
       if (!$currentSessionId) {
         throw new Error('No active workflow session');
       }
-      await backend.runSession($currentSessionId);
+      await backend.runSession($currentSessionId, workflowName);
     } catch (error) {
       console.error('Workflow execution failed:', error);
       isExecuting.set(false);

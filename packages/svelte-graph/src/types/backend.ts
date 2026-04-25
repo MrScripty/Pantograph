@@ -70,10 +70,13 @@ export interface WorkflowBackend {
 
   /** Create an editing session (enables undo/redo). Returns a backend-owned
    *  session handle rather than inferring session classification locally. */
-  createSession(graph: WorkflowGraph, workflowId?: string | null): Promise<WorkflowSessionHandle>;
+  createSession(
+    graph: WorkflowGraph,
+    workflowId?: string | null,
+  ): Promise<WorkflowSessionHandle>;
 
   /** Run an existing backend-owned session by demanding outputs from terminal nodes. */
-  runSession(sessionId: string): Promise<void>;
+  runSession(sessionId: string, workflowName?: string | null): Promise<void>;
 
   /** Clean up a session when done */
   removeSession(sessionId: string): Promise<void>;

@@ -62,12 +62,16 @@ export class TauriWorkflowBackend implements WorkflowBackend {
     });
   }
 
-  async runSession(sessionId: string): Promise<void> {
+  async runSession(sessionId: string, workflowName?: string | null): Promise<void> {
     this.channel = new Channel<WorkflowEvent>();
     this.channel.onmessage = (event) => {
       this.eventListeners.forEach((listener) => listener(event));
     };
-    await invoke('run_workflow_execution_session', { sessionId, channel: this.channel });
+    await invoke('run_workflow_execution_session', {
+      sessionId,
+      workflowName: workflowName ?? null,
+      channel: this.channel,
+    });
   }
 
   async removeSession(sessionId: string): Promise<void> {

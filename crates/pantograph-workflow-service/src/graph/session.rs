@@ -6,36 +6,25 @@ use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
 
 use crate::workflow::{
-    scheduler_snapshot_trace_execution_id, WorkflowExecutionSessionQueueItem,
-    WorkflowExecutionSessionSummary, WorkflowSchedulerSnapshotResponse, WorkflowServiceError,
+    scheduler_snapshot_trace_execution_id, WorkflowSchedulerSnapshotResponse, WorkflowServiceError,
 };
 
-use super::canonicalization::canonicalize_workflow_graph;
 use super::group_mutation::{
     create_node_group_graph, ungroup_node_graph, update_group_ports_graph,
 };
 use super::memory_impact::graph_memory_impact_from_graph_change;
-use super::registry::NodeRegistry;
-use super::session_contract::{
-    build_workflow_execution_session_state_view, resolve_workflow_execution_session_memory_impact,
-    WorkflowGraphEditSessionGraphResponse, WorkflowGraphSessionStateProjection,
-    WorkflowGraphSessionStateView,
-};
+use super::session_contract::WorkflowGraphEditSessionGraphResponse;
 use super::session_event::{
     dirty_tasks_for_full_snapshot, dirty_tasks_from_seed_nodes, graph_modified_event,
 };
-use super::session_graph::{
-    hydrate_embedding_emit_metadata_flags, merge_node_data, sync_embedding_emit_metadata_flags,
-};
-use super::session_runtime::GraphEditSessionRuntime;
+use super::session_graph::sync_embedding_emit_metadata_flags;
+use super::session_state::{phase6_memory_impact_projection, GraphEditSession};
 use super::session_types::{
-    UndoRedoState, WorkflowExecutionSessionKind, WorkflowGraphAddEdgeRequest,
-    WorkflowGraphAddNodeRequest, WorkflowGraphCreateGroupRequest,
+    WorkflowExecutionSessionKind, WorkflowGraphAddEdgeRequest, WorkflowGraphCreateGroupRequest,
     WorkflowGraphEditSessionCloseResponse, WorkflowGraphEditSessionCreateResponse,
     WorkflowGraphEditSessionGraphRequest, WorkflowGraphRemoveEdgeRequest,
-    WorkflowGraphRemoveNodeRequest, WorkflowGraphUndoRedoStateResponse,
-    WorkflowGraphUngroupRequest, WorkflowGraphUpdateGroupPortsRequest,
-    WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest,
+    WorkflowGraphUndoRedoStateResponse, WorkflowGraphUngroupRequest,
+    WorkflowGraphUpdateGroupPortsRequest,
 };
 use super::types::WorkflowGraph;
 #[cfg(test)]
@@ -43,223 +32,12 @@ use super::{
     session_types::{WorkflowGraphConnectRequest, WorkflowGraphInsertNodeOnEdgeRequest},
     types::GraphEdge,
 };
-const DEFAULT_MAX_UNDO_SNAPSHOTS: usize = 64;
-
 #[path = "session_connection_api.rs"]
 mod session_connection_api;
-
-#[derive(Debug, Clone)]
-struct GraphEditSession {
-    graph: WorkflowGraph,
-    workflow_id: Option<String>,
-    undo_stack: Vec<WorkflowGraph>,
-    redo_stack: Vec<WorkflowGraph>,
-    last_memory_impact: Option<node_engine::GraphMemoryImpactSummary>,
-    runtime: GraphEditSessionRuntime,
-}
-
-impl GraphEditSession {
-    fn new(mut graph: WorkflowGraph, workflow_id: Option<String>) -> Self {
-        graph = hydrate_embedding_emit_metadata_flags(graph);
-        let mut session = Self {
-            graph,
-            workflow_id: workflow_id.and_then(normalize_workflow_id),
-            undo_stack: Vec::new(),
-            redo_stack: Vec::new(),
-            last_memory_impact: None,
-            runtime: GraphEditSessionRuntime::new(),
-        };
-        session.canonicalize_graph();
-        session
-    }
-
-    fn touch(&mut self) {
-        self.runtime.touch();
-    }
-
-    fn is_stale(&self, timeout: Duration) -> bool {
-        self.runtime.is_stale(timeout)
-    }
-
-    fn push_undo_snapshot(&mut self) {
-        if self.undo_stack.len() >= DEFAULT_MAX_UNDO_SNAPSHOTS {
-            self.undo_stack.remove(0);
-        }
-        self.undo_stack.push(self.graph.clone());
-        self.redo_stack.clear();
-    }
-
-    fn canonicalize_graph(&mut self) {
-        let graph = std::mem::take(&mut self.graph);
-        self.graph = canonicalize_workflow_graph(graph, &NodeRegistry::new());
-        self.graph.refresh_derived_graph();
-    }
-
-    fn snapshot_response(&mut self, session_id: &str) -> WorkflowGraphEditSessionGraphResponse {
-        self.touch();
-        self.canonicalize_graph();
-        build_graph_session_response_with_projection(
-            session_id,
-            &self.graph,
-            None,
-            phase6_memory_impact_projection(self.last_memory_impact.clone()),
-        )
-    }
-
-    fn snapshot_response_with_state(
-        &mut self,
-        session_id: &str,
-        workflow_event: Option<node_engine::WorkflowEvent>,
-        projection: Option<WorkflowGraphSessionStateProjection>,
-    ) -> WorkflowGraphEditSessionGraphResponse {
-        self.touch();
-        self.canonicalize_graph();
-        let projection =
-            resolved_phase6_memory_impact_projection(workflow_event.as_ref(), projection.as_ref());
-        self.last_memory_impact = projection.as_ref().and_then(|projection| {
-            resolve_workflow_execution_session_memory_impact(
-                workflow_event.as_ref(),
-                Some(projection),
-            )
-        });
-        build_graph_session_response_with_projection(
-            session_id,
-            &self.graph,
-            workflow_event,
-            projection,
-        )
-    }
-
-    fn undo(
-        &mut self,
-        session_id: &str,
-    ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
-        let before_graph = self.graph.clone();
-        let previous = self
-            .undo_stack
-            .pop()
-            .ok_or_else(|| WorkflowServiceError::InvalidRequest("Nothing to undo".to_string()))?;
-        self.redo_stack.push(self.graph.clone());
-        self.graph = previous;
-        let dirty_tasks = dirty_tasks_for_full_snapshot(&self.graph);
-        let memory_impact = graph_memory_impact_from_graph_change(
-            &before_graph,
-            &self.graph,
-            &dirty_tasks_for_full_snapshot(&self.graph),
-        );
-        let workflow_event =
-            graph_modified_event(session_id, session_id, dirty_tasks, memory_impact.clone());
-        let projection = phase6_memory_impact_projection(memory_impact);
-        Ok(self.snapshot_response_with_state(session_id, Some(workflow_event), projection))
-    }
-
-    fn redo(
-        &mut self,
-        session_id: &str,
-    ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
-        let before_graph = self.graph.clone();
-        let next = self
-            .redo_stack
-            .pop()
-            .ok_or_else(|| WorkflowServiceError::InvalidRequest("Nothing to redo".to_string()))?;
-        self.undo_stack.push(self.graph.clone());
-        self.graph = next;
-        let dirty_tasks = dirty_tasks_for_full_snapshot(&self.graph);
-        let memory_impact = graph_memory_impact_from_graph_change(
-            &before_graph,
-            &self.graph,
-            &dirty_tasks_for_full_snapshot(&self.graph),
-        );
-        let workflow_event =
-            graph_modified_event(session_id, session_id, dirty_tasks, memory_impact.clone());
-        let projection = phase6_memory_impact_projection(memory_impact);
-        Ok(self.snapshot_response_with_state(session_id, Some(workflow_event), projection))
-    }
-
-    fn undo_redo_state(&self) -> UndoRedoState {
-        UndoRedoState {
-            can_undo: !self.undo_stack.is_empty(),
-            can_redo: !self.redo_stack.is_empty(),
-            undo_count: self.undo_stack.len(),
-        }
-    }
-
-    fn session_summary(&self, session_id: &str) -> WorkflowExecutionSessionSummary {
-        self.runtime
-            .session_summary(session_id, self.workflow_id.as_deref())
-    }
-
-    fn queue_items(&self) -> Vec<WorkflowExecutionSessionQueueItem> {
-        self.runtime.queue_items()
-    }
-
-    fn mark_running(&mut self, session_id: &str) {
-        self.runtime.mark_running(session_id);
-    }
-
-    fn finish_run(&mut self) {
-        self.runtime.finish_run();
-    }
-
-    fn mutation_session_state_view(
-        &mut self,
-        session_id: &str,
-        workflow_event: Option<&node_engine::WorkflowEvent>,
-        projection: Option<WorkflowGraphSessionStateProjection>,
-    ) -> WorkflowGraphSessionStateView {
-        let projection =
-            resolved_phase6_memory_impact_projection(workflow_event, projection.as_ref());
-        self.last_memory_impact = projection.as_ref().and_then(|projection| {
-            resolve_workflow_execution_session_memory_impact(workflow_event, Some(projection))
-        });
-        build_workflow_execution_session_state_view(
-            session_id,
-            &self.graph.compute_fingerprint(),
-            workflow_event,
-            projection.as_ref(),
-        )
-    }
-}
+#[path = "session_node_api.rs"]
+mod session_node_api;
 
 type GraphSessionHandle = Arc<Mutex<GraphEditSession>>;
-
-fn build_graph_session_response_with_projection(
-    session_id: &str,
-    graph: &WorkflowGraph,
-    workflow_event: Option<node_engine::WorkflowEvent>,
-    projection: Option<WorkflowGraphSessionStateProjection>,
-) -> WorkflowGraphEditSessionGraphResponse {
-    super::session_contract::build_graph_session_response_with_state(
-        session_id,
-        graph,
-        workflow_event,
-        projection.as_ref(),
-    )
-}
-
-fn phase6_memory_impact_projection(
-    memory_impact: Option<node_engine::GraphMemoryImpactSummary>,
-) -> Option<WorkflowGraphSessionStateProjection> {
-    memory_impact.map(|memory_impact| WorkflowGraphSessionStateProjection {
-        memory_impact: Some(memory_impact),
-        ..WorkflowGraphSessionStateProjection::default()
-    })
-}
-
-fn resolved_phase6_memory_impact_projection(
-    workflow_event: Option<&node_engine::WorkflowEvent>,
-    projection: Option<&WorkflowGraphSessionStateProjection>,
-) -> Option<WorkflowGraphSessionStateProjection> {
-    let resolved_memory_impact =
-        resolve_workflow_execution_session_memory_impact(workflow_event, projection);
-    match projection.cloned() {
-        Some(mut projection) => {
-            projection.memory_impact = resolved_memory_impact;
-            Some(projection)
-        }
-        None => phase6_memory_impact_projection(resolved_memory_impact),
-    }
-}
 
 #[derive(Debug)]
 pub struct GraphSessionStore {
@@ -271,11 +49,6 @@ impl Default for GraphSessionStore {
     fn default() -> Self {
         Self::new()
     }
-}
-
-fn normalize_workflow_id(workflow_id: String) -> Option<String> {
-    let workflow_id = workflow_id.trim().to_string();
-    (!workflow_id.is_empty()).then_some(workflow_id)
 }
 
 impl GraphSessionStore {
@@ -397,151 +170,6 @@ impl GraphSessionStore {
         let mut state = handle.lock().await;
         state.finish_run();
         Ok(())
-    }
-
-    pub async fn update_node_data(
-        &self,
-        request: WorkflowGraphUpdateNodeDataRequest,
-    ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
-        let handle = self.get_session_handle(&request.session_id).await?;
-        let mut state = handle.lock().await;
-        state.touch();
-        let before_graph = state.graph.clone();
-        if state.graph.find_node(&request.node_id).is_none() {
-            return Err(WorkflowServiceError::InvalidRequest(format!(
-                "node '{}' was not found",
-                request.node_id
-            )));
-        }
-        state.push_undo_snapshot();
-        let node = state.graph.find_node_mut(&request.node_id).ok_or_else(|| {
-            WorkflowServiceError::InvalidRequest(format!(
-                "node '{}' was not found",
-                request.node_id
-            ))
-        })?;
-        merge_node_data(&mut node.data, request.data);
-        sync_embedding_emit_metadata_flags(&mut state.graph);
-        let dirty_tasks =
-            dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&request.node_id));
-        let memory_impact = graph_memory_impact_from_graph_change(
-            &before_graph,
-            &state.graph,
-            &dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&request.node_id)),
-        );
-        let workflow_event = graph_modified_event(
-            &request.session_id,
-            &request.session_id,
-            dirty_tasks,
-            memory_impact.clone(),
-        );
-        let projection = phase6_memory_impact_projection(memory_impact);
-        Ok(state.snapshot_response_with_state(
-            &request.session_id,
-            Some(workflow_event),
-            projection,
-        ))
-    }
-
-    pub async fn update_node_position(
-        &self,
-        request: WorkflowGraphUpdateNodePositionRequest,
-    ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
-        let handle = self.get_session_handle(&request.session_id).await?;
-        let mut state = handle.lock().await;
-        state.touch();
-        if state.graph.find_node(&request.node_id).is_none() {
-            return Err(WorkflowServiceError::InvalidRequest(format!(
-                "node '{}' was not found",
-                request.node_id
-            )));
-        }
-        state.push_undo_snapshot();
-        let node = state.graph.find_node_mut(&request.node_id).ok_or_else(|| {
-            WorkflowServiceError::InvalidRequest(format!(
-                "node '{}' was not found",
-                request.node_id
-            ))
-        })?;
-        node.position = request.position;
-        sync_embedding_emit_metadata_flags(&mut state.graph);
-        let workflow_event =
-            graph_modified_event(&request.session_id, &request.session_id, Vec::new(), None);
-        Ok(state.snapshot_response_with_state(&request.session_id, Some(workflow_event), None))
-    }
-
-    pub async fn add_node(
-        &self,
-        request: WorkflowGraphAddNodeRequest,
-    ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
-        let handle = self.get_session_handle(&request.session_id).await?;
-        let mut state = handle.lock().await;
-        state.touch();
-        let before_graph = state.graph.clone();
-        state.push_undo_snapshot();
-        let node_id = request.node.id.clone();
-        state.graph.nodes.push(request.node);
-        sync_embedding_emit_metadata_flags(&mut state.graph);
-        let dirty_tasks = dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&node_id));
-        let memory_impact = graph_memory_impact_from_graph_change(
-            &before_graph,
-            &state.graph,
-            &dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&node_id)),
-        );
-        let workflow_event = graph_modified_event(
-            &request.session_id,
-            &request.session_id,
-            dirty_tasks,
-            memory_impact.clone(),
-        );
-        let projection = phase6_memory_impact_projection(memory_impact);
-        Ok(state.snapshot_response_with_state(
-            &request.session_id,
-            Some(workflow_event),
-            projection,
-        ))
-    }
-
-    pub async fn remove_node(
-        &self,
-        request: WorkflowGraphRemoveNodeRequest,
-    ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
-        let handle = self.get_session_handle(&request.session_id).await?;
-        let mut state = handle.lock().await;
-        state.touch();
-        let before_graph = state.graph.clone();
-        if state.graph.find_node(&request.node_id).is_none() {
-            return Err(WorkflowServiceError::InvalidRequest(format!(
-                "node '{}' was not found",
-                request.node_id
-            )));
-        }
-        state.push_undo_snapshot();
-        let dirty_tasks =
-            dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(&request.node_id));
-        state.graph.nodes.retain(|node| node.id != request.node_id);
-        state
-            .graph
-            .edges
-            .retain(|edge| edge.source != request.node_id && edge.target != request.node_id);
-        sync_embedding_emit_metadata_flags(&mut state.graph);
-        let memory_impact = graph_memory_impact_from_graph_change(
-            &before_graph,
-            &state.graph,
-            &dirty_tasks_from_seed_nodes(&before_graph, std::slice::from_ref(&request.node_id)),
-        );
-        let workflow_event = graph_modified_event(
-            &request.session_id,
-            &request.session_id,
-            dirty_tasks,
-            memory_impact.clone(),
-        );
-        let projection = phase6_memory_impact_projection(memory_impact);
-        Ok(state.snapshot_response_with_state(
-            &request.session_id,
-            Some(workflow_event),
-            projection,
-        ))
     }
 
     pub async fn add_edge(

@@ -13,6 +13,7 @@ mod session_contract;
 mod session_event;
 mod session_graph;
 mod session_runtime;
+mod session_state;
 mod session_types;
 mod types;
 mod validation;

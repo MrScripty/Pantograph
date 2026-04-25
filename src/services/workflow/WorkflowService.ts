@@ -15,15 +15,6 @@ import type {
   WorkflowMetadata,
   WorkflowSessionQueueListResponse,
   WorkflowSessionStatusResponse,
-  GraphNode,
-  GraphEdge,
-  ConnectionAnchor,
-  ConnectionCandidatesResponse,
-  ConnectionCommitResponse,
-  EdgeInsertionPreviewResponse,
-  InsertNodePositionHint,
-  InsertNodeConnectionResponse,
-  InsertNodeOnEdgeResponse,
 } from './types.ts';
 import {
   MOCK_NODE_DEFINITIONS,
@@ -33,17 +24,9 @@ import {
   getWorkflowEventExecutionId,
   projectWorkflowEventOwnership,
 } from '@pantograph/svelte-graph';
-import {
-  connectWorkflowAnchors,
-  getWorkflowConnectionCandidates,
-  insertWorkflowNodeAndConnect,
-  insertWorkflowNodeOnEdge,
-  previewWorkflowNodeInsertOnEdge,
-} from './workflowConnectionActions.ts';
 import { parseWorkflowGraphMutationResponse } from '../../lib/workflowGraphMutationResponse.ts';
-
-// Set to false to use real Rust backend, true to use frontend mocks
-const USE_MOCKS = false;
+import { WorkflowGraphMutationService } from './WorkflowGraphMutationService.ts';
+import { USE_WORKFLOW_MOCKS } from './workflowServiceConfig.ts';
 
 /** Undo/redo state from the backend */
 export interface UndoRedoState {
@@ -64,11 +47,9 @@ interface WorkflowSessionQueueListRequest {
   session_id: string;
 }
 
-export class WorkflowService {
+export class WorkflowService extends WorkflowGraphMutationService {
   private channel: Channel<WorkflowEvent> | null = null;
   private eventListeners: Set<(event: WorkflowEvent) => void> = new Set();
-  private currentExecutionId: string | null = null;
-  private currentRunExecutionId: string | null = null;
 
   private publishEvent(event: WorkflowEvent): void {
     this.currentRunExecutionId = projectWorkflowEventOwnership(
@@ -84,14 +65,14 @@ export class WorkflowService {
   // --- Node Definitions ---
 
   async getNodeDefinitions(): Promise<NodeDefinition[]> {
-    if (USE_MOCKS) {
+    if (USE_WORKFLOW_MOCKS) {
       return MOCK_NODE_DEFINITIONS;
     }
     return invoke<NodeDefinition[]>('get_node_definitions');
   }
 
   getNodeDefinition(nodeType: string): NodeDefinition | undefined {
-    if (USE_MOCKS) {
+    if (USE_WORKFLOW_MOCKS) {
       return MOCK_NODE_DEFINITIONS.find((d) => d.node_type === nodeType);
     }
     // When using real backend, definitions should be cached
@@ -101,7 +82,7 @@ export class WorkflowService {
   // --- Connection Validation ---
 
   async validateConnection(sourceType: string, targetType: string): Promise<boolean> {
-    if (USE_MOCKS) {
+    if (USE_WORKFLOW_MOCKS) {
       return mockValidateConnection(sourceType, targetType);
     }
     return invoke<boolean>('validate_workflow_connection', {
@@ -144,7 +125,7 @@ export class WorkflowService {
     graph: WorkflowGraph,
     workflowId?: string | null,
   ): Promise<WorkflowSessionHandle> {
-    if (USE_MOCKS) {
+    if (USE_WORKFLOW_MOCKS) {
       this.currentExecutionId = 'mock-session-id';
       this.currentRunExecutionId = null;
       return {
@@ -166,13 +147,13 @@ export class WorkflowService {
    * Run an existing workflow session by demanding outputs from terminal nodes.
    * Uses the current session if no sessionId is provided.
    */
-  async runSession(sessionId?: string): Promise<void> {
+  async runSession(sessionId?: string, workflowName?: string | null): Promise<void> {
     const id = sessionId ?? this.currentExecutionId;
     if (!id) {
       throw new Error('No active session');
     }
 
-    if (USE_MOCKS) {
+    if (USE_WORKFLOW_MOCKS) {
       console.log('[WorkflowService] Mock: Run session', id);
       return;
     }
@@ -186,12 +167,13 @@ export class WorkflowService {
 
     await invoke('run_workflow_execution_session', {
       sessionId: id,
+      workflowName: workflowName ?? null,
       channel: this.channel,
     });
   }
 
   async getWorkflowCapabilities(workflowId: string): Promise<WorkflowCapabilitiesResponse> {
-    if (USE_MOCKS) {
+    if (USE_WORKFLOW_MOCKS) {
       return {
         max_input_bindings: 8,
         max_output_targets: 8,
@@ -220,7 +202,7 @@ export class WorkflowService {
       return null;
     }
 
-    if (USE_MOCKS) {
+    if (USE_WORKFLOW_MOCKS) {
       return {
         session: {
           session_id: id,
@@ -247,7 +229,7 @@ export class WorkflowService {
       return null;
     }
 
-    if (USE_MOCKS) {
+    if (USE_WORKFLOW_MOCKS) {
       return {
         session_id: id,
         items: [],
@@ -267,7 +249,7 @@ export class WorkflowService {
       return null;
     }
 
-    if (USE_MOCKS) {
+    if (USE_WORKFLOW_MOCKS) {
       return {
         workflow_id: 'mock-workflow',
         session_id: id,
@@ -298,7 +280,7 @@ export class WorkflowService {
     sessionId?: string | null,
     workflowGraph?: WorkflowGraph | null,
   ): Promise<WorkflowDiagnosticsProjection> {
-    if (USE_MOCKS) {
+    if (USE_WORKFLOW_MOCKS) {
       return {
         context: {
           requestedSessionId: sessionId ?? null,
@@ -353,7 +335,7 @@ export class WorkflowService {
   async getTraceSnapshot(
     request: WorkflowTraceSnapshotRequest = {},
   ): Promise<WorkflowTraceSnapshotResponse> {
-    if (USE_MOCKS) {
+    if (USE_WORKFLOW_MOCKS) {
       return {
         traces: [],
         retained_trace_limit: 200,
@@ -366,7 +348,7 @@ export class WorkflowService {
   }
 
   async clearDiagnosticsHistory(): Promise<WorkflowDiagnosticsProjection> {
-    if (USE_MOCKS) {
+    if (USE_WORKFLOW_MOCKS) {
       return this.getDiagnosticsSnapshot(null, null, null);
     }
 
@@ -384,7 +366,7 @@ export class WorkflowService {
       return { canUndo: false, canRedo: false, undoCount: 0 };
     }
 
-    if (USE_MOCKS) {
+    if (USE_WORKFLOW_MOCKS) {
       return { canUndo: false, canRedo: false, undoCount: 0 };
     }
 
@@ -401,7 +383,7 @@ export class WorkflowService {
       throw new Error('No active execution');
     }
 
-    if (USE_MOCKS) {
+    if (USE_WORKFLOW_MOCKS) {
       throw new Error('Undo not supported in mock mode');
     }
 
@@ -420,320 +402,13 @@ export class WorkflowService {
       throw new Error('No active execution');
     }
 
-    if (USE_MOCKS) {
+    if (USE_WORKFLOW_MOCKS) {
       throw new Error('Redo not supported in mock mode');
     }
 
     return invoke<unknown>('redo_workflow', {
       executionId: id,
     }).then((response) => parseWorkflowGraphMutationResponse(response).graph);
-  }
-
-  // --- Graph Modification During Execution ---
-
-  /**
-   * Update a node's data during execution.
-   * This marks the node as modified and will trigger re-execution of downstream nodes.
-   */
-  async updateNodeData(
-    nodeId: string,
-    data: Record<string, unknown>,
-    executionId?: string
-  ): Promise<WorkflowGraph> {
-    const id = executionId ?? this.currentExecutionId;
-    if (!id) {
-      throw new Error('No active execution');
-    }
-
-    if (USE_MOCKS) {
-      console.log('[WorkflowService] Mock: Update node data', nodeId, data);
-      return { nodes: [], edges: [] };
-    }
-
-    return invoke<unknown>('update_node_data', {
-      executionId: id,
-      nodeId,
-      data,
-    }).then((response) => parseWorkflowGraphMutationResponse(response).graph);
-  }
-
-  async updateNodePosition(
-    nodeId: string,
-    position: { x: number; y: number },
-    executionId?: string
-  ): Promise<WorkflowGraph> {
-    const id = executionId ?? this.currentExecutionId;
-    if (!id) {
-      throw new Error('No active execution');
-    }
-
-    if (USE_MOCKS) {
-      console.log('[WorkflowService] Mock: Update node position', nodeId, position);
-      return { nodes: [], edges: [] };
-    }
-
-    return invoke<unknown>('update_node_position_in_execution', {
-      executionId: id,
-      nodeId,
-      position,
-    }).then((response) => parseWorkflowGraphMutationResponse(response).graph);
-  }
-
-  /**
-   * Add a node to the graph during execution.
-   */
-  async addNode(node: GraphNode, executionId?: string): Promise<WorkflowGraph> {
-    const id = executionId ?? this.currentExecutionId;
-    if (!id) {
-      throw new Error('No active execution');
-    }
-
-    if (USE_MOCKS) {
-      console.log('[WorkflowService] Mock: Add node', node);
-      return { nodes: [], edges: [] };
-    }
-
-    return invoke<unknown>('add_node_to_execution', {
-      executionId: id,
-      node,
-    }).then((response) => parseWorkflowGraphMutationResponse(response).graph);
-  }
-
-  async removeNode(nodeId: string, executionId?: string): Promise<WorkflowGraph> {
-    const id = executionId ?? this.currentExecutionId;
-    if (!id) {
-      throw new Error('No active execution');
-    }
-
-    if (USE_MOCKS) {
-      console.log('[WorkflowService] Mock: Remove node', nodeId);
-      return { nodes: [], edges: [] };
-    }
-
-    return invoke<unknown>('remove_node_from_execution', {
-      executionId: id,
-      nodeId,
-    }).then((response) => parseWorkflowGraphMutationResponse(response).graph);
-  }
-
-  /**
-   * Add an edge to the graph during execution.
-   * Returns the updated graph for syncing frontend state.
-   */
-  async addEdge(edge: GraphEdge, executionId?: string): Promise<WorkflowGraph> {
-    const id = executionId ?? this.currentExecutionId;
-    if (!id) {
-      throw new Error('No active session');
-    }
-
-    if (USE_MOCKS) {
-      console.log('[WorkflowService] Mock: Add edge', edge);
-      return { nodes: [], edges: [] };
-    }
-
-    return invoke<unknown>('add_edge_to_execution', {
-      executionId: id,
-      edge,
-    }).then((response) => parseWorkflowGraphMutationResponse(response).graph);
-  }
-
-  async getConnectionCandidates(
-    sourceAnchor: ConnectionAnchor,
-    executionId?: string,
-    graphRevision?: string
-  ): Promise<ConnectionCandidatesResponse> {
-    const id = executionId ?? this.currentExecutionId;
-    if (!id) {
-      throw new Error('No active session');
-    }
-
-    if (USE_MOCKS) {
-      return {
-        graph_revision: '',
-        revision_matches: true,
-        source_anchor: sourceAnchor,
-        compatible_nodes: [],
-        insertable_node_types: [],
-      };
-    }
-
-    return getWorkflowConnectionCandidates(
-      id,
-      sourceAnchor,
-      graphRevision,
-    );
-  }
-
-  async connectAnchors(
-    sourceAnchor: ConnectionAnchor,
-    targetAnchor: ConnectionAnchor,
-    graphRevision: string,
-    executionId?: string
-  ): Promise<ConnectionCommitResponse> {
-    const id = executionId ?? this.currentExecutionId;
-    if (!id) {
-      throw new Error('No active session');
-    }
-
-    if (USE_MOCKS) {
-      return {
-        accepted: false,
-        graph_revision: graphRevision,
-        rejection: {
-          reason: 'unknown_target_anchor',
-          message: 'Mock mode does not implement connection commits',
-        },
-      };
-    }
-
-    return connectWorkflowAnchors(id, sourceAnchor, targetAnchor, graphRevision);
-  }
-
-  async insertNodeAndConnect(
-    sourceAnchor: ConnectionAnchor,
-    nodeType: string,
-    graphRevision: string,
-    positionHint: InsertNodePositionHint,
-    preferredInputPortId?: string,
-    executionId?: string
-  ): Promise<InsertNodeConnectionResponse> {
-    const id = executionId ?? this.currentExecutionId;
-    if (!id) {
-      throw new Error('No active session');
-    }
-
-    if (USE_MOCKS) {
-      return {
-        accepted: false,
-        graph_revision: graphRevision,
-        rejection: {
-          reason: 'unknown_insert_node_type',
-          message: 'Mock mode does not implement insert-and-connect',
-        },
-      };
-    }
-
-    return insertWorkflowNodeAndConnect(
-      id,
-      sourceAnchor,
-      nodeType,
-      graphRevision,
-      positionHint,
-      preferredInputPortId,
-    );
-  }
-
-  async previewNodeInsertOnEdge(
-    edgeId: string,
-    nodeType: string,
-    graphRevision: string,
-    executionId?: string
-  ): Promise<EdgeInsertionPreviewResponse> {
-    const id = executionId ?? this.currentExecutionId;
-    if (!id) {
-      throw new Error('No active session');
-    }
-
-    if (USE_MOCKS) {
-      return {
-        accepted: false,
-        graph_revision: graphRevision,
-        rejection: {
-          reason: 'unknown_edge',
-          message: 'Mock mode does not implement edge insertion preview',
-        },
-      };
-    }
-
-    return previewWorkflowNodeInsertOnEdge(id, edgeId, nodeType, graphRevision);
-  }
-
-  async insertNodeOnEdge(
-    edgeId: string,
-    nodeType: string,
-    graphRevision: string,
-    positionHint: InsertNodePositionHint,
-    executionId?: string
-  ): Promise<InsertNodeOnEdgeResponse> {
-    const id = executionId ?? this.currentExecutionId;
-    if (!id) {
-      throw new Error('No active session');
-    }
-
-    if (USE_MOCKS) {
-      return {
-        accepted: false,
-        graph_revision: graphRevision,
-        rejection: {
-          reason: 'unknown_edge',
-          message: 'Mock mode does not implement edge insertion',
-        },
-      };
-    }
-
-    return insertWorkflowNodeOnEdge(id, edgeId, nodeType, graphRevision, positionHint);
-  }
-
-  /**
-   * Remove an edge from the graph during execution.
-   * Returns the updated graph for syncing frontend state.
-   */
-  async removeEdge(edgeId: string, executionId?: string): Promise<WorkflowGraph> {
-    const id = executionId ?? this.currentExecutionId;
-    if (!id) {
-      throw new Error('No active session');
-    }
-
-    if (USE_MOCKS) {
-      console.log('[WorkflowService] Mock: Remove edge', edgeId);
-      return { nodes: [], edges: [] };
-    }
-
-    return invoke<unknown>('remove_edge_from_execution', {
-      executionId: id,
-      edgeId,
-    }).then((response) => parseWorkflowGraphMutationResponse(response).graph);
-  }
-
-  /**
-   * Get the current graph state from an execution.
-   */
-  async getExecutionGraph(executionId?: string): Promise<WorkflowGraph> {
-    const id = executionId ?? this.currentExecutionId;
-    if (!id) {
-      throw new Error('No active execution');
-    }
-
-    if (USE_MOCKS) {
-      return { nodes: [], edges: [] };
-    }
-
-    return invoke<WorkflowGraph>('get_execution_graph', { executionId: id });
-  }
-
-  /**
-   * Clean up an execution when done.
-   */
-  async removeExecution(executionId?: string): Promise<void> {
-    const id = executionId ?? this.currentExecutionId;
-    if (!id) {
-      return;
-    }
-
-    if (USE_MOCKS) {
-      this.currentExecutionId = null;
-      this.currentRunExecutionId = null;
-      return;
-    }
-
-    await invoke('remove_execution', { executionId: id });
-
-    if (id === this.currentExecutionId) {
-      this.currentExecutionId = null;
-    }
-    if (id === this.currentRunExecutionId) {
-      this.currentRunExecutionId = null;
-    }
   }
 
   // --- Event Subscription ---
@@ -746,7 +421,7 @@ export class WorkflowService {
   // --- Workflow Persistence ---
 
   async saveWorkflow(name: string, graph: WorkflowGraph): Promise<string> {
-    if (USE_MOCKS) {
+    if (USE_WORKFLOW_MOCKS) {
       console.log('[WorkflowService] Mock: Saving workflow', name, graph);
       return `/mock/workflows/${name}.json`;
     }
@@ -754,7 +429,7 @@ export class WorkflowService {
   }
 
   async loadWorkflow(path: string): Promise<WorkflowFile> {
-    if (USE_MOCKS) {
+    if (USE_WORKFLOW_MOCKS) {
       console.log('[WorkflowService] Mock: Loading workflow', path);
       return {
         version: '1.0',
@@ -770,7 +445,7 @@ export class WorkflowService {
   }
 
   async listWorkflows(): Promise<WorkflowMetadata[]> {
-    if (USE_MOCKS) {
+    if (USE_WORKFLOW_MOCKS) {
       return [
         {
           name: 'coding-agent',
@@ -784,7 +459,7 @@ export class WorkflowService {
   }
 
   async deleteWorkflow(name: string): Promise<void> {
-    if (USE_MOCKS) {
+    if (USE_WORKFLOW_MOCKS) {
       console.log('[WorkflowService] Mock: Deleting workflow', name);
       return;
     }
