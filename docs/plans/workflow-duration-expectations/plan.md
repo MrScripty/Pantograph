@@ -232,17 +232,17 @@ idempotently.
 without moving ownership to Tauri or the frontend.
 
 **Tasks:**
-- [ ] Add workflow-service query/use-case APIs for run and node timing
+- [x] Add workflow-service query/use-case APIs for run and node timing
   expectations.
-- [ ] Merge timing expectations into Tauri-facing `DiagnosticsRunTrace` and
+- [x] Merge timing expectations into Tauri-facing `DiagnosticsRunTrace` and
   `DiagnosticsNodeTrace` DTOs.
-- [ ] Keep scalar reported progress separate from duration expectations and
+- [x] Keep scalar reported progress separate from duration expectations and
   mark it optional/node-specific.
-- [ ] Ensure running nodes compare elapsed time against historical ranges.
-- [ ] Ensure completed nodes compare final duration against historical ranges.
-- [ ] Add replay and duplicate-event tests so expectations remain stable after
+- [x] Ensure running nodes compare elapsed time against historical ranges.
+- [x] Ensure completed nodes compare final duration against historical ranges.
+- [x] Add replay and duplicate-event tests so expectations remain stable after
   recovery.
-- [ ] Update `src-tauri/src/workflow/diagnostics/README.md` and
+- [x] Update `src-tauri/src/workflow/diagnostics/README.md` and
   `crates/pantograph-workflow-service/src/trace/README.md`.
 
 **Verification:**
@@ -253,7 +253,7 @@ without moving ownership to Tauri or the frontend.
 - Cross-layer acceptance check from persisted timing observation to diagnostics
   snapshot DTO.
 
-**Status:** Not started.
+**Status:** Complete.
 
 ### Milestone 4: Replace Frontend Progress Presentation
 
@@ -386,6 +386,15 @@ the applicable standards after the feature works.
   run-terminal boundaries, enriches snapshots from prior completed timing
   history, and keeps SQLite writes outside the trace-state lock. Verification:
   `cargo test -p pantograph-workflow-service`.
+- 2026-04-25: Milestone 3 completed. Tauri diagnostics DTOs now carry optional
+  backend timing expectations, the desktop app opens a durable
+  `.pantograph/workflow-diagnostics.sqlite` timing ledger, and a focused Tauri
+  replay test verifies projection from backend timing history into GUI
+  diagnostics. Verification: `cargo check --manifest-path src-tauri/Cargo.toml`,
+  `cargo test --manifest-path src-tauri/Cargo.toml
+  diagnostics_projection_exposes_backend_timing_expectation`,
+  `cargo test -p pantograph-diagnostics-ledger`, `cargo test -p
+  pantograph-workflow-service`, and `npm run typecheck`.
 
 ## Commit Cadence Notes
 

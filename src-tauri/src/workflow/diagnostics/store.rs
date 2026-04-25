@@ -11,10 +11,10 @@ use pantograph_workflow_service::{
 use parking_lot::Mutex;
 
 use super::attempts::{
-    overlay_record_decision, trace_attempt_state_for_execution, trace_attempt_state_in_snapshot,
-    trace_event_execution_id, OverlayRecordDecision,
+    OverlayRecordDecision, overlay_record_decision, trace_attempt_state_for_execution,
+    trace_attempt_state_in_snapshot, trace_event_execution_id,
 };
-use super::overlay::{event_execution_id, record_diagnostics_overlay, WorkflowDiagnosticsState};
+use super::overlay::{WorkflowDiagnosticsState, event_execution_id, record_diagnostics_overlay};
 use super::trace::{graph_trace_context, workflow_trace_event};
 use super::types::{
     DiagnosticsRuntimeLifecycleSnapshot, DiagnosticsRuntimeSnapshot,
@@ -84,7 +84,6 @@ fn unix_timestamp_ms() -> u64 {
         .unwrap_or(0)
 }
 
-#[derive(Debug)]
 pub struct WorkflowDiagnosticsStore {
     state: Mutex<WorkflowDiagnosticsState>,
     trace_store: WorkflowTraceStore,
@@ -102,6 +101,25 @@ impl WorkflowDiagnosticsStore {
             state: Mutex::new(WorkflowDiagnosticsState::new(retained_event_limit)),
             trace_store: WorkflowTraceStore::new(retained_event_limit),
         }
+    }
+
+    pub fn with_timing_ledger(
+        retained_event_limit: usize,
+        timing_ledger: pantograph_workflow_service::SqliteDiagnosticsLedger,
+    ) -> Self {
+        Self {
+            state: Mutex::new(WorkflowDiagnosticsState::new(retained_event_limit)),
+            trace_store: WorkflowTraceStore::with_timing_ledger(
+                retained_event_limit,
+                timing_ledger,
+            ),
+        }
+    }
+
+    pub fn with_default_timing_ledger(
+        timing_ledger: pantograph_workflow_service::SqliteDiagnosticsLedger,
+    ) -> Self {
+        Self::with_timing_ledger(DEFAULT_DIAGNOSTICS_EVENT_LIMIT, timing_ledger)
     }
 
     pub fn snapshot(&self) -> WorkflowDiagnosticsProjection {

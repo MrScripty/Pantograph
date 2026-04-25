@@ -1,14 +1,14 @@
 use std::collections::BTreeMap;
 
 use node_engine::GraphMemoryImpactSummary;
+use pantograph_embedded_runtime::ManagedRuntimeManagerRuntimeView;
 use pantograph_embedded_runtime::workflow_runtime::{
     capability_runtime_lifecycle_snapshot, normalized_runtime_lifecycle_snapshot,
 };
-use pantograph_embedded_runtime::ManagedRuntimeManagerRuntimeView;
 use pantograph_workflow_service::{
-    graph::WorkflowGraphSessionStateView, WorkflowExecutionSessionQueueItem,
-    WorkflowExecutionSessionSummary, WorkflowSchedulerSnapshotDiagnostics, WorkflowServiceError,
-    WorkflowTraceNodeStatus, WorkflowTraceRuntimeMetrics, WorkflowTraceStatus,
+    WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionSummary,
+    WorkflowSchedulerSnapshotDiagnostics, WorkflowServiceError, WorkflowTraceNodeStatus,
+    WorkflowTraceRuntimeMetrics, WorkflowTraceStatus, graph::WorkflowGraphSessionStateView,
 };
 use serde::{Deserialize, Serialize};
 
@@ -72,6 +72,8 @@ pub struct DiagnosticsNodeTrace {
     pub error: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_progress_detail: Option<node_engine::TaskProgressDetail>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timing_expectation: Option<pantograph_workflow_service::WorkflowTimingExpectation>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -104,6 +106,8 @@ pub struct DiagnosticsRunTrace {
     pub last_incremental_task_ids: Vec<String>,
     #[serde(default)]
     pub last_graph_memory_impact: Option<GraphMemoryImpactSummary>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timing_expectation: Option<pantograph_workflow_service::WorkflowTimingExpectation>,
     pub nodes: BTreeMap<String, DiagnosticsNodeTrace>,
     pub events: Vec<DiagnosticsEventRecord>,
 }

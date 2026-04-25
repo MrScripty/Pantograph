@@ -25,8 +25,6 @@ pub fn run_app() -> AppStartupResult<()> {
 
     let workflow_service: workflow::commands::SharedWorkflowService =
         Arc::new(pantograph_workflow_service::WorkflowService::new());
-    let workflow_diagnostics_store: workflow::commands::SharedWorkflowDiagnosticsStore =
-        Arc::new(workflow::WorkflowDiagnosticsStore::default());
 
     // Resolve the real repo root at runtime so saved workflows survive source tree moves.
     let project_root = resolve_project_root().map_err(|error| {
@@ -34,6 +32,25 @@ pub fn run_app() -> AppStartupResult<()> {
             "failed to resolve Pantograph project root at runtime: {error}"
         ))
     })?;
+    let pantograph_data_dir = project_root.join(".pantograph");
+    std::fs::create_dir_all(&pantograph_data_dir).map_err(|error| {
+        startup_error(format!(
+            "failed to create Pantograph data directory {:?}: {error}",
+            pantograph_data_dir
+        ))
+    })?;
+    let workflow_timing_ledger_path = pantograph_data_dir.join("workflow-diagnostics.sqlite");
+    let workflow_timing_ledger =
+        pantograph_workflow_service::SqliteDiagnosticsLedger::open(&workflow_timing_ledger_path)
+            .map_err(|error| {
+                startup_error(format!(
+                    "failed to open workflow diagnostics ledger {:?}: {error}",
+                    workflow_timing_ledger_path
+                ))
+            })?;
+    let workflow_diagnostics_store: workflow::commands::SharedWorkflowDiagnosticsStore = Arc::new(
+        workflow::WorkflowDiagnosticsStore::with_default_timing_ledger(workflow_timing_ledger),
+    );
     let orchestrations_path = project_root.join(".pantograph/orchestrations");
     let workflow_graph_store: workflow::commands::SharedWorkflowGraphStore = Arc::new(
         pantograph_workflow_service::FileSystemWorkflowGraphStore::new(project_root.clone()),

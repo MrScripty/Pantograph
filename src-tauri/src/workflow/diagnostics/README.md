@@ -13,7 +13,7 @@ TypeScript or command handlers.
 | `attempts.rs` | Owns trace-attempt lookup, execution-id extraction, and overlay reset/record decisions across workflow trace events. |
 | `mod.rs` | Module entrypoint that exposes the diagnostics store and transport-facing DTOs. |
 | `overlay.rs` | Owns retained overlay state, pruning, and workflow-event overlay mutation helpers. |
-| `store.rs` | Owns the diagnostics facade and orchestrates backend trace snapshots with additive overlay application. |
+| `store.rs` | Owns the diagnostics facade and orchestrates backend trace snapshots, durable timing-ledger configuration, and additive overlay application. |
 | `trace.rs` | Converts workflow events and backend trace summaries into diagnostics-friendly run projections. |
 | `types.rs` | Defines the Tauri-facing diagnostics DTOs and snapshot request/response shapes. |
 | `tests.rs` | Diagnostics test harness, shared fixtures, request normalization, event timing, and small trace-filter assertions. |
@@ -108,7 +108,8 @@ let trace = diagnostics.trace_snapshot(Default::default())?;
   as projections over backend-owned trace and runtime data.
 - `WorkflowDiagnosticsProjection` returns `runs_by_id`, `run_order`, `runtime`,
   `scheduler`, backend-authored `context`, additive `current_session_state`,
-  and `retained_event_limit` with stable field names.
+  timing expectation projections, and `retained_event_limit` with stable field
+  names.
 - `trace_snapshot()` validates backend-owned trace filters through
   `WorkflowTraceSnapshotRequest` instead of accepting arbitrary adapter-local
   filtering rules.
@@ -120,6 +121,9 @@ let trace = diagnostics.trace_snapshot(Default::default())?;
   silently dropping them.
 - `clear_history()` clears retained overlays and backend trace history together
   so the GUI does not keep stale local diagnostics after a reset.
+- Timing expectations are backend-projected duration comparisons from
+  workflow-service traces and the diagnostics ledger. Tauri transports them but
+  must not calculate historical baselines locally.
 
 ## Structured Producer Contract
 - `DiagnosticsRunTrace`, `DiagnosticsNodeTrace`, and related DTOs are
@@ -134,3 +138,5 @@ let trace = diagnostics.trace_snapshot(Default::default())?;
   backend-observed producer runtime id from the underlying trace.
 - Omitted optional fields mean the backend did not provide a value; consumers
   must not infer stronger semantics from absence.
+- `timingExpectation` fields are optional and represent duration history, not
+  generic workflow progress. Absence means no usable historical baseline.

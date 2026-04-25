@@ -1,11 +1,12 @@
 use serde::{Deserialize, Serialize};
 
-use crate::util::{validate_optional_text, validate_required_text, MAX_ID_LEN};
 use crate::DiagnosticsLedgerError;
+use crate::util::{MAX_ID_LEN, validate_optional_text, validate_required_text};
 
 pub const MIN_TIMING_EXPECTATION_SAMPLE_COUNT: usize = 3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum WorkflowTimingObservationScope {
     Run,
     Node,
@@ -31,6 +32,7 @@ impl WorkflowTimingObservationScope {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum WorkflowTimingObservationStatus {
     Completed,
     Failed,
@@ -59,6 +61,7 @@ impl WorkflowTimingObservationStatus {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum WorkflowTimingExpectationComparison {
     InsufficientHistory,
     NoCurrentDuration,

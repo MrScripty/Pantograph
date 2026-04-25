@@ -32,6 +32,22 @@ export type DiagnosticsNodeStatus =
   | 'cancelled'
   | 'failed';
 
+export type WorkflowTimingExpectationComparison =
+  | 'insufficient_history'
+  | 'no_current_duration'
+  | 'faster_than_expected'
+  | 'within_expected_range'
+  | 'slower_than_expected';
+
+export interface WorkflowTimingExpectation {
+  comparison: WorkflowTimingExpectationComparison;
+  sampleCount: number;
+  currentDurationMs: number | null;
+  medianDurationMs: number | null;
+  typicalMinDurationMs: number | null;
+  typicalMaxDurationMs: number | null;
+}
+
 export interface DiagnosticsEventRecord {
   id: string;
   sequence: number;
@@ -56,6 +72,7 @@ export interface DiagnosticsNodeTrace {
   streamEventCount: number;
   eventCount: number;
   error: string | null;
+  timingExpectation?: WorkflowTimingExpectation | null;
 }
 
 export interface DiagnosticsRunTrace {
@@ -78,6 +95,7 @@ export interface DiagnosticsRunTrace {
   lastDirtyTasks: string[];
   lastIncrementalTaskIds: string[];
   lastGraphMemoryImpact: GraphMemoryImpactSummary | null;
+  timingExpectation?: WorkflowTimingExpectation | null;
   nodes: Record<string, DiagnosticsNodeTrace>;
   events: DiagnosticsEventRecord[];
 }
