@@ -206,7 +206,10 @@ export class WorkflowService {
    * This enables editing the graph with undo/redo support before running.
    * Returns the session ID which can be used for graph modifications.
    */
-  async createSession(graph: WorkflowGraph): Promise<WorkflowSessionHandle> {
+  async createSession(
+    graph: WorkflowGraph,
+    workflowId?: string | null,
+  ): Promise<WorkflowSessionHandle> {
     if (USE_MOCKS) {
       this.currentExecutionId = 'mock-session-id';
       this.currentRunExecutionId = null;
@@ -216,7 +219,10 @@ export class WorkflowService {
       };
     }
 
-    const session = await invoke<WorkflowSessionHandle>('create_workflow_execution_session', { graph });
+    const session = await invoke<WorkflowSessionHandle>('create_workflow_execution_session', {
+      graph,
+      workflowId: workflowId ?? null,
+    });
     this.currentExecutionId = session.session_id;
     this.currentRunExecutionId = null;
     return session;

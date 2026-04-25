@@ -160,7 +160,15 @@ test('loadWorkflowByName renders the loaded file graph after creating an edit se
     edges: [],
   } satisfies WorkflowGraph;
   let renderedGraph: WorkflowGraph | null = null;
+  let createdSessionWorkflowId: string | null | undefined;
   const backend = createBackendStub({
+    async createSession(_graph: WorkflowGraph, workflowId?: string | null) {
+      createdSessionWorkflowId = workflowId;
+      return {
+        session_id: 'stub-session-1',
+        session_kind: 'edit',
+      } satisfies WorkflowSessionHandle;
+    },
     async loadWorkflow(path: string) {
       assert.equal(path, '.pantograph/workflows/saved-flow.json');
       return {
@@ -188,6 +196,7 @@ test('loadWorkflowByName renders the loaded file graph after creating an edit se
   assert.equal(loaded, true);
   assert.equal(get(sessionStores.graphSessionError), null);
   assert.deepEqual(renderedGraph, loadedGraph);
+  assert.equal(createdSessionWorkflowId, 'saved-flow');
   assert.equal(get(sessionStores.currentGraphId), 'saved-flow');
   assert.equal(get(sessionStores.currentGraphName), 'Saved Flow');
   assert.match(get(sessionStores.currentSessionId) ?? '', /^stub-session-/);

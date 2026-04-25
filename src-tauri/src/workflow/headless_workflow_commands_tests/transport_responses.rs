@@ -25,6 +25,7 @@ async fn workflow_scheduler_snapshot_response_reads_backend_owned_service_snapsh
     let created = workflow_service
         .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest {
             graph: WorkflowGraph::new(),
+            workflow_id: None,
         })
         .await
         .expect("create edit session");

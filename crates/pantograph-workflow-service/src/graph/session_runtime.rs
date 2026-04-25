@@ -41,10 +41,14 @@ impl GraphEditSessionRuntime {
         self.last_accessed.elapsed() > timeout
     }
 
-    pub(crate) fn session_summary(&self, session_id: &str) -> WorkflowExecutionSessionSummary {
+    pub(crate) fn session_summary(
+        &self,
+        session_id: &str,
+        workflow_id: Option<&str>,
+    ) -> WorkflowExecutionSessionSummary {
         WorkflowExecutionSessionSummary {
             session_id: session_id.to_string(),
-            workflow_id: session_id.to_string(),
+            workflow_id: workflow_id.unwrap_or(session_id).to_string(),
             session_kind: WorkflowExecutionSessionKind::Edit,
             usage_profile: None,
             keep_alive: false,
@@ -106,7 +110,7 @@ mod tests {
     #[test]
     fn session_summary_defaults_to_idle_loaded() {
         let runtime = GraphEditSessionRuntime::new();
-        let summary = runtime.session_summary("session-1");
+        let summary = runtime.session_summary("session-1", None);
 
         assert_eq!(summary.session_id, "session-1");
         assert_eq!(summary.workflow_id, "session-1");
@@ -120,10 +124,11 @@ mod tests {
         let mut runtime = GraphEditSessionRuntime::new();
         runtime.mark_running("session-1");
 
-        let summary = runtime.session_summary("session-1");
+        let summary = runtime.session_summary("session-1", Some("saved-workflow"));
         let queue_items = runtime.queue_items();
 
         assert_eq!(summary.state, WorkflowExecutionSessionState::Running);
+        assert_eq!(summary.workflow_id, "saved-workflow");
         assert_eq!(summary.queued_runs, 1);
         assert_eq!(queue_items.len(), 1);
         assert_eq!(queue_items[0].queue_id, "session-1");
@@ -140,7 +145,7 @@ mod tests {
         runtime.mark_running("session-1");
         runtime.finish_run();
 
-        let summary = runtime.session_summary("session-1");
+        let summary = runtime.session_summary("session-1", None);
 
         assert_eq!(summary.state, WorkflowExecutionSessionState::IdleLoaded);
         assert_eq!(summary.queued_runs, 0);

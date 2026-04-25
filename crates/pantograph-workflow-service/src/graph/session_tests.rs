@@ -1,6 +1,7 @@
 use super::super::types::InsertNodePositionHint;
 use super::*;
 use crate::graph::types::{ConnectionAnchor, GraphNode, Position};
+use crate::WorkflowExecutionSessionQueueItemStatus;
 
 fn sample_graph() -> WorkflowGraph {
     WorkflowGraph {
@@ -47,7 +48,7 @@ fn disconnected_graph() -> WorkflowGraph {
 async fn create_session_returns_backend_owned_edit_kind() {
     let store = GraphSessionStore::new();
 
-    let session = store.create_session(sample_graph()).await;
+    let session = store.create_session(sample_graph(), None).await;
 
     assert_eq!(session.session_kind, WorkflowExecutionSessionKind::Edit);
     assert!(!session.session_id.is_empty());
@@ -55,9 +56,68 @@ async fn create_session_returns_backend_owned_edit_kind() {
 }
 
 #[tokio::test]
+async fn scheduler_snapshot_preserves_source_workflow_id_for_loaded_edit_session() {
+    let store = GraphSessionStore::new();
+
+    let session = store
+        .create_session(sample_graph(), Some("saved-flow".to_string()))
+        .await;
+
+    let snapshot = store
+        .get_scheduler_snapshot(&session.session_id)
+        .await
+        .expect("scheduler snapshot");
+
+    assert_eq!(snapshot.workflow_id, None);
+    assert_eq!(snapshot.session.session_id, session.session_id);
+    assert_eq!(snapshot.session.workflow_id, "saved-flow");
+}
+
+#[tokio::test]
+async fn scheduler_snapshot_tracks_running_edit_session_queue_item() {
+    let store = GraphSessionStore::new();
+
+    let session = store.create_session(sample_graph(), None).await;
+    store
+        .mark_running(&session.session_id)
+        .await
+        .expect("mark running");
+
+    let running_snapshot = store
+        .get_scheduler_snapshot(&session.session_id)
+        .await
+        .expect("running scheduler snapshot");
+
+    assert_eq!(running_snapshot.session.queued_runs, 1);
+    assert_eq!(running_snapshot.items.len(), 1);
+    assert_eq!(running_snapshot.items[0].queue_id, session.session_id);
+    assert_eq!(
+        running_snapshot.items[0].run_id.as_deref(),
+        Some(session.session_id.as_str())
+    );
+    assert_eq!(
+        running_snapshot.items[0].status,
+        WorkflowExecutionSessionQueueItemStatus::Running
+    );
+
+    store
+        .finish_run(&session.session_id)
+        .await
+        .expect("finish run");
+    let finished_snapshot = store
+        .get_scheduler_snapshot(&session.session_id)
+        .await
+        .expect("finished scheduler snapshot");
+
+    assert_eq!(finished_snapshot.session.queued_runs, 0);
+    assert_eq!(finished_snapshot.session.run_count, 1);
+    assert!(finished_snapshot.items.is_empty());
+}
+
+#[tokio::test]
 async fn update_node_data_merges_patch_into_existing_data() {
     let store = GraphSessionStore::new();
-    let session = store.create_session(sample_graph()).await;
+    let session = store.create_session(sample_graph(), None).await;
 
     let response = store
         .update_node_data(WorkflowGraphUpdateNodeDataRequest {
@@ -130,7 +190,7 @@ async fn update_node_data_merges_patch_into_existing_data() {
 #[tokio::test]
 async fn update_node_position_updates_session_graph() {
     let store = GraphSessionStore::new();
-    let session = store.create_session(sample_graph()).await;
+    let session = store.create_session(sample_graph(), None).await;
 
     let response = store
         .update_node_position(WorkflowGraphUpdateNodePositionRequest {
@@ -169,7 +229,7 @@ async fn update_node_position_updates_session_graph() {
 #[tokio::test]
 async fn remove_node_prunes_attached_edges() {
     let store = GraphSessionStore::new();
-    let session = store.create_session(sample_graph()).await;
+    let session = store.create_session(sample_graph(), None).await;
 
     let response = store
         .remove_node(WorkflowGraphRemoveNodeRequest {
@@ -211,7 +271,7 @@ async fn remove_node_prunes_attached_edges() {
 #[tokio::test]
 async fn undo_response_carries_backend_owned_graph_modified_event() {
     let store = GraphSessionStore::new();
-    let session = store.create_session(sample_graph()).await;
+    let session = store.create_session(sample_graph(), None).await;
 
     store
         .update_node_data(WorkflowGraphUpdateNodeDataRequest {
@@ -247,7 +307,7 @@ async fn undo_response_carries_backend_owned_graph_modified_event() {
 #[tokio::test]
 async fn get_session_graph_replays_last_memory_impact_until_a_non_invalidating_edit_clears_it() {
     let store = GraphSessionStore::new();
-    let session = store.create_session(sample_graph()).await;
+    let session = store.create_session(sample_graph(), None).await;
 
     store
         .update_node_data(WorkflowGraphUpdateNodeDataRequest {
@@ -297,7 +357,7 @@ async fn get_session_graph_replays_last_memory_impact_until_a_non_invalidating_e
 #[tokio::test]
 async fn insert_node_on_edge_replaces_original_edge_in_session_graph() {
     let store = GraphSessionStore::new();
-    let session = store.create_session(sample_graph()).await;
+    let session = store.create_session(sample_graph(), None).await;
     let session_id = session.session_id.clone();
 
     let response = store
@@ -360,7 +420,7 @@ async fn insert_node_on_edge_replaces_original_edge_in_session_graph() {
 #[tokio::test]
 async fn connect_persists_memory_impact_for_later_session_snapshot() {
     let store = GraphSessionStore::new();
-    let session = store.create_session(disconnected_graph()).await;
+    let session = store.create_session(disconnected_graph(), None).await;
 
     let response = store
         .connect(WorkflowGraphConnectRequest {

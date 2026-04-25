@@ -52,8 +52,14 @@ export class TauriWorkflowBackend implements WorkflowBackend {
 
   // --- Session Management ---
 
-  async createSession(graph: WorkflowGraph): Promise<WorkflowSessionHandle> {
-    return invoke<WorkflowSessionHandle>('create_workflow_execution_session', { graph });
+  async createSession(
+    graph: WorkflowGraph,
+    workflowId?: string | null,
+  ): Promise<WorkflowSessionHandle> {
+    return invoke<WorkflowSessionHandle>('create_workflow_execution_session', {
+      graph,
+      workflowId: workflowId ?? null,
+    });
   }
 
   async runSession(sessionId: string): Promise<void> {

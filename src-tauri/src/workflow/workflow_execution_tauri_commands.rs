@@ -306,10 +306,15 @@ pub async fn get_execution_graph(
 #[command]
 pub async fn create_workflow_execution_session(
     graph: WorkflowGraph,
+    workflow_id: Option<String>,
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<pantograph_workflow_service::WorkflowGraphEditSessionCreateResponse, String> {
-    super::workflow_execution_commands::create_workflow_execution_session(graph, workflow_service)
-        .await
+    super::workflow_execution_commands::create_workflow_execution_session(
+        graph,
+        workflow_id,
+        workflow_service,
+    )
+    .await
 }
 
 #[command]

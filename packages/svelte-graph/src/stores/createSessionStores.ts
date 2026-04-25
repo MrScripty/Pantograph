@@ -123,7 +123,7 @@ export function createSessionStores(
 
       const path = `.pantograph/workflows/${name}.json`;
       const file = await backend.loadWorkflow(path);
-      const session = await backend.createSession(file.graph);
+      const session = await backend.createSession(file.graph, name);
       applySessionHandle(session);
 
       workflowStores.loadWorkflow(file.graph, file.metadata);

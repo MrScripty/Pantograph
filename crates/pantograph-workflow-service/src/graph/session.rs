@@ -51,6 +51,7 @@ mod session_connection_api;
 #[derive(Debug, Clone)]
 struct GraphEditSession {
     graph: WorkflowGraph,
+    workflow_id: Option<String>,
     undo_stack: Vec<WorkflowGraph>,
     redo_stack: Vec<WorkflowGraph>,
     last_memory_impact: Option<node_engine::GraphMemoryImpactSummary>,
@@ -58,10 +59,11 @@ struct GraphEditSession {
 }
 
 impl GraphEditSession {
-    fn new(mut graph: WorkflowGraph) -> Self {
+    fn new(mut graph: WorkflowGraph, workflow_id: Option<String>) -> Self {
         graph = hydrate_embedding_emit_metadata_flags(graph);
         let mut session = Self {
             graph,
+            workflow_id: workflow_id.and_then(normalize_workflow_id),
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
             last_memory_impact: None,
@@ -183,7 +185,8 @@ impl GraphEditSession {
     }
 
     fn session_summary(&self, session_id: &str) -> WorkflowExecutionSessionSummary {
-        self.runtime.session_summary(session_id)
+        self.runtime
+            .session_summary(session_id, self.workflow_id.as_deref())
     }
 
     fn queue_items(&self) -> Vec<WorkflowExecutionSessionQueueItem> {
@@ -270,6 +273,11 @@ impl Default for GraphSessionStore {
     }
 }
 
+fn normalize_workflow_id(workflow_id: String) -> Option<String> {
+    let workflow_id = workflow_id.trim().to_string();
+    (!workflow_id.is_empty()).then_some(workflow_id)
+}
+
 impl GraphSessionStore {
     pub fn new() -> Self {
         Self::with_timeout(Duration::from_secs(5 * 60))
@@ -285,9 +293,10 @@ impl GraphSessionStore {
     pub async fn create_session(
         &self,
         graph: WorkflowGraph,
+        workflow_id: Option<String>,
     ) -> WorkflowGraphEditSessionCreateResponse {
         let session_id = Uuid::new_v4().to_string();
-        let session = Arc::new(Mutex::new(GraphEditSession::new(graph)));
+        let session = Arc::new(Mutex::new(GraphEditSession::new(graph, workflow_id)));
         let graph_revision = {
             let state = session.lock().await;
             state.graph.compute_fingerprint()

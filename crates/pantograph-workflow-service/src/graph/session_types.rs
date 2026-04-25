@@ -13,6 +13,8 @@ pub struct UndoRedoState {
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowGraphEditSessionCreateRequest {
     pub graph: WorkflowGraph,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_id: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]

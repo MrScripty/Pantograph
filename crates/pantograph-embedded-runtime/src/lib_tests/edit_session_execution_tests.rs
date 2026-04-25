@@ -75,6 +75,7 @@ async fn execute_edit_session_graph_reconciles_registry_after_restore() {
     let session = runtime
         .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest {
             graph: graph.clone(),
+            workflow_id: None,
         })
         .await
         .expect("create edit session");
@@ -186,6 +187,7 @@ async fn execute_edit_session_graph_restore_keeps_scheduler_runtime_registry_dia
     let edit_session = runtime
         .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest {
             graph: graph.clone(),
+            workflow_id: None,
         })
         .await
         .expect("create edit session");
@@ -357,6 +359,7 @@ async fn execute_edit_session_graph_reconciles_registry_after_embedding_prepare(
     let session = runtime
         .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest {
             graph: graph.clone(),
+            workflow_id: None,
         })
         .await
         .expect("create edit session");
@@ -466,6 +469,7 @@ async fn execute_edit_session_graph_reconciles_registry_after_failed_restore() {
     let session = runtime
         .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest {
             graph: graph.clone(),
+            workflow_id: None,
         })
         .await
         .expect("create edit session");
@@ -532,6 +536,7 @@ async fn execute_edit_session_graph_reports_all_python_runtime_ids_in_trace_metr
     let session = runtime
         .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest {
             graph: graph.clone(),
+            workflow_id: None,
         })
         .await
         .expect("create edit session");
@@ -604,6 +609,7 @@ async fn execute_edit_session_graph_waiting_for_input_does_not_emit_workflow_fai
     let session = runtime
         .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest {
             graph: graph.clone(),
+            workflow_id: None,
         })
         .await
         .expect("create edit session");

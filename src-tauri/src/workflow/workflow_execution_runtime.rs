@@ -105,6 +105,13 @@ fn finalize_edit_session_execution(
     Ok(())
 }
 
+fn persisted_workflow_id_for_runtime_capabilities<'a>(
+    session_id: &str,
+    workflow_id: &'a str,
+) -> Option<&'a str> {
+    (workflow_id != session_id).then_some(workflow_id)
+}
+
 async fn emit_diagnostics_snapshots(input: DiagnosticsEmissionInput<'_>) {
     let scheduler_snapshot = match input
         .workflow_service
@@ -141,25 +148,31 @@ async fn emit_diagnostics_snapshots(input: DiagnosticsEmissionInput<'_>) {
         .workflow_id
         .clone()
         .unwrap_or_else(|| scheduler_snapshot.session.workflow_id.clone());
-    let (runtime_capabilities, runtime_error) = match runtime {
-        Ok(runtime) => match runtime
-            .workflow_get_capabilities(WorkflowCapabilitiesRequest {
-                workflow_id: runtime_workflow_id.clone(),
-            })
-            .await
-        {
-            Ok(response) => (Some(response), None),
-            Err(error) => {
-                log::warn!(
-                    "Failed to collect runtime snapshot for workflow '{}' in session '{}': {}",
-                    runtime_workflow_id,
-                    input.session_id,
-                    error
-                );
-                (None, Some(error.to_envelope_json()))
-            }
-        },
-        Err(error) => (None, Some(error)),
+    let (runtime_capabilities, runtime_error) = if let Some(persisted_workflow_id) =
+        persisted_workflow_id_for_runtime_capabilities(input.session_id, &runtime_workflow_id)
+    {
+        match runtime {
+            Ok(runtime) => match runtime
+                .workflow_get_capabilities(WorkflowCapabilitiesRequest {
+                    workflow_id: persisted_workflow_id.to_string(),
+                })
+                .await
+            {
+                Ok(response) => (Some(response), None),
+                Err(error) => {
+                    log::warn!(
+                        "Failed to collect runtime snapshot for workflow '{}' in session '{}': {}",
+                        persisted_workflow_id,
+                        input.session_id,
+                        error
+                    );
+                    (None, Some(error.to_envelope_json()))
+                }
+            },
+            Err(error) => (None, Some(error)),
+        }
+    } else {
+        (None, None)
     };
 
     let snapshot = build_workflow_execution_diagnostics_snapshot_with_registry_sync(
@@ -241,6 +254,10 @@ async fn run_session_graph_snapshot(input: SessionGraphSnapshotInput<'_>) -> Res
     } = state;
     let diagnostics_channel = channel.clone();
 
+    workflow_service
+        .workflow_graph_mark_edit_session_running(&session_id)
+        .await
+        .map_err(|e| e.to_envelope_json())?;
     emit_diagnostics_snapshots(DiagnosticsEmissionInput {
         app: &app,
         session_id: &session_id,
@@ -266,7 +283,7 @@ async fn run_session_graph_snapshot(input: SessionGraphSnapshotInput<'_>) -> Res
     let guard = config.read().await;
     let device = guard.device.clone();
     drop(guard);
-    let runtime = super::headless_runtime::build_runtime(
+    let runtime = match super::headless_runtime::build_runtime(
         &app,
         gateway.inner(),
         runtime_registry.inner(),
@@ -274,8 +291,24 @@ async fn run_session_graph_snapshot(input: SessionGraphSnapshotInput<'_>) -> Res
         workflow_service.inner(),
         Some(rag_manager.inner()),
     )
-    .await?;
-    let outcome = runtime
+    .await
+    {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            if let Err(finish_error) = workflow_service
+                .workflow_graph_mark_edit_session_finished(&session_id)
+                .await
+            {
+                log::warn!(
+                    "Failed to finish scheduler state for edit session '{}': {}",
+                    session_id,
+                    finish_error
+                );
+            }
+            return Err(error);
+        }
+    };
+    let outcome = match runtime
         .execute_edit_session_graph(
             &session_id,
             &session_graph,
@@ -288,7 +321,22 @@ async fn run_session_graph_snapshot(input: SessionGraphSnapshotInput<'_>) -> Res
             event_adapter.clone() as Arc<dyn EventSink>,
         )
         .await
-        .map_err(|error| error.to_string())?;
+    {
+        Ok(outcome) => outcome,
+        Err(error) => {
+            if let Err(finish_error) = workflow_service
+                .workflow_graph_mark_edit_session_finished(&session_id)
+                .await
+            {
+                log::warn!(
+                    "Failed to finish scheduler state for edit session '{}': {}",
+                    session_id,
+                    finish_error
+                );
+            }
+            return Err(error.to_string());
+        }
+    };
     emit_diagnostics_snapshots(DiagnosticsEmissionInput {
         app: &app,
         session_id: &session_id,
@@ -315,7 +363,10 @@ pub async fn execute_workflow_v2(input: ExecuteWorkflowV2Input<'_>) -> Result<St
     } = input;
     let session = state
         .workflow_service
-        .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest { graph })
+        .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest {
+            graph,
+            workflow_id: None,
+        })
         .await
         .map_err(|e| e.to_envelope_json())?;
     let execution_id = session.session_id.clone();
@@ -361,7 +412,7 @@ pub async fn run_workflow_execution_session(
 
 #[cfg(test)]
 mod tests {
-    use super::finalize_edit_session_execution;
+    use super::{finalize_edit_session_execution, persisted_workflow_id_for_runtime_capabilities};
 
     #[test]
     fn finalize_edit_session_execution_treats_waiting_as_non_error() {
@@ -380,5 +431,17 @@ mod tests {
     #[test]
     fn finalize_edit_session_execution_accepts_success_without_error() {
         assert!(finalize_edit_session_execution(false, None).is_ok());
+    }
+
+    #[test]
+    fn persisted_workflow_id_for_runtime_capabilities_skips_transient_edit_session_ids() {
+        assert_eq!(
+            persisted_workflow_id_for_runtime_capabilities("session-1", "session-1"),
+            None
+        );
+        assert_eq!(
+            persisted_workflow_id_for_runtime_capabilities("session-1", "saved-flow"),
+            Some("saved-flow")
+        );
     }
 }

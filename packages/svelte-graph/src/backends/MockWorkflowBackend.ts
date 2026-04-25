@@ -138,7 +138,10 @@ export class MockWorkflowBackend implements WorkflowBackend {
     return mockValidateConnection(sourceType, targetType);
   }
 
-  async createSession(graph: WorkflowGraph): Promise<WorkflowSessionHandle> {
+  async createSession(
+    graph: WorkflowGraph,
+    _workflowId?: string | null,
+  ): Promise<WorkflowSessionHandle> {
     const sessionId = `mock-session-${++this.sessionCounter}`;
     this.sessions.set(sessionId, { ...structuredClone(graph), derived_graph: buildDerivedGraph(graph) });
     return {

@@ -44,6 +44,7 @@ async fn workflow_get_scheduler_snapshot_returns_edit_session_lifecycle() {
     let created = service
         .workflow_graph_create_edit_session(WorkflowGraphEditSessionCreateRequest {
             graph: WorkflowGraph::new(),
+            workflow_id: None,
         })
         .await
         .expect("create edit session");

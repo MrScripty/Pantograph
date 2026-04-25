@@ -22,7 +22,10 @@ impl WorkflowService {
         &self,
         request: WorkflowGraphEditSessionCreateRequest,
     ) -> Result<WorkflowGraphEditSessionCreateResponse, WorkflowServiceError> {
-        Ok(self.graph_session_store.create_session(request.graph).await)
+        Ok(self
+            .graph_session_store
+            .create_session(request.graph, request.workflow_id)
+            .await)
     }
 
     pub async fn workflow_graph_close_edit_session(
