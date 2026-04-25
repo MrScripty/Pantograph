@@ -10,6 +10,142 @@ explicit diagnostics nodes.
 Ready for stage-start preflight after stages `01`, `02`, and `03` are complete
 and their stage-end refactor gates have been recorded.
 
+## Implementation Notes
+
+### 2026-04-24 Stage-Start Report
+
+- Selected stage: Stage `04`, model license diagnostics ledger.
+- Current branch: `main`.
+- Stage base: `915e2c0a`, the Stage `03` closeout commit.
+- Prior-stage gates: Stage `01`, Stage `02`, and Stage `03` coordination
+  ledgers record completed wave integration and stage-end refactor gate
+  outcomes of `not_warranted`.
+- Git status before implementation: unrelated asset changes only:
+  deleted `assets/3c842e69-080c-43ad-a9f0-14136e18761f.jpg`, deleted
+  `assets/grok-image-6c435c73-11b8-4dcf-a8b2-f2735cc0c5d3.png`, deleted
+  `assets/grok-image-e5979483-32c2-4cf5-b32f-53be66170132.png`,
+  untracked `assets/banner_3.jpg`, `assets/banner_3.png`,
+  `assets/github_social.jpg`, and `assets/reject/`.
+- Dirty-file overlap: none. Stage `04` implementation must not touch
+  `assets/`.
+- Standards reviewed through the execution-platform standards map:
+  `PLAN-STANDARDS.md`, `ARCHITECTURE-PATTERNS.md`,
+  `CODING-STANDARDS.md`, `DOCUMENTATION-STANDARDS.md`,
+  `TESTING-STANDARDS.md`, `CONCURRENCY-STANDARDS.md`,
+  `TOOLING-STANDARDS.md`, `DEPENDENCY-STANDARDS.md`,
+  `SECURITY-STANDARDS.md`, `RELEASE-STANDARDS.md`,
+  `COMMIT-STANDARDS.md`, `languages/rust/RUST-DEPENDENCY-STANDARDS.md`,
+  `languages/rust/RUST-API-STANDARDS.md`, and
+  `languages/rust/RUST-TOOLING-STANDARDS.md`.
+- Intended Wave `02` write sets:
+  - `ledger-storage-retention`: `crates/pantograph-diagnostics-ledger/`.
+  - `runtime-ledger-submission`: `crates/pantograph-embedded-runtime/`
+    ledger submission boundaries.
+  - `workflow-service-query-projections`:
+    `crates/pantograph-workflow-service/` diagnostics query use cases.
+- Host-owned shared files: workspace manifests, lockfiles, public facade
+  exports, ADR files, and any integration documentation.
+- Forbidden write set for this stage unless the plan is updated first:
+  GUI diagnostics views, host binding projections, and node factoring or
+  migration logic.
+- Start outcome: `ready_with_recorded_assumptions`.
+- Recorded assumptions:
+  - Wave `02` may be executed serially by the host in this shared workspace
+    when subagents are not explicitly authorized; the recorded worker write
+    sets and reports still apply.
+  - The first implementation step after Wave `01` is
+    `ledger-storage-retention`: create `pantograph-diagnostics-ledger` with
+    canonical event types, SQLite schema/migrations, retention/pruning,
+    bounded query DTOs, tests, and README coverage.
+  - GUI diagnostics/history views remain deferred. Stage `04` may define
+    backend query projections that GUI can consume, but must not implement GUI
+    files or host binding projections in this stage.
+
+### 2026-04-24 Wave 01 Ledger Schema And Retention Freeze
+
+- SQLite dependency decision: use `rusqlite` `0.32.1` with the existing
+  `bundled` feature already present in `pantograph-runtime-attribution`.
+  Stage `04` does not introduce a second SQLite crate or a different SQLite
+  feature set.
+- Workspace ownership decision: because `rusqlite` will be directly used by
+  both `pantograph-runtime-attribution` and
+  `pantograph-diagnostics-ledger`, implementation should move the shared
+  version/features to `[workspace.dependencies]` and have both crates declare
+  `rusqlite = { workspace = true }`.
+- Dependency review commands run:
+  `cargo tree -i rusqlite`,
+  `cargo tree -p pantograph-runtime-attribution --depth 1`,
+  `cargo tree -p rusqlite --depth 1`, and
+  `cargo tree -p pantograph-runtime-attribution --prefix none --no-dedupe | sort -u | wc -l`.
+- Dependency review results:
+  `rusqlite` is already in the tree via `pantograph-runtime-attribution` and
+  `pumas-library`; direct `rusqlite` dependencies are `bitflags`,
+  `fallible-iterator`, `fallible-streaming-iterator`, `hashlink`,
+  `libsqlite3-sys`, and `smallvec`; the attribution crate reports 48 unique
+  dependency lines under the inspected tree, below the 100+ written-justification
+  threshold.
+- Linking/release decision: keep `bundled` SQLite for deterministic local
+  builds and to match existing attribution persistence. Release artifact impact
+  is unchanged in kind from Stage `01`: native artifacts carry bundled SQLite
+  through `libsqlite3-sys` rather than depending on host SQLite availability.
+- Audit decision: no new storage-family dependency is added in Wave `01`; the
+  implementation still must keep `Cargo.lock` updated and rerun workspace
+  check, clippy, and tests after manifest changes.
+- Migration strategy: `pantograph-diagnostics-ledger` owns a
+  `ledger_schema_migrations` table with monotonically increasing integer
+  versions, applied timestamp in milliseconds, and a schema checksum string for
+  the migration text or equivalent embedded migration identity.
+- Unsupported schema versions must fail open attempts with a typed ledger
+  error rather than silently applying unknown migrations or truncating data.
+- Version `1` schema freeze:
+  - `model_license_usage_events`: usage event id, attribution ids, workflow id,
+    node id/type, model id/version/hash/modality, runtime/backend id, guarantee
+    level, status, started/completed timestamps, schema version, retention
+    class, and correlation ids.
+  - `license_snapshots`: usage event id, Pumas license value, source metadata,
+    model metadata snapshot JSON, and unavailable reason.
+  - `model_output_measurements`: usage event id, modality, typed count/size/
+    duration/dimension/token fields, unavailable fields, and unavailable
+    reasons.
+  - `usage_lineage`: usage event id, node id/type, port ids, composed-parent
+    chain JSON, effective contract version or digest, and lineage metadata.
+  - `diagnostics_retention_policy`: policy id/version, retention class,
+    retention duration in days, applied timestamp, and explanation.
+- Required indexes remain the plan-level indexes for time range, model,
+  license, client, session, bucket, workflow, workflow run, node, guarantee
+  level, per-run drilldown, and pruning lookup by timestamp and retention
+  class.
+- Retention default: local usage events use a `standard` retention class with
+  a default retention duration of 365 days. This avoids unbounded local growth
+  while preserving enough history for compliance and diagnostics review.
+- Retention re-plan trigger: if product policy requires a different retention
+  period, legal hold, export-before-prune, or per-client retention, update this
+  plan and ledger schema policy before changing implementation behavior.
+- Pruning command semantics: pruning is explicit and command-shaped, accepts a
+  validated cutoff or retention policy id, deletes only complete eligible usage
+  events plus associated license snapshot, measurement, and lineage rows in one
+  transaction, and returns counts plus retention metadata.
+- Pruning must not rewrite retained license snapshots, output measurements,
+  lineage, attribution ids, or guarantee values.
+- Query bounds: query inputs use validated optional filters, inclusive start
+  and exclusive end timestamps, stable sort fields, and explicit pagination.
+  Default page size is 100, maximum page size is 500, and time-series bucket
+  count must be bounded to at most 366 buckets per query.
+- Unavailable measurement reasons are frozen as typed values:
+  `NotProduced`, `UnsupportedModality`, `TokenizerUnavailable`,
+  `MetadataUnavailable`, `RuntimeDidNotReport`, `OutputTruncated`,
+  `OutputRedacted`, `ExecutionFailedBeforeMeasurement`, and `Unknown`.
+- Unavailable license reasons are frozen as typed values:
+  `PumasMetadataUnavailable`, `LicenseFieldMissing`, `ModelNotInLibrary`,
+  `RuntimeOnlyModel`, `LookupFailed`, and `Unknown`.
+- Wave `02` non-overlap decision: `ledger-storage-retention` owns canonical
+  ledger DTOs and persistence; `runtime-ledger-submission` may consume the
+  ledger trait and DTOs but does not define storage; `workflow-service-query-
+  projections` may delegate to the ledger but does not own ledger persistence
+  semantics.
+- Wave `01` outcome: complete. Source implementation may begin with the
+  `ledger-storage-retention` slice.
+
 ## Diagnostics Products
 
 Diagnostics has two related products:

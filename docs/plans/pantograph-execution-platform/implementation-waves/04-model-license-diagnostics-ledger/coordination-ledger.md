@@ -2,13 +2,21 @@
 
 ## Status
 
-Not started.
+Stage `04` in progress. Wave `01` is complete. Wave `02` implementation
+slices are ready to begin from `ledger-storage-retention`.
+
+## Branch Or Worktree Strategy
+
+- Integration branch: `main`.
+- Worker worktrees: subagents are not explicitly authorized in this turn, so
+  the host will execute Wave `02` worker slices serially in the shared
+  workspace unless authorization changes.
 
 ## Wave Status
 
 | Wave | Status | Integration Notes |
 | ---- | ------ | ----------------- |
-| `wave-01` | Pending | Host-owned schema, retention, and dependency freeze. |
+| `wave-01` | Complete | Stage-start report, SQLite dependency/linking review, schema freeze, retention default, pruning semantics, query bounds, and worker write boundaries recorded in `04-model-license-diagnostics-ledger.md`. |
 | `wave-02` | Pending | Parallel ledger/runtime/query implementation. |
 | `wave-03` | Pending | Host-owned integration and gate. |
 
@@ -22,8 +30,47 @@ Not started.
 
 ## Decisions
 
-- None recorded.
+- 2026-04-24: Stage-start outcome is
+  `ready_with_recorded_assumptions`.
+- 2026-04-24: Existing dirty files are unrelated `assets/` changes and do not
+  overlap the Stage `04` write set.
+- 2026-04-24: Stage `01`, Stage `02`, and Stage `03` are integrated and their
+  stage-end refactor gates are recorded as `not_warranted`.
+- 2026-04-24: Without explicit subagent authorization, the host may implement
+  Wave `02` slices serially while preserving the recorded worker boundaries.
+- 2026-04-24: Stage `04` uses `rusqlite` `0.32.1` with the existing `bundled`
+  feature. Because both `pantograph-runtime-attribution` and
+  `pantograph-diagnostics-ledger` will directly use it, implementation should
+  centralize the dependency in `[workspace.dependencies]` and declare it in
+  each owning crate with `{ workspace = true }`.
+- 2026-04-24: The version `1` ledger schema owns
+  `ledger_schema_migrations`, `model_license_usage_events`,
+  `license_snapshots`, `model_output_measurements`, `usage_lineage`, and
+  `diagnostics_retention_policy`.
+- 2026-04-24: The default local retention policy is `standard` usage-event
+  retention for 365 days. Policy changes that require legal hold,
+  export-before-prune, per-client retention, or a different default duration
+  are re-plan triggers.
+- 2026-04-24: Pruning is explicit and command-shaped. It deletes complete
+  eligible usage events and their associated snapshot, measurement, and lineage
+  rows in one transaction and must not rewrite retained historical facts.
+- 2026-04-24: Query inputs are bounded by validated filters, inclusive start
+  and exclusive end timestamps, explicit pagination, maximum page size 500,
+  and maximum time-series bucket count 366.
+- 2026-04-24: Wave `02` non-overlap boundary is frozen:
+  `ledger-storage-retention` owns canonical ledger DTOs and persistence,
+  `runtime-ledger-submission` consumes the ledger trait and DTOs from embedded
+  runtime integration, and `workflow-service-query-projections` delegates to
+  the ledger without owning persistence semantics.
 
 ## Verification Results
 
-- None recorded.
+- 2026-04-24: Wave `01` verification passed by inspection: start outcome is
+  recorded, dirty files are unrelated, prior-stage gates are recorded,
+  dependency/linking review is recorded, schema/retention/pruning/query bounds
+  are frozen, and Wave `02` write boundaries are explicit.
+- 2026-04-24: Dependency review commands passed:
+  `cargo tree -i rusqlite`,
+  `cargo tree -p pantograph-runtime-attribution --depth 1`,
+  `cargo tree -p rusqlite --depth 1`, and
+  `cargo tree -p pantograph-runtime-attribution --prefix none --no-dedupe | sort -u | wc -l`.
