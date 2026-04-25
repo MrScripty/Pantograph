@@ -188,7 +188,7 @@ storage or UI.
 - [x] Decide whether timing history extends `pantograph-diagnostics-ledger` or
   gets a focused sibling persistence boundary.
 - [x] Record the clear-history and retention policy for timing observations.
-- [ ] Update this plan if the storage-boundary decision changes affected files.
+- [x] Update this plan if the storage-boundary decision changes affected files.
 
 **Verification:**
 - Review against `CODING-STANDARDS.md` backend-owned data and layered
@@ -292,20 +292,20 @@ misleading universal progress copy.
 the applicable standards after the feature works.
 
 **Tasks:**
-- [ ] Re-check file sizes and responsibility boundaries for touched Svelte,
+- [x] Re-check file sizes and responsibility boundaries for touched Svelte,
   TypeScript, Rust diagnostics, trace, and persistence files.
-- [ ] Refactor oversized or mixed-responsibility touched files where the
+- [x] Refactor oversized or mixed-responsibility touched files where the
   implementation made the violation worse or the surrounding code now blocks a
   compliant change.
-- [ ] Verify every touched `src/` directory has a standards-compliant
+- [x] Verify every touched `src/` directory has a standards-compliant
   `README.md` with updated API/structured producer contracts where applicable.
-- [ ] Ensure no frontend component owns backend timing state or performs local
+- [x] Ensure no frontend component owns backend timing state or performs local
   historical estimation.
-- [ ] Ensure Rust APIs use typed enums/newtypes where the contract crosses crate
+- [x] Ensure Rust APIs use typed enums/newtypes where the contract crosses crate
   or host boundaries.
-- [ ] Ensure SQLite tests isolate durable state and do not depend on shared
+- [x] Ensure SQLite tests isolate durable state and do not depend on shared
   process-global state.
-- [ ] Record any unrelated issues that are found but intentionally deferred.
+- [x] Record any unrelated issues that are found but intentionally deferred.
 
 **Verification:**
 - `git diff --check`
@@ -317,7 +317,7 @@ the applicable standards after the feature works.
 - `cargo check --manifest-path src-tauri/Cargo.toml`
 - Documentation traceability review against `DOCUMENTATION-STANDARDS.md`.
 
-**Status:** Not started.
+**Status:** Complete.
 
 ## Compliance Review For Touched Areas
 
@@ -344,6 +344,17 @@ the applicable standards after the feature works.
   crate as model/license usage specific. If timing history is added there, the
   README and crate-level docs must be updated to avoid a contract mismatch.
   If that broadening is undesirable, create a focused timing-history boundary.
+
+### Compliance Pass Results
+
+- `DiagnosticsOverview.svelte` is below the UI component review trigger after
+  extracting node detail and timing badge components.
+- Tauri diagnostics DTO/store files remain below the 500-line target.
+- Workflow trace timing contracts live in `trace/timing.rs`, and timing trace
+  coverage lives in `trace/tests/timing.rs`.
+- Legacy `trace/tests.rs` remains oversized; this feature no longer adds
+  timing responsibility to that harness.
+- Frontend rendering consumes backend-projected timing expectations only.
 
 ### Standards Applied
 
@@ -401,6 +412,12 @@ the applicable standards after the feature works.
   detail/timing badge components so `DiagnosticsOverview.svelte` is below the
   250-line UI review trigger. Verification: `npm run typecheck` and
   `npm run test:frontend`.
+- 2026-04-25: Milestone 5 completed. Re-checked touched file sizes, confirmed
+  backend-owned timing projection, moved timing expectation trace coverage into
+  `trace/tests/timing.rs`, and documented the remaining oversized legacy trace
+  harness as a deferred unrelated refactor. Verification: targeted
+  `cargo test -p pantograph-workflow-service
+  workflow_trace_store_projects_timing_expectation_from_prior_history`.
 
 ## Commit Cadence Notes
 
@@ -409,20 +426,6 @@ the applicable standards after the feature works.
   changes, and compliance refactors in separate atomic commits unless a test
   fixture must move with its contract.
 - Follow `COMMIT-STANDARDS.md` for detailed conventional commit messages.
-
-## Optional Subagent Assignment
-
-No subagents are required for the initial implementation. If the work is split,
-use one worker wave only after Milestone 1 freezes contracts.
-
-| Owner/Agent | Scope | Output Contract | Handoff Checkpoint |
-| ----------- | ----- | --------------- | ------------------ |
-| Backend worker | SQLite timing persistence and workflow-service expectation API | Committed Rust changes, tests, and README updates within storage/workflow-service write set | After Milestone 2 verification passes |
-| Frontend worker | Diagnostics DTO mirror and UI presentation | Committed TypeScript/Svelte changes, presenter tests, and README updates within frontend diagnostics write set | After backend DTO shape is frozen |
-
-Workers must use separate worktrees or temporary clones if they are allowed to
-commit. Shared DTO/schema files must be owned by exactly one worker or handled
-serially by the integrator.
 
 ## Re-Plan Triggers
 
@@ -451,7 +454,12 @@ serially by the integrator.
 
 ### Completed
 
-- Not started.
+- Durable workflow timing observations and expectation queries.
+- Workflow-service trace enrichment from prior timing history.
+- Tauri diagnostics DTO projection backed by a durable timing ledger.
+- Frontend expected-duration presentation replacing misleading universal
+  progress copy.
+- Standards compliance pass for touched areas.
 
 ### Deviations
 
@@ -459,15 +467,26 @@ serially by the integrator.
 
 ### Follow-Ups
 
-- None yet.
+- Split legacy `crates/pantograph-workflow-service/src/trace/tests.rs` further
+  during the next trace-test maintenance pass.
 
 ### Verification Summary
 
-- Not run. This is a planning artifact only.
+- `cargo test -p pantograph-diagnostics-ledger`
+- `cargo test -p pantograph-workflow-service`
+- `cargo check --manifest-path src-tauri/Cargo.toml`
+- `cargo test --manifest-path src-tauri/Cargo.toml
+  diagnostics_projection_exposes_backend_timing_expectation`
+- `npm run typecheck`
+- `npm run test:frontend`
+- `git diff --check`
 
 ### Traceability Links
 
 - Plan: `docs/plans/workflow-duration-expectations/plan.md`
-- Module README updates: pending implementation.
-- ADR added/updated: pending implementation decision on durable timing
-  ownership.
+- Module README updates:
+  `crates/pantograph-diagnostics-ledger/README.md`,
+  `crates/pantograph-workflow-service/src/trace/README.md`,
+  `src-tauri/src/workflow/diagnostics/README.md`, and
+  `src/components/diagnostics/README.md`.
+- Durable timing ownership: `pantograph-diagnostics-ledger`.
