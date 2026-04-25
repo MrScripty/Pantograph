@@ -6,7 +6,7 @@ Runtime smoke coverage for generated Pantograph C# bindings.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `Pantograph.NativeSmoke/` | Small C# source harness that loads the native library through generated bindings and runs direct `FfiPantographRuntime` session-create/session-run/session-close smokes. |
+| `Pantograph.NativeSmoke/` | Small C# source harness that loads the native library through generated bindings and runs direct `FfiPantographRuntime` backend discovery plus session-create/session-run/session-close smokes. |
 | `Pantograph.DirectRuntimeQuickstart/` | Artifact-ready quickstart showing native save/list/load/edit-session/workflow-session usage from C#. |
 | `PACKAGE-README.md` | README copied to the generated C# binding artifact. |
 

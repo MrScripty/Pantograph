@@ -38,6 +38,13 @@ The harness strips any platform extension before calling
 `:erlang.load_nif/2`, so callers may provide either the full library filename
 or the extensionless base path.
 
+## Support Tier
+The BEAM lane is experimental until the host-side smoke harness covers every
+surface advertised by `crates/pantograph-rustler/README.md`. Current smoke
+coverage proves NIF loading, version reporting, workflow JSON graph helpers,
+validation error projection, parse errors, backend-owned node-definition
+discovery, and queryable-port discovery.
+
 ## Constraints
 - Keep this directory host-harness-only; do not move canonical workflow
   semantics into BEAM code.

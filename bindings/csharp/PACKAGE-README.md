@@ -39,7 +39,8 @@ using FfiPantographRuntime runtime = await FfiPantographRuntime.New(
     new FfiEmbeddedRuntimeConfig(
         appDataDir: "/tmp/pantograph/app-data",
         projectRoot: "/tmp/pantograph/project",
-        workflowRoots: []),
+        workflowRoots: [],
+        maxLoadedSessions: null),
     pumasApi: null);
 
 string createResponse = await runtime.WorkflowCreateSession(

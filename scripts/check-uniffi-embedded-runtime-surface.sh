@@ -53,6 +53,11 @@ require_metadata 'name: "workflow_list_session_queue"'
 require_metadata 'name: "workflow_cancel_session_queue_item"'
 require_metadata 'name: "workflow_reprioritize_session_queue_item"'
 require_metadata 'name: "workflow_set_session_keep_alive"'
+require_metadata 'name: "workflow_graph_list_node_definitions"'
+require_metadata 'name: "workflow_graph_get_node_definition"'
+require_metadata 'name: "workflow_graph_get_node_definitions_by_category"'
+require_metadata 'name: "workflow_graph_get_queryable_ports"'
+require_metadata 'name: "workflow_graph_query_port_options"'
 require_metadata 'name: "shutdown"'
 
 echo "Verified Pantograph headless runtime surface in UniFFI metadata: $repr_path"

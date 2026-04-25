@@ -284,6 +284,79 @@ async fn direct_runtime_runs_workflow_from_json() {
         serde_json::from_str(&run_response_json).expect("parse run response");
     assert_eq!(run_response["outputs"][0]["value"], "direct run");
 
+    let create_session_json = runtime
+        .workflow_create_session(
+            serde_json::json!({
+                "workflow_id": workflow_id,
+                "keep_alive": true
+            })
+            .to_string(),
+        )
+        .await
+        .expect("create execution session");
+    let create_session: serde_json::Value =
+        serde_json::from_str(&create_session_json).expect("parse create session");
+    let session_id = create_session["session_id"]
+        .as_str()
+        .expect("execution session id");
+
+    let session_run_json = runtime
+        .workflow_run_session(
+            serde_json::json!({
+                "session_id": session_id,
+                "inputs": [{
+                    "node_id": "text-input-1",
+                    "port_id": "text",
+                    "value": "session run"
+                }],
+                "output_targets": [{
+                    "node_id": "text-output-1",
+                    "port_id": "text"
+                }]
+            })
+            .to_string(),
+        )
+        .await
+        .expect("run execution session");
+    let session_run: serde_json::Value =
+        serde_json::from_str(&session_run_json).expect("parse session run");
+    assert_eq!(session_run["outputs"][0]["value"], "session run");
+
+    let status_json = runtime
+        .workflow_get_session_status(serde_json::json!({ "session_id": session_id }).to_string())
+        .await
+        .expect("session status");
+    let status: serde_json::Value = serde_json::from_str(&status_json).expect("parse status");
+    assert_eq!(status["session"]["workflow_id"], workflow_id);
+
+    let queue_json = runtime
+        .workflow_list_session_queue(serde_json::json!({ "session_id": session_id }).to_string())
+        .await
+        .expect("session queue");
+    let queue: serde_json::Value = serde_json::from_str(&queue_json).expect("parse queue");
+    assert!(queue["items"].as_array().expect("queue items").is_empty());
+
+    let keep_alive_json = runtime
+        .workflow_set_session_keep_alive(
+            serde_json::json!({
+                "session_id": session_id,
+                "keep_alive": false
+            })
+            .to_string(),
+        )
+        .await
+        .expect("set keep alive");
+    let keep_alive: serde_json::Value =
+        serde_json::from_str(&keep_alive_json).expect("parse keep alive");
+    assert_eq!(keep_alive["keep_alive"], false);
+
+    let close_json = runtime
+        .workflow_close_session(serde_json::json!({ "session_id": session_id }).to_string())
+        .await
+        .expect("close execution session");
+    let close: serde_json::Value = serde_json::from_str(&close_json).expect("parse close");
+    assert_eq!(close["ok"], true);
+
     runtime.shutdown().await;
 
     let _ = std::fs::remove_dir_all(root);
@@ -548,5 +621,90 @@ async fn direct_runtime_exposes_workflow_graph_persistence_and_edit_session() {
         .expect("close graph edit session");
     runtime.shutdown().await;
 
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[tokio::test]
+async fn direct_runtime_exposes_backend_owned_graph_authoring_discovery() {
+    let root = create_temp_root("uniffi-runtime-discovery");
+    let runtime = FfiPantographRuntime::new(
+        FfiEmbeddedRuntimeConfig {
+            app_data_dir: root.join("app-data").to_string_lossy().into_owned(),
+            project_root: root.to_string_lossy().into_owned(),
+            workflow_roots: Vec::new(),
+            max_loaded_sessions: None,
+        },
+        None,
+    )
+    .await
+    .expect("runtime");
+
+    let definitions_json = runtime
+        .workflow_graph_list_node_definitions()
+        .expect("list node definitions");
+    let definitions: serde_json::Value =
+        serde_json::from_str(&definitions_json).expect("parse definitions");
+    assert!(definitions
+        .as_array()
+        .expect("definitions")
+        .iter()
+        .any(|definition| definition["node_type"] == "text-input"));
+
+    let text_input_json = runtime
+        .workflow_graph_get_node_definition("text-input".to_string())
+        .expect("get text-input definition");
+    let text_input: serde_json::Value =
+        serde_json::from_str(&text_input_json).expect("parse text-input definition");
+    assert_eq!(text_input["category"], "input");
+    assert!(text_input["outputs"]
+        .as_array()
+        .expect("outputs")
+        .iter()
+        .any(|port| port["id"] == "text"));
+
+    let grouped_json = runtime
+        .workflow_graph_get_node_definitions_by_category()
+        .expect("group node definitions");
+    let grouped: serde_json::Value =
+        serde_json::from_str(&grouped_json).expect("parse grouped definitions");
+    assert!(grouped["input"]
+        .as_array()
+        .expect("input category")
+        .iter()
+        .any(|definition| definition["node_type"] == "text-input"));
+
+    let queryable_json = runtime
+        .workflow_graph_get_queryable_ports()
+        .expect("queryable ports");
+    let queryable: serde_json::Value =
+        serde_json::from_str(&queryable_json).expect("parse queryable ports");
+    assert!(queryable
+        .as_array()
+        .expect("queryable ports")
+        .iter()
+        .any(|port| port["node_type"] == "puma-lib" && port["port_id"] == "model_path"));
+
+    let missing = runtime
+        .workflow_graph_get_node_definition("missing-node".to_string())
+        .expect_err("unknown node type should be rejected");
+    let envelope = workflow_error_envelope(missing);
+    assert_eq!(envelope.code, WorkflowErrorCode::InvalidRequest);
+    assert_eq!(envelope.message, "unknown node_type 'missing-node'");
+
+    let missing_options = runtime
+        .workflow_graph_query_port_options(
+            "text-input".to_string(),
+            "text".to_string(),
+            "{}".to_string(),
+        )
+        .await
+        .expect_err("non-queryable port should be rejected");
+    let envelope = workflow_error_envelope(missing_options);
+    assert_eq!(envelope.code, WorkflowErrorCode::InvalidRequest);
+    assert!(envelope
+        .message
+        .contains("No options provider for text-input:text"));
+
+    runtime.shutdown().await;
     let _ = std::fs::remove_dir_all(root);
 }

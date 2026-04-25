@@ -11,7 +11,10 @@ discovery facts instead of duplicating node shape or compatibility rules.
 
 | File | Description |
 | ---- | ----------- |
-| `lib.rs` | Public canonical contract, composed-node mapping, migration, effective contract, compatibility, and error API. |
+| `lib.rs` | Public canonical contract, effective contract, compatibility, module re-export, and error API. |
+| `composition.rs` | Composed-node DTOs, internal graph mapping, external port mapping validation, and trace policy contracts. |
+| `migration.rs` | Contract-upgrade records, outcomes, changes, diagnostics, and validation. |
+| `tests.rs` | Crate-private coverage for id validation, compatibility, effective contracts, composition, migration, and JSON shape stability. |
 
 ## Problem
 

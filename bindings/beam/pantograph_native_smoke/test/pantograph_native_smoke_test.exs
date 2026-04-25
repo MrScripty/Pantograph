@@ -33,4 +33,30 @@ defmodule PantographNativeSmokeTest do
     assert {:error, message} = Pantograph.Native.workflow_from_json("{")
     assert String.contains?(message, "Parse error:")
   end
+
+  test "node registry projects backend-owned graph-authoring discovery" do
+    definitions = Pantograph.Native.node_registry_list_definitions()
+
+    assert is_binary(definitions)
+    assert String.contains?(definitions, ~s("node_type":"text-input"))
+    assert String.contains?(definitions, ~s("io_binding_origin":"client_session"))
+
+    text_input = Pantograph.Native.node_registry_get_definition("text-input")
+
+    assert String.contains?(text_input, ~s("category":"input"))
+    assert String.contains?(text_input, ~s("id":"text"))
+
+    grouped = Pantograph.Native.node_registry_definitions_by_category()
+
+    assert String.contains?(grouped, ~s("input"))
+    assert String.contains?(grouped, ~s("node_type":"text-input"))
+
+    registry = Pantograph.Native.node_registry_new()
+    assert :ok = Pantograph.Native.node_registry_register_builtins(registry)
+
+    queryable = Pantograph.Native.node_registry_queryable_ports(registry)
+
+    assert String.contains?(queryable, ~s("node_type":"puma-lib"))
+    assert String.contains?(queryable, ~s("port_id":"model_path"))
+  end
 end

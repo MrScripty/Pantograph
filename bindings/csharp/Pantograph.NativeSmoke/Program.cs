@@ -45,6 +45,7 @@ public static class Program
     private static async Task RunTextSmoke(FfiPantographRuntime runtime, string projectRoot)
     {
         WriteTextWorkflow(projectRoot, TextWorkflowId);
+        ExerciseGraphAuthoringDiscovery(runtime);
 
         string createResponse = await runtime.WorkflowCreateSession(
             $$"""{"workflow_id":"{{TextWorkflowId}}","keep_alive":true}""");
@@ -80,6 +81,36 @@ public static class Program
         }
 
         Console.WriteLine("Pantograph C# native binding runtime smoke passed.");
+    }
+
+    private static void ExerciseGraphAuthoringDiscovery(FfiPantographRuntime runtime)
+    {
+        string definitions = runtime.WorkflowGraphListNodeDefinitions();
+        if (!definitions.Contains("\"node_type\":\"text-input\"", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"Expected text-input definition: {definitions}");
+        }
+
+        string textInput = runtime.WorkflowGraphGetNodeDefinition("text-input");
+        if (!textInput.Contains("\"category\":\"input\"", StringComparison.Ordinal)
+            || !textInput.Contains("\"id\":\"text\"", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"Unexpected text-input definition: {textInput}");
+        }
+
+        string grouped = runtime.WorkflowGraphGetNodeDefinitionsByCategory();
+        if (!grouped.Contains("\"input\"", StringComparison.Ordinal)
+            || !grouped.Contains("\"node_type\":\"text-input\"", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"Unexpected grouped definitions: {grouped}");
+        }
+
+        string queryable = runtime.WorkflowGraphGetQueryablePorts();
+        if (!queryable.Contains("\"node_type\":\"puma-lib\"", StringComparison.Ordinal)
+            || !queryable.Contains("\"port_id\":\"model_path\"", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"Unexpected queryable ports: {queryable}");
+        }
     }
 
     private static async Task RunDiffusionSmoke(FfiPantographRuntime runtime, string projectRoot)
@@ -507,7 +538,8 @@ public static class DirectRuntimeSmoke
         var config = new FfiEmbeddedRuntimeConfig(
             appDataDir,
             projectRoot,
-            workflowRoots?.ToList() ?? new List<string>());
+            workflowRoots?.ToList() ?? new List<string>(),
+            maxLoadedSessions: null);
 
         return await FfiPantographRuntime.FfiPantographRuntimeAsync(config, pumasApi);
     }

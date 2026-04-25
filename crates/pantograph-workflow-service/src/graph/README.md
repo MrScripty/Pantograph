@@ -12,6 +12,10 @@ and persistence abstractions so adapters do not implement graph business logic.
 | `mod.rs` | Public exports for graph-edit contracts and helper modules. |
 | `types.rs` | Graph DTOs, edit-session request/response types, and persisted workflow file shapes. |
 | `registry.rs` | Built-in node-definition discovery and canonical node-contract projection. |
+| `canonicalization.rs` | Saved graph canonicalization orchestration and migration-record response assembly. |
+| `canonicalization_inference.rs` | Dynamic inference-setting schema expansion, per-node definition overlay rebuilds, and passthrough port helpers. |
+| `canonicalization_legacy_migration.rs` | Legacy saved-node rewrites and typed contract-upgrade record production. |
+| `canonicalization_tests.rs` | Canonicalization migration and inference-overlay regression tests. |
 | `effective_definition.rs` | Resolves backend-owned effective node contracts and projects them into graph DTOs before validation or candidate lookup. |
 | `validation.rs` | Shared connection compatibility helpers used by graph-edit flows. |
 | `connection_intent.rs` | Canonical candidate-discovery and revision-aware connection/insert validation. |

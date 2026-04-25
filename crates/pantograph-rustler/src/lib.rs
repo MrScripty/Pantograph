@@ -551,6 +551,24 @@ fn node_registry_list(resource: ResourceArc<NodeRegistryResource>) -> NifResult<
     registry_nifs::node_registry_list(resource)
 }
 
+/// List backend-owned workflow-service node definitions as JSON.
+#[rustler::nif]
+fn node_registry_list_definitions() -> NifResult<String> {
+    registry_nifs::node_registry_list_definitions()
+}
+
+/// Get one backend-owned workflow-service node definition as JSON.
+#[rustler::nif]
+fn node_registry_get_definition(node_type: String) -> NifResult<String> {
+    registry_nifs::node_registry_get_definition(node_type)
+}
+
+/// List backend-owned workflow-service node definitions grouped by category.
+#[rustler::nif]
+fn node_registry_definitions_by_category() -> NifResult<String> {
+    registry_nifs::node_registry_definitions_by_category()
+}
+
 /// Register all built-in node types from the workflow-nodes crate.
 ///
 /// Uses the `inventory` crate to discover all TaskMetadata submitted via
@@ -558,6 +576,12 @@ fn node_registry_list(resource: ResourceArc<NodeRegistryResource>) -> NifResult<
 #[rustler::nif]
 fn node_registry_register_builtins(resource: ResourceArc<NodeRegistryResource>) -> NifResult<Atom> {
     registry_nifs::node_registry_register_builtins(resource)
+}
+
+/// List queryable backend port option providers as JSON.
+#[rustler::nif]
+fn node_registry_queryable_ports(resource: ResourceArc<NodeRegistryResource>) -> NifResult<String> {
+    registry_nifs::node_registry_queryable_ports(resource)
 }
 
 // ============================================================================

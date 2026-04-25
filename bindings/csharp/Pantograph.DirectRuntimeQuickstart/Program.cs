@@ -14,7 +14,8 @@ using FfiPantographRuntime runtime = await FfiPantographRuntime.FfiPantographRun
     new FfiEmbeddedRuntimeConfig(
         appDataDir: appDataDir,
         projectRoot: projectRoot,
-        workflowRoots: []),
+        workflowRoots: [],
+        maxLoadedSessions: null),
     pumasApi: null);
 
 try

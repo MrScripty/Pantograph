@@ -5,16 +5,21 @@ use node_engine::ExecutorExtensions;
 use pantograph_embedded_runtime::{EmbeddedRuntime, EmbeddedRuntimeConfig};
 use pantograph_workflow_service::{
     BucketCreateRequest, BucketDeleteRequest, ClientRegistrationRequest, ClientSessionOpenRequest,
-    ClientSessionResumeRequest, WorkflowAttributedRunRequest, WorkflowCapabilitiesRequest,
-    WorkflowErrorCode, WorkflowErrorEnvelope, WorkflowGraphAddEdgeRequest,
-    WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest, WorkflowGraphEditSessionCloseRequest,
-    WorkflowGraphEditSessionCreateRequest, WorkflowGraphEditSessionGraphRequest,
-    WorkflowGraphGetConnectionCandidatesRequest, WorkflowGraphInsertNodeAndConnectRequest,
-    WorkflowGraphInsertNodeOnEdgeRequest, WorkflowGraphLoadRequest,
-    WorkflowGraphPreviewNodeInsertOnEdgeRequest, WorkflowGraphRemoveEdgeRequest,
-    WorkflowGraphRemoveNodeRequest, WorkflowGraphSaveRequest, WorkflowGraphUndoRedoStateRequest,
-    WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest, WorkflowIoRequest,
-    WorkflowPreflightRequest, WorkflowRunRequest, WorkflowService, WorkflowServiceError,
+    ClientSessionResumeRequest, NodeRegistry as WorkflowNodeRegistry, WorkflowAttributedRunRequest,
+    WorkflowCapabilitiesRequest, WorkflowErrorCode, WorkflowErrorEnvelope,
+    WorkflowExecutionSessionCloseRequest, WorkflowExecutionSessionCreateRequest,
+    WorkflowExecutionSessionKeepAliveRequest, WorkflowExecutionSessionQueueCancelRequest,
+    WorkflowExecutionSessionQueueListRequest, WorkflowExecutionSessionQueueReprioritizeRequest,
+    WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionStatusRequest,
+    WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest,
+    WorkflowGraphEditSessionCloseRequest, WorkflowGraphEditSessionCreateRequest,
+    WorkflowGraphEditSessionGraphRequest, WorkflowGraphGetConnectionCandidatesRequest,
+    WorkflowGraphInsertNodeAndConnectRequest, WorkflowGraphInsertNodeOnEdgeRequest,
+    WorkflowGraphLoadRequest, WorkflowGraphPreviewNodeInsertOnEdgeRequest,
+    WorkflowGraphRemoveEdgeRequest, WorkflowGraphRemoveNodeRequest, WorkflowGraphSaveRequest,
+    WorkflowGraphUndoRedoStateRequest, WorkflowGraphUpdateNodeDataRequest,
+    WorkflowGraphUpdateNodePositionRequest, WorkflowIoRequest, WorkflowPreflightRequest,
+    WorkflowRunRequest, WorkflowService, WorkflowServiceError,
 };
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -45,6 +50,15 @@ pub struct FfiEmbeddedRuntimeConfig {
 #[derive(uniffi::Object)]
 pub struct FfiPantographRuntime {
     runtime: Arc<EmbeddedRuntime>,
+    node_registry: Arc<node_engine::NodeRegistry>,
+    extensions: Arc<RwLock<ExecutorExtensions>>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
+struct QueryablePortProjection<'a> {
+    node_type: &'a str,
+    port_id: &'a str,
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -86,13 +100,15 @@ impl FfiPantographRuntime {
         let runtime = EmbeddedRuntime::with_default_python_runtime(
             config,
             Arc::new(inference::InferenceGateway::new()),
-            extensions,
+            extensions.clone(),
             workflow_service,
             None,
         );
 
         Ok(Arc::new(Self {
             runtime: Arc::new(runtime),
+            node_registry: Arc::new(node_engine::NodeRegistry::with_builtins()),
+            extensions,
         }))
     }
 
@@ -212,6 +228,110 @@ impl FfiPantographRuntime {
         serialize_response(&response)
     }
 
+    /// Create a workflow execution session and return WorkflowExecutionSessionCreateResponse JSON.
+    pub async fn workflow_create_session(&self, request_json: String) -> Result<String, FfiError> {
+        let request: WorkflowExecutionSessionCreateRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .create_workflow_execution_session(request)
+            .await
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Run work inside a workflow execution session and return WorkflowRunResponse JSON.
+    pub async fn workflow_run_session(&self, request_json: String) -> Result<String, FfiError> {
+        let request: WorkflowExecutionSessionRunRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .run_workflow_execution_session(request)
+            .await
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Close a workflow execution session and return WorkflowExecutionSessionCloseResponse JSON.
+    pub async fn workflow_close_session(&self, request_json: String) -> Result<String, FfiError> {
+        let request: WorkflowExecutionSessionCloseRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .close_workflow_execution_session(request)
+            .await
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Return WorkflowExecutionSessionStatusResponse JSON.
+    pub async fn workflow_get_session_status(
+        &self,
+        request_json: String,
+    ) -> Result<String, FfiError> {
+        let request: WorkflowExecutionSessionStatusRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .workflow_get_execution_session_status(request)
+            .await
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Return WorkflowExecutionSessionQueueListResponse JSON.
+    pub async fn workflow_list_session_queue(
+        &self,
+        request_json: String,
+    ) -> Result<String, FfiError> {
+        let request: WorkflowExecutionSessionQueueListRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .workflow_list_execution_session_queue(request)
+            .await
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Cancel a queued workflow execution-session item and return WorkflowExecutionSessionQueueCancelResponse JSON.
+    pub async fn workflow_cancel_session_queue_item(
+        &self,
+        request_json: String,
+    ) -> Result<String, FfiError> {
+        let request: WorkflowExecutionSessionQueueCancelRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .workflow_cancel_execution_session_queue_item(request)
+            .await
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Reprioritize a queued workflow execution-session item and return WorkflowExecutionSessionQueueReprioritizeResponse JSON.
+    pub async fn workflow_reprioritize_session_queue_item(
+        &self,
+        request_json: String,
+    ) -> Result<String, FfiError> {
+        let request: WorkflowExecutionSessionQueueReprioritizeRequest =
+            parse_request(request_json)?;
+        let response = self
+            .runtime
+            .workflow_reprioritize_execution_session_queue_item(request)
+            .await
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Update workflow execution-session keep-alive policy and return WorkflowExecutionSessionKeepAliveResponse JSON.
+    pub async fn workflow_set_session_keep_alive(
+        &self,
+        request_json: String,
+    ) -> Result<String, FfiError> {
+        let request: WorkflowExecutionSessionKeepAliveRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .workflow_set_execution_session_keep_alive(request)
+            .await
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
     /// Save a workflow graph to the runtime project and return WorkflowGraphSaveResponse JSON.
     pub fn workflow_graph_save(&self, request_json: String) -> Result<String, FfiError> {
         let request: WorkflowGraphSaveRequest = parse_request(request_json)?;
@@ -239,6 +359,61 @@ impl FfiPantographRuntime {
             .workflow_graph_list()
             .map_err(map_workflow_service_error)?;
         serialize_response(&response)
+    }
+
+    /// Return registry-backed NodeDefinition JSON array for graph authoring.
+    pub fn workflow_graph_list_node_definitions(&self) -> Result<String, FfiError> {
+        let registry = WorkflowNodeRegistry::new();
+        serialize_response(&registry.all_definitions())
+    }
+
+    /// Return one registry-backed NodeDefinition JSON object by node type.
+    pub fn workflow_graph_get_node_definition(
+        &self,
+        node_type: String,
+    ) -> Result<String, FfiError> {
+        let registry = WorkflowNodeRegistry::new();
+        let definition = registry.get_definition(&node_type).ok_or_else(|| {
+            workflow_adapter_error(
+                WorkflowErrorCode::InvalidRequest,
+                format!("unknown node_type '{node_type}'"),
+            )
+        })?;
+        serialize_response(definition)
+    }
+
+    /// Return registry-backed NodeDefinition JSON grouped by category.
+    pub fn workflow_graph_get_node_definitions_by_category(&self) -> Result<String, FfiError> {
+        let registry = WorkflowNodeRegistry::new();
+        serialize_response(&registry.definitions_by_category())
+    }
+
+    /// Return backend-owned queryable `(node_type, port_id)` pairs as JSON.
+    pub fn workflow_graph_get_queryable_ports(&self) -> Result<String, FfiError> {
+        let ports = self
+            .node_registry
+            .queryable_ports()
+            .into_iter()
+            .map(|(node_type, port_id)| QueryablePortProjection { node_type, port_id })
+            .collect::<Vec<_>>();
+        serialize_response(&ports)
+    }
+
+    /// Query backend-owned port options and return PortOptionsResult JSON.
+    pub async fn workflow_graph_query_port_options(
+        &self,
+        node_type: String,
+        port_id: String,
+        query_json: String,
+    ) -> Result<String, FfiError> {
+        let query: node_engine::PortOptionsQuery = parse_request(query_json)?;
+        let extensions = self.extensions.read().await;
+        let result = self
+            .node_registry
+            .query_port_options(&node_type, &port_id, &query, &extensions)
+            .await
+            .map_err(map_node_engine_error)?;
+        serialize_response(&result)
     }
 
     /// Start an in-memory graph edit session and return WorkflowGraphEditSessionCreateResponse JSON.
@@ -524,6 +699,10 @@ fn map_workflow_service_error(err: WorkflowServiceError) -> FfiError {
     FfiError::Other {
         message: err.to_envelope_json(),
     }
+}
+
+fn map_node_engine_error(err: node_engine::NodeEngineError) -> FfiError {
+    workflow_adapter_error(WorkflowErrorCode::InvalidRequest, err.to_string())
 }
 
 fn workflow_error_json(code: WorkflowErrorCode, message: impl Into<String>) -> String {

@@ -98,9 +98,14 @@ Pantograph.Native.workflow_validate(graph_json)
 ## Binding Support Tiers
 | Tier | Surface | Contract |
 | ---- | ------- | -------- |
-| Supported | `version()`, workflow JSON graph helpers, executor resources, orchestration store operations, node registry operations, callback response/error NIFs, and Pumas API resource operations. | BEAM hosts may rely on these names and JSON/resource shapes with native NIF and Elixir wrapper versions matched. |
+| Experimental | `version()`, workflow JSON graph helpers, backend-owned node-definition discovery, queryable-port discovery, executor resources, orchestration store operations, node registry operations, callback response/error NIFs, and Pumas API resource operations. | Available for integration work with native NIF and Elixir wrapper versions matched; surfaces remain experimental until the BEAM harness covers the advertised contract end to end. |
 | Experimental | `frontend-http` feature exports and callback/orchestration paths that still need stronger lifecycle supervision. | Available for integration work; support tier can change with coordinated host smoke tests. |
 | Internal-only | Rust resource wrapper structs, registration helpers, parsing helper modules, and non-NIF implementation functions. | Not part of the BEAM API even when compiled into the native library. |
+
+No broad Elixir/BEAM application surface is currently marked `Supported`. A
+surface may move to `Supported` only after native helper coverage and
+host-language smoke or acceptance tests load the real NIF and exercise that
+surface through the BEAM wrapper.
 
 The native artifact name is `pantograph_rustler` as configured by the Rustler
 crate and loaded by `Elixir.Pantograph.Native`. The host-visible `version()`

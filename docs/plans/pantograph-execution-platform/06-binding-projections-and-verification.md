@@ -13,6 +13,205 @@ for the projected surface is stable enough to bind. The stage-start report must
 reconcile exact host-lane smoke commands with the binding-platform plan before
 source edits begin.
 
+## Implementation Progress
+
+### 2026-04-25 Wave 01 Stage-Start Preflight
+
+Stage-start outcome: `ready_with_recorded_assumptions`.
+
+- Stage `01` through Stage `05` implementation outputs are present. The Stage
+  `05` stage-end refactor gate required the composition contract module split;
+  that split has been implemented and verified locally, but the commit is
+  blocked because `.git` is mounted read-only while the working tree root is
+  writable. The user explicitly directed continuation, so Wave `01` proceeds as
+  documentation-only stage-start work and code edits remain scoped away from
+  the dirty Stage `05` refactor files until git is writable again.
+- Pre-existing unrelated dirty asset files remain outside this stage and must
+  not be staged, reformatted, or reverted.
+- Existing dirty Stage `05` refactor files do not overlap the Wave `01` write
+  set. They do block a normal clean stage transition and must be committed
+  before any final Stage `06` completion claim.
+- Implementation remains sequential in this session. The wave plan defines
+  parallel UniFFI/Rustler lanes, but no subagents were authorized and the
+  current read-only `.git` mount prevents atomic worker integration commits.
+
+Frozen native Rust base API for Stage `06` projection:
+
+- Existing product-native UniFFI surface remains `version()`,
+  `validate_workflow_json`, `validate_orchestration_json`, and
+  `FfiPantographRuntime` workflow, attribution, persistence, graph edit-session,
+  connection candidate, connect, insert-and-connect, and insertion-preview JSON
+  methods.
+- New binding projection work must remain additive over backend-owned
+  contracts and must not define node semantics in wrapper crates. The base
+  owners for upcoming projection work are workflow-service `NodeRegistry`,
+  effective node-contract resolution, graph connection diagnostics, and
+  diagnostics-ledger query projections.
+- Required additive projection surface for supported graph authoring is
+  registry-backed node definition discovery, lookup by `node_type`,
+  category/grouped discovery, queryable port discovery, port-option queries,
+  effective contract lookup, and diagnostics/model-license usage query
+  projection.
+- Generated C# and future Python artifacts are owned by `pantograph-uniffi`,
+  packaging scripts, and `bindings/` harness/package directories. Generated
+  artifacts must remain build artifacts under `target/` or package output and
+  must not be hand-edited.
+- The Elixir/BEAM lane is owned by `pantograph-rustler` plus
+  `bindings/beam/pantograph_native_smoke`; Rustler code may project backend
+  facts but must not become a separate node catalog or diagnostics owner.
+
+Support-tier reconciliation for this stage start:
+
+- Native Rust: required and supported for every implemented surface.
+- C# over `pantograph_headless`/UniFFI: candidate `supported` for the current
+  direct runtime workflow/session/persistence/graph-edit JSON surface because
+  the repo has generated-artifact packaging, dotnet-backed smoke coverage, and
+  packaged quickstart checks. Full graph-authoring support remains incomplete
+  until registry discovery, queryable-port, and port-option projections are
+  exposed through the binding surface.
+- Python host bindings: `unsupported` for this stage start. `python3` exists on
+  this machine, but there is no `bindings/python/` package, generated artifact,
+  or language-native import/load smoke command yet. Python work must first add
+  a documented host-binding package and real generated/native artifact smoke
+  path before any supported or experimental completion claim.
+- Elixir/BEAM over Rustler: `experimental` for this stage start. A real BEAM
+  smoke runner exists at `./scripts/check-rustler-beam-smoke.sh`, but the
+  current machine does not have `mix` on `PATH`, and the current Rustler README
+  `Supported` row is broader than the host-language coverage. Stage `06` must
+  either downgrade/narrow that row or expand the BEAM harness before any BEAM
+  surface remains supported.
+
+Exact verification commands recorded for host lanes:
+
+```bash
+cargo test -p pantograph-uniffi
+cargo test -p pantograph-rustler
+./scripts/check-uniffi-embedded-runtime-surface.sh
+./scripts/check-uniffi-csharp-smoke.sh
+PANTOGRAPH_PACKAGE_PROFILE=debug ./scripts/package-uniffi-csharp-artifacts.sh
+./scripts/check-packaged-csharp-quickstart.sh
+./scripts/check-rustler-beam-smoke.sh
+cargo check --workspace --all-features
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test --workspace --doc
+```
+
+Host command availability observed during preflight:
+
+- `.NET`: available at `/usr/bin/dotnet`, version `10.0.103`.
+- `mix`/Elixir: not available on `PATH`; BEAM smoke is a required command only
+  where the BEAM toolchain is installed.
+- `python3`: available at `/usr/bin/python3`, version `3.12.3`; no Python
+  binding package or generated-artifact smoke command exists yet.
+
+### 2026-04-25 Wave 02 UniFFI Discovery Projection Progress
+
+- Added additive `FfiPantographRuntime` JSON methods for backend-owned graph
+  authoring discovery:
+  - `workflow_graph_list_node_definitions`
+  - `workflow_graph_get_node_definition`
+  - `workflow_graph_get_node_definitions_by_category`
+  - `workflow_graph_get_queryable_ports`
+  - `workflow_graph_query_port_options`
+- The implementation projects `pantograph-workflow-service` `NodeRegistry`
+  definitions and `node-engine` queryable port providers. It does not define
+  wrapper-local node metadata, compatibility policy, diagnostics meaning, or
+  generated artifacts.
+- The direct runtime now retains the same `ExecutorExtensions` handle used by
+  embedded execution so option-provider queries can receive backend extension
+  facts such as an optional Pumas API.
+- Restored the direct workflow execution-session methods expected by the
+  generated C# smoke and metadata gate:
+  - `workflow_create_session`
+  - `workflow_run_session`
+  - `workflow_close_session`
+  - `workflow_get_session_status`
+  - `workflow_list_session_queue`
+  - `workflow_cancel_session_queue_item`
+  - `workflow_reprioritize_session_queue_item`
+  - `workflow_set_session_keep_alive`
+- Added UniFFI runtime coverage for node definition discovery, grouped
+  discovery, queryable port exposure, execution-session create/run/status/
+  queue/keep-alive/close, unknown-node rejection envelopes, and
+  non-queryable-port rejection envelopes.
+- Extended the C# native smoke to assert generated binding access to
+  backend-owned node definitions, grouped definitions, and queryable ports.
+- Updated the UniFFI metadata gate to require the new graph-authoring discovery
+  methods.
+
+Verification passed:
+
+```bash
+cargo test -p pantograph-uniffi direct_runtime_exposes_backend_owned_graph_authoring_discovery
+cargo test -p pantograph-uniffi direct_runtime_runs_workflow_from_json
+cargo test -p pantograph-uniffi
+./scripts/check-uniffi-embedded-runtime-surface.sh
+./scripts/check-uniffi-csharp-smoke.sh
+PANTOGRAPH_PACKAGE_PROFILE=debug ./scripts/package-uniffi-csharp-artifacts.sh
+./scripts/check-packaged-csharp-quickstart.sh
+```
+
+### 2026-04-25 Wave 02 Rustler Discovery Projection Progress
+
+- Added additive Rustler NIFs for backend-owned graph authoring discovery:
+  - `node_registry_list_definitions`
+  - `node_registry_get_definition`
+  - `node_registry_definitions_by_category`
+  - `node_registry_queryable_ports`
+- `node_registry_list_definitions`,
+  `node_registry_get_definition`, and
+  `node_registry_definitions_by_category` project
+  `pantograph-workflow-service` `NodeRegistry` definitions, not Rustler-local
+  task metadata.
+- `node_registry_queryable_ports` projects backend `node-engine` queryable port
+  providers after built-in registration.
+- Extended the BEAM smoke harness stubs and tests for node definitions, grouped
+  definitions, and queryable ports.
+- Updated BEAM support-tier documentation so the broad Rustler surface is
+  `Experimental` until host smoke coverage justifies supported status.
+
+Verification passed:
+
+```bash
+cargo check -p pantograph_rustler
+```
+
+Verification not completed in this environment:
+
+```bash
+cargo test -p pantograph_rustler
+./scripts/check-rustler-beam-smoke.sh
+```
+
+`cargo test -p pantograph_rustler` still fails at link time because Erlang
+`enif_*` symbols are supplied by the BEAM host runtime. The BEAM smoke runner
+fails immediately because `mix` is not installed on this machine.
+
+### 2026-04-25 Wave 03 Host-Language Verification Progress
+
+- C# host verification is complete locally. The native smoke loads the real
+  generated/native artifact and now asserts generated access to backend-owned
+  graph-authoring discovery. The package and packaged quickstart scripts pass
+  without hand-editing generated artifacts.
+- Python remains `unsupported`. The host has `python3`, but the repository has
+  no `bindings/python/` package, generated Python artifact, or import/load
+  smoke command.
+- BEAM remains `experimental`. The smoke fixture source now covers the new
+  Rustler graph-authoring discovery NIFs, but the host smoke cannot run here
+  because `mix` is not installed.
+- Workspace verification passed after Wave `02` and Wave `03` changes:
+
+```bash
+cargo check --workspace --all-features
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test --workspace --doc
+```
+
+The workspace check emitted existing `pumas-library` dead-code warnings outside
+this repo's current change set. Doctests emitted Cargo's expected note that doc
+tests are not supported for the Rustler `cdylib` crate type.
+
 ## Binding Projection Types
 
 - `FfiNodeDefinition`
