@@ -103,6 +103,47 @@ their stage-end refactor gates have been recorded.
 - Expected Stage `03` verification remains the command set listed in
   `Verification Commands`.
 
+### 2026-04-24 Wave 02 Runtime Context Capabilities Progress
+
+- Added `crates/pantograph-embedded-runtime/src/node_execution.rs`,
+  `node_execution_capabilities.rs`, and `node_execution_tests.rs` as the
+  embedded-runtime-owned context, managed capability, and focused test
+  modules.
+- Added crate-local path dependencies on `pantograph-node-contracts` and
+  `pantograph-runtime-attribution` so the runtime context carries canonical
+  effective contracts and durable attribution ids directly.
+- Implemented execution contracts:
+  `NodeExecutionContext`, `NodeExecutionContextInput`, `NodeExecutionInput`,
+  `NodeExecutionOutput`, `NodeExecutionResult`, `NodeExecutionError`, and
+  `NodeOutputSummary`.
+- Implemented runtime-owned lifecycle handles and context:
+  `NodeCancellationToken`, `NodeProgressHandle`, `NodeProgressEvent`, and
+  `NodeLineageContext`.
+- Implemented managed capability route contracts:
+  `ManagedCapabilityKind`, `ManagedCapabilityRoute`,
+  `NodeManagedCapabilities`, `ModelExecutionCapability`,
+  `ResourceAccessCapability`, `CacheCapability`, `ProgressCapability`,
+  `DiagnosticsCapability`, and `ExternalToolCapability`.
+- Implemented guarantee classification through `NodeExecutionGuarantee` and
+  `NodeExecutionGuaranteeEvidence`.
+- Updated the embedded-runtime public facade and source README to expose and
+  document the new runtime context boundary.
+- Decomposition review: the initial combined context/capability/test module
+  exceeded 500 lines, so it was split into focused sibling modules before
+  commit.
+- Verification passed:
+  `cargo test -p pantograph-embedded-runtime node_execution`,
+  `cargo check -p pantograph-embedded-runtime`,
+  `cargo fmt --all -- --check`, and
+  `cargo clippy -p pantograph-embedded-runtime --all-targets -- -D warnings`.
+- Full `cargo test -p pantograph-embedded-runtime` is not clean in this
+  environment. The new `node_execution` tests passed, but the package suite
+  still reports existing Pumas SQLite read-only database failures and older
+  workflow-run fixture failures where callers supply backend-owned run ids.
+- Remaining Wave `02` work: adapt baseline runtime diagnostics events from
+  scheduler/runtime/node-engine facts and wire cancellation/progress/guarantee
+  behavior into execution paths.
+
 ## Type Families To Define
 
 ### Execution Types

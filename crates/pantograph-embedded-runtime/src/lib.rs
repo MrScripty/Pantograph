@@ -20,6 +20,7 @@ pub mod embedding_workflow;
 pub mod host_runtime;
 pub mod managed_runtime_manager;
 pub mod model_dependencies;
+mod node_execution;
 pub mod python_runtime;
 mod python_runtime_execution;
 pub mod rag;
@@ -50,6 +51,14 @@ pub use managed_runtime_manager::{
     ManagedRuntimeManagerRuntimeView,
 };
 pub use model_dependencies::{SharedModelDependencyResolver, TauriModelDependencyResolver};
+pub use node_execution::{
+    CacheCapability, DiagnosticsCapability, ExternalToolCapability, ManagedCapabilityKind,
+    ManagedCapabilityRoute, ModelExecutionCapability, NodeCancellationToken, NodeExecutionContext,
+    NodeExecutionContextInput, NodeExecutionError, NodeExecutionGuarantee,
+    NodeExecutionGuaranteeEvidence, NodeExecutionInput, NodeExecutionOutput, NodeExecutionResult,
+    NodeLineageContext, NodeManagedCapabilities, NodeOutputSummary, NodeProgressEvent,
+    NodeProgressHandle, ResourceAccessCapability,
+};
 pub use python_runtime::{
     ProcessPythonRuntimeAdapter, PythonNodeExecutionRequest, PythonRuntimeAdapter,
     PythonStreamHandler,

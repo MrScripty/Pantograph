@@ -7260,6 +7260,8 @@ dependencies = [
  "log",
  "node-engine",
  "once_cell",
+ "pantograph-node-contracts",
+ "pantograph-runtime-attribution",
  "pantograph-runtime-identity",
  "pantograph-runtime-registry",
  "pantograph-workflow-service",

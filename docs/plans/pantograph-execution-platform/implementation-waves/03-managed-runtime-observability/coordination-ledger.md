@@ -18,14 +18,14 @@ are recorded in `03-managed-runtime-observability.md`.
 | Wave | Status | Integration Notes |
 | ---- | ------ | ----------------- |
 | `wave-01` | Complete | Stage-start report, event adaptation decision, durable ledger boundary, and serial execution assumption recorded in `03-managed-runtime-observability.md`. |
-| `wave-02` | Pending | Parallel runtime and event adaptation. |
+| `wave-02` | In progress | Runtime context and managed capability contracts are integrated locally; diagnostics event adaptation and cancellation/progress/guarantee wiring remain. |
 | `wave-03` | Pending | Host-owned integration and gate. |
 
 ## Worker Reports
 
 | Worker | Report Path | Status |
 | ------ | ----------- | ------ |
-| runtime-context-capabilities | `reports/wave-02-worker-runtime-context-capabilities.md` | Pending |
+| runtime-context-capabilities | `reports/wave-02-worker-runtime-context-capabilities.md` | Complete |
 | diagnostics-event-adapter | `reports/wave-02-worker-diagnostics-event-adapter.md` | Pending |
 | cancellation-progress-guarantee | `reports/wave-02-worker-cancellation-progress-guarantee.md` | Pending |
 
@@ -53,6 +53,16 @@ are recorded in `03-managed-runtime-observability.md`.
 - 2026-04-24: No new third-party dependency is expected for the first slice. If
   one becomes necessary, implementation stops for dependency-standard review
   before manifest edits.
+- 2026-04-24: The host implemented `runtime-context-capabilities` locally in
+  the shared workspace. The slice adds `node_execution.rs`,
+  `node_execution_capabilities.rs`, `node_execution_tests.rs`,
+  embedded-runtime facade exports, README coverage, crate-local path
+  dependencies on `pantograph-node-contracts` and
+  `pantograph-runtime-attribution`, and focused context/capability/guarantee
+  tests.
+- 2026-04-24: Decomposition review split the initial combined
+  context/capability/test module into focused sibling modules before commit to
+  keep touched source files below the 500-line standards trigger.
 
 ## Verification Results
 
@@ -60,3 +70,12 @@ are recorded in `03-managed-runtime-observability.md`.
   recorded, Stage `01` and Stage `02` end gates are recorded, dirty files are
   unrelated, durable ledger storage remains forbidden until Stage `04`, and
   Wave `02` write boundaries are explicit.
+- 2026-04-24: `runtime-context-capabilities` verification passed:
+  `cargo test -p pantograph-embedded-runtime node_execution`,
+  `cargo check -p pantograph-embedded-runtime`,
+  `cargo fmt --all -- --check`, and
+  `cargo clippy -p pantograph-embedded-runtime --all-targets -- -D warnings`.
+- 2026-04-24: Full `cargo test -p pantograph-embedded-runtime` is not clean in
+  this environment. The new `node_execution` tests passed; the package suite
+  still reports Pumas SQLite read-only database failures and older
+  workflow-run fixture failures where callers supply backend-owned run ids.
