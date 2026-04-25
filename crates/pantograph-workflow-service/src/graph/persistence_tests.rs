@@ -104,6 +104,38 @@ fn load_workflow_accepts_file_inside_project_root() {
 }
 
 #[test]
+fn load_workflow_refreshes_missing_derived_graph_for_diagnostics_history() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let store = FileSystemWorkflowGraphStore::new(temp.path());
+    let workflow = WorkflowFile::new(
+        "No Fingerprint".to_string(),
+        WorkflowGraph {
+            nodes: vec![GraphNode {
+                id: "input".to_string(),
+                node_type: "text-input".to_string(),
+                position: Position { x: 0.0, y: 0.0 },
+                data: serde_json::json!({"text": "hello"}),
+            }],
+            edges: Vec::new(),
+            derived_graph: None,
+        },
+    );
+    write_workflow(temp.path(), "No Fingerprint.json", &workflow);
+
+    let loaded = store
+        .load_workflow(".pantograph/workflows/No Fingerprint.json".to_string())
+        .expect("load workflow");
+
+    assert!(
+        loaded
+            .graph
+            .derived_graph
+            .as_ref()
+            .is_some_and(|derived| !derived.graph_fingerprint.is_empty())
+    );
+}
+
+#[test]
 fn save_workflow_strips_puma_lib_derived_data_with_model_identity() {
     let temp = tempfile::tempdir().expect("tempdir");
     let store = FileSystemWorkflowGraphStore::new(temp.path());

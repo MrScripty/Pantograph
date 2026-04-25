@@ -219,6 +219,7 @@ impl WorkflowGraphStore for FileSystemWorkflowGraphStore {
             WorkflowServiceError::Internal(format!("Failed to parse workflow file: {}", e))
         })?;
         sanitize_workflow_graph_persistence_state(&mut workflow.graph);
+        workflow.graph.refresh_derived_graph();
         Ok(workflow)
     }
 
