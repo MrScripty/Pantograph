@@ -10,6 +10,9 @@ The format is based on Keep a Changelog.
 - Source-directory documentation coverage with `README.md` files across all active source trees.
 - Tooling hooks and quality-gate scripts for linting, type checking, and tests.
 - Tauri path-boundary regression tests for workflow loading, sandbox validation, and agent file tools.
+- Canonical composed-node contracts, `tool-loop` composed authoring metadata,
+  runtime composed-parent lineage projection, and migration-aware workflow graph
+  canonicalization records.
 
 ### Changed
 - Root project `README.md` reorganized around install, usage, development, and contribution workflows.

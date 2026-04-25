@@ -202,6 +202,41 @@ and their stage-end refactor gates have been recorded.
   Wave `03`: saved-workflow migration integration, release notes, ADR, final
   verification, and stage-end refactor gate.
 
+### 2026-04-24 Wave 03 Migration Integration And Closeout
+
+- Added migration-aware workflow graph canonicalization results in
+  `pantograph-workflow-service` while preserving the existing graph-only
+  canonicalization API.
+- Added explicit upgrade records for the existing saved-workflow
+  `system-prompt` to `text-input` migration, including changed node type,
+  changed port id, and primitive-lineage preservation metadata.
+- Added `docs/adr/ADR-009-composed-node-contracts-and-migration.md` to freeze
+  composed-node ownership, primitive trace preservation, runtime lineage
+  projection, and saved-workflow migration strategy.
+- Updated the ADR index and `CHANGELOG.md` release notes.
+- Final verification passed:
+  `cargo test -p pantograph-node-contracts`,
+  `cargo test -p workflow-nodes`,
+  `cargo test -p pantograph-embedded-runtime`,
+  `cargo test -p pantograph-workflow-service`,
+  `cargo check --workspace --all-features`,
+  `cargo fmt --all -- --check`,
+  `cargo clippy --workspace --all-targets --all-features -- -D warnings`,
+  and `cargo test --workspace --doc`.
+- Stage-end refactor gate outcome: `separate_refactor_plan_required`.
+  The touched-file review found Stage `05`-touched source files that remain
+  functionally verified but should be split before additional composition work:
+  `crates/pantograph-node-contracts/src/lib.rs` is 1411 lines and
+  `crates/pantograph-workflow-service/src/graph/canonicalization.rs` is 824
+  lines. The required structural cleanup is broader than a safe closeout edit,
+  so it is recorded in
+  `docs/refactors/stage-05-composition-contracts-module-split/final-plan.md`.
+- Host binding implementation and GUI redesign were not implemented in Stage
+  `05`.
+- Unrelated `assets/` working-tree changes remain outside the Stage `05`
+  commit scope.
+- Stage `05` outcome: complete with separate refactor plan recorded.
+
 ## Required Direction
 
 - Primitive nodes own narrow, coherent responsibilities.

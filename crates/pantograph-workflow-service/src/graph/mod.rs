@@ -15,6 +15,9 @@ mod session_types;
 mod types;
 mod validation;
 
+pub use canonicalization::{
+    canonicalize_workflow_graph_with_migrations, WorkflowGraphCanonicalizationResult,
+};
 pub use connection_intent::{
     commit_connection, connection_candidates, insert_node_and_connect, insert_node_on_edge,
     preview_node_insert_on_edge, rejected_commit_response, rejected_edge_insert_preview_response,

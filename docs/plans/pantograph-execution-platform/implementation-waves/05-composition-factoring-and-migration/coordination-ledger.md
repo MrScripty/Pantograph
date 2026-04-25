@@ -2,9 +2,8 @@
 
 ## Status
 
-Stage `05` in progress. Wave `01` and Wave `02` implementation slices are
-integrated locally. Wave `03` migration integration, ADR, final verification,
-and stage-end gate remain.
+Stage `05` complete with a separate refactor plan recorded for touched-file
+module splits. Wave `01`, Wave `02`, and Wave `03` are integrated.
 
 ## Wave Status
 
@@ -12,7 +11,7 @@ and stage-end gate remain.
 | ---- | ------ | ----------------- |
 | `wave-01` | Complete | Stage-start report, node/port inventory, saved-workflow artifact inventory, classification freeze, migration output semantics, and Wave `02` write boundaries recorded in `05-composition-factoring-and-migration.md`. |
 | `wave-02` | Complete | Composition contracts, workflow-node factoring, and runtime lineage are integrated locally. |
-| `wave-03` | Pending | Host-owned migration integration and gate. |
+| `wave-03` | Complete | Saved-workflow migration record integration, release notes, ADR, final verification, and stage-end refactor gate recorded. |
 
 ## Worker Reports
 
@@ -72,6 +71,22 @@ and stage-end gate remain.
   workspace. The slice adds `NodeLineageContext` helpers for primitive lineage,
   entering composed execution scopes, preserving composed-parent stacks,
   carrying lineage segment metadata, README coverage, and focused tests.
+- 2026-04-24: Wave `03` added migration-aware workflow graph canonicalization
+  results for saved-workflow upgrades. The existing `system-prompt` to
+  `text-input` migration now emits a `ContractUpgradeRecord` with changed node
+  type, changed port id, and primitive-lineage preservation metadata while the
+  existing graph-only canonicalization API remains available.
+- 2026-04-24: ADR-009 freezes composed-node contract ownership, primitive
+  trace preservation, runtime lineage projection, and saved-workflow migration
+  strategy.
+- 2026-04-24: Stage `05` intentionally did not implement host bindings or GUI
+  redesign.
+- 2026-04-24: Stage-end refactor gate outcome is
+  `separate_refactor_plan_required`. The touched-file review found
+  `crates/pantograph-node-contracts/src/lib.rs` at 1411 lines and
+  `crates/pantograph-workflow-service/src/graph/canonicalization.rs` at 824
+  lines. The module split is recorded in
+  `docs/refactors/stage-05-composition-contracts-module-split/final-plan.md`.
 
 ## Verification Results
 
@@ -95,3 +110,19 @@ and stage-end gate remain.
   `cargo test -p pantograph-embedded-runtime node_execution`,
   `cargo check -p pantograph-embedded-runtime`, and
   `cargo clippy -p pantograph-embedded-runtime --all-targets -- -D warnings`.
+- 2026-04-24: Wave `03` migration integration verification passed:
+  `cargo fmt -p pantograph-workflow-service -- --check`,
+  `cargo test -p pantograph-workflow-service canonicalize_workflow_graph_migrates_legacy_system_prompt_nodes`,
+  `cargo check -p pantograph-workflow-service`, and
+  `cargo clippy -p pantograph-workflow-service --all-targets -- -D warnings`.
+- 2026-04-24: Stage `05` final verification passed:
+  `cargo test -p pantograph-node-contracts`,
+  `cargo test -p workflow-nodes`,
+  `cargo test -p pantograph-embedded-runtime`,
+  `cargo test -p pantograph-workflow-service`,
+  `cargo check --workspace --all-features`,
+  `cargo fmt --all -- --check`,
+  `cargo clippy --workspace --all-targets --all-features -- -D warnings`,
+  and `cargo test --workspace --doc`.
+- 2026-04-24: Stage `05` closeout verification passed. Unrelated dirty
+  `assets/` changes remain excluded from the stage scope.

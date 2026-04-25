@@ -16,6 +16,7 @@ developers to reconstruct intent from commit history.
 | `ADR-006-canonical-node-contract-ownership.md` | Freezes canonical node/port/effective-contract ownership in `pantograph-node-contracts` and projection responsibilities for workflow-service, node-engine, bindings, and GUI adapters. |
 | `ADR-007-managed-runtime-observability-ownership.md` | Freezes embedded-runtime ownership of runtime-created node execution context, managed capabilities, transient diagnostics, cancellation/progress lifecycle, and guarantee classification. |
 | `ADR-008-durable-model-license-diagnostics-ledger.md` | Freezes durable model/license diagnostics ledger ownership, SQLite persistence, retention/pruning semantics, runtime submission, and workflow query projection boundaries. |
+| `ADR-009-composed-node-contracts-and-migration.md` | Freezes composed-node contract ownership, primitive trace preservation, runtime lineage projection, and saved-workflow migration strategy. |
 
 ## Problem
 Pantograph is actively deepening its backend/runtime architecture. Without an
@@ -72,6 +73,7 @@ link to these decisions.
 - `docs/adr/ADR-006-canonical-node-contract-ownership.md`
 - `docs/adr/ADR-007-managed-runtime-observability-ownership.md`
 - `docs/adr/ADR-008-durable-model-license-diagnostics-ledger.md`
+- `docs/adr/ADR-009-composed-node-contracts-and-migration.md`
 ```
 
 ## API Consumer Contract
