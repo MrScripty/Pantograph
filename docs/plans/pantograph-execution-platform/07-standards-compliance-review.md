@@ -6,6 +6,57 @@ Verify that the execution-platform plans conform to the planning standards and
 that implementation following these plans should produce code compliant with
 the repository standards.
 
+## Implementation Progress
+
+### 2026-04-25 Stage-Start Preflight
+
+Start outcome: `ready_with_recorded_assumptions`.
+
+- Selected stage: Stage `07`, standards compliance review.
+- Prior-stage gates: Stage `01` through Stage `06` are implemented, their
+  architecture ADR checkpoints are recorded, and their stage-end refactor gates
+  are recorded. Stage `05` required a separate refactor plan; the module split
+  was completed before Stage `06` closeout.
+- Current dirty files before Stage `07`: unrelated asset deletions and
+  untracked asset files under `assets/`. Stage `07` must not stage, reformat,
+  or revert them.
+- Intended write set: execution-platform review docs, Stage `06` closeout
+  ledger corrections, and documentation-only status reconciliation. No source,
+  test, manifest, generated artifact, or build metadata edits are required.
+- Concurrency decision: single-worker. Stage `07` is a documentation review and
+  does not warrant a new concurrent implementation-wave folder.
+- Expected verification: Markdown/status consistency inspection, `git diff`
+  review, and `git status --short` to confirm only intended documentation files
+  are staged.
+
+### 2026-04-25 Post-Implementation Review Progress
+
+- Reconciled the review with completed Stage `01` through Stage `06`
+  architecture ADRs.
+- Replaced stale future-tense residual risks for Stage `01`, Stage `04`, and
+  Stage `06` with current implementation evidence and remaining host/toolchain
+  limitations.
+- Confirmed Stage `06` support-tier decisions now live in ADR-010:
+  Native Rust supported for implemented surfaces, C# supported for verified
+  generated/native surfaces, Python unsupported, and BEAM experimental on this
+  host.
+
+### 2026-04-25 Stage-End Refactor Gate
+
+Outcome: `not_warranted`.
+
+- Touched files reviewed:
+  `docs/plans/pantograph-execution-platform/07-standards-compliance-review.md`
+  and
+  `docs/plans/pantograph-execution-platform/implementation-waves/06-binding-projections-and-verification/coordination-ledger.md`.
+- Applicable standards groups: planning, documentation, commit history,
+  implementation-wave traceability, and stage-end gate reporting.
+- Findings: the Stage `07` diff is a documentation/status reconciliation only.
+  No source, test, manifest, generated artifact, or build metadata file was
+  touched, and no additional decomposition or refactor is warranted.
+- Residual unrelated dirty files under `assets/` remain outside the Stage `07`
+  touched-file boundary.
+
 ## Scope
 
 In scope:
@@ -147,25 +198,35 @@ Out of scope:
 
 ## Residual Risks
 
-- The plans now record stage-level crate ownership and first implementation
-  storage choices. Implementation must still create ADRs when those decisions
-  are first implemented.
-- Stage `06` still must reconcile exact C# and Python support tiers and host
-  smoke commands with the binding-platform plan at stage start. A host lane
-  without a real generated-artifact smoke path remains unsupported or
-  experimental, not complete.
-- Stage `04` chooses SQLite ledger persistence as the first implementation.
-  The ledger stage must record SQLite dependency, linking, migration,
-  audit, and release-artifact impact before source edits.
-- Stage `01` chooses SQLite attribution persistence as the first
-  implementation. The attribution stage must record SQLite dependency,
-  linking, migration, audit, and release-artifact impact before source edits.
+- Stage `01` through Stage `06` architecture decisions are now represented by
+  ADR-005 through ADR-010. Future execution-platform work must update or
+  supersede those ADRs when it changes durable attribution, node contracts,
+  runtime observability, diagnostics ledger persistence, composition/migration,
+  or binding projection ownership.
+- Stage `06` support tiers are reconciled in ADR-010 and the Stage `06`
+  closeout. Remaining risk is toolchain and artifact availability rather than
+  plan ambiguity: Python stays unsupported until a real generated/native
+  package and import/load smoke exists, and BEAM stays experimental on hosts
+  without `mix` smoke coverage.
+- Stage `04` recorded SQLite ledger dependency, linking, migration, audit, and
+  release-artifact impact before implementation. Future storage-engine changes
+  require a new plan update or ADR rather than editing the ledger crate in
+  place.
+- Stage `01` recorded SQLite attribution dependency, linking, migration, audit,
+  and release-artifact impact before implementation. Future attribution storage
+  changes require a plan update or ADR because the durable schema is now an
+  implemented artifact.
 - The root `../../../DIAGNOSTICS-MODEL-LICENSE-USAGE.md` remains outside `docs/` because
   it was requested as a root orientation document. It should stay short and
   point into `docs/` for durable planning details.
 - `LAUNCHER-STANDARDS.md` does not directly change these plan files, but any
   implementation that adds canonical verification commands should expose them
   through `launcher.sh` or explicitly document why they remain workspace-native.
+- Some completed stage plans retain historical progress notes and future-tense
+  implementation requirements below their completion summaries. Those notes are
+  useful audit history, but future readers should treat the latest
+  implementation progress, coordination ledger, and ADR entries as authoritative
+  when they conflict with earlier planning language.
 
 ## Verification
 
@@ -176,6 +237,10 @@ Out of scope:
   launcher, commit, frontend, accessibility, and release standards.
 - The review does not weaken or duplicate the authoritative standards; it
   maps this plan set to them.
+- 2026-04-25 Stage `07` review compared Stage `01` through Stage `06`
+  completion records, ADR index entries, support-tier records, and current
+  dirty worktree state. No source-code verification was required because this
+  stage changed review/status documentation only.
 
 ## Risks And Mitigations
 
@@ -204,3 +269,7 @@ Out of scope:
   plans without rediscovering the standards category by category.
 - Any implementation that cannot satisfy one of these gates must update the
   relevant plan or create an ADR before proceeding.
+- Stage `07` implementation is complete when stale compliance-review residual
+  risks are reconciled with completed stage evidence, any discovered ledger
+  drift is corrected, and the documentation-only diff is committed separately
+  from unrelated asset changes.

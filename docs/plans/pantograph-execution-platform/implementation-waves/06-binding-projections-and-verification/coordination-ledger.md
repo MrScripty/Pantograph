@@ -2,24 +2,26 @@
 
 ## Status
 
-In progress.
+Stage `06` complete. Wave `01` through Wave `04` are integrated, the binding
+projection ADR is recorded, and the stage-end refactor gate outcome is
+`not_warranted`.
 
 ## Wave Status
 
 | Wave | Status | Integration Notes |
 | ---- | ------ | ----------------- |
 | `wave-01` | Complete | Stage-start outcome recorded as `ready_with_recorded_assumptions`; C# is candidate supported, Python is unsupported, and BEAM is experimental until support-tier docs and host smoke coverage align. |
-| `wave-02` | Complete locally | UniFFI and Rustler discovery projections are integrated locally; commits are blocked by read-only `.git`. |
-| `wave-03` | Complete locally | C# generated-artifact smoke passed; Python remains unsupported; BEAM source smoke coverage is added but host smoke is blocked by missing `mix`. |
-| `wave-04` | Complete locally | ADR, headless binding docs, support-tier reconciliation, final verification, and stage-end refactor gate recorded. |
+| `wave-02` | Complete | UniFFI and Rustler discovery projections are integrated and committed. |
+| `wave-03` | Complete | C# generated-artifact smoke passed; Python remains unsupported; BEAM source smoke coverage is added but host smoke is blocked by missing `mix`. |
+| `wave-04` | Complete | ADR, headless binding docs, support-tier reconciliation, final verification, and stage-end refactor gate are committed. |
 
 ## Worker Reports
 
 | Worker | Report Path | Status |
 | ------ | ----------- | ------ |
-| uniffi-projections | `reports/wave-02-worker-uniffi-projections.md` | Complete locally, uncommitted because `.git` is read-only. |
-| rustler-projections | `reports/wave-02-worker-rustler-projections.md` | Complete locally, BEAM smoke blocked by missing `mix`. |
-| csharp-host-tests | `reports/wave-03-worker-csharp-host-tests.md` | Complete locally, uncommitted because `.git` is read-only. |
+| uniffi-projections | `reports/wave-02-worker-uniffi-projections.md` | Complete. |
+| rustler-projections | `reports/wave-02-worker-rustler-projections.md` | Complete; BEAM smoke remains blocked by missing `mix`. |
+| csharp-host-tests | `reports/wave-03-worker-csharp-host-tests.md` | Complete. |
 | python-host-tests | `reports/wave-03-worker-python-host-tests.md` | Complete as unsupported-lane reconciliation. |
 | beam-host-tests | `reports/wave-03-worker-beam-host-tests.md` | Source coverage complete locally; host smoke blocked by missing `mix`. |
 
@@ -27,8 +29,8 @@ In progress.
 
 - 2026-04-25: Implementation proceeds sequentially in this session. The wave
   plan permits parallel UniFFI/Rustler work, but no subagents were authorized,
-  and `.git` is currently mounted read-only so atomic worker integration commits
-  are unavailable.
+  and `.git` was mounted read-only during the stage-start window, so worker
+  integration commits were unavailable at that point.
 - 2026-04-25: C# over the `pantograph_headless` UniFFI runtime is the only
   candidate supported host lane at stage start because it has dotnet-backed
   generated-artifact smoke and packaged quickstart commands. Full
