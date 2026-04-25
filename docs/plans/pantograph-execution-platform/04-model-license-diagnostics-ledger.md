@@ -146,6 +146,39 @@ and their stage-end refactor gates have been recorded.
 - Wave `01` outcome: complete. Source implementation may begin with the
   `ledger-storage-retention` slice.
 
+### 2026-04-24 Wave 02 Ledger Storage Retention Progress
+
+- Added `crates/pantograph-diagnostics-ledger` as the backend-owned durable
+  model/license diagnostics ledger crate.
+- Added canonical ledger DTOs for model/license usage events, model identity,
+  license snapshots, typed output measurements, usage lineage, execution
+  guarantee level, retention policy, bounded diagnostics queries, and prune
+  commands.
+- Implemented `DiagnosticsLedgerRepository` and `SqliteDiagnosticsLedger` with
+  versioned schema initialization, unsupported schema rejection, event
+  insertion, bounded event queries, default retention policy lookup, and
+  transactional pruning over complete usage events.
+- Added SQLite schema coverage for `ledger_schema_migrations`,
+  `model_license_usage_events`, `license_snapshots`,
+  `model_output_measurements`, `usage_lineage`, and
+  `diagnostics_retention_policy`.
+- Added tests for event persistence/querying, time-of-use license snapshot
+  stability, query bound validation, transactional pruning, restart recovery,
+  unsupported schema rejection, and default retention policy.
+- Centralized `rusqlite` in workspace dependencies and switched
+  `pantograph-runtime-attribution` to `rusqlite.workspace = true`.
+- Verification passed:
+  `cargo fmt -p pantograph-diagnostics-ledger -p pantograph-runtime-attribution`,
+  `cargo test -p pantograph-diagnostics-ledger`,
+  `cargo check -p pantograph-diagnostics-ledger`, and
+  `cargo clippy -p pantograph-diagnostics-ledger --all-targets -- -D warnings`.
+- Full `cargo fmt --all` attempted during this slice failed because it tried
+  to write a read-only file in the external Pumas checkout:
+  `/media/jeremy/OrangeCream/Linux Software/repos/owned/ai-systems/Pumas-Library/rust/crates/pumas-core/src/conversion/manager.rs`.
+  Package-scoped formatting for touched crates passed.
+- Remaining Wave `02` work: runtime ledger submission and workflow-service
+  query projections.
+
 ## Diagnostics Products
 
 Diagnostics has two related products:

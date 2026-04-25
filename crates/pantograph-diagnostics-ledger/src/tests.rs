@@ -1,0 +1,227 @@
+use pantograph_runtime_attribution::{
+    BucketId, ClientId, ClientSessionId, UsageEventId, WorkflowId, WorkflowRunId,
+};
+use rusqlite::Connection;
+
+use crate::{
+    DiagnosticsLedgerError, DiagnosticsLedgerRepository, DiagnosticsQuery, ExecutionGuaranteeLevel,
+    LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement,
+    OutputMeasurementUnavailableReason, OutputModality, PruneUsageEventsCommand, RetentionClass,
+    SqliteDiagnosticsLedger, UsageEventStatus, UsageLineage, DEFAULT_STANDARD_RETENTION_DAYS,
+};
+
+#[test]
+fn record_and_query_usage_event_preserves_snapshot_and_measurement() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    let event = sample_event("usage_alpha", "model-a", 10, 20);
+
+    ledger
+        .record_usage_event(event.clone())
+        .expect("event is recorded");
+
+    let projection = ledger
+        .query_usage_events(DiagnosticsQuery {
+            model_id: Some("model-a".to_string()),
+            ..DiagnosticsQuery::default()
+        })
+        .expect("events query succeeds");
+
+    assert_eq!(projection.events, vec![event]);
+    assert!(projection.may_have_pruned_usage);
+}
+
+#[test]
+fn license_snapshot_is_time_of_use_and_not_rewritten_by_later_events() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    let mut original = sample_event("usage_original", "model-a", 10, 20);
+    original.license_snapshot.license_value = Some("mit".to_string());
+    let mut later = sample_event("usage_later", "model-a", 30, 40);
+    later.license_snapshot.license_value = Some("apache-2.0".to_string());
+
+    ledger
+        .record_usage_event(original.clone())
+        .expect("original event is recorded");
+    ledger
+        .record_usage_event(later)
+        .expect("later event is recorded");
+
+    let projection = ledger
+        .query_usage_events(DiagnosticsQuery {
+            license_value: Some("mit".to_string()),
+            ..DiagnosticsQuery::default()
+        })
+        .expect("license query succeeds");
+
+    assert_eq!(projection.events, vec![original]);
+}
+
+#[test]
+fn query_rejects_unbounded_page_size_and_invalid_time_range() {
+    let ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+
+    let oversized = ledger.query_usage_events(DiagnosticsQuery {
+        page_size: 501,
+        ..DiagnosticsQuery::default()
+    });
+    assert!(matches!(
+        oversized,
+        Err(DiagnosticsLedgerError::QueryLimitExceeded {
+            requested: 501,
+            max: 500
+        })
+    ));
+
+    let invalid_range = ledger.query_usage_events(DiagnosticsQuery {
+        started_at_ms: Some(10),
+        ended_before_ms: Some(10),
+        ..DiagnosticsQuery::default()
+    });
+    assert!(matches!(
+        invalid_range,
+        Err(DiagnosticsLedgerError::InvalidTimeRange)
+    ));
+}
+
+#[test]
+fn prune_deletes_complete_events_without_rewriting_retained_snapshots() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    let pruned = sample_event("usage_pruned", "model-a", 10, 20);
+    let retained = sample_event("usage_retained", "model-b", 100, 200);
+    ledger
+        .record_usage_event(pruned)
+        .expect("old event is recorded");
+    ledger
+        .record_usage_event(retained.clone())
+        .expect("retained event is recorded");
+
+    let result = ledger
+        .prune_usage_events(PruneUsageEventsCommand {
+            retention_class: RetentionClass::Standard,
+            prune_completed_before_ms: 50,
+        })
+        .expect("prune succeeds");
+
+    assert_eq!(result.pruned_event_count, 1);
+    let projection = ledger
+        .query_usage_events(DiagnosticsQuery::default())
+        .expect("events query succeeds");
+    assert_eq!(projection.events, vec![retained]);
+}
+
+#[test]
+fn persisted_events_survive_reopen() {
+    let temp = tempfile::NamedTempFile::new().expect("temp file");
+    let path = temp.path().to_path_buf();
+    let event = sample_event("usage_persisted", "model-a", 10, 20);
+
+    {
+        let mut ledger = SqliteDiagnosticsLedger::open(&path).expect("ledger opens");
+        ledger
+            .record_usage_event(event.clone())
+            .expect("event is recorded");
+    }
+
+    let ledger = SqliteDiagnosticsLedger::open(&path).expect("ledger reopens");
+    let projection = ledger
+        .query_usage_events(DiagnosticsQuery::default())
+        .expect("events query succeeds");
+
+    assert_eq!(projection.events, vec![event]);
+}
+
+#[test]
+fn unsupported_schema_version_is_rejected() {
+    let conn = Connection::open_in_memory().expect("connection opens");
+    conn.execute_batch(
+        "CREATE TABLE ledger_schema_migrations (
+            version INTEGER PRIMARY KEY,
+            applied_at_ms INTEGER NOT NULL,
+            checksum TEXT NOT NULL
+        );
+        INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
+        VALUES (999, 0, 'future');",
+    )
+    .expect("future schema is installed");
+
+    let result = SqliteDiagnosticsLedger::from_connection(conn);
+
+    assert!(matches!(
+        result,
+        Err(DiagnosticsLedgerError::UnsupportedSchemaVersion { found: 999 })
+    ));
+}
+
+#[test]
+fn retention_policy_uses_standard_local_default() {
+    let ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+
+    let policy = ledger.retention_policy().expect("policy loads");
+
+    assert_eq!(policy.retention_class, RetentionClass::Standard);
+    assert_eq!(policy.retention_days, DEFAULT_STANDARD_RETENTION_DAYS);
+}
+
+fn sample_event(
+    usage_suffix: &str,
+    model_id: &str,
+    started_at_ms: i64,
+    completed_at_ms: i64,
+) -> ModelLicenseUsageEvent {
+    ModelLicenseUsageEvent {
+        usage_event_id: UsageEventId::try_from(usage_suffix.to_string()).unwrap(),
+        client_id: ClientId::try_from("client_alpha".to_string()).unwrap(),
+        client_session_id: ClientSessionId::try_from("session_alpha".to_string()).unwrap(),
+        bucket_id: BucketId::try_from("bucket_alpha".to_string()).unwrap(),
+        workflow_run_id: WorkflowRunId::try_from("run_alpha".to_string()).unwrap(),
+        workflow_id: WorkflowId::try_from("workflow_alpha".to_string()).unwrap(),
+        model: ModelIdentity {
+            model_id: model_id.to_string(),
+            model_revision: Some("rev-1".to_string()),
+            model_hash: Some("sha256:abc".to_string()),
+            model_modality: Some("text".to_string()),
+            runtime_backend: Some("pytorch".to_string()),
+        },
+        lineage: UsageLineage {
+            node_id: "node-1".to_string(),
+            node_type: "text-generation".to_string(),
+            port_ids: vec!["out".to_string()],
+            composed_parent_chain: vec!["parent-a".to_string()],
+            effective_contract_version: Some("1".to_string()),
+            effective_contract_digest: Some("digest-1".to_string()),
+            metadata_json: Some(r#"{"path":"root/node-1"}"#.to_string()),
+        },
+        license_snapshot: LicenseSnapshot {
+            license_value: Some("mit".to_string()),
+            source_metadata_json: Some(r#"{"source":"pumas"}"#.to_string()),
+            model_metadata_snapshot_json: Some(r#"{"model":"snapshot"}"#.to_string()),
+            unavailable_reason: None,
+        },
+        output_measurement: ModelOutputMeasurement {
+            modality: OutputModality::Text,
+            item_count: Some(1),
+            character_count: Some(42),
+            byte_size: Some(42),
+            token_count: None,
+            width: None,
+            height: None,
+            pixel_count: None,
+            duration_ms: None,
+            sample_rate_hz: None,
+            channels: None,
+            frame_count: None,
+            vector_count: None,
+            dimensions: None,
+            numeric_representation: None,
+            top_level_shape: None,
+            schema_id: None,
+            schema_digest: None,
+            unavailable_reasons: vec![OutputMeasurementUnavailableReason::TokenizerUnavailable],
+        },
+        guarantee_level: ExecutionGuaranteeLevel::ManagedFull,
+        status: UsageEventStatus::Completed,
+        retention_class: RetentionClass::Standard,
+        started_at_ms,
+        completed_at_ms: Some(completed_at_ms),
+        correlation_id: Some("corr-1".to_string()),
+    }
+}

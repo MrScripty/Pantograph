@@ -7246,6 +7246,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "pantograph-diagnostics-ledger"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "pantograph-runtime-attribution",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "pantograph-embedded-runtime"
 version = "0.1.0"
 dependencies = [

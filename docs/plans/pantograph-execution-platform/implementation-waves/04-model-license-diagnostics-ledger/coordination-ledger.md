@@ -17,14 +17,14 @@ slices are ready to begin from `ledger-storage-retention`.
 | Wave | Status | Integration Notes |
 | ---- | ------ | ----------------- |
 | `wave-01` | Complete | Stage-start report, SQLite dependency/linking review, schema freeze, retention default, pruning semantics, query bounds, and worker write boundaries recorded in `04-model-license-diagnostics-ledger.md`. |
-| `wave-02` | Pending | Parallel ledger/runtime/query implementation. |
+| `wave-02` | In Progress | `ledger-storage-retention` is integrated locally; runtime submission and workflow-service query projections remain. |
 | `wave-03` | Pending | Host-owned integration and gate. |
 
 ## Worker Reports
 
 | Worker | Report Path | Status |
 | ------ | ----------- | ------ |
-| ledger-storage-retention | `reports/wave-02-worker-ledger-storage-retention.md` | Pending |
+| ledger-storage-retention | `reports/wave-02-worker-ledger-storage-retention.md` | Complete |
 | runtime-ledger-submission | `reports/wave-02-worker-runtime-ledger-submission.md` | Pending |
 | workflow-service-query-projections | `reports/wave-02-worker-workflow-service-query-projections.md` | Pending |
 
@@ -62,6 +62,14 @@ slices are ready to begin from `ledger-storage-retention`.
   `runtime-ledger-submission` consumes the ledger trait and DTOs from embedded
   runtime integration, and `workflow-service-query-projections` delegates to
   the ledger without owning persistence semantics.
+- 2026-04-24: The host implemented `ledger-storage-retention` locally in the
+  shared workspace. The slice adds `pantograph-diagnostics-ledger`, canonical
+  ledger DTOs, `DiagnosticsLedgerRepository`, `SqliteDiagnosticsLedger`, schema
+  migration initialization, event insertion/querying, retention policy lookup,
+  transactional pruning, crate README coverage, and focused persistence tests.
+- 2026-04-24: `rusqlite` is now centralized in workspace dependencies and
+  `pantograph-runtime-attribution` inherits it through `rusqlite.workspace =
+  true`.
 
 ## Verification Results
 
@@ -74,3 +82,11 @@ slices are ready to begin from `ledger-storage-retention`.
   `cargo tree -p pantograph-runtime-attribution --depth 1`,
   `cargo tree -p rusqlite --depth 1`, and
   `cargo tree -p pantograph-runtime-attribution --prefix none --no-dedupe | sort -u | wc -l`.
+- 2026-04-24: `ledger-storage-retention` verification passed:
+  `cargo fmt -p pantograph-diagnostics-ledger -p pantograph-runtime-attribution`,
+  `cargo test -p pantograph-diagnostics-ledger`,
+  `cargo check -p pantograph-diagnostics-ledger`, and
+  `cargo clippy -p pantograph-diagnostics-ledger --all-targets -- -D warnings`.
+- 2026-04-24: Full `cargo fmt --all` attempted during this slice failed
+  because it tried to write a read-only file in the external Pumas checkout.
+  Package-scoped formatting for touched crates passed.
