@@ -22,7 +22,9 @@ pub mod system;
 pub mod tool;
 
 // Re-export all tasks for convenience
-pub use contracts::{builtin_node_contracts, task_metadata_to_contract};
+pub use contracts::{
+    builtin_composed_node_contracts, builtin_node_contracts, task_metadata_to_contract,
+};
 pub use control::*;
 pub use input::*;
 pub use output::*;

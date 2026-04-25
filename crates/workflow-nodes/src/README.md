@@ -3,14 +3,16 @@
 Built-in workflow node descriptor and task source boundary.
 
 ## Purpose
-This directory owns the built-in node definitions and task implementations
-registered into `node-engine`. It keeps node metadata, port contracts, and
-runtime task behavior grouped by workflow node family.
+This directory owns the built-in node definitions, composed-node
+registrations, and task implementations registered into `node-engine`. It
+keeps node metadata, port contracts, and runtime task behavior grouped by
+workflow node family.
 
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
 | `lib.rs` | Crate export surface and built-in descriptor registration wiring. |
+| `contracts.rs` | Canonical primitive contract projection plus composed authoring registrations for built-in workflow nodes. |
 | `setup.rs` | Node registration helpers used by hosts and tests. |
 | `input/` | User/model input node task definitions and metadata. |
 | `processing/` | Inference, transformation, dependency, and model-processing nodes. |
@@ -37,6 +39,12 @@ Group built-in nodes by workflow role and expose them through crate-level
 registration helpers. Keep node descriptors and task implementations near each
 other so graph metadata and runtime behavior can be reviewed together.
 
+Composed authoring surfaces are exported through
+`builtin_composed_node_contracts()`. The current built-in composed
+registration is `tool-loop`, which maps its stable external contract onto
+primitive `llm-inference`, `tool-executor`, and turn-state control nodes so
+diagnostics can preserve primitive execution facts.
+
 ## Alternatives Rejected
 - Put all node implementations in one file: rejected because node families have
   distinct runtime and contract concerns.
@@ -47,6 +55,8 @@ other so graph metadata and runtime behavior can be reviewed together.
 - Node descriptor metadata must match task input/output behavior.
 - Built-in node ids, port ids, categories, and data types are compatibility
   contracts.
+- Composed registrations use `pantograph-node-contracts` mapping DTOs and must
+  preserve primitive trace policy.
 - Saved templates must not rely on frontend-only aliases for backend ports.
 - Experimental control/tool nodes must not be presented as complete execution
   behavior while tool execution is disabled.
@@ -79,6 +89,8 @@ workflow_nodes::setup_extensions(&mut extensions).await;
 - Inputs: graph context values keyed by task id and port id.
 - Outputs: context values, stream events, and task metadata consumed by
   `node-engine`, workflow service, frontend templates, and saved workflows.
+- Composition: `builtin_composed_node_contracts()` returns backend-owned
+  mappings for stable composed authoring surfaces.
 - Lifecycle: descriptors are registered during host setup; task instances run
   during graph execution.
 - Errors: task failures should use `GraphError` categories that workflow

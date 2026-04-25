@@ -18,7 +18,7 @@ slices are ready to begin.
 | Worker | Report Path | Status |
 | ------ | ----------- | ------ |
 | composition-contracts | `reports/wave-02-worker-composition-contracts.md` | Complete |
-| workflow-nodes-factoring | `reports/wave-02-worker-workflow-nodes-factoring.md` | Pending |
+| workflow-nodes-factoring | `reports/wave-02-worker-workflow-nodes-factoring.md` | Complete |
 | runtime-lineage | `reports/wave-02-worker-runtime-lineage.md` | Pending |
 
 ## Decisions
@@ -61,6 +61,12 @@ slices are ready to begin.
   diagnostic DTOs, typed composition/migration validation errors, README
   coverage, and focused tests without changing primitive `NodeTypeContract`
   serialization.
+- 2026-04-24: The host implemented `workflow-nodes-factoring` locally in the
+  shared workspace. The slice adds `builtin_composed_node_contracts()`, a
+  concrete `tool-loop` composed authoring registration over primitive
+  `llm-inference`, `tool-executor`, and turn-state control nodes, crate-root
+  exports, README coverage, and focused tests without changing primitive
+  descriptor registration.
 
 ## Verification Results
 
@@ -74,3 +80,8 @@ slices are ready to begin.
   `cargo test -p pantograph-node-contracts`,
   `cargo check -p pantograph-node-contracts`, and
   `cargo clippy -p pantograph-node-contracts --all-targets -- -D warnings`.
+- 2026-04-24: `workflow-nodes-factoring` verification passed:
+  `cargo fmt -p workflow-nodes -- --check`,
+  `cargo test -p workflow-nodes`,
+  `cargo check -p workflow-nodes`, and
+  `cargo clippy -p workflow-nodes --all-targets -- -D warnings`.

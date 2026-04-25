@@ -163,6 +163,24 @@ and their stage-end refactor gates have been recorded.
   `cargo clippy -p pantograph-node-contracts --all-targets -- -D warnings`.
 - Remaining Wave `02` work: workflow-node factoring and runtime lineage.
 
+### 2026-04-24 Wave 02 Workflow Nodes Factoring Progress
+
+- Added `workflow_nodes::builtin_composed_node_contracts()` as the built-in
+  composed authoring registration surface.
+- Added a concrete `tool-loop` composed registration that maps the stable
+  external `tool-loop` contract onto internal primitive `llm-inference`,
+  `tool-executor`, and turn-state control nodes while preserving primitive
+  trace policy.
+- Preserved existing primitive descriptor registration and primitive
+  `NodeTypeContract` serialization.
+- Updated workflow-nodes README coverage and crate-root exports.
+- Verification passed:
+  `cargo fmt -p workflow-nodes -- --check`,
+  `cargo test -p workflow-nodes`,
+  `cargo check -p workflow-nodes`, and
+  `cargo clippy -p workflow-nodes --all-targets -- -D warnings`.
+- Remaining Wave `02` work: runtime lineage.
+
 ## Required Direction
 
 - Primitive nodes own narrow, coherent responsibilities.

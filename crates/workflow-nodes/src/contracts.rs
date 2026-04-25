@@ -5,9 +5,11 @@
 //! `pantograph-node-contracts` for graph-authoring and binding surfaces.
 
 use pantograph_node_contracts::{
-    NodeAuthoringMetadata, NodeCapabilityRequirement, NodeCategory, NodeContractError,
-    NodeExecutionSemantics, NodeTypeContract, NodeTypeId, PortCardinality, PortContract, PortId,
-    PortKind, PortRequirement, PortValueType, PortVisibility,
+    ComposedInternalEdge, ComposedInternalGraph, ComposedInternalNode, ComposedNodeContract,
+    ComposedPortMapping, ComposedPortMappings, ComposedTracePolicy, NodeAuthoringMetadata,
+    NodeCapabilityRequirement, NodeCategory, NodeContractError, NodeExecutionSemantics,
+    NodeInstanceId, NodeTypeContract, NodeTypeId, PortCardinality, PortContract, PortId, PortKind,
+    PortRequirement, PortValueType, PortVisibility,
 };
 
 pub fn builtin_node_contracts() -> Result<Vec<NodeTypeContract>, NodeContractError> {
@@ -18,6 +20,14 @@ pub fn builtin_node_contracts() -> Result<Vec<NodeTypeContract>, NodeContractErr
         .map(task_metadata_to_contract)
         .collect::<Result<Vec<_>, _>>()?;
     contracts.sort_by(|left, right| left.node_type.as_str().cmp(right.node_type.as_str()));
+    Ok(contracts)
+}
+
+pub fn builtin_composed_node_contracts() -> Result<Vec<ComposedNodeContract>, NodeContractError> {
+    let contracts = vec![tool_loop_composed_contract()?];
+    for contract in &contracts {
+        contract.validate()?;
+    }
     Ok(contracts)
 }
 
@@ -51,6 +61,90 @@ pub fn task_metadata_to_contract(
     };
     contract.validate()?;
     Ok(contract)
+}
+
+fn tool_loop_composed_contract() -> Result<ComposedNodeContract, NodeContractError> {
+    let metadata = <crate::control::ToolLoopTask as node_engine::TaskDescriptor>::descriptor();
+    let external_contract = task_metadata_to_contract(&metadata)?;
+    Ok(ComposedNodeContract {
+        external_contract,
+        internal_graph: ComposedInternalGraph {
+            graph_id: "tool-loop-internal-v1".to_string(),
+            nodes: vec![
+                internal_node("tool-loop.llm", "llm-inference", "Tool Loop LLM")?,
+                internal_node("tool-loop.tool-executor", "tool-executor", "Tool Executor")?,
+                internal_node("tool-loop.turn-state", "merge", "Turn State")?,
+            ],
+            edges: vec![
+                ComposedInternalEdge {
+                    source_node_id: node_id("tool-loop.llm")?,
+                    source_port_id: port_id("tool_calls")?,
+                    target_node_id: node_id("tool-loop.tool-executor")?,
+                    target_port_id: port_id("tool_calls")?,
+                },
+                ComposedInternalEdge {
+                    source_node_id: node_id("tool-loop.tool-executor")?,
+                    source_port_id: port_id("results")?,
+                    target_node_id: node_id("tool-loop.turn-state")?,
+                    target_port_id: port_id("inputs")?,
+                },
+            ],
+        },
+        port_mappings: ComposedPortMappings {
+            inputs: vec![
+                map_port("prompt", "tool-loop.llm", "prompt")?,
+                map_port("system_prompt", "tool-loop.llm", "system_prompt")?,
+                map_port("context", "tool-loop.llm", "context")?,
+                map_port("tools", "tool-loop.llm", "tools")?,
+                map_port("max_turns", "tool-loop.turn-state", "inputs")?,
+            ],
+            outputs: vec![
+                map_port("response", "tool-loop.llm", "response")?,
+                map_port("tool_calls", "tool-loop.llm", "tool_calls")?,
+                map_port("turns", "tool-loop.turn-state", "count")?,
+            ],
+        },
+        trace_policy: ComposedTracePolicy::PreservePrimitiveFacts,
+        upgrade_metadata: None,
+    })
+}
+
+fn internal_node(
+    node_id_value: &str,
+    node_type_value: &str,
+    label: &str,
+) -> Result<ComposedInternalNode, NodeContractError> {
+    Ok(ComposedInternalNode {
+        node_id: node_id(node_id_value)?,
+        node_type: node_type_id(node_type_value)?,
+        label: label.to_string(),
+        contract_version: Some("1".to_string()),
+        contract_digest: None,
+    })
+}
+
+fn map_port(
+    external_port_id: &str,
+    internal_node_id: &str,
+    internal_port_id: &str,
+) -> Result<ComposedPortMapping, NodeContractError> {
+    Ok(ComposedPortMapping {
+        external_port_id: port_id(external_port_id)?,
+        internal_node_id: node_id(internal_node_id)?,
+        internal_port_id: port_id(internal_port_id)?,
+    })
+}
+
+fn node_type_id(value: &str) -> Result<NodeTypeId, NodeContractError> {
+    value.parse()
+}
+
+fn node_id(value: &str) -> Result<NodeInstanceId, NodeContractError> {
+    value.parse()
+}
+
+fn port_id(value: &str) -> Result<PortId, NodeContractError> {
+    value.parse()
 }
 
 fn port_metadata_to_contract(
@@ -166,6 +260,49 @@ mod tests {
         assert!(contracts
             .iter()
             .any(|contract| contract.node_type.as_str() == "text-output"));
+    }
+
+    #[test]
+    fn builtin_composed_contracts_register_tool_loop_authoring_contract() {
+        let contracts = builtin_composed_node_contracts().expect("composed contracts");
+        let tool_loop = contracts
+            .iter()
+            .find(|contract| contract.external_contract.node_type.as_str() == "tool-loop")
+            .expect("tool-loop composed contract");
+
+        assert_eq!(
+            tool_loop.trace_policy,
+            ComposedTracePolicy::PreservePrimitiveFacts
+        );
+        assert!(tool_loop
+            .internal_graph
+            .nodes
+            .iter()
+            .any(|node| node.node_type.as_str() == "llm-inference"));
+        assert!(tool_loop
+            .internal_graph
+            .nodes
+            .iter()
+            .any(|node| node.node_type.as_str() == "tool-executor"));
+        assert_eq!(
+            tool_loop
+                .port_mappings
+                .inputs
+                .iter()
+                .map(|mapping| mapping.external_port_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["prompt", "system_prompt", "context", "tools", "max_turns"]
+        );
+        assert_eq!(
+            tool_loop
+                .port_mappings
+                .outputs
+                .iter()
+                .map(|mapping| mapping.external_port_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["response", "tool_calls", "turns"]
+        );
+        tool_loop.validate().expect("valid composed contract");
     }
 
     #[test]
