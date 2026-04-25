@@ -164,9 +164,27 @@ their stage-end refactor gates have been recorded.
   `cargo check -p pantograph-embedded-runtime`,
   `cargo fmt --all -- --check`, and
   `cargo clippy -p pantograph-embedded-runtime --all-targets -- -D warnings`.
-- Remaining Wave `02` work: wire cancellation/progress/guarantee behavior into
-  execution paths so ordinary node execution produces these baseline facts
-  through the runtime wrapper.
+### 2026-04-24 Wave 02 Cancellation Progress Guarantee Progress
+
+- Added `NodeExecutionDiagnosticsRecorder` as an event-sink recorder that can
+  sit on node-engine execution paths, forward original workflow events, and
+  collect enriched runtime-owned diagnostics for registered
+  `NodeExecutionContext` values.
+- The recorder adapts progress, cancellation, lifecycle, stream, graph, and
+  incremental execution events without requiring ordinary node code to emit
+  diagnostics manually.
+- Added tests proving the recorder forwards original node-engine events,
+  captures adapted diagnostics, and preserves reduced guarantee classification
+  on cancellation events.
+- Verification passed:
+  `cargo test -p pantograph-embedded-runtime node_execution_diagnostics`,
+  `cargo check -p pantograph-embedded-runtime`,
+  `cargo fmt --all -- --check`, and
+  `cargo clippy -p pantograph-embedded-runtime --all-targets -- -D warnings`.
+- Wave `02` runtime context, diagnostics adaptation, and
+  cancellation/progress/guarantee slices are integrated. Remaining Stage `03`
+  work moves to Wave `03`: final integration review, ADR, final verification,
+  and stage-end refactor gate.
 
 ## Type Families To Define
 

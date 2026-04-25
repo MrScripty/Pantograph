@@ -2,9 +2,9 @@
 
 ## Status
 
-Stage `03` started. Wave `01` stage-start gate, contract freeze, event
-adaptation decision, durable ledger boundary, and serial execution assumption
-are recorded in `03-managed-runtime-observability.md`.
+Stage `03` in progress. Wave `01` is complete and Wave `02` implementation
+slices are integrated locally. Wave `03` integration, ADR, final verification,
+and stage-end gate remain.
 
 ## Branch Or Worktree Strategy
 
@@ -18,7 +18,7 @@ are recorded in `03-managed-runtime-observability.md`.
 | Wave | Status | Integration Notes |
 | ---- | ------ | ----------------- |
 | `wave-01` | Complete | Stage-start report, event adaptation decision, durable ledger boundary, and serial execution assumption recorded in `03-managed-runtime-observability.md`. |
-| `wave-02` | In progress | Runtime context/capability contracts and diagnostics event adaptation are integrated locally; cancellation/progress/guarantee execution-path wiring remains. |
+| `wave-02` | Complete | Runtime context/capability contracts, diagnostics event adaptation, and cancellation/progress/guarantee recorder wiring are integrated locally. |
 | `wave-03` | Pending | Host-owned integration and gate. |
 
 ## Worker Reports
@@ -27,7 +27,7 @@ are recorded in `03-managed-runtime-observability.md`.
 | ------ | ----------- | ------ |
 | runtime-context-capabilities | `reports/wave-02-worker-runtime-context-capabilities.md` | Complete |
 | diagnostics-event-adapter | `reports/wave-02-worker-diagnostics-event-adapter.md` | Complete |
-| cancellation-progress-guarantee | `reports/wave-02-worker-cancellation-progress-guarantee.md` | Pending |
+| cancellation-progress-guarantee | `reports/wave-02-worker-cancellation-progress-guarantee.md` | Complete |
 
 ## Decisions
 
@@ -68,6 +68,11 @@ are recorded in `03-managed-runtime-observability.md`.
   DTOs and adapts node-engine lifecycle/progress/stream/cancellation facts into
   enriched attribution, contract, lineage, and guarantee events without adding
   durable ledger storage.
+- 2026-04-24: The host implemented `cancellation-progress-guarantee` locally in
+  the shared workspace. The slice adds an event-sink recorder that forwards
+  original node-engine events and collects enriched diagnostics for registered
+  runtime-created node contexts, including cancellation and reduced-guarantee
+  classification.
 
 ## Verification Results
 
@@ -85,6 +90,11 @@ are recorded in `03-managed-runtime-observability.md`.
   still reports Pumas SQLite read-only database failures and older
   workflow-run fixture failures where callers supply backend-owned run ids.
 - 2026-04-24: `diagnostics-event-adapter` verification passed:
+  `cargo test -p pantograph-embedded-runtime node_execution_diagnostics`,
+  `cargo check -p pantograph-embedded-runtime`,
+  `cargo fmt --all -- --check`, and
+  `cargo clippy -p pantograph-embedded-runtime --all-targets -- -D warnings`.
+- 2026-04-24: `cancellation-progress-guarantee` verification passed:
   `cargo test -p pantograph-embedded-runtime node_execution_diagnostics`,
   `cargo check -p pantograph-embedded-runtime`,
   `cargo fmt --all -- --check`, and

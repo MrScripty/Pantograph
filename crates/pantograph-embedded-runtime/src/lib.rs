@@ -62,7 +62,7 @@ pub use node_execution::{
 };
 pub use node_execution_diagnostics::{
     adapt_node_engine_diagnostic_event, NodeExecutionDiagnosticEvent,
-    NodeExecutionDiagnosticEventKind,
+    NodeExecutionDiagnosticEventKind, NodeExecutionDiagnosticsRecorder,
 };
 pub use python_runtime::{
     ProcessPythonRuntimeAdapter, PythonNodeExecutionRequest, PythonRuntimeAdapter,

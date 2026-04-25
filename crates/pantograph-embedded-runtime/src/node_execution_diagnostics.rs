@@ -4,6 +4,9 @@
 //! transient runtime facts. The facts are not durable ledger records; Stage 04
 //! owns durable model/license persistence.
 
+use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex};
+
 use pantograph_node_contracts::{PortId, PortValueType};
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, WorkflowId, WorkflowRunId,
@@ -57,6 +60,67 @@ pub struct NodeExecutionDiagnosticEvent {
     pub output_summaries: Vec<NodeOutputSummary>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub progress_detail: Option<node_engine::TaskProgressDetail>,
+}
+
+#[derive(Default)]
+pub struct NodeExecutionDiagnosticsRecorder {
+    contexts_by_node_id: Mutex<BTreeMap<String, NodeExecutionContext>>,
+    events: Mutex<Vec<NodeExecutionDiagnosticEvent>>,
+    inner: Option<Arc<dyn node_engine::EventSink>>,
+}
+
+impl NodeExecutionDiagnosticsRecorder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn forwarding_to(inner: Arc<dyn node_engine::EventSink>) -> Self {
+        Self {
+            contexts_by_node_id: Mutex::new(BTreeMap::new()),
+            events: Mutex::new(Vec::new()),
+            inner: Some(inner),
+        }
+    }
+
+    pub fn register_context(
+        &self,
+        context: NodeExecutionContext,
+    ) -> Result<(), node_engine::EventError> {
+        let mut contexts = self.contexts_by_node_id.lock().map_err(lock_error)?;
+        contexts.insert(context.node_id().as_str().to_string(), context);
+        Ok(())
+    }
+
+    pub fn events(&self) -> Result<Vec<NodeExecutionDiagnosticEvent>, node_engine::EventError> {
+        self.events
+            .lock()
+            .map(|events| events.clone())
+            .map_err(lock_error)
+    }
+}
+
+impl node_engine::EventSink for NodeExecutionDiagnosticsRecorder {
+    fn send(&self, event: node_engine::WorkflowEvent) -> Result<(), node_engine::EventError> {
+        let diagnostic_event = {
+            let contexts = self.contexts_by_node_id.lock().map_err(lock_error)?;
+            contexts
+                .values()
+                .find_map(|context| adapt_node_engine_diagnostic_event(context, &event))
+        };
+
+        if let Some(diagnostic_event) = diagnostic_event {
+            self.events
+                .lock()
+                .map_err(lock_error)?
+                .push(diagnostic_event);
+        }
+
+        if let Some(inner) = &self.inner {
+            inner.send(event)?;
+        }
+
+        Ok(())
+    }
 }
 
 pub fn adapt_node_engine_diagnostic_event(
@@ -290,6 +354,12 @@ fn summary_for_port(
         .map(|port| port.base.value_type)
         .or(Some(PortValueType::Any));
     summary
+}
+
+fn lock_error<T>(_error: std::sync::PoisonError<T>) -> node_engine::EventError {
+    node_engine::EventError {
+        message: "node execution diagnostics recorder lock poisoned".to_string(),
+    }
 }
 
 #[cfg(test)]
