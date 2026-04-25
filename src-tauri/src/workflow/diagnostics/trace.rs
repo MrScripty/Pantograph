@@ -5,8 +5,8 @@ use pantograph_workflow_service::{
 
 use super::overlay::{DiagnosticsNodeOverlay, DiagnosticsRunOverlay};
 use super::types::{
-    DiagnosticsNodeTrace, DiagnosticsRunTrace, DiagnosticsTraceRuntimeMetrics,
-    diagnostics_node_status, diagnostics_run_status,
+    DiagnosticsNodeTrace, DiagnosticsRunTrace, DiagnosticsTimingExpectation,
+    DiagnosticsTraceRuntimeMetrics, diagnostics_node_status, diagnostics_run_status,
 };
 use crate::workflow::events::WorkflowEvent;
 
@@ -349,7 +349,10 @@ pub(crate) fn diagnostics_run_trace(
         last_dirty_tasks,
         last_incremental_task_ids,
         last_graph_memory_impact,
-        timing_expectation: trace.timing_expectation.clone(),
+        timing_expectation: trace
+            .timing_expectation
+            .as_ref()
+            .map(DiagnosticsTimingExpectation::from),
         nodes: trace
             .nodes
             .iter()
@@ -379,7 +382,10 @@ fn diagnostics_node_trace(
         last_progress_detail: overlay
             .last_progress_detail
             .or_else(|| node.last_progress_detail.clone()),
-        timing_expectation: node.timing_expectation.clone(),
+        timing_expectation: node
+            .timing_expectation
+            .as_ref()
+            .map(DiagnosticsTimingExpectation::from),
         stream_event_count: node.stream_event_count,
         event_count: node.event_count,
         error: node.last_error.clone(),

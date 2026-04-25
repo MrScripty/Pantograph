@@ -83,10 +83,14 @@ export function formatTimingExpectationDetail(
     return 'No comparable completed runs yet';
   }
   if (
-    expectation.medianDurationMs === null ||
-    expectation.typicalMinDurationMs === null ||
-    expectation.typicalMaxDurationMs === null
+    expectation.sampleCount == null ||
+    expectation.medianDurationMs == null ||
+    expectation.typicalMinDurationMs == null ||
+    expectation.typicalMaxDurationMs == null
   ) {
+    if (expectation.sampleCount == null) {
+      return 'No comparable completed runs yet';
+    }
     return `${expectation.sampleCount} comparable run${expectation.sampleCount === 1 ? '' : 's'}`;
   }
 

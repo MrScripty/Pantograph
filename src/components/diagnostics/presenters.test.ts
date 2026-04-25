@@ -150,6 +150,12 @@ test('timing expectation presenters expose duration comparison labels', () => {
     }),
     'Typical 200 ms-300 ms | median 220 ms | n=5',
   );
+  assert.equal(
+    formatTimingExpectationDetail({
+      comparison: 'insufficient_history',
+    } as Parameters<typeof formatTimingExpectationDetail>[0]),
+    'No comparable completed runs yet',
+  );
 });
 
 test('byte and runtime or scheduler label helpers expose readable labels', () => {

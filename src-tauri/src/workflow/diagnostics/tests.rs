@@ -4,6 +4,8 @@ use pantograph_workflow_service::graph::{WorkflowDerivedGraph, WorkflowExecution
 
 use super::*;
 
+mod clear_history;
+
 fn sample_graph() -> pantograph_workflow_service::WorkflowGraph {
     pantograph_workflow_service::WorkflowGraph {
         nodes: vec![pantograph_workflow_service::GraphNode {
@@ -397,7 +399,11 @@ fn node_engine_parallel_waiting_trace_projection_tracks_waiting_state() {
 
 mod runtime_projection;
 
+mod overlay;
+
 mod replay;
+
+mod timing;
 
 #[test]
 fn cancelled_workflow_event_maps_to_cancelled_trace_status() {

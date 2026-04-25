@@ -6,8 +6,11 @@ Focused diagnostics test modules for the Tauri workflow diagnostics projection b
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
+| `clear_history.rs` | Clear-history snapshot preservation coverage. |
+| `overlay.rs` | Node progress overlay projection and progress-detail coverage. |
 | `runtime_projection.rs` | Runtime/scheduler snapshot projection, runtime lifecycle normalization, and trace-store attribution coverage. |
-| `replay.rs` | Clear-history, restart, replay, overlay reset, progress detail, and duplicate snapshot coverage. |
+| `replay.rs` | Clear-history, restart, replay, overlay reset, and duplicate snapshot coverage. |
+| `timing.rs` | Timing expectation projection and serialized DTO shape coverage. |
 
 ## Problem
 The diagnostics test harness was large enough to obscure which behavior area a regression covered. Splitting behavior groups keeps the projection boundary reviewable without changing production diagnostics APIs.
@@ -18,7 +21,12 @@ The diagnostics test harness was large enough to obscure which behavior area a r
 - Test modules must not introduce production-only helper APIs.
 
 ## Decision
-Keep `runtime_projection.rs` for runtime/scheduler snapshot projection coverage and `replay.rs` for clear-history, restart, replay, and overlay reset behavior. Leave request normalization, event timing, and small trace-filter assertions in the parent harness.
+Keep `runtime_projection.rs` for runtime/scheduler snapshot projection coverage,
+`clear_history.rs` for clear-history preservation, `replay.rs` for restart,
+replay, and overlay reset behavior, `overlay.rs` for progress overlay details,
+and `timing.rs` for duration expectation projection. Leave request
+normalization, event timing, and small trace-filter assertions in the parent
+harness.
 
 ## Alternatives Rejected
 - Leave all diagnostics tests in one file. Rejected because the file exceeded the decomposition threshold and mixed unrelated behavior groups.
@@ -26,8 +34,11 @@ Keep `runtime_projection.rs` for runtime/scheduler snapshot projection coverage 
 
 ## Invariants
 - Submodules use `super::*` to share parent fixtures and keep fixture ownership local to the diagnostics test harness.
+- Clear-history preservation coverage stays in `clear_history.rs`.
 - Runtime/scheduler projection coverage stays in `runtime_projection.rs`.
-- Replay and clear-history coverage stays in `replay.rs`.
+- Replay coverage stays in `replay.rs`.
+- Progress overlay coverage stays in `overlay.rs`.
+- Timing expectation projection coverage stays in `timing.rs`.
 
 ## Revisit Triggers
 - Diagnostics fixtures grow enough to justify a dedicated shared fixture module.
