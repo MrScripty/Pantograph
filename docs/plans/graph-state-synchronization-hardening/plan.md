@@ -273,20 +273,24 @@ mutation behavior.
 when they belong to the current edit session.
 
 **Tasks:**
-- [ ] Make `syncGraphMutationFromBackend` return a promise with accepted,
+- [x] Make `syncGraphMutationFromBackend` return a promise with accepted,
   stale, and failed outcomes.
-- [ ] Capture request session ids and check active session before applying
+- [x] Capture request session ids and check active session before applying
   graph responses.
-- [ ] Apply the same guard to group, ungroup, update-group-ports, reconnect,
+- [x] Apply the same guard to group, ungroup, update-group-ports, reconnect,
   edge-removal, and compatible-node insert paths.
-- [ ] Add regression tests for stale add-node, stale position update, stale
-  group mutation, and stale reconnect responses.
+- [x] Add regression tests for stale add-node, stale position update, stale
+  group mutation, and edge-removal responses. Reconnect stale handling is
+  implemented in both helper paths and covered by typecheck; direct helper
+  runtime tests are deferred to Milestone 6 helper centralization because the
+  current package helper uses publish-style `.js` source imports that Node's
+  strip-types test runner cannot resolve without a build.
 
 **Verification:**
-- `npm run -w frontend test:run -- createWorkflowStores workflowGraphBackendActions`
-- `npm run -w frontend check:types`
+- `node --experimental-strip-types --test packages/svelte-graph/src/stores/createWorkflowStores.test.ts`
+- `npm run typecheck`
 
-**Status:** Not started.
+**Status:** Complete.
 
 ### Milestone 3: Ordered And Batch Graph Mutations
 
@@ -438,6 +442,18 @@ Update during implementation:
   colocated Node test command. Added load transition guards, stale-created
   session cleanup, previous-session cleanup after replacement, and regression
   tests for stale loads and session lifecycle cleanup.
+- 2026-04-26: Milestone 2 started. The implementation will keep stale-response
+  ownership in the workflow store first, then thread session checks through
+  package and app graph backend action helpers.
+- 2026-04-26: Milestone 2 completed. Added awaitable mutation outcomes,
+  active-session response guards, stale-safe backend graph sync, guarded group
+  mutations, and stale-safe package/app graph action helper application.
+  Regression coverage now includes stale update-node-data, add-node,
+  node-position, group, and edge-removal responses. Direct package helper tests
+  for reconnect were attempted, but the current Node strip-types harness cannot
+  import package component helpers that use publish-style `.js` relative
+  imports before build; Milestone 6 must make the centralized helper boundary
+  directly testable.
 
 ## Commit Cadence Notes
 

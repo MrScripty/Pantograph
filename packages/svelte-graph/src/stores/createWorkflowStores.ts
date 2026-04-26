@@ -54,6 +54,21 @@ interface InferenceParamSchema {
   };
 }
 
+export type WorkflowGraphMutationResultStatus = 'applied' | 'failed' | 'skipped' | 'stale';
+
+export interface WorkflowGraphMutationResult {
+  action: string;
+  error?: unknown;
+  response?: WorkflowGraphMutationResponse;
+  sessionId: string | null;
+  status: WorkflowGraphMutationResultStatus;
+}
+
+interface SyncEdgesFromBackendOptions {
+  markDirty?: boolean;
+  sessionId?: string;
+}
+
 export interface WorkflowStores {
   // Writable stores
   nodes: ReturnType<typeof writable<Node[]>>;
@@ -74,10 +89,16 @@ export interface WorkflowStores {
   nodeDefinitionsByCategory: ReturnType<typeof derived>;
 
   // Actions — nodes
-  addNode: (definition: NodeDefinition, position: { x: number; y: number }) => void;
-  removeNode: (nodeId: string) => void;
-  updateNodePosition: (nodeId: string, position: { x: number; y: number }) => void;
-  updateNodeData: (nodeId: string, data: Record<string, unknown>) => void;
+  addNode: (definition: NodeDefinition, position: { x: number; y: number }) => Promise<WorkflowGraphMutationResult>;
+  removeNode: (nodeId: string) => Promise<WorkflowGraphMutationResult>;
+  updateNodePosition: (
+    nodeId: string,
+    position: { x: number; y: number },
+  ) => Promise<WorkflowGraphMutationResult>;
+  updateNodeData: (
+    nodeId: string,
+    data: Record<string, unknown>,
+  ) => Promise<WorkflowGraphMutationResult>;
   updateNodeRuntimeData: (nodeId: string, data: Record<string, unknown>) => void;
   clearNodeRuntimeData: (keys: string[]) => void;
   getNodeById: (nodeId: string) => Node | undefined;
@@ -86,9 +107,12 @@ export interface WorkflowStores {
   getNodesBounds: (nodeIds: string[]) => { x: number; y: number; width: number; height: number } | null;
 
   // Actions — edges
-  addEdge: (edge: Edge) => void;
-  removeEdge: (edgeId: string) => void;
-  syncEdgesFromBackend: (backendGraph: WorkflowGraph) => void;
+  addEdge: (edge: Edge) => Promise<WorkflowGraphMutationResult>;
+  removeEdge: (edgeId: string) => Promise<WorkflowGraphMutationResult>;
+  syncEdgesFromBackend: (
+    backendGraph: WorkflowGraph,
+    options?: SyncEdgesFromBackendOptions,
+  ) => boolean;
 
   // Actions — execution
   setNodeExecutionState: (nodeId: string, state: NodeExecutionState, message?: string) => void;
@@ -176,6 +200,10 @@ export function createWorkflowStores(
     activeSessionId = sessionId;
   }
 
+  function isActiveSession(sessionId: string): boolean {
+    return activeSessionId === sessionId;
+  }
+
   function materializeWorkflowGraph(graph: WorkflowGraph) {
     const definitions = get(nodeDefinitions);
     const selectedIds = get(selectedNodeIds);
@@ -206,30 +234,54 @@ export function createWorkflowStores(
     isDirty.set(options?.markDirty ?? true);
   }
 
-  function syncGraphMutationFromBackend(
-    action: string,
-    mutate: (sessionId: string) => Promise<WorkflowGraphMutationResponse>,
-  ) {
-    if (!activeSessionId) {
-      console.warn(`[workflowStores] Ignoring ${action} without an active session`);
-      return;
+  function applyBackendMutationResponse(
+    sessionId: string,
+    response: WorkflowGraphMutationResponse,
+  ): boolean {
+    if (!isActiveSession(sessionId)) {
+      return false;
     }
 
-    void mutate(activeSessionId)
-      .then((response) => {
-        applyWorkflowGraph(response.graph, { markDirty: true });
-        applyWorkflowGraphMutationResponse(response, {
-          setNodeExecutionState,
-        });
-      })
-      .catch((error) => {
+    applyWorkflowGraph(response.graph, { markDirty: true });
+    applyWorkflowGraphMutationResponse(response, {
+      setNodeExecutionState,
+    });
+    return true;
+  }
+
+  async function syncGraphMutationFromBackend(
+    action: string,
+    mutate: (sessionId: string) => Promise<WorkflowGraphMutationResponse>,
+  ): Promise<WorkflowGraphMutationResult> {
+    if (!activeSessionId) {
+      console.warn(`[workflowStores] Ignoring ${action} without an active session`);
+      return { action, sessionId: null, status: 'skipped' };
+    }
+
+    const requestSessionId = activeSessionId;
+
+    try {
+      const response = await mutate(requestSessionId);
+      if (!applyBackendMutationResponse(requestSessionId, response)) {
+        return { action, response, sessionId: requestSessionId, status: 'stale' };
+      }
+      return { action, response, sessionId: requestSessionId, status: 'applied' };
+    } catch (error) {
+      if (!isActiveSession(requestSessionId)) {
+        return { action, error, sessionId: requestSessionId, status: 'stale' };
+      }
+
         console.error(`[workflowStores] Failed to ${action}:`, error);
-      });
+      return { action, error, sessionId: requestSessionId, status: 'failed' };
+    }
   }
 
   // --- Node actions ---
 
-  function addNode(definition: NodeDefinition, position: { x: number; y: number }) {
+  function addNode(
+    definition: NodeDefinition,
+    position: { x: number; y: number },
+  ): Promise<WorkflowGraphMutationResult> {
     const id = `${definition.node_type}-${Date.now()}`;
     const newNode: GraphNode = {
       id,
@@ -242,22 +294,32 @@ export function createWorkflowStores(
       },
     };
     selectedNodeIds.set([id]);
-    syncGraphMutationFromBackend('add node', (sessionId) => backend.addNode(newNode, sessionId));
+    return syncGraphMutationFromBackend('add node', (sessionId) =>
+      backend.addNode(newNode, sessionId)
+    );
   }
 
-  function removeNode(nodeId: string) {
+  function removeNode(nodeId: string): Promise<WorkflowGraphMutationResult> {
     selectedNodeIds.update((ids) => ids.filter((id) => id !== nodeId));
-    syncGraphMutationFromBackend('remove node', (sessionId) => backend.removeNode(nodeId, sessionId));
+    return syncGraphMutationFromBackend('remove node', (sessionId) =>
+      backend.removeNode(nodeId, sessionId)
+    );
   }
 
-  function updateNodePosition(nodeId: string, position: { x: number; y: number }) {
-    syncGraphMutationFromBackend('update node position', (sessionId) =>
+  function updateNodePosition(
+    nodeId: string,
+    position: { x: number; y: number },
+  ): Promise<WorkflowGraphMutationResult> {
+    return syncGraphMutationFromBackend('update node position', (sessionId) =>
       backend.updateNodePosition(nodeId, position, sessionId)
     );
   }
 
-  function updateNodeData(nodeId: string, data: Record<string, unknown>) {
-    syncGraphMutationFromBackend('update node data', (sessionId) =>
+  function updateNodeData(
+    nodeId: string,
+    data: Record<string, unknown>,
+  ): Promise<WorkflowGraphMutationResult> {
+    return syncGraphMutationFromBackend('update node data', (sessionId) =>
       backend.updateNodeData(nodeId, data, sessionId)
     );
   }
@@ -292,20 +354,28 @@ export function createWorkflowStores(
 
   // --- Edge actions ---
 
-  function addEdgeFn(edge: Edge) {
-    syncGraphMutationFromBackend('add edge', (sessionId) =>
+  function addEdgeFn(edge: Edge): Promise<WorkflowGraphMutationResult> {
+    return syncGraphMutationFromBackend('add edge', (sessionId) =>
       backend.addEdge(edgeToGraphEdge(edge), sessionId),
     );
   }
 
-  function removeEdgeFn(edgeId: string) {
-    syncGraphMutationFromBackend('remove edge', (sessionId) =>
+  function removeEdgeFn(edgeId: string): Promise<WorkflowGraphMutationResult> {
+    return syncGraphMutationFromBackend('remove edge', (sessionId) =>
       backend.removeEdge(edgeId, sessionId)
     );
   }
 
-  function syncEdgesFromBackend(backendGraph: WorkflowGraph) {
-    applyWorkflowGraph(backendGraph, { markDirty: true });
+  function syncEdgesFromBackend(
+    backendGraph: WorkflowGraph,
+    options?: SyncEdgesFromBackendOptions,
+  ): boolean {
+    if (options?.sessionId && !isActiveSession(options.sessionId)) {
+      return false;
+    }
+
+    applyWorkflowGraph(backendGraph, { markDirty: options?.markDirty ?? true });
+    return true;
   }
 
   // --- Execution actions ---
@@ -424,11 +494,11 @@ export function createWorkflowStores(
     }
 
     try {
-      const response = await backend.createGroup(name, nodeIds, activeSessionId);
-      applyWorkflowGraph(response.graph, { markDirty: true });
-      applyWorkflowGraphMutationResponse(response, {
-        setNodeExecutionState,
-      });
+      const requestSessionId = activeSessionId;
+      const response = await backend.createGroup(name, nodeIds, requestSessionId);
+      if (!applyBackendMutationResponse(requestSessionId, response)) {
+        return null;
+      }
       return findWorkflowGroupContainingNodeIds(get(nodeGroups), nodeIds);
     } catch (error) {
       console.error('[workflowStores] Failed to create group:', error);
@@ -443,12 +513,9 @@ export function createWorkflowStores(
     }
 
     try {
-      const response = await backend.ungroup(groupId, activeSessionId);
-      applyWorkflowGraph(response.graph, { markDirty: true });
-      applyWorkflowGraphMutationResponse(response, {
-        setNodeExecutionState,
-      });
-      return true;
+      const requestSessionId = activeSessionId;
+      const response = await backend.ungroup(groupId, requestSessionId);
+      return applyBackendMutationResponse(requestSessionId, response);
     } catch (error) {
       console.error('[workflowStores] Failed to ungroup:', error);
       return false;
@@ -466,17 +533,14 @@ export function createWorkflowStores(
     }
 
     try {
+      const requestSessionId = activeSessionId;
       const response = await backend.updateGroupPorts(
         groupId,
         exposedInputs,
         exposedOutputs,
-        activeSessionId,
+        requestSessionId,
       );
-      applyWorkflowGraph(response.graph, { markDirty: true });
-      applyWorkflowGraphMutationResponse(response, {
-        setNodeExecutionState,
-      });
-      return true;
+      return applyBackendMutationResponse(requestSessionId, response);
     } catch (error) {
       console.error('[workflowStores] Failed to update group ports:', error);
       return false;

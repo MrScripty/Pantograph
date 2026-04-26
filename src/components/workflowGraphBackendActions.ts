@@ -1,4 +1,3 @@
-import { get } from 'svelte/store';
 import type { Connection, Edge } from '@xyflow/svelte';
 import {
   applyWorkflowGraphMutationResponse,
@@ -6,10 +5,8 @@ import {
   type ConnectionIntentState,
 } from '@pantograph/svelte-graph';
 import {
-  loadWorkflow,
   setNodeExecutionState,
   syncEdgesFromBackend,
-  workflowMetadata,
 } from '../stores/workflowStore';
 import { workflowService } from '../services/workflow/WorkflowService';
 import type {
@@ -99,19 +96,44 @@ interface ReconnectFailedResult {
   type: 'failed';
 }
 
+interface ReconnectStaleResult {
+  type: 'stale';
+}
+
 export type WorkflowReconnectCommitResult =
   | ReconnectAcceptedResult
   | ReconnectRejectedResult
-  | ReconnectFailedResult;
+  | ReconnectFailedResult
+  | ReconnectStaleResult;
+
+function currentSessionId(): string | null {
+  return workflowService.getCurrentExecutionId();
+}
+
+function isCurrentSession(sessionId: string | null): sessionId is string {
+  return sessionId !== null && workflowService.getCurrentExecutionId() === sessionId;
+}
+
+function syncGraphForSession(graph: WorkflowGraph, sessionId: string | null): boolean {
+  if (!isCurrentSession(sessionId)) {
+    return false;
+  }
+
+  return syncEdgesFromBackend(graph, { sessionId });
+}
 
 function applyAcceptedGraphMutation(
   response: InsertNodeConnectionResponse | InsertNodeOnEdgeResponse | ConnectionCommitResponse,
+  sessionId: string | null,
 ) {
   if (!response.accepted || !response.graph) {
     return false;
   }
 
-  loadWorkflow(response.graph, get(workflowMetadata) ?? undefined);
+  if (!syncGraphForSession(response.graph, sessionId)) {
+    return false;
+  }
+
   applyWorkflowGraphMutationResponse(
     {
       graph: response.graph,
@@ -133,14 +155,16 @@ export async function commitWorkflowEdgeInsertDrop({
   }
 
   try {
+    const sessionId = currentSessionId();
     const response = await workflowService.insertNodeOnEdge(
       preview.edgeId,
       definition.node_type,
       preview.graphRevision,
       { position },
+      sessionId ?? undefined,
     );
 
-    if (applyAcceptedGraphMutation(response)) {
+    if (applyAcceptedGraphMutation(response, sessionId)) {
       return true;
     }
 
@@ -165,14 +189,16 @@ export async function commitWorkflowInsertCandidate({
   preferredInputPortId,
   sourceAnchor,
 }: InsertCandidateParams): Promise<InsertNodeConnectionResponse> {
+  const sessionId = currentSessionId();
   const response = await workflowService.insertNodeAndConnect(
     sourceAnchor,
     candidateNodeType,
     graphRevision,
     positionHint,
     preferredInputPortId,
+    sessionId ?? undefined,
   );
-  applyAcceptedGraphMutation(response);
+  applyAcceptedGraphMutation(response, sessionId);
   return response;
 }
 
@@ -181,22 +207,16 @@ export async function commitWorkflowConnectionAnchors({
   sourceAnchor,
   targetAnchor,
 }: ConnectionCommitParams): Promise<ConnectionCommitResponse> {
+  const sessionId = currentSessionId();
   const response = await workflowService.connectAnchors(
     sourceAnchor,
     targetAnchor,
     requestedRevision,
+    sessionId ?? undefined,
   );
 
   if (response.accepted && response.graph) {
-    syncEdgesFromBackend(response.graph);
-    applyWorkflowGraphMutationResponse(
-      {
-        graph: response.graph,
-        workflow_event: response.workflow_event,
-        workflow_session_state: response.workflow_session_state,
-      },
-      { setNodeExecutionState },
-    );
+    applyAcceptedGraphMutation(response, sessionId);
     return response;
   }
 
@@ -214,11 +234,16 @@ export async function loadWorkflowConnectionIntentState({
   sourceAnchor,
 }: ConnectionIntentLoadParams): Promise<ConnectionIntentLoadResult> {
   try {
+    const sessionId = currentSessionId();
     const candidates: ConnectionCandidatesResponse = await workflowService.getConnectionCandidates(
       sourceAnchor,
-      undefined,
+      sessionId ?? undefined,
       graphRevision,
     );
+    if (!isCurrentSession(sessionId)) {
+      return { type: 'clear', intent: null };
+    }
+
     return {
       type: 'set',
       intent: buildConnectionIntentState(candidates, rejection),
@@ -278,10 +303,13 @@ export async function commitWorkflowConnection({
 }
 
 export async function removeWorkflowGraphEdges(edgeIds: string[], errorMessage: string) {
+  const sessionId = currentSessionId();
   for (const edgeId of edgeIds) {
     try {
-      const updatedGraph = await workflowService.removeEdge(edgeId);
-      syncEdgesFromBackend(updatedGraph);
+      const updatedGraph = await workflowService.removeEdge(edgeId, sessionId ?? undefined);
+      if (!syncGraphForSession(updatedGraph, sessionId)) {
+        return;
+      }
     } catch (error) {
       console.error(errorMessage, error);
     }
@@ -298,30 +326,32 @@ export async function commitWorkflowReconnect({
   oldEdge,
 }: ReconnectCommitParams): Promise<WorkflowReconnectCommitResult> {
   try {
-    const graphAfterRemoval = await workflowService.removeEdge(oldEdge.id);
-    syncEdgesFromBackend(graphAfterRemoval);
+    const sessionId = currentSessionId();
+    const graphAfterRemoval = await workflowService.removeEdge(oldEdge.id, sessionId ?? undefined);
+    if (!syncGraphForSession(graphAfterRemoval, sessionId)) {
+      return { type: 'stale' };
+    }
 
     const response = await workflowService.connectAnchors(
       anchors.sourceAnchor,
       anchors.targetAnchor,
       graphAfterRemoval.derived_graph?.graph_fingerprint ?? fallbackRevision,
+      sessionId ?? undefined,
     );
 
     if (response.accepted && response.graph) {
-      syncEdgesFromBackend(response.graph);
-      applyWorkflowGraphMutationResponse(
-        {
-          graph: response.graph,
-          workflow_event: response.workflow_event,
-          workflow_session_state: response.workflow_session_state,
-        },
-        { setNodeExecutionState },
-      );
-      return { type: 'accepted' };
+      return applyAcceptedGraphMutation(response, sessionId)
+        ? { type: 'accepted' }
+        : { type: 'stale' };
     }
 
-    const restoredGraph = await workflowService.addEdge(edgeToGraphEdge(oldEdge));
-    syncEdgesFromBackend(restoredGraph);
+    const restoredGraph = await workflowService.addEdge(
+      edgeToGraphEdge(oldEdge),
+      sessionId ?? undefined,
+    );
+    if (!syncGraphForSession(restoredGraph, sessionId)) {
+      return { type: 'stale' };
+    }
     return {
       type: 'rejected',
       graphRevision: response.graph_revision,
@@ -335,13 +365,14 @@ export async function commitWorkflowReconnect({
 
 export async function refreshWorkflowEdgesFromBackend(warningMessage: string) {
   try {
-    const backendGraph = await workflowService.getExecutionGraph();
-    syncEdgesFromBackend(backendGraph);
+    const sessionId = currentSessionId();
+    const backendGraph = await workflowService.getExecutionGraph(sessionId ?? undefined);
+    syncGraphForSession(backendGraph, sessionId);
   } catch (error) {
     console.warn(warningMessage, error);
   }
 }
 
 export function syncWorkflowEdgesFromGraph(graph: WorkflowGraph) {
-  syncEdgesFromBackend(graph);
+  syncGraphForSession(graph, currentSessionId());
 }

@@ -7,6 +7,7 @@ import type {
   GraphNode,
   NodeDefinition,
   WorkflowGraph,
+  WorkflowGraphMutationResponse,
   WorkflowMetadata,
   WorkflowSessionHandle,
 } from '../types/workflow.ts';
@@ -15,6 +16,20 @@ import type { NodeGroup } from '../types/groups.ts';
 
 function flushAsyncWork(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+interface Deferred<T> {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+}
+
+function createDeferred<T>(): Deferred<T> {
+  let resolve: (value: T) => void = () => {};
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+
+  return { promise, resolve };
 }
 
 function createBackendStub(initialGraph: WorkflowGraph): WorkflowBackend {
@@ -235,8 +250,7 @@ test('createWorkflowStores applies backend graph-mutation responses to graph sta
   stores.loadWorkflow(graph);
   stores.setNodeExecutionState('text-input-1', 'running');
 
-  stores.updateNodeData('text-input-1', { text: 'updated' });
-  await flushAsyncWork();
+  await stores.updateNodeData('text-input-1', { text: 'updated' });
 
   const updatedNode = (get(stores.workflowGraph) as WorkflowGraph).nodes.find(
     (node: GraphNode) => node.id === 'text-input-1',
@@ -305,5 +319,250 @@ test('createWorkflowStores renders backend-owned group mutation responses', asyn
   assert.deepEqual(
     (get(stores.workflowGraph) as WorkflowGraph).edges.map((edge) => edge.id),
     ['backend-owned-boundary'],
+  );
+});
+
+test('createWorkflowStores ignores stale graph mutation responses', async () => {
+  const graph = {
+    nodes: [
+      {
+        id: 'text-input-1',
+        node_type: 'text-input',
+        position: { x: 0, y: 0 },
+        data: { text: 'draft' },
+      },
+    ],
+    edges: [],
+  } satisfies WorkflowGraph;
+  const mutation = createDeferred<WorkflowGraphMutationResponse>();
+  const backend = createBackendStub(graph);
+  const stores = createWorkflowStores(
+    {
+      ...backend,
+      async updateNodeData() {
+        return mutation.promise;
+      },
+    },
+    {
+      groupStack: writable<string[]>([]),
+      async tabOutOfGroup() {},
+    },
+  );
+
+  stores.loadWorkflow(graph);
+  stores.setActiveSessionId('session-a');
+  const result = stores.updateNodeData('text-input-1', { text: 'stale update' });
+  stores.setActiveSessionId('session-b');
+  mutation.resolve({
+    graph: {
+      nodes: [
+        {
+          id: 'text-input-1',
+          node_type: 'text-input',
+          position: { x: 0, y: 0 },
+          data: { text: 'stale update' },
+        },
+      ],
+      edges: [],
+    },
+  });
+
+  assert.equal((await result).status, 'stale');
+  const node = (get(stores.workflowGraph) as WorkflowGraph).nodes[0];
+  assert.equal(node.data.text, 'draft');
+});
+
+test('createWorkflowStores reports stale add-node responses without applying them', async () => {
+  const graph = { nodes: [], edges: [] } satisfies WorkflowGraph;
+  const mutation = createDeferred<WorkflowGraphMutationResponse>();
+  const backend = createBackendStub(graph);
+  const stores = createWorkflowStores(
+    {
+      ...backend,
+      async addNode() {
+        return mutation.promise;
+      },
+    },
+    {
+      groupStack: writable<string[]>([]),
+      async tabOutOfGroup() {},
+    },
+  );
+  const definition = (await backend.getNodeDefinitions())[0];
+
+  stores.loadWorkflow(graph);
+  stores.setActiveSessionId('session-a');
+  const result = stores.addNode(definition, { x: 5, y: 6 });
+  stores.setActiveSessionId('session-b');
+  mutation.resolve({
+    graph: {
+      nodes: [
+        {
+          id: 'stale-node',
+          node_type: 'text-input',
+          position: { x: 5, y: 6 },
+          data: {},
+        },
+      ],
+      edges: [],
+    },
+  });
+
+  assert.equal((await result).status, 'stale');
+  assert.deepEqual((get(stores.workflowGraph) as WorkflowGraph).nodes, []);
+});
+
+test('createWorkflowStores reports stale position responses without applying them', async () => {
+  const graph = {
+    nodes: [
+      {
+        id: 'text-input-1',
+        node_type: 'text-input',
+        position: { x: 0, y: 0 },
+        data: {},
+      },
+    ],
+    edges: [],
+  } satisfies WorkflowGraph;
+  const mutation = createDeferred<WorkflowGraphMutationResponse>();
+  const backend = createBackendStub(graph);
+  const stores = createWorkflowStores(
+    {
+      ...backend,
+      async updateNodePosition() {
+        return mutation.promise;
+      },
+    },
+    {
+      groupStack: writable<string[]>([]),
+      async tabOutOfGroup() {},
+    },
+  );
+
+  stores.loadWorkflow(graph);
+  stores.setActiveSessionId('session-a');
+  const result = stores.updateNodePosition('text-input-1', { x: 10, y: 20 });
+  stores.setActiveSessionId('session-b');
+  mutation.resolve({
+    graph: {
+      nodes: [
+        {
+          id: 'text-input-1',
+          node_type: 'text-input',
+          position: { x: 10, y: 20 },
+          data: {},
+        },
+      ],
+      edges: [],
+    },
+  });
+
+  assert.equal((await result).status, 'stale');
+  const node = (get(stores.workflowGraph) as WorkflowGraph).nodes[0];
+  assert.deepEqual(node.position, { x: 0, y: 0 });
+});
+
+test('createWorkflowStores reports stale edge removal responses without applying them', async () => {
+  const graph = {
+    nodes: [],
+    edges: [
+      {
+        id: 'edge-a',
+        source: 'source',
+        source_handle: 'text',
+        target: 'target',
+        target_handle: 'text',
+      },
+    ],
+  } satisfies WorkflowGraph;
+  const mutation = createDeferred<WorkflowGraphMutationResponse>();
+  const backend = createBackendStub(graph);
+  const stores = createWorkflowStores(
+    {
+      ...backend,
+      async removeEdge() {
+        return mutation.promise;
+      },
+    },
+    {
+      groupStack: writable<string[]>([]),
+      async tabOutOfGroup() {},
+    },
+  );
+
+  stores.loadWorkflow(graph);
+  stores.setActiveSessionId('session-a');
+  const result = stores.removeEdge('edge-a');
+  stores.setActiveSessionId('session-b');
+  mutation.resolve({
+    graph: {
+      nodes: [],
+      edges: [],
+    },
+  });
+
+  assert.equal((await result).status, 'stale');
+  assert.deepEqual(
+    (get(stores.workflowGraph) as WorkflowGraph).edges.map((edge) => edge.id),
+    ['edge-a'],
+  );
+});
+
+test('createWorkflowStores ignores stale group mutation responses', async () => {
+  const graph = {
+    nodes: [
+      {
+        id: 'a',
+        node_type: 'text-input',
+        position: { x: 0, y: 0 },
+        data: { text: 'a' },
+      },
+      {
+        id: 'b',
+        node_type: 'text-input',
+        position: { x: 100, y: 0 },
+        data: { text: 'b' },
+      },
+    ],
+    edges: [],
+  } satisfies WorkflowGraph;
+  const groupMutation = createDeferred<WorkflowGraphMutationResponse>();
+  const backend = createBackendStub(graph);
+  const stores = createWorkflowStores(
+    {
+      ...backend,
+      async createGroup() {
+        return groupMutation.promise;
+      },
+    },
+    {
+      groupStack: writable<string[]>([]),
+      async tabOutOfGroup() {},
+    },
+  );
+
+  stores.loadWorkflow(graph);
+  stores.setActiveSessionId('session-a');
+  const result = stores.createGroup('Stale Group', ['a', 'b']);
+  stores.setActiveSessionId('session-b');
+  groupMutation.resolve({
+    graph: {
+      nodes: [
+        {
+          id: 'stale-group',
+          node_type: 'node-group',
+          position: { x: 0, y: 0 },
+          data: { label: 'Stale Group', isGroup: true },
+        },
+      ],
+      edges: [],
+    },
+  });
+
+  assert.equal(await result, null);
+  assert.equal(get(stores.nodeGroups).has('stale-group'), false);
+  assert.deepEqual(
+    (get(stores.workflowGraph) as WorkflowGraph).nodes.map((node) => node.id),
+    ['a', 'b'],
   );
 });

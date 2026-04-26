@@ -766,7 +766,7 @@
       fallbackRevision: getGraphRevision(),
     });
 
-    if (result.type === 'accepted') {
+    if (result.type === 'accepted' || result.type === 'stale') {
       clearConnectionInteraction();
       return;
     }

@@ -1,4 +1,3 @@
-import { get } from 'svelte/store';
 import type { Connection, Edge } from '@xyflow/svelte';
 
 import { applyWorkflowGraphMutationResponse } from '../stores/workflowGraphMutationResponse.js';
@@ -22,11 +21,9 @@ import {
 
 type WorkflowGraphMutationStores = Pick<
   WorkflowStores,
-  | 'loadWorkflow'
   | 'setConnectionIntent'
   | 'setNodeExecutionState'
   | 'syncEdgesFromBackend'
-  | 'workflowMetadata'
 >;
 
 interface WorkflowGraphBackendActionContext {
@@ -97,6 +94,10 @@ interface ReconnectInvalidResult {
   type: 'invalid';
 }
 
+interface ReconnectStaleResult {
+  type: 'stale';
+}
+
 interface ReconnectRejectedResult {
   intent: ConnectionIntentState;
   type: 'rejected';
@@ -106,17 +107,22 @@ export type WorkflowReconnectCommitResult =
   | ReconnectAcceptedResult
   | ReconnectFailedResult
   | ReconnectInvalidResult
+  | ReconnectStaleResult
   | ReconnectRejectedResult;
 
 function applyAcceptedInsertMutation(
   workflowStores: WorkflowGraphMutationStores,
   response: InsertNodeConnectionResponse,
+  sessionId: string,
 ): boolean {
   if (!response.accepted || !response.graph) {
     return false;
   }
 
-  workflowStores.loadWorkflow(response.graph, get(workflowStores.workflowMetadata) ?? undefined);
+  if (!workflowStores.syncEdgesFromBackend(response.graph, { sessionId })) {
+    return false;
+  }
+
   applyWorkflowGraphMutationResponse(
     {
       graph: response.graph,
@@ -133,12 +139,16 @@ function applyAcceptedInsertMutation(
 function applyAcceptedConnectionMutation(
   workflowStores: WorkflowGraphMutationStores,
   response: ConnectionCommitResponse,
+  sessionId: string,
 ): boolean {
   if (!response.accepted || !response.graph) {
     return false;
   }
 
-  workflowStores.syncEdgesFromBackend(response.graph);
+  if (!workflowStores.syncEdgesFromBackend(response.graph, { sessionId })) {
+    return false;
+  }
+
   applyWorkflowGraphMutationResponse(
     {
       graph: response.graph,
@@ -207,7 +217,7 @@ export async function commitWorkflowInsertCandidate({
     positionHint,
     preferredInputPortId,
   );
-  applyAcceptedInsertMutation(workflowStores, response);
+  applyAcceptedInsertMutation(workflowStores, response, sessionId);
   return response;
 }
 
@@ -236,7 +246,8 @@ export async function commitWorkflowConnection({
     requestedRevision,
   );
 
-  if (applyAcceptedConnectionMutation(workflowStores, response)) {
+  if (response.accepted) {
+    applyAcceptedConnectionMutation(workflowStores, response, sessionId);
     return { response };
   }
 
@@ -262,7 +273,7 @@ export async function removeWorkflowGraphEdges({
     try {
       const response = await backend.removeEdge(edgeId, sessionId);
       if (response.graph) {
-        workflowStores.syncEdgesFromBackend(response.graph);
+        workflowStores.syncEdgesFromBackend(response.graph, { sessionId });
       }
     } catch (error) {
       console.error(errorMessage, error);
@@ -288,7 +299,7 @@ export async function commitWorkflowReconnect({
   try {
     const graphAfterRemoval = await backend.removeEdge(oldEdge.id, sessionId);
     if (graphAfterRemoval.graph) {
-      workflowStores.syncEdgesFromBackend(graphAfterRemoval.graph);
+      workflowStores.syncEdgesFromBackend(graphAfterRemoval.graph, { sessionId });
     }
 
     const response = await backend.connectAnchors(
@@ -298,13 +309,15 @@ export async function commitWorkflowReconnect({
       graphAfterRemoval.graph?.derived_graph?.graph_fingerprint ?? fallbackRevision,
     );
 
-    if (applyAcceptedConnectionMutation(workflowStores, response)) {
-      return { type: 'accepted' };
+    if (response.accepted) {
+      return applyAcceptedConnectionMutation(workflowStores, response, sessionId)
+        ? { type: 'accepted' }
+        : { type: 'stale' };
     }
 
     const restoredGraph = await backend.addEdge(edgeToGraphEdge(oldEdge), sessionId);
     if (restoredGraph.graph) {
-      workflowStores.syncEdgesFromBackend(restoredGraph.graph);
+      workflowStores.syncEdgesFromBackend(restoredGraph.graph, { sessionId });
     }
     return {
       type: 'rejected',
