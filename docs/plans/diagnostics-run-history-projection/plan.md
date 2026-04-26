@@ -308,12 +308,12 @@ trace selection.
 diagnostics display.
 
 **Tasks:**
-- [ ] Add an integration-style test or focused multi-layer regression proving a
+- [x] Add an integration-style test or focused multi-layer regression proving a
   run produces one canonical row.
-- [ ] Verify retained trace rows and SQLite timing history are independent but
+- [x] Verify retained trace rows and SQLite timing history are independent but
   keyed consistently by `workflow_run_id`, `workflow_id`, and graph
   fingerprint.
-- [ ] Add a regression fixture for run A then run B, confirming each row keeps
+- [x] Add a regression fixture for run A then run B, confirming each row keeps
   its original workflow id.
 
 **Verification:**
@@ -322,7 +322,20 @@ diagnostics display.
 - `cargo check --manifest-path src-tauri/Cargo.toml`
 - `npm run -w frontend test:run`
 
-**Status:** Not started.
+**Status:** Complete.
+
+**Execution Notes:**
+- Added a Tauri diagnostics store regression that records run A and run B for
+  different workflows through the same event path used by GUI diagnostics.
+- The regression asserts one retained trace row per generated run id, stable
+  workflow ids on each retained row, and independent SQLite timing history by
+  workflow id plus graph fingerprint.
+- Verification passed:
+  `cargo test --manifest-path src-tauri/Cargo.toml workflow::diagnostics::tests::timing`;
+  `cargo test -p pantograph-workflow-service`;
+  `cargo test -p pantograph-diagnostics-ledger`;
+  `cargo check --manifest-path src-tauri/Cargo.toml`;
+  `npm run test:frontend`.
 
 ### Milestone 6: Standards Compliance Refactor
 

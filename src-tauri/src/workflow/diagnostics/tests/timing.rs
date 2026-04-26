@@ -100,17 +100,81 @@ fn workflow_timing_history_reads_prior_runs_without_active_trace() {
     assert_eq!(expectation.typical_max_duration_ms, Some(300));
 }
 
+#[test]
+fn retained_runs_and_timing_history_keep_run_and_workflow_identity_separate() {
+    let store = WorkflowDiagnosticsStore::with_default_timing_ledger(
+        pantograph_workflow_service::SqliteDiagnosticsLedger::open_in_memory()
+            .expect("ledger opens"),
+    );
+
+    record_completed_timing_run_for_workflow(&store, "run-a", "wf-a", 1_000, 100);
+    let projection =
+        record_completed_timing_run_for_workflow(&store, "run-b", "wf-b", 2_000, 200);
+
+    assert_eq!(projection.runs_by_id.len(), 2);
+    assert_eq!(
+        projection
+            .runs_by_id
+            .get("run-a")
+            .and_then(|run| run.workflow_id.as_deref()),
+        Some("wf-a")
+    );
+    assert_eq!(
+        projection
+            .runs_by_id
+            .get("run-b")
+            .and_then(|run| run.workflow_id.as_deref()),
+        Some("wf-b")
+    );
+
+    let history_a = store.workflow_timing_history("wf-a".to_string(), &sample_graph());
+    let history_b = store.workflow_timing_history("wf-b".to_string(), &sample_graph());
+    let expectation_a = history_a
+        .nodes
+        .get("llm-1")
+        .and_then(|node| node.timing_expectation.as_ref())
+        .expect("workflow a timing expectation");
+    let expectation_b = history_b
+        .nodes
+        .get("llm-1")
+        .and_then(|node| node.timing_expectation.as_ref())
+        .expect("workflow b timing expectation");
+
+    assert_eq!(history_a.workflow_id, "wf-a");
+    assert_eq!(history_b.workflow_id, "wf-b");
+    assert_eq!(history_a.graph_fingerprint.as_deref(), Some("graph-123"));
+    assert_eq!(history_b.graph_fingerprint.as_deref(), Some("graph-123"));
+    assert_eq!(expectation_a.sample_count, 1);
+    assert_eq!(expectation_b.sample_count, 1);
+}
+
 fn record_completed_timing_run(
     store: &WorkflowDiagnosticsStore,
     workflow_run_id: &str,
     started_at_ms: u64,
     node_duration_ms: u64,
 ) -> WorkflowDiagnosticsProjection {
-    store.set_execution_metadata(workflow_run_id, Some("wf-timing".to_string()));
+    record_completed_timing_run_for_workflow(
+        store,
+        workflow_run_id,
+        "wf-timing",
+        started_at_ms,
+        node_duration_ms,
+    )
+}
+
+fn record_completed_timing_run_for_workflow(
+    store: &WorkflowDiagnosticsStore,
+    workflow_run_id: &str,
+    workflow_id: &str,
+    started_at_ms: u64,
+    node_duration_ms: u64,
+) -> WorkflowDiagnosticsProjection {
+    store.set_execution_metadata(workflow_run_id, Some(workflow_id.to_string()));
     store.set_execution_graph(workflow_run_id, &sample_graph());
     store.record_workflow_event(
         &crate::workflow::events::WorkflowEvent::Started {
-            workflow_id: "wf-timing".to_string(),
+            workflow_id: workflow_id.to_string(),
             node_count: 1,
             workflow_run_id: workflow_run_id.to_string(),
         },
@@ -134,7 +198,7 @@ fn record_completed_timing_run(
     );
     store.record_workflow_event(
         &crate::workflow::events::WorkflowEvent::Completed {
-            workflow_id: "wf-timing".to_string(),
+            workflow_id: workflow_id.to_string(),
             outputs: std::collections::HashMap::new(),
             workflow_run_id: workflow_run_id.to_string(),
         },
