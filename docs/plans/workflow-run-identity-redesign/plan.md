@@ -734,10 +734,10 @@ model is implemented.
 **Goal:** Verify the redesigned identity model works in the built application.
 
 **Tasks:**
-- [ ] Run the complete affected Rust and frontend test set.
-- [ ] Run `git diff --check`.
-- [ ] Compile the app.
-- [ ] Make the release build.
+- [x] Run the complete affected Rust and frontend test set.
+- [x] Run `git diff --check`.
+- [x] Compile the app.
+- [x] Make the release build.
 - [ ] Manually smoke the GUI flow: open workflow A, inspect prior history, run
   A, run B, run A again, restart GUI, reopen A, verify history and ids.
 
@@ -750,7 +750,25 @@ model is implemented.
 - `npm run test:frontend`
 - `bash launcher.sh --build-release`
 
-**Status:** Not started.
+**Status:** Completed with manual smoke deferred.
+
+**Notes:**
+- Automated release verification passed, including the release build at
+  `target/release/pantograph`.
+- Manual GUI smoke was not run in this non-interactive session. The automated
+  checks cover the identity contracts, scheduler/runtime propagation, durable
+  diagnostics history, frontend projections, and release compilation; the
+  remaining manual smoke is listed as a follow-up.
+
+**Verification Results:**
+- `cargo test -p pantograph-workflow-service`
+- `cargo test -p pantograph-diagnostics-ledger`
+- `cargo test -p pantograph-embedded-runtime`
+- `cargo check --manifest-path src-tauri/Cargo.toml`
+- `npm run typecheck`
+- `npm run test:frontend`
+- `git diff --check`
+- `bash launcher.sh --build-release`
 
 ## Execution Notes
 
@@ -791,6 +809,9 @@ model is implemented.
   lifecycle, Tauri event serialization, and graph run-button logic into focused
   files; added the diagnostics-ledger source README and updated touched module
   READMEs.
+- 2026-04-26: Milestone 9 automated release verification completed. The
+  affected Rust/frontend suites passed and `bash launcher.sh --build-release`
+  produced `target/release/pantograph`; manual GUI smoke remains a follow-up.
 - Current known unrelated dirty files must remain untouched unless the user
   explicitly assigns them to this work:
   - `.pantograph/workflows/tiny-sd-turbo-diffusion.json`
@@ -866,16 +887,22 @@ owned serially by the integration implementer.
 - Milestone 6: Update Frontend Contracts And Rendering.
 - Milestone 7: Binding And Public API Guardrails.
 - Milestone 8: Standards Compliance Refactor.
+- Milestone 9: Release Verification automated checks.
 
 ### Deviations
 
 - Milestone 6 also removed the lingering GUI `workflow_name` run-command
   argument because implementing the frontend run-response contract showed that
   the dead argument would otherwise remain on a touched public Tauri boundary.
+- Milestone 9 manual GUI smoke could not be performed from this non-interactive
+  session and is tracked as the remaining follow-up. Automated release
+  verification completed successfully.
 
 ### Follow-Ups
 
-- None yet.
+- Manually smoke the GUI flow from Milestone 9: open workflow A, inspect prior
+  history, run A, run B, run A again, restart GUI, reopen A, and verify history
+  plus ids in diagnostics.
 
 ### Verification Summary
 
@@ -933,6 +960,15 @@ owned serially by the integration implementer.
   - `npm run test:frontend`
   - `git diff --check`
   - File-size/decomposition review and identity guardrail source search.
+- Milestone 9 release verification:
+  - `cargo test -p pantograph-workflow-service`
+  - `cargo test -p pantograph-diagnostics-ledger`
+  - `cargo test -p pantograph-embedded-runtime`
+  - `cargo check --manifest-path src-tauri/Cargo.toml`
+  - `npm run typecheck`
+  - `npm run test:frontend`
+  - `git diff --check`
+  - `bash launcher.sh --build-release`
 
 ### Traceability Links
 
