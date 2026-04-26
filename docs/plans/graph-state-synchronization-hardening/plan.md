@@ -408,11 +408,11 @@ behavior is corrected and before release verification.
 the refactor.
 
 **Tasks:**
-- [ ] Run the plan's full verification set.
-- [ ] Run the release build command expected for Pantograph.
-- [ ] Update this plan with completion notes, deviations, and verification
+- [x] Run the plan's full verification set.
+- [x] Run the release build command expected for Pantograph.
+- [x] Update this plan with completion notes, deviations, and verification
   results.
-- [ ] Confirm only intended files are dirty before final commit/report.
+- [x] Confirm only intended files are dirty before final commit/report.
 
 **Verification:**
 - `npm run -w frontend test:run`
@@ -421,7 +421,7 @@ the refactor.
 - `cargo check --manifest-path src-tauri/Cargo.toml`
 - `bash launcher.sh --build-release`
 
-**Status:** Not started.
+**Status:** Complete.
 
 ## Execution Notes
 
@@ -514,6 +514,14 @@ Update during implementation:
   verification, but doing it inside this behavior-fix plan would add broad API
   churn. Follow-up owner: svelte graph store maintainers. Risk until completed:
   future changes can still land in an oversized assembler.
+- 2026-04-26: Milestone 7 started. Running full frontend, TypeScript,
+  workflow-service, Tauri check, and release-build verification before final
+  plan completion.
+- 2026-04-26: Milestone 7 completed. Full frontend tests, TypeScript
+  typecheck, workflow-service tests, Tauri cargo check, and release build
+  passed. Release binary built at `target/release/pantograph`. The only
+  remaining dirty files are the unrelated pre-existing workflow/assets/SQLite
+  artifacts listed during preflight.
 
 ## Commit Cadence Notes
 
@@ -576,24 +584,54 @@ reports per `PLAN-STANDARDS.md`.
 
 ### Completed
 
-- Not started.
+- Lifecycle guards prevent stale workflow loads from replacing newer active
+  workflow/session state and close superseded edit sessions.
+- Awaitable graph mutation outcomes reject stale backend responses across node,
+  edge, group, insert, and reconnect helper paths.
+- Selected graph deletion now uses backend-owned batch mutations with one
+  selected-delete response and one undo snapshot.
+- Runtime outputs and stream content now live in transient node-id keyed
+  overlays; `$workflowGraph` and save projection remain structural.
+- Backend-provided derived graph metadata is preserved instead of recalculated
+  by frontend snapshot application.
+- Store graph state/runtime projection ownership moved into
+  `workflowStoreGraphState.ts`, and touched store documentation was updated.
+- Release verification completed and release binary was built.
 
 ### Deviations
 
-- None.
+- The plan's `npm run -w frontend ...` commands are invalid for this repository
+  layout because there is no `frontend` workspace. Equivalent root scripts and
+  direct Node test commands were used and recorded during execution.
+- Full extraction of both oversized `WorkflowGraph.svelte` components and the
+  remaining `createWorkflowStores.ts` assembler responsibilities was deferred
+  with traceable risk notes because completing those decompositions safely would
+  be broader than the graph synchronization behavior fixes.
 
 ### Follow-Ups
 
-- None recorded.
+- Graph editor maintainers should extract shared canvas interaction controllers
+  from both active `WorkflowGraph.svelte` paths to reduce duplicate behavior
+  drift.
+- Svelte graph store maintainers should continue splitting
+  `createWorkflowStores.ts` into mutation dispatch, execution-state, group, and
+  viewport owners.
 
 ### Verification Summary
 
-- Not run.
+- `git diff --check`: passed.
+- `npm run test:frontend`: passed, 251 frontend tests.
+- `npm run typecheck`: passed.
+- `cargo test -p pantograph-workflow-service`: passed, 204 unit tests and 9
+  contract tests.
+- `cargo check --manifest-path src-tauri/Cargo.toml`: passed.
+- `bash launcher.sh --build-release`: passed; built `target/release/pantograph`.
 
 ### Traceability Links
 
-- Module README updated: N/A until implementation touches documentation
-  boundaries.
+- Module README updated:
+  `packages/svelte-graph/src/stores/README.md`,
+  `src/stores/README.md`.
 - ADR added/updated: N/A unless implementation changes graph/session identity
   architecture.
 - PR notes completed per `templates/PULL_REQUEST_TEMPLATE.md`: N/A.
