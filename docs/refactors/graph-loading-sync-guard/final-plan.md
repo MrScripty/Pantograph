@@ -171,7 +171,7 @@ component wiring.
 - Add equivalent package helper tests.
 - Run the helper tests directly with Node's test runner.
 
-**Status:** Not started.
+**Status:** Complete.
 
 ### Milestone 2: Wire App Graph Identity
 
@@ -198,7 +198,7 @@ suppression across workflow and architecture source changes.
 - Run app graph sync/source unit tests.
 - Run frontend typecheck for the changed TypeScript/Svelte surface.
 
-**Status:** Not started.
+**Status:** Complete.
 
 ### Milestone 3: Wire Package Graph Identity
 
@@ -220,7 +220,7 @@ package graph.
 - Run package graph sync unit tests.
 - Run package/frontend typecheck covering `packages/svelte-graph`.
 
-**Status:** Not started.
+**Status:** Complete.
 
 ### Milestone 4: Cross-Surface Regression Verification
 
@@ -243,7 +243,7 @@ interaction behavior.
 - `npm run -w frontend test:run`
 - `npm run -w frontend check:types`
 
-**Status:** Not started.
+**Status:** Complete.
 
 ### Milestone 5: Standards Cleanup
 
@@ -265,7 +265,7 @@ fix.
 - Confirm `git status --short` only shows intended implementation/docs changes
   plus pre-existing unrelated dirty files.
 
-**Status:** Not started.
+**Status:** In progress.
 
 ## Standards Compliance Review
 
@@ -292,6 +292,14 @@ fix.
   package graph synchronization paths. Current worktree contains unrelated
   deleted `.pantograph`/asset files and untracked diagnostics/assets; leave them
   untouched during implementation unless the user explicitly changes scope.
+- 2026-04-26: Milestones 1-4 implemented as one buildable behavior slice
+  because the helper contract and Svelte component call sites must change
+  together. App and package sync helpers now use graph-keyed node-sync
+  suppression. App and package graph components pass graph identity keys and
+  clear stale suppression during architecture-pending transitions. Frontend unit
+  tests and repo typecheck passed; the plan's obsolete workspace-form commands
+  were replaced with the repository's actual `npm run test:frontend` and
+  `npm run typecheck` scripts.
 
 ## Commit Cadence Notes
 

@@ -3,7 +3,8 @@ export interface WorkflowGraphSyncDecision<TNode, TEdge> {
   applyEdges: boolean;
   nextPrevNodesRef: TNode[];
   nextPrevEdgesRef: TEdge[];
-  nextSkipNextNodeSync: boolean;
+  nextPrevGraphSyncKey: string;
+  nextSkipNodeSyncGraphKey: string | null;
 }
 
 export function computeWorkflowGraphSyncDecision<TNode, TEdge>(params: {
@@ -11,18 +12,31 @@ export function computeWorkflowGraphSyncDecision<TNode, TEdge>(params: {
   storeEdges: TEdge[];
   prevNodesRef: TNode[] | null;
   prevEdgesRef: TEdge[] | null;
-  skipNextNodeSync: boolean;
+  graphSyncKey: string;
+  prevGraphSyncKey: string | null;
+  skipNodeSyncGraphKey: string | null;
 }): WorkflowGraphSyncDecision<TNode, TEdge> {
-  const { storeNodes, storeEdges, prevNodesRef, prevEdgesRef, skipNextNodeSync } = params;
+  const {
+    storeNodes,
+    storeEdges,
+    prevNodesRef,
+    prevEdgesRef,
+    graphSyncKey,
+    prevGraphSyncKey,
+    skipNodeSyncGraphKey,
+  } = params;
 
   const nodesChanged = storeNodes !== prevNodesRef;
   const edgesChanged = storeEdges !== prevEdgesRef;
+  const graphChanged = graphSyncKey !== prevGraphSyncKey;
+  const skipNodeSync = skipNodeSyncGraphKey === graphSyncKey && !graphChanged;
 
   return {
-    applyNodes: nodesChanged && !skipNextNodeSync,
+    applyNodes: nodesChanged && !skipNodeSync,
     applyEdges: edgesChanged,
     nextPrevNodesRef: storeNodes,
     nextPrevEdgesRef: storeEdges,
-    nextSkipNextNodeSync: false,
+    nextPrevGraphSyncKey: graphSyncKey,
+    nextSkipNodeSyncGraphKey: null,
   };
 }

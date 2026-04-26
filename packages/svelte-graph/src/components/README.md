@@ -305,7 +305,8 @@ threshold while preserving the same package-owned visual contract.
 - `workflowMiniMap.ts` must preserve backend category color semantics and keep
   group-node coloring ahead of category coloring.
 - `workflowGraphSync.ts` must not reassign nodes when a caller intentionally
-  suppresses the next node sync after a local drag operation.
+  suppresses the next same-graph node sync after a local drag operation, but
+  graph identity changes must still replace nodes and edges together.
 - `workflowConnections.ts` must keep candidate-derived target validation aligned
   with backend source anchors and package port compatibility.
 - `workflowConnections.ts` must reject incomplete connection or reconnect

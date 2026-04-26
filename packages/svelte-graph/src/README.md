@@ -223,8 +223,9 @@ query editing, and close/open routing.
   legacy raw `execution_id` fields.
 - `workflowMiniMap.ts` must keep group-node coloring ahead of backend category
   coloring and provide a stable fallback color for unknown node types.
-- `workflowGraphSync.ts` must clear one-shot node-sync suppression while still
-  allowing edge updates through.
+- `workflowGraphSync.ts` must clear one-shot node-sync suppression while keeping
+  suppression scoped to the graph identity that created it, so graph loads apply
+  matching node and edge snapshots together.
 - `workflowConnections.ts` must prefer active backend candidate intent when it
   matches the source anchor, then fall back to static port compatibility only
   when no active intent applies.

@@ -113,6 +113,8 @@
   }
 
   let { showContainerBorder = false, onContainerZoomOut }: Props = $props();
+  const WORKFLOW_GRAPH_SYNC_KEY_PREFIX = 'workflow:';
+  const WORKFLOW_GRAPH_SYNC_KEY_FALLBACK = 'workflow:unrevisioned';
   const nodesStore = stores.workflow.nodes;
   const edgesStore = stores.workflow.edges;
   const connectionIntentStore = stores.workflow.connectionIntent;
@@ -162,7 +164,20 @@
   let containerBorderRef: ContainerBorder;
   let _prevNodesRef: Node[] | null = null;
   let _prevEdgesRef: Edge[] | null = null;
-  let _skipNextNodeSync = false;
+  let _prevGraphSyncKey: string | null = null;
+  let _skipNodeSyncGraphKey: string | null = null;
+
+  function resolveWorkflowGraphSyncKey(graphRevision: string): string {
+    if (!graphRevision) {
+      return WORKFLOW_GRAPH_SYNC_KEY_FALLBACK;
+    }
+
+    return `${WORKFLOW_GRAPH_SYNC_KEY_PREFIX}${graphRevision}`;
+  }
+
+  let currentGraphSyncKey = $derived(
+    resolveWorkflowGraphSyncKey($workflowGraphStore.derived_graph?.graph_fingerprint ?? ''),
+  );
 
   $effect(() => {
     const syncDecision = computeWorkflowGraphSyncDecision({
@@ -170,12 +185,15 @@
       storeEdges: $edgesStore,
       prevNodesRef: _prevNodesRef,
       prevEdgesRef: _prevEdgesRef,
-      skipNextNodeSync: _skipNextNodeSync,
+      graphSyncKey: currentGraphSyncKey,
+      prevGraphSyncKey: _prevGraphSyncKey,
+      skipNodeSyncGraphKey: _skipNodeSyncGraphKey,
     });
 
     _prevNodesRef = syncDecision.nextPrevNodesRef;
     _prevEdgesRef = syncDecision.nextPrevEdgesRef;
-    _skipNextNodeSync = syncDecision.nextSkipNextNodeSync;
+    _prevGraphSyncKey = syncDecision.nextPrevGraphSyncKey;
+    _skipNodeSyncGraphKey = syncDecision.nextSkipNodeSyncGraphKey;
 
     if (syncDecision.applyNodes) {
       nodes = $nodesStore;
@@ -584,7 +602,7 @@
     event: MouseEvent | TouchEvent;
   }) {
     if (!canEdit || !targetNode) return;
-    _skipNextNodeSync = true;
+    _skipNodeSyncGraphKey = currentGraphSyncKey;
     stores.workflow.updateNodePosition(targetNode.id, targetNode.position);
   }
 

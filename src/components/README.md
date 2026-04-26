@@ -292,6 +292,9 @@ component.
   instead of rebuilding fallback state inline.
 - `workflowGraphSource.ts` must preserve the architecture-pending state so the
   app graph does not flash workflow nodes while architecture data is loading.
+- App graph store-to-SvelteFlow synchronization must key drag-time node-sync
+  suppression to the rendered graph identity so a workflow or architecture
+  source change applies nodes and edges as one coherent snapshot.
 - App graph horseshoe keyboard behavior must use the package keyboard resolver
   so `Space`, `Enter`, arrow, `Escape`, and query-editing semantics stay aligned
   with the package graph.

@@ -92,6 +92,19 @@
   } from '../stores/viewStore';
   import { currentOrchestration } from '../stores/orchestrationStore';
 
+  const ARCHITECTURE_GRAPH_SYNC_KEY = 'system:app-architecture';
+  const ARCHITECTURE_PENDING_GRAPH_SYNC_KEY = 'system:app-architecture:pending';
+  const WORKFLOW_GRAPH_SYNC_KEY_PREFIX = 'workflow:';
+  const WORKFLOW_GRAPH_SYNC_KEY_FALLBACK = 'workflow:unrevisioned';
+
+  function resolveWorkflowGraphSyncKey(graphRevision: string): string {
+    if (!graphRevision) {
+      return WORKFLOW_GRAPH_SYNC_KEY_FALLBACK;
+    }
+
+    return `${WORKFLOW_GRAPH_SYNC_KEY_PREFIX}${graphRevision}`;
+  }
+
   let nodes = $state.raw<Node[]>([]);
   let edges = $state.raw<Edge[]>([]);
 
@@ -136,7 +149,8 @@
   // re-reconcile, which can drop edges or lose measured dimensions.
   let _prevNodesRef: Node[] | null = null;
   let _prevEdgesRef: Edge[] | null = null;
-  let _skipNextNodeSync = false;
+  let _prevGraphSyncKey: string | null = null;
+  let _skipNodeSyncGraphKey: string | null = null;
 
   let containerBounds = $derived(resolveWorkflowContainerBounds(nodes));
 
@@ -207,31 +221,37 @@
     const storeNodes = $nodesStore;
     const storeEdges = $edgesStore;
 
-    if (graphSource.type === 'architecture') {
-      nodes = graphSource.nodes;
-      edges = graphSource.edges;
-      return;
-    }
-
     if (graphSource.type === 'architecture-pending') {
+      nodes = [];
+      edges = [];
+      _prevNodesRef = null;
+      _prevEdgesRef = null;
+      _prevGraphSyncKey = ARCHITECTURE_PENDING_GRAPH_SYNC_KEY;
+      _skipNodeSyncGraphKey = null;
       return;
     }
 
+    const graphSyncKey = graphSource.type === 'architecture'
+      ? ARCHITECTURE_GRAPH_SYNC_KEY
+      : resolveWorkflowGraphSyncKey(currentGraphRevision);
     const syncDecision = computeWorkflowGraphSyncDecision({
       storeNodes,
       storeEdges,
       prevNodesRef: _prevNodesRef,
       prevEdgesRef: _prevEdgesRef,
-      skipNextNodeSync: _skipNextNodeSync,
+      graphSyncKey,
+      prevGraphSyncKey: _prevGraphSyncKey,
+      skipNodeSyncGraphKey: _skipNodeSyncGraphKey,
     });
 
     _prevNodesRef = syncDecision.nextPrevNodesRef;
     _prevEdgesRef = syncDecision.nextPrevEdgesRef;
+    _prevGraphSyncKey = syncDecision.nextPrevGraphSyncKey;
 
     if (syncDecision.applyNodes) {
       nodes = storeNodes;
     }
-    _skipNextNodeSync = syncDecision.nextSkipNextNodeSync;
+    _skipNodeSyncGraphKey = syncDecision.nextSkipNodeSyncGraphKey;
 
     if (syncDecision.applyEdges) {
       edges = storeEdges;
@@ -551,7 +571,7 @@
     if (targetNode) {
       // SvelteFlow already has the correct local position via bind:nodes.
       // Skip the next store-to-local node sync so we do not discard internals.
-      _skipNextNodeSync = true;
+      _skipNodeSyncGraphKey = resolveWorkflowGraphSyncKey(currentGraphRevision);
       updateNodePosition(targetNode.id, targetNode.position);
     }
   }
