@@ -6,14 +6,14 @@ const FNV64_PRIME = BigInt('0x100000001b3');
 const FNV64_MASK = BigInt('0xffffffffffffffff');
 const ENCODER = new TextEncoder();
 
-function fnv1a64(input: string): string {
-  let hash = FNV64_OFFSET_BASIS;
+function fnv1a64Update(hash: bigint, input: string): bigint {
   const bytes = ENCODER.encode(input);
+  let nextHash = hash;
   for (const byte of bytes) {
-    hash ^= BigInt(byte);
-    hash = (hash * FNV64_PRIME) & FNV64_MASK;
+    nextHash ^= BigInt(byte);
+    nextHash = (nextHash * FNV64_PRIME) & FNV64_MASK;
   }
-  return hash.toString(16).padStart(16, '0');
+  return nextHash;
 }
 
 export function computeGraphFingerprint(graph: WorkflowGraph): string {
@@ -28,8 +28,18 @@ export function computeGraphFingerprint(graph: WorkflowGraph): string {
     )
     .sort();
 
-  const rows = ['v1', ...nodeRows, '--', ...edgeRows];
-  return fnv1a64(rows.join('\n'));
+  let digest = FNV64_OFFSET_BASIS;
+  digest = fnv1a64Update(digest, 'v1');
+  for (const row of nodeRows) {
+    digest = fnv1a64Update(digest, row);
+    digest = fnv1a64Update(digest, '\n');
+  }
+  digest = fnv1a64Update(digest, '--');
+  for (const row of edgeRows) {
+    digest = fnv1a64Update(digest, row);
+    digest = fnv1a64Update(digest, '\n');
+  }
+  return digest.toString(16).padStart(16, '0');
 }
 
 export function computeConsumerCountMap(graph: WorkflowGraph): Record<string, number> {

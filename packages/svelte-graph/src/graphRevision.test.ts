@@ -41,6 +41,10 @@ test('computeGraphFingerprint is deterministic for graph structure', () => {
   assert.equal(first, second);
 });
 
+test('computeGraphFingerprint matches the Rust workflow graph fingerprint contract', () => {
+  assert.equal(computeGraphFingerprint(graph()), 'a6371bd3ec2804c2');
+});
+
 test('computeConsumerCountMap counts outgoing consumers by source port', () => {
   const counts = computeConsumerCountMap(graph());
 

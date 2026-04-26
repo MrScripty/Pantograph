@@ -492,6 +492,44 @@ display-name/file-stem variant for the same graph fingerprint.
   `npm run typecheck`;
   `npm run test:frontend -- createSessionStores`;
   `git diff --check`.
+- 2026-04-26: Re-opened again after user clarified that the missing pre-run
+  data is the SQLite-backed typical/median node timing ranges, not live
+  observed node durations. Investigation found the frontend recalculated
+  `derived_graph.graph_fingerprint` with a JavaScript FNV input layout that did
+  not match Rust `WorkflowGraph::compute_fingerprint`, so opened-workflow
+  diagnostics snapshots queried the timing ledger with a graph fingerprint that
+  could not match persisted records.
+
+## Reopened Milestone: Frontend Graph Fingerprint Contract
+
+**Goal:** Ensure frontend-derived workflow graph fingerprints match the Rust
+backend contract so opened-workflow diagnostics can read SQLite timing
+expectations before a run starts.
+
+**Tasks:**
+- [x] Update `packages/svelte-graph` graph fingerprint calculation to use the
+  same FNV-1a input order and newline placement as Rust
+  `WorkflowGraph::compute_fingerprint`.
+- [x] Add a regression test with a known Rust fingerprint fixture.
+- [x] Verify TypeScript and targeted frontend tests.
+
+**Verification:**
+- `node --experimental-strip-types --test packages/svelte-graph/src/graphRevision.test.ts`
+- `npm run typecheck`
+- `npm run test:frontend`
+
+**Status:** Complete.
+
+**Execution Notes:**
+- `computeGraphFingerprint` now mirrors Rust by hashing `v1`, each sorted node
+  row followed by a newline, `--`, and each sorted edge row followed by a
+  newline.
+- The regression fixture asserts the TypeScript implementation returns the
+  Rust-compatible fingerprint `a6371bd3ec2804c2` for the sample graph.
+- Verification passed:
+  `node --experimental-strip-types --test packages/svelte-graph/src/graphRevision.test.ts`;
+  `npm run typecheck`;
+  `npm run test:frontend`.
 
 ## Deviations And Follow-Ups
 
