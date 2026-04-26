@@ -230,13 +230,13 @@ traceable deferrals.
 **Goal:** Prove the refactor is shippable.
 
 **Tasks:**
-- [ ] Run full frontend tests.
-- [ ] Run TypeScript typecheck.
-- [ ] Run workflow-service tests.
-- [ ] Run Tauri cargo check.
-- [ ] Run Pantograph release build.
-- [ ] Update this plan with completion summary.
-- [ ] Confirm final dirty worktree contains only unrelated pre-existing files.
+- [x] Run full frontend tests.
+- [x] Run TypeScript typecheck.
+- [x] Run workflow-service tests.
+- [x] Run Tauri cargo check.
+- [x] Run Pantograph release build.
+- [x] Update this plan with completion summary.
+- [x] Confirm final dirty worktree contains only unrelated pre-existing files.
 
 **Verification:**
 - `git diff --check`
@@ -246,7 +246,7 @@ traceable deferrals.
 - `cargo check --manifest-path src-tauri/Cargo.toml`
 - `bash launcher.sh --build-release`
 
-**Status:** Not started.
+**Status:** Complete.
 
 ## Execution Notes
 
@@ -325,6 +325,15 @@ traceable deferrals.
 - Follow-up: split package and app graph coordinator state machines into
   controller modules or child components, then verify with frontend tests and
   visual smoke coverage.
+- 2026-04-26: Milestone 7 started. Final verification will run whitespace,
+  frontend, TypeScript, workflow-service, Tauri, and release-build checks before
+  completion summary.
+- 2026-04-26: Milestone 7 completed. Final verification passed:
+  `git diff --check`, `npm run test:frontend`, `npm run typecheck`,
+  `cargo test -p pantograph-workflow-service`,
+  `cargo check --manifest-path src-tauri/Cargo.toml`, and
+  `bash launcher.sh --build-release`. Release binary built at
+  `target/release/pantograph`.
 
 ## Commit Cadence Notes
 
@@ -354,23 +363,44 @@ parallel work.
 
 ### Completed
 
-- Not complete.
+- Milestone 1: Standards preflight, baseline verification, and plan artifact.
+- Milestone 2: Workflow store responsibility split for mutation dispatch,
+  execution-state overlays, and backend-backed group actions.
+- Milestone 3: Shared dependency-injected backend action core for package and
+  app graph action adapters.
+- Milestone 4: Package graph delete/reconnect interaction decision extraction.
+- Milestone 5: App graph reuse of shared interaction helpers while preserving
+  app-local service and architecture wiring.
+- Milestone 6: Compliance pass with explicit residual graph coordinator
+  follow-up.
+- Milestone 7: Final frontend, Rust, Tauri, and release-build verification.
 
 ### Deviations
 
-- None recorded.
+- The two graph coordinator Svelte components remain over the file-size target.
+  This is recorded as a residual compliance follow-up because reducing them
+  below target requires a broader visual/event-wiring split outside this plan's
+  safe helper-extraction scope.
 
 ### Follow-Ups
 
-- None recorded.
+- Split `packages/svelte-graph/src/components/WorkflowGraph.svelte` and
+  `src/components/WorkflowGraph.svelte` into smaller coordinator/controller
+  modules or child components with frontend and visual smoke verification.
 
 ### Verification Summary
 
-- Not run.
+- `git diff --check`: passed.
+- `npm run test:frontend`: passed, 262 tests.
+- `npm run typecheck`: passed.
+- `cargo test -p pantograph-workflow-service`: passed, 204 unit tests and 9
+  contract tests.
+- `cargo check --manifest-path src-tauri/Cargo.toml`: passed.
+- `bash launcher.sh --build-release`: passed; built `target/release/pantograph`.
 
 ### Traceability Links
 
-- Module README updated: pending.
+- Module README updated: package stores, package components, and app components.
 - ADR added/updated: N/A unless implementation changes graph/editor ownership
   architecture beyond helper extraction.
 - PR notes completed per `templates/PULL_REQUEST_TEMPLATE.md`: N/A.
