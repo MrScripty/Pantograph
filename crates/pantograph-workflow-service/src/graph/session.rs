@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -6,7 +6,7 @@ use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
 
 use crate::workflow::{
-    scheduler_snapshot_workflow_run_id, WorkflowSchedulerSnapshotResponse, WorkflowServiceError,
+    WorkflowSchedulerSnapshotResponse, WorkflowServiceError, scheduler_snapshot_workflow_run_id,
 };
 
 use super::group_mutation::{
@@ -18,13 +18,13 @@ use super::session_event::{
     dirty_tasks_for_full_snapshot, dirty_tasks_from_seed_nodes, graph_modified_event,
 };
 use super::session_graph::sync_embedding_emit_metadata_flags;
-use super::session_state::{phase6_memory_impact_projection, GraphEditSession};
+use super::session_state::{GraphEditSession, phase6_memory_impact_projection};
 use super::session_types::{
     WorkflowExecutionSessionKind, WorkflowGraphAddEdgeRequest, WorkflowGraphCreateGroupRequest,
     WorkflowGraphEditSessionCloseResponse, WorkflowGraphEditSessionCreateResponse,
     WorkflowGraphEditSessionGraphRequest, WorkflowGraphRemoveEdgeRequest,
-    WorkflowGraphUndoRedoStateResponse, WorkflowGraphUngroupRequest,
-    WorkflowGraphUpdateGroupPortsRequest,
+    WorkflowGraphRemoveEdgesRequest, WorkflowGraphUndoRedoStateResponse,
+    WorkflowGraphUngroupRequest, WorkflowGraphUpdateGroupPortsRequest,
 };
 use super::types::WorkflowGraph;
 #[cfg(test)]
@@ -38,6 +38,26 @@ mod session_connection_api;
 mod session_node_api;
 
 type GraphSessionHandle = Arc<Mutex<GraphEditSession>>;
+
+fn append_unique_strings(target: &mut Vec<String>, values: Vec<String>) {
+    let mut seen = target.iter().cloned().collect::<HashSet<_>>();
+    for value in values {
+        if seen.insert(value.clone()) {
+            target.push(value);
+        }
+    }
+}
+
+fn dirty_tasks_from_seed_nodes_unique(graph: &WorkflowGraph, node_ids: &[String]) -> Vec<String> {
+    let mut dirty_tasks = Vec::new();
+    for node_id in node_ids {
+        append_unique_strings(
+            &mut dirty_tasks,
+            dirty_tasks_from_seed_nodes(graph, std::slice::from_ref(node_id)),
+        );
+    }
+    dirty_tasks
+}
 
 #[derive(Debug)]
 pub struct GraphSessionStore {
@@ -237,6 +257,48 @@ impl GraphSessionStore {
                 &dirty_tasks_from_seed_nodes(&state.graph, std::slice::from_ref(node_id)),
             )
         });
+        let workflow_event = graph_modified_event(
+            &request.session_id,
+            &request.session_id,
+            dirty_tasks,
+            memory_impact.clone(),
+        );
+        let projection = phase6_memory_impact_projection(memory_impact);
+        Ok(state.snapshot_response_with_state(
+            &request.session_id,
+            Some(workflow_event),
+            projection,
+        ))
+    }
+
+    pub async fn remove_edges(
+        &self,
+        request: WorkflowGraphRemoveEdgesRequest,
+    ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
+        let handle = self.get_session_handle(&request.session_id).await?;
+        let mut state = handle.lock().await;
+        state.touch();
+        let before_graph = state.graph.clone();
+        let edge_ids = request.edge_ids.into_iter().collect::<HashSet<_>>();
+        let target_node_ids = state
+            .graph
+            .edges
+            .iter()
+            .filter(|edge| edge_ids.contains(&edge.id))
+            .map(|edge| edge.target.clone())
+            .collect::<Vec<_>>();
+        state.push_undo_snapshot();
+        state
+            .graph
+            .edges
+            .retain(|edge| !edge_ids.contains(&edge.id));
+        sync_embedding_emit_metadata_flags(&mut state.graph);
+        let dirty_tasks = dirty_tasks_from_seed_nodes_unique(&state.graph, &target_node_ids);
+        let memory_impact = if dirty_tasks.is_empty() {
+            None
+        } else {
+            graph_memory_impact_from_graph_change(&before_graph, &state.graph, &dirty_tasks)
+        };
         let workflow_event = graph_modified_event(
             &request.session_id,
             &request.session_id,

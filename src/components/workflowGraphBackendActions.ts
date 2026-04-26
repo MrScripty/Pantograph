@@ -304,15 +304,15 @@ export async function commitWorkflowConnection({
 
 export async function removeWorkflowGraphEdges(edgeIds: string[], errorMessage: string) {
   const sessionId = currentSessionId();
-  for (const edgeId of edgeIds) {
-    try {
-      const updatedGraph = await workflowService.removeEdge(edgeId, sessionId ?? undefined);
-      if (!syncGraphForSession(updatedGraph, sessionId)) {
-        return;
-      }
-    } catch (error) {
-      console.error(errorMessage, error);
-    }
+  if (edgeIds.length === 0) {
+    return;
+  }
+
+  try {
+    const updatedGraph = await workflowService.removeEdges(edgeIds, sessionId ?? undefined);
+    syncGraphForSession(updatedGraph, sessionId);
+  } catch (error) {
+    console.error(errorMessage, error);
   }
 }
 

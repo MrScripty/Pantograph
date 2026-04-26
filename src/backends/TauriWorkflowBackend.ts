@@ -96,6 +96,19 @@ export class TauriWorkflowBackend implements WorkflowBackend {
     return parseWorkflowGraphMutationResponse(response);
   }
 
+  async deleteSelection(
+    nodeIds: string[],
+    edgeIds: string[],
+    sessionId: string,
+  ): Promise<WorkflowGraphMutationResponse> {
+    const response = await invoke<unknown>('delete_selection_from_execution', {
+      executionId: sessionId,
+      nodeIds,
+      edgeIds,
+    });
+    return parseWorkflowGraphMutationResponse(response);
+  }
+
   async addEdge(edge: GraphEdge, sessionId: string): Promise<WorkflowGraphMutationResponse> {
     const response = await invoke<unknown>('add_edge_to_execution', {
       executionId: sessionId,
@@ -202,6 +215,14 @@ export class TauriWorkflowBackend implements WorkflowBackend {
     const response = await invoke<unknown>('remove_edge_from_execution', {
       executionId: sessionId,
       edgeId,
+    });
+    return parseWorkflowGraphMutationResponse(response);
+  }
+
+  async removeEdges(edgeIds: string[], sessionId: string): Promise<WorkflowGraphMutationResponse> {
+    const response = await invoke<unknown>('remove_edges_from_execution', {
+      executionId: sessionId,
+      edgeIds,
     });
     return parseWorkflowGraphMutationResponse(response);
   }

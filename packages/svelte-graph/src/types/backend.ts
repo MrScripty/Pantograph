@@ -90,6 +90,13 @@ export interface WorkflowBackend {
   /** Remove a node and any attached edges. Returns the updated graph for frontend sync. */
   removeNode(nodeId: string, sessionId: string): Promise<WorkflowGraphMutationResponse>;
 
+  /** Remove a mixed node/edge selection as one backend-owned mutation. */
+  deleteSelection(
+    nodeIds: string[],
+    edgeIds: string[],
+    sessionId: string,
+  ): Promise<WorkflowGraphMutationResponse>;
+
   /** Add an edge. Returns the updated graph for frontend sync. */
   addEdge(edge: GraphEdge, sessionId: string): Promise<WorkflowGraphMutationResponse>;
 
@@ -137,6 +144,9 @@ export interface WorkflowBackend {
 
   /** Remove an edge. Returns the updated graph for frontend sync. */
   removeEdge(edgeId: string, sessionId: string): Promise<WorkflowGraphMutationResponse>;
+
+  /** Remove multiple edges as one backend-owned mutation. */
+  removeEdges(edgeIds: string[], sessionId: string): Promise<WorkflowGraphMutationResponse>;
 
   /** Update a node's data. Returns the updated graph for frontend sync. */
   updateNodeData(

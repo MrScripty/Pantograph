@@ -298,15 +298,15 @@ when they belong to the current edit session.
 transition instead of a chain of full-graph races.
 
 **Tasks:**
-- [ ] Add backend graph session requests for batch edge removal and, if needed,
+- [x] Add backend graph session requests for batch edge removal and, if needed,
   batch node removal.
-- [ ] Make one selected-delete action produce one backend response and one undo
+- [x] Make one selected-delete action produce one backend response and one undo
   snapshot.
-- [ ] Update Tauri and TypeScript backend contracts for batch mutation calls.
-- [ ] Update both graph editor component paths to await ordered mutation
+- [x] Update Tauri and TypeScript backend contracts for batch mutation calls.
+- [x] Update both graph editor component paths to await ordered mutation
   outcomes.
-- [ ] Add Rust tests for batch delete graph shape and undo behavior.
-- [ ] Add frontend tests for selected multi-delete ordering.
+- [x] Add Rust tests for batch delete graph shape and undo behavior.
+- [x] Add frontend tests for selected multi-delete ordering.
 
 **Verification:**
 - `cargo test -p pantograph-workflow-service graph`
@@ -314,7 +314,7 @@ transition instead of a chain of full-graph races.
 - `npm run -w frontend test:run -- WorkflowGraph workflowGraphBackendActions`
 - `npm run -w frontend check:types`
 
-**Status:** Not started.
+**Status:** Complete.
 
 ### Milestone 4: Runtime Overlay Separation
 
@@ -454,6 +454,16 @@ Update during implementation:
   import package component helpers that use publish-style `.js` relative
   imports before build; Milestone 6 must make the centralized helper boundary
   directly testable.
+- 2026-04-26: Milestone 3 started. Implementation will add a combined
+  session-scoped delete-selection backend mutation so mixed node/edge
+  selections produce one backend-authored graph snapshot and one undo entry.
+- 2026-04-26: Milestone 3 completed. Added backend `remove_edges` and
+  `delete_selection` session mutations, Tauri command wiring, TypeScript
+  backend/service/store contracts, graph editor delete-selection usage, and
+  regression coverage for batch edge removal, mixed selected deletion, undo
+  behavior, and one frontend store-level selected-delete backend call. The
+  planned frontend workspace commands remain invalid for this repo layout, so
+  verification used the direct store test and root typecheck commands.
 
 ## Commit Cadence Notes
 

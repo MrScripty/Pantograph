@@ -6,11 +6,12 @@ use pantograph_workflow_service::{
     InsertNodeOnEdgeResponse, InsertNodePositionHint, PortMapping, Position, UndoRedoState,
     WorkflowGraph, WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest,
     WorkflowGraphConnectRequest, WorkflowGraphCreateGroupRequest,
-    WorkflowGraphEditSessionCloseRequest, WorkflowGraphEditSessionCreateRequest,
-    WorkflowGraphEditSessionGraphRequest, WorkflowGraphEditSessionGraphResponse,
-    WorkflowGraphGetConnectionCandidatesRequest, WorkflowGraphInsertNodeAndConnectRequest,
-    WorkflowGraphInsertNodeOnEdgeRequest, WorkflowGraphPreviewNodeInsertOnEdgeRequest,
-    WorkflowGraphRemoveEdgeRequest, WorkflowGraphRemoveNodeRequest,
+    WorkflowGraphDeleteSelectionRequest, WorkflowGraphEditSessionCloseRequest,
+    WorkflowGraphEditSessionCreateRequest, WorkflowGraphEditSessionGraphRequest,
+    WorkflowGraphEditSessionGraphResponse, WorkflowGraphGetConnectionCandidatesRequest,
+    WorkflowGraphInsertNodeAndConnectRequest, WorkflowGraphInsertNodeOnEdgeRequest,
+    WorkflowGraphPreviewNodeInsertOnEdgeRequest, WorkflowGraphRemoveEdgeRequest,
+    WorkflowGraphRemoveEdgesRequest, WorkflowGraphRemoveNodeRequest,
     WorkflowGraphUndoRedoStateRequest, WorkflowGraphUngroupRequest,
     WorkflowGraphUpdateGroupPortsRequest, WorkflowGraphUpdateNodeDataRequest,
     WorkflowGraphUpdateNodePositionRequest,
@@ -114,6 +115,22 @@ pub async fn remove_node_from_execution(
         .workflow_graph_remove_node(WorkflowGraphRemoveNodeRequest {
             session_id: execution_id,
             node_id,
+        })
+        .await
+        .map_err(|e| e.to_envelope_json())
+}
+
+pub async fn delete_selection_from_execution(
+    execution_id: String,
+    node_ids: Vec<String>,
+    edge_ids: Vec<String>,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowGraphEditSessionGraphResponse, String> {
+    workflow_service
+        .workflow_graph_delete_selection(WorkflowGraphDeleteSelectionRequest {
+            session_id: execution_id,
+            node_ids,
+            edge_ids,
         })
         .await
         .map_err(|e| e.to_envelope_json())
@@ -236,6 +253,20 @@ pub async fn remove_edge_from_execution(
         .workflow_graph_remove_edge(WorkflowGraphRemoveEdgeRequest {
             session_id: execution_id,
             edge_id,
+        })
+        .await
+        .map_err(|e| e.to_envelope_json())
+}
+
+pub async fn remove_edges_from_execution(
+    execution_id: String,
+    edge_ids: Vec<String>,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowGraphEditSessionGraphResponse, String> {
+    workflow_service
+        .workflow_graph_remove_edges(WorkflowGraphRemoveEdgesRequest {
+            session_id: execution_id,
+            edge_ids,
         })
         .await
         .map_err(|e| e.to_envelope_json())

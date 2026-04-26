@@ -91,6 +91,7 @@ export interface WorkflowStores {
   // Actions — nodes
   addNode: (definition: NodeDefinition, position: { x: number; y: number }) => Promise<WorkflowGraphMutationResult>;
   removeNode: (nodeId: string) => Promise<WorkflowGraphMutationResult>;
+  deleteSelection: (nodeIds: string[], edgeIds: string[]) => Promise<WorkflowGraphMutationResult>;
   updateNodePosition: (
     nodeId: string,
     position: { x: number; y: number },
@@ -109,6 +110,7 @@ export interface WorkflowStores {
   // Actions — edges
   addEdge: (edge: Edge) => Promise<WorkflowGraphMutationResult>;
   removeEdge: (edgeId: string) => Promise<WorkflowGraphMutationResult>;
+  removeEdges: (edgeIds: string[]) => Promise<WorkflowGraphMutationResult>;
   syncEdgesFromBackend: (
     backendGraph: WorkflowGraph,
     options?: SyncEdgesFromBackendOptions,
@@ -306,6 +308,17 @@ export function createWorkflowStores(
     );
   }
 
+  function deleteSelection(
+    nodeIds: string[],
+    edgeIds: string[],
+  ): Promise<WorkflowGraphMutationResult> {
+    const deletedNodeIds = new Set(nodeIds);
+    selectedNodeIds.update((ids) => ids.filter((id) => !deletedNodeIds.has(id)));
+    return syncGraphMutationFromBackend('delete selection', (sessionId) =>
+      backend.deleteSelection(nodeIds, edgeIds, sessionId)
+    );
+  }
+
   function updateNodePosition(
     nodeId: string,
     position: { x: number; y: number },
@@ -363,6 +376,12 @@ export function createWorkflowStores(
   function removeEdgeFn(edgeId: string): Promise<WorkflowGraphMutationResult> {
     return syncGraphMutationFromBackend('remove edge', (sessionId) =>
       backend.removeEdge(edgeId, sessionId)
+    );
+  }
+
+  function removeEdgesFn(edgeIds: string[]): Promise<WorkflowGraphMutationResult> {
+    return syncGraphMutationFromBackend('remove edges', (sessionId) =>
+      backend.removeEdges(edgeIds, sessionId)
     );
   }
 
@@ -562,11 +581,12 @@ export function createWorkflowStores(
     connectionIntent,
     workflowGraph, nodeDefinitionsByCategory,
     // Node actions
-    addNode, removeNode, updateNodePosition, updateNodeData, updateNodeRuntimeData,
-    clearNodeRuntimeData,
+    addNode, removeNode, deleteSelection, updateNodePosition, updateNodeData,
+    updateNodeRuntimeData, clearNodeRuntimeData,
     getNodeById, isNodeGroup: isNodeGroupFn, getConnectedNodes, getNodesBounds,
     // Edge actions
-    addEdge: addEdgeFn, removeEdge: removeEdgeFn, syncEdgesFromBackend,
+    addEdge: addEdgeFn, removeEdge: removeEdgeFn, removeEdges: removeEdgesFn,
+    syncEdgesFromBackend,
     // Execution actions
     setNodeExecutionState, getNodeExecutionInfo, resetExecutionStates,
     // Streaming actions

@@ -180,6 +180,32 @@ export class MockWorkflowBackend implements WorkflowBackend {
     return this.graphMutationResponse(graph, sessionId, [nodeId]);
   }
 
+  async deleteSelection(
+    nodeIds: string[],
+    edgeIds: string[],
+    sessionId: string,
+  ): Promise<WorkflowGraphMutationResponse> {
+    const graph = this.sessions.get(sessionId);
+    if (!graph) throw new Error(`Session not found: ${sessionId}`);
+    const deletedNodeIds = new Set(nodeIds);
+    const deletedEdgeIds = new Set(edgeIds);
+    const dirtyTasks = [
+      ...nodeIds,
+      ...graph.edges
+        .filter((edge) => deletedEdgeIds.has(edge.id) && !deletedNodeIds.has(edge.target))
+        .map((edge) => edge.target),
+    ];
+    graph.nodes = graph.nodes.filter((node) => !deletedNodeIds.has(node.id));
+    graph.edges = graph.edges.filter(
+      (edge) =>
+        !deletedEdgeIds.has(edge.id) &&
+        !deletedNodeIds.has(edge.source) &&
+        !deletedNodeIds.has(edge.target),
+    );
+    graph.derived_graph = buildDerivedGraph(graph);
+    return this.graphMutationResponse(graph, sessionId, Array.from(new Set(dirtyTasks)));
+  }
+
   async addEdge(edge: GraphEdge, sessionId: string): Promise<WorkflowGraphMutationResponse> {
     const graph = this.sessions.get(sessionId);
     if (!graph) throw new Error(`Session not found: ${sessionId}`);
@@ -279,6 +305,18 @@ export class MockWorkflowBackend implements WorkflowBackend {
     graph.edges = graph.edges.filter((e) => e.id !== edgeId);
     graph.derived_graph = buildDerivedGraph(graph);
     return this.graphMutationResponse(graph, sessionId, targetNodeId ? [targetNodeId] : []);
+  }
+
+  async removeEdges(edgeIds: string[], sessionId: string): Promise<WorkflowGraphMutationResponse> {
+    const graph = this.sessions.get(sessionId);
+    if (!graph) throw new Error(`Session not found: ${sessionId}`);
+    const deletedEdgeIds = new Set(edgeIds);
+    const dirtyTasks = graph.edges
+      .filter((edge) => deletedEdgeIds.has(edge.id))
+      .map((edge) => edge.target);
+    graph.edges = graph.edges.filter((edge) => !deletedEdgeIds.has(edge.id));
+    graph.derived_graph = buildDerivedGraph(graph);
+    return this.graphMutationResponse(graph, sessionId, Array.from(new Set(dirtyTasks)));
   }
 
   async updateNodeData(

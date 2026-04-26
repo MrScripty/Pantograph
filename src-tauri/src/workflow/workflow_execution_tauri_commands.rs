@@ -1,4 +1,4 @@
-use tauri::{command, ipc::Channel, AppHandle, State};
+use tauri::{AppHandle, State, command, ipc::Channel};
 
 use crate::agent::rag::SharedRagManager;
 use crate::llm::{SharedAppConfig, SharedGateway, SharedRuntimeRegistry};
@@ -90,6 +90,22 @@ pub async fn remove_node_from_execution(
     super::workflow_execution_commands::remove_node_from_execution(
         execution_id,
         node_id,
+        workflow_service,
+    )
+    .await
+}
+
+#[command]
+pub async fn delete_selection_from_execution(
+    execution_id: String,
+    node_ids: Vec<String>,
+    edge_ids: Vec<String>,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowGraphEditSessionGraphResponse, String> {
+    super::workflow_execution_commands::delete_selection_from_execution(
+        execution_id,
+        node_ids,
+        edge_ids,
         workflow_service,
     )
     .await
@@ -208,6 +224,20 @@ pub async fn remove_edge_from_execution(
     super::workflow_execution_commands::remove_edge_from_execution(
         execution_id,
         edge_id,
+        workflow_service,
+    )
+    .await
+}
+
+#[command]
+pub async fn remove_edges_from_execution(
+    execution_id: String,
+    edge_ids: Vec<String>,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowGraphEditSessionGraphResponse, String> {
+    super::workflow_execution_commands::remove_edges_from_execution(
+        execution_id,
+        edge_ids,
         workflow_service,
     )
     .await

@@ -1,15 +1,16 @@
 pub use super::workflow_edit_session::{
     add_edge_to_execution, add_node_to_execution, connect_anchors_in_execution,
-    create_group_in_execution, create_workflow_execution_session, get_connection_candidates,
-    get_execution_graph, get_undo_redo_state, insert_node_and_connect_in_execution,
-    insert_node_on_edge_in_execution, preview_node_insert_on_edge_in_execution, redo_workflow,
-    remove_edge_from_execution, remove_execution, remove_node_from_execution, undo_workflow,
+    create_group_in_execution, create_workflow_execution_session, delete_selection_from_execution,
+    get_connection_candidates, get_execution_graph, get_undo_redo_state,
+    insert_node_and_connect_in_execution, insert_node_on_edge_in_execution,
+    preview_node_insert_on_edge_in_execution, redo_workflow, remove_edge_from_execution,
+    remove_edges_from_execution, remove_execution, remove_node_from_execution, undo_workflow,
     ungroup_in_execution, update_group_ports_in_execution, update_node_data,
     update_node_position_in_execution,
 };
 pub use super::workflow_execution_runtime::{
-    run_workflow_execution_session, RunWorkflowExecutionSessionInput,
-    WorkflowEditSessionRunResponse, WorkflowExecutionRuntimeState,
+    RunWorkflowExecutionSessionInput, WorkflowEditSessionRunResponse,
+    WorkflowExecutionRuntimeState, run_workflow_execution_session,
 };
 
 #[cfg(test)]

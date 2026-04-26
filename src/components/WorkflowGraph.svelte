@@ -24,7 +24,7 @@
 
   import {
     addNode, clearConnectionIntent, connectionIntent, edges as edgesStore, isEditing,
-    nodeDefinitions, nodes as nodesStore, removeNode, selectedNodeIds, setConnectionIntent,
+    deleteSelection, nodeDefinitions, nodes as nodesStore, selectedNodeIds, setConnectionIntent,
     updateNodePosition, workflowGraph,
   } from '../stores/workflowStore';
   import { isReadOnly, currentGraphId, currentGraphType } from '../stores/graphSessionStore';
@@ -692,14 +692,10 @@
     if (!canEdit) return;
     clearConnectionInteraction();
 
-    await removeWorkflowGraphEdges(
+    await deleteSelection(
+      deletedNodes.map((node) => node.id),
       deletedEdges.map((edge) => edge.id),
-      '[WorkflowGraph] Failed to remove edge:',
     );
-
-    for (const node of deletedNodes) {
-      removeNode(node.id);
-    }
   }
 
   async function handleDrop(event: DragEvent) {

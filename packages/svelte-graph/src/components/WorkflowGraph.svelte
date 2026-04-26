@@ -645,22 +645,11 @@
   async function handleDelete({ nodes: deletedNodes, edges: deletedEdges }: { nodes: Node[]; edges: Edge[] }) {
     if (!canEdit) return;
 
-    const sessionId = get(currentSessionId);
     clearConnectionInteraction();
-
-    if (sessionId) {
-      await removeWorkflowGraphEdgesMutation({
-        backend,
-        edgeIds: deletedEdges.map((edge) => edge.id),
-        errorMessage: '[WorkflowGraph] Failed to notify backend of edge removal:',
-        sessionId,
-        workflowStores: stores.workflow,
-      });
-    }
-
-    for (const node of deletedNodes) {
-      stores.workflow.removeNode(node.id);
-    }
+    await stores.workflow.deleteSelection(
+      deletedNodes.map((node) => node.id),
+      deletedEdges.map((edge) => edge.id),
+    );
   }
 
   function handleDrop(event: DragEvent) {

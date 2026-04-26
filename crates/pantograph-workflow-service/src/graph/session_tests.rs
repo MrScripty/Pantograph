@@ -1,6 +1,10 @@
 use super::super::types::InsertNodePositionHint;
 use super::*;
 use crate::graph::types::{ConnectionAnchor, GraphNode, Position};
+use crate::graph::{
+    WorkflowGraphDeleteSelectionRequest, WorkflowGraphEditSessionGraphRequest,
+    WorkflowGraphRemoveEdgesRequest,
+};
 use crate::{
     WorkflowExecutionSessionQueueItemStatus, WorkflowGraphRemoveNodeRequest,
     WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest,
@@ -44,6 +48,26 @@ fn sample_graph() -> WorkflowGraph {
 fn disconnected_graph() -> WorkflowGraph {
     let mut graph = sample_graph();
     graph.edges.clear();
+    graph
+}
+
+fn branching_graph() -> WorkflowGraph {
+    let mut graph = sample_graph();
+    graph.nodes.push(GraphNode {
+        id: "text-copy".to_string(),
+        node_type: "text-output".to_string(),
+        position: Position { x: 120.0, y: 80.0 },
+        data: serde_json::json!({
+            "label": "Text Copy"
+        }),
+    });
+    graph.edges.push(GraphEdge {
+        id: "text-input-text-text-copy-text".to_string(),
+        source: "text-input".to_string(),
+        source_handle: "text".to_string(),
+        target: "text-copy".to_string(),
+        target_handle: "text".to_string(),
+    });
     graph
 }
 
@@ -269,6 +293,70 @@ async fn remove_node_prunes_attached_edges() {
 }
 
 #[tokio::test]
+async fn remove_edges_removes_multiple_edges_with_one_undo_snapshot() {
+    let store = GraphSessionStore::new();
+    let session = store.create_session(branching_graph(), None).await;
+
+    let response = store
+        .remove_edges(WorkflowGraphRemoveEdgesRequest {
+            session_id: session.session_id.clone(),
+            edge_ids: vec![
+                "text-input-text-text-output-text".to_string(),
+                "text-input-text-text-copy-text".to_string(),
+            ],
+        })
+        .await
+        .expect("remove edges");
+
+    assert!(response.graph.edges.is_empty());
+    let undo_state = store
+        .get_undo_redo_state(&session.session_id)
+        .await
+        .expect("undo state");
+    assert_eq!(undo_state.undo_count, 1);
+
+    let undo_response = store
+        .undo(WorkflowGraphEditSessionGraphRequest {
+            session_id: session.session_id.clone(),
+        })
+        .await
+        .expect("undo remove edges");
+    assert_eq!(undo_response.graph.edges.len(), 2);
+}
+
+#[tokio::test]
+async fn delete_selection_removes_mixed_selection_with_one_undo_snapshot() {
+    let store = GraphSessionStore::new();
+    let session = store.create_session(branching_graph(), None).await;
+
+    let response = store
+        .delete_selection(WorkflowGraphDeleteSelectionRequest {
+            session_id: session.session_id.clone(),
+            node_ids: vec!["text-copy".to_string()],
+            edge_ids: vec!["text-input-text-text-output-text".to_string()],
+        })
+        .await
+        .expect("delete selection");
+
+    assert!(response.graph.find_node("text-copy").is_none());
+    assert!(response.graph.edges.is_empty());
+    let undo_state = store
+        .get_undo_redo_state(&session.session_id)
+        .await
+        .expect("undo state");
+    assert_eq!(undo_state.undo_count, 1);
+
+    let undo_response = store
+        .undo(WorkflowGraphEditSessionGraphRequest {
+            session_id: session.session_id.clone(),
+        })
+        .await
+        .expect("undo delete selection");
+    assert!(undo_response.graph.find_node("text-copy").is_some());
+    assert_eq!(undo_response.graph.edges.len(), 2);
+}
+
+#[tokio::test]
 async fn undo_response_carries_backend_owned_graph_modified_event() {
     let store = GraphSessionStore::new();
     let session = store.create_session(sample_graph(), None).await;
@@ -376,10 +464,12 @@ async fn insert_node_on_edge_replaces_original_edge_in_session_graph() {
     assert!(response.accepted);
     let graph = response.graph.expect("updated graph");
     assert_eq!(graph.edges.len(), 2);
-    assert!(graph
-        .edges
-        .iter()
-        .all(|edge| edge.id != "text-input-text-text-output-text"));
+    assert!(
+        graph
+            .edges
+            .iter()
+            .all(|edge| edge.id != "text-input-text-text-output-text")
+    );
     let inserted_node_id = response.inserted_node_id.expect("inserted node id");
     assert!(graph.find_node(&inserted_node_id).is_some());
     assert!(matches!(
@@ -396,10 +486,12 @@ async fn insert_node_on_edge_replaces_original_edge_in_session_graph() {
         .expect("workflow execution session state")
         .memory_impact
         .expect("memory impact");
-    assert!(response_memory_impact
-        .node_decisions
-        .iter()
-        .any(|decision| decision.node_id == inserted_node_id));
+    assert!(
+        response_memory_impact
+            .node_decisions
+            .iter()
+            .any(|decision| decision.node_id == inserted_node_id)
+    );
 
     let snapshot = store
         .get_session_graph(&session.session_id)
@@ -411,10 +503,12 @@ async fn insert_node_on_edge_replaces_original_edge_in_session_graph() {
         .memory_impact
         .expect("memory impact");
     assert!(!memory_impact.node_decisions.is_empty());
-    assert!(memory_impact
-        .node_decisions
-        .iter()
-        .any(|decision| decision.node_id == inserted_node_id));
+    assert!(
+        memory_impact
+            .node_decisions
+            .iter()
+            .any(|decision| decision.node_id == inserted_node_id)
+    );
 }
 
 #[tokio::test]

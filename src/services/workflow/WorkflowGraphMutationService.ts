@@ -103,6 +103,28 @@ export abstract class WorkflowGraphMutationService {
     }).then((response) => parseWorkflowGraphMutationResponse(response).graph);
   }
 
+  async deleteSelection(
+    nodeIds: string[],
+    edgeIds: string[],
+    executionId?: string
+  ): Promise<WorkflowGraph> {
+    const id = executionId ?? this.currentExecutionId;
+    if (!id) {
+      throw new Error('No active execution');
+    }
+
+    if (USE_WORKFLOW_MOCKS) {
+      console.log('[WorkflowService] Mock: Delete selection', { nodeIds, edgeIds });
+      return { nodes: [], edges: [] };
+    }
+
+    return invoke<unknown>('delete_selection_from_execution', {
+      executionId: id,
+      nodeIds,
+      edgeIds,
+    }).then((response) => parseWorkflowGraphMutationResponse(response).graph);
+  }
+
   async addEdge(edge: GraphEdge, executionId?: string): Promise<WorkflowGraph> {
     const id = executionId ?? this.currentExecutionId;
     if (!id) {
@@ -267,6 +289,23 @@ export abstract class WorkflowGraphMutationService {
     return invoke<unknown>('remove_edge_from_execution', {
       executionId: id,
       edgeId,
+    }).then((response) => parseWorkflowGraphMutationResponse(response).graph);
+  }
+
+  async removeEdges(edgeIds: string[], executionId?: string): Promise<WorkflowGraph> {
+    const id = executionId ?? this.currentExecutionId;
+    if (!id) {
+      throw new Error('No active session');
+    }
+
+    if (USE_WORKFLOW_MOCKS) {
+      console.log('[WorkflowService] Mock: Remove edges', edgeIds);
+      return { nodes: [], edges: [] };
+    }
+
+    return invoke<unknown>('remove_edges_from_execution', {
+      executionId: id,
+      edgeIds,
     }).then((response) => parseWorkflowGraphMutationResponse(response).graph);
   }
 

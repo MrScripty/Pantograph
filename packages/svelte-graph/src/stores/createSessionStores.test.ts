@@ -59,6 +59,9 @@ function createBackendStub(overrides: Partial<WorkflowBackend> = {}): WorkflowBa
     async removeNode() {
       return { graph: { nodes: [], edges: [] } };
     },
+    async deleteSelection() {
+      return { graph: { nodes: [], edges: [] } };
+    },
     async addEdge() {
       return { graph: { nodes: [], edges: [] } };
     },
@@ -78,6 +81,9 @@ function createBackendStub(overrides: Partial<WorkflowBackend> = {}): WorkflowBa
       throw new Error('not implemented');
     },
     async removeEdge() {
+      return { graph: { nodes: [], edges: [] } };
+    },
+    async removeEdges() {
       return { graph: { nodes: [], edges: [] } };
     },
     async updateNodeData() {

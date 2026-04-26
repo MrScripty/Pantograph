@@ -46,6 +46,7 @@ export const nodeDefinitionsByCategory = workflowStores.nodeDefinitionsByCategor
 // --- Node actions ---
 export const addNode = workflowStores.addNode;
 export const removeNode = workflowStores.removeNode;
+export const deleteSelection = workflowStores.deleteSelection;
 export const updateNodePosition = workflowStores.updateNodePosition;
 export const updateNodeData = workflowStores.updateNodeData;
 export const updateNodeRuntimeData = workflowStores.updateNodeRuntimeData;
@@ -58,6 +59,7 @@ export const getNodesBounds = workflowStores.getNodesBounds;
 // --- Edge actions ---
 export const addEdge = workflowStores.addEdge;
 export const removeEdge = workflowStores.removeEdge;
+export const removeEdges = workflowStores.removeEdges;
 export const syncEdgesFromBackend = workflowStores.syncEdgesFromBackend;
 
 // --- Execution actions ---

@@ -79,6 +79,23 @@ function createBackendStub(initialGraph: WorkflowGraph): WorkflowBackend {
     async removeNode() {
       throw new Error('not implemented');
     },
+    async deleteSelection(nodeIds: string[], edgeIds: string[]) {
+      const deletedNodeIds = new Set(nodeIds);
+      const deletedEdgeIds = new Set(edgeIds);
+      currentGraph = {
+        ...currentGraph,
+        nodes: currentGraph.nodes.filter((node) => !deletedNodeIds.has(node.id)),
+        edges: currentGraph.edges.filter(
+          (edge) =>
+            !deletedEdgeIds.has(edge.id) &&
+            !deletedNodeIds.has(edge.source) &&
+            !deletedNodeIds.has(edge.target),
+        ),
+      };
+      return {
+        graph: structuredClone(currentGraph),
+      };
+    },
     async addEdge() {
       throw new Error('not implemented');
     },
@@ -99,6 +116,16 @@ function createBackendStub(initialGraph: WorkflowGraph): WorkflowBackend {
     },
     async removeEdge() {
       throw new Error('not implemented');
+    },
+    async removeEdges(edgeIds: string[]) {
+      const deletedEdgeIds = new Set(edgeIds);
+      currentGraph = {
+        ...currentGraph,
+        edges: currentGraph.edges.filter((edge) => !deletedEdgeIds.has(edge.id)),
+      };
+      return {
+        graph: structuredClone(currentGraph),
+      };
     },
     async updateNodeData(nodeId: string, data: Record<string, unknown>) {
       currentGraph = {
@@ -506,6 +533,80 @@ test('createWorkflowStores reports stale edge removal responses without applying
     (get(stores.workflowGraph) as WorkflowGraph).edges.map((edge) => edge.id),
     ['edge-a'],
   );
+});
+
+test('createWorkflowStores deletes selected nodes and edges with one backend mutation', async () => {
+  const graph = {
+    nodes: [
+      {
+        id: 'source',
+        node_type: 'text-input',
+        position: { x: 0, y: 0 },
+        data: {},
+      },
+      {
+        id: 'target',
+        node_type: 'text-input',
+        position: { x: 100, y: 0 },
+        data: {},
+      },
+      {
+        id: 'extra',
+        node_type: 'text-input',
+        position: { x: 200, y: 0 },
+        data: {},
+      },
+    ],
+    edges: [
+      {
+        id: 'source-target',
+        source: 'source',
+        source_handle: 'text',
+        target: 'target',
+        target_handle: 'text',
+      },
+      {
+        id: 'target-extra',
+        source: 'target',
+        source_handle: 'text',
+        target: 'extra',
+        target_handle: 'text',
+      },
+    ],
+  } satisfies WorkflowGraph;
+  let deleteSelectionCalls = 0;
+  const backend = createBackendStub(graph);
+  const stores = createWorkflowStores(
+    {
+      ...backend,
+      async deleteSelection(nodeIds: string[], edgeIds: string[], sessionId: string) {
+        deleteSelectionCalls += 1;
+        assert.deepEqual(nodeIds, ['target']);
+        assert.deepEqual(edgeIds, ['source-target']);
+        assert.equal(sessionId, 'session-a');
+        return backend.deleteSelection(nodeIds, edgeIds, sessionId);
+      },
+    },
+    {
+      groupStack: writable<string[]>([]),
+      async tabOutOfGroup() {},
+    },
+  );
+
+  stores.loadWorkflow(graph);
+  stores.setActiveSessionId('session-a');
+  stores.selectedNodeIds.set(['target']);
+
+  const result = await stores.deleteSelection(['target'], ['source-target']);
+
+  assert.equal(result.status, 'applied');
+  assert.equal(deleteSelectionCalls, 1);
+  assert.deepEqual(
+    (get(stores.workflowGraph) as WorkflowGraph).nodes.map((node) => node.id),
+    ['source', 'extra'],
+  );
+  assert.deepEqual((get(stores.workflowGraph) as WorkflowGraph).edges, []);
+  assert.deepEqual(get(stores.selectedNodeIds), []);
 });
 
 test('createWorkflowStores ignores stale group mutation responses', async () => {

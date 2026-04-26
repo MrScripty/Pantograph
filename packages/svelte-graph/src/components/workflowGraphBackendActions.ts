@@ -269,15 +269,17 @@ export async function removeWorkflowGraphEdges({
   sessionId,
   workflowStores,
 }: RemoveWorkflowGraphEdgesParams) {
-  for (const edgeId of edgeIds) {
-    try {
-      const response = await backend.removeEdge(edgeId, sessionId);
-      if (response.graph) {
-        workflowStores.syncEdgesFromBackend(response.graph, { sessionId });
-      }
-    } catch (error) {
-      console.error(errorMessage, error);
+  if (edgeIds.length === 0) {
+    return;
+  }
+
+  try {
+    const response = await backend.removeEdges(edgeIds, sessionId);
+    if (response.graph) {
+      workflowStores.syncEdgesFromBackend(response.graph, { sessionId });
     }
+  } catch (error) {
+    console.error(errorMessage, error);
   }
 }
 

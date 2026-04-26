@@ -1,20 +1,22 @@
+use crate::WorkflowRunId;
 use crate::graph::{
     ConnectionCandidatesResponse, ConnectionCommitResponse, EdgeInsertionPreviewResponse,
     InsertNodeConnectionResponse, InsertNodeOnEdgeResponse, WorkflowFile, WorkflowGraph,
     WorkflowGraphAddEdgeRequest, WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest,
     WorkflowGraphCreateGroupRequest, WorkflowGraphDeleteRequest, WorkflowGraphDeleteResponse,
-    WorkflowGraphEditSessionCloseRequest, WorkflowGraphEditSessionCloseResponse,
-    WorkflowGraphEditSessionCreateRequest, WorkflowGraphEditSessionCreateResponse,
-    WorkflowGraphEditSessionGraphRequest, WorkflowGraphEditSessionGraphResponse,
-    WorkflowGraphGetConnectionCandidatesRequest, WorkflowGraphInsertNodeAndConnectRequest,
-    WorkflowGraphInsertNodeOnEdgeRequest, WorkflowGraphListResponse, WorkflowGraphLoadRequest,
+    WorkflowGraphDeleteSelectionRequest, WorkflowGraphEditSessionCloseRequest,
+    WorkflowGraphEditSessionCloseResponse, WorkflowGraphEditSessionCreateRequest,
+    WorkflowGraphEditSessionCreateResponse, WorkflowGraphEditSessionGraphRequest,
+    WorkflowGraphEditSessionGraphResponse, WorkflowGraphGetConnectionCandidatesRequest,
+    WorkflowGraphInsertNodeAndConnectRequest, WorkflowGraphInsertNodeOnEdgeRequest,
+    WorkflowGraphListResponse, WorkflowGraphLoadRequest,
     WorkflowGraphPreviewNodeInsertOnEdgeRequest, WorkflowGraphRemoveEdgeRequest,
-    WorkflowGraphRemoveNodeRequest, WorkflowGraphSaveRequest, WorkflowGraphSaveResponse,
-    WorkflowGraphStore, WorkflowGraphUndoRedoStateRequest, WorkflowGraphUndoRedoStateResponse,
-    WorkflowGraphUngroupRequest, WorkflowGraphUpdateGroupPortsRequest,
-    WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest,
+    WorkflowGraphRemoveEdgesRequest, WorkflowGraphRemoveNodeRequest, WorkflowGraphSaveRequest,
+    WorkflowGraphSaveResponse, WorkflowGraphStore, WorkflowGraphUndoRedoStateRequest,
+    WorkflowGraphUndoRedoStateResponse, WorkflowGraphUngroupRequest,
+    WorkflowGraphUpdateGroupPortsRequest, WorkflowGraphUpdateNodeDataRequest,
+    WorkflowGraphUpdateNodePositionRequest,
 };
-use crate::WorkflowRunId;
 
 use super::{WorkflowService, WorkflowServiceError};
 
@@ -84,6 +86,13 @@ impl WorkflowService {
         self.graph_session_store.remove_node(request).await
     }
 
+    pub async fn workflow_graph_delete_selection(
+        &self,
+        request: WorkflowGraphDeleteSelectionRequest,
+    ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
+        self.graph_session_store.delete_selection(request).await
+    }
+
     pub async fn workflow_graph_add_edge(
         &self,
         request: WorkflowGraphAddEdgeRequest,
@@ -96,6 +105,13 @@ impl WorkflowService {
         request: WorkflowGraphRemoveEdgeRequest,
     ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
         self.graph_session_store.remove_edge(request).await
+    }
+
+    pub async fn workflow_graph_remove_edges(
+        &self,
+        request: WorkflowGraphRemoveEdgesRequest,
+    ) -> Result<WorkflowGraphEditSessionGraphResponse, WorkflowServiceError> {
+        self.graph_session_store.remove_edges(request).await
     }
 
     pub async fn workflow_graph_create_group(

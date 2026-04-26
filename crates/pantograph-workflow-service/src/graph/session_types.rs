@@ -87,6 +87,14 @@ pub struct WorkflowGraphRemoveNodeRequest {
     pub node_id: String,
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowGraphDeleteSelectionRequest {
+    pub session_id: String,
+    pub node_ids: Vec<String>,
+    pub edge_ids: Vec<String>,
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowGraphAddNodeRequest {
@@ -106,6 +114,13 @@ pub struct WorkflowGraphAddEdgeRequest {
 pub struct WorkflowGraphRemoveEdgeRequest {
     pub session_id: String,
     pub edge_id: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowGraphRemoveEdgesRequest {
+    pub session_id: String,
+    pub edge_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
