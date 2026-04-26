@@ -11,10 +11,10 @@ use pantograph_workflow_service::{
 use parking_lot::Mutex;
 
 use super::attempts::{
-    overlay_record_decision, trace_attempt_state_for_execution, trace_attempt_state_in_snapshot,
-    trace_event_execution_id, OverlayRecordDecision,
+    OverlayRecordDecision, overlay_record_decision, trace_attempt_state_for_workflow_run,
+    trace_attempt_state_in_snapshot, trace_event_workflow_run_id,
 };
-use super::overlay::{event_execution_id, record_diagnostics_overlay, WorkflowDiagnosticsState};
+use super::overlay::{WorkflowDiagnosticsState, event_workflow_run_id, record_diagnostics_overlay};
 use super::trace::{graph_trace_context, workflow_trace_event};
 use super::types::{
     DiagnosticsRuntimeLifecycleSnapshot, DiagnosticsRuntimeSnapshot,
@@ -30,7 +30,7 @@ const DEFAULT_DIAGNOSTICS_EVENT_LIMIT: usize = 200;
 #[derive(Debug, Clone, Default)]
 pub struct WorkflowRuntimeSnapshotRecord {
     pub workflow_id: String,
-    pub execution_id: String,
+    pub workflow_run_id: String,
     pub captured_at_ms: u64,
     pub capabilities: Option<WorkflowCapabilitiesResponse>,
     pub trace_runtime_metrics: WorkflowTraceRuntimeMetrics,
@@ -45,7 +45,7 @@ pub struct WorkflowRuntimeSnapshotRecord {
 #[derive(Debug, Clone, Default)]
 pub struct WorkflowSchedulerSnapshotRecord {
     pub workflow_id: Option<String>,
-    pub execution_id: String,
+    pub workflow_run_id: String,
     pub session_id: String,
     pub captured_at_ms: u64,
     pub session: Option<WorkflowExecutionSessionSummary>,
@@ -151,32 +151,26 @@ impl WorkflowDiagnosticsStore {
         state.snapshot(&traces)
     }
 
-    pub fn set_execution_metadata(
-        &self,
-        execution_id: &str,
-        workflow_id: Option<String>,
-        workflow_name: Option<String>,
-    ) {
+    pub fn set_execution_metadata(&self, workflow_run_id: &str, workflow_id: Option<String>) {
         self.trace_store
-            .set_execution_metadata(execution_id, workflow_id, workflow_name);
+            .set_execution_metadata(workflow_run_id, workflow_id);
     }
 
-    pub fn set_execution_graph(&self, execution_id: &str, graph: &WorkflowGraph) {
+    pub fn set_execution_graph(&self, workflow_run_id: &str, graph: &WorkflowGraph) {
         self.trace_store
-            .set_execution_graph_context(execution_id, &graph_trace_context(graph));
+            .set_execution_graph_context(workflow_run_id, &graph_trace_context(graph));
     }
 
     pub fn workflow_timing_history(
         &self,
         workflow_id: String,
-        workflow_name: Option<String>,
         graph: &WorkflowGraph,
     ) -> DiagnosticsWorkflowTimingHistory {
-        DiagnosticsWorkflowTimingHistory::from(&self.trace_store.graph_timing_expectations(
-            workflow_id,
-            workflow_name,
-            &graph_trace_context(graph),
-        ))
+        DiagnosticsWorkflowTimingHistory::from(
+            &self
+                .trace_store
+                .graph_timing_expectations(workflow_id, &graph_trace_context(graph)),
+        )
     }
 
     pub fn record_runtime_snapshot(
@@ -185,7 +179,7 @@ impl WorkflowDiagnosticsStore {
     ) -> WorkflowDiagnosticsProjection {
         let event = WorkflowEvent::runtime_snapshot(WorkflowRuntimeSnapshotEventInput {
             workflow_id: input.workflow_id,
-            execution_id: input.execution_id,
+            workflow_run_id: input.workflow_run_id,
             captured_at_ms: input.captured_at_ms,
             capabilities: input.capabilities,
             trace_runtime_metrics: input.trace_runtime_metrics,
@@ -205,7 +199,7 @@ impl WorkflowDiagnosticsStore {
     ) -> WorkflowDiagnosticsProjection {
         let event = WorkflowEvent::scheduler_snapshot(WorkflowSchedulerSnapshotEventInput {
             workflow_id: input.workflow_id,
-            execution_id: input.execution_id,
+            workflow_run_id: input.workflow_run_id,
             session_id: input.session_id,
             captured_at_ms: input.captured_at_ms,
             session: input.session,
@@ -257,7 +251,7 @@ impl WorkflowDiagnosticsStore {
             Some(session_id) => DiagnosticsSchedulerSnapshot {
                 workflow_id: input.workflow_id,
                 session_id: Some(session_id),
-                trace_execution_id: None,
+                workflow_run_id: None,
                 captured_at_ms: Some(input.captured_at_ms),
                 session: input.session,
                 items: input.items,
@@ -276,23 +270,23 @@ impl WorkflowDiagnosticsStore {
         event: &WorkflowEvent,
         timestamp_ms: u64,
     ) -> WorkflowDiagnosticsProjection {
-        let (traces, execution_id, overlay_decision) = workflow_trace_event(event)
+        let (traces, workflow_run_id, overlay_decision) = workflow_trace_event(event)
             .map(|trace_event| {
-                let execution_id = trace_event_execution_id(&trace_event).to_string();
+                let workflow_run_id = trace_event_workflow_run_id(&trace_event).to_string();
                 let previous_state =
-                    trace_attempt_state_for_execution(&self.trace_store, &execution_id);
+                    trace_attempt_state_for_workflow_run(&self.trace_store, &workflow_run_id);
                 let traces = self.trace_store.record_event(&trace_event, timestamp_ms);
-                let current_state = trace_attempt_state_in_snapshot(&traces, &execution_id);
+                let current_state = trace_attempt_state_in_snapshot(&traces, &workflow_run_id);
                 (
                     traces,
-                    Some(execution_id),
+                    Some(workflow_run_id),
                     overlay_record_decision(previous_state, current_state),
                 )
             })
             .unwrap_or_else(|| {
                 (
                     self.trace_store.snapshot_all(),
-                    event_execution_id(event),
+                    event_workflow_run_id(event),
                     OverlayRecordDecision {
                         reset_overlay: false,
                         record_overlay: true,
@@ -301,8 +295,8 @@ impl WorkflowDiagnosticsStore {
             });
         let mut state = self.state.lock();
         if overlay_decision.reset_overlay {
-            if let Some(execution_id) = execution_id.as_deref() {
-                state.overlays_by_execution_id.remove(execution_id);
+            if let Some(workflow_run_id) = workflow_run_id.as_deref() {
+                state.overlays_by_workflow_run_id.remove(workflow_run_id);
             }
         }
         if overlay_decision.record_overlay {
@@ -316,18 +310,18 @@ impl WorkflowDiagnosticsStore {
         &self,
         event: &WorkflowEvent,
     ) -> WorkflowDiagnosticsProjection {
-        let (traces, timestamp_ms, execution_id, overlay_decision) = workflow_trace_event(event)
+        let (traces, timestamp_ms, workflow_run_id, overlay_decision) = workflow_trace_event(event)
             .map(|trace_event| {
-                let execution_id = trace_event_execution_id(&trace_event).to_string();
+                let workflow_run_id = trace_event_workflow_run_id(&trace_event).to_string();
                 let previous_state =
-                    trace_attempt_state_for_execution(&self.trace_store, &execution_id);
+                    trace_attempt_state_for_workflow_run(&self.trace_store, &workflow_run_id);
                 let result = self.trace_store.record_event_now(&trace_event);
                 let current_state =
-                    trace_attempt_state_in_snapshot(&result.snapshot, &execution_id);
+                    trace_attempt_state_in_snapshot(&result.snapshot, &workflow_run_id);
                 (
                     result.snapshot,
                     result.recorded_at_ms,
-                    Some(execution_id),
+                    Some(workflow_run_id),
                     overlay_record_decision(previous_state, current_state),
                 )
             })
@@ -336,7 +330,7 @@ impl WorkflowDiagnosticsStore {
                 (
                     self.trace_store.snapshot_all(),
                     timestamp_ms,
-                    event_execution_id(event),
+                    event_workflow_run_id(event),
                     OverlayRecordDecision {
                         reset_overlay: false,
                         record_overlay: true,
@@ -345,8 +339,8 @@ impl WorkflowDiagnosticsStore {
             });
         let mut state = self.state.lock();
         if overlay_decision.reset_overlay {
-            if let Some(execution_id) = execution_id.as_deref() {
-                state.overlays_by_execution_id.remove(execution_id);
+            if let Some(workflow_run_id) = workflow_run_id.as_deref() {
+                state.overlays_by_workflow_run_id.remove(workflow_run_id);
             }
         }
         if overlay_decision.record_overlay {
@@ -362,14 +356,15 @@ impl WorkflowDiagnosticsStore {
         overlay_event: &WorkflowEvent,
         timestamp_ms: u64,
     ) -> WorkflowDiagnosticsProjection {
-        let execution_id = trace_event_execution_id(trace_event).to_string();
-        let previous_state = trace_attempt_state_for_execution(&self.trace_store, &execution_id);
+        let workflow_run_id = trace_event_workflow_run_id(trace_event).to_string();
+        let previous_state =
+            trace_attempt_state_for_workflow_run(&self.trace_store, &workflow_run_id);
         let traces = self.trace_store.record_event(trace_event, timestamp_ms);
-        let current_state = trace_attempt_state_in_snapshot(&traces, &execution_id);
+        let current_state = trace_attempt_state_in_snapshot(&traces, &workflow_run_id);
         let overlay_decision = overlay_record_decision(previous_state, current_state);
         let mut state = self.state.lock();
         if overlay_decision.reset_overlay {
-            state.overlays_by_execution_id.remove(&execution_id);
+            state.overlays_by_workflow_run_id.remove(&workflow_run_id);
         }
         if overlay_decision.record_overlay {
             record_diagnostics_overlay(&mut state, overlay_event, timestamp_ms);

@@ -43,7 +43,7 @@ impl DiagnosticsRunOverlay {
 
 #[derive(Debug, Clone)]
 pub(crate) struct WorkflowDiagnosticsState {
-    pub(crate) overlays_by_execution_id: BTreeMap<String, DiagnosticsRunOverlay>,
+    pub(crate) overlays_by_workflow_run_id: BTreeMap<String, DiagnosticsRunOverlay>,
     pub(crate) runtime: DiagnosticsRuntimeSnapshot,
     pub(crate) scheduler: DiagnosticsSchedulerSnapshot,
     pub(crate) retained_event_limit: usize,
@@ -52,7 +52,7 @@ pub(crate) struct WorkflowDiagnosticsState {
 impl WorkflowDiagnosticsState {
     pub(crate) fn new(retained_event_limit: usize) -> Self {
         Self {
-            overlays_by_execution_id: BTreeMap::new(),
+            overlays_by_workflow_run_id: BTreeMap::new(),
             runtime: DiagnosticsRuntimeSnapshot::default(),
             scheduler: DiagnosticsSchedulerSnapshot::default(),
             retained_event_limit,
@@ -66,18 +66,18 @@ impl WorkflowDiagnosticsState {
         let run_order = traces
             .traces
             .iter()
-            .map(|trace| trace.execution_id.clone())
+            .map(|trace| trace.workflow_run_id.clone())
             .collect::<Vec<_>>();
         let runs_by_id = traces
             .traces
             .iter()
             .map(|trace| {
                 let overlay = self
-                    .overlays_by_execution_id
-                    .get(&trace.execution_id)
+                    .overlays_by_workflow_run_id
+                    .get(&trace.workflow_run_id)
                     .cloned();
                 (
-                    trace.execution_id.clone(),
+                    trace.workflow_run_id.clone(),
                     diagnostics_run_trace(trace, overlay),
                 )
             })
@@ -96,17 +96,19 @@ impl WorkflowDiagnosticsState {
     }
 
     pub(crate) fn clear_history(&mut self) {
-        self.overlays_by_execution_id.clear();
+        self.overlays_by_workflow_run_id.clear();
     }
 
     pub(crate) fn prune_overlays(&mut self, traces: &WorkflowTraceSnapshotResponse) {
-        let retained_execution_ids = traces
+        let retained_workflow_run_ids = traces
             .traces
             .iter()
-            .map(|trace| trace.execution_id.as_str())
+            .map(|trace| trace.workflow_run_id.as_str())
             .collect::<HashSet<_>>();
-        self.overlays_by_execution_id
-            .retain(|execution_id, _| retained_execution_ids.contains(execution_id.as_str()));
+        self.overlays_by_workflow_run_id
+            .retain(|workflow_run_id, _| {
+                retained_workflow_run_ids.contains(workflow_run_id.as_str())
+            });
     }
 }
 
@@ -122,13 +124,13 @@ pub(crate) fn record_diagnostics_overlay(
         apply_scheduler_event(state, event, timestamp_ms);
     }
 
-    let Some(execution_id) = event_execution_id(event) else {
+    let Some(workflow_run_id) = event_workflow_run_id(event) else {
         return;
     };
 
     let overlay = state
-        .overlays_by_execution_id
-        .entry(execution_id.clone())
+        .overlays_by_workflow_run_id
+        .entry(workflow_run_id.clone())
         .or_insert_with(|| DiagnosticsRunOverlay::new(timestamp_ms));
     overlay.last_updated_at_ms = timestamp_ms;
 
@@ -179,11 +181,11 @@ pub(crate) fn record_diagnostics_overlay(
 
     let sequence = overlay.events.len() + 1;
     overlay.events.push(DiagnosticsEventRecord {
-        id: format!("{}-{}", execution_id, sequence),
+        id: format!("{}-{}", workflow_run_id, sequence),
         sequence,
         timestamp_ms,
         event_type: event_type_name(event).to_string(),
-        execution_id,
+        workflow_run_id,
         workflow_id: event_workflow_id(event),
         node_id: event_node_id(event),
         summary: summarize_event(event),
@@ -195,23 +197,53 @@ pub(crate) fn record_diagnostics_overlay(
     }
 }
 
-pub(crate) fn event_execution_id(event: &WorkflowEvent) -> Option<String> {
+pub(crate) fn event_workflow_run_id(event: &WorkflowEvent) -> Option<String> {
     match event {
-        WorkflowEvent::Started { execution_id, .. }
-        | WorkflowEvent::NodeStarted { execution_id, .. }
-        | WorkflowEvent::NodeProgress { execution_id, .. }
-        | WorkflowEvent::NodeStream { execution_id, .. }
-        | WorkflowEvent::NodeCompleted { execution_id, .. }
-        | WorkflowEvent::NodeError { execution_id, .. }
-        | WorkflowEvent::Completed { execution_id, .. }
-        | WorkflowEvent::Failed { execution_id, .. }
-        | WorkflowEvent::Cancelled { execution_id, .. }
-        | WorkflowEvent::GraphModified { execution_id, .. }
-        | WorkflowEvent::WaitingForInput { execution_id, .. }
-        | WorkflowEvent::IncrementalExecutionStarted { execution_id, .. }
-        | WorkflowEvent::RuntimeSnapshot { execution_id, .. }
-        | WorkflowEvent::SchedulerSnapshot { execution_id, .. }
-        | WorkflowEvent::DiagnosticsSnapshot { execution_id, .. } => Some(execution_id.clone()),
+        WorkflowEvent::Started {
+            workflow_run_id, ..
+        }
+        | WorkflowEvent::NodeStarted {
+            workflow_run_id, ..
+        }
+        | WorkflowEvent::NodeProgress {
+            workflow_run_id, ..
+        }
+        | WorkflowEvent::NodeStream {
+            workflow_run_id, ..
+        }
+        | WorkflowEvent::NodeCompleted {
+            workflow_run_id, ..
+        }
+        | WorkflowEvent::NodeError {
+            workflow_run_id, ..
+        }
+        | WorkflowEvent::Completed {
+            workflow_run_id, ..
+        }
+        | WorkflowEvent::Failed {
+            workflow_run_id, ..
+        }
+        | WorkflowEvent::Cancelled {
+            workflow_run_id, ..
+        }
+        | WorkflowEvent::GraphModified {
+            workflow_run_id, ..
+        }
+        | WorkflowEvent::WaitingForInput {
+            workflow_run_id, ..
+        }
+        | WorkflowEvent::IncrementalExecutionStarted {
+            workflow_run_id, ..
+        }
+        | WorkflowEvent::RuntimeSnapshot {
+            workflow_run_id, ..
+        }
+        | WorkflowEvent::SchedulerSnapshot {
+            workflow_run_id, ..
+        }
+        | WorkflowEvent::DiagnosticsSnapshot {
+            workflow_run_id, ..
+        } => Some(workflow_run_id.clone()),
     }
 }
 
@@ -254,7 +286,7 @@ fn apply_scheduler_event(
 ) {
     if let WorkflowEvent::SchedulerSnapshot {
         workflow_id,
-        execution_id,
+        workflow_run_id,
         session_id,
         session,
         items,
@@ -266,7 +298,7 @@ fn apply_scheduler_event(
         state.scheduler = DiagnosticsSchedulerSnapshot {
             workflow_id: workflow_id.clone(),
             session_id: Some(session_id.clone()),
-            trace_execution_id: Some(execution_id.clone()),
+            workflow_run_id: Some(workflow_run_id.clone()),
             captured_at_ms: Some(timestamp_ms),
             session: session.clone(),
             items: items.clone(),

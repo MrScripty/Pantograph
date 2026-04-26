@@ -12,11 +12,11 @@ fn workflow_diagnostics_snapshot_projection_joins_backend_scheduler_and_runtime_
         Some(Ok(WorkflowSchedulerSnapshotResponse {
             workflow_id: Some("wf-1".to_string()),
             session_id: "session-1".to_string(),
-            trace_execution_id: Some("run-1".to_string()),
+            workflow_run_id: Some("run-1".to_string()),
             session: running_session_summary(),
             items: vec![WorkflowExecutionSessionQueueItem {
-                queue_id: "queue-1".to_string(),
-                run_id: Some("run-1".to_string()),
+                workflow_run_id: "queue-1".to_string(),
+
                 enqueued_at_ms: Some(100),
                 dequeued_at_ms: Some(110),
                 priority: 5,
@@ -56,12 +56,11 @@ fn workflow_diagnostics_snapshot_projection_joins_backend_scheduler_and_runtime_
         Some("session-1")
     );
     assert_eq!(
-        projection.scheduler.trace_execution_id.as_deref(),
+        projection.scheduler.workflow_run_id.as_deref(),
         Some("run-1")
     );
     let trace = projection.runs_by_id.get("run-1").expect("joined trace");
     assert_eq!(trace.session_id.as_deref(), Some("session-1"));
-    assert_eq!(trace.workflow_name.as_deref(), Some("Workflow 1"));
     assert_eq!(trace.workflow_id.as_deref(), Some("wf-1"));
     assert_eq!(trace.nodes.len(), 0);
 }
@@ -78,11 +77,11 @@ fn workflow_diagnostics_snapshot_projection_preserves_scheduler_runtime_registry
         Some(Ok(WorkflowSchedulerSnapshotResponse {
             workflow_id: Some("wf-1".to_string()),
             session_id: "session-1".to_string(),
-            trace_execution_id: Some("run-1".to_string()),
+            workflow_run_id: Some("run-1".to_string()),
             session: running_session_summary(),
             items: vec![WorkflowExecutionSessionQueueItem {
-                queue_id: "queue-1".to_string(),
-                run_id: Some("run-1".to_string()),
+                workflow_run_id: "queue-1".to_string(),
+
                 enqueued_at_ms: Some(100),
                 dequeued_at_ms: None,
                 priority: 5,
@@ -98,8 +97,8 @@ fn workflow_diagnostics_snapshot_projection_preserves_scheduler_runtime_registry
                 runtime_capacity_pressure:
                     pantograph_workflow_service::WorkflowSchedulerRuntimeCapacityPressure::RebalanceRequired,
                 active_run_blocks_admission: false,
-                next_admission_queue_id: Some("queue-1".to_string()),
-                next_admission_bypassed_queue_id: None,
+                next_admission_workflow_run_id: Some("queue-1".to_string()),
+                next_admission_bypassed_workflow_run_id: None,
                 next_admission_after_runs: Some(0),
                 next_admission_wait_ms: Some(0),
                 next_admission_not_before_ms: Some(120),
@@ -168,7 +167,7 @@ fn stored_runtime_trace_metrics_prefers_latest_recorded_trace() {
         Some(Ok(WorkflowSchedulerSnapshotResponse {
             workflow_id: Some("wf-1".to_string()),
             session_id: "session-1".to_string(),
-            trace_execution_id: Some("run-1".to_string()),
+            workflow_run_id: Some("run-1".to_string()),
             session: running_session_summary(),
             items: vec![],
             diagnostics: None,
@@ -219,7 +218,7 @@ fn stored_runtime_snapshots_return_recorded_active_runtime() {
         Some(Ok(WorkflowSchedulerSnapshotResponse {
             workflow_id: Some("wf-1".to_string()),
             session_id: "session-1".to_string(),
-            trace_execution_id: Some("run-1".to_string()),
+            workflow_run_id: Some("run-1".to_string()),
             session: running_session_summary(),
             items: vec![],
             diagnostics: None,
@@ -288,7 +287,7 @@ fn stored_runtime_snapshots_normalize_missing_lifecycle_reason_from_diagnostics_
         Some(Ok(WorkflowSchedulerSnapshotResponse {
             workflow_id: Some("wf-1".to_string()),
             session_id: "session-1".to_string(),
-            trace_execution_id: Some("run-1".to_string()),
+            workflow_run_id: Some("run-1".to_string()),
             session: running_session_summary(),
             items: vec![],
             diagnostics: None,
@@ -349,7 +348,7 @@ fn stored_runtime_model_targets_return_recorded_runtime_targets() {
         Some(Ok(WorkflowSchedulerSnapshotResponse {
             workflow_id: Some("wf-1".to_string()),
             session_id: "session-1".to_string(),
-            trace_execution_id: Some("run-1".to_string()),
+            workflow_run_id: Some("run-1".to_string()),
             session: running_session_summary(),
             items: vec![],
             diagnostics: None,
@@ -410,7 +409,7 @@ fn workflow_diagnostics_snapshot_projection_preserves_observed_runtime_ids() {
         Some(Ok(WorkflowSchedulerSnapshotResponse {
             workflow_id: Some("wf-1".to_string()),
             session_id: "session-1".to_string(),
-            trace_execution_id: Some("run-1".to_string()),
+            workflow_run_id: Some("run-1".to_string()),
             session: running_session_summary(),
             items: vec![],
             diagnostics: None,
@@ -454,11 +453,11 @@ fn workflow_diagnostics_snapshot_projection_clears_scheduler_and_runtime_without
         Some(Ok(WorkflowSchedulerSnapshotResponse {
             workflow_id: Some("wf-1".to_string()),
             session_id: "session-1".to_string(),
-            trace_execution_id: Some("run-1".to_string()),
+            workflow_run_id: Some("run-1".to_string()),
             session: running_session_summary(),
             items: vec![WorkflowExecutionSessionQueueItem {
-                queue_id: "queue-1".to_string(),
-                run_id: Some("run-1".to_string()),
+                workflow_run_id: "queue-1".to_string(),
+
                 enqueued_at_ms: Some(100),
                 dequeued_at_ms: Some(110),
                 priority: 5,
@@ -499,7 +498,7 @@ fn workflow_diagnostics_snapshot_projection_clears_scheduler_and_runtime_without
 
     assert_eq!(projection.runtime.workflow_id, None);
     assert_eq!(projection.scheduler.session_id, None);
-    assert_eq!(projection.scheduler.trace_execution_id, None);
+    assert_eq!(projection.scheduler.workflow_run_id, None);
     assert_eq!(projection.run_order, vec!["run-1".to_string()]);
 }
 
@@ -515,11 +514,11 @@ fn workflow_clear_diagnostics_history_response_preserves_backend_snapshots() {
         Some(Ok(WorkflowSchedulerSnapshotResponse {
             workflow_id: Some("wf-1".to_string()),
             session_id: "session-1".to_string(),
-            trace_execution_id: Some("run-1".to_string()),
+            workflow_run_id: Some("run-1".to_string()),
             session: running_session_summary(),
             items: vec![WorkflowExecutionSessionQueueItem {
-                queue_id: "queue-1".to_string(),
-                run_id: Some("run-1".to_string()),
+                workflow_run_id: "queue-1".to_string(),
+
                 enqueued_at_ms: Some(100),
                 dequeued_at_ms: Some(110),
                 priority: 5,
@@ -561,7 +560,7 @@ fn workflow_clear_diagnostics_history_response_preserves_backend_snapshots() {
         Some("session-1")
     );
     assert_eq!(
-        projection.scheduler.trace_execution_id.as_deref(),
+        projection.scheduler.workflow_run_id.as_deref(),
         Some("run-1")
     );
 }

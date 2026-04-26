@@ -7,7 +7,7 @@ fn clear_history_preserves_runtime_and_scheduler_snapshots() {
         &crate::workflow::events::WorkflowEvent::Started {
             workflow_id: "wf-1".to_string(),
             node_count: 1,
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
         },
         1_000,
     );

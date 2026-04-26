@@ -1,16 +1,16 @@
 use std::sync::Arc;
 
 use pantograph_workflow_service::{
-    graph::{WorkflowExecutionSessionKind, WorkflowGraphSessionStateView},
     WorkflowCapabilitiesResponse, WorkflowExecutionSessionQueueItem,
     WorkflowExecutionSessionQueueItemStatus, WorkflowExecutionSessionState,
     WorkflowExecutionSessionSummary, WorkflowRuntimeRequirements,
     WorkflowSchedulerSnapshotResponse, WorkflowTraceRuntimeMetrics,
+    graph::{WorkflowExecutionSessionKind, WorkflowGraphSessionStateView},
 };
 
 use super::{
-    stored_runtime_trace_metrics, workflow_diagnostics_snapshot_projection,
-    WorkflowDiagnosticsSnapshotProjectionInput,
+    WorkflowDiagnosticsSnapshotProjectionInput, stored_runtime_trace_metrics,
+    workflow_diagnostics_snapshot_projection,
 };
 use crate::workflow::diagnostics::WorkflowDiagnosticsStore;
 
@@ -37,9 +37,10 @@ macro_rules! workflow_projection {
         workflow_diagnostics_snapshot_projection(
             $store,
             WorkflowDiagnosticsSnapshotProjectionInput {
+                workflow_run_id: None,
                 session_id: $session_id,
                 workflow_id: $workflow_id,
-                workflow_name: $workflow_name,
+
                 scheduler_snapshot_result: $scheduler_snapshot_result,
                 capabilities_result: $capabilities_result,
                 current_session_state: $current_session_state,
@@ -87,17 +88,18 @@ fn workflow_diagnostics_snapshot_projection_preserves_ambiguous_scheduler_identi
     let projection = workflow_projection!(
         &diagnostics_store,
         WorkflowDiagnosticsSnapshotProjectionInput {
+            workflow_run_id: None,
             session_id: Some("session-1".to_string()),
             workflow_id: Some("wf-1".to_string()),
-            workflow_name: Some("Workflow 1".to_string()),
+
             scheduler_snapshot_result: Some(Ok(WorkflowSchedulerSnapshotResponse {
                 workflow_id: Some("wf-1".to_string()),
                 session_id: "session-1".to_string(),
-                trace_execution_id: None,
+                workflow_run_id: None,
                 session: running_session_summary(),
                 items: vec![WorkflowExecutionSessionQueueItem {
-                    queue_id: "queue-1".to_string(),
-                    run_id: Some("run-1".to_string()),
+                    workflow_run_id: "queue-1".to_string(),
+
                     enqueued_at_ms: Some(100),
                     dequeued_at_ms: None,
                     priority: 5,
@@ -135,7 +137,7 @@ fn workflow_diagnostics_snapshot_projection_preserves_ambiguous_scheduler_identi
         projection.scheduler.session_id.as_deref(),
         Some("session-1")
     );
-    assert_eq!(projection.scheduler.trace_execution_id, None);
+    assert_eq!(projection.scheduler.workflow_run_id, None);
     assert_eq!(
         projection.context.requested_session_id.as_deref(),
         Some("session-1")
@@ -144,11 +146,7 @@ fn workflow_diagnostics_snapshot_projection_preserves_ambiguous_scheduler_identi
         projection.context.requested_workflow_id.as_deref(),
         Some("wf-1")
     );
-    assert_eq!(
-        projection.context.requested_workflow_name.as_deref(),
-        Some("Workflow 1")
-    );
-    assert_eq!(projection.context.relevant_execution_id, None);
+    assert_eq!(projection.context.relevant_workflow_run_id, None);
     assert!(projection.context.relevant);
     assert!(projection.run_order.is_empty());
     assert_eq!(projection.runtime.workflow_id.as_deref(), Some("wf-1"));
@@ -170,13 +168,14 @@ fn workflow_diagnostics_snapshot_projection_preserves_current_session_state() {
     let projection = workflow_projection!(
         &diagnostics_store,
         WorkflowDiagnosticsSnapshotProjectionInput {
+            workflow_run_id: None,
             session_id: Some("session-1".to_string()),
             workflow_id: Some("wf-1".to_string()),
-            workflow_name: Some("Workflow 1".to_string()),
+
             scheduler_snapshot_result: Some(Ok(WorkflowSchedulerSnapshotResponse {
                 workflow_id: Some("wf-1".to_string()),
                 session_id: "session-1".to_string(),
-                trace_execution_id: None,
+                workflow_run_id: None,
                 session: running_session_summary(),
                 items: Vec::new(),
                 diagnostics: None,
@@ -211,17 +210,18 @@ fn stored_runtime_trace_metrics_returns_none_for_ambiguous_multi_run_scope() {
         workflow_projection!(
             &diagnostics_store,
             WorkflowDiagnosticsSnapshotProjectionInput {
+                workflow_run_id: None,
                 session_id: Some("session-1".to_string()),
                 workflow_id: Some("wf-1".to_string()),
-                workflow_name: Some("Workflow 1".to_string()),
+
                 scheduler_snapshot_result: Some(Ok(WorkflowSchedulerSnapshotResponse {
                     workflow_id: Some("wf-1".to_string()),
                     session_id: "session-1".to_string(),
-                    trace_execution_id: Some(execution_id.to_string()),
+                    workflow_run_id: Some(execution_id.to_string()),
                     session: running_session_summary(),
                     items: vec![WorkflowExecutionSessionQueueItem {
-                        queue_id: format!("queue-{execution_id}"),
-                        run_id: Some(execution_id.to_string()),
+                        workflow_run_id: format!("queue-{execution_id}"),
+
                         enqueued_at_ms: Some(captured_at_ms.saturating_sub(10)),
                         dequeued_at_ms: Some(captured_at_ms),
                         priority: 5,

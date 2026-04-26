@@ -3,18 +3,14 @@ use super::*;
 #[test]
 fn node_progress_detail_is_exposed_in_diagnostics_snapshot() {
     let store = WorkflowDiagnosticsStore::default();
-    store.set_execution_metadata(
-        "exec-1",
-        Some("wf-1".to_string()),
-        Some("KV Workflow".to_string()),
-    );
+    store.set_execution_metadata("exec-1", Some("wf-1".to_string()));
     store.set_execution_graph("exec-1", &sample_graph());
 
     store.record_workflow_event(
         &crate::workflow::events::WorkflowEvent::Started {
             workflow_id: "wf-1".to_string(),
             node_count: 1,
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
         },
         1_000,
     );
@@ -34,7 +30,7 @@ fn node_progress_detail_is_exposed_in_diagnostics_snapshot() {
                     reason: Some("restored_input_handle".to_string()),
                 },
             )),
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
         },
         1_020,
     );

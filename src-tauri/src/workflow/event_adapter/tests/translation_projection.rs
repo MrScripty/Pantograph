@@ -15,28 +15,28 @@ fn translated_workflow_started_event_preserves_engine_execution_id() {
     match &event {
         TauriWorkflowEvent::Started {
             workflow_id,
-            execution_id,
+            workflow_run_id,
             ..
         } => {
             assert_eq!(workflow_id, "wf-1");
-            assert_eq!(execution_id, "exec-1");
+            assert_eq!(workflow_run_id, "exec-1");
         }
         other => panic!("unexpected event: {other:?}"),
     }
 
-    assert_eq!(translated_execution_id(&event), "exec-1");
+    assert_eq!(translated_workflow_run_id(&event), "exec-1");
     match diagnostics_event {
         TauriWorkflowEvent::DiagnosticsSnapshot {
-            execution_id,
+            workflow_run_id,
             snapshot,
         } => {
-            assert_eq!(execution_id, "exec-1");
+            assert_eq!(workflow_run_id, "exec-1");
             assert_eq!(
-                snapshot.context.source_execution_id.as_deref(),
+                snapshot.context.source_workflow_run_id.as_deref(),
                 Some("exec-1")
             );
             assert_eq!(
-                snapshot.context.relevant_execution_id.as_deref(),
+                snapshot.context.relevant_workflow_run_id.as_deref(),
                 Some("exec-1")
             );
             assert!(snapshot.context.relevant);
@@ -151,11 +151,11 @@ fn translated_workflow_cancelled_event_maps_directly_to_cancelled_event() {
     match event {
         TauriWorkflowEvent::Cancelled {
             workflow_id,
-            execution_id,
+            workflow_run_id,
             error,
         } => {
             assert_eq!(workflow_id, "wf-1");
-            assert_eq!(execution_id, "exec-1");
+            assert_eq!(workflow_run_id, "exec-1");
             assert!(error.contains("cancelled"));
         }
         other => panic!("unexpected event: {other:?}"),
@@ -189,11 +189,11 @@ fn translated_workflow_failed_event_stays_failed() {
     match event {
         TauriWorkflowEvent::Failed {
             workflow_id,
-            execution_id,
+            workflow_run_id,
             error,
         } => {
             assert_eq!(workflow_id, "wf-1");
-            assert_eq!(execution_id, "exec-1");
+            assert_eq!(workflow_run_id, "exec-1");
             assert_eq!(error, "runtime unavailable");
         }
         other => panic!("unexpected event: {other:?}"),
@@ -233,13 +233,13 @@ fn translated_graph_modified_event_preserves_engine_execution_id() {
     match &event {
         TauriWorkflowEvent::GraphModified {
             workflow_id,
-            execution_id,
+            workflow_run_id,
             dirty_tasks,
             memory_impact,
             ..
         } => {
             assert_eq!(workflow_id, "wf-1");
-            assert_eq!(execution_id, "exec-graph");
+            assert_eq!(workflow_run_id, "exec-graph");
             assert_eq!(
                 dirty_tasks,
                 &vec!["node-a".to_string(), "node-b".to_string()]
@@ -257,13 +257,13 @@ fn translated_graph_modified_event_preserves_engine_execution_id() {
         other => panic!("unexpected event: {other:?}"),
     }
 
-    assert_eq!(translated_execution_id(&event), "exec-graph");
+    assert_eq!(translated_workflow_run_id(&event), "exec-graph");
     match diagnostics_event {
         TauriWorkflowEvent::DiagnosticsSnapshot {
-            execution_id,
+            workflow_run_id,
             snapshot,
         } => {
-            assert_eq!(execution_id, "exec-graph");
+            assert_eq!(workflow_run_id, "exec-graph");
             assert_eq!(snapshot.run_order, vec!["exec-graph".to_string()]);
             let trace = snapshot.runs_by_id.get("exec-graph").expect("trace");
             assert_eq!(
@@ -303,23 +303,23 @@ fn translated_incremental_execution_started_event_preserves_resume_task_ids() {
     match &event {
         TauriWorkflowEvent::IncrementalExecutionStarted {
             workflow_id,
-            execution_id,
+            workflow_run_id,
             task_ids,
         } => {
             assert_eq!(workflow_id, "wf-1");
-            assert_eq!(execution_id, "exec-inc");
+            assert_eq!(workflow_run_id, "exec-inc");
             assert_eq!(task_ids, &vec!["node-a".to_string(), "node-b".to_string()]);
         }
         other => panic!("unexpected event: {other:?}"),
     }
 
-    assert_eq!(translated_execution_id(&event), "exec-inc");
+    assert_eq!(translated_workflow_run_id(&event), "exec-inc");
     match diagnostics_event {
         TauriWorkflowEvent::DiagnosticsSnapshot {
-            execution_id,
+            workflow_run_id,
             snapshot,
         } => {
-            assert_eq!(execution_id, "exec-inc");
+            assert_eq!(workflow_run_id, "exec-inc");
             let trace = snapshot.runs_by_id.get("exec-inc").expect("trace");
             assert_eq!(
                 trace.status,
@@ -353,25 +353,25 @@ fn translated_waiting_for_input_event_preserves_backend_contract_and_waiting_sta
     match &event {
         TauriWorkflowEvent::WaitingForInput {
             workflow_id,
-            execution_id,
+            workflow_run_id,
             node_id,
             message,
         } => {
             assert_eq!(workflow_id, "wf-1");
-            assert_eq!(execution_id, "exec-wait");
+            assert_eq!(workflow_run_id, "exec-wait");
             assert_eq!(node_id, "human-input-1");
             assert_eq!(message.as_deref(), Some("Need approval"));
         }
         other => panic!("unexpected event: {other:?}"),
     }
 
-    assert_eq!(translated_execution_id(&event), "exec-wait");
+    assert_eq!(translated_workflow_run_id(&event), "exec-wait");
     match diagnostics_event {
         TauriWorkflowEvent::DiagnosticsSnapshot {
-            execution_id,
+            workflow_run_id,
             snapshot,
         } => {
-            assert_eq!(execution_id, "exec-wait");
+            assert_eq!(workflow_run_id, "exec-wait");
             let trace = snapshot.runs_by_id.get("exec-wait").expect("trace");
             assert_eq!(
                 trace.status,
@@ -387,11 +387,7 @@ fn translated_waiting_for_input_event_preserves_backend_contract_and_waiting_sta
 #[test]
 fn translated_parallel_root_events_preserve_overlapping_trace_timing() {
     let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
-    diagnostics_store.set_execution_metadata(
-        "exec-parallel",
-        Some("wf-parallel".to_string()),
-        Some("Parallel Workflow".to_string()),
-    );
+    diagnostics_store.set_execution_metadata("exec-parallel", Some("wf-parallel".to_string()));
     diagnostics_store.set_execution_graph("exec-parallel", &sample_parallel_graph());
 
     let _ = translate_node_event_with_diagnostics(
@@ -438,11 +434,11 @@ fn translated_parallel_root_events_preserve_overlapping_trace_timing() {
         },
     );
 
-    assert_eq!(translated_execution_id(&event), "exec-parallel");
+    assert_eq!(translated_workflow_run_id(&event), "exec-parallel");
     match diagnostics_event {
         TauriWorkflowEvent::DiagnosticsSnapshot { snapshot, .. } => {
             let run = snapshot.runs_by_id.get("exec-parallel").expect("trace");
-            assert_eq!(run.workflow_name.as_deref(), Some("Parallel Workflow"));
+            assert_eq!(run.workflow_id.as_deref(), Some("wf-parallel"));
             assert_eq!(
                 run.graph_fingerprint_at_start.as_deref(),
                 Some("graph-parallel")
@@ -475,11 +471,7 @@ fn translated_parallel_root_events_preserve_overlapping_trace_timing() {
 #[test]
 fn translated_parallel_waiting_event_preserves_waiting_pause_duration() {
     let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
-    diagnostics_store.set_execution_metadata(
-        "exec-parallel",
-        Some("wf-parallel".to_string()),
-        Some("Parallel Workflow".to_string()),
-    );
+    diagnostics_store.set_execution_metadata("exec-parallel", Some("wf-parallel".to_string()));
     diagnostics_store.set_execution_graph("exec-parallel", &sample_parallel_graph());
 
     let _ = translate_node_event_with_diagnostics(
@@ -527,7 +519,7 @@ fn translated_parallel_waiting_event_preserves_waiting_pause_duration() {
         },
     );
 
-    assert_eq!(translated_execution_id(&event), "exec-parallel");
+    assert_eq!(translated_workflow_run_id(&event), "exec-parallel");
     match diagnostics_event {
         TauriWorkflowEvent::DiagnosticsSnapshot { snapshot, .. } => {
             let run = snapshot.runs_by_id.get("exec-parallel").expect("trace");

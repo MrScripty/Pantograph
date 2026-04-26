@@ -1,14 +1,14 @@
 use std::collections::BTreeMap;
 
 use node_engine::GraphMemoryImpactSummary;
+use pantograph_embedded_runtime::ManagedRuntimeManagerRuntimeView;
 use pantograph_embedded_runtime::workflow_runtime::{
     capability_runtime_lifecycle_snapshot, normalized_runtime_lifecycle_snapshot,
 };
-use pantograph_embedded_runtime::ManagedRuntimeManagerRuntimeView;
 use pantograph_workflow_service::{
-    graph::WorkflowGraphSessionStateView, WorkflowExecutionSessionQueueItem,
-    WorkflowExecutionSessionSummary, WorkflowSchedulerSnapshotDiagnostics, WorkflowServiceError,
-    WorkflowTraceNodeStatus, WorkflowTraceRuntimeMetrics, WorkflowTraceStatus,
+    WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionSummary,
+    WorkflowSchedulerSnapshotDiagnostics, WorkflowServiceError, WorkflowTraceNodeStatus,
+    WorkflowTraceRuntimeMetrics, WorkflowTraceStatus, graph::WorkflowGraphSessionStateView,
 };
 use serde::{Deserialize, Serialize};
 
@@ -42,7 +42,7 @@ pub struct DiagnosticsEventRecord {
     pub timestamp_ms: u64,
     #[serde(rename = "type")]
     pub event_type: String,
-    pub execution_id: String,
+    pub workflow_run_id: String,
     #[serde(default)]
     pub workflow_id: Option<String>,
     #[serde(default)]
@@ -81,13 +81,11 @@ pub struct DiagnosticsNodeTrace {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct DiagnosticsRunTrace {
-    pub execution_id: String,
+    pub workflow_run_id: String,
     #[serde(default)]
     pub session_id: Option<String>,
     #[serde(default)]
     pub workflow_id: Option<String>,
-    #[serde(default)]
-    pub workflow_name: Option<String>,
     #[serde(default)]
     pub graph_fingerprint_at_start: Option<String>,
     pub node_count_at_start: usize,
@@ -307,7 +305,7 @@ pub struct DiagnosticsSchedulerSnapshot {
     #[serde(default)]
     pub session_id: Option<String>,
     #[serde(default)]
-    pub trace_execution_id: Option<String>,
+    pub workflow_run_id: Option<String>,
     #[serde(default)]
     pub captured_at_ms: Option<u64>,
     #[serde(default)]
@@ -339,15 +337,15 @@ pub struct WorkflowDiagnosticsProjection {
 #[serde(rename_all = "camelCase")]
 pub struct WorkflowDiagnosticsProjectionContext {
     #[serde(default)]
+    pub requested_workflow_run_id: Option<String>,
+    #[serde(default)]
     pub requested_session_id: Option<String>,
     #[serde(default)]
     pub requested_workflow_id: Option<String>,
     #[serde(default)]
-    pub requested_workflow_name: Option<String>,
+    pub source_workflow_run_id: Option<String>,
     #[serde(default)]
-    pub source_execution_id: Option<String>,
-    #[serde(default)]
-    pub relevant_execution_id: Option<String>,
+    pub relevant_workflow_run_id: Option<String>,
     #[serde(default = "default_projection_relevance")]
     pub relevant: bool,
 }
@@ -359,11 +357,11 @@ fn default_projection_relevance() -> bool {
 impl Default for WorkflowDiagnosticsProjectionContext {
     fn default() -> Self {
         Self {
+            requested_workflow_run_id: None,
             requested_session_id: None,
             requested_workflow_id: None,
-            requested_workflow_name: None,
-            source_execution_id: None,
-            relevant_execution_id: None,
+            source_workflow_run_id: None,
+            relevant_workflow_run_id: None,
             relevant: true,
         }
     }
@@ -375,9 +373,12 @@ impl WorkflowDiagnosticsProjection {
         self
     }
 
-    pub(crate) fn with_source_execution_id(mut self, source_execution_id: Option<String>) -> Self {
-        self.context.source_execution_id = source_execution_id.clone();
-        self.context.relevant_execution_id = source_execution_id;
+    pub(crate) fn with_source_workflow_run_id(
+        mut self,
+        source_workflow_run_id: Option<String>,
+    ) -> Self {
+        self.context.source_workflow_run_id = source_workflow_run_id.clone();
+        self.context.relevant_workflow_run_id = source_workflow_run_id;
         self.context.relevant = true;
         self
     }
@@ -387,11 +388,11 @@ impl WorkflowDiagnosticsProjection {
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowDiagnosticsSnapshotRequest {
     #[serde(default)]
+    pub workflow_run_id: Option<String>,
+    #[serde(default)]
     pub session_id: Option<String>,
     #[serde(default)]
     pub workflow_id: Option<String>,
-    #[serde(default)]
-    pub workflow_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workflow_graph: Option<pantograph_workflow_service::WorkflowGraph>,
 }
@@ -399,17 +400,17 @@ pub struct WorkflowDiagnosticsSnapshotRequest {
 impl WorkflowDiagnosticsSnapshotRequest {
     pub(crate) fn normalized(&self) -> Self {
         Self {
+            workflow_run_id: normalize_optional_filter(&self.workflow_run_id),
             session_id: normalize_optional_filter(&self.session_id),
             workflow_id: normalize_optional_filter(&self.workflow_id),
-            workflow_name: normalize_optional_filter(&self.workflow_name),
             workflow_graph: self.workflow_graph.clone(),
         }
     }
 
     pub(crate) fn validate(&self) -> Result<(), WorkflowServiceError> {
+        validate_optional_filter(&self.workflow_run_id, "workflow_run_id")?;
         validate_optional_filter(&self.session_id, "session_id")?;
         validate_optional_filter(&self.workflow_id, "workflow_id")?;
-        validate_optional_filter(&self.workflow_name, "workflow_name")?;
         Ok(())
     }
 }

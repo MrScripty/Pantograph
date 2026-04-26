@@ -5,9 +5,8 @@
 //! command adapter.
 
 use pantograph_embedded_runtime::{
-    list_managed_runtime_manager_runtimes,
+    HostRuntimeModeSnapshot, list_managed_runtime_manager_runtimes,
     workflow_runtime::{build_runtime_event_projection_with_registry_sync, unix_timestamp_ms},
-    HostRuntimeModeSnapshot,
 };
 use pantograph_workflow_service::{
     WorkflowCapabilitiesRequest, WorkflowExecutionSessionInspectionRequest,
@@ -21,9 +20,10 @@ use super::commands::{SharedExtensions, SharedWorkflowDiagnosticsStore, SharedWo
 use super::diagnostics::{WorkflowDiagnosticsProjection, WorkflowDiagnosticsSnapshotRequest};
 pub(crate) use super::headless_diagnostics::workflow_trace_snapshot_response;
 use super::headless_diagnostics::{
-    stored_runtime_model_targets, stored_runtime_snapshots, stored_runtime_trace_metrics,
+    WorkflowDiagnosticsSnapshotProjectionInput, stored_runtime_model_targets,
+    stored_runtime_snapshots, stored_runtime_trace_metrics,
     workflow_clear_diagnostics_history_response, workflow_diagnostics_snapshot_projection,
-    workflow_error_json, WorkflowDiagnosticsSnapshotProjectionInput,
+    workflow_error_json,
 };
 use super::headless_runtime::build_runtime;
 
@@ -69,9 +69,9 @@ pub async fn workflow_diagnostics_snapshot_response(
     let captured_at_ms = unix_timestamp_ms();
     let request = request.normalized();
     request.validate().map_err(workflow_error_json)?;
+    let workflow_run_id = request.workflow_run_id;
     let session_id = request.session_id;
     let workflow_id = request.workflow_id;
-    let workflow_name = request.workflow_name;
     let workflow_graph = request.workflow_graph;
     let runtime = if workflow_id.is_some() || session_id.is_some() {
         Some(
@@ -166,9 +166,9 @@ pub async fn workflow_diagnostics_snapshot_response(
     Ok(workflow_diagnostics_snapshot_projection(
         diagnostics_store,
         WorkflowDiagnosticsSnapshotProjectionInput {
+            workflow_run_id,
             session_id,
             workflow_id,
-            workflow_name,
             scheduler_snapshot_result,
             capabilities_result,
             workflow_graph,

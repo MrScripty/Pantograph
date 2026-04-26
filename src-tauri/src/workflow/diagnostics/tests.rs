@@ -59,7 +59,7 @@ fn diagnostics_overlay_event_for_node_engine_event(
         } => crate::workflow::events::WorkflowEvent::Started {
             workflow_id: workflow_id.clone(),
             node_count: 0,
-            execution_id: execution_id.clone(),
+            workflow_run_id: execution_id.clone(),
         },
         node_engine::WorkflowEvent::WorkflowCompleted {
             workflow_id,
@@ -68,7 +68,7 @@ fn diagnostics_overlay_event_for_node_engine_event(
         } => crate::workflow::events::WorkflowEvent::Completed {
             workflow_id: workflow_id.clone(),
             outputs: HashMap::new(),
-            execution_id: execution_id.clone(),
+            workflow_run_id: execution_id.clone(),
         },
         node_engine::WorkflowEvent::WorkflowFailed {
             workflow_id,
@@ -78,7 +78,7 @@ fn diagnostics_overlay_event_for_node_engine_event(
         } => crate::workflow::events::WorkflowEvent::Failed {
             workflow_id: workflow_id.clone(),
             error: error.clone(),
-            execution_id: execution_id.clone(),
+            workflow_run_id: execution_id.clone(),
         },
         node_engine::WorkflowEvent::WaitingForInput {
             workflow_id,
@@ -88,7 +88,7 @@ fn diagnostics_overlay_event_for_node_engine_event(
             ..
         } => crate::workflow::events::WorkflowEvent::WaitingForInput {
             workflow_id: workflow_id.clone(),
-            execution_id: execution_id.clone(),
+            workflow_run_id: execution_id.clone(),
             node_id: task_id.clone(),
             message: prompt.clone(),
         },
@@ -99,7 +99,7 @@ fn diagnostics_overlay_event_for_node_engine_event(
         } => crate::workflow::events::WorkflowEvent::NodeStarted {
             node_id: task_id.clone(),
             node_type: String::new(),
-            execution_id: execution_id.clone(),
+            workflow_run_id: execution_id.clone(),
         },
         node_engine::WorkflowEvent::TaskCompleted {
             task_id,
@@ -112,7 +112,7 @@ fn diagnostics_overlay_event_for_node_engine_event(
                 .as_ref()
                 .and_then(|value| serde_json::from_value(value.clone()).ok())
                 .unwrap_or_default(),
-            execution_id: execution_id.clone(),
+            workflow_run_id: execution_id.clone(),
         },
         node_engine::WorkflowEvent::TaskFailed {
             task_id,
@@ -122,7 +122,7 @@ fn diagnostics_overlay_event_for_node_engine_event(
         } => crate::workflow::events::WorkflowEvent::NodeError {
             node_id: task_id.clone(),
             error: error.clone(),
-            execution_id: execution_id.clone(),
+            workflow_run_id: execution_id.clone(),
         },
         node_engine::WorkflowEvent::IncrementalExecutionStarted {
             workflow_id,
@@ -131,7 +131,7 @@ fn diagnostics_overlay_event_for_node_engine_event(
             ..
         } => crate::workflow::events::WorkflowEvent::IncrementalExecutionStarted {
             workflow_id: workflow_id.clone(),
-            execution_id: execution_id.clone(),
+            workflow_run_id: execution_id.clone(),
             task_ids: tasks.clone(),
         },
         other => panic!("unsupported node-engine event in diagnostics test: {other:?}"),
@@ -151,24 +151,24 @@ fn record_node_engine_event(
 #[test]
 fn workflow_diagnostics_snapshot_request_normalizes_trimmed_filters() {
     let normalized = WorkflowDiagnosticsSnapshotRequest {
+        workflow_run_id: Some("  run-1  ".to_string()),
         session_id: Some("  session-1  ".to_string()),
         workflow_id: Some("   ".to_string()),
-        workflow_name: Some("\tWorkflow 1\t".to_string()),
         workflow_graph: None,
     }
     .normalized();
 
+    assert_eq!(normalized.workflow_run_id.as_deref(), Some("run-1"));
     assert_eq!(normalized.session_id.as_deref(), Some("session-1"));
     assert_eq!(normalized.workflow_id.as_deref(), Some(""));
-    assert_eq!(normalized.workflow_name.as_deref(), Some("Workflow 1"));
 }
 
 #[test]
 fn workflow_diagnostics_snapshot_request_rejects_blank_filters() {
     let request = WorkflowDiagnosticsSnapshotRequest {
+        workflow_run_id: None,
         session_id: None,
         workflow_id: Some("   ".to_string()),
-        workflow_name: None,
         workflow_graph: None,
     }
     .normalized();
@@ -192,18 +192,14 @@ fn workflow_diagnostics_snapshot_request_rejects_blank_filters() {
 #[test]
 fn record_workflow_event_tracks_run_and_node_timing() {
     let store = WorkflowDiagnosticsStore::default();
-    store.set_execution_metadata(
-        "exec-1",
-        Some("wf-1".to_string()),
-        Some("Test Workflow".to_string()),
-    );
+    store.set_execution_metadata("exec-1", Some("wf-1".to_string()));
     store.set_execution_graph("exec-1", &sample_graph());
 
     store.record_workflow_event(
         &crate::workflow::events::WorkflowEvent::Started {
             workflow_id: "wf-1".to_string(),
             node_count: 1,
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
         },
         1_000,
     );
@@ -211,7 +207,7 @@ fn record_workflow_event_tracks_run_and_node_timing() {
         &crate::workflow::events::WorkflowEvent::NodeStarted {
             node_id: "llm-1".to_string(),
             node_type: String::new(),
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
         },
         1_010,
     );
@@ -219,7 +215,7 @@ fn record_workflow_event_tracks_run_and_node_timing() {
         &crate::workflow::events::WorkflowEvent::NodeCompleted {
             node_id: "llm-1".to_string(),
             outputs: HashMap::new(),
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
         },
         1_050,
     );
@@ -227,13 +223,12 @@ fn record_workflow_event_tracks_run_and_node_timing() {
         &crate::workflow::events::WorkflowEvent::Completed {
             workflow_id: "wf-1".to_string(),
             outputs: HashMap::new(),
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
         },
         1_100,
     );
 
     let run = snapshot.runs_by_id.get("exec-1").expect("run trace");
-    assert_eq!(run.workflow_name.as_deref(), Some("Test Workflow"));
     assert_eq!(run.graph_fingerprint_at_start.as_deref(), Some("graph-123"));
     assert_eq!(run.node_count_at_start, 1);
     assert_eq!(run.status, DiagnosticsRunStatus::Completed);
@@ -249,11 +244,7 @@ fn record_workflow_event_tracks_run_and_node_timing() {
 #[test]
 fn node_engine_parallel_root_trace_projection_tracks_overlapping_node_timing() {
     let store = WorkflowDiagnosticsStore::default();
-    store.set_execution_metadata(
-        "exec-parallel",
-        Some("wf-parallel".to_string()),
-        Some("Parallel Workflow".to_string()),
-    );
+    store.set_execution_metadata("exec-parallel", Some("wf-parallel".to_string()));
     store.set_execution_graph("exec-parallel", &sample_parallel_graph());
 
     record_node_engine_event(
@@ -304,7 +295,6 @@ fn node_engine_parallel_root_trace_projection_tracks_overlapping_node_timing() {
         .runs_by_id
         .get("exec-parallel")
         .expect("parallel run trace");
-    assert_eq!(run.workflow_name.as_deref(), Some("Parallel Workflow"));
     assert_eq!(
         run.graph_fingerprint_at_start.as_deref(),
         Some("graph-parallel")
@@ -330,11 +320,7 @@ fn node_engine_parallel_root_trace_projection_tracks_overlapping_node_timing() {
 #[test]
 fn node_engine_parallel_waiting_trace_projection_tracks_waiting_state() {
     let store = WorkflowDiagnosticsStore::default();
-    store.set_execution_metadata(
-        "exec-parallel",
-        Some("wf-parallel".to_string()),
-        Some("Parallel Workflow".to_string()),
-    );
+    store.set_execution_metadata("exec-parallel", Some("wf-parallel".to_string()));
     store.set_execution_graph("exec-parallel", &sample_parallel_graph());
 
     record_node_engine_event(
@@ -414,7 +400,7 @@ fn cancelled_workflow_event_maps_to_cancelled_trace_status() {
     let snapshot = store.record_workflow_event(
         &crate::workflow::events::WorkflowEvent::Cancelled {
             workflow_id: "wf-1".to_string(),
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             error: "workflow run cancelled during execution".to_string(),
         },
         200,
@@ -435,7 +421,7 @@ fn trace_snapshot_filters_runs_without_projection_overlay_rules() {
         &crate::workflow::events::WorkflowEvent::Started {
             workflow_id: "wf-1".to_string(),
             node_count: 1,
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
         },
         1_000,
     );
@@ -443,7 +429,7 @@ fn trace_snapshot_filters_runs_without_projection_overlay_rules() {
         &crate::workflow::events::WorkflowEvent::Completed {
             workflow_id: "wf-1".to_string(),
             outputs: HashMap::new(),
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
         },
         1_100,
     );
@@ -451,23 +437,23 @@ fn trace_snapshot_filters_runs_without_projection_overlay_rules() {
         &crate::workflow::events::WorkflowEvent::Started {
             workflow_id: "wf-2".to_string(),
             node_count: 1,
-            execution_id: "exec-2".to_string(),
+            workflow_run_id: "exec-2".to_string(),
         },
         1_200,
     );
 
     let snapshot = store
         .trace_snapshot(pantograph_workflow_service::WorkflowTraceSnapshotRequest {
-            execution_id: None,
+            workflow_run_id: None,
             session_id: None,
             workflow_id: None,
-            workflow_name: None,
+
             include_completed: Some(false),
         })
         .expect("trace snapshot");
 
     assert_eq!(snapshot.traces.len(), 1);
-    assert_eq!(snapshot.traces[0].execution_id, "exec-2");
+    assert_eq!(snapshot.traces[0].workflow_run_id, "exec-2");
     assert_eq!(
         snapshot.traces[0].status,
         pantograph_workflow_service::WorkflowTraceStatus::Running

@@ -41,8 +41,6 @@ impl From<&pantograph_workflow_service::WorkflowTimingExpectation>
 pub struct DiagnosticsWorkflowTimingHistory {
     pub workflow_id: String,
     #[serde(default)]
-    pub workflow_name: Option<String>,
-    #[serde(default)]
     pub graph_fingerprint: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timing_expectation: Option<DiagnosticsTimingExpectation>,
@@ -53,7 +51,6 @@ impl From<&WorkflowTraceGraphTimingExpectations> for DiagnosticsWorkflowTimingHi
     fn from(expectations: &WorkflowTraceGraphTimingExpectations) -> Self {
         Self {
             workflow_id: expectations.workflow_id.clone(),
-            workflow_name: expectations.workflow_name.clone(),
             graph_fingerprint: expectations.graph_fingerprint.clone(),
             timing_expectation: expectations
                 .timing_expectation

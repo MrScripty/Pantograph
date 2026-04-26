@@ -209,7 +209,7 @@ async fn emit_diagnostics_snapshots(input: DiagnosticsEmissionInput<'_>) {
 
     let scheduler_event = WorkflowEvent::scheduler_snapshot(WorkflowSchedulerSnapshotEventInput {
         workflow_id: snapshot.scheduler.workflow_id,
-        execution_id: snapshot.scheduler.trace_execution_id.clone(),
+        workflow_run_id: snapshot.scheduler.workflow_run_id.clone(),
         session_id: snapshot.scheduler.session_id,
         captured_at_ms: snapshot.scheduler.captured_at_ms,
         session: Some(snapshot.scheduler.session),
@@ -224,12 +224,12 @@ async fn emit_diagnostics_snapshots(input: DiagnosticsEmissionInput<'_>) {
     send_diagnostics_projection(
         input.channel,
         input.diagnostics_store,
-        &snapshot.scheduler.trace_execution_id,
+        &snapshot.scheduler.workflow_run_id,
     );
 
     let runtime_event = WorkflowEvent::runtime_snapshot(WorkflowRuntimeSnapshotEventInput {
         workflow_id: snapshot.runtime.workflow_id,
-        execution_id: snapshot.runtime.trace_execution_id.clone(),
+        workflow_run_id: snapshot.runtime.workflow_run_id.clone(),
         captured_at_ms: snapshot.runtime.captured_at_ms,
         capabilities: snapshot.runtime.capabilities,
         trace_runtime_metrics: snapshot.runtime.trace_runtime_metrics,
@@ -247,7 +247,7 @@ async fn emit_diagnostics_snapshots(input: DiagnosticsEmissionInput<'_>) {
     send_diagnostics_projection(
         input.channel,
         input.diagnostics_store,
-        &snapshot.runtime.trace_execution_id,
+        &snapshot.runtime.workflow_run_id,
     );
 }
 

@@ -512,14 +512,14 @@ run id and workflow id only.
 identity model without frontend repair.
 
 **Tasks:**
-- [ ] Update Tauri run command responses/events to include
+- [x] Update Tauri run command responses/events to include
   `workflow_run_id` where a run is submitted.
-- [ ] Update diagnostics snapshot request/projection DTOs to use `workflow_id`,
+- [x] Update diagnostics snapshot request/projection DTOs to use `workflow_id`,
   `session_id`, and `workflow_run_id`.
-- [ ] Remove `workflow_name` from diagnostics snapshot requests and projections.
-- [ ] Ensure pre-run and post-run diagnostics snapshots join on
+- [x] Remove `workflow_name` from diagnostics snapshot requests and projections.
+- [x] Ensure pre-run and post-run diagnostics snapshots join on
   `workflow_run_id`.
-- [ ] Update Tauri tests for workflow switching, restart-opened workflow
+- [x] Update Tauri tests for workflow switching, restart-opened workflow
   history, and scheduler/runtime/trace joins.
 
 **Verification:**
@@ -528,7 +528,25 @@ identity model without frontend repair.
 - Cross-layer projection test proving a scheduler queue item and trace row
   share the same `workflow_run_id`.
 
-**Status:** Not started.
+**Status:** Completed.
+
+**Notes:**
+- Tauri workflow events, diagnostics event records, diagnostics run traces,
+  scheduler snapshots, snapshot contexts, and runtime debug trace selection now
+  expose `workflow_run_id`.
+- Diagnostics snapshot requests no longer accept `workflow_name`; pre-run
+  timing/history lookup is keyed by `workflow_id` plus graph context, and
+  scheduler/runtime trace joins use the backend-authored `workflow_run_id`.
+- Runtime debug trace requests now use `workflow_run_id` and report matched
+  workflow run ids without execution-id aliases.
+- Tauri diagnostics, event adapter, headless diagnostics, and runtime debug
+  tests were updated to assert scheduler/runtime/trace joins through
+  `workflow_run_id`.
+
+**Verification Results:**
+- `cargo check --manifest-path src-tauri/Cargo.toml`
+- `cargo test --manifest-path src-tauri/Cargo.toml workflow::diagnostics`
+- `git diff --check -- src-tauri/src/llm/commands/registry.rs src-tauri/src/llm/commands/registry src-tauri/src/workflow`
 
 ### Milestone 6: Update Frontend Contracts And Rendering
 
@@ -662,6 +680,10 @@ model is implemented.
 - 2026-04-26: Milestone 4 completed. Diagnostics ledger now stores durable
   workflow run summaries keyed by `workflow_run_id`, and workflow trace
   recording upserts those summaries for restart-visible diagnostics history.
+- 2026-04-26: Milestone 5 completed. Tauri diagnostics projections, workflow
+  events, runtime debug trace selection, and headless diagnostics helpers now
+  use `workflow_run_id`; scheduler/runtime/trace joins are tested through the
+  canonical run id.
 - Current known unrelated dirty files must remain untouched unless the user
   explicitly assigns them to this work:
   - `.pantograph/workflows/tiny-sd-turbo-diffusion.json`
@@ -769,6 +791,10 @@ owned serially by the integration implementer.
   - `cargo test -p pantograph-workflow-service`
   - `cargo test -p pantograph-diagnostics-ledger`
   - `git diff --check -- crates/pantograph-diagnostics-ledger/src crates/pantograph-workflow-service/src/trace docs/plans/workflow-run-identity-redesign/plan.md`
+- Milestone 5 Tauri diagnostics projection:
+  - `cargo check --manifest-path src-tauri/Cargo.toml`
+  - `cargo test --manifest-path src-tauri/Cargo.toml workflow::diagnostics`
+  - `git diff --check -- src-tauri/src/llm/commands/registry.rs src-tauri/src/llm/commands/registry src-tauri/src/workflow`
 
 ### Traceability Links
 

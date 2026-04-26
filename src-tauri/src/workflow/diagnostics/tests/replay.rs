@@ -7,7 +7,7 @@ fn clear_history_reconciles_restarted_backend_trace_and_runtime_snapshots() {
         &crate::workflow::events::WorkflowEvent::Started {
             workflow_id: "wf-1".to_string(),
             node_count: 1,
-            execution_id: "stale-exec".to_string(),
+            workflow_run_id: "stale-exec".to_string(),
         },
         1_000,
     );
@@ -15,7 +15,7 @@ fn clear_history_reconciles_restarted_backend_trace_and_runtime_snapshots() {
         &crate::workflow::events::WorkflowEvent::NodeStarted {
             node_id: "llm-1".to_string(),
             node_type: "llm-inference".to_string(),
-            execution_id: "stale-exec".to_string(),
+            workflow_run_id: "stale-exec".to_string(),
         },
         1_010,
     );
@@ -27,7 +27,7 @@ fn clear_history_reconciles_restarted_backend_trace_and_runtime_snapshots() {
     let projection =
         store.record_scheduler_snapshot(WorkflowSchedulerSnapshotRecord {
             workflow_id: Some("wf-1".to_string()),
-            execution_id: "restored-exec".to_string(),
+            workflow_run_id: "restored-exec".to_string(),
             session_id: "session-1".to_string(),
             captured_at_ms: 2_000,
             session: Some(
@@ -43,8 +43,8 @@ fn clear_history_reconciles_restarted_backend_trace_and_runtime_snapshots() {
                 },
             ),
             items: vec![pantograph_workflow_service::WorkflowExecutionSessionQueueItem {
-            queue_id: "queue-1".to_string(),
-            run_id: Some("restored-exec".to_string()),
+            workflow_run_id: "restored-exec".to_string(),
+
             enqueued_at_ms: Some(1_950),
             dequeued_at_ms: Some(1_980),
             priority: 5,
@@ -60,7 +60,7 @@ fn clear_history_reconciles_restarted_backend_trace_and_runtime_snapshots() {
     assert_eq!(projection.run_order, vec!["restored-exec".to_string()]);
     assert!(!projection.runs_by_id.contains_key("stale-exec"));
     assert_eq!(
-        projection.scheduler.trace_execution_id.as_deref(),
+        projection.scheduler.workflow_run_id.as_deref(),
         Some("restored-exec")
     );
 
@@ -101,10 +101,10 @@ fn clear_history_reconciles_restarted_backend_trace_and_runtime_snapshots() {
 
     let trace = store
         .trace_snapshot(pantograph_workflow_service::WorkflowTraceSnapshotRequest {
-            execution_id: Some("restored-exec".to_string()),
+            workflow_run_id: Some("restored-exec".to_string()),
             session_id: None,
             workflow_id: None,
-            workflow_name: None,
+
             include_completed: Some(true),
         })
         .expect("trace snapshot")
@@ -113,7 +113,7 @@ fn clear_history_reconciles_restarted_backend_trace_and_runtime_snapshots() {
         .next()
         .expect("restored trace");
 
-    assert_eq!(trace.execution_id, "restored-exec");
+    assert_eq!(trace.workflow_run_id, "restored-exec");
     assert_eq!(trace.session_id.as_deref(), Some("session-1"));
     assert_eq!(trace.workflow_id.as_deref(), Some("wf-1"));
     assert_eq!(trace.queue.enqueued_at_ms, Some(1_950));
@@ -123,18 +123,14 @@ fn clear_history_reconciles_restarted_backend_trace_and_runtime_snapshots() {
 #[test]
 fn restarted_run_clears_stale_overlay_history_and_node_state() {
     let store = WorkflowDiagnosticsStore::default();
-    store.set_execution_metadata(
-        "exec-1",
-        Some("wf-1".to_string()),
-        Some("Retry Workflow".to_string()),
-    );
+    store.set_execution_metadata("exec-1", Some("wf-1".to_string()));
     store.set_execution_graph("exec-1", &sample_graph());
 
     store.record_workflow_event(
         &crate::workflow::events::WorkflowEvent::Started {
             workflow_id: "wf-1".to_string(),
             node_count: 1,
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
         },
         1_000,
     );
@@ -142,7 +138,7 @@ fn restarted_run_clears_stale_overlay_history_and_node_state() {
         &crate::workflow::events::WorkflowEvent::NodeStarted {
             node_id: "llm-1".to_string(),
             node_type: "llm-inference".to_string(),
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
         },
         1_010,
     );
@@ -152,7 +148,7 @@ fn restarted_run_clears_stale_overlay_history_and_node_state() {
             progress: 0.5,
             message: Some("halfway".to_string()),
             detail: None,
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
         },
         1_020,
     );
@@ -160,7 +156,7 @@ fn restarted_run_clears_stale_overlay_history_and_node_state() {
         &crate::workflow::events::WorkflowEvent::Completed {
             workflow_id: "wf-1".to_string(),
             outputs: HashMap::new(),
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
         },
         1_100,
     );
@@ -169,7 +165,7 @@ fn restarted_run_clears_stale_overlay_history_and_node_state() {
         &crate::workflow::events::WorkflowEvent::Started {
             workflow_id: "wf-1".to_string(),
             node_count: 1,
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
         },
         2_000,
     );
@@ -186,18 +182,14 @@ fn restarted_run_clears_stale_overlay_history_and_node_state() {
 #[test]
 fn restarted_cancelled_run_clears_stale_overlay_history_and_node_state() {
     let store = WorkflowDiagnosticsStore::default();
-    store.set_execution_metadata(
-        "exec-1",
-        Some("wf-1".to_string()),
-        Some("Retry Workflow".to_string()),
-    );
+    store.set_execution_metadata("exec-1", Some("wf-1".to_string()));
     store.set_execution_graph("exec-1", &sample_graph());
 
     store.record_workflow_event(
         &crate::workflow::events::WorkflowEvent::Started {
             workflow_id: "wf-1".to_string(),
             node_count: 1,
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
         },
         1_000,
     );
@@ -207,14 +199,14 @@ fn restarted_cancelled_run_clears_stale_overlay_history_and_node_state() {
             progress: 0.5,
             message: Some("halfway".to_string()),
             detail: None,
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
         },
         1_020,
     );
     store.record_workflow_event(
         &crate::workflow::events::WorkflowEvent::Cancelled {
             workflow_id: "wf-1".to_string(),
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             error: "workflow run cancelled during execution".to_string(),
         },
         1_100,
@@ -224,7 +216,7 @@ fn restarted_cancelled_run_clears_stale_overlay_history_and_node_state() {
         &crate::workflow::events::WorkflowEvent::Started {
             workflow_id: "wf-1".to_string(),
             node_count: 1,
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
         },
         2_000,
     );
@@ -241,25 +233,21 @@ fn restarted_cancelled_run_clears_stale_overlay_history_and_node_state() {
 #[test]
 fn restarted_run_clears_stale_graph_mutation_overlay_state() {
     let store = WorkflowDiagnosticsStore::default();
-    store.set_execution_metadata(
-        "exec-1",
-        Some("wf-1".to_string()),
-        Some("Retry Workflow".to_string()),
-    );
+    store.set_execution_metadata("exec-1", Some("wf-1".to_string()));
     store.set_execution_graph("exec-1", &sample_graph());
 
     store.record_workflow_event(
         &crate::workflow::events::WorkflowEvent::Started {
             workflow_id: "wf-1".to_string(),
             node_count: 2,
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
         },
         1_000,
     );
     store.record_workflow_event(
         &crate::workflow::events::WorkflowEvent::GraphModified {
             workflow_id: "wf-1".to_string(),
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             graph: None,
             dirty_tasks: vec!["llm-1".to_string()],
             memory_impact: Some(
@@ -274,7 +262,7 @@ fn restarted_run_clears_stale_graph_mutation_overlay_state() {
     store.record_workflow_event(
         &crate::workflow::events::WorkflowEvent::IncrementalExecutionStarted {
             workflow_id: "wf-1".to_string(),
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             task_ids: vec!["llm-1".to_string()],
         },
         1_040,
@@ -283,7 +271,7 @@ fn restarted_run_clears_stale_graph_mutation_overlay_state() {
         &crate::workflow::events::WorkflowEvent::Completed {
             workflow_id: "wf-1".to_string(),
             outputs: HashMap::new(),
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
         },
         1_100,
     );
@@ -292,7 +280,7 @@ fn restarted_run_clears_stale_graph_mutation_overlay_state() {
         &crate::workflow::events::WorkflowEvent::Started {
             workflow_id: "wf-1".to_string(),
             node_count: 2,
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
         },
         2_000,
     );
@@ -315,7 +303,7 @@ fn replayed_backend_scheduler_and_runtime_snapshots_do_not_duplicate_trace() {
 
     store.record_scheduler_snapshot(WorkflowSchedulerSnapshotRecord {
         workflow_id: Some("wf-1".to_string()),
-        execution_id: "exec-1".to_string(),
+        workflow_run_id: "exec-1".to_string(),
         session_id: "session-1".to_string(),
         captured_at_ms: 1_000,
         session: Some(
@@ -332,8 +320,8 @@ fn replayed_backend_scheduler_and_runtime_snapshots_do_not_duplicate_trace() {
         ),
         items: vec![
             pantograph_workflow_service::WorkflowExecutionSessionQueueItem {
-                queue_id: "queue-1".to_string(),
-                run_id: Some("exec-1".to_string()),
+                workflow_run_id: "exec-1".to_string(),
+
                 enqueued_at_ms: Some(900),
                 dequeued_at_ms: Some(930),
                 priority: 1,
@@ -349,7 +337,7 @@ fn replayed_backend_scheduler_and_runtime_snapshots_do_not_duplicate_trace() {
     });
     store.record_runtime_snapshot(WorkflowRuntimeSnapshotRecord {
         workflow_id: "wf-1".to_string(),
-        execution_id: "exec-1".to_string(),
+        workflow_run_id: "exec-1".to_string(),
         captured_at_ms: 1_010,
         capabilities: None,
         trace_runtime_metrics: pantograph_workflow_service::WorkflowTraceRuntimeMetrics {
@@ -383,7 +371,7 @@ fn replayed_backend_scheduler_and_runtime_snapshots_do_not_duplicate_trace() {
 
     store.record_scheduler_snapshot(WorkflowSchedulerSnapshotRecord {
         workflow_id: Some("wf-1".to_string()),
-        execution_id: "exec-1".to_string(),
+        workflow_run_id: "exec-1".to_string(),
         session_id: "session-1".to_string(),
         captured_at_ms: 1_100,
         session: Some(
@@ -400,8 +388,8 @@ fn replayed_backend_scheduler_and_runtime_snapshots_do_not_duplicate_trace() {
         ),
         items: vec![
             pantograph_workflow_service::WorkflowExecutionSessionQueueItem {
-                queue_id: "queue-1".to_string(),
-                run_id: Some("exec-1".to_string()),
+                workflow_run_id: "exec-1".to_string(),
+
                 enqueued_at_ms: Some(900),
                 dequeued_at_ms: Some(940),
                 priority: 1,
@@ -418,7 +406,7 @@ fn replayed_backend_scheduler_and_runtime_snapshots_do_not_duplicate_trace() {
 
     store.record_runtime_snapshot(WorkflowRuntimeSnapshotRecord {
         workflow_id: "wf-1".to_string(),
-        execution_id: "exec-1".to_string(),
+        workflow_run_id: "exec-1".to_string(),
         captured_at_ms: 1_120,
         capabilities: None,
         trace_runtime_metrics: pantograph_workflow_service::WorkflowTraceRuntimeMetrics {
@@ -452,17 +440,17 @@ fn replayed_backend_scheduler_and_runtime_snapshots_do_not_duplicate_trace() {
 
     let trace_snapshot = store
         .trace_snapshot(pantograph_workflow_service::WorkflowTraceSnapshotRequest {
-            execution_id: Some("exec-1".to_string()),
+            workflow_run_id: Some("exec-1".to_string()),
             session_id: None,
             workflow_id: None,
-            workflow_name: None,
+
             include_completed: Some(true),
         })
         .expect("trace snapshot");
 
     assert_eq!(trace_snapshot.traces.len(), 1);
     let trace = &trace_snapshot.traces[0];
-    assert_eq!(trace.execution_id, "exec-1");
+    assert_eq!(trace.workflow_run_id, "exec-1");
     assert_eq!(trace.session_id.as_deref(), Some("session-1"));
     assert_eq!(trace.workflow_id.as_deref(), Some("wf-1"));
     assert_eq!(trace.queue.dequeued_at_ms, Some(930));

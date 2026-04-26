@@ -73,8 +73,8 @@ fn runtime_and_scheduler_snapshots_are_backend_owned() {
                 },
             ),
             items: vec![pantograph_workflow_service::WorkflowExecutionSessionQueueItem {
-            queue_id: "queue-1".to_string(),
-            run_id: Some("run-1".to_string()),
+            workflow_run_id: "queue-1".to_string(),
+
             enqueued_at_ms: None,
             dequeued_at_ms: None,
             priority: 10,
@@ -138,8 +138,8 @@ fn workflow_diagnostics_projection_preserves_scheduler_snapshot_diagnostics() {
         runtime_capacity_pressure:
             pantograph_workflow_service::WorkflowSchedulerRuntimeCapacityPressure::RebalanceRequired,
         active_run_blocks_admission: true,
-        next_admission_queue_id: Some("queue-1".to_string()),
-        next_admission_bypassed_queue_id: None,
+        next_admission_workflow_run_id: Some("queue-1".to_string()),
+        next_admission_bypassed_workflow_run_id: None,
         next_admission_after_runs: Some(1),
         next_admission_wait_ms: None,
         next_admission_not_before_ms: None,
@@ -444,7 +444,7 @@ fn runtime_snapshot_event_carries_runtime_lifecycle_into_trace_store() {
     let store = WorkflowDiagnosticsStore::default();
     let snapshot = store.record_runtime_snapshot(WorkflowRuntimeSnapshotRecord {
         workflow_id: "wf-runtime".to_string(),
-        execution_id: "exec-runtime".to_string(),
+        workflow_run_id: "exec-runtime".to_string(),
         captured_at_ms: 5_000,
         capabilities: None,
         trace_runtime_metrics: pantograph_workflow_service::WorkflowTraceRuntimeMetrics {
@@ -488,10 +488,10 @@ fn runtime_snapshot_event_carries_runtime_lifecycle_into_trace_store() {
 
     let trace = store
         .trace_snapshot(pantograph_workflow_service::WorkflowTraceSnapshotRequest {
-            execution_id: Some("exec-runtime".to_string()),
+            workflow_run_id: Some("exec-runtime".to_string()),
             session_id: None,
             workflow_id: None,
-            workflow_name: None,
+
             include_completed: None,
         })
         .expect("trace snapshot")
@@ -684,7 +684,7 @@ fn scheduler_snapshot_event_carries_authoritative_queue_metrics_into_trace_store
     let projection =
         store.record_scheduler_snapshot(WorkflowSchedulerSnapshotRecord {
             workflow_id: None,
-            execution_id: "edit-session-1".to_string(),
+            workflow_run_id: "edit-session-1".to_string(),
             session_id: "edit-session-1".to_string(),
             captured_at_ms: 5_000,
             session: Some(
@@ -700,8 +700,8 @@ fn scheduler_snapshot_event_carries_authoritative_queue_metrics_into_trace_store
                 },
             ),
             items: vec![pantograph_workflow_service::WorkflowExecutionSessionQueueItem {
-            queue_id: "edit-session-1".to_string(),
-            run_id: Some("edit-session-1".to_string()),
+            workflow_run_id: "edit-session-1".to_string(),
+
             enqueued_at_ms: Some(4_750),
             dequeued_at_ms: Some(4_750),
             priority: 0,
@@ -714,16 +714,16 @@ fn scheduler_snapshot_event_carries_authoritative_queue_metrics_into_trace_store
             error: None,
         });
     assert_eq!(
-        projection.scheduler.trace_execution_id.as_deref(),
+        projection.scheduler.workflow_run_id.as_deref(),
         Some("edit-session-1")
     );
 
     let trace = store
         .trace_snapshot(pantograph_workflow_service::WorkflowTraceSnapshotRequest {
-            execution_id: Some("edit-session-1".to_string()),
+            workflow_run_id: Some("edit-session-1".to_string()),
             session_id: None,
             workflow_id: None,
-            workflow_name: None,
+
             include_completed: None,
         })
         .expect("trace snapshot")
@@ -747,12 +747,12 @@ fn scheduler_snapshot_event_carries_authoritative_queue_metrics_into_trace_store
 }
 
 #[test]
-fn scheduler_snapshot_event_carries_trace_execution_id_into_projection() {
+fn scheduler_snapshot_event_carries_workflow_run_id_into_projection() {
     let store = WorkflowDiagnosticsStore::default();
     let projection =
         store.record_scheduler_snapshot(WorkflowSchedulerSnapshotRecord {
             workflow_id: Some("wf-1".to_string()),
-            execution_id: "run-1".to_string(),
+            workflow_run_id: "run-1".to_string(),
             session_id: "session-1".to_string(),
             captured_at_ms: 5_000,
             session: Some(
@@ -768,8 +768,8 @@ fn scheduler_snapshot_event_carries_trace_execution_id_into_projection() {
                 },
             ),
             items: vec![pantograph_workflow_service::WorkflowExecutionSessionQueueItem {
-            queue_id: "queue-1".to_string(),
-            run_id: Some("run-1".to_string()),
+            workflow_run_id: "queue-1".to_string(),
+
             enqueued_at_ms: Some(100),
             dequeued_at_ms: Some(110),
             priority: 5,
@@ -788,7 +788,7 @@ fn scheduler_snapshot_event_carries_trace_execution_id_into_projection() {
         Some("session-1")
     );
     assert_eq!(
-        projection.scheduler.trace_execution_id.as_deref(),
+        projection.scheduler.workflow_run_id.as_deref(),
         Some("run-1")
     );
     let run = projection.runs_by_id.get("run-1").expect("run trace");

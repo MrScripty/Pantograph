@@ -3,11 +3,7 @@ use super::*;
 #[tokio::test]
 async fn workflow_executor_parallel_run_emits_consumer_visible_events_through_adapter() {
     let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
-    diagnostics_store.set_execution_metadata(
-        "exec-parallel",
-        Some("parallel".to_string()),
-        Some("Parallel Workflow".to_string()),
-    );
+    diagnostics_store.set_execution_metadata("exec-parallel", Some("parallel".to_string()));
     diagnostics_store.set_execution_graph("exec-parallel", &sample_parallel_graph());
 
     let emitted = Arc::new(Mutex::new(Vec::<Value>::new()));

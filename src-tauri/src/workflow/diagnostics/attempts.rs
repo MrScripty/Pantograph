@@ -15,16 +15,15 @@ pub(super) struct OverlayRecordDecision {
     pub(super) record_overlay: bool,
 }
 
-pub(super) fn trace_attempt_state_for_execution(
+pub(super) fn trace_attempt_state_for_workflow_run(
     trace_store: &WorkflowTraceStore,
-    execution_id: &str,
+    workflow_run_id: &str,
 ) -> Option<TraceAttemptState> {
     trace_store
         .snapshot(&WorkflowTraceSnapshotRequest {
-            execution_id: Some(execution_id.to_string()),
+            workflow_run_id: Some(workflow_run_id.to_string()),
             session_id: None,
             workflow_id: None,
-            workflow_name: None,
             include_completed: Some(true),
         })
         .expect("trace snapshot request should be valid")
@@ -39,12 +38,12 @@ pub(super) fn trace_attempt_state_for_execution(
 
 pub(super) fn trace_attempt_state_in_snapshot(
     traces: &WorkflowTraceSnapshotResponse,
-    execution_id: &str,
+    workflow_run_id: &str,
 ) -> Option<TraceAttemptState> {
     traces
         .traces
         .iter()
-        .find(|trace| trace.execution_id == execution_id)
+        .find(|trace| trace.workflow_run_id == workflow_run_id)
         .map(|trace| TraceAttemptState {
             started_at_ms: trace.started_at_ms,
             event_count: trace.event_count,
@@ -82,21 +81,49 @@ pub(super) fn overlay_record_decision(
     }
 }
 
-pub(super) fn trace_event_execution_id(event: &WorkflowTraceEvent) -> &str {
+pub(super) fn trace_event_workflow_run_id(event: &WorkflowTraceEvent) -> &str {
     match event {
-        WorkflowTraceEvent::RunStarted { execution_id, .. }
-        | WorkflowTraceEvent::RunCompleted { execution_id, .. }
-        | WorkflowTraceEvent::RunFailed { execution_id, .. }
-        | WorkflowTraceEvent::RunCancelled { execution_id, .. }
-        | WorkflowTraceEvent::NodeStarted { execution_id, .. }
-        | WorkflowTraceEvent::NodeProgress { execution_id, .. }
-        | WorkflowTraceEvent::NodeStream { execution_id, .. }
-        | WorkflowTraceEvent::NodeCompleted { execution_id, .. }
-        | WorkflowTraceEvent::NodeFailed { execution_id, .. }
-        | WorkflowTraceEvent::WaitingForInput { execution_id, .. }
-        | WorkflowTraceEvent::GraphModified { execution_id, .. }
-        | WorkflowTraceEvent::IncrementalExecutionStarted { execution_id, .. }
-        | WorkflowTraceEvent::RuntimeSnapshotCaptured { execution_id, .. }
-        | WorkflowTraceEvent::SchedulerSnapshotCaptured { execution_id, .. } => execution_id,
+        WorkflowTraceEvent::RunStarted {
+            workflow_run_id, ..
+        }
+        | WorkflowTraceEvent::RunCompleted {
+            workflow_run_id, ..
+        }
+        | WorkflowTraceEvent::RunFailed {
+            workflow_run_id, ..
+        }
+        | WorkflowTraceEvent::RunCancelled {
+            workflow_run_id, ..
+        }
+        | WorkflowTraceEvent::NodeStarted {
+            workflow_run_id, ..
+        }
+        | WorkflowTraceEvent::NodeProgress {
+            workflow_run_id, ..
+        }
+        | WorkflowTraceEvent::NodeStream {
+            workflow_run_id, ..
+        }
+        | WorkflowTraceEvent::NodeCompleted {
+            workflow_run_id, ..
+        }
+        | WorkflowTraceEvent::NodeFailed {
+            workflow_run_id, ..
+        }
+        | WorkflowTraceEvent::WaitingForInput {
+            workflow_run_id, ..
+        }
+        | WorkflowTraceEvent::GraphModified {
+            workflow_run_id, ..
+        }
+        | WorkflowTraceEvent::IncrementalExecutionStarted {
+            workflow_run_id, ..
+        }
+        | WorkflowTraceEvent::RuntimeSnapshotCaptured {
+            workflow_run_id, ..
+        }
+        | WorkflowTraceEvent::SchedulerSnapshotCaptured {
+            workflow_run_id, ..
+        } => workflow_run_id,
     }
 }

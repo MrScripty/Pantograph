@@ -13,9 +13,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub struct RuntimeDebugTraceSelection {
-    pub execution_id: Option<String>,
+    pub workflow_run_id: Option<String>,
     #[serde(default)]
-    pub matched_execution_ids: Vec<String>,
+    pub matched_workflow_run_ids: Vec<String>,
     pub ambiguous: bool,
 }
 
@@ -23,8 +23,8 @@ impl From<WorkflowTraceRuntimeSelection> for RuntimeDebugTraceSelection {
     fn from(value: WorkflowTraceRuntimeSelection) -> Self {
         let ambiguous = value.is_ambiguous();
         Self {
-            execution_id: value.execution_id,
-            matched_execution_ids: value.matched_execution_ids,
+            workflow_run_id: value.workflow_run_id,
+            matched_workflow_run_ids: value.matched_workflow_run_ids,
             ambiguous,
         }
     }

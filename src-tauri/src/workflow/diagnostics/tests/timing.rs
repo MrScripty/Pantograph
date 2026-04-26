@@ -80,11 +80,7 @@ fn workflow_timing_history_reads_prior_runs_without_active_trace() {
     record_completed_timing_run(&store, "exec-2", 2_000, 200);
     record_completed_timing_run(&store, "exec-3", 3_000, 300);
 
-    let history = store.workflow_timing_history(
-        "wf-timing".to_string(),
-        Some("Timing Workflow".to_string()),
-        &sample_graph(),
-    );
+    let history = store.workflow_timing_history("wf-timing".to_string(), &sample_graph());
     let node = history.nodes.get("llm-1").expect("node history");
     let expectation = node
         .timing_expectation
@@ -92,7 +88,6 @@ fn workflow_timing_history_reads_prior_runs_without_active_trace() {
         .expect("node timing expectation");
 
     assert_eq!(history.workflow_id, "wf-timing");
-    assert_eq!(history.workflow_name.as_deref(), Some("Timing Workflow"));
     assert_eq!(history.graph_fingerprint.as_deref(), Some("graph-123"));
     assert_eq!(expectation.sample_count, 3);
     assert_eq!(
@@ -107,21 +102,17 @@ fn workflow_timing_history_reads_prior_runs_without_active_trace() {
 
 fn record_completed_timing_run(
     store: &WorkflowDiagnosticsStore,
-    execution_id: &str,
+    workflow_run_id: &str,
     started_at_ms: u64,
     node_duration_ms: u64,
 ) -> WorkflowDiagnosticsProjection {
-    store.set_execution_metadata(
-        execution_id,
-        Some("wf-timing".to_string()),
-        Some("Timing Workflow".to_string()),
-    );
-    store.set_execution_graph(execution_id, &sample_graph());
+    store.set_execution_metadata(workflow_run_id, Some("wf-timing".to_string()));
+    store.set_execution_graph(workflow_run_id, &sample_graph());
     store.record_workflow_event(
         &crate::workflow::events::WorkflowEvent::Started {
             workflow_id: "wf-timing".to_string(),
             node_count: 1,
-            execution_id: execution_id.to_string(),
+            workflow_run_id: workflow_run_id.to_string(),
         },
         started_at_ms,
     );
@@ -129,7 +120,7 @@ fn record_completed_timing_run(
         &crate::workflow::events::WorkflowEvent::NodeStarted {
             node_id: "llm-1".to_string(),
             node_type: "llm-inference".to_string(),
-            execution_id: execution_id.to_string(),
+            workflow_run_id: workflow_run_id.to_string(),
         },
         started_at_ms + 10,
     );
@@ -137,7 +128,7 @@ fn record_completed_timing_run(
         &crate::workflow::events::WorkflowEvent::NodeCompleted {
             node_id: "llm-1".to_string(),
             outputs: std::collections::HashMap::new(),
-            execution_id: execution_id.to_string(),
+            workflow_run_id: workflow_run_id.to_string(),
         },
         started_at_ms + 10 + node_duration_ms,
     );
@@ -145,7 +136,7 @@ fn record_completed_timing_run(
         &crate::workflow::events::WorkflowEvent::Completed {
             workflow_id: "wf-timing".to_string(),
             outputs: std::collections::HashMap::new(),
-            execution_id: execution_id.to_string(),
+            workflow_run_id: workflow_run_id.to_string(),
         },
         started_at_ms + 20 + node_duration_ms,
     )

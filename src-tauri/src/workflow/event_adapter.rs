@@ -22,7 +22,6 @@ use diagnostics_bridge::translate_node_event_with_diagnostics;
 pub struct TauriEventAdapter {
     channel: Channel<TauriWorkflowEvent>,
     workflow_id: String,
-    workflow_name: Option<String>,
     execution_graph: Option<WorkflowGraph>,
     diagnostics_store: SharedWorkflowDiagnosticsStore,
 }
@@ -37,15 +36,14 @@ impl TauriEventAdapter {
         Self {
             channel,
             workflow_id: workflow_id.into(),
-            workflow_name: None,
             execution_graph: None,
             diagnostics_store,
         }
     }
 
     /// Attach the display name that belongs to runtime execution events.
-    pub fn with_workflow_name(mut self, workflow_name: Option<String>) -> Self {
-        self.workflow_name = workflow_name;
+    pub fn with_workflow_name(self, workflow_name: Option<String>) -> Self {
+        let _ = workflow_name;
         self
     }
 
@@ -61,11 +59,8 @@ impl TauriEventAdapter {
     ) -> node_engine::WorkflowEvent {
         let event = workflow_event_with_id(event, &self.workflow_id);
         let execution_id = node_engine_execution_id(&event);
-        self.diagnostics_store.set_execution_metadata(
-            execution_id,
-            Some(self.workflow_id.clone()),
-            self.workflow_name.clone(),
-        );
+        self.diagnostics_store
+            .set_execution_metadata(execution_id, Some(self.workflow_id.clone()));
         if let Some(graph) = &self.execution_graph {
             self.diagnostics_store
                 .set_execution_graph(execution_id, graph);

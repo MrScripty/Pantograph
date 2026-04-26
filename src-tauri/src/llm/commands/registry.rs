@@ -19,7 +19,7 @@ use crate::workflow::headless_diagnostics_transport::{
 };
 use pantograph_workflow_service::{WorkflowServiceError, WorkflowTraceSnapshotRequest};
 use serde::{Deserialize, Serialize};
-use tauri::{command, AppHandle, Manager, State};
+use tauri::{AppHandle, Manager, State, command};
 
 use crate::llm::runtime_registry::reclaim_runtime_and_sync_runtime_registry;
 use crate::llm::{SharedGateway, SharedRuntimeRegistry};
@@ -61,13 +61,12 @@ fn resolve_runtime_debug_trace_scope(
     let selection =
         RuntimeDebugTraceSelection::from(diagnostics_store.select_trace_runtime_metrics(request)?);
     let resolved_request = WorkflowTraceSnapshotRequest {
-        execution_id: selection
-            .execution_id
+        workflow_run_id: selection
+            .workflow_run_id
             .clone()
-            .or_else(|| request.execution_id.clone()),
+            .or_else(|| request.workflow_run_id.clone()),
         session_id: request.session_id.clone(),
         workflow_id: request.workflow_id.clone(),
-        workflow_name: request.workflow_name.clone(),
         include_completed: request.include_completed,
     };
 
@@ -108,15 +107,14 @@ pub async fn get_runtime_debug_snapshot(
     workflow_request
         .validate()
         .map_err(|error| error.to_envelope_json())?;
-    let execution_id_filter = workflow_request.execution_id.clone();
+    let workflow_run_id_filter = workflow_request.workflow_run_id.clone();
     let session_id_filter = workflow_request.session_id.clone();
     let workflow_id_filter = workflow_request.workflow_id.clone();
-    let workflow_name_filter = workflow_request.workflow_name.clone();
     let include_trace = workflow_request.include_trace.unwrap_or(false);
     let include_completed = workflow_request.include_completed;
-    let has_workflow_filter = session_id_filter.is_some()
-        || workflow_id_filter.is_some()
-        || workflow_name_filter.is_some();
+    let has_workflow_filter = workflow_run_id_filter.is_some()
+        || session_id_filter.is_some()
+        || workflow_id_filter.is_some();
     let workflow_diagnostics = match (
         workflow_diagnostics_store.clone(),
         workflow_service,
@@ -132,9 +130,9 @@ pub async fn get_runtime_debug_snapshot(
                 &service,
                 &store,
                 WorkflowDiagnosticsSnapshotRequest {
+                    workflow_run_id: workflow_run_id_filter.clone(),
                     session_id: session_id_filter.clone(),
                     workflow_id: workflow_id_filter.clone(),
-                    workflow_name: workflow_name_filter.clone(),
                     workflow_graph: None,
                 },
             )
@@ -144,10 +142,9 @@ pub async fn get_runtime_debug_snapshot(
         _ => None,
     };
     let trace_request = WorkflowTraceSnapshotRequest {
-        execution_id: execution_id_filter,
+        workflow_run_id: workflow_run_id_filter,
         session_id: session_id_filter,
         workflow_id: workflow_id_filter,
-        workflow_name: workflow_name_filter,
         include_completed,
     };
     let (workflow_trace, workflow_trace_selection) = if include_trace {

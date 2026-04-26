@@ -291,7 +291,7 @@ let snapshot = workflow_service
 - Headless diagnostics helpers use grouped projection and runtime snapshot
   inputs so scheduler/runtime/trace facts stay named as they cross the Tauri
   adapter boundary.
-- When a scheduler snapshot includes backend-owned `trace_execution_id`,
+- When a scheduler snapshot includes backend-owned `workflow_run_id`,
   adapters must attribute runtime/scheduler snapshot events to that execution
   instead of falling back to `session_id`. If the field is absent, the adapter
   may only use the requested session identity or update overlay-only state; it

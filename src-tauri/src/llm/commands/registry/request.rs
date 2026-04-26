@@ -5,13 +5,11 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case")]
 pub struct RuntimeDebugSnapshotRequest {
     #[serde(default)]
-    pub execution_id: Option<String>,
+    pub workflow_run_id: Option<String>,
     #[serde(default)]
     pub session_id: Option<String>,
     #[serde(default)]
     pub workflow_id: Option<String>,
-    #[serde(default)]
-    pub workflow_name: Option<String>,
     #[serde(default)]
     pub include_trace: Option<bool>,
     #[serde(default)]
@@ -21,20 +19,18 @@ pub struct RuntimeDebugSnapshotRequest {
 impl RuntimeDebugSnapshotRequest {
     pub(crate) fn normalized(&self) -> Self {
         Self {
-            execution_id: normalize_optional_filter(&self.execution_id),
+            workflow_run_id: normalize_optional_filter(&self.workflow_run_id),
             session_id: normalize_optional_filter(&self.session_id),
             workflow_id: normalize_optional_filter(&self.workflow_id),
-            workflow_name: normalize_optional_filter(&self.workflow_name),
             include_trace: self.include_trace,
             include_completed: self.include_completed,
         }
     }
 
     pub(crate) fn validate(&self) -> Result<(), WorkflowServiceError> {
-        validate_optional_filter(&self.execution_id, "execution_id")?;
+        validate_optional_filter(&self.workflow_run_id, "workflow_run_id")?;
         validate_optional_filter(&self.session_id, "session_id")?;
         validate_optional_filter(&self.workflow_id, "workflow_id")?;
-        validate_optional_filter(&self.workflow_name, "workflow_name")?;
         Ok(())
     }
 }

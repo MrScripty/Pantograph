@@ -8,8 +8,8 @@ use inference::{EmbeddingMemoryMode, LlamaCppEmbeddingRuntime};
 use tokio::sync::mpsc;
 
 use super::{
-    reclaim_runtime, resolve_runtime_debug_trace_scope, runtime_debug_snapshot_response,
-    runtime_registry_snapshot_response, RuntimeDebugSnapshotRequest,
+    RuntimeDebugSnapshotRequest, reclaim_runtime, resolve_runtime_debug_trace_scope,
+    runtime_debug_snapshot_response, runtime_registry_snapshot_response,
 };
 use crate::llm::health_monitor::{
     HealthCheckResult, HealthMonitor, HealthMonitorConfig, HealthStatus, SharedHealthMonitor,
@@ -20,9 +20,9 @@ use crate::workflow::diagnostics::{
     SharedWorkflowDiagnosticsStore, WorkflowRuntimeSnapshotRecord, WorkflowSchedulerSnapshotRecord,
 };
 use pantograph_workflow_service::{
-    graph::WorkflowExecutionSessionKind, WorkflowCapabilitiesResponse,
-    WorkflowExecutionSessionState, WorkflowExecutionSessionSummary, WorkflowServiceError,
-    WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest,
+    WorkflowCapabilitiesResponse, WorkflowExecutionSessionState, WorkflowExecutionSessionSummary,
+    WorkflowServiceError, WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest,
+    graph::WorkflowExecutionSessionKind,
 };
 
 struct MockProcessHandle;
@@ -178,7 +178,7 @@ async fn runtime_debug_snapshot_includes_synced_runtime_and_recovery_state() {
     let workflow_diagnostics: SharedWorkflowDiagnosticsStore = Arc::new(Default::default());
     workflow_diagnostics.record_runtime_snapshot(WorkflowRuntimeSnapshotRecord {
         workflow_id: "workflow-debug".to_string(),
-        execution_id: "execution-debug".to_string(),
+        workflow_run_id: "execution-debug".to_string(),
         captured_at_ms: 123,
         capabilities: Some(WorkflowCapabilitiesResponse {
             max_input_bindings: 1,
@@ -219,7 +219,7 @@ async fn runtime_debug_snapshot_includes_synced_runtime_and_recovery_state() {
     let scheduler_projection =
         workflow_diagnostics.record_scheduler_snapshot(WorkflowSchedulerSnapshotRecord {
             workflow_id: Some("workflow-debug".to_string()),
-            execution_id: "execution-debug".to_string(),
+            workflow_run_id: "execution-debug".to_string(),
             session_id: "session-debug".to_string(),
             captured_at_ms: 456,
             session: Some(WorkflowExecutionSessionSummary {
@@ -243,10 +243,10 @@ async fn runtime_debug_snapshot_includes_synced_runtime_and_recovery_state() {
     let workflow_diagnostics_projection = workflow_diagnostics.snapshot();
     let workflow_trace = workflow_diagnostics
         .trace_snapshot(WorkflowTraceSnapshotRequest {
-            execution_id: Some("execution-debug".to_string()),
+            workflow_run_id: Some("execution-debug".to_string()),
             session_id: None,
             workflow_id: None,
-            workflow_name: None,
+
             include_completed: Some(true),
         })
         .expect("workflow trace snapshot");
@@ -338,7 +338,7 @@ async fn runtime_debug_snapshot_preserves_backend_trace_and_scheduler_contracts(
     let workflow_diagnostics: SharedWorkflowDiagnosticsStore = Arc::new(Default::default());
     workflow_diagnostics.record_runtime_snapshot(WorkflowRuntimeSnapshotRecord {
         workflow_id: "workflow-debug".to_string(),
-        execution_id: "execution-debug".to_string(),
+        workflow_run_id: "execution-debug".to_string(),
         captured_at_ms: 123,
         capabilities: None,
         trace_runtime_metrics: WorkflowTraceRuntimeMetrics {
@@ -374,7 +374,7 @@ async fn runtime_debug_snapshot_preserves_backend_trace_and_scheduler_contracts(
     });
     workflow_diagnostics.record_scheduler_snapshot(WorkflowSchedulerSnapshotRecord {
         workflow_id: Some("workflow-debug".to_string()),
-        execution_id: "execution-debug".to_string(),
+        workflow_run_id: "execution-debug".to_string(),
         session_id: "session-debug".to_string(),
         captured_at_ms: 456,
         session: Some(WorkflowExecutionSessionSummary {
@@ -389,8 +389,8 @@ async fn runtime_debug_snapshot_preserves_backend_trace_and_scheduler_contracts(
         }),
         items: vec![
             pantograph_workflow_service::WorkflowExecutionSessionQueueItem {
-                queue_id: "queue-1".to_string(),
-                run_id: Some("execution-debug".to_string()),
+                workflow_run_id: "queue-1".to_string(),
+
                 enqueued_at_ms: Some(400),
                 dequeued_at_ms: Some(430),
                 priority: 3,
@@ -407,10 +407,10 @@ async fn runtime_debug_snapshot_preserves_backend_trace_and_scheduler_contracts(
     let workflow_diagnostics_projection = workflow_diagnostics.snapshot();
     let workflow_trace = workflow_diagnostics
         .trace_snapshot(WorkflowTraceSnapshotRequest {
-            execution_id: Some("execution-debug".to_string()),
+            workflow_run_id: Some("execution-debug".to_string()),
             session_id: None,
             workflow_id: None,
-            workflow_name: None,
+
             include_completed: Some(true),
         })
         .expect("workflow trace snapshot");
@@ -432,7 +432,7 @@ async fn runtime_debug_snapshot_preserves_backend_trace_and_scheduler_contracts(
         .expect("scheduler diagnostics");
     assert_eq!(scheduler.session_id.as_deref(), Some("session-debug"));
     assert_eq!(
-        scheduler.trace_execution_id.as_deref(),
+        scheduler.workflow_run_id.as_deref(),
         Some("execution-debug")
     );
 
@@ -458,7 +458,7 @@ async fn runtime_debug_snapshot_preserves_backend_trace_and_scheduler_contracts(
         .as_ref()
         .and_then(|trace| trace.traces.first())
         .expect("workflow trace");
-    assert_eq!(trace.execution_id, "execution-debug");
+    assert_eq!(trace.workflow_run_id, "execution-debug");
     assert_eq!(trace.session_id.as_deref(), Some("session-debug"));
     assert_eq!(trace.workflow_id.as_deref(), Some("workflow-debug"));
     assert_eq!(trace.queue.enqueued_at_ms, Some(400));
@@ -480,10 +480,10 @@ async fn runtime_debug_snapshot_preserves_backend_trace_and_scheduler_contracts(
 #[test]
 fn runtime_debug_snapshot_request_serializes_optional_workflow_filters() {
     let request = RuntimeDebugSnapshotRequest {
-        execution_id: Some("execution-1".to_string()),
+        workflow_run_id: Some("execution-1".to_string()),
         session_id: Some("session-1".to_string()),
         workflow_id: Some("workflow-1".to_string()),
-        workflow_name: Some("Workflow 1".to_string()),
+
         include_trace: Some(true),
         include_completed: Some(false),
     };
@@ -492,10 +492,9 @@ fn runtime_debug_snapshot_request_serializes_optional_workflow_filters() {
     assert_eq!(
         value,
         serde_json::json!({
-            "execution_id": "execution-1",
+            "workflow_run_id": "execution-1",
             "session_id": "session-1",
             "workflow_id": "workflow-1",
-            "workflow_name": "Workflow 1",
             "include_trace": true,
             "include_completed": false
         })
@@ -505,19 +504,18 @@ fn runtime_debug_snapshot_request_serializes_optional_workflow_filters() {
 #[test]
 fn runtime_debug_snapshot_request_normalizes_and_rejects_blank_filters() {
     let normalized = RuntimeDebugSnapshotRequest {
-        execution_id: Some("  execution-1  ".to_string()),
+        workflow_run_id: Some("  execution-1  ".to_string()),
         session_id: Some("  ".to_string()),
         workflow_id: Some("\tworkflow-1\t".to_string()),
-        workflow_name: Some("  Workflow 1  ".to_string()),
+
         include_trace: Some(true),
         include_completed: Some(false),
     }
     .normalized();
 
-    assert_eq!(normalized.execution_id.as_deref(), Some("execution-1"));
+    assert_eq!(normalized.workflow_run_id.as_deref(), Some("execution-1"));
     assert_eq!(normalized.session_id.as_deref(), Some(""));
     assert_eq!(normalized.workflow_id.as_deref(), Some("workflow-1"));
-    assert_eq!(normalized.workflow_name.as_deref(), Some("Workflow 1"));
 
     let error = normalized
         .validate()
@@ -539,7 +537,7 @@ fn resolve_runtime_debug_trace_scope_uses_unique_execution_match() {
     let diagnostics_store: SharedWorkflowDiagnosticsStore = Arc::new(Default::default());
     diagnostics_store.record_runtime_snapshot(WorkflowRuntimeSnapshotRecord {
         workflow_id: "workflow-debug".to_string(),
-        execution_id: "execution-debug".to_string(),
+        workflow_run_id: "execution-debug".to_string(),
         captured_at_ms: 123,
         capabilities: None,
         trace_runtime_metrics: WorkflowTraceRuntimeMetrics {
@@ -560,21 +558,24 @@ fn resolve_runtime_debug_trace_scope_uses_unique_execution_match() {
     let (request, selection) = resolve_runtime_debug_trace_scope(
         Some(&diagnostics_store),
         &WorkflowTraceSnapshotRequest {
-            execution_id: None,
+            workflow_run_id: None,
             session_id: None,
             workflow_id: Some("workflow-debug".to_string()),
-            workflow_name: None,
+
             include_completed: Some(true),
         },
     )
     .expect("trace selection should succeed")
     .expect("trace selection should exist");
 
-    assert_eq!(request.execution_id.as_deref(), Some("execution-debug"));
-    assert_eq!(selection.execution_id.as_deref(), Some("execution-debug"));
+    assert_eq!(request.workflow_run_id.as_deref(), Some("execution-debug"));
+    assert_eq!(
+        selection.workflow_run_id.as_deref(),
+        Some("execution-debug")
+    );
     assert!(!selection.ambiguous);
     assert_eq!(
-        selection.matched_execution_ids,
+        selection.matched_workflow_run_ids,
         vec!["execution-debug".to_string()]
     );
 }
@@ -585,7 +586,7 @@ fn resolve_runtime_debug_trace_scope_marks_multi_run_scope_ambiguous() {
     for execution_id in ["execution-a", "execution-b"] {
         diagnostics_store.record_runtime_snapshot(WorkflowRuntimeSnapshotRecord {
             workflow_id: "workflow-debug".to_string(),
-            execution_id: execution_id.to_string(),
+            workflow_run_id: execution_id.to_string(),
             captured_at_ms: 123,
             capabilities: None,
             trace_runtime_metrics: WorkflowTraceRuntimeMetrics {
@@ -607,21 +608,21 @@ fn resolve_runtime_debug_trace_scope_marks_multi_run_scope_ambiguous() {
     let (request, selection) = resolve_runtime_debug_trace_scope(
         Some(&diagnostics_store),
         &WorkflowTraceSnapshotRequest {
-            execution_id: None,
+            workflow_run_id: None,
             session_id: None,
             workflow_id: Some("workflow-debug".to_string()),
-            workflow_name: None,
+
             include_completed: Some(true),
         },
     )
     .expect("trace selection should succeed")
     .expect("trace selection should exist");
 
-    assert!(request.execution_id.is_none());
-    assert!(selection.execution_id.is_none());
+    assert!(request.workflow_run_id.is_none());
+    assert!(selection.workflow_run_id.is_none());
     assert!(selection.ambiguous);
     assert_eq!(
-        selection.matched_execution_ids,
+        selection.matched_workflow_run_ids,
         vec!["execution-b".to_string(), "execution-a".to_string()]
     );
 }

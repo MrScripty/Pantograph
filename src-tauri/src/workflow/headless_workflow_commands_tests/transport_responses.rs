@@ -3,9 +3,10 @@ use super::*;
 #[test]
 fn diagnostics_snapshot_request_still_allows_optional_scheduler_context() {
     let request = WorkflowDiagnosticsSnapshotRequest {
+        workflow_run_id: Some("run-1".to_string()),
         session_id: Some("session-1".to_string()),
         workflow_id: Some("wf-1".to_string()),
-        workflow_name: Some("Workflow 1".to_string()),
+
         workflow_graph: None,
     };
 
@@ -13,9 +14,9 @@ fn diagnostics_snapshot_request_still_allows_optional_scheduler_context() {
     assert_eq!(
         value,
         serde_json::json!({
+            "workflow_run_id": "run-1",
             "session_id": "session-1",
-            "workflow_id": "wf-1",
-            "workflow_name": "Workflow 1"
+            "workflow_id": "wf-1"
         })
     );
 }
@@ -60,15 +61,14 @@ fn workflow_trace_snapshot_response_reads_backend_owned_trace_snapshot() {
         diagnostics_store.as_ref(),
         "session-1",
         Some("wf-1".to_string()),
-        Some("Workflow 1".to_string()),
         Ok(WorkflowSchedulerSnapshotResponse {
             workflow_id: Some("wf-1".to_string()),
             session_id: "session-1".to_string(),
-            trace_execution_id: Some("run-1".to_string()),
+            workflow_run_id: Some("run-1".to_string()),
             session: running_session_summary(),
             items: vec![WorkflowExecutionSessionQueueItem {
-                queue_id: "queue-1".to_string(),
-                run_id: Some("run-1".to_string()),
+                workflow_run_id: "queue-1".to_string(),
+
                 enqueued_at_ms: Some(100),
                 dequeued_at_ms: Some(110),
                 priority: 5,
@@ -86,10 +86,10 @@ fn workflow_trace_snapshot_response_reads_backend_owned_trace_snapshot() {
     let snapshot = workflow_trace_snapshot_response(
         &diagnostics_store,
         WorkflowTraceSnapshotRequest {
-            execution_id: Some("run-1".to_string()),
+            workflow_run_id: Some("run-1".to_string()),
             session_id: None,
             workflow_id: None,
-            workflow_name: None,
+
             include_completed: None,
         },
     )
@@ -97,10 +97,9 @@ fn workflow_trace_snapshot_response_reads_backend_owned_trace_snapshot() {
 
     assert_eq!(snapshot.traces.len(), 1);
     let trace = &snapshot.traces[0];
-    assert_eq!(trace.execution_id, "run-1");
+    assert_eq!(trace.workflow_run_id, "run-1");
     assert_eq!(trace.session_id.as_deref(), Some("session-1"));
     assert_eq!(trace.workflow_id.as_deref(), Some("wf-1"));
-    assert_eq!(trace.workflow_name.as_deref(), Some("Workflow 1"));
     assert_eq!(trace.queue.enqueued_at_ms, Some(100));
     assert_eq!(trace.queue.dequeued_at_ms, Some(110));
 }
@@ -112,15 +111,14 @@ fn workflow_trace_snapshot_response_filters_by_backend_session_id() {
         diagnostics_store.as_ref(),
         "session-1",
         Some("wf-1".to_string()),
-        Some("Workflow 1".to_string()),
         Ok(WorkflowSchedulerSnapshotResponse {
             workflow_id: Some("wf-1".to_string()),
             session_id: "session-1".to_string(),
-            trace_execution_id: Some("run-1".to_string()),
+            workflow_run_id: Some("run-1".to_string()),
             session: running_session_summary(),
             items: vec![WorkflowExecutionSessionQueueItem {
-                queue_id: "queue-1".to_string(),
-                run_id: Some("run-1".to_string()),
+                workflow_run_id: "queue-1".to_string(),
+
                 enqueued_at_ms: Some(100),
                 dequeued_at_ms: Some(110),
                 priority: 5,
@@ -138,10 +136,10 @@ fn workflow_trace_snapshot_response_filters_by_backend_session_id() {
     let snapshot = workflow_trace_snapshot_response(
         &diagnostics_store,
         WorkflowTraceSnapshotRequest {
-            execution_id: None,
+            workflow_run_id: None,
             session_id: Some("session-1".to_string()),
             workflow_id: None,
-            workflow_name: None,
+
             include_completed: None,
         },
     )
@@ -149,7 +147,7 @@ fn workflow_trace_snapshot_response_filters_by_backend_session_id() {
 
     assert_eq!(snapshot.traces.len(), 1);
     let trace = &snapshot.traces[0];
-    assert_eq!(trace.execution_id, "run-1");
+    assert_eq!(trace.workflow_run_id, "run-1");
     assert_eq!(trace.session_id.as_deref(), Some("session-1"));
 }
 
@@ -160,10 +158,10 @@ fn workflow_trace_snapshot_response_returns_backend_validation_error() {
     let error = workflow_trace_snapshot_response(
         &diagnostics_store,
         WorkflowTraceSnapshotRequest {
-            execution_id: Some("   ".to_string()),
+            workflow_run_id: Some("   ".to_string()),
             session_id: None,
             workflow_id: None,
-            workflow_name: None,
+
             include_completed: None,
         },
     )
@@ -171,7 +169,7 @@ fn workflow_trace_snapshot_response_returns_backend_validation_error() {
 
     assert!(error.contains("\"code\":\"invalid_request\""));
     assert!(
-        error.contains("workflow trace snapshot request field 'execution_id' must not be blank")
+        error.contains("workflow trace snapshot request field 'workflow_run_id' must not be blank")
     );
 }
 

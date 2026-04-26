@@ -8,13 +8,13 @@ use node_engine::{
     Context, ExecutorExtensions, GraphNode as EngineGraphNode, TaskExecutor, WorkflowExecutor,
 };
 use pantograph_workflow_service::{
-    graph::WorkflowDerivedGraph, GraphNode, Position, WorkflowGraph,
+    GraphNode, Position, WorkflowGraph, graph::WorkflowDerivedGraph,
 };
 use serde_json::Value;
 use tauri::ipc::{Channel, InvokeResponseBody};
 
 use super::diagnostics_bridge::translate_node_event_with_diagnostics;
-use super::translation::translated_execution_id;
+use super::translation::translated_workflow_run_id;
 use super::{TauriEventAdapter, TauriWorkflowEvent};
 use crate::workflow::WorkflowDiagnosticsStore;
 

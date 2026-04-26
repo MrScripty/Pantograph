@@ -3,8 +3,8 @@
 //! These events are sent via Tauri channels to provide real-time
 //! feedback on workflow execution progress.
 
-use serde::{ser::Error as _, Serialize, Serializer};
-use serde_json::{json, Map, Value};
+use serde::{Serialize, Serializer, ser::Error as _};
+use serde_json::{Map, Value, json};
 use std::collections::HashMap;
 
 use pantograph_embedded_runtime::ManagedRuntimeManagerRuntimeView;
@@ -22,7 +22,7 @@ pub type PortValue = serde_json::Value;
 #[derive(Debug, Clone)]
 pub struct WorkflowRuntimeSnapshotEventInput {
     pub workflow_id: String,
-    pub execution_id: String,
+    pub workflow_run_id: String,
     pub captured_at_ms: u64,
     pub capabilities: Option<WorkflowCapabilitiesResponse>,
     pub trace_runtime_metrics: WorkflowTraceRuntimeMetrics,
@@ -37,7 +37,7 @@ pub struct WorkflowRuntimeSnapshotEventInput {
 #[derive(Debug, Clone)]
 pub struct WorkflowSchedulerSnapshotEventInput {
     pub workflow_id: Option<String>,
-    pub execution_id: String,
+    pub workflow_run_id: String,
     pub session_id: String,
     pub captured_at_ms: u64,
     pub session: Option<WorkflowExecutionSessionSummary>,
@@ -59,7 +59,7 @@ pub enum WorkflowEvent {
         /// Total number of nodes to execute
         node_count: usize,
         /// Unique identifier for this execution
-        execution_id: String,
+        workflow_run_id: String,
     },
 
     /// A node has begun executing
@@ -69,7 +69,7 @@ pub enum WorkflowEvent {
         /// Type of the node (for UI display)
         node_type: String,
         /// Unique identifier for this execution
-        execution_id: String,
+        workflow_run_id: String,
     },
 
     /// Progress update from a node (for long-running operations)
@@ -83,7 +83,7 @@ pub enum WorkflowEvent {
         /// Optional backend-owned structured progress detail
         detail: Option<node_engine::TaskProgressDetail>,
         /// Unique identifier for this execution
-        execution_id: String,
+        workflow_run_id: String,
     },
 
     /// Streaming content from a node (for LLM output, etc.)
@@ -95,7 +95,7 @@ pub enum WorkflowEvent {
         /// Chunk of streaming data
         chunk: serde_json::Value,
         /// Unique identifier for this execution
-        execution_id: String,
+        workflow_run_id: String,
     },
 
     /// A node has completed successfully
@@ -105,7 +105,7 @@ pub enum WorkflowEvent {
         /// Output values produced by the node
         outputs: HashMap<String, PortValue>,
         /// Unique identifier for this execution
-        execution_id: String,
+        workflow_run_id: String,
     },
 
     /// A node has failed
@@ -115,7 +115,7 @@ pub enum WorkflowEvent {
         /// Error message
         error: String,
         /// Unique identifier for this execution
-        execution_id: String,
+        workflow_run_id: String,
     },
 
     /// Workflow has completed successfully
@@ -125,7 +125,7 @@ pub enum WorkflowEvent {
         /// All outputs from all nodes
         outputs: HashMap<String, HashMap<String, PortValue>>,
         /// Unique identifier for this execution
-        execution_id: String,
+        workflow_run_id: String,
     },
 
     /// Workflow has failed
@@ -135,7 +135,7 @@ pub enum WorkflowEvent {
         /// Error message describing the failure
         error: String,
         /// Unique identifier for this execution
-        execution_id: String,
+        workflow_run_id: String,
     },
 
     /// Workflow was cancelled before completing successfully
@@ -145,7 +145,7 @@ pub enum WorkflowEvent {
         /// Cancellation reason when one is available
         error: String,
         /// Unique identifier for this execution
-        execution_id: String,
+        workflow_run_id: String,
     },
 
     /// Graph was modified (edge/node added/removed)
@@ -153,7 +153,7 @@ pub enum WorkflowEvent {
         /// Workflow identifier associated with this run
         workflow_id: String,
         /// Unique identifier for this execution
-        execution_id: String,
+        workflow_run_id: String,
         /// The updated graph when a full snapshot is available
         graph: Option<WorkflowGraph>,
         /// Nodes invalidated by the graph change
@@ -167,7 +167,7 @@ pub enum WorkflowEvent {
         /// Workflow identifier associated with this run
         workflow_id: String,
         /// Unique identifier for this execution
-        execution_id: String,
+        workflow_run_id: String,
         /// Node or task waiting for input
         node_id: String,
         /// Optional prompt shown to the user
@@ -179,7 +179,7 @@ pub enum WorkflowEvent {
         /// Workflow identifier associated with this run
         workflow_id: String,
         /// Unique identifier for this execution
-        execution_id: String,
+        workflow_run_id: String,
         /// Task ids that are being re-executed
         task_ids: Vec<String>,
     },
@@ -189,7 +189,7 @@ pub enum WorkflowEvent {
         /// Workflow identifier associated with this run
         workflow_id: String,
         /// Unique identifier for this execution
-        execution_id: String,
+        workflow_run_id: String,
         /// Millisecond unix timestamp for when the snapshot was captured
         captured_at_ms: u64,
         /// Runtime capabilities and requirements when available
@@ -215,7 +215,7 @@ pub enum WorkflowEvent {
         /// Workflow identifier associated with this run
         workflow_id: Option<String>,
         /// Unique identifier for this execution
-        execution_id: String,
+        workflow_run_id: String,
         /// Session identifier the snapshot belongs to
         session_id: String,
         /// Millisecond unix timestamp for when the snapshot was captured
@@ -233,7 +233,7 @@ pub enum WorkflowEvent {
     /// Backend-owned diagnostics projection captured after a workflow event.
     DiagnosticsSnapshot {
         /// Unique identifier for this execution
-        execution_id: String,
+        workflow_run_id: String,
         /// Canonical diagnostics projection for the workflow UI
         snapshot: Box<WorkflowDiagnosticsProjection>,
     },
@@ -242,16 +242,16 @@ pub enum WorkflowEvent {
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkflowEventOwnershipProjection {
-    pub event_execution_id: String,
-    pub active_execution_id: String,
+    pub event_workflow_run_id: String,
+    pub active_workflow_run_id: String,
     pub relevant: bool,
 }
 
 impl WorkflowEventOwnershipProjection {
-    fn from_execution_id(execution_id: &str) -> Self {
+    fn from_workflow_run_id(workflow_run_id: &str) -> Self {
         Self {
-            event_execution_id: execution_id.to_string(),
-            active_execution_id: execution_id.to_string(),
+            event_workflow_run_id: workflow_run_id.to_string(),
+            active_workflow_run_id: workflow_run_id.to_string(),
             relevant: true,
         }
     }
@@ -279,28 +279,58 @@ impl Serialize for WorkflowEvent {
 
 impl WorkflowEvent {
     pub fn ownership_projection(&self) -> Option<WorkflowEventOwnershipProjection> {
-        Some(WorkflowEventOwnershipProjection::from_execution_id(
-            self.execution_id(),
+        Some(WorkflowEventOwnershipProjection::from_workflow_run_id(
+            self.workflow_run_id(),
         ))
     }
 
-    fn execution_id(&self) -> &str {
+    fn workflow_run_id(&self) -> &str {
         match self {
-            Self::Started { execution_id, .. }
-            | Self::NodeStarted { execution_id, .. }
-            | Self::NodeProgress { execution_id, .. }
-            | Self::NodeStream { execution_id, .. }
-            | Self::NodeCompleted { execution_id, .. }
-            | Self::NodeError { execution_id, .. }
-            | Self::Completed { execution_id, .. }
-            | Self::Failed { execution_id, .. }
-            | Self::Cancelled { execution_id, .. }
-            | Self::GraphModified { execution_id, .. }
-            | Self::WaitingForInput { execution_id, .. }
-            | Self::IncrementalExecutionStarted { execution_id, .. }
-            | Self::RuntimeSnapshot { execution_id, .. }
-            | Self::SchedulerSnapshot { execution_id, .. }
-            | Self::DiagnosticsSnapshot { execution_id, .. } => execution_id,
+            Self::Started {
+                workflow_run_id, ..
+            }
+            | Self::NodeStarted {
+                workflow_run_id, ..
+            }
+            | Self::NodeProgress {
+                workflow_run_id, ..
+            }
+            | Self::NodeStream {
+                workflow_run_id, ..
+            }
+            | Self::NodeCompleted {
+                workflow_run_id, ..
+            }
+            | Self::NodeError {
+                workflow_run_id, ..
+            }
+            | Self::Completed {
+                workflow_run_id, ..
+            }
+            | Self::Failed {
+                workflow_run_id, ..
+            }
+            | Self::Cancelled {
+                workflow_run_id, ..
+            }
+            | Self::GraphModified {
+                workflow_run_id, ..
+            }
+            | Self::WaitingForInput {
+                workflow_run_id, ..
+            }
+            | Self::IncrementalExecutionStarted {
+                workflow_run_id, ..
+            }
+            | Self::RuntimeSnapshot {
+                workflow_run_id, ..
+            }
+            | Self::SchedulerSnapshot {
+                workflow_run_id, ..
+            }
+            | Self::DiagnosticsSnapshot {
+                workflow_run_id, ..
+            } => workflow_run_id,
         }
     }
 
@@ -309,25 +339,25 @@ impl WorkflowEvent {
             Self::Started {
                 workflow_id,
                 node_count,
-                execution_id,
+                workflow_run_id,
             } => (
                 "Started",
                 json!({
                     "workflow_id": workflow_id,
                     "node_count": node_count,
-                    "execution_id": execution_id,
+                    "workflow_run_id": workflow_run_id,
                 }),
             ),
             Self::NodeStarted {
                 node_id,
                 node_type,
-                execution_id,
+                workflow_run_id,
             } => (
                 "NodeStarted",
                 json!({
                     "node_id": node_id,
                     "node_type": node_type,
-                    "execution_id": execution_id,
+                    "workflow_run_id": workflow_run_id,
                 }),
             ),
             Self::NodeProgress {
@@ -335,7 +365,7 @@ impl WorkflowEvent {
                 progress,
                 message,
                 detail,
-                execution_id,
+                workflow_run_id,
             } => (
                 "NodeProgress",
                 json!({
@@ -343,86 +373,86 @@ impl WorkflowEvent {
                     "progress": progress,
                     "message": message,
                     "detail": detail,
-                    "execution_id": execution_id,
+                    "workflow_run_id": workflow_run_id,
                 }),
             ),
             Self::NodeStream {
                 node_id,
                 port,
                 chunk,
-                execution_id,
+                workflow_run_id,
             } => (
                 "NodeStream",
                 json!({
                     "node_id": node_id,
                     "port": port,
                     "chunk": chunk,
-                    "execution_id": execution_id,
+                    "workflow_run_id": workflow_run_id,
                 }),
             ),
             Self::NodeCompleted {
                 node_id,
                 outputs,
-                execution_id,
+                workflow_run_id,
             } => (
                 "NodeCompleted",
                 json!({
                     "node_id": node_id,
                     "outputs": outputs,
-                    "execution_id": execution_id,
+                    "workflow_run_id": workflow_run_id,
                 }),
             ),
             Self::NodeError {
                 node_id,
                 error,
-                execution_id,
+                workflow_run_id,
             } => (
                 "NodeError",
                 json!({
                     "node_id": node_id,
                     "error": error,
-                    "execution_id": execution_id,
+                    "workflow_run_id": workflow_run_id,
                 }),
             ),
             Self::Completed {
                 workflow_id,
                 outputs,
-                execution_id,
+                workflow_run_id,
             } => (
                 "Completed",
                 json!({
                     "workflow_id": workflow_id,
                     "outputs": outputs,
-                    "execution_id": execution_id,
+                    "workflow_run_id": workflow_run_id,
                 }),
             ),
             Self::Failed {
                 workflow_id,
                 error,
-                execution_id,
+                workflow_run_id,
             } => (
                 "Failed",
                 json!({
                     "workflow_id": workflow_id,
                     "error": error,
-                    "execution_id": execution_id,
+                    "workflow_run_id": workflow_run_id,
                 }),
             ),
             Self::Cancelled {
                 workflow_id,
                 error,
-                execution_id,
+                workflow_run_id,
             } => (
                 "Cancelled",
                 json!({
                     "workflow_id": workflow_id,
                     "error": error,
-                    "execution_id": execution_id,
+                    "workflow_run_id": workflow_run_id,
                 }),
             ),
             Self::GraphModified {
                 workflow_id,
-                execution_id,
+                workflow_run_id,
                 graph,
                 dirty_tasks,
                 memory_impact,
@@ -430,7 +460,7 @@ impl WorkflowEvent {
                 "GraphModified",
                 json!({
                     "workflow_id": workflow_id,
-                    "execution_id": execution_id,
+                    "workflow_run_id": workflow_run_id,
                     "graph": graph,
                     "dirty_tasks": dirty_tasks,
                     "memory_impact": memory_impact,
@@ -438,33 +468,33 @@ impl WorkflowEvent {
             ),
             Self::WaitingForInput {
                 workflow_id,
-                execution_id,
+                workflow_run_id,
                 node_id,
                 message,
             } => (
                 "WaitingForInput",
                 json!({
                     "workflow_id": workflow_id,
-                    "execution_id": execution_id,
+                    "workflow_run_id": workflow_run_id,
                     "node_id": node_id,
                     "message": message,
                 }),
             ),
             Self::IncrementalExecutionStarted {
                 workflow_id,
-                execution_id,
+                workflow_run_id,
                 task_ids,
             } => (
                 "IncrementalExecutionStarted",
                 json!({
                     "workflow_id": workflow_id,
-                    "execution_id": execution_id,
+                    "workflow_run_id": workflow_run_id,
                     "task_ids": task_ids,
                 }),
             ),
             Self::RuntimeSnapshot {
                 workflow_id,
-                execution_id,
+                workflow_run_id,
                 captured_at_ms,
                 capabilities,
                 trace_runtime_metrics,
@@ -478,7 +508,7 @@ impl WorkflowEvent {
                 "RuntimeSnapshot",
                 json!({
                     "workflow_id": workflow_id,
-                    "execution_id": execution_id,
+                    "workflow_run_id": workflow_run_id,
                     "captured_at_ms": captured_at_ms,
                     "capabilities": capabilities,
                     "trace_runtime_metrics": trace_runtime_metrics,
@@ -492,7 +522,7 @@ impl WorkflowEvent {
             ),
             Self::SchedulerSnapshot {
                 workflow_id,
-                execution_id,
+                workflow_run_id,
                 session_id,
                 captured_at_ms,
                 session,
@@ -503,7 +533,7 @@ impl WorkflowEvent {
                 "SchedulerSnapshot",
                 json!({
                     "workflow_id": workflow_id,
-                    "execution_id": execution_id,
+                    "workflow_run_id": workflow_run_id,
                     "session_id": session_id,
                     "captured_at_ms": captured_at_ms,
                     "session": session,
@@ -513,12 +543,12 @@ impl WorkflowEvent {
                 }),
             ),
             Self::DiagnosticsSnapshot {
-                execution_id,
+                workflow_run_id,
                 snapshot,
             } => (
                 "DiagnosticsSnapshot",
                 json!({
-                    "execution_id": execution_id,
+                    "workflow_run_id": workflow_run_id,
                     "snapshot": snapshot,
                 }),
             ),
@@ -529,7 +559,7 @@ impl WorkflowEvent {
     pub fn runtime_snapshot(input: WorkflowRuntimeSnapshotEventInput) -> Self {
         Self::RuntimeSnapshot {
             workflow_id: input.workflow_id,
-            execution_id: input.execution_id,
+            workflow_run_id: input.workflow_run_id,
             captured_at_ms: input.captured_at_ms,
             capabilities: Box::new(input.capabilities),
             trace_runtime_metrics: Box::new(input.trace_runtime_metrics),
@@ -552,7 +582,7 @@ impl WorkflowEvent {
     pub fn scheduler_snapshot(input: WorkflowSchedulerSnapshotEventInput) -> Self {
         Self::SchedulerSnapshot {
             workflow_id: input.workflow_id,
-            execution_id: input.execution_id,
+            workflow_run_id: input.workflow_run_id,
             session_id: input.session_id,
             captured_at_ms: input.captured_at_ms,
             session: input.session,
@@ -564,11 +594,11 @@ impl WorkflowEvent {
 
     /// Create a DiagnosticsSnapshot event
     pub fn diagnostics_snapshot(
-        execution_id: impl Into<String>,
+        workflow_run_id: impl Into<String>,
         snapshot: WorkflowDiagnosticsProjection,
     ) -> Self {
         Self::DiagnosticsSnapshot {
-            execution_id: execution_id.into(),
+            workflow_run_id: workflow_run_id.into(),
             snapshot: Box::new(snapshot),
         }
     }
@@ -583,7 +613,7 @@ mod tests {
         let event = WorkflowEvent::Started {
             workflow_id: "test-123".to_string(),
             node_count: 5,
-            execution_id: "exec-123".to_string(),
+            workflow_run_id: "exec-123".to_string(),
         };
         let json = serde_json::to_string(&event).unwrap();
         assert!(json.contains("Started"));
@@ -592,11 +622,11 @@ mod tests {
         assert!(json.contains("exec-123"));
         let value = serde_json::to_value(event).unwrap();
         assert_eq!(
-            value["data"]["ownership"]["eventExecutionId"].as_str(),
+            value["data"]["ownership"]["eventWorkflowRunId"].as_str(),
             Some("exec-123")
         );
         assert_eq!(
-            value["data"]["ownership"]["activeExecutionId"].as_str(),
+            value["data"]["ownership"]["activeWorkflowRunId"].as_str(),
             Some("exec-123")
         );
         assert_eq!(value["data"]["ownership"]["relevant"].as_bool(), Some(true));
@@ -608,7 +638,7 @@ mod tests {
             node_id: "node1".to_string(),
             port: "output".to_string(),
             chunk: serde_json::json!({"text": "hello"}),
-            execution_id: "exec-123".to_string(),
+            workflow_run_id: "exec-123".to_string(),
         };
         let json = serde_json::to_string(&event).unwrap();
         assert!(json.contains("NodeStream"));
@@ -620,7 +650,7 @@ mod tests {
     fn test_runtime_snapshot_event() {
         let event = WorkflowEvent::runtime_snapshot(WorkflowRuntimeSnapshotEventInput {
             workflow_id: "workflow-123".to_string(),
-            execution_id: "exec-123".to_string(),
+            workflow_run_id: "exec-123".to_string(),
             captured_at_ms: 1234,
             capabilities: None,
             trace_runtime_metrics: WorkflowTraceRuntimeMetrics::default(),
