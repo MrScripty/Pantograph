@@ -12,6 +12,7 @@ planning.
 | ---- | ----------- |
 | `pantograph-node-system.md` | Requirements for backend-owned node contracts, port authoring, composition, runtime-managed observability, managed capabilities, and binding-facing node semantics. |
 | `pantograph-client-sessions-buckets-model-license-diagnostics.md` | Requirements for durable client/session/bucket identity and persistent model/license usage diagnostics. |
+| `pantograph-gui-run-centric-workbench.md` | Requirements for the scheduler-first GUI workbench, active-run page context, workflow/run versioning, scheduler events, I/O retention, Library/Pumas audit behavior, and local-first Network page. |
 
 ## Problem
 
@@ -79,6 +80,7 @@ Use these files as inputs when drafting or reviewing implementation plans:
 ```text
 docs/requirements/pantograph-node-system.md
 docs/requirements/pantograph-client-sessions-buckets-model-license-diagnostics.md
+docs/requirements/pantograph-gui-run-centric-workbench.md
 ```
 
 ## API Consumer Contract
