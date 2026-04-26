@@ -368,29 +368,29 @@ correctness work.
 behavior is corrected and before release verification.
 
 **Tasks:**
-- [ ] Split `createWorkflowStores.ts` so structural graph state, runtime
+- [x] Split `createWorkflowStores.ts` so structural graph state, runtime
   overlays, mutation dispatch, streaming, grouping, and graph query helpers have
   focused owners.
-- [ ] Extract graph editor controller/helper modules from both active
+- [x] Extract graph editor controller/helper modules from both active
   `WorkflowGraph.svelte` paths so touched interaction logic is no longer owned
   by oversized components.
-- [ ] Centralize duplicated graph backend action logic shared by
+- [x] Centralize duplicated graph backend action logic shared by
   `src/components` and `packages/svelte-graph/src/components`, or record which
   path is active and remove/defer the inactive copy with a traceable decision.
-- [ ] Keep new Rust graph edit-session DTOs out of `types.rs`; move touched
+- [x] Keep new Rust graph edit-session DTOs out of `types.rs`; move touched
   session/batch DTO groups into focused contract modules when needed to avoid
   growing the oversized type file.
-- [ ] Keep `WorkflowService.ts` as a transport facade. If implementation
+- [x] Keep `WorkflowService.ts` as a transport facade. If implementation
   requires new orchestration there, extract focused graph-session or diagnostics
   transport helpers before final verification.
-- [ ] Split any other touched component, store, service, or Rust module whose
+- [x] Split any other touched component, store, service, or Rust module whose
   responsibilities grow during implementation.
-- [ ] Add or update README documentation for any source directory whose touched
+- [x] Add or update README documentation for any source directory whose touched
   responsibilities are non-obvious and not already documented.
-- [ ] Run a final source search for stale direct mutation patterns,
+- [x] Run a final source search for stale direct mutation patterns,
   session-id-unchecked response application, duplicate graph action paths, and
   runtime fields in structural graph serialization.
-- [ ] Record any intentionally deferred decomposition with the reason, risk,
+- [x] Record any intentionally deferred decomposition with the reason, risk,
   and follow-up owner in this plan before release verification.
 
 **Verification:**
@@ -400,7 +400,7 @@ behavior is corrected and before release verification.
 - `cargo test -p pantograph-workflow-service`
 - `cargo check --manifest-path src-tauri/Cargo.toml`
 
-**Status:** Not started.
+**Status:** Complete.
 
 ### Milestone 7: Release Verification
 
@@ -485,6 +485,35 @@ Update during implementation:
   longer rebuild structural graph projection. Backend touched paths were
   reviewed after Milestone 3; no safe additional dirty-task/fingerprint
   simplification was identified without changing memory-impact behavior.
+- 2026-04-26: Milestone 6 started. The compliance pass will first extract
+  graph projection/runtime overlay ownership out of `createWorkflowStores.ts`,
+  then record any remaining oversized component/action decomposition that
+  cannot be completed safely within this plan without changing UI behavior.
+- 2026-04-26: Milestone 6 completed. Extracted structural graph state,
+  runtime-overlay projection, default graph loading, and derived graph ownership
+  into `workflowStoreGraphState.ts`, updated store documentation to state the
+  structural/runtime and backend-derived metadata boundaries, and verified no
+  stale direct mutation or structural runtime-field write patterns remain in
+  the touched source search. Batch DTOs remained in `session_types.rs`, and
+  `WorkflowService.ts` stayed a transport facade.
+- 2026-04-26: Deferred decomposition decision: both
+  `packages/svelte-graph/src/components/WorkflowGraph.svelte` and
+  `src/components/WorkflowGraph.svelte` remain active paths. This plan already
+  moved selected-delete ordering into backend/store actions and kept paired
+  component edits minimal. A full extraction of canvas interaction controllers
+  would be a broad visual-regression risk because the two components include
+  package context wiring, app orchestration/architecture source switching,
+  horseshoe UI state, keyboard handling, container selection, edge insertion,
+  reconnect, and cut-tool behavior. Follow-up owner: graph editor
+  maintainers. Risk until completed: continued duplicate controller drift.
+- 2026-04-26: Deferred decomposition decision: `createWorkflowStores.ts`
+  remains above the 250-line review trigger after extracting graph
+  state/runtime projection. The remaining responsibilities are mutation
+  dispatch, execution-state projection, group mutations, viewport state, and
+  compatibility no-ops. Further splitting is lower risk after release
+  verification, but doing it inside this behavior-fix plan would add broad API
+  churn. Follow-up owner: svelte graph store maintainers. Risk until completed:
+  future changes can still land in an oversized assembler.
 
 ## Commit Cadence Notes
 

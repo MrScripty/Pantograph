@@ -117,9 +117,13 @@ with graph component connection commits.
   workflow load, workflow clear, and default-graph load.
 - `selectedNodeIds` is transient UI state; graph rematerialization must project
   it back onto node snapshots until the user or consumer clears the selection.
-- `runtimeData.ts` must own transient runtime-data and stream-content node array
-  projection, and cleanup helpers must continue to touch only explicitly
-  requested transient keys.
+- `workflowStoreGraphState.ts` owns structural node/edge stores, transient
+  runtime overlays, displayed-node projection, and `workflowGraph` projection.
+  Runtime/output overlays are keyed by node id and must not be written into
+  structural graph nodes.
+- `runtimeData.ts` must own transient runtime-data and stream-content overlay
+  helpers, and cleanup helpers must continue to touch only explicitly requested
+  transient keys.
 - Store graph snapshots and add-edge commits must use the shared
   `workflowConnections.ts` `edgeToGraphEdge` helper rather than rebuilding
   backend edge defaults inline.
@@ -183,10 +187,12 @@ stores.setConnectionIntent({
   and connection-intent semantics should not silently change.
 
 ## Structured Producer Contract (Machine-Consumed Modules)
-- `workflowGraph` is the machine-consumed projection of the active node and edge
-  stores.
-- `derived_graph.graph_fingerprint` and `consumer_count_map` are regenerated
-  metadata; consumers should not persist hand-authored values.
+- `workflowGraph` is the machine-consumed projection of structural graph state,
+  not displayed runtime overlays.
+- `derived_graph.graph_fingerprint` and `consumer_count_map` are backend-owned
+  metadata when provided by a backend graph snapshot. Frontend stores only
+  rebuild derived metadata for local/default/mock graph construction or loaded
+  graphs that do not provide it.
 - `connectionIntent.graphRevision` records the candidate query snapshot and is
   invalid once `workflowGraph.derived_graph.graph_fingerprint` changes.
 - Missing `connectionIntent` means “no active connect/reconnect interaction,”

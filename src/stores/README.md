@@ -137,8 +137,10 @@ diagnosticsSnapshot.subscribe(({ selectedRun }) => {
   layers.
 - `connectionIntent` is transient and may be `null`; consumers must not persist
   it.
-- `workflowGraph.derived_graph.graph_fingerprint` is regenerated metadata and is
-  the revision token used for connection-intent commits.
+- `workflowGraph.derived_graph.graph_fingerprint` is backend-owned metadata
+  when a backend graph snapshot provides it, and it is the revision token used
+  for connection-intent commits. Frontend package stores only rebuild it for
+  local/default graph construction or loaded graphs that lack derived metadata.
 - Diagnostics snapshots are in-memory, session-scoped views over workflow
   events; they are not durable artifacts in v1.
 - `currentSessionState` is an additive backend-owned inspection snapshot and

@@ -18,15 +18,6 @@ import type {
 import type { NodeGroup, PortMapping } from '../types/groups.js';
 import type { ViewportState } from '../types/view.js';
 import type { WorkflowBackend } from '../types/backend.js';
-import {
-  appendNodeStreamContentOverlay,
-  clearNodeRuntimeOverlayKeys,
-  clearNodeStreamContentOverlay,
-  mergeNodeRuntimeOverlays,
-  setNodeStreamContentOverlay,
-  updateNodeRuntimeOverlay,
-} from './runtimeData.ts';
-import { buildDerivedGraph } from '../graphRevision.ts';
 import { applyWorkflowGraphMutationResponse } from './workflowGraphMutationResponse.ts';
 import type { WorkflowGraphMutationResponse } from '../types/workflow.js';
 import {
@@ -35,11 +26,7 @@ import {
   getWorkflowConnectedNodes,
   getWorkflowNodesBounds,
 } from './workflowStoreGraphQueries.ts';
-import {
-  materializeWorkflowGraphSnapshot,
-  projectWorkflowGraphStoreState,
-} from './workflowStoreMaterialization.ts';
-import { buildDefaultWorkflowGraphState } from './defaultWorkflowGraph.ts';
+import { createWorkflowStoreGraphState } from './workflowStoreGraphState.ts';
 import { edgeToGraphEdge } from '../workflowConnections.ts';
 
 interface InferenceParamSchema {
@@ -163,20 +150,11 @@ export function createWorkflowStores(
   },
 ): WorkflowStores {
   // --- Writable stores ---
-  const structuralNodes = writable<Node[]>([]);
-  const nodeRuntimeOverlays = writable<Map<string, Record<string, unknown>>>(new Map());
-  const nodes = derived(
-    [structuralNodes, nodeRuntimeOverlays],
-    ([$structuralNodes, $nodeRuntimeOverlays]) =>
-      mergeNodeRuntimeOverlays($structuralNodes, $nodeRuntimeOverlays),
-  );
-  const edges = writable<Edge[]>([]);
   const nodeDefinitions = writable<NodeDefinition[]>([]);
   const workflowMetadata = writable<WorkflowMetadata | null>(null);
   const isDirty = writable<boolean>(false);
   const isExecuting = writable<boolean>(false);
   const isEditing = writable<boolean>(true);
-  const derivedGraph = writable<WorkflowGraph['derived_graph']>(undefined);
   const nodeExecutionStates = writable<Map<string, NodeExecutionInfo>>(new Map());
   const currentViewport = writable<ViewportState>({ x: 0, y: 0, zoom: 1 });
   const nodeGroups = writable<Map<string, NodeGroup>>(new Map());
@@ -184,17 +162,13 @@ export function createWorkflowStores(
   const connectionIntent = writable<ConnectionIntentState | null>(null);
   let activeSessionId: string | null = null;
 
-  // --- Derived stores ---
-  const workflowGraph = derived(
-    [structuralNodes, edges, derivedGraph],
-    ([$nodes, $edges, $derivedGraph]): WorkflowGraph =>
-      projectWorkflowGraphStoreState({
-        nodes: $nodes,
-        edges: $edges,
-        derivedGraph: $derivedGraph,
-      }),
-  );
+  const graphState = createWorkflowStoreGraphState({
+    nodeDefinitions,
+    selectedNodeIds,
+  });
+  const { nodes, edges, workflowGraph } = graphState;
 
+  // --- Derived stores ---
   const nodeDefinitionsByCategory = derived(nodeDefinitions, ($defs) => {
     const grouped = new Map<string, NodeDefinition[]>();
     for (const def of $defs) {
@@ -213,21 +187,6 @@ export function createWorkflowStores(
     return activeSessionId === sessionId;
   }
 
-  function materializeWorkflowGraph(graph: WorkflowGraph) {
-    const definitions = get(nodeDefinitions);
-    const selectedIds = get(selectedNodeIds);
-
-    return materializeWorkflowGraphSnapshot({
-      graph,
-      definitions,
-      selectedNodeIds: selectedIds,
-    });
-  }
-
-  function resolveDerivedGraph(graph: WorkflowGraph): WorkflowGraph['derived_graph'] {
-    return graph.derived_graph ?? buildDerivedGraph(graph);
-  }
-
   function applyWorkflowGraph(
     graph: WorkflowGraph,
     options?: {
@@ -235,15 +194,12 @@ export function createWorkflowStores(
       markDirty?: boolean;
     },
   ) {
-    const { graphNodes, graphEdges, graph: nextGraph } = materializeWorkflowGraph(graph);
-    structuralNodes.set(graphNodes);
-    edges.set(graphEdges);
+    const { graphNodes } = graphState.applyWorkflowGraph(graph);
     nodeGroups.set(extractWorkflowNodeGroups(graphNodes));
     if (typeof options?.metadata !== 'undefined') {
       workflowMetadata.set(options.metadata);
     }
     connectionIntent.set(null);
-    derivedGraph.set(resolveDerivedGraph(nextGraph));
     isDirty.set(options?.markDirty ?? true);
   }
 
@@ -349,13 +305,11 @@ export function createWorkflowStores(
   }
 
   function updateNodeRuntimeData(nodeId: string, data: Record<string, unknown>) {
-    nodeRuntimeOverlays.update((overlays) => updateNodeRuntimeOverlay(overlays, nodeId, data));
+    graphState.updateNodeRuntimeData(nodeId, data);
   }
 
   function clearNodeRuntimeData(keys: string[]) {
-    if (keys.length === 0) return;
-
-    nodeRuntimeOverlays.update((overlays) => clearNodeRuntimeOverlayKeys(overlays, keys));
+    graphState.clearNodeRuntimeData(keys);
   }
 
   function getNodeById(nodeId: string): Node | undefined {
@@ -424,32 +378,28 @@ export function createWorkflowStores(
 
   function resetExecutionStates() {
     nodeExecutionStates.set(new Map());
-    nodeRuntimeOverlays.set(new Map());
+    graphState.clearRuntimeOverlays();
   }
 
   // --- Streaming actions ---
 
   function appendStreamContent(nodeId: string, chunk: string) {
-    nodeRuntimeOverlays.update((overlays) =>
-      appendNodeStreamContentOverlay(overlays, nodeId, chunk),
-    );
+    graphState.appendStreamContent(nodeId, chunk);
   }
 
   function setStreamContent(nodeId: string, content: string) {
-    nodeRuntimeOverlays.update((overlays) =>
-      setNodeStreamContentOverlay(overlays, nodeId, content),
-    );
+    graphState.setStreamContent(nodeId, content);
   }
 
   function clearStreamContent() {
-    nodeRuntimeOverlays.update(clearNodeStreamContentOverlay);
+    graphState.clearStreamContent();
   }
 
   // --- Workflow actions ---
 
   function loadWorkflowFn(graph: WorkflowGraph, metadata?: WorkflowMetadata) {
     selectedNodeIds.set([]);
-    nodeRuntimeOverlays.set(new Map());
+    graphState.clearRuntimeOverlays();
     applyWorkflowGraph(graph, {
       metadata: metadata || null,
       markDirty: false,
@@ -457,32 +407,20 @@ export function createWorkflowStores(
   }
 
   function clearWorkflow() {
-    structuralNodes.set([]);
-    edges.set([]);
-    nodeRuntimeOverlays.set(new Map());
+    graphState.clearGraph();
     nodeGroups.set(new Map());
     workflowMetadata.set(null);
     selectedNodeIds.set([]);
     connectionIntent.set(null);
-    derivedGraph.set(
-      buildDerivedGraph({
-        nodes: [],
-        edges: [],
-      })
-    );
     isDirty.set(false);
     resetExecutionStates();
   }
 
   function loadDefaultWorkflow(definitions: NodeDefinition[]) {
     selectedNodeIds.set([]);
-    nodeRuntimeOverlays.set(new Map());
-    const defaultWorkflow = buildDefaultWorkflowGraphState(definitions);
-    structuralNodes.set(defaultWorkflow.nodes);
+    graphState.loadDefaultWorkflow(definitions);
     nodeGroups.set(new Map());
-    edges.set(defaultWorkflow.edges);
     connectionIntent.set(null);
-    derivedGraph.set(buildDerivedGraph(defaultWorkflow.graph));
     isDirty.set(false);
   }
 
