@@ -160,8 +160,8 @@ async fn workflow_execution_session_capacity_is_released_after_close() {
 }
 
 #[tokio::test]
-async fn workflow_execution_session_create_surfaces_runtime_capacity_details_when_no_unload_candidate_available(
-) {
+async fn workflow_execution_session_create_surfaces_runtime_capacity_details_when_no_unload_candidate_available()
+ {
     let host = MockWorkflowHost::new(8, 1024);
     let service = WorkflowService::with_capacity_limits(2, 1);
     let loaded = service
@@ -190,7 +190,6 @@ async fn workflow_execution_session_create_surfaces_runtime_capacity_details_whe
                     output_targets: None,
                     override_selection: None,
                     timeout_ms: None,
-                    run_id: Some("run-loaded".to_string()),
                     priority: None,
                 },
             )

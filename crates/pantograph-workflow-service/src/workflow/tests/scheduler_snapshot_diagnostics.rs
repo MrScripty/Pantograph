@@ -30,7 +30,6 @@ async fn workflow_get_scheduler_snapshot_exposes_next_admission_diagnostics() {
                     output_targets: None,
                     override_selection: None,
                     timeout_ms: None,
-                    run_id: Some("queued-run-1".to_string()),
                     priority: Some(1),
                 },
             )
@@ -55,10 +54,10 @@ async fn workflow_get_scheduler_snapshot_exposes_next_admission_diagnostics() {
     );
     assert!(!diagnostics.active_run_blocks_admission);
     assert_eq!(
-        diagnostics.next_admission_queue_id.as_deref(),
+        diagnostics.next_admission_workflow_run_id.as_deref(),
         Some(queue_id.as_str())
     );
-    assert_eq!(diagnostics.next_admission_bypassed_queue_id, None);
+    assert_eq!(diagnostics.next_admission_bypassed_workflow_run_id, None);
     assert_eq!(diagnostics.next_admission_after_runs, Some(0));
     assert_eq!(diagnostics.next_admission_wait_ms, Some(0));
     let next_admission_not_before_ms = diagnostics
@@ -130,7 +129,6 @@ async fn workflow_get_scheduler_snapshot_merges_runtime_registry_diagnostics_fro
                     output_targets: None,
                     override_selection: None,
                     timeout_ms: None,
-                    run_id: Some("queued-run-1".to_string()),
                     priority: Some(1),
                 },
             )
@@ -167,7 +165,9 @@ async fn workflow_get_scheduler_snapshot_merges_runtime_registry_diagnostics_fro
     assert!(!recorded_requests[0].keep_alive);
     assert!(!recorded_requests[0].runtime_loaded);
     assert_eq!(
-        recorded_requests[0].next_admission_queue_id.as_deref(),
+        recorded_requests[0]
+            .next_admission_workflow_run_id
+            .as_deref(),
         Some(queue_id.as_str())
     );
     assert_eq!(recorded_requests[0].reclaim_candidates.len(), 1);
@@ -178,8 +178,8 @@ async fn workflow_get_scheduler_snapshot_merges_runtime_registry_diagnostics_fro
 }
 
 #[tokio::test]
-async fn workflow_get_scheduler_snapshot_marks_rebalance_required_when_idle_runtime_can_be_reclaimed(
-) {
+async fn workflow_get_scheduler_snapshot_marks_rebalance_required_when_idle_runtime_can_be_reclaimed()
+ {
     let host = MockWorkflowHost::new(8, 1024);
     let service = WorkflowService::with_capacity_limits(3, 1);
     let _loaded = service
@@ -219,7 +219,6 @@ async fn workflow_get_scheduler_snapshot_marks_rebalance_required_when_idle_runt
                     output_targets: None,
                     override_selection: None,
                     timeout_ms: None,
-                    run_id: Some("queued-run-1".to_string()),
                     priority: Some(1),
                 },
             )

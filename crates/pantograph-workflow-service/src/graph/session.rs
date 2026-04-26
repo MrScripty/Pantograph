@@ -6,7 +6,7 @@ use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
 
 use crate::workflow::{
-    scheduler_snapshot_trace_execution_id, WorkflowSchedulerSnapshotResponse, WorkflowServiceError,
+    WorkflowSchedulerSnapshotResponse, WorkflowServiceError, scheduler_snapshot_workflow_run_id,
 };
 
 use super::group_mutation::{
@@ -18,7 +18,7 @@ use super::session_event::{
     dirty_tasks_for_full_snapshot, dirty_tasks_from_seed_nodes, graph_modified_event,
 };
 use super::session_graph::sync_embedding_emit_metadata_flags;
-use super::session_state::{phase6_memory_impact_projection, GraphEditSession};
+use super::session_state::{GraphEditSession, phase6_memory_impact_projection};
 use super::session_types::{
     WorkflowExecutionSessionKind, WorkflowGraphAddEdgeRequest, WorkflowGraphCreateGroupRequest,
     WorkflowGraphEditSessionCloseResponse, WorkflowGraphEditSessionCreateResponse,
@@ -151,17 +151,21 @@ impl GraphSessionStore {
         Ok(WorkflowSchedulerSnapshotResponse {
             workflow_id: None,
             session_id: session_id.to_string(),
-            trace_execution_id: scheduler_snapshot_trace_execution_id(&items),
+            workflow_run_id: scheduler_snapshot_workflow_run_id(&items),
             session: state.session_summary(session_id),
             items,
             diagnostics: None,
         })
     }
 
-    pub async fn mark_running(&self, session_id: &str) -> Result<(), WorkflowServiceError> {
+    pub async fn mark_running(
+        &self,
+        session_id: &str,
+        workflow_run_id: &str,
+    ) -> Result<(), WorkflowServiceError> {
         let handle = self.get_session_handle(session_id).await?;
         let mut state = handle.lock().await;
-        state.mark_running(session_id);
+        state.mark_running(workflow_run_id);
         Ok(())
     }
 

@@ -59,14 +59,14 @@ use crate::graph::WorkflowExecutionSessionKind;
 #[cfg(test)]
 use crate::scheduler::unix_timestamp_ms;
 
-pub(crate) use crate::scheduler::scheduler_snapshot_trace_execution_id;
+pub(crate) use crate::scheduler::scheduler_snapshot_workflow_run_id;
 pub use crate::scheduler::{
-    select_runtime_unload_candidate_by_affinity, WorkflowExecutionSessionInspectionRequest,
-    WorkflowExecutionSessionInspectionResponse, WorkflowExecutionSessionKeepAliveRequest,
-    WorkflowExecutionSessionKeepAliveResponse, WorkflowExecutionSessionQueueCancelRequest,
-    WorkflowExecutionSessionQueueCancelResponse, WorkflowExecutionSessionQueueItem,
-    WorkflowExecutionSessionQueueItemStatus, WorkflowExecutionSessionQueueListRequest,
-    WorkflowExecutionSessionQueueListResponse, WorkflowExecutionSessionQueueReprioritizeRequest,
+    WorkflowExecutionSessionInspectionRequest, WorkflowExecutionSessionInspectionResponse,
+    WorkflowExecutionSessionKeepAliveRequest, WorkflowExecutionSessionKeepAliveResponse,
+    WorkflowExecutionSessionQueueCancelRequest, WorkflowExecutionSessionQueueCancelResponse,
+    WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionQueueItemStatus,
+    WorkflowExecutionSessionQueueListRequest, WorkflowExecutionSessionQueueListResponse,
+    WorkflowExecutionSessionQueueReprioritizeRequest,
     WorkflowExecutionSessionQueueReprioritizeResponse, WorkflowExecutionSessionRetentionHint,
     WorkflowExecutionSessionRuntimeSelectionTarget, WorkflowExecutionSessionRuntimeUnloadCandidate,
     WorkflowExecutionSessionStaleCleanupRequest, WorkflowExecutionSessionStaleCleanupResponse,
@@ -77,6 +77,7 @@ pub use crate::scheduler::{
     WorkflowSchedulerDecisionReason, WorkflowSchedulerRuntimeRegistryDiagnostics,
     WorkflowSchedulerRuntimeWarmupDecision, WorkflowSchedulerRuntimeWarmupReason,
     WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse,
+    select_runtime_unload_candidate_by_affinity,
 };
 
 /// Service entrypoint for workflow API operations.

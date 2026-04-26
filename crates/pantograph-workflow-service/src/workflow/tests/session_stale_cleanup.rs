@@ -89,7 +89,6 @@ async fn workflow_cleanup_stale_execution_sessions_keeps_session_with_queued_wor
                     output_targets: None,
                     override_selection: None,
                     timeout_ms: None,
-                    run_id: Some("queued-run-1".to_string()),
                     priority: Some(1),
                 },
             )
@@ -375,7 +374,6 @@ async fn workflow_stale_cleanup_worker_keeps_sessions_with_queued_work() {
                     output_targets: None,
                     override_selection: None,
                     timeout_ms: None,
-                    run_id: Some("queued-run-1".to_string()),
                     priority: Some(1),
                 },
             )

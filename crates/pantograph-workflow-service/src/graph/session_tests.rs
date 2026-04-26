@@ -82,7 +82,7 @@ async fn scheduler_snapshot_tracks_running_edit_session_queue_item() {
 
     let session = store.create_session(sample_graph(), None).await;
     store
-        .mark_running(&session.session_id)
+        .mark_running(&session.session_id, "run-1")
         .await
         .expect("mark running");
 
@@ -93,11 +93,8 @@ async fn scheduler_snapshot_tracks_running_edit_session_queue_item() {
 
     assert_eq!(running_snapshot.session.queued_runs, 1);
     assert_eq!(running_snapshot.items.len(), 1);
-    assert_eq!(running_snapshot.items[0].queue_id, session.session_id);
-    assert_eq!(
-        running_snapshot.items[0].run_id.as_deref(),
-        Some(session.session_id.as_str())
-    );
+    assert_eq!(running_snapshot.items[0].workflow_run_id, "run-1");
+    assert_eq!(running_snapshot.workflow_run_id.as_deref(), Some("run-1"));
     assert_eq!(
         running_snapshot.items[0].status,
         WorkflowExecutionSessionQueueItemStatus::Running
@@ -379,10 +376,12 @@ async fn insert_node_on_edge_replaces_original_edge_in_session_graph() {
     assert!(response.accepted);
     let graph = response.graph.expect("updated graph");
     assert_eq!(graph.edges.len(), 2);
-    assert!(graph
-        .edges
-        .iter()
-        .all(|edge| edge.id != "text-input-text-text-output-text"));
+    assert!(
+        graph
+            .edges
+            .iter()
+            .all(|edge| edge.id != "text-input-text-text-output-text")
+    );
     let inserted_node_id = response.inserted_node_id.expect("inserted node id");
     assert!(graph.find_node(&inserted_node_id).is_some());
     assert!(matches!(
@@ -399,10 +398,12 @@ async fn insert_node_on_edge_replaces_original_edge_in_session_graph() {
         .expect("workflow execution session state")
         .memory_impact
         .expect("memory impact");
-    assert!(response_memory_impact
-        .node_decisions
-        .iter()
-        .any(|decision| decision.node_id == inserted_node_id));
+    assert!(
+        response_memory_impact
+            .node_decisions
+            .iter()
+            .any(|decision| decision.node_id == inserted_node_id)
+    );
 
     let snapshot = store
         .get_session_graph(&session.session_id)
@@ -414,10 +415,12 @@ async fn insert_node_on_edge_replaces_original_edge_in_session_graph() {
         .memory_impact
         .expect("memory impact");
     assert!(!memory_impact.node_decisions.is_empty());
-    assert!(memory_impact
-        .node_decisions
-        .iter()
-        .any(|decision| decision.node_id == inserted_node_id));
+    assert!(
+        memory_impact
+            .node_decisions
+            .iter()
+            .any(|decision| decision.node_id == inserted_node_id)
+    );
 }
 
 #[tokio::test]

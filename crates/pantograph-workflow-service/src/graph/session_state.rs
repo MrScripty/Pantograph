@@ -8,9 +8,9 @@ use super::canonicalization::canonicalize_workflow_graph;
 use super::memory_impact::graph_memory_impact_from_graph_change;
 use super::registry::NodeRegistry;
 use super::session_contract::{
-    build_workflow_execution_session_state_view, resolve_workflow_execution_session_memory_impact,
     WorkflowGraphEditSessionGraphResponse, WorkflowGraphSessionStateProjection,
-    WorkflowGraphSessionStateView,
+    WorkflowGraphSessionStateView, build_workflow_execution_session_state_view,
+    resolve_workflow_execution_session_memory_impact,
 };
 use super::session_event::{dirty_tasks_for_full_snapshot, graph_modified_event};
 use super::session_graph::hydrate_embedding_emit_metadata_flags;
@@ -162,8 +162,8 @@ impl GraphEditSession {
         self.runtime.queue_items()
     }
 
-    pub(super) fn mark_running(&mut self, session_id: &str) {
-        self.runtime.mark_running(session_id);
+    pub(super) fn mark_running(&mut self, workflow_run_id: &str) {
+        self.runtime.mark_running(workflow_run_id);
     }
 
     pub(super) fn finish_run(&mut self) {

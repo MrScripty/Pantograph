@@ -1,4 +1,4 @@
-use crate::scheduler::scheduler_snapshot_trace_execution_id;
+use crate::scheduler::scheduler_snapshot_workflow_run_id;
 
 use super::{
     WorkflowExecutionSessionInspectionRequest, WorkflowExecutionSessionInspectionResponse,
@@ -121,7 +121,7 @@ impl WorkflowService {
             return Ok(WorkflowSchedulerSnapshotResponse {
                 workflow_id: Some(session.workflow_id.clone()),
                 session_id: session_id.to_string(),
-                trace_execution_id: scheduler_snapshot_trace_execution_id(&items),
+                workflow_run_id: scheduler_snapshot_workflow_run_id(&items),
                 session,
                 items,
                 diagnostics: Some(diagnostics),
@@ -143,15 +143,15 @@ impl WorkflowService {
                 "session_id must be non-empty".to_string(),
             ));
         }
-        let queue_id = request.queue_id.trim();
-        if queue_id.is_empty() {
+        let workflow_run_id = request.workflow_run_id.trim();
+        if workflow_run_id.is_empty() {
             return Err(WorkflowServiceError::InvalidRequest(
-                "queue_id must be non-empty".to_string(),
+                "workflow_run_id must be non-empty".to_string(),
             ));
         }
 
         let mut store = self.session_store_guard()?;
-        store.cancel_queue_item(session_id, queue_id)?;
+        store.cancel_queue_item(session_id, workflow_run_id)?;
         Ok(WorkflowExecutionSessionQueueCancelResponse { ok: true })
     }
 
@@ -165,14 +165,14 @@ impl WorkflowService {
                 "session_id must be non-empty".to_string(),
             ));
         }
-        let queue_id = request.queue_id.trim();
-        if queue_id.is_empty() {
+        let workflow_run_id = request.workflow_run_id.trim();
+        if workflow_run_id.is_empty() {
             return Err(WorkflowServiceError::InvalidRequest(
-                "queue_id must be non-empty".to_string(),
+                "workflow_run_id must be non-empty".to_string(),
             ));
         }
         let mut store = self.session_store_guard()?;
-        store.reprioritize_queue_item(session_id, queue_id, request.priority)?;
+        store.reprioritize_queue_item(session_id, workflow_run_id, request.priority)?;
         Ok(WorkflowExecutionSessionQueueReprioritizeResponse { ok: true })
     }
 }

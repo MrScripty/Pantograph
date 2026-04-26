@@ -5,7 +5,7 @@ use super::super::{
     PriorityThenFifoSchedulerPolicy, WorkflowSchedulerDecisionReason,
     WorkflowSchedulerRuntimeCapacityPressure, WorkflowSchedulerSnapshotDiagnostics,
 };
-use super::{unix_timestamp_ms, WorkflowExecutionSessionStore};
+use super::{WorkflowExecutionSessionStore, unix_timestamp_ms};
 
 impl WorkflowExecutionSessionStore {
     pub(crate) fn scheduler_snapshot_diagnostics(
@@ -24,25 +24,30 @@ impl WorkflowExecutionSessionStore {
         admission_input.has_active_run = false;
         let predicted_admission =
             PriorityThenFifoSchedulerPolicy.predicted_admission_decision(&admission_input);
-        let next_admission_queue_id = predicted_admission
+        let next_admission_workflow_run_id = predicted_admission
             .as_ref()
-            .and_then(|decision| decision.admitted_queue_id.clone());
-        let next_admission_bypassed_queue_id = match (
-            state.queue.first().map(|queued| queued.queue_id.as_str()),
-            next_admission_queue_id.as_deref(),
+            .and_then(|decision| decision.admitted_workflow_run_id.clone());
+        let next_admission_bypassed_workflow_run_id = match (
+            state
+                .queue
+                .first()
+                .map(|queued| queued.workflow_run_id.as_str()),
+            next_admission_workflow_run_id.as_deref(),
         ) {
-            (Some(queue_head_id), Some(next_queue_id)) if queue_head_id != next_queue_id => {
-                Some(queue_head_id.to_string())
+            (Some(workflow_run_head_id), Some(next_workflow_run_id))
+                if workflow_run_head_id != next_workflow_run_id =>
+            {
+                Some(workflow_run_head_id.to_string())
             }
             _ => None,
         };
-        let next_admission_reason = next_admission_queue_id
+        let next_admission_reason = next_admission_workflow_run_id
             .as_deref()
             .and_then(|queue_id| {
                 state
                     .queue
                     .iter()
-                    .find(|queued| queued.queue_id == queue_id)
+                    .find(|queued| queued.workflow_run_id == queue_id)
                     .map(|queued| queued.scheduler_decision_reason)
             })
             .filter(|reason| {
@@ -67,7 +72,7 @@ impl WorkflowExecutionSessionStore {
         };
         let next_admission_eta = next_admission_eta(
             active_run_blocks_admission,
-            next_admission_queue_id.as_deref(),
+            next_admission_workflow_run_id.as_deref(),
             next_admission_reason,
             now_ms,
         );
@@ -78,8 +83,8 @@ impl WorkflowExecutionSessionStore {
             reclaimable_loaded_session_count,
             runtime_capacity_pressure,
             active_run_blocks_admission,
-            next_admission_queue_id,
-            next_admission_bypassed_queue_id,
+            next_admission_workflow_run_id,
+            next_admission_bypassed_workflow_run_id,
             next_admission_after_runs: predicted_admission
                 .as_ref()
                 .map(|_| usize::from(active_run_blocks_admission)),
@@ -104,7 +109,7 @@ impl WorkflowExecutionSessionStore {
             usage_profile: state.usage_profile.clone(),
             keep_alive: state.keep_alive,
             runtime_loaded: state.runtime_loaded,
-            next_admission_queue_id: diagnostics.next_admission_queue_id,
+            next_admission_workflow_run_id: diagnostics.next_admission_workflow_run_id,
             reclaim_candidates: self.runtime_unload_candidates(session_id),
         })
     }

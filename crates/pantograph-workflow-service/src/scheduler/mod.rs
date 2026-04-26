@@ -3,7 +3,7 @@ mod policy;
 mod store;
 mod store_admission;
 
-pub(crate) use contracts::scheduler_snapshot_trace_execution_id;
+pub(crate) use contracts::scheduler_snapshot_workflow_run_id;
 pub use contracts::{
     WorkflowExecutionSessionInspectionRequest, WorkflowExecutionSessionInspectionResponse,
     WorkflowExecutionSessionKeepAliveRequest, WorkflowExecutionSessionKeepAliveResponse,
@@ -23,9 +23,9 @@ pub use contracts::{
     WorkflowSchedulerRuntimeWarmupReason, WorkflowSchedulerSnapshotDiagnostics,
     WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse,
 };
-pub use policy::select_runtime_unload_candidate_by_affinity;
 pub(crate) use policy::PriorityThenFifoSchedulerPolicy;
+pub use policy::select_runtime_unload_candidate_by_affinity;
 pub(crate) use store::{
-    unix_timestamp_ms, WorkflowExecutionSessionPreflightCache, WorkflowExecutionSessionStore,
-    WORKFLOW_SESSION_QUEUE_POLL_MS,
+    WORKFLOW_SESSION_QUEUE_POLL_MS, WorkflowExecutionSessionPreflightCache,
+    WorkflowExecutionSessionStore, unix_timestamp_ms,
 };

@@ -19,6 +19,7 @@ use super::{
     WorkflowExecutionSessionState, WorkflowExecutionSessionSummary,
     WorkflowSchedulerAdmissionOutcome, WorkflowSchedulerDecisionReason,
 };
+use crate::WorkflowRunId;
 
 pub(crate) const WORKFLOW_SESSION_QUEUE_POLL_MS: u64 = 10;
 
@@ -27,8 +28,7 @@ mod store_diagnostics;
 
 #[derive(Debug, Clone)]
 pub(crate) struct WorkflowExecutionSessionQueuedRun {
-    pub(crate) queue_id: String,
-    pub(crate) run_id: Option<String>,
+    pub(crate) workflow_run_id: String,
     pub(super) enqueued_at_ms: u64,
     pub(crate) inputs: Vec<WorkflowPortBinding>,
     pub(crate) output_targets: Option<Vec<WorkflowOutputTarget>>,
@@ -42,8 +42,7 @@ pub(crate) struct WorkflowExecutionSessionQueuedRun {
 
 #[derive(Debug, Clone)]
 struct WorkflowExecutionSessionActiveRun {
-    queue_id: String,
-    run_id: Option<String>,
+    workflow_run_id: String,
     enqueued_at_ms: u64,
     dequeued_at_ms: u64,
     priority: i32,
@@ -331,8 +330,7 @@ impl WorkflowExecutionSessionStore {
             Vec::with_capacity(state.queue.len() + usize::from(state.active_run.is_some()));
         if let Some(active_run) = state.active_run.as_ref() {
             items.push(WorkflowExecutionSessionQueueItem {
-                queue_id: active_run.queue_id.clone(),
-                run_id: active_run.run_id.clone(),
+                workflow_run_id: active_run.workflow_run_id.clone(),
                 enqueued_at_ms: Some(active_run.enqueued_at_ms),
                 dequeued_at_ms: Some(active_run.dequeued_at_ms),
                 priority: active_run.priority,
@@ -346,8 +344,7 @@ impl WorkflowExecutionSessionStore {
         let pending_offset = items.len();
         for (index, queued) in state.queue.iter().enumerate() {
             items.push(WorkflowExecutionSessionQueueItem {
-                queue_id: queued.queue_id.clone(),
-                run_id: queued.run_id.clone(),
+                workflow_run_id: queued.workflow_run_id.clone(),
                 enqueued_at_ms: Some(queued.enqueued_at_ms),
                 dequeued_at_ms: None,
                 priority: queued.priority,
@@ -371,15 +368,9 @@ impl WorkflowExecutionSessionStore {
         })?;
 
         let policy = PriorityThenFifoSchedulerPolicy;
-        let queue_id = Uuid::new_v4().to_string();
+        let workflow_run_id = WorkflowRunId::generate().to_string();
         let queued = WorkflowExecutionSessionQueuedRun {
-            queue_id: queue_id.clone(),
-            run_id: request
-                .run_id
-                .as_deref()
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(ToOwned::to_owned),
+            workflow_run_id: workflow_run_id.clone(),
             enqueued_at_ms: unix_timestamp_ms(),
             inputs: request.inputs.clone(),
             output_targets: request.output_targets.clone(),
@@ -401,7 +392,7 @@ impl WorkflowExecutionSessionStore {
         }
         policy.refresh_queue(&mut state.queue);
         Self::mark_session_access(state, tick);
-        Ok(queue_id)
+        Ok(workflow_run_id)
     }
 
     pub(crate) fn queued_run_is_admission_candidate(
@@ -415,8 +406,11 @@ impl WorkflowExecutionSessionStore {
         })?;
 
         if let Some(active_run) = state.active_run.as_ref() {
-            if active_run.queue_id == queue_id
-                || state.queue.iter().any(|item| item.queue_id == queue_id)
+            if active_run.workflow_run_id == queue_id
+                || state
+                    .queue
+                    .iter()
+                    .any(|item| item.workflow_run_id == queue_id)
             {
                 Self::mark_session_access(state, tick);
                 return Ok(false);
@@ -427,7 +421,11 @@ impl WorkflowExecutionSessionStore {
             )));
         }
 
-        if !state.queue.iter().any(|item| item.queue_id == queue_id) {
+        if !state
+            .queue
+            .iter()
+            .any(|item| item.workflow_run_id == queue_id)
+        {
             return Err(WorkflowServiceError::QueueItemNotFound(format!(
                 "queue item '{}' not found in session '{}'",
                 queue_id, session_id
@@ -439,7 +437,7 @@ impl WorkflowExecutionSessionStore {
         let admission_input = Self::admission_input_from_state(state);
         let candidate = policy
             .predicted_admission_decision(&admission_input)
-            .and_then(|decision| decision.admitted_queue_id)
+            .and_then(|decision| decision.admitted_workflow_run_id)
             .as_deref()
             == Some(queue_id);
         Self::mark_session_access(state, tick);
@@ -459,7 +457,7 @@ impl WorkflowExecutionSessionStore {
         let Some(queued) = state
             .queue
             .iter_mut()
-            .find(|queued| queued.queue_id == queue_id)
+            .find(|queued| queued.workflow_run_id == queue_id)
         else {
             return Ok(false);
         };
@@ -488,8 +486,11 @@ impl WorkflowExecutionSessionStore {
         })?;
 
         if let Some(active_run) = state.active_run.as_ref() {
-            if active_run.queue_id == queue_id
-                || state.queue.iter().any(|item| item.queue_id == queue_id)
+            if active_run.workflow_run_id == queue_id
+                || state
+                    .queue
+                    .iter()
+                    .any(|item| item.workflow_run_id == queue_id)
             {
                 return Ok(None);
             }
@@ -503,14 +504,14 @@ impl WorkflowExecutionSessionStore {
         policy.refresh_queue(&mut state.queue);
         let admission_input = Self::admission_input_from_state(state);
         if capacity_blocked {
-            if let Some(admitted_queue_id) = policy
+            if let Some(admitted_workflow_run_id) = policy
                 .predicted_admission_decision(&admission_input)
-                .and_then(|decision| decision.admitted_queue_id)
+                .and_then(|decision| decision.admitted_workflow_run_id)
             {
                 if let Some(queued) = state
                     .queue
                     .iter_mut()
-                    .find(|queued| queued.queue_id == admitted_queue_id)
+                    .find(|queued| queued.workflow_run_id == admitted_workflow_run_id)
                 {
                     queued.scheduler_decision_reason =
                         WorkflowSchedulerDecisionReason::WaitingForRuntimeCapacity;
@@ -520,17 +521,17 @@ impl WorkflowExecutionSessionStore {
             return Ok(None);
         }
         let decision = policy.admission_decision(&admission_input, queue_id)?;
-        let Some(admitted_queue_id) = decision.admitted_queue_id.as_deref() else {
+        let Some(admitted_workflow_run_id) = decision.admitted_workflow_run_id.as_deref() else {
             return Ok(None);
         };
         let admitted_index = state
             .queue
             .iter()
-            .position(|queued| queued.queue_id == admitted_queue_id)
+            .position(|queued| queued.workflow_run_id == admitted_workflow_run_id)
             .ok_or_else(|| {
                 WorkflowServiceError::Internal(format!(
                     "admitted queue item '{}' missing from session '{}'",
-                    admitted_queue_id, session_id
+                    admitted_workflow_run_id, session_id
                 ))
             })?;
 
@@ -540,15 +541,14 @@ impl WorkflowExecutionSessionStore {
         }
         policy.refresh_queue(&mut state.queue);
         state.active_run = Some(WorkflowExecutionSessionActiveRun {
-            queue_id: queued.queue_id.clone(),
-            run_id: queued.run_id.clone(),
+            workflow_run_id: queued.workflow_run_id.clone(),
             enqueued_at_ms: queued.enqueued_at_ms,
             dequeued_at_ms: unix_timestamp_ms(),
             priority: queued.priority,
             scheduler_decision_reason: decision.reason.ok_or_else(|| {
                 WorkflowServiceError::Internal(format!(
                     "admitted queue item '{}' in session '{}' missing scheduler reason",
-                    admitted_queue_id, session_id
+                    admitted_workflow_run_id, session_id
                 ))
             })?,
         });
@@ -574,10 +574,10 @@ impl WorkflowExecutionSessionStore {
                 session_id
             )));
         };
-        if active_run.queue_id != queue_id {
+        if active_run.workflow_run_id != queue_id {
             return Err(WorkflowServiceError::Internal(format!(
                 "session '{}' active run '{}' does not match '{}'",
-                session_id, active_run.queue_id, queue_id
+                session_id, active_run.workflow_run_id, queue_id
             )));
         }
 
@@ -630,7 +630,7 @@ impl WorkflowExecutionSessionStore {
         if state
             .active_run
             .as_ref()
-            .map(|active| active.queue_id.as_str())
+            .map(|active| active.workflow_run_id.as_str())
             == Some(queue_id)
         {
             return Err(WorkflowServiceError::InvalidRequest(format!(
@@ -640,7 +640,7 @@ impl WorkflowExecutionSessionStore {
         }
 
         let original_len = state.queue.len();
-        state.queue.retain(|item| item.queue_id != queue_id);
+        state.queue.retain(|item| item.workflow_run_id != queue_id);
         if state.queue.len() == original_len {
             return Err(WorkflowServiceError::QueueItemNotFound(format!(
                 "queue item '{}' not found in session '{}'",
@@ -666,7 +666,7 @@ impl WorkflowExecutionSessionStore {
         if state
             .active_run
             .as_ref()
-            .map(|active| active.queue_id.as_str())
+            .map(|active| active.workflow_run_id.as_str())
             == Some(queue_id)
         {
             return Err(WorkflowServiceError::InvalidRequest(format!(
@@ -678,7 +678,7 @@ impl WorkflowExecutionSessionStore {
         let Some(item_index) = state
             .queue
             .iter()
-            .position(|item| item.queue_id == queue_id)
+            .position(|item| item.workflow_run_id == queue_id)
         else {
             return Err(WorkflowServiceError::QueueItemNotFound(format!(
                 "queue item '{}' not found in session '{}'",
@@ -809,7 +809,7 @@ impl WorkflowExecutionSessionStore {
                     let warm_session_compatibility =
                         Self::warm_session_compatibility(state, queued);
                     WorkflowExecutionSessionAdmissionCandidate {
-                        queue_id: queued.queue_id.clone(),
+                        workflow_run_id: queued.workflow_run_id.clone(),
                         priority: queued.priority,
                         enqueued_tick: queued.enqueued_tick,
                         starvation_bypass_count: queued.starvation_bypass_count,

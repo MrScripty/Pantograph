@@ -35,7 +35,6 @@ async fn workflow_execution_session_runtime_preflight_is_cached_until_graph_chan
                 output_targets: None,
                 override_selection: None,
                 timeout_ms: None,
-                run_id: None,
                 priority: None,
             },
         )
@@ -52,7 +51,6 @@ async fn workflow_execution_session_runtime_preflight_is_cached_until_graph_chan
                 output_targets: None,
                 override_selection: None,
                 timeout_ms: None,
-                run_id: None,
                 priority: None,
             },
         )
@@ -78,7 +76,6 @@ async fn workflow_execution_session_runtime_preflight_is_cached_until_graph_chan
                 output_targets: None,
                 override_selection: None,
                 timeout_ms: None,
-                run_id: None,
                 priority: None,
             },
         )
@@ -92,8 +89,8 @@ async fn workflow_execution_session_runtime_preflight_is_cached_until_graph_chan
 }
 
 #[tokio::test]
-async fn workflow_execution_session_runtime_preflight_cache_invalidates_on_override_selection_change(
-) {
+async fn workflow_execution_session_runtime_preflight_cache_invalidates_on_override_selection_change()
+ {
     let workflow_capabilities_calls = Arc::new(AtomicUsize::new(0));
     let runtime_capabilities_calls = Arc::new(AtomicUsize::new(0));
     let technical_fit_requests = Arc::new(Mutex::new(Vec::new()));
@@ -129,7 +126,6 @@ async fn workflow_execution_session_runtime_preflight_cache_invalidates_on_overr
                     backend_key: Some("llama.cpp".to_string()),
                 }),
                 timeout_ms: None,
-                run_id: None,
                 priority: None,
             },
         )
@@ -148,7 +144,6 @@ async fn workflow_execution_session_runtime_preflight_cache_invalidates_on_overr
                     backend_key: Some("llama.cpp".to_string()),
                 }),
                 timeout_ms: None,
-                run_id: None,
                 priority: None,
             },
         )

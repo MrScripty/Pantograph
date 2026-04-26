@@ -71,7 +71,7 @@ impl WorkflowService {
             validate_output_targets(targets)?;
         }
 
-        let queue_id = {
+        let workflow_run_id = {
             let mut store = self.session_store_guard()?;
             store.enqueue_run(&session_id, &request)?
         };
@@ -79,7 +79,7 @@ impl WorkflowService {
         let queued_run = loop {
             let session_ready_to_load = {
                 let mut store = self.session_store_guard()?;
-                if !store.queued_run_is_admission_candidate(&session_id, &queue_id)? {
+                if !store.queued_run_is_admission_candidate(&session_id, &workflow_run_id)? {
                     None
                 } else {
                     Some(store.session_summary(&session_id)?)
@@ -103,7 +103,7 @@ impl WorkflowService {
                     if let Ok(mut store) = self.session_store.lock() {
                         let _ = store.set_queue_decision_reason_if_present(
                             &session_id,
-                            &queue_id,
+                            &workflow_run_id,
                             WorkflowSchedulerDecisionReason::WaitingForRuntimeAdmission,
                         );
                     }
@@ -114,7 +114,7 @@ impl WorkflowService {
 
             let maybe_queued = {
                 let mut store = self.session_store_guard()?;
-                store.begin_queued_run(&session_id, &queue_id)?
+                store.begin_queued_run(&session_id, &workflow_run_id)?
             };
             if let Some(queued) = maybe_queued {
                 break queued;
@@ -134,7 +134,7 @@ impl WorkflowService {
             Ok(cache) => cache,
             Err(error) => {
                 if let Ok(mut store) = self.session_store.lock() {
-                    let _ = store.finish_run(&session_id, &queue_id);
+                    let _ = store.finish_run(&session_id, &workflow_run_id);
                 }
                 return Err(error);
             }
@@ -142,7 +142,7 @@ impl WorkflowService {
 
         if let Err(error) = self.ensure_session_runtime_loaded(host, &session_id).await {
             if let Ok(mut store) = self.session_store.lock() {
-                let _ = store.finish_run(&session_id, &queue_id);
+                let _ = store.finish_run(&session_id, &workflow_run_id);
             }
             return Err(error);
         }
@@ -156,7 +156,7 @@ impl WorkflowService {
                     output_targets: queued_run.queued.output_targets,
                     override_selection: queued_run.queued.override_selection,
                     timeout_ms: queued_run.queued.timeout_ms,
-                    run_id: queued_run.queued.run_id,
+                    run_id: Some(queued_run.queued.workflow_run_id.clone()),
                 },
                 Some(preflight_cache),
                 Some(session_id.clone()),
@@ -165,7 +165,7 @@ impl WorkflowService {
 
         let finish_state = {
             let mut store = self.session_store_guard()?;
-            store.finish_run(&session_id, &queue_id)?
+            store.finish_run(&session_id, &workflow_run_id)?
         };
         if finish_state.unload_runtime {
             host.unload_session_runtime(

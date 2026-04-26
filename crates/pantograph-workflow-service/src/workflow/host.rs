@@ -6,9 +6,9 @@ use std::path::PathBuf;
 use crate::capabilities;
 use crate::graph::WorkflowGraphSessionStateView;
 use crate::scheduler::{
-    select_runtime_unload_candidate_by_affinity, WorkflowExecutionSessionRetentionHint,
-    WorkflowExecutionSessionRuntimeSelectionTarget, WorkflowExecutionSessionRuntimeUnloadCandidate,
-    WorkflowExecutionSessionUnloadReason, WorkflowSchedulerRuntimeRegistryDiagnostics,
+    WorkflowExecutionSessionRetentionHint, WorkflowExecutionSessionRuntimeSelectionTarget,
+    WorkflowExecutionSessionRuntimeUnloadCandidate, WorkflowExecutionSessionUnloadReason,
+    WorkflowSchedulerRuntimeRegistryDiagnostics, select_runtime_unload_candidate_by_affinity,
 };
 use crate::technical_fit::{WorkflowTechnicalFitDecision, WorkflowTechnicalFitRequest};
 
@@ -248,7 +248,7 @@ pub struct WorkflowSchedulerRuntimeDiagnosticsRequest {
     pub usage_profile: Option<String>,
     pub keep_alive: bool,
     pub runtime_loaded: bool,
-    pub next_admission_queue_id: Option<String>,
+    pub next_admission_workflow_run_id: Option<String>,
     pub reclaim_candidates: Vec<WorkflowExecutionSessionRuntimeUnloadCandidate>,
 }
 

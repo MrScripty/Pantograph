@@ -34,7 +34,7 @@ async fn workflow_get_scheduler_snapshot_returns_workflow_execution_session_summ
         snapshot.session.usage_profile.as_deref(),
         Some("interactive")
     );
-    assert_eq!(snapshot.trace_execution_id, None);
+    assert_eq!(snapshot.workflow_run_id, None);
     assert!(snapshot.items.is_empty());
 }
 
@@ -66,11 +66,11 @@ async fn workflow_get_scheduler_snapshot_returns_edit_session_lifecycle() {
     );
     assert_eq!(idle_snapshot.session.queued_runs, 0);
     assert_eq!(idle_snapshot.session.run_count, 0);
-    assert_eq!(idle_snapshot.trace_execution_id, None);
+    assert_eq!(idle_snapshot.workflow_run_id, None);
     assert!(idle_snapshot.items.is_empty());
 
     service
-        .workflow_graph_mark_edit_session_running(&created.session_id)
+        .workflow_graph_mark_edit_session_running(&created.session_id, "run-1")
         .await
         .expect("mark running");
 
@@ -101,14 +101,8 @@ async fn workflow_get_scheduler_snapshot_returns_edit_session_lifecycle() {
         running_snapshot.items[0].dequeued_at_ms,
         Some(started_at_ms)
     );
-    assert_eq!(
-        running_snapshot.items[0].run_id.as_deref(),
-        Some(created.session_id.as_str())
-    );
-    assert_eq!(
-        running_snapshot.trace_execution_id.as_deref(),
-        Some(created.session_id.as_str())
-    );
+    assert_eq!(running_snapshot.items[0].workflow_run_id.as_str(), "run-1");
+    assert_eq!(running_snapshot.workflow_run_id.as_deref(), Some("run-1"));
 
     service
         .workflow_graph_mark_edit_session_finished(&created.session_id)
@@ -127,7 +121,7 @@ async fn workflow_get_scheduler_snapshot_returns_edit_session_lifecycle() {
     );
     assert_eq!(completed_snapshot.session.queued_runs, 0);
     assert_eq!(completed_snapshot.session.run_count, 1);
-    assert_eq!(completed_snapshot.trace_execution_id, None);
+    assert_eq!(completed_snapshot.workflow_run_id, None);
     assert!(completed_snapshot.items.is_empty());
 }
 
@@ -147,7 +141,7 @@ async fn workflow_get_scheduler_snapshot_exposes_single_visible_queue_run_as_tra
         .await
         .expect("create workflow execution session");
 
-    {
+    let workflow_run_id = {
         let mut store = service
             .session_store
             .lock()
@@ -161,12 +155,11 @@ async fn workflow_get_scheduler_snapshot_exposes_single_visible_queue_run_as_tra
                     output_targets: None,
                     override_selection: None,
                     timeout_ms: None,
-                    run_id: Some("queued-run-1".to_string()),
                     priority: None,
                 },
             )
-            .expect("enqueue run");
-    }
+            .expect("enqueue run")
+    };
 
     let session_id = created.session_id.clone();
     let snapshot = service
@@ -174,7 +167,10 @@ async fn workflow_get_scheduler_snapshot_exposes_single_visible_queue_run_as_tra
         .await
         .expect("scheduler snapshot");
 
-    assert_eq!(snapshot.trace_execution_id.as_deref(), Some("queued-run-1"));
+    assert_eq!(
+        snapshot.workflow_run_id.as_deref(),
+        Some(workflow_run_id.as_str())
+    );
     assert_eq!(snapshot.items.len(), 1);
     assert_eq!(
         snapshot.items[0].status,
@@ -225,7 +221,6 @@ async fn workflow_get_scheduler_snapshot_reports_bypassed_queue_head_for_warm_re
                         backend_key: Some("pytorch".to_string()),
                     }),
                     timeout_ms: None,
-                    run_id: Some("cold-head".to_string()),
                     priority: Some(1),
                 },
             )
@@ -239,7 +234,6 @@ async fn workflow_get_scheduler_snapshot_reports_bypassed_queue_head_for_warm_re
                     output_targets: None,
                     override_selection: None,
                     timeout_ms: None,
-                    run_id: Some("warm-follow".to_string()),
                     priority: Some(1),
                 },
             )
@@ -256,11 +250,13 @@ async fn workflow_get_scheduler_snapshot_reports_bypassed_queue_head_for_warm_re
     let diagnostics = snapshot.diagnostics.expect("scheduler diagnostics");
 
     assert_eq!(
-        diagnostics.next_admission_queue_id.as_deref(),
+        diagnostics.next_admission_workflow_run_id.as_deref(),
         Some(warm_queue_id.as_str())
     );
     assert_eq!(
-        diagnostics.next_admission_bypassed_queue_id.as_deref(),
+        diagnostics
+            .next_admission_bypassed_workflow_run_id
+            .as_deref(),
         Some(cold_head_queue_id.as_str())
     );
     assert_eq!(
@@ -290,7 +286,7 @@ async fn workflow_get_scheduler_snapshot_omits_trace_execution_for_ambiguous_pen
             .session_store
             .lock()
             .expect("session store lock poisoned");
-        for run_id in ["queued-run-1", "queued-run-2"] {
+        for _ in 0..2 {
             store
                 .enqueue_run(
                     &created.session_id,
@@ -300,7 +296,6 @@ async fn workflow_get_scheduler_snapshot_omits_trace_execution_for_ambiguous_pen
                         output_targets: None,
                         override_selection: None,
                         timeout_ms: None,
-                        run_id: Some(run_id.to_string()),
                         priority: None,
                     },
                 )
@@ -315,10 +310,12 @@ async fn workflow_get_scheduler_snapshot_omits_trace_execution_for_ambiguous_pen
         .await
         .expect("scheduler snapshot");
 
-    assert_eq!(snapshot.trace_execution_id, None);
+    assert_eq!(snapshot.workflow_run_id, None);
     assert_eq!(snapshot.items.len(), 2);
-    assert!(snapshot
-        .items
-        .iter()
-        .all(|item| item.status == WorkflowExecutionSessionQueueItemStatus::Pending));
+    assert!(
+        snapshot
+            .items
+            .iter()
+            .all(|item| item.status == WorkflowExecutionSessionQueueItemStatus::Pending)
+    );
 }

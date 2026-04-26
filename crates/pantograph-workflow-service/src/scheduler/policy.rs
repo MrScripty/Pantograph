@@ -26,7 +26,7 @@ pub(crate) enum WorkflowExecutionSessionWarmCompatibility {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct WorkflowExecutionSessionAdmissionCandidate {
-    pub(crate) queue_id: String,
+    pub(crate) workflow_run_id: String,
     pub(crate) priority: i32,
     pub(crate) enqueued_tick: u64,
     pub(crate) starvation_bypass_count: u32,
@@ -47,7 +47,7 @@ pub(crate) struct WorkflowExecutionSessionAdmissionInput {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct WorkflowExecutionSessionAdmissionDecision {
-    pub(crate) admitted_queue_id: Option<String>,
+    pub(crate) admitted_workflow_run_id: Option<String>,
     pub(crate) reason: Option<WorkflowSchedulerDecisionReason>,
 }
 
@@ -83,7 +83,7 @@ impl PriorityThenFifoSchedulerPolicy {
     ) -> Option<WorkflowExecutionSessionAdmissionDecision> {
         let candidate = self.select_admission_candidate(input)?;
         Some(WorkflowExecutionSessionAdmissionDecision {
-            admitted_queue_id: Some(candidate.queue_id.clone()),
+            admitted_workflow_run_id: Some(candidate.workflow_run_id.clone()),
             reason: Some(self.admission_reason(input, candidate)),
         })
     }
@@ -122,27 +122,27 @@ impl PriorityThenFifoSchedulerPolicy {
     pub(crate) fn admission_decision(
         &self,
         input: &WorkflowExecutionSessionAdmissionInput,
-        queue_id: &str,
+        workflow_run_id: &str,
     ) -> Result<WorkflowExecutionSessionAdmissionDecision, WorkflowServiceError> {
         if input.has_active_run {
-            return self.pending_or_not_found(input, queue_id);
+            return self.pending_or_not_found(input, workflow_run_id);
         }
 
         let Some(candidate) = self.select_admission_candidate(input) else {
             return Err(WorkflowServiceError::QueueItemNotFound(format!(
                 "queue item '{}' not found in queue",
-                queue_id
+                workflow_run_id
             )));
         };
 
-        if candidate.queue_id == queue_id {
+        if candidate.workflow_run_id == workflow_run_id {
             return Ok(WorkflowExecutionSessionAdmissionDecision {
-                admitted_queue_id: Some(candidate.queue_id.clone()),
+                admitted_workflow_run_id: Some(candidate.workflow_run_id.clone()),
                 reason: Some(self.admission_reason(input, candidate)),
             });
         }
 
-        self.pending_or_not_found(input, queue_id)
+        self.pending_or_not_found(input, workflow_run_id)
     }
 
     pub(crate) fn select_admission_candidate<'a>(
@@ -171,7 +171,7 @@ impl PriorityThenFifoSchedulerPolicy {
         self.effective_priority(right)
             .cmp(&self.effective_priority(left))
             .then_with(|| left.enqueued_tick.cmp(&right.enqueued_tick))
-            .then_with(|| left.queue_id.cmp(&right.queue_id))
+            .then_with(|| left.workflow_run_id.cmp(&right.workflow_run_id))
     }
 
     fn compare_admission_candidates(
@@ -182,7 +182,7 @@ impl PriorityThenFifoSchedulerPolicy {
         self.admission_effective_priority(right)
             .cmp(&self.admission_effective_priority(left))
             .then_with(|| left.enqueued_tick.cmp(&right.enqueued_tick))
-            .then_with(|| left.queue_id.cmp(&right.queue_id))
+            .then_with(|| left.workflow_run_id.cmp(&right.workflow_run_id))
     }
 
     fn compare_runtime_unload_candidates(
@@ -299,7 +299,7 @@ impl PriorityThenFifoSchedulerPolicy {
                 left.queue_position
                     .cmp(&right.queue_position)
                     .then_with(|| left.enqueued_tick.cmp(&right.enqueued_tick))
-                    .then_with(|| left.queue_id.cmp(&right.queue_id))
+                    .then_with(|| left.workflow_run_id.cmp(&right.workflow_run_id))
             })
     }
 
@@ -356,22 +356,22 @@ impl PriorityThenFifoSchedulerPolicy {
     fn pending_or_not_found(
         &self,
         input: &WorkflowExecutionSessionAdmissionInput,
-        queue_id: &str,
+        workflow_run_id: &str,
     ) -> Result<WorkflowExecutionSessionAdmissionDecision, WorkflowServiceError> {
         if input
             .candidates
             .iter()
-            .any(|item| item.queue_id == queue_id)
+            .any(|item| item.workflow_run_id == workflow_run_id)
         {
             return Ok(WorkflowExecutionSessionAdmissionDecision {
-                admitted_queue_id: None,
+                admitted_workflow_run_id: None,
                 reason: None,
             });
         }
 
         Err(WorkflowServiceError::QueueItemNotFound(format!(
             "queue item '{}' not found in queue",
-            queue_id
+            workflow_run_id
         )))
     }
 

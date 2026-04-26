@@ -34,7 +34,6 @@ async fn workflow_execution_session_lifecycle_create_run_close() {
                 }]),
                 override_selection: None,
                 timeout_ms: None,
-                run_id: Some("session-run-1".to_string()),
                 priority: None,
             },
         )
@@ -66,7 +65,6 @@ async fn workflow_execution_session_lifecycle_create_run_close() {
                 output_targets: None,
                 override_selection: None,
                 timeout_ms: None,
-                run_id: None,
                 priority: None,
             },
         )
@@ -108,7 +106,6 @@ async fn workflow_execution_session_run_passes_logical_session_id_in_run_options
                 }]),
                 override_selection: None,
                 timeout_ms: None,
-                run_id: Some("session-run-options".to_string()),
                 priority: None,
             },
         )
@@ -125,6 +122,74 @@ async fn workflow_execution_session_run_passes_logical_session_id_in_run_options
         Some(created.session_id.as_str())
     );
     assert_eq!(recorded[0].timeout_ms, None);
+}
+
+#[tokio::test]
+async fn workflow_execution_session_repeated_runs_create_distinct_backend_run_ids() {
+    let host = MockWorkflowHost::new(8, 1024);
+    let service = WorkflowService::with_max_sessions(2);
+
+    let created = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "wf-1".to_string(),
+                usage_profile: None,
+                keep_alive: true,
+            },
+        )
+        .await
+        .expect("create session");
+
+    let first = service
+        .run_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionRunRequest {
+                session_id: created.session_id.clone(),
+                inputs: Vec::new(),
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+            },
+        )
+        .await
+        .expect("first run");
+
+    let second = service
+        .run_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionRunRequest {
+                session_id: created.session_id.clone(),
+                inputs: Vec::new(),
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+            },
+        )
+        .await
+        .expect("second run");
+
+    assert_ne!(first.run_id, created.session_id);
+    assert_ne!(second.run_id, created.session_id);
+    assert_ne!(first.run_id, second.run_id);
+    assert!(first.run_id.starts_with("run_"));
+    assert!(second.run_id.starts_with("run_"));
+
+    let status = service
+        .workflow_get_execution_session_status(WorkflowExecutionSessionStatusRequest {
+            session_id: created.session_id,
+        })
+        .await
+        .expect("session status");
+    assert_eq!(status.session.run_count, 2);
 }
 
 #[tokio::test]
@@ -180,7 +245,6 @@ async fn one_shot_session_run_loads_runtime_with_ephemeral_retention_hint() {
                 output_targets: None,
                 override_selection: None,
                 timeout_ms: None,
-                run_id: None,
                 priority: None,
             },
         )

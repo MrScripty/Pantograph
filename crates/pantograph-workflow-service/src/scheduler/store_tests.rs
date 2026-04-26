@@ -7,7 +7,6 @@ fn empty_run_request() -> WorkflowExecutionSessionRunRequest {
         output_targets: None,
         override_selection: None,
         timeout_ms: None,
-        run_id: None,
         priority: None,
     }
 }
@@ -42,7 +41,7 @@ fn admission_input_marks_loaded_runtime_reuse_as_incompatible_when_override_dive
     let candidate = input
         .candidates
         .iter()
-        .find(|candidate| candidate.queue_id == queue_id)
+        .find(|candidate| candidate.workflow_run_id == queue_id)
         .expect("candidate");
 
     assert_eq!(
@@ -81,7 +80,7 @@ fn admission_input_marks_loaded_runtime_reuse_as_compatible_without_override_div
     let candidate = input
         .candidates
         .iter()
-        .find(|candidate| candidate.queue_id == queue_id)
+        .find(|candidate| candidate.workflow_run_id == queue_id)
         .expect("candidate");
 
     assert!(candidate.affine_runtime_reuse);

@@ -82,8 +82,7 @@ fn workflow_trace_store_resets_attempt_state_when_run_restarts_after_failure() {
                 run_count: 1,
             }),
             items: vec![crate::workflow::WorkflowExecutionSessionQueueItem {
-                queue_id: "queue-1".to_string(),
-                run_id: Some("exec-1".to_string()),
+                workflow_run_id: "exec-1".to_string(),
                 enqueued_at_ms: Some(90),
                 dequeued_at_ms: Some(100),
                 priority: 0,

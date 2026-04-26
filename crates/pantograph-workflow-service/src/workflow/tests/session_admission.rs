@@ -41,7 +41,6 @@ async fn workflow_execution_session_run_waits_for_runtime_capacity_before_admiss
                     output_targets: None,
                     override_selection: None,
                     timeout_ms: None,
-                    run_id: Some("run-first".to_string()),
                     priority: Some(1),
                 },
             )
@@ -63,7 +62,6 @@ async fn workflow_execution_session_run_waits_for_runtime_capacity_before_admiss
                     output_targets: None,
                     override_selection: None,
                     timeout_ms: None,
-                    run_id: Some("run-second".to_string()),
                     priority: Some(1),
                 },
             )
@@ -155,7 +153,6 @@ async fn workflow_execution_session_run_waits_for_runtime_admission_before_deque
                     output_targets: None,
                     override_selection: None,
                     timeout_ms: None,
-                    run_id: Some("run-gated".to_string()),
                     priority: Some(1),
                 },
             )

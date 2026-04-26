@@ -3,14 +3,13 @@ use crate::workflow::{WorkflowOutputTarget, WorkflowPortBinding};
 use super::*;
 
 fn queued_run(
-    queue_id: &str,
+    workflow_run_id: &str,
     priority: i32,
     enqueued_tick: u64,
     starvation_bypass_count: u32,
 ) -> WorkflowExecutionSessionQueuedRun {
     WorkflowExecutionSessionQueuedRun {
-        queue_id: queue_id.to_string(),
-        run_id: Some(queue_id.to_string()),
+        workflow_run_id: workflow_run_id.to_string(),
         enqueued_at_ms: 0,
         inputs: Vec::<WorkflowPortBinding>::new(),
         output_targets: Some(Vec::<WorkflowOutputTarget>::new()),
@@ -73,7 +72,7 @@ fn unload_candidate(
 }
 
 fn admission_candidate(
-    queue_id: &str,
+    workflow_run_id: &str,
     priority: i32,
     enqueued_tick: u64,
     starvation_bypass_count: u32,
@@ -82,7 +81,7 @@ fn admission_candidate(
     warm_session_compatibility: WorkflowExecutionSessionWarmCompatibility,
 ) -> WorkflowExecutionSessionAdmissionCandidate {
     WorkflowExecutionSessionAdmissionCandidate {
-        queue_id: queue_id.to_string(),
+        workflow_run_id: workflow_run_id.to_string(),
         priority,
         enqueued_tick,
         starvation_bypass_count,
@@ -103,17 +102,17 @@ fn refresh_queue_promotes_starved_run_over_newer_higher_priority_items() {
 
     policy.refresh_queue(&mut queue);
 
-    assert_eq!(queue[0].queue_id, "starved");
+    assert_eq!(queue[0].workflow_run_id, "starved");
     assert_eq!(
         queue[0].scheduler_decision_reason,
         WorkflowSchedulerDecisionReason::StarvationProtection
     );
-    assert_eq!(queue[1].queue_id, "high-1");
+    assert_eq!(queue[1].workflow_run_id, "high-1");
     assert_eq!(
         queue[1].scheduler_decision_reason,
         WorkflowSchedulerDecisionReason::FifoPriorityTieBreak
     );
-    assert_eq!(queue[2].queue_id, "high-2");
+    assert_eq!(queue[2].workflow_run_id, "high-2");
 }
 
 #[test]
@@ -366,7 +365,7 @@ fn admission_decision_selects_highest_priority_candidate_from_admission_input() 
         .expect("admission decision");
 
     assert_eq!(
-        decision.admitted_queue_id.as_deref(),
+        decision.admitted_workflow_run_id.as_deref(),
         Some("higher-priority")
     );
     assert_eq!(
@@ -410,7 +409,7 @@ fn admission_decision_keeps_pending_candidate_when_another_item_is_selected() {
         .admission_decision(&input, "pending")
         .expect("pending decision");
 
-    assert_eq!(decision.admitted_queue_id, None);
+    assert_eq!(decision.admitted_workflow_run_id, None);
     assert_eq!(decision.reason, None);
 }
 
@@ -509,7 +508,10 @@ fn admission_decision_prefers_warm_reuse_within_bounded_fairness_window() {
         .admission_decision(&input, "next-warm")
         .expect("admission decision");
 
-    assert_eq!(decision.admitted_queue_id.as_deref(), Some("next-warm"));
+    assert_eq!(
+        decision.admitted_workflow_run_id.as_deref(),
+        Some("next-warm")
+    );
     assert_eq!(
         decision.reason,
         Some(WorkflowSchedulerDecisionReason::WarmSessionReused)
@@ -551,7 +553,7 @@ fn admission_decision_preserves_starved_head_over_warm_reuse_candidate() {
         .admission_decision(&input, "warm-follower")
         .expect("pending decision");
 
-    assert_eq!(decision.admitted_queue_id, None);
+    assert_eq!(decision.admitted_workflow_run_id, None);
     assert_eq!(decision.reason, None);
 }
 
@@ -599,6 +601,6 @@ fn admission_decision_preserves_fifo_when_warm_reuse_candidate_is_outside_window
         .admission_decision(&input, "far-warm")
         .expect("pending decision");
 
-    assert_eq!(decision.admitted_queue_id, None);
+    assert_eq!(decision.admitted_workflow_run_id, None);
     assert_eq!(decision.reason, None);
 }

@@ -161,8 +161,7 @@ fn workflow_trace_store_prefers_matching_queue_items_over_session_backlog() {
             }),
             items: vec![
                 crate::workflow::WorkflowExecutionSessionQueueItem {
-                    queue_id: "queue-other".to_string(),
-                    run_id: Some("other-run".to_string()),
+                    workflow_run_id: "other-run".to_string(),
                     enqueued_at_ms: Some(100),
                     dequeued_at_ms: Some(150),
                     priority: 10,
@@ -172,8 +171,7 @@ fn workflow_trace_store_prefers_matching_queue_items_over_session_backlog() {
                     status: crate::workflow::WorkflowExecutionSessionQueueItemStatus::Running,
                 },
                 crate::workflow::WorkflowExecutionSessionQueueItem {
-                    queue_id: "queue-target".to_string(),
-                    run_id: Some("exec-target".to_string()),
+                    workflow_run_id: "exec-target".to_string(),
                     enqueued_at_ms: Some(180),
                     dequeued_at_ms: None,
                     priority: 5,
@@ -224,8 +222,7 @@ fn workflow_trace_store_preserves_enqueue_time_when_first_snapshot_is_running() 
                 run_count: 2,
             }),
             items: vec![crate::workflow::WorkflowExecutionSessionQueueItem {
-                queue_id: "edit-session-1".to_string(),
-                run_id: Some("edit-session-1".to_string()),
+                workflow_run_id: "edit-session-1".to_string(),
                 enqueued_at_ms: Some(4_750),
                 dequeued_at_ms: Some(4_750),
                 priority: 0,
@@ -275,8 +272,7 @@ fn workflow_trace_store_does_not_synthesize_queue_timing_from_snapshot_capture_t
                 run_count: 1,
             }),
             items: vec![crate::workflow::WorkflowExecutionSessionQueueItem {
-                queue_id: "queue-1".to_string(),
-                run_id: Some("exec-1".to_string()),
+                workflow_run_id: "exec-1".to_string(),
                 enqueued_at_ms: None,
                 dequeued_at_ms: None,
                 priority: 5,
@@ -326,8 +322,7 @@ fn workflow_trace_store_does_not_match_unrelated_queue_item_by_session_id() {
                 run_count: 2,
             }),
             items: vec![crate::workflow::WorkflowExecutionSessionQueueItem {
-                queue_id: "session-1".to_string(),
-                run_id: Some("other-run".to_string()),
+                workflow_run_id: "other-run".to_string(),
                 enqueued_at_ms: Some(100),
                 dequeued_at_ms: Some(120),
                 priority: 5,
@@ -379,8 +374,7 @@ fn workflow_trace_store_prefers_backend_scheduler_decision_reason_from_queue_ite
                 run_count: 1,
             }),
             items: vec![crate::workflow::WorkflowExecutionSessionQueueItem {
-                queue_id: "queue-1".to_string(),
-                run_id: Some("exec-1".to_string()),
+                workflow_run_id: "exec-1".to_string(),
                 enqueued_at_ms: Some(100),
                 dequeued_at_ms: Some(120),
                 priority: 5,
@@ -432,8 +426,7 @@ fn workflow_trace_store_selects_runtime_metrics_when_trace_match_is_unique() {
                 run_count: 1,
             }),
             items: vec![crate::workflow::WorkflowExecutionSessionQueueItem {
-                queue_id: "queue-1".to_string(),
-                run_id: Some("exec-1".to_string()),
+                workflow_run_id: "exec-1".to_string(),
                 enqueued_at_ms: Some(100),
                 dequeued_at_ms: Some(110),
                 priority: 5,
@@ -520,8 +513,7 @@ fn workflow_trace_store_marks_runtime_metric_selection_ambiguous_for_multi_run_s
                     run_count: 2,
                 }),
                 items: vec![crate::workflow::WorkflowExecutionSessionQueueItem {
-                    queue_id: format!("queue-{execution_id}"),
-                    run_id: Some(execution_id.to_string()),
+                    workflow_run_id: execution_id.to_string(),
                     enqueued_at_ms: Some(captured_at_ms.saturating_sub(20)),
                     dequeued_at_ms: Some(captured_at_ms.saturating_sub(10)),
                     priority: 5,

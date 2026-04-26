@@ -171,7 +171,6 @@ async fn workflow_run_contract_snapshot() {
                 }]),
                 override_selection: None,
                 timeout_ms: None,
-                run_id: None,
                 priority: None,
             },
         )
@@ -179,9 +178,11 @@ async fn workflow_run_contract_snapshot() {
         .expect("session workflow run response");
 
     let value = serde_json::to_value(response).expect("serialize response");
-    assert!(value["run_id"]
-        .as_str()
-        .is_some_and(|run_id| !run_id.is_empty()));
+    assert!(
+        value["run_id"]
+            .as_str()
+            .is_some_and(|run_id| !run_id.is_empty())
+    );
     let expected = serde_json::json!({
         "run_id": value["run_id"],
         "outputs": [
@@ -331,8 +332,8 @@ fn workflow_trace_contract_snapshot() {
                         reclaimable_loaded_session_count: 1,
                         runtime_capacity_pressure: pantograph_workflow_service::WorkflowSchedulerRuntimeCapacityPressure::RebalanceRequired,
                         active_run_blocks_admission: false,
-                        next_admission_queue_id: Some("queue-next".to_string()),
-                        next_admission_bypassed_queue_id: None,
+                        next_admission_workflow_run_id: Some("run-next".to_string()),
+                        next_admission_bypassed_workflow_run_id: None,
                         next_admission_after_runs: Some(0),
                         next_admission_wait_ms: Some(0),
                         next_admission_not_before_ms: Some(100),
@@ -417,7 +418,7 @@ fn workflow_trace_contract_snapshot() {
                     "reclaimable_loaded_session_count": 1,
                     "runtime_capacity_pressure": "rebalance_required",
                     "active_run_blocks_admission": false,
-                    "next_admission_queue_id": "queue-next",
+                    "next_admission_workflow_run_id": "run-next",
                     "next_admission_after_runs": 0,
                     "next_admission_wait_ms": 0,
                     "next_admission_not_before_ms": 100,
@@ -481,7 +482,7 @@ fn workflow_scheduler_snapshot_response_contract_snapshot() {
     let response = WorkflowSchedulerSnapshotResponse {
         workflow_id: Some("wf-1".to_string()),
         session_id: "session-1".to_string(),
-        trace_execution_id: Some("run-1".to_string()),
+        workflow_run_id: Some("run-1".to_string()),
         session: WorkflowExecutionSessionSummary {
             session_id: "session-1".to_string(),
             workflow_id: "wf-1".to_string(),
@@ -493,8 +494,7 @@ fn workflow_scheduler_snapshot_response_contract_snapshot() {
             run_count: 2,
         },
         items: vec![WorkflowExecutionSessionQueueItem {
-            queue_id: "queue-1".to_string(),
-            run_id: Some("run-1".to_string()),
+            workflow_run_id: "run-1".to_string(),
             enqueued_at_ms: Some(100),
             dequeued_at_ms: Some(110),
             priority: 5,
@@ -510,7 +510,7 @@ fn workflow_scheduler_snapshot_response_contract_snapshot() {
     let expected = serde_json::json!({
         "workflow_id": "wf-1",
         "session_id": "session-1",
-        "trace_execution_id": "run-1",
+        "workflow_run_id": "run-1",
         "session": {
             "session_id": "session-1",
             "workflow_id": "wf-1",
@@ -522,8 +522,7 @@ fn workflow_scheduler_snapshot_response_contract_snapshot() {
             "run_count": 2
         },
         "items": [{
-            "queue_id": "queue-1",
-            "run_id": "run-1",
+            "workflow_run_id": "run-1",
             "enqueued_at_ms": 100,
             "dequeued_at_ms": 110,
             "priority": 5,
@@ -612,7 +611,6 @@ async fn workflow_run_rejects_non_discovered_output_target_contract() {
                 }]),
                 override_selection: None,
                 timeout_ms: None,
-                run_id: None,
                 priority: None,
             },
         )

@@ -22,7 +22,6 @@ async fn workflow_execution_session_queue_items_include_authoritative_timestamps
         output_targets: None,
         override_selection: None,
         timeout_ms: None,
-        run_id: Some("queued-run-1".to_string()),
         priority: None,
     };
 
@@ -46,8 +45,7 @@ async fn workflow_execution_session_queue_items_include_authoritative_timestamps
             .expect("list pending queue items")
     };
     assert_eq!(pending_items.len(), 1);
-    assert_eq!(pending_items[0].queue_id, queue_id);
-    assert_eq!(pending_items[0].run_id.as_deref(), Some("queued-run-1"));
+    assert_eq!(pending_items[0].workflow_run_id, queue_id);
     assert!(pending_items[0].enqueued_at_ms.is_some());
     assert!(pending_items[0].dequeued_at_ms.is_none());
     assert_eq!(pending_items[0].queue_position, Some(0));
@@ -77,7 +75,7 @@ async fn workflow_execution_session_queue_items_include_authoritative_timestamps
             .expect("list running queue items")
     };
     assert_eq!(running_items.len(), 1);
-    assert_eq!(running_items[0].queue_id, queue_id);
+    assert_eq!(running_items[0].workflow_run_id, queue_id);
     assert_eq!(
         running_items[0].status,
         WorkflowExecutionSessionQueueItemStatus::Running
@@ -139,7 +137,6 @@ async fn workflow_execution_session_queue_marks_loaded_compatible_admission_as_w
                     output_targets: None,
                     override_selection: None,
                     timeout_ms: None,
-                    run_id: Some("queued-run-1".to_string()),
                     priority: Some(1),
                 },
             )
@@ -160,7 +157,7 @@ async fn workflow_execution_session_queue_marks_loaded_compatible_admission_as_w
     };
 
     assert_eq!(running_items.len(), 1);
-    assert_eq!(running_items[0].queue_id, queue_id);
+    assert_eq!(running_items[0].workflow_run_id, queue_id);
     assert_eq!(
         running_items[0].scheduler_admission_outcome,
         Some(WorkflowSchedulerAdmissionOutcome::Admitted)
@@ -215,7 +212,6 @@ async fn workflow_execution_session_queue_prefers_bounded_warm_reuse_over_same_p
                         backend_key: Some("pytorch".to_string()),
                     }),
                     timeout_ms: None,
-                    run_id: Some("cold-head".to_string()),
                     priority: Some(1),
                 },
             )
@@ -229,7 +225,6 @@ async fn workflow_execution_session_queue_prefers_bounded_warm_reuse_over_same_p
                     output_targets: None,
                     override_selection: None,
                     timeout_ms: None,
-                    run_id: Some("warm-follow".to_string()),
                     priority: Some(1),
                 },
             )
@@ -251,12 +246,12 @@ async fn workflow_execution_session_queue_prefers_bounded_warm_reuse_over_same_p
     };
 
     assert_eq!(running_items.len(), 2);
-    assert_eq!(running_items[0].queue_id, warm_queue_id);
+    assert_eq!(running_items[0].workflow_run_id, warm_queue_id);
     assert_eq!(
         running_items[0].scheduler_decision_reason,
         Some(WorkflowSchedulerDecisionReason::WarmSessionReused)
     );
-    assert_eq!(running_items[1].queue_id, cold_head_queue_id);
+    assert_eq!(running_items[1].workflow_run_id, cold_head_queue_id);
     assert_eq!(
         running_items[1].scheduler_decision_reason,
         Some(WorkflowSchedulerDecisionReason::HighestPriorityFirst)
@@ -293,7 +288,6 @@ async fn workflow_execution_session_queue_items_expose_authoritative_queue_posit
                     output_targets: None,
                     override_selection: None,
                     timeout_ms: None,
-                    run_id: Some("queued-run-1".to_string()),
                     priority: Some(10),
                 },
             )
@@ -313,7 +307,6 @@ async fn workflow_execution_session_queue_items_expose_authoritative_queue_posit
                     output_targets: None,
                     override_selection: None,
                     timeout_ms: None,
-                    run_id: Some("queued-run-2".to_string()),
                     priority: Some(5),
                 },
             )
@@ -330,9 +323,9 @@ async fn workflow_execution_session_queue_items_expose_authoritative_queue_posit
             .expect("list pending queue items")
     };
     assert_eq!(pending_items.len(), 2);
-    assert_eq!(pending_items[0].queue_id, first_queue_id);
+    assert_eq!(pending_items[0].workflow_run_id, first_queue_id);
     assert_eq!(pending_items[0].queue_position, Some(0));
-    assert_eq!(pending_items[1].queue_id, second_queue_id);
+    assert_eq!(pending_items[1].workflow_run_id, second_queue_id);
     assert_eq!(pending_items[1].queue_position, Some(1));
 
     let running_items = {
@@ -348,9 +341,9 @@ async fn workflow_execution_session_queue_items_expose_authoritative_queue_posit
             .expect("list queue after begin")
     };
     assert_eq!(running_items.len(), 2);
-    assert_eq!(running_items[0].queue_id, first_queue_id);
+    assert_eq!(running_items[0].workflow_run_id, first_queue_id);
     assert_eq!(running_items[0].queue_position, Some(0));
-    assert_eq!(running_items[1].queue_id, second_queue_id);
+    assert_eq!(running_items[1].workflow_run_id, second_queue_id);
     assert_eq!(running_items[1].queue_position, Some(1));
 }
 
@@ -385,7 +378,6 @@ async fn workflow_execution_session_queue_promotes_starved_runs_before_newer_hig
                     output_targets: None,
                     override_selection: None,
                     timeout_ms: None,
-                    run_id: Some("older-low-priority".to_string()),
                     priority: Some(0),
                 },
             )
@@ -397,7 +389,7 @@ async fn workflow_execution_session_queue_promotes_starved_runs_before_newer_hig
             .session_store
             .lock()
             .expect("session store lock poisoned");
-        for run_id in [
+        for _ in [
             "newer-high-priority-1",
             "newer-high-priority-2",
             "newer-high-priority-3",
@@ -412,7 +404,6 @@ async fn workflow_execution_session_queue_promotes_starved_runs_before_newer_hig
                         output_targets: None,
                         override_selection: None,
                         timeout_ms: None,
-                        run_id: Some(run_id.to_string()),
                         priority: Some(2),
                     },
                 )
@@ -430,7 +421,7 @@ async fn workflow_execution_session_queue_promotes_starved_runs_before_newer_hig
             .expect("list starved queue items")
     };
     assert_eq!(pending_items.len(), 5);
-    assert_eq!(pending_items[0].queue_id, low_priority_queue_id);
+    assert_eq!(pending_items[0].workflow_run_id, low_priority_queue_id);
     assert_eq!(pending_items[0].queue_position, Some(0));
     assert_eq!(
         pending_items[0].scheduler_admission_outcome,
@@ -457,7 +448,7 @@ async fn workflow_execution_session_queue_promotes_starved_runs_before_newer_hig
             .list_queue(&created.session_id)
             .expect("list running queue items")
     };
-    assert_eq!(running_items[0].queue_id, low_priority_queue_id);
+    assert_eq!(running_items[0].workflow_run_id, low_priority_queue_id);
     assert_eq!(
         running_items[0].scheduler_admission_outcome,
         Some(WorkflowSchedulerAdmissionOutcome::Admitted)

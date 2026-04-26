@@ -1,9 +1,9 @@
+use crate::WorkflowSchedulerSnapshotDiagnostics;
 use crate::workflow::{
     WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionQueueItemStatus,
     WorkflowExecutionSessionState, WorkflowExecutionSessionSummary,
     WorkflowSchedulerAdmissionOutcome, WorkflowSchedulerDecisionReason,
 };
-use crate::WorkflowSchedulerSnapshotDiagnostics;
 
 pub(super) fn apply_scheduler_snapshot(
     trace: &mut super::store::WorkflowTraceRunState,
@@ -189,11 +189,10 @@ fn scheduler_decision_reason(
 }
 
 fn matched_queue_item<'a>(
-    execution_id: &str,
+    workflow_run_id: &str,
     items: &'a [WorkflowExecutionSessionQueueItem],
 ) -> Option<&'a WorkflowExecutionSessionQueueItem> {
     items
         .iter()
-        .find(|item| item.run_id.as_deref() == Some(execution_id))
-        .or_else(|| items.iter().find(|item| item.queue_id == execution_id))
+        .find(|item| item.workflow_run_id == workflow_run_id)
 }

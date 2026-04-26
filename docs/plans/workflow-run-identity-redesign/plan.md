@@ -353,15 +353,15 @@ Assumption: scheduler queue id and run id should be the same canonical
 `workflow_run_id` before queue visibility.
 
 **Tasks:**
-- [ ] Update scheduler run submission contracts so queue id and run id are the
+- [x] Update scheduler run submission contracts so queue id and run id are the
   same generated `workflow_run_id`.
-- [ ] Update edit-session runtime state so `mark_running` receives a
+- [x] Update edit-session runtime state so `mark_running` receives a
   `workflow_run_id` rather than deriving execution identity from `session_id`.
-- [ ] Ensure scheduler snapshots expose `workflow_run_id` and never infer trace
+- [x] Ensure scheduler snapshots expose `workflow_run_id` and never infer trace
   identity from `session_id`.
-- [ ] Update scheduler and graph edit-session tests for repeated runs from the
+- [x] Update scheduler and graph edit-session tests for repeated runs from the
   same session.
-- [ ] Refactor touched scheduler/session modules for standards compliance.
+- [x] Refactor touched scheduler/session modules for standards compliance.
 
 **Verification:**
 - `cargo test -p pantograph-workflow-service`
@@ -369,7 +369,33 @@ Assumption: scheduler queue id and run id should be the same canonical
   `workflow_run_id` values.
 - Search check proving `session_id` is not assigned into queue/run identity.
 
-**Status:** Not started.
+**Status:** Completed.
+
+**Notes:**
+- Removed caller-authored `run_id` from
+  `WorkflowExecutionSessionRunRequest`.
+- Changed scheduler queue items and scheduler snapshots to expose
+  `workflow_run_id` instead of separate `queue_id`, `run_id`, and
+  `trace_execution_id` fields.
+- Scheduler enqueue now generates the backend-owned run id with
+  `WorkflowRunId::generate()` before the item is visible in queue state.
+- Edit-session runtime `mark_running` now receives the workflow run id
+  explicitly and graph scheduler snapshots use that id instead of the
+  `session_id`.
+- Added a repeated-run session test proving two runs from the same workflow
+  execution session produce distinct backend-owned run ids, and updated queue,
+  scheduler, trace, contract, and example fixtures to the new scheduler
+  contract.
+- Downstream Tauri, frontend, and binding surfaces are expected to need
+  matching DTO updates in Milestones 5 through 7.
+
+**Verification Results:**
+- `cargo test -p pantograph-workflow-service`
+- `rg` search checked for `session_id` assigned into scheduler queue,
+  runtime execution, trace, or workflow-run identity in the workflow-service
+  slice; remaining matches pass `session_id` and `workflow_run_id` as separate
+  arguments.
+- `git diff --check -- crates/pantograph-workflow-service docs/plans/workflow-run-identity-redesign/plan.md`
 
 ### Milestone 3: Propagate Workflow Run Id Through Runtime Events
 
@@ -562,6 +588,9 @@ model is implemented.
   re-exported canonical attribution id types from workflow-service, and
   verified the contract slice with diff, source-search, and workflow-service
   cargo check.
+- 2026-04-26: Milestone 2 completed. Scheduler/session contracts now generate
+  and expose `workflow_run_id`; edit-session running state no longer derives
+  run identity from `session_id`; workflow-service tests pass.
 - Current known unrelated dirty files must remain untouched unless the user
   explicitly assigns them to this work:
   - `.pantograph/workflows/tiny-sd-turbo-diffusion.json`
@@ -630,6 +659,7 @@ owned serially by the integration implementer.
 ### Completed
 
 - Milestone 1: Freeze Canonical Identity Contract.
+- Milestone 2: Make Scheduler Own Run Id Creation.
 
 ### Deviations
 
@@ -644,6 +674,11 @@ owned serially by the integration implementer.
 - Milestone 1:
   - `git diff --check -- docs/adr/ADR-012-canonical-workflow-run-identity.md docs/adr/README.md crates/pantograph-workflow-service/src/lib.rs`
   - `cargo check -p pantograph-workflow-service`
+- Milestone 2:
+  - `cargo test -p pantograph-workflow-service`
+  - `git diff --check -- crates/pantograph-workflow-service docs/plans/workflow-run-identity-redesign/plan.md`
+  - Source search for `session_id` assigned into workflow-run identity in the
+    workflow-service scheduler/session slice.
 
 ### Traceability Links
 

@@ -221,8 +221,11 @@ impl WorkflowService {
     pub async fn workflow_graph_mark_edit_session_running(
         &self,
         session_id: &str,
+        workflow_run_id: &str,
     ) -> Result<(), WorkflowServiceError> {
-        self.graph_session_store.mark_running(session_id).await
+        self.graph_session_store
+            .mark_running(session_id, workflow_run_id)
+            .await
     }
 
     pub async fn workflow_graph_mark_edit_session_finished(

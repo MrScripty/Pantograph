@@ -17,7 +17,7 @@ fn unix_timestamp_ms() -> u64 {
 /// Focused runtime/lifecycle state for one graph edit session.
 #[derive(Debug, Clone)]
 pub(crate) struct GraphEditSessionRuntime {
-    active_execution_id: Option<String>,
+    active_workflow_run_id: Option<String>,
     active_execution_started_at_ms: Option<u64>,
     run_count: u64,
     last_accessed: Instant,
@@ -26,7 +26,7 @@ pub(crate) struct GraphEditSessionRuntime {
 impl GraphEditSessionRuntime {
     pub(crate) fn new() -> Self {
         Self {
-            active_execution_id: None,
+            active_workflow_run_id: None,
             active_execution_started_at_ms: None,
             run_count: 0,
             last_accessed: Instant::now(),
@@ -52,24 +52,23 @@ impl GraphEditSessionRuntime {
             session_kind: WorkflowExecutionSessionKind::Edit,
             usage_profile: None,
             keep_alive: false,
-            state: if self.active_execution_id.is_some() {
+            state: if self.active_workflow_run_id.is_some() {
                 WorkflowExecutionSessionState::Running
             } else {
                 WorkflowExecutionSessionState::IdleLoaded
             },
-            queued_runs: usize::from(self.active_execution_id.is_some()),
+            queued_runs: usize::from(self.active_workflow_run_id.is_some()),
             run_count: self.run_count,
         }
     }
 
     pub(crate) fn queue_items(&self) -> Vec<WorkflowExecutionSessionQueueItem> {
-        self.active_execution_id
+        self.active_workflow_run_id
             .as_ref()
-            .map(|execution_id| {
+            .map(|workflow_run_id| {
                 let started_at_ms = self.active_execution_started_at_ms;
                 WorkflowExecutionSessionQueueItem {
-                    queue_id: execution_id.clone(),
-                    run_id: Some(execution_id.clone()),
+                    workflow_run_id: workflow_run_id.clone(),
                     enqueued_at_ms: started_at_ms,
                     dequeued_at_ms: started_at_ms,
                     priority: 0,
@@ -83,19 +82,19 @@ impl GraphEditSessionRuntime {
             .collect()
     }
 
-    pub(crate) fn mark_running(&mut self, session_id: &str) {
+    pub(crate) fn mark_running(&mut self, workflow_run_id: &str) {
         self.touch();
-        if self.active_execution_id.as_deref() != Some(session_id)
+        if self.active_workflow_run_id.as_deref() != Some(workflow_run_id)
             || self.active_execution_started_at_ms.is_none()
         {
             self.active_execution_started_at_ms = Some(unix_timestamp_ms());
         }
-        self.active_execution_id = Some(session_id.to_string());
+        self.active_workflow_run_id = Some(workflow_run_id.to_string());
     }
 
     pub(crate) fn finish_run(&mut self) {
         self.touch();
-        if self.active_execution_id.take().is_some() {
+        if self.active_workflow_run_id.take().is_some() {
             self.active_execution_started_at_ms = None;
             self.run_count = self.run_count.saturating_add(1);
         }
@@ -122,7 +121,7 @@ mod tests {
     #[test]
     fn mark_running_populates_running_queue_item() {
         let mut runtime = GraphEditSessionRuntime::new();
-        runtime.mark_running("session-1");
+        runtime.mark_running("run-1");
 
         let summary = runtime.session_summary("session-1", Some("saved-workflow"));
         let queue_items = runtime.queue_items();
@@ -131,7 +130,7 @@ mod tests {
         assert_eq!(summary.workflow_id, "saved-workflow");
         assert_eq!(summary.queued_runs, 1);
         assert_eq!(queue_items.len(), 1);
-        assert_eq!(queue_items[0].queue_id, "session-1");
+        assert_eq!(queue_items[0].workflow_run_id, "run-1");
         assert_eq!(
             queue_items[0].status,
             WorkflowExecutionSessionQueueItemStatus::Running
@@ -142,7 +141,7 @@ mod tests {
     #[test]
     fn finish_run_clears_active_execution_and_increments_count() {
         let mut runtime = GraphEditSessionRuntime::new();
-        runtime.mark_running("session-1");
+        runtime.mark_running("run-1");
         runtime.finish_run();
 
         let summary = runtime.session_summary("session-1", None);

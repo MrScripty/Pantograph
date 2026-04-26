@@ -199,9 +199,7 @@ impl WorkflowSchedulerDecisionReason {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowExecutionSessionQueueItem {
-    pub queue_id: String,
-    #[serde(default)]
-    pub run_id: Option<String>,
+    pub workflow_run_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub enqueued_at_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -246,7 +244,7 @@ pub struct WorkflowSchedulerSnapshotResponse {
     pub workflow_id: Option<String>,
     pub session_id: String,
     #[serde(default)]
-    pub trace_execution_id: Option<String>,
+    pub workflow_run_id: Option<String>,
     pub session: WorkflowExecutionSessionSummary,
     #[serde(default)]
     pub items: Vec<WorkflowExecutionSessionQueueItem>,
@@ -254,7 +252,7 @@ pub struct WorkflowSchedulerSnapshotResponse {
     pub diagnostics: Option<WorkflowSchedulerSnapshotDiagnostics>,
 }
 
-pub(crate) fn scheduler_snapshot_trace_execution_id(
+pub(crate) fn scheduler_snapshot_workflow_run_id(
     items: &[WorkflowExecutionSessionQueueItem],
 ) -> Option<String> {
     items
@@ -269,7 +267,7 @@ pub(crate) fn scheduler_snapshot_trace_execution_id(
                 _ => None,
             }
         })
-        .map(|item| item.run_id.clone().unwrap_or_else(|| item.queue_id.clone()))
+        .map(|item| item.workflow_run_id.clone())
 }
 
 /// Session queue cancellation request.
@@ -277,7 +275,7 @@ pub(crate) fn scheduler_snapshot_trace_execution_id(
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowExecutionSessionQueueCancelRequest {
     pub session_id: String,
-    pub queue_id: String,
+    pub workflow_run_id: String,
 }
 
 /// Session queue cancellation response.
@@ -292,7 +290,7 @@ pub struct WorkflowExecutionSessionQueueCancelResponse {
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowExecutionSessionQueueReprioritizeRequest {
     pub session_id: String,
-    pub queue_id: String,
+    pub workflow_run_id: String,
     pub priority: i32,
 }
 
@@ -397,9 +395,9 @@ pub struct WorkflowSchedulerSnapshotDiagnostics {
     pub runtime_capacity_pressure: WorkflowSchedulerRuntimeCapacityPressure,
     pub active_run_blocks_admission: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub next_admission_queue_id: Option<String>,
+    pub next_admission_workflow_run_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub next_admission_bypassed_queue_id: Option<String>,
+    pub next_admission_bypassed_workflow_run_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next_admission_after_runs: Option<usize>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
