@@ -224,6 +224,10 @@ export function createWorkflowStores(
     });
   }
 
+  function resolveDerivedGraph(graph: WorkflowGraph): WorkflowGraph['derived_graph'] {
+    return graph.derived_graph ?? buildDerivedGraph(graph);
+  }
+
   function applyWorkflowGraph(
     graph: WorkflowGraph,
     options?: {
@@ -239,7 +243,7 @@ export function createWorkflowStores(
       workflowMetadata.set(options.metadata);
     }
     connectionIntent.set(null);
-    derivedGraph.set(buildDerivedGraph(nextGraph));
+    derivedGraph.set(resolveDerivedGraph(nextGraph));
     isDirty.set(options?.markDirty ?? true);
   }
 

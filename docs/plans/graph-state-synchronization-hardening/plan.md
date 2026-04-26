@@ -343,16 +343,16 @@ transition instead of a chain of full-graph races.
 correctness work.
 
 **Tasks:**
-- [ ] Prefer backend-provided `derived_graph` when applying backend-owned graph
+- [x] Prefer backend-provided `derived_graph` when applying backend-owned graph
   snapshots.
-- [ ] Restrict frontend derived graph rebuilds to mock/local-only graph
+- [x] Restrict frontend derived graph rebuilds to mock/local-only graph
   construction paths.
-- [ ] Avoid rebuilding the materialized `WorkflowGraph` in response to runtime
+- [x] Avoid rebuilding the materialized `WorkflowGraph` in response to runtime
   overlay-only updates.
-- [ ] Review backend mutation responses for duplicate fingerprint or dirty-task
+- [x] Review backend mutation responses for duplicate fingerprint or dirty-task
   calculations in touched paths and remove repeated local recomputation where
   behavior is unchanged.
-- [ ] Add tests that protect backend-derived graph identity from frontend
+- [x] Add tests that protect backend-derived graph identity from frontend
   recalculation drift.
 
 **Verification:**
@@ -360,7 +360,7 @@ correctness work.
 - `cargo test -p pantograph-workflow-service graph`
 - `npm run -w frontend check:types`
 
-**Status:** Not started.
+**Status:** Complete.
 
 ### Milestone 6: Final Standards Compliance Refactor
 
@@ -474,6 +474,17 @@ Update during implementation:
   Regression coverage now proves runtime text/stream overlays render through
   `nodes` without entering `$workflowGraph`, and materialization strips known
   runtime-only display fields before save.
+- 2026-04-26: Milestone 5 started. The efficiency pass will keep
+  backend-provided derived graph metadata when applying backend snapshots and
+  limit frontend-derived rebuilds to local/default/mock graph construction
+  boundaries.
+- 2026-04-26: Milestone 5 completed. `applyWorkflowGraph` now preserves
+  backend-provided `derived_graph` metadata and only rebuilds derived metadata
+  for local/default graph construction or loaded graphs that lack backend
+  metadata. Runtime overlay updates no longer feed `$workflowGraph`, so they no
+  longer rebuild structural graph projection. Backend touched paths were
+  reviewed after Milestone 3; no safe additional dirty-task/fingerprint
+  simplification was identified without changing memory-impact behavior.
 
 ## Commit Cadence Notes
 

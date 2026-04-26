@@ -319,6 +319,70 @@ test('createWorkflowStores keeps runtime overlays out of structural workflow gra
   assert.equal(structuralData.streamContent, undefined);
 });
 
+test('createWorkflowStores preserves backend-provided derived graph metadata', async () => {
+  const graph = {
+    nodes: [
+      {
+        id: 'text-input-1',
+        node_type: 'text-input',
+        position: { x: 0, y: 0 },
+        data: { text: 'draft' },
+      },
+    ],
+    edges: [],
+    derived_graph: {
+      schema_version: 1,
+      graph_fingerprint: 'backend-fingerprint-a',
+      consumer_count_map: {},
+    },
+  } satisfies WorkflowGraph;
+  const backend = createBackendStub(graph);
+  const stores = createWorkflowStores(
+    {
+      ...backend,
+      async updateNodeData() {
+        return {
+          graph: {
+            ...graph,
+            nodes: [
+              {
+                id: 'text-input-1',
+                node_type: 'text-input',
+                position: { x: 0, y: 0 },
+                data: { text: 'updated' },
+              },
+            ],
+            derived_graph: {
+              schema_version: 1,
+              graph_fingerprint: 'backend-fingerprint-b',
+              consumer_count_map: {},
+            },
+          },
+        };
+      },
+    },
+    {
+      groupStack: writable<string[]>([]),
+      async tabOutOfGroup() {},
+    },
+  );
+
+  stores.loadWorkflow(graph);
+  stores.setActiveSessionId('session-a');
+
+  assert.equal(
+    (get(stores.workflowGraph) as WorkflowGraph).derived_graph?.graph_fingerprint,
+    'backend-fingerprint-a',
+  );
+
+  await stores.updateNodeData('text-input-1', { text: 'updated' });
+
+  assert.equal(
+    (get(stores.workflowGraph) as WorkflowGraph).derived_graph?.graph_fingerprint,
+    'backend-fingerprint-b',
+  );
+});
+
 test('createWorkflowStores renders backend-owned group mutation responses', async () => {
   const graph = {
     nodes: [
