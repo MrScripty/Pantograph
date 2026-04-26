@@ -37,7 +37,6 @@ fn unix_timestamp_ms() -> u64 {
 #[derive(Debug, Clone, Default)]
 pub(super) struct WorkflowTraceExecutionContext {
     pub(super) workflow_id: Option<String>,
-    pub(super) workflow_name: Option<String>,
     pub(super) graph_fingerprint: Option<String>,
     pub(super) node_count_at_start: usize,
     pub(super) node_types_by_id: HashMap<String, String>,
@@ -45,10 +44,9 @@ pub(super) struct WorkflowTraceExecutionContext {
 
 #[derive(Debug, Clone)]
 pub(super) struct WorkflowTraceRunState {
-    pub(super) execution_id: String,
+    pub(super) workflow_run_id: String,
     pub(super) session_id: Option<String>,
     pub(super) workflow_id: Option<String>,
-    pub(super) workflow_name: Option<String>,
     pub(super) graph_fingerprint: Option<String>,
     pub(super) status: WorkflowTraceStatus,
     pub(super) started_at_ms: u64,
@@ -70,10 +68,9 @@ pub(super) struct WorkflowTraceRunState {
 impl WorkflowTraceRunState {
     pub(super) fn snapshot(&self) -> WorkflowTraceSummary {
         WorkflowTraceSummary {
-            execution_id: self.execution_id.clone(),
+            workflow_run_id: self.workflow_run_id.clone(),
             session_id: self.session_id.clone(),
             workflow_id: self.workflow_id.clone(),
-            workflow_name: self.workflow_name.clone(),
             graph_fingerprint: self.graph_fingerprint.clone(),
             status: self.status,
             started_at_ms: self.started_at_ms,
@@ -117,7 +114,7 @@ impl WorkflowTraceState {
         snapshot_for_request(
             self.trace_order
                 .iter()
-                .filter_map(|execution_id| self.traces_by_id.get(execution_id)),
+                .filter_map(|workflow_run_id| self.traces_by_id.get(workflow_run_id)),
             self.retained_trace_limit,
             request,
         )
@@ -130,7 +127,7 @@ impl WorkflowTraceState {
         runtime_metrics_selection(
             self.trace_order
                 .iter()
-                .filter_map(|execution_id| self.traces_by_id.get(execution_id)),
+                .filter_map(|workflow_run_id| self.traces_by_id.get(workflow_run_id)),
             request,
         )
     }
@@ -145,47 +142,36 @@ impl WorkflowTraceState {
         self.execution_contexts.clear();
     }
 
-    fn set_execution_metadata(
-        &mut self,
-        execution_id: &str,
-        workflow_id: Option<String>,
-        workflow_name: Option<String>,
-    ) {
+    fn set_execution_metadata(&mut self, workflow_run_id: &str, workflow_id: Option<String>) {
         let context = self
             .execution_contexts
-            .entry(execution_id.to_string())
+            .entry(workflow_run_id.to_string())
             .or_default();
         if let Some(workflow_id) = workflow_id {
             context.workflow_id = Some(workflow_id);
         }
-        if let Some(workflow_name) = workflow_name {
-            context.workflow_name = Some(workflow_name);
-        }
 
-        if let Some(trace) = self.traces_by_id.get_mut(execution_id) {
+        if let Some(trace) = self.traces_by_id.get_mut(workflow_run_id) {
             if context.workflow_id.is_some() {
                 trace.workflow_id = context.workflow_id.clone();
-            }
-            if context.workflow_name.is_some() {
-                trace.workflow_name = context.workflow_name.clone();
             }
         }
     }
 
     fn set_execution_graph_context(
         &mut self,
-        execution_id: &str,
+        workflow_run_id: &str,
         graph_context: &WorkflowTraceGraphContext,
     ) {
         let context = self
             .execution_contexts
-            .entry(execution_id.to_string())
+            .entry(workflow_run_id.to_string())
             .or_default();
         context.graph_fingerprint = graph_context.graph_fingerprint.clone();
         context.node_count_at_start = graph_context.node_count_at_start;
         context.node_types_by_id = graph_context.node_types_by_id.clone();
 
-        if let Some(trace) = self.traces_by_id.get_mut(execution_id) {
+        if let Some(trace) = self.traces_by_id.get_mut(workflow_run_id) {
             if trace.graph_fingerprint.is_none() {
                 trace.graph_fingerprint = context.graph_fingerprint.clone();
             }
@@ -203,35 +189,35 @@ impl WorkflowTraceState {
     }
 
     fn record_event(&mut self, event: &WorkflowTraceEvent, timestamp_ms: u64) {
-        let execution_id = event.execution_id().to_string();
+        let workflow_run_id = event.workflow_run_id().to_string();
         let context = self
             .execution_contexts
-            .get(&execution_id)
+            .get(&workflow_run_id)
             .cloned()
             .unwrap_or_default();
         let workflow_id = event
             .workflow_id()
             .map(ToOwned::to_owned)
             .or_else(|| context.workflow_id.clone());
-        let mut trace = self.traces_by_id.remove(&execution_id).unwrap_or_else(|| {
-            create_trace_run_state(
-                &execution_id,
-                workflow_id.clone(),
-                &context,
-                timestamp_ms,
-                event.node_count().unwrap_or(context.node_count_at_start),
-            )
-        });
+        let mut trace = self
+            .traces_by_id
+            .remove(&workflow_run_id)
+            .unwrap_or_else(|| {
+                create_trace_run_state(
+                    &workflow_run_id,
+                    workflow_id.clone(),
+                    &context,
+                    timestamp_ms,
+                    event.node_count().unwrap_or(context.node_count_at_start),
+                )
+            });
 
         self.trace_order
-            .retain(|candidate| candidate != &execution_id);
-        self.trace_order.insert(0, execution_id.clone());
+            .retain(|candidate| candidate != &workflow_run_id);
+        self.trace_order.insert(0, workflow_run_id.clone());
 
         if trace.workflow_id.is_none() {
             trace.workflow_id = workflow_id;
-        }
-        if trace.workflow_name.is_none() {
-            trace.workflow_name = context.workflow_name.clone();
         }
         if trace.graph_fingerprint.is_none() {
             trace.graph_fingerprint = context.graph_fingerprint.clone();
@@ -241,17 +227,17 @@ impl WorkflowTraceState {
         }
 
         apply_trace_event(&mut trace, &context, event, timestamp_ms);
-        self.traces_by_id.insert(execution_id, trace);
+        self.traces_by_id.insert(workflow_run_id, trace);
         self.enforce_retention_limit();
     }
 
     fn enforce_retention_limit(&mut self) {
         while self.trace_order.len() > self.retained_trace_limit {
-            let Some(removed_execution_id) = self.trace_order.pop() else {
+            let Some(removed_workflow_run_id) = self.trace_order.pop() else {
                 break;
             };
-            self.traces_by_id.remove(&removed_execution_id);
-            self.execution_contexts.remove(&removed_execution_id);
+            self.traces_by_id.remove(&removed_workflow_run_id);
+            self.execution_contexts.remove(&removed_workflow_run_id);
         }
     }
 }
@@ -317,35 +303,29 @@ impl WorkflowTraceStore {
         self.enrich_timing(snapshot)
     }
 
-    pub fn set_execution_metadata(
-        &self,
-        execution_id: &str,
-        workflow_id: Option<String>,
-        workflow_name: Option<String>,
-    ) {
+    pub fn set_execution_metadata(&self, workflow_run_id: &str, workflow_id: Option<String>) {
         self.state
             .lock()
-            .set_execution_metadata(execution_id, workflow_id, workflow_name);
+            .set_execution_metadata(workflow_run_id, workflow_id);
     }
 
     pub fn set_execution_graph_context(
         &self,
-        execution_id: &str,
+        workflow_run_id: &str,
         graph_context: &WorkflowTraceGraphContext,
     ) {
         self.state
             .lock()
-            .set_execution_graph_context(execution_id, graph_context);
+            .set_execution_graph_context(workflow_run_id, graph_context);
     }
 
     pub fn graph_timing_expectations(
         &self,
         workflow_id: String,
-        workflow_name: Option<String>,
         graph_context: &WorkflowTraceGraphContext,
     ) -> WorkflowTraceGraphTimingExpectations {
         let ledger = self.timing_ledger.as_ref().map(|ledger| ledger.lock());
-        graph_timing_expectations(workflow_id, workflow_name, graph_context, ledger.as_deref())
+        graph_timing_expectations(workflow_id, graph_context, ledger.as_deref())
     }
 
     pub fn record_event(

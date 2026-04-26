@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-use crate::util::{validate_optional_text, validate_required_text, MAX_ID_LEN};
 use crate::DiagnosticsLedgerError;
+use crate::util::{MAX_ID_LEN, validate_optional_text, validate_required_text};
 
 pub const MIN_TIMING_EXPECTATION_SAMPLE_COUNT: usize = 3;
 
@@ -74,9 +74,8 @@ pub enum WorkflowTimingExpectationComparison {
 pub struct WorkflowTimingObservation {
     pub observation_key: String,
     pub scope: WorkflowTimingObservationScope,
-    pub execution_id: String,
+    pub workflow_run_id: String,
     pub workflow_id: String,
-    pub workflow_name: Option<String>,
     pub graph_fingerprint: String,
     pub node_id: Option<String>,
     pub node_type: Option<String>,
@@ -91,10 +90,9 @@ pub struct WorkflowTimingObservation {
 impl WorkflowTimingObservation {
     pub fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
         validate_required_text("observation_key", &self.observation_key, MAX_ID_LEN)?;
-        validate_required_text("execution_id", &self.execution_id, MAX_ID_LEN)?;
+        validate_required_text("workflow_run_id", &self.workflow_run_id, MAX_ID_LEN)?;
         validate_required_text("workflow_id", &self.workflow_id, MAX_ID_LEN)?;
         validate_required_text("graph_fingerprint", &self.graph_fingerprint, MAX_ID_LEN)?;
-        validate_optional_text("workflow_name", self.workflow_name.as_deref(), MAX_ID_LEN)?;
         validate_optional_text("node_id", self.node_id.as_deref(), MAX_ID_LEN)?;
         validate_optional_text("node_type", self.node_type.as_deref(), MAX_ID_LEN)?;
         validate_optional_text("runtime_id", self.runtime_id.as_deref(), MAX_ID_LEN)?;

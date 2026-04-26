@@ -4,13 +4,13 @@ use pantograph_runtime_attribution::{
 use rusqlite::Connection;
 
 use crate::{
-    DiagnosticsLedgerError, DiagnosticsLedgerRepository, DiagnosticsQuery, ExecutionGuaranteeLevel,
-    LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement,
-    OutputMeasurementUnavailableReason, OutputModality, PruneTimingObservationsCommand,
-    PruneUsageEventsCommand, RetentionClass, SqliteDiagnosticsLedger, UsageEventStatus,
-    UsageLineage, WorkflowTimingExpectation, WorkflowTimingExpectationComparison,
-    WorkflowTimingExpectationQuery, WorkflowTimingObservation, WorkflowTimingObservationScope,
-    WorkflowTimingObservationStatus, DEFAULT_STANDARD_RETENTION_DAYS,
+    DEFAULT_STANDARD_RETENTION_DAYS, DiagnosticsLedgerError, DiagnosticsLedgerRepository,
+    DiagnosticsQuery, ExecutionGuaranteeLevel, LicenseSnapshot, ModelIdentity,
+    ModelLicenseUsageEvent, ModelOutputMeasurement, OutputMeasurementUnavailableReason,
+    OutputModality, PruneTimingObservationsCommand, PruneUsageEventsCommand, RetentionClass,
+    SqliteDiagnosticsLedger, UsageEventStatus, UsageLineage, WorkflowTimingExpectation,
+    WorkflowTimingExpectationComparison, WorkflowTimingExpectationQuery, WorkflowTimingObservation,
+    WorkflowTimingObservationScope, WorkflowTimingObservationStatus,
 };
 
 #[test]
@@ -293,6 +293,55 @@ fn existing_v1_schema_migrates_to_timing_observation_schema() {
 }
 
 #[test]
+fn existing_v2_timing_schema_drops_incompatible_timing_rows() {
+    let conn = Connection::open_in_memory().expect("connection opens");
+    conn.execute_batch(
+        "CREATE TABLE ledger_schema_migrations (
+            version INTEGER PRIMARY KEY,
+            applied_at_ms INTEGER NOT NULL,
+            checksum TEXT NOT NULL
+        );
+        INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
+        VALUES (2, 0, 'pantograph-diagnostics-ledger-v2');
+        CREATE TABLE workflow_timing_observations (
+            observation_key TEXT PRIMARY KEY,
+            observation_scope TEXT NOT NULL,
+            execution_id TEXT NOT NULL,
+            workflow_id TEXT NOT NULL,
+            workflow_name TEXT,
+            graph_fingerprint TEXT NOT NULL,
+            node_id TEXT,
+            node_type TEXT,
+            runtime_id TEXT,
+            status TEXT NOT NULL,
+            started_at_ms INTEGER NOT NULL,
+            ended_at_ms INTEGER NOT NULL,
+            duration_ms INTEGER NOT NULL,
+            recorded_at_ms INTEGER NOT NULL
+        );
+        INSERT INTO workflow_timing_observations
+            (observation_key, observation_scope, execution_id, workflow_id, workflow_name,
+             graph_fingerprint, node_id, node_type, runtime_id, status, started_at_ms,
+             ended_at_ms, duration_ms, recorded_at_ms)
+        VALUES
+            ('node:old-run:node-1', 'node', 'old-run', 'workflow_alpha', 'Workflow Alpha',
+             'graph_alpha', 'node-1', 'text-generation', 'llama.cpp', 'completed',
+             1000, 1200, 200, 2000);",
+    )
+    .expect("v2 timing schema is installed");
+
+    let mut ledger = SqliteDiagnosticsLedger::from_connection(conn).expect("ledger migrates");
+
+    let expectation = ledger
+        .timing_expectation(sample_timing_query(Some(200)))
+        .expect("timing expectation projects after migration");
+    assert_eq!(expectation.sample_count, 0);
+    ledger
+        .record_timing_observation(sample_timing_observation(1, 200))
+        .expect("new workflow_run_id timing observation can be recorded");
+}
+
+#[test]
 fn unsupported_schema_version_is_rejected() {
     let conn = Connection::open_in_memory().expect("connection opens");
     conn.execute_batch(
@@ -413,9 +462,8 @@ fn sample_timing_observation(index: usize, duration_ms: u64) -> WorkflowTimingOb
     WorkflowTimingObservation {
         observation_key: format!("node:exec-{index}:node-1"),
         scope: WorkflowTimingObservationScope::Node,
-        execution_id: format!("exec-{index}"),
+        workflow_run_id: format!("exec-{index}"),
         workflow_id: "workflow_alpha".to_string(),
-        workflow_name: Some("Workflow Alpha".to_string()),
         graph_fingerprint: "graph_alpha".to_string(),
         node_id: Some("node-1".to_string()),
         node_type: Some("text-generation".to_string()),

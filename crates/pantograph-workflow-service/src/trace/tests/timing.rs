@@ -56,47 +56,23 @@ fn workflow_trace_store_includes_completed_run_in_returned_timing_expectation() 
 }
 
 #[test]
-fn graph_timing_expectations_falls_back_to_workflow_name_identity() {
+fn graph_timing_expectations_reads_prior_workflow_id_history() {
     let store = WorkflowTraceStore::with_timing_ledger(
         10,
         SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens"),
     );
 
-    record_completed_timing_run_with_workflow(
-        &store,
-        "exec-name-1",
-        "Saved Workflow",
-        Some("Saved Workflow"),
-        1_000,
-        100,
-    );
-    record_completed_timing_run_with_workflow(
-        &store,
-        "exec-name-2",
-        "Saved Workflow",
-        Some("Saved Workflow"),
-        2_000,
-        200,
-    );
-    record_completed_timing_run_with_workflow(
-        &store,
-        "exec-name-3",
-        "Saved Workflow",
-        Some("Saved Workflow"),
-        3_000,
-        300,
-    );
+    record_completed_timing_run_with_workflow(&store, "exec-name-1", "saved-workflow", 1_000, 100);
+    record_completed_timing_run_with_workflow(&store, "exec-name-2", "saved-workflow", 2_000, 200);
+    record_completed_timing_run_with_workflow(&store, "exec-name-3", "saved-workflow", 3_000, 300);
 
-    let history = store.graph_timing_expectations(
-        "saved-workflow".to_string(),
-        Some("Saved Workflow".to_string()),
-        &timing_graph_context(),
-    );
+    let history =
+        store.graph_timing_expectations("saved-workflow".to_string(), &timing_graph_context());
     let node = history.nodes.first().expect("node timing history");
     let expectation = node
         .timing_expectation
         .as_ref()
-        .expect("name fallback timing expectation");
+        .expect("workflow id timing expectation");
 
     assert_eq!(history.workflow_id, "saved-workflow");
     assert_eq!(expectation.sample_count, 3);
@@ -105,15 +81,14 @@ fn graph_timing_expectations_falls_back_to_workflow_name_identity() {
 
 fn record_completed_timing_run(
     store: &WorkflowTraceStore,
-    execution_id: &str,
+    workflow_run_id: &str,
     started_at_ms: u64,
     node_duration_ms: u64,
 ) -> WorkflowTraceSnapshotResponse {
     record_completed_timing_run_with_workflow(
         store,
-        execution_id,
+        workflow_run_id,
         "wf-timing",
-        Some("Timing Workflow"),
         started_at_ms,
         node_duration_ms,
     )
@@ -121,21 +96,16 @@ fn record_completed_timing_run(
 
 fn record_completed_timing_run_with_workflow(
     store: &WorkflowTraceStore,
-    execution_id: &str,
+    workflow_run_id: &str,
     workflow_id: &str,
-    workflow_name: Option<&str>,
     started_at_ms: u64,
     node_duration_ms: u64,
 ) -> WorkflowTraceSnapshotResponse {
-    store.set_execution_metadata(
-        execution_id,
-        Some(workflow_id.to_string()),
-        workflow_name.map(ToOwned::to_owned),
-    );
-    store.set_execution_graph_context(execution_id, &timing_graph_context());
+    store.set_execution_metadata(workflow_run_id, Some(workflow_id.to_string()));
+    store.set_execution_graph_context(workflow_run_id, &timing_graph_context());
     store.record_event(
         &WorkflowTraceEvent::RunStarted {
-            execution_id: execution_id.to_string(),
+            workflow_run_id: workflow_run_id.to_string(),
             workflow_id: Some(workflow_id.to_string()),
             node_count: 1,
         },
@@ -143,7 +113,7 @@ fn record_completed_timing_run_with_workflow(
     );
     store.record_event(
         &WorkflowTraceEvent::NodeStarted {
-            execution_id: execution_id.to_string(),
+            workflow_run_id: workflow_run_id.to_string(),
             node_id: "node-1".to_string(),
             node_type: None,
         },
@@ -151,14 +121,14 @@ fn record_completed_timing_run_with_workflow(
     );
     store.record_event(
         &WorkflowTraceEvent::NodeCompleted {
-            execution_id: execution_id.to_string(),
+            workflow_run_id: workflow_run_id.to_string(),
             node_id: "node-1".to_string(),
         },
         started_at_ms + 10 + node_duration_ms,
     );
     store.record_event(
         &WorkflowTraceEvent::RunCompleted {
-            execution_id: execution_id.to_string(),
+            workflow_run_id: workflow_run_id.to_string(),
             workflow_id: Some(workflow_id.to_string()),
         },
         started_at_ms + 20 + node_duration_ms,

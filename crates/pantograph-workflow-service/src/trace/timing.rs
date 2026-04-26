@@ -1,7 +1,6 @@
 use pantograph_diagnostics_ledger::{
-    DiagnosticsLedgerRepository, SqliteDiagnosticsLedger, WorkflowTimingExpectation,
-    WorkflowTimingExpectationQuery, WorkflowTimingObservation, WorkflowTimingObservationScope,
-    WorkflowTimingObservationStatus,
+    DiagnosticsLedgerRepository, SqliteDiagnosticsLedger, WorkflowTimingExpectationQuery,
+    WorkflowTimingObservation, WorkflowTimingObservationScope, WorkflowTimingObservationStatus,
 };
 
 use super::store::WorkflowTraceState;
@@ -16,7 +15,7 @@ pub(super) fn terminal_timing_observations(
     event: &WorkflowTraceEvent,
     recorded_at_ms: u64,
 ) -> Vec<WorkflowTimingObservation> {
-    let Some(trace) = state.traces_by_id.get(event.execution_id()) else {
+    let Some(trace) = state.traces_by_id.get(event.workflow_run_id()) else {
         return Vec::new();
     };
     match event {
@@ -66,7 +65,6 @@ pub(super) fn enrich_snapshot_timing(
 
 pub(super) fn graph_timing_expectations(
     workflow_id: String,
-    workflow_name: Option<String>,
     graph_context: &WorkflowTraceGraphContext,
     ledger: Option<&SqliteDiagnosticsLedger>,
 ) -> WorkflowTraceGraphTimingExpectations {
@@ -75,9 +73,8 @@ pub(super) fn graph_timing_expectations(
             .graph_fingerprint
             .as_ref()
             .and_then(|graph_fingerprint| {
-                timing_expectation_for_workflow_identity(
-                    ledger?,
-                    WorkflowTimingExpectationQuery {
+                ledger?
+                    .timing_expectation(WorkflowTimingExpectationQuery {
                         scope: WorkflowTimingObservationScope::Run,
                         workflow_id: workflow_id.clone(),
                         graph_fingerprint: graph_fingerprint.clone(),
@@ -86,9 +83,8 @@ pub(super) fn graph_timing_expectations(
                         runtime_id: None,
                         current_duration_ms: None,
                         current_duration_is_complete: false,
-                    },
-                    workflow_name.as_deref(),
-                )
+                    })
+                    .ok()
             });
     let mut nodes: Vec<_> = graph_context
         .node_types_by_id
@@ -98,9 +94,8 @@ pub(super) fn graph_timing_expectations(
             node_type: Some(node_type.clone()),
             timing_expectation: graph_context.graph_fingerprint.as_ref().and_then(
                 |graph_fingerprint| {
-                    timing_expectation_for_workflow_identity(
-                        ledger?,
-                        WorkflowTimingExpectationQuery {
+                    ledger?
+                        .timing_expectation(WorkflowTimingExpectationQuery {
                             scope: WorkflowTimingObservationScope::Node,
                             workflow_id: workflow_id.clone(),
                             graph_fingerprint: graph_fingerprint.clone(),
@@ -109,9 +104,8 @@ pub(super) fn graph_timing_expectations(
                             runtime_id: None,
                             current_duration_ms: None,
                             current_duration_is_complete: false,
-                        },
-                        workflow_name.as_deref(),
-                    )
+                        })
+                        .ok()
                 },
             ),
         })
@@ -120,34 +114,10 @@ pub(super) fn graph_timing_expectations(
 
     WorkflowTraceGraphTimingExpectations {
         workflow_id,
-        workflow_name,
         graph_fingerprint: graph_context.graph_fingerprint.clone(),
         timing_expectation,
         nodes,
     }
-}
-
-fn timing_expectation_for_workflow_identity(
-    ledger: &SqliteDiagnosticsLedger,
-    query: WorkflowTimingExpectationQuery,
-    workflow_name: Option<&str>,
-) -> Option<WorkflowTimingExpectation> {
-    let exact = ledger.timing_expectation(query.clone()).ok()?;
-    if exact.sample_count > 0 {
-        return Some(exact);
-    }
-
-    let name = workflow_name
-        .map(str::trim)
-        .filter(|name| !name.is_empty() && *name != query.workflow_id)?;
-    ledger
-        .timing_expectation(WorkflowTimingExpectationQuery {
-            workflow_id: name.to_string(),
-            ..query
-        })
-        .ok()
-        .filter(|fallback| fallback.sample_count > 0)
-        .or(Some(exact))
 }
 
 fn run_timing_observation(
@@ -159,11 +129,10 @@ fn run_timing_observation(
     let ended_at_ms = trace.ended_at_ms?;
     let duration_ms = trace.duration_ms?;
     Some(WorkflowTimingObservation {
-        observation_key: format!("run:{}", trace.execution_id),
+        observation_key: format!("run:{}", trace.workflow_run_id),
         scope: WorkflowTimingObservationScope::Run,
-        execution_id: trace.execution_id.clone(),
+        workflow_run_id: trace.workflow_run_id.clone(),
         workflow_id,
-        workflow_name: trace.workflow_name.clone(),
         graph_fingerprint,
         node_id: None,
         node_type: None,
@@ -189,11 +158,10 @@ fn node_timing_observation(
     let ended_at_ms = node.ended_at_ms?;
     let duration_ms = node.duration_ms?;
     Some(WorkflowTimingObservation {
-        observation_key: format!("node:{}:{node_id}", trace.execution_id),
+        observation_key: format!("node:{}:{node_id}", trace.workflow_run_id),
         scope: WorkflowTimingObservationScope::Node,
-        execution_id: trace.execution_id.clone(),
+        workflow_run_id: trace.workflow_run_id.clone(),
         workflow_id,
-        workflow_name: trace.workflow_name.clone(),
         graph_fingerprint,
         node_id: Some(node_id.to_string()),
         node_type: node.node_type.clone(),

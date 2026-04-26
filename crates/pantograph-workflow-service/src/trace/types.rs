@@ -4,11 +4,11 @@ use node_engine::GraphMemoryImpactSummary;
 use pantograph_diagnostics_ledger::WorkflowTimingExpectation;
 use serde::{Deserialize, Serialize};
 
+use crate::WorkflowSchedulerSnapshotDiagnostics;
 use crate::workflow::{
     WorkflowCapabilitiesResponse, WorkflowExecutionSessionQueueItem,
     WorkflowExecutionSessionSummary, WorkflowServiceError,
 };
-use crate::WorkflowSchedulerSnapshotDiagnostics;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -100,13 +100,11 @@ pub struct WorkflowTraceNodeRecord {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowTraceSummary {
-    pub execution_id: String,
+    pub workflow_run_id: String,
     #[serde(default)]
     pub session_id: Option<String>,
     #[serde(default)]
     pub workflow_id: Option<String>,
-    #[serde(default)]
-    pub workflow_name: Option<String>,
     #[serde(default)]
     pub graph_fingerprint: Option<String>,
     pub status: WorkflowTraceStatus,
@@ -153,8 +151,6 @@ pub struct WorkflowTraceGraphContext {
 pub struct WorkflowTraceGraphTimingExpectations {
     pub workflow_id: String,
     #[serde(default)]
-    pub workflow_name: Option<String>,
-    #[serde(default)]
     pub graph_fingerprint: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timing_expectation: Option<WorkflowTimingExpectation>,
@@ -174,65 +170,65 @@ pub struct WorkflowTraceNodeTimingExpectation {
 #[derive(Debug, Clone, PartialEq)]
 pub enum WorkflowTraceEvent {
     RunStarted {
-        execution_id: String,
+        workflow_run_id: String,
         workflow_id: Option<String>,
         node_count: usize,
     },
     NodeStarted {
-        execution_id: String,
+        workflow_run_id: String,
         node_id: String,
         node_type: Option<String>,
     },
     NodeProgress {
-        execution_id: String,
+        workflow_run_id: String,
         node_id: String,
         detail: Option<node_engine::TaskProgressDetail>,
     },
     NodeStream {
-        execution_id: String,
+        workflow_run_id: String,
         node_id: String,
     },
     NodeCompleted {
-        execution_id: String,
+        workflow_run_id: String,
         node_id: String,
     },
     NodeFailed {
-        execution_id: String,
+        workflow_run_id: String,
         node_id: String,
         error: String,
     },
     RunCompleted {
-        execution_id: String,
+        workflow_run_id: String,
         workflow_id: Option<String>,
     },
     RunFailed {
-        execution_id: String,
+        workflow_run_id: String,
         workflow_id: Option<String>,
         error: String,
     },
     RunCancelled {
-        execution_id: String,
+        workflow_run_id: String,
         workflow_id: Option<String>,
         error: String,
     },
     WaitingForInput {
-        execution_id: String,
+        workflow_run_id: String,
         workflow_id: Option<String>,
         node_id: String,
     },
     GraphModified {
-        execution_id: String,
+        workflow_run_id: String,
         workflow_id: Option<String>,
         dirty_tasks: Vec<String>,
         memory_impact: Option<GraphMemoryImpactSummary>,
     },
     IncrementalExecutionStarted {
-        execution_id: String,
+        workflow_run_id: String,
         workflow_id: Option<String>,
         task_ids: Vec<String>,
     },
     RuntimeSnapshotCaptured {
-        execution_id: String,
+        workflow_run_id: String,
         workflow_id: Option<String>,
         captured_at_ms: u64,
         runtime: WorkflowTraceRuntimeMetrics,
@@ -240,7 +236,7 @@ pub enum WorkflowTraceEvent {
         error: Option<String>,
     },
     SchedulerSnapshotCaptured {
-        execution_id: String,
+        workflow_run_id: String,
         workflow_id: Option<String>,
         session_id: String,
         captured_at_ms: u64,
@@ -252,22 +248,50 @@ pub enum WorkflowTraceEvent {
 }
 
 impl WorkflowTraceEvent {
-    pub(crate) fn execution_id(&self) -> &str {
+    pub(crate) fn workflow_run_id(&self) -> &str {
         match self {
-            Self::RunStarted { execution_id, .. }
-            | Self::NodeStarted { execution_id, .. }
-            | Self::NodeProgress { execution_id, .. }
-            | Self::NodeStream { execution_id, .. }
-            | Self::NodeCompleted { execution_id, .. }
-            | Self::NodeFailed { execution_id, .. }
-            | Self::RunCompleted { execution_id, .. }
-            | Self::RunFailed { execution_id, .. }
-            | Self::RunCancelled { execution_id, .. }
-            | Self::WaitingForInput { execution_id, .. }
-            | Self::GraphModified { execution_id, .. }
-            | Self::IncrementalExecutionStarted { execution_id, .. }
-            | Self::RuntimeSnapshotCaptured { execution_id, .. }
-            | Self::SchedulerSnapshotCaptured { execution_id, .. } => execution_id,
+            Self::RunStarted {
+                workflow_run_id, ..
+            }
+            | Self::NodeStarted {
+                workflow_run_id, ..
+            }
+            | Self::NodeProgress {
+                workflow_run_id, ..
+            }
+            | Self::NodeStream {
+                workflow_run_id, ..
+            }
+            | Self::NodeCompleted {
+                workflow_run_id, ..
+            }
+            | Self::NodeFailed {
+                workflow_run_id, ..
+            }
+            | Self::RunCompleted {
+                workflow_run_id, ..
+            }
+            | Self::RunFailed {
+                workflow_run_id, ..
+            }
+            | Self::RunCancelled {
+                workflow_run_id, ..
+            }
+            | Self::WaitingForInput {
+                workflow_run_id, ..
+            }
+            | Self::GraphModified {
+                workflow_run_id, ..
+            }
+            | Self::IncrementalExecutionStarted {
+                workflow_run_id, ..
+            }
+            | Self::RuntimeSnapshotCaptured {
+                workflow_run_id, ..
+            }
+            | Self::SchedulerSnapshotCaptured {
+                workflow_run_id, ..
+            } => workflow_run_id,
         }
     }
 
@@ -328,13 +352,11 @@ impl WorkflowTraceEvent {
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowTraceSnapshotRequest {
     #[serde(default)]
-    pub execution_id: Option<String>,
+    pub workflow_run_id: Option<String>,
     #[serde(default)]
     pub session_id: Option<String>,
     #[serde(default)]
     pub workflow_id: Option<String>,
-    #[serde(default)]
-    pub workflow_name: Option<String>,
     #[serde(default)]
     pub include_completed: Option<bool>,
 }
@@ -342,19 +364,17 @@ pub struct WorkflowTraceSnapshotRequest {
 impl WorkflowTraceSnapshotRequest {
     pub fn normalized(&self) -> Self {
         Self {
-            execution_id: normalize_optional_filter(&self.execution_id),
+            workflow_run_id: normalize_optional_filter(&self.workflow_run_id),
             session_id: normalize_optional_filter(&self.session_id),
             workflow_id: normalize_optional_filter(&self.workflow_id),
-            workflow_name: normalize_optional_filter(&self.workflow_name),
             include_completed: self.include_completed,
         }
     }
 
     pub fn validate(&self) -> Result<(), WorkflowServiceError> {
-        validate_optional_filter(&self.execution_id, "execution_id")?;
+        validate_optional_filter(&self.workflow_run_id, "workflow_run_id")?;
         validate_optional_filter(&self.session_id, "session_id")?;
         validate_optional_filter(&self.workflow_id, "workflow_id")?;
-        validate_optional_filter(&self.workflow_name, "workflow_name")?;
         Ok(())
     }
 }
@@ -370,14 +390,14 @@ pub struct WorkflowTraceSnapshotResponse {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct WorkflowTraceRuntimeSelection {
-    pub execution_id: Option<String>,
+    pub workflow_run_id: Option<String>,
     pub runtime: Option<WorkflowTraceRuntimeMetrics>,
-    pub matched_execution_ids: Vec<String>,
+    pub matched_workflow_run_ids: Vec<String>,
 }
 
 impl WorkflowTraceRuntimeSelection {
     pub fn is_ambiguous(&self) -> bool {
-        self.execution_id.is_none() && self.matched_execution_ids.len() > 1
+        self.workflow_run_id.is_none() && self.matched_workflow_run_ids.len() > 1
     }
 }
 

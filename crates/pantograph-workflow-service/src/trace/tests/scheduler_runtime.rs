@@ -6,7 +6,7 @@ fn workflow_trace_store_records_graph_reconciliation_facts() {
 
     let snapshot = store.record_event(
         &WorkflowTraceEvent::GraphModified {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             dirty_tasks: vec!["merge".to_string(), "output".to_string()],
             memory_impact: Some(node_engine::GraphMemoryImpactSummary {
@@ -61,7 +61,7 @@ fn workflow_trace_store_waiting_nodes_capture_pause_duration() {
 
     store.record_event(
         &WorkflowTraceEvent::IncrementalExecutionStarted {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             task_ids: vec!["node-1".to_string()],
         },
@@ -69,7 +69,7 @@ fn workflow_trace_store_waiting_nodes_capture_pause_duration() {
     );
     store.record_event(
         &WorkflowTraceEvent::NodeStarted {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             node_id: "node-1".to_string(),
             node_type: Some("llm-inference".to_string()),
         },
@@ -77,7 +77,7 @@ fn workflow_trace_store_waiting_nodes_capture_pause_duration() {
     );
     let snapshot = store.record_event(
         &WorkflowTraceEvent::WaitingForInput {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             node_id: "node-1".to_string(),
         },
@@ -99,7 +99,7 @@ fn workflow_trace_store_ignores_duplicate_node_failed_events() {
 
     store.record_event(
         &WorkflowTraceEvent::RunStarted {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             node_count: 1,
         },
@@ -107,7 +107,7 @@ fn workflow_trace_store_ignores_duplicate_node_failed_events() {
     );
     store.record_event(
         &WorkflowTraceEvent::NodeStarted {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             node_id: "node-1".to_string(),
             node_type: Some("llm-inference".to_string()),
         },
@@ -115,7 +115,7 @@ fn workflow_trace_store_ignores_duplicate_node_failed_events() {
     );
     store.record_event(
         &WorkflowTraceEvent::NodeFailed {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             node_id: "node-1".to_string(),
             error: "boom".to_string(),
         },
@@ -123,7 +123,7 @@ fn workflow_trace_store_ignores_duplicate_node_failed_events() {
     );
     let snapshot = store.record_event(
         &WorkflowTraceEvent::NodeFailed {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             node_id: "node-1".to_string(),
             error: "boom".to_string(),
         },
@@ -145,7 +145,7 @@ fn workflow_trace_store_prefers_matching_queue_items_over_session_backlog() {
     let store = WorkflowTraceStore::new(10);
     let snapshot = store.record_event(
         &WorkflowTraceEvent::SchedulerSnapshotCaptured {
-            execution_id: "exec-target".to_string(),
+            workflow_run_id: "exec-target".to_string(),
             workflow_id: Some("wf-1".to_string()),
             session_id: "session-1".to_string(),
             captured_at_ms: 200,
@@ -207,7 +207,7 @@ fn workflow_trace_store_preserves_enqueue_time_when_first_snapshot_is_running() 
     let store = WorkflowTraceStore::new(10);
     let snapshot = store.record_event(
         &WorkflowTraceEvent::SchedulerSnapshotCaptured {
-            execution_id: "edit-session-1".to_string(),
+            workflow_run_id: "edit-session-1".to_string(),
             workflow_id: None,
             session_id: "edit-session-1".to_string(),
             captured_at_ms: 5_000,
@@ -257,7 +257,7 @@ fn workflow_trace_store_does_not_synthesize_queue_timing_from_snapshot_capture_t
     let store = WorkflowTraceStore::new(10);
     let snapshot = store.record_event(
         &WorkflowTraceEvent::SchedulerSnapshotCaptured {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             session_id: "session-1".to_string(),
             captured_at_ms: 200,
@@ -307,7 +307,7 @@ fn workflow_trace_store_does_not_match_unrelated_queue_item_by_session_id() {
     let store = WorkflowTraceStore::new(10);
     let snapshot = store.record_event(
         &WorkflowTraceEvent::SchedulerSnapshotCaptured {
-            execution_id: "exec-target".to_string(),
+            workflow_run_id: "exec-target".to_string(),
             workflow_id: Some("wf-1".to_string()),
             session_id: "session-1".to_string(),
             captured_at_ms: 200,
@@ -359,7 +359,7 @@ fn workflow_trace_store_prefers_backend_scheduler_decision_reason_from_queue_ite
     let store = WorkflowTraceStore::new(10);
     let snapshot = store.record_event(
         &WorkflowTraceEvent::SchedulerSnapshotCaptured {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             session_id: "session-1".to_string(),
             captured_at_ms: 200,
@@ -403,7 +403,7 @@ fn workflow_trace_store_selects_runtime_metrics_when_trace_match_is_unique() {
     let store = WorkflowTraceStore::new(10);
     store.record_event(
         &WorkflowTraceEvent::RunStarted {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             node_count: 1,
         },
@@ -411,7 +411,7 @@ fn workflow_trace_store_selects_runtime_metrics_when_trace_match_is_unique() {
     );
     store.record_event(
         &WorkflowTraceEvent::SchedulerSnapshotCaptured {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             session_id: "session-1".to_string(),
             captured_at_ms: 110,
@@ -442,7 +442,7 @@ fn workflow_trace_store_selects_runtime_metrics_when_trace_match_is_unique() {
     );
     store.record_event(
         &WorkflowTraceEvent::RuntimeSnapshotCaptured {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             captured_at_ms: 120,
             runtime: WorkflowTraceRuntimeMetrics {
@@ -464,16 +464,18 @@ fn workflow_trace_store_selects_runtime_metrics_when_trace_match_is_unique() {
 
     let selection = store
         .select_runtime_metrics(&WorkflowTraceSnapshotRequest {
-            execution_id: None,
+            workflow_run_id: None,
             session_id: Some("session-1".to_string()),
             workflow_id: Some("wf-1".to_string()),
-            workflow_name: None,
             include_completed: Some(true),
         })
         .expect("runtime selection");
 
-    assert_eq!(selection.execution_id.as_deref(), Some("exec-1"));
-    assert_eq!(selection.matched_execution_ids, vec!["exec-1".to_string()]);
+    assert_eq!(selection.workflow_run_id.as_deref(), Some("exec-1"));
+    assert_eq!(
+        selection.matched_workflow_run_ids,
+        vec!["exec-1".to_string()]
+    );
     assert!(!selection.is_ambiguous());
     assert_eq!(
         selection.runtime.and_then(|runtime| runtime.runtime_id),
@@ -484,13 +486,13 @@ fn workflow_trace_store_selects_runtime_metrics_when_trace_match_is_unique() {
 #[test]
 fn workflow_trace_store_marks_runtime_metric_selection_ambiguous_for_multi_run_scope() {
     let store = WorkflowTraceStore::new(10);
-    for (execution_id, runtime_id, captured_at_ms) in [
+    for (workflow_run_id, runtime_id, captured_at_ms) in [
         ("exec-1", "llama_cpp", 120_u64),
         ("exec-2", "llama_cpp.embedding", 220_u64),
     ] {
         store.record_event(
             &WorkflowTraceEvent::RunStarted {
-                execution_id: execution_id.to_string(),
+                workflow_run_id: workflow_run_id.to_string(),
                 workflow_id: Some("wf-1".to_string()),
                 node_count: 1,
             },
@@ -498,7 +500,7 @@ fn workflow_trace_store_marks_runtime_metric_selection_ambiguous_for_multi_run_s
         );
         store.record_event(
             &WorkflowTraceEvent::SchedulerSnapshotCaptured {
-                execution_id: execution_id.to_string(),
+                workflow_run_id: workflow_run_id.to_string(),
                 workflow_id: Some("wf-1".to_string()),
                 session_id: "session-1".to_string(),
                 captured_at_ms: captured_at_ms.saturating_sub(10),
@@ -513,7 +515,7 @@ fn workflow_trace_store_marks_runtime_metric_selection_ambiguous_for_multi_run_s
                     run_count: 2,
                 }),
                 items: vec![crate::workflow::WorkflowExecutionSessionQueueItem {
-                    workflow_run_id: execution_id.to_string(),
+                    workflow_run_id: workflow_run_id.to_string(),
                     enqueued_at_ms: Some(captured_at_ms.saturating_sub(20)),
                     dequeued_at_ms: Some(captured_at_ms.saturating_sub(10)),
                     priority: 5,
@@ -529,7 +531,7 @@ fn workflow_trace_store_marks_runtime_metric_selection_ambiguous_for_multi_run_s
         );
         store.record_event(
             &WorkflowTraceEvent::RuntimeSnapshotCaptured {
-                execution_id: execution_id.to_string(),
+                workflow_run_id: workflow_run_id.to_string(),
                 workflow_id: Some("wf-1".to_string()),
                 captured_at_ms,
                 runtime: WorkflowTraceRuntimeMetrics {
@@ -552,19 +554,18 @@ fn workflow_trace_store_marks_runtime_metric_selection_ambiguous_for_multi_run_s
 
     let selection = store
         .select_runtime_metrics(&WorkflowTraceSnapshotRequest {
-            execution_id: None,
+            workflow_run_id: None,
             session_id: Some("session-1".to_string()),
             workflow_id: Some("wf-1".to_string()),
-            workflow_name: None,
             include_completed: Some(true),
         })
         .expect("runtime selection");
 
-    assert_eq!(selection.execution_id, None);
+    assert_eq!(selection.workflow_run_id, None);
     assert_eq!(selection.runtime, None);
     assert!(selection.is_ambiguous());
     assert_eq!(
-        selection.matched_execution_ids,
+        selection.matched_workflow_run_ids,
         vec!["exec-2".to_string(), "exec-1".to_string()]
     );
 }
@@ -578,7 +579,7 @@ fn workflow_trace_store_record_event_now_uses_backend_timestamp_capture() {
         .as_millis()
         .min(u128::from(u64::MAX)) as u64;
     let result = store.record_event_now(&WorkflowTraceEvent::RunStarted {
-        execution_id: "exec-1".to_string(),
+        workflow_run_id: "exec-1".to_string(),
         workflow_id: Some("wf-1".to_string()),
         node_count: 2,
     });

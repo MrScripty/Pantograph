@@ -453,16 +453,16 @@ owned `workflow_run_id`.
 run id and workflow id only.
 
 **Tasks:**
-- [ ] Replace trace side-channel name metadata with explicit run descriptors.
-- [ ] Remove `workflow_name` from trace summaries, trace snapshot requests, and
+- [x] Replace trace side-channel name metadata with explicit run descriptors.
+- [x] Remove `workflow_name` from trace summaries, trace snapshot requests, and
   timing expectation fallback logic.
-- [ ] Ensure trace creation requires or receives `workflow_run_id`,
+- [x] Ensure trace creation requires or receives `workflow_run_id`,
   `session_id`, `workflow_id`, and graph context.
-- [ ] Update SQLite timing observation schema/use to treat `execution_id` as
+- [x] Update SQLite timing observation schema/use to treat `execution_id` as
   `workflow_run_id`.
 - [ ] Add or update durable run-summary storage if restart-visible diagnostic
   run history is required beyond timing expectations.
-- [ ] Make terminal timing writes idempotent by `workflow_run_id` and node id.
+- [x] Make terminal timing writes idempotent by `workflow_run_id` and node id.
 
 **Verification:**
 - `cargo test -p pantograph-workflow-service`
@@ -470,7 +470,36 @@ run id and workflow id only.
 - Replay/idempotency tests for duplicate terminal events.
 - Fresh database and existing incompatible database behavior tests.
 
-**Status:** Not started.
+**Status:** In progress.
+
+**Notes:**
+- Trace summaries and snapshot requests now expose `workflow_run_id` instead of
+  generic `execution_id`.
+- Removed `workflow_name` from workflow-service trace contracts, trace runtime
+  selection, snapshot filtering, graph timing expectations, and timing
+  observation projection.
+- Trace state now keys run state and graph context by canonical
+  `workflow_run_id`; session filtering no longer treats `session_id` as a
+  fallback run id.
+- SQLite timing observations now store `workflow_run_id` and `workflow_id`,
+  with no workflow-name column or fallback lookup.
+- Bumped the diagnostics ledger schema to v3 and intentionally drops old v2
+  timing rows because their identity contract is incompatible and no backwards
+  compatibility is required.
+- Downstream Tauri, LLM registry debug, frontend, and binding call sites still
+  reference old trace DTO names; these are assigned to Milestones 5 through 7.
+- Durable restart-visible run-summary storage remains in this milestone before
+  it can be marked complete.
+
+**Verification Results:**
+- `cargo test -p pantograph-workflow-service`
+- `cargo test -p pantograph-diagnostics-ledger`
+- `git diff --check -- crates/pantograph-workflow-service/src/trace crates/pantograph-workflow-service/tests/contract.rs crates/pantograph-diagnostics-ledger/src docs/plans/workflow-run-identity-redesign/plan.md`
+- Source search found no `workflow_name` or generic `execution_id` in
+  `crates/pantograph-workflow-service/src/trace`,
+  `crates/pantograph-workflow-service/tests/contract.rs`, or
+  `crates/pantograph-diagnostics-ledger/src`, except an intentional v2
+  incompatible-schema migration fixture that verifies old rows are dropped.
 
 ### Milestone 5: Update Tauri Diagnostics Projection
 
@@ -621,6 +650,10 @@ model is implemented.
   backend-generated `workflow_run_id` before runtime execution and embedded
   runtime propagates that id through node-engine execution, runtime extension
   attribution, scheduler running state, and runtime events.
+- 2026-04-26: Milestone 4 trace/timing identity slice completed. Workflow
+  traces and SQLite timing observations now use `workflow_run_id` without
+  workflow-name side channels; durable restart-visible run summaries remain in
+  progress.
 - Current known unrelated dirty files must remain untouched unless the user
   explicitly assigns them to this work:
   - `.pantograph/workflows/tiny-sd-turbo-diffusion.json`
@@ -716,6 +749,13 @@ owned serially by the integration implementer.
   - Source search for edit-session `session_id` assigned into runtime
     execution identity in embedded-runtime, Tauri workflow runtime, and
     workflow-service graph APIs.
+- Milestone 4 trace/timing identity slice:
+  - `cargo test -p pantograph-workflow-service`
+  - `cargo test -p pantograph-diagnostics-ledger`
+  - `git diff --check -- crates/pantograph-workflow-service/src/trace crates/pantograph-workflow-service/tests/contract.rs crates/pantograph-diagnostics-ledger/src docs/plans/workflow-run-identity-redesign/plan.md`
+  - Source search for stale `workflow_name` and generic `execution_id` in the
+    workflow-service trace and diagnostics-ledger slices, allowing only the
+    v2 incompatible-schema migration fixture.
 
 ### Traceability Links
 

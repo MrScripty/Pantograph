@@ -27,10 +27,9 @@ fn workflow_capabilities_with_runtimes(
 #[test]
 fn workflow_trace_summary_serializes_with_snake_case_contract() {
     let value = serde_json::to_value(WorkflowTraceSummary {
-        execution_id: "exec-1".to_string(),
+        workflow_run_id: "exec-1".to_string(),
         session_id: Some("session-1".to_string()),
         workflow_id: Some("wf-1".to_string()),
-        workflow_name: Some("Workflow".to_string()),
         graph_fingerprint: Some("graph-1".to_string()),
         status: WorkflowTraceStatus::Running,
         started_at_ms: 100,
@@ -109,10 +108,9 @@ fn workflow_trace_summary_serializes_with_snake_case_contract() {
     .expect("serialize trace summary");
 
     let expected = serde_json::json!({
-        "execution_id": "exec-1",
+        "workflow_run_id": "exec-1",
         "session_id": "session-1",
         "workflow_id": "wf-1",
-        "workflow_name": "Workflow",
         "graph_fingerprint": "graph-1",
         "status": "running",
         "started_at_ms": 100,
@@ -344,10 +342,9 @@ fn runtime_lifecycle_reason_prefers_selected_runtime_metadata() {
 #[test]
 fn workflow_trace_snapshot_request_serializes_optional_filters() {
     let request = WorkflowTraceSnapshotRequest {
-        execution_id: Some("exec-1".to_string()),
+        workflow_run_id: Some("exec-1".to_string()),
         session_id: Some("session-1".to_string()),
         workflow_id: Some("wf-1".to_string()),
-        workflow_name: Some("Workflow 1".to_string()),
         include_completed: Some(true),
     };
     request.validate().expect("valid trace snapshot request");
@@ -355,10 +352,9 @@ fn workflow_trace_snapshot_request_serializes_optional_filters() {
     let value = serde_json::to_value(request).expect("serialize snapshot request");
 
     let expected = serde_json::json!({
-        "execution_id": "exec-1",
+        "workflow_run_id": "exec-1",
         "session_id": "session-1",
         "workflow_id": "wf-1",
-        "workflow_name": "Workflow 1",
         "include_completed": true
     });
 
@@ -368,22 +364,21 @@ fn workflow_trace_snapshot_request_serializes_optional_filters() {
 #[test]
 fn workflow_trace_snapshot_request_rejects_blank_filter_values() {
     let request = WorkflowTraceSnapshotRequest {
-        execution_id: Some("   ".to_string()),
+        workflow_run_id: Some("   ".to_string()),
         session_id: None,
         workflow_id: None,
-        workflow_name: None,
         include_completed: None,
     };
 
     let error = request
         .validate()
-        .expect_err("blank execution_id should be rejected");
+        .expect_err("blank workflow_run_id should be rejected");
     assert!(
         matches!(
             error,
             WorkflowServiceError::InvalidRequest(ref message)
                 if message
-                    == "workflow trace snapshot request field 'execution_id' must not be blank"
+                    == "workflow trace snapshot request field 'workflow_run_id' must not be blank"
         ),
         "unexpected validation error: {:?}",
         error
@@ -393,29 +388,23 @@ fn workflow_trace_snapshot_request_rejects_blank_filter_values() {
 #[test]
 fn workflow_trace_snapshot_request_normalizes_trimmed_filters() {
     let normalized = WorkflowTraceSnapshotRequest {
-        execution_id: Some("  exec-1  ".to_string()),
+        workflow_run_id: Some("  exec-1  ".to_string()),
         session_id: Some("\tsession-1\t".to_string()),
         workflow_id: Some(" wf-1 ".to_string()),
-        workflow_name: Some("  Workflow 1  ".to_string()),
         include_completed: Some(false),
     }
     .normalized();
 
-    assert_eq!(normalized.execution_id.as_deref(), Some("exec-1"));
+    assert_eq!(normalized.workflow_run_id.as_deref(), Some("exec-1"));
     assert_eq!(normalized.session_id.as_deref(), Some("session-1"));
     assert_eq!(normalized.workflow_id.as_deref(), Some("wf-1"));
-    assert_eq!(normalized.workflow_name.as_deref(), Some("Workflow 1"));
     assert_eq!(normalized.include_completed, Some(false));
 }
 
 #[test]
 fn workflow_trace_store_records_run_and_node_timing() {
     let store = WorkflowTraceStore::new(10);
-    store.set_execution_metadata(
-        "exec-1",
-        Some("wf-1".to_string()),
-        Some("Workflow".to_string()),
-    );
+    store.set_execution_metadata("exec-1", Some("wf-1".to_string()));
     store.set_execution_graph_context(
         "exec-1",
         &WorkflowTraceGraphContext {
@@ -427,7 +416,7 @@ fn workflow_trace_store_records_run_and_node_timing() {
 
     store.record_event(
         &WorkflowTraceEvent::RunStarted {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             node_count: 1,
         },
@@ -435,7 +424,7 @@ fn workflow_trace_store_records_run_and_node_timing() {
     );
     store.record_event(
         &WorkflowTraceEvent::NodeStarted {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             node_id: "node-1".to_string(),
             node_type: None,
         },
@@ -443,28 +432,28 @@ fn workflow_trace_store_records_run_and_node_timing() {
     );
     store.record_event(
         &WorkflowTraceEvent::NodeStream {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             node_id: "node-1".to_string(),
         },
         1_030,
     );
     store.record_event(
         &WorkflowTraceEvent::NodeCompleted {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             node_id: "node-1".to_string(),
         },
         1_050,
     );
     let snapshot = store.record_event(
         &WorkflowTraceEvent::RunCompleted {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
         },
         1_100,
     );
 
     let trace = snapshot.traces.first().expect("trace summary");
-    assert_eq!(trace.workflow_name.as_deref(), Some("Workflow"));
+    assert_eq!(trace.workflow_id.as_deref(), Some("wf-1"));
     assert_eq!(trace.graph_fingerprint.as_deref(), Some("graph-1"));
     assert_eq!(trace.status, WorkflowTraceStatus::Completed);
     assert_eq!(trace.duration_ms, Some(100));
@@ -483,7 +472,7 @@ fn workflow_trace_store_filters_completed_runs() {
     let store = WorkflowTraceStore::new(10);
     store.record_event(
         &WorkflowTraceEvent::RunStarted {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             node_count: 0,
         },
@@ -491,14 +480,14 @@ fn workflow_trace_store_filters_completed_runs() {
     );
     store.record_event(
         &WorkflowTraceEvent::RunCompleted {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
         },
         150,
     );
     store.record_event(
         &WorkflowTraceEvent::RunStarted {
-            execution_id: "exec-2".to_string(),
+            workflow_run_id: "exec-2".to_string(),
             workflow_id: Some("wf-2".to_string()),
             node_count: 0,
         },
@@ -507,16 +496,15 @@ fn workflow_trace_store_filters_completed_runs() {
 
     let filtered = store
         .snapshot(&WorkflowTraceSnapshotRequest {
-            execution_id: None,
+            workflow_run_id: None,
             session_id: None,
             workflow_id: None,
-            workflow_name: None,
             include_completed: Some(false),
         })
         .expect("filtered snapshot");
 
     assert_eq!(filtered.traces.len(), 1);
-    assert_eq!(filtered.traces[0].execution_id, "exec-2");
+    assert_eq!(filtered.traces[0].workflow_run_id, "exec-2");
     assert_eq!(filtered.traces[0].status, WorkflowTraceStatus::Running);
 }
 
@@ -525,7 +513,7 @@ fn workflow_trace_store_filters_by_session_id_when_execution_differs() {
     let store = WorkflowTraceStore::new(10);
     store.record_event(
         &WorkflowTraceEvent::RunStarted {
-            execution_id: "run-1".to_string(),
+            workflow_run_id: "run-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             node_count: 0,
         },
@@ -533,7 +521,7 @@ fn workflow_trace_store_filters_by_session_id_when_execution_differs() {
     );
     store.record_event(
         &WorkflowTraceEvent::SchedulerSnapshotCaptured {
-            execution_id: "run-1".to_string(),
+            workflow_run_id: "run-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             session_id: "session-1".to_string(),
             captured_at_ms: 105,
@@ -565,35 +553,26 @@ fn workflow_trace_store_filters_by_session_id_when_execution_differs() {
 
     let filtered = store
         .snapshot(&WorkflowTraceSnapshotRequest {
-            execution_id: None,
+            workflow_run_id: None,
             session_id: Some("session-1".to_string()),
             workflow_id: None,
-            workflow_name: None,
             include_completed: None,
         })
         .expect("session-filtered snapshot");
 
     assert_eq!(filtered.traces.len(), 1);
-    assert_eq!(filtered.traces[0].execution_id, "run-1");
+    assert_eq!(filtered.traces[0].workflow_run_id, "run-1");
     assert_eq!(filtered.traces[0].session_id.as_deref(), Some("session-1"));
 }
 
 #[test]
-fn workflow_trace_store_filters_by_workflow_name() {
+fn workflow_trace_store_filters_by_workflow_id() {
     let store = WorkflowTraceStore::new(10);
-    store.set_execution_metadata(
-        "run-1",
-        Some("wf-1".to_string()),
-        Some("Workflow 1".to_string()),
-    );
-    store.set_execution_metadata(
-        "run-2",
-        Some("wf-2".to_string()),
-        Some("Workflow 2".to_string()),
-    );
+    store.set_execution_metadata("run-1", Some("wf-1".to_string()));
+    store.set_execution_metadata("run-2", Some("wf-2".to_string()));
     store.record_event(
         &WorkflowTraceEvent::RunStarted {
-            execution_id: "run-1".to_string(),
+            workflow_run_id: "run-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             node_count: 0,
         },
@@ -601,7 +580,7 @@ fn workflow_trace_store_filters_by_workflow_name() {
     );
     store.record_event(
         &WorkflowTraceEvent::RunStarted {
-            execution_id: "run-2".to_string(),
+            workflow_run_id: "run-2".to_string(),
             workflow_id: Some("wf-2".to_string()),
             node_count: 0,
         },
@@ -610,20 +589,16 @@ fn workflow_trace_store_filters_by_workflow_name() {
 
     let filtered = store
         .snapshot(&WorkflowTraceSnapshotRequest {
-            execution_id: None,
+            workflow_run_id: None,
             session_id: None,
-            workflow_id: None,
-            workflow_name: Some("Workflow 1".to_string()),
+            workflow_id: Some("wf-1".to_string()),
             include_completed: None,
         })
-        .expect("workflow-name-filtered snapshot");
+        .expect("workflow-id-filtered snapshot");
 
     assert_eq!(filtered.traces.len(), 1);
-    assert_eq!(filtered.traces[0].execution_id, "run-1");
-    assert_eq!(
-        filtered.traces[0].workflow_name.as_deref(),
-        Some("Workflow 1")
-    );
+    assert_eq!(filtered.traces[0].workflow_run_id, "run-1");
+    assert_eq!(filtered.traces[0].workflow_id.as_deref(), Some("wf-1"));
 }
 
 #[test]
@@ -631,7 +606,7 @@ fn workflow_trace_store_enforces_retention_limit() {
     let store = WorkflowTraceStore::new(1);
     store.record_event(
         &WorkflowTraceEvent::RunStarted {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             node_count: 0,
         },
@@ -639,7 +614,7 @@ fn workflow_trace_store_enforces_retention_limit() {
     );
     let snapshot = store.record_event(
         &WorkflowTraceEvent::RunStarted {
-            execution_id: "exec-2".to_string(),
+            workflow_run_id: "exec-2".to_string(),
             workflow_id: Some("wf-2".to_string()),
             node_count: 0,
         },
@@ -648,7 +623,7 @@ fn workflow_trace_store_enforces_retention_limit() {
 
     assert_eq!(snapshot.retained_trace_limit, 1);
     assert_eq!(snapshot.traces.len(), 1);
-    assert_eq!(snapshot.traces[0].execution_id, "exec-2");
+    assert_eq!(snapshot.traces[0].workflow_run_id, "exec-2");
 }
 
 #[test]
@@ -656,7 +631,7 @@ fn workflow_trace_store_records_queue_and_runtime_snapshot_metrics() {
     let store = WorkflowTraceStore::new(10);
     store.record_event(
         &WorkflowTraceEvent::SchedulerSnapshotCaptured {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             session_id: "session-1".to_string(),
             captured_at_ms: 90,
@@ -701,7 +676,7 @@ fn workflow_trace_store_records_queue_and_runtime_snapshot_metrics() {
     );
     store.record_event(
         &WorkflowTraceEvent::RunStarted {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             node_count: 0,
         },
@@ -709,7 +684,7 @@ fn workflow_trace_store_records_queue_and_runtime_snapshot_metrics() {
     );
     store.record_event(
         &WorkflowTraceEvent::RuntimeSnapshotCaptured {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             captured_at_ms: 110,
             runtime: WorkflowTraceRuntimeMetrics {
@@ -762,7 +737,7 @@ fn workflow_trace_store_records_queue_and_runtime_snapshot_metrics() {
     );
     let snapshot = store.record_event(
         &WorkflowTraceEvent::SchedulerSnapshotCaptured {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             session_id: "session-1".to_string(),
             captured_at_ms: 120,

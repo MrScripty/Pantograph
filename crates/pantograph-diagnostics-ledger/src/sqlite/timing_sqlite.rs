@@ -1,12 +1,12 @@
 use rusqlite::params;
 
 use super::SqliteDiagnosticsLedger;
-use crate::timing::{
-    PruneTimingObservationsCommand, PruneTimingObservationsResult, WorkflowTimingExpectation,
-    WorkflowTimingExpectationQuery, WorkflowTimingObservation, WorkflowTimingObservationStatus,
-    MIN_TIMING_EXPECTATION_SAMPLE_COUNT,
-};
 use crate::DiagnosticsLedgerError;
+use crate::timing::{
+    MIN_TIMING_EXPECTATION_SAMPLE_COUNT, PruneTimingObservationsCommand,
+    PruneTimingObservationsResult, WorkflowTimingExpectation, WorkflowTimingExpectationQuery,
+    WorkflowTimingObservation, WorkflowTimingObservationStatus,
+};
 
 pub(super) fn record_timing_observation(
     ledger: &mut SqliteDiagnosticsLedger,
@@ -15,17 +15,16 @@ pub(super) fn record_timing_observation(
     observation.validate()?;
     ledger.conn.execute(
         "INSERT OR IGNORE INTO workflow_timing_observations
-            (observation_key, observation_scope, execution_id, workflow_id, workflow_name,
+            (observation_key, observation_scope, workflow_run_id, workflow_id,
              graph_fingerprint, node_id, node_type, runtime_id, status, started_at_ms,
              ended_at_ms, duration_ms, recorded_at_ms)
          VALUES
-            (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+            (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
         params![
             observation.observation_key.as_str(),
             observation.scope.as_db(),
-            observation.execution_id.as_str(),
+            observation.workflow_run_id.as_str(),
             observation.workflow_id.as_str(),
-            observation.workflow_name.as_deref(),
             observation.graph_fingerprint.as_str(),
             observation.node_id.as_deref(),
             observation.node_type.as_deref(),

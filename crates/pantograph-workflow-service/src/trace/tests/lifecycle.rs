@@ -3,11 +3,7 @@ use super::*;
 #[test]
 fn workflow_trace_store_resets_attempt_state_when_run_restarts_after_failure() {
     let store = WorkflowTraceStore::new(10);
-    store.set_execution_metadata(
-        "exec-1",
-        Some("wf-1".to_string()),
-        Some("Workflow".to_string()),
-    );
+    store.set_execution_metadata("exec-1", Some("wf-1".to_string()));
     store.set_execution_graph_context(
         "exec-1",
         &WorkflowTraceGraphContext {
@@ -22,7 +18,7 @@ fn workflow_trace_store_resets_attempt_state_when_run_restarts_after_failure() {
 
     store.record_event(
         &WorkflowTraceEvent::RunStarted {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             node_count: 1,
         },
@@ -30,7 +26,7 @@ fn workflow_trace_store_resets_attempt_state_when_run_restarts_after_failure() {
     );
     store.record_event(
         &WorkflowTraceEvent::NodeStarted {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             node_id: "node-1".to_string(),
             node_type: None,
         },
@@ -38,7 +34,7 @@ fn workflow_trace_store_resets_attempt_state_when_run_restarts_after_failure() {
     );
     store.record_event(
         &WorkflowTraceEvent::NodeFailed {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             node_id: "node-1".to_string(),
             error: "boom".to_string(),
         },
@@ -46,7 +42,7 @@ fn workflow_trace_store_resets_attempt_state_when_run_restarts_after_failure() {
     );
     store.record_event(
         &WorkflowTraceEvent::RuntimeSnapshotCaptured {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             captured_at_ms: 125,
             runtime: WorkflowTraceRuntimeMetrics {
@@ -67,7 +63,7 @@ fn workflow_trace_store_resets_attempt_state_when_run_restarts_after_failure() {
     );
     store.record_event(
         &WorkflowTraceEvent::SchedulerSnapshotCaptured {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             session_id: "session-1".to_string(),
             captured_at_ms: 126,
@@ -98,7 +94,7 @@ fn workflow_trace_store_resets_attempt_state_when_run_restarts_after_failure() {
     );
     store.record_event(
         &WorkflowTraceEvent::RunFailed {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             error: "boom".to_string(),
         },
@@ -107,7 +103,7 @@ fn workflow_trace_store_resets_attempt_state_when_run_restarts_after_failure() {
 
     store.record_event(
         &WorkflowTraceEvent::RunStarted {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             node_count: 2,
         },
@@ -115,7 +111,7 @@ fn workflow_trace_store_resets_attempt_state_when_run_restarts_after_failure() {
     );
     let snapshot = store.record_event(
         &WorkflowTraceEvent::NodeStarted {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             node_id: "node-2".to_string(),
             node_type: None,
         },
@@ -123,7 +119,7 @@ fn workflow_trace_store_resets_attempt_state_when_run_restarts_after_failure() {
     );
 
     let trace = snapshot.traces.first().expect("trace");
-    assert_eq!(trace.workflow_name.as_deref(), Some("Workflow"));
+    assert_eq!(trace.workflow_id.as_deref(), Some("wf-1"));
     assert_eq!(trace.graph_fingerprint.as_deref(), Some("graph-1"));
     assert_eq!(trace.status, WorkflowTraceStatus::Running);
     assert_eq!(trace.started_at_ms, 200);
@@ -143,51 +139,37 @@ fn workflow_trace_store_resets_attempt_state_when_run_restarts_after_failure() {
 #[test]
 fn workflow_trace_store_corrects_existing_trace_workflow_metadata() {
     let store = WorkflowTraceStore::new(10);
-    store.set_execution_metadata(
-        "exec-1",
-        Some("session-1".to_string()),
-        Some("Untitled Workflow".to_string()),
-    );
+    store.set_execution_metadata("exec-1", Some("session-1".to_string()));
     store.record_event(
         &WorkflowTraceEvent::RunStarted {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("session-1".to_string()),
             node_count: 0,
         },
         100,
     );
 
-    store.set_execution_metadata(
-        "exec-1",
-        Some("wf-1".to_string()),
-        Some("Workflow A".to_string()),
-    );
+    store.set_execution_metadata("exec-1", Some("wf-1".to_string()));
     let snapshot = store
         .snapshot(&WorkflowTraceSnapshotRequest {
-            execution_id: Some("exec-1".to_string()),
+            workflow_run_id: Some("exec-1".to_string()),
             session_id: None,
             workflow_id: None,
-            workflow_name: None,
             include_completed: None,
         })
         .expect("trace snapshot");
 
     let trace = &snapshot.traces[0];
     assert_eq!(trace.workflow_id.as_deref(), Some("wf-1"));
-    assert_eq!(trace.workflow_name.as_deref(), Some("Workflow A"));
 }
 
 #[test]
 fn workflow_trace_store_tracks_observed_runtime_ids_across_runtime_snapshots() {
     let store = WorkflowTraceStore::new(10);
-    store.set_execution_metadata(
-        "exec-mixed",
-        Some("wf-mixed".to_string()),
-        Some("Workflow".to_string()),
-    );
+    store.set_execution_metadata("exec-mixed", Some("wf-mixed".to_string()));
     store.record_event(
         &WorkflowTraceEvent::RunStarted {
-            execution_id: "exec-mixed".to_string(),
+            workflow_run_id: "exec-mixed".to_string(),
             workflow_id: Some("wf-mixed".to_string()),
             node_count: 0,
         },
@@ -195,7 +177,7 @@ fn workflow_trace_store_tracks_observed_runtime_ids_across_runtime_snapshots() {
     );
     store.record_event(
         &WorkflowTraceEvent::RuntimeSnapshotCaptured {
-            execution_id: "exec-mixed".to_string(),
+            workflow_run_id: "exec-mixed".to_string(),
             workflow_id: Some("wf-mixed".to_string()),
             captured_at_ms: 110,
             runtime: WorkflowTraceRuntimeMetrics {
@@ -216,7 +198,7 @@ fn workflow_trace_store_tracks_observed_runtime_ids_across_runtime_snapshots() {
     );
     store.record_event(
         &WorkflowTraceEvent::RuntimeSnapshotCaptured {
-            execution_id: "exec-mixed".to_string(),
+            workflow_run_id: "exec-mixed".to_string(),
             workflow_id: Some("wf-mixed".to_string()),
             captured_at_ms: 120,
             runtime: WorkflowTraceRuntimeMetrics {
@@ -238,10 +220,9 @@ fn workflow_trace_store_tracks_observed_runtime_ids_across_runtime_snapshots() {
 
     let trace = store
         .snapshot(&crate::trace::WorkflowTraceSnapshotRequest {
-            execution_id: Some("exec-mixed".to_string()),
+            workflow_run_id: Some("exec-mixed".to_string()),
             session_id: None,
             workflow_id: None,
-            workflow_name: None,
             include_completed: Some(true),
         })
         .expect("trace snapshot")
@@ -263,7 +244,7 @@ fn workflow_trace_store_keeps_inflight_state_on_duplicate_run_started() {
 
     store.record_event(
         &WorkflowTraceEvent::RunStarted {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             node_count: 1,
         },
@@ -271,7 +252,7 @@ fn workflow_trace_store_keeps_inflight_state_on_duplicate_run_started() {
     );
     store.record_event(
         &WorkflowTraceEvent::NodeStarted {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             node_id: "node-1".to_string(),
             node_type: Some("llm-inference".to_string()),
         },
@@ -279,7 +260,7 @@ fn workflow_trace_store_keeps_inflight_state_on_duplicate_run_started() {
     );
     let snapshot = store.record_event(
         &WorkflowTraceEvent::RunStarted {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             node_count: 1,
         },
@@ -302,7 +283,7 @@ fn workflow_trace_store_records_cancelled_runs_and_marks_active_nodes_cancelled(
 
     store.record_event(
         &WorkflowTraceEvent::RunStarted {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             node_count: 1,
         },
@@ -310,7 +291,7 @@ fn workflow_trace_store_records_cancelled_runs_and_marks_active_nodes_cancelled(
     );
     store.record_event(
         &WorkflowTraceEvent::NodeStarted {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             node_id: "node-1".to_string(),
             node_type: Some("llm-inference".to_string()),
         },
@@ -318,7 +299,7 @@ fn workflow_trace_store_records_cancelled_runs_and_marks_active_nodes_cancelled(
     );
     let snapshot = store.record_event(
         &WorkflowTraceEvent::RunCancelled {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             error: "workflow run cancelled during execution".to_string(),
         },
@@ -342,11 +323,7 @@ fn workflow_trace_store_records_cancelled_runs_and_marks_active_nodes_cancelled(
 #[test]
 fn workflow_trace_store_resets_attempt_state_when_run_restarts_after_cancellation() {
     let store = WorkflowTraceStore::new(10);
-    store.set_execution_metadata(
-        "exec-1",
-        Some("wf-1".to_string()),
-        Some("Workflow".to_string()),
-    );
+    store.set_execution_metadata("exec-1", Some("wf-1".to_string()));
     store.set_execution_graph_context(
         "exec-1",
         &WorkflowTraceGraphContext {
@@ -361,7 +338,7 @@ fn workflow_trace_store_resets_attempt_state_when_run_restarts_after_cancellatio
 
     store.record_event(
         &WorkflowTraceEvent::RunStarted {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             node_count: 1,
         },
@@ -369,7 +346,7 @@ fn workflow_trace_store_resets_attempt_state_when_run_restarts_after_cancellatio
     );
     store.record_event(
         &WorkflowTraceEvent::NodeStarted {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             node_id: "node-1".to_string(),
             node_type: None,
         },
@@ -377,7 +354,7 @@ fn workflow_trace_store_resets_attempt_state_when_run_restarts_after_cancellatio
     );
     store.record_event(
         &WorkflowTraceEvent::RunCancelled {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             error: "workflow run cancelled during execution".to_string(),
         },
@@ -386,7 +363,7 @@ fn workflow_trace_store_resets_attempt_state_when_run_restarts_after_cancellatio
 
     store.record_event(
         &WorkflowTraceEvent::RunStarted {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             node_count: 2,
         },
@@ -394,7 +371,7 @@ fn workflow_trace_store_resets_attempt_state_when_run_restarts_after_cancellatio
     );
     let snapshot = store.record_event(
         &WorkflowTraceEvent::NodeStarted {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             node_id: "node-2".to_string(),
             node_type: None,
         },
@@ -402,7 +379,7 @@ fn workflow_trace_store_resets_attempt_state_when_run_restarts_after_cancellatio
     );
 
     let trace = snapshot.traces.first().expect("trace");
-    assert_eq!(trace.workflow_name.as_deref(), Some("Workflow"));
+    assert_eq!(trace.workflow_id.as_deref(), Some("wf-1"));
     assert_eq!(trace.graph_fingerprint.as_deref(), Some("graph-1"));
     assert_eq!(trace.status, WorkflowTraceStatus::Running);
     assert_eq!(trace.started_at_ms, 200);
@@ -425,7 +402,7 @@ fn workflow_trace_store_ignores_duplicate_run_completed_events() {
 
     store.record_event(
         &WorkflowTraceEvent::RunStarted {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             node_count: 1,
         },
@@ -433,14 +410,14 @@ fn workflow_trace_store_ignores_duplicate_run_completed_events() {
     );
     store.record_event(
         &WorkflowTraceEvent::RunCompleted {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
         },
         140,
     );
     let snapshot = store.record_event(
         &WorkflowTraceEvent::RunCompleted {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
         },
         170,
@@ -459,7 +436,7 @@ fn workflow_trace_store_incremental_execution_started_resumes_waiting_runs() {
 
     store.record_event(
         &WorkflowTraceEvent::RunStarted {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             node_count: 2,
         },
@@ -467,7 +444,7 @@ fn workflow_trace_store_incremental_execution_started_resumes_waiting_runs() {
     );
     store.record_event(
         &WorkflowTraceEvent::WaitingForInput {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             node_id: "human-input-1".to_string(),
         },
@@ -475,7 +452,7 @@ fn workflow_trace_store_incremental_execution_started_resumes_waiting_runs() {
     );
     let snapshot = store.record_event(
         &WorkflowTraceEvent::IncrementalExecutionStarted {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             workflow_id: Some("wf-1".to_string()),
             task_ids: vec!["resume-node".to_string()],
         },

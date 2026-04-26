@@ -9,17 +9,16 @@ use super::types::{
 };
 
 pub(super) fn create_trace_run_state(
-    execution_id: &str,
+    workflow_run_id: &str,
     workflow_id: Option<String>,
     context: &WorkflowTraceExecutionContext,
     timestamp_ms: u64,
     node_count_at_start: usize,
 ) -> WorkflowTraceRunState {
     WorkflowTraceRunState {
-        execution_id: execution_id.to_string(),
+        workflow_run_id: workflow_run_id.to_string(),
         session_id: None,
         workflow_id,
-        workflow_name: context.workflow_name.clone(),
         graph_fingerprint: context.graph_fingerprint.clone(),
         status: WorkflowTraceStatus::Running,
         started_at_ms: timestamp_ms,
@@ -132,7 +131,7 @@ pub(super) fn apply_trace_event(
             *captured_at_ms,
         ),
         WorkflowTraceEvent::SchedulerSnapshotCaptured {
-            execution_id,
+            workflow_run_id,
             session_id,
             session,
             items,
@@ -141,7 +140,7 @@ pub(super) fn apply_trace_event(
             ..
         } => apply_scheduler_snapshot(
             trace,
-            execution_id,
+            workflow_run_id,
             session_id,
             session.as_ref(),
             items,
@@ -292,7 +291,6 @@ fn reset_trace_for_restart(
     timestamp_ms: u64,
     node_count_at_start: usize,
 ) {
-    trace.workflow_name = context.workflow_name.clone();
     trace.graph_fingerprint = context.graph_fingerprint.clone();
     trace.status = WorkflowTraceStatus::Running;
     trace.started_at_ms = timestamp_ms;

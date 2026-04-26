@@ -25,21 +25,21 @@ pub(super) fn runtime_metrics_selection<'a>(
     request: &WorkflowTraceSnapshotRequest,
 ) -> WorkflowTraceRuntimeSelection {
     let matching_traces = matching_traces(traces, request);
-    let matched_execution_ids = matching_traces
+    let matched_workflow_run_ids = matching_traces
         .iter()
-        .map(|trace| trace.execution_id.clone())
+        .map(|trace| trace.workflow_run_id.clone())
         .collect::<Vec<_>>();
 
     match matching_traces.as_slice() {
         [trace] => WorkflowTraceRuntimeSelection {
-            execution_id: Some(trace.execution_id.clone()),
+            workflow_run_id: Some(trace.workflow_run_id.clone()),
             runtime: Some(trace.runtime.clone()),
-            matched_execution_ids,
+            matched_workflow_run_ids,
         },
         _ => WorkflowTraceRuntimeSelection {
-            execution_id: None,
+            workflow_run_id: None,
             runtime: None,
-            matched_execution_ids,
+            matched_workflow_run_ids,
         },
     }
 }
@@ -57,23 +57,18 @@ fn trace_matches_request(
     trace: &WorkflowTraceRunState,
     request: &WorkflowTraceSnapshotRequest,
 ) -> bool {
-    if let Some(execution_id) = request.execution_id.as_deref() {
-        if trace.execution_id != execution_id {
+    if let Some(workflow_run_id) = request.workflow_run_id.as_deref() {
+        if trace.workflow_run_id != workflow_run_id {
             return false;
         }
     }
     if let Some(session_id) = request.session_id.as_deref() {
-        if trace.session_id.as_deref() != Some(session_id) && trace.execution_id != session_id {
+        if trace.session_id.as_deref() != Some(session_id) {
             return false;
         }
     }
     if let Some(workflow_id) = request.workflow_id.as_deref() {
         if trace.workflow_id.as_deref() != Some(workflow_id) {
-            return false;
-        }
-    }
-    if let Some(workflow_name) = request.workflow_name.as_deref() {
-        if trace.workflow_name.as_deref() != Some(workflow_name) {
             return false;
         }
     }

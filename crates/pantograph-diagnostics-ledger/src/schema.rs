@@ -1,11 +1,11 @@
-use rusqlite::{params, Connection, OptionalExtension, Transaction};
+use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
-use crate::records::{RetentionClass, DEFAULT_STANDARD_RETENTION_DAYS};
-use crate::util::now_ms;
 use crate::DiagnosticsLedgerError;
+use crate::records::{DEFAULT_STANDARD_RETENTION_DAYS, RetentionClass};
+use crate::util::now_ms;
 
-pub(crate) const SCHEMA_VERSION: i64 = 2;
-const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v2";
+pub(crate) const SCHEMA_VERSION: i64 = 3;
+const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v3";
 
 pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {
     tx.execute_batch(
@@ -144,7 +144,8 @@ pub(crate) fn migrate_schema(
     }
 
     let tx = conn.transaction()?;
-    if found < 2 {
+    if found < SCHEMA_VERSION {
+        tx.execute("DROP TABLE IF EXISTS workflow_timing_observations", [])?;
         apply_timing_schema(&tx)?;
         tx.execute(
             "INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
@@ -162,9 +163,8 @@ fn apply_timing_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerErro
         CREATE TABLE IF NOT EXISTS workflow_timing_observations (
             observation_key TEXT PRIMARY KEY,
             observation_scope TEXT NOT NULL,
-            execution_id TEXT NOT NULL,
+            workflow_run_id TEXT NOT NULL,
             workflow_id TEXT NOT NULL,
-            workflow_name TEXT,
             graph_fingerprint TEXT NOT NULL,
             node_id TEXT,
             node_type TEXT,

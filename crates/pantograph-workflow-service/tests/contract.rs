@@ -310,10 +310,9 @@ async fn workflow_io_contract_snapshot() {
 fn workflow_trace_contract_snapshot() {
     let response = WorkflowTraceSnapshotResponse {
         traces: vec![WorkflowTraceSummary {
-            execution_id: "exec-1".to_string(),
+            workflow_run_id: "exec-1".to_string(),
             session_id: Some("session-1".to_string()),
             workflow_id: Some("wf-1".to_string()),
-            workflow_name: Some("Workflow 1".to_string()),
             graph_fingerprint: Some("graph-1".to_string()),
             status: WorkflowTraceStatus::Completed,
             started_at_ms: 100,
@@ -398,10 +397,9 @@ fn workflow_trace_contract_snapshot() {
     let value = serde_json::to_value(response).expect("serialize trace response");
     let expected = serde_json::json!({
         "traces": [{
-            "execution_id": "exec-1",
+            "workflow_run_id": "exec-1",
             "session_id": "session-1",
             "workflow_id": "wf-1",
-            "workflow_name": "Workflow 1",
             "graph_fingerprint": "graph-1",
             "status": "completed",
             "started_at_ms": 100,
@@ -536,10 +534,9 @@ fn workflow_scheduler_snapshot_response_contract_snapshot() {
 #[test]
 fn workflow_trace_snapshot_request_contract_snapshot() {
     let request = WorkflowTraceSnapshotRequest {
-        execution_id: Some("exec-1".to_string()),
+        workflow_run_id: Some("exec-1".to_string()),
         session_id: Some("session-1".to_string()),
         workflow_id: Some("wf-1".to_string()),
-        workflow_name: Some("Workflow 1".to_string()),
         include_completed: Some(true),
     };
     request
@@ -548,10 +545,9 @@ fn workflow_trace_snapshot_request_contract_snapshot() {
 
     let value = serde_json::to_value(request).expect("serialize trace request");
     let expected = serde_json::json!({
-        "execution_id": "exec-1",
+        "workflow_run_id": "exec-1",
         "session_id": "session-1",
         "workflow_id": "wf-1",
-        "workflow_name": "Workflow 1",
         "include_completed": true
     });
 
@@ -561,10 +557,9 @@ fn workflow_trace_snapshot_request_contract_snapshot() {
 #[test]
 fn workflow_trace_snapshot_request_rejects_blank_contract_filter() {
     let request = WorkflowTraceSnapshotRequest {
-        execution_id: Some(String::new()),
+        workflow_run_id: Some(String::new()),
         session_id: None,
         workflow_id: None,
-        workflow_name: None,
         include_completed: None,
     };
 
@@ -576,7 +571,7 @@ fn workflow_trace_snapshot_request_rejects_blank_contract_filter() {
             error,
             WorkflowServiceError::InvalidRequest(ref message)
                 if message
-                    == "workflow trace snapshot request field 'execution_id' must not be blank"
+                    == "workflow trace snapshot request field 'workflow_run_id' must not be blank"
         ),
         "unexpected validation error: {:?}",
         error
