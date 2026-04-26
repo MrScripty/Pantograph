@@ -172,7 +172,7 @@ fn stored_runtime_trace_metrics_prefers_latest_recorded_trace() {
     );
     record_headless_runtime_snapshot(
         &diagnostics_store,
-        HeadlessRuntimeSnapshotInput {
+        HeadlessRuntimeSnapshotRecordInput {
             workflow_id: "wf-1".to_string(),
             workflow_run_id: Some("run-1".to_string()),
             capabilities_result: Ok(capability_response()),
@@ -420,7 +420,7 @@ fn workflow_diagnostics_snapshot_projection_preserves_observed_runtime_ids() {
     );
     record_headless_runtime_snapshot(
         &diagnostics_store,
-        HeadlessRuntimeSnapshotInput {
+        HeadlessRuntimeSnapshotRecordInput {
             workflow_id: "wf-1".to_string(),
             workflow_run_id: Some("run-1".to_string()),
             capabilities_result: Ok(capability_response()),

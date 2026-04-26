@@ -14,7 +14,7 @@ fn headless_scheduler_snapshot_helper_uses_workflow_run_identity() {
             workflow_run_id: Some("run-1".to_string()),
             session: running_session_summary(),
             items: vec![WorkflowExecutionSessionQueueItem {
-                workflow_run_id: "queue-1".to_string(),
+                workflow_run_id: "run-1".to_string(),
 
                 enqueued_at_ms: Some(100),
                 dequeued_at_ms: Some(110),
@@ -84,7 +84,7 @@ fn headless_runtime_snapshot_helper_records_trace_for_identified_execution() {
 
     record_headless_runtime_snapshot(
         &diagnostics_store,
-        HeadlessRuntimeSnapshotInput {
+        HeadlessRuntimeSnapshotRecordInput {
             workflow_id: "wf-1".to_string(),
             workflow_run_id: Some("run-1".to_string()),
             capabilities_result: Ok(capability_response()),
@@ -149,7 +149,7 @@ fn headless_runtime_snapshot_helper_keeps_trace_store_empty_without_execution_id
 
     record_headless_runtime_snapshot(
         &diagnostics_store,
-        HeadlessRuntimeSnapshotInput {
+        HeadlessRuntimeSnapshotRecordInput {
             workflow_id: "wf-1".to_string(),
             workflow_run_id: None,
             capabilities_result: Ok(capability_response()),
@@ -199,7 +199,7 @@ fn headless_scheduler_and_runtime_helpers_join_on_workflow_run_identity() {
             workflow_run_id: Some("run-1".to_string()),
             session: running_session_summary(),
             items: vec![WorkflowExecutionSessionQueueItem {
-                workflow_run_id: "queue-1".to_string(),
+                workflow_run_id: "run-1".to_string(),
 
                 enqueued_at_ms: Some(100),
                 dequeued_at_ms: Some(110),
@@ -217,7 +217,7 @@ fn headless_scheduler_and_runtime_helpers_join_on_workflow_run_identity() {
 
     record_headless_runtime_snapshot(
         &diagnostics_store,
-        HeadlessRuntimeSnapshotInput {
+        HeadlessRuntimeSnapshotRecordInput {
             workflow_id: "wf-1".to_string(),
             workflow_run_id: Some("run-1".to_string()),
             capabilities_result: Ok(capability_response()),

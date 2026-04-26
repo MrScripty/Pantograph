@@ -12,10 +12,11 @@ mod trace;
 mod types;
 
 pub use store::{
-    SharedWorkflowDiagnosticsStore, WorkflowDiagnosticsStore, WorkflowRuntimeSnapshotRecord,
-    WorkflowRuntimeSnapshotUpdate, WorkflowSchedulerSnapshotRecord,
+    SharedWorkflowDiagnosticsStore, WorkflowDiagnosticsStore, WorkflowRuntimeSnapshotUpdate,
     WorkflowSchedulerSnapshotUpdate,
 };
+#[cfg(test)]
+pub use store::{WorkflowRuntimeSnapshotRecord, WorkflowSchedulerSnapshotRecord};
 pub(crate) use trace::node_engine_workflow_trace_event;
 #[allow(unused_imports)]
 pub use types::{

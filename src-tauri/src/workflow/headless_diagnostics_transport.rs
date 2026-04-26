@@ -175,7 +175,6 @@ pub async fn workflow_diagnostics_snapshot_response(
             current_session_state: session_inspection_result
                 .and_then(Result::ok)
                 .and_then(|response| response.workflow_execution_session_state),
-            runtime_trace_metrics: runtime_projection.trace_runtime_metrics,
             active_model_target: runtime_projection.active_model_target,
             embedding_model_target: runtime_projection.embedding_model_target,
             active_runtime_snapshot: Some(runtime_projection.active_runtime_snapshot),

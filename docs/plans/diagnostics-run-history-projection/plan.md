@@ -234,20 +234,36 @@ or mutate canonical run traces.
 not create an idle-session trace after completion.
 
 **Tasks:**
-- [ ] Carry the generated `workflow_run_id` through final diagnostics emission
+- [x] Carry the generated `workflow_run_id` through final diagnostics emission
   instead of deriving it from scheduler snapshot fallback.
-- [ ] Finish edit-session scheduler state on all non-waiting terminal paths
+- [x] Finish edit-session scheduler state on all non-waiting terminal paths
   while preserving waiting-for-input behavior.
-- [ ] Ensure runtime metrics emitted after completion update the existing run
+- [x] Ensure runtime metrics emitted after completion update the existing run
   trace or remain overlay-only when no real run id exists.
-- [ ] Add regression tests for success, failure, cancellation, and waiting
+- [x] Add regression tests for success, failure, cancellation, and waiting
   lifecycles.
 
 **Verification:**
 - `cargo test -p pantograph-embedded-runtime`
 - `cargo check --manifest-path src-tauri/Cargo.toml`
 
-**Status:** Not started.
+**Status:** Complete.
+
+**Execution Notes:**
+- Execution diagnostics emission now accepts the backend-generated
+  `workflow_run_id` as an attribution override for final snapshots collected
+  after the scheduler has already returned to idle.
+- Scheduler/runtime snapshots with no real run id remain overlay-only; snapshots
+  collected during a real run record against the generated run id.
+- Waiting-for-input edit-session execution now leaves scheduler state running,
+  while completed and failed runs mark the session finished before terminal
+  diagnostics are emitted.
+- Verification passed:
+  `cargo test -p pantograph-embedded-runtime`;
+  `cargo test --manifest-path src-tauri/Cargo.toml workflow::workflow_execution_runtime`;
+  `cargo test --manifest-path src-tauri/Cargo.toml workflow::headless_diagnostics`;
+  `cargo test --manifest-path src-tauri/Cargo.toml workflow::headless_workflow_commands::tests::diagnostics_helpers`;
+  `cargo check --manifest-path src-tauri/Cargo.toml`.
 
 ### Milestone 4: Frontend History And Selection Policy
 

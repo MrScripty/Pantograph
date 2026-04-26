@@ -5,7 +5,7 @@ use crate::workflow::diagnostics::{
     WorkflowDiagnosticsStore,
 };
 use crate::workflow::headless_diagnostics::{
-    HeadlessRuntimeSnapshotInput, WorkflowDiagnosticsSnapshotProjectionInput,
+    HeadlessRuntimeSnapshotRecordInput, WorkflowDiagnosticsSnapshotProjectionInput,
     record_headless_runtime_snapshot, record_headless_scheduler_snapshot,
     stored_runtime_model_targets, stored_runtime_snapshots, stored_runtime_trace_metrics,
     workflow_clear_diagnostics_history_response, workflow_diagnostics_snapshot_projection,
@@ -54,7 +54,6 @@ macro_rules! workflow_projection {
                 capabilities_result: $capabilities_result,
                 current_session_state: $current_session_state,
                 workflow_graph: None,
-                runtime_trace_metrics: $runtime_trace_metrics,
                 active_model_target: $active_model_target,
                 embedding_model_target: $embedding_model_target,
                 active_runtime_snapshot: $active_runtime_snapshot,

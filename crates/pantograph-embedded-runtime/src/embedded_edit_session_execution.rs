@@ -127,43 +127,45 @@ impl EmbeddedRuntime {
             }
         }
 
-        self.workflow_service
-            .workflow_graph_mark_edit_session_finished(session_id)
-            .await
-            .map_err(|error| error.to_envelope_json())?;
-
         if waiting_for_input {
             log::debug!(
                 "workflow execution session '{}' paused in waiting-for-input state",
                 session_id
             );
-        } else if workflow_result.is_ok() {
-            let _ = event_sink.send(
-                node_engine::WorkflowEvent::WorkflowCompleted {
-                    workflow_id: session_id.to_string(),
-                    execution_id: workflow_run_id.to_string(),
-                    occurred_at_ms: None,
-                }
-                .now(),
-            );
-        } else if let Err(error) = &workflow_result {
-            let terminal_event = match error {
-                node_engine::NodeEngineError::Cancelled => {
-                    node_engine::WorkflowEvent::WorkflowCancelled {
+        } else {
+            self.workflow_service
+                .workflow_graph_mark_edit_session_finished(session_id)
+                .await
+                .map_err(|error| error.to_envelope_json())?;
+
+            if workflow_result.is_ok() {
+                let _ = event_sink.send(
+                    node_engine::WorkflowEvent::WorkflowCompleted {
+                        workflow_id: session_id.to_string(),
+                        execution_id: workflow_run_id.to_string(),
+                        occurred_at_ms: None,
+                    }
+                    .now(),
+                );
+            } else if let Err(error) = &workflow_result {
+                let terminal_event = match error {
+                    node_engine::NodeEngineError::Cancelled => {
+                        node_engine::WorkflowEvent::WorkflowCancelled {
+                            workflow_id: session_id.to_string(),
+                            execution_id: workflow_run_id.to_string(),
+                            error: error.to_string(),
+                            occurred_at_ms: None,
+                        }
+                    }
+                    _ => node_engine::WorkflowEvent::WorkflowFailed {
                         workflow_id: session_id.to_string(),
                         execution_id: workflow_run_id.to_string(),
                         error: error.to_string(),
                         occurred_at_ms: None,
-                    }
-                }
-                _ => node_engine::WorkflowEvent::WorkflowFailed {
-                    workflow_id: session_id.to_string(),
-                    execution_id: workflow_run_id.to_string(),
-                    error: error.to_string(),
-                    occurred_at_ms: None,
-                },
-            };
-            let _ = event_sink.send(terminal_event.now());
+                    },
+                };
+                let _ = event_sink.send(terminal_event.now());
+            }
         }
 
         let execution_mode_info =

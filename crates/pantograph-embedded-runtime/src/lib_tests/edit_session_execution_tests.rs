@@ -577,6 +577,21 @@ async fn execute_edit_session_graph_reports_all_python_runtime_ids_in_trace_metr
         Some("/tmp/mock-onnx-model")
     );
     assert!(!outcome.waiting_for_input);
+
+    let scheduler_snapshot = runtime
+        .workflow_service()
+        .workflow_get_scheduler_snapshot(
+            pantograph_workflow_service::WorkflowSchedulerSnapshotRequest {
+                session_id: session.session_id.clone(),
+            },
+        )
+        .await
+        .expect("scheduler snapshot after completed edit-session run");
+    assert_eq!(
+        scheduler_snapshot.session.state,
+        WorkflowExecutionSessionState::IdleLoaded
+    );
+    assert_eq!(scheduler_snapshot.workflow_run_id, None);
 }
 
 #[tokio::test]
@@ -633,6 +648,24 @@ async fn execute_edit_session_graph_waiting_for_input_does_not_emit_workflow_fai
 
     assert!(outcome.waiting_for_input);
     assert!(outcome.error.is_none());
+
+    let scheduler_snapshot = runtime
+        .workflow_service()
+        .workflow_get_scheduler_snapshot(
+            pantograph_workflow_service::WorkflowSchedulerSnapshotRequest {
+                session_id: session.session_id.clone(),
+            },
+        )
+        .await
+        .expect("scheduler snapshot after waiting edit-session run");
+    assert_eq!(
+        scheduler_snapshot.session.state,
+        WorkflowExecutionSessionState::Running
+    );
+    assert_eq!(
+        scheduler_snapshot.workflow_run_id.as_deref(),
+        Some("run-test")
+    );
 
     let events = event_sink.events();
     assert!(events.iter().any(|event| matches!(

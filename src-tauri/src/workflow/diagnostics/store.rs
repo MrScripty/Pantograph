@@ -5,28 +5,33 @@ use pantograph_embedded_runtime::ManagedRuntimeManagerRuntimeView;
 use pantograph_workflow_service::{
     WorkflowCapabilitiesResponse, WorkflowExecutionSessionQueueItem,
     WorkflowExecutionSessionSummary, WorkflowGraph, WorkflowServiceError, WorkflowTraceEvent,
-    WorkflowTraceRuntimeMetrics, WorkflowTraceRuntimeSelection, WorkflowTraceSnapshotRequest,
-    WorkflowTraceSnapshotResponse, WorkflowTraceStore,
+    WorkflowTraceRuntimeSelection, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
+    WorkflowTraceStore,
 };
+#[cfg(test)]
+use pantograph_workflow_service::WorkflowTraceRuntimeMetrics;
 use parking_lot::Mutex;
 
 use super::attempts::{
-    overlay_record_decision, trace_attempt_state_for_workflow_run, trace_attempt_state_in_snapshot,
-    trace_event_workflow_run_id, OverlayRecordDecision,
+    OverlayRecordDecision, overlay_record_decision, trace_attempt_state_for_workflow_run,
+    trace_attempt_state_in_snapshot, trace_event_workflow_run_id,
 };
-use super::overlay::{event_workflow_run_id, record_diagnostics_overlay, WorkflowDiagnosticsState};
+use super::overlay::{WorkflowDiagnosticsState, event_workflow_run_id, record_diagnostics_overlay};
 use super::trace::{graph_trace_context, workflow_trace_event};
 use super::types::{
     DiagnosticsRuntimeLifecycleSnapshot, DiagnosticsRuntimeSnapshot,
     DiagnosticsRuntimeSnapshotInput, DiagnosticsSchedulerSnapshot,
     DiagnosticsWorkflowTimingHistory, WorkflowDiagnosticsProjection,
 };
+use crate::workflow::events::WorkflowEvent;
+#[cfg(test)]
 use crate::workflow::events::{
-    WorkflowEvent, WorkflowRuntimeSnapshotEventInput, WorkflowSchedulerSnapshotEventInput,
+    WorkflowRuntimeSnapshotEventInput, WorkflowSchedulerSnapshotEventInput,
 };
 
 const DEFAULT_DIAGNOSTICS_EVENT_LIMIT: usize = 200;
 
+#[cfg(test)]
 #[derive(Debug, Clone, Default)]
 pub struct WorkflowRuntimeSnapshotRecord {
     pub workflow_id: String,
@@ -42,6 +47,7 @@ pub struct WorkflowRuntimeSnapshotRecord {
     pub error: Option<String>,
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, Default)]
 pub struct WorkflowSchedulerSnapshotRecord {
     pub workflow_id: Option<String>,
@@ -174,6 +180,7 @@ impl WorkflowDiagnosticsStore {
         )
     }
 
+    #[cfg(test)]
     pub fn record_runtime_snapshot(
         &self,
         input: WorkflowRuntimeSnapshotRecord,
@@ -194,6 +201,7 @@ impl WorkflowDiagnosticsStore {
         self.record_workflow_event(&event, input.captured_at_ms)
     }
 
+    #[cfg(test)]
     pub fn record_scheduler_snapshot(
         &self,
         input: WorkflowSchedulerSnapshotRecord,

@@ -7,14 +7,16 @@
 use super::commands::{SharedWorkflowDiagnosticsStore, SharedWorkflowService};
 use super::diagnostics::{
     WorkflowDiagnosticsProjection, WorkflowDiagnosticsProjectionContext, WorkflowDiagnosticsStore,
-    WorkflowRuntimeSnapshotRecord, WorkflowRuntimeSnapshotUpdate, WorkflowSchedulerSnapshotRecord,
-    WorkflowSchedulerSnapshotUpdate,
+    WorkflowRuntimeSnapshotUpdate, WorkflowSchedulerSnapshotUpdate,
 };
+#[cfg(test)]
+use super::diagnostics::{WorkflowRuntimeSnapshotRecord, WorkflowSchedulerSnapshotRecord};
 use pantograph_embedded_runtime::ManagedRuntimeManagerRuntimeView;
 use pantograph_workflow_service::{
-    graph::WorkflowGraphSessionStateView, WorkflowCapabilitiesResponse, WorkflowGraph,
-    WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse, WorkflowServiceError,
-    WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
+    WorkflowCapabilitiesResponse, WorkflowGraph, WorkflowSchedulerSnapshotRequest,
+    WorkflowSchedulerSnapshotResponse, WorkflowServiceError, WorkflowTraceRuntimeMetrics,
+    WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
+    graph::WorkflowGraphSessionStateView,
 };
 
 pub(crate) fn workflow_error_json(error: WorkflowServiceError) -> String {
@@ -22,6 +24,18 @@ pub(crate) fn workflow_error_json(error: WorkflowServiceError) -> String {
 }
 
 pub(crate) struct HeadlessRuntimeSnapshotInput {
+    pub workflow_id: String,
+    pub capabilities_result: Result<WorkflowCapabilitiesResponse, WorkflowServiceError>,
+    pub active_model_target: Option<String>,
+    pub embedding_model_target: Option<String>,
+    pub active_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
+    pub embedding_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
+    pub managed_runtimes: Vec<ManagedRuntimeManagerRuntimeView>,
+    pub captured_at_ms: u64,
+}
+
+#[cfg(test)]
+pub(crate) struct HeadlessRuntimeSnapshotRecordInput {
     pub workflow_id: String,
     pub workflow_run_id: Option<String>,
     pub capabilities_result: Result<WorkflowCapabilitiesResponse, WorkflowServiceError>,
@@ -43,7 +57,6 @@ pub(crate) struct WorkflowDiagnosticsSnapshotProjectionInput {
     pub capabilities_result: Option<Result<WorkflowCapabilitiesResponse, WorkflowServiceError>>,
     pub current_session_state: Option<WorkflowGraphSessionStateView>,
     pub workflow_graph: Option<WorkflowGraph>,
-    pub runtime_trace_metrics: WorkflowTraceRuntimeMetrics,
     pub active_model_target: Option<String>,
     pub embedding_model_target: Option<String>,
     pub active_runtime_snapshot: Option<inference::RuntimeLifecycleSnapshot>,
@@ -52,6 +65,7 @@ pub(crate) struct WorkflowDiagnosticsSnapshotProjectionInput {
     pub captured_at_ms: u64,
 }
 
+#[cfg(test)]
 pub(crate) fn record_headless_scheduler_snapshot(
     diagnostics_store: &WorkflowDiagnosticsStore,
     requested_session_id: &str,
@@ -148,9 +162,10 @@ pub(crate) fn update_headless_scheduler_snapshot(
     }
 }
 
+#[cfg(test)]
 pub(crate) fn record_headless_runtime_snapshot(
     diagnostics_store: &WorkflowDiagnosticsStore,
-    input: HeadlessRuntimeSnapshotInput,
+    input: HeadlessRuntimeSnapshotRecordInput,
 ) {
     match (input.workflow_run_id.as_deref(), input.capabilities_result) {
         (Some(workflow_run_id), Ok(capabilities)) => {
@@ -370,13 +385,11 @@ pub(crate) fn workflow_diagnostics_snapshot_projection(
             diagnostics_store.as_ref(),
             HeadlessRuntimeSnapshotInput {
                 workflow_id,
-                workflow_run_id: workflow_run_id.clone(),
                 capabilities_result: input.capabilities_result.unwrap_or_else(|| {
                     Err(WorkflowServiceError::InvalidRequest(
                         "workflow capabilities unavailable".to_string(),
                     ))
                 }),
-                trace_runtime_metrics: input.runtime_trace_metrics,
                 active_model_target: input.active_model_target,
                 embedding_model_target: input.embedding_model_target,
                 active_runtime_snapshot: input.active_runtime_snapshot,
