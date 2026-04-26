@@ -16,6 +16,10 @@ shared node presentation rules live outside the Pantograph app shell.
 | `workflowGraphBackendActions.ts` | Owns package-local backend mutation calls, connection-intent loading, reconnect rollback, and accepted graph-sync projection used by `WorkflowGraph.svelte`. |
 | `../workflowGraphBackendActionCore.ts` | Provides dependency-injected backend action primitives shared by package and app graph action adapters. |
 | `../workflowGraphBackendActionCore.test.ts` | Unit coverage for shared mutation projection, connection rejection, edge removal, and reconnect rollback behavior. |
+| `../workflowGraphDeletion.ts` | Projects package graph delete-selection and session-scoped edge-removal requests from SvelteFlow events. |
+| `../workflowGraphDeletion.test.ts` | Unit coverage for package graph delete and edge-removal request projection. |
+| `../workflowGraphReconnect.ts` | Projects reconnect-start and reconnect-result decisions for package graph event handlers. |
+| `../workflowGraphReconnect.test.ts` | Unit coverage for package graph reconnect start and result decision projection. |
 | `../workflowConnectionInteraction.ts` | Owns connection drag reset and connect-end preservation decisions. |
 | `../workflowConnectionInteraction.test.ts` | Unit coverage for connection interaction reset and connect-end preservation. |
 | `../workflowConnections.ts` | Computes reusable connection validation, graph-edge normalization, candidate-to-intent projection, commit anchors, revision selection, and rejected-intent preservation. |
@@ -133,6 +137,12 @@ session-id fallbacks while still allowing local node removal to proceed.
 Those backend edge-removal calls now live in
 `workflowGraphBackendActions.ts`, keeping `WorkflowGraph.svelte` focused on
 selection cleanup and event wiring.
+Delete-selection and edge-removal request projection now live in
+`workflowGraphDeletion.ts`, while `WorkflowGraph.svelte` only clears interaction
+state and invokes the accepted backend action request.
+Reconnect start and reconnect result branching now live in
+`workflowGraphReconnect.ts`, while `WorkflowGraph.svelte` owns applying the
+resulting intent, cleanup, and logging side effects.
 Connection drag reset and connect-end preservation live in
 `workflowConnectionInteraction.ts`, while `WorkflowGraph.svelte` owns clearing
 the backing connection-intent store and host-specific preview state.
@@ -210,6 +220,10 @@ threshold while preserving the same package-owned visual contract.
   contract instead of reintroducing app-local service coupling.
 - `workflowGraphBackendActionCore.ts` must stay dependency-injected and must not
   import app services or singleton stores.
+- `workflowGraphDeletion.ts` must keep delete and edge-removal request
+  projection side-effect free.
+- `workflowGraphReconnect.ts` must keep reconnect branching side-effect free;
+  components own store writes and logging.
 - `WorkflowRunButton.svelte` must keep execution state rendered in its template
   on Svelte runes-backed reactive state so workflow events can switch between
   running and waiting-for-input labels without a manual refresh.

@@ -304,6 +304,23 @@ export type {
   WorkflowGraphInteractionState,
 } from './workflowGraphInteraction.js';
 export {
+  resolveWorkflowDeleteSelectionRequest,
+  resolveWorkflowEdgeRemovalRequest,
+} from './workflowGraphDeletion.js';
+export type {
+  WorkflowDeleteSelectionRequest,
+  WorkflowEdgeRemovalRequest,
+} from './workflowGraphDeletion.js';
+export {
+  resolveWorkflowReconnectResultDecision,
+  resolveWorkflowReconnectStartDecision,
+} from './workflowGraphReconnect.js';
+export type {
+  WorkflowReconnectCommitResult,
+  WorkflowReconnectResultDecision,
+  WorkflowReconnectStartDecision,
+} from './workflowGraphReconnect.js';
+export {
   WORKFLOW_GRAPH_FIT_VIEW_OPTIONS,
   WORKFLOW_GRAPH_MAX_ZOOM,
   WORKFLOW_GRAPH_MINIMAP_MASK_COLOR,

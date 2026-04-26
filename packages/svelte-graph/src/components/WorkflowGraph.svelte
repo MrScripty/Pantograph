@@ -64,7 +64,8 @@
     shouldClearWorkflowConnectionInteractionAfterConnectEnd,
   } from '../workflowConnectionInteraction.js';
   import { collectSelectedNodeIds } from '../workflowSelection.js';
-  import { resolveReconnectSourceAnchor } from '../reconnectInteraction.js';
+  import { resolveWorkflowDeleteSelectionRequest, resolveWorkflowEdgeRemovalRequest } from '../workflowGraphDeletion.js';
+  import { resolveWorkflowReconnectResultDecision, resolveWorkflowReconnectStartDecision } from '../workflowGraphReconnect.js';
   import { resolveWorkflowDragCursorUpdate } from '../workflowDragCursor.js';
   import { resolveWorkflowGraphInteractionState } from '../workflowGraphInteraction.js';
   import { registerWorkflowGraphWindowListeners } from '../workflowGraphWindowListeners.js';
@@ -643,12 +644,17 @@
   }
 
   async function handleDelete({ nodes: deletedNodes, edges: deletedEdges }: { nodes: Node[]; edges: Edge[] }) {
-    if (!canEdit) return;
+    const request = resolveWorkflowDeleteSelectionRequest({
+      canEdit,
+      nodes: deletedNodes,
+      edges: deletedEdges,
+    });
+    if (!request) return;
 
     clearConnectionInteraction();
     await stores.workflow.deleteSelection(
-      deletedNodes.map((node) => node.id),
-      deletedEdges.map((edge) => edge.id),
+      request.nodeIds,
+      request.edgeIds,
     );
   }
 
@@ -682,12 +688,16 @@
     edge: Edge,
     handleType: 'source' | 'target',
   ) {
-    if (!canEdit) return;
-    const sourceAnchor = resolveReconnectSourceAnchor(edge, handleType);
-    if (sourceAnchor) {
-      connectionDragState = startReconnectDrag(edge.id, sourceAnchor);
+    const decision = resolveWorkflowReconnectStartDecision({
+      canEdit,
+      edge,
+      handleType,
+    });
+    if (decision.type === 'ignore') return;
+    if (decision.type === 'start') {
+      connectionDragState = startReconnectDrag(edge.id, decision.sourceAnchor);
       applyHorseshoeSession(startHorseshoeDrag(getEventPointerPosition(_event)));
-      await loadConnectionIntent(sourceAnchor);
+      await loadConnectionIntent(decision.sourceAnchor);
       return;
     }
 
@@ -712,25 +722,19 @@
       workflowStores: stores.workflow,
     });
 
-    if (result.type === 'invalid') {
+    const decision = resolveWorkflowReconnectResultDecision(result);
+    if (decision.type === 'clear') {
       clearConnectionInteraction();
       return;
     }
 
-    if (result.type === 'accepted' || result.type === 'stale') {
-      clearConnectionInteraction();
+    if (decision.type === 'set-intent') {
+      stores.workflow.setConnectionIntent(decision.intent);
+      console.warn('[WorkflowGraph] Reconnection rejected:', decision.message);
       return;
     }
 
-    if (result.type === 'rejected') {
-      stores.workflow.setConnectionIntent(result.intent);
-      console.warn('[WorkflowGraph] Reconnection rejected:', result.intent.rejection?.message);
-      return;
-    }
-
-    if (result.type === 'failed') {
-      console.error('[WorkflowGraph] Failed to notify backend of reconnection:', result.error);
-    }
+    console.error('[WorkflowGraph] Failed to notify backend of reconnection:', decision.error);
   }
 
   async function handleReconnectEnd(
@@ -742,13 +746,16 @@
     if (!canEdit) return;
 
     const reconnectingEdgeId = shouldRemoveReconnectedEdge(connectionDragState, connectionState);
-    const sessionId = get(currentSessionId);
-    if (reconnectingEdgeId && sessionId) {
+    const request = resolveWorkflowEdgeRemovalRequest({
+      edgeIds: reconnectingEdgeId ? [reconnectingEdgeId] : [],
+      sessionId: get(currentSessionId),
+    });
+    if (request) {
       await removeWorkflowGraphEdgesMutation({
         backend,
-        edgeIds: [reconnectingEdgeId],
+        edgeIds: request.edgeIds,
         errorMessage: '[WorkflowGraph] Failed to notify backend of edge removal:',
-        sessionId,
+        sessionId: request.sessionId,
         workflowStores: stores.workflow,
       });
     }
@@ -777,14 +784,17 @@
   }
 
   async function handleEdgesCut(edgeIds: string[]) {
-    const sessionId = get(currentSessionId);
     clearConnectionInteraction();
-    if (sessionId) {
+    const request = resolveWorkflowEdgeRemovalRequest({
+      edgeIds,
+      sessionId: get(currentSessionId),
+    });
+    if (request) {
       await removeWorkflowGraphEdgesMutation({
         backend,
-        edgeIds,
+        edgeIds: request.edgeIds,
         errorMessage: '[WorkflowGraph] Failed to notify backend of edge cut:',
-        sessionId,
+        sessionId: request.sessionId,
         workflowStores: stores.workflow,
       });
     }

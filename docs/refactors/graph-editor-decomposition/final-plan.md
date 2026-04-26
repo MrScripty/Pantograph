@@ -176,17 +176,17 @@ package and app paths can share it safely.
 component while preserving rendering behavior.
 
 **Tasks:**
-- [ ] Extract package delete/cut interaction controller code.
-- [ ] Extract package reconnect interaction controller code.
-- [ ] Extract package connection-intent or horseshoe lifecycle helpers where
+- [x] Extract package delete/cut interaction controller code.
+- [x] Extract package reconnect interaction controller code.
+- [x] Extract package connection-intent or horseshoe lifecycle helpers where
   behavior can be isolated without visual changes.
-- [ ] Keep the component responsible for rendering and event wiring.
+- [x] Keep the component responsible for rendering and event wiring.
 
 **Verification:**
 - `npm run test:frontend`
 - `npm run typecheck`
 
-**Status:** Not started.
+**Status:** Complete.
 
 ### Milestone 5: App Graph Component Decomposition
 
@@ -275,6 +275,17 @@ traceable deferrals.
   insert/connect rejection handling, edge removal, and reconnect rollback while
   keeping Pantograph `WorkflowService` lookup app-local. `npm run test:frontend`
   and `npm run typecheck` passed.
+- 2026-04-26: Milestone 4 started. Package `WorkflowGraph.svelte` still owns
+  delete request projection, reconnect-start branching, and reconnect-result
+  branching inline. The next slice extracts those interaction decisions into
+  tested helpers while leaving Svelte event wiring in the component.
+- 2026-04-26: Milestone 4 completed. Added side-effect-free package helpers for
+  delete/edge-removal request projection and reconnect start/result decisions,
+  then rewired `WorkflowGraph.svelte` to keep only event wiring, store writes,
+  and logging side effects. Existing connection-intent and horseshoe lifecycle
+  behavior was already isolated in package helpers, so no additional visual
+  lifecycle extraction was needed in this slice. `npm run test:frontend` and
+  `npm run typecheck` passed.
 
 ## Commit Cadence Notes
 
