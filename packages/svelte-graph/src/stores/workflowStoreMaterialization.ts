@@ -4,6 +4,7 @@ import type { NodeDefinition, WorkflowGraph } from '../types/workflow.js';
 import { edgeToGraphEdge } from '../workflowConnections.ts';
 import { applySelectedNodeIds } from '../workflowSelection.ts';
 import { resolveNodeDefinitionOverlay } from './definitionOverlay.ts';
+import { stripStructuralRuntimeNodeData } from './runtimeData.ts';
 
 export interface WorkflowGraphMaterialization {
   graphNodes: Node[];
@@ -21,7 +22,7 @@ export function projectWorkflowGraphStoreState(params: {
       id: node.id,
       node_type: node.type || 'unknown',
       position: node.position,
-      data: node.data,
+      data: stripStructuralRuntimeNodeData(node.data),
     })),
     edges: params.edges.map((edge) => edgeToGraphEdge(edge)),
     ...(typeof params.derivedGraph === 'undefined' ? {} : { derived_graph: params.derivedGraph }),

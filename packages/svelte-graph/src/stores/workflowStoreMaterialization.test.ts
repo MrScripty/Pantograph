@@ -79,6 +79,30 @@ test('projectWorkflowGraphStoreState converts SvelteFlow state into workflow gra
   });
 });
 
+test('projectWorkflowGraphStoreState strips runtime-only display fields', () => {
+  const graph = projectWorkflowGraphStoreState({
+    nodes: [
+      {
+        id: 'node-a',
+        type: 'text-output',
+        position: { x: 10, y: 20 },
+        data: {
+          label: 'Text Output',
+          streamContent: 'partial',
+          audio: 'base64-audio',
+          audio_mime: 'audio/wav',
+        },
+      },
+    ] as Node[],
+    edges: [],
+    derivedGraph: undefined,
+  });
+
+  assert.deepEqual(graph.nodes[0].data, {
+    label: 'Text Output',
+  });
+});
+
 test('materializeWorkflowGraphSnapshot applies definitions and selected node ids', () => {
   const graph = {
     nodes: [

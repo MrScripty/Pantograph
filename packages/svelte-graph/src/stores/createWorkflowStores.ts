@@ -4,7 +4,7 @@
  * This is the main assembler that creates all workflow sub-stores
  * and returns a unified API. Replaces the global workflowStore.
  */
-import { writable, derived, get } from 'svelte/store';
+import { writable, derived, get, type Readable } from 'svelte/store';
 import type { Node, Edge } from '@xyflow/svelte';
 import type {
   WorkflowGraph,
@@ -19,11 +19,12 @@ import type { NodeGroup, PortMapping } from '../types/groups.js';
 import type { ViewportState } from '../types/view.js';
 import type { WorkflowBackend } from '../types/backend.js';
 import {
-  appendNodeStreamContent,
-  clearNodeRuntimeDataKeysInNodes,
-  clearNodeStreamContent,
-  setNodeStreamContent,
-  updateNodeRuntimeDataInNodes,
+  appendNodeStreamContentOverlay,
+  clearNodeRuntimeOverlayKeys,
+  clearNodeStreamContentOverlay,
+  mergeNodeRuntimeOverlays,
+  setNodeStreamContentOverlay,
+  updateNodeRuntimeOverlay,
 } from './runtimeData.ts';
 import { buildDerivedGraph } from '../graphRevision.ts';
 import { applyWorkflowGraphMutationResponse } from './workflowGraphMutationResponse.ts';
@@ -71,7 +72,7 @@ interface SyncEdgesFromBackendOptions {
 
 export interface WorkflowStores {
   // Writable stores
-  nodes: ReturnType<typeof writable<Node[]>>;
+  nodes: Readable<Node[]>;
   edges: ReturnType<typeof writable<Edge[]>>;
   nodeDefinitions: ReturnType<typeof writable<NodeDefinition[]>>;
   workflowMetadata: ReturnType<typeof writable<WorkflowMetadata | null>>;
@@ -162,7 +163,13 @@ export function createWorkflowStores(
   },
 ): WorkflowStores {
   // --- Writable stores ---
-  const nodes = writable<Node[]>([]);
+  const structuralNodes = writable<Node[]>([]);
+  const nodeRuntimeOverlays = writable<Map<string, Record<string, unknown>>>(new Map());
+  const nodes = derived(
+    [structuralNodes, nodeRuntimeOverlays],
+    ([$structuralNodes, $nodeRuntimeOverlays]) =>
+      mergeNodeRuntimeOverlays($structuralNodes, $nodeRuntimeOverlays),
+  );
   const edges = writable<Edge[]>([]);
   const nodeDefinitions = writable<NodeDefinition[]>([]);
   const workflowMetadata = writable<WorkflowMetadata | null>(null);
@@ -179,7 +186,7 @@ export function createWorkflowStores(
 
   // --- Derived stores ---
   const workflowGraph = derived(
-    [nodes, edges, derivedGraph],
+    [structuralNodes, edges, derivedGraph],
     ([$nodes, $edges, $derivedGraph]): WorkflowGraph =>
       projectWorkflowGraphStoreState({
         nodes: $nodes,
@@ -225,7 +232,7 @@ export function createWorkflowStores(
     },
   ) {
     const { graphNodes, graphEdges, graph: nextGraph } = materializeWorkflowGraph(graph);
-    nodes.set(graphNodes);
+    structuralNodes.set(graphNodes);
     edges.set(graphEdges);
     nodeGroups.set(extractWorkflowNodeGroups(graphNodes));
     if (typeof options?.metadata !== 'undefined') {
@@ -338,13 +345,13 @@ export function createWorkflowStores(
   }
 
   function updateNodeRuntimeData(nodeId: string, data: Record<string, unknown>) {
-    nodes.update((n) => updateNodeRuntimeDataInNodes(n, nodeId, data));
+    nodeRuntimeOverlays.update((overlays) => updateNodeRuntimeOverlay(overlays, nodeId, data));
   }
 
   function clearNodeRuntimeData(keys: string[]) {
     if (keys.length === 0) return;
 
-    nodes.update((n) => clearNodeRuntimeDataKeysInNodes(n, keys));
+    nodeRuntimeOverlays.update((overlays) => clearNodeRuntimeOverlayKeys(overlays, keys));
   }
 
   function getNodeById(nodeId: string): Node | undefined {
@@ -413,26 +420,32 @@ export function createWorkflowStores(
 
   function resetExecutionStates() {
     nodeExecutionStates.set(new Map());
+    nodeRuntimeOverlays.set(new Map());
   }
 
   // --- Streaming actions ---
 
   function appendStreamContent(nodeId: string, chunk: string) {
-    nodes.update((n) => appendNodeStreamContent(n, nodeId, chunk));
+    nodeRuntimeOverlays.update((overlays) =>
+      appendNodeStreamContentOverlay(overlays, nodeId, chunk),
+    );
   }
 
   function setStreamContent(nodeId: string, content: string) {
-    nodes.update((n) => setNodeStreamContent(n, nodeId, content));
+    nodeRuntimeOverlays.update((overlays) =>
+      setNodeStreamContentOverlay(overlays, nodeId, content),
+    );
   }
 
   function clearStreamContent() {
-    nodes.update(clearNodeStreamContent);
+    nodeRuntimeOverlays.update(clearNodeStreamContentOverlay);
   }
 
   // --- Workflow actions ---
 
   function loadWorkflowFn(graph: WorkflowGraph, metadata?: WorkflowMetadata) {
     selectedNodeIds.set([]);
+    nodeRuntimeOverlays.set(new Map());
     applyWorkflowGraph(graph, {
       metadata: metadata || null,
       markDirty: false,
@@ -440,8 +453,9 @@ export function createWorkflowStores(
   }
 
   function clearWorkflow() {
-    nodes.set([]);
+    structuralNodes.set([]);
     edges.set([]);
+    nodeRuntimeOverlays.set(new Map());
     nodeGroups.set(new Map());
     workflowMetadata.set(null);
     selectedNodeIds.set([]);
@@ -458,8 +472,9 @@ export function createWorkflowStores(
 
   function loadDefaultWorkflow(definitions: NodeDefinition[]) {
     selectedNodeIds.set([]);
+    nodeRuntimeOverlays.set(new Map());
     const defaultWorkflow = buildDefaultWorkflowGraphState(definitions);
-    nodes.set(defaultWorkflow.nodes);
+    structuralNodes.set(defaultWorkflow.nodes);
     nodeGroups.set(new Map());
     edges.set(defaultWorkflow.edges);
     connectionIntent.set(null);

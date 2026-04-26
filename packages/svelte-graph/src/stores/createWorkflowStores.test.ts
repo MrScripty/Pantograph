@@ -289,6 +289,36 @@ test('createWorkflowStores applies backend graph-mutation responses to graph sta
   );
 });
 
+test('createWorkflowStores keeps runtime overlays out of structural workflow graph', () => {
+  const graph = {
+    nodes: [
+      {
+        id: 'text-output-1',
+        node_type: 'text-output',
+        position: { x: 0, y: 0 },
+        data: { label: 'Text Output' },
+      },
+    ],
+    edges: [],
+  } satisfies WorkflowGraph;
+  const backend = createBackendStub(graph);
+  const stores = createWorkflowStores(backend, {
+    groupStack: writable<string[]>([]),
+    async tabOutOfGroup() {},
+  });
+
+  stores.loadWorkflow(graph);
+  stores.updateNodeRuntimeData('text-output-1', { text: 'runtime result' });
+  stores.appendStreamContent('text-output-1', 'stream chunk');
+
+  assert.equal(get(stores.nodes)[0].data.text, 'runtime result');
+  assert.equal(get(stores.nodes)[0].data.streamContent, 'stream chunk');
+  const structuralData = (get(stores.workflowGraph) as WorkflowGraph).nodes[0].data;
+  assert.equal(structuralData.label, 'Text Output');
+  assert.equal(structuralData.text, undefined);
+  assert.equal(structuralData.streamContent, undefined);
+});
+
 test('createWorkflowStores renders backend-owned group mutation responses', async () => {
   const graph = {
     nodes: [

@@ -3,12 +3,13 @@ import assert from 'node:assert/strict';
 import type { Node } from '@xyflow/svelte';
 
 import {
-  appendNodeStreamContent,
-  clearNodeRuntimeDataKeysInNodes,
-  clearNodeStreamContent,
+  appendNodeStreamContentOverlay,
+  clearNodeRuntimeOverlayKeys,
+  clearNodeStreamContentOverlay,
+  mergeNodeRuntimeOverlays,
   removeNodeDataKeys,
-  setNodeStreamContent,
-  updateNodeRuntimeDataInNodes,
+  setNodeStreamContentOverlay,
+  updateNodeRuntimeOverlay,
 } from './runtimeData.ts';
 
 function node(id: string, data: Record<string, unknown> = {}): Node {
@@ -53,12 +54,30 @@ test('removeNodeDataKeys reports unchanged when no requested keys are present', 
   });
 });
 
-test('updateNodeRuntimeDataInNodes merges runtime data into the targeted node', () => {
-  const first = node('first', { label: 'First' });
-  const second = node('second', { label: 'Second' });
-  const result = updateNodeRuntimeDataInNodes([first, second], 'second', {
+test('updateNodeRuntimeOverlay merges runtime data into the targeted overlay', () => {
+  const overlays = updateNodeRuntimeOverlay(new Map(), 'second', {
     output: 'ready',
   });
+
+  assert.deepEqual(overlays.get('second'), {
+    output: 'ready',
+  });
+
+  const updated = updateNodeRuntimeOverlay(overlays, 'second', {
+    audio: 'base64',
+  });
+  assert.deepEqual(updated.get('second'), {
+    output: 'ready',
+    audio: 'base64',
+  });
+  assert.equal(overlays.get('second')?.audio, undefined);
+});
+
+test('mergeNodeRuntimeOverlays applies overlays without mutating structural nodes', () => {
+  const first = node('first', { label: 'First' });
+  const second = node('second', { label: 'Second' });
+  const overlays = new Map([['second', { output: 'ready' }]]);
+  const result = mergeNodeRuntimeOverlays([first, second], overlays);
 
   assert.equal(result[0], first);
   assert.notEqual(result[1], second);
@@ -66,31 +85,32 @@ test('updateNodeRuntimeDataInNodes merges runtime data into the targeted node', 
     label: 'Second',
     output: 'ready',
   });
+  assert.deepEqual(second.data, { label: 'Second' });
 });
 
-test('clearNodeRuntimeDataKeysInNodes removes runtime keys while preserving unchanged nodes', () => {
-  const first = node('first', { label: 'First', stream: 'chunk' });
-  const second = node('second', { label: 'Second' });
-  const result = clearNodeRuntimeDataKeysInNodes([first, second], ['stream']);
+test('clearNodeRuntimeOverlayKeys removes runtime keys while preserving other overlays', () => {
+  const overlays = new Map([
+    ['first', { stream: 'chunk', audio: 'base64' }],
+    ['second', { label: 'Second' }],
+  ]);
+  const result = clearNodeRuntimeOverlayKeys(overlays, ['stream']);
 
-  assert.notEqual(result[0], first);
-  assert.deepEqual(result[0].data, { label: 'First' });
-  assert.equal(result[1], second);
+  assert.deepEqual(result.get('first'), { audio: 'base64' });
+  assert.equal(result.get('second'), overlays.get('second'));
 });
 
 test('stream content helpers append set and clear node stream content', () => {
-  const first = node('first', { label: 'First' });
-  const second = node('second', { label: 'Second', streamContent: 'old' });
+  const initial = new Map([['second', { streamContent: 'old' }]]);
 
-  const appended = appendNodeStreamContent([first, second], 'first', 'chunk');
-  assert.deepEqual(appended[0].data, { label: 'First', streamContent: 'chunk' });
-  assert.equal(appended[1], second);
+  const appended = appendNodeStreamContentOverlay(initial, 'first', 'chunk');
+  assert.deepEqual(appended.get('first'), { streamContent: 'chunk' });
+  assert.equal(appended.get('second'), initial.get('second'));
 
-  const set = setNodeStreamContent(appended, 'first', 'final');
-  assert.deepEqual(set[0].data, { label: 'First', streamContent: 'final' });
-  assert.equal(set[1], second);
+  const set = setNodeStreamContentOverlay(appended, 'first', 'final');
+  assert.deepEqual(set.get('first'), { streamContent: 'final' });
+  assert.equal(set.get('second'), initial.get('second'));
 
-  const cleared = clearNodeStreamContent(set);
-  assert.deepEqual(cleared[0].data, { label: 'First', streamContent: '' });
-  assert.deepEqual(cleared[1].data, { label: 'Second', streamContent: '' });
+  const cleared = clearNodeStreamContentOverlay(set);
+  assert.deepEqual(cleared.get('first'), { streamContent: '' });
+  assert.deepEqual(cleared.get('second'), { streamContent: '' });
 });

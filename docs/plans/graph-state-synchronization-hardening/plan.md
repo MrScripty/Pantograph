@@ -321,21 +321,21 @@ transition instead of a chain of full-graph races.
 **Goal:** Remove runtime outputs from persisted graph node data.
 
 **Tasks:**
-- [ ] Introduce a transient runtime overlay store keyed by node id.
-- [ ] Move `updateNodeRuntimeData`, stream content, and clear-runtime behavior
+- [x] Introduce a transient runtime overlay store keyed by node id.
+- [x] Move `updateNodeRuntimeData`, stream content, and clear-runtime behavior
   into the overlay path.
-- [ ] Update node rendering and toolbar event handling to read overlay data
+- [x] Update node rendering and toolbar event handling to read overlay data
   without mutating structural nodes.
-- [ ] Ensure workflow load/session changes clear overlays.
-- [ ] Ensure save uses structural graph projection only.
-- [ ] Add tests proving runtime outputs do not appear in `$workflowGraph` or
+- [x] Ensure workflow load/session changes clear overlays.
+- [x] Ensure save uses structural graph projection only.
+- [x] Add tests proving runtime outputs do not appear in `$workflowGraph` or
   saved workflow payloads.
 
 **Verification:**
 - `npm run -w frontend test:run -- runtimeData workflowStoreMaterialization workflowToolbarEvents`
 - `npm run -w frontend check:types`
 
-**Status:** Not started.
+**Status:** Complete.
 
 ### Milestone 5: Derived Graph And Snapshot Efficiency
 
@@ -464,6 +464,16 @@ Update during implementation:
   behavior, and one frontend store-level selected-delete backend call. The
   planned frontend workspace commands remain invalid for this repo layout, so
   verification used the direct store test and root typecheck commands.
+- 2026-04-26: Milestone 4 started. Runtime outputs and stream content will move
+  out of structural node data into a transient node-id keyed overlay while save
+  and workflow graph projection remain structural only.
+- 2026-04-26: Milestone 4 completed. Added a transient node runtime overlay
+  map, made displayed nodes merge overlays while `$workflowGraph` derives from
+  structural nodes only, cleared overlays on workflow/session reset paths, and
+  stripped known runtime-only display fields from structural projection.
+  Regression coverage now proves runtime text/stream overlays render through
+  `nodes` without entering `$workflowGraph`, and materialization strips known
+  runtime-only display fields before save.
 
 ## Commit Cadence Notes
 
