@@ -300,6 +300,10 @@ fix.
   tests and repo typecheck passed; the plan's obsolete workspace-form commands
   were replaced with the repository's actual `npm run test:frontend` and
   `npm run typecheck` scripts.
+- 2026-04-26: Final `npm run lint:full` found an unrelated unused
+  `currentGraphName` import in `src/components/WorkflowToolbar.svelte`. This is
+  outside the graph-sync write set but blocks the repository lint gate, so it
+  will be fixed as a separate compile-unblocking standards cleanup commit.
 
 ## Commit Cadence Notes
 

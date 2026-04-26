@@ -13,7 +13,6 @@
     clearStreamContent,
   } from '../stores/workflowStore';
   import {
-    currentGraphName,
     isReadOnly,
     currentSessionId,
   } from '../stores/graphSessionStore';
