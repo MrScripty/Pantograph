@@ -343,15 +343,15 @@ diagnostics display.
 coding and documentation standards.
 
 **Tasks:**
-- [ ] Review touched Rust modules for ambiguous raw id handling, oversized
+- [x] Review touched Rust modules for ambiguous raw id handling, oversized
   responsibilities, and read/write lifecycle mixing.
-- [ ] Review touched frontend store/components for presentation ownership,
+- [x] Review touched frontend store/components for presentation ownership,
   stale async handling, and component responsibility boundaries.
-- [ ] Update `src-tauri/src/workflow/diagnostics/README.md`,
+- [x] Update `src-tauri/src/workflow/diagnostics/README.md`,
   `crates/pantograph-workflow-service/src/trace/README.md`,
   `crates/pantograph-embedded-runtime/src/README.md`, and
   `src/components/diagnostics/README.md` as needed.
-- [ ] Record any unrelated standards issues discovered but not required for
+- [x] Record any unrelated standards issues discovered but not required for
   this plan as follow-ups.
 
 **Verification:**
@@ -361,7 +361,21 @@ coding and documentation standards.
   `ARCHITECTURE-PATTERNS.md`, `FRONTEND-STANDARDS.md`,
   `TESTING-STANDARDS.md`, and `DOCUMENTATION-STANDARDS.md`.
 
-**Status:** Not started.
+**Status:** Complete.
+
+**Execution Notes:**
+- Rust review found the previous read/write mixing in headless diagnostics and
+  terminal attribution issues already addressed by Milestones 2 and 3. Test-only
+  recording helpers are no longer exposed in production builds.
+- Frontend review found selection policy belonged in the diagnostics store, not
+  the panel components. The panel remains a declarative renderer over snapshots.
+- Updated README contracts for side-effect-safe reads, canonical
+  `workflow_run_id` ownership, terminal attribution, waiting-for-input
+  lifecycle, and opened-workflow timing history selection behavior.
+- No unrelated standards issues requiring immediate refactor were found in the
+  touched areas. The existing unrelated dirty files remain outside this plan.
+- Verification passed: `git diff --check`. Prior milestone targeted tests cover
+  the reviewed Rust and frontend behavior.
 
 ### Milestone 7: Release Verification
 

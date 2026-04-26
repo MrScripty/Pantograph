@@ -65,6 +65,10 @@ diagnostics remain visible before a new run starts.
 - Components render diagnostics state supplied by the store and do not subscribe
   to workflow events directly.
 - Tab switching and node/run selection use exported diagnostics store commands.
+- The diagnostics store must not auto-select retained runs just because
+  retained history exists. It may select a run when backend projection context
+  marks that run relevant, and workflow switches must clear selected run/node
+  state so opened-workflow timing history can render before a new run starts.
 - Runtime, scheduler, and graph inspection rendering should stay read-only over
   store snapshots, not call workflow commands directly from the component tree.
 - Duration expectation badges render backend-projected timing history only.

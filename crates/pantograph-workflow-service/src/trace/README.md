@@ -67,6 +67,9 @@ they do not own trace lifecycle rules.
 - Request validation for snapshot filters stays here, not in adapters.
 - Trace snapshot filter semantics stay
   backend-owned and must not drift between transport surfaces.
+- `workflow_run_id` is the only canonical trace key for a run. Session ids may
+  scope scheduler state and filtering, but they must never be used to create or
+  look up a run record as a fallback execution id.
 - When a run is paused by `WaitingForInput`, a later
   `IncrementalExecutionStarted` or `NodeStarted` event for the same execution
   must resume the canonical trace back to `Running` rather than leaving the
@@ -83,6 +86,10 @@ they do not own trace lifecycle rules.
   input; scheduler projection consumes measured queue item/session facts only.
 - Recovery or replay updates for the same workflow run id update one canonical run
   record in place.
+- Scheduler and runtime snapshots collected after a terminal transition may be
+  attributed by the caller's known generated `workflow_run_id`; idle scheduler
+  snapshots without such attribution must remain outside canonical trace
+  creation.
 - Timing expectations are projected from durable prior completed observations.
   The active execution is not recorded until after its terminal snapshot is
   enriched, so completion diagnostics compare against previous history rather

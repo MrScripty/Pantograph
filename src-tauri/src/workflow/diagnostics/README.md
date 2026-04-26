@@ -62,6 +62,10 @@ runtime and scheduler facts cannot drift through positional argument lists.
 - `WorkflowTraceStore` remains the canonical owner of workflow trace history.
 - This directory may merge overlays onto backend traces, but it must not invent
   new canonical run records from overlay-only runtime or scheduler state.
+- Explicit diagnostics snapshot reads are side-effect-safe for retained trace
+  history. They may update the current runtime/scheduler panels, but only
+  workflow events and test-only recording helpers may create canonical run
+  traces.
 - Runtime lifecycle fallback and producer-aware runtime shaping remain
   backend-owned in `pantograph-embedded-runtime`.
 - Diagnostics payload casing and enum labels stay stable for the GUI consumer.
@@ -134,6 +138,9 @@ let trace = diagnostics.trace_snapshot(Default::default())?;
 - Runtime and scheduler overlays are additive. When canonical backend trace
   identity is absent, this directory may update overlay-only state but must not
   synthesize a canonical execution id locally.
+- `workflow_run_id` is the only canonical execution key. `session_id` is a
+  scheduler/edit-session scope and must not be used as a fallback run id in
+  trace history, diagnostics projections, or timing observations.
 - `WorkflowDiagnosticsProjectionContext` owns requested snapshot filters, source
   execution id, relevant execution id, and relevance so GUI stores do not claim
   or reject diagnostics snapshots with frontend-local rules.

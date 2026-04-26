@@ -174,6 +174,12 @@ embedded-runtime crate.
   state as `workflow_run_id: None`; edit-session `session_id` values must not
   be projected as fallback workflow run ids for runtime or scheduler
   diagnostics.
+- Final diagnostics emitted after completed, failed, or cancelled execution
+  must be attributed with the scheduler-issued `workflow_run_id` already known
+  to the execution path, even if the scheduler snapshot has returned to idle.
+- Waiting-for-input edit-session execution keeps the scheduler run active so
+  diagnostics continue to show the real generated run id instead of a finished
+  idle session.
 - Runtime-created node lineage stays in `NodeLineageContext`. Composed-node
   execution scopes must use its parent-stack projection helpers so primitive
   diagnostics and ledger events preserve composed-parent context without GUI or
