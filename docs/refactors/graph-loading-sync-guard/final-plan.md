@@ -265,7 +265,7 @@ fix.
 - Confirm `git status --short` only shows intended implementation/docs changes
   plus pre-existing unrelated dirty files.
 
-**Status:** In progress.
+**Status:** Complete.
 
 ## Standards Compliance Review
 
@@ -348,11 +348,27 @@ fix.
 
 ### Completed
 
-- Not started.
+- Milestone 1: Graph sync helpers now require graph identity and graph-scoped
+  skip tokens.
+- Milestone 2: App graph sync now keys workflow and architecture renders and
+  clears stale suppression during architecture-pending transitions.
+- Milestone 3: Package graph sync now derives the same graph identity from the
+  workflow graph fingerprint.
+- Milestone 4: Cross-surface regression tests and call-site search completed.
+- Milestone 5: README invariants updated and an unrelated lint blocker removed
+  in a separate cleanup commit.
 
 ### Deviations
 
-- None.
+- The plan's initial workspace-form verification commands were not usable
+  because this repository has no `frontend` workspace. The implementation used
+  the repository's actual root scripts instead.
+- Milestones 1-4 were committed as one integrated behavior slice because the
+  sync helper contract and component call sites had to change together to keep
+  the tree buildable.
+- `npm run lint:full` exposed an unrelated unused import in
+  `src/components/WorkflowToolbar.svelte`; it was fixed separately because it
+  blocked final verification.
 
 ### Follow-Ups
 
@@ -362,11 +378,16 @@ fix.
 
 ### Verification Summary
 
-- Not run; this is a planning artifact only.
+- `node --experimental-strip-types --test src/components/workflowGraphSync.test.ts packages/svelte-graph/src/workflowGraphSync.test.ts`: passed.
+- `npm run test:frontend`: passed.
+- `npm run typecheck`: passed.
+- `npm run lint:full`: passed after the unrelated toolbar import cleanup.
 
 ### Traceability Links
 
-- Module README updated: Pending implementation decision.
+- Module README updated: `src/components/README.md`,
+  `packages/svelte-graph/src/README.md`, and
+  `packages/svelte-graph/src/components/README.md`.
 - ADR added/updated: N/A.
   Reason: This plan changes a local frontend synchronization invariant, not a
   durable architecture boundary.
