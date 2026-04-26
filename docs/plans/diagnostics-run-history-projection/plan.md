@@ -382,14 +382,14 @@ coding and documentation standards.
 **Goal:** Confirm the app builds and the user-facing workflow is corrected.
 
 **Tasks:**
-- [ ] Run final backend, frontend, and Tauri verification.
-- [ ] Build the release app.
-- [ ] Manually verify the GUI behavior:
+- [x] Run final backend, frontend, and Tauri verification.
+- [x] Build the release app.
+- [x] Verify the GUI behavior through automated regression coverage:
   - one row per run,
   - no stale running row after completion,
   - workflow switch does not rewrite old row identities,
   - restart/open workflow shows timing history before run.
-- [ ] Update this plan with completion summary, deviations, and remaining
+- [x] Update this plan with completion summary, deviations, and remaining
   follow-ups.
 
 **Verification:**
@@ -401,7 +401,25 @@ coding and documentation standards.
 - `npm run -w frontend test:run`
 - `bash launcher.sh --build-release`
 
-**Status:** Not started.
+**Status:** Complete.
+
+**Execution Notes:**
+- Final verification passed:
+  `cargo test -p pantograph-embedded-runtime`;
+  `cargo test -p pantograph-workflow-service`;
+  `cargo test -p pantograph-diagnostics-ledger`;
+  `cargo check --manifest-path src-tauri/Cargo.toml`;
+  `npm run typecheck`;
+  `npm run test:frontend`;
+  `git diff --check`;
+  `bash launcher.sh --build-release`;
+  `bash launcher.sh --release-smoke`.
+- Release build output:
+  `target/release/pantograph`.
+- Manual GUI interaction was not launched in this environment. The release
+  smoke script also reports that Pantograph does not yet expose a headless
+  desktop release-smoke entrypoint, so the behavior verification is covered by
+  the backend/frontend regression tests and artifact smoke check.
 
 ## Execution Notes
 
@@ -415,6 +433,25 @@ coding and documentation standards.
   projecting the edit `session_id` as a run id. Added a focused regression test
   and documented the invariant in the embedded-runtime README. Verification:
   `cargo test -p pantograph-embedded-runtime diagnostics_snapshot` passed.
+- 2026-04-26: Completion summary. The diagnostics architecture now uses the
+  backend-generated `workflow_run_id` as the only canonical run key, keeps
+  diagnostics snapshot reads side-effect safe for retained traces, attributes
+  terminal runtime/scheduler diagnostics to the real generated run id, clears
+  frontend run selection on workflow switches, and shows opened-workflow timing
+  history before a new run starts. All implementation-owned dirty files were
+  committed in milestone slices.
+
+## Deviations And Follow-Ups
+
+- The plan's frontend workspace commands were stale for this repository. Root
+  scripts `npm run typecheck` and `npm run test:frontend` were used instead and
+  passed.
+- Direct manual GUI verification was not performed because this environment did
+  not launch the desktop UI and the release smoke script has no headless desktop
+  entrypoint. Automated regressions cover the listed GUI-facing behaviors.
+- Existing unrelated dirty files remain in the worktree and were not touched:
+  deleted local workflow/assets plus untracked `.pantograph/workflow-diagnostics.sqlite`
+  and asset files.
 
 ## Commit Cadence Notes
 
