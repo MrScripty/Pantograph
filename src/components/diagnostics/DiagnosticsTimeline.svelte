@@ -67,7 +67,7 @@
       <div>
         <div class="text-sm font-medium text-neutral-100">Node Timeline</div>
         <div class="text-xs text-neutral-500">
-          Relative node spans within run {run.executionId}
+          Relative node spans within run {run.workflowRunId}
         </div>
       </div>
       <div class="text-xs text-neutral-500">

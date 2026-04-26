@@ -90,7 +90,6 @@ test('normalizeConnectionCommitResponse converts camelCase payloads', () => {
         type: 'GraphModified',
         data: {
           workflow_id: 'session-1',
-          execution_id: 'session-1',
           dirty_tasks: ['target-node'],
         },
       },
@@ -111,7 +110,6 @@ test('normalizeConnectionCommitResponse converts camelCase payloads', () => {
         type: 'GraphModified',
         data: {
           workflow_id: 'session-1',
-          execution_id: 'session-1',
           dirty_tasks: ['target-node'],
         },
       },
@@ -185,7 +183,6 @@ test('normalizeInsertNodeOnEdgeResponse converts camelCase payloads', () => {
         type: 'GraphModified',
         data: {
           workflow_id: 'session-2',
-          execution_id: 'session-2',
           dirty_tasks: ['inserted-node', 'target'],
         },
       },
@@ -207,7 +204,6 @@ test('normalizeInsertNodeOnEdgeResponse converts camelCase payloads', () => {
         type: 'GraphModified',
         data: {
           workflow_id: 'session-2',
-          execution_id: 'session-2',
           dirty_tasks: ['inserted-node', 'target'],
         },
       },

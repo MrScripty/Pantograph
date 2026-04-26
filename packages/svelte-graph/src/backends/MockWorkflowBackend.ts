@@ -22,6 +22,7 @@ import type {
   WorkflowMetadata,
   WorkflowEvent,
   WorkflowSessionHandle,
+  WorkflowEditSessionRunResponse,
   GraphNode,
   GraphEdge,
 } from '../types/workflow.js';
@@ -123,7 +124,6 @@ export class MockWorkflowBackend implements WorkflowBackend {
         type: 'GraphModified',
         data: {
           workflow_id: sessionId,
-          execution_id: sessionId,
           dirty_tasks: dirtyTasks,
         },
       },
@@ -150,11 +150,13 @@ export class MockWorkflowBackend implements WorkflowBackend {
     };
   }
 
-  async runSession(sessionId: string): Promise<void> {
+  async runSession(sessionId: string): Promise<WorkflowEditSessionRunResponse> {
     const graph = this.sessions.get(sessionId);
     if (!graph) throw new Error(`Session not found: ${sessionId}`);
+    const workflowRunId = `mock-run-${Date.now()}`;
 
-    await this.simulateExecution(graph);
+    await this.simulateExecution(graph, workflowRunId);
+    return { workflow_run_id: workflowRunId };
   }
 
   async removeSession(sessionId: string): Promise<void> {
@@ -527,14 +529,16 @@ export class MockWorkflowBackend implements WorkflowBackend {
 
   // --- Internal ---
 
-  private async simulateExecution(graph: WorkflowGraph): Promise<void> {
-    const executionId = `mock-run-${Date.now()}`;
+  private async simulateExecution(
+    graph: WorkflowGraph,
+    workflowRunId: string,
+  ): Promise<void> {
     this.emit({
       type: 'Started',
       data: {
-        workflow_id: executionId,
+        workflow_id: workflowRunId,
         node_count: graph.nodes.length,
-        execution_id: executionId,
+        workflow_run_id: workflowRunId,
       },
     });
 
@@ -544,7 +548,7 @@ export class MockWorkflowBackend implements WorkflowBackend {
         data: {
           node_id: node.id,
           node_type: node.node_type,
-          execution_id: executionId,
+          workflow_run_id: workflowRunId,
         },
       });
       await sleep(300);
@@ -553,12 +557,12 @@ export class MockWorkflowBackend implements WorkflowBackend {
         data: {
           node_id: node.id,
           outputs: {},
-          execution_id: executionId,
+          workflow_run_id: workflowRunId,
         },
       });
     }
 
-    this.emit({ type: 'Completed', data: { outputs: {}, execution_id: executionId } });
+    this.emit({ type: 'Completed', data: { outputs: {}, workflow_run_id: workflowRunId } });
   }
 
   private emit(event: WorkflowEvent): void {

@@ -34,7 +34,7 @@
 
   // Store unsubscribe function at module scope so event handler can access it
   let currentUnsubscribe: (() => void) | null = null;
-  let activeExecutionId: string | null = null;
+  let activeWorkflowRunId: string | null = null;
   let waitingForInput = $state(false);
 
   function normalizeError(error: unknown): string {
@@ -55,7 +55,7 @@
     clearNodeRuntimeData([...AUDIO_RUNTIME_DATA_KEYS]);
     resetExecutionStates();
     clearStreamContent();
-    activeExecutionId = null;
+    activeWorkflowRunId = null;
     waitingForInput = false;
 
     // Subscribe to events - will be cleaned up in handleWorkflowEvent on completion/failure
@@ -65,7 +65,7 @@
       if (!$currentSessionId) {
         throw new Error('No active workflow session');
       }
-      await workflowService.runSession($currentSessionId, $currentGraphName);
+      await workflowService.runSession($currentSessionId);
       // Don't unsubscribe here - wait for Completed/Failed events
     } catch (error) {
       console.error('Workflow execution failed:', error);
@@ -76,7 +76,7 @@
         currentUnsubscribe();
         currentUnsubscribe = null;
       }
-      activeExecutionId = null;
+      activeWorkflowRunId = null;
       waitingForInput = false;
     }
   }
@@ -87,14 +87,14 @@
       currentUnsubscribe();
       currentUnsubscribe = null;
     }
-    activeExecutionId = null;
+    activeWorkflowRunId = null;
     waitingForInput = false;
   }
 
   function handleWorkflowEvent(event: WorkflowEvent) {
     const result = applyWorkflowToolbarEvent({
       event,
-      activeExecutionId,
+      activeWorkflowRunId,
       waitingForInput,
       edges: get(edges),
       workflow: {
@@ -105,7 +105,7 @@
       },
     });
 
-    activeExecutionId = result.activeExecutionId;
+    activeWorkflowRunId = result.activeWorkflowRunId;
     waitingForInput = result.waitingForInput;
 
     if (!result.handled) {

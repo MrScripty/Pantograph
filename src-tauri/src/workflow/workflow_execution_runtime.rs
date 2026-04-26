@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use serde::Serialize;
 use tauri::{AppHandle, Manager, State, ipc::Channel};
 
 use crate::agent::rag::SharedRagManager;
@@ -36,9 +37,14 @@ pub struct WorkflowExecutionRuntimeState<'a> {
 pub struct RunWorkflowExecutionSessionInput<'a> {
     pub app: AppHandle,
     pub session_id: String,
-    pub workflow_name: Option<String>,
     pub state: WorkflowExecutionRuntimeState<'a>,
     pub channel: Channel<WorkflowEvent>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowEditSessionRunResponse {
+    pub workflow_run_id: String,
 }
 
 struct DiagnosticsEmissionInput<'a> {
@@ -60,7 +66,6 @@ struct SessionGraphSnapshotInput<'a> {
     app: AppHandle,
     session_id: String,
     workflow_run_id: String,
-    workflow_name: Option<String>,
     session_graph: WorkflowGraph,
     state: WorkflowExecutionRuntimeState<'a>,
     channel: Channel<WorkflowEvent>,
@@ -256,7 +261,6 @@ async fn run_session_graph_snapshot(input: SessionGraphSnapshotInput<'_>) -> Res
         app,
         session_id,
         workflow_run_id,
-        workflow_name,
         session_graph,
         state,
         channel,
@@ -297,7 +301,6 @@ async fn run_session_graph_snapshot(input: SessionGraphSnapshotInput<'_>) -> Res
             event_workflow_id,
             diagnostics_store.inner().clone(),
         )
-        .with_workflow_name(workflow_name)
         .with_execution_graph(session_graph.clone()),
     );
     let guard = config.read().await;
@@ -377,11 +380,10 @@ async fn run_session_graph_snapshot(input: SessionGraphSnapshotInput<'_>) -> Res
 
 pub async fn run_workflow_execution_session(
     input: RunWorkflowExecutionSessionInput<'_>,
-) -> Result<(), String> {
+) -> Result<WorkflowEditSessionRunResponse, String> {
     let RunWorkflowExecutionSessionInput {
         app,
         session_id,
-        workflow_name,
         state,
         channel,
     } = input;
@@ -395,16 +397,19 @@ pub async fn run_workflow_execution_session(
         .workflow_graph_begin_edit_session_run(&session_id)
         .await
         .map_err(|e| e.to_envelope_json())?;
+    let response = WorkflowEditSessionRunResponse {
+        workflow_run_id: workflow_run_id.clone(),
+    };
     run_session_graph_snapshot(SessionGraphSnapshotInput {
         app,
         session_id,
         workflow_run_id,
-        workflow_name,
         session_graph,
         state,
         channel,
     })
-    .await
+    .await?;
+    Ok(response)
 }
 
 #[cfg(test)]

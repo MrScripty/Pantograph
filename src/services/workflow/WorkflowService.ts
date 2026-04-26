@@ -12,6 +12,7 @@ import type {
   WorkflowFile,
   WorkflowSessionHandle,
   WorkflowSchedulerSnapshotResponse,
+  WorkflowEditSessionRunResponse,
   WorkflowMetadata,
   WorkflowSessionQueueListResponse,
   WorkflowSessionStatusResponse,
@@ -21,7 +22,7 @@ import {
   mockValidateConnection,
 } from './mocks.ts';
 import {
-  getWorkflowEventExecutionId,
+  getWorkflowEventWorkflowRunId,
   projectWorkflowEventOwnership,
 } from '@pantograph/svelte-graph';
 import { parseWorkflowGraphMutationResponse } from '../../lib/workflowGraphMutationResponse.ts';
@@ -55,9 +56,9 @@ export class WorkflowService extends WorkflowGraphMutationService {
     this.currentRunExecutionId = projectWorkflowEventOwnership(
       event,
       this.currentRunExecutionId,
-    ).activeExecutionId;
+    ).activeWorkflowRunId;
     if (event.type === 'Started' && this.currentExecutionId === null) {
-      this.currentExecutionId = getWorkflowEventExecutionId(event);
+      this.currentExecutionId = getWorkflowEventWorkflowRunId(event);
     }
     this.eventListeners.forEach((listener) => listener(event));
   }
@@ -147,7 +148,7 @@ export class WorkflowService extends WorkflowGraphMutationService {
    * Run an existing workflow session by demanding outputs from terminal nodes.
    * Uses the current session if no sessionId is provided.
    */
-  async runSession(sessionId?: string, workflowName?: string | null): Promise<void> {
+  async runSession(sessionId?: string): Promise<WorkflowEditSessionRunResponse> {
     const id = sessionId ?? this.currentExecutionId;
     if (!id) {
       throw new Error('No active session');
@@ -155,7 +156,9 @@ export class WorkflowService extends WorkflowGraphMutationService {
 
     if (USE_WORKFLOW_MOCKS) {
       console.log('[WorkflowService] Mock: Run session', id);
-      return;
+      const workflowRunId = `mock-run-${Date.now()}`;
+      this.currentRunExecutionId = workflowRunId;
+      return { workflow_run_id: workflowRunId };
     }
 
     this.currentRunExecutionId = null;
@@ -165,11 +168,12 @@ export class WorkflowService extends WorkflowGraphMutationService {
       this.publishEvent(event);
     };
 
-    await invoke('run_workflow_execution_session', {
+    const response = await invoke<WorkflowEditSessionRunResponse>('run_workflow_execution_session', {
       sessionId: id,
-      workflowName: workflowName ?? null,
       channel: this.channel,
     });
+    this.currentRunExecutionId = response.workflow_run_id;
+    return response;
   }
 
   async getWorkflowCapabilities(workflowId: string): Promise<WorkflowCapabilitiesResponse> {
@@ -253,7 +257,7 @@ export class WorkflowService extends WorkflowGraphMutationService {
       return {
         workflow_id: 'mock-workflow',
         session_id: id,
-        trace_execution_id: id,
+        workflow_run_id: null,
         session: {
           session_id: id,
           workflow_id: 'mock-workflow',
@@ -276,7 +280,6 @@ export class WorkflowService extends WorkflowGraphMutationService {
 
   async getDiagnosticsSnapshot(
     workflowId?: string | null,
-    workflowName?: string | null,
     sessionId?: string | null,
     workflowGraph?: WorkflowGraph | null,
   ): Promise<WorkflowDiagnosticsProjection> {
@@ -285,9 +288,9 @@ export class WorkflowService extends WorkflowGraphMutationService {
         context: {
           requestedSessionId: sessionId ?? null,
           requestedWorkflowId: workflowId ?? null,
-          requestedWorkflowName: workflowName ?? null,
-          sourceExecutionId: null,
-          relevantExecutionId: null,
+          requestedWorkflowRunId: null,
+          sourceWorkflowRunId: null,
+          relevantWorkflowRunId: null,
           relevant: true,
         },
         runsById: {},
@@ -310,7 +313,7 @@ export class WorkflowService extends WorkflowGraphMutationService {
         scheduler: {
           workflowId: workflowId ?? null,
           sessionId: sessionId ?? null,
-          traceExecutionId: null,
+          workflowRunId: null,
           capturedAtMs: null,
           session: null,
           items: [],
@@ -325,7 +328,6 @@ export class WorkflowService extends WorkflowGraphMutationService {
     return invoke<WorkflowDiagnosticsProjection>('workflow_get_diagnostics_snapshot', {
       request: {
         workflow_id: workflowId ?? null,
-        workflow_name: workflowName ?? null,
         session_id: sessionId ?? null,
         workflow_graph: workflowGraph ?? null,
       },

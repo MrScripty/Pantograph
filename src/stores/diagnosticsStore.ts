@@ -7,7 +7,7 @@ import type {
 } from '../services/diagnostics/types';
 import type { WorkflowGraph, WorkflowEvent } from '../services/workflow/types';
 import { workflowGraph } from './workflowStore';
-import { currentGraphId, currentGraphName } from './graphSessionStore';
+import { currentGraphId } from './graphSessionStore';
 import { workflowService } from '../services/workflow/WorkflowService';
 import { sessionStores } from './storeInstances';
 import {
@@ -26,7 +26,6 @@ const DEFAULT_UI_STATE: DiagnosticsUiState = {
 
 let latestProjection: WorkflowDiagnosticsProjection = createEmptyDiagnosticsProjection();
 let latestWorkflowId: string | null = null;
-let latestWorkflowName: string | null = null;
 let latestWorkflowGraph: WorkflowGraph | null = null;
 let latestSessionId: string | null = null;
 let uiState: DiagnosticsUiState = { ...DEFAULT_UI_STATE };
@@ -36,7 +35,6 @@ function createSnapshot(): DiagnosticsSnapshot {
     projection: latestProjection,
     uiState,
     workflowId: latestWorkflowId,
-    workflowName: latestWorkflowName,
     workflowGraph: latestWorkflowGraph,
     sessionId: latestSessionId,
   });
@@ -104,7 +102,6 @@ const diagnosticsSnapshotStore = writable<DiagnosticsSnapshot>(createSnapshot())
 let workflowEventUnsubscribe: (() => void) | null = null;
 let workflowGraphUnsubscribe: (() => void) | null = null;
 let workflowIdUnsubscribe: (() => void) | null = null;
-let workflowNameUnsubscribe: (() => void) | null = null;
 let sessionIdUnsubscribe: (() => void) | null = null;
 let diagnosticsStarted = false;
 let refreshToken = 0;
@@ -125,7 +122,6 @@ async function refreshDiagnosticsProjection(): Promise<void> {
   try {
     const projection = await workflowService.getDiagnosticsSnapshot(
       latestWorkflowId,
-      latestWorkflowName,
       latestSessionId,
       latestWorkflowGraph,
     );
@@ -191,12 +187,6 @@ function bindDiagnosticsStore(): void {
     void refreshDiagnosticsProjection();
   });
 
-  workflowNameUnsubscribe = currentGraphName.subscribe((workflowName) => {
-    latestWorkflowName = workflowName;
-    emitSnapshot();
-    void refreshDiagnosticsProjection();
-  });
-
   sessionIdUnsubscribe = sessionStores.currentSessionId.subscribe((sessionId) => {
     latestSessionId = sessionId;
     emitSnapshot();
@@ -208,13 +198,11 @@ function unbindDiagnosticsStore(): void {
   workflowEventUnsubscribe?.();
   workflowGraphUnsubscribe?.();
   workflowIdUnsubscribe?.();
-  workflowNameUnsubscribe?.();
   sessionIdUnsubscribe?.();
 
   workflowEventUnsubscribe = null;
   workflowGraphUnsubscribe = null;
   workflowIdUnsubscribe = null;
-  workflowNameUnsubscribe = null;
   sessionIdUnsubscribe = null;
 }
 

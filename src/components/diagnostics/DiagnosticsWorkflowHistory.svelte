@@ -19,7 +19,7 @@
     <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
       <div>
         <div class="text-sm font-medium text-neutral-100">
-          {history.workflowName ?? history.workflowId}
+          {history.workflowId}
         </div>
         <div class="mt-1 text-xs text-neutral-500">
           Graph Fingerprint: {history.graphFingerprint ?? 'Unavailable'}

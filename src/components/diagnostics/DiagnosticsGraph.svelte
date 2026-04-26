@@ -272,7 +272,7 @@
             </div>
             <div class="flex items-center justify-between gap-3">
               <span>Workflow</span>
-              <span>{selectedRun.workflowName ?? selectedRun.workflowId ?? 'Unknown'}</span>
+              <span>{selectedRun.workflowId ?? 'Unknown'}</span>
             </div>
             <div class="flex items-center justify-between gap-3">
               <span>Observed Events</span>

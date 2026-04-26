@@ -38,7 +38,7 @@ export function createEmptyDiagnosticsProjection(): WorkflowDiagnosticsProjectio
     scheduler: {
       workflowId: null,
       sessionId: null,
-      traceExecutionId: null,
+      workflowRunId: null,
       capturedAtMs: null,
       session: null,
       items: [],
@@ -54,11 +54,11 @@ function createDefaultDiagnosticsProjectionContext(
   previous?: WorkflowDiagnosticsProjection,
 ): WorkflowDiagnosticsProjectionContext {
   return {
+    requestedWorkflowRunId: previous?.context?.requestedWorkflowRunId ?? null,
     requestedSessionId: previous?.context?.requestedSessionId ?? null,
     requestedWorkflowId: previous?.context?.requestedWorkflowId ?? null,
-    requestedWorkflowName: previous?.context?.requestedWorkflowName ?? null,
-    sourceExecutionId: null,
-    relevantExecutionId: previous?.context?.relevantExecutionId ?? null,
+    sourceWorkflowRunId: null,
+    relevantWorkflowRunId: previous?.context?.relevantWorkflowRunId ?? null,
     relevant: true,
   };
 }
@@ -93,7 +93,6 @@ type SnapshotParams = {
   projection: WorkflowDiagnosticsProjection;
   uiState: DiagnosticsUiState;
   workflowId: string | null;
-  workflowName: string | null;
   workflowGraph: WorkflowGraph | null;
   sessionId: string | null;
 };
@@ -102,7 +101,6 @@ export function createDiagnosticsSnapshot({
   projection,
   uiState,
   workflowId,
-  workflowName,
   workflowGraph,
   sessionId,
 }: SnapshotParams): DiagnosticsSnapshot {
@@ -121,7 +119,6 @@ export function createDiagnosticsSnapshot({
       ...uiState,
       currentSessionId: sessionId,
       currentWorkflowId: workflowId,
-      currentWorkflowName: workflowName,
       currentGraphFingerprint: workflowGraph?.derived_graph?.graph_fingerprint ?? null,
       currentGraphNodeCount: workflowGraph?.nodes.length ?? 0,
       currentGraphEdgeCount: workflowGraph?.edges.length ?? 0,

@@ -26,6 +26,7 @@ export type {
   WorkflowGraph,
   WorkflowMetadata,
   WorkflowFile,
+  WorkflowEditSessionRunResponse,
   WorkflowRuntimeRequirements,
   WorkflowRuntimeInstallState,
   WorkflowRuntimeCapability,
@@ -87,9 +88,9 @@ export type { ViewStores, ViewStoreOptions } from './stores/createViewStores.js'
 export { createSessionStores } from './stores/createSessionStores.js';
 export type { SessionStores, SessionStoreOptions, GraphType, GraphInfo, SessionKind } from './stores/createSessionStores.js';
 export {
-  claimWorkflowExecutionIdFromEvent,
-  getWorkflowEventExecutionId,
-  isWorkflowEventRelevantToExecution,
+  claimWorkflowRunIdFromEvent,
+  getWorkflowEventWorkflowRunId,
+  isWorkflowEventRelevantToWorkflowRun,
   projectWorkflowEventOwnership,
 } from './workflowEventOwnership.js';
 export type { WorkflowEventOwnershipProjection } from './workflowEventOwnership.js';

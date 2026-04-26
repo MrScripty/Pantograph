@@ -259,6 +259,10 @@ export interface WorkflowSessionHandle {
   session_kind: WorkflowSessionKind;
 }
 
+export interface WorkflowEditSessionRunResponse {
+  workflow_run_id: string;
+}
+
 export type WorkflowSessionState = 'idle_loaded' | 'idle_unloaded' | 'running';
 
 export interface WorkflowSessionSummary {
@@ -275,8 +279,9 @@ export interface WorkflowSessionSummary {
 export type WorkflowSessionQueueItemStatus = 'pending' | 'running';
 
 export interface WorkflowSessionQueueItem {
-  queue_id: string;
-  run_id?: string | null;
+  workflow_run_id: string;
+  enqueued_at_ms?: number | null;
+  dequeued_at_ms?: number | null;
   priority: number;
   status: WorkflowSessionQueueItemStatus;
 }
@@ -308,78 +313,78 @@ export interface WorkflowEventData {
   Started: WorkflowEventOwnershipData & {
     workflow_id: string;
     node_count: number;
-    execution_id?: string;
+    workflow_run_id?: string;
   };
   NodeStarted: WorkflowEventOwnershipData & {
     node_id: string;
     node_type: string;
-    execution_id?: string;
+    workflow_run_id?: string;
   };
   NodeProgress: WorkflowEventOwnershipData & {
     node_id: string;
     progress: number;
     message?: string;
-    execution_id?: string;
+    workflow_run_id?: string;
   };
   NodeStream: WorkflowEventOwnershipData & {
     node_id: string;
     port: string;
     chunk: unknown;
-    execution_id?: string;
+    workflow_run_id?: string;
   };
   NodeCompleted: WorkflowEventOwnershipData & {
     node_id: string;
     outputs: Record<string, unknown>;
-    execution_id?: string;
+    workflow_run_id?: string;
   };
   NodeError: WorkflowEventOwnershipData & {
     node_id: string;
     error: string;
-    execution_id?: string;
+    workflow_run_id?: string;
   };
   Completed: WorkflowEventOwnershipData & {
     workflow_id?: string;
     outputs: Record<string, unknown>;
-    execution_id?: string;
+    workflow_run_id?: string;
   };
   Failed: WorkflowEventOwnershipData & {
     workflow_id?: string;
     error: string;
-    execution_id?: string;
+    workflow_run_id?: string;
   };
   Cancelled: WorkflowEventOwnershipData & {
     workflow_id?: string;
     error: string;
-    execution_id?: string;
+    workflow_run_id?: string;
   };
   GraphModified: WorkflowEventOwnershipData & {
     workflow_id?: string;
-    execution_id?: string;
+    workflow_run_id?: string;
     graph?: WorkflowGraph | null;
     dirty_tasks?: string[];
     memory_impact?: GraphMemoryImpactSummary | null;
   };
   WaitingForInput: WorkflowEventOwnershipData & {
     workflow_id?: string;
-    execution_id?: string;
+    workflow_run_id?: string;
     node_id: string;
     message?: string | null;
   };
   IncrementalExecutionStarted: WorkflowEventOwnershipData & {
     workflow_id?: string;
-    execution_id?: string;
+    workflow_run_id?: string;
     task_ids: string[];
   };
   RuntimeSnapshot: WorkflowEventOwnershipData & {
     workflow_id?: string;
-    execution_id?: string;
+    workflow_run_id?: string;
     captured_at_ms: number;
     capabilities?: WorkflowCapabilitiesResponse | null;
     error?: string | null;
   };
   SchedulerSnapshot: WorkflowEventOwnershipData & {
     workflow_id?: string;
-    execution_id?: string;
+    workflow_run_id?: string;
     session_id: string;
     captured_at_ms: number;
     session?: WorkflowSessionSummary | null;
@@ -387,7 +392,7 @@ export interface WorkflowEventData {
     error?: string | null;
   };
   DiagnosticsSnapshot: WorkflowEventOwnershipData & {
-    execution_id?: string;
+    workflow_run_id?: string;
     snapshot: unknown;
   };
 }

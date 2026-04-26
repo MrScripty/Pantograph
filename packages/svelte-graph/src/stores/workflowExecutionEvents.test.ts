@@ -26,7 +26,7 @@ function createWorkflowActions() {
 function applyEvent(
   event: WorkflowEvent,
   options?: {
-    activeExecutionId?: string | null;
+    activeWorkflowRunId?: string | null;
     waitingForInput?: boolean;
     edges?: Edge[];
   },
@@ -34,7 +34,7 @@ function applyEvent(
   const actions = createWorkflowActions();
   const result = applyWorkflowExecutionEvent({
     event,
-    activeExecutionId: options?.activeExecutionId ?? null,
+    activeWorkflowRunId: options?.activeWorkflowRunId ?? null,
     waitingForInput: options?.waitingForInput ?? false,
     edges: options?.edges ?? [],
     workflow: actions.workflow,
@@ -46,38 +46,38 @@ function applyEvent(
   };
 }
 
-test('applyWorkflowExecutionEvent marks node starts as running and claims execution id', () => {
+test('applyWorkflowExecutionEvent marks node starts as running and claims workflow run id', () => {
   const { result, stateCalls } = applyEvent({
     type: 'NodeStarted',
     data: {
       node_id: 'node-a',
       node_type: 'llm',
-      execution_id: 'run-1',
+      workflow_run_id: 'run-1',
     },
   });
 
   assert.deepEqual(stateCalls, [{ nodeId: 'node-a', state: 'running', message: undefined }]);
-  assert.equal(result.activeExecutionId, 'run-1');
+  assert.equal(result.activeWorkflowRunId, 'run-1');
   assert.equal(result.waitingForInput, false);
   assert.equal(result.handled, true);
   assert.equal(result.shouldCleanup, false);
 });
 
-test('applyWorkflowExecutionEvent ignores events for a different claimed execution', () => {
+test('applyWorkflowExecutionEvent ignores events for a different claimed workflow run', () => {
   const { result, stateCalls } = applyEvent(
     {
       type: 'NodeStarted',
       data: {
         node_id: 'node-b',
         node_type: 'llm',
-        execution_id: 'run-2',
+        workflow_run_id: 'run-2',
       },
     },
-    { activeExecutionId: 'run-1' },
+    { activeWorkflowRunId: 'run-1' },
   );
 
   assert.deepEqual(stateCalls, []);
-  assert.equal(result.activeExecutionId, 'run-1');
+  assert.equal(result.activeWorkflowRunId, 'run-1');
   assert.equal(result.handled, false);
   assert.equal(result.shouldCleanup, false);
 });
@@ -91,7 +91,7 @@ test('applyWorkflowExecutionEvent propagates completed outputs to connected targ
         outputs: {
           image: 'blob-1',
         },
-        execution_id: 'run-1',
+        workflow_run_id: 'run-1',
       },
     },
     {
@@ -126,7 +126,7 @@ test('applyWorkflowExecutionEvent marks waiting nodes and keeps waiting state tr
     data: {
       node_id: 'input-node',
       message: 'Need user confirmation',
-      execution_id: 'run-1',
+      workflow_run_id: 'run-1',
     },
   });
 
@@ -148,16 +148,16 @@ test('applyWorkflowExecutionEvent requests cleanup for cancelled runs', () => {
       type: 'Cancelled',
       data: {
         error: 'Stopped by user',
-        execution_id: 'run-1',
+        workflow_run_id: 'run-1',
       },
     },
     {
-      activeExecutionId: 'run-1',
+      activeWorkflowRunId: 'run-1',
       waitingForInput: true,
     },
   );
 
-  assert.equal(result.activeExecutionId, 'run-1');
+  assert.equal(result.activeWorkflowRunId, 'run-1');
   assert.equal(result.waitingForInput, false);
   assert.equal(result.handled, true);
   assert.equal(result.shouldCleanup, true);
@@ -169,11 +169,11 @@ test('applyWorkflowExecutionEvent marks incremental rerun tasks as running and c
       type: 'IncrementalExecutionStarted',
       data: {
         task_ids: ['node-a', 'node-b'],
-        execution_id: 'run-1',
+        workflow_run_id: 'run-1',
       },
     },
     {
-      activeExecutionId: 'run-1',
+      activeWorkflowRunId: 'run-1',
       waitingForInput: true,
     },
   );
@@ -182,7 +182,7 @@ test('applyWorkflowExecutionEvent marks incremental rerun tasks as running and c
     { nodeId: 'node-a', state: 'running', message: undefined },
     { nodeId: 'node-b', state: 'running', message: undefined },
   ]);
-  assert.equal(result.activeExecutionId, 'run-1');
+  assert.equal(result.activeWorkflowRunId, 'run-1');
   assert.equal(result.waitingForInput, false);
   assert.equal(result.handled, true);
   assert.equal(result.shouldCleanup, false);
@@ -194,12 +194,12 @@ test('applyWorkflowExecutionEvent replays graph-modified dirty tasks into idle s
       type: 'GraphModified',
       data: {
         workflow_id: 'wf-1',
-        execution_id: 'run-1',
+        workflow_run_id: 'run-1',
         dirty_tasks: ['node-a', 'node-b'],
       },
     },
     {
-      activeExecutionId: 'run-1',
+      activeWorkflowRunId: 'run-1',
       waitingForInput: true,
     },
   );
@@ -208,7 +208,7 @@ test('applyWorkflowExecutionEvent replays graph-modified dirty tasks into idle s
     { nodeId: 'node-a', state: 'idle', message: undefined },
     { nodeId: 'node-b', state: 'idle', message: undefined },
   ]);
-  assert.equal(result.activeExecutionId, 'run-1');
+  assert.equal(result.activeWorkflowRunId, 'run-1');
   assert.equal(result.waitingForInput, true);
   assert.equal(result.handled, true);
   assert.equal(result.shouldCleanup, false);

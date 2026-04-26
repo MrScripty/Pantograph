@@ -1,27 +1,27 @@
 export interface ExecutionScopedWorkflowEvent {
   type?: string;
   data: {
-    execution_id?: string | null;
+    workflow_run_id?: string | null;
     ownership?: WorkflowEventOwnershipProjection | null;
   };
 }
 
 export interface WorkflowEventOwnershipProjection {
-  eventExecutionId: string | null;
-  activeExecutionId: string | null;
+  eventWorkflowRunId: string | null;
+  activeWorkflowRunId: string | null;
   relevant: boolean;
 }
 
-export function getWorkflowEventExecutionId(event: ExecutionScopedWorkflowEvent): string | null {
+export function getWorkflowEventWorkflowRunId(event: ExecutionScopedWorkflowEvent): string | null {
   return (
-    normalizeExecutionId(event.data.ownership?.eventExecutionId) ??
-    normalizeExecutionId(event.data.execution_id)
+    normalizeWorkflowRunId(event.data.ownership?.eventWorkflowRunId) ??
+    normalizeWorkflowRunId(event.data.workflow_run_id)
   );
 }
 
-function normalizeExecutionId(executionId: string | null | undefined): string | null {
-  return typeof executionId === 'string' && executionId.trim().length > 0
-    ? executionId
+function normalizeWorkflowRunId(workflowRunId: string | null | undefined): string | null {
+  return typeof workflowRunId === 'string' && workflowRunId.trim().length > 0
+    ? workflowRunId
     : null;
 }
 
@@ -32,48 +32,48 @@ function normalizeBackendOwnership(
     return null;
   }
 
-  const eventExecutionId = normalizeExecutionId(ownership.eventExecutionId);
-  const activeExecutionId = normalizeExecutionId(ownership.activeExecutionId);
-  if (eventExecutionId === null || activeExecutionId === null) {
+  const eventWorkflowRunId = normalizeWorkflowRunId(ownership.eventWorkflowRunId);
+  const activeWorkflowRunId = normalizeWorkflowRunId(ownership.activeWorkflowRunId);
+  if (eventWorkflowRunId === null || activeWorkflowRunId === null) {
     return null;
   }
 
   return {
-    eventExecutionId,
-    activeExecutionId,
+    eventWorkflowRunId,
+    activeWorkflowRunId,
     relevant: ownership.relevant,
   };
 }
 
 export function projectWorkflowEventOwnership(
   event: ExecutionScopedWorkflowEvent,
-  currentExecutionId: string | null,
+  currentWorkflowRunId: string | null,
 ): WorkflowEventOwnershipProjection {
   const backendOwnership = normalizeBackendOwnership(event.data.ownership);
   if (backendOwnership !== null) {
     return backendOwnership;
   }
 
-  const eventExecutionId = getWorkflowEventExecutionId(event);
-  const activeExecutionId = currentExecutionId ?? eventExecutionId;
+  const eventWorkflowRunId = getWorkflowEventWorkflowRunId(event);
+  const activeWorkflowRunId = currentWorkflowRunId ?? eventWorkflowRunId;
 
   return {
-    eventExecutionId,
-    activeExecutionId,
-    relevant: activeExecutionId === null || eventExecutionId === activeExecutionId,
+    eventWorkflowRunId,
+    activeWorkflowRunId,
+    relevant: activeWorkflowRunId === null || eventWorkflowRunId === activeWorkflowRunId,
   };
 }
 
-export function claimWorkflowExecutionIdFromEvent(
+export function claimWorkflowRunIdFromEvent(
   event: ExecutionScopedWorkflowEvent,
-  currentExecutionId: string | null,
+  currentWorkflowRunId: string | null,
 ): string | null {
-  return projectWorkflowEventOwnership(event, currentExecutionId).activeExecutionId;
+  return projectWorkflowEventOwnership(event, currentWorkflowRunId).activeWorkflowRunId;
 }
 
-export function isWorkflowEventRelevantToExecution(
+export function isWorkflowEventRelevantToWorkflowRun(
   event: ExecutionScopedWorkflowEvent,
-  expectedExecutionId: string | null,
+  expectedWorkflowRunId: string | null,
 ): boolean {
-  return projectWorkflowEventOwnership(event, expectedExecutionId).relevant;
+  return projectWorkflowEventOwnership(event, expectedWorkflowRunId).relevant;
 }

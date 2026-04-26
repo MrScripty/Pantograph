@@ -56,7 +56,7 @@ async fn workflow_executor_parallel_run_emits_consumer_visible_events_through_ad
         .find(|event| event["type"] == "DiagnosticsSnapshot")
         .expect("final diagnostics snapshot");
     let run = &snapshot["data"]["snapshot"]["runsById"]["exec-parallel"];
-    assert_eq!(run["workflowName"], "Parallel Workflow");
+    assert_eq!(run["workflowId"], "parallel");
     assert_eq!(run["graphFingerprintAtStart"], "graph-parallel");
     assert_eq!(run["lastIncrementalTaskIds"][0], "left");
     assert_eq!(run["lastIncrementalTaskIds"][1], "right");

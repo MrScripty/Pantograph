@@ -32,7 +32,9 @@ function createBackendStub(overrides: Partial<WorkflowBackend> = {}): WorkflowBa
         session_kind: 'edit',
       } satisfies WorkflowSessionHandle;
     },
-    async runSession() {},
+    async runSession() {
+      return { workflow_run_id: 'stub-run-1' };
+    },
     async removeSession() {},
     async addNode() {
       return { graph: { nodes: [], edges: [] } };

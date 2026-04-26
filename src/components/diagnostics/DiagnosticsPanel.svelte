@@ -50,7 +50,7 @@
             <div>
               <div class="text-[11px] uppercase tracking-[0.28em] text-neutral-500">Workflow Diagnostics</div>
               <div class="mt-2 text-sm font-medium text-neutral-100">
-                {snapshot.state.currentWorkflowName ?? snapshot.state.currentWorkflowId ?? 'Active Workflow'}
+                {snapshot.state.currentWorkflowId ?? 'Active Workflow'}
               </div>
             </div>
             <button
@@ -87,21 +87,21 @@
             </div>
           {:else}
             <div class="divide-y divide-neutral-900">
-              {#each runs as run (run.executionId)}
+              {#each runs as run (run.workflowRunId)}
                 <button
                   type="button"
-                  class:selected-run={snapshot.state.selectedRunId === run.executionId}
+                  class:selected-run={snapshot.state.selectedRunId === run.workflowRunId}
                   class="w-full px-4 py-3 text-left transition-colors hover:bg-neutral-900/80"
-                  onclick={() => handleSelectRun(run.executionId)}
+                  onclick={() => handleSelectRun(run.workflowRunId)}
                 >
                   <div class="flex items-center justify-between gap-3">
-                    <div class="truncate text-sm font-medium text-neutral-100">{run.executionId}</div>
+                    <div class="truncate text-sm font-medium text-neutral-100">{run.workflowRunId}</div>
                     <span class={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${getDiagnosticsStatusClasses(run.status)}`}>
                       {run.status}
                     </span>
                   </div>
                   <div class="mt-1 truncate text-xs text-neutral-500">
-                    {run.workflowName ?? run.workflowId ?? 'Unlabeled workflow'}
+                    {run.workflowId ?? 'Unlabeled workflow'}
                   </div>
                   <div class="mt-2 flex items-center justify-between text-[11px] text-neutral-500">
                     <span>{formatDiagnosticsTimestamp(run.startedAtMs)}</span>

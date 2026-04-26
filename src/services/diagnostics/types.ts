@@ -56,7 +56,6 @@ export interface DiagnosticsWorkflowNodeTimingHistory {
 
 export interface DiagnosticsWorkflowTimingHistory {
   workflowId: string;
-  workflowName: string | null;
   graphFingerprint: string | null;
   timingExpectation?: WorkflowTimingExpectation | null;
   nodes: Record<string, DiagnosticsWorkflowNodeTimingHistory>;
@@ -67,7 +66,7 @@ export interface DiagnosticsEventRecord {
   sequence: number;
   timestampMs: number;
   type: string;
-  executionId: string;
+  workflowRunId: string;
   workflowId: string | null;
   nodeId: string | null;
   summary: string;
@@ -90,10 +89,9 @@ export interface DiagnosticsNodeTrace {
 }
 
 export interface DiagnosticsRunTrace {
-  executionId: string;
+  workflowRunId: string;
   sessionId: string | null;
   workflowId: string | null;
-  workflowName: string | null;
   graphFingerprintAtStart: string | null;
   nodeCountAtStart: number;
   status: DiagnosticsRunStatus;
@@ -156,7 +154,7 @@ export interface DiagnosticsRuntimeLifecycleSnapshot {
 export interface DiagnosticsSchedulerSnapshot {
   workflowId: string | null;
   sessionId: string | null;
-  traceExecutionId: string | null;
+  workflowRunId: string | null;
   capturedAtMs: number | null;
   session: WorkflowSessionSummary | null;
   items: WorkflowSessionQueueItem[];
@@ -164,11 +162,11 @@ export interface DiagnosticsSchedulerSnapshot {
 }
 
 export interface WorkflowDiagnosticsProjectionContext {
+  requestedWorkflowRunId: string | null;
   requestedSessionId: string | null;
   requestedWorkflowId: string | null;
-  requestedWorkflowName: string | null;
-  sourceExecutionId: string | null;
-  relevantExecutionId: string | null;
+  sourceWorkflowRunId: string | null;
+  relevantWorkflowRunId: string | null;
   relevant: boolean;
 }
 
@@ -231,10 +229,9 @@ export interface WorkflowTraceNodeRecord {
 }
 
 export interface WorkflowTraceSummary {
-  execution_id: string;
+  workflow_run_id: string;
   session_id?: string | null;
   workflow_id?: string | null;
-  workflow_name?: string | null;
   graph_fingerprint?: string | null;
   status: WorkflowTraceStatus;
   started_at_ms: number;
@@ -254,7 +251,7 @@ export interface WorkflowTraceSummary {
 }
 
 export interface WorkflowTraceSnapshotRequest {
-  execution_id?: string | null;
+  workflow_run_id?: string | null;
   session_id?: string | null;
   workflow_id?: string | null;
   include_completed?: boolean | null;
@@ -272,7 +269,6 @@ export interface WorkflowDiagnosticsState extends WorkflowDiagnosticsProjection 
   selectedNodeId: string | null;
   currentSessionId: string | null;
   currentWorkflowId: string | null;
-  currentWorkflowName: string | null;
   currentGraphFingerprint: string | null;
   currentGraphNodeCount: number;
   currentGraphEdgeCount: number;

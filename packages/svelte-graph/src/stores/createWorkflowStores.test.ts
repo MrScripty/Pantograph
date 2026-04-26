@@ -54,7 +54,9 @@ function createBackendStub(initialGraph: WorkflowGraph): WorkflowBackend {
         session_kind: 'edit',
       } satisfies WorkflowSessionHandle;
     },
-    async runSession() {},
+    async runSession() {
+      return { workflow_run_id: 'stub-run-1' };
+    },
     async removeSession() {},
     async addNode() {
       throw new Error('not implemented');
@@ -102,7 +104,6 @@ function createBackendStub(initialGraph: WorkflowGraph): WorkflowBackend {
           type: 'GraphModified',
           data: {
             workflow_id: 'stub-session-1',
-            execution_id: 'stub-session-1',
             dirty_tasks: [nodeId],
           },
         },
@@ -192,7 +193,6 @@ function createBackendStub(initialGraph: WorkflowGraph): WorkflowBackend {
           type: 'GraphModified',
           data: {
             workflow_id: 'stub-session-1',
-            execution_id: 'stub-session-1',
             dirty_tasks: [group.id],
           },
         },

@@ -41,12 +41,6 @@ impl TauriEventAdapter {
         }
     }
 
-    /// Attach the display name that belongs to runtime execution events.
-    pub fn with_workflow_name(self, workflow_name: Option<String>) -> Self {
-        let _ = workflow_name;
-        self
-    }
-
     /// Attach the graph that belongs to runtime execution events.
     pub fn with_execution_graph(mut self, graph: WorkflowGraph) -> Self {
         self.execution_graph = Some(graph);

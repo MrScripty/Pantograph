@@ -15,6 +15,7 @@ import type {
   WorkflowMetadata,
   WorkflowEvent,
   WorkflowSessionHandle,
+  WorkflowEditSessionRunResponse,
   GraphNode,
   GraphEdge,
   ConnectionAnchor,
@@ -62,14 +63,13 @@ export class TauriWorkflowBackend implements WorkflowBackend {
     });
   }
 
-  async runSession(sessionId: string, workflowName?: string | null): Promise<void> {
+  async runSession(sessionId: string): Promise<WorkflowEditSessionRunResponse> {
     this.channel = new Channel<WorkflowEvent>();
     this.channel.onmessage = (event) => {
       this.eventListeners.forEach((listener) => listener(event));
     };
-    await invoke('run_workflow_execution_session', {
+    return invoke<WorkflowEditSessionRunResponse>('run_workflow_execution_session', {
       sessionId,
-      workflowName: workflowName ?? null,
       channel: this.channel,
     });
   }

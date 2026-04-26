@@ -23,10 +23,9 @@ import type { DiagnosticsRunTrace } from '../../services/diagnostics/types.ts';
 
 function createRunTrace(): DiagnosticsRunTrace {
   return {
-    executionId: 'exec-1',
+    workflowRunId: 'run-1',
     sessionId: 'session-1',
     workflowId: 'wf-1',
-    workflowName: 'Workflow One',
     graphFingerprintAtStart: 'graph-1',
     nodeCountAtStart: 4,
     status: 'running',

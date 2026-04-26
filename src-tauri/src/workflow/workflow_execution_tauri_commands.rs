@@ -6,7 +6,8 @@ use crate::llm::{SharedAppConfig, SharedGateway, SharedRuntimeRegistry};
 use super::commands::{SharedExtensions, SharedWorkflowDiagnosticsStore, SharedWorkflowService};
 use super::events::WorkflowEvent;
 use super::workflow_execution_commands::{
-    RunWorkflowExecutionSessionInput, WorkflowExecutionRuntimeState,
+    RunWorkflowExecutionSessionInput, WorkflowEditSessionRunResponse,
+    WorkflowExecutionRuntimeState,
 };
 use pantograph_workflow_service::{
     ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse,
@@ -291,7 +292,6 @@ pub async fn create_workflow_execution_session(
 pub async fn run_workflow_execution_session(
     app: AppHandle,
     session_id: String,
-    workflow_name: Option<String>,
     gateway: State<'_, SharedGateway>,
     runtime_registry: State<'_, SharedRuntimeRegistry>,
     config: State<'_, SharedAppConfig>,
@@ -300,12 +300,11 @@ pub async fn run_workflow_execution_session(
     workflow_service: State<'_, SharedWorkflowService>,
     diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
     channel: Channel<WorkflowEvent>,
-) -> Result<(), String> {
+) -> Result<WorkflowEditSessionRunResponse, String> {
     super::workflow_execution_commands::run_workflow_execution_session(
         RunWorkflowExecutionSessionInput {
             app,
             session_id,
-            workflow_name,
             state: WorkflowExecutionRuntimeState {
                 gateway,
                 runtime_registry,

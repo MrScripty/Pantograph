@@ -36,7 +36,7 @@ function createWorkflowActions() {
 function applyEvent(
   event: WorkflowEvent,
   options?: {
-    activeExecutionId?: string | null;
+    activeWorkflowRunId?: string | null;
     waitingForInput?: boolean;
     edges?: Edge[];
   },
@@ -44,7 +44,7 @@ function applyEvent(
   const actions = createWorkflowActions();
   const result = applyWorkflowToolbarEvent({
     event,
-    activeExecutionId: options?.activeExecutionId ?? null,
+    activeWorkflowRunId: options?.activeWorkflowRunId ?? null,
     waitingForInput: options?.waitingForInput ?? false,
     edges: options?.edges ?? [],
     workflow: actions.workflow,
@@ -62,11 +62,11 @@ test('applyWorkflowToolbarEvent marks incremental rerun tasks as running and cle
       type: 'IncrementalExecutionStarted',
       data: {
         task_ids: ['node-a', 'node-b'],
-        execution_id: 'run-1',
+        workflow_run_id: 'run-1',
       },
     },
     {
-      activeExecutionId: 'run-1',
+      activeWorkflowRunId: 'run-1',
       waitingForInput: true,
     },
   );
@@ -85,12 +85,12 @@ test('applyWorkflowToolbarEvent replays graph-modified dirty tasks into idle sta
       type: 'GraphModified',
       data: {
         workflow_id: 'wf-1',
-        execution_id: 'run-1',
+        workflow_run_id: 'run-1',
         dirty_tasks: ['node-a', 'node-b'],
       },
     },
     {
-      activeExecutionId: 'run-1',
+      activeWorkflowRunId: 'run-1',
       waitingForInput: true,
     },
   );
@@ -110,11 +110,11 @@ test('applyWorkflowToolbarEvent marks waiting nodes and keeps waiting state true
       data: {
         node_id: 'input-node',
         message: 'Need user confirmation',
-        execution_id: 'run-1',
+        workflow_run_id: 'run-1',
       },
     },
     {
-      activeExecutionId: 'run-1',
+      activeWorkflowRunId: 'run-1',
     },
   );
 
@@ -125,7 +125,7 @@ test('applyWorkflowToolbarEvent marks waiting nodes and keeps waiting state true
       message: 'Need user confirmation',
     },
   ]);
-  assert.equal(result.activeExecutionId, 'run-1');
+  assert.equal(result.activeWorkflowRunId, 'run-1');
   assert.equal(result.waitingForInput, true);
   assert.equal(result.handled, true);
   assert.equal(result.shouldCleanup, false);
@@ -137,16 +137,16 @@ test('applyWorkflowToolbarEvent requests cleanup for cancelled runs', () => {
       type: 'Cancelled',
       data: {
         error: 'Stopped by user',
-        execution_id: 'run-1',
+        workflow_run_id: 'run-1',
       },
     },
     {
-      activeExecutionId: 'run-1',
+      activeWorkflowRunId: 'run-1',
       waitingForInput: true,
     },
   );
 
-  assert.equal(result.activeExecutionId, 'run-1');
+  assert.equal(result.activeWorkflowRunId, 'run-1');
   assert.equal(result.waitingForInput, false);
   assert.equal(result.handled, true);
   assert.equal(result.shouldCleanup, true);
@@ -162,7 +162,7 @@ test('applyWorkflowToolbarEvent mirrors completed outputs into node and downstre
           audio: 'base64-audio',
           text: 'hello',
         },
-        execution_id: 'run-1',
+        workflow_run_id: 'run-1',
       },
     },
     {
@@ -222,7 +222,7 @@ test('applyWorkflowToolbarEvent forwards text stream chunks to connected targets
           mode: 'replace',
           text: 'hello',
         },
-        execution_id: 'run-1',
+        workflow_run_id: 'run-1',
       },
     },
     {

@@ -554,15 +554,15 @@ identity model without frontend repair.
 without owning or correcting it.
 
 **Tasks:**
-- [ ] Update TypeScript diagnostics and workflow service types to mirror the
+- [x] Update TypeScript diagnostics and workflow service types to mirror the
   new backend DTOs.
-- [ ] Remove `workflowName` from diagnostics calls and run diagnostics
+- [x] Remove `workflowName` from diagnostics calls and run diagnostics
   rendering.
-- [ ] Make Run button capture and track returned `workflow_run_id`.
-- [ ] Render diagnostics run labels from `workflow_id`.
-- [ ] Ensure opening a workflow triggers a diagnostics snapshot/history request
+- [x] Make Run button capture and track returned `workflow_run_id`.
+- [x] Render diagnostics run labels from `workflow_id`.
+- [x] Ensure opening a workflow triggers a diagnostics snapshot/history request
   by `workflow_id` and graph context before first run.
-- [ ] Update frontend tests for startup history display and workflow switching.
+- [x] Update frontend tests for startup history display and workflow switching.
 
 **Verification:**
 - `npm run typecheck`
@@ -570,7 +570,31 @@ without owning or correcting it.
 - Frontend acceptance test or component test proving diagnostics rows do not
   reuse stale workflow labels after switching workflows.
 
-**Status:** Not started.
+**Status:** Completed.
+
+**Notes:**
+- Frontend diagnostics DTOs now expose `workflowRunId` and `workflowId`
+  without workflow-name repair fields.
+- Diagnostics panel, graph, workflow-history, scheduler, event, and timeline
+  views now render workflow identity from `workflowId` and scheduler rows from
+  one `workflow_run_id` column.
+- GUI and reusable graph run-event ownership now tracks
+  `activeWorkflowRunId`; graph-edit session APIs keep their existing
+  session-scoped `executionId` command parameters.
+- The GUI run Tauri command now returns a `workflow_run_id` response and no
+  longer accepts the dead `workflow_name` side-channel argument.
+- Opening or switching workflows continues to request diagnostics snapshots
+  from the backend by `workflow_id`, session id, and graph context before a
+  first run.
+- Added frontend coverage proving switched workflow diagnostics expose
+  workflow-id labels without stale `workflowName` fields.
+
+**Verification Results:**
+- `npm run typecheck`
+- `npm run test:frontend`
+- `cargo check --manifest-path src-tauri/Cargo.toml`
+- `cargo test --manifest-path src-tauri/Cargo.toml workflow::event_adapter`
+- `git diff --check`
 
 ### Milestone 7: Binding And Public API Guardrails
 
@@ -684,6 +708,10 @@ model is implemented.
   events, runtime debug trace selection, and headless diagnostics helpers now
   use `workflow_run_id`; scheduler/runtime/trace joins are tested through the
   canonical run id.
+- 2026-04-26: Milestone 6 completed. Frontend diagnostics and graph event
+  contracts now use backend-authored `workflow_run_id`, diagnostics labels use
+  `workflow_id`, and the GUI run command returns the submitted
+  `workflow_run_id` without a workflow-name side channel.
 - Current known unrelated dirty files must remain untouched unless the user
   explicitly assigns them to this work:
   - `.pantograph/workflows/tiny-sd-turbo-diffusion.json`
@@ -755,10 +783,14 @@ owned serially by the integration implementer.
 - Milestone 2: Make Scheduler Own Run Id Creation.
 - Milestone 3: Propagate Workflow Run Id Through Runtime Events.
 - Milestone 4: Rebuild Trace And Timing Around Workflow Run Id.
+- Milestone 5: Update Tauri Diagnostics Projection.
+- Milestone 6: Update Frontend Contracts And Rendering.
 
 ### Deviations
 
-- None.
+- Milestone 6 also removed the lingering GUI `workflow_name` run-command
+  argument because implementing the frontend run-response contract showed that
+  the dead argument would otherwise remain on a touched public Tauri boundary.
 
 ### Follow-Ups
 
@@ -795,6 +827,12 @@ owned serially by the integration implementer.
   - `cargo check --manifest-path src-tauri/Cargo.toml`
   - `cargo test --manifest-path src-tauri/Cargo.toml workflow::diagnostics`
   - `git diff --check -- src-tauri/src/llm/commands/registry.rs src-tauri/src/llm/commands/registry src-tauri/src/workflow`
+- Milestone 6 frontend contracts and rendering:
+  - `npm run typecheck`
+  - `npm run test:frontend`
+  - `cargo check --manifest-path src-tauri/Cargo.toml`
+  - `cargo test --manifest-path src-tauri/Cargo.toml workflow::event_adapter`
+  - `git diff --check`
 
 ### Traceability Links
 

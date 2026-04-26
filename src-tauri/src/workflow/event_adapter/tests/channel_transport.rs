@@ -17,8 +17,7 @@ fn adapter_send_emits_primary_and_diagnostics_events() {
         captured.lock().expect("captured events lock").push(value);
         Ok(())
     });
-    let adapter = TauriEventAdapter::new(channel, "adapter-workflow", diagnostics_store)
-        .with_workflow_name(Some("Adapter Workflow".to_string()));
+    let adapter = TauriEventAdapter::new(channel, "adapter-workflow", diagnostics_store);
 
     EventSink::send(
         &adapter,
@@ -34,16 +33,12 @@ fn adapter_send_emits_primary_and_diagnostics_events() {
     assert_eq!(events.len(), 2);
     assert_eq!(events[0]["type"], "Started");
     assert_eq!(events[0]["data"]["workflow_id"], "adapter-workflow");
-    assert_eq!(events[0]["data"]["execution_id"], "exec-1");
+    assert_eq!(events[0]["data"]["workflow_run_id"], "exec-1");
     assert_eq!(events[1]["type"], "DiagnosticsSnapshot");
-    assert_eq!(events[1]["data"]["execution_id"], "exec-1");
+    assert_eq!(events[1]["data"]["workflow_run_id"], "exec-1");
     assert_eq!(events[1]["data"]["snapshot"]["runOrder"][0], "exec-1");
     assert_eq!(
         events[1]["data"]["snapshot"]["runsById"]["exec-1"]["workflowId"],
         "adapter-workflow"
-    );
-    assert_eq!(
-        events[1]["data"]["snapshot"]["runsById"]["exec-1"]["workflowName"],
-        "Adapter Workflow"
     );
 }

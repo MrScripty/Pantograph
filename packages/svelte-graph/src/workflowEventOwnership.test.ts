@@ -2,17 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  claimWorkflowExecutionIdFromEvent,
-  getWorkflowEventExecutionId,
-  isWorkflowEventRelevantToExecution,
+  claimWorkflowRunIdFromEvent,
+  getWorkflowEventWorkflowRunId,
+  isWorkflowEventRelevantToWorkflowRun,
   projectWorkflowEventOwnership,
 } from './workflowEventOwnership.ts';
 
-test('getWorkflowEventExecutionId returns the event execution id when present', () => {
+test('getWorkflowEventWorkflowRunId returns the event workflow run id when present', () => {
   assert.equal(
-    getWorkflowEventExecutionId({
+    getWorkflowEventWorkflowRunId({
       data: {
-        execution_id: 'run-1',
+        workflow_run_id: 'run-1',
       },
     }),
     'run-1',
@@ -24,14 +24,14 @@ test('projectWorkflowEventOwnership exposes event identity active identity and r
     projectWorkflowEventOwnership(
       {
         data: {
-          execution_id: 'run-2',
+          workflow_run_id: 'run-2',
         },
       },
       'run-1',
     ),
     {
-      eventExecutionId: 'run-2',
-      activeExecutionId: 'run-1',
+      eventWorkflowRunId: 'run-2',
+      activeWorkflowRunId: 'run-1',
       relevant: false,
     },
   );
@@ -42,14 +42,14 @@ test('projectWorkflowEventOwnership claims the backend event id when no run is p
     projectWorkflowEventOwnership(
       {
         data: {
-          execution_id: 'run-1',
+          workflow_run_id: 'run-1',
         },
       },
       null,
     ),
     {
-      eventExecutionId: 'run-1',
-      activeExecutionId: 'run-1',
+      eventWorkflowRunId: 'run-1',
+      activeWorkflowRunId: 'run-1',
       relevant: true,
     },
   );
@@ -60,10 +60,10 @@ test('projectWorkflowEventOwnership prefers backend-authored ownership', () => {
     projectWorkflowEventOwnership(
       {
         data: {
-          execution_id: 'legacy-run',
+          workflow_run_id: 'legacy-run',
           ownership: {
-            eventExecutionId: 'backend-run',
-            activeExecutionId: 'backend-run',
+            eventWorkflowRunId: 'backend-run',
+            activeWorkflowRunId: 'backend-run',
             relevant: true,
           },
         },
@@ -71,8 +71,8 @@ test('projectWorkflowEventOwnership prefers backend-authored ownership', () => {
       null,
     ),
     {
-      eventExecutionId: 'backend-run',
-      activeExecutionId: 'backend-run',
+      eventWorkflowRunId: 'backend-run',
+      activeWorkflowRunId: 'backend-run',
       relevant: true,
     },
   );
@@ -84,8 +84,8 @@ test('projectWorkflowEventOwnership trusts backend ownership relevance', () => {
       {
         data: {
           ownership: {
-            eventExecutionId: 'run-2',
-            activeExecutionId: 'run-2',
+            eventWorkflowRunId: 'run-2',
+            activeWorkflowRunId: 'run-2',
             relevant: true,
           },
         },
@@ -93,19 +93,19 @@ test('projectWorkflowEventOwnership trusts backend ownership relevance', () => {
       'run-1',
     ),
     {
-      eventExecutionId: 'run-2',
-      activeExecutionId: 'run-2',
+      eventWorkflowRunId: 'run-2',
+      activeWorkflowRunId: 'run-2',
       relevant: true,
     },
   );
 });
 
-test('isWorkflowEventRelevantToExecution accepts all events when no execution is pinned', () => {
+test('isWorkflowEventRelevantToWorkflowRun accepts all events when no run is pinned', () => {
   assert.equal(
-    isWorkflowEventRelevantToExecution(
+    isWorkflowEventRelevantToWorkflowRun(
       {
         data: {
-          execution_id: 'run-1',
+          workflow_run_id: 'run-1',
         },
       },
       null,
@@ -114,37 +114,37 @@ test('isWorkflowEventRelevantToExecution accepts all events when no execution is
   );
 });
 
-test('isWorkflowEventRelevantToExecution accepts matching execution ids', () => {
+test('isWorkflowEventRelevantToWorkflowRun accepts matching workflow run ids', () => {
   assert.equal(
-    isWorkflowEventRelevantToExecution(
+    isWorkflowEventRelevantToWorkflowRun(
       {
         data: {
-          execution_id: 'session-1',
+          workflow_run_id: 'run-1',
         },
       },
-      'session-1',
+      'run-1',
     ),
     true,
   );
 });
 
-test('isWorkflowEventRelevantToExecution rejects mismatched execution ids', () => {
+test('isWorkflowEventRelevantToWorkflowRun rejects mismatched workflow run ids', () => {
   assert.equal(
-    isWorkflowEventRelevantToExecution(
+    isWorkflowEventRelevantToWorkflowRun(
       {
         data: {
-          execution_id: 'session-2',
+          workflow_run_id: 'run-2',
         },
       },
-      'session-1',
+      'run-1',
     ),
     false,
   );
 });
 
-test('isWorkflowEventRelevantToExecution keeps events without execution ids', () => {
+test('isWorkflowEventRelevantToWorkflowRun keeps events without workflow run ids', () => {
   assert.equal(
-    isWorkflowEventRelevantToExecution(
+    isWorkflowEventRelevantToWorkflowRun(
       {
         data: {},
       },
@@ -154,25 +154,25 @@ test('isWorkflowEventRelevantToExecution keeps events without execution ids', ()
   );
 });
 
-test('isWorkflowEventRelevantToExecution rejects events without execution ids after pinning', () => {
+test('isWorkflowEventRelevantToWorkflowRun rejects events without workflow run ids after pinning', () => {
   assert.equal(
-    isWorkflowEventRelevantToExecution(
+    isWorkflowEventRelevantToWorkflowRun(
       {
         data: {},
       },
-      'session-1',
+      'run-1',
     ),
     false,
   );
 });
 
-test('claimWorkflowExecutionIdFromEvent pins the started execution id for transient runs', () => {
+test('claimWorkflowRunIdFromEvent pins the started workflow run id for transient runs', () => {
   assert.equal(
-    claimWorkflowExecutionIdFromEvent(
+    claimWorkflowRunIdFromEvent(
       {
         type: 'Started',
         data: {
-          execution_id: 'run-9',
+          workflow_run_id: 'run-9',
         },
       },
       null,
@@ -181,13 +181,13 @@ test('claimWorkflowExecutionIdFromEvent pins the started execution id for transi
   );
 });
 
-test('claimWorkflowExecutionIdFromEvent pins the first execution-scoped event id', () => {
+test('claimWorkflowRunIdFromEvent pins the first run-scoped event id', () => {
   assert.equal(
-    claimWorkflowExecutionIdFromEvent(
+    claimWorkflowRunIdFromEvent(
       {
         type: 'GraphModified',
         data: {
-          execution_id: 'run-graph-1',
+          workflow_run_id: 'run-graph-1',
         },
       },
       null,
@@ -196,9 +196,9 @@ test('claimWorkflowExecutionIdFromEvent pins the first execution-scoped event id
   );
 });
 
-test('claimWorkflowExecutionIdFromEvent ignores events without an execution id', () => {
+test('claimWorkflowRunIdFromEvent ignores events without a workflow run id', () => {
   assert.equal(
-    claimWorkflowExecutionIdFromEvent(
+    claimWorkflowRunIdFromEvent(
       {
         type: 'SchedulerSnapshot',
         data: {},
@@ -209,13 +209,13 @@ test('claimWorkflowExecutionIdFromEvent ignores events without an execution id',
   );
 });
 
-test('claimWorkflowExecutionIdFromEvent does not replace an existing execution id', () => {
+test('claimWorkflowRunIdFromEvent does not replace an existing workflow run id', () => {
   assert.equal(
-    claimWorkflowExecutionIdFromEvent(
+    claimWorkflowRunIdFromEvent(
       {
         type: 'Started',
         data: {
-          execution_id: 'run-9',
+          workflow_run_id: 'run-9',
         },
       },
       'run-8',

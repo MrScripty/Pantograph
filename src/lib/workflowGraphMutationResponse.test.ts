@@ -10,7 +10,6 @@ test('parseWorkflowGraphMutationResponse accepts graph payloads with additive gr
       type: 'GraphModified',
       data: {
         workflow_id: 'session-1',
-        execution_id: 'session-1',
         dirty_tasks: ['node-a'],
       },
     },

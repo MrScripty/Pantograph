@@ -24,7 +24,7 @@
         <div class="mt-3 truncate text-sm font-medium text-neutral-100">{scheduler.sessionId}</div>
         <div class="mt-2 text-xs text-neutral-500">{scheduler.workflowId ?? 'Unknown workflow'}</div>
         <div class="mt-2 text-xs text-neutral-500">
-          Trace target {scheduler.traceExecutionId ?? 'session-scoped only'}
+          Active run {scheduler.workflowRunId ?? 'none'}
         </div>
         <div class="mt-3 text-xs text-neutral-500">
           Refreshed {formatDiagnosticsTimestamp(scheduler.capturedAtMs)}
@@ -91,17 +91,15 @@
           <table class="min-w-full divide-y divide-neutral-800 text-sm">
             <thead class="bg-neutral-950/90 text-left text-xs uppercase tracking-[0.24em] text-neutral-500">
               <tr>
-                <th class="px-4 py-3 font-medium">Queue Id</th>
-                <th class="px-4 py-3 font-medium">Run Id</th>
+                <th class="px-4 py-3 font-medium">Workflow Run Id</th>
                 <th class="px-4 py-3 font-medium">Priority</th>
                 <th class="px-4 py-3 font-medium">Status</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-neutral-900">
-              {#each scheduler.items as item (item.queue_id)}
+              {#each scheduler.items as item (item.workflow_run_id)}
                 <tr>
-                  <td class="px-4 py-3 text-neutral-200">{item.queue_id}</td>
-                  <td class="px-4 py-3 text-neutral-400">{item.run_id ?? 'auto-generated'}</td>
+                  <td class="px-4 py-3 text-neutral-200">{item.workflow_run_id}</td>
                   <td class="px-4 py-3 text-neutral-300">{item.priority}</td>
                   <td class="px-4 py-3">
                     <span class={`inline-flex rounded-full border px-2 py-1 text-xs font-medium ${getSchedulerStateClasses(item.status)}`}>

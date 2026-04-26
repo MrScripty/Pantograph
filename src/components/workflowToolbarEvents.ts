@@ -19,14 +19,14 @@ interface WorkflowToolbarStoreActions {
 
 export interface WorkflowToolbarEventInput {
   event: WorkflowEvent;
-  activeExecutionId: string | null;
+  activeWorkflowRunId: string | null;
   waitingForInput: boolean;
   edges: Edge[];
   workflow: WorkflowToolbarStoreActions;
 }
 
 export interface WorkflowToolbarEventResult {
-  activeExecutionId: string | null;
+  activeWorkflowRunId: string | null;
   waitingForInput: boolean;
   handled: boolean;
   shouldCleanup: boolean;
@@ -34,14 +34,14 @@ export interface WorkflowToolbarEventResult {
 
 export function applyWorkflowToolbarEvent({
   event,
-  activeExecutionId,
+  activeWorkflowRunId,
   waitingForInput,
   edges,
   workflow,
 }: WorkflowToolbarEventInput): WorkflowToolbarEventResult {
   const result = applyWorkflowExecutionEvent({
     event,
-    activeExecutionId,
+    activeWorkflowRunId,
     waitingForInput,
     edges,
     workflow: {

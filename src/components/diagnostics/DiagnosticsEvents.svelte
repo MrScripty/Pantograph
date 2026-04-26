@@ -26,7 +26,7 @@
       <div>
         <div class="text-sm font-medium text-neutral-100">Event Stream</div>
         <div class="text-xs text-neutral-500">
-          Most recent {run.events.length} retained events for execution {run.executionId}
+          Most recent {run.events.length} retained events for execution {run.workflowRunId}
         </div>
       </div>
       <div class="text-xs text-neutral-500">
@@ -57,7 +57,7 @@
               </div>
               <div class="min-w-0">
                 <div class="truncate text-sm text-neutral-100">{event.summary}</div>
-                <div class="truncate text-xs text-neutral-500">{event.executionId}</div>
+                <div class="truncate text-xs text-neutral-500">{event.workflowRunId}</div>
               </div>
               <div class="flex items-center justify-end gap-2">
                 {#if event.nodeId}

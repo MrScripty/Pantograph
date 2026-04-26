@@ -19,7 +19,7 @@
   let workflowName = $derived($currentGraphName || 'Untitled Workflow');
 
   let currentUnsubscribe: (() => void) | null = null;
-  let activeExecutionId: string | null = null;
+  let activeWorkflowRunId: string | null = null;
   let waitingForInput = $state(false);
 
   async function handleRun() {
@@ -27,7 +27,7 @@
 
     isExecuting.set(true);
     stores.workflow.resetExecutionStates();
-    activeExecutionId = null;
+    activeWorkflowRunId = null;
     waitingForInput = false;
 
     currentUnsubscribe = backend.subscribeEvents(handleWorkflowEvent);
@@ -36,7 +36,7 @@
       if (!$currentSessionId) {
         throw new Error('No active workflow session');
       }
-      await backend.runSession($currentSessionId, workflowName);
+      await backend.runSession($currentSessionId);
     } catch (error) {
       console.error('Workflow execution failed:', error);
       isExecuting.set(false);
@@ -44,7 +44,7 @@
         currentUnsubscribe();
         currentUnsubscribe = null;
       }
-      activeExecutionId = null;
+      activeWorkflowRunId = null;
       waitingForInput = false;
     }
   }
@@ -55,20 +55,20 @@
       currentUnsubscribe();
       currentUnsubscribe = null;
     }
-    activeExecutionId = null;
+    activeWorkflowRunId = null;
     waitingForInput = false;
   }
 
   function handleWorkflowEvent(event: WorkflowEvent) {
     const result = applyWorkflowExecutionEvent({
       event,
-      activeExecutionId,
+      activeWorkflowRunId,
       waitingForInput,
       edges: get(edgesStore),
       workflow: stores.workflow,
     });
 
-    activeExecutionId = result.activeExecutionId;
+    activeWorkflowRunId = result.activeWorkflowRunId;
     waitingForInput = result.waitingForInput;
 
     if (!result.handled) {

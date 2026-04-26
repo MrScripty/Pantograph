@@ -18,6 +18,7 @@ import type {
   InsertNodePositionHint,
   InsertNodeConnectionResponse,
   InsertNodeOnEdgeResponse,
+  WorkflowEditSessionRunResponse,
 } from './workflow.js';
 import type { PortMapping } from './groups.js';
 
@@ -76,7 +77,7 @@ export interface WorkflowBackend {
   ): Promise<WorkflowSessionHandle>;
 
   /** Run an existing backend-owned session by demanding outputs from terminal nodes. */
-  runSession(sessionId: string, workflowName?: string | null): Promise<void>;
+  runSession(sessionId: string): Promise<WorkflowEditSessionRunResponse>;
 
   /** Clean up a session when done */
   removeSession(sessionId: string): Promise<void>;

@@ -12,7 +12,6 @@ test('applyWorkflowGraphMutationResponse replays backend-owned dirty tasks into 
       type: 'GraphModified',
       data: {
         workflow_id: 'session-1',
-        execution_id: 'session-1',
         dirty_tasks: ['node-a', 'node-b'],
       },
     },
