@@ -5,8 +5,8 @@ use pantograph_workflow_service::{
 
 use super::overlay::{DiagnosticsNodeOverlay, DiagnosticsRunOverlay};
 use super::types::{
-    DiagnosticsNodeTrace, DiagnosticsRunTrace, DiagnosticsTimingExpectation,
-    DiagnosticsTraceRuntimeMetrics, diagnostics_node_status, diagnostics_run_status,
+    diagnostics_node_status, diagnostics_run_status, DiagnosticsNodeTrace, DiagnosticsRunTrace,
+    DiagnosticsTimingExpectation, DiagnosticsTraceRuntimeMetrics,
 };
 use crate::workflow::events::WorkflowEvent;
 

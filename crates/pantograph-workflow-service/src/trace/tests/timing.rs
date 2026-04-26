@@ -83,6 +83,52 @@ fn graph_timing_expectations_reads_prior_workflow_id_history() {
 }
 
 #[test]
+fn graph_timing_expectations_recovers_unique_legacy_id_for_same_graph() {
+    let store = WorkflowTraceStore::with_timing_ledger(
+        10,
+        SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens"),
+    );
+
+    record_completed_timing_run_with_workflow(&store, "exec-name-1", "Display Name", 1_000, 100);
+    record_completed_timing_run_with_workflow(&store, "exec-name-2", "Display Name", 2_000, 200);
+    record_completed_timing_run_with_workflow(&store, "exec-name-3", "Display Name", 3_000, 300);
+
+    let history =
+        store.graph_timing_expectations("saved-workflow-id".to_string(), &timing_graph_context());
+    let node = history.nodes.first().expect("node timing history");
+    let expectation = node
+        .timing_expectation
+        .as_ref()
+        .expect("legacy id timing expectation");
+
+    assert_eq!(history.workflow_id, "saved-workflow-id");
+    assert_eq!(expectation.sample_count, 3);
+    assert_eq!(expectation.median_duration_ms, Some(200));
+}
+
+#[test]
+fn graph_timing_expectations_ignores_ambiguous_legacy_ids_for_same_graph() {
+    let store = WorkflowTraceStore::with_timing_ledger(
+        10,
+        SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens"),
+    );
+
+    record_completed_timing_run_with_workflow(&store, "exec-name-1", "Display Name", 1_000, 100);
+    record_completed_timing_run_with_workflow(&store, "exec-alias-1", "Other Name", 2_000, 200);
+
+    let history =
+        store.graph_timing_expectations("saved-workflow-id".to_string(), &timing_graph_context());
+    let node = history.nodes.first().expect("node timing history");
+    let expectation = node
+        .timing_expectation
+        .as_ref()
+        .expect("empty timing expectation");
+
+    assert_eq!(history.workflow_id, "saved-workflow-id");
+    assert_eq!(expectation.sample_count, 0);
+}
+
+#[test]
 fn workflow_trace_store_persists_run_summary_history() {
     let store = WorkflowTraceStore::with_timing_ledger(
         10,

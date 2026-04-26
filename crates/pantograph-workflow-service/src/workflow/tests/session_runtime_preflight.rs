@@ -89,8 +89,8 @@ async fn workflow_execution_session_runtime_preflight_is_cached_until_graph_chan
 }
 
 #[tokio::test]
-async fn workflow_execution_session_runtime_preflight_cache_invalidates_on_override_selection_change()
- {
+async fn workflow_execution_session_runtime_preflight_cache_invalidates_on_override_selection_change(
+) {
     let workflow_capabilities_calls = Arc::new(AtomicUsize::new(0));
     let runtime_capabilities_calls = Arc::new(AtomicUsize::new(0));
     let technical_fit_requests = Arc::new(Mutex::new(Vec::new()));

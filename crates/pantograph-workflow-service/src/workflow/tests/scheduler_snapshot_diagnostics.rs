@@ -178,8 +178,8 @@ async fn workflow_get_scheduler_snapshot_merges_runtime_registry_diagnostics_fro
 }
 
 #[tokio::test]
-async fn workflow_get_scheduler_snapshot_marks_rebalance_required_when_idle_runtime_can_be_reclaimed()
- {
+async fn workflow_get_scheduler_snapshot_marks_rebalance_required_when_idle_runtime_can_be_reclaimed(
+) {
     let host = MockWorkflowHost::new(8, 1024);
     let service = WorkflowService::with_capacity_limits(3, 1);
     let _loaded = service

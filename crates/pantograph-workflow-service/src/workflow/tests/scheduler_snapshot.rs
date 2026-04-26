@@ -312,10 +312,8 @@ async fn workflow_get_scheduler_snapshot_omits_trace_execution_for_ambiguous_pen
 
     assert_eq!(snapshot.workflow_run_id, None);
     assert_eq!(snapshot.items.len(), 2);
-    assert!(
-        snapshot
-            .items
-            .iter()
-            .all(|item| item.status == WorkflowExecutionSessionQueueItemStatus::Pending)
-    );
+    assert!(snapshot
+        .items
+        .iter()
+        .all(|item| item.status == WorkflowExecutionSessionQueueItemStatus::Pending));
 }

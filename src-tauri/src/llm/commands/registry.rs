@@ -19,7 +19,7 @@ use crate::workflow::headless_diagnostics_transport::{
 };
 use pantograph_workflow_service::{WorkflowServiceError, WorkflowTraceSnapshotRequest};
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager, State, command};
+use tauri::{command, AppHandle, Manager, State};
 
 use crate::llm::runtime_registry::reclaim_runtime_and_sync_runtime_registry;
 use crate::llm::{SharedGateway, SharedRuntimeRegistry};

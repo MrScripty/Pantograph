@@ -4,14 +4,14 @@ use pantograph_runtime_attribution::{
 use rusqlite::Connection;
 
 use crate::{
-    DEFAULT_STANDARD_RETENTION_DAYS, DiagnosticsLedgerError, DiagnosticsLedgerRepository,
-    DiagnosticsQuery, ExecutionGuaranteeLevel, LicenseSnapshot, ModelIdentity,
-    ModelLicenseUsageEvent, ModelOutputMeasurement, OutputMeasurementUnavailableReason,
-    OutputModality, PruneTimingObservationsCommand, PruneUsageEventsCommand, RetentionClass,
-    SqliteDiagnosticsLedger, UsageEventStatus, UsageLineage, WorkflowRunSummaryQuery,
-    WorkflowRunSummaryRecord, WorkflowRunSummaryStatus, WorkflowTimingExpectation,
-    WorkflowTimingExpectationComparison, WorkflowTimingExpectationQuery, WorkflowTimingObservation,
-    WorkflowTimingObservationScope, WorkflowTimingObservationStatus,
+    DiagnosticsLedgerError, DiagnosticsLedgerRepository, DiagnosticsQuery, ExecutionGuaranteeLevel,
+    LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement,
+    OutputMeasurementUnavailableReason, OutputModality, PruneTimingObservationsCommand,
+    PruneUsageEventsCommand, RetentionClass, SqliteDiagnosticsLedger, UsageEventStatus,
+    UsageLineage, WorkflowRunSummaryQuery, WorkflowRunSummaryRecord, WorkflowRunSummaryStatus,
+    WorkflowTimingExpectation, WorkflowTimingExpectationComparison, WorkflowTimingExpectationQuery,
+    WorkflowTimingObservation, WorkflowTimingObservationScope, WorkflowTimingObservationStatus,
+    DEFAULT_STANDARD_RETENTION_DAYS,
 };
 
 #[test]
@@ -220,6 +220,33 @@ fn timing_expectation_falls_back_when_runtime_refinement_has_too_little_history(
     assert_eq!(expectation.median_duration_ms, Some(200));
     assert_eq!(expectation.typical_min_duration_ms, Some(200));
     assert_eq!(expectation.typical_max_duration_ms, Some(300));
+}
+
+#[test]
+fn lists_distinct_workflow_ids_for_timing_graph_fingerprint() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    let mut first = sample_timing_observation(1, 100);
+    first.workflow_id = "workflow-a".to_string();
+    let mut duplicate = sample_timing_observation(2, 200);
+    duplicate.workflow_id = "workflow-a".to_string();
+    let mut second = sample_timing_observation(3, 300);
+    second.workflow_id = "workflow-b".to_string();
+
+    ledger
+        .record_timing_observation(first)
+        .expect("first timing observation is recorded");
+    ledger
+        .record_timing_observation(duplicate)
+        .expect("duplicate workflow timing observation is recorded");
+    ledger
+        .record_timing_observation(second)
+        .expect("second workflow timing observation is recorded");
+
+    let workflow_ids = ledger
+        .workflow_ids_for_timing_graph_fingerprint("graph_alpha")
+        .expect("workflow ids load");
+
+    assert_eq!(workflow_ids, vec!["workflow-a", "workflow-b"]);
 }
 
 #[test]

@@ -218,6 +218,9 @@ impl WorkflowGraphStore for FileSystemWorkflowGraphStore {
         let mut workflow: WorkflowFile = serde_json::from_str(&content).map_err(|e| {
             WorkflowServiceError::Internal(format!("Failed to parse workflow file: {}", e))
         })?;
+        if let Some(stem) = full_path.file_stem().and_then(|s| s.to_str()) {
+            workflow.metadata.id = Some(stem.to_string());
+        }
         sanitize_workflow_graph_persistence_state(&mut workflow.graph);
         workflow.graph.refresh_derived_graph();
         Ok(workflow)

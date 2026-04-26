@@ -101,6 +101,30 @@ fn workflow_timing_history_reads_prior_runs_without_active_trace() {
 }
 
 #[test]
+fn workflow_timing_history_recovers_unique_legacy_id_before_run() {
+    let store = WorkflowDiagnosticsStore::with_default_timing_ledger(
+        pantograph_workflow_service::SqliteDiagnosticsLedger::open_in_memory()
+            .expect("ledger opens"),
+    );
+
+    record_completed_timing_run_for_workflow(&store, "exec-1", "Display Name", 1_000, 100);
+    record_completed_timing_run_for_workflow(&store, "exec-2", "Display Name", 2_000, 200);
+    record_completed_timing_run_for_workflow(&store, "exec-3", "Display Name", 3_000, 300);
+
+    let history = store.workflow_timing_history("saved-workflow-id".to_string(), &sample_graph());
+    let node = history.nodes.get("llm-1").expect("node history");
+    let expectation = node
+        .timing_expectation
+        .as_ref()
+        .expect("node timing expectation");
+
+    assert_eq!(history.workflow_id, "saved-workflow-id");
+    assert_eq!(history.graph_fingerprint.as_deref(), Some("graph-123"));
+    assert_eq!(expectation.sample_count, 3);
+    assert_eq!(expectation.median_duration_ms, Some(200));
+}
+
+#[test]
 fn retained_runs_and_timing_history_keep_run_and_workflow_identity_separate() {
     let store = WorkflowDiagnosticsStore::with_default_timing_ledger(
         pantograph_workflow_service::SqliteDiagnosticsLedger::open_in_memory()
@@ -108,8 +132,7 @@ fn retained_runs_and_timing_history_keep_run_and_workflow_identity_separate() {
     );
 
     record_completed_timing_run_for_workflow(&store, "run-a", "wf-a", 1_000, 100);
-    let projection =
-        record_completed_timing_run_for_workflow(&store, "run-b", "wf-b", 2_000, 200);
+    let projection = record_completed_timing_run_for_workflow(&store, "run-b", "wf-b", 2_000, 200);
 
     assert_eq!(projection.runs_by_id.len(), 2);
     assert_eq!(

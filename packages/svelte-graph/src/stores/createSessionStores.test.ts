@@ -203,6 +203,43 @@ test('loadWorkflowByName renders the loaded file graph after creating an edit se
   assert.match(get(sessionStores.currentSessionId) ?? '', /^stub-session-/);
 });
 
+test('loadWorkflowByName uses loaded metadata id for session identity', async () => {
+  let createdSessionWorkflowId: string | null | undefined;
+  const backend = createBackendStub({
+    async createSession(_graph: WorkflowGraph, workflowId?: string | null) {
+      createdSessionWorkflowId = workflowId;
+      return {
+        session_id: 'stub-session-1',
+        session_kind: 'edit',
+      } satisfies WorkflowSessionHandle;
+    },
+    async loadWorkflow(path: string) {
+      assert.equal(path, '.pantograph/workflows/Display Flow.json');
+      return {
+        version: '1.0',
+        metadata: {
+          id: 'saved-flow',
+          name: 'Display Flow',
+          created: '',
+          modified: '',
+        },
+        graph: { nodes: [], edges: [] },
+      };
+    },
+  });
+  const sessionStores = createSessionStores(
+    backend,
+    createWorkflowStoresStub(),
+    createViewStoresStub(),
+  );
+
+  const loaded = await sessionStores.loadWorkflowByName('Display Flow');
+
+  assert.equal(loaded, true);
+  assert.equal(createdSessionWorkflowId, 'saved-flow');
+  assert.equal(get(sessionStores.currentGraphId), 'saved-flow');
+});
+
 test('loadWorkflowByName exposes backend failures through graphSessionError', async () => {
   const backend = createBackendStub({
     async loadWorkflow() {

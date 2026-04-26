@@ -1,12 +1,13 @@
 use rusqlite::params;
 
 use super::SqliteDiagnosticsLedger;
-use crate::DiagnosticsLedgerError;
 use crate::timing::{
-    MIN_TIMING_EXPECTATION_SAMPLE_COUNT, PruneTimingObservationsCommand,
-    PruneTimingObservationsResult, WorkflowTimingExpectation, WorkflowTimingExpectationQuery,
-    WorkflowTimingObservation, WorkflowTimingObservationStatus,
+    PruneTimingObservationsCommand, PruneTimingObservationsResult, WorkflowTimingExpectation,
+    WorkflowTimingExpectationQuery, WorkflowTimingObservation, WorkflowTimingObservationStatus,
+    MIN_TIMING_EXPECTATION_SAMPLE_COUNT,
 };
+use crate::util::{validate_required_text, MAX_ID_LEN};
+use crate::DiagnosticsLedgerError;
 
 pub(super) fn record_timing_observation(
     ledger: &mut SqliteDiagnosticsLedger,
@@ -37,6 +38,25 @@ pub(super) fn record_timing_observation(
         ],
     )?;
     Ok(())
+}
+
+pub(super) fn workflow_ids_for_timing_graph_fingerprint(
+    ledger: &SqliteDiagnosticsLedger,
+    graph_fingerprint: &str,
+) -> Result<Vec<String>, DiagnosticsLedgerError> {
+    validate_required_text("graph_fingerprint", graph_fingerprint, MAX_ID_LEN)?;
+    let mut stmt = ledger.conn.prepare(
+        "SELECT DISTINCT workflow_id
+         FROM workflow_timing_observations
+         WHERE graph_fingerprint = ?1
+         ORDER BY workflow_id",
+    )?;
+    let rows = stmt.query_map(params![graph_fingerprint], |row| row.get::<_, String>(0))?;
+    let mut workflow_ids = Vec::new();
+    for row in rows {
+        workflow_ids.push(row?);
+    }
+    Ok(workflow_ids)
 }
 
 pub(super) fn timing_expectation(

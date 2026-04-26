@@ -4,7 +4,8 @@ use pantograph_workflow_service::{
     graph::{WorkflowExecutionSessionKind, WorkflowGraphSessionStateView},
     WorkflowCapabilitiesResponse, WorkflowExecutionSessionQueueItem,
     WorkflowExecutionSessionQueueItemStatus, WorkflowExecutionSessionState,
-    WorkflowExecutionSessionSummary, WorkflowRuntimeRequirements, WorkflowSchedulerSnapshotResponse,
+    WorkflowExecutionSessionSummary, WorkflowRuntimeRequirements,
+    WorkflowSchedulerSnapshotResponse,
 };
 
 use super::{

@@ -15,19 +15,30 @@
   const { workflowGraph, isDirty } = stores.workflow;
   const { isReadOnly, currentGraphId, currentGraphName } = stores.session;
 
+  const WORKFLOW_FILE_EXTENSION = '.json';
+
   let workflowName = $derived($currentGraphName || 'Untitled Workflow');
+
+  function workflowIdFromSavedPath(path: string, fallbackName: string): string {
+    const filename = path.split(/[\\/]/).pop();
+    if (!filename?.endsWith(WORKFLOW_FILE_EXTENSION)) {
+      return fallbackName;
+    }
+    return filename.slice(0, -WORKFLOW_FILE_EXTENSION.length);
+  }
 
   async function handleSave() {
     const name = prompt('Workflow name:', workflowName);
     if (!name) return;
 
     try {
-      await backend.saveWorkflow(name, get(workflowGraph));
+      const path = await backend.saveWorkflow(name, get(workflowGraph));
+      const workflowId = workflowIdFromSavedPath(path, name);
       isDirty.set(false);
 
-      currentGraphId.set(name);
+      currentGraphId.set(workflowId);
       currentGraphName.set(name);
-      stores.session.saveLastGraph(name, 'workflow');
+      stores.session.saveLastGraph(workflowId, 'workflow');
       await stores.session.refreshWorkflowList();
     } catch (error) {
       console.error('Failed to save workflow:', error);

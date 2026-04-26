@@ -440,6 +440,58 @@ coding and documentation standards.
   frontend run selection on workflow switches, and shows opened-workflow timing
   history before a new run starts. All implementation-owned dirty files were
   committed in milestone slices.
+- 2026-04-26: Re-opened after user report that node runtime history still does
+  not display before runs. Ledger inspection showed persisted timing
+  observations keyed by workflow display-name stems such as
+  `Tiny SD Turbo Diffusion`, while opened workflows can be addressed by saved
+  filename ids such as `tiny-sd-turbo-diffusion` or
+  `juggernaut-x-v10-sdxl`. The original regression covered restart-visible
+  history only when the opened workflow id already matched the persisted
+  timing workflow id. This is a re-plan trigger because persisted workflow
+  identity normalization is part of the acceptance criteria.
+
+## Reopened Milestone: Workflow Identity Normalization For Opened History
+
+**Goal:** Ensure opened-workflow timing history is projected under the current
+canonical workflow id even when older observations were recorded under a
+display-name/file-stem variant for the same graph fingerprint.
+
+**Tasks:**
+- [x] Ensure workflow load responses expose the file-stem workflow id, matching
+  list/save behavior, so the GUI and edit session use one id source after load.
+- [x] Ensure timing-history projection can recover prior observations for the
+  same graph fingerprint when the current canonical id has no samples and there
+  is exactly one persisted alternate workflow id for that fingerprint.
+- [x] Keep the diagnostics projection reported `workflow_id` equal to the
+  opened canonical workflow id so the frontend mismatch guard does not discard
+  recovered history.
+- [x] Add regression tests for opened-workflow history with old observations
+  recorded under a different workflow id for the same graph fingerprint.
+
+**Verification:**
+- `cargo test -p pantograph-diagnostics-ledger`
+- `cargo test -p pantograph-workflow-service`
+- `cargo test --manifest-path src-tauri/Cargo.toml workflow::diagnostics`
+- `npm run test:frontend`
+
+**Status:** Complete.
+
+**Execution Notes:**
+- Workflow file loads now populate `metadata.id` from the file stem, and the
+  session store uses that id for `currentGraphId`, saved last graph, and edit
+  session creation.
+- The timing projection resolves a query-only legacy workflow id only when the
+  current id has no direct persisted samples and the graph fingerprint maps to
+  exactly one alternate persisted workflow id. The returned diagnostics history
+  remains labeled with the opened canonical id.
+- Verification passed:
+  `cargo test -p pantograph-diagnostics-ledger`;
+  `cargo test -p pantograph-workflow-service`;
+  `cargo test --manifest-path src-tauri/Cargo.toml workflow::diagnostics::tests::timing`;
+  `cargo check --manifest-path src-tauri/Cargo.toml`;
+  `npm run typecheck`;
+  `npm run test:frontend -- createSessionStores`;
+  `git diff --check`.
 
 ## Deviations And Follow-Ups
 

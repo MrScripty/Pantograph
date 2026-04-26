@@ -6,8 +6,7 @@ use crate::llm::{SharedAppConfig, SharedGateway, SharedRuntimeRegistry};
 use super::commands::{SharedExtensions, SharedWorkflowDiagnosticsStore, SharedWorkflowService};
 use super::events::WorkflowEvent;
 use super::workflow_execution_commands::{
-    RunWorkflowExecutionSessionInput, WorkflowEditSessionRunResponse,
-    WorkflowExecutionRuntimeState,
+    RunWorkflowExecutionSessionInput, WorkflowEditSessionRunResponse, WorkflowExecutionRuntimeState,
 };
 use pantograph_workflow_service::{
     ConnectionAnchor, ConnectionCandidatesResponse, ConnectionCommitResponse,

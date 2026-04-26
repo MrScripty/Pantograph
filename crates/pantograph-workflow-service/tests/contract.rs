@@ -178,11 +178,9 @@ async fn workflow_run_contract_snapshot() {
         .expect("session workflow run response");
 
     let value = serde_json::to_value(response).expect("serialize response");
-    assert!(
-        value["workflow_run_id"]
-            .as_str()
-            .is_some_and(|workflow_run_id| !workflow_run_id.is_empty())
-    );
+    assert!(value["workflow_run_id"]
+        .as_str()
+        .is_some_and(|workflow_run_id| !workflow_run_id.is_empty()));
     let expected = serde_json::json!({
         "workflow_run_id": value["workflow_run_id"],
         "outputs": [

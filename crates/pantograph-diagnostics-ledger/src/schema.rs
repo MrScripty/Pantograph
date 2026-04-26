@@ -1,8 +1,8 @@
-use rusqlite::{Connection, OptionalExtension, Transaction, params};
+use rusqlite::{params, Connection, OptionalExtension, Transaction};
 
-use crate::DiagnosticsLedgerError;
-use crate::records::{DEFAULT_STANDARD_RETENTION_DAYS, RetentionClass};
+use crate::records::{RetentionClass, DEFAULT_STANDARD_RETENTION_DAYS};
 use crate::util::now_ms;
+use crate::DiagnosticsLedgerError;
 
 pub(crate) const SCHEMA_VERSION: i64 = 4;
 const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v4";

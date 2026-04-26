@@ -3,7 +3,7 @@ use std::path::Path;
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, UsageEventId, WorkflowId, WorkflowRunId,
 };
-use rusqlite::{Connection, Row, params};
+use rusqlite::{params, Connection, Row};
 
 mod run_summary_sqlite;
 mod timing_sqlite;
@@ -14,7 +14,7 @@ use crate::records::{
     PruneUsageEventsCommand, PruneUsageEventsResult, RetentionClass, UsageEventStatus,
     UsageLineage,
 };
-use crate::schema::{SCHEMA_VERSION, apply_schema, current_schema_version, migrate_schema};
+use crate::schema::{apply_schema, current_schema_version, migrate_schema, SCHEMA_VERSION};
 use crate::timing::{
     PruneTimingObservationsCommand, PruneTimingObservationsResult, WorkflowRunSummaryProjection,
     WorkflowRunSummaryQuery, WorkflowRunSummaryRecord, WorkflowTimingExpectation,
@@ -56,6 +56,13 @@ impl SqliteDiagnosticsLedger {
         apply_schema(&tx)?;
         tx.commit()?;
         Ok(())
+    }
+
+    pub fn workflow_ids_for_timing_graph_fingerprint(
+        &self,
+        graph_fingerprint: &str,
+    ) -> Result<Vec<String>, DiagnosticsLedgerError> {
+        timing_sqlite::workflow_ids_for_timing_graph_fingerprint(self, graph_fingerprint)
     }
 }
 

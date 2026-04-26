@@ -2,21 +2,21 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use pantograph_embedded_runtime::ManagedRuntimeManagerRuntimeView;
+#[cfg(test)]
+use pantograph_workflow_service::WorkflowTraceRuntimeMetrics;
 use pantograph_workflow_service::{
     WorkflowCapabilitiesResponse, WorkflowExecutionSessionQueueItem,
     WorkflowExecutionSessionSummary, WorkflowGraph, WorkflowServiceError, WorkflowTraceEvent,
     WorkflowTraceRuntimeSelection, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
     WorkflowTraceStore,
 };
-#[cfg(test)]
-use pantograph_workflow_service::WorkflowTraceRuntimeMetrics;
 use parking_lot::Mutex;
 
 use super::attempts::{
-    OverlayRecordDecision, overlay_record_decision, trace_attempt_state_for_workflow_run,
-    trace_attempt_state_in_snapshot, trace_event_workflow_run_id,
+    overlay_record_decision, trace_attempt_state_for_workflow_run, trace_attempt_state_in_snapshot,
+    trace_event_workflow_run_id, OverlayRecordDecision,
 };
-use super::overlay::{WorkflowDiagnosticsState, event_workflow_run_id, record_diagnostics_overlay};
+use super::overlay::{event_workflow_run_id, record_diagnostics_overlay, WorkflowDiagnosticsState};
 use super::trace::{graph_trace_context, workflow_trace_event};
 use super::types::{
     DiagnosticsRuntimeLifecycleSnapshot, DiagnosticsRuntimeSnapshot,

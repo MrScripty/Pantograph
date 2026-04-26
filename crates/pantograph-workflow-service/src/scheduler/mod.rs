@@ -23,9 +23,9 @@ pub use contracts::{
     WorkflowSchedulerRuntimeWarmupReason, WorkflowSchedulerSnapshotDiagnostics,
     WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse,
 };
-pub(crate) use policy::PriorityThenFifoSchedulerPolicy;
 pub use policy::select_runtime_unload_candidate_by_affinity;
+pub(crate) use policy::PriorityThenFifoSchedulerPolicy;
 pub(crate) use store::{
-    WORKFLOW_SESSION_QUEUE_POLL_MS, WorkflowExecutionSessionPreflightCache,
-    WorkflowExecutionSessionStore, unix_timestamp_ms,
+    unix_timestamp_ms, WorkflowExecutionSessionPreflightCache, WorkflowExecutionSessionStore,
+    WORKFLOW_SESSION_QUEUE_POLL_MS,
 };

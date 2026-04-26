@@ -1,11 +1,11 @@
-use rusqlite::{Row, params};
+use rusqlite::{params, Row};
 
 use super::SqliteDiagnosticsLedger;
-use crate::DiagnosticsLedgerError;
 use crate::timing::{
     WorkflowRunSummaryProjection, WorkflowRunSummaryQuery, WorkflowRunSummaryRecord,
     WorkflowRunSummaryStatus,
 };
+use crate::DiagnosticsLedgerError;
 
 pub(super) fn upsert_workflow_run_summary(
     ledger: &mut SqliteDiagnosticsLedger,

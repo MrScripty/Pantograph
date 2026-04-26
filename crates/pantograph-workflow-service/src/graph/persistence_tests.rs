@@ -100,6 +100,7 @@ fn load_workflow_accepts_file_inside_project_root() {
         .load_workflow(".pantograph/workflows/Inside.json".to_string())
         .expect("load workflow");
 
+    assert_eq!(loaded.metadata.id.as_deref(), Some("Inside"));
     assert_eq!(loaded.metadata.name, "Inside");
 }
 

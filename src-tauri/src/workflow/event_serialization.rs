@@ -1,5 +1,5 @@
-use serde::{Serialize, Serializer, ser::Error as _};
-use serde_json::{Map, Value, json};
+use serde::{ser::Error as _, Serialize, Serializer};
+use serde_json::{json, Map, Value};
 
 use super::WorkflowEvent;
 

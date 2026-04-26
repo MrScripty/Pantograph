@@ -8,9 +8,9 @@ use super::canonicalization::canonicalize_workflow_graph;
 use super::memory_impact::graph_memory_impact_from_graph_change;
 use super::registry::NodeRegistry;
 use super::session_contract::{
+    build_workflow_execution_session_state_view, resolve_workflow_execution_session_memory_impact,
     WorkflowGraphEditSessionGraphResponse, WorkflowGraphSessionStateProjection,
-    WorkflowGraphSessionStateView, build_workflow_execution_session_state_view,
-    resolve_workflow_execution_session_memory_impact,
+    WorkflowGraphSessionStateView,
 };
 use super::session_event::{dirty_tasks_for_full_snapshot, graph_modified_event};
 use super::session_graph::hydrate_embedding_emit_metadata_flags;

@@ -89,6 +89,7 @@ pub(super) fn graph_timing_expectations(
     graph_context: &WorkflowTraceGraphContext,
     ledger: Option<&SqliteDiagnosticsLedger>,
 ) -> WorkflowTraceGraphTimingExpectations {
+    let query_workflow_id = resolve_timing_query_workflow_id(&workflow_id, graph_context, ledger);
     let timing_expectation =
         graph_context
             .graph_fingerprint
@@ -97,7 +98,7 @@ pub(super) fn graph_timing_expectations(
                 ledger?
                     .timing_expectation(WorkflowTimingExpectationQuery {
                         scope: WorkflowTimingObservationScope::Run,
-                        workflow_id: workflow_id.clone(),
+                        workflow_id: query_workflow_id.clone(),
                         graph_fingerprint: graph_fingerprint.clone(),
                         node_id: None,
                         node_type: None,
@@ -118,7 +119,7 @@ pub(super) fn graph_timing_expectations(
                     ledger?
                         .timing_expectation(WorkflowTimingExpectationQuery {
                             scope: WorkflowTimingObservationScope::Node,
-                            workflow_id: workflow_id.clone(),
+                            workflow_id: query_workflow_id.clone(),
                             graph_fingerprint: graph_fingerprint.clone(),
                             node_id: Some(node_id.clone()),
                             node_type: Some(node_type.clone()),
@@ -139,6 +140,30 @@ pub(super) fn graph_timing_expectations(
         timing_expectation,
         nodes,
     }
+}
+
+fn resolve_timing_query_workflow_id(
+    workflow_id: &str,
+    graph_context: &WorkflowTraceGraphContext,
+    ledger: Option<&SqliteDiagnosticsLedger>,
+) -> String {
+    let Some(ledger) = ledger else {
+        return workflow_id.to_string();
+    };
+    let Some(graph_fingerprint) = graph_context.graph_fingerprint.as_deref() else {
+        return workflow_id.to_string();
+    };
+    let Ok(workflow_ids) = ledger.workflow_ids_for_timing_graph_fingerprint(graph_fingerprint)
+    else {
+        return workflow_id.to_string();
+    };
+    if workflow_ids.iter().any(|stored| stored == workflow_id) {
+        return workflow_id.to_string();
+    }
+    if let [legacy_workflow_id] = workflow_ids.as_slice() {
+        return legacy_workflow_id.clone();
+    }
+    workflow_id.to_string()
 }
 
 fn run_timing_observation(
