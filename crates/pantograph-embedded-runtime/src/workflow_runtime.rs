@@ -32,7 +32,7 @@ pub struct RuntimeEventProjection {
 #[derive(Debug, Clone)]
 pub struct WorkflowExecutionSchedulerSnapshot {
     pub workflow_id: Option<String>,
-    pub workflow_run_id: String,
+    pub workflow_run_id: Option<String>,
     pub session_id: String,
     pub captured_at_ms: u64,
     pub session: WorkflowExecutionSessionSummary,
@@ -43,7 +43,7 @@ pub struct WorkflowExecutionSchedulerSnapshot {
 #[derive(Debug, Clone)]
 pub struct WorkflowExecutionRuntimeSnapshot {
     pub workflow_id: String,
-    pub workflow_run_id: String,
+    pub workflow_run_id: Option<String>,
     pub captured_at_ms: u64,
     pub capabilities: Option<WorkflowCapabilitiesResponse>,
     pub trace_runtime_metrics: WorkflowTraceRuntimeMetrics,
@@ -123,10 +123,7 @@ pub fn build_workflow_execution_diagnostics_snapshot(
     let runtime_workflow_id = workflow_id
         .clone()
         .unwrap_or_else(|| scheduler_snapshot.session.workflow_id.clone());
-    let workflow_run_id = scheduler_snapshot
-        .workflow_run_id
-        .clone()
-        .unwrap_or_else(|| scheduler_snapshot.session_id.clone());
+    let workflow_run_id = scheduler_snapshot.workflow_run_id.clone();
     let runtime_projection = build_runtime_event_projection_with_registry_override(
         runtime_registry,
         None,

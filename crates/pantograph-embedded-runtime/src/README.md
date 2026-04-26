@@ -170,6 +170,10 @@ embedded-runtime crate.
 - Workflow diagnostics snapshot builders group scheduler/runtime inputs into
   explicit input structs so registry synchronization and projection helpers do
   not grow long positional argument lists.
+- Workflow diagnostics snapshot builders must preserve idle no-run scheduler
+  state as `workflow_run_id: None`; edit-session `session_id` values must not
+  be projected as fallback workflow run ids for runtime or scheduler
+  diagnostics.
 - Runtime-created node lineage stays in `NodeLineageContext`. Composed-node
   execution scopes must use its parent-stack projection helpers so primitive
   diagnostics and ledger events preserve composed-parent context without GUI or

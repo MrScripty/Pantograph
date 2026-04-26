@@ -231,11 +231,17 @@ fn build_workflow_execution_diagnostics_snapshot_uses_backend_owned_scheduler_an
         });
 
     assert_eq!(snapshot.scheduler.workflow_id.as_deref(), Some("wf-123"));
-    assert_eq!(snapshot.scheduler.workflow_run_id, "exec-456");
+    assert_eq!(
+        snapshot.scheduler.workflow_run_id.as_deref(),
+        Some("exec-456")
+    );
     assert_eq!(snapshot.scheduler.session_id, "session-123");
     assert_eq!(snapshot.scheduler.captured_at_ms, 999);
     assert_eq!(snapshot.runtime.workflow_id, "wf-123");
-    assert_eq!(snapshot.runtime.workflow_run_id, "exec-456");
+    assert_eq!(
+        snapshot.runtime.workflow_run_id.as_deref(),
+        Some("exec-456")
+    );
     assert_eq!(snapshot.runtime.captured_at_ms, 999);
     assert_eq!(
         snapshot.runtime.error.as_deref(),
@@ -268,4 +274,60 @@ fn build_workflow_execution_diagnostics_snapshot_uses_backend_owned_scheduler_an
         registry_runtime.runtime_instance_id.as_deref(),
         Some("python-runtime:pytorch:default")
     );
+}
+
+#[test]
+fn build_workflow_execution_diagnostics_snapshot_preserves_idle_no_run_state() {
+    let snapshot =
+        build_workflow_execution_diagnostics_snapshot(WorkflowExecutionDiagnosticsInput {
+            runtime_registry: None,
+            scheduler_snapshot: &WorkflowSchedulerSnapshotResponse {
+                workflow_id: Some("wf-idle".to_string()),
+                session_id: "session-idle".to_string(),
+                workflow_run_id: None,
+                session: WorkflowExecutionSessionSummary {
+                    session_id: "session-idle".to_string(),
+                    workflow_id: "wf-idle".to_string(),
+                    session_kind: WorkflowExecutionSessionKind::Workflow,
+                    usage_profile: Some("interactive".to_string()),
+                    keep_alive: false,
+                    state: WorkflowExecutionSessionState::IdleLoaded,
+                    queued_runs: 0,
+                    run_count: 1,
+                },
+                items: Vec::new(),
+                diagnostics: None,
+            },
+            captured_at_ms: 1_234,
+            runtime_capabilities: None,
+            runtime_error: None,
+            trace_runtime_metrics_override: None,
+            runtime_snapshot_override: None,
+            gateway_snapshot: &inference::RuntimeLifecycleSnapshot {
+                runtime_id: Some("llama.cpp".to_string()),
+                runtime_instance_id: Some("llama-main-1".to_string()),
+                warmup_started_at_ms: None,
+                warmup_completed_at_ms: None,
+                warmup_duration_ms: None,
+                runtime_reused: Some(true),
+                lifecycle_decision_reason: Some("runtime_reused".to_string()),
+                active: true,
+                last_error: None,
+            },
+            embedding_runtime_snapshot: None,
+            gateway_mode_info: &HostRuntimeModeSnapshot {
+                backend_name: Some("llama.cpp".to_string()),
+                backend_key: Some("llama_cpp".to_string()),
+                active_model_target: Some("/models/main.gguf".to_string()),
+                embedding_model_target: None,
+                active_runtime: None,
+                embedding_runtime: None,
+            },
+            runtime_model_target_override: None,
+        });
+
+    assert_eq!(snapshot.scheduler.workflow_run_id, None);
+    assert_eq!(snapshot.scheduler.session_id, "session-idle");
+    assert_eq!(snapshot.runtime.workflow_run_id, None);
+    assert_eq!(snapshot.runtime.workflow_id, "wf-idle");
 }

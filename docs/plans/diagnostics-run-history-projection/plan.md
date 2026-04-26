@@ -182,19 +182,19 @@ Investigation found three coupled causes:
 from the planned contract.
 
 **Tasks:**
-- [ ] Change embedded runtime diagnostics DTO planning targets so scheduler and
+- [x] Change embedded runtime diagnostics DTO planning targets so scheduler and
   runtime snapshots can represent `workflow_run_id: None` for idle/no-run
   state.
-- [ ] Identify tests that currently expect fallback to `session_id` and mark
+- [x] Identify tests that currently expect fallback to `session_id` and mark
   them for replacement with no-run assertions.
-- [ ] Update affected README/API contract notes in the implementation slice.
+- [x] Update affected README/API contract notes in the implementation slice.
 
 **Verification:**
 - Rust unit tests for embedded diagnostics snapshot projection prove missing
   scheduler run id remains missing.
 - `cargo test -p pantograph-embedded-runtime diagnostics_snapshot`.
 
-**Status:** Not started.
+**Status:** Complete.
 
 ### Milestone 2: Side-Effect-Safe Diagnostics Reads
 
@@ -341,6 +341,11 @@ coding and documentation standards.
   frontend diagnostics selection. Existing unrelated dirty files are present in
   the worktree and must remain untouched unless the user assigns them to this
   plan.
+- 2026-04-26: Milestone 1 completed. Embedded-runtime diagnostics snapshots now
+  preserve idle/no-run scheduler state as `workflow_run_id: None` instead of
+  projecting the edit `session_id` as a run id. Added a focused regression test
+  and documented the invariant in the embedded-runtime README. Verification:
+  `cargo test -p pantograph-embedded-runtime diagnostics_snapshot` passed.
 
 ## Commit Cadence Notes
 
