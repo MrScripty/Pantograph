@@ -211,19 +211,19 @@ oversized app Svelte component while reusing package helpers where practical.
 traceable deferrals.
 
 **Tasks:**
-- [ ] Re-run line counts and responsibility review for touched oversized files.
-- [ ] Search for unchecked backend graph response application.
-- [ ] Search for duplicated reconnect/delete flow that should share ownership.
-- [ ] Search for runtime fields entering structural graph projection.
-- [ ] Update component/store READMEs for changed boundaries.
-- [ ] Record any remaining deferrals with owner, risk, and follow-up.
+- [x] Re-run line counts and responsibility review for touched oversized files.
+- [x] Search for unchecked backend graph response application.
+- [x] Search for duplicated reconnect/delete flow that should share ownership.
+- [x] Search for runtime fields entering structural graph projection.
+- [x] Update component/store READMEs for changed boundaries.
+- [x] Record any remaining deferrals with owner, risk, and follow-up.
 
 **Verification:**
 - `git diff --check`
 - `npm run test:frontend`
 - `npm run typecheck`
 
-**Status:** Not started.
+**Status:** Complete.
 
 ### Milestone 7: Release Verification
 
@@ -299,6 +299,32 @@ traceable deferrals.
   interaction wiring was already isolated in `workflowGraphSource.ts`, so no
   additional source-switch extraction was needed. `npm run test:frontend` and
   `npm run typecheck` passed.
+- 2026-04-26: Milestone 6 started. Compliance pass will check touched file
+  sizes, side-effect ownership, unsafe backend graph response application,
+  duplicate reconnect/delete flows, and runtime-field structural projection.
+- 2026-04-26: Milestone 6 completed. Line-count review found
+  `createWorkflowStores.ts` at 452 lines and all new helper/action modules under
+  the 500-line target. The package and app graph Svelte coordinators remain
+  oversized at 897 and 889 lines respectively, but the touched delete,
+  reconnect, backend action, graph-source, and palette edge-insert decisions now
+  delegate to focused helpers. No unchecked backend graph response application
+  was found in touched paths; accepted mutation projection flows through active
+  session sync gates. Runtime overlays still project through `runtimeData.ts`
+  and are stripped by `workflowStoreMaterialization.ts`.
+
+### Milestone 6 Residual Compliance Follow-Ups
+
+- Owner: graph editor refactor follow-up.
+- Risk: `packages/svelte-graph/src/components/WorkflowGraph.svelte` and
+  `src/components/WorkflowGraph.svelte` still exceed the file-size target and
+  remain review-trigger components even after this plan's interaction
+  extractions.
+- Reason deferred: reducing either component below the target now would require
+  a larger markup/event-wiring split with higher visual regression risk than the
+  scoped helper extraction in this plan.
+- Follow-up: split package and app graph coordinator state machines into
+  controller modules or child components, then verify with frontend tests and
+  visual smoke coverage.
 
 ## Commit Cadence Notes
 
