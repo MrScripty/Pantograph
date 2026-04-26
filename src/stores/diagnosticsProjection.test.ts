@@ -5,7 +5,46 @@ import {
   createDiagnosticsSnapshot,
   createEmptyDiagnosticsProjection,
   normalizeDiagnosticsProjection,
+  normalizeDiagnosticsUiState,
 } from './diagnosticsProjection.ts';
+import type { DiagnosticsRunTrace } from '../services/diagnostics/types.ts';
+
+function createRunTrace(
+  workflowRunId: string,
+  workflowId: string | null,
+): DiagnosticsRunTrace {
+  return {
+    workflowRunId,
+    sessionId: `session-${workflowRunId}`,
+    workflowId,
+    graphFingerprintAtStart: `graph-${workflowRunId}`,
+    nodeCountAtStart: 1,
+    status: 'completed',
+    startedAtMs: 1_000,
+    endedAtMs: 1_500,
+    durationMs: 500,
+    lastUpdatedAtMs: 1_500,
+    error: null,
+    waitingForInput: false,
+    runtime: {
+      runtimeId: null,
+      runtimeInstanceId: null,
+      modelTarget: null,
+      warmupStartedAtMs: null,
+      warmupCompletedAtMs: null,
+      warmupDurationMs: null,
+      runtimeReused: null,
+      lifecycleDecisionReason: null,
+    },
+    eventCount: 2,
+    streamEventCount: 0,
+    lastDirtyTasks: [],
+    lastIncrementalTaskIds: [],
+    lastGraphMemoryImpact: null,
+    nodes: {},
+    events: [],
+  };
+}
 
 test('createEmptyDiagnosticsProjection includes backend-owned projection context', () => {
   const projection = createEmptyDiagnosticsProjection();
@@ -90,37 +129,7 @@ test('createDiagnosticsSnapshot keeps switched workflow run labels on workflow i
   const projection = {
     ...createEmptyDiagnosticsProjection(),
     runsById: {
-      'run-b': {
-        workflowRunId: 'run-b',
-        sessionId: 'session-b',
-        workflowId: 'workflow-b',
-        graphFingerprintAtStart: 'graph-b',
-        nodeCountAtStart: 1,
-        status: 'completed' as const,
-        startedAtMs: 1_000,
-        endedAtMs: 1_500,
-        durationMs: 500,
-        lastUpdatedAtMs: 1_500,
-        error: null,
-        waitingForInput: false,
-        runtime: {
-          runtimeId: null,
-          runtimeInstanceId: null,
-          modelTarget: null,
-          warmupStartedAtMs: null,
-          warmupCompletedAtMs: null,
-          warmupDurationMs: null,
-          runtimeReused: null,
-          lifecycleDecisionReason: null,
-        },
-        eventCount: 2,
-        streamEventCount: 0,
-        lastDirtyTasks: [],
-        lastIncrementalTaskIds: [],
-        lastGraphMemoryImpact: null,
-        nodes: {},
-        events: [],
-      },
+      'run-b': createRunTrace('run-b', 'workflow-b'),
     },
     runOrder: ['run-b'],
   };
@@ -141,4 +150,79 @@ test('createDiagnosticsSnapshot keeps switched workflow run labels on workflow i
   assert.equal(snapshot.state.currentWorkflowId, 'workflow-b');
   assert.equal(snapshot.selectedRun?.workflowId, 'workflow-b');
   assert.equal('workflowName' in (snapshot.selectedRun ?? {}), false);
+});
+
+test('normalizeDiagnosticsUiState leaves retained runs unselected without backend relevance', () => {
+  const projection = {
+    ...createEmptyDiagnosticsProjection(),
+    runsById: {
+      'run-a': createRunTrace('run-a', 'workflow-a'),
+    },
+    runOrder: ['run-a'],
+  };
+
+  const uiState = normalizeDiagnosticsUiState({
+    projection,
+    uiState: {
+      panelOpen: true,
+      activeTab: 'overview',
+      selectedRunId: null,
+      selectedNodeId: null,
+    },
+  });
+
+  assert.equal(uiState.selectedRunId, null);
+});
+
+test('normalizeDiagnosticsUiState selects a backend-relevant run', () => {
+  const projection = {
+    ...createEmptyDiagnosticsProjection(),
+    context: {
+      ...createEmptyDiagnosticsProjection().context,
+      relevantWorkflowRunId: 'run-a',
+    },
+    runsById: {
+      'run-a': createRunTrace('run-a', 'workflow-a'),
+    },
+    runOrder: ['run-a'],
+  };
+
+  const uiState = normalizeDiagnosticsUiState({
+    projection,
+    uiState: {
+      panelOpen: true,
+      activeTab: 'overview',
+      selectedRunId: null,
+      selectedNodeId: null,
+    },
+  });
+
+  assert.equal(uiState.selectedRunId, 'run-a');
+});
+
+test('normalizeDiagnosticsUiState clears selected runs on workflow switch', () => {
+  const projection = {
+    ...createEmptyDiagnosticsProjection(),
+    context: {
+      ...createEmptyDiagnosticsProjection().context,
+      relevantWorkflowRunId: 'run-a',
+    },
+    runsById: {
+      'run-a': createRunTrace('run-a', 'workflow-a'),
+    },
+    runOrder: ['run-a'],
+  };
+
+  const uiState = normalizeDiagnosticsUiState({
+    projection,
+    workflowChanged: true,
+    uiState: {
+      panelOpen: true,
+      activeTab: 'overview',
+      selectedRunId: 'run-a',
+      selectedNodeId: null,
+    },
+  });
+
+  assert.equal(uiState.selectedRunId, null);
 });

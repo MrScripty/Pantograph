@@ -15,6 +15,59 @@ export type DiagnosticsUiState = {
   selectedNodeId: string | null;
 };
 
+type NormalizeDiagnosticsUiStateParams = {
+  projection: WorkflowDiagnosticsProjection;
+  uiState: DiagnosticsUiState;
+  workflowChanged?: boolean;
+};
+
+function isSelectableDiagnosticsRun(
+  projection: WorkflowDiagnosticsProjection,
+  runId: string | null,
+): runId is string {
+  if (!runId) {
+    return false;
+  }
+
+  const run = projection.runsById[runId] ?? null;
+  return run !== null && run.workflowRunId === runId;
+}
+
+export function normalizeDiagnosticsUiState({
+  projection,
+  uiState,
+  workflowChanged = false,
+}: NormalizeDiagnosticsUiStateParams): DiagnosticsUiState {
+  let selectedRunId = workflowChanged ? null : uiState.selectedRunId;
+  let selectedNodeId = workflowChanged ? null : uiState.selectedNodeId;
+
+  if (!isSelectableDiagnosticsRun(projection, selectedRunId)) {
+    selectedRunId = null;
+    selectedNodeId = null;
+  }
+
+  if (
+    !workflowChanged &&
+    selectedRunId === null &&
+    isSelectableDiagnosticsRun(projection, projection.context.relevantWorkflowRunId)
+  ) {
+    selectedRunId = projection.context.relevantWorkflowRunId;
+  }
+
+  const selectedRun = selectedRunId ? projection.runsById[selectedRunId] ?? null : null;
+  if (!selectedRun) {
+    selectedNodeId = null;
+  } else if (selectedNodeId !== null && !(selectedNodeId in selectedRun.nodes)) {
+    selectedNodeId = null;
+  }
+
+  return {
+    ...uiState,
+    selectedRunId,
+    selectedNodeId,
+  };
+}
+
 export function createEmptyDiagnosticsProjection(): WorkflowDiagnosticsProjection {
   return {
     context: createDefaultDiagnosticsProjectionContext(),

@@ -271,21 +271,36 @@ not create an idle-session trace after completion.
 trace selection.
 
 **Tasks:**
-- [ ] Adjust diagnostics store selection so phantom/no-run rows cannot become
+- [x] Adjust diagnostics store selection so phantom/no-run rows cannot become
   selected.
-- [ ] Ensure `workflowTimingHistory` can render before first run after app
+- [x] Ensure `workflowTimingHistory` can render before first run after app
   restart.
-- [ ] Decide whether the history view is always visible in the overview when no
+- [x] Decide whether the history view is always visible in the overview when no
   run is selected, or whether it gets a dedicated history section that is not
   hidden by retained runs.
-- [ ] Add frontend tests for restart/open workflow history, no auto-selection
+- [x] Add frontend tests for restart/open workflow history, no auto-selection
   of invalid rows, and run selection reset on workflow switch.
 
 **Verification:**
 - `npm run -w frontend check:types`
 - `npm run -w frontend test:run`
 
-**Status:** Not started.
+**Status:** Complete.
+
+**Execution Notes:**
+- Frontend diagnostics state no longer auto-selects the first retained run just
+  because `runOrder` is non-empty. It only selects a retained run when the
+  backend marks that run as relevant.
+- Workflow id changes clear the selected run and node so the opened workflow's
+  SQLite timing history can render before any new run starts.
+- The existing overview fallback remains the display policy: when no run is
+  selected, `DiagnosticsWorkflowHistory` renders the opened-workflow timing
+  history.
+- The plan's workspace-scoped npm commands are stale for this repository. Root
+  equivalents were used instead.
+- Verification passed:
+  `npm run typecheck`;
+  `npm run test:frontend`.
 
 ### Milestone 5: Cross-Layer Regression Coverage
 

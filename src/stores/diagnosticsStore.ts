@@ -15,6 +15,7 @@ import {
   createDiagnosticsSnapshot,
   createEmptyDiagnosticsProjection,
   normalizeDiagnosticsProjection,
+  normalizeDiagnosticsUiState,
 } from './diagnosticsProjection';
 
 const DEFAULT_UI_STATE: DiagnosticsUiState = {
@@ -55,33 +56,12 @@ function clearMismatchedWorkflowTimingHistory(): void {
   }
 }
 
-function normalizeUiSelections(): void {
-  if (
-    uiState.selectedRunId !== null &&
-    !(uiState.selectedRunId in latestProjection.runsById)
-  ) {
-    uiState.selectedRunId = null;
-    uiState.selectedNodeId = null;
-  }
-
-  if (uiState.selectedRunId === null && latestProjection.runOrder.length > 0) {
-    uiState.selectedRunId = latestProjection.runOrder[0] ?? null;
-  }
-
-  const selectedRun = uiState.selectedRunId
-    ? latestProjection.runsById[uiState.selectedRunId] ?? null
-    : null;
-  if (!selectedRun) {
-    uiState.selectedNodeId = null;
-    return;
-  }
-
-  if (
-    uiState.selectedNodeId !== null &&
-    !(uiState.selectedNodeId in selectedRun.nodes)
-  ) {
-    uiState.selectedNodeId = null;
-  }
+function normalizeUiSelections(workflowChanged = false): void {
+  uiState = normalizeDiagnosticsUiState({
+    projection: latestProjection,
+    uiState,
+    workflowChanged,
+  });
 }
 
 function applyProjection(projection: WorkflowDiagnosticsProjection): void {
@@ -91,9 +71,9 @@ function applyProjection(projection: WorkflowDiagnosticsProjection): void {
   diagnosticsSnapshotStore.set(createSnapshot());
 }
 
-function emitSnapshot(): void {
+function emitSnapshot(workflowChanged = false): void {
   clearMismatchedWorkflowTimingHistory();
-  normalizeUiSelections();
+  normalizeUiSelections(workflowChanged);
   diagnosticsSnapshotStore.set(createSnapshot());
 }
 
@@ -182,8 +162,9 @@ function bindDiagnosticsStore(): void {
   });
 
   workflowIdUnsubscribe = currentGraphId.subscribe((workflowId) => {
+    const workflowChanged = latestWorkflowId !== workflowId;
     latestWorkflowId = workflowId;
-    emitSnapshot();
+    emitSnapshot(workflowChanged);
     void refreshDiagnosticsProjection();
   });
 
