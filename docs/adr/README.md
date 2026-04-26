@@ -19,6 +19,7 @@ developers to reconstruct intent from commit history.
 | `ADR-009-composed-node-contracts-and-migration.md` | Freezes composed-node contract ownership, primitive trace preservation, runtime lineage projection, and saved-workflow migration strategy. |
 | `ADR-010-binding-projection-ownership-and-support-tiers.md` | Freezes binding projection ownership, generated artifact policy, and evidence-based host support tiers. |
 | `ADR-011-scheduler-only-workflow-execution.md` | Freezes the rule that all public workflow execution must enter through scheduler-owned workflow execution sessions. |
+| `ADR-012-canonical-workflow-run-identity.md` | Freezes canonical `workflow_run_id`, `workflow_id`, `session_id`, and `runtime_instance_id` semantics across scheduler, runtime, diagnostics, bindings, and frontend projections. |
 
 ## Problem
 Pantograph is actively deepening its backend/runtime architecture. Without an
@@ -78,6 +79,7 @@ link to these decisions.
 - `docs/adr/ADR-009-composed-node-contracts-and-migration.md`
 - `docs/adr/ADR-010-binding-projection-ownership-and-support-tiers.md`
 - `docs/adr/ADR-011-scheduler-only-workflow-execution.md`
+- `docs/adr/ADR-012-canonical-workflow-run-identity.md`
 ```
 
 ## API Consumer Contract

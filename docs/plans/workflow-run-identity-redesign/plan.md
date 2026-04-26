@@ -304,12 +304,12 @@ Assumption: scheduler queue id and run id should be the same canonical
 **Goal:** Define the run identity model before changing producers or consumers.
 
 **Tasks:**
-- [ ] Add or update an ADR documenting `workflow_id`, `session_id`,
+- [x] Add or update an ADR documenting `workflow_id`, `session_id`,
   `workflow_run_id`, and `runtime_instance_id`.
-- [ ] Define Rust domain types or unambiguous contract fields for the four ids.
-- [ ] Decide exact wire names for Tauri, frontend, bindings, and SQLite.
-- [ ] Remove `workflow_name` from planned diagnostics contracts.
-- [ ] Document that old mixed-identity SQLite rows are unsupported.
+- [x] Define Rust domain types or unambiguous contract fields for the four ids.
+- [x] Decide exact wire names for Tauri, frontend, bindings, and SQLite.
+- [x] Remove `workflow_name` from planned diagnostics contracts.
+- [x] Document that old mixed-identity SQLite rows are unsupported.
 
 **Verification:**
 - Review against backend-owned data and single-owner state-flow rules in
@@ -319,7 +319,33 @@ Assumption: scheduler queue id and run id should be the same canonical
 - Search planned public contracts for ambiguous `execution_id` use and record
   whether it will be renamed or explicitly documented as `workflow_run_id`.
 
-**Status:** Not started.
+**Status:** Completed.
+
+**Notes:**
+- Added `docs/adr/ADR-012-canonical-workflow-run-identity.md` as the
+  source-of-truth identity decision for `workflow_id`, `session_id`,
+  `workflow_run_id`, and `runtime_instance_id`.
+- Confirmed existing validated Rust id types are owned by
+  `pantograph-runtime-attribution` and re-exported
+  `WorkflowId`, `ClientSessionId`, and `WorkflowRunId` from
+  `pantograph-workflow-service`.
+- Froze wire names as `workflow_id`, `session_id`, `workflow_run_id`, and
+  `runtime_instance_id`.
+- Documented that diagnostics contracts remove `workflow_name` and that old
+  mixed-identity SQLite timing rows are unsupported.
+- Source search confirmed ambiguous `execution_id`, `trace_execution_id`,
+  `queue_id`, `run_id`, and `workflow_name` fields still exist in the planned
+  touched surfaces; they remain assigned to Milestones 2 through 7.
+
+**Verification Results:**
+- Reviewed against backend-owned data and single-owner state-flow guidance in
+  `CODING-STANDARDS.md`.
+- Reviewed against correct-by-construction and parse-at-boundary guidance in
+  `languages/rust/RUST-API-STANDARDS.md`.
+- `rg` search recorded stale public/cross-layer identity names for later
+  milestone replacement.
+- `git diff --check -- docs/adr/ADR-012-canonical-workflow-run-identity.md docs/adr/README.md crates/pantograph-workflow-service/src/lib.rs`
+- `cargo check -p pantograph-workflow-service`
 
 ### Milestone 2: Make Scheduler Own Run Id Creation
 
@@ -532,6 +558,10 @@ model is implemented.
 - 2026-04-26: Plan created from architecture analysis of diagnostic history and
   workflow identity bugs. No implementation changes made in this planning
   step.
+- 2026-04-26: Milestone 1 completed. Added ADR-012, updated the ADR index,
+  re-exported canonical attribution id types from workflow-service, and
+  verified the contract slice with diff, source-search, and workflow-service
+  cargo check.
 - Current known unrelated dirty files must remain untouched unless the user
   explicitly assigns them to this work:
   - `.pantograph/workflows/tiny-sd-turbo-diffusion.json`
@@ -599,7 +629,7 @@ owned serially by the integration implementer.
 
 ### Completed
 
-- Not started.
+- Milestone 1: Freeze Canonical Identity Contract.
 
 ### Deviations
 
@@ -611,10 +641,13 @@ owned serially by the integration implementer.
 
 ### Verification Summary
 
-- Planning only. No verification commands run for implementation.
+- Milestone 1:
+  - `git diff --check -- docs/adr/ADR-012-canonical-workflow-run-identity.md docs/adr/README.md crates/pantograph-workflow-service/src/lib.rs`
+  - `cargo check -p pantograph-workflow-service`
 
 ### Traceability Links
 
 - Plan artifact: `docs/plans/workflow-run-identity-redesign/plan.md`
-- ADR added/updated: pending Milestone 1.
+- ADR added/updated:
+  `docs/adr/ADR-012-canonical-workflow-run-identity.md`
 - Module README updates: pending implementation milestones.

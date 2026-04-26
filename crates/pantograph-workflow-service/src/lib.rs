@@ -15,6 +15,7 @@ pub mod technical_fit;
 pub mod trace;
 pub mod workflow;
 
+pub use pantograph_runtime_attribution::{ClientSessionId, WorkflowId, WorkflowRunId};
 pub use graph::{
     convert_graph_from_node_engine, convert_graph_to_node_engine,
     graph_memory_impact_from_node_engine_graph_change, validate_workflow_connection,
