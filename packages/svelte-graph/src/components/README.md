@@ -14,6 +14,8 @@ shared node presentation rules live outside the Pantograph app shell.
 | `WorkflowToolbar.svelte` | Graph toolbar shell for workflow save/new/clear controls and status badges. |
 | `WorkflowRunButton.svelte` | Scheduler-backed run button, workflow-event subscription, active-run ownership, and run cleanup lifecycle. |
 | `workflowGraphBackendActions.ts` | Owns package-local backend mutation calls, connection-intent loading, reconnect rollback, and accepted graph-sync projection used by `WorkflowGraph.svelte`. |
+| `../workflowGraphBackendActionCore.ts` | Provides dependency-injected backend action primitives shared by package and app graph action adapters. |
+| `../workflowGraphBackendActionCore.test.ts` | Unit coverage for shared mutation projection, connection rejection, edge removal, and reconnect rollback behavior. |
 | `../workflowConnectionInteraction.ts` | Owns connection drag reset and connect-end preservation decisions. |
 | `../workflowConnectionInteraction.test.ts` | Unit coverage for connection interaction reset and connect-end preservation. |
 | `../workflowConnections.ts` | Computes reusable connection validation, graph-edge normalization, candidate-to-intent projection, commit anchors, revision selection, and rejected-intent preservation. |
@@ -113,6 +115,11 @@ keeping reference comparisons out of `WorkflowGraph.svelte`.
 Connection validation and backend candidate projection live in
 `workflowConnections.ts`, while `workflowGraphBackendActions.ts` owns backend
 calls and accepted/rejected graph-sync projection for `WorkflowGraph.svelte`.
+Shared backend action primitives now live in
+`workflowGraphBackendActionCore.ts` so accepted graph projection, connection
+rejection preservation, edge removal, insert-and-connect, and reconnect
+rollback stay aligned with the app graph without coupling package code to the
+Pantograph `WorkflowService` singleton.
 Connection and reconnect commit anchor projection plus active-intent revision
 selection also live in `workflowConnections.ts`, so `WorkflowGraph.svelte`
 resolves a tested commit contract before invoking backend graph mutations.
@@ -201,6 +208,8 @@ threshold while preserving the same package-owned visual contract.
 - `workflowGraphBackendActions.ts` must keep package graph backend mutation
   calls and response projection aligned with the reusable `WorkflowBackend`
   contract instead of reintroducing app-local service coupling.
+- `workflowGraphBackendActionCore.ts` must stay dependency-injected and must not
+  import app services or singleton stores.
 - `WorkflowRunButton.svelte` must keep execution state rendered in its template
   on Svelte runes-backed reactive state so workflow events can switch between
   running and waiting-for-input labels without a manual refresh.

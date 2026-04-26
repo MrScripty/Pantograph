@@ -21,7 +21,7 @@ architecture views on top of the shared editor.
 | `workflowConnections.ts` | Computes app graph connection validation, graph-edge normalization, backend candidate projection, commit anchors, and revision selection. |
 | `workflowConnections.test.ts` | Unit coverage for app graph connection helper behavior. |
 | `edgeInsertInteraction.ts` | Computes palette edge-insert hover state, preview refresh/staleness/cleanup decisions, and rendered-edge hit testing. |
-| `workflowGraphBackendActions.ts` | Owns app graph backend mutation calls for edge insertion, insert-and-connect, connection commits, reconnect, edge removal, and backend graph refresh. |
+| `workflowGraphBackendActions.ts` | Owns app graph `WorkflowService` session lookup, edge insertion, backend graph refresh, and adapters into shared package backend action primitives. |
 | `workflowGraphEdgeInsertPreview.ts` | Coordinates palette edge-insert preview refresh requests and stale-response guards around the edge-insert interaction state helpers. |
 | `workflowGraphKeyboardActions.ts` | Coordinates app graph container keyboard commands and horseshoe window keyboard dispatch. |
 | `workflowGraphPaletteHandlers.ts` | Coordinates app palette drop and drag-over events before delegating to node insertion or edge-insert preview handlers. |
@@ -126,6 +126,12 @@ maps browser events into those helpers and owns backend preview/commit effects.
 Connection validation and backend candidate projection live in
 `workflowConnections.ts`, while `WorkflowGraph.svelte` owns backend calls and
 interaction cleanup.
+Accepted graph mutation projection, insert-and-connect, connection rejection
+preservation, edge removal, and reconnect rollback now use the package
+`workflowGraphBackendActionCore.ts` helpers through app-local adapters. The app
+graph keeps `WorkflowService` session lookup and rejected-connect refresh
+side effects local so shared package code does not depend on Pantograph
+singletons.
 Connection and reconnect commit anchor projection plus active-intent revision
 selection also live in `workflowConnections.ts`, so the app graph resolves a
 tested commit contract before invoking backend graph mutations.

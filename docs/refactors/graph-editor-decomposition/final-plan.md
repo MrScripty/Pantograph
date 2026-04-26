@@ -157,18 +157,18 @@ owners.
 package and app paths can share it safely.
 
 **Tasks:**
-- [ ] Create a shared package-level action helper or controller module with
+- [x] Create a shared package-level action helper or controller module with
   dependency injection for session lookup, graph sync, and transport calls.
-- [ ] Migrate common delete, edge removal, connect, insert, and reconnect
+- [x] Migrate common delete, edge removal, connect, insert, and reconnect
   behavior where contracts match.
-- [ ] Keep app-only workflow-service details app-local.
-- [ ] Add direct tests for the shared helper boundary.
+- [x] Keep app-only workflow-service details app-local.
+- [x] Add direct tests for the shared helper boundary.
 
 **Verification:**
 - `npm run test:frontend`
 - `npm run typecheck`
 
-**Status:** Not started.
+**Status:** Complete.
 
 ### Milestone 4: Package Graph Component Decomposition
 
@@ -264,6 +264,17 @@ traceable deferrals.
   active-session mutation dispatch, node execution-state overlays, and
   backend-backed group actions to focused store helpers while preserving the
   public `WorkflowStores` facade. Focused store test and typecheck passed.
+- 2026-04-26: Milestone 3 started. Package and app graph backend action modules
+  both own accepted mutation projection, connection commit rejection projection,
+  edge removal, and reconnect rollback. The safest shared boundary is a
+  package-level dependency-injected action core that keeps app-only
+  `WorkflowService` session lookup local.
+- 2026-04-26: Milestone 3 completed. Added
+  `workflowGraphBackendActionCore.ts` with direct tests and adapted both package
+  and app graph backend action modules to share accepted mutation projection,
+  insert/connect rejection handling, edge removal, and reconnect rollback while
+  keeping Pantograph `WorkflowService` lookup app-local. `npm run test:frontend`
+  and `npm run typecheck` passed.
 
 ## Commit Cadence Notes
 

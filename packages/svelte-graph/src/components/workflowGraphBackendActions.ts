@@ -1,23 +1,26 @@
 import type { Connection, Edge } from '@xyflow/svelte';
 
-import { applyWorkflowGraphMutationResponse } from '../stores/workflowGraphMutationResponse.js';
 import type { WorkflowStores } from '../stores/createWorkflowStores.js';
 import type { WorkflowBackend } from '../types/backend.js';
 import type {
   ConnectionAnchor,
-  ConnectionCandidatesResponse,
   ConnectionCommitResponse,
   ConnectionIntentState,
   InsertNodeConnectionResponse,
   InsertNodePositionHint,
 } from '../types/workflow.js';
 import {
-  buildConnectionIntentState,
-  edgeToGraphEdge,
   preserveConnectionIntentState,
-  resolveConnectionCommitGraphRevision,
   resolveWorkflowConnectionAnchors,
 } from '../workflowConnections.js';
+import {
+  applyAcceptedWorkflowGraphMutation,
+  commitWorkflowConnectionCore,
+  commitWorkflowInsertCandidateCore,
+  commitWorkflowReconnectCore,
+  loadWorkflowConnectionIntentStateCore,
+  removeWorkflowGraphEdgesCore,
+} from '../workflowGraphBackendActionCore.js';
 
 type WorkflowGraphMutationStores = Pick<
   WorkflowStores,
@@ -110,56 +113,15 @@ export type WorkflowReconnectCommitResult =
   | ReconnectStaleResult
   | ReconnectRejectedResult;
 
-function applyAcceptedInsertMutation(
+function applyAcceptedMutation(
   workflowStores: WorkflowGraphMutationStores,
-  response: InsertNodeConnectionResponse,
+  response: ConnectionCommitResponse | InsertNodeConnectionResponse,
   sessionId: string,
 ): boolean {
-  if (!response.accepted || !response.graph) {
-    return false;
-  }
-
-  if (!workflowStores.syncEdgesFromBackend(response.graph, { sessionId })) {
-    return false;
-  }
-
-  applyWorkflowGraphMutationResponse(
-    {
-      graph: response.graph,
-      workflow_event: response.workflow_event,
-      workflow_session_state: response.workflow_session_state,
-    },
-    {
-      setNodeExecutionState: workflowStores.setNodeExecutionState,
-    },
-  );
-  return true;
-}
-
-function applyAcceptedConnectionMutation(
-  workflowStores: WorkflowGraphMutationStores,
-  response: ConnectionCommitResponse,
-  sessionId: string,
-): boolean {
-  if (!response.accepted || !response.graph) {
-    return false;
-  }
-
-  if (!workflowStores.syncEdgesFromBackend(response.graph, { sessionId })) {
-    return false;
-  }
-
-  applyWorkflowGraphMutationResponse(
-    {
-      graph: response.graph,
-      workflow_event: response.workflow_event,
-      workflow_session_state: response.workflow_session_state,
-    },
-    {
-      setNodeExecutionState: workflowStores.setNodeExecutionState,
-    },
-  );
-  return true;
+  return applyAcceptedWorkflowGraphMutation(response, {
+    setNodeExecutionState: workflowStores.setNodeExecutionState,
+    syncGraph: (graph) => workflowStores.syncEdgesFromBackend(graph, { sessionId }),
+  });
 }
 
 export async function loadWorkflowConnectionIntentState({
@@ -171,32 +133,19 @@ export async function loadWorkflowConnectionIntentState({
   sessionId,
   sourceAnchor,
 }: ConnectionIntentLoadParams): Promise<ConnectionIntentLoadResult> {
-  try {
-    const candidates: ConnectionCandidatesResponse = await backend.getConnectionCandidates(
+  return loadWorkflowConnectionIntentStateCore({
+    currentIntent,
+    failureMessage: '[WorkflowGraph] Failed to load connection candidates:',
+    getConnectionCandidates: () => backend.getConnectionCandidates(
       sourceAnchor,
       sessionId,
       graphRevision,
-    );
-    return {
-      type: 'set',
-      intent: buildConnectionIntentState(candidates, rejection),
-    };
-  } catch (error) {
-    console.error('[WorkflowGraph] Failed to load connection candidates:', error);
-    if (!preserveDisplay) {
-      return { type: 'clear', intent: null };
-    }
-
-    return {
-      type: 'set',
-      intent: preserveConnectionIntentState({
-        sourceAnchor,
-        graphRevision,
-        currentIntent,
-        rejection,
-      }),
-    };
-  }
+    ),
+    graphRevision,
+    preserveDisplay,
+    rejection,
+    sourceAnchor,
+  });
 }
 
 export async function commitWorkflowInsertCandidate({
@@ -209,16 +158,29 @@ export async function commitWorkflowInsertCandidate({
   sourceAnchor,
   workflowStores,
 }: InsertCandidateParams): Promise<InsertNodeConnectionResponse> {
-  const response = await backend.insertNodeAndConnect(
-    sourceAnchor,
+  return commitWorkflowInsertCandidateCore({
+    applyAcceptedMutation: (response) =>
+      applyAcceptedMutation(workflowStores, response, sessionId),
     candidateNodeType,
-    sessionId,
     graphRevision,
+    insertNodeAndConnect: (
+      insertSourceAnchor,
+      insertCandidateNodeType,
+      insertGraphRevision,
+      insertPositionHint,
+      insertPreferredInputPortId,
+    ) => backend.insertNodeAndConnect(
+      insertSourceAnchor,
+      insertCandidateNodeType,
+      sessionId,
+      insertGraphRevision,
+      insertPositionHint,
+      insertPreferredInputPortId,
+    ),
     positionHint,
     preferredInputPortId,
-  );
-  applyAcceptedInsertMutation(workflowStores, response, sessionId);
-  return response;
+    sourceAnchor,
+  });
 }
 
 export async function commitWorkflowConnection({
@@ -229,37 +191,15 @@ export async function commitWorkflowConnection({
   sessionId,
   workflowStores,
 }: WorkflowConnectionCommitParams): Promise<WorkflowConnectionCommitResult> {
-  const anchors = resolveWorkflowConnectionAnchors(connection);
-  if (!anchors) {
-    return { response: null };
-  }
-
-  const requestedRevision = resolveConnectionCommitGraphRevision({
-    sourceAnchor: anchors.sourceAnchor,
-    currentIntent,
+  return commitWorkflowConnectionCore({
+    applyAcceptedMutation: (response) =>
+      applyAcceptedMutation(workflowStores, response, sessionId),
+    connectAnchors: (sourceAnchor, targetAnchor, graphRevision) =>
+      backend.connectAnchors(sourceAnchor, targetAnchor, sessionId, graphRevision),
+    connection,
     currentGraphRevision,
+    currentIntent,
   });
-  const response = await backend.connectAnchors(
-    anchors.sourceAnchor,
-    anchors.targetAnchor,
-    sessionId,
-    requestedRevision,
-  );
-
-  if (response.accepted) {
-    applyAcceptedConnectionMutation(workflowStores, response, sessionId);
-    return { response };
-  }
-
-  return {
-    response,
-    intent: preserveConnectionIntentState({
-      sourceAnchor: anchors.sourceAnchor,
-      graphRevision: response.graph_revision,
-      currentIntent,
-      rejection: response.rejection,
-    }),
-  };
 }
 
 export async function removeWorkflowGraphEdges({
@@ -269,18 +209,12 @@ export async function removeWorkflowGraphEdges({
   sessionId,
   workflowStores,
 }: RemoveWorkflowGraphEdgesParams) {
-  if (edgeIds.length === 0) {
-    return;
-  }
-
-  try {
-    const response = await backend.removeEdges(edgeIds, sessionId);
-    if (response.graph) {
-      workflowStores.syncEdgesFromBackend(response.graph, { sessionId });
-    }
-  } catch (error) {
-    console.error(errorMessage, error);
-  }
+  await removeWorkflowGraphEdgesCore({
+    edgeIds,
+    errorMessage,
+    removeEdges: (ids) => backend.removeEdges(ids, sessionId),
+    syncGraph: (graph) => workflowStores.syncEdgesFromBackend(graph, { sessionId }),
+  });
 }
 
 export async function commitWorkflowReconnect({
@@ -298,39 +232,31 @@ export async function commitWorkflowReconnect({
     return { type: 'invalid' };
   }
 
-  try {
-    const graphAfterRemoval = await backend.removeEdge(oldEdge.id, sessionId);
-    if (graphAfterRemoval.graph) {
-      workflowStores.syncEdgesFromBackend(graphAfterRemoval.graph, { sessionId });
-    }
+  const result = await commitWorkflowReconnectCore({
+    anchors,
+    applyAcceptedMutation: (response) =>
+      applyAcceptedMutation(workflowStores, response, sessionId),
+    connectAnchors: (sourceAnchor, targetAnchor, graphRevision) =>
+      backend.connectAnchors(sourceAnchor, targetAnchor, sessionId, graphRevision),
+    fallbackRevision,
+    oldEdge,
+    rejectionSourceAnchor: reconnectingSourceAnchor ?? anchors.sourceAnchor,
+    removeEdge: (edgeId) => backend.removeEdge(edgeId, sessionId),
+    restoreEdge: (edge) => backend.addEdge(edge, sessionId),
+    syncGraph: (graph) => workflowStores.syncEdgesFromBackend(graph, { sessionId }),
+  });
 
-    const response = await backend.connectAnchors(
-      anchors.sourceAnchor,
-      anchors.targetAnchor,
-      sessionId,
-      graphAfterRemoval.graph?.derived_graph?.graph_fingerprint ?? fallbackRevision,
-    );
-
-    if (response.accepted) {
-      return applyAcceptedConnectionMutation(workflowStores, response, sessionId)
-        ? { type: 'accepted' }
-        : { type: 'stale' };
-    }
-
-    const restoredGraph = await backend.addEdge(edgeToGraphEdge(oldEdge), sessionId);
-    if (restoredGraph.graph) {
-      workflowStores.syncEdgesFromBackend(restoredGraph.graph, { sessionId });
-    }
+  if (result.type === 'rejected') {
     return {
       type: 'rejected',
       intent: preserveConnectionIntentState({
-        sourceAnchor: reconnectingSourceAnchor ?? anchors.sourceAnchor,
-        graphRevision: response.graph_revision,
+        sourceAnchor: result.sourceAnchor,
+        graphRevision: result.graphRevision,
         currentIntent,
-        rejection: response.rejection,
+        rejection: result.rejection,
       }),
     };
-  } catch (error) {
-    return { type: 'failed', error };
   }
+
+  return result;
 }

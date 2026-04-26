@@ -122,6 +122,19 @@ export {
   preserveConnectionIntentState,
 } from './workflowConnections.js';
 export {
+  applyAcceptedWorkflowGraphMutation,
+  commitWorkflowConnectionCore,
+  commitWorkflowInsertCandidateCore,
+  commitWorkflowReconnectCore,
+  loadWorkflowConnectionIntentStateCore,
+  removeWorkflowGraphEdgesCore,
+} from './workflowGraphBackendActionCore.js';
+export type {
+  WorkflowConnectionCommitResult,
+  WorkflowConnectionIntentLoadResult,
+  WorkflowReconnectCoreResult,
+} from './workflowGraphBackendActionCore.js';
+export {
   HORSESHOE_VISIBLE_COUNT,
   HORSESHOE_OUTER_RADIUS,
   HORSESHOE_SELECTION_RADIUS,
