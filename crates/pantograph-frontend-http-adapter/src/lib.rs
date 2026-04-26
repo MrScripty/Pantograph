@@ -12,10 +12,10 @@ use pantograph_runtime_identity::{
     backend_key_aliases, normalize_runtime_identifier_with_fallback,
 };
 use pantograph_workflow_service::{
-    capabilities, WorkflowErrorCode, WorkflowErrorDetails, WorkflowErrorEnvelope, WorkflowHost,
+    WorkflowErrorCode, WorkflowErrorDetails, WorkflowErrorEnvelope, WorkflowHost,
     WorkflowHostModelDescriptor, WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunHandle,
     WorkflowRunOptions, WorkflowRuntimeCapability, WorkflowRuntimeInstallState,
-    WorkflowRuntimeSourceKind, WorkflowServiceError,
+    WorkflowRuntimeSourceKind, WorkflowServiceError, capabilities,
 };
 
 pub const DEFAULT_BACKEND_NAME: &str = "openai-compatible";
@@ -397,7 +397,6 @@ mod tests {
                     output_targets: request.output_targets,
                     override_selection: request.override_selection,
                     timeout_ms: request.timeout_ms,
-                    run_id: request.run_id,
                     priority: None,
                 },
             )
@@ -550,7 +549,7 @@ mod tests {
             .join("workflows");
 
         let payload = serde_json::json!({
-            "run_id": "adapter-run-1",
+            "workflow_run_id": "adapter-run-1",
             "outputs": [],
             "timing_ms": 2
         });
@@ -579,7 +578,6 @@ mod tests {
                     }]),
                     override_selection: None,
                     timeout_ms: None,
-                    run_id: None,
                 },
             )
             .await
@@ -621,7 +619,6 @@ mod tests {
                     output_targets: None,
                     override_selection: None,
                     timeout_ms: None,
-                    run_id: None,
                 },
             )
             .await
@@ -668,7 +665,6 @@ mod tests {
                     output_targets: None,
                     override_selection: None,
                     timeout_ms: None,
-                    run_id: None,
                 },
             )
             .await
@@ -715,7 +711,6 @@ mod tests {
                     output_targets: None,
                     override_selection: None,
                     timeout_ms: None,
-                    run_id: None,
                 },
             )
             .await
@@ -761,7 +756,6 @@ mod tests {
                     output_targets: None,
                     override_selection: None,
                     timeout_ms: None,
-                    run_id: None,
                 },
             )
             .await
@@ -769,9 +763,10 @@ mod tests {
 
         server_thread.join().expect("join server");
         assert!(matches!(err, WorkflowServiceError::Internal(_)));
-        assert!(err
-            .to_string()
-            .contains("expected workflow error envelope JSON"));
+        assert!(
+            err.to_string()
+                .contains("expected workflow error envelope JSON")
+        );
     }
 
     #[tokio::test]
@@ -895,8 +890,10 @@ mod tests {
 
         server_thread.join().expect("join server");
         assert!(matches!(error, WorkflowServiceError::Internal(_)));
-        assert!(error
-            .to_string()
-            .contains("expected workflow error envelope JSON"));
+        assert!(
+            error
+                .to_string()
+                .contains("expected workflow error envelope JSON")
+        );
     }
 }

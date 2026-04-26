@@ -3,9 +3,22 @@ use node_engine::{EventError, WorkflowEvent};
 pub(crate) fn serialize_workflow_event_json(
     event: &WorkflowEvent,
 ) -> std::result::Result<String, EventError> {
-    serde_json::to_string(event).map_err(|e| EventError {
+    let mut value = serde_json::to_value(event).map_err(|e| EventError {
+        message: format!("Serialization error: {}", e),
+    })?;
+    rename_execution_id_to_workflow_run_id(&mut value);
+    serde_json::to_string(&value).map_err(|e| EventError {
         message: format!("Serialization error: {}", e),
     })
+}
+
+fn rename_execution_id_to_workflow_run_id(value: &mut serde_json::Value) {
+    let Some(object) = value.as_object_mut() else {
+        return;
+    };
+    if let Some(execution_id) = object.remove("executionId") {
+        object.insert("workflowRunId".to_string(), execution_id);
+    }
 }
 
 #[cfg(test)]
@@ -27,7 +40,8 @@ mod tests {
 
         assert_eq!(value["type"], "graphModified");
         assert_eq!(value["workflowId"], "wf-1");
-        assert_eq!(value["executionId"], "exec-1");
+        assert_eq!(value["workflowRunId"], "exec-1");
+        assert!(value.get("executionId").is_none());
         assert_eq!(value["dirtyTasks"], serde_json::json!(["node-a", "node-b"]));
     }
 
@@ -46,7 +60,8 @@ mod tests {
 
         assert_eq!(value["type"], "waitingForInput");
         assert_eq!(value["workflowId"], "wf-1");
-        assert_eq!(value["executionId"], "exec-1");
+        assert_eq!(value["workflowRunId"], "exec-1");
+        assert!(value.get("executionId").is_none());
         assert_eq!(value["taskId"], "human-input-1");
         assert_eq!(value["prompt"], "Need approval");
     }

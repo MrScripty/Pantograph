@@ -160,6 +160,10 @@ embedded-runtime crate.
 - Public embedded-runtime workflow, session, queue, inspection, and keep-alive
   facade methods stay in `embedded_workflow_service_api.rs` so root composition
   remains separate from workflow-service API forwarding.
+- Embedded workflow execution must use the scheduler-issued `workflow_run_id`
+  as the node-engine execution id, runtime event id, diagnostics trace id, and
+  timing-ledger execution id. Edit-session `session_id` values are logical
+  editor/session containers only and must not be reused as workflow run ids.
 - Root embedded-runtime facade tests stay outside `lib.rs` so production
   runtime composition remains reviewable; split `lib_tests.rs` further when a
   behavior-focused test module boundary is introduced.

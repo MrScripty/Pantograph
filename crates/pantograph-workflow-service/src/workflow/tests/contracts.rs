@@ -18,7 +18,6 @@ fn request_roundtrip_uses_snake_case() {
             backend_key: Some("llama.cpp".to_string()),
         }),
         timeout_ms: None,
-        run_id: Some("run-1".to_string()),
     };
 
     let json = serde_json::to_value(&req).expect("serialize request");
@@ -30,9 +29,25 @@ fn request_roundtrip_uses_snake_case() {
 }
 
 #[test]
+fn request_rejects_caller_authored_run_id() {
+    let payload = serde_json::json!({
+        "workflow_id": "wf-1",
+        "inputs": [],
+        "output_targets": null,
+        "override_selection": null,
+        "timeout_ms": null,
+        "run_id": "caller-run-1"
+    });
+
+    let err = serde_json::from_value::<WorkflowRunRequest>(payload)
+        .expect_err("old run_id field must be rejected");
+    assert!(err.to_string().contains("unknown field `run_id`"));
+}
+
+#[test]
 fn response_roundtrip_preserves_outputs() {
     let res = WorkflowRunResponse {
-        run_id: "run-1".to_string(),
+        workflow_run_id: "run-1".to_string(),
         outputs: vec![WorkflowPortBinding {
             node_id: "vector-output-1".to_string(),
             port_id: "vector".to_string(),
@@ -43,7 +58,7 @@ fn response_roundtrip_preserves_outputs() {
 
     let json = serde_json::to_string(&res).expect("serialize response");
     let parsed: WorkflowRunResponse = serde_json::from_str(&json).expect("parse response");
-    assert_eq!(parsed.run_id, "run-1");
+    assert_eq!(parsed.workflow_run_id, "run-1");
     assert_eq!(parsed.outputs[0].node_id, "vector-output-1");
 }
 

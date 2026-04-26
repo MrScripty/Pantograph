@@ -25,7 +25,7 @@ public exports out of the service crate.
 | `tests/` | Behavior-focused workflow facade test modules split from the legacy monolithic test module. |
 | `tests.rs` | Legacy workflow facade and scheduler/session behavior tests extracted from the root facade file. |
 | `validation.rs` | Request, binding, output-target, and produced-output validation helpers shared by facade operations. |
-| `workflow_run_api.rs` | Scheduler-owned workflow run internals, run timeout handling, output validation, and private session-run handoff. |
+| `workflow_run_api.rs` | Private scheduler-owned workflow run internals, run timeout handling, output validation, and session-run handoff. |
 
 ## Problem
 `src/workflow.rs` remains a large public facade with service methods. Public
@@ -35,7 +35,9 @@ request validation, and session-runtime loading are cohesive enough to isolate,
 but they still preserve the parent facade as the compatibility export point.
 
 ## Constraints
-- Preserve the public `WorkflowService` API while decomposing internals.
+- Preserve the public `WorkflowService` API while decomposing internals, except
+  where the canonical workflow-run identity contract intentionally removes
+  direct scheduler-bypass execution surfaces.
 - Keep runtime capability matching deterministic.
 - Keep scheduler capacity and session runtime decisions backend-owned.
 - Avoid introducing adapter-specific types into service internals.
@@ -80,7 +82,10 @@ runtime readiness, session-runtime workflows, and the root facade test module.
   behavior slice.
 - Host calls occur outside session-store locks.
 - Generic workflow run execution owns timeout cancellation, output validation,
-  and direct runtime-not-ready checks behind the public facade.
+  and runtime-not-ready checks behind private scheduler/session handoff.
+- Public workflow-run request DTOs must not accept caller-authored `run_id`
+  fields. The backend scheduler creates `workflow_run_id` exactly once for a
+  submitted run, and response DTOs expose that id as `workflow_run_id`.
 - Workflow run handles use the same constructor for explicit and default
   creation so cancellation state starts from one backend-owned shape.
 - Session execution APIs keep queue admission, runtime preflight, runtime load,

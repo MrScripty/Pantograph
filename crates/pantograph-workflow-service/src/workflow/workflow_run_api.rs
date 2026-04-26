@@ -26,6 +26,7 @@ impl WorkflowService {
         request: WorkflowRunRequest,
         cached_preflight: Option<WorkflowExecutionSessionPreflightCache>,
         workflow_execution_session_id: Option<String>,
+        workflow_run_id: Option<String>,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
         validate_workflow_id(&request.workflow_id)?;
         validate_timeout_ms(request.timeout_ms)?;
@@ -139,8 +140,7 @@ impl WorkflowService {
             validate_payload_size(binding, max_value_bytes)?;
         }
 
-        let run_id = request
-            .run_id
+        let workflow_run_id = workflow_run_id
             .as_deref()
             .map(str::trim)
             .filter(|s| !s.is_empty())
@@ -148,7 +148,7 @@ impl WorkflowService {
             .unwrap_or_else(|| Uuid::new_v4().to_string());
 
         Ok(WorkflowRunResponse {
-            run_id,
+            workflow_run_id,
             outputs,
             timing_ms: started.elapsed().as_millis(),
         })

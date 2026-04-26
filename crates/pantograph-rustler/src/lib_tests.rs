@@ -187,7 +187,7 @@ async fn test_rustler_workflow_host_contract_success() {
     std::env::set_current_dir(&root).expect("set cwd");
 
     let payload = serde_json::json!({
-        "run_id": "server-run-1",
+        "workflow_run_id": "server-run-1",
         "outputs": [{ "node_id": "vector-output-1", "port_id": "vector", "value": [1.0, 2.0, 3.0] }],
         "timing_ms": 2
     });
@@ -223,7 +223,6 @@ async fn test_rustler_workflow_host_contract_success() {
                 }]),
                 override_selection: None,
                 timeout_ms: None,
-                run_id: None,
                 priority: None,
             },
         )
@@ -286,7 +285,6 @@ async fn test_rustler_workflow_execution_session_host_contract_preserves_cancell
                 override_selection: None,
                 timeout_ms: None,
                 priority: None,
-                run_id: None,
             },
         )
         .await
@@ -353,7 +351,6 @@ async fn test_rustler_workflow_execution_session_host_contract_preserves_invalid
                 override_selection: None,
                 timeout_ms: None,
                 priority: None,
-                run_id: None,
             },
         )
         .await

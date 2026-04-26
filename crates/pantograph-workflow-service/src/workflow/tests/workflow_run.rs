@@ -6,7 +6,8 @@ impl WorkflowService {
         host: &H,
         request: WorkflowRunRequest,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
-        self.workflow_run_internal(host, request, None, None).await
+        self.workflow_run_internal(host, request, None, None, None)
+            .await
     }
 }
 
@@ -30,13 +31,12 @@ async fn workflow_run_returns_host_outputs() {
                 }]),
                 override_selection: None,
                 timeout_ms: None,
-                run_id: None,
             },
         )
         .await
         .expect("workflow_run");
 
-    assert!(!response.run_id.trim().is_empty());
+    assert!(!response.workflow_run_id.trim().is_empty());
     assert_eq!(response.outputs.len(), 1);
     assert_eq!(response.outputs[0].value, serde_json::json!("hello world"));
 }
@@ -59,7 +59,6 @@ async fn workflow_run_fails_when_host_returns_runtime_error() {
                 output_targets: None,
                 override_selection: None,
                 timeout_ms: None,
-                run_id: None,
             },
         )
         .await
@@ -102,16 +101,16 @@ async fn workflow_run_honors_blocking_backend_technical_fit_decision() {
                 output_targets: None,
                 override_selection: None,
                 timeout_ms: None,
-                run_id: None,
             },
         )
         .await
         .expect_err("technical-fit decision should block run");
 
     assert!(matches!(err, WorkflowServiceError::RuntimeNotReady(_)));
-    assert!(err
-        .to_string()
-        .contains("technical-fit could not select a ready runtime"));
+    assert!(
+        err.to_string()
+            .contains("technical-fit could not select a ready runtime")
+    );
 }
 
 #[tokio::test]
@@ -128,16 +127,16 @@ async fn workflow_run_returns_internal_when_host_emits_invalid_output_shape() {
                 output_targets: None,
                 override_selection: None,
                 timeout_ms: None,
-                run_id: None,
             },
         )
         .await
         .expect_err("invalid host output should be internal");
 
     assert!(matches!(err, WorkflowServiceError::Internal(_)));
-    assert!(err
-        .to_string()
-        .contains("outputs.0.port_id must be non-empty"));
+    assert!(
+        err.to_string()
+            .contains("outputs.0.port_id must be non-empty")
+    );
 }
 
 #[tokio::test]
@@ -154,7 +153,6 @@ async fn workflow_run_rejects_zero_timeout_ms() {
                 output_targets: None,
                 override_selection: None,
                 timeout_ms: Some(0),
-                run_id: None,
             },
         )
         .await
@@ -179,7 +177,6 @@ async fn workflow_run_timeout_cancels_host_within_grace_window() {
                 output_targets: None,
                 override_selection: None,
                 timeout_ms: Some(25),
-                run_id: None,
             },
         )
         .await
@@ -207,7 +204,6 @@ async fn workflow_run_rejects_empty_node_id() {
                 output_targets: None,
                 override_selection: None,
                 timeout_ms: None,
-                run_id: None,
             },
         )
         .await
@@ -234,7 +230,6 @@ async fn workflow_run_rejects_oversized_payload() {
                 output_targets: None,
                 override_selection: None,
                 timeout_ms: None,
-                run_id: None,
             },
         )
         .await
@@ -276,7 +271,6 @@ async fn workflow_run_accepts_discovered_output_targets() {
                 }]),
                 override_selection: None,
                 timeout_ms: None,
-                run_id: None,
             },
         )
         .await
@@ -304,7 +298,6 @@ async fn workflow_run_rejects_non_discovered_output_targets() {
                 }]),
                 override_selection: None,
                 timeout_ms: None,
-                run_id: None,
             },
         )
         .await
@@ -330,16 +323,16 @@ async fn workflow_run_returns_output_not_produced_when_target_missing() {
                 }]),
                 override_selection: None,
                 timeout_ms: None,
-                run_id: None,
             },
         )
         .await
         .expect_err("expected output_not_produced");
 
     assert!(matches!(err, WorkflowServiceError::OutputNotProduced(_)));
-    assert!(err
-        .to_string()
-        .contains("requested output target 'text-output-1.text' was not produced"));
+    assert!(
+        err.to_string()
+            .contains("requested output target 'text-output-1.text' was not produced")
+    );
 }
 
 #[tokio::test]
@@ -367,7 +360,6 @@ async fn workflow_run_rejects_duplicate_input_bindings() {
                 output_targets: None,
                 override_selection: None,
                 timeout_ms: None,
-                run_id: None,
             },
         )
         .await

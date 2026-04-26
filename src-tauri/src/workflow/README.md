@@ -122,7 +122,7 @@ Stored diagnostics-runtime replay and runtime-event projection sequencing
 should likewise stay in backend helpers so the Tauri diagnostics transport
 remains a thin caller.
 Diagnostics projections now carry backend-authored context for requested
-snapshot filters, event source execution id, relevant execution id, and
+snapshot filters, event source workflow run id, relevant workflow run id, and
 relevance, so GUI stores do not need adapter-local diagnostics event claiming.
 Serialized workflow events also include a backend-authored `ownership` payload
 that exposes event execution id, active execution id, and baseline relevance for
@@ -161,6 +161,9 @@ service crate, which is the active owner for save/load/list behavior.
 - Diagnostics snapshot commands and event bridge emissions must preserve
   backend-authored projection context rather than requiring frontend-local
   execution-id claiming for diagnostics relevance.
+- Workflow run commands must submit through the scheduler and return the
+  scheduler-generated `workflow_run_id`; Tauri command payloads must not accept
+  caller-authored run ids or workflow-name diagnostics side channels.
 - Workflow-event serialization must include backend-authored ownership context
   for execution-scoped events so GUI reducers do not infer event execution ids
   from raw payload fields first.

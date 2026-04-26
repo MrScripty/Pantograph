@@ -4,15 +4,15 @@ use node_engine::{EventSink, WorkflowEvent, WorkflowGraph};
 use tokio::sync::RwLock;
 
 use crate::{
-    validate_workflow_json, version, workflow_event_bridge::BufferedEventSink, FfiError,
-    FfiOrchestrationStore, FfiWorkflowEngine, FfiWorkflowGraph,
+    FfiError, FfiOrchestrationStore, FfiWorkflowEngine, FfiWorkflowGraph, validate_workflow_json,
+    version, workflow_event_bridge::BufferedEventSink,
 };
 
 #[cfg(feature = "frontend-http")]
 use crate::frontend_http_workflow_get_capabilities;
 #[cfg(feature = "frontend-http")]
 use pantograph_frontend_http_adapter::{
-    parse_workflow_outputs_payload, DEFAULT_MAX_INPUT_BINDINGS, DEFAULT_MAX_VALUE_BYTES,
+    DEFAULT_MAX_INPUT_BINDINGS, DEFAULT_MAX_VALUE_BYTES, parse_workflow_outputs_payload,
 };
 #[cfg(feature = "frontend-http")]
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -180,7 +180,8 @@ async fn test_buffered_event_sink_uses_canonical_event_type_names() {
 
     assert_eq!(graph_modified_json["type"], "graphModified");
     assert_eq!(graph_modified_json["workflowId"], "wf-1");
-    assert_eq!(graph_modified_json["executionId"], "exec-1");
+    assert_eq!(graph_modified_json["workflowRunId"], "exec-1");
+    assert!(graph_modified_json.get("executionId").is_none());
     assert_eq!(
         graph_modified_json["dirtyTasks"],
         serde_json::json!(["node-a", "node-b"])
@@ -194,7 +195,8 @@ async fn test_buffered_event_sink_uses_canonical_event_type_names() {
 
     assert_eq!(incremental_json["type"], "incrementalExecutionStarted");
     assert_eq!(incremental_json["workflowId"], "wf-1");
-    assert_eq!(incremental_json["executionId"], "exec-1");
+    assert_eq!(incremental_json["workflowRunId"], "exec-1");
+    assert!(incremental_json.get("executionId").is_none());
     assert_eq!(incremental_json["tasks"], serde_json::json!(["node-c"]));
 }
 

@@ -156,10 +156,10 @@ impl WorkflowService {
                     output_targets: queued_run.queued.output_targets,
                     override_selection: queued_run.queued.override_selection,
                     timeout_ms: queued_run.queued.timeout_ms,
-                    run_id: Some(queued_run.queued.workflow_run_id.clone()),
                 },
                 Some(preflight_cache),
                 Some(session_id.clone()),
+                Some(queued_run.queued.workflow_run_id.clone()),
             )
             .await;
 

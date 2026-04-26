@@ -27,6 +27,7 @@ pub struct WorkflowOutputTarget {
 /// Request contract for generic workflow execution.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
 pub struct WorkflowRunRequest {
     pub workflow_id: String,
     #[serde(default)]
@@ -37,15 +38,14 @@ pub struct WorkflowRunRequest {
     pub override_selection: Option<WorkflowTechnicalFitOverride>,
     #[serde(default)]
     pub timeout_ms: Option<u64>,
-    #[serde(default)]
-    pub run_id: Option<String>,
 }
 
 /// Workflow run response.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
 pub struct WorkflowRunResponse {
-    pub run_id: String,
+    pub workflow_run_id: String,
     pub outputs: Vec<WorkflowPortBinding>,
     pub timing_ms: u128,
 }

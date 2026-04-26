@@ -49,7 +49,7 @@ and duration expectation enrichment for retained traces and opened workflow
 graphs, and `runtime.rs` plus `scheduler.rs` apply backend-owned
 runtime/scheduler facts into the canonical run state. The
 canonical trace snapshot filter model is
-`execution_id`, `session_id`, `workflow_id`, `workflow_name`, plus
+`workflow_run_id`, `session_id`, `workflow_id`, plus
 `include_completed`, with whitespace trimming and blank-filter rejection applied
 inside this boundary. Adapters may project or transport these contracts, but
 they do not own trace lifecycle rules.
@@ -65,7 +65,7 @@ they do not own trace lifecycle rules.
 ## Invariants
 - `WorkflowTraceStore` is the canonical owner of retained workflow trace state.
 - Request validation for snapshot filters stays here, not in adapters.
-- Trace snapshot filter semantics, including `workflow_name`, stay
+- Trace snapshot filter semantics stay
   backend-owned and must not drift between transport surfaces.
 - When a run is paused by `WaitingForInput`, a later
   `IncrementalExecutionStarted` or `NodeStarted` event for the same execution
@@ -81,7 +81,7 @@ they do not own trace lifecycle rules.
   metrics to another execution's trace.
 - Scheduler snapshot observation time is not currently a trace queue-state
   input; scheduler projection consumes measured queue item/session facts only.
-- Recovery or replay updates for the same execution id update one canonical run
+- Recovery or replay updates for the same workflow run id update one canonical run
   record in place.
 - Timing expectations are projected from durable prior completed observations.
   The active execution is not recorded until after its terminal snapshot is
@@ -128,8 +128,8 @@ let response = trace_store.snapshot(&WorkflowTraceSnapshotRequest::default())?;
   `WorkflowTraceSnapshotResponse` with canonical `WorkflowTraceSummary` values.
 - `select_runtime_metrics()` reuses the same backend-owned request semantics
   but only returns runtime metrics when the filter resolves to exactly one
-  execution. Multi-run matches stay explicit through
-  `matched_execution_ids` instead of silently picking the first trace.
+  workflow run. Multi-run matches stay explicit through
+  `matched_workflow_run_ids` instead of silently picking the first trace.
 - `snapshot()` trims surrounding whitespace from optional filters and rejects
   blank filter values instead of silently inventing adapter-local fallback
   semantics.
@@ -138,9 +138,9 @@ let response = trace_store.snapshot(&WorkflowTraceSnapshotRequest::default())?;
   or insufficient, not that a node failed to run.
 - `snapshot_all()` and `clear_history()` operate on the retained in-memory
   trace set owned by this directory.
-- Callers may set execution metadata and graph context additively before or
+- Callers may set workflow-run metadata and graph context additively before or
   after trace events arrive; the store reconciles those facts into the same
-  execution record.
+  workflow-run record.
 
 ## Structured Producer Contract
 - Public trace DTOs use snake_case field names and enum labels.
@@ -149,7 +149,7 @@ let response = trace_store.snapshot(&WorkflowTraceSnapshotRequest::default())?;
 - `WorkflowTraceSnapshotResponse.retained_trace_limit` communicates the current
   in-memory retention bound to consumers.
 - `WorkflowTraceSnapshotRequest` supports additive filtering by
-  `execution_id`, `session_id`, `workflow_id`, and `workflow_name`.
+  `workflow_run_id`, `session_id`, and `workflow_id`.
 - When a filter field is omitted, snapshot semantics fall back to the backend
   default rather than adapter-specific filtering behavior.
 - Queue timing fields are authoritative-only: missing queue timestamps remain

@@ -601,12 +601,12 @@ without owning or correcting it.
 **Goal:** Prevent public API drift back into ambiguous ids or scheduler bypass.
 
 **Tasks:**
-- [ ] Update language bindings and HTTP adapter DTOs to expose
+- [x] Update language bindings and HTTP adapter DTOs to expose
   `workflow_run_id` consistently.
-- [ ] Remove `workflow_name` from binding diagnostics contracts.
-- [ ] Add source-surface guardrails for forbidden `session_id` as run id usage
+- [x] Remove `workflow_name` from binding diagnostics contracts.
+- [x] Add source-surface guardrails for forbidden `session_id` as run id usage
   in public/binding-facing code.
-- [ ] Update README/API docs for workflow-service, embedded-runtime, Tauri
+- [x] Update README/API docs for workflow-service, embedded-runtime, Tauri
   workflow, frontend diagnostics, and bindings touched by the refactor.
 
 **Verification:**
@@ -616,7 +616,37 @@ without owning or correcting it.
   session-id-as-run-id patterns.
 - Documentation traceability review.
 
-**Status:** Not started.
+**Status:** Completed.
+
+**Notes:**
+- `WorkflowRunRequest` no longer exposes a caller-authored `run_id`, and the
+  run request/response DTOs reject unknown fields so stale `run_id` payloads
+  do not survive as a compatibility path.
+- `WorkflowRunResponse` and the frontend HTTP adapter now consume
+  `workflow_run_id` as the only run identity field.
+- Rustler and UniFFI event JSON bridge code maps backend `executionId` event
+  payloads to public `workflowRunId` and tests that `executionId` is absent in
+  the binding-facing JSON.
+- Active module READMEs for workflow-service, embedded-runtime, Tauri
+  workflow, frontend diagnostics, frontend HTTP adapter, Rustler, UniFFI, and
+  trace diagnostics now document the canonical run identity boundary.
+
+**Verification Results:**
+- `cargo test -p pantograph-workflow-service`
+- `cargo test -p pantograph-frontend-http-adapter`
+- `cargo test -p pantograph-uniffi`
+- `cargo check -p pantograph_rustler`
+- `cargo check --manifest-path src-tauri/Cargo.toml`
+- `git diff --check`
+- Binding/API guardrail search for stale `workflow_name`, stale public
+  `"run_id"`, and binding-facing `executionId` fields. Remaining matches are
+  `workflow_run_id` fields, binding adapter removal code, and tests asserting
+  `executionId` is absent.
+- `cargo test -p pantograph_rustler` was attempted with the actual Cargo
+  package id, but the standalone Rust test binary failed to link because the
+  Erlang host-supplied `enif_*` symbols are unavailable outside the BEAM NIF
+  harness. The crate README already documents `cargo check -p
+  pantograph_rustler` plus BEAM smoke as the supported verification path.
 
 ### Milestone 8: Standards Compliance Refactor
 
@@ -712,6 +742,10 @@ model is implemented.
   contracts now use backend-authored `workflow_run_id`, diagnostics labels use
   `workflow_id`, and the GUI run command returns the submitted
   `workflow_run_id` without a workflow-name side channel.
+- 2026-04-26: Milestone 7 completed. Public workflow-run DTOs now reject stale
+  caller-authored `run_id`, HTTP adapter and native binding projections expose
+  canonical workflow run ids, and active module READMEs document the binding
+  boundary.
 - Current known unrelated dirty files must remain untouched unless the user
   explicitly assigns them to this work:
   - `.pantograph/workflows/tiny-sd-turbo-diffusion.json`
@@ -785,6 +819,7 @@ owned serially by the integration implementer.
 - Milestone 4: Rebuild Trace And Timing Around Workflow Run Id.
 - Milestone 5: Update Tauri Diagnostics Projection.
 - Milestone 6: Update Frontend Contracts And Rendering.
+- Milestone 7: Binding And Public API Guardrails.
 
 ### Deviations
 
@@ -833,6 +868,16 @@ owned serially by the integration implementer.
   - `cargo check --manifest-path src-tauri/Cargo.toml`
   - `cargo test --manifest-path src-tauri/Cargo.toml workflow::event_adapter`
   - `git diff --check`
+- Milestone 7 binding and public API guardrails:
+  - `cargo test -p pantograph-workflow-service`
+  - `cargo test -p pantograph-frontend-http-adapter`
+  - `cargo test -p pantograph-uniffi`
+  - `cargo check -p pantograph_rustler`
+  - `cargo check --manifest-path src-tauri/Cargo.toml`
+  - `git diff --check`
+  - Guardrail source search for stale public `run_id`, diagnostics
+    `workflow_name`, binding-facing `executionId`, and session-id-as-run-id
+    patterns.
 
 ### Traceability Links
 

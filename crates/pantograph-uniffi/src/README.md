@@ -54,6 +54,9 @@ and error projection, while workflow semantics stay in
   module wiring.
 - Request/response JSON contracts remain backend-owned by
   `pantograph-workflow-service`.
+- Workflow run response JSON exposes `workflow_run_id`; binding-facing request
+  JSON must not provide caller-authored run ids or workflow-name diagnostics
+  fields.
 - `frontend-http` exports delegate to `pantograph-frontend-http-adapter`.
 - Frontend HTTP workflow/session exports stay in `frontend_http.rs`; `lib.rs`
   re-exports them to preserve the binding surface while keeping adapter
@@ -66,6 +69,8 @@ and error projection, while workflow semantics stay in
 - Buffered workflow-event delivery for the legacy engine object stays in
   `workflow_event_bridge.rs`; the exported `FfiWorkflowEvent` record stays in
   `lib.rs` to preserve binding metadata shape.
+- Buffered workflow-event JSON maps backend runtime-event identity to public
+  `workflowRunId` instead of exposing ambiguous `executionId`.
 - Generated bindings and native library artifacts must be produced from the
   same build input.
 - Public exported methods should map to documented host-language use cases.

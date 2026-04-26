@@ -177,11 +177,11 @@ async fn workflow_execution_session_repeated_runs_create_distinct_backend_run_id
         .await
         .expect("second run");
 
-    assert_ne!(first.run_id, created.session_id);
-    assert_ne!(second.run_id, created.session_id);
-    assert_ne!(first.run_id, second.run_id);
-    assert!(first.run_id.starts_with("run_"));
-    assert!(second.run_id.starts_with("run_"));
+    assert_ne!(first.workflow_run_id, created.session_id);
+    assert_ne!(second.workflow_run_id, created.session_id);
+    assert_ne!(first.workflow_run_id, second.workflow_run_id);
+    assert!(first.workflow_run_id.starts_with("run_"));
+    assert!(second.workflow_run_id.starts_with("run_"));
 
     let status = service
         .workflow_get_execution_session_status(WorkflowExecutionSessionStatusRequest {

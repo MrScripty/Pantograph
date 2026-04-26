@@ -29,24 +29,15 @@ spread across toolbar handlers, global stores, and view code.
 - Workflow-service-backed capability and scheduler snapshots must coexist with
   event-derived run traces without introducing a second source of truth for run
   execution state.
-- GUI edit-session runs may not have workflow-service scheduler state, so the
-  service must also support a deterministic synthetic scheduler view derived
-  from execution lifecycle events until authoritative snapshots arrive.
 - Retained history must stay bounded so long sessions do not grow without
   limit.
 
 ## Decision
-Use `DiagnosticsService.ts` as the single owner of diagnostics state and keep
-event normalization in `traceAccumulator.ts`. The service accepts workflow
-metadata, graph snapshots, execution events, runtime capability snapshots, and
-session queue snapshots, then emits derived state for the frontend store to
-expose declaratively. Runtime and scheduler tabs now consume additive
-`RuntimeSnapshot` and `SchedulerSnapshot` workflow events when the backend emits
-them, while the service can synthesize a minimal scheduler session lifecycle
-for edit-session runs that do not resolve through workflow-service session
-APIs. The frontend store also rejects event updates from older edit-session
-execution ids before they reach the diagnostics service so switching sessions
-does not splice stale run events into the current workflow view.
+Use backend diagnostics projections as the source of truth for run history,
+runtime state, scheduler state, timing expectations, and workflow labels.
+Frontend stores mirror those projections by `workflow_id`, `session_id`, graph
+context, and backend-authored `workflow_run_id`; Svelte components render the
+projection without inventing fallback run identities or workflow display names.
 
 ## Alternatives Rejected
 - Accumulate diagnostics directly inside `WorkflowToolbar.svelte`.
@@ -68,10 +59,8 @@ does not splice stale run events into the current workflow view.
   diagnostics fetches before equivalent event-driven projections, so consumers
   must tolerate partial producer coverage without discarding the last known
   backend snapshot.
-- Synthetic scheduler fallback must clear when authoritative scheduler snapshot
-  data for the same session arrives.
 - Edit-session diagnostics consumers must ignore workflow events whose
-  `execution_id` no longer matches the active session id.
+  `workflow_run_id` no longer matches the active workflow run id.
 
 ## Revisit Triggers
 - Diagnostics needs durable persistence or export/replay support.
@@ -98,11 +87,10 @@ import { DiagnosticsService } from './DiagnosticsService';
 const service = new DiagnosticsService();
 service.updateWorkflowMetadata({
   workflowId: 'workflow-1',
-  workflowName: 'Example Workflow',
 });
 service.recordWorkflowEvent({
   type: 'Started',
-  data: { workflow_id: 'workflow-1', node_count: 3, execution_id: 'run-1' },
+  data: { workflow_id: 'workflow-1', node_count: 3, workflow_run_id: 'run-1' },
 });
 ```
 
@@ -130,11 +118,11 @@ service.recordWorkflowEvent({
 - Runtime and scheduler snapshots are last-write-wins views over workflow
   service responses keyed by current workflow and current session identity.
 - `WorkflowDiagnosticsProjection.context` mirrors backend-owned requested
-  filters, event source execution id, relevant execution id, and relevance
+  filters, event source workflow run id, relevant workflow run id, and relevance
   decision for app stores that render diagnostics snapshots.
 - `WorkflowDiagnosticsProjection.currentSessionState` is an additive,
   backend-owned session inspection mirror; producer paths may omit it until the
   backend explicitly forwards the inspection snapshot.
-- Scheduler state may also be synthesized from execution lifecycle events for
-  edit-session GUI runs; that fallback remains additive and is superseded by
-  streamed or fetched workflow-service snapshots when available.
+- Scheduler state is backend-owned. GUI runs must be submitted through the
+  scheduler so queued/running rows and runtime traces share the same
+  `workflow_run_id`.

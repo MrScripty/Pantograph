@@ -42,6 +42,9 @@ implements `WorkflowHost`.
 - Scheduler error details are the only currently supported envelope detail
   variant, so adapter projection should map that variant directly without
   inventing optional fallback branches.
+- Workflow run responses consume `workflow_run_id` only. Public callers do not
+  provide run identity through this adapter; scheduler-owned session execution
+  is responsible for creating canonical workflow run ids.
 
 ## Revisit Triggers
 - A second frontend transport needs the same host semantics.

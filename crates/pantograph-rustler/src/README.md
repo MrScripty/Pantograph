@@ -59,6 +59,8 @@ registration, callback transport, and feature-gated adapter calls.
 - Exported NIF names remain stable unless BEAM consumers migrate together.
 - Workflow JSON responses and error envelopes preserve backend-owned service
   semantics.
+- Workflow run responses expose `workflow_run_id`; BEAM-facing request JSON
+  must not provide caller-authored run ids or workflow-name diagnostics fields.
 - Resource registration stays centralized in `resource_registration.rs`.
 - Crate-local Rust tests stay in `lib_tests.rs`; `lib.rs` keeps only the test
   module declaration because NIF-annotated functions require a BEAM-backed host
@@ -77,7 +79,9 @@ registration, callback transport, and feature-gated adapter calls.
   keeps only the exported executor NIF wrappers.
 - BEAM DTO and `ResourceArc` wrapper declarations stay outside `lib.rs` so the
   facade remains focused on exported NIF behavior and load wiring.
-- Callback/event JSON serialization preserves backend event labels and order.
+- Callback/event JSON serialization preserves backend event labels and order,
+  and maps backend runtime-event identity to public `workflowRunId` instead of
+  exposing ambiguous `executionId`.
 - Callback bridge state and BEAM event delivery stay in `callback_bridge.rs`;
   `lib.rs` keeps only the exported callback NIF wrappers.
 - Event contract tests must construct the current backend event shape,
