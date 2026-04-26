@@ -3,8 +3,9 @@ use std::path::Path;
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, UsageEventId, WorkflowId, WorkflowRunId,
 };
-use rusqlite::{params, Connection, Row};
+use rusqlite::{Connection, Row, params};
 
+mod run_summary_sqlite;
 mod timing_sqlite;
 
 use crate::records::{
@@ -13,9 +14,10 @@ use crate::records::{
     PruneUsageEventsCommand, PruneUsageEventsResult, RetentionClass, UsageEventStatus,
     UsageLineage,
 };
-use crate::schema::{apply_schema, current_schema_version, migrate_schema, SCHEMA_VERSION};
+use crate::schema::{SCHEMA_VERSION, apply_schema, current_schema_version, migrate_schema};
 use crate::timing::{
-    PruneTimingObservationsCommand, PruneTimingObservationsResult, WorkflowTimingExpectation,
+    PruneTimingObservationsCommand, PruneTimingObservationsResult, WorkflowRunSummaryProjection,
+    WorkflowRunSummaryQuery, WorkflowRunSummaryRecord, WorkflowTimingExpectation,
     WorkflowTimingExpectationQuery, WorkflowTimingObservation,
 };
 use crate::util::now_ms;
@@ -302,6 +304,20 @@ impl DiagnosticsLedgerRepository for SqliteDiagnosticsLedger {
         command: PruneTimingObservationsCommand,
     ) -> Result<PruneTimingObservationsResult, DiagnosticsLedgerError> {
         timing_sqlite::prune_timing_observations(self, command)
+    }
+
+    fn upsert_workflow_run_summary(
+        &mut self,
+        record: WorkflowRunSummaryRecord,
+    ) -> Result<(), DiagnosticsLedgerError> {
+        run_summary_sqlite::upsert_workflow_run_summary(self, record)
+    }
+
+    fn query_workflow_run_summaries(
+        &self,
+        query: WorkflowRunSummaryQuery,
+    ) -> Result<WorkflowRunSummaryProjection, DiagnosticsLedgerError> {
+        run_summary_sqlite::query_workflow_run_summaries(self, query)
     }
 }
 

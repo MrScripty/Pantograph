@@ -9,7 +9,8 @@ use crate::workflow::WorkflowServiceError;
 use super::query::{runtime_metrics_selection, snapshot_for_request};
 use super::state::{apply_trace_event, create_trace_run_state};
 use super::timing::{
-    enrich_snapshot_timing, graph_timing_expectations, terminal_timing_observations,
+    enrich_snapshot_timing, graph_timing_expectations, run_summary_record,
+    terminal_timing_observations,
 };
 use super::types::{
     WorkflowTraceEvent, WorkflowTraceGraphContext, WorkflowTraceGraphTimingExpectations,
@@ -328,19 +329,45 @@ impl WorkflowTraceStore {
         graph_timing_expectations(workflow_id, graph_context, ledger.as_deref())
     }
 
+    pub fn workflow_run_summaries(
+        &self,
+        query: pantograph_diagnostics_ledger::WorkflowRunSummaryQuery,
+    ) -> Result<pantograph_diagnostics_ledger::WorkflowRunSummaryProjection, WorkflowServiceError>
+    {
+        query
+            .validate()
+            .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+        let Some(ledger) = self.timing_ledger.as_ref() else {
+            return Ok(
+                pantograph_diagnostics_ledger::WorkflowRunSummaryProjection { runs: Vec::new() },
+            );
+        };
+        pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::query_workflow_run_summaries(
+            &*ledger.lock(),
+            query,
+        )
+        .map_err(|error| WorkflowServiceError::Internal(error.to_string()))
+    }
+
     pub fn record_event(
         &self,
         event: &WorkflowTraceEvent,
         timestamp_ms: u64,
     ) -> WorkflowTraceSnapshotResponse {
-        let (snapshot, observations) = {
+        let (snapshot, observations, run_summary) = {
             let mut state = self.state.lock();
             state.record_event(event, timestamp_ms);
+            let run_summary = state
+                .traces_by_id
+                .get(event.workflow_run_id())
+                .and_then(|trace| run_summary_record(trace, timestamp_ms));
             (
                 state.snapshot_all(),
                 terminal_timing_observations(&state, event, timestamp_ms),
+                run_summary,
             )
         };
+        self.record_run_summary(run_summary);
         self.record_timing_observations(observations);
         let snapshot = self.enrich_timing(snapshot);
         snapshot
@@ -371,6 +398,23 @@ impl WorkflowTraceStore {
                 observation,
             );
         }
+    }
+
+    fn record_run_summary(
+        &self,
+        run_summary: Option<pantograph_diagnostics_ledger::WorkflowRunSummaryRecord>,
+    ) {
+        let Some(run_summary) = run_summary else {
+            return;
+        };
+        let Some(ledger) = self.timing_ledger.as_ref() else {
+            return;
+        };
+        let _ =
+            pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::upsert_workflow_run_summary(
+                &mut *ledger.lock(),
+                run_summary,
+            );
     }
 
     fn enrich_timing(

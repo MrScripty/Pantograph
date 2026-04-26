@@ -460,7 +460,7 @@ run id and workflow id only.
   `session_id`, `workflow_id`, and graph context.
 - [x] Update SQLite timing observation schema/use to treat `execution_id` as
   `workflow_run_id`.
-- [ ] Add or update durable run-summary storage if restart-visible diagnostic
+- [x] Add or update durable run-summary storage if restart-visible diagnostic
   run history is required beyond timing expectations.
 - [x] Make terminal timing writes idempotent by `workflow_run_id` and node id.
 
@@ -470,7 +470,7 @@ run id and workflow id only.
 - Replay/idempotency tests for duplicate terminal events.
 - Fresh database and existing incompatible database behavior tests.
 
-**Status:** In progress.
+**Status:** Completed.
 
 **Notes:**
 - Trace summaries and snapshot requests now expose `workflow_run_id` instead of
@@ -483,13 +483,16 @@ run id and workflow id only.
   fallback run id.
 - SQLite timing observations now store `workflow_run_id` and `workflow_id`,
   with no workflow-name column or fallback lookup.
-- Bumped the diagnostics ledger schema to v3 and intentionally drops old v2
-  timing rows because their identity contract is incompatible and no backwards
-  compatibility is required.
+- Bumped the diagnostics ledger schema through v4; v3 intentionally drops old
+  v2 timing rows because their identity contract is incompatible and no
+  backwards compatibility is required, and v4 adds durable run summaries.
+- Added durable SQLite workflow run summaries keyed by `workflow_run_id`, with
+  `workflow_id`, `session_id`, graph fingerprint, status, timing, event count,
+  and error fields for restart-visible diagnostics history.
+- Workflow trace recording now upserts run summaries when traces change and
+  exposes a query API for later Tauri/frontend projection.
 - Downstream Tauri, LLM registry debug, frontend, and binding call sites still
   reference old trace DTO names; these are assigned to Milestones 5 through 7.
-- Durable restart-visible run-summary storage remains in this milestone before
-  it can be marked complete.
 
 **Verification Results:**
 - `cargo test -p pantograph-workflow-service`
@@ -500,6 +503,8 @@ run id and workflow id only.
   `crates/pantograph-workflow-service/tests/contract.rs`, or
   `crates/pantograph-diagnostics-ledger/src`, except an intentional v2
   incompatible-schema migration fixture that verifies old rows are dropped.
+- Ledger tests cover workflow-run summary upsert/query behavior.
+- Workflow-service trace tests cover persisted run-summary history projection.
 
 ### Milestone 5: Update Tauri Diagnostics Projection
 
@@ -654,6 +659,9 @@ model is implemented.
   traces and SQLite timing observations now use `workflow_run_id` without
   workflow-name side channels; durable restart-visible run summaries remain in
   progress.
+- 2026-04-26: Milestone 4 completed. Diagnostics ledger now stores durable
+  workflow run summaries keyed by `workflow_run_id`, and workflow trace
+  recording upserts those summaries for restart-visible diagnostics history.
 - Current known unrelated dirty files must remain untouched unless the user
   explicitly assigns them to this work:
   - `.pantograph/workflows/tiny-sd-turbo-diffusion.json`
@@ -724,6 +732,7 @@ owned serially by the integration implementer.
 - Milestone 1: Freeze Canonical Identity Contract.
 - Milestone 2: Make Scheduler Own Run Id Creation.
 - Milestone 3: Propagate Workflow Run Id Through Runtime Events.
+- Milestone 4: Rebuild Trace And Timing Around Workflow Run Id.
 
 ### Deviations
 
@@ -756,6 +765,10 @@ owned serially by the integration implementer.
   - Source search for stale `workflow_name` and generic `execution_id` in the
     workflow-service trace and diagnostics-ledger slices, allowing only the
     v2 incompatible-schema migration fixture.
+- Milestone 4 durable run-summary slice:
+  - `cargo test -p pantograph-workflow-service`
+  - `cargo test -p pantograph-diagnostics-ledger`
+  - `git diff --check -- crates/pantograph-diagnostics-ledger/src crates/pantograph-workflow-service/src/trace docs/plans/workflow-run-identity-redesign/plan.md`
 
 ### Traceability Links
 

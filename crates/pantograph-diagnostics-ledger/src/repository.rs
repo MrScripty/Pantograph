@@ -1,7 +1,8 @@
 use crate::{
     DiagnosticsLedgerError, DiagnosticsProjection, DiagnosticsQuery, DiagnosticsRetentionPolicy,
     ModelLicenseUsageEvent, PruneTimingObservationsCommand, PruneTimingObservationsResult,
-    PruneUsageEventsCommand, PruneUsageEventsResult, WorkflowTimingExpectation,
+    PruneUsageEventsCommand, PruneUsageEventsResult, WorkflowRunSummaryProjection,
+    WorkflowRunSummaryQuery, WorkflowRunSummaryRecord, WorkflowTimingExpectation,
     WorkflowTimingExpectationQuery, WorkflowTimingObservation,
 };
 
@@ -37,4 +38,14 @@ pub trait DiagnosticsLedgerRepository {
         &mut self,
         command: PruneTimingObservationsCommand,
     ) -> Result<PruneTimingObservationsResult, DiagnosticsLedgerError>;
+
+    fn upsert_workflow_run_summary(
+        &mut self,
+        record: WorkflowRunSummaryRecord,
+    ) -> Result<(), DiagnosticsLedgerError>;
+
+    fn query_workflow_run_summaries(
+        &self,
+        query: WorkflowRunSummaryQuery,
+    ) -> Result<WorkflowRunSummaryProjection, DiagnosticsLedgerError>;
 }

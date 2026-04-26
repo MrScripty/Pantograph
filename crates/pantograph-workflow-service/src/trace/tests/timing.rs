@@ -1,4 +1,7 @@
-use pantograph_diagnostics_ledger::{SqliteDiagnosticsLedger, WorkflowTimingExpectationComparison};
+use pantograph_diagnostics_ledger::{
+    SqliteDiagnosticsLedger, WorkflowRunSummaryQuery, WorkflowRunSummaryStatus,
+    WorkflowTimingExpectationComparison,
+};
 
 use super::*;
 
@@ -77,6 +80,32 @@ fn graph_timing_expectations_reads_prior_workflow_id_history() {
     assert_eq!(history.workflow_id, "saved-workflow");
     assert_eq!(expectation.sample_count, 3);
     assert_eq!(expectation.median_duration_ms, Some(200));
+}
+
+#[test]
+fn workflow_trace_store_persists_run_summary_history() {
+    let store = WorkflowTraceStore::with_timing_ledger(
+        10,
+        SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens"),
+    );
+
+    record_completed_timing_run(&store, "exec-summary", 1_000, 100);
+
+    let history = store
+        .workflow_run_summaries(WorkflowRunSummaryQuery {
+            workflow_id: Some("wf-timing".to_string()),
+            workflow_run_id: None,
+            limit: 10,
+        })
+        .expect("run summary history loads");
+    let run = history.runs.first().expect("run summary");
+
+    assert_eq!(run.workflow_run_id, "exec-summary");
+    assert_eq!(run.workflow_id, "wf-timing");
+    assert_eq!(run.status, WorkflowRunSummaryStatus::Completed);
+    assert_eq!(run.duration_ms, Some(120));
+    assert_eq!(run.node_count_at_start, 1);
+    assert!(run.event_count >= 3);
 }
 
 fn record_completed_timing_run(

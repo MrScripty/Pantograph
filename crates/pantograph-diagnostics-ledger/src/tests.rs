@@ -8,7 +8,8 @@ use crate::{
     DiagnosticsQuery, ExecutionGuaranteeLevel, LicenseSnapshot, ModelIdentity,
     ModelLicenseUsageEvent, ModelOutputMeasurement, OutputMeasurementUnavailableReason,
     OutputModality, PruneTimingObservationsCommand, PruneUsageEventsCommand, RetentionClass,
-    SqliteDiagnosticsLedger, UsageEventStatus, UsageLineage, WorkflowTimingExpectation,
+    SqliteDiagnosticsLedger, UsageEventStatus, UsageLineage, WorkflowRunSummaryQuery,
+    WorkflowRunSummaryRecord, WorkflowRunSummaryStatus, WorkflowTimingExpectation,
     WorkflowTimingExpectationComparison, WorkflowTimingExpectationQuery, WorkflowTimingObservation,
     WorkflowTimingObservationScope, WorkflowTimingObservationStatus,
 };
@@ -342,6 +343,34 @@ fn existing_v2_timing_schema_drops_incompatible_timing_rows() {
 }
 
 #[test]
+fn workflow_run_summary_upsert_and_query_preserves_latest_run_state() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    let mut record = sample_run_summary("run-1", "workflow_alpha", 1_000);
+
+    ledger
+        .upsert_workflow_run_summary(record.clone())
+        .expect("run summary is recorded");
+    record.status = WorkflowRunSummaryStatus::Completed;
+    record.ended_at_ms = Some(1_250);
+    record.duration_ms = Some(250);
+    record.event_count = 5;
+    record.recorded_at_ms = 1_260;
+    ledger
+        .upsert_workflow_run_summary(record.clone())
+        .expect("run summary is updated");
+
+    let projection = ledger
+        .query_workflow_run_summaries(WorkflowRunSummaryQuery {
+            workflow_id: Some("workflow_alpha".to_string()),
+            workflow_run_id: None,
+            limit: 10,
+        })
+        .expect("run summaries query succeeds");
+
+    assert_eq!(projection.runs, vec![record]);
+}
+
+#[test]
 fn unsupported_schema_version_is_rejected() {
     let conn = Connection::open_in_memory().expect("connection opens");
     conn.execute_batch(
@@ -473,6 +502,27 @@ fn sample_timing_observation(index: usize, duration_ms: u64) -> WorkflowTimingOb
         ended_at_ms: 1_000 + duration_ms as i64,
         duration_ms,
         recorded_at_ms: 2_000 + index as i64,
+    }
+}
+
+fn sample_run_summary(
+    workflow_run_id: &str,
+    workflow_id: &str,
+    started_at_ms: i64,
+) -> WorkflowRunSummaryRecord {
+    WorkflowRunSummaryRecord {
+        workflow_run_id: workflow_run_id.to_string(),
+        workflow_id: workflow_id.to_string(),
+        session_id: Some("session_alpha".to_string()),
+        graph_fingerprint: Some("graph_alpha".to_string()),
+        status: WorkflowRunSummaryStatus::Running,
+        started_at_ms,
+        ended_at_ms: None,
+        duration_ms: None,
+        node_count_at_start: 2,
+        event_count: 1,
+        last_error: None,
+        recorded_at_ms: started_at_ms,
     }
 }
 

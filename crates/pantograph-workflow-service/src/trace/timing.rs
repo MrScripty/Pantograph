@@ -1,6 +1,7 @@
 use pantograph_diagnostics_ledger::{
-    DiagnosticsLedgerRepository, SqliteDiagnosticsLedger, WorkflowTimingExpectationQuery,
-    WorkflowTimingObservation, WorkflowTimingObservationScope, WorkflowTimingObservationStatus,
+    DiagnosticsLedgerRepository, SqliteDiagnosticsLedger, WorkflowRunSummaryRecord,
+    WorkflowRunSummaryStatus, WorkflowTimingExpectationQuery, WorkflowTimingObservation,
+    WorkflowTimingObservationScope, WorkflowTimingObservationStatus,
 };
 
 use super::store::WorkflowTraceState;
@@ -37,6 +38,26 @@ pub(super) fn terminal_timing_observations(
         }
         _ => Vec::new(),
     }
+}
+
+pub(super) fn run_summary_record(
+    trace: &super::store::WorkflowTraceRunState,
+    recorded_at_ms: u64,
+) -> Option<WorkflowRunSummaryRecord> {
+    Some(WorkflowRunSummaryRecord {
+        workflow_run_id: trace.workflow_run_id.clone(),
+        workflow_id: trace.workflow_id.clone()?,
+        session_id: trace.session_id.clone(),
+        graph_fingerprint: trace.graph_fingerprint.clone(),
+        status: run_summary_status(trace.status),
+        started_at_ms: trace.started_at_ms as i64,
+        ended_at_ms: trace.ended_at_ms.map(|ended_at_ms| ended_at_ms as i64),
+        duration_ms: trace.duration_ms,
+        node_count_at_start: trace.node_count_at_start,
+        event_count: trace.event_count,
+        last_error: trace.last_error.clone(),
+        recorded_at_ms: recorded_at_ms as i64,
+    })
 }
 
 pub(super) fn enrich_snapshot_timing(
@@ -240,6 +261,17 @@ fn event_status_for_run(status: WorkflowTraceStatus) -> WorkflowTimingObservatio
         | WorkflowTraceStatus::Running
         | WorkflowTraceStatus::Waiting => WorkflowTimingObservationStatus::Failed,
         WorkflowTraceStatus::Failed => WorkflowTimingObservationStatus::Failed,
+    }
+}
+
+fn run_summary_status(status: WorkflowTraceStatus) -> WorkflowRunSummaryStatus {
+    match status {
+        WorkflowTraceStatus::Queued => WorkflowRunSummaryStatus::Queued,
+        WorkflowTraceStatus::Running => WorkflowRunSummaryStatus::Running,
+        WorkflowTraceStatus::Waiting => WorkflowRunSummaryStatus::Waiting,
+        WorkflowTraceStatus::Completed => WorkflowRunSummaryStatus::Completed,
+        WorkflowTraceStatus::Failed => WorkflowRunSummaryStatus::Failed,
+        WorkflowTraceStatus::Cancelled => WorkflowRunSummaryStatus::Cancelled,
     }
 }
 

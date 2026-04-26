@@ -4,8 +4,8 @@ use crate::DiagnosticsLedgerError;
 use crate::records::{DEFAULT_STANDARD_RETENTION_DAYS, RetentionClass};
 use crate::util::now_ms;
 
-pub(crate) const SCHEMA_VERSION: i64 = 3;
-const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v3";
+pub(crate) const SCHEMA_VERSION: i64 = 4;
+const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v4";
 
 pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {
     tx.execute_batch(
@@ -112,6 +112,7 @@ pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedger
         "#,
     )?;
     apply_timing_schema(tx)?;
+    apply_workflow_run_summary_schema(tx)?;
     tx.execute(
         "INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
          VALUES (?1, ?2, ?3)",
@@ -144,9 +145,14 @@ pub(crate) fn migrate_schema(
     }
 
     let tx = conn.transaction()?;
-    if found < SCHEMA_VERSION {
+    if found < 3 {
         tx.execute("DROP TABLE IF EXISTS workflow_timing_observations", [])?;
         apply_timing_schema(&tx)?;
+    }
+    if found < 4 {
+        apply_workflow_run_summary_schema(&tx)?;
+    }
+    if found < SCHEMA_VERSION {
         tx.execute(
             "INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
              VALUES (?1, ?2, ?3)",
@@ -188,6 +194,32 @@ fn apply_timing_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerErro
             );
         CREATE INDEX IF NOT EXISTS idx_workflow_timing_retention
             ON workflow_timing_observations(recorded_at_ms);
+        "#,
+    )?;
+    Ok(())
+}
+
+fn apply_workflow_run_summary_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {
+    tx.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS workflow_run_summaries (
+            workflow_run_id TEXT PRIMARY KEY,
+            workflow_id TEXT NOT NULL,
+            session_id TEXT,
+            graph_fingerprint TEXT,
+            status TEXT NOT NULL,
+            started_at_ms INTEGER NOT NULL,
+            ended_at_ms INTEGER,
+            duration_ms INTEGER,
+            node_count_at_start INTEGER NOT NULL,
+            event_count INTEGER NOT NULL,
+            last_error TEXT,
+            recorded_at_ms INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_workflow_run_summaries_workflow_time
+            ON workflow_run_summaries(workflow_id, started_at_ms DESC);
+        CREATE INDEX IF NOT EXISTS idx_workflow_run_summaries_recorded
+            ON workflow_run_summaries(recorded_at_ms DESC);
         "#,
     )?;
     Ok(())

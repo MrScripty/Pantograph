@@ -157,6 +157,107 @@ pub struct PruneTimingObservationsResult {
     pub prune_recorded_before_ms: i64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowRunSummaryStatus {
+    Queued,
+    Running,
+    Waiting,
+    Completed,
+    Failed,
+    Cancelled,
+}
+
+impl WorkflowRunSummaryStatus {
+    pub fn as_db(self) -> &'static str {
+        match self {
+            Self::Queued => "queued",
+            Self::Running => "running",
+            Self::Waiting => "waiting",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+            Self::Cancelled => "cancelled",
+        }
+    }
+
+    pub fn from_db(value: &str) -> Result<Self, DiagnosticsLedgerError> {
+        match value {
+            "queued" => Ok(Self::Queued),
+            "running" => Ok(Self::Running),
+            "waiting" => Ok(Self::Waiting),
+            "completed" => Ok(Self::Completed),
+            "failed" => Ok(Self::Failed),
+            "cancelled" => Ok(Self::Cancelled),
+            _ => Err(DiagnosticsLedgerError::InvalidField {
+                field: "workflow_run_status",
+            }),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkflowRunSummaryRecord {
+    pub workflow_run_id: String,
+    pub workflow_id: String,
+    pub session_id: Option<String>,
+    pub graph_fingerprint: Option<String>,
+    pub status: WorkflowRunSummaryStatus,
+    pub started_at_ms: i64,
+    pub ended_at_ms: Option<i64>,
+    pub duration_ms: Option<u64>,
+    pub node_count_at_start: usize,
+    pub event_count: usize,
+    pub last_error: Option<String>,
+    pub recorded_at_ms: i64,
+}
+
+impl WorkflowRunSummaryRecord {
+    pub fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        validate_required_text("workflow_run_id", &self.workflow_run_id, MAX_ID_LEN)?;
+        validate_required_text("workflow_id", &self.workflow_id, MAX_ID_LEN)?;
+        validate_optional_text("session_id", self.session_id.as_deref(), MAX_ID_LEN)?;
+        validate_optional_text(
+            "graph_fingerprint",
+            self.graph_fingerprint.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text("last_error", self.last_error.as_deref(), MAX_ID_LEN)?;
+        if let Some(ended_at_ms) = self.ended_at_ms {
+            if ended_at_ms < self.started_at_ms {
+                return Err(DiagnosticsLedgerError::InvalidTimeRange);
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkflowRunSummaryQuery {
+    pub workflow_id: Option<String>,
+    pub workflow_run_id: Option<String>,
+    pub limit: usize,
+}
+
+impl WorkflowRunSummaryQuery {
+    pub fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        validate_optional_text("workflow_id", self.workflow_id.as_deref(), MAX_ID_LEN)?;
+        validate_optional_text(
+            "workflow_run_id",
+            self.workflow_run_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        if self.limit == 0 || self.limit > 500 {
+            return Err(DiagnosticsLedgerError::InvalidField { field: "limit" });
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkflowRunSummaryProjection {
+    pub runs: Vec<WorkflowRunSummaryRecord>,
+}
+
 impl WorkflowTimingExpectation {
     pub fn from_completed_durations(
         query: &WorkflowTimingExpectationQuery,
