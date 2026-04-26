@@ -254,18 +254,18 @@ pause the work before release verification.
 mutation behavior.
 
 **Tasks:**
-- [ ] Add a workflow-load request token to `createSessionStores`.
-- [ ] Capture and close superseded edit sessions without closing the current
+- [x] Add a workflow-load request token to `createSessionStores`.
+- [x] Capture and close superseded edit sessions without closing the current
   session.
-- [ ] Add stale-load regression tests for out-of-order workflow loads.
-- [ ] Add session lifecycle tests proving `removeSession` is called for
+- [x] Add stale-load regression tests for out-of-order workflow loads.
+- [x] Add session lifecycle tests proving `removeSession` is called for
   superseded sessions.
 
 **Verification:**
-- `npm run -w frontend test:run -- createSessionStores`
-- `npm run -w frontend check:types`
+- `node --experimental-strip-types --test packages/svelte-graph/src/stores/createSessionStores.test.ts`
+- `npm run typecheck`
 
-**Status:** Not started.
+**Status:** Complete.
 
 ### Milestone 2: Stale Mutation Rejection
 
@@ -428,6 +428,16 @@ Update during implementation:
 - 2026-04-26: Standards compliance pass added mandatory final refactor scope
   for oversized graph components, `createWorkflowStores.ts`, `types.rs`,
   duplicated backend action helpers, and `WorkflowService.ts` facade ownership.
+- 2026-04-26: Milestone 1 started. Preflight confirmed the plan has required
+  objective, ordered milestones, verification criteria, risks, re-plan
+  triggers, and completion criteria. Existing dirty workflow/assets/SQLite
+  artifacts are unrelated and will remain untouched.
+- 2026-04-26: Milestone 1 completed. The planned `npm run -w frontend ...`
+  verification commands are invalid because this repo has no `frontend`
+  workspace, so verification used the equivalent root scripts and direct
+  colocated Node test command. Added load transition guards, stale-created
+  session cleanup, previous-session cleanup after replacement, and regression
+  tests for stale loads and session lifecycle cleanup.
 
 ## Commit Cadence Notes
 

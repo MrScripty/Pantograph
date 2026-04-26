@@ -14,6 +14,23 @@ import type {
 import type { ViewStores } from './createViewStores.ts';
 import type { WorkflowStores } from './createWorkflowStores.ts';
 
+interface Deferred<T> {
+  promise: Promise<T>;
+  reject: (error: unknown) => void;
+  resolve: (value: T) => void;
+}
+
+function createDeferred<T>(): Deferred<T> {
+  let resolve: (value: T) => void = () => {};
+  let reject: (error: unknown) => void = () => {};
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+
+  return { promise, reject, resolve };
+}
+
 function createBackendStub(overrides: Partial<WorkflowBackend> = {}): WorkflowBackend {
   let sessionCounter = 0;
   const definitions: NodeDefinition[] = [];
@@ -259,6 +276,177 @@ test('loadWorkflowByName exposes backend failures through graphSessionError', as
     get(sessionStores.graphSessionError),
     'Failed to load workflow "missing-flow": workflow file missing',
   );
+});
+
+test('loadWorkflowByName ignores stale load responses after a newer workflow starts', async () => {
+  const firstLoad = createDeferred<Awaited<ReturnType<WorkflowBackend['loadWorkflow']>>>();
+  const secondGraph = {
+    nodes: [
+      {
+        id: 'second-node',
+        node_type: 'text-input',
+        position: { x: 3, y: 4 },
+        data: {},
+      },
+    ],
+    edges: [],
+  } satisfies WorkflowGraph;
+  const renderedGraphs: WorkflowGraph[] = [];
+  const createdSessionWorkflowIds: (string | null | undefined)[] = [];
+  const backend = createBackendStub({
+    async createSession(_graph: WorkflowGraph, workflowId?: string | null) {
+      createdSessionWorkflowIds.push(workflowId);
+      return {
+        session_id: `session-${workflowId ?? 'untitled'}`,
+        session_kind: 'edit',
+      } satisfies WorkflowSessionHandle;
+    },
+    async loadWorkflow(path: string) {
+      if (path.endsWith('/first-flow.json')) {
+        return firstLoad.promise;
+      }
+
+      assert.equal(path, '.pantograph/workflows/second-flow.json');
+      return {
+        version: '1.0',
+        metadata: {
+          id: 'second-flow',
+          name: 'Second Flow',
+          created: '',
+          modified: '',
+        },
+        graph: secondGraph,
+      };
+    },
+  });
+  const workflowStores = createWorkflowStoresStub((graph) => {
+    renderedGraphs.push(graph);
+  });
+  const sessionStores = createSessionStores(backend, workflowStores, createViewStoresStub());
+
+  const firstResult = sessionStores.loadWorkflowByName('first-flow');
+  const secondResult = await sessionStores.loadWorkflowByName('second-flow');
+  firstLoad.resolve({
+    version: '1.0',
+    metadata: {
+      id: 'first-flow',
+      name: 'First Flow',
+      created: '',
+      modified: '',
+    },
+    graph: { nodes: [], edges: [] },
+  });
+
+  assert.equal(secondResult, true);
+  assert.equal(await firstResult, false);
+  assert.deepEqual(renderedGraphs, [secondGraph]);
+  assert.deepEqual(createdSessionWorkflowIds, ['second-flow']);
+  assert.equal(get(sessionStores.currentGraphId), 'second-flow');
+  assert.equal(get(sessionStores.currentGraphName), 'Second Flow');
+  assert.equal(get(sessionStores.currentSessionId), 'session-second-flow');
+});
+
+test('loadWorkflowByName closes a session created by a stale load', async () => {
+  const firstSessionStarted = createDeferred<void>();
+  const firstSession = createDeferred<WorkflowSessionHandle>();
+  const closedSessions: string[] = [];
+  const renderedGraphs: WorkflowGraph[] = [];
+  const backend = createBackendStub({
+    async createSession(_graph: WorkflowGraph, workflowId?: string | null) {
+      if (workflowId === 'first-flow') {
+        firstSessionStarted.resolve(undefined);
+        return firstSession.promise;
+      }
+
+      return {
+        session_id: 'second-session',
+        session_kind: 'edit',
+      } satisfies WorkflowSessionHandle;
+    },
+    async removeSession(sessionId: string) {
+      closedSessions.push(sessionId);
+    },
+    async loadWorkflow(path: string) {
+      const workflowId = path.includes('first-flow') ? 'first-flow' : 'second-flow';
+      return {
+        version: '1.0',
+        metadata: {
+          id: workflowId,
+          name: workflowId,
+          created: '',
+          modified: '',
+        },
+        graph: {
+          nodes: [
+            {
+              id: workflowId,
+              node_type: 'text-input',
+              position: { x: 0, y: 0 },
+              data: {},
+            },
+          ],
+          edges: [],
+        },
+      };
+    },
+  });
+  const workflowStores = createWorkflowStoresStub((graph) => {
+    renderedGraphs.push(graph);
+  });
+  const sessionStores = createSessionStores(backend, workflowStores, createViewStoresStub());
+
+  const firstResult = sessionStores.loadWorkflowByName('first-flow');
+  await firstSessionStarted.promise;
+  const secondResultPromise = sessionStores.loadWorkflowByName('second-flow');
+  firstSession.resolve({
+    session_id: 'first-session',
+    session_kind: 'edit',
+  });
+
+  assert.equal(await secondResultPromise, true);
+  assert.equal(await firstResult, false);
+  assert.deepEqual(closedSessions, ['first-session']);
+  assert.deepEqual(renderedGraphs.map((graph) => graph.nodes[0]?.id), ['second-flow']);
+  assert.equal(get(sessionStores.currentSessionId), 'second-session');
+});
+
+test('loadWorkflowByName closes the previous active session after replacement', async () => {
+  const closedSessions: string[] = [];
+  const backend = createBackendStub({
+    async createSession(_graph: WorkflowGraph, workflowId?: string | null) {
+      return {
+        session_id: `${workflowId}-session`,
+        session_kind: 'edit',
+      } satisfies WorkflowSessionHandle;
+    },
+    async removeSession(sessionId: string) {
+      closedSessions.push(sessionId);
+    },
+    async loadWorkflow(path: string) {
+      const workflowId = path.includes('first-flow') ? 'first-flow' : 'second-flow';
+      return {
+        version: '1.0',
+        metadata: {
+          id: workflowId,
+          name: workflowId,
+          created: '',
+          modified: '',
+        },
+        graph: { nodes: [], edges: [] },
+      };
+    },
+  });
+  const sessionStores = createSessionStores(
+    backend,
+    createWorkflowStoresStub(),
+    createViewStoresStub(),
+  );
+
+  assert.equal(await sessionStores.loadWorkflowByName('first-flow'), true);
+  assert.equal(await sessionStores.loadWorkflowByName('second-flow'), true);
+
+  assert.deepEqual(closedSessions, ['first-flow-session']);
+  assert.equal(get(sessionStores.currentSessionId), 'second-flow-session');
 });
 
 test('deleteWorkflowByName deletes current workflow after backend confirmation', async () => {

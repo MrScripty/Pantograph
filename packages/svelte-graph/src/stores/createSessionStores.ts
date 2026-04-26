@@ -76,6 +76,7 @@ export function createSessionStores(
   const currentSessionId = writable<string | null>(null);
   const currentSessionKind = writable<SessionKind | null>(null);
   const graphSessionError = writable<string | null>(null);
+  let sessionTransitionId = 0;
 
   // --- Derived ---
   const isReadOnly = derived(currentGraphType, ($type) => $type === 'system');
@@ -100,6 +101,34 @@ export function createSessionStores(
     return String(error);
   }
 
+  function beginSessionTransition(): number {
+    sessionTransitionId += 1;
+    return sessionTransitionId;
+  }
+
+  function isCurrentSessionTransition(transitionId: number): boolean {
+    return transitionId === sessionTransitionId;
+  }
+
+  async function closeSessionById(sessionId: string | null): Promise<void> {
+    if (!sessionId) return;
+
+    try {
+      await backend.removeSession(sessionId);
+    } catch (error) {
+      console.warn(`[sessionStores] Failed to close superseded session "${sessionId}":`, error);
+    }
+  }
+
+  async function replaceSessionHandle(session: WorkflowSessionHandle): Promise<void> {
+    const previousSessionId = get(currentSessionId);
+    applySessionHandle(session);
+
+    if (previousSessionId && previousSessionId !== session.session_id) {
+      await closeSessionById(previousSessionId);
+    }
+  }
+
   async function refreshWorkflowList(): Promise<void> {
     try {
       const workflows = await backend.listWorkflows();
@@ -113,25 +142,37 @@ export function createSessionStores(
   }
 
   async function loadWorkflowByName(name: string): Promise<boolean> {
+    const transitionId = beginSessionTransition();
     graphSessionError.set(null);
     try {
       // Ensure node definitions are loaded
       if (get(workflowStores.nodeDefinitions).length === 0) {
         const definitions = await backend.getNodeDefinitions();
+        if (!isCurrentSessionTransition(transitionId)) {
+          return false;
+        }
         workflowStores.nodeDefinitions.set(definitions);
       }
 
       const path = `.pantograph/workflows/${name}.json`;
       const file = await backend.loadWorkflow(path);
+      if (!isCurrentSessionTransition(transitionId)) {
+        return false;
+      }
+
       const workflowId = file.metadata.id ?? name;
       const workflowName = file.metadata.name;
+      const session = await backend.createSession(file.graph, workflowId);
+      if (!isCurrentSessionTransition(transitionId)) {
+        await closeSessionById(session.session_id);
+        return false;
+      }
+
       currentGraphId.set(workflowId);
       currentGraphType.set('workflow');
       currentGraphName.set(workflowName);
       workflowStores.loadWorkflow(file.graph, file.metadata);
-
-      const session = await backend.createSession(file.graph, workflowId);
-      applySessionHandle(session);
+      await replaceSessionHandle(session);
 
       // Call optional hook for consumer-specific post-load behavior
       if (options?.onWorkflowLoaded && file.metadata) {
@@ -142,9 +183,17 @@ export function createSessionStores(
         }
       }
 
+      if (!isCurrentSessionTransition(transitionId)) {
+        return false;
+      }
+
       saveLastGraph(workflowId, 'workflow');
       return true;
     } catch (error) {
+      if (!isCurrentSessionTransition(transitionId)) {
+        return false;
+      }
+
       console.error(`[sessionStores] Failed to load workflow "${name}":`, error);
       graphSessionError.set(`Failed to load workflow "${name}": ${normalizeError(error)}`);
       return false;
@@ -152,9 +201,15 @@ export function createSessionStores(
   }
 
   async function createNewWorkflow(): Promise<void> {
+    const transitionId = beginSessionTransition();
     const emptyGraph = { nodes: [], edges: [] };
     const session = await backend.createSession(emptyGraph);
-    applySessionHandle(session);
+    if (!isCurrentSessionTransition(transitionId)) {
+      await closeSessionById(session.session_id);
+      return;
+    }
+
+    await replaceSessionHandle(session);
 
     workflowStores.clearWorkflow();
 
