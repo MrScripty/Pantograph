@@ -194,16 +194,16 @@ component while preserving rendering behavior.
 oversized app Svelte component while reusing package helpers where practical.
 
 **Tasks:**
-- [ ] Extract app architecture/workflow graph source interaction wiring.
-- [ ] Extract app delete/cut/reconnect wiring that depends on singleton stores.
-- [ ] Keep app-only orchestration and architecture behavior app-local.
-- [ ] Update `src/components/README.md` if ownership changes.
+- [x] Extract app architecture/workflow graph source interaction wiring.
+- [x] Extract app delete/cut/reconnect wiring that depends on singleton stores.
+- [x] Keep app-only orchestration and architecture behavior app-local.
+- [x] Update `src/components/README.md` if ownership changes.
 
 **Verification:**
 - `npm run test:frontend`
 - `npm run typecheck`
 
-**Status:** Not started.
+**Status:** Complete.
 
 ### Milestone 6: Documentation And Compliance Pass
 
@@ -285,6 +285,19 @@ traceable deferrals.
   and logging side effects. Existing connection-intent and horseshoe lifecycle
   behavior was already isolated in package helpers, so no additional visual
   lifecycle extraction was needed in this slice. `npm run test:frontend` and
+  `npm run typecheck` passed.
+- 2026-04-26: Milestone 5 started. The app graph has matching inline
+  delete-selection and reconnect-start projection plus app-specific reconnect
+  rejection intent assembly. This slice will reuse package helpers for the
+  shared decisions and keep app-only `WorkflowService` and architecture wiring
+  local.
+- 2026-04-26: Milestone 5 completed. Reused package graph helpers for app
+  delete-selection projection, reconnect-start decisions, and reconnect result
+  handling. Moved app reconnect rejection intent assembly into the app backend
+  action adapter so `WorkflowGraph.svelte` keeps app-only orchestration,
+  palette edge-insert, and architecture-mode wiring local. Existing graph source
+  interaction wiring was already isolated in `workflowGraphSource.ts`, so no
+  additional source-switch extraction was needed. `npm run test:frontend` and
   `npm run typecheck` passed.
 
 ## Commit Cadence Notes

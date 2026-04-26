@@ -7,13 +7,15 @@
     clearWorkflowConnectionDragInteraction, closeHorseshoeDisplay, collectSelectedNodeIds,
     createConnectionDragState, createHorseshoeDragSessionState,
     createHorseshoeInsertFeedbackState, isPortTypeCompatible, markConnectionDragFinalizing,
-    normalizeWorkflowHorseshoeSelectedIndex, preserveConnectionIntentState,
+    normalizeWorkflowHorseshoeSelectedIndex,
     registerWorkflowGraphWindowListeners, rejectHorseshoeInsertFeedback,
     requestWorkflowHorseshoeOpen, resolveWorkflowDragCursorUpdate,
+    resolveWorkflowDeleteSelectionRequest,
     resolveWorkflowGraphInteractionState, resolveWorkflowGroupZoomTarget,
     resolveWorkflowHorseshoeBlockedReasonLog, resolveWorkflowHorseshoeQueryUpdate,
     resolveWorkflowHorseshoeSessionUpdate, resolveWorkflowInsertPositionHint,
     resolveWorkflowNodeClick, resolveWorkflowPointerClientPosition,
+    resolveWorkflowReconnectResultDecision, resolveWorkflowReconnectStartDecision,
     resolveWorkflowRelativePointerPosition, rotateWorkflowHorseshoeSelection,
     shouldClearWorkflowConnectionInteractionAfterConnectEnd, shouldRemoveReconnectedEdge,
     startConnectionDrag, startHorseshoeDrag, startHorseshoeInsertFeedback,
@@ -49,7 +51,6 @@
     type EdgeInsertPreviewState,
   } from './edgeInsertInteraction.ts';
   import { refreshWorkflowGraphEdgeInsertPreview } from './workflowGraphEdgeInsertPreview.ts';
-  import { resolveReconnectSourceAnchor } from './reconnectInteraction';
   import WorkflowGraphCanvas from './WorkflowGraphCanvas.svelte';
   import {
     resolveWorkflowContainerBounds,
@@ -689,12 +690,17 @@
   }
 
   async function handleDelete({ nodes: deletedNodes, edges: deletedEdges }: { nodes: Node[]; edges: Edge[] }) {
-    if (!canEdit) return;
+    const request = resolveWorkflowDeleteSelectionRequest({
+      canEdit,
+      nodes: deletedNodes,
+      edges: deletedEdges,
+    });
+    if (!request) return;
     clearConnectionInteraction();
 
     await deleteSelection(
-      deletedNodes.map((node) => node.id),
-      deletedEdges.map((edge) => edge.id),
+      request.nodeIds,
+      request.edgeIds,
     );
   }
 
@@ -733,13 +739,16 @@
     edge: Edge,
     handleType: 'source' | 'target'
   ) {
-    if (!canEdit) return;
-    const sourceAnchor = resolveReconnectSourceAnchor(edge, handleType);
-
-    if (sourceAnchor) {
-      connectionDragState = startReconnectDrag(edge.id, sourceAnchor);
+    const decision = resolveWorkflowReconnectStartDecision({
+      canEdit,
+      edge,
+      handleType,
+    });
+    if (decision.type === 'ignore') return;
+    if (decision.type === 'start') {
+      connectionDragState = startReconnectDrag(edge.id, decision.sourceAnchor);
       applyHorseshoeSession(startHorseshoeDrag(getEventPointerPosition(_event)));
-      await loadConnectionIntent(sourceAnchor);
+      await loadConnectionIntent(decision.sourceAnchor);
       return;
     }
 
@@ -758,31 +767,25 @@
 
     const result = await commitWorkflowReconnect({
       anchors,
+      currentIntent: $connectionIntent,
       oldEdge,
       fallbackRevision: getGraphRevision(),
+      reconnectingSourceAnchor: connectionDragState.reconnectingSourceAnchor,
     });
 
-    if (result.type === 'accepted' || result.type === 'stale') {
+    const decision = resolveWorkflowReconnectResultDecision(result);
+    if (decision.type === 'clear') {
       clearConnectionInteraction();
       return;
     }
 
-    if (result.type === 'rejected' && result.rejection) {
-      setConnectionIntent(preserveConnectionIntentState({
-        sourceAnchor:
-          connectionDragState.reconnectingSourceAnchor ??
-          result.sourceAnchor,
-        graphRevision: result.graphRevision,
-        currentIntent: $connectionIntent,
-        rejection: result.rejection,
-      }));
-      console.warn('[WorkflowGraph] Reconnection rejected:', result.rejection.message);
+    if (decision.type === 'set-intent') {
+      setConnectionIntent(decision.intent);
+      console.warn('[WorkflowGraph] Reconnection rejected:', decision.message);
       return;
     }
 
-    if (result.type === 'failed') {
-      console.error('[WorkflowGraph] Failed to reconnect edge:', result.error);
-    }
+    console.error('[WorkflowGraph] Failed to reconnect edge:', decision.error);
   }
 
   async function handleReconnectEnd(_event: MouseEvent | TouchEvent, _edge: Edge, _handleType: unknown, connectionState: { isValid: boolean }) {

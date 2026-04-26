@@ -132,6 +132,10 @@ preservation, edge removal, and reconnect rollback now use the package
 graph keeps `WorkflowService` session lookup and rejected-connect refresh
 side effects local so shared package code does not depend on Pantograph
 singletons.
+App graph delete-selection projection, reconnect-start branching, and reconnect
+result handling now use the package graph interaction helpers. The app graph
+still owns architecture mode, palette edge-insert preview, and
+`WorkflowService` orchestration because those are Pantograph-specific concerns.
 Connection and reconnect commit anchor projection plus active-intent revision
 selection also live in `workflowConnections.ts`, so the app graph resolves a
 tested commit contract before invoking backend graph mutations.

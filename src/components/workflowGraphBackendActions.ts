@@ -5,8 +5,10 @@ import {
   commitWorkflowInsertCandidateCore,
   commitWorkflowReconnectCore,
   loadWorkflowConnectionIntentStateCore,
+  preserveConnectionIntentState,
   removeWorkflowGraphEdgesCore,
   type ConnectionIntentState,
+  type WorkflowReconnectCommitResult as SharedWorkflowReconnectCommitResult,
 } from '@pantograph/svelte-graph';
 import {
   setNodeExecutionState,
@@ -67,35 +69,13 @@ interface ReconnectCommitParams {
     sourceAnchor: ConnectionAnchor;
     targetAnchor: ConnectionAnchor;
   };
+  currentIntent: ConnectionIntentState | null;
   fallbackRevision: string;
   oldEdge: Edge;
+  reconnectingSourceAnchor: ConnectionAnchor | null;
 }
 
-interface ReconnectRejectedResult {
-  graphRevision: string;
-  rejection: ConnectionCommitResponse['rejection'];
-  sourceAnchor: ConnectionAnchor;
-  type: 'rejected';
-}
-
-interface ReconnectAcceptedResult {
-  type: 'accepted';
-}
-
-interface ReconnectFailedResult {
-  error: unknown;
-  type: 'failed';
-}
-
-interface ReconnectStaleResult {
-  type: 'stale';
-}
-
-export type WorkflowReconnectCommitResult =
-  | ReconnectAcceptedResult
-  | ReconnectRejectedResult
-  | ReconnectFailedResult
-  | ReconnectStaleResult;
+export type WorkflowReconnectCommitResult = SharedWorkflowReconnectCommitResult;
 
 function currentSessionId(): string | null {
   return workflowService.getCurrentExecutionId();
@@ -262,11 +242,13 @@ export async function removeWorkflowGraphEdge(edgeId: string, errorMessage: stri
 
 export async function commitWorkflowReconnect({
   anchors,
+  currentIntent,
   fallbackRevision,
   oldEdge,
+  reconnectingSourceAnchor,
 }: ReconnectCommitParams): Promise<WorkflowReconnectCommitResult> {
   const sessionId = currentSessionId();
-  return commitWorkflowReconnectCore({
+  const result = await commitWorkflowReconnectCore({
     anchors,
     applyAcceptedMutation: (response) =>
       applyAcceptedGraphMutation(response, sessionId),
@@ -283,6 +265,20 @@ export async function commitWorkflowReconnect({
     restoreEdge: (edge) => workflowService.addEdge(edge, sessionId ?? undefined),
     syncGraph: (graph) => syncGraphForSession(graph, sessionId),
   });
+
+  if (result.type !== 'rejected') {
+    return result;
+  }
+
+  return {
+    type: 'rejected',
+    intent: preserveConnectionIntentState({
+      sourceAnchor: reconnectingSourceAnchor ?? result.sourceAnchor,
+      graphRevision: result.graphRevision,
+      currentIntent,
+      rejection: result.rejection,
+    }),
+  };
 }
 
 export async function refreshWorkflowEdgesFromBackend(warningMessage: string) {
