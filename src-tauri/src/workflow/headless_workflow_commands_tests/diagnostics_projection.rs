@@ -48,7 +48,7 @@ fn workflow_diagnostics_snapshot_projection_joins_backend_scheduler_and_runtime_
         120,
     );
 
-    assert_eq!(projection.run_order, vec!["run-1".to_string()]);
+    assert!(projection.run_order.is_empty());
     assert_eq!(projection.runtime.workflow_id.as_deref(), Some("wf-1"));
     assert_eq!(projection.runtime.max_input_bindings, Some(4));
     assert_eq!(
@@ -59,10 +59,7 @@ fn workflow_diagnostics_snapshot_projection_joins_backend_scheduler_and_runtime_
         projection.scheduler.workflow_run_id.as_deref(),
         Some("run-1")
     );
-    let trace = projection.runs_by_id.get("run-1").expect("joined trace");
-    assert_eq!(trace.session_id.as_deref(), Some("session-1"));
-    assert_eq!(trace.workflow_id.as_deref(), Some("wf-1"));
-    assert_eq!(trace.nodes.len(), 0);
+    assert!(!projection.runs_by_id.contains_key("run-1"));
 }
 
 #[test]
@@ -159,38 +156,44 @@ fn workflow_diagnostics_snapshot_projection_preserves_scheduler_runtime_registry
 fn stored_runtime_trace_metrics_prefers_latest_recorded_trace() {
     let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
 
-    workflow_projection!(
+    record_headless_scheduler_snapshot(
         &diagnostics_store,
-        Some("session-1".to_string()),
+        "session-1",
         Some("wf-1".to_string()),
-        Some("Workflow 1".to_string()),
-        Some(Ok(WorkflowSchedulerSnapshotResponse {
+        Ok(WorkflowSchedulerSnapshotResponse {
             workflow_id: Some("wf-1".to_string()),
             session_id: "session-1".to_string(),
             workflow_run_id: Some("run-1".to_string()),
             session: running_session_summary(),
             items: vec![],
             diagnostics: None,
-        })),
-        Some(Ok(capability_response())),
-        None,
-        WorkflowTraceRuntimeMetrics {
-            runtime_id: Some("llama.cpp.embedding".to_string()),
-            observed_runtime_ids: vec!["llama.cpp.embedding".to_string()],
-            runtime_instance_id: Some("embed-7".to_string()),
-            model_target: Some("/models/embed.gguf".to_string()),
-            warmup_started_at_ms: Some(90),
-            warmup_completed_at_ms: Some(99),
-            warmup_duration_ms: Some(9),
-            runtime_reused: Some(true),
-            lifecycle_decision_reason: Some("runtime_reused".to_string()),
-        },
-        Some("llava:34b".to_string()),
-        Some("/models/embed.gguf".to_string()),
-        None,
-        None,
-        Vec::new(),
+        }),
         120,
+    );
+    record_headless_runtime_snapshot(
+        &diagnostics_store,
+        HeadlessRuntimeSnapshotInput {
+            workflow_id: "wf-1".to_string(),
+            workflow_run_id: Some("run-1".to_string()),
+            capabilities_result: Ok(capability_response()),
+            trace_runtime_metrics: WorkflowTraceRuntimeMetrics {
+                runtime_id: Some("llama.cpp.embedding".to_string()),
+                observed_runtime_ids: vec!["llama.cpp.embedding".to_string()],
+                runtime_instance_id: Some("embed-7".to_string()),
+                model_target: Some("/models/embed.gguf".to_string()),
+                warmup_started_at_ms: Some(90),
+                warmup_completed_at_ms: Some(99),
+                warmup_duration_ms: Some(9),
+                runtime_reused: Some(true),
+                lifecycle_decision_reason: Some("runtime_reused".to_string()),
+            },
+            active_model_target: Some("llava:34b".to_string()),
+            embedding_model_target: Some("/models/embed.gguf".to_string()),
+            active_runtime_snapshot: None,
+            embedding_runtime_snapshot: None,
+            managed_runtimes: Vec::new(),
+            captured_at_ms: 120,
+        },
     );
 
     let metrics = stored_runtime_trace_metrics(&diagnostics_store, Some("session-1"), Some("wf-1"))
@@ -401,41 +404,58 @@ fn stored_runtime_model_targets_return_recorded_runtime_targets() {
 fn workflow_diagnostics_snapshot_projection_preserves_observed_runtime_ids() {
     let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
 
-    let projection = workflow_projection!(
+    record_headless_scheduler_snapshot(
         &diagnostics_store,
-        Some("session-1".to_string()),
+        "session-1",
         Some("wf-1".to_string()),
-        Some("Workflow 1".to_string()),
-        Some(Ok(WorkflowSchedulerSnapshotResponse {
+        Ok(WorkflowSchedulerSnapshotResponse {
             workflow_id: Some("wf-1".to_string()),
             session_id: "session-1".to_string(),
             workflow_run_id: Some("run-1".to_string()),
             session: running_session_summary(),
             items: vec![],
             diagnostics: None,
-        })),
-        Some(Ok(capability_response())),
-        None,
-        WorkflowTraceRuntimeMetrics {
-            runtime_id: Some("onnx-runtime".to_string()),
-            observed_runtime_ids: vec!["pytorch".to_string(), "onnx-runtime".to_string()],
-            runtime_instance_id: Some("python-runtime:onnx-runtime:venv_onnx".to_string()),
-            model_target: Some("/tmp/model.onnx".to_string()),
-            warmup_started_at_ms: None,
-            warmup_completed_at_ms: None,
-            warmup_duration_ms: None,
-            runtime_reused: Some(false),
-            lifecycle_decision_reason: Some("runtime_ready".to_string()),
-        },
-        Some("llava:34b".to_string()),
-        Some("/models/embed.gguf".to_string()),
-        None,
-        None,
-        Vec::new(),
+        }),
         120,
     );
+    record_headless_runtime_snapshot(
+        &diagnostics_store,
+        HeadlessRuntimeSnapshotInput {
+            workflow_id: "wf-1".to_string(),
+            workflow_run_id: Some("run-1".to_string()),
+            capabilities_result: Ok(capability_response()),
+            trace_runtime_metrics: WorkflowTraceRuntimeMetrics {
+                runtime_id: Some("onnx-runtime".to_string()),
+                observed_runtime_ids: vec!["pytorch".to_string(), "onnx-runtime".to_string()],
+                runtime_instance_id: Some("python-runtime:onnx-runtime:venv_onnx".to_string()),
+                model_target: Some("/tmp/model.onnx".to_string()),
+                warmup_started_at_ms: None,
+                warmup_completed_at_ms: None,
+                warmup_duration_ms: None,
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+            },
+            active_model_target: Some("llava:34b".to_string()),
+            embedding_model_target: Some("/models/embed.gguf".to_string()),
+            active_runtime_snapshot: None,
+            embedding_runtime_snapshot: None,
+            managed_runtimes: Vec::new(),
+            captured_at_ms: 120,
+        },
+    );
 
-    let trace = projection.runs_by_id.get("run-1").expect("joined trace");
+    let trace = diagnostics_store
+        .trace_snapshot(WorkflowTraceSnapshotRequest {
+            workflow_run_id: Some("run-1".to_string()),
+            session_id: None,
+            workflow_id: None,
+            include_completed: Some(true),
+        })
+        .expect("trace snapshot")
+        .traces
+        .into_iter()
+        .next()
+        .expect("joined trace");
     assert_eq!(
         trace.runtime.observed_runtime_ids,
         vec!["pytorch".to_string(), "onnx-runtime".to_string()]
@@ -499,7 +519,7 @@ fn workflow_diagnostics_snapshot_projection_clears_scheduler_and_runtime_without
     assert_eq!(projection.runtime.workflow_id, None);
     assert_eq!(projection.scheduler.session_id, None);
     assert_eq!(projection.scheduler.workflow_run_id, None);
-    assert_eq!(projection.run_order, vec!["run-1".to_string()]);
+    assert!(projection.run_order.is_empty());
 }
 
 #[test]

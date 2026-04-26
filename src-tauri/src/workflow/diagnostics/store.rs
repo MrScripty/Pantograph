@@ -11,10 +11,10 @@ use pantograph_workflow_service::{
 use parking_lot::Mutex;
 
 use super::attempts::{
-    OverlayRecordDecision, overlay_record_decision, trace_attempt_state_for_workflow_run,
-    trace_attempt_state_in_snapshot, trace_event_workflow_run_id,
+    overlay_record_decision, trace_attempt_state_for_workflow_run, trace_attempt_state_in_snapshot,
+    trace_event_workflow_run_id, OverlayRecordDecision,
 };
-use super::overlay::{WorkflowDiagnosticsState, event_workflow_run_id, record_diagnostics_overlay};
+use super::overlay::{event_workflow_run_id, record_diagnostics_overlay, WorkflowDiagnosticsState};
 use super::trace::{graph_trace_context, workflow_trace_event};
 use super::types::{
     DiagnosticsRuntimeLifecycleSnapshot, DiagnosticsRuntimeSnapshot,
@@ -70,6 +70,7 @@ pub struct WorkflowRuntimeSnapshotUpdate {
 #[derive(Debug, Clone, Default)]
 pub struct WorkflowSchedulerSnapshotUpdate {
     pub workflow_id: Option<String>,
+    pub workflow_run_id: Option<String>,
     pub session_id: Option<String>,
     pub session: Option<WorkflowExecutionSessionSummary>,
     pub items: Vec<WorkflowExecutionSessionQueueItem>,
@@ -251,7 +252,7 @@ impl WorkflowDiagnosticsStore {
             Some(session_id) => DiagnosticsSchedulerSnapshot {
                 workflow_id: input.workflow_id,
                 session_id: Some(session_id),
-                workflow_run_id: None,
+                workflow_run_id: input.workflow_run_id,
                 captured_at_ms: Some(input.captured_at_ms),
                 session: input.session,
                 items: input.items,

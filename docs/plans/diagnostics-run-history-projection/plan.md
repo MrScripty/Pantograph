@@ -202,20 +202,31 @@ from the planned contract.
 or mutate canonical run traces.
 
 **Tasks:**
-- [ ] Split Tauri diagnostics projection into read-only snapshot assembly and
+- [x] Split Tauri diagnostics projection into read-only snapshot assembly and
   event/run recording paths.
-- [ ] Preserve runtime and scheduler panel data for idle sessions without
+- [x] Preserve runtime and scheduler panel data for idle sessions without
   writing to `WorkflowTraceStore`.
-- [ ] Add tests showing repeated `workflow_get_diagnostics_snapshot` calls with
+- [x] Add tests showing repeated `workflow_get_diagnostics_snapshot` calls with
   no active run leave `runOrder` empty.
-- [ ] Add tests showing workflow switching does not rewrite existing run
+- [x] Add tests showing workflow switching does not rewrite existing run
   `workflowId` values.
 
 **Verification:**
 - `cargo test --manifest-path src-tauri/Cargo.toml workflow::headless_diagnostics`
 - `cargo test --manifest-path src-tauri/Cargo.toml workflow::diagnostics`
 
-**Status:** Not started.
+**Status:** Complete.
+
+**Execution Notes:**
+- `workflow_diagnostics_snapshot_projection` now updates scheduler/runtime panel
+  snapshots without recording scheduler or runtime trace events.
+- Scheduler panel state carries an observed active `workflow_run_id` for display
+  while leaving `runOrder` unchanged unless a real event recording path has
+  populated the trace store.
+- Verification passed:
+  `cargo test --manifest-path src-tauri/Cargo.toml workflow::headless_diagnostics`;
+  `cargo test --manifest-path src-tauri/Cargo.toml workflow::diagnostics`;
+  `cargo test --manifest-path src-tauri/Cargo.toml workflow::headless_workflow_commands::tests::diagnostics_projection`.
 
 ### Milestone 3: Terminal Run Attribution
 

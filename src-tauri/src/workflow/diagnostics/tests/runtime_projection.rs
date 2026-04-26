@@ -59,6 +59,7 @@ fn runtime_and_scheduler_snapshots_are_backend_owned() {
     let snapshot =
         store.update_scheduler_snapshot(WorkflowSchedulerSnapshotUpdate {
             workflow_id: Some("wf-runtime".to_string()),
+            workflow_run_id: Some("queue-1".to_string()),
             session_id: Some("session-1".to_string()),
             session: Some(
                 pantograph_workflow_service::WorkflowExecutionSessionSummary {
@@ -151,6 +152,7 @@ fn workflow_diagnostics_projection_preserves_scheduler_snapshot_diagnostics() {
 
     let snapshot = store.update_scheduler_snapshot(WorkflowSchedulerSnapshotUpdate {
         workflow_id: Some("wf-runtime".to_string()),
+        workflow_run_id: None,
         session_id: Some("session-1".to_string()),
         session: Some(
             pantograph_workflow_service::WorkflowExecutionSessionSummary {

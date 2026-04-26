@@ -12,10 +12,9 @@ use super::diagnostics::{
 };
 use pantograph_embedded_runtime::ManagedRuntimeManagerRuntimeView;
 use pantograph_workflow_service::{
-    WorkflowCapabilitiesResponse, WorkflowGraph, WorkflowSchedulerSnapshotRequest,
-    WorkflowSchedulerSnapshotResponse, WorkflowServiceError, WorkflowTraceRuntimeMetrics,
-    WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
-    graph::WorkflowGraphSessionStateView,
+    graph::WorkflowGraphSessionStateView, WorkflowCapabilitiesResponse, WorkflowGraph,
+    WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse, WorkflowServiceError,
+    WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
 };
 
 pub(crate) fn workflow_error_json(error: WorkflowServiceError) -> String {
@@ -60,8 +59,6 @@ pub(crate) fn record_headless_scheduler_snapshot(
     snapshot_result: Result<WorkflowSchedulerSnapshotResponse, WorkflowServiceError>,
     captured_at_ms: u64,
 ) -> Option<String> {
-    diagnostics_store.set_execution_metadata(requested_session_id, requested_workflow_id.clone());
-
     match snapshot_result {
         Ok(snapshot) => {
             if let Some(observed_workflow_run_id) = snapshot.workflow_run_id.clone() {
@@ -86,6 +83,7 @@ pub(crate) fn record_headless_scheduler_snapshot(
             } else {
                 diagnostics_store.update_scheduler_snapshot(WorkflowSchedulerSnapshotUpdate {
                     workflow_id: snapshot.workflow_id,
+                    workflow_run_id: None,
                     session_id: Some(snapshot.session_id),
                     session: Some(snapshot.session),
                     items: snapshot.items,
@@ -99,6 +97,45 @@ pub(crate) fn record_headless_scheduler_snapshot(
         Err(error) => {
             diagnostics_store.update_scheduler_snapshot(WorkflowSchedulerSnapshotUpdate {
                 workflow_id: requested_workflow_id,
+                workflow_run_id: None,
+                session_id: Some(requested_session_id.to_string()),
+                session: None,
+                items: Vec::new(),
+                diagnostics: None,
+                last_error: Some(error.to_envelope_json()),
+                captured_at_ms,
+            });
+            None
+        }
+    }
+}
+
+pub(crate) fn update_headless_scheduler_snapshot(
+    diagnostics_store: &WorkflowDiagnosticsStore,
+    requested_session_id: &str,
+    requested_workflow_id: Option<String>,
+    snapshot_result: Result<WorkflowSchedulerSnapshotResponse, WorkflowServiceError>,
+    captured_at_ms: u64,
+) -> Option<String> {
+    match snapshot_result {
+        Ok(snapshot) => {
+            let workflow_run_id = snapshot.workflow_run_id.clone();
+            diagnostics_store.update_scheduler_snapshot(WorkflowSchedulerSnapshotUpdate {
+                workflow_id: snapshot.workflow_id,
+                workflow_run_id: workflow_run_id.clone(),
+                session_id: Some(snapshot.session_id),
+                session: Some(snapshot.session),
+                items: snapshot.items,
+                diagnostics: snapshot.diagnostics,
+                last_error: None,
+                captured_at_ms,
+            });
+            workflow_run_id
+        }
+        Err(error) => {
+            diagnostics_store.update_scheduler_snapshot(WorkflowSchedulerSnapshotUpdate {
+                workflow_id: requested_workflow_id,
+                workflow_run_id: None,
                 session_id: Some(requested_session_id.to_string()),
                 session: None,
                 items: Vec::new(),
@@ -160,6 +197,40 @@ pub(crate) fn record_headless_runtime_snapshot(
             });
         }
         (None, Err(error)) => {
+            diagnostics_store.update_runtime_snapshot(WorkflowRuntimeSnapshotUpdate {
+                workflow_id: Some(input.workflow_id),
+                capabilities: None,
+                last_error: Some(error.to_envelope_json()),
+                active_model_target: input.active_model_target,
+                embedding_model_target: input.embedding_model_target,
+                active_runtime_snapshot: input.active_runtime_snapshot,
+                embedding_runtime_snapshot: input.embedding_runtime_snapshot,
+                managed_runtimes: input.managed_runtimes,
+                captured_at_ms: input.captured_at_ms,
+            });
+        }
+    }
+}
+
+pub(crate) fn update_headless_runtime_snapshot(
+    diagnostics_store: &WorkflowDiagnosticsStore,
+    input: HeadlessRuntimeSnapshotInput,
+) {
+    match input.capabilities_result {
+        Ok(capabilities) => {
+            diagnostics_store.update_runtime_snapshot(WorkflowRuntimeSnapshotUpdate {
+                workflow_id: Some(input.workflow_id),
+                capabilities: Some(capabilities),
+                last_error: None,
+                active_model_target: input.active_model_target,
+                embedding_model_target: input.embedding_model_target,
+                active_runtime_snapshot: input.active_runtime_snapshot,
+                embedding_runtime_snapshot: input.embedding_runtime_snapshot,
+                managed_runtimes: input.managed_runtimes,
+                captured_at_ms: input.captured_at_ms,
+            });
+        }
+        Err(error) => {
             diagnostics_store.update_runtime_snapshot(WorkflowRuntimeSnapshotUpdate {
                 workflow_id: Some(input.workflow_id),
                 capabilities: None,
@@ -267,7 +338,7 @@ pub(crate) fn workflow_diagnostics_snapshot_projection(
     let mut workflow_run_id = input.workflow_run_id.clone();
 
     if let Some(session_id) = input.session_id.as_deref() {
-        workflow_run_id = record_headless_scheduler_snapshot(
+        let observed_workflow_run_id = update_headless_scheduler_snapshot(
             diagnostics_store.as_ref(),
             session_id,
             input.workflow_id.clone(),
@@ -278,9 +349,13 @@ pub(crate) fn workflow_diagnostics_snapshot_projection(
             }),
             input.captured_at_ms,
         );
+        if workflow_run_id.is_none() {
+            workflow_run_id = observed_workflow_run_id;
+        }
     } else {
         diagnostics_store.update_scheduler_snapshot(WorkflowSchedulerSnapshotUpdate {
             workflow_id: None,
+            workflow_run_id: None,
             session_id: None,
             session: None,
             items: Vec::new(),
@@ -291,7 +366,7 @@ pub(crate) fn workflow_diagnostics_snapshot_projection(
     }
 
     if let Some(workflow_id) = input.workflow_id.clone() {
-        record_headless_runtime_snapshot(
+        update_headless_runtime_snapshot(
             diagnostics_store.as_ref(),
             HeadlessRuntimeSnapshotInput {
                 workflow_id,

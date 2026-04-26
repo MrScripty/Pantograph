@@ -1,16 +1,16 @@
 use std::sync::Arc;
 
 use pantograph_workflow_service::{
+    graph::{WorkflowExecutionSessionKind, WorkflowGraphSessionStateView},
     WorkflowCapabilitiesResponse, WorkflowExecutionSessionQueueItem,
     WorkflowExecutionSessionQueueItemStatus, WorkflowExecutionSessionState,
     WorkflowExecutionSessionSummary, WorkflowRuntimeRequirements,
     WorkflowSchedulerSnapshotResponse, WorkflowTraceRuntimeMetrics,
-    graph::{WorkflowExecutionSessionKind, WorkflowGraphSessionStateView},
 };
 
 use super::{
-    WorkflowDiagnosticsSnapshotProjectionInput, stored_runtime_trace_metrics,
-    workflow_diagnostics_snapshot_projection,
+    stored_runtime_trace_metrics, workflow_diagnostics_snapshot_projection,
+    WorkflowDiagnosticsSnapshotProjectionInput,
 };
 use crate::workflow::diagnostics::WorkflowDiagnosticsStore;
 
@@ -153,6 +153,79 @@ fn workflow_diagnostics_snapshot_projection_preserves_ambiguous_scheduler_identi
     assert!(
         stored_runtime_trace_metrics(&diagnostics_store, Some("session-1"), Some("wf-1")).is_none()
     );
+}
+
+#[test]
+fn workflow_diagnostics_snapshot_projection_does_not_record_trace_from_read_snapshot() {
+    let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
+
+    let projection = workflow_projection!(
+        &diagnostics_store,
+        WorkflowDiagnosticsSnapshotProjectionInput {
+            workflow_run_id: None,
+            session_id: Some("session-1".to_string()),
+            workflow_id: Some("wf-1".to_string()),
+
+            scheduler_snapshot_result: Some(Ok(WorkflowSchedulerSnapshotResponse {
+                workflow_id: Some("wf-1".to_string()),
+                session_id: "session-1".to_string(),
+                workflow_run_id: Some("run-1".to_string()),
+                session: running_session_summary(),
+                items: vec![WorkflowExecutionSessionQueueItem {
+                    workflow_run_id: "run-1".to_string(),
+
+                    enqueued_at_ms: Some(100),
+                    dequeued_at_ms: Some(110),
+                    priority: 5,
+                    queue_position: Some(0),
+                    scheduler_admission_outcome: None,
+                    scheduler_decision_reason: None,
+                    status: WorkflowExecutionSessionQueueItemStatus::Running,
+                }],
+                diagnostics: None,
+            })),
+            capabilities_result: Some(Ok(capability_response())),
+            current_session_state: None,
+            workflow_graph: None,
+            runtime_trace_metrics: WorkflowTraceRuntimeMetrics {
+                runtime_id: Some("llama_cpp".to_string()),
+                observed_runtime_ids: vec!["llama_cpp".to_string()],
+                runtime_instance_id: Some("runtime-1".to_string()),
+                model_target: Some("llava:34b".to_string()),
+                warmup_started_at_ms: Some(90),
+                warmup_completed_at_ms: Some(99),
+                warmup_duration_ms: Some(9),
+                runtime_reused: Some(true),
+                lifecycle_decision_reason: Some("runtime_reused".to_string()),
+            },
+            active_model_target: Some("llava:34b".to_string()),
+            embedding_model_target: None,
+            active_runtime_snapshot: None,
+            embedding_runtime_snapshot: None,
+            managed_runtimes: Vec::new(),
+            captured_at_ms: 120,
+        },
+    );
+
+    assert_eq!(
+        projection.scheduler.workflow_run_id.as_deref(),
+        Some("run-1")
+    );
+    assert_eq!(
+        projection.context.relevant_workflow_run_id.as_deref(),
+        Some("run-1")
+    );
+    assert!(projection.run_order.is_empty());
+
+    let trace_snapshot = diagnostics_store
+        .trace_snapshot(pantograph_workflow_service::WorkflowTraceSnapshotRequest {
+            workflow_run_id: Some("run-1".to_string()),
+            session_id: None,
+            workflow_id: None,
+            include_completed: Some(true),
+        })
+        .expect("trace snapshot");
+    assert!(trace_snapshot.traces.is_empty());
 }
 
 #[test]

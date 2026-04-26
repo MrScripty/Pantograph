@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use serde::Serialize;
-use tauri::{AppHandle, Manager, State, ipc::Channel};
+use tauri::{ipc::Channel, AppHandle, Manager, State};
 
 use crate::agent::rag::SharedRagManager;
 use crate::llm::startup::build_resolved_embedding_request;
@@ -11,8 +11,8 @@ pub(crate) use pantograph_embedded_runtime::workflow_runtime::unix_timestamp_ms;
 use pantograph_embedded_runtime::{
     list_managed_runtime_manager_runtimes,
     workflow_runtime::{
-        WorkflowExecutionDiagnosticsSyncInput,
         build_workflow_execution_diagnostics_snapshot_with_registry_sync,
+        WorkflowExecutionDiagnosticsSyncInput,
     },
 };
 use pantograph_workflow_service::{WorkflowCapabilitiesRequest, WorkflowGraph};
@@ -212,48 +212,45 @@ async fn emit_diagnostics_snapshots(input: DiagnosticsEmissionInput<'_>) {
     .await;
     let managed_runtimes = managed_runtime_diagnostics_views(input.app);
 
-    let scheduler_event = WorkflowEvent::scheduler_snapshot(WorkflowSchedulerSnapshotEventInput {
-        workflow_id: snapshot.scheduler.workflow_id,
-        workflow_run_id: snapshot.scheduler.workflow_run_id.clone(),
-        session_id: snapshot.scheduler.session_id,
-        captured_at_ms: snapshot.scheduler.captured_at_ms,
-        session: Some(snapshot.scheduler.session),
-        items: snapshot.scheduler.items,
-        diagnostics: snapshot.scheduler.diagnostics,
-        error: None,
-    });
-    input
-        .diagnostics_store
-        .record_workflow_event(&scheduler_event, captured_at_ms);
-    let _ = input.channel.send(scheduler_event);
-    send_diagnostics_projection(
-        input.channel,
-        input.diagnostics_store,
-        &snapshot.scheduler.workflow_run_id,
-    );
+    if let Some(workflow_run_id) = snapshot.scheduler.workflow_run_id.clone() {
+        let scheduler_event =
+            WorkflowEvent::scheduler_snapshot(WorkflowSchedulerSnapshotEventInput {
+                workflow_id: snapshot.scheduler.workflow_id,
+                workflow_run_id: workflow_run_id.clone(),
+                session_id: snapshot.scheduler.session_id,
+                captured_at_ms: snapshot.scheduler.captured_at_ms,
+                session: Some(snapshot.scheduler.session),
+                items: snapshot.scheduler.items,
+                diagnostics: snapshot.scheduler.diagnostics,
+                error: None,
+            });
+        input
+            .diagnostics_store
+            .record_workflow_event(&scheduler_event, captured_at_ms);
+        let _ = input.channel.send(scheduler_event);
+        send_diagnostics_projection(input.channel, input.diagnostics_store, &workflow_run_id);
+    }
 
-    let runtime_event = WorkflowEvent::runtime_snapshot(WorkflowRuntimeSnapshotEventInput {
-        workflow_id: snapshot.runtime.workflow_id,
-        workflow_run_id: snapshot.runtime.workflow_run_id.clone(),
-        captured_at_ms: snapshot.runtime.captured_at_ms,
-        capabilities: snapshot.runtime.capabilities,
-        trace_runtime_metrics: snapshot.runtime.trace_runtime_metrics,
-        active_model_target: snapshot.runtime.active_model_target,
-        embedding_model_target: snapshot.runtime.embedding_model_target,
-        active_runtime_snapshot: Some(snapshot.runtime.active_runtime_snapshot),
-        embedding_runtime_snapshot: snapshot.runtime.embedding_runtime_snapshot,
-        managed_runtimes,
-        error: snapshot.runtime.error,
-    });
-    input
-        .diagnostics_store
-        .record_workflow_event(&runtime_event, captured_at_ms);
-    let _ = input.channel.send(runtime_event);
-    send_diagnostics_projection(
-        input.channel,
-        input.diagnostics_store,
-        &snapshot.runtime.workflow_run_id,
-    );
+    if let Some(workflow_run_id) = snapshot.runtime.workflow_run_id.clone() {
+        let runtime_event = WorkflowEvent::runtime_snapshot(WorkflowRuntimeSnapshotEventInput {
+            workflow_id: snapshot.runtime.workflow_id,
+            workflow_run_id: workflow_run_id.clone(),
+            captured_at_ms: snapshot.runtime.captured_at_ms,
+            capabilities: snapshot.runtime.capabilities,
+            trace_runtime_metrics: snapshot.runtime.trace_runtime_metrics,
+            active_model_target: snapshot.runtime.active_model_target,
+            embedding_model_target: snapshot.runtime.embedding_model_target,
+            active_runtime_snapshot: Some(snapshot.runtime.active_runtime_snapshot),
+            embedding_runtime_snapshot: snapshot.runtime.embedding_runtime_snapshot,
+            managed_runtimes,
+            error: snapshot.runtime.error,
+        });
+        input
+            .diagnostics_store
+            .record_workflow_event(&runtime_event, captured_at_ms);
+        let _ = input.channel.send(runtime_event);
+        send_diagnostics_projection(input.channel, input.diagnostics_store, &workflow_run_id);
+    }
 }
 
 async fn run_session_graph_snapshot(input: SessionGraphSnapshotInput<'_>) -> Result<(), String> {
