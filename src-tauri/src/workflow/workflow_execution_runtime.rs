@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use tauri::{ipc::Channel, AppHandle, Manager, State};
+use tauri::{AppHandle, Manager, State, ipc::Channel};
 
 use crate::agent::rag::SharedRagManager;
 use crate::llm::startup::build_resolved_embedding_request;
@@ -10,8 +10,8 @@ pub(crate) use pantograph_embedded_runtime::workflow_runtime::unix_timestamp_ms;
 use pantograph_embedded_runtime::{
     list_managed_runtime_manager_runtimes,
     workflow_runtime::{
-        build_workflow_execution_diagnostics_snapshot_with_registry_sync,
         WorkflowExecutionDiagnosticsSyncInput,
+        build_workflow_execution_diagnostics_snapshot_with_registry_sync,
     },
 };
 use pantograph_workflow_service::{WorkflowCapabilitiesRequest, WorkflowGraph};
@@ -59,6 +59,7 @@ struct DiagnosticsEmissionInput<'a> {
 struct SessionGraphSnapshotInput<'a> {
     app: AppHandle,
     session_id: String,
+    workflow_run_id: String,
     workflow_name: Option<String>,
     session_graph: WorkflowGraph,
     state: WorkflowExecutionRuntimeState<'a>,
@@ -254,6 +255,7 @@ async fn run_session_graph_snapshot(input: SessionGraphSnapshotInput<'_>) -> Res
     let SessionGraphSnapshotInput {
         app,
         session_id,
+        workflow_run_id,
         workflow_name,
         session_graph,
         state,
@@ -270,10 +272,6 @@ async fn run_session_graph_snapshot(input: SessionGraphSnapshotInput<'_>) -> Res
     } = state;
     let diagnostics_channel = channel.clone();
 
-    workflow_service
-        .workflow_graph_mark_edit_session_running(&session_id)
-        .await
-        .map_err(|e| e.to_envelope_json())?;
     emit_diagnostics_snapshots(DiagnosticsEmissionInput {
         app: &app,
         session_id: &session_id,
@@ -289,7 +287,7 @@ async fn run_session_graph_snapshot(input: SessionGraphSnapshotInput<'_>) -> Res
     })
     .await;
 
-    diagnostics_store.set_execution_graph(&session_id, &session_graph);
+    diagnostics_store.set_execution_graph(&workflow_run_id, &session_graph);
 
     let event_workflow_id =
         workflow_id_for_runtime_events(workflow_service.inner(), &session_id).await;
@@ -333,6 +331,7 @@ async fn run_session_graph_snapshot(input: SessionGraphSnapshotInput<'_>) -> Res
     let outcome = match runtime
         .execute_edit_session_graph(
             &session_id,
+            &workflow_run_id,
             &session_graph,
             build_resolved_embedding_request(
                 None,
@@ -391,9 +390,15 @@ pub async fn run_workflow_execution_session(
         .workflow_graph_get_runtime_snapshot(&session_id)
         .await
         .map_err(|e| e.to_envelope_json())?;
+    let workflow_run_id = state
+        .workflow_service
+        .workflow_graph_begin_edit_session_run(&session_id)
+        .await
+        .map_err(|e| e.to_envelope_json())?;
     run_session_graph_snapshot(SessionGraphSnapshotInput {
         app,
         session_id,
+        workflow_run_id,
         workflow_name,
         session_graph,
         state,

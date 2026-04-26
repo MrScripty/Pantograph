@@ -86,9 +86,11 @@ async fn test_keep_alive_session_load_tracks_registry_reservation_lifecycle() {
 
     let released_snapshot = runtime_registry.snapshot();
     assert!(released_snapshot.reservations.is_empty());
-    assert!(released_snapshot.runtimes[0]
-        .active_reservation_ids
-        .is_empty());
+    assert!(
+        released_snapshot.runtimes[0]
+            .active_reservation_ids
+            .is_empty()
+    );
     assert_eq!(
         released_snapshot.runtimes[0].status,
         RuntimeRegistryStatus::Stopped
@@ -170,7 +172,7 @@ async fn keep_alive_disable_reclaim_flips_scheduler_runtime_registry_diagnostics
             usage_profile: Some("interactive".to_string()),
             keep_alive: false,
             runtime_loaded: false,
-            next_admission_queue_id: Some("queue-after-reclaim".to_string()),
+            next_admission_workflow_run_id: Some("queue-after-reclaim".to_string()),
             reclaim_candidates: Vec::new(),
         })
         .await
@@ -529,10 +531,12 @@ async fn test_session_runtime_load_releases_reservation_after_warmup_timeout() {
 
     let snapshot = runtime_registry.snapshot();
     assert!(snapshot.reservations.is_empty());
-    assert!(snapshot
-        .runtimes
-        .iter()
-        .all(|runtime| runtime.active_reservation_ids.is_empty()));
+    assert!(
+        snapshot
+            .runtimes
+            .iter()
+            .all(|runtime| runtime.active_reservation_ids.is_empty())
+    );
     assert_eq!(snapshot.runtimes[0].status, RuntimeRegistryStatus::Stopped);
 }
 
@@ -585,7 +589,6 @@ async fn test_session_run_without_keep_alive_releases_runtime_reservation_after_
             override_selection: None,
             timeout_ms: None,
             priority: None,
-            run_id: Some("run-queued".to_string()),
         })
         .await
         .expect("run queued session");
@@ -597,13 +600,17 @@ async fn test_session_run_without_keep_alive_releases_runtime_reservation_after_
 
     let snapshot = runtime_registry.snapshot();
     assert!(snapshot.reservations.is_empty());
-    assert!(snapshot
-        .runtimes
-        .iter()
-        .all(|runtime| runtime.active_reservation_ids.is_empty()));
-    assert!(runtime
-        .session_executions
-        .handle(&created.session_id)
-        .expect("session execution lookup should succeed")
-        .is_none());
+    assert!(
+        snapshot
+            .runtimes
+            .iter()
+            .all(|runtime| runtime.active_reservation_ids.is_empty())
+    );
+    assert!(
+        runtime
+            .session_executions
+            .handle(&created.session_id)
+            .expect("session execution lookup should succeed")
+            .is_none()
+    );
 }

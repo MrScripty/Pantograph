@@ -32,7 +32,7 @@ pub struct RuntimeEventProjection {
 #[derive(Debug, Clone)]
 pub struct WorkflowExecutionSchedulerSnapshot {
     pub workflow_id: Option<String>,
-    pub trace_execution_id: String,
+    pub workflow_run_id: String,
     pub session_id: String,
     pub captured_at_ms: u64,
     pub session: WorkflowExecutionSessionSummary,
@@ -43,7 +43,7 @@ pub struct WorkflowExecutionSchedulerSnapshot {
 #[derive(Debug, Clone)]
 pub struct WorkflowExecutionRuntimeSnapshot {
     pub workflow_id: String,
-    pub trace_execution_id: String,
+    pub workflow_run_id: String,
     pub captured_at_ms: u64,
     pub capabilities: Option<WorkflowCapabilitiesResponse>,
     pub trace_runtime_metrics: WorkflowTraceRuntimeMetrics,
@@ -123,8 +123,8 @@ pub fn build_workflow_execution_diagnostics_snapshot(
     let runtime_workflow_id = workflow_id
         .clone()
         .unwrap_or_else(|| scheduler_snapshot.session.workflow_id.clone());
-    let trace_execution_id = scheduler_snapshot
-        .trace_execution_id
+    let workflow_run_id = scheduler_snapshot
+        .workflow_run_id
         .clone()
         .unwrap_or_else(|| scheduler_snapshot.session_id.clone());
     let runtime_projection = build_runtime_event_projection_with_registry_override(
@@ -144,7 +144,7 @@ pub fn build_workflow_execution_diagnostics_snapshot(
     WorkflowExecutionDiagnosticsSnapshot {
         scheduler: WorkflowExecutionSchedulerSnapshot {
             workflow_id,
-            trace_execution_id: trace_execution_id.clone(),
+            workflow_run_id: workflow_run_id.clone(),
             session_id: scheduler_snapshot.session_id.clone(),
             captured_at_ms,
             session: scheduler_snapshot.session.clone(),
@@ -153,7 +153,7 @@ pub fn build_workflow_execution_diagnostics_snapshot(
         },
         runtime: WorkflowExecutionRuntimeSnapshot {
             workflow_id: runtime_workflow_id,
-            trace_execution_id,
+            workflow_run_id,
             captured_at_ms,
             capabilities: runtime_capabilities,
             trace_runtime_metrics: runtime_projection.trace_runtime_metrics,

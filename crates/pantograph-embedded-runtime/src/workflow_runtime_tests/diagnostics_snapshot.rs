@@ -1,8 +1,7 @@
 use super::*;
 
 #[tokio::test]
-async fn build_workflow_execution_diagnostics_snapshot_with_registry_sync_reconciles_execution_runtime(
-) {
+async fn diagnostics_snapshot_with_registry_sync_reconciles_execution_runtime() {
     let registry = RuntimeRegistry::new();
     let active_runtime_snapshot = inference::RuntimeLifecycleSnapshot {
         runtime_id: Some("llama.cpp".to_string()),
@@ -45,7 +44,7 @@ async fn build_workflow_execution_diagnostics_snapshot_with_registry_sync_reconc
             scheduler_snapshot: &WorkflowSchedulerSnapshotResponse {
                 workflow_id: Some("wf-123".to_string()),
                 session_id: "session-123".to_string(),
-                trace_execution_id: Some("exec-456".to_string()),
+                workflow_run_id: Some("exec-456".to_string()),
                 session: WorkflowExecutionSessionSummary {
                     session_id: "session-123".to_string(),
                     workflow_id: "wf-123".to_string(),
@@ -108,10 +107,12 @@ async fn build_workflow_execution_diagnostics_snapshot_with_registry_sync_reconc
     );
 
     let registry_snapshot = registry.snapshot();
-    assert!(registry_snapshot
-        .runtimes
-        .iter()
-        .any(|runtime| runtime.runtime_id == "llama_cpp"));
+    assert!(
+        registry_snapshot
+            .runtimes
+            .iter()
+            .any(|runtime| runtime.runtime_id == "llama_cpp")
+    );
     let execution_runtime = registry_snapshot
         .runtimes
         .iter()
@@ -132,7 +133,7 @@ fn build_workflow_execution_diagnostics_snapshot_uses_backend_owned_scheduler_an
             scheduler_snapshot: &WorkflowSchedulerSnapshotResponse {
                 workflow_id: Some("wf-123".to_string()),
                 session_id: "session-123".to_string(),
-                trace_execution_id: Some("exec-456".to_string()),
+                workflow_run_id: Some("exec-456".to_string()),
                 session: WorkflowExecutionSessionSummary {
                     session_id: "session-123".to_string(),
                     workflow_id: "wf-123".to_string(),
@@ -144,8 +145,7 @@ fn build_workflow_execution_diagnostics_snapshot_uses_backend_owned_scheduler_an
                     run_count: 1,
                 },
                 items: vec![WorkflowExecutionSessionQueueItem {
-                    queue_id: "queue-1".to_string(),
-                    run_id: Some("exec-456".to_string()),
+                    workflow_run_id: "exec-456".to_string(),
                     enqueued_at_ms: Some(11),
                     dequeued_at_ms: Some(12),
                     priority: 0,
@@ -231,11 +231,11 @@ fn build_workflow_execution_diagnostics_snapshot_uses_backend_owned_scheduler_an
         });
 
     assert_eq!(snapshot.scheduler.workflow_id.as_deref(), Some("wf-123"));
-    assert_eq!(snapshot.scheduler.trace_execution_id, "exec-456");
+    assert_eq!(snapshot.scheduler.workflow_run_id, "exec-456");
     assert_eq!(snapshot.scheduler.session_id, "session-123");
     assert_eq!(snapshot.scheduler.captured_at_ms, 999);
     assert_eq!(snapshot.runtime.workflow_id, "wf-123");
-    assert_eq!(snapshot.runtime.trace_execution_id, "exec-456");
+    assert_eq!(snapshot.runtime.workflow_run_id, "exec-456");
     assert_eq!(snapshot.runtime.captured_at_ms, 999);
     assert_eq!(
         snapshot.runtime.error.as_deref(),

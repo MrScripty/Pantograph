@@ -403,14 +403,14 @@ Assumption: scheduler queue id and run id should be the same canonical
 owned `workflow_run_id`.
 
 **Tasks:**
-- [ ] Introduce a run context passed from Tauri/session execution into embedded
+- [x] Introduce a run context passed from Tauri/session execution into embedded
   runtime.
-- [ ] Replace edit-session `execution_id: session_id` event emission with
+- [x] Replace edit-session `execution_id: session_id` event emission with
   `execution_id: workflow_run_id`.
-- [ ] Preserve `session_id` only as session attribution where needed.
-- [ ] Keep `runtime_instance_id` in runtime diagnostics metrics, separate from
+- [x] Preserve `session_id` only as session attribution where needed.
+- [x] Keep `runtime_instance_id` in runtime diagnostics metrics, separate from
   run identity.
-- [ ] Update embedded-runtime tests for completion, failure, waiting-for-input,
+- [x] Update embedded-runtime tests for completion, failure, waiting-for-input,
   cancellation, and runtime metrics.
 
 **Verification:**
@@ -419,7 +419,33 @@ owned `workflow_run_id`.
   active item and node-engine terminal event share the same `workflow_run_id`.
 - Search check for edit-session `execution_id: session_id` event construction.
 
-**Status:** Not started.
+**Status:** Completed.
+
+**Notes:**
+- Added `workflow_graph_begin_edit_session_run` so Tauri asks the workflow
+  service to create the backend-owned `workflow_run_id` before edit-session
+  runtime execution starts.
+- Passed `workflow_run_id` through Tauri session graph execution into embedded
+  runtime and node-engine execution context.
+- Embedded runtime now uses `workflow_run_id` for `CoreTaskExecutor`,
+  node-engine `WorkflowExecutor`, runtime extension attribution, scheduler
+  running state, and manual started/completed/failed/cancelled events.
+- `session_id` remains edit-session attribution and lookup context; Tauri's
+  event adapter still projects the stable saved `workflow_id` for diagnostics.
+- Runtime diagnostics continue to expose runtime resource identity through
+  `runtime_instance_id` and observed runtime ids, not through workflow run
+  identity.
+- Downstream Tauri DTO and frontend compile updates remain assigned to
+  Milestones 5 and 6, where `workflow_run_id` replaces stale
+  `trace_execution_id` transport fields.
+
+**Verification Results:**
+- `cargo test -p pantograph-embedded-runtime`
+- `git diff --check -- crates/pantograph-embedded-runtime crates/pantograph-workflow-service/src/workflow/graph_api.rs src-tauri/src/workflow/workflow_execution_runtime.rs docs/plans/workflow-run-identity-redesign/plan.md`
+- Source search found no edit-session `session_id` assignment into runtime
+  `execution_id`, `CoreTaskExecutor` execution id, `WorkflowExecutor`
+  execution id, or single-argument edit-session `mark_running` calls in the
+  runtime/Tauri/workflow-service slice.
 
 ### Milestone 4: Rebuild Trace And Timing Around Workflow Run Id
 
@@ -591,6 +617,10 @@ model is implemented.
 - 2026-04-26: Milestone 2 completed. Scheduler/session contracts now generate
   and expose `workflow_run_id`; edit-session running state no longer derives
   run identity from `session_id`; workflow-service tests pass.
+- 2026-04-26: Milestone 3 completed. Tauri edit-session runs now receive a
+  backend-generated `workflow_run_id` before runtime execution and embedded
+  runtime propagates that id through node-engine execution, runtime extension
+  attribution, scheduler running state, and runtime events.
 - Current known unrelated dirty files must remain untouched unless the user
   explicitly assigns them to this work:
   - `.pantograph/workflows/tiny-sd-turbo-diffusion.json`
@@ -660,6 +690,7 @@ owned serially by the integration implementer.
 
 - Milestone 1: Freeze Canonical Identity Contract.
 - Milestone 2: Make Scheduler Own Run Id Creation.
+- Milestone 3: Propagate Workflow Run Id Through Runtime Events.
 
 ### Deviations
 
@@ -679,6 +710,12 @@ owned serially by the integration implementer.
   - `git diff --check -- crates/pantograph-workflow-service docs/plans/workflow-run-identity-redesign/plan.md`
   - Source search for `session_id` assigned into workflow-run identity in the
     workflow-service scheduler/session slice.
+- Milestone 3:
+  - `cargo test -p pantograph-embedded-runtime`
+  - `git diff --check -- crates/pantograph-embedded-runtime crates/pantograph-workflow-service/src/workflow/graph_api.rs src-tauri/src/workflow/workflow_execution_runtime.rs docs/plans/workflow-run-identity-redesign/plan.md`
+  - Source search for edit-session `session_id` assigned into runtime
+    execution identity in embedded-runtime, Tauri workflow runtime, and
+    workflow-service graph APIs.
 
 ### Traceability Links
 

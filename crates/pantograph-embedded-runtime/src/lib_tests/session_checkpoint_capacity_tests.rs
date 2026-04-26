@@ -46,7 +46,6 @@ async fn keep_alive_session_retains_checkpoint_across_capacity_rebalance() {
             override_selection: None,
             timeout_ms: None,
             priority: None,
-            run_id: Some("run-first".to_string()),
         })
         .await
         .expect("run first keep-alive session");
@@ -121,7 +120,6 @@ async fn keep_alive_session_retains_checkpoint_across_capacity_rebalance() {
             override_selection: None,
             timeout_ms: None,
             priority: None,
-            run_id: Some("run-resume".to_string()),
         })
         .await
         .expect("resume first keep-alive session from checkpoint");
@@ -217,7 +215,6 @@ async fn scheduler_driven_rebalance_checkpoints_keep_alive_session() {
             override_selection: None,
             timeout_ms: None,
             priority: None,
-            run_id: Some("run-keep-alive".to_string()),
         })
         .await
         .expect("run keep-alive session");
@@ -253,7 +250,6 @@ async fn scheduler_driven_rebalance_checkpoints_keep_alive_session() {
             override_selection: None,
             timeout_ms: None,
             priority: None,
-            run_id: Some("run-one-shot".to_string()),
         })
         .await
         .expect("run one-shot session under capacity pressure");
@@ -286,7 +282,6 @@ async fn scheduler_driven_rebalance_checkpoints_keep_alive_session() {
             override_selection: None,
             timeout_ms: None,
             priority: None,
-            run_id: Some("run-keep-alive-resume".to_string()),
         })
         .await
         .expect("resume keep-alive session after scheduler rebalance");
@@ -371,7 +366,6 @@ async fn repeated_capacity_unload_keeps_checkpoint_identity_and_keep_alive_disab
             override_selection: None,
             timeout_ms: None,
             priority: None,
-            run_id: Some("run-first".to_string()),
         })
         .await
         .expect("run keep-alive session");
@@ -432,9 +426,11 @@ async fn repeated_capacity_unload_keeps_checkpoint_identity_and_keep_alive_disab
         .await
         .expect("disable keep-alive after checkpoint");
 
-    assert!(runtime
-        .session_executions
-        .handle(&session.session_id)
-        .expect("session execution lookup should succeed")
-        .is_none());
+    assert!(
+        runtime
+            .session_executions
+            .handle(&session.session_id)
+            .expect("session execution lookup should succeed")
+            .is_none()
+    );
 }

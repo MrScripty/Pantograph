@@ -46,7 +46,6 @@ async fn failed_restore_keeps_checkpoint_until_resume_succeeds() {
             override_selection: None,
             timeout_ms: None,
             priority: None,
-            run_id: Some("run-first".to_string()),
         })
         .await
         .expect("run keep-alive session");
@@ -87,7 +86,6 @@ async fn failed_restore_keeps_checkpoint_until_resume_succeeds() {
             override_selection: None,
             timeout_ms: None,
             priority: None,
-            run_id: Some("run-resume-fail".to_string()),
         })
         .await
         .expect_err("resume should fail when the output node now requires interactive input");
@@ -130,7 +128,6 @@ async fn failed_restore_keeps_checkpoint_until_resume_succeeds() {
             override_selection: None,
             timeout_ms: None,
             priority: None,
-            run_id: Some("run-resume-success".to_string()),
         })
         .await
         .expect("resume should succeed after restoring a runnable graph");
@@ -202,7 +199,6 @@ async fn runtime_not_ready_resume_keeps_checkpoint_until_runtime_returns() {
             override_selection: None,
             timeout_ms: None,
             priority: None,
-            run_id: Some("run-first".to_string()),
         })
         .await
         .expect("run keep-alive session");
@@ -237,7 +233,6 @@ async fn runtime_not_ready_resume_keeps_checkpoint_until_runtime_returns() {
             override_selection: None,
             timeout_ms: None,
             priority: None,
-            run_id: Some("run-one-shot".to_string()),
         })
         .await
         .expect("run one-shot session to force keep-alive rebalance");
@@ -265,7 +260,6 @@ async fn runtime_not_ready_resume_keeps_checkpoint_until_runtime_returns() {
             override_selection: None,
             timeout_ms: None,
             priority: None,
-            run_id: Some("run-resume-missing-runtime".to_string()),
         })
         .await
         .expect_err("resume should fail when the selected runtime is no longer ready");
@@ -308,7 +302,6 @@ async fn runtime_not_ready_resume_keeps_checkpoint_until_runtime_returns() {
             override_selection: None,
             timeout_ms: None,
             priority: None,
-            run_id: Some("run-resume-runtime-restored".to_string()),
         })
         .await
         .expect("resume should succeed after the runtime becomes ready again");
@@ -388,7 +381,6 @@ async fn scheduler_reclaim_keeps_checkpointed_sessions_isolated_across_resumes()
             override_selection: None,
             timeout_ms: None,
             priority: None,
-            run_id: Some("run-a-initial".to_string()),
         })
         .await
         .expect("run first keep-alive session");
@@ -425,7 +417,6 @@ async fn scheduler_reclaim_keeps_checkpointed_sessions_isolated_across_resumes()
             override_selection: None,
             timeout_ms: None,
             priority: None,
-            run_id: Some("run-b-initial".to_string()),
         })
         .await
         .expect("run second keep-alive session under reclaim pressure");
@@ -474,7 +465,6 @@ async fn scheduler_reclaim_keeps_checkpointed_sessions_isolated_across_resumes()
             override_selection: None,
             timeout_ms: None,
             priority: None,
-            run_id: Some("run-a-resume".to_string()),
         })
         .await
         .expect("resume first session after scheduler reclaim");
@@ -542,7 +532,6 @@ async fn scheduler_reclaim_keeps_checkpointed_sessions_isolated_across_resumes()
             override_selection: None,
             timeout_ms: None,
             priority: None,
-            run_id: Some("run-b-resume".to_string()),
         })
         .await
         .expect("resume second session after reclaiming the first");

@@ -1,3 +1,4 @@
+use crate::WorkflowRunId;
 use crate::graph::{
     ConnectionCandidatesResponse, ConnectionCommitResponse, EdgeInsertionPreviewResponse,
     InsertNodeConnectionResponse, InsertNodeOnEdgeResponse, WorkflowFile, WorkflowGraph,
@@ -226,6 +227,16 @@ impl WorkflowService {
         self.graph_session_store
             .mark_running(session_id, workflow_run_id)
             .await
+    }
+
+    pub async fn workflow_graph_begin_edit_session_run(
+        &self,
+        session_id: &str,
+    ) -> Result<String, WorkflowServiceError> {
+        let workflow_run_id = WorkflowRunId::generate().to_string();
+        self.workflow_graph_mark_edit_session_running(session_id, &workflow_run_id)
+            .await?;
+        Ok(workflow_run_id)
     }
 
     pub async fn workflow_graph_mark_edit_session_finished(

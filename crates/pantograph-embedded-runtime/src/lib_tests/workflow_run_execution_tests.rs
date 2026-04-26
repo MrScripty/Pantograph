@@ -22,7 +22,6 @@ async fn run_workflow_through_scheduler(
             override_selection: None,
             timeout_ms: None,
             priority: None,
-            run_id: None,
         })
         .await
 }
@@ -92,7 +91,6 @@ async fn test_runtime_run_and_session_execution() {
             override_selection: None,
             timeout_ms: None,
             priority: None,
-            run_id: Some("run-2".to_string()),
         })
         .await
         .expect("run session");
@@ -212,7 +210,6 @@ async fn workflow_run_execution_session_returns_invalid_request_for_human_input_
             override_selection: None,
             timeout_ms: None,
             priority: None,
-            run_id: Some("run-human-input-session".to_string()),
         })
         .await
         .expect_err(

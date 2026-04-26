@@ -2,12 +2,13 @@ use std::sync::Arc;
 
 use node_engine::{CoreTaskExecutor, EventSink, WorkflowExecutor};
 use pantograph_workflow_service::{
-    convert_graph_to_node_engine, WorkflowGraph, WorkflowTraceRuntimeMetrics,
+    WorkflowGraph, WorkflowTraceRuntimeMetrics, convert_graph_to_node_engine,
 };
 
 use crate::{
+    EmbeddedRuntime, HostRuntimeModeSnapshot, RuntimeExtensionsSnapshot,
     apply_runtime_extensions_for_execution, embedding_workflow, runtime_registry, task_executor,
-    workflow_runtime, EmbeddedRuntime, HostRuntimeModeSnapshot, RuntimeExtensionsSnapshot,
+    workflow_runtime,
 };
 
 #[derive(Debug, Clone)]
@@ -23,6 +24,7 @@ impl EmbeddedRuntime {
     pub async fn execute_edit_session_graph(
         &self,
         session_id: &str,
+        workflow_run_id: &str,
         session_graph: &WorkflowGraph,
         embedding_request: inference::EmbeddingStartRequest,
         event_sink: Arc<dyn EventSink>,
@@ -44,7 +46,7 @@ impl EmbeddedRuntime {
                 .with_project_root(self.config.project_root.clone())
                 .with_gateway(self.gateway.clone())
                 .with_event_sink(event_sink.clone())
-                .with_execution_id(session_id.to_string()),
+                .with_execution_id(workflow_run_id.to_string()),
         );
         let host = Arc::new(task_executor::TauriTaskExecutor::with_python_runtime(
             self.rag_backend.clone(),
@@ -70,7 +72,7 @@ impl EmbeddedRuntime {
         let python_runtime_execution_recorder =
             Arc::new(task_executor::PythonRuntimeExecutionRecorder::default());
         let mut executor = WorkflowExecutor::new(
-            session_id,
+            workflow_run_id,
             convert_graph_to_node_engine(session_graph),
             event_sink.clone(),
         );
@@ -78,7 +80,7 @@ impl EmbeddedRuntime {
             &mut executor,
             &runtime_ext,
             Some(event_sink.clone()),
-            Some(session_id.to_string()),
+            Some(workflow_run_id.to_string()),
             Some(python_runtime_execution_recorder.clone()),
         );
         executor.set_event_sink(event_sink.clone());
@@ -87,14 +89,14 @@ impl EmbeddedRuntime {
             .map_err(|error| error.to_string())?;
 
         self.workflow_service
-            .workflow_graph_mark_edit_session_running(session_id)
+            .workflow_graph_mark_edit_session_running(session_id, workflow_run_id)
             .await
             .map_err(|error| error.to_envelope_json())?;
 
         let _ = event_sink.send(
             node_engine::WorkflowEvent::WorkflowStarted {
                 workflow_id: session_id.to_string(),
-                execution_id: session_id.to_string(),
+                execution_id: workflow_run_id.to_string(),
                 occurred_at_ms: None,
             }
             .now(),
@@ -139,7 +141,7 @@ impl EmbeddedRuntime {
             let _ = event_sink.send(
                 node_engine::WorkflowEvent::WorkflowCompleted {
                     workflow_id: session_id.to_string(),
-                    execution_id: session_id.to_string(),
+                    execution_id: workflow_run_id.to_string(),
                     occurred_at_ms: None,
                 }
                 .now(),
@@ -149,14 +151,14 @@ impl EmbeddedRuntime {
                 node_engine::NodeEngineError::Cancelled => {
                     node_engine::WorkflowEvent::WorkflowCancelled {
                         workflow_id: session_id.to_string(),
-                        execution_id: session_id.to_string(),
+                        execution_id: workflow_run_id.to_string(),
                         error: error.to_string(),
                         occurred_at_ms: None,
                     }
                 }
                 _ => node_engine::WorkflowEvent::WorkflowFailed {
                     workflow_id: session_id.to_string(),
-                    execution_id: session_id.to_string(),
+                    execution_id: workflow_run_id.to_string(),
                     error: error.to_string(),
                     occurred_at_ms: None,
                 },

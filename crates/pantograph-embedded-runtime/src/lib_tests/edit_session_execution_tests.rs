@@ -83,6 +83,7 @@ async fn execute_edit_session_graph_reconciles_registry_after_restore() {
     let outcome = runtime
         .execute_edit_session_graph(
             &session.session_id,
+            "run-test",
             &graph,
             inference::EmbeddingStartRequest {
                 gguf_model_path: Some(embedding_model_path),
@@ -195,6 +196,7 @@ async fn execute_edit_session_graph_restore_keeps_scheduler_runtime_registry_dia
     let outcome = runtime
         .execute_edit_session_graph(
             &edit_session.session_id,
+            "run-test",
             &graph,
             inference::EmbeddingStartRequest {
                 gguf_model_path: Some(embedding_model_path),
@@ -245,7 +247,7 @@ async fn execute_edit_session_graph_restore_keeps_scheduler_runtime_registry_dia
             usage_profile: Some("interactive".to_string()),
             keep_alive: false,
             runtime_loaded: false,
-            next_admission_queue_id: Some("queue-after-restore".to_string()),
+            next_admission_workflow_run_id: Some("queue-after-restore".to_string()),
             reclaim_candidates: vec![WorkflowExecutionSessionRuntimeUnloadCandidate {
                 session_id: loaded.session_id.clone(),
                 workflow_id: "runtime-text".to_string(),
@@ -367,6 +369,7 @@ async fn execute_edit_session_graph_reconciles_registry_after_embedding_prepare(
     let outcome = runtime
         .execute_edit_session_graph(
             &session.session_id,
+            "run-test",
             &graph,
             inference::EmbeddingStartRequest {
                 gguf_model_path: Some(embedding_model_path),
@@ -477,6 +480,7 @@ async fn execute_edit_session_graph_reconciles_registry_after_failed_restore() {
     let outcome = runtime
         .execute_edit_session_graph(
             &session.session_id,
+            "run-test",
             &graph,
             inference::EmbeddingStartRequest {
                 gguf_model_path: Some(embedding_model_path),
@@ -544,6 +548,7 @@ async fn execute_edit_session_graph_reports_all_python_runtime_ids_in_trace_metr
     let outcome = runtime
         .execute_edit_session_graph(
             &session.session_id,
+            "run-test",
             &graph,
             inference::EmbeddingStartRequest::default(),
             Arc::new(node_engine::NullEventSink),
@@ -618,6 +623,7 @@ async fn execute_edit_session_graph_waiting_for_input_does_not_emit_workflow_fai
     let outcome = runtime
         .execute_edit_session_graph(
             &session.session_id,
+            "run-test",
             &graph,
             inference::EmbeddingStartRequest::default(),
             event_sink.clone(),
@@ -631,15 +637,25 @@ async fn execute_edit_session_graph_waiting_for_input_does_not_emit_workflow_fai
     let events = event_sink.events();
     assert!(events.iter().any(|event| matches!(
         event,
+        node_engine::WorkflowEvent::WorkflowStarted { execution_id, .. }
+            if execution_id == "run-test"
+    )));
+    assert!(events.iter().any(|event| matches!(
+        event,
         node_engine::WorkflowEvent::WaitingForInput {
+            execution_id,
             task_id,
             prompt: Some(prompt),
             ..
-        } if task_id == "approval" && prompt == "Approve deployment?"
+        } if execution_id == "run-test"
+            && task_id == "approval"
+            && prompt == "Approve deployment?"
     )));
-    assert!(!events
-        .iter()
-        .any(|event| matches!(event, node_engine::WorkflowEvent::WorkflowFailed { .. })));
+    assert!(
+        !events
+            .iter()
+            .any(|event| matches!(event, node_engine::WorkflowEvent::WorkflowFailed { .. }))
+    );
     assert!(!events.iter().any(|event| matches!(
         event,
         node_engine::WorkflowEvent::WorkflowCompleted { .. }
