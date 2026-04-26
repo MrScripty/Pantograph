@@ -21,6 +21,7 @@ owner of that policy itself.
 | `event_adapter.rs` | Stable facade that bridges `node-engine` workflow events onto Tauri channels. |
 | `event_adapter/` | Focused translation and diagnostics-bridge helpers behind the stable event-adapter facade. |
 | `event_adapter/tests/` | Focused adapter regression tests split by translation/projection, channel transport, and executor integration behavior. |
+| `event_serialization.rs` | Workflow event envelope serialization and backend-authored ownership projection for Tauri channel payloads. |
 | `workflow_edit_session.rs` | Backend-owned workflow edit-session graph operations surfaced through thin Tauri wrappers. |
 | `types.rs` | Legacy Rust DTO mirrors retained during migration; core DTOs are the source of truth for new editing surfaces. |
 | `model_dependencies.rs` | Dependency preflight, binding resolution, and runtime-environment selection for Python-backed models. |
@@ -87,6 +88,9 @@ regressions no longer accumulate in one large root test module.
 Workflow event construction should stay with backend event translation or active
 diagnostics snapshot emitters; `events.rs` should not grow unused convenience
 constructors that bypass those owners.
+Workflow event serialization and ownership projection now live in
+`event_serialization.rs`, keeping `events.rs` focused on DTO definitions and
+snapshot factory helpers.
 `workflow_execution_tauri_commands.rs` now owns the Tauri-facing execution
 entrypoints, while `workflow_execution_commands.rs` remains a thin command-
 group facade over `workflow_execution_runtime.rs` and `workflow_edit_session.rs`
@@ -167,6 +171,9 @@ service crate, which is the active owner for save/load/list behavior.
 - Workflow-event serialization must include backend-authored ownership context
   for execution-scoped events so GUI reducers do not infer event execution ids
   from raw payload fields first.
+- Workflow-event serialization and ownership projection stay in
+  `event_serialization.rs`; `events.rs` remains the DTO and constructor
+  boundary.
 - Session-scoped candidate and insert commands must log enough request/rejection
   context to diagnose release-only interaction failures without relying on
   browser-console access.

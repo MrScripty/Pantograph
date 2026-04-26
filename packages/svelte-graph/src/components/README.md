@@ -11,6 +11,8 @@ shared node presentation rules live outside the Pantograph app shell.
 | ----------- | ----------- |
 | `WorkflowGraph.svelte` | Main graph canvas that owns connect/reconnect flows, candidate loading, revision-aware edge commits, and the drag-time horseshoe insert flow. |
 | `WorkflowGraph.css` | Package graph canvas and SvelteFlow chrome styling imported by `WorkflowGraph.svelte`. |
+| `WorkflowToolbar.svelte` | Graph toolbar shell for workflow save/new/clear controls and status badges. |
+| `WorkflowRunButton.svelte` | Scheduler-backed run button, workflow-event subscription, active-run ownership, and run cleanup lifecycle. |
 | `workflowGraphBackendActions.ts` | Owns package-local backend mutation calls, connection-intent loading, reconnect rollback, and accepted graph-sync projection used by `WorkflowGraph.svelte`. |
 | `../workflowConnectionInteraction.ts` | Owns connection drag reset and connect-end preservation decisions. |
 | `../workflowConnectionInteraction.test.ts` | Unit coverage for connection interaction reset and connect-end preservation. |
@@ -95,16 +97,15 @@ Palette-driven HTML drag sessions now emit explicit start/end signals so the
 graph can disable pan, drag, selection, and reconnect behavior until the
 external drag completes. Selection persistence also moved into the shared store
 contract so backend graph snapshots reapply the current selected-node ids
-instead of dropping selection metadata on every sync. Toolbar event consumers
-now claim execution ownership from the first execution-scoped workflow event
-instead of pre-pinning to the edit-session id, so session-backed runs keep
-accepting valid scheduler/runtime or incremental events until the backend
-publishes the real run id and stale events from older runs still stop at the
-execution-id boundary. `WorkflowToolbar.svelte` now delegates backend
-workflow-event reduction to the focused store helper in
-`stores/workflowExecutionEvents.ts`, keeping the component responsible for
-subscription and run-lifecycle orchestration instead of full event-to-store
-mapping.
+instead of dropping selection metadata on every sync. Toolbar run controls now
+claim execution ownership from the first execution-scoped workflow event instead
+of pre-pinning to the edit-session id, so session-backed runs keep accepting
+valid scheduler/runtime or incremental events until the backend publishes the
+real run id and stale events from older runs still stop at the execution-id
+boundary. `WorkflowRunButton.svelte` delegates backend workflow-event reduction
+to the focused store helper in `stores/workflowExecutionEvents.ts`, keeping
+`WorkflowToolbar.svelte` responsible for toolbar composition rather than
+run-lifecycle orchestration.
 Minimap color projection lives in `workflowMiniMap.ts` so category-to-color
 mapping stays testable outside the SvelteFlow component.
 Store-to-SvelteFlow synchronization decisions live in `workflowGraphSync.ts`,
@@ -200,9 +201,11 @@ threshold while preserving the same package-owned visual contract.
 - `workflowGraphBackendActions.ts` must keep package graph backend mutation
   calls and response projection aligned with the reusable `WorkflowBackend`
   contract instead of reintroducing app-local service coupling.
-- `WorkflowToolbar.svelte` must keep execution-banner state that is rendered in
-  the template on Svelte runes-backed reactive state so workflow events can
-  switch between running and waiting-for-input labels without a manual refresh.
+- `WorkflowRunButton.svelte` must keep execution state rendered in its template
+  on Svelte runes-backed reactive state so workflow events can switch between
+  running and waiting-for-input labels without a manual refresh.
+- `WorkflowToolbar.svelte` must remain a composition shell for graph-level
+  toolbar controls and status badges.
 - `WorkflowGraph.svelte` may keep the canvas container focusable for keyboard
   graph commands, but the reviewed Svelte a11y suppression set must explicitly
   cover the noninteractive-tabindex warning that comes with that container.
@@ -265,9 +268,9 @@ threshold while preserving the same package-owned visual contract.
   selection, or reconnect gestures.
 - Store-backed graph rematerialization must preserve the selected node ids that
   the consumer last acknowledged through selection change events.
-- Session-owned execution UI must claim the active run from the first workflow
-  event that carries a non-empty `execution_id`, then ignore later events that
-  either omit `execution_id` or no longer match that run.
+- Session-owned execution UI must claim the active run from backend-authored
+  event ownership or the first workflow event that carries a non-empty
+  `workflow_run_id`, then ignore later events that no longer match that run.
 - Session-owned execution UI must treat backend-owned `WaitingForInput`,
   `IncrementalExecutionStarted`, `GraphModified`, and `Cancelled` events as
   execution-state updates rather than leaving those contracts unobserved in the

@@ -1,0 +1,149 @@
+# crates/pantograph-diagnostics-ledger/src
+
+Durable diagnostics ledger contracts and SQLite-backed persistence for
+workflow runtime usage, timing observations, and workflow run summaries.
+
+## Purpose
+
+This directory owns diagnostics records that must survive process restarts.
+The boundary exists so runtime producers, workflow trace code, and GUI
+diagnostics projections can depend on one persistence contract instead of
+writing ad hoc SQLite tables or keeping history in frontend memory.
+
+## Contents
+
+| File/Folder | Description |
+| ----------- | ----------- |
+| `lib.rs` | Crate facade and public exports for diagnostics records, repositories, timing expectations, and SQLite storage. |
+| `records.rs` | Model/license usage event records, query contracts, retention policy, lineage, and projection DTOs. |
+| `timing.rs` | Workflow timing observation, timing expectation, and workflow run-summary contracts. |
+| `repository.rs` | Host-facing diagnostics ledger repository trait. |
+| `schema.rs` | SQLite schema version constants and migration ownership. |
+| `sqlite.rs` and `sqlite/` | SQLite repository implementation split by model usage, timing, and run-summary persistence behavior. |
+| `tests.rs` | Crate-level persistence, query, pruning, and migration regression tests. |
+
+## Problem
+
+Workflow diagnostics need durable history for timing comparisons and
+restart-visible run summaries, while model/runtime usage diagnostics need an
+auditable ledger. If these records are owned by transient trace stores or UI
+state, the GUI loses previous workflow timing and runtime history after restart.
+
+## Constraints
+
+- Persisted records must use backend-owned identifiers, especially
+  `workflow_id` and `workflow_run_id`.
+- SQLite schema changes must be explicit and tested because user workspaces
+  keep this database between application runs.
+- Query contracts must remain deterministic so diagnostics views can compare
+  current runs against prior observations.
+- Retention/pruning must be caller-driven and auditable.
+
+## Decision
+
+Keep durable diagnostics contracts in this crate and expose
+`SqliteDiagnosticsLedger` as the concrete persistence owner. Workflow timing
+history and run summaries use `workflow_run_id` for one submitted execution and
+`workflow_id` for cross-run comparisons. Runtime and workflow services may
+write observations and summaries, but they do not own the schema or query
+semantics.
+
+## Alternatives Rejected
+
+- Store timing history only in the frontend.
+  Rejected because workflow history must be visible after GUI restart.
+- Keep workflow run summaries in the transient trace store.
+  Rejected because trace retention is process-local and not sufficient for
+  restart-visible diagnostics.
+- Let each producer create its own SQLite tables.
+  Rejected because schema ownership, migrations, and retention would drift.
+
+## Invariants
+
+- `workflow_run_id` identifies one workflow execution in timing observations
+  and run summaries.
+- `workflow_id` is the stable workflow grouping key for comparable timing
+  history.
+- Schema migrations are forward-only and covered by repository tests.
+- Query results must not require frontend-side identity repair or workflow-name
+  side channels.
+- Pruning commands return explicit counts so callers can audit data removal.
+
+## Revisit Triggers
+
+- Diagnostics storage moves from local SQLite to a shared service.
+- Run-summary records need to include additional scheduler/runtime lifecycle
+  phases beyond the current status and timing facts.
+- Timing comparison policy needs configurable percentile or window selection.
+
+## Dependencies
+
+### Internal
+
+- `pantograph-runtime-attribution` for canonical workflow and run id value
+  semantics used by producers.
+
+### External
+
+- `rusqlite` for the local durable store.
+- `serde` for persisted/query DTO projection.
+- `thiserror` for repository error contracts.
+
+## Related ADRs
+
+- `docs/adr/ADR-012-canonical-workflow-run-identity.md` - Canonical workflow
+  run identity across scheduler, runtime, traces, and diagnostics history.
+
+## Usage Examples
+
+```rust
+use pantograph_diagnostics_ledger::{
+    SqliteDiagnosticsLedger, WorkflowRunSummaryQuery,
+};
+
+let ledger = SqliteDiagnosticsLedger::open(path)?;
+let history = ledger.query_workflow_run_summaries(&WorkflowRunSummaryQuery {
+    workflow_id: Some("workflow-1".to_string()),
+    workflow_run_id: None,
+    limit: Some(10),
+})?;
+```
+
+## API Consumer Contract
+
+- Inputs: repository methods accept strongly named query/record structs; blank
+  ids are rejected by callers before persistence where applicable.
+- Outputs: query responses preserve backend field names and deterministic
+  ordering for diagnostics projection.
+- Lifecycle: callers open one ledger for a workspace database and reuse it
+  through workflow/runtime services.
+- Errors: repository failures return `DiagnosticsLedgerError` without hiding
+  SQLite migration or query failures.
+- Versioning: schema changes require migration code, tests, and README updates.
+
+## Structured Producer Contract
+
+- Stable fields: `workflow_id`, `workflow_run_id`, timing status, timing
+  durations, usage-event identity, model identity, and lineage facts are
+  machine-consumed by diagnostics projections.
+- Defaults: omitted optional filters mean unfiltered queries within the
+  caller-provided limit.
+- Enums and labels: timing statuses, run-summary statuses, and usage statuses
+  are persisted semantic labels.
+- Ordering: timing and run-summary queries return most-recent compatible
+  records first unless a narrower query defines otherwise.
+- Compatibility: old incompatible identity records may be ignored when a plan
+  intentionally changes the schema contract.
+- Regeneration/migration: schema version bumps must include migration tests and
+  update the SQLite module README when table ownership changes.
+
+## Testing
+
+```bash
+cargo test -p pantograph-diagnostics-ledger
+```
+
+## Notes
+
+- `src/sqlite/README.md` documents the split inside the SQLite implementation
+  modules.

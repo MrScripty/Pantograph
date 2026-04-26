@@ -1,4 +1,9 @@
 use super::*;
+use crate::workflow::WorkflowExecutionSessionRunRequest;
+
+use super::super::policy::{
+    WorkflowExecutionSessionAdmissionRuntimePosture, WorkflowExecutionSessionWarmCompatibility,
+};
 
 fn empty_run_request() -> WorkflowExecutionSessionRunRequest {
     WorkflowExecutionSessionRunRequest {

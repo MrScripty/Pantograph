@@ -109,8 +109,8 @@ use crate::workflow::event_adapter::TauriEventAdapter;
   `IncrementalExecutionStarted` events must preserve execution ownership and
   their additive payload fields when translated into the app-facing workflow
   event DTOs and diagnostics snapshots.
-- Diagnostics snapshots emitted here must preserve backend-owned execution ids
-  and backend trace timing when present.
-- `WorkflowDiagnosticsProjection.context.source_execution_id` and
-  `relevant_execution_id` must be set from the translated backend execution id
-  when this bridge emits a paired diagnostics snapshot.
+- Diagnostics snapshots emitted here must preserve backend-owned workflow run
+  ids and backend trace timing when present.
+- `WorkflowDiagnosticsProjection.context.source_workflow_run_id` and
+  `relevant_workflow_run_id` must be set from the translated backend workflow
+  run id when this bridge emits a paired diagnostics snapshot.

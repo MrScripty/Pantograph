@@ -13,7 +13,8 @@ by `WorkflowService` so adapters do not become queue-policy owners.
 | `contracts.rs` | Scheduler request/response DTOs, queue item contracts, keep-alive/unload semantics, and stale-cleanup worker types. |
 | `policy.rs` | Explicit scheduler ordering policy objects, internal admission-input/decision models, and stable decision vocabulary for queue placement and admission. |
 | `policy_tests.rs` | Scheduler priority, FIFO, starvation-protection, warm-reuse bypass, runtime-capacity, and admission-wait tests extracted from the production policy module. |
-| `store.rs` | In-memory scheduler state, queue ordering, canonical admission-input construction, runtime-unload candidate selection inputs, and stale-cleanup candidate logic. |
+| `store.rs` | In-memory scheduler session records, runtime-load state, runtime-unload candidate selection inputs, and stale-cleanup candidate logic. |
+| `store_queue.rs` | Queue listing, enqueue/cancel/reprioritize, admission-input construction, queued-run admission, and active-run finish transitions. |
 | `store_admission.rs` | Scheduler store admission ETA projection helper used by queue diagnostics. |
 | `store_diagnostics.rs` | Scheduler snapshot diagnostics and runtime-diagnostics request projection helpers extracted from the store. |
 | `store_tests.rs` | Scheduler store admission-input and warm-session compatibility tests extracted from the production store module. |
@@ -36,7 +37,10 @@ future fairness, affinity, and diagnostics policy.
 ## Decision
 Create a focused `scheduler/` boundary inside `pantograph-workflow-service`.
 `contracts.rs` freezes the workflow-facing scheduler DTOs, while `store.rs`
-owns the in-memory queue and session state that `WorkflowService` delegates to.
+owns in-memory session state that `WorkflowService` delegates to.
+`store_queue.rs` owns queue/run mutation and canonical admission-input
+construction so run-id ownership and queue policy do not keep growing the
+general session store.
 `policy.rs` makes the current priority/FIFO queue behavior explicit and now
 also owns the first starvation-protection promotion rule plus the first
 runtime-affinity unload-ranking rule instead of leaving that behavior as ad hoc
@@ -102,6 +106,9 @@ needs to be the long-term home for scheduler contracts or queue mutation logic.
 - Scheduler store admission ETA projection stays in `store_admission.rs` so
   queue diagnostics timing helpers do not keep `store.rs` above the
   decomposition threshold.
+- Scheduler queue mutation, admission-input construction, and active-run finish
+  transitions stay in `store_queue.rs` so canonical `workflow_run_id`
+  lifecycle ownership is isolated from runtime-load and stale-cleanup state.
 - Scheduler snapshot diagnostics and runtime-diagnostics request shaping stay
   in `store_diagnostics.rs` so read-side scheduler projection does not keep
   `store.rs` above the large-file threshold.

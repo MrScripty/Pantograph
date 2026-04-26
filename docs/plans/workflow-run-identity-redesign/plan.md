@@ -655,27 +655,27 @@ documentation, frontend, Rust API, and testing standards after the identity
 model is implemented.
 
 **Tasks:**
-- [ ] Complete a decomposition review for each touched file over the standards
+- [x] Complete a decomposition review for each touched file over the standards
   thresholds and split modules/components where the refactor added
   responsibility.
-- [ ] Split or narrow `scheduler/store.rs` so run-id ownership, admission
+- [x] Split or narrow `scheduler/store.rs` so run-id ownership, admission
   decisions, queue storage, and diagnostics projection do not remain one broad
   responsibility.
-- [ ] Split or narrow `src-tauri/src/workflow/events.rs` if run identity DTOs
+- [x] Split or narrow `src-tauri/src/workflow/events.rs` if run identity DTOs
   or conversions grow the file further.
-- [ ] Decompose `WorkflowToolbar.svelte` or extract run/diagnostics controls
+- [x] Decompose `WorkflowToolbar.svelte` or extract run/diagnostics controls
   when Milestone 6 edits touch that component.
-- [ ] Extract focused helpers from `WorkflowService.ts` if new run identity
+- [x] Extract focused helpers from `WorkflowService.ts` if new run identity
   transport logic would push it beyond the file-size target or keep it as a
   broad mixed service.
-- [ ] Add `crates/pantograph-diagnostics-ledger/src/README.md` with required
+- [x] Add `crates/pantograph-diagnostics-ledger/src/README.md` with required
   purpose, contract, persistence, migration, and structured producer sections.
-- [ ] Re-run source searches for stale `workflow_name`, ambiguous public
+- [x] Re-run source searches for stale `workflow_name`, ambiguous public
   `execution_id`, and `session_id` assigned as run identity.
-- [ ] Audit collateral-damage findings above and verify each affected surface
+- [x] Audit collateral-damage findings above and verify each affected surface
   is either updated for `workflow_run_id`, explicitly left as edit-session
   identity, or documented as historical-only.
-- [ ] Update module READMEs and ADR links for every touched source directory.
+- [x] Update module READMEs and ADR links for every touched source directory.
 
 **Verification:**
 - `git diff --check`
@@ -686,7 +686,48 @@ model is implemented.
 - Relevant Rust and frontend tests from prior milestones still pass after
   refactors.
 
-**Status:** Not started.
+**Status:** Completed.
+
+**Notes:**
+- Split scheduler queue/run lifecycle and admission-input construction from
+  `scheduler/store.rs` into `scheduler/store_queue.rs`; `store.rs` now keeps
+  session/runtime/stale-cleanup state and is below the large-file threshold.
+- Split Tauri workflow-event serialization and ownership projection from
+  `events.rs` into `event_serialization.rs`; `events.rs` now remains focused
+  on event DTOs and snapshot factory helpers.
+- Extracted scheduler-backed run submission and workflow-event subscription
+  cleanup from `WorkflowToolbar.svelte` into `WorkflowRunButton.svelte`.
+- Added the required source-root README for
+  `crates/pantograph-diagnostics-ledger/src/` and updated module READMEs for
+  scheduler, Tauri workflow events, event adapter diagnostics context, and
+  graph toolbar components.
+- `WorkflowService.ts` remains below the generic file-size threshold after the
+  earlier run identity changes. The M8 review did not add a new helper because
+  the new identity behavior already uses `WorkflowGraphMutationService`,
+  `workflowConnectionActions.ts`, and package-level ownership projection
+  helpers; adding another wrapper would not reduce current coupling.
+- Guardrail search remaining matches are documented allowlists: workflow save
+  display names outside diagnostics, old-schema diagnostics-ledger migration
+  fixtures, engine/edit-session `execution_id` tests, and local scheduler
+  `queue_id` variables that compare against canonical `workflow_run_id`.
+
+**Verification Results:**
+- `cargo test -p pantograph-workflow-service`
+- `cargo test -p pantograph-diagnostics-ledger`
+- `cargo check --manifest-path src-tauri/Cargo.toml`
+- `cargo test --manifest-path src-tauri/Cargo.toml workflow::event_adapter`
+- `npm run typecheck`
+- `npm run test:frontend`
+- `git diff --check`
+- File-size/decomposition review:
+  - `scheduler/store.rs`: 446 lines after split.
+  - `scheduler/store_queue.rs`: 464 lines after split.
+  - `src-tauri/src/workflow/events.rs`: 358 lines after split.
+  - `src-tauri/src/workflow/event_serialization.rs`: 318 lines.
+  - `WorkflowToolbar.svelte`: 174 lines after run-button extraction.
+  - `WorkflowRunButton.svelte`: 132 lines.
+  - `WorkflowService.ts`: 486 lines, reviewed and left without new extraction
+    because this milestone did not add responsibility there.
 
 ### Milestone 9: Release Verification
 
@@ -746,6 +787,10 @@ model is implemented.
   caller-authored `run_id`, HTTP adapter and native binding projections expose
   canonical workflow run ids, and active module READMEs document the binding
   boundary.
+- 2026-04-26: Milestone 8 completed. Standards pass split scheduler queue
+  lifecycle, Tauri event serialization, and graph run-button logic into focused
+  files; added the diagnostics-ledger source README and updated touched module
+  READMEs.
 - Current known unrelated dirty files must remain untouched unless the user
   explicitly assigns them to this work:
   - `.pantograph/workflows/tiny-sd-turbo-diffusion.json`
@@ -820,6 +865,7 @@ owned serially by the integration implementer.
 - Milestone 5: Update Tauri Diagnostics Projection.
 - Milestone 6: Update Frontend Contracts And Rendering.
 - Milestone 7: Binding And Public API Guardrails.
+- Milestone 8: Standards Compliance Refactor.
 
 ### Deviations
 
@@ -878,6 +924,15 @@ owned serially by the integration implementer.
   - Guardrail source search for stale public `run_id`, diagnostics
     `workflow_name`, binding-facing `executionId`, and session-id-as-run-id
     patterns.
+- Milestone 8 standards compliance refactor:
+  - `cargo test -p pantograph-workflow-service`
+  - `cargo test -p pantograph-diagnostics-ledger`
+  - `cargo check --manifest-path src-tauri/Cargo.toml`
+  - `cargo test --manifest-path src-tauri/Cargo.toml workflow::event_adapter`
+  - `npm run typecheck`
+  - `npm run test:frontend`
+  - `git diff --check`
+  - File-size/decomposition review and identity guardrail source search.
 
 ### Traceability Links
 
