@@ -139,17 +139,17 @@ refactoring.
 owners.
 
 **Tasks:**
-- [ ] Extract backend mutation dispatch and stale-session result handling.
-- [ ] Extract node execution-state ownership.
-- [ ] Extract group mutation actions.
-- [ ] Preserve the existing `WorkflowStores` public facade.
-- [ ] Update `packages/svelte-graph/src/stores/README.md`.
+- [x] Extract backend mutation dispatch and stale-session result handling.
+- [x] Extract node execution-state ownership.
+- [x] Extract group mutation actions.
+- [x] Preserve the existing `WorkflowStores` public facade.
+- [x] Update `packages/svelte-graph/src/stores/README.md`.
 
 **Verification:**
 - `node --experimental-strip-types --test packages/svelte-graph/src/stores/createWorkflowStores.test.ts`
 - `npm run typecheck`
 
-**Status:** Not started.
+**Status:** Complete.
 
 ### Milestone 3: Shared Backend Action Boundary
 
@@ -257,6 +257,13 @@ traceable deferrals.
   and must remain untouched.
 - 2026-04-26: Milestone 1 completed. Baseline `npm run test:frontend` and
   `npm run typecheck` passed before implementation refactors.
+- 2026-04-26: Milestone 2 started. The first slice extracts backend mutation
+  dispatch and stale-session result handling while preserving the existing
+  `WorkflowStores` public facade.
+- 2026-04-26: Milestone 2 completed. `createWorkflowStores.ts` now delegates
+  active-session mutation dispatch, node execution-state overlays, and
+  backend-backed group actions to focused store helpers while preserving the
+  public `WorkflowStores` facade. Focused store test and typecheck passed.
 
 ## Commit Cadence Notes
 

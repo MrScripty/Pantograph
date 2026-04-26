@@ -22,10 +22,13 @@ import { applyWorkflowGraphMutationResponse } from './workflowGraphMutationRespo
 import type { WorkflowGraphMutationResponse } from '../types/workflow.js';
 import {
   extractWorkflowNodeGroups,
-  findWorkflowGroupContainingNodeIds,
   getWorkflowConnectedNodes,
   getWorkflowNodesBounds,
 } from './workflowStoreGraphQueries.ts';
+import { createWorkflowExecutionState } from './workflowExecutionState.ts';
+import { createWorkflowGroupActions } from './workflowGroupActions.ts';
+import { createWorkflowMutationDispatch } from './workflowMutationDispatch.ts';
+import type { WorkflowGraphMutationResult } from './workflowMutationDispatch.ts';
 import { createWorkflowStoreGraphState } from './workflowStoreGraphState.ts';
 import { edgeToGraphEdge } from '../workflowConnections.ts';
 
@@ -42,15 +45,10 @@ interface InferenceParamSchema {
   };
 }
 
-export type WorkflowGraphMutationResultStatus = 'applied' | 'failed' | 'skipped' | 'stale';
-
-export interface WorkflowGraphMutationResult {
-  action: string;
-  error?: unknown;
-  response?: WorkflowGraphMutationResponse;
-  sessionId: string | null;
-  status: WorkflowGraphMutationResultStatus;
-}
+export type {
+  WorkflowGraphMutationResult,
+  WorkflowGraphMutationResultStatus,
+} from './workflowMutationDispatch.ts';
 
 interface SyncEdgesFromBackendOptions {
   markDirty?: boolean;
@@ -155,18 +153,25 @@ export function createWorkflowStores(
   const isDirty = writable<boolean>(false);
   const isExecuting = writable<boolean>(false);
   const isEditing = writable<boolean>(true);
-  const nodeExecutionStates = writable<Map<string, NodeExecutionInfo>>(new Map());
   const currentViewport = writable<ViewportState>({ x: 0, y: 0, zoom: 1 });
   const nodeGroups = writable<Map<string, NodeGroup>>(new Map());
   const selectedNodeIds = writable<string[]>([]);
   const connectionIntent = writable<ConnectionIntentState | null>(null);
-  let activeSessionId: string | null = null;
 
   const graphState = createWorkflowStoreGraphState({
     nodeDefinitions,
     selectedNodeIds,
   });
   const { nodes, edges, workflowGraph } = graphState;
+  const executionState = createWorkflowExecutionState({
+    clearRuntimeOverlays: graphState.clearRuntimeOverlays,
+  });
+  const {
+    getNodeExecutionInfo,
+    nodeExecutionStates,
+    resetExecutionStates,
+    setNodeExecutionState,
+  } = executionState;
 
   // --- Derived stores ---
   const nodeDefinitionsByCategory = derived(nodeDefinitions, ($defs) => {
@@ -178,14 +183,6 @@ export function createWorkflowStores(
     }
     return grouped;
   });
-
-  function setActiveSessionId(sessionId: string | null) {
-    activeSessionId = sessionId;
-  }
-
-  function isActiveSession(sessionId: string): boolean {
-    return activeSessionId === sessionId;
-  }
 
   function applyWorkflowGraph(
     graph: WorkflowGraph,
@@ -207,7 +204,7 @@ export function createWorkflowStores(
     sessionId: string,
     response: WorkflowGraphMutationResponse,
   ): boolean {
-    if (!isActiveSession(sessionId)) {
+    if (!mutationDispatch.isActiveSession(sessionId)) {
       return false;
     }
 
@@ -218,32 +215,10 @@ export function createWorkflowStores(
     return true;
   }
 
-  async function syncGraphMutationFromBackend(
-    action: string,
-    mutate: (sessionId: string) => Promise<WorkflowGraphMutationResponse>,
-  ): Promise<WorkflowGraphMutationResult> {
-    if (!activeSessionId) {
-      console.warn(`[workflowStores] Ignoring ${action} without an active session`);
-      return { action, sessionId: null, status: 'skipped' };
-    }
-
-    const requestSessionId = activeSessionId;
-
-    try {
-      const response = await mutate(requestSessionId);
-      if (!applyBackendMutationResponse(requestSessionId, response)) {
-        return { action, response, sessionId: requestSessionId, status: 'stale' };
-      }
-      return { action, response, sessionId: requestSessionId, status: 'applied' };
-    } catch (error) {
-      if (!isActiveSession(requestSessionId)) {
-        return { action, error, sessionId: requestSessionId, status: 'stale' };
-      }
-
-        console.error(`[workflowStores] Failed to ${action}:`, error);
-      return { action, error, sessionId: requestSessionId, status: 'failed' };
-    }
-  }
+  const mutationDispatch = createWorkflowMutationDispatch({
+    applyBackendMutationResponse,
+  });
+  const { setActiveSessionId, syncGraphMutationFromBackend } = mutationDispatch;
 
   // --- Node actions ---
 
@@ -354,31 +329,12 @@ export function createWorkflowStores(
     backendGraph: WorkflowGraph,
     options?: SyncEdgesFromBackendOptions,
   ): boolean {
-    if (options?.sessionId && !isActiveSession(options.sessionId)) {
+    if (options?.sessionId && !mutationDispatch.isActiveSession(options.sessionId)) {
       return false;
     }
 
     applyWorkflowGraph(backendGraph, { markDirty: options?.markDirty ?? true });
     return true;
-  }
-
-  // --- Execution actions ---
-
-  function setNodeExecutionState(nodeId: string, state: NodeExecutionState, message?: string) {
-    nodeExecutionStates.update((map) => {
-      const newMap = new Map(map);
-      newMap.set(nodeId, { state, message });
-      return newMap;
-    });
-  }
-
-  function getNodeExecutionInfo(nodeId: string): NodeExecutionInfo | undefined {
-    return get(nodeExecutionStates).get(nodeId);
-  }
-
-  function resetExecutionStates() {
-    nodeExecutionStates.set(new Map());
-    graphState.clearRuntimeOverlays();
   }
 
   // --- Streaming actions ---
@@ -457,79 +413,12 @@ export function createWorkflowStores(
     // Backend-owned graph canonicalization now applies expand passthrough edges.
   }
 
-  // --- Group actions ---
-
-  async function createGroup(name: string, nodeIds: string[]): Promise<NodeGroup | null> {
-    if (nodeIds.length < 2) {
-      console.warn('[workflowStores] Cannot create group with less than 2 nodes');
-      return null;
-    }
-    if (!activeSessionId) {
-      console.warn('[workflowStores] Cannot create group without an active session');
-      return null;
-    }
-
-    try {
-      const requestSessionId = activeSessionId;
-      const response = await backend.createGroup(name, nodeIds, requestSessionId);
-      if (!applyBackendMutationResponse(requestSessionId, response)) {
-        return null;
-      }
-      return findWorkflowGroupContainingNodeIds(get(nodeGroups), nodeIds);
-    } catch (error) {
-      console.error('[workflowStores] Failed to create group:', error);
-      return null;
-    }
-  }
-
-  async function ungroupNodes(groupId: string): Promise<boolean> {
-    if (!activeSessionId) {
-      console.warn('[workflowStores] Cannot ungroup without an active session');
-      return false;
-    }
-
-    try {
-      const requestSessionId = activeSessionId;
-      const response = await backend.ungroup(groupId, requestSessionId);
-      return applyBackendMutationResponse(requestSessionId, response);
-    } catch (error) {
-      console.error('[workflowStores] Failed to ungroup:', error);
-      return false;
-    }
-  }
-
-  async function updateGroupPortsFn(
-    groupId: string,
-    exposedInputs: PortMapping[],
-    exposedOutputs: PortMapping[],
-  ): Promise<boolean> {
-    if (!activeSessionId) {
-      console.warn('[workflowStores] Cannot update group ports without an active session');
-      return false;
-    }
-
-    try {
-      const requestSessionId = activeSessionId;
-      const response = await backend.updateGroupPorts(
-        groupId,
-        exposedInputs,
-        exposedOutputs,
-        requestSessionId,
-      );
-      return applyBackendMutationResponse(requestSessionId, response);
-    } catch (error) {
-      console.error('[workflowStores] Failed to update group ports:', error);
-      return false;
-    }
-  }
-
-  function getGroupById(groupId: string): NodeGroup | undefined {
-    return get(nodeGroups).get(groupId);
-  }
-
-  function collapseGroup(): void {
-    viewStores?.tabOutOfGroup();
-  }
+  const groupActions = createWorkflowGroupActions({
+    backend,
+    mutationDispatch,
+    nodeGroups,
+    tabOutOfGroup: viewStores?.tabOutOfGroup,
+  });
 
   return {
     // Stores
@@ -554,7 +443,10 @@ export function createWorkflowStores(
     // Compatibility no-ops
     syncInferencePorts, syncExpandPorts, autoConnectExpandToInference,
     // Group actions
-    createGroup, ungroupNodes, updateGroupPorts: updateGroupPortsFn,
-    getGroupById, collapseGroup,
+    createGroup: groupActions.createGroup,
+    ungroupNodes: groupActions.ungroupNodes,
+    updateGroupPorts: groupActions.updateGroupPorts,
+    getGroupById: groupActions.getGroupById,
+    collapseGroup: groupActions.collapseGroup,
   };
 }

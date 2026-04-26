@@ -9,7 +9,7 @@ metadata, execution overlays, and transient connection-intent state.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `createWorkflowStores.ts` | Owns workflow nodes, edges, derived graph metadata, execution state, and connection intent for the active editor. |
+| `createWorkflowStores.ts` | Assembles workflow graph, execution, mutation, group, and connection-intent stores into the public active-editor facade. |
 | `createSessionStores.ts` | Manages session lifecycle, graph loading, and current graph selection. |
 | `createViewStores.ts` | Holds viewport and navigation state such as group stacks and zoom targets. |
 | `defaultWorkflowGraph.ts` | Builds the starter workflow graph used when no saved graph is available. |
@@ -18,6 +18,9 @@ metadata, execution overlays, and transient connection-intent state.
 | `inferenceSettingsPorts.ts` | Builds additive inference-setting port definitions, merges upstream schema with promoted inference-node defaults, and de-duplicates settings that should flow only through `inference_settings`. |
 | `runtimeData.ts` | Projects transient execution/runtime data updates into node arrays without touching persisted configuration fields. |
 | `workflowExecutionEvents.ts` | Reduces backend-owned workflow execution events into read-only execution overlays and downstream runtime-data mirrors for GUI consumers. |
+| `workflowExecutionState.ts` | Owns node execution-state overlays and runtime-overlay cleanup when execution state resets. |
+| `workflowGroupActions.ts` | Owns backend-session group create, ungroup, and group port-edit actions. |
+| `workflowMutationDispatch.ts` | Owns active edit-session tracking, stale mutation filtering, and mutation result reporting. |
 | `workflowStoreGraphQueries.ts` | Projects store-owned graph nodes and edges into group indexes, connected-node lists, and node bounds. |
 | `workflowStoreMaterialization.ts` | Converts between backend workflow graph snapshots and SvelteFlow store state while preserving selected-node projection. |
 
@@ -92,6 +95,14 @@ keeping transient execution updates outside the store facade while
 Backend edge normalization for store add-edge commits reuses
 `../workflowConnections.ts`, keeping backend `GraphEdge` shape policy shared
 with graph component connection commits.
+Active edit-session tracking and stale backend mutation handling now live in
+`workflowMutationDispatch.ts`; `createWorkflowStores.ts` applies accepted graph
+snapshots and keeps the public `WorkflowStores` facade stable for consumers.
+Node execution-state overlays live in `workflowExecutionState.ts` so runtime
+overlay cleanup remains coupled to execution reset without adding another
+responsibility to the facade assembler. Group create, ungroup, and port edits
+live in `workflowGroupActions.ts`, sharing the same backend mutation dispatcher
+as node and edge structural edits.
 
 ## Alternatives Rejected
 - Store connection intent only inside `WorkflowGraph.svelte`.
@@ -127,6 +138,13 @@ with graph component connection commits.
 - Store graph snapshots and add-edge commits must use the shared
   `workflowConnections.ts` `edgeToGraphEdge` helper rather than rebuilding
   backend edge defaults inline.
+- `workflowMutationDispatch.ts` owns the active edit-session id and must be the
+  only store helper that classifies mutation results as applied, skipped,
+  failed, or stale.
+- `workflowExecutionState.ts` owns node execution-state overlays and must clear
+  runtime overlays through its injected cleanup when execution state resets.
+- `workflowGroupActions.ts` owns backend-backed group structural actions and
+  must not synthesize group nodes or edges locally.
 - Dynamic inference-setting ports must be derived from backend-owned schema and
   written back into `node.data.definition`; ad hoc component-local copies are
   not authoritative.
