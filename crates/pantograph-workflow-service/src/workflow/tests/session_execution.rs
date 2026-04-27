@@ -257,6 +257,27 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         .workflow_execution_fingerprint
         .starts_with("workflow-exec-blake3:"));
     assert!(snapshot.inputs_json.contains("snapshotted"));
+
+    let version_projection = service
+        .workflow_run_version_projection(&response.workflow_run_id)
+        .expect("query run version projection")
+        .expect("projection");
+    assert_eq!(
+        version_projection.snapshot.workflow_run_id.as_str(),
+        response.workflow_run_id
+    );
+    assert_eq!(
+        version_projection.workflow_version.workflow_version_id,
+        snapshot.workflow_version_id
+    );
+    assert_eq!(
+        version_projection.workflow_version.semantic_version,
+        "1.2.3"
+    );
+    assert!(version_projection
+        .workflow_version
+        .executable_topology_json
+        .contains("text-input-1"));
 }
 
 #[tokio::test]

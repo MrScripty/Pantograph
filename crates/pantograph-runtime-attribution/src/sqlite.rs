@@ -22,7 +22,8 @@ use crate::{
     ClientSessionRecord, ClientSessionResumeRequest, ClientStatus, CredentialProofRequest,
     CredentialSecret, DefaultBucketAssignment, SessionLifecycleRecord, WorkflowRunRecord,
     WorkflowRunSnapshotRecord, WorkflowRunSnapshotRequest, WorkflowRunStartRequest,
-    WorkflowRunStatus, WorkflowVersionRecord, WorkflowVersionResolveRequest,
+    WorkflowRunStatus, WorkflowRunVersionProjection, WorkflowVersionRecord,
+    WorkflowVersionResolveRequest,
 };
 
 const MAX_SEMANTIC_VERSION_LEN: usize = 64;
@@ -94,6 +95,23 @@ impl SqliteAttributionStore {
         workflow_run_id: &crate::WorkflowRunId,
     ) -> Result<Option<WorkflowRunSnapshotRecord>, AttributionError> {
         workflow_run_snapshot_by_run_id(&self.conn, workflow_run_id)
+    }
+
+    pub fn workflow_run_version_projection(
+        &self,
+        workflow_run_id: &crate::WorkflowRunId,
+    ) -> Result<Option<WorkflowRunVersionProjection>, AttributionError> {
+        let Some(snapshot) = workflow_run_snapshot_by_run_id(&self.conn, workflow_run_id)? else {
+            return Ok(None);
+        };
+        let workflow_version = workflow_version_by_id(&self.conn, &snapshot.workflow_version_id)?
+            .ok_or(AttributionError::NotFound {
+            entity: "workflow_version",
+        })?;
+        Ok(Some(WorkflowRunVersionProjection {
+            snapshot,
+            workflow_version,
+        }))
     }
 }
 

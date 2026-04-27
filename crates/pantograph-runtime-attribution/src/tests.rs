@@ -278,6 +278,20 @@ fn workflow_run_snapshot_records_immutable_version_and_queue_context() {
     assert_eq!(snapshot.scheduler_policy, "priority_then_fifo");
     assert_eq!(snapshot.priority, 5);
     assert_eq!(snapshot.timeout_ms, Some(1000));
+
+    let projection = store
+        .workflow_run_version_projection(&run_id)
+        .expect("query run version projection")
+        .expect("projection");
+    assert_eq!(projection.snapshot.workflow_run_id, run_id);
+    assert_eq!(
+        projection.workflow_version.workflow_version_id,
+        version.workflow_version_id
+    );
+    assert_eq!(
+        projection.workflow_version.executable_topology_json,
+        version.executable_topology_json
+    );
 }
 
 #[test]

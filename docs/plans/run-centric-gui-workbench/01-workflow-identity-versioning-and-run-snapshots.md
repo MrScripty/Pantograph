@@ -235,7 +235,7 @@ full audit context and event-builder correlation fields.
 - [ ] Add workflow/node version filters to diagnostics query contracts.
 - [ ] Make diagnostics query contracts consume projections derived from typed
   event ledger correlation fields rather than raw mutable graph state.
-- [ ] Add run-to-workflow-version projection for Graph page consumers.
+- [x] Add run-to-workflow-version projection for Graph page consumers.
 - [ ] Remove or quarantine old graph-fingerprint-only diagnostics grouping.
 - [ ] Update READMEs for changed host-facing contracts.
 
@@ -325,6 +325,9 @@ records for the same execution fingerprint.
 - 2026-04-27: Added typed optional workflow-version id and semantic-version
   correlation fields to the diagnostics usage ledger, plus workflow-service
   query filters for those fields. Node version filters remain pending.
+- 2026-04-27: Added a run-to-workflow-version projection that joins immutable
+  run snapshots to their workflow-version record and executable topology JSON
+  for Graph page and diagnostics consumers.
 
 ### Deviations
 
@@ -386,6 +389,9 @@ records for the same execution fingerprint.
 - 2026-04-27: `cargo check -p pantograph-embedded-runtime` passed after
   preserving embedded runtime usage-event construction with optional workflow
   version fields.
+- 2026-04-27: `cargo test -p pantograph-runtime-attribution` and
+  `cargo test -p pantograph-workflow-service` passed after adding the
+  run-to-workflow-version projection.
 
 ### Traceability Links
 

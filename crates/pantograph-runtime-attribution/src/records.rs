@@ -308,6 +308,12 @@ pub struct WorkflowRunSnapshotRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkflowRunVersionProjection {
+    pub snapshot: WorkflowRunSnapshotRecord,
+    pub workflow_version: WorkflowVersionRecord,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkflowRunAttribution {
     pub client_id: ClientId,
     pub client_session_id: ClientSessionId,

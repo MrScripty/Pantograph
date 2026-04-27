@@ -2,7 +2,8 @@ use pantograph_runtime_attribution::{
     BucketCreateRequest, BucketDeleteRequest, BucketRecord, ClientRegistrationRequest,
     ClientRegistrationResponse, ClientSessionOpenRequest, ClientSessionOpenResponse,
     ClientSessionRecord, ClientSessionResumeRequest, WorkflowId, WorkflowRunId,
-    WorkflowRunSnapshotRecord, WorkflowVersionRecord, WorkflowVersionResolveRequest,
+    WorkflowRunSnapshotRecord, WorkflowRunVersionProjection, WorkflowVersionRecord,
+    WorkflowVersionResolveRequest,
 };
 
 use crate::graph::{
@@ -96,6 +97,17 @@ impl WorkflowService {
         let store = self.attribution_store_guard()?;
         store
             .workflow_run_snapshot(&workflow_run_id)
+            .map_err(WorkflowServiceError::from)
+    }
+
+    pub fn workflow_run_version_projection(
+        &self,
+        workflow_run_id: &str,
+    ) -> Result<Option<WorkflowRunVersionProjection>, WorkflowServiceError> {
+        let workflow_run_id = WorkflowRunId::try_from(workflow_run_id.to_string())?;
+        let store = self.attribution_store_guard()?;
+        store
+            .workflow_run_version_projection(&workflow_run_id)
             .map_err(WorkflowServiceError::from)
     }
 }
