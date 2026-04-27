@@ -150,7 +150,8 @@ where present in the run-list projection, selected-run actions, active-run
 updates, projection freshness, search, status filtering, stable local sort
 options, scheduler policy IDs, retention policy IDs, scheduler-policy and
 retention-policy filters, typed queue position, priority, estimate, and
-scheduler-reason columns, a selected-run timeline panel, timeline projection
+scheduler-reason columns, delayed status presentation, a selected-run timeline
+panel, timeline projection
 freshness, and timeline summary/detail rows without raw event parsing. Progress,
 model/runtime summaries, richer delay categories, richer retention summaries,
 and privileged queue action controls remain open.

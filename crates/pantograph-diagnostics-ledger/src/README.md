@@ -84,6 +84,9 @@ semantics.
   sequence so incremental projection drains can resume after restart.
 - `scheduler_timeline_projection` is read directly by page/API consumers after
   an explicit incremental drain; normal reads do not replay raw event rows.
+- Scheduler timeline events include typed delay and model lifecycle facts when
+  those events are emitted. Delay state may also update the run-list status and
+  scheduler reason through projection drains.
 - `run_detail_projection` is read directly by selected-run page/API consumers
   after an explicit incremental drain; normal detail reads do not replay raw
   event rows.

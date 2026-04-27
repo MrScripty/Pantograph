@@ -79,6 +79,9 @@ triggered by workflow events rather than polling.
   backend.
 - Scheduler timeline rows come from `workflowService.querySchedulerTimeline`.
   Components render typed summary/detail fields and payload availability only.
+- Scheduler status presentation includes delayed rows from the run-list
+  projection. Components must treat delayed as backend-authored state rather
+  than inferring it from scheduler reason text.
 - I/O artifact rendering must distinguish metadata-only rows from rows with
   payload references without treating missing payload references as failures.
 - Library active-run highlighting must use explicit projection facts, not

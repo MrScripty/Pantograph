@@ -52,6 +52,7 @@ function createRunDetail(): RunDetailProjectionRecord {
 test('formatDiagnosticsDuration exposes pending and running states', () => {
   assert.equal(formatDiagnosticsDuration(null, 'running'), 'Running');
   assert.equal(formatDiagnosticsDuration(null, 'queued'), 'Pending');
+  assert.equal(formatDiagnosticsDuration(null, 'delayed'), 'Pending');
   assert.equal(formatDiagnosticsDuration(500, 'completed'), '500 ms');
   assert.equal(formatDiagnosticsDuration(2_500, 'completed'), '2.5 s');
 });

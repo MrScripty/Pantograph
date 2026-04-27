@@ -26,6 +26,7 @@ export const SCHEDULER_STATUS_FILTERS: SchedulerStatusFilter[] = [
   'all',
   'accepted',
   'queued',
+  'delayed',
   'running',
   'completed',
   'failed',
@@ -55,7 +56,7 @@ export function formatSchedulerDuration(
     if (status === 'running') {
       return 'Running';
     }
-    if (status === 'queued' || status === 'accepted') {
+    if (status === 'queued' || status === 'accepted' || status === 'delayed') {
       return 'Pending';
     }
     return 'Unavailable';
@@ -109,6 +110,8 @@ export function schedulerStatusClass(status: RunListProjectionRecord['status']):
     case 'queued':
     case 'accepted':
       return 'border-amber-700 bg-amber-950/60 text-amber-200';
+    case 'delayed':
+      return 'border-orange-700 bg-orange-950/60 text-orange-200';
     case 'failed':
       return 'border-red-700 bg-red-950/60 text-red-200';
     case 'cancelled':

@@ -276,10 +276,13 @@ export interface ProjectionStateRecord {
 export type DiagnosticEventKind =
   | 'scheduler_estimate_produced'
   | 'scheduler_queue_placement'
+  | 'scheduler_run_delayed'
+  | 'scheduler_model_lifecycle_changed'
   | 'run_started'
   | 'run_terminal'
   | 'run_snapshot_accepted'
   | 'io_artifact_observed'
+  | 'retention_artifact_state_changed'
   | 'library_asset_accessed'
   | 'retention_policy_changed'
   | 'runtime_capability_observed'
@@ -315,6 +318,7 @@ export interface SchedulerTimelineProjectionRecord {
 export type RunListProjectionStatus =
   | 'accepted'
   | 'queued'
+  | 'delayed'
   | 'running'
   | 'completed'
   | 'failed'

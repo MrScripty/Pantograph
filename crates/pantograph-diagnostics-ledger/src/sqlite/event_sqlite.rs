@@ -267,6 +267,8 @@ pub(super) fn drain_scheduler_timeline_projection(
                AND event_kind IN (
                     'scheduler.estimate_produced',
                     'scheduler.queue_placement',
+                    'scheduler.run_delayed',
+                    'scheduler.model_lifecycle_changed',
                     'run.started',
                     'run.terminal',
                     'run.snapshot_accepted'
@@ -1216,6 +1218,8 @@ fn diagnostic_projection_events_after(
            AND event_kind IN (
                 'scheduler.estimate_produced',
                 'scheduler.queue_placement',
+                'scheduler.run_delayed',
+                'scheduler.model_lifecycle_changed',
                 'run.started',
                 'run.terminal',
                 'run.snapshot_accepted'
@@ -1332,6 +1336,50 @@ fn scheduler_timeline_record_from_event(
             format!("queued at position {}", payload.queue_position),
             Some(format!("priority {}", payload.priority)),
         ),
+        DiagnosticEventPayload::SchedulerRunDelayed(payload) => {
+            let detail = match (
+                payload.delayed_until_ms,
+                payload.fairness_context.as_deref(),
+            ) {
+                (Some(delayed_until_ms), Some(fairness_context)) => Some(format!(
+                    "{}; delayed until {delayed_until_ms}; {fairness_context}",
+                    payload.reason
+                )),
+                (Some(delayed_until_ms), None) => Some(format!(
+                    "{}; delayed until {delayed_until_ms}",
+                    payload.reason
+                )),
+                (None, Some(fairness_context)) => {
+                    Some(format!("{}; {fairness_context}", payload.reason))
+                }
+                (None, None) => Some(payload.reason),
+            };
+            ("run delayed".to_string(), detail)
+        }
+        DiagnosticEventPayload::SchedulerModelLifecycleChanged(payload) => {
+            let summary = payload.summary().to_string();
+            let detail = match (
+                payload.duration_ms,
+                payload.reason.as_deref(),
+                payload.error.as_deref(),
+            ) {
+                (Some(duration_ms), Some(reason), Some(error)) => {
+                    Some(format!("{duration_ms} ms; {reason}; {error}"))
+                }
+                (Some(duration_ms), Some(reason), None) => {
+                    Some(format!("{duration_ms} ms; {reason}"))
+                }
+                (Some(duration_ms), None, Some(error)) => {
+                    Some(format!("{duration_ms} ms; {error}"))
+                }
+                (Some(duration_ms), None, None) => Some(format!("{duration_ms} ms")),
+                (None, Some(reason), Some(error)) => Some(format!("{reason}; {error}")),
+                (None, Some(reason), None) => Some(reason.to_string()),
+                (None, None, Some(error)) => Some(error.to_string()),
+                (None, None, None) => None,
+            };
+            (summary, detail)
+        }
         DiagnosticEventPayload::RunStarted(payload) => {
             let detail = match (
                 payload.queue_wait_ms,
@@ -1606,6 +1654,7 @@ fn apply_run_list_projection_event(
         DiagnosticEventPayload::RunSnapshotAccepted(_) => RunListProjectionStatus::Accepted,
         DiagnosticEventPayload::SchedulerEstimateProduced(_) => RunListProjectionStatus::Accepted,
         DiagnosticEventPayload::SchedulerQueuePlacement(_) => RunListProjectionStatus::Queued,
+        DiagnosticEventPayload::SchedulerRunDelayed(_) => RunListProjectionStatus::Delayed,
         DiagnosticEventPayload::RunStarted(_) => RunListProjectionStatus::Running,
         DiagnosticEventPayload::RunTerminal(payload) => match payload.status {
             crate::event::RunTerminalStatus::Completed => RunListProjectionStatus::Completed,
@@ -1715,6 +1764,24 @@ fn scheduler_projection_facts(payload: &DiagnosticEventPayload) -> SchedulerProj
             estimated_duration_ms: None,
             reason: None,
         },
+        DiagnosticEventPayload::SchedulerRunDelayed(payload) => SchedulerProjectionFacts {
+            queue_position: None,
+            priority: None,
+            estimate_confidence: None,
+            estimated_queue_wait_ms: None,
+            estimated_duration_ms: None,
+            reason: Some(payload.reason.clone()),
+        },
+        DiagnosticEventPayload::SchedulerModelLifecycleChanged(payload) => {
+            SchedulerProjectionFacts {
+                queue_position: None,
+                priority: None,
+                estimate_confidence: None,
+                estimated_queue_wait_ms: None,
+                estimated_duration_ms: None,
+                reason: payload.reason.clone(),
+            }
+        }
         DiagnosticEventPayload::RunStarted(payload) => SchedulerProjectionFacts {
             queue_position: None,
             priority: None,
@@ -1749,6 +1816,7 @@ fn apply_run_detail_projection_event(
         DiagnosticEventPayload::RunSnapshotAccepted(_) => RunListProjectionStatus::Accepted,
         DiagnosticEventPayload::SchedulerEstimateProduced(_) => RunListProjectionStatus::Accepted,
         DiagnosticEventPayload::SchedulerQueuePlacement(_) => RunListProjectionStatus::Queued,
+        DiagnosticEventPayload::SchedulerRunDelayed(_) => RunListProjectionStatus::Delayed,
         DiagnosticEventPayload::RunStarted(_) => RunListProjectionStatus::Running,
         DiagnosticEventPayload::RunTerminal(payload) => match payload.status {
             crate::event::RunTerminalStatus::Completed => RunListProjectionStatus::Completed,

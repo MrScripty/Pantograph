@@ -16,11 +16,12 @@ use crate::{
     RetentionClass, RetentionPolicyChangedPayload, RunDetailProjectionQuery, RunListFacetKind,
     RunListProjectionQuery, RunListProjectionStatus, RunSnapshotAcceptedPayload, RunStartedPayload,
     RunTerminalPayload, RunTerminalStatus, SchedulerEstimateProducedPayload,
-    SchedulerQueuePlacementPayload, SchedulerTimelineProjectionQuery, SqliteDiagnosticsLedger,
-    UpdateRetentionPolicyCommand, UsageEventStatus, UsageLineage, WorkflowRunSummaryQuery,
-    WorkflowRunSummaryRecord, WorkflowRunSummaryStatus, WorkflowTimingExpectation,
-    WorkflowTimingExpectationComparison, WorkflowTimingExpectationQuery, WorkflowTimingObservation,
-    WorkflowTimingObservationScope, WorkflowTimingObservationStatus,
+    SchedulerModelLifecycleChangedPayload, SchedulerModelLifecycleTransition,
+    SchedulerQueuePlacementPayload, SchedulerRunDelayedPayload, SchedulerTimelineProjectionQuery,
+    SqliteDiagnosticsLedger, UpdateRetentionPolicyCommand, UsageEventStatus, UsageLineage,
+    WorkflowRunSummaryQuery, WorkflowRunSummaryRecord, WorkflowRunSummaryStatus,
+    WorkflowTimingExpectation, WorkflowTimingExpectationComparison, WorkflowTimingExpectationQuery,
+    WorkflowTimingObservation, WorkflowTimingObservationScope, WorkflowTimingObservationStatus,
     DEFAULT_STANDARD_RETENTION_DAYS, IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION,
     LIBRARY_USAGE_PROJECTION_NAME, LIBRARY_USAGE_PROJECTION_VERSION,
     MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, NODE_STATUS_PROJECTION_NAME,
@@ -536,6 +537,14 @@ fn diagnostic_event_ledger_validates_run_scope_and_event_source() {
             source_component: "library"
         })
     ));
+
+    let mut missing_model = sample_scheduler_model_lifecycle_event("workflow_run_alpha");
+    missing_model.model_id = None;
+    let result = ledger.append_diagnostic_event(missing_model);
+    assert!(matches!(
+        result,
+        Err(DiagnosticsLedgerError::MissingField { field: "model_id" })
+    ));
 }
 
 #[test]
@@ -711,6 +720,12 @@ fn scheduler_timeline_projection_drains_events_incrementally() {
     let queue_event = ledger
         .append_diagnostic_event(sample_scheduler_queue_event("workflow_run_alpha", 0))
         .expect("scheduler queue event appends");
+    let delay_event = ledger
+        .append_diagnostic_event(sample_scheduler_delay_event("workflow_run_alpha"))
+        .expect("scheduler delay event appends");
+    let model_event = ledger
+        .append_diagnostic_event(sample_scheduler_model_lifecycle_event("workflow_run_alpha"))
+        .expect("scheduler model lifecycle event appends");
     let started_event = ledger
         .append_diagnostic_event(sample_run_started_event("workflow_run_alpha"))
         .expect("run started event appends");
@@ -737,7 +752,7 @@ fn scheduler_timeline_projection_drains_events_incrementally() {
             ..SchedulerTimelineProjectionQuery::default()
         })
         .expect("scheduler timeline projection loads");
-    assert_eq!(records.len(), 5);
+    assert_eq!(records.len(), 7);
     assert_eq!(records[0].event_seq, snapshot_event.event_seq);
     assert_eq!(records[0].summary, "run snapshot accepted");
     assert_eq!(records[1].event_seq, estimate_event.event_seq);
@@ -746,15 +761,27 @@ fn scheduler_timeline_projection_drains_events_incrementally() {
     assert_eq!(records[2].event_seq, queue_event.event_seq);
     assert_eq!(records[2].summary, "queued at position 0");
     assert_eq!(records[2].detail.as_deref(), Some("priority 7"));
-    assert_eq!(records[3].event_seq, started_event.event_seq);
-    assert_eq!(records[3].summary, "run started");
+    assert_eq!(records[3].event_seq, delay_event.event_seq);
+    assert_eq!(records[3].summary, "run delayed");
     assert_eq!(
         records[3].detail.as_deref(),
+        Some("waiting_for_model_cache; delayed until 1050; fair after active run")
+    );
+    assert_eq!(records[4].event_seq, model_event.event_seq);
+    assert_eq!(records[4].summary, "model load requested");
+    assert_eq!(
+        records[4].detail.as_deref(),
+        Some("cache miss before queued run")
+    );
+    assert_eq!(records[5].event_seq, started_event.event_seq);
+    assert_eq!(records[5].summary, "run started");
+    assert_eq!(
+        records[5].detail.as_deref(),
         Some("queue wait 10 ms; warm_session_reused")
     );
-    assert_eq!(records[4].event_seq, terminal_event.event_seq);
-    assert_eq!(records[4].summary, "run completed");
-    assert_eq!(records[4].detail.as_deref(), None);
+    assert_eq!(records[6].event_seq, terminal_event.event_seq);
+    assert_eq!(records[6].summary, "run completed");
+    assert_eq!(records[6].detail.as_deref(), None);
 
     let after_first = ledger
         .query_scheduler_timeline_projection(SchedulerTimelineProjectionQuery {
@@ -762,7 +789,7 @@ fn scheduler_timeline_projection_drains_events_incrementally() {
             ..SchedulerTimelineProjectionQuery::default()
         })
         .expect("scheduler timeline projection cursor query loads");
-    assert_eq!(after_first.len(), 4);
+    assert_eq!(after_first.len(), 6);
 
     let no_new_state = ledger
         .drain_scheduler_timeline_projection(10)
@@ -774,7 +801,7 @@ fn scheduler_timeline_projection_drains_events_incrementally() {
     let records_after_duplicate_drain = ledger
         .query_scheduler_timeline_projection(SchedulerTimelineProjectionQuery::default())
         .expect("scheduler timeline projection loads after duplicate drain");
-    assert_eq!(records_after_duplicate_drain.len(), 5);
+    assert_eq!(records_after_duplicate_drain.len(), 7);
 
     let later_event = ledger
         .append_diagnostic_event(sample_scheduler_queue_event("workflow_run_alpha", 1))
@@ -786,7 +813,39 @@ fn scheduler_timeline_projection_drains_events_incrementally() {
     let records_after_later_event = ledger
         .query_scheduler_timeline_projection(SchedulerTimelineProjectionQuery::default())
         .expect("scheduler timeline projection loads after later event");
-    assert_eq!(records_after_later_event.len(), 6);
+    assert_eq!(records_after_later_event.len(), 8);
+}
+
+#[test]
+fn run_list_projection_records_scheduler_delay_status_and_reason() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_run_snapshot_event("workflow_run_alpha"))
+        .expect("run snapshot event appends");
+    ledger
+        .append_diagnostic_event(sample_scheduler_queue_event("workflow_run_alpha", 0))
+        .expect("scheduler queue event appends");
+    let delay_event = ledger
+        .append_diagnostic_event(sample_scheduler_delay_event("workflow_run_alpha"))
+        .expect("scheduler delay event appends");
+
+    let state = ledger
+        .drain_run_list_projection(10)
+        .expect("run list projection drains");
+    assert_eq!(state.last_applied_event_seq, delay_event.event_seq);
+
+    let records = ledger
+        .query_run_list_projection(RunListProjectionQuery {
+            status: Some(RunListProjectionStatus::Delayed),
+            ..RunListProjectionQuery::default()
+        })
+        .expect("delayed run list projection loads");
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].status, RunListProjectionStatus::Delayed);
+    assert_eq!(
+        records[0].scheduler_reason.as_deref(),
+        Some("waiting_for_model_cache")
+    );
 }
 
 #[test]
@@ -2012,6 +2071,73 @@ fn sample_scheduler_queue_event(
             priority: 7,
             scheduler_policy_id: "scheduler_default".to_string(),
         }),
+    }
+}
+
+fn sample_scheduler_delay_event(workflow_run_id: &str) -> DiagnosticEventAppendRequest {
+    DiagnosticEventAppendRequest {
+        source_component: DiagnosticEventSourceComponent::Scheduler,
+        source_instance_id: Some("scheduler-local".to_string()),
+        occurred_at_ms: 1_015,
+        workflow_run_id: Some(WorkflowRunId::try_from(workflow_run_id.to_string()).unwrap()),
+        workflow_id: Some(WorkflowId::try_from("workflow_alpha".to_string()).unwrap()),
+        workflow_version_id: Some(WorkflowVersionId::try_from("wfver_alpha".to_string()).unwrap()),
+        workflow_semantic_version: Some("1.0.0".to_string()),
+        node_id: None,
+        node_type: None,
+        node_version: None,
+        runtime_id: None,
+        runtime_version: None,
+        model_id: None,
+        model_version: None,
+        client_id: Some(ClientId::try_from("client_alpha".to_string()).unwrap()),
+        client_session_id: Some(ClientSessionId::try_from("session_alpha".to_string()).unwrap()),
+        bucket_id: Some(BucketId::try_from("bucket_alpha".to_string()).unwrap()),
+        scheduler_policy_id: Some("scheduler_default".to_string()),
+        retention_policy_id: None,
+        privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+        retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+        payload_ref: None,
+        payload: DiagnosticEventPayload::SchedulerRunDelayed(SchedulerRunDelayedPayload {
+            reason: "waiting_for_model_cache".to_string(),
+            delayed_until_ms: Some(1_050),
+            fairness_context: Some("fair after active run".to_string()),
+        }),
+    }
+}
+
+fn sample_scheduler_model_lifecycle_event(workflow_run_id: &str) -> DiagnosticEventAppendRequest {
+    DiagnosticEventAppendRequest {
+        source_component: DiagnosticEventSourceComponent::Scheduler,
+        source_instance_id: Some("scheduler-local".to_string()),
+        occurred_at_ms: 1_016,
+        workflow_run_id: Some(WorkflowRunId::try_from(workflow_run_id.to_string()).unwrap()),
+        workflow_id: Some(WorkflowId::try_from("workflow_alpha".to_string()).unwrap()),
+        workflow_version_id: Some(WorkflowVersionId::try_from("wfver_alpha".to_string()).unwrap()),
+        workflow_semantic_version: Some("1.0.0".to_string()),
+        node_id: None,
+        node_type: None,
+        node_version: None,
+        runtime_id: Some("runtime_alpha".to_string()),
+        runtime_version: Some("runtime-v1".to_string()),
+        model_id: Some("model_alpha".to_string()),
+        model_version: Some("model-v1".to_string()),
+        client_id: Some(ClientId::try_from("client_alpha".to_string()).unwrap()),
+        client_session_id: Some(ClientSessionId::try_from("session_alpha".to_string()).unwrap()),
+        bucket_id: Some(BucketId::try_from("bucket_alpha".to_string()).unwrap()),
+        scheduler_policy_id: Some("scheduler_default".to_string()),
+        retention_policy_id: None,
+        privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+        retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+        payload_ref: None,
+        payload: DiagnosticEventPayload::SchedulerModelLifecycleChanged(
+            SchedulerModelLifecycleChangedPayload {
+                transition: SchedulerModelLifecycleTransition::LoadRequested,
+                reason: Some("cache miss before queued run".to_string()),
+                duration_ms: None,
+                error: None,
+            },
+        ),
     }
 }
 

@@ -148,9 +148,12 @@ durable `scheduler.estimate_produced` and `scheduler.queue_placement` events
 after queue insertion when a diagnostics ledger is configured. The hot
 run-list and run-detail projections now promote typed scheduler queue position,
 priority, estimate confidence, estimated queue wait, estimated duration, and
-scheduler reason fields from those events. Richer estimate DTO semantics,
-cache/model state contracts, admin/client action vocabulary, and complete hot
-projection ownership remain pending.
+scheduler reason fields from those events. The typed scheduler event family
+also has validated delay and model lifecycle payload contracts, including a
+model lifecycle transition enum, and the timeline projection can materialize
+those rows when emitted. Richer estimate DTO semantics, admin/client action
+vocabulary, production model-load emitters, and complete hot projection
+ownership remain pending.
 
 ### Milestone 2: Estimate Production
 
@@ -174,9 +177,12 @@ projection ownership remain pending.
 
 **Status:** In progress. Queue insertion now records a low-confidence
 submission-time scheduler estimate for the queued run, and the stable estimate
-facts are queryable from hot run-list/run-detail projections. Rich estimate
-inputs from model metadata, runtime state, local node capacity, diagnostics
-history, cache/model state changes, and missing-asset analysis remain pending.
+facts are queryable from hot run-list/run-detail projections. Typed delay
+events can now record a concrete delay reason and delayed-until timestamp into
+run-list/run-detail status and scheduler timeline projections when a scheduler
+emitter produces them. Rich estimate inputs from model metadata, runtime state,
+local node capacity, diagnostics history, cache/model state changes, and
+missing-asset analysis remain pending.
 
 ### Milestone 3: Scheduler Event Emission And Persistence
 
@@ -218,10 +224,13 @@ scheduler activity.
 **Status:** In progress. Estimate-produced and queue-placement events are now
 persisted through the typed event ledger for queued workflow-session runs.
 The first scheduler timeline projection now drains those scheduler events plus
-`run.snapshot_accepted` into materialized timeline rows by event cursor. Other
-scheduler events, action/override events, model load/unload events, admission
-events, and frontend page wiring remain pending; workflow-service now has a
-query boundary for the materialized scheduler timeline.
+`run.snapshot_accepted` into materialized timeline rows by event cursor.
+Scheduler delay and model lifecycle events now have validated ledger payloads
+and materialized timeline summaries, but production emitters for model
+load/unload and scheduler delay decisions are not wired yet. Other scheduler
+events, action/override events, admission events, and frontend page wiring
+remain pending; workflow-service now has a query boundary for the materialized
+scheduler timeline.
 
 ### Milestone 4: Queue Authority And Admin Controls
 

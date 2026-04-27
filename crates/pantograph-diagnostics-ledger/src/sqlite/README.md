@@ -60,6 +60,9 @@ helpers own restart-visible workflow run summaries.
   cursor and write idempotent rows keyed by `event_seq`.
 - Scheduler timeline page/query reads use `scheduler_timeline_projection`,
   not `diagnostic_events`.
+- Scheduler delay and model lifecycle events are typed ledger events and become
+  timeline rows through the same incremental projection cursor. Delay events
+  may also update run-list/run-detail scheduler status and reason fields.
 - Run detail drains apply only events after the stored projection cursor and
   update one row per workflow run for selected-run page/query reads.
 - Run-list facet reads group `run_list_projection` rows and must not replay

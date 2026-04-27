@@ -26,6 +26,8 @@ pub const NODE_STATUS_PROJECTION_VERSION: i64 = 1;
 pub enum DiagnosticEventKind {
     SchedulerEstimateProduced,
     SchedulerQueuePlacement,
+    SchedulerRunDelayed,
+    SchedulerModelLifecycleChanged,
     RunStarted,
     RunTerminal,
     RunSnapshotAccepted,
@@ -42,6 +44,8 @@ impl DiagnosticEventKind {
         match self {
             Self::SchedulerEstimateProduced => "scheduler.estimate_produced",
             Self::SchedulerQueuePlacement => "scheduler.queue_placement",
+            Self::SchedulerRunDelayed => "scheduler.run_delayed",
+            Self::SchedulerModelLifecycleChanged => "scheduler.model_lifecycle_changed",
             Self::RunStarted => "run.started",
             Self::RunTerminal => "run.terminal",
             Self::RunSnapshotAccepted => "run.snapshot_accepted",
@@ -58,6 +62,8 @@ impl DiagnosticEventKind {
         match value {
             "scheduler.estimate_produced" => Ok(Self::SchedulerEstimateProduced),
             "scheduler.queue_placement" => Ok(Self::SchedulerQueuePlacement),
+            "scheduler.run_delayed" => Ok(Self::SchedulerRunDelayed),
+            "scheduler.model_lifecycle_changed" => Ok(Self::SchedulerModelLifecycleChanged),
             "run.started" => Ok(Self::RunStarted),
             "run.terminal" => Ok(Self::RunTerminal),
             "run.snapshot_accepted" => Ok(Self::RunSnapshotAccepted),
@@ -216,6 +222,8 @@ impl IoArtifactRetentionState {
 pub enum DiagnosticEventPayload {
     SchedulerEstimateProduced(SchedulerEstimateProducedPayload),
     SchedulerQueuePlacement(SchedulerQueuePlacementPayload),
+    SchedulerRunDelayed(SchedulerRunDelayedPayload),
+    SchedulerModelLifecycleChanged(SchedulerModelLifecycleChangedPayload),
     RunStarted(RunStartedPayload),
     RunTerminal(RunTerminalPayload),
     RunSnapshotAccepted(RunSnapshotAcceptedPayload),
@@ -232,6 +240,10 @@ impl DiagnosticEventPayload {
         match self {
             Self::SchedulerEstimateProduced(_) => DiagnosticEventKind::SchedulerEstimateProduced,
             Self::SchedulerQueuePlacement(_) => DiagnosticEventKind::SchedulerQueuePlacement,
+            Self::SchedulerRunDelayed(_) => DiagnosticEventKind::SchedulerRunDelayed,
+            Self::SchedulerModelLifecycleChanged(_) => {
+                DiagnosticEventKind::SchedulerModelLifecycleChanged
+            }
             Self::RunStarted(_) => DiagnosticEventKind::RunStarted,
             Self::RunTerminal(_) => DiagnosticEventKind::RunTerminal,
             Self::RunSnapshotAccepted(_) => DiagnosticEventKind::RunSnapshotAccepted,
@@ -250,6 +262,8 @@ impl DiagnosticEventPayload {
         match self {
             Self::SchedulerEstimateProduced(payload) => payload.validate(),
             Self::SchedulerQueuePlacement(payload) => payload.validate(),
+            Self::SchedulerRunDelayed(payload) => payload.validate(),
+            Self::SchedulerModelLifecycleChanged(payload) => payload.validate(),
             Self::RunStarted(payload) => payload.validate(),
             Self::RunTerminal(payload) => payload.validate(),
             Self::RunSnapshotAccepted(payload) => payload.validate(),
@@ -293,6 +307,73 @@ pub struct SchedulerQueuePlacementPayload {
 impl SchedulerQueuePlacementPayload {
     fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
         validate_required_text("scheduler_policy_id", &self.scheduler_policy_id, MAX_ID_LEN)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SchedulerRunDelayedPayload {
+    pub reason: String,
+    pub delayed_until_ms: Option<i64>,
+    pub fairness_context: Option<String>,
+}
+
+impl SchedulerRunDelayedPayload {
+    fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        validate_required_text("delay_reason", &self.reason, MAX_ID_LEN)?;
+        validate_optional_text(
+            "fairness_context",
+            self.fairness_context.as_deref(),
+            MAX_JSON_LEN,
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SchedulerModelLifecycleTransition {
+    LoadRequested,
+    LoadStarted,
+    LoadCompleted,
+    LoadFailed,
+    UnloadScheduled,
+    UnloadCancelled,
+    UnloadStarted,
+    UnloadCompleted,
+}
+
+impl SchedulerModelLifecycleTransition {
+    fn summary(self) -> &'static str {
+        match self {
+            Self::LoadRequested => "model load requested",
+            Self::LoadStarted => "model load started",
+            Self::LoadCompleted => "model load completed",
+            Self::LoadFailed => "model load failed",
+            Self::UnloadScheduled => "model unload scheduled",
+            Self::UnloadCancelled => "model unload cancelled",
+            Self::UnloadStarted => "model unload started",
+            Self::UnloadCompleted => "model unload completed",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SchedulerModelLifecycleChangedPayload {
+    pub transition: SchedulerModelLifecycleTransition,
+    pub reason: Option<String>,
+    pub duration_ms: Option<u64>,
+    pub error: Option<String>,
+}
+
+impl SchedulerModelLifecycleChangedPayload {
+    fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        validate_optional_text("model_lifecycle_reason", self.reason.as_deref(), MAX_ID_LEN)?;
+        validate_optional_text("model_lifecycle_error", self.error.as_deref(), MAX_JSON_LEN)
+    }
+
+    pub(crate) fn summary(&self) -> &'static str {
+        self.transition.summary()
     }
 }
 
@@ -745,6 +826,7 @@ pub struct SchedulerTimelineProjectionRecord {
 pub enum RunListProjectionStatus {
     Accepted,
     Queued,
+    Delayed,
     Running,
     Completed,
     Failed,
@@ -756,6 +838,7 @@ impl RunListProjectionStatus {
         match self {
             Self::Accepted => "accepted",
             Self::Queued => "queued",
+            Self::Delayed => "delayed",
             Self::Running => "running",
             Self::Completed => "completed",
             Self::Failed => "failed",
@@ -767,6 +850,7 @@ impl RunListProjectionStatus {
         match value {
             "accepted" => Ok(Self::Accepted),
             "queued" => Ok(Self::Queued),
+            "delayed" => Ok(Self::Delayed),
             "running" => Ok(Self::Running),
             "completed" => Ok(Self::Completed),
             "failed" => Ok(Self::Failed),
@@ -1217,6 +1301,8 @@ fn validate_event_scope(
     match request.payload.event_kind() {
         DiagnosticEventKind::SchedulerEstimateProduced
         | DiagnosticEventKind::SchedulerQueuePlacement
+        | DiagnosticEventKind::SchedulerRunDelayed
+        | DiagnosticEventKind::SchedulerModelLifecycleChanged
         | DiagnosticEventKind::RunStarted
         | DiagnosticEventKind::RunTerminal
         | DiagnosticEventKind::RunSnapshotAccepted
@@ -1245,6 +1331,11 @@ fn validate_event_scope(
             {
                 return Err(DiagnosticsLedgerError::MissingField { field: "node_id" });
             }
+            if request.payload.event_kind() == DiagnosticEventKind::SchedulerModelLifecycleChanged
+                && request.model_id.is_none()
+            {
+                return Err(DiagnosticsLedgerError::MissingField { field: "model_id" });
+            }
         }
         DiagnosticEventKind::RetentionPolicyChanged => {
             if request.retention_policy_id.is_none() {
@@ -1272,6 +1363,8 @@ fn validate_event_source(
     let allowed = match event_kind {
         DiagnosticEventKind::SchedulerEstimateProduced
         | DiagnosticEventKind::SchedulerQueuePlacement
+        | DiagnosticEventKind::SchedulerRunDelayed
+        | DiagnosticEventKind::SchedulerModelLifecycleChanged
         | DiagnosticEventKind::RunStarted => {
             matches!(source_component, DiagnosticEventSourceComponent::Scheduler)
         }
