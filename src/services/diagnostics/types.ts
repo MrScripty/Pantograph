@@ -419,6 +419,15 @@ export interface WorkflowIoArtifactQueryResponse {
   projection_state: ProjectionStateRecord;
 }
 
+export interface WorkflowProjectionRebuildRequest {
+  projection_name: string;
+  batch_size?: number | null;
+}
+
+export interface WorkflowProjectionRebuildResponse {
+  projection_state: ProjectionStateRecord;
+}
+
 export interface WorkflowSchedulerTimelineQueryRequest {
   workflow_run_id?: string | null;
   workflow_id?: string | null;

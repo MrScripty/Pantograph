@@ -168,6 +168,20 @@ pub struct WorkflowIoArtifactQueryResponse {
     pub projection_state: ProjectionStateRecord,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowProjectionRebuildRequest {
+    pub projection_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub batch_size: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowProjectionRebuildResponse {
+    pub projection_state: ProjectionStateRecord,
+}
+
 impl WorkflowService {
     pub fn workflow_diagnostics_usage_query(
         &self,
@@ -290,6 +304,24 @@ impl WorkflowService {
             artifacts,
             projection_state,
         })
+    }
+
+    pub fn workflow_projection_rebuild(
+        &self,
+        request: WorkflowProjectionRebuildRequest,
+    ) -> Result<WorkflowProjectionRebuildResponse, WorkflowServiceError> {
+        let batch_size = request.batch_size.unwrap_or(500).max(1);
+        if batch_size > 500 {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "batch_size exceeds maximum 500".to_string(),
+            ));
+        }
+        let mut ledger = self.diagnostics_ledger_guard()?;
+        let projection_state = ledger
+            .rebuild_projection(&request.projection_name, batch_size)
+            .map_err(WorkflowServiceError::from)?;
+
+        Ok(WorkflowProjectionRebuildResponse { projection_state })
     }
 }
 

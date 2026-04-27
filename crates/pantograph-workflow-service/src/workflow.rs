@@ -36,8 +36,9 @@ pub use self::contracts::*;
 pub use self::diagnostics_api::{
     WorkflowDiagnosticsUsageQueryRequest, WorkflowDiagnosticsUsageQueryResponse,
     WorkflowDiagnosticsUsageSummary, WorkflowIoArtifactQueryRequest,
-    WorkflowIoArtifactQueryResponse, WorkflowRunDetailQueryRequest, WorkflowRunDetailQueryResponse,
-    WorkflowRunListQueryRequest, WorkflowRunListQueryResponse,
+    WorkflowIoArtifactQueryResponse, WorkflowProjectionRebuildRequest,
+    WorkflowProjectionRebuildResponse, WorkflowRunDetailQueryRequest,
+    WorkflowRunDetailQueryResponse, WorkflowRunListQueryRequest, WorkflowRunListQueryResponse,
     WorkflowSchedulerTimelineQueryRequest, WorkflowSchedulerTimelineQueryResponse,
 };
 pub use self::host::{

@@ -959,6 +959,44 @@ fn io_artifact_projection_drains_artifact_events_incrementally() {
 }
 
 #[test]
+fn projection_rebuild_resets_projection_rows_and_cursor() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_run_snapshot_event("workflow_run_alpha"))
+        .expect("run snapshot event appends");
+    let terminal_event = ledger
+        .append_diagnostic_event(sample_run_terminal_event("workflow_run_alpha"))
+        .expect("run terminal event appends");
+    ledger
+        .drain_run_list_projection(10)
+        .expect("run list projection drains");
+
+    let stale_state = ledger
+        .upsert_projection_state(ProjectionStateUpdate {
+            projection_name: RUN_LIST_PROJECTION_NAME.to_string(),
+            projection_version: RUN_LIST_PROJECTION_VERSION,
+            last_applied_event_seq: 0,
+            status: ProjectionStatus::NeedsRebuild,
+            rebuilt_at_ms: None,
+        })
+        .expect("stale projection state stores");
+    assert_eq!(stale_state.last_applied_event_seq, 0);
+
+    let rebuilt = ledger
+        .rebuild_projection(RUN_LIST_PROJECTION_NAME, 1)
+        .expect("run list projection rebuilds");
+    assert_eq!(rebuilt.projection_name, RUN_LIST_PROJECTION_NAME);
+    assert_eq!(rebuilt.last_applied_event_seq, terminal_event.event_seq);
+    assert_eq!(rebuilt.status, ProjectionStatus::Current);
+
+    let records = ledger
+        .query_run_list_projection(RunListProjectionQuery::default())
+        .expect("rebuilt run list projection loads");
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].status, RunListProjectionStatus::Completed);
+}
+
+#[test]
 fn existing_v5_schema_adds_usage_lineage_contract_indexes() {
     let temp = tempfile::NamedTempFile::new().expect("temp file");
     let path = temp.path().to_path_buf();

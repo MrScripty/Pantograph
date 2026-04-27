@@ -373,6 +373,51 @@ fn workflow_io_artifact_query_validates_bounds() {
     ));
 }
 
+#[test]
+fn workflow_projection_rebuild_delegates_to_ledger() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_run_snapshot_event())
+        .expect("run snapshot event");
+    ledger
+        .append_diagnostic_event(sample_run_terminal_event())
+        .expect("run terminal event");
+    let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+
+    let response = service
+        .workflow_projection_rebuild(WorkflowProjectionRebuildRequest {
+            projection_name: "run_list".to_string(),
+            batch_size: Some(1),
+        })
+        .expect("projection rebuild");
+
+    assert_eq!(response.projection_state.projection_name, "run_list");
+    assert_eq!(response.projection_state.last_applied_event_seq, 2);
+}
+
+#[test]
+fn workflow_projection_rebuild_validates_bounds() {
+    let service = WorkflowService::with_ephemeral_diagnostics_ledger().expect("service");
+
+    let oversized = service.workflow_projection_rebuild(WorkflowProjectionRebuildRequest {
+        projection_name: "run_list".to_string(),
+        batch_size: Some(501),
+    });
+    assert!(matches!(
+        oversized,
+        Err(WorkflowServiceError::InvalidRequest(_))
+    ));
+
+    let unknown = service.workflow_projection_rebuild(WorkflowProjectionRebuildRequest {
+        projection_name: "unknown".to_string(),
+        batch_size: None,
+    });
+    assert!(matches!(
+        unknown,
+        Err(WorkflowServiceError::InvalidRequest(_))
+    ));
+}
+
 fn sample_run_snapshot_event() -> DiagnosticEventAppendRequest {
     DiagnosticEventAppendRequest {
         source_component: DiagnosticEventSourceComponent::WorkflowService,

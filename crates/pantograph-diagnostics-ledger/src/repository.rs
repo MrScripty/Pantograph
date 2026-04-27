@@ -89,6 +89,12 @@ pub trait DiagnosticsLedgerRepository {
         query: IoArtifactProjectionQuery,
     ) -> Result<Vec<IoArtifactProjectionRecord>, DiagnosticsLedgerError>;
 
+    fn rebuild_projection(
+        &mut self,
+        projection_name: &str,
+        batch_size: u32,
+    ) -> Result<ProjectionStateRecord, DiagnosticsLedgerError>;
+
     fn record_timing_observation(
         &mut self,
         observation: WorkflowTimingObservation,

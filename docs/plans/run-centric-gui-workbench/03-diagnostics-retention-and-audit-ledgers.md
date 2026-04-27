@@ -228,7 +228,7 @@ repair, migration, projection-version changes, and tests.
 - [ ] Implement warm projection drains for diagnostics summary, retention
   completeness, workflow-version performance, model/runtime comparison facets,
   and Library usage where first-pass event families exist.
-- [ ] Implement explicit full-rebuild commands for migration, corruption
+- [x] Implement explicit full-rebuild commands for migration, corruption
   repair, projection-version changes, and tests. Ordinary startup and page
   load must not call these commands.
 - [ ] Add compact terminal run summary rows for completed/failed/cancelled runs
@@ -276,7 +276,8 @@ node, role, and event cursor for I/O Inspector reads. Projection filters now
 cover workflow version, scheduler policy, runtime/model ids, media type,
 retention policy, and artifact role where those facts exist in the read model.
 Warm projection drains, mixed-version facet outputs, and explicit rebuild
-commands remain pending.
+commands for hot projections are implemented. Warm projection drains and
+mixed-version facet outputs remain pending.
 
 ### Milestone 3: I/O Artifact Metadata And Retention
 

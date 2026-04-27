@@ -397,6 +397,14 @@ impl DiagnosticsLedgerRepository for SqliteDiagnosticsLedger {
         event_sqlite::query_io_artifact_projection(self, query)
     }
 
+    fn rebuild_projection(
+        &mut self,
+        projection_name: &str,
+        batch_size: u32,
+    ) -> Result<ProjectionStateRecord, DiagnosticsLedgerError> {
+        event_sqlite::rebuild_projection(self, projection_name, batch_size)
+    }
+
     fn record_timing_observation(
         &mut self,
         observation: WorkflowTimingObservation,

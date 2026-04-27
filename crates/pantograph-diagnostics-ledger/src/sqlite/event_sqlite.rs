@@ -690,6 +690,74 @@ pub(super) fn query_io_artifact_projection(
         .map_err(DiagnosticsLedgerError::from)
 }
 
+pub(super) fn rebuild_projection(
+    ledger: &mut SqliteDiagnosticsLedger,
+    projection_name: &str,
+    batch_size: u32,
+) -> Result<ProjectionStateRecord, DiagnosticsLedgerError> {
+    if batch_size > MAX_PAGE_SIZE {
+        return Err(DiagnosticsLedgerError::QueryLimitExceeded {
+            requested: batch_size,
+            max: MAX_PAGE_SIZE,
+        });
+    }
+    let batch_size = batch_size.max(1);
+    reset_projection(ledger, projection_name)?;
+
+    let mut previous_event_seq = -1;
+    loop {
+        let state = match projection_name {
+            SCHEDULER_TIMELINE_PROJECTION_NAME => {
+                drain_scheduler_timeline_projection(ledger, batch_size)?
+            }
+            RUN_LIST_PROJECTION_NAME => drain_run_list_projection(ledger, batch_size)?,
+            RUN_DETAIL_PROJECTION_NAME => drain_run_detail_projection(ledger, batch_size)?,
+            IO_ARTIFACT_PROJECTION_NAME => drain_io_artifact_projection(ledger, batch_size)?,
+            _ => {
+                return Err(DiagnosticsLedgerError::InvalidField {
+                    field: "projection_name",
+                });
+            }
+        };
+        if state.last_applied_event_seq == previous_event_seq {
+            return Ok(state);
+        }
+        previous_event_seq = state.last_applied_event_seq;
+    }
+}
+
+fn reset_projection(
+    ledger: &mut SqliteDiagnosticsLedger,
+    projection_name: &str,
+) -> Result<(), DiagnosticsLedgerError> {
+    let tx = ledger.conn.transaction()?;
+    match projection_name {
+        SCHEDULER_TIMELINE_PROJECTION_NAME => {
+            tx.execute("DELETE FROM scheduler_timeline_projection", [])?;
+        }
+        RUN_LIST_PROJECTION_NAME => {
+            tx.execute("DELETE FROM run_list_projection", [])?;
+        }
+        RUN_DETAIL_PROJECTION_NAME => {
+            tx.execute("DELETE FROM run_detail_projection", [])?;
+        }
+        IO_ARTIFACT_PROJECTION_NAME => {
+            tx.execute("DELETE FROM io_artifact_projection", [])?;
+        }
+        _ => {
+            return Err(DiagnosticsLedgerError::InvalidField {
+                field: "projection_name",
+            });
+        }
+    }
+    tx.execute(
+        "DELETE FROM projection_state WHERE projection_name = ?1",
+        params![projection_name],
+    )?;
+    tx.commit()?;
+    Ok(())
+}
+
 fn diagnostic_event_from_row(row: &Row<'_>) -> rusqlite::Result<DiagnosticEventRecord> {
     Ok(DiagnosticEventRecord {
         event_seq: row.get(0)?,

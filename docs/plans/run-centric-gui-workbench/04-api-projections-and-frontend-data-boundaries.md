@@ -171,7 +171,7 @@ policy into adapters.
   views.
 - [x] Ensure backend projection queries read materialized projection tables or
   authoritative state, not raw event replay, during ordinary API requests.
-- [ ] Add explicit admin/maintenance command boundaries for projection rebuild
+- [x] Add explicit admin/maintenance command boundaries for projection rebuild
   where Stage `03` exposes them.
 - [ ] Add local Network/system-node status query.
 - [ ] Add immutable run submission and cancel/resubmit command boundaries.
@@ -204,7 +204,9 @@ artifact metadata/reference rows for I/O Inspector reads. Projection query
 DTOs now expose backend-owned filters for workflow version, scheduler policy,
 runtime/model ids, media type, retention policy, node id, and artifact role
 where those fields exist. Retention policy, Library/Pumas, Network/system-node,
-admin maintenance, and broader command boundaries remain pending.
+and broader command boundaries remain pending. `workflow_projection_rebuild`
+provides the first explicit admin maintenance boundary for hot projection
+repair and projection-version rebuild scenarios.
 
 ### Milestone 3: Frontend Services And Stores
 

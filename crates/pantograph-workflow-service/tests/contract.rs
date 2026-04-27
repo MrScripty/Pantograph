@@ -12,7 +12,8 @@ use pantograph_workflow_service::{
     WorkflowExecutionSessionSummary, WorkflowHost, WorkflowHostCapabilities,
     WorkflowIoArtifactQueryRequest, WorkflowIoArtifactQueryResponse, WorkflowIoNode,
     WorkflowIoPort, WorkflowIoRequest, WorkflowIoResponse, WorkflowOutputTarget,
-    WorkflowPortBinding, WorkflowPreflightRequest, WorkflowRunDetailQueryRequest,
+    WorkflowPortBinding, WorkflowPreflightRequest, WorkflowProjectionRebuildRequest,
+    WorkflowProjectionRebuildResponse, WorkflowRunDetailQueryRequest,
     WorkflowRunDetailQueryResponse, WorkflowRuntimeCapability, WorkflowRuntimeInstallState,
     WorkflowRuntimeRequirements, WorkflowRuntimeSourceKind, WorkflowSchedulerSnapshotResponse,
     WorkflowSchedulerTimelineQueryRequest, WorkflowSchedulerTimelineQueryResponse, WorkflowService,
@@ -806,6 +807,44 @@ fn workflow_io_artifact_query_contract_snapshot() {
             "status": "current",
             "rebuilt_at_ms": null,
             "updated_at_ms": 1210
+        }
+    });
+    assert_eq!(response_value, expected_response);
+}
+
+#[test]
+fn workflow_projection_rebuild_contract_snapshot() {
+    let request = WorkflowProjectionRebuildRequest {
+        projection_name: "run_list".to_string(),
+        batch_size: Some(100),
+    };
+    let response = WorkflowProjectionRebuildResponse {
+        projection_state: ProjectionStateRecord {
+            projection_name: "run_list".to_string(),
+            projection_version: 1,
+            last_applied_event_seq: 42,
+            status: ProjectionStatus::Current,
+            rebuilt_at_ms: None,
+            updated_at_ms: 1300,
+        },
+    };
+
+    let request_value = serde_json::to_value(request).expect("serialize rebuild request");
+    let expected_request = serde_json::json!({
+        "projection_name": "run_list",
+        "batch_size": 100
+    });
+    assert_eq!(request_value, expected_request);
+
+    let response_value = serde_json::to_value(response).expect("serialize rebuild response");
+    let expected_response = serde_json::json!({
+        "projection_state": {
+            "projection_name": "run_list",
+            "projection_version": 1,
+            "last_applied_event_seq": 42,
+            "status": "current",
+            "rebuilt_at_ms": null,
+            "updated_at_ms": 1300
         }
     });
     assert_eq!(response_value, expected_response);

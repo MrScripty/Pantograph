@@ -3,6 +3,8 @@ import type {
   WorkflowDiagnosticsProjection,
   WorkflowIoArtifactQueryRequest,
   WorkflowIoArtifactQueryResponse,
+  WorkflowProjectionRebuildRequest,
+  WorkflowProjectionRebuildResponse,
   WorkflowRunDetailQueryRequest,
   WorkflowRunDetailQueryResponse,
   WorkflowRunListQueryRequest,
@@ -370,6 +372,27 @@ export class WorkflowService extends WorkflowGraphMutationService {
     }
 
     return invoke<WorkflowIoArtifactQueryResponse>('workflow_io_artifact_query', {
+      request,
+    });
+  }
+
+  async rebuildProjection(
+    request: WorkflowProjectionRebuildRequest,
+  ): Promise<WorkflowProjectionRebuildResponse> {
+    if (USE_WORKFLOW_MOCKS) {
+      return {
+        projection_state: {
+          projection_name: request.projection_name,
+          projection_version: 1,
+          last_applied_event_seq: 0,
+          status: 'current',
+          rebuilt_at_ms: Date.now(),
+          updated_at_ms: Date.now(),
+        },
+      };
+    }
+
+    return invoke<WorkflowProjectionRebuildResponse>('workflow_projection_rebuild', {
       request,
     });
   }

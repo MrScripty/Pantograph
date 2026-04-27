@@ -293,6 +293,14 @@ pub async fn workflow_io_artifact_query(
 }
 
 #[command]
+pub async fn workflow_projection_rebuild(
+    request: pantograph_workflow_service::WorkflowProjectionRebuildRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<pantograph_workflow_service::WorkflowProjectionRebuildResponse, String> {
+    super::headless_workflow_commands::workflow_projection_rebuild(request, workflow_service).await
+}
+
+#[command]
 pub async fn workflow_cancel_execution_session_queue_item(
     request: pantograph_workflow_service::WorkflowExecutionSessionQueueCancelRequest,
     workflow_service: State<'_, SharedWorkflowService>,
