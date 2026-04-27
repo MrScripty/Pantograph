@@ -4,9 +4,9 @@
 
 In progress. Stage `05` delivered the Scheduler-first shell, dense Scheduler
 table, local Network status page, and Node Editor reserved page. This stage now
-has a first-pass I/O Inspector artifact metadata browser and global retention
-policy form. Library, historic run graph rendering, deeper diagnostics facets,
-and richer artifact payload renderers remain open.
+has first-pass I/O Inspector and Library pages backed by projection services.
+Historic run graph rendering, deeper diagnostics facets, Pumas mutation
+actions, and richer artifact payload renderers remain open.
 
 ## Objective
 
@@ -250,16 +250,16 @@ and cleanup/storage controls remain open pending richer backend projections.
 
 **Tasks:**
 
-- [ ] Show asset categories: models, runtimes, workflows, nodes, templates,
+- [x] Show asset categories: models, runtimes, workflows, nodes, templates,
   connectors, local additions, Pumas assets, Pantograph-owned assets.
-- [ ] Highlight assets used by active run.
-- [ ] Show source, version, fingerprint where available, usage count, last
+- [x] Highlight assets used by active run.
+- [x] Show source, version, fingerprint where available, usage count, last
   accessed, linked workflow/node versions, and audit summaries.
-- [ ] Render Library usage projections derived from typed `library.*` events.
-- [ ] Render backend-provided projection freshness/catching-up state for
+- [x] Render Library usage projections derived from typed `library.*` events.
+- [x] Render backend-provided projection freshness/catching-up state for
   Library usage counts.
 - [ ] Add Pumas search/download/delete actions where backend support exists.
-- [ ] Avoid optimistic display of asset mutations.
+- [x] Avoid optimistic display of asset mutations.
 
 **Verification:**
 
@@ -268,7 +268,12 @@ and cleanup/storage controls remain open pending richer backend projections.
 - Tests cover rejected Pumas/Library actions without optimistic local mutation.
 - Accessibility checks cover asset action buttons and filters.
 
-**Status:** Not started.
+**Status:** Partially complete. `LibraryPage.svelte` now queries
+`workflowService.queryLibraryUsage`, renders a dense usage/audit table, shows
+projection freshness, formats asset categories from explicit id prefixes, and
+highlights rows whose `last_workflow_run_id` exactly matches the active run.
+Pumas search/download/delete actions remain open because the frontend workflow
+service does not yet expose typed confirmed mutation commands for those actions.
 
 ### Milestone 6: Network And Node Editor Pages
 
@@ -333,6 +338,11 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
 - Added `src/components/workbench/ioInspectorPresenters.ts` and tests for media
   labels, payload-reference availability labels, byte labels, and projection
   freshness labels.
+- Added `src/components/workbench/LibraryPage.svelte` with projection-backed
+  Library usage/audit rendering from `workflowService.queryLibraryUsage`.
+- Added `src/components/workbench/libraryUsagePresenters.ts` and tests for
+  asset category labels, exact active-run match highlighting, network byte
+  labels, and projection freshness labels.
 
 ### Deviations
 
@@ -341,6 +351,9 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
   typed payload body API in Stage `04`.
 - No-active-run retained artifact browsing remains unavailable because the
   current I/O artifact query contract requires `workflow_run_id`.
+- Pumas search/download/delete UI is deferred because there is no typed
+  frontend workflow service method that confirms those mutations and can be
+  refreshed without optimistic local state.
 
 ### Follow-Ups
 
@@ -349,16 +362,20 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
   retained, expired, deleted, external, truncated, and too-large payloads.
 - Add first-pass media renderers after payload body access is exposed through a
   typed service.
+- Add typed Pumas/Library mutation service methods before adding Library action
+  buttons.
 
 ### Verification Summary
 
 - `node --experimental-strip-types --test src/components/workbench/ioInspectorPresenters.test.ts`
   passed.
+- `node --experimental-strip-types --test src/components/workbench/libraryUsagePresenters.test.ts`
+  passed.
 - `npm run test:frontend` passed.
 - `npm run typecheck` passed.
 - `npm run lint:a11y` passed.
 - `npm run build` passed.
-- `git diff --check` passed for the I/O Inspector slice.
+- `git diff --check` passed for the Stage `06` page slices.
 
 ### Traceability Links
 

@@ -15,7 +15,9 @@ later plan stages fill in richer page bodies.
 | `IoInspectorPage.svelte` | Projection-backed I/O artifact browser and global retention policy form. |
 | `ioInspectorPresenters.ts` | Pure I/O media, payload availability, byte-size, and projection freshness presenters. |
 | `ioInspectorPresenters.test.ts` | Unit coverage for I/O Inspector presentation labels. |
-| `LibraryPage.svelte` | Reserved Library page that reflects run-scoped Library usage context. |
+| `LibraryPage.svelte` | Projection-backed Library usage and audit table with active-run highlighting where the projection proves a last-run match. |
+| `libraryUsagePresenters.ts` | Pure Library category, active-run match, network byte, and projection freshness presenters. |
+| `libraryUsagePresenters.test.ts` | Unit coverage for Library page presentation labels and active-run matching. |
 | `NetworkPage.svelte` | Local-only system and scheduler status page backed by the local network status API. |
 | `NodeLabPage.svelte` | Reserved Node Editor page for future node authoring workflows. |
 
@@ -33,6 +35,8 @@ grow separate navigation and selection models.
   diagnostic event ledger rows.
 - I/O pages must treat artifact rows as metadata projections. Payload bodies
   are not loaded unless a dedicated typed payload API exists.
+- Library pages must render usage projections without issuing optimistic Pumas
+  or Library mutations.
 - Existing graph and diagnostics surfaces must remain usable while ownership
   moves into the workbench shell.
 - Toolbar navigation must use semantic buttons with accessible names.
@@ -58,6 +62,8 @@ triggered by workflow events rather than polling.
   still be fetched from projection services by each page.
 - I/O artifact rendering must distinguish metadata-only rows from rows with
   payload references without treating missing payload references as failures.
+- Library active-run highlighting must use explicit projection facts, not
+  inferred workflow or asset name matches.
 - Workbench pages must not consume raw diagnostic ledger events.
 - Reserved pages must not invent backend state; they should display only data
   available through typed services or explicit unavailable states.
@@ -102,6 +108,8 @@ triggered by workflow events rather than polling.
   `workflowService.queryRetentionPolicy`.
 - Retention policy saves call `workflowService.updateRetentionPolicy` and
   update displayed state only from the backend response.
+- `LibraryPage.svelte` reads usage and audit summaries through
+  `workflowService.queryLibraryUsage`.
 
 ## Structured Producer Contract
 - Workbench navigation order comes from `WORKBENCH_PAGES` in
@@ -110,6 +118,8 @@ triggered by workflow events rather than polling.
   `workflowService.queryRunList`.
 - I/O artifact cards render `IoArtifactProjectionRecord` metadata and may show
   `payload_ref` availability, but do not dereference payload bodies.
+- Library usage rows render `LibraryUsageProjectionRecord` summaries and may
+  highlight only rows whose `last_workflow_run_id` equals the active run.
 - Network status cards are derived from `WorkflowLocalNetworkStatusQueryResponse`.
 - Reserved page unavailable states are not persisted and do not imply backend
   capability flags.
