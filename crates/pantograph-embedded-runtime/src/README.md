@@ -174,6 +174,11 @@ embedded-runtime crate.
   state as `workflow_run_id: None`; edit-session `session_id` values must not
   be projected as fallback workflow run ids for runtime or scheduler
   diagnostics.
+  - Reason: idle scheduler diagnostics need an explicit no-run state so later
+    run-centric projections do not accidentally attribute host metrics to an
+    unrelated edit session.
+  - Revisit trigger: scheduler diagnostics introduce a separate typed idle
+    context field that replaces nullable workflow-run identity.
 - Final diagnostics emitted after completed, failed, or cancelled execution
   must be attributed with the scheduler-issued `workflow_run_id` already known
   to the execution path, even if the scheduler snapshot has returned to idle.

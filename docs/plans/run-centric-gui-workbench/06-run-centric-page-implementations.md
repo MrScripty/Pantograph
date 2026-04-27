@@ -228,7 +228,7 @@ rendering.
 - [ ] Add workflow inputs and outputs sections.
 - [ ] Add node-centric input/output view.
 - [x] Add artifact-centric gallery view.
-- [ ] Add no-active-run retained artifact browsing where backend projections
+- [x] Add no-active-run retained artifact browsing where backend projections
   support it.
 - [x] Render artifact gallery projection with event-derived retention state and
   payload availability labels.
@@ -254,10 +254,11 @@ rendering.
 **Status:** Partially complete. `IoInspectorPage.svelte` now queries
 `workflowService.queryIoArtifacts`, renders artifact metadata cards, separates
 payload-reference availability from metadata-only rows, displays projection
-freshness, and exposes the global retention policy read/update command without
-optimistic local mutation. Workflow I/O grouping, node-centric views,
-no-active-run browsing, rich media previews, detailed payload retention state,
-and cleanup/storage controls remain open pending richer backend projections.
+freshness, browses retained artifacts across runs when no run is active, and
+exposes the global retention policy read/update command without optimistic
+local mutation. Workflow I/O grouping, node-centric views, rich media previews,
+detailed payload retention state, and cleanup/storage controls remain open
+pending richer backend projections.
 
 ### Milestone 5: Library Page
 
@@ -351,6 +352,9 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
   status cards, and Node Editor unavailable state.
 - Added `src/components/workbench/IoInspectorPage.svelte` with active-run
   artifact metadata browsing from `workflowService.queryIoArtifacts`.
+- Extended the I/O artifact projection query contract so `workflow_run_id` is
+  an optional filter, allowing the I/O Inspector to browse retained artifact
+  metadata across runs when no run is selected.
 - Added global retention policy read/update controls using
   `workflowService.queryRetentionPolicy` and
   `workflowService.updateRetentionPolicy` with no optimistic mutation.
@@ -393,8 +397,9 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
 - First-pass I/O rendering is metadata-only. The page shows `payload_ref`
   availability but does not dereference payload bodies because there is no
   typed payload body API in Stage `04`.
-- No-active-run retained artifact browsing remains unavailable because the
-  current I/O artifact query contract requires `workflow_run_id`.
+- No-active-run retained artifact browsing now uses an optional
+  `workflow_run_id` query filter and still returns metadata only; payload body
+  dereferencing remains blocked on a typed payload body API.
 - Pumas search/download/delete UI is deferred because there is no typed
   frontend workflow service method that confirms those mutations and can be
   refreshed without optimistic local state.
@@ -445,8 +450,11 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
   passed.
 - `npm run test:frontend` passed.
 - `npm run typecheck` passed.
-- `npm run lint:a11y` passed.
+- `npm run lint:full` passed.
 - `npm run build` passed.
+- `cargo test -p pantograph-diagnostics-ledger` passed.
+- `cargo test -p pantograph-workflow-service` passed.
+- `npm run format:check` passed.
 - `git diff --check` passed for the Stage `06` page slices.
 
 ### Traceability Links

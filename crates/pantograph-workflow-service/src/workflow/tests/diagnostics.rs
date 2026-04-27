@@ -311,7 +311,7 @@ fn workflow_io_artifact_query_drains_and_reads_projection() {
 
     let response = service
         .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
-            workflow_run_id: "run-a".to_string(),
+            workflow_run_id: Some("run-a".to_string()),
             node_id: Some("node-b".to_string()),
             artifact_role: None,
             media_type: None,
@@ -332,6 +332,22 @@ fn workflow_io_artifact_query_drains_and_reads_projection() {
         Some("artifact://artifact-b")
     );
     assert_eq!(response.projection_state.last_applied_event_seq, 2);
+
+    let global_response = service
+        .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
+            workflow_run_id: None,
+            node_id: None,
+            artifact_role: None,
+            media_type: None,
+            retention_policy_id: None,
+            runtime_id: None,
+            model_id: None,
+            after_event_seq: None,
+            limit: Some(10),
+            projection_batch_size: Some(10),
+        })
+        .expect("global io artifact query");
+    assert_eq!(global_response.artifacts.len(), 2);
 }
 
 #[test]
@@ -339,7 +355,7 @@ fn workflow_io_artifact_query_validates_bounds() {
     let service = WorkflowService::with_ephemeral_diagnostics_ledger().expect("service");
 
     let invalid_id = service.workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
-        workflow_run_id: "bad\nid".to_string(),
+        workflow_run_id: Some("bad\nid".to_string()),
         node_id: None,
         artifact_role: None,
         media_type: None,
@@ -356,7 +372,7 @@ fn workflow_io_artifact_query_validates_bounds() {
     ));
 
     let oversized_limit = service.workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
-        workflow_run_id: "run-a".to_string(),
+        workflow_run_id: Some("run-a".to_string()),
         node_id: None,
         artifact_role: None,
         media_type: None,

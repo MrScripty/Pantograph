@@ -663,7 +663,7 @@ pub(super) fn query_io_artifact_projection(
                 model_version, artifact_id, artifact_role, media_type, size_bytes,
                 content_hash, payload_ref, retention_policy_id
          FROM io_artifact_projection
-         WHERE workflow_run_id = ?1
+         WHERE (?1 IS NULL OR workflow_run_id = ?1)
            AND (?2 IS NULL OR node_id = ?2)
            AND (?3 IS NULL OR artifact_role = ?3)
            AND (?4 IS NULL OR media_type = ?4)
@@ -676,7 +676,7 @@ pub(super) fn query_io_artifact_projection(
     )?;
     let rows = stmt.query_map(
         params![
-            query.workflow_run_id.as_str(),
+            query.workflow_run_id.as_ref().map(|id| id.as_str()),
             query.node_id.as_deref(),
             query.artifact_role.as_deref(),
             query.media_type.as_deref(),

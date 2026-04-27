@@ -45,17 +45,10 @@
     const requestSerial = ++artifactRequestSerial;
     artifactError = null;
 
-    if (!runId) {
-      artifacts = [];
-      projectionState = null;
-      loadingArtifacts = false;
-      return;
-    }
-
     loadingArtifacts = true;
     try {
       const response = await workflowService.queryIoArtifacts({
-        workflow_run_id: runId,
+        workflow_run_id: runId ?? null,
         limit: 250,
       });
       if (requestSerial !== artifactRequestSerial) {
@@ -136,7 +129,7 @@
         {#if $activeWorkflowRun}
           {$activeWorkflowRun.workflow_run_id}
         {:else}
-          No active run selected
+          Browsing retained artifacts across runs
         {/if}
       </div>
     </div>
@@ -144,7 +137,7 @@
       type="button"
       class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
       onclick={() => refreshArtifacts()}
-      disabled={loadingArtifacts || !$activeWorkflowRun}
+      disabled={loadingArtifacts}
     >
       <RefreshCw size={14} aria-hidden="true" class={loadingArtifacts ? 'animate-spin' : ''} />
       Refresh
@@ -161,12 +154,16 @@
         <div class="border-b border-red-900 bg-red-950/50 px-4 py-2 text-sm text-red-200">{artifactError}</div>
       {/if}
 
-      {#if !$activeWorkflowRun}
-        <div class="px-4 py-8 text-sm text-neutral-500">No active run selected</div>
-      {:else if loadingArtifacts && artifacts.length === 0}
+      {#if loadingArtifacts && artifacts.length === 0}
         <div class="px-4 py-8 text-sm text-neutral-500">Loading artifacts</div>
       {:else if artifacts.length === 0}
-        <div class="px-4 py-8 text-sm text-neutral-500">No retained artifact metadata for this run</div>
+        <div class="px-4 py-8 text-sm text-neutral-500">
+          {#if $activeWorkflowRun}
+            No retained artifact metadata for this run
+          {:else}
+            No retained artifact metadata available
+          {/if}
+        </div>
       {:else}
         <div class="grid gap-3 p-4 xl:grid-cols-2 2xl:grid-cols-3">
           {#each artifacts as artifact (artifact.event_id)}
@@ -194,6 +191,12 @@
                   <dt class="text-neutral-500">Node</dt>
                   <dd class="mt-0.5 truncate text-neutral-200" title={artifact.node_id ?? ''}>
                     {artifact.node_id ?? 'Workflow'}
+                  </dd>
+                </div>
+                <div>
+                  <dt class="text-neutral-500">Run</dt>
+                  <dd class="mt-0.5 truncate text-neutral-200" title={artifact.workflow_run_id}>
+                    {artifact.workflow_run_id}
                   </dd>
                 </div>
                 <div>

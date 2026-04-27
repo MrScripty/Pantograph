@@ -716,7 +716,7 @@ fn workflow_run_detail_query_contract_snapshot() {
 #[test]
 fn workflow_io_artifact_query_contract_snapshot() {
     let request = WorkflowIoArtifactQueryRequest {
-        workflow_run_id: "run-1".to_string(),
+        workflow_run_id: Some("run-1".to_string()),
         node_id: Some("node-1".to_string()),
         artifact_role: Some("node_output".to_string()),
         media_type: Some("image/png".to_string()),

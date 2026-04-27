@@ -738,7 +738,7 @@ pub struct RunDetailProjectionRecord {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IoArtifactProjectionQuery {
-    pub workflow_run_id: WorkflowRunId,
+    pub workflow_run_id: Option<WorkflowRunId>,
     pub node_id: Option<String>,
     pub artifact_role: Option<String>,
     pub media_type: Option<String>,

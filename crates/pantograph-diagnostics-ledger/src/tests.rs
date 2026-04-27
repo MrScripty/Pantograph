@@ -902,7 +902,9 @@ fn io_artifact_projection_drains_artifact_events_incrementally() {
 
     let records = ledger
         .query_io_artifact_projection(IoArtifactProjectionQuery {
-            workflow_run_id: WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+            workflow_run_id: Some(
+                WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+            ),
             node_id: None,
             artifact_role: None,
             media_type: None,
@@ -925,9 +927,26 @@ fn io_artifact_projection_drains_artifact_events_incrementally() {
     assert_eq!(records[1].media_type.as_deref(), Some("image/png"));
     assert_eq!(records[1].size_bytes, Some(1_024));
 
+    let global_records = ledger
+        .query_io_artifact_projection(IoArtifactProjectionQuery {
+            workflow_run_id: None,
+            node_id: None,
+            artifact_role: None,
+            media_type: None,
+            retention_policy_id: None,
+            runtime_id: None,
+            model_id: None,
+            after_event_seq: None,
+            limit: 10,
+        })
+        .expect("global io artifact projection loads");
+    assert_eq!(global_records.len(), 2);
+
     let node_records = ledger
         .query_io_artifact_projection(IoArtifactProjectionQuery {
-            workflow_run_id: WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+            workflow_run_id: Some(
+                WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+            ),
             node_id: Some("node_image".to_string()),
             artifact_role: None,
             media_type: Some("image/png".to_string()),
@@ -947,7 +966,9 @@ fn io_artifact_projection_drains_artifact_events_incrementally() {
     assert_eq!(no_new_state.last_applied_event_seq, output_event.event_seq);
     let after_idempotent = ledger
         .query_io_artifact_projection(IoArtifactProjectionQuery {
-            workflow_run_id: WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+            workflow_run_id: Some(
+                WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+            ),
             node_id: None,
             artifact_role: None,
             media_type: None,

@@ -146,7 +146,8 @@ pub struct WorkflowRunDetailQueryResponse {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowIoArtifactQueryRequest {
-    pub workflow_run_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_run_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub node_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -550,7 +551,7 @@ impl WorkflowRunDetailQueryRequest {
 impl WorkflowIoArtifactQueryRequest {
     fn into_io_artifact_query(self) -> Result<IoArtifactProjectionQuery, WorkflowServiceError> {
         let query = IoArtifactProjectionQuery {
-            workflow_run_id: parse_id("workflow_run_id", self.workflow_run_id)?,
+            workflow_run_id: parse_optional_id("workflow_run_id", self.workflow_run_id)?,
             node_id: self.node_id,
             artifact_role: self.artifact_role,
             media_type: self.media_type,

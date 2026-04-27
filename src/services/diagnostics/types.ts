@@ -402,7 +402,7 @@ export interface WorkflowRunDetailQueryResponse {
 }
 
 export interface WorkflowIoArtifactQueryRequest {
-  workflow_run_id: string;
+  workflow_run_id?: string | null;
   node_id?: string | null;
   artifact_role?: string | null;
   media_type?: string | null;
