@@ -4,7 +4,7 @@ use pantograph_diagnostics_ledger::{
     DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
     DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
     RunSnapshotAcceptedPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
-    SchedulerEstimateProducedPayload, SchedulerQueuePlacementPayload,
+    SchedulerEstimateProducedPayload, SchedulerQueuePlacementPayload, SchedulerRunDelayedPayload,
 };
 use pantograph_runtime_attribution::{
     WorkflowId, WorkflowRunId, WorkflowRunSnapshotRecord, WorkflowRunSnapshotRequest,
@@ -137,6 +137,7 @@ impl WorkflowService {
             return Err(error);
         }
 
+        let mut runtime_admission_delay_recorded = false;
         let queued_run = loop {
             let session_ready_to_load = {
                 let mut store = self.session_store_guard()?;
@@ -167,6 +168,20 @@ impl WorkflowService {
                             &workflow_run_id,
                             WorkflowSchedulerDecisionReason::WaitingForRuntimeAdmission,
                         );
+                    }
+                    if !runtime_admission_delay_recorded {
+                        let delayed_until_ms = unix_timestamp_ms()
+                            .saturating_add(WORKFLOW_SESSION_QUEUE_POLL_MS as u64);
+                        self.record_scheduler_delay_event_if_configured(
+                            &session,
+                            run_snapshot.as_ref(),
+                            &workflow_run_id,
+                            &request.workflow_semantic_version,
+                            WorkflowSchedulerDecisionReason::WaitingForRuntimeAdmission,
+                            Some(delayed_until_ms),
+                            Some("runtime admission retry scheduled"),
+                        )?;
+                        runtime_admission_delay_recorded = true;
                     }
                     tokio::time::sleep(Duration::from_millis(WORKFLOW_SESSION_QUEUE_POLL_MS)).await;
                     continue;
@@ -535,6 +550,68 @@ impl WorkflowService {
                         scheduler_policy_id: WORKFLOW_SESSION_SCHEDULER_POLICY.to_string(),
                     },
                 ),
+            },
+        )
+        .map(|_| ())
+        .map_err(WorkflowServiceError::from)
+    }
+
+    fn record_scheduler_delay_event_if_configured(
+        &self,
+        session: &WorkflowExecutionSessionSummary,
+        snapshot: Option<&WorkflowRunSnapshotRecord>,
+        workflow_run_id: &str,
+        workflow_semantic_version: &str,
+        reason: WorkflowSchedulerDecisionReason,
+        delayed_until_ms: Option<u64>,
+        fairness_context: Option<&str>,
+    ) -> Result<(), WorkflowServiceError> {
+        let Some(ledger) = self.diagnostics_ledger.as_ref() else {
+            return Ok(());
+        };
+        let workflow_run_id = WorkflowRunId::try_from(workflow_run_id.to_string())?;
+        let workflow_id = workflow_id_for_scheduler_event(session, snapshot)?;
+        let occurred_at_ms = unix_timestamp_ms() as i64;
+        let delayed_until_ms =
+            delayed_until_ms.map(|value| i64::try_from(value).unwrap_or(i64::MAX));
+
+        let mut ledger = ledger.lock().map_err(|_| {
+            WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
+        })?;
+        DiagnosticsLedgerRepository::append_diagnostic_event(
+            &mut *ledger,
+            DiagnosticEventAppendRequest {
+                source_component: DiagnosticEventSourceComponent::Scheduler,
+                source_instance_id: Some("workflow-session-scheduler".to_string()),
+                occurred_at_ms,
+                workflow_run_id: Some(workflow_run_id),
+                workflow_id: Some(workflow_id),
+                workflow_version_id: snapshot.map(|snapshot| snapshot.workflow_version_id.clone()),
+                workflow_semantic_version: Some(
+                    snapshot
+                        .map(|snapshot| snapshot.workflow_semantic_version.clone())
+                        .unwrap_or_else(|| workflow_semantic_version.to_string()),
+                ),
+                node_id: None,
+                node_type: None,
+                node_version: None,
+                runtime_id: None,
+                runtime_version: None,
+                model_id: None,
+                model_version: None,
+                client_id: None,
+                client_session_id: None,
+                bucket_id: None,
+                scheduler_policy_id: Some(WORKFLOW_SESSION_SCHEDULER_POLICY.to_string()),
+                retention_policy_id: snapshot.map(|snapshot| snapshot.retention_policy.clone()),
+                privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+                retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+                payload_ref: None,
+                payload: DiagnosticEventPayload::SchedulerRunDelayed(SchedulerRunDelayedPayload {
+                    reason: reason.as_str().to_string(),
+                    delayed_until_ms,
+                    fairness_context: fairness_context.map(str::to_string),
+                }),
             },
         )
         .map(|_| ())

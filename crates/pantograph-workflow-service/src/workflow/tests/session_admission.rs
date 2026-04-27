@@ -128,7 +128,8 @@ async fn workflow_execution_session_run_waits_for_runtime_capacity_before_admiss
 async fn workflow_execution_session_run_waits_for_runtime_admission_before_dequeue() {
     let admission_open = Arc::new(AtomicBool::new(false));
     let host = AdmissionGatedHost::new(admission_open.clone());
-    let service = WorkflowService::with_capacity_limits(1, 1);
+    let service = WorkflowService::with_capacity_limits(1, 1)
+        .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"));
 
     let created = service
         .create_workflow_execution_session(
@@ -214,4 +215,32 @@ async fn workflow_execution_session_run_waits_for_runtime_admission_before_deque
         .expect("run join")
         .expect("run response after admission opens");
     assert_eq!(response.outputs.len(), 1);
+
+    let diagnostic_events = {
+        let ledger = service
+            .diagnostics_ledger_guard()
+            .expect("diagnostics ledger");
+        pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::diagnostic_events_after(
+            &*ledger, 0, 20,
+        )
+        .expect("diagnostic events")
+    };
+    let delay_events = diagnostic_events
+        .iter()
+        .filter(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerRunDelayed
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(delay_events.len(), 1);
+    assert_eq!(
+        delay_events[0]
+            .workflow_run_id
+            .as_ref()
+            .map(|id| id.as_str()),
+        Some(response.workflow_run_id.as_str())
+    );
+    assert!(delay_events[0]
+        .payload_json
+        .contains("\"reason\":\"waiting_for_runtime_admission\""));
 }

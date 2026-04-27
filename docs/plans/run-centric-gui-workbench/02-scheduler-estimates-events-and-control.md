@@ -180,9 +180,10 @@ submission-time scheduler estimate for the queued run, and the stable estimate
 facts are queryable from hot run-list/run-detail projections. Typed delay
 events can now record a concrete delay reason and delayed-until timestamp into
 run-list/run-detail status and scheduler timeline projections when a scheduler
-emitter produces them. Rich estimate inputs from model metadata, runtime state,
-local node capacity, diagnostics history, cache/model state changes, and
-missing-asset analysis remain pending.
+emitter produces them, and workflow-session runtime admission waits now emit
+the first production delay event. Rich estimate inputs from model metadata,
+runtime state, local node capacity, diagnostics history, cache/model state
+changes, and missing-asset analysis remain pending.
 
 ### Milestone 3: Scheduler Event Emission And Persistence
 
@@ -226,10 +227,11 @@ persisted through the typed event ledger for queued workflow-session runs.
 The first scheduler timeline projection now drains those scheduler events plus
 `run.snapshot_accepted` into materialized timeline rows by event cursor.
 Scheduler delay and model lifecycle events now have validated ledger payloads
-and materialized timeline summaries, but production emitters for model
-load/unload and scheduler delay decisions are not wired yet. Other scheduler
-events, action/override events, admission events, and frontend page wiring
-remain pending; workflow-service now has a query boundary for the materialized
+and materialized timeline summaries. Workflow-session runtime admission waits
+now emit one durable `scheduler.run_delayed` event per wait. Production
+emitters for model load/unload are not wired yet. Other scheduler events,
+action/override events, admission events, and frontend page wiring remain
+pending; workflow-service now has a query boundary for the materialized
 scheduler timeline.
 
 ### Milestone 4: Queue Authority And Admin Controls

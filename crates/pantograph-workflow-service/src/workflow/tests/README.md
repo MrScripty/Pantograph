@@ -61,6 +61,9 @@ Use `workflow/tests/` for behavior-specific child modules under the parent
 - Extracted tests preserve their original public facade paths and assertions.
 - Diagnostics projection tests must verify typed projection fields rather than
   inferring retention, scheduler, or run-list facet facts from raw payload JSON.
+- Session admission tests with diagnostics enabled must verify durable
+  scheduler delay events for runtime admission waits without depending on raw
+  scheduler-store internals.
 - New behavior families should be added here only when they are cohesive enough
   to reduce `workflow/tests.rs` without hiding shared test setup.
 

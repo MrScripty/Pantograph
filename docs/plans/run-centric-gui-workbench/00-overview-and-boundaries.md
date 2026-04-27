@@ -223,8 +223,9 @@ observability, and scoped queue actions.
 
 **Status:** In progress. Scheduler estimate and queue-placement events now flow
 through the typed ledger and projections. Delay and model lifecycle events now
-have validated typed contracts and scheduler timeline projection support, but
-production runtime/model load emitters and control actions remain open.
+have validated typed contracts and scheduler timeline projection support.
+Runtime admission waits now emit a durable scheduler delay event, but
+runtime/model load emitters and control actions remain open.
 
 ### Milestone 3: Diagnostics, Retention, And Audit Storage
 
