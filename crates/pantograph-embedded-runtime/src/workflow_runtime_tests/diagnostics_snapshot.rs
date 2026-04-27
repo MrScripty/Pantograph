@@ -107,12 +107,10 @@ async fn diagnostics_snapshot_with_registry_sync_reconciles_execution_runtime() 
     );
 
     let registry_snapshot = registry.snapshot();
-    assert!(
-        registry_snapshot
-            .runtimes
-            .iter()
-            .any(|runtime| runtime.runtime_id == "llama_cpp")
-    );
+    assert!(registry_snapshot
+        .runtimes
+        .iter()
+        .any(|runtime| runtime.runtime_id == "llama_cpp"));
     let execution_runtime = registry_snapshot
         .runtimes
         .iter()

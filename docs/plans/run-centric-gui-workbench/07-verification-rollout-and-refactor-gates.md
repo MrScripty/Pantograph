@@ -369,6 +369,9 @@ Before launching workers, create a dedicated implementation-wave plan with:
   standards checker. This was resolved by ADR-014 and targeted README cleanup.
 - Initial `npm run lint:full` failed on frontend lint issues introduced during
   Stage `06`; those findings were resolved before continuing.
+- Initial `npm run format:check` failed on committed Rust formatting drift in
+  embedded-runtime, UniFFI, workflow-service, and Tauri workflow files; the
+  formatting-only changes were applied with `cargo fmt --all`.
 
 ### Follow-Ups
 
@@ -394,6 +397,7 @@ Before launching workers, create a dedicated implementation-wave plan with:
 - `npm run build` passed.
 - `cargo test -p pantograph-diagnostics-ledger` passed.
 - `cargo test -p pantograph-workflow-service` passed.
+- `npm run format:check` passed after applying `cargo fmt --all`.
 - `git diff --check` passed.
 
 ### Traceability Links

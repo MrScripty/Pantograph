@@ -12,7 +12,7 @@ use super::super::session_types::{
     WorkflowGraphUpdateNodePositionRequest,
 };
 use super::{
-    GraphSessionStore, dirty_tasks_from_seed_nodes_unique, phase6_memory_impact_projection,
+    dirty_tasks_from_seed_nodes_unique, phase6_memory_impact_projection, GraphSessionStore,
 };
 
 impl GraphSessionStore {

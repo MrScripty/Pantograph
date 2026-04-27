@@ -62,7 +62,9 @@ async fn workflow_run_rejects_invalid_workflow_semantic_version() {
         .await
         .expect_err("expected invalid semantic version");
 
-    assert!(matches!(err, WorkflowServiceError::InvalidRequest(message) if message.contains("workflow_semantic_version")));
+    assert!(
+        matches!(err, WorkflowServiceError::InvalidRequest(message) if message.contains("workflow_semantic_version"))
+    );
 }
 
 #[tokio::test]

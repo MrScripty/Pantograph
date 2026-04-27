@@ -177,13 +177,11 @@ fn load_workflow_refreshes_missing_derived_graph_for_diagnostics_history() {
         .load_workflow(".pantograph/workflows/no-fingerprint.json".to_string())
         .expect("load workflow");
 
-    assert!(
-        loaded
-            .graph
-            .derived_graph
-            .as_ref()
-            .is_some_and(|derived| !derived.graph_fingerprint.is_empty())
-    );
+    assert!(loaded
+        .graph
+        .derived_graph
+        .as_ref()
+        .is_some_and(|derived| !derived.graph_fingerprint.is_empty()));
 }
 
 #[test]
