@@ -477,6 +477,16 @@ export interface WorkflowRetentionPolicyQueryResponse {
   retention_policy: DiagnosticsRetentionPolicy;
 }
 
+export interface WorkflowRetentionPolicyUpdateRequest {
+  retention_days: number;
+  explanation: string;
+  reason: string;
+}
+
+export interface WorkflowRetentionPolicyUpdateResponse {
+  retention_policy: DiagnosticsRetentionPolicy;
+}
+
 export interface WorkflowSchedulerTimelineQueryRequest {
   workflow_run_id?: string | null;
   workflow_id?: string | null;

@@ -6,9 +6,9 @@ use crate::{
     PruneTimingObservationsCommand, PruneTimingObservationsResult, PruneUsageEventsCommand,
     PruneUsageEventsResult, RunDetailProjectionQuery, RunDetailProjectionRecord,
     RunListProjectionQuery, RunListProjectionRecord, SchedulerTimelineProjectionQuery,
-    SchedulerTimelineProjectionRecord, WorkflowRunSummaryProjection, WorkflowRunSummaryQuery,
-    WorkflowRunSummaryRecord, WorkflowTimingExpectation, WorkflowTimingExpectationQuery,
-    WorkflowTimingObservation,
+    SchedulerTimelineProjectionRecord, UpdateRetentionPolicyCommand, WorkflowRunSummaryProjection,
+    WorkflowRunSummaryQuery, WorkflowRunSummaryRecord, WorkflowTimingExpectation,
+    WorkflowTimingExpectationQuery, WorkflowTimingObservation,
 };
 
 pub trait DiagnosticsLedgerRepository {
@@ -23,6 +23,11 @@ pub trait DiagnosticsLedgerRepository {
     ) -> Result<DiagnosticsProjection, DiagnosticsLedgerError>;
 
     fn retention_policy(&self) -> Result<DiagnosticsRetentionPolicy, DiagnosticsLedgerError>;
+
+    fn update_retention_policy(
+        &mut self,
+        command: UpdateRetentionPolicyCommand,
+    ) -> Result<DiagnosticsRetentionPolicy, DiagnosticsLedgerError>;
 
     fn prune_usage_events(
         &mut self,

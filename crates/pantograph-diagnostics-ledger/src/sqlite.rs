@@ -19,8 +19,8 @@ use crate::event::{
 use crate::records::{
     DiagnosticsProjection, DiagnosticsQuery, DiagnosticsRetentionPolicy, ExecutionGuaranteeLevel,
     LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement, OutputModality,
-    PruneUsageEventsCommand, PruneUsageEventsResult, RetentionClass, UsageEventStatus,
-    UsageLineage,
+    PruneUsageEventsCommand, PruneUsageEventsResult, RetentionClass, UpdateRetentionPolicyCommand,
+    UsageEventStatus, UsageLineage,
 };
 use crate::schema::{apply_schema, current_schema_version, migrate_schema, SCHEMA_VERSION};
 use crate::timing::{
@@ -277,6 +277,46 @@ impl DiagnosticsLedgerRepository for SqliteDiagnosticsLedger {
                 })
             },
         )?;
+        Ok(policy)
+    }
+
+    fn update_retention_policy(
+        &mut self,
+        command: UpdateRetentionPolicyCommand,
+    ) -> Result<DiagnosticsRetentionPolicy, DiagnosticsLedgerError> {
+        command.validate()?;
+        let applied_at_ms = now_ms();
+        let tx = self.conn.transaction()?;
+        tx.execute(
+            "UPDATE diagnostics_retention_policy
+             SET retention_days = ?2,
+                 applied_at_ms = ?3,
+                 explanation = ?4
+             WHERE retention_class = ?1",
+            params![
+                command.retention_class.as_db(),
+                i64::from(command.retention_days),
+                applied_at_ms,
+                command.explanation.as_str()
+            ],
+        )?;
+        let policy = tx.query_row(
+            "SELECT policy_id, retention_class, retention_days, applied_at_ms, explanation
+             FROM diagnostics_retention_policy
+             WHERE retention_class = ?1",
+            params![command.retention_class.as_db()],
+            |row| {
+                Ok(DiagnosticsRetentionPolicy {
+                    policy_id: row.get(0)?,
+                    retention_class: RetentionClass::from_db(&row.get::<_, String>(1)?)
+                        .map_err(to_sql_error)?,
+                    retention_days: row.get::<_, i64>(2)? as u32,
+                    applied_at_ms: row.get(3)?,
+                    explanation: row.get(4)?,
+                })
+            },
+        )?;
+        tx.commit()?;
         Ok(policy)
     }
 

@@ -1,12 +1,17 @@
 use pantograph_diagnostics_ledger::{
-    DiagnosticsLedgerRepository, DiagnosticsQuery, DiagnosticsRetentionPolicy,
-    ExecutionGuaranteeLevel, IoArtifactProjectionQuery, IoArtifactProjectionRecord,
-    LibraryUsageProjectionQuery, LibraryUsageProjectionRecord, ModelLicenseUsageEvent,
-    ProjectionStateRecord, RunDetailProjectionQuery, RunDetailProjectionRecord,
+    DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
+    DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
+    DiagnosticsQuery, DiagnosticsRetentionPolicy, ExecutionGuaranteeLevel,
+    IoArtifactProjectionQuery, IoArtifactProjectionRecord, LibraryUsageProjectionQuery,
+    LibraryUsageProjectionRecord, ModelLicenseUsageEvent, ProjectionStateRecord, RetentionClass,
+    RetentionPolicyChangedPayload, RunDetailProjectionQuery, RunDetailProjectionRecord,
     RunListProjectionQuery, RunListProjectionRecord, RunListProjectionStatus,
     SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
+    UpdateRetentionPolicyCommand,
 };
 use serde::{Deserialize, Serialize};
+
+use crate::scheduler::unix_timestamp_ms;
 
 use super::{WorkflowService, WorkflowServiceError};
 
@@ -217,6 +222,20 @@ pub struct WorkflowRetentionPolicyQueryResponse {
     pub retention_policy: DiagnosticsRetentionPolicy,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowRetentionPolicyUpdateRequest {
+    pub retention_days: u32,
+    pub explanation: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowRetentionPolicyUpdateResponse {
+    pub retention_policy: DiagnosticsRetentionPolicy,
+}
+
 impl WorkflowService {
     pub fn workflow_diagnostics_usage_query(
         &self,
@@ -394,6 +413,60 @@ impl WorkflowService {
             .map_err(WorkflowServiceError::from)?;
 
         Ok(WorkflowRetentionPolicyQueryResponse { retention_policy })
+    }
+
+    pub fn workflow_retention_policy_update(
+        &self,
+        request: WorkflowRetentionPolicyUpdateRequest,
+    ) -> Result<WorkflowRetentionPolicyUpdateResponse, WorkflowServiceError> {
+        if request.reason.trim().is_empty() {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "reason must be non-empty".to_string(),
+            ));
+        }
+
+        let mut ledger = self.diagnostics_ledger_guard()?;
+        let retention_policy = ledger
+            .update_retention_policy(UpdateRetentionPolicyCommand {
+                retention_class: RetentionClass::Standard,
+                retention_days: request.retention_days,
+                explanation: request.explanation,
+            })
+            .map_err(WorkflowServiceError::from)?;
+        ledger
+            .append_diagnostic_event(DiagnosticEventAppendRequest {
+                source_component: DiagnosticEventSourceComponent::Retention,
+                source_instance_id: Some("workflow-retention-policy".to_string()),
+                occurred_at_ms: unix_timestamp_ms() as i64,
+                workflow_run_id: None,
+                workflow_id: None,
+                workflow_version_id: None,
+                workflow_semantic_version: None,
+                node_id: None,
+                node_type: None,
+                node_version: None,
+                runtime_id: None,
+                runtime_version: None,
+                model_id: None,
+                model_version: None,
+                client_id: None,
+                client_session_id: None,
+                bucket_id: None,
+                scheduler_policy_id: None,
+                retention_policy_id: Some(retention_policy.policy_id.clone()),
+                privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+                retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+                payload_ref: None,
+                payload: DiagnosticEventPayload::RetentionPolicyChanged(
+                    RetentionPolicyChangedPayload {
+                        policy_id: retention_policy.policy_id.clone(),
+                        reason: request.reason,
+                    },
+                ),
+            })
+            .map_err(WorkflowServiceError::from)?;
+
+        Ok(WorkflowRetentionPolicyUpdateResponse { retention_policy })
     }
 }
 

@@ -326,6 +326,15 @@ pub async fn workflow_retention_policy_query(
 }
 
 #[command]
+pub async fn workflow_retention_policy_update(
+    request: pantograph_workflow_service::WorkflowRetentionPolicyUpdateRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<pantograph_workflow_service::WorkflowRetentionPolicyUpdateResponse, String> {
+    super::headless_workflow_commands::workflow_retention_policy_update(request, workflow_service)
+        .await
+}
+
+#[command]
 pub async fn workflow_local_network_status_query(
     request: pantograph_workflow_service::WorkflowLocalNetworkStatusQueryRequest,
     workflow_service: State<'_, SharedWorkflowService>,

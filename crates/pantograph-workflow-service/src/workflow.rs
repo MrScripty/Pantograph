@@ -40,7 +40,8 @@ pub use self::diagnostics_api::{
     WorkflowIoArtifactQueryResponse, WorkflowLibraryUsageQueryRequest,
     WorkflowLibraryUsageQueryResponse, WorkflowProjectionRebuildRequest,
     WorkflowProjectionRebuildResponse, WorkflowRetentionPolicyQueryRequest,
-    WorkflowRetentionPolicyQueryResponse, WorkflowRunDetailQueryRequest,
+    WorkflowRetentionPolicyQueryResponse, WorkflowRetentionPolicyUpdateRequest,
+    WorkflowRetentionPolicyUpdateResponse, WorkflowRunDetailQueryRequest,
     WorkflowRunDetailQueryResponse, WorkflowRunListQueryRequest, WorkflowRunListQueryResponse,
     WorkflowSchedulerTimelineQueryRequest, WorkflowSchedulerTimelineQueryResponse,
 };

@@ -9,6 +9,7 @@ use crate::DiagnosticsLedgerError;
 pub const DEFAULT_PAGE_SIZE: u32 = 100;
 pub const MAX_PAGE_SIZE: u32 = 500;
 pub const DEFAULT_STANDARD_RETENTION_DAYS: u32 = 365;
+pub const MAX_RETENTION_DAYS: u32 = 3650;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ExecutionGuaranteeLevel {
@@ -252,6 +253,24 @@ pub struct DiagnosticsRetentionPolicy {
     pub retention_days: u32,
     pub applied_at_ms: i64,
     pub explanation: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UpdateRetentionPolicyCommand {
+    pub retention_class: RetentionClass,
+    pub retention_days: u32,
+    pub explanation: String,
+}
+
+impl UpdateRetentionPolicyCommand {
+    pub(crate) fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        if self.retention_days == 0 || self.retention_days > MAX_RETENTION_DAYS {
+            return Err(DiagnosticsLedgerError::InvalidField {
+                field: "retention_days",
+            });
+        }
+        validate_required_text("explanation", &self.explanation, MAX_JSON_LEN)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

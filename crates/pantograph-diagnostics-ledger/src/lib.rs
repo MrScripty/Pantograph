@@ -35,8 +35,8 @@ pub use records::{
     DiagnosticsProjection, DiagnosticsQuery, DiagnosticsRetentionPolicy, ExecutionGuaranteeLevel,
     LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement,
     OutputMeasurementUnavailableReason, OutputModality, PruneUsageEventsCommand,
-    PruneUsageEventsResult, RetentionClass, UsageEventStatus, UsageLineage,
-    DEFAULT_STANDARD_RETENTION_DAYS,
+    PruneUsageEventsResult, RetentionClass, UpdateRetentionPolicyCommand, UsageEventStatus,
+    UsageLineage, DEFAULT_STANDARD_RETENTION_DAYS, MAX_RETENTION_DAYS,
 };
 pub use repository::DiagnosticsLedgerRepository;
 pub use sqlite::SqliteDiagnosticsLedger;

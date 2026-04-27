@@ -277,6 +277,27 @@ fn workflow_local_network_status_roundtrip_uses_snake_case() {
 }
 
 #[test]
+fn workflow_retention_policy_update_request_uses_snake_case() {
+    let request = WorkflowRetentionPolicyUpdateRequest {
+        retention_days: 120,
+        explanation: "Keep diagnostics for development audit".to_string(),
+        reason: "GUI settings update".to_string(),
+    };
+
+    let json = serde_json::to_value(&request).expect("serialize retention update request");
+    assert_eq!(json["retention_days"], 120);
+    assert_eq!(
+        json["explanation"],
+        "Keep diagnostics for development audit"
+    );
+    assert_eq!(json["reason"], "GUI settings update");
+
+    let parsed: WorkflowRetentionPolicyUpdateRequest =
+        serde_json::from_value(json).expect("parse retention update request");
+    assert_eq!(parsed.retention_days, 120);
+}
+
+#[test]
 fn workflow_service_error_envelope_roundtrip() {
     let err = WorkflowServiceError::OutputNotProduced(
         "requested output target 'vector-output-1.vector' was not produced".to_string(),

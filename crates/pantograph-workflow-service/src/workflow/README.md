@@ -188,6 +188,9 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
   local-only system and scheduler-load facts through a provider abstraction.
   Future peer records must extend the peer DTOs instead of changing local-node
   semantics.
+- Retention policy updates: `workflow_retention_policy_update` changes the
+  global standard diagnostics retention policy and records a typed
+  `retention.policy_changed` audit event.
 - Diagnostics: usage diagnostics accept workflow-version and node contract
   version/digest filters so historic comparisons can avoid mixing different
   executable node behavior.

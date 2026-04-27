@@ -15,14 +15,15 @@ use crate::{
     RunDetailProjectionQuery, RunListProjectionQuery, RunListProjectionStatus,
     RunSnapshotAcceptedPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
     SchedulerEstimateProducedPayload, SchedulerQueuePlacementPayload,
-    SchedulerTimelineProjectionQuery, SqliteDiagnosticsLedger, UsageEventStatus, UsageLineage,
-    WorkflowRunSummaryQuery, WorkflowRunSummaryRecord, WorkflowRunSummaryStatus,
-    WorkflowTimingExpectation, WorkflowTimingExpectationComparison, WorkflowTimingExpectationQuery,
-    WorkflowTimingObservation, WorkflowTimingObservationScope, WorkflowTimingObservationStatus,
-    DEFAULT_STANDARD_RETENTION_DAYS, IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION,
-    LIBRARY_USAGE_PROJECTION_NAME, LIBRARY_USAGE_PROJECTION_VERSION,
-    MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION,
-    RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
+    SchedulerTimelineProjectionQuery, SqliteDiagnosticsLedger, UpdateRetentionPolicyCommand,
+    UsageEventStatus, UsageLineage, WorkflowRunSummaryQuery, WorkflowRunSummaryRecord,
+    WorkflowRunSummaryStatus, WorkflowTimingExpectation, WorkflowTimingExpectationComparison,
+    WorkflowTimingExpectationQuery, WorkflowTimingObservation, WorkflowTimingObservationScope,
+    WorkflowTimingObservationStatus, DEFAULT_STANDARD_RETENTION_DAYS, IO_ARTIFACT_PROJECTION_NAME,
+    IO_ARTIFACT_PROJECTION_VERSION, LIBRARY_USAGE_PROJECTION_NAME,
+    LIBRARY_USAGE_PROJECTION_VERSION, MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES,
+    RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION, RUN_LIST_PROJECTION_NAME,
+    RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
     SCHEDULER_TIMELINE_PROJECTION_VERSION,
 };
 
@@ -1330,6 +1331,30 @@ fn retention_policy_uses_standard_local_default() {
 
     assert_eq!(policy.retention_class, RetentionClass::Standard);
     assert_eq!(policy.retention_days, DEFAULT_STANDARD_RETENTION_DAYS);
+}
+
+#[test]
+fn update_retention_policy_updates_standard_policy() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+
+    let policy = ledger
+        .update_retention_policy(UpdateRetentionPolicyCommand {
+            retention_class: RetentionClass::Standard,
+            retention_days: 90,
+            explanation: "Short local retention for test".to_string(),
+        })
+        .expect("policy updates");
+
+    assert_eq!(policy.retention_class, RetentionClass::Standard);
+    assert_eq!(policy.retention_days, 90);
+    assert_eq!(policy.explanation, "Short local retention for test");
+    assert_eq!(
+        ledger
+            .retention_policy()
+            .expect("policy loads")
+            .retention_days,
+        90
+    );
 }
 
 #[test]

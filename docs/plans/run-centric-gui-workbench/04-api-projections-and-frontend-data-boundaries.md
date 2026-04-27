@@ -170,9 +170,9 @@ policy into adapters.
 - [x] Add backend queries for run detail.
 - [x] Add scheduler estimate and event queries.
 - [x] Add workflow-version graph lookup by run id.
-- [ ] Add I/O metadata and retention policy queries/commands.
+- [x] Add I/O metadata and retention policy queries/commands.
   - I/O artifact metadata query is implemented. Retention policy
-    query is implemented. Retention policy commands remain pending.
+    query and global update command are implemented.
 - [x] Add Library/Pumas usage audit queries.
 - [x] Add projection rebuild/query boundaries for typed event ledger derived
   views.
@@ -217,7 +217,9 @@ status query is exposed with local-only CPU/memory/disk/network-interface
 facts, scheduler load, future peer DTO placeholders, and explicit degraded GPU
 state. Frontend queue cancel/reprioritize methods now call the backend-owned
 execution-session queue commands, and stale frontend session command names were
-corrected. Retention policy commands and broader command boundaries remain pending.
+corrected. Retention policy updates now use a backend command that changes the
+global standard policy and records a typed `retention.policy_changed` audit
+event. Broader command boundaries remain pending.
 `workflow_projection_rebuild`
 provides the first explicit admin maintenance boundary for hot projection
 repair and projection-version rebuild scenarios. `workflow_run_graph_query`
@@ -243,6 +245,7 @@ projections while owning only transient UI state.
   DTOs.
 - [x] Add the initial I/O artifact projection service method and TypeScript
   DTOs.
+- [x] Add frontend retention policy update method and TypeScript DTOs.
 - [x] Add the initial local Network status service method and TypeScript DTOs.
 - [x] Add frontend methods and DTOs for scoped queue cancel/reprioritize
   actions.
@@ -312,8 +315,8 @@ event consumer for normal page state.
 
 - Backend projection boundaries implemented so far: run list, run detail,
   scheduler timeline, I/O artifact metadata, Library/Pumas usage, retention
-  policy query, projection rebuild, historic run graph lookup by run id, and
-  local Network status query.
+  policy query/update, projection rebuild, historic run graph lookup by run id,
+  and local Network status query.
 - Frontend service/type boundaries implemented so far for those projection
   reads, the historic run graph lookup, and local Network status query.
 

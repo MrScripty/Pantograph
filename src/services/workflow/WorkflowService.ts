@@ -9,6 +9,8 @@ import type {
   WorkflowProjectionRebuildResponse,
   WorkflowRetentionPolicyQueryRequest,
   WorkflowRetentionPolicyQueryResponse,
+  WorkflowRetentionPolicyUpdateRequest,
+  WorkflowRetentionPolicyUpdateResponse,
   WorkflowRunDetailQueryRequest,
   WorkflowRunDetailQueryResponse,
   WorkflowRunListQueryRequest,
@@ -487,6 +489,26 @@ export class WorkflowService extends WorkflowGraphMutationService {
     }
 
     return invoke<WorkflowRetentionPolicyQueryResponse>('workflow_retention_policy_query', {
+      request,
+    });
+  }
+
+  async updateRetentionPolicy(
+    request: WorkflowRetentionPolicyUpdateRequest,
+  ): Promise<WorkflowRetentionPolicyUpdateResponse> {
+    if (USE_WORKFLOW_MOCKS) {
+      return {
+        retention_policy: {
+          policy_id: 'standard-local-v1',
+          retention_class: 'standard',
+          retention_days: request.retention_days,
+          applied_at_ms: Date.now(),
+          explanation: request.explanation,
+        },
+      };
+    }
+
+    return invoke<WorkflowRetentionPolicyUpdateResponse>('workflow_retention_policy_update', {
       request,
     });
   }

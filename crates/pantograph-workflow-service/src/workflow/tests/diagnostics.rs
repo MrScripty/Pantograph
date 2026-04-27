@@ -499,6 +499,49 @@ fn workflow_retention_policy_query_reads_current_policy() {
     assert_eq!(response.retention_policy.retention_days, 365);
 }
 
+#[test]
+fn workflow_retention_policy_update_changes_policy_and_records_event() {
+    let service = WorkflowService::with_ephemeral_diagnostics_ledger().expect("service");
+
+    let response = service
+        .workflow_retention_policy_update(WorkflowRetentionPolicyUpdateRequest {
+            retention_days: 120,
+            explanation: "Keep local diagnostics for one development cycle".to_string(),
+            reason: "Developer changed global I/O retention settings".to_string(),
+        })
+        .expect("retention policy update");
+
+    assert_eq!(response.retention_policy.policy_id, "standard-local-v1");
+    assert_eq!(response.retention_policy.retention_days, 120);
+    assert_eq!(
+        service
+            .workflow_retention_policy_query(WorkflowRetentionPolicyQueryRequest {})
+            .expect("query updated policy")
+            .retention_policy
+            .retention_days,
+        120
+    );
+
+    let events = {
+        let ledger = service
+            .diagnostics_ledger_guard()
+            .expect("diagnostics ledger");
+        pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::diagnostic_events_after(
+            &*ledger, 0, 10,
+        )
+        .expect("diagnostic events")
+    };
+    assert_eq!(events.len(), 1);
+    assert_eq!(
+        events[0].event_kind,
+        pantograph_diagnostics_ledger::DiagnosticEventKind::RetentionPolicyChanged
+    );
+    assert_eq!(
+        events[0].retention_policy_id.as_deref(),
+        Some("standard-local-v1")
+    );
+}
+
 fn sample_run_snapshot_event() -> DiagnosticEventAppendRequest {
     DiagnosticEventAppendRequest {
         source_component: DiagnosticEventSourceComponent::WorkflowService,
