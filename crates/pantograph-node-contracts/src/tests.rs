@@ -24,7 +24,7 @@ fn test_contract() -> NodeTypeContract {
         execution_semantics: NodeExecutionSemantics::Reactive,
         capability_requirements: vec![NodeCapabilityRequirement::required("llm")],
         authoring: NodeAuthoringMetadata::default(),
-        contract_version: Some("1".to_string()),
+        contract_version: Some("1.0.0".to_string()),
         contract_digest: None,
     }
 }
@@ -254,7 +254,7 @@ fn composed_contract() -> ComposedNodeContract {
             execution_semantics: NodeExecutionSemantics::Stream,
             capability_requirements: vec![NodeCapabilityRequirement::required("llm")],
             authoring: NodeAuthoringMetadata::default(),
-            contract_version: Some("1".to_string()),
+            contract_version: Some("1.0.0".to_string()),
             contract_digest: Some("digest-tool-loop-v1".to_string()),
         },
         internal_graph: ComposedInternalGraph {
@@ -264,14 +264,14 @@ fn composed_contract() -> ComposedNodeContract {
                     node_id: id("llm"),
                     node_type: id("llm-inference"),
                     label: "LLM".to_string(),
-                    contract_version: Some("1".to_string()),
+                    contract_version: Some("1.0.0".to_string()),
                     contract_digest: None,
                 },
                 ComposedInternalNode {
                     node_id: id("tool-executor"),
                     node_type: id("tool-executor"),
                     label: "Tool Executor".to_string(),
-                    contract_version: Some("1".to_string()),
+                    contract_version: Some("1.0.0".to_string()),
                     contract_digest: None,
                 },
             ],
@@ -346,9 +346,9 @@ fn contract_upgrade_records_validate_outcomes_and_diagnostics() {
     let valid = ContractUpgradeRecord {
         node_type: id("system-prompt"),
         outcome: ContractUpgradeOutcome::Upgraded,
-        source_contract_version: Some("legacy".to_string()),
+        source_contract_version: Some("0.0.0".to_string()),
         source_contract_digest: None,
-        target_contract_version: Some("1".to_string()),
+        target_contract_version: Some("1.0.0".to_string()),
         target_contract_digest: None,
         diagnostics_lineage: DiagnosticsLineagePolicy::PreservePrimitiveLineage,
         changes: vec![ContractUpgradeChange::NodeTypeChanged {

@@ -12,6 +12,7 @@ description = "Canonical node, port, effective contract, and discovery semantics
 workspace = true
 
 [dependencies]
+blake3 = "1.8.3"
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

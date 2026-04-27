@@ -71,9 +71,9 @@ fn legacy_system_prompt_migration_record(node_id: &str) -> Option<ContractUpgrad
     let record = ContractUpgradeRecord {
         node_type: NodeTypeId::try_from("system-prompt".to_string()).ok()?,
         outcome: ContractUpgradeOutcome::Upgraded,
-        source_contract_version: Some("legacy".to_string()),
+        source_contract_version: Some("0.0.0".to_string()),
         source_contract_digest: None,
-        target_contract_version: Some("1".to_string()),
+        target_contract_version: Some("1.0.0".to_string()),
         target_contract_digest: None,
         diagnostics_lineage: DiagnosticsLineagePolicy::PreservePrimitiveLineage,
         changes: vec![

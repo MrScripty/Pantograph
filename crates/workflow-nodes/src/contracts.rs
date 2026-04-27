@@ -56,7 +56,7 @@ pub fn task_metadata_to_contract(
         execution_semantics: convert_execution_semantics(metadata.execution_mode),
         capability_requirements: capability_requirements(metadata),
         authoring: authoring_metadata(metadata),
-        contract_version: Some("1".to_string()),
+        contract_version: Some("1.0.0".to_string()),
         contract_digest: None,
     };
     contract.validate()?;
@@ -118,7 +118,7 @@ fn internal_node(
         node_id: node_id(node_id_value)?,
         node_type: node_type_id(node_type_value)?,
         label: label.to_string(),
-        contract_version: Some("1".to_string()),
+        contract_version: Some("1.0.0".to_string()),
         contract_digest: None,
     })
 }

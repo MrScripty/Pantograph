@@ -45,13 +45,24 @@ pub enum NodeContractError {
     MissingContractUpgradeChange,
     #[error("typed rejection migration records require at least one diagnostic")]
     MissingContractUpgradeDiagnostic,
+    #[error("{field} is required for executable node behavior identity")]
+    MissingBehaviorIdentityField { field: &'static str },
+    #[error("{field} is invalid: {reason}")]
+    InvalidBehaviorIdentityField {
+        field: &'static str,
+        reason: &'static str,
+    },
+    #[error("failed to encode node behavior digest input: {reason}")]
+    BehaviorDigestEncoding { reason: String },
 }
 
+mod behavior;
 mod composition;
 mod migration;
 #[cfg(test)]
 mod tests;
 
+pub use behavior::{compute_node_behavior_digest, NodeBehaviorVersion};
 pub use composition::{
     ComposedInternalEdge, ComposedInternalGraph, ComposedInternalNode, ComposedNodeContract,
     ComposedPortMapping, ComposedPortMappings, ComposedTracePolicy,
@@ -434,6 +445,7 @@ impl NodeTypeContract {
     pub fn validate(&self) -> Result<(), NodeContractError> {
         validate_display_text("node.label", &self.label, MAX_LABEL_LEN)?;
         validate_display_text("node.description", &self.description, MAX_DESCRIPTION_LEN)?;
+        NodeBehaviorVersion::from_contract(self)?;
         if self.inputs.is_empty() && self.outputs.is_empty() {
             return Err(NodeContractError::MissingPorts);
         }

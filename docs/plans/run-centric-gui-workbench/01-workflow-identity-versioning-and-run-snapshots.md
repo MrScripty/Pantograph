@@ -73,11 +73,11 @@ policy, graph settings, and inputs that existed when the run was queued.
   diagnostics history, or run records.
 - Existing records that cannot satisfy the new workflow identity and version
   invariants may be deleted, ignored, or regenerated during the cutover.
-- Node behavior fingerprints may initially be derived from available node
-  contract/version metadata, but Stage `01` must make the resulting contract
-  explicit. Executable nodes either provide version/fingerprint facts or are
-  rejected/quarantined from versioned execution; later stages must not carry
-  silent "unknown node version" fallback identity logic.
+- Node behavior fingerprints are projected from node contracts through an
+  explicit `NodeBehaviorVersion` fact. Producers may provide a digest or allow
+  the contract crate to derive one from the typed contract payload, but
+  executable nodes must carry semantic contract versions before they can
+  participate in versioned execution.
 
 ### Dependencies
 
@@ -164,8 +164,9 @@ large patch. Before coding, split it into waves with explicit write sets:
 - Documentation links back to the requirements file and this stage.
 
 **Status:** In progress. Workflow identity grammar has a first implementation
-in `pantograph-workflow-service`; remaining Milestone 1 contract decisions are
-still open.
+in `pantograph-workflow-service`, and node behavior version facts are now
+available from `pantograph-node-contracts`; remaining Milestone 1 contract
+decisions are still open.
 
 ### Milestone 2: Workflow Version Registry
 
@@ -282,17 +283,26 @@ records for the same execution fingerprint.
   `pantograph-workflow-service`, routed `validate_workflow_id` through it, and
   changed filesystem workflow save/load/list/delete boundaries to reject or
   skip incompatible workflow file stems instead of silently sanitizing names.
+- 2026-04-27: Added `NodeBehaviorVersion` in
+  `pantograph-node-contracts`, made `NodeTypeContract::validate` require
+  semantic contract versions and BLAKE3 behavior digests, and updated
+  built-in contract producers plus legacy migration metadata to semantic
+  versions.
 
 ### Deviations
 
 - Full workflow-version registry and run-snapshot storage are intentionally not
   part of this first slice. This keeps the initial cutover limited to identity
   validation before topology/node-version fingerprint contracts are added.
+- Workflow execution fingerprints do not consume `NodeBehaviorVersion` yet.
+  That wiring remains in the topology and workflow-version registry slices.
 
 ### Follow-Ups
 
 - Decide whether workflow version ownership needs an ADR.
-- Define canonical executable topology inputs and exclusions.
+- Define canonical executable topology inputs and exclusions, including how
+  derived node behavior digests are embedded into workflow execution
+  fingerprints.
 - Define workflow-version registry storage owner before schema work.
 
 ### Verification Summary
@@ -306,6 +316,12 @@ records for the same execution fingerprint.
 - 2026-04-27: `cargo test -p pantograph-workflow-service --lib
   persistence_tests` passed.
 - 2026-04-27: `cargo test -p pantograph-workflow-service` passed.
+- 2026-04-27: `cargo test -p pantograph-node-contracts` passed.
+- 2026-04-27: `cargo test -p workflow-nodes` passed.
+- 2026-04-27: `cargo test -p pantograph-workflow-service canonicalization`
+  passed.
+- 2026-04-27: `cargo test -p pantograph-workflow-service` passed after the
+  semantic node contract-version cutover.
 
 ### Traceability Links
 

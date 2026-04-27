@@ -12,6 +12,7 @@ discovery facts instead of duplicating node shape or compatibility rules.
 | File | Description |
 | ---- | ----------- |
 | `lib.rs` | Public canonical contract, effective contract, compatibility, module re-export, and error API. |
+| `behavior.rs` | Node behavior-version facts, semantic contract-version validation, and stable digest derivation for workflow execution identity. |
 | `composition.rs` | Composed-node DTOs, internal graph mapping, external port mapping validation, and trace policy contracts. |
 | `migration.rs` | Contract-upgrade records, outcomes, changes, diagnostics, and validation. |
 | `tests.rs` | Crate-private coverage for id validation, compatibility, effective contracts, composition, migration, and JSON shape stability. |
@@ -65,6 +66,10 @@ candidates, graph-authoring diagnostics, or saved-workflow migration results.
 - Effective contracts include resolution diagnostics so callers can explain
   why a node shape differs from its static type contract.
 - Host adapters project contracts; they do not define compatibility rules.
+- Executable node identity uses `NodeBehaviorVersion`: node contracts must
+  expose a semantic `major.minor.patch` contract version, and behavior digests
+  are either supplied by the producer or derived by the backend from the
+  canonical contract.
 
 ## Revisit Triggers
 
@@ -101,7 +106,10 @@ candidates, graph-authoring diagnostics, or saved-workflow migration results.
 ## Structured Producer Contract
 
 - Concrete node registries provide `NodeTypeContract` values with stable port
-  ids.
+  ids and semantic contract versions.
+- Node behavior-version producers emit `{ node_type, contract_version,
+  behavior_digest }` facts. Missing producer digests are backend-derived from a
+  BLAKE3 digest over the serialized contract with `contract_digest` cleared.
 - Composed-node producers provide external port mappings into internal
   primitive graph nodes and preserve primitive trace policy.
 - Migration producers emit `ContractUpgradeRecord` values before rewriting,
