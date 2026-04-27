@@ -2,7 +2,10 @@
 
 ## Status
 
-Draft plan. Not implemented.
+In progress. Stage-start gate and first Stage `05`/`06` source-audit pass have
+been run for the workbench shell and run-centric page implementation slices.
+The traceability gate currently fails on broader documentation gaps that need a
+dedicated cleanup slice before this stage can be closed.
 
 ## Objective
 
@@ -99,14 +102,21 @@ backend truth exists.
 
 Before editing source code for any numbered stage:
 
-- [ ] Read this file, the selected stage file, and relevant standards.
-- [ ] Run `git status --short`.
-- [ ] Identify primary write set and adjacent write set.
-- [ ] Confirm dirty implementation files do not overlap the write set.
-- [ ] Review affected module READMEs.
-- [ ] Decide whether an ADR is required before implementation.
-- [ ] Decide whether the stage is serial or needs implementation waves.
-- [ ] Define the smallest logical slice to implement first.
+- [x] Read this file, the selected stage file, and relevant standards.
+- [x] Run `git status --short`.
+- [x] Identify primary write set and adjacent write set.
+- [x] Confirm dirty implementation files do not overlap the write set.
+- [x] Review affected module READMEs.
+- [x] Decide whether an ADR is required before implementation.
+- [x] Decide whether the stage is serial or needs implementation waves.
+- [x] Define the smallest logical slice to implement first.
+
+**2026-04-27 gate result:** The active implementation source write set was
+clean. The only dirty files were unrelated deleted workflow/assets plus
+untracked generated/runtime assets under `.pantograph/` and `assets/`, which
+were left untouched. No new ADR was required for the verification slice because
+the accepted ownership boundaries are already captured in the stage plans and
+workbench READMEs.
 
 If dirty implementation files overlap the selected stage and are not yours,
 stop and ask for direction. Do not revert them.
@@ -324,21 +334,60 @@ Before launching workers, create a dedicated implementation-wave plan with:
 
 ### Completed
 
-- None. Draft plan only.
+- Ran Stage `05` source audit for old shell ownership:
+  `rg -n "viewMode|view mode|canvas/workflow|drawing-to-svelte|Drawing|Canvas"`.
+  Active `src` code no longer contains the old `viewMode` root-shell store or
+  canvas/workflow toggle. Remaining drawing/canvas hits are feature exports,
+  drawing services/components, graph canvas internals, mock descriptions, and
+  historical plan/review text.
+- Ran Stage `03`/`04` frontend projection audit:
+  `rg -n "diagnostic_events|event_seq|projection_state|projection_rebuild|payload_json" src/components src/services`.
+  Workbench pages consume projection services and freshness records; no
+  workbench page queries raw `diagnostic_events`. Scheduler and Diagnostics
+  pages expose payload availability labels without parsing raw `payload_json`
+  bodies.
+- Ran Stage `04`/`06` projection service audit:
+  `rg -n "queryRunList|queryRunDetail|querySchedulerTimeline|queryRunGraph|queryIoArtifacts|queryLibraryUsage|queryLocalNetworkStatus"`.
+  Workbench page data comes through the typed workflow service methods for run
+  list/detail, scheduler timeline, run graph, I/O artifacts, Library usage, and
+  local Network status.
 
 ### Deviations
 
-- None.
+- `npm run traceability` was run and failed. The failures are broader
+  repository documentation traceability gaps, not a localized workbench page
+  regression. They should be fixed in a dedicated documentation cleanup slice
+  because the affected directories span Tauri workflow commands, workflow
+  service crates/tests/scheduler code, diagnostics ledger SQLite docs,
+  frontend services, config, and root `src`.
 
 ### Follow-Ups
 
 - Convert any broad stage into implementation-wave specs before using parallel
   workers.
 - Add concrete command outputs during implementation.
+- Add/update README or ADR traceability for the directories reported by
+  `npm run traceability`: `src-tauri/src/workflow`,
+  `crates/pantograph-workflow-service`,
+  `crates/pantograph-workflow-service/tests`,
+  `crates/pantograph-workflow-service/src/workflow/tests`, `src`,
+  `crates/pantograph-workflow-service/src/scheduler`, `src/services/workflow`,
+  `src/config`, `src-tauri/src`, `crates/pantograph-workflow-service/src`, and
+  `src/services/diagnostics`.
+- Bring `crates/pantograph-diagnostics-ledger/src/README.md` and
+  `crates/pantograph-diagnostics-ledger/src/sqlite/README.md` into compliance
+  with the documentation standards sections required by the traceability gate.
 
 ### Verification Summary
 
-- Not run. Draft plan only.
+- `git status --short` showed only unrelated deleted workflow/assets and
+  untracked generated/runtime assets before the Stage `07` audit update.
+- Stage `05` shell audit passed for active root-shell ownership: no active
+  `viewMode` store or canvas/workflow root toggle remains in `src`.
+- Projection consumption audit passed for workbench pages: pages call typed
+  projection services and do not query raw diagnostic ledger rows.
+- `npm run traceability` failed with 13 documentation traceability issues; see
+  Follow-Ups for the affected directories/files.
 
 ### Traceability Links
 
