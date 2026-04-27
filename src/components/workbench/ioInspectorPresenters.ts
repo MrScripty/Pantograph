@@ -26,6 +26,12 @@ export interface IoArtifactNodeGroup {
   latest_event_seq: number;
 }
 
+export interface IoArtifactRendererSummary {
+  family: IoArtifactMediaFamily;
+  title: string;
+  detail: string;
+}
+
 export function isWorkflowInputArtifact(
   artifact: Pick<IoArtifactProjectionRecord, 'artifact_role'>,
 ): boolean {
@@ -131,6 +137,35 @@ export function formatIoArtifactMediaLabel(mediaType: string | null | undefined)
       return 'File';
     case 'unknown':
       return 'Unknown';
+  }
+}
+
+export function buildIoArtifactRendererSummary(
+  artifact: Pick<IoArtifactProjectionRecord, 'media_type' | 'payload_ref'>,
+): IoArtifactRendererSummary {
+  const family = classifyIoArtifactMedia(artifact.media_type);
+  const hasPayloadReference = resolveIoArtifactPayloadAvailability(artifact) === 'referenced';
+  const detail = hasPayloadReference
+    ? 'Payload reference retained'
+    : 'Metadata retained only';
+
+  switch (family) {
+    case 'text':
+      return { family, title: 'Text', detail };
+    case 'image':
+      return { family, title: 'Image preview', detail };
+    case 'audio':
+      return { family, title: 'Audio', detail };
+    case 'video':
+      return { family, title: 'Video', detail };
+    case 'table':
+      return { family, title: 'Table', detail };
+    case 'json':
+      return { family, title: 'JSON', detail };
+    case 'file':
+      return { family, title: 'File', detail };
+    case 'unknown':
+      return { family, title: 'Unknown media', detail };
   }
 }
 

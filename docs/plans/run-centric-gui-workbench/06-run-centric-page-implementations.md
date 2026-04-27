@@ -234,7 +234,7 @@ rendering.
   payload availability labels.
 - [x] Render backend-provided projection freshness/catching-up state for
   retained-artifact galleries when the projection is warm or rebuilding.
-- [ ] Add renderers for text, image metadata/preview, audio placeholder/player
+- [x] Add renderers for text, image metadata/preview, audio placeholder/player
   where available, video placeholder/player where available, tables, JSON,
   files, and unknown/raw fallback.
 - [x] Show retention state and cleanup/policy details for each item.
@@ -258,9 +258,11 @@ freshness, browses retained artifacts across runs when no run is active, and
 exposes the global retention policy read/update command without optimistic
 local mutation. Workflow input/output sections now group retained metadata by
 artifact role, and the node I/O section groups retained node artifacts by
-producer node with input/output counts. Rich media previews, detailed payload
-retention state, and cleanup/storage controls remain open pending richer
-backend projections.
+producer node with input/output counts. Artifact cards now include media-family
+renderer surfaces for text, image, audio, video, table, JSON, file, and unknown
+metadata states without dereferencing payload bodies. Detailed payload retention
+state and cleanup/storage controls remain open pending richer backend
+projections.
 
 ### Milestone 5: Library Page
 
@@ -363,6 +365,9 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
 - Added a node-centric I/O summary in the I/O Inspector, grouping retained
   artifact metadata by `node_id` and surfacing node input/output counts without
   reading raw payload bodies.
+- Added metadata-only media renderer surfaces in artifact cards for text,
+  image, audio, video, table, JSON, file, and unknown media families, preserving
+  the payload-reference boundary until typed payload body access exists.
 - Added global retention policy read/update controls using
   `workflowService.queryRetentionPolicy` and
   `workflowService.updateRetentionPolicy` with no optimistic mutation.
@@ -402,9 +407,9 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
 
 ### Deviations
 
-- First-pass I/O rendering is metadata-only. The page shows `payload_ref`
-  availability but does not dereference payload bodies because there is no
-  typed payload body API in Stage `04`.
+- First-pass I/O media rendering is metadata-only. The page shows media-family
+  renderer surfaces and `payload_ref` availability but does not dereference
+  payload bodies because there is no typed payload body API in Stage `04`.
 - No-active-run retained artifact browsing now uses an optional
   `workflow_run_id` query filter and still returns metadata only; payload body
   dereferencing remains blocked on a typed payload body API.

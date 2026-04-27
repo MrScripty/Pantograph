@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   buildIoArtifactNodeGroups,
+  buildIoArtifactRendererSummary,
   classifyIoArtifactMedia,
   formatIoArtifactAvailabilityLabel,
   formatIoArtifactBytes,
@@ -30,6 +31,25 @@ test('formatIoArtifactMediaLabel exposes stable UI labels', () => {
   assert.equal(formatIoArtifactMediaLabel('image/jpeg'), 'Image');
   assert.equal(formatIoArtifactMediaLabel(undefined), 'Unknown');
 });
+
+test('buildIoArtifactRendererSummary maps media families to renderer states', () => {
+  assert.deepEqual(buildIoArtifactRendererSummary({ media_type: 'image/png', payload_ref: 'artifact://image' }), {
+    family: 'image',
+    title: 'Image preview',
+    detail: 'Payload reference retained',
+  });
+  assert.deepEqual(buildIoArtifactRendererSummary({ media_type: 'application/json', payload_ref: null }), {
+    family: 'json',
+    title: 'JSON',
+    detail: 'Metadata retained only',
+  });
+  assert.deepEqual(buildIoArtifactRendererSummary({ media_type: undefined, payload_ref: '' }), {
+    family: 'unknown',
+    title: 'Unknown media',
+    detail: 'Metadata retained only',
+  });
+});
+
 
 test('formatIoArtifactAvailabilityLabel distinguishes referenced and metadata-only artifacts', () => {
   assert.equal(formatIoArtifactAvailabilityLabel({ payload_ref: 'artifact://run/output' }), 'Payload referenced');

@@ -1,6 +1,17 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { RefreshCw, Save } from 'lucide-svelte';
+  import {
+    Braces,
+    CircleHelp,
+    File,
+    FileText,
+    Image as ImageIcon,
+    Music,
+    RefreshCw,
+    Save,
+    Table2,
+    Video,
+  } from 'lucide-svelte';
   import type {
     DiagnosticsRetentionPolicy,
     IoArtifactProjectionRecord,
@@ -10,6 +21,7 @@
   import { activeWorkflowRun } from '../../stores/workbenchStore';
   import {
     buildIoArtifactNodeGroups,
+    buildIoArtifactRendererSummary,
     formatIoArtifactAvailabilityLabel,
     formatIoArtifactBytes,
     formatIoArtifactMediaLabel,
@@ -277,6 +289,7 @@
 
         <div class="grid gap-3 p-4 xl:grid-cols-2 2xl:grid-cols-3">
           {#each artifacts as artifact (artifact.event_id)}
+            {@const renderer = buildIoArtifactRendererSummary(artifact)}
             <article class="rounded border border-neutral-800 bg-neutral-900/60 p-4">
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0">
@@ -290,6 +303,30 @@
                 <span class="shrink-0 rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-300">
                   {formatIoArtifactAvailabilityLabel(artifact)}
                 </span>
+              </div>
+
+              <div class="mt-4 rounded border border-neutral-800 bg-neutral-950/70 px-3 py-3">
+                <div class="flex items-center gap-2 text-sm text-neutral-100">
+                  {#if renderer.family === 'text'}
+                    <FileText size={16} aria-hidden="true" class="text-cyan-300" />
+                  {:else if renderer.family === 'image'}
+                    <ImageIcon size={16} aria-hidden="true" class="text-emerald-300" />
+                  {:else if renderer.family === 'audio'}
+                    <Music size={16} aria-hidden="true" class="text-amber-300" />
+                  {:else if renderer.family === 'video'}
+                    <Video size={16} aria-hidden="true" class="text-rose-300" />
+                  {:else if renderer.family === 'table'}
+                    <Table2 size={16} aria-hidden="true" class="text-sky-300" />
+                  {:else if renderer.family === 'json'}
+                    <Braces size={16} aria-hidden="true" class="text-violet-300" />
+                  {:else if renderer.family === 'file'}
+                    <File size={16} aria-hidden="true" class="text-neutral-300" />
+                  {:else}
+                    <CircleHelp size={16} aria-hidden="true" class="text-neutral-400" />
+                  {/if}
+                  <span>{renderer.title}</span>
+                </div>
+                <div class="mt-2 text-xs text-neutral-500">{renderer.detail}</div>
               </div>
 
               <dl class="mt-4 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
