@@ -2,12 +2,12 @@ use pantograph_diagnostics_ledger::{
     DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
     DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
     DiagnosticsQuery, DiagnosticsRetentionPolicy, ExecutionGuaranteeLevel,
-    IoArtifactProjectionQuery, IoArtifactProjectionRecord, LibraryUsageProjectionQuery,
-    LibraryUsageProjectionRecord, ModelLicenseUsageEvent, NodeExecutionProjectionStatus,
-    NodeStatusProjectionQuery, NodeStatusProjectionRecord, ProjectionStateRecord, RetentionClass,
-    RetentionPolicyChangedPayload, RunDetailProjectionQuery, RunDetailProjectionRecord,
-    RunListProjectionQuery, RunListProjectionRecord, RunListProjectionStatus,
-    SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
+    IoArtifactProjectionQuery, IoArtifactProjectionRecord, IoArtifactRetentionState,
+    LibraryUsageProjectionQuery, LibraryUsageProjectionRecord, ModelLicenseUsageEvent,
+    NodeExecutionProjectionStatus, NodeStatusProjectionQuery, NodeStatusProjectionRecord,
+    ProjectionStateRecord, RetentionClass, RetentionPolicyChangedPayload, RunDetailProjectionQuery,
+    RunDetailProjectionRecord, RunListProjectionQuery, RunListProjectionRecord,
+    RunListProjectionStatus, SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
     UpdateRetentionPolicyCommand,
 };
 use serde::{Deserialize, Serialize};
@@ -157,6 +157,8 @@ pub struct WorkflowIoArtifactQueryRequest {
     pub artifact_role: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub media_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retention_state: Option<IoArtifactRetentionState>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retention_policy_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -608,6 +610,7 @@ impl WorkflowIoArtifactQueryRequest {
             node_id: self.node_id,
             artifact_role: self.artifact_role,
             media_type: self.media_type,
+            retention_state: self.retention_state,
             retention_policy_id: self.retention_policy_id,
             runtime_id: self.runtime_id,
             model_id: self.model_id,

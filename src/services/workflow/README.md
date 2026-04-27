@@ -176,3 +176,7 @@ const preview = await workflowService.previewNodeInsertOnEdge(
   build.
 - `WorkflowDiagnosticsProjection.context` fields are passed through from native
   diagnostics responses and mirrored in mock responses.
+- `WorkflowIoArtifactQueryResponse` carries backend-authored
+  `retention_state` values. Mock and native responses must preserve that field
+  shape so I/O Inspector callers can render retention state without guessing
+  from `payload_ref`.

@@ -191,6 +191,9 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
 - Retention policy updates: `workflow_retention_policy_update` changes the
   global standard diagnostics retention policy and records a typed
   `retention.policy_changed` audit event.
+- I/O artifact queries expose typed retention state from the diagnostics
+  projection. Callers must treat `retention_state` as authoritative instead of
+  deriving payload state from `payload_ref`.
 - Diagnostics: usage diagnostics accept workflow-version and node contract
   version/digest filters so historic comparisons can avoid mixing different
   executable node behavior.

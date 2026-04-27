@@ -8,11 +8,11 @@ use crate::event::{
     DiagnosticEventAppendRequest, DiagnosticEventKind, DiagnosticEventPayload,
     DiagnosticEventPrivacyClass, DiagnosticEventRecord, DiagnosticEventRetentionClass,
     DiagnosticEventSourceComponent, IoArtifactProjectionQuery, IoArtifactProjectionRecord,
-    LibraryUsageProjectionQuery, LibraryUsageProjectionRecord, NodeExecutionProjectionStatus,
-    NodeStatusProjectionQuery, NodeStatusProjectionRecord, ProjectionStateRecord,
-    ProjectionStateUpdate, ProjectionStatus, RunDetailProjectionQuery, RunDetailProjectionRecord,
-    RunListProjectionQuery, RunListProjectionRecord, RunListProjectionStatus,
-    SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
+    IoArtifactRetentionState, LibraryUsageProjectionQuery, LibraryUsageProjectionRecord,
+    NodeExecutionProjectionStatus, NodeStatusProjectionQuery, NodeStatusProjectionRecord,
+    ProjectionStateRecord, ProjectionStateUpdate, ProjectionStatus, RunDetailProjectionQuery,
+    RunDetailProjectionRecord, RunListProjectionQuery, RunListProjectionRecord,
+    RunListProjectionStatus, SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
     DIAGNOSTIC_EVENT_SCHEMA_VERSION, IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION,
     LIBRARY_USAGE_PROJECTION_NAME, LIBRARY_USAGE_PROJECTION_VERSION,
     MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, NODE_STATUS_PROJECTION_NAME,
@@ -669,18 +669,20 @@ pub(super) fn query_io_artifact_projection(
                 workflow_id, workflow_version_id, workflow_semantic_version, node_id,
                 node_type, node_version, runtime_id, runtime_version, model_id,
                 model_version, artifact_id, artifact_role, media_type, size_bytes,
-                content_hash, payload_ref, retention_policy_id
+                content_hash, payload_ref, retention_state, retention_reason,
+                retention_policy_id
          FROM io_artifact_projection
          WHERE (?1 IS NULL OR workflow_run_id = ?1)
            AND (?2 IS NULL OR node_id = ?2)
            AND (?3 IS NULL OR artifact_role = ?3)
            AND (?4 IS NULL OR media_type = ?4)
-           AND (?5 IS NULL OR retention_policy_id = ?5)
-           AND (?6 IS NULL OR runtime_id = ?6)
-           AND (?7 IS NULL OR model_id = ?7)
-           AND event_seq > ?8
+           AND (?5 IS NULL OR retention_state = ?5)
+           AND (?6 IS NULL OR retention_policy_id = ?6)
+           AND (?7 IS NULL OR runtime_id = ?7)
+           AND (?8 IS NULL OR model_id = ?8)
+           AND event_seq > ?9
          ORDER BY event_seq
-         LIMIT ?9",
+         LIMIT ?10",
     )?;
     let rows = stmt.query_map(
         params![
@@ -688,6 +690,7 @@ pub(super) fn query_io_artifact_projection(
             query.node_id.as_deref(),
             query.artifact_role.as_deref(),
             query.media_type.as_deref(),
+            query.retention_state.map(IoArtifactRetentionState::as_db),
             query.retention_policy_id.as_deref(),
             query.runtime_id.as_deref(),
             query.model_id.as_deref(),
@@ -1300,8 +1303,22 @@ fn io_artifact_projection_record_from_event(
         size_bytes: payload.size_bytes,
         content_hash: payload.content_hash,
         payload_ref: event.payload_ref.clone(),
+        retention_state: payload.retention_state.unwrap_or_else(|| {
+            io_artifact_retention_state_from_payload_ref(event.payload_ref.as_deref())
+        }),
+        retention_reason: payload.retention_reason,
         retention_policy_id: event.retention_policy_id.clone(),
     }))
+}
+
+fn io_artifact_retention_state_from_payload_ref(
+    payload_ref: Option<&str>,
+) -> IoArtifactRetentionState {
+    if payload_ref.is_some_and(|reference| !reference.trim().is_empty()) {
+        IoArtifactRetentionState::Retained
+    } else {
+        IoArtifactRetentionState::MetadataOnly
+    }
 }
 
 fn apply_node_status_projection_event(
@@ -1816,9 +1833,10 @@ fn insert_io_artifact_projection(
              workflow_id, workflow_version_id, workflow_semantic_version, node_id,
              node_type, node_version, runtime_id, runtime_version, model_id,
              model_version, artifact_id, artifact_role, media_type, size_bytes,
-             content_hash, payload_ref, retention_policy_id)
+             content_hash, payload_ref, retention_state, retention_reason,
+             retention_policy_id)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13,
-                 ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)",
+                 ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24)",
         params![
             record.event_seq,
             record.event_id.as_str(),
@@ -1844,6 +1862,8 @@ fn insert_io_artifact_projection(
             record.size_bytes.map(|value| value as i64),
             record.content_hash.as_deref(),
             record.payload_ref.as_deref(),
+            record.retention_state.as_db(),
+            record.retention_reason.as_deref(),
             record.retention_policy_id.as_deref(),
         ],
     )?;
@@ -2028,7 +2048,11 @@ fn io_artifact_projection_from_row(row: &Row<'_>) -> rusqlite::Result<IoArtifact
             .map(|value| u64::try_from(value).unwrap_or(u64::MAX)),
         content_hash: row.get(19)?,
         payload_ref: row.get(20)?,
-        retention_policy_id: row.get(21)?,
+        retention_state: row.get::<_, String>(21).and_then(|value| {
+            IoArtifactRetentionState::from_db(&value).map_err(sqlite_conversion_error)
+        })?,
+        retention_reason: row.get(22)?,
+        retention_policy_id: row.get(23)?,
     })
 }
 

@@ -1,10 +1,10 @@
 use async_trait::async_trait;
 use pantograph_diagnostics_ledger::{
     DiagnosticEventKind, DiagnosticEventSourceComponent, DiagnosticsRetentionPolicy,
-    IoArtifactProjectionRecord, LibraryUsageProjectionRecord, NodeExecutionProjectionStatus,
-    NodeStatusProjectionRecord, ProjectionStateRecord, ProjectionStatus, RetentionClass,
-    RunDetailProjectionRecord, RunListProjectionRecord, RunListProjectionStatus,
-    SchedulerTimelineProjectionRecord,
+    IoArtifactProjectionRecord, IoArtifactRetentionState, LibraryUsageProjectionRecord,
+    NodeExecutionProjectionStatus, NodeStatusProjectionRecord, ProjectionStateRecord,
+    ProjectionStatus, RetentionClass, RunDetailProjectionRecord, RunListProjectionRecord,
+    RunListProjectionStatus, SchedulerTimelineProjectionRecord,
 };
 use pantograph_workflow_service::graph::WorkflowExecutionSessionKind;
 use pantograph_workflow_service::{
@@ -830,6 +830,7 @@ fn workflow_io_artifact_query_contract_snapshot() {
         node_id: Some("node-1".to_string()),
         artifact_role: Some("node_output".to_string()),
         media_type: Some("image/png".to_string()),
+        retention_state: Some(IoArtifactRetentionState::Retained),
         retention_policy_id: Some("standard-local-v1".to_string()),
         runtime_id: Some("runtime-1".to_string()),
         model_id: Some("model-1".to_string()),
@@ -860,11 +861,13 @@ fn workflow_io_artifact_query_contract_snapshot() {
             size_bytes: Some(2048),
             content_hash: Some("blake3:artifact".to_string()),
             payload_ref: Some("artifact://artifact-1".to_string()),
+            retention_state: IoArtifactRetentionState::Retained,
+            retention_reason: None,
             retention_policy_id: Some("standard-local-v1".to_string()),
         }],
         projection_state: ProjectionStateRecord {
             projection_name: "io_artifact".to_string(),
-            projection_version: 1,
+            projection_version: 2,
             last_applied_event_seq: 21,
             status: ProjectionStatus::Current,
             rebuilt_at_ms: None,
@@ -878,6 +881,7 @@ fn workflow_io_artifact_query_contract_snapshot() {
         "node_id": "node-1",
         "artifact_role": "node_output",
         "media_type": "image/png",
+        "retention_state": "retained",
         "retention_policy_id": "standard-local-v1",
         "runtime_id": "runtime-1",
         "model_id": "model-1",
@@ -911,11 +915,13 @@ fn workflow_io_artifact_query_contract_snapshot() {
             "size_bytes": 2048,
             "content_hash": "blake3:artifact",
             "payload_ref": "artifact://artifact-1",
+            "retention_state": "retained",
+            "retention_reason": null,
             "retention_policy_id": "standard-local-v1"
         }],
         "projection_state": {
             "projection_name": "io_artifact",
-            "projection_version": 1,
+            "projection_version": 2,
             "last_applied_event_seq": 21,
             "status": "current",
             "rebuilt_at_ms": null,

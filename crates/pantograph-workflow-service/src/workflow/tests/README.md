@@ -29,6 +29,7 @@ stay reviewable as more tests are split.
 | `workflow_io.rs` | Workflow I/O discovery and validation tests for bindable input/output nodes and port contracts. |
 | `workflow_preflight.rs` | Workflow preflight facade tests for required inputs, target validation, technical-fit decisions, and override normalization. |
 | `workflow_run.rs` | Private scheduler run implementation tests for host outputs, timeout cancellation, runtime readiness, input validation, and output-target enforcement. |
+| parent `diagnostics` module | Diagnostics facade tests for projection query boundaries, including I/O artifact retention state. |
 
 ## Problem
 `workflow/tests.rs` remains too large to review efficiently. Moving every test
@@ -58,6 +59,8 @@ Use `workflow/tests/` for behavior-specific child modules under the parent
 - Child modules use the parent test module fixture re-exports instead of
   duplicating host mocks and scheduler setup.
 - Extracted tests preserve their original public facade paths and assertions.
+- Diagnostics projection tests must verify typed projection fields rather than
+  inferring retention or scheduler facts from raw payload JSON.
 - New behavior families should be added here only when they are cohesive enough
   to reduce `workflow/tests.rs` without hiding shared test setup.
 

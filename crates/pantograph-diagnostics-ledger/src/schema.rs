@@ -4,8 +4,8 @@ use crate::records::{RetentionClass, DEFAULT_STANDARD_RETENTION_DAYS};
 use crate::util::now_ms;
 use crate::DiagnosticsLedgerError;
 
-pub(crate) const SCHEMA_VERSION: i64 = 14;
-const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v13";
+pub(crate) const SCHEMA_VERSION: i64 = 15;
+const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v15";
 
 pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {
     tx.execute_batch(
@@ -211,6 +211,9 @@ pub(crate) fn migrate_schema(
     }
     if found < 14 {
         apply_node_status_projection_schema(&tx)?;
+    }
+    if found < 15 {
+        apply_io_artifact_retention_state_migration(&tx)?;
     }
     if found < SCHEMA_VERSION {
         tx.execute(
@@ -503,6 +506,8 @@ fn apply_io_artifact_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagn
             size_bytes INTEGER,
             content_hash TEXT,
             payload_ref TEXT,
+            retention_state TEXT NOT NULL,
+            retention_reason TEXT,
             retention_policy_id TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_io_artifact_projection_run_seq
@@ -511,7 +516,45 @@ fn apply_io_artifact_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagn
             ON io_artifact_projection(workflow_run_id, node_id, event_seq);
         CREATE INDEX IF NOT EXISTS idx_io_artifact_projection_role_seq
             ON io_artifact_projection(artifact_role, event_seq);
+        CREATE INDEX IF NOT EXISTS idx_io_artifact_projection_retention_state_seq
+            ON io_artifact_projection(retention_state, event_seq);
         "#,
+    )?;
+    Ok(())
+}
+
+fn apply_io_artifact_retention_state_migration(
+    tx: &Transaction<'_>,
+) -> Result<(), DiagnosticsLedgerError> {
+    if !table_exists(tx, "io_artifact_projection")? {
+        return Ok(());
+    }
+    if !column_exists(tx, "io_artifact_projection", "retention_state")? {
+        tx.execute(
+            "ALTER TABLE io_artifact_projection
+             ADD COLUMN retention_state TEXT NOT NULL DEFAULT 'retained'",
+            [],
+        )?;
+        tx.execute(
+            "UPDATE io_artifact_projection
+             SET retention_state = CASE
+                WHEN payload_ref IS NULL OR TRIM(payload_ref) = '' THEN 'metadata_only'
+                ELSE 'retained'
+             END",
+            [],
+        )?;
+    }
+    if !column_exists(tx, "io_artifact_projection", "retention_reason")? {
+        tx.execute(
+            "ALTER TABLE io_artifact_projection
+             ADD COLUMN retention_reason TEXT",
+            [],
+        )?;
+    }
+    tx.execute(
+        "CREATE INDEX IF NOT EXISTS idx_io_artifact_projection_retention_state_seq
+            ON io_artifact_projection(retention_state, event_seq)",
+        [],
     )?;
     Ok(())
 }
@@ -608,6 +651,21 @@ fn table_exists(tx: &Transaction<'_>, table_name: &str) -> Result<bool, Diagnost
         |row| row.get::<_, bool>(0),
     )?;
     Ok(exists)
+}
+
+fn column_exists(
+    tx: &Transaction<'_>,
+    table_name: &str,
+    column_name: &str,
+) -> Result<bool, DiagnosticsLedgerError> {
+    let mut stmt = tx.prepare(&format!("PRAGMA table_info({table_name})"))?;
+    let rows = stmt.query_map([], |row| row.get::<_, String>(1))?;
+    for row in rows {
+        if row? == column_name {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn apply_timing_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {

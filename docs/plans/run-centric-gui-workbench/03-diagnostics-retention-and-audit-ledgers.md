@@ -278,7 +278,8 @@ selected-run pages. `io_artifact_projection` now materializes bounded artifact
 metadata and payload references from `io.artifact_observed` events by run,
 node, role, and event cursor for I/O Inspector reads. Projection filters now
 cover workflow version, scheduler policy, runtime/model ids, media type,
-retention policy, and artifact role where those facts exist in the read model.
+retention policy/state, and artifact role where those facts exist in the read
+model.
 The first warm projection, `library_usage_projection`, now aggregates
 Library/Pumas asset access counts, distinct run counts, network bytes, last
 access facts, and workflow-version run links. Remaining warm drains and
@@ -295,9 +296,9 @@ availability.
 - [ ] Store artifact type, size, content hash where available, producer node,
   consumer node, run id, timestamps, and payload reference.
   - First-pass projection stores artifact role, media type, size, content
-    hash, event node identity, run id, timestamps, and payload reference.
-    Explicit producer/consumer edge roles remain pending with richer I/O
-    event payloads.
+    hash, event node identity, run id, timestamps, payload reference, typed
+    retention state, and retention reason. Explicit producer/consumer edge
+    roles remain pending with richer I/O event payloads.
 - [ ] Emit typed `io.*` events for artifact observation, retention state
   changes, truncation, externalization, expiration, and deletion.
 - [ ] Add global retention policy record and policy version.

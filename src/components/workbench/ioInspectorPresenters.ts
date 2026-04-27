@@ -1,5 +1,6 @@
 import type {
   IoArtifactProjectionRecord,
+  IoArtifactRetentionState,
   ProjectionStateRecord,
 } from '../../services/diagnostics/types';
 
@@ -141,13 +142,11 @@ export function formatIoArtifactMediaLabel(mediaType: string | null | undefined)
 }
 
 export function buildIoArtifactRendererSummary(
-  artifact: Pick<IoArtifactProjectionRecord, 'media_type' | 'payload_ref'>,
+  artifact: Pick<IoArtifactProjectionRecord, 'media_type' | 'payload_ref'> &
+    Partial<Pick<IoArtifactProjectionRecord, 'retention_state'>>,
 ): IoArtifactRendererSummary {
   const family = classifyIoArtifactMedia(artifact.media_type);
-  const hasPayloadReference = resolveIoArtifactPayloadAvailability(artifact) === 'referenced';
-  const detail = hasPayloadReference
-    ? 'Payload reference retained'
-    : 'Metadata retained only';
+  const detail = formatIoArtifactRetentionStateLabel(artifact.retention_state);
 
   switch (family) {
     case 'text':
@@ -170,21 +169,54 @@ export function buildIoArtifactRendererSummary(
 }
 
 export function resolveIoArtifactPayloadAvailability(
-  artifact: Pick<IoArtifactProjectionRecord, 'payload_ref'>,
+  artifact: Pick<IoArtifactProjectionRecord, 'payload_ref'> &
+    Partial<Pick<IoArtifactProjectionRecord, 'retention_state'>>,
 ): IoArtifactPayloadAvailability {
+  if (
+    artifact.retention_state === 'metadata_only' ||
+    artifact.retention_state === 'expired' ||
+    artifact.retention_state === 'deleted' ||
+    artifact.retention_state === 'too_large'
+  ) {
+    return 'metadata_only';
+  }
   return artifact.payload_ref && artifact.payload_ref.trim().length > 0
     ? 'referenced'
     : 'metadata_only';
 }
 
 export function formatIoArtifactAvailabilityLabel(
-  artifact: Pick<IoArtifactProjectionRecord, 'payload_ref'>,
+  artifact: Pick<IoArtifactProjectionRecord, 'payload_ref'> &
+    Partial<Pick<IoArtifactProjectionRecord, 'retention_state'>>,
 ): string {
   switch (resolveIoArtifactPayloadAvailability(artifact)) {
     case 'referenced':
       return 'Payload referenced';
     case 'metadata_only':
       return 'Metadata only';
+  }
+}
+
+export function formatIoArtifactRetentionStateLabel(
+  retentionState: IoArtifactRetentionState | null | undefined,
+): string {
+  switch (retentionState) {
+    case 'retained':
+      return 'Payload retained';
+    case 'metadata_only':
+      return 'Metadata retained only';
+    case 'external':
+      return 'External reference';
+    case 'truncated':
+      return 'Payload truncated';
+    case 'too_large':
+      return 'Too large to retain';
+    case 'expired':
+      return 'Payload expired';
+    case 'deleted':
+      return 'Payload deleted';
+    default:
+      return 'Retention unknown';
   }
 }
 

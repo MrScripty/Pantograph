@@ -379,8 +379,19 @@ export interface IoArtifactProjectionRecord {
   size_bytes?: number | null;
   content_hash?: string | null;
   payload_ref?: string | null;
+  retention_state: IoArtifactRetentionState;
+  retention_reason?: string | null;
   retention_policy_id?: string | null;
 }
+
+export type IoArtifactRetentionState =
+  | 'retained'
+  | 'metadata_only'
+  | 'external'
+  | 'truncated'
+  | 'too_large'
+  | 'expired'
+  | 'deleted';
 
 export type NodeExecutionProjectionStatus =
   | 'queued'
@@ -443,6 +454,7 @@ export interface WorkflowIoArtifactQueryRequest {
   node_id?: string | null;
   artifact_role?: string | null;
   media_type?: string | null;
+  retention_state?: IoArtifactRetentionState | null;
   retention_policy_id?: string | null;
   runtime_id?: string | null;
   model_id?: string | null;

@@ -61,6 +61,9 @@ projection without inventing fallback run identities or workflow display names.
   backend snapshot.
 - Edit-session diagnostics consumers must ignore workflow events whose
   `workflow_run_id` no longer matches the active workflow run id.
+- I/O artifact DTOs carry typed `retention_state` values. Consumers must not
+  infer deleted, expired, external, truncated, or too-large states from
+  `payload_ref` presence.
 
 ## Revisit Triggers
 - Diagnostics needs durable persistence or export/replay support.

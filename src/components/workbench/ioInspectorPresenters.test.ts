@@ -8,6 +8,7 @@ import {
   formatIoArtifactAvailabilityLabel,
   formatIoArtifactBytes,
   formatIoArtifactMediaLabel,
+  formatIoArtifactRetentionStateLabel,
   formatIoArtifactRoleLabel,
   formatProjectionFreshness,
   isWorkflowInputArtifact,
@@ -33,28 +34,64 @@ test('formatIoArtifactMediaLabel exposes stable UI labels', () => {
 });
 
 test('buildIoArtifactRendererSummary maps media families to renderer states', () => {
-  assert.deepEqual(buildIoArtifactRendererSummary({ media_type: 'image/png', payload_ref: 'artifact://image' }), {
+  assert.deepEqual(
+    buildIoArtifactRendererSummary({
+      media_type: 'image/png',
+      payload_ref: 'artifact://image',
+      retention_state: 'retained',
+    }),
+    {
     family: 'image',
     title: 'Image preview',
-    detail: 'Payload reference retained',
-  });
-  assert.deepEqual(buildIoArtifactRendererSummary({ media_type: 'application/json', payload_ref: null }), {
+      detail: 'Payload retained',
+    },
+  );
+  assert.deepEqual(
+    buildIoArtifactRendererSummary({
+      media_type: 'application/json',
+      payload_ref: null,
+      retention_state: 'metadata_only',
+    }),
+    {
     family: 'json',
     title: 'JSON',
     detail: 'Metadata retained only',
-  });
+    },
+  );
   assert.deepEqual(buildIoArtifactRendererSummary({ media_type: undefined, payload_ref: '' }), {
     family: 'unknown',
     title: 'Unknown media',
-    detail: 'Metadata retained only',
+    detail: 'Retention unknown',
   });
 });
 
 
 test('formatIoArtifactAvailabilityLabel distinguishes referenced and metadata-only artifacts', () => {
-  assert.equal(formatIoArtifactAvailabilityLabel({ payload_ref: 'artifact://run/output' }), 'Payload referenced');
+  assert.equal(
+    formatIoArtifactAvailabilityLabel({
+      payload_ref: 'artifact://run/output',
+      retention_state: 'retained',
+    }),
+    'Payload referenced',
+  );
   assert.equal(formatIoArtifactAvailabilityLabel({ payload_ref: '' }), 'Metadata only');
-  assert.equal(formatIoArtifactAvailabilityLabel({ payload_ref: null }), 'Metadata only');
+  assert.equal(
+    formatIoArtifactAvailabilityLabel({
+      payload_ref: 'artifact://run/output',
+      retention_state: 'expired',
+    }),
+    'Metadata only',
+  );
+});
+
+test('formatIoArtifactRetentionStateLabel exposes typed retention state labels', () => {
+  assert.equal(formatIoArtifactRetentionStateLabel('retained'), 'Payload retained');
+  assert.equal(formatIoArtifactRetentionStateLabel('external'), 'External reference');
+  assert.equal(formatIoArtifactRetentionStateLabel('truncated'), 'Payload truncated');
+  assert.equal(formatIoArtifactRetentionStateLabel('too_large'), 'Too large to retain');
+  assert.equal(formatIoArtifactRetentionStateLabel('expired'), 'Payload expired');
+  assert.equal(formatIoArtifactRetentionStateLabel('deleted'), 'Payload deleted');
+  assert.equal(formatIoArtifactRetentionStateLabel(undefined), 'Retention unknown');
 });
 
 test('workflow artifact role helpers identify workflow boundaries', () => {

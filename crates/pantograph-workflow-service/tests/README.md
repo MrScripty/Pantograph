@@ -41,6 +41,8 @@ by external adapters.
 - Expected JSON should preserve semantic field names, enum labels, and ordering.
 - Test hosts should return backend-shaped facts and avoid duplicating policy
   logic under test.
+- Public diagnostics projection snapshots must include typed retention fields
+  when those fields are observable through serialized service contracts.
 
 ## Revisit Triggers
 - Contract snapshots become large enough to justify fixture files.

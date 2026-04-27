@@ -7,11 +7,11 @@ use crate::{
     DiagnosticEventAppendRequest, DiagnosticEventKind, DiagnosticEventPayload,
     DiagnosticEventPrivacyClass, DiagnosticEventRetentionClass, DiagnosticEventSourceComponent,
     DiagnosticsLedgerError, DiagnosticsLedgerRepository, DiagnosticsQuery, ExecutionGuaranteeLevel,
-    IoArtifactObservedPayload, IoArtifactProjectionQuery, LibraryAssetAccessedPayload,
-    LibraryUsageProjectionQuery, LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent,
-    ModelOutputMeasurement, NodeExecutionProjectionStatus, NodeExecutionStatusPayload,
-    NodeStatusProjectionQuery, OutputMeasurementUnavailableReason, OutputModality,
-    ProjectionStateUpdate, ProjectionStatus, PruneTimingObservationsCommand,
+    IoArtifactObservedPayload, IoArtifactProjectionQuery, IoArtifactRetentionState,
+    LibraryAssetAccessedPayload, LibraryUsageProjectionQuery, LicenseSnapshot, ModelIdentity,
+    ModelLicenseUsageEvent, ModelOutputMeasurement, NodeExecutionProjectionStatus,
+    NodeExecutionStatusPayload, NodeStatusProjectionQuery, OutputMeasurementUnavailableReason,
+    OutputModality, ProjectionStateUpdate, ProjectionStatus, PruneTimingObservationsCommand,
     PruneUsageEventsCommand, RetentionClass, RetentionPolicyChangedPayload,
     RunDetailProjectionQuery, RunListProjectionQuery, RunListProjectionStatus,
     RunSnapshotAcceptedPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
@@ -1013,6 +1013,7 @@ fn io_artifact_projection_drains_artifact_events_incrementally() {
             node_id: None,
             artifact_role: None,
             media_type: None,
+            retention_state: None,
             retention_policy_id: None,
             runtime_id: None,
             model_id: None,
@@ -1028,6 +1029,11 @@ fn io_artifact_projection_drains_artifact_events_incrementally() {
         records[0].payload_ref.as_deref(),
         Some("artifact://artifact_prompt")
     );
+    assert_eq!(
+        records[0].retention_state,
+        IoArtifactRetentionState::Retained
+    );
+    assert_eq!(records[0].retention_reason, None);
     assert_eq!(records[1].event_seq, output_event.event_seq);
     assert_eq!(records[1].media_type.as_deref(), Some("image/png"));
     assert_eq!(records[1].size_bytes, Some(1_024));
@@ -1038,6 +1044,7 @@ fn io_artifact_projection_drains_artifact_events_incrementally() {
             node_id: None,
             artifact_role: None,
             media_type: None,
+            retention_state: None,
             retention_policy_id: None,
             runtime_id: None,
             model_id: None,
@@ -1055,6 +1062,7 @@ fn io_artifact_projection_drains_artifact_events_incrementally() {
             node_id: Some("node_image".to_string()),
             artifact_role: None,
             media_type: Some("image/png".to_string()),
+            retention_state: Some(IoArtifactRetentionState::Retained),
             retention_policy_id: Some("retention_default".to_string()),
             runtime_id: Some("runtime_alpha".to_string()),
             model_id: None,
@@ -1077,6 +1085,7 @@ fn io_artifact_projection_drains_artifact_events_incrementally() {
             node_id: None,
             artifact_role: None,
             media_type: None,
+            retention_state: None,
             retention_policy_id: None,
             runtime_id: None,
             model_id: None,
@@ -1516,6 +1525,66 @@ fn existing_v12_schema_adds_scheduler_projection_fact_columns() {
 }
 
 #[test]
+fn existing_v14_schema_adds_io_artifact_retention_state_columns() {
+    let temp = tempfile::NamedTempFile::new().expect("temp file");
+    let path = temp.path().to_path_buf();
+    {
+        let conn = Connection::open(&path).expect("connection opens");
+        conn.execute_batch(
+            "CREATE TABLE ledger_schema_migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at_ms INTEGER NOT NULL,
+                checksum TEXT NOT NULL
+            );
+            INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
+            VALUES (14, 0, 'pantograph-diagnostics-ledger-v14');
+            CREATE TABLE io_artifact_projection (
+                event_seq INTEGER PRIMARY KEY,
+                payload_ref TEXT
+            );
+            INSERT INTO io_artifact_projection (event_seq, payload_ref)
+            VALUES (1, NULL), (2, 'artifact://retained');",
+        )
+        .expect("v14 schema marker and old artifact table are installed");
+    }
+    {
+        let _ledger = SqliteDiagnosticsLedger::open(&path).expect("ledger migrates");
+    }
+    let conn = Connection::open(&path).expect("connection reopens");
+
+    assert!(sqlite_column_exists(
+        &conn,
+        "io_artifact_projection",
+        "retention_state"
+    ));
+    assert!(sqlite_column_exists(
+        &conn,
+        "io_artifact_projection",
+        "retention_reason"
+    ));
+    assert!(sqlite_index_exists(
+        &conn,
+        "idx_io_artifact_projection_retention_state_seq"
+    ));
+    let metadata_state = conn
+        .query_row(
+            "SELECT retention_state FROM io_artifact_projection WHERE event_seq = 1",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .expect("metadata-only state loads");
+    let retained_state = conn
+        .query_row(
+            "SELECT retention_state FROM io_artifact_projection WHERE event_seq = 2",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .expect("retained state loads");
+    assert_eq!(metadata_state, "metadata_only");
+    assert_eq!(retained_state, "retained");
+}
+
+#[test]
 fn unsupported_schema_version_is_rejected() {
     let conn = Connection::open_in_memory().expect("connection opens");
     conn.execute_batch(
@@ -1930,6 +1999,8 @@ fn sample_io_artifact_event(
             media_type: Some("image/png".to_string()),
             size_bytes: Some(1_024),
             content_hash: Some("blake3:artifact-hash".to_string()),
+            retention_state: Some(IoArtifactRetentionState::Retained),
+            retention_reason: None,
         }),
     }
 }

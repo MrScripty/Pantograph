@@ -25,6 +25,7 @@
     formatIoArtifactAvailabilityLabel,
     formatIoArtifactBytes,
     formatIoArtifactMediaLabel,
+    formatIoArtifactRetentionStateLabel,
     formatIoArtifactRoleLabel,
     formatProjectionFreshness,
     isWorkflowInputArtifact,
@@ -344,6 +345,12 @@
                   <dt class="text-neutral-500">Run</dt>
                   <dd class="mt-0.5 truncate text-neutral-200" title={artifact.workflow_run_id}>
                     {artifact.workflow_run_id}
+                  </dd>
+                </div>
+                <div>
+                  <dt class="text-neutral-500">Retention</dt>
+                  <dd class="mt-0.5 truncate text-neutral-200" title={artifact.retention_reason ?? ''}>
+                    {formatIoArtifactRetentionStateLabel(artifact.retention_state)}
                   </dd>
                 </div>
                 <div>

@@ -65,6 +65,9 @@ helpers own restart-visible workflow run summaries.
 - I/O artifact drains apply only artifact observation events after the stored
   projection cursor and write bounded metadata/reference rows keyed by
   `event_seq`.
+- I/O artifact drains persist typed retention-state columns so page/API
+  consumers can distinguish retained, metadata-only, external, truncated,
+  too-large, expired, and deleted payload states without parsing event payloads.
 
 ## Revisit Triggers
 - Diagnostics storage moves away from local SQLite.

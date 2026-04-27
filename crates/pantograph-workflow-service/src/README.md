@@ -136,6 +136,9 @@ for storage and query semantics.
 - Diagnostics usage query API methods preserve the public facade while keeping
   durable ledger storage and retention semantics in
   `pantograph-diagnostics-ledger`.
+- Diagnostics projection re-exports include typed I/O artifact retention state
+  so adapter callers can preserve serialized service contracts without
+  depending on private ledger modules.
 
 ## Revisit Triggers
 - Public workflow DTOs need versioning rather than additive migration.

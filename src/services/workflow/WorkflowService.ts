@@ -418,7 +418,7 @@ export class WorkflowService extends WorkflowGraphMutationService {
         artifacts: [],
         projection_state: {
           projection_name: 'io_artifact',
-          projection_version: 1,
+          projection_version: 2,
           last_applied_event_seq: 0,
           status: 'current',
           rebuilt_at_ms: null,

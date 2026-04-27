@@ -142,7 +142,9 @@ triggered by workflow events rather than polling.
   `workflowService.querySchedulerTimeline`.
 - `IoInspectorPage.svelte` reads artifact metadata through
   `workflowService.queryIoArtifacts` and global retention state through
-  `workflowService.queryRetentionPolicy`.
+  `workflowService.queryRetentionPolicy`. Artifact retention labels come from
+  `IoArtifactProjectionRecord.retention_state`, not from `payload_ref`
+  inference.
 - Retention policy saves call `workflowService.updateRetentionPolicy` and
   update displayed state only from the backend response.
 - `LibraryPage.svelte` reads usage and audit summaries through
@@ -161,7 +163,8 @@ triggered by workflow events rather than polling.
 - Scheduler timeline rows are `SchedulerTimelineProjectionRecord` values and
   must not be rebuilt or interpreted from raw ledger rows in the frontend.
 - I/O artifact cards render `IoArtifactProjectionRecord` metadata and may show
-  `payload_ref` availability, but do not dereference payload bodies.
+  typed retention-state and `payload_ref` availability, but do not dereference
+  payload bodies.
 - Library usage rows render `LibraryUsageProjectionRecord` summaries and may
   highlight only rows whose `last_workflow_run_id` equals the active run.
 - Run graph snapshot rows render `WorkflowRunGraphProjection` topology,

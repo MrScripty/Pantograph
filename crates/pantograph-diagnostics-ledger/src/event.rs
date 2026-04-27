@@ -15,7 +15,7 @@ pub const RUN_LIST_PROJECTION_VERSION: i64 = 1;
 pub const RUN_DETAIL_PROJECTION_NAME: &str = "run_detail";
 pub const RUN_DETAIL_PROJECTION_VERSION: i64 = 1;
 pub const IO_ARTIFACT_PROJECTION_NAME: &str = "io_artifact";
-pub const IO_ARTIFACT_PROJECTION_VERSION: i64 = 1;
+pub const IO_ARTIFACT_PROJECTION_VERSION: i64 = 2;
 pub const LIBRARY_USAGE_PROJECTION_NAME: &str = "library_usage";
 pub const LIBRARY_USAGE_PROJECTION_VERSION: i64 = 1;
 pub const NODE_STATUS_PROJECTION_NAME: &str = "node_status";
@@ -162,6 +162,47 @@ impl DiagnosticEventRetentionClass {
             "payload_reference" => Ok(Self::PayloadReference),
             _ => Err(DiagnosticsLedgerError::InvalidField {
                 field: "event_retention_class",
+            }),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IoArtifactRetentionState {
+    Retained,
+    MetadataOnly,
+    External,
+    Truncated,
+    TooLarge,
+    Expired,
+    Deleted,
+}
+
+impl IoArtifactRetentionState {
+    pub(crate) fn as_db(self) -> &'static str {
+        match self {
+            Self::Retained => "retained",
+            Self::MetadataOnly => "metadata_only",
+            Self::External => "external",
+            Self::Truncated => "truncated",
+            Self::TooLarge => "too_large",
+            Self::Expired => "expired",
+            Self::Deleted => "deleted",
+        }
+    }
+
+    pub(crate) fn from_db(value: &str) -> Result<Self, DiagnosticsLedgerError> {
+        match value {
+            "retained" => Ok(Self::Retained),
+            "metadata_only" => Ok(Self::MetadataOnly),
+            "external" => Ok(Self::External),
+            "truncated" => Ok(Self::Truncated),
+            "too_large" => Ok(Self::TooLarge),
+            "expired" => Ok(Self::Expired),
+            "deleted" => Ok(Self::Deleted),
+            _ => Err(DiagnosticsLedgerError::InvalidField {
+                field: "retention_state",
             }),
         }
     }
@@ -316,6 +357,10 @@ pub struct IoArtifactObservedPayload {
     pub media_type: Option<String>,
     pub size_bytes: Option<u64>,
     pub content_hash: Option<String>,
+    #[serde(default)]
+    pub retention_state: Option<IoArtifactRetentionState>,
+    #[serde(default)]
+    pub retention_reason: Option<String>,
 }
 
 impl IoArtifactObservedPayload {
@@ -323,7 +368,12 @@ impl IoArtifactObservedPayload {
         validate_required_text("artifact_id", &self.artifact_id, MAX_ID_LEN)?;
         validate_required_text("artifact_role", &self.artifact_role, MAX_ID_LEN)?;
         validate_optional_text("media_type", self.media_type.as_deref(), MAX_ID_LEN)?;
-        validate_optional_text("content_hash", self.content_hash.as_deref(), MAX_ID_LEN)
+        validate_optional_text("content_hash", self.content_hash.as_deref(), MAX_ID_LEN)?;
+        validate_optional_text(
+            "retention_reason",
+            self.retention_reason.as_deref(),
+            MAX_JSON_LEN,
+        )
     }
 }
 
@@ -833,6 +883,7 @@ pub struct IoArtifactProjectionQuery {
     pub node_id: Option<String>,
     pub artifact_role: Option<String>,
     pub media_type: Option<String>,
+    pub retention_state: Option<IoArtifactRetentionState>,
     pub retention_policy_id: Option<String>,
     pub runtime_id: Option<String>,
     pub model_id: Option<String>,
@@ -889,6 +940,8 @@ pub struct IoArtifactProjectionRecord {
     pub size_bytes: Option<u64>,
     pub content_hash: Option<String>,
     pub payload_ref: Option<String>,
+    pub retention_state: IoArtifactRetentionState,
+    pub retention_reason: Option<String>,
     pub retention_policy_id: Option<String>,
 }
 

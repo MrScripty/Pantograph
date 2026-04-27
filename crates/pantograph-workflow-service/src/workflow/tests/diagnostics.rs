@@ -1,12 +1,12 @@
 use pantograph_diagnostics_ledger::{
     DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
     DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
-    ExecutionGuaranteeLevel, IoArtifactObservedPayload, LibraryAssetAccessedPayload,
-    LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement,
-    NodeExecutionProjectionStatus, NodeExecutionStatusPayload, OutputModality, RetentionClass,
-    RunSnapshotAcceptedPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
-    SchedulerEstimateProducedPayload, SchedulerQueuePlacementPayload, UsageEventStatus,
-    UsageLineage,
+    ExecutionGuaranteeLevel, IoArtifactObservedPayload, IoArtifactRetentionState,
+    LibraryAssetAccessedPayload, LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent,
+    ModelOutputMeasurement, NodeExecutionProjectionStatus, NodeExecutionStatusPayload,
+    OutputModality, RetentionClass, RunSnapshotAcceptedPayload, RunStartedPayload,
+    RunTerminalPayload, RunTerminalStatus, SchedulerEstimateProducedPayload,
+    SchedulerQueuePlacementPayload, UsageEventStatus, UsageLineage,
 };
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, UsageEventId, WorkflowId, WorkflowRunId, WorkflowVersionId,
@@ -333,6 +333,7 @@ fn workflow_io_artifact_query_drains_and_reads_projection() {
             node_id: Some("node-b".to_string()),
             artifact_role: None,
             media_type: None,
+            retention_state: None,
             retention_policy_id: None,
             runtime_id: None,
             model_id: None,
@@ -346,6 +347,10 @@ fn workflow_io_artifact_query_drains_and_reads_projection() {
     assert_eq!(response.artifacts[0].artifact_id, "artifact-b");
     assert_eq!(response.artifacts[0].artifact_role, "workflow_output");
     assert_eq!(
+        response.artifacts[0].retention_state,
+        IoArtifactRetentionState::Retained
+    );
+    assert_eq!(
         response.artifacts[0].payload_ref.as_deref(),
         Some("artifact://artifact-b")
     );
@@ -357,6 +362,7 @@ fn workflow_io_artifact_query_drains_and_reads_projection() {
             node_id: None,
             artifact_role: None,
             media_type: None,
+            retention_state: None,
             retention_policy_id: None,
             runtime_id: None,
             model_id: None,
@@ -377,6 +383,7 @@ fn workflow_io_artifact_query_validates_bounds() {
         node_id: None,
         artifact_role: None,
         media_type: None,
+        retention_state: None,
         retention_policy_id: None,
         runtime_id: None,
         model_id: None,
@@ -394,6 +401,7 @@ fn workflow_io_artifact_query_validates_bounds() {
         node_id: None,
         artifact_role: None,
         media_type: None,
+        retention_state: None,
         retention_policy_id: None,
         runtime_id: None,
         model_id: None,
@@ -825,6 +833,8 @@ fn sample_io_artifact_event(
             media_type: Some("text/plain".to_string()),
             size_bytes: Some(42),
             content_hash: Some("blake3:test".to_string()),
+            retention_state: Some(IoArtifactRetentionState::Retained),
+            retention_reason: None,
         }),
     }
 }
