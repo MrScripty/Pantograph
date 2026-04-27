@@ -341,6 +341,7 @@ impl DiagnosticsLedgerRepository for SqliteDiagnosticsLedger {
         }
         let cutoff_occurred_before_ms =
             command.now_ms - i64::from(policy.retention_days) * MILLIS_PER_DAY;
+        self.drain_io_artifact_projection(command.limit)?;
         let artifacts = event_sqlite::query_expirable_io_artifact_projection(
             self,
             cutoff_occurred_before_ms,

@@ -1,4 +1,5 @@
 use pantograph_diagnostics_ledger::{
+    ApplyArtifactRetentionPolicyCommand, ApplyArtifactRetentionPolicyResult,
     DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
     DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
     DiagnosticsQuery, DiagnosticsRetentionPolicy, ExecutionGuaranteeLevel,
@@ -271,6 +272,20 @@ pub struct WorkflowRetentionPolicyUpdateResponse {
     pub retention_policy: DiagnosticsRetentionPolicy,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowRetentionCleanupRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowRetentionCleanupResponse {
+    pub cleanup: ApplyArtifactRetentionPolicyResult,
+}
+
 impl WorkflowService {
     pub fn workflow_diagnostics_usage_query(
         &self,
@@ -540,6 +555,35 @@ impl WorkflowService {
             .map_err(WorkflowServiceError::from)?;
 
         Ok(WorkflowRetentionPolicyUpdateResponse { retention_policy })
+    }
+
+    pub fn workflow_retention_cleanup_apply(
+        &self,
+        request: WorkflowRetentionCleanupRequest,
+    ) -> Result<WorkflowRetentionCleanupResponse, WorkflowServiceError> {
+        if request.reason.trim().is_empty() {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "reason must be non-empty".to_string(),
+            ));
+        }
+        let limit = request.limit.unwrap_or(500).max(1);
+        if limit > 500 {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "limit exceeds maximum 500".to_string(),
+            ));
+        }
+
+        let mut ledger = self.diagnostics_ledger_guard()?;
+        let cleanup = ledger
+            .apply_artifact_retention_policy(ApplyArtifactRetentionPolicyCommand {
+                retention_class: RetentionClass::Standard,
+                now_ms: unix_timestamp_ms() as i64,
+                limit,
+                reason: request.reason,
+            })
+            .map_err(WorkflowServiceError::from)?;
+
+        Ok(WorkflowRetentionCleanupResponse { cleanup })
     }
 }
 

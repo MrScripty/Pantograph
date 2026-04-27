@@ -77,6 +77,9 @@ instances while preserving backend error codes and details.
 Queue and retention command methods live in `WorkflowCommandService.ts` so
 their backend-owned no-optimistic-update contract can be tested without
 importing the full graph event runtime required by `WorkflowService.ts`.
+Retention cleanup is a backend-owned command that returns cleanup counts and
+projection-derived state; frontend services forward the request and do not
+remove artifact cards optimistically.
 
 ## Alternatives Rejected
 - Remove `WorkflowService` and switch every app caller to `TauriWorkflowBackend`
@@ -115,6 +118,8 @@ importing the full graph event runtime required by `WorkflowService.ts`.
   must not reimplement those methods separately.
 - Library usage request coverage includes active-run `workflow_run_id`
   filtering so frontend services preserve the backend projection contract.
+- Retention cleanup requests must use `workflow_retention_cleanup_apply` and
+  preserve the backend cleanup result exactly.
 - Mock-mode payload shapes must remain compatible enough for callers to compile
   and branch safely.
 - Mock-mode diagnostics projections must include the same projection context

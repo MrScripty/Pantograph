@@ -94,6 +94,9 @@ live behind the facade in the workflow session lifecycle API helper.
 Model/license usage diagnostics query methods now live behind the facade in the
 workflow diagnostics API helper and delegate to `pantograph-diagnostics-ledger`
 for storage and query semantics.
+Retention cleanup now lives behind the same diagnostics API helper and is
+re-exported by the crate facade so Tauri and frontend command adapters can
+trigger backend-owned artifact expiration without touching ledger internals.
 
 ## Alternatives Rejected
 - Keep workflow behavior in Tauri commands: rejected because native bindings
@@ -142,6 +145,9 @@ for storage and query semantics.
 - Diagnostics projection re-exports include run-list facet records so adapter
   callers can consume backend-owned comparison counts without depending on
   private ledger modules or sampled frontend pages.
+- Retention cleanup request/response DTOs are public workflow-service
+  contracts and must preserve backend cleanup counts rather than client-side
+  artifact deletion state.
 
 ## Revisit Triggers
 - Public workflow DTOs need versioning rather than additive migration.

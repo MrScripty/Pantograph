@@ -575,6 +575,24 @@ export interface WorkflowRetentionPolicyUpdateResponse {
   retention_policy: DiagnosticsRetentionPolicy;
 }
 
+export interface WorkflowRetentionCleanupRequest {
+  limit?: number | null;
+  reason: string;
+}
+
+export interface WorkflowRetentionCleanupResult {
+  policy_id: string;
+  policy_version: number;
+  retention_class: DiagnosticsRetentionClass;
+  cutoff_occurred_before_ms: number;
+  expired_artifact_count: number;
+  last_event_seq?: number | null;
+}
+
+export interface WorkflowRetentionCleanupResponse {
+  cleanup: WorkflowRetentionCleanupResult;
+}
+
 export interface WorkflowSchedulerTimelineQueryRequest {
   workflow_run_id?: string | null;
   workflow_id?: string | null;

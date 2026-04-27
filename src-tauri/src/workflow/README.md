@@ -48,6 +48,9 @@ while still handling desktop runtime execution concerns.
   the migration.
 - Runtime admission, reservation, retention, and eviction policy must not be
   implemented directly in Tauri workflow command handlers.
+- Retention cleanup command handlers must stay transport-thin and delegate to
+  `pantograph-workflow-service` so audit events and projection updates have one
+  backend owner.
 - Tauri execution-handle lifecycle and undo/redo projection must stay thin
   wrappers around backend-owned `node-engine` behavior rather than becoming a
   second owner of workflow-session policy.

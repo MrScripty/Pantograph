@@ -126,9 +126,9 @@ semantics.
   by typed retention state. They must not scan raw ledger events during normal
   page reads.
 - The artifact retention cleanup command uses the active global policy to
-  select retained projection rows older than the policy cutoff, appends typed
-  `retention.artifact_state_changed` audit events, and leaves artifact metadata
-  queryable after payload references expire.
+  drain the I/O artifact projection, select retained rows older than the policy
+  cutoff, append typed `retention.artifact_state_changed` audit events, and
+  leave artifact metadata queryable after payload references expire.
 - Library usage projection queries may filter by `workflow_run_id` through the
   materialized run-link table so active-run Library pages do not scan raw
   `library.asset_accessed` events.

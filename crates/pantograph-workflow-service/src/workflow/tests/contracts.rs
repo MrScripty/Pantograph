@@ -298,6 +298,23 @@ fn workflow_retention_policy_update_request_uses_snake_case() {
 }
 
 #[test]
+fn workflow_retention_cleanup_request_uses_snake_case() {
+    let request = WorkflowRetentionCleanupRequest {
+        limit: Some(250),
+        reason: "GUI cleanup request".to_string(),
+    };
+
+    let json = serde_json::to_value(&request).expect("serialize retention cleanup request");
+    assert_eq!(json["limit"], 250);
+    assert_eq!(json["reason"], "GUI cleanup request");
+
+    let parsed: WorkflowRetentionCleanupRequest =
+        serde_json::from_value(json).expect("parse retention cleanup request");
+    assert_eq!(parsed.limit, Some(250));
+    assert_eq!(parsed.reason, "GUI cleanup request");
+}
+
+#[test]
 fn workflow_service_error_envelope_roundtrip() {
     let err = WorkflowServiceError::OutputNotProduced(
         "requested output target 'vector-output-1.vector' was not produced".to_string(),

@@ -470,8 +470,12 @@ implicitly on page load.
 - 2026-04-27: Added `workflow_run_id` filtering to Library usage projection
   queries so selected-run Library views can ask for active-run assets directly.
 - 2026-04-27: Added a first-pass artifact retention cleanup command that
-  emits typed artifact expiration events from retained projection rows older
-  than the active global policy cutoff.
+  drains the current artifact projection batch and emits typed artifact
+  expiration events from retained projection rows older than the active global
+  policy cutoff.
+- 2026-04-27: Exposed artifact retention cleanup through workflow-service,
+  Tauri, and frontend command DTOs so GUI/admin controls can trigger cleanup
+  without bypassing the ledger/projection boundary.
 
 ### Deviations
 
@@ -533,6 +537,11 @@ implicitly on page load.
 - 2026-04-27: `cargo test -p pantograph-diagnostics-ledger
   apply_artifact_retention_policy_expires_projected_payload_references --lib`
   passed after adding the first-pass artifact retention cleanup command.
+- 2026-04-27: `cargo test -p pantograph-workflow-service
+  workflow_retention_cleanup --lib` and
+  `node --experimental-strip-types --test
+  src/services/workflow/WorkflowService.commands.test.ts` passed after exposing
+  retention cleanup through service and frontend command boundaries.
 
 ### Traceability Links
 

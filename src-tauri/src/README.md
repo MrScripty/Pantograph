@@ -89,6 +89,9 @@ improvements and backend-owned grouping DTOs over local adapter exceptions.
   return backend-owned service snapshots instead of adapter-owned graph facts.
 - Workflow persistence command registrations must delegate path validation and
   file IO policy to the service graph store.
+- Retention cleanup command registration must delegate artifact expiration and
+  audit-event emission to the workflow service; Tauri only transports the
+  typed request/response.
 - Desktop composition must not register parallel workflow execution-state
   managers when the workflow service owns the active session state.
 - Mechanical lint fixes must not change command payload shape, runtime

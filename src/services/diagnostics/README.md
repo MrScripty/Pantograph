@@ -73,6 +73,9 @@ projection without inventing fallback run identities or workflow display names.
 - Library usage query DTOs include optional `workflow_run_id` filters so
   frontend consumers can request selected-run asset usage without reconstructing
   active-run Library state from raw ledger events.
+- Retention cleanup DTOs mirror the backend cleanup command/result shape so GUI
+  controls can display expired-artifact counts without mutating local
+  diagnostics state optimistically.
 
 ## Revisit Triggers
 - Diagnostics needs durable persistence or export/replay support.

@@ -832,6 +832,55 @@ fn workflow_retention_policy_update_changes_policy_and_records_event() {
         .contains("\"actor_scope\":\"gui_admin\""));
 }
 
+#[test]
+fn workflow_retention_cleanup_expires_artifacts_through_projection() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_io_artifact_event(
+            "node-a",
+            "workflow_output",
+            "artifact-expired",
+        ))
+        .expect("artifact event appends");
+    let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+
+    let response = service
+        .workflow_retention_cleanup_apply(WorkflowRetentionCleanupRequest {
+            limit: Some(10),
+            reason: "developer requested cleanup".to_string(),
+        })
+        .expect("retention cleanup applies");
+
+    assert_eq!(response.cleanup.policy_id, "standard-local-v1");
+    assert_eq!(response.cleanup.policy_version, 1);
+    assert_eq!(response.cleanup.expired_artifact_count, 1);
+    assert!(response.cleanup.last_event_seq.is_some());
+
+    let artifacts = service
+        .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
+            workflow_run_id: Some("run-a".to_string()),
+            node_id: None,
+            artifact_role: None,
+            media_type: None,
+            retention_state: Some(IoArtifactRetentionState::Expired),
+            retention_policy_id: Some("standard-local-v1".to_string()),
+            runtime_id: None,
+            model_id: None,
+            after_event_seq: None,
+            limit: Some(10),
+            projection_batch_size: Some(10),
+        })
+        .expect("expired artifact query loads")
+        .artifacts;
+    assert_eq!(artifacts.len(), 1);
+    assert_eq!(artifacts[0].artifact_id, "artifact-expired");
+    assert_eq!(artifacts[0].payload_ref, None);
+    assert_eq!(
+        artifacts[0].retention_reason.as_deref(),
+        Some("developer requested cleanup; policy_version=1")
+    );
+}
+
 fn sample_run_snapshot_event() -> DiagnosticEventAppendRequest {
     DiagnosticEventAppendRequest {
         source_component: DiagnosticEventSourceComponent::WorkflowService,

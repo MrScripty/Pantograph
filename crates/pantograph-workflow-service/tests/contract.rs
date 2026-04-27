@@ -1,11 +1,11 @@
 use async_trait::async_trait;
 use pantograph_diagnostics_ledger::{
-    DiagnosticEventKind, DiagnosticEventSourceComponent, DiagnosticsRetentionPolicy,
-    IoArtifactProjectionRecord, IoArtifactRetentionState, IoArtifactRetentionSummaryRecord,
-    LibraryUsageProjectionRecord, NodeExecutionProjectionStatus, NodeStatusProjectionRecord,
-    ProjectionStateRecord, ProjectionStatus, RetentionClass, RunDetailProjectionRecord,
-    RunListFacetKind, RunListFacetRecord, RunListProjectionRecord, RunListProjectionStatus,
-    SchedulerTimelineProjectionRecord,
+    ApplyArtifactRetentionPolicyResult, DiagnosticEventKind, DiagnosticEventSourceComponent,
+    DiagnosticsRetentionPolicy, IoArtifactProjectionRecord, IoArtifactRetentionState,
+    IoArtifactRetentionSummaryRecord, LibraryUsageProjectionRecord, NodeExecutionProjectionStatus,
+    NodeStatusProjectionRecord, ProjectionStateRecord, ProjectionStatus, RetentionClass,
+    RunDetailProjectionRecord, RunListFacetKind, RunListFacetRecord, RunListProjectionRecord,
+    RunListProjectionStatus, SchedulerTimelineProjectionRecord,
 };
 use pantograph_workflow_service::graph::WorkflowExecutionSessionKind;
 use pantograph_workflow_service::{
@@ -18,6 +18,7 @@ use pantograph_workflow_service::{
     WorkflowLibraryUsageQueryResponse, WorkflowNodeStatusQueryRequest,
     WorkflowNodeStatusQueryResponse, WorkflowOutputTarget, WorkflowPortBinding,
     WorkflowPreflightRequest, WorkflowProjectionRebuildRequest, WorkflowProjectionRebuildResponse,
+    WorkflowRetentionCleanupRequest, WorkflowRetentionCleanupResponse,
     WorkflowRetentionPolicyQueryRequest, WorkflowRetentionPolicyQueryResponse,
     WorkflowRunDetailQueryRequest, WorkflowRunDetailQueryResponse, WorkflowRuntimeCapability,
     WorkflowRuntimeInstallState, WorkflowRuntimeRequirements, WorkflowRuntimeSourceKind,
@@ -1197,6 +1198,44 @@ fn workflow_retention_policy_query_contract_snapshot() {
             "retention_days": 365,
             "applied_at_ms": 1500,
             "explanation": "Default local model/license usage retention policy"
+        }
+    });
+    assert_eq!(response_value, expected_response);
+}
+
+#[test]
+fn workflow_retention_cleanup_contract_snapshot() {
+    let request = WorkflowRetentionCleanupRequest {
+        limit: Some(25),
+        reason: "GUI cleanup request".to_string(),
+    };
+    let response = WorkflowRetentionCleanupResponse {
+        cleanup: ApplyArtifactRetentionPolicyResult {
+            policy_id: "standard-local-v1".to_string(),
+            policy_version: 3,
+            retention_class: RetentionClass::Standard,
+            cutoff_occurred_before_ms: 1_700,
+            expired_artifact_count: 2,
+            last_event_seq: Some(44),
+        },
+    };
+
+    let request_value = serde_json::to_value(request).expect("serialize cleanup request");
+    let expected_request = serde_json::json!({
+        "limit": 25,
+        "reason": "GUI cleanup request"
+    });
+    assert_eq!(request_value, expected_request);
+
+    let response_value = serde_json::to_value(response).expect("serialize cleanup response");
+    let expected_response = serde_json::json!({
+        "cleanup": {
+            "policy_id": "standard-local-v1",
+            "policy_version": 3,
+            "retention_class": "standard",
+            "cutoff_occurred_before_ms": 1700,
+            "expired_artifact_count": 2,
+            "last_event_seq": 44
         }
     });
     assert_eq!(response_value, expected_response);

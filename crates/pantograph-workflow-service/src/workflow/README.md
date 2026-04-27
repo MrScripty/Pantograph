@@ -81,6 +81,9 @@ runtime readiness, session-runtime workflows, and the root facade test module.
 - Workflow Library usage queries accept `workflow_run_id` filters for
   active-run Library views and delegate that filtering to diagnostics-ledger
   projections.
+- Workflow retention cleanup applies through a typed diagnostics facade command
+  that delegates to the ledger cleanup policy and returns backend cleanup
+  counts without client-side artifact mutation.
 - Shared workflow facade test fixtures live under `workflow/tests/fixtures/`
   and are re-exported by `workflow/tests/fixtures.rs`, keeping
   `workflow/tests.rs` as the module index for behavior slices.

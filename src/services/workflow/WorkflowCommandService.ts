@@ -1,6 +1,8 @@
 import type {
   WorkflowRetentionPolicyQueryRequest,
   WorkflowRetentionPolicyQueryResponse,
+  WorkflowRetentionCleanupRequest,
+  WorkflowRetentionCleanupResponse,
   WorkflowRetentionPolicyUpdateRequest,
   WorkflowRetentionPolicyUpdateResponse,
 } from '../diagnostics/types.ts';
@@ -79,6 +81,27 @@ export class WorkflowCommandService extends WorkflowProjectionService {
     }
 
     return invokeWorkflowCommand<WorkflowRetentionPolicyUpdateResponse>('workflow_retention_policy_update', {
+      request,
+    });
+  }
+
+  async applyRetentionCleanup(
+    request: WorkflowRetentionCleanupRequest,
+  ): Promise<WorkflowRetentionCleanupResponse> {
+    if (USE_WORKFLOW_MOCKS) {
+      return {
+        cleanup: {
+          policy_id: 'standard-local-v1',
+          policy_version: 1,
+          retention_class: 'standard',
+          cutoff_occurred_before_ms: Date.now() - 365 * 86_400_000,
+          expired_artifact_count: 0,
+          last_event_seq: null,
+        },
+      };
+    }
+
+    return invokeWorkflowCommand<WorkflowRetentionCleanupResponse>('workflow_retention_cleanup_apply', {
       request,
     });
   }

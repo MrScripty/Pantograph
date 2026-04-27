@@ -2,7 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { WorkflowCommandService } from './WorkflowCommandService.ts';
-import type { WorkflowRetentionPolicyUpdateResponse } from '../diagnostics/types.ts';
+import type {
+  WorkflowRetentionCleanupResponse,
+  WorkflowRetentionPolicyUpdateResponse,
+} from '../diagnostics/types.ts';
 import type {
   WorkflowSessionQueueCancelResponse,
   WorkflowSessionQueueReprioritizeResponse,
@@ -102,6 +105,48 @@ test('queue cancel and reprioritize methods return backend command results exact
             session_id: 'session-a',
             workflow_run_id: 'run-b',
             priority: 10,
+          },
+        },
+      },
+    ]);
+  } finally {
+    clearMocks();
+  }
+});
+
+test('applyRetentionCleanup returns backend cleanup result without optimistic mutation', async () => {
+  installWindowMock();
+  const calls: Array<{ cmd: string; args: unknown }> = [];
+  const response: WorkflowRetentionCleanupResponse = {
+    cleanup: {
+      policy_id: 'standard-local-v1',
+      policy_version: 3,
+      retention_class: 'standard',
+      cutoff_occurred_before_ms: 1700,
+      expired_artifact_count: 2,
+      last_event_seq: 44,
+    },
+  };
+  mockIPC((cmd, args) => {
+    calls.push({ cmd, args });
+    return response;
+  });
+
+  try {
+    const service = new WorkflowCommandService();
+    const result = await service.applyRetentionCleanup({
+      limit: 25,
+      reason: 'GUI cleanup request',
+    });
+
+    assert.deepEqual(result, response);
+    assert.deepEqual(calls, [
+      {
+        cmd: 'workflow_retention_cleanup_apply',
+        args: {
+          request: {
+            limit: 25,
+            reason: 'GUI cleanup request',
           },
         },
       },

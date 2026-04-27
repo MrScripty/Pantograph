@@ -19,6 +19,7 @@ use pantograph_workflow_service::{
     WorkflowLocalNetworkStatusQueryRequest, WorkflowLocalNetworkStatusQueryResponse,
     WorkflowNodeStatusQueryRequest, WorkflowNodeStatusQueryResponse, WorkflowPreflightRequest,
     WorkflowPreflightResponse, WorkflowProjectionRebuildRequest, WorkflowProjectionRebuildResponse,
+    WorkflowRetentionCleanupRequest, WorkflowRetentionCleanupResponse,
     WorkflowRetentionPolicyQueryRequest, WorkflowRetentionPolicyQueryResponse,
     WorkflowRetentionPolicyUpdateRequest, WorkflowRetentionPolicyUpdateResponse,
     WorkflowRunDetailQueryRequest, WorkflowRunDetailQueryResponse, WorkflowRunGraphQueryRequest,
@@ -303,6 +304,15 @@ pub async fn workflow_retention_policy_update(
 ) -> Result<WorkflowRetentionPolicyUpdateResponse, String> {
     workflow_service
         .workflow_retention_policy_update(request)
+        .map_err(workflow_error_json)
+}
+
+pub async fn workflow_retention_cleanup_apply(
+    request: WorkflowRetentionCleanupRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowRetentionCleanupResponse, String> {
+    workflow_service
+        .workflow_retention_cleanup_apply(request)
         .map_err(workflow_error_json)
 }
 
