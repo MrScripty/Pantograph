@@ -177,7 +177,7 @@ version, execution fingerprint, and presentation revision lookup.
 
 **Tasks:**
 
-- [ ] Add canonical fingerprint generation for executable graph topology.
+- [x] Add canonical fingerprint generation for executable graph topology.
 - [x] Store or project workflow versions under stable workflow identity.
 - [x] Reuse an existing workflow version when identity and fingerprint match.
 - [x] Reject same semantic version with different fingerprint.
@@ -244,7 +244,9 @@ full audit context and event-builder correlation fields.
 - Diagnostics query tests cover workflow-version filtering.
 - Graph projection tests cover historic run version lookup.
 
-**Status:** Not started.
+**Status:** In progress. Workflow-version id and semantic-version filters now
+exist for model/license usage diagnostics. Node-version filters, graph
+projections, and graph-fingerprint quarantine remain pending.
 
 ## Public Facade Preservation Note
 
