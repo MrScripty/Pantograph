@@ -11,6 +11,7 @@ trace ownership out of `pantograph-workflow-service`.
 | ----------- | ----------- |
 | `lifecycle.rs` | Trace store restart, cancellation, duplicate completion, and incremental resume behavior. |
 | `scheduler_runtime.rs` | Graph reconciliation, waiting pause duration, queue attribution, scheduler decision, runtime metric selection, and backend timestamp capture behavior. |
+| `timing.rs` | Timing expectation, run-summary persistence, and bounded node-status ledger producer behavior. |
 
 ## Problem
 Trace store tests cover several independent behavior families. Keeping every
@@ -28,6 +29,9 @@ attribution regressions and violates the large-file decomposition target.
 Keep shared trace fixtures and smaller contract/filter tests in the parent
 `tests.rs` module. Move larger lifecycle/restart scenarios into `lifecycle.rs`
 and scheduler/runtime attribution scenarios into `scheduler_runtime.rs`.
+Keep durable timing and node-status ledger producer tests in `timing.rs`
+because both validate trace-store writes to `pantograph-diagnostics-ledger`
+without introducing frontend or Tauri dependencies.
 
 ## Alternatives Rejected
 - Keep appending scenarios to `tests.rs`.
@@ -38,6 +42,8 @@ and scheduler/runtime attribution scenarios into `scheduler_runtime.rs`.
 - Each test module must focus on one trace behavior family.
 - Test modules may use parent imports and helpers through `super::*`.
 - Production trace modules remain independent of test-only fixtures.
+- Durable diagnostic ledger producer tests must assert bounded event emission
+  and projection results rather than inspecting raw frontend state.
 
 ## Revisit Triggers
 - A behavior slice grows past the review threshold.

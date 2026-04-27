@@ -403,6 +403,10 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
 - Added graph node runtime-status overlays from
   `workflowService.queryNodeStatus`, backed by the durable `node_status`
   projection and presenter tests for latest-status selection.
+- Wired `WorkflowTraceStore` to append bounded typed
+  `node.execution_status` ledger events for node start, waiting, completion,
+  failure, and cancellation transitions. Progress and stream observations do
+  not create diagnostic ledger events.
 - Added `src/components/workbench/DiagnosticsPage.svelte` with active-run
   `queryRunDetail` and `querySchedulerTimeline` projection rendering.
 - Added `src/components/workbench/diagnosticsPagePresenters.ts` and tests for
@@ -465,8 +469,8 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
   through a service.
 - Add typed Pumas/Library mutation service methods before adding Library action
   buttons.
-- Wire runtime producers to append typed node-status ledger events for all
-  executor paths; the projection and graph consumer contract are now in place.
+- Audit any future executor path that bypasses `WorkflowTraceStore` before it
+  can drive graph runtime-status overlays.
 - Add typed diagnostics facet projections for scheduler estimates, selected and
   rejected runtime/device choices, model load/unload decisions, graph settings,
   and mixed-version comparison filters.

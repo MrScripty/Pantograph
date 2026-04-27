@@ -84,6 +84,9 @@ they do not own trace lifecycle rules.
   metrics to another execution's trace.
 - Scheduler snapshot observation time is not currently a trace queue-state
   input; scheduler projection consumes measured queue item/session facts only.
+- `WorkflowTraceStore` emits typed node-status diagnostic ledger events only
+  for bounded lifecycle transitions. Progress and stream observations update
+  retained trace state but must not be appended as diagnostic ledger events.
 - Recovery or replay updates for the same workflow run id update one canonical run
   record in place.
 - Scheduler and runtime snapshots collected after a terminal transition may be

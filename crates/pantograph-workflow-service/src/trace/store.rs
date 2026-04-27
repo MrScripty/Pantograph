@@ -1,7 +1,12 @@
 use std::collections::{BTreeMap, HashMap};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use pantograph_diagnostics_ledger::SqliteDiagnosticsLedger;
+use pantograph_diagnostics_ledger::{
+    DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
+    DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, NodeExecutionProjectionStatus,
+    NodeExecutionStatusPayload, SqliteDiagnosticsLedger,
+};
+use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId};
 use parking_lot::Mutex;
 
 use crate::workflow::WorkflowServiceError;
@@ -14,9 +19,9 @@ use super::timing::{
 };
 use super::types::{
     WorkflowTraceEvent, WorkflowTraceGraphContext, WorkflowTraceGraphTimingExpectations,
-    WorkflowTraceNodeRecord, WorkflowTraceQueueMetrics, WorkflowTraceRuntimeMetrics,
-    WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse, WorkflowTraceStatus,
-    WorkflowTraceSummary,
+    WorkflowTraceNodeRecord, WorkflowTraceNodeStatus, WorkflowTraceQueueMetrics,
+    WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
+    WorkflowTraceStatus, WorkflowTraceSummary,
 };
 use node_engine::GraphMemoryImpactSummary;
 
@@ -189,7 +194,7 @@ impl WorkflowTraceState {
         }
     }
 
-    fn record_event(&mut self, event: &WorkflowTraceEvent, timestamp_ms: u64) {
+    fn record_event(&mut self, event: &WorkflowTraceEvent, timestamp_ms: u64) -> bool {
         let workflow_run_id = event.workflow_run_id().to_string();
         let context = self
             .execution_contexts
@@ -227,9 +232,12 @@ impl WorkflowTraceState {
             trace.node_count_at_start = context.node_count_at_start;
         }
 
+        let previous_event_count = trace.event_count;
         apply_trace_event(&mut trace, &context, event, timestamp_ms);
+        let event_applied = trace.event_count != previous_event_count;
         self.traces_by_id.insert(workflow_run_id, trace);
         self.enforce_retention_limit();
+        event_applied
     }
 
     fn enforce_retention_limit(&mut self) {
@@ -354,21 +362,26 @@ impl WorkflowTraceStore {
         event: &WorkflowTraceEvent,
         timestamp_ms: u64,
     ) -> WorkflowTraceSnapshotResponse {
-        let (snapshot, observations, run_summary) = {
+        let (snapshot, observations, run_summary, node_status_events) = {
             let mut state = self.state.lock();
-            state.record_event(event, timestamp_ms);
+            let event_applied = state.record_event(event, timestamp_ms);
             let run_summary = state
                 .traces_by_id
                 .get(event.workflow_run_id())
                 .and_then(|trace| run_summary_record(trace, timestamp_ms));
+            let node_status_events = event_applied
+                .then(|| node_status_events_from_trace_state(&state, event, timestamp_ms))
+                .unwrap_or_default();
             (
                 state.snapshot_all(),
                 terminal_timing_observations(&state, event, timestamp_ms),
                 run_summary,
+                node_status_events,
             )
         };
         self.record_run_summary(run_summary);
         self.record_timing_observations(observations);
+        self.record_node_status_events(node_status_events);
         let snapshot = self.enrich_timing(snapshot);
         snapshot
     }
@@ -417,6 +430,23 @@ impl WorkflowTraceStore {
             );
     }
 
+    fn record_node_status_events(&self, events: Vec<DiagnosticEventAppendRequest>) {
+        if events.is_empty() {
+            return;
+        }
+        let Some(ledger) = self.timing_ledger.as_ref() else {
+            return;
+        };
+        let mut ledger = ledger.lock();
+        for event in events {
+            let _ =
+                pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::append_diagnostic_event(
+                    &mut *ledger,
+                    event,
+                );
+        }
+    }
+
     fn enrich_timing(
         &self,
         snapshot: WorkflowTraceSnapshotResponse,
@@ -427,4 +457,116 @@ impl WorkflowTraceStore {
         let ledger = ledger.lock();
         enrich_snapshot_timing(snapshot, &*ledger, unix_timestamp_ms())
     }
+}
+
+fn node_status_events_from_trace_state(
+    state: &WorkflowTraceState,
+    event: &WorkflowTraceEvent,
+    timestamp_ms: u64,
+) -> Vec<DiagnosticEventAppendRequest> {
+    match event {
+        WorkflowTraceEvent::NodeStarted { node_id, .. }
+        | WorkflowTraceEvent::NodeCompleted { node_id, .. }
+        | WorkflowTraceEvent::NodeFailed { node_id, .. }
+        | WorkflowTraceEvent::WaitingForInput { node_id, .. } => state
+            .traces_by_id
+            .get(event.workflow_run_id())
+            .and_then(|trace| {
+                trace
+                    .nodes_by_id
+                    .get(node_id)
+                    .and_then(|node| node_status_event_from_trace_node(trace, node, timestamp_ms))
+            })
+            .into_iter()
+            .collect(),
+        WorkflowTraceEvent::RunCancelled { .. } => state
+            .traces_by_id
+            .get(event.workflow_run_id())
+            .map(|trace| {
+                trace
+                    .nodes_by_id
+                    .values()
+                    .filter(|node| node.status == WorkflowTraceNodeStatus::Cancelled)
+                    .filter_map(|node| node_status_event_from_trace_node(trace, node, timestamp_ms))
+                    .collect()
+            })
+            .unwrap_or_default(),
+        WorkflowTraceEvent::RunStarted { .. }
+        | WorkflowTraceEvent::NodeProgress { .. }
+        | WorkflowTraceEvent::NodeStream { .. }
+        | WorkflowTraceEvent::RunCompleted { .. }
+        | WorkflowTraceEvent::RunFailed { .. }
+        | WorkflowTraceEvent::GraphModified { .. }
+        | WorkflowTraceEvent::IncrementalExecutionStarted { .. }
+        | WorkflowTraceEvent::RuntimeSnapshotCaptured { .. }
+        | WorkflowTraceEvent::SchedulerSnapshotCaptured { .. } => Vec::new(),
+    }
+}
+
+fn node_status_event_from_trace_node(
+    trace: &WorkflowTraceRunState,
+    node: &WorkflowTraceNodeRecord,
+    timestamp_ms: u64,
+) -> Option<DiagnosticEventAppendRequest> {
+    let workflow_id = trace.workflow_id.as_ref()?;
+    let workflow_run_id = WorkflowRunId::try_from(trace.workflow_run_id.clone()).ok()?;
+    let workflow_id = WorkflowId::try_from(workflow_id.clone()).ok()?;
+    let status = node_execution_projection_status(node.status)?;
+    let completed_at_ms = match status {
+        NodeExecutionProjectionStatus::Completed
+        | NodeExecutionProjectionStatus::Failed
+        | NodeExecutionProjectionStatus::Cancelled => node.ended_at_ms.map(u64_to_i64_saturating),
+        NodeExecutionProjectionStatus::Waiting
+        | NodeExecutionProjectionStatus::Queued
+        | NodeExecutionProjectionStatus::Running => None,
+    };
+
+    Some(DiagnosticEventAppendRequest {
+        source_component: DiagnosticEventSourceComponent::NodeExecution,
+        source_instance_id: Some("workflow-trace-store".to_string()),
+        occurred_at_ms: u64_to_i64_saturating(timestamp_ms),
+        workflow_run_id: Some(workflow_run_id),
+        workflow_id: Some(workflow_id),
+        workflow_version_id: None,
+        workflow_semantic_version: None,
+        node_id: Some(node.node_id.clone()),
+        node_type: node.node_type.clone(),
+        node_version: None,
+        runtime_id: None,
+        runtime_version: None,
+        model_id: None,
+        model_version: None,
+        client_id: None,
+        client_session_id: None,
+        bucket_id: None,
+        scheduler_policy_id: None,
+        retention_policy_id: None,
+        privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+        retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+        payload_ref: None,
+        payload: DiagnosticEventPayload::NodeExecutionStatus(NodeExecutionStatusPayload {
+            status,
+            started_at_ms: node.started_at_ms.map(u64_to_i64_saturating),
+            completed_at_ms,
+            duration_ms: node.duration_ms,
+            error: node.last_error.clone(),
+        }),
+    })
+}
+
+fn node_execution_projection_status(
+    status: WorkflowTraceNodeStatus,
+) -> Option<NodeExecutionProjectionStatus> {
+    match status {
+        WorkflowTraceNodeStatus::Pending => None,
+        WorkflowTraceNodeStatus::Running => Some(NodeExecutionProjectionStatus::Running),
+        WorkflowTraceNodeStatus::Waiting => Some(NodeExecutionProjectionStatus::Waiting),
+        WorkflowTraceNodeStatus::Completed => Some(NodeExecutionProjectionStatus::Completed),
+        WorkflowTraceNodeStatus::Failed => Some(NodeExecutionProjectionStatus::Failed),
+        WorkflowTraceNodeStatus::Cancelled => Some(NodeExecutionProjectionStatus::Cancelled),
+    }
+}
+
+fn u64_to_i64_saturating(value: u64) -> i64 {
+    i64::try_from(value).unwrap_or(i64::MAX)
 }

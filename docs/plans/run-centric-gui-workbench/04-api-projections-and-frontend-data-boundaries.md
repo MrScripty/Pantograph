@@ -230,6 +230,9 @@ estimate or queue-placement payload JSON for those facts. Broader command
 boundaries remain pending.
 `workflow_node_status_query` now exposes the hot `node_status` projection over
 typed `node.execution_status` ledger events for graph runtime-status overlays.
+`WorkflowTraceStore` now produces bounded node-status events for traced node
+lifecycle transitions, while progress and stream observations remain outside
+the typed event ledger.
 `workflow_projection_rebuild`
 provides the first explicit admin maintenance boundary for hot projection
 repair and projection-version rebuild scenarios. `workflow_run_graph_query`
