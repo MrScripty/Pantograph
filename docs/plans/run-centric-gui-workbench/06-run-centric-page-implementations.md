@@ -4,8 +4,8 @@
 
 In progress. Stage `05` delivered the Scheduler-first shell, dense Scheduler
 table, local Network status page, and Node Editor reserved page. This stage now
-has first-pass I/O Inspector and Library pages backed by projection services.
-Historic run graph rendering, deeper diagnostics facets, Pumas mutation
+has first-pass Graph, I/O Inspector, and Library pages backed by projection
+services. Deeper diagnostics facets, node status graph overlays, Pumas mutation
 actions, and richer artifact payload renderers remain open.
 
 ## Objective
@@ -66,8 +66,9 @@ into a second source of truth.
   inspectability over advanced filtering polish.
 - Existing diagnostics components can be adapted instead of rewritten from
   scratch where they consume the new run-centric projections cleanly.
-- Existing graph components can render historic workflow versions if given the
-  correct graph projection.
+- Historic workflow versions can be rendered through an isolated read-only
+  projection view until the graph editor package exposes a safe immutable graph
+  store.
 
 ### Dependencies
 
@@ -186,10 +187,10 @@ editable workflow behavior.
 
 **Tasks:**
 
-- [ ] Implement run view for selected historic/queued run workflow version.
-- [ ] Implement or preserve edit view for current editable workflow.
-- [ ] Use presentation revision when available and generated layout otherwise.
-- [ ] Add visible distinction between run view and edit view.
+- [x] Implement run view for selected historic/queued run workflow version.
+- [x] Implement or preserve edit view for current editable workflow.
+- [x] Use presentation revision when available and generated layout otherwise.
+- [x] Add visible distinction between run view and edit view.
 - [ ] Overlay node status/output availability when diagnostics projection
   supports it.
 
@@ -199,9 +200,15 @@ editable workflow behavior.
 - Tests cover presentation fallback layout behavior.
 - Existing graph interaction tests pass for edit view.
 
-**Status:** Not started beyond preserving the editable graph page in Stage
-`05`. Historic run graph rendering still needs an isolated run-view
-implementation.
+**Status:** Partially complete. `GraphPage.svelte` now loads the selected run's
+`WorkflowRunGraphProjection` through `workflowService.queryRunGraph`, defaults
+to a read-only run snapshot when an active run is selected, and keeps the
+current editable graph behind an explicit `Current Editor` mode. The snapshot
+renders version identity, execution fingerprint, presentation revision,
+captured topology, run settings availability, and an isolated SVG graph without
+applying historic graphs to the editor store. Node status and output
+availability overlays remain open until diagnostics projections expose those
+facts by node.
 
 ### Milestone 4: I/O Inspector Page
 
@@ -343,6 +350,13 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
 - Added `src/components/workbench/libraryUsagePresenters.ts` and tests for
   asset category labels, exact active-run match highlighting, network byte
   labels, and projection freshness labels.
+- Added `src/components/workbench/GraphPage.svelte` run-snapshot mode backed by
+  `workflowService.queryRunGraph`, while preserving the current editable graph
+  page behind an explicit mode switch.
+- Added `src/components/workbench/RunGraphSnapshot.svelte` and
+  `src/components/workbench/runGraphPresenters.ts` with tests for immutable run
+  graph summary, topology rows, presentation fallback labels, and stable SVG
+  layout inputs.
 
 ### Deviations
 
@@ -354,6 +368,9 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
 - Pumas search/download/delete UI is deferred because there is no typed
   frontend workflow service method that confirms those mutations and can be
   refreshed without optimistic local state.
+- The first run graph view uses a lightweight read-only SVG snapshot instead
+  of the full graph editor package because the current editor components are
+  bound to the live workflow store.
 
 ### Follow-Ups
 
@@ -364,12 +381,16 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
   typed service.
 - Add typed Pumas/Library mutation service methods before adding Library action
   buttons.
+- Add node status and output availability overlays once the diagnostics
+  projection exposes node-keyed status/artifact summary records.
 
 ### Verification Summary
 
 - `node --experimental-strip-types --test src/components/workbench/ioInspectorPresenters.test.ts`
   passed.
 - `node --experimental-strip-types --test src/components/workbench/libraryUsagePresenters.test.ts`
+  passed.
+- `node --experimental-strip-types --test src/components/workbench/runGraphPresenters.test.ts`
   passed.
 - `npm run test:frontend` passed.
 - `npm run typecheck` passed.

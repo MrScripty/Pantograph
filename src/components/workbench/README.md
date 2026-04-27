@@ -10,7 +10,8 @@ later plan stages fill in richer page bodies.
 | ----------- | ----------- |
 | `WorkbenchShell.svelte` | Top-level workbench frame, toolbar navigation, active-run summary, and page outlet. |
 | `SchedulerPage.svelte` | Dense run-list view backed by the run-list projection service and active-run selection store. |
-| `GraphPage.svelte` | Workbench page wrapper for the existing workflow graph editor surface. |
+| `GraphPage.svelte` | Workbench page that switches between the active run's immutable graph snapshot and the current editable workflow graph. |
+| `RunGraphSnapshot.svelte` | Read-only run graph renderer backed by `workflowService.queryRunGraph`; it does not load historic graphs into the editor store. |
 | `DiagnosticsPage.svelte` | Workbench page wrapper for the existing diagnostics panel. |
 | `IoInspectorPage.svelte` | Projection-backed I/O artifact browser and global retention policy form. |
 | `ioInspectorPresenters.ts` | Pure I/O media, payload availability, byte-size, and projection freshness presenters. |
@@ -18,6 +19,8 @@ later plan stages fill in richer page bodies.
 | `LibraryPage.svelte` | Projection-backed Library usage and audit table with active-run highlighting where the projection proves a last-run match. |
 | `libraryUsagePresenters.ts` | Pure Library category, active-run match, network byte, and projection freshness presenters. |
 | `libraryUsagePresenters.test.ts` | Unit coverage for Library page presentation labels and active-run matching. |
+| `runGraphPresenters.ts` | Pure run graph summary, topology table, and SVG snapshot layout presenters. |
+| `runGraphPresenters.test.ts` | Unit coverage for run graph version/topology presentation without editor-store state. |
 | `NetworkPage.svelte` | Local-only system and scheduler status page backed by the local network status API. |
 | `NodeLabPage.svelte` | Reserved Node Editor page for future node authoring workflows. |
 
@@ -37,6 +40,8 @@ grow separate navigation and selection models.
   are not loaded unless a dedicated typed payload API exists.
 - Library pages must render usage projections without issuing optimistic Pumas
   or Library mutations.
+- Historic run graph rendering must use immutable run graph projections and
+  must not mutate the current editor store.
 - Existing graph and diagnostics surfaces must remain usable while ownership
   moves into the workbench shell.
 - Toolbar navigation must use semantic buttons with accessible names.
@@ -64,6 +69,9 @@ triggered by workflow events rather than polling.
   payload references without treating missing payload references as failures.
 - Library active-run highlighting must use explicit projection facts, not
   inferred workflow or asset name matches.
+- Run graph snapshots are read-only projection views. Switching to the current
+  editor keeps the selected run context for other pages but does not imply the
+  editor graph matches that run.
 - Workbench pages must not consume raw diagnostic ledger events.
 - Reserved pages must not invent backend state; they should display only data
   available through typed services or explicit unavailable states.
@@ -72,8 +80,7 @@ triggered by workflow events rather than polling.
 - A router is introduced for deep links or browser-style navigation.
 - Library or Node Editor graduate from reserved pages to full feature
   surfaces with their own subnavigation.
-- Historic graph rendering needs an isolated read-only graph store instead of
-  the current editor store.
+- The read-only snapshot renderer needs richer node status or artifact overlays.
 
 ## Dependencies
 **Internal:** `src/stores/workbenchStore.ts`, `src/services/workflow`,
@@ -103,6 +110,9 @@ triggered by workflow events rather than polling.
   events; callers should not add independent polling loops around it.
 - Active-run selection contains identity and summary fields only. Consumers must
   query detail, timeline, graph, I/O, or Library projections for durable data.
+- `GraphPage.svelte` reads historic workflow versions through
+  `workflowService.queryRunGraph` and renders them through
+  `RunGraphSnapshot.svelte`. It never applies that graph to the editor store.
 - `IoInspectorPage.svelte` reads artifact metadata through
   `workflowService.queryIoArtifacts` and global retention state through
   `workflowService.queryRetentionPolicy`.
@@ -120,6 +130,8 @@ triggered by workflow events rather than polling.
   `payload_ref` availability, but do not dereference payload bodies.
 - Library usage rows render `LibraryUsageProjectionRecord` summaries and may
   highlight only rows whose `last_workflow_run_id` equals the active run.
+- Run graph snapshot rows render `WorkflowRunGraphProjection` topology,
+  presentation revision, graph settings, and execution fingerprint fields.
 - Network status cards are derived from `WorkflowLocalNetworkStatusQueryResponse`.
 - Reserved page unavailable states are not persisted and do not imply backend
   capability flags.

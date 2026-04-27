@@ -1,24 +1,147 @@
 <script lang="ts">
+  import { RefreshCw } from 'lucide-svelte';
   import NodePalette from '../NodePalette.svelte';
   import WorkflowGraph from '../WorkflowGraph.svelte';
   import WorkflowToolbar from '../WorkflowToolbar.svelte';
+  import type { WorkflowRunGraphProjection } from '../../services/workflow/types';
+  import { workflowService } from '../../services/workflow/WorkflowService';
   import { isReadOnly } from '../../stores/graphSessionStore';
   import { activeWorkflowRun } from '../../stores/workbenchStore';
+  import RunGraphSnapshot from './RunGraphSnapshot.svelte';
+
+  type GraphPageMode = 'run_snapshot' | 'editor';
+
+  let mode = $state<GraphPageMode>('editor');
+  let runGraph = $state<WorkflowRunGraphProjection | null>(null);
+  let loadingRunGraph = $state(false);
+  let runGraphError = $state<string | null>(null);
+  let lastRunId = $state<string | null>(null);
+  let runGraphRequestSerial = 0;
+
+  function activeRunId(): string | null {
+    return $activeWorkflowRun?.workflow_run_id ?? null;
+  }
+
+  async function refreshRunGraph(runId = activeRunId()): Promise<void> {
+    const requestSerial = ++runGraphRequestSerial;
+    runGraphError = null;
+
+    if (!runId) {
+      runGraph = null;
+      loadingRunGraph = false;
+      return;
+    }
+
+    loadingRunGraph = true;
+    try {
+      const response = await workflowService.queryRunGraph({
+        workflow_run_id: runId,
+      });
+      if (requestSerial !== runGraphRequestSerial) {
+        return;
+      }
+      runGraph = response.run_graph ?? null;
+    } catch (error) {
+      if (requestSerial !== runGraphRequestSerial) {
+        return;
+      }
+      runGraphError = error instanceof Error ? error.message : String(error);
+      runGraph = null;
+    } finally {
+      if (requestSerial === runGraphRequestSerial) {
+        loadingRunGraph = false;
+      }
+    }
+  }
+
+  $effect(() => {
+    const runId = activeRunId();
+    if (runId === lastRunId) {
+      return;
+    }
+
+    lastRunId = runId;
+    mode = runId ? 'run_snapshot' : 'editor';
+    void refreshRunGraph(runId);
+  });
 </script>
 
 <section class="flex h-full min-h-0 flex-col bg-neutral-950">
-  <WorkflowToolbar showDiagnosticsToggle={false} />
   {#if $activeWorkflowRun}
-    <div class="border-b border-neutral-800 bg-neutral-900/60 px-4 py-2 text-xs text-neutral-400">
-      Selected run: <span class="font-mono text-neutral-200">{$activeWorkflowRun.workflow_run_id}</span>
+    <div class="flex shrink-0 items-center justify-between gap-4 border-b border-neutral-800 px-4 py-3">
+      <div class="min-w-0">
+        <h1 class="text-base font-semibold text-neutral-100">Graph</h1>
+        <div class="mt-1 truncate text-xs text-neutral-500">
+          {$activeWorkflowRun.workflow_run_id}
+        </div>
+      </div>
+      <div class="flex shrink-0 items-center gap-2">
+        <div class="inline-flex overflow-hidden rounded border border-neutral-800">
+          <button
+            type="button"
+            class={`px-3 py-1.5 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 ${mode === 'run_snapshot' ? 'bg-cyan-950 text-cyan-100' : 'text-neutral-400 hover:bg-neutral-900 hover:text-neutral-100'}`}
+            onclick={() => {
+              mode = 'run_snapshot';
+            }}
+          >
+            Run Snapshot
+          </button>
+          <button
+            type="button"
+            class={`border-l border-neutral-800 px-3 py-1.5 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 ${mode === 'editor' ? 'bg-cyan-950 text-cyan-100' : 'text-neutral-400 hover:bg-neutral-900 hover:text-neutral-100'}`}
+            onclick={() => {
+              mode = 'editor';
+            }}
+          >
+            Current Editor
+          </button>
+        </div>
+        {#if mode === 'run_snapshot'}
+          <button
+            type="button"
+            class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+            onclick={() => refreshRunGraph()}
+            disabled={loadingRunGraph}
+          >
+            <RefreshCw size={14} aria-hidden="true" class={loadingRunGraph ? 'animate-spin' : ''} />
+            Refresh
+          </button>
+        {/if}
+      </div>
     </div>
   {/if}
-  <div class="flex min-h-0 flex-1 overflow-hidden">
-    {#if !$isReadOnly}
-      <NodePalette />
+
+  {#if !$activeWorkflowRun || mode === 'editor'}
+    <WorkflowToolbar showDiagnosticsToggle={false} />
+    {#if $activeWorkflowRun}
+      <div class="border-b border-neutral-800 bg-neutral-900/60 px-4 py-2 text-xs text-neutral-400">
+        Editing the current workflow. Selected run remains
+        <span class="font-mono text-neutral-200">{$activeWorkflowRun.workflow_run_id}</span>
+        for other workbench pages.
+      </div>
     {/if}
-    <div class="min-w-0 flex-1">
-      <WorkflowGraph />
+    <div class="flex min-h-0 flex-1 overflow-hidden">
+      {#if !$isReadOnly}
+        <NodePalette />
+      {/if}
+      <div class="min-w-0 flex-1">
+        <WorkflowGraph />
+      </div>
     </div>
-  </div>
+  {:else if loadingRunGraph && !runGraph}
+    <div class="flex min-h-0 flex-1 items-center justify-center text-sm text-neutral-500">
+      Loading run graph
+    </div>
+  {:else if runGraphError}
+    <div class="border-b border-red-900 bg-red-950/50 px-4 py-2 text-sm text-red-200">{runGraphError}</div>
+    <div class="flex min-h-0 flex-1 items-center justify-center text-sm text-neutral-500">
+      Run graph unavailable
+    </div>
+  {:else if !runGraph}
+    <div class="flex min-h-0 flex-1 items-center justify-center text-sm text-neutral-500">
+      No versioned graph captured for this run
+    </div>
+  {:else}
+    <RunGraphSnapshot {runGraph} />
+  {/if}
 </section>
