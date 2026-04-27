@@ -261,9 +261,11 @@ incremental hot read model, `scheduler_timeline_projection`, now drains
 `scheduler.queue_placement` events by cursor into materialized rows for page/API
 queries. Typed `run.started` and `run.terminal` events are added to the same
 timeline so selected-run history can cover execution start and terminal
-status without replaying raw legacy diagnostics. Run detail/current status,
-active-run I/O artifact metadata, warm projection drains, additional filters,
-and explicit rebuild commands remain pending.
+status without replaying raw legacy diagnostics. A first `run_list_projection`
+now materializes one row per run from the same cursor-drained lifecycle events
+for scheduler-page list reads. Run detail/current status, active-run I/O
+artifact metadata, warm projection drains, additional filters, and explicit
+rebuild commands remain pending.
 
 ### Milestone 3: I/O Artifact Metadata And Retention
 

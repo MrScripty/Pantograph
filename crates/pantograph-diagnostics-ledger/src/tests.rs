@@ -10,14 +10,15 @@ use crate::{
     LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement,
     OutputMeasurementUnavailableReason, OutputModality, ProjectionStateUpdate, ProjectionStatus,
     PruneTimingObservationsCommand, PruneUsageEventsCommand, RetentionClass,
-    RetentionPolicyChangedPayload, RunSnapshotAcceptedPayload, RunStartedPayload,
-    RunTerminalPayload, RunTerminalStatus, SchedulerEstimateProducedPayload,
-    SchedulerQueuePlacementPayload, SchedulerTimelineProjectionQuery, SqliteDiagnosticsLedger,
-    UsageEventStatus, UsageLineage, WorkflowRunSummaryQuery, WorkflowRunSummaryRecord,
-    WorkflowRunSummaryStatus, WorkflowTimingExpectation, WorkflowTimingExpectationComparison,
-    WorkflowTimingExpectationQuery, WorkflowTimingObservation, WorkflowTimingObservationScope,
-    WorkflowTimingObservationStatus, DEFAULT_STANDARD_RETENTION_DAYS,
-    MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, SCHEDULER_TIMELINE_PROJECTION_NAME,
+    RetentionPolicyChangedPayload, RunListProjectionQuery, RunListProjectionStatus,
+    RunSnapshotAcceptedPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
+    SchedulerEstimateProducedPayload, SchedulerQueuePlacementPayload,
+    SchedulerTimelineProjectionQuery, SqliteDiagnosticsLedger, UsageEventStatus, UsageLineage,
+    WorkflowRunSummaryQuery, WorkflowRunSummaryRecord, WorkflowRunSummaryStatus,
+    WorkflowTimingExpectation, WorkflowTimingExpectationComparison, WorkflowTimingExpectationQuery,
+    WorkflowTimingObservation, WorkflowTimingObservationScope, WorkflowTimingObservationStatus,
+    DEFAULT_STANDARD_RETENTION_DAYS, MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, RUN_LIST_PROJECTION_NAME,
+    RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
     SCHEDULER_TIMELINE_PROJECTION_VERSION,
 };
 
@@ -730,6 +731,61 @@ fn scheduler_timeline_projection_query_rejects_unbounded_requests() {
 }
 
 #[test]
+fn run_list_projection_drains_lifecycle_events_incrementally() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_run_snapshot_event("workflow_run_alpha"))
+        .expect("run snapshot event appends");
+    ledger
+        .append_diagnostic_event(sample_scheduler_queue_event("workflow_run_alpha", 0))
+        .expect("scheduler queue event appends");
+    ledger
+        .append_diagnostic_event(sample_run_started_event("workflow_run_alpha"))
+        .expect("run started event appends");
+    let terminal_event = ledger
+        .append_diagnostic_event(sample_run_terminal_event("workflow_run_alpha"))
+        .expect("run terminal event appends");
+
+    let state = ledger
+        .drain_run_list_projection(10)
+        .expect("run list projection drains");
+    assert_eq!(state.projection_name, RUN_LIST_PROJECTION_NAME);
+    assert_eq!(state.projection_version, RUN_LIST_PROJECTION_VERSION);
+    assert_eq!(state.last_applied_event_seq, terminal_event.event_seq);
+
+    let records = ledger
+        .query_run_list_projection(RunListProjectionQuery::default())
+        .expect("run list projection loads");
+    assert_eq!(records.len(), 1);
+    let record = &records[0];
+    assert_eq!(record.workflow_run_id.as_str(), "workflow_run_alpha");
+    assert_eq!(record.workflow_id.as_str(), "workflow_alpha");
+    assert_eq!(record.status, RunListProjectionStatus::Completed);
+    assert_eq!(record.accepted_at_ms, Some(990));
+    assert_eq!(record.enqueued_at_ms, Some(1_010));
+    assert_eq!(record.started_at_ms, Some(1_020));
+    assert_eq!(record.completed_at_ms, Some(1_100));
+    assert_eq!(record.duration_ms, Some(80));
+    assert_eq!(record.last_event_seq, terminal_event.event_seq);
+    assert_eq!(
+        record.scheduler_policy_id.as_deref(),
+        Some("scheduler_default")
+    );
+    assert_eq!(
+        record.retention_policy_id.as_deref(),
+        Some("retention_default")
+    );
+
+    let completed = ledger
+        .query_run_list_projection(RunListProjectionQuery {
+            status: Some(RunListProjectionStatus::Completed),
+            ..RunListProjectionQuery::default()
+        })
+        .expect("run list status filter loads");
+    assert_eq!(completed.len(), 1);
+}
+
+#[test]
 fn existing_v5_schema_adds_usage_lineage_contract_indexes() {
     let temp = tempfile::NamedTempFile::new().expect("temp file");
     let path = temp.path().to_path_buf();
@@ -821,6 +877,35 @@ fn existing_v7_schema_adds_scheduler_timeline_projection_table() {
 
     assert!(sqlite_table_exists(&conn, "scheduler_timeline_projection"));
     assert!(sqlite_index_exists(&conn, "idx_scheduler_timeline_run_seq"));
+}
+
+#[test]
+fn existing_v8_schema_adds_run_list_projection_table() {
+    let temp = tempfile::NamedTempFile::new().expect("temp file");
+    let path = temp.path().to_path_buf();
+    {
+        let conn = Connection::open(&path).expect("connection opens");
+        conn.execute_batch(
+            "CREATE TABLE ledger_schema_migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at_ms INTEGER NOT NULL,
+                checksum TEXT NOT NULL
+            );
+            INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
+            VALUES (8, 0, 'pantograph-diagnostics-ledger-v8');",
+        )
+        .expect("v8 schema marker is installed");
+    }
+    {
+        let _ledger = SqliteDiagnosticsLedger::open(&path).expect("ledger migrates");
+    }
+    let conn = Connection::open(&path).expect("connection reopens");
+
+    assert!(sqlite_table_exists(&conn, "run_list_projection"));
+    assert!(sqlite_index_exists(
+        &conn,
+        "idx_run_list_projection_updated"
+    ));
 }
 
 #[test]

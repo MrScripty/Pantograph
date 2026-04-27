@@ -311,6 +311,44 @@ export interface SchedulerTimelineProjectionRecord {
   payload_json: string;
 }
 
+export type RunListProjectionStatus =
+  | 'accepted'
+  | 'queued'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
+export interface RunListProjectionRecord {
+  workflow_run_id: string;
+  workflow_id: string;
+  workflow_version_id?: string | null;
+  workflow_semantic_version?: string | null;
+  status: RunListProjectionStatus;
+  accepted_at_ms?: number | null;
+  enqueued_at_ms?: number | null;
+  started_at_ms?: number | null;
+  completed_at_ms?: number | null;
+  duration_ms?: number | null;
+  scheduler_policy_id?: string | null;
+  retention_policy_id?: string | null;
+  last_event_seq: number;
+  last_updated_at_ms: number;
+}
+
+export interface WorkflowRunListQueryRequest {
+  workflow_id?: string | null;
+  status?: RunListProjectionStatus | null;
+  after_event_seq?: number | null;
+  limit?: number | null;
+  projection_batch_size?: number | null;
+}
+
+export interface WorkflowRunListQueryResponse {
+  runs: RunListProjectionRecord[];
+  projection_state: ProjectionStateRecord;
+}
+
 export interface WorkflowSchedulerTimelineQueryRequest {
   workflow_run_id?: string | null;
   workflow_id?: string | null;

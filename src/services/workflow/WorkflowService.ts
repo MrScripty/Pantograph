@@ -1,6 +1,8 @@
 import { invoke, Channel } from '@tauri-apps/api/core';
 import type {
   WorkflowDiagnosticsProjection,
+  WorkflowRunListQueryRequest,
+  WorkflowRunListQueryResponse,
   WorkflowSchedulerTimelineQueryRequest,
   WorkflowSchedulerTimelineQueryResponse,
   WorkflowTraceSnapshotRequest,
@@ -298,6 +300,28 @@ export class WorkflowService extends WorkflowGraphMutationService {
     }
 
     return invoke<WorkflowSchedulerTimelineQueryResponse>('workflow_scheduler_timeline_query', {
+      request,
+    });
+  }
+
+  async queryRunList(
+    request: WorkflowRunListQueryRequest = {},
+  ): Promise<WorkflowRunListQueryResponse> {
+    if (USE_WORKFLOW_MOCKS) {
+      return {
+        runs: [],
+        projection_state: {
+          projection_name: 'run_list',
+          projection_version: 1,
+          last_applied_event_seq: 0,
+          status: 'current',
+          rebuilt_at_ms: null,
+          updated_at_ms: Date.now(),
+        },
+      };
+    }
+
+    return invoke<WorkflowRunListQueryResponse>('workflow_run_list_query', {
       request,
     });
   }

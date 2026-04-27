@@ -15,7 +15,8 @@ use pantograph_workflow_service::{
     WorkflowExecutionSessionStaleCleanupRequest, WorkflowExecutionSessionStaleCleanupResponse,
     WorkflowExecutionSessionStatusRequest, WorkflowExecutionSessionStatusResponse,
     WorkflowIoRequest, WorkflowIoResponse, WorkflowPreflightRequest, WorkflowPreflightResponse,
-    WorkflowRunResponse, WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse,
+    WorkflowRunListQueryRequest, WorkflowRunListQueryResponse, WorkflowRunResponse,
+    WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse,
     WorkflowSchedulerTimelineQueryRequest, WorkflowSchedulerTimelineQueryResponse,
     WorkflowServiceError,
 };
@@ -214,6 +215,15 @@ pub async fn workflow_scheduler_timeline_query(
 ) -> Result<WorkflowSchedulerTimelineQueryResponse, String> {
     workflow_service
         .workflow_scheduler_timeline_query(request)
+        .map_err(workflow_error_json)
+}
+
+pub async fn workflow_run_list_query(
+    request: WorkflowRunListQueryRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowRunListQueryResponse, String> {
+    workflow_service
+        .workflow_run_list_query(request)
         .map_err(workflow_error_json)
 }
 

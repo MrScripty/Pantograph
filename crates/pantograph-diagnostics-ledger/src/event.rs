@@ -10,6 +10,8 @@ pub const DIAGNOSTIC_EVENT_SCHEMA_VERSION: i64 = 1;
 pub const MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES: usize = 8_192;
 pub const SCHEDULER_TIMELINE_PROJECTION_NAME: &str = "scheduler_timeline";
 pub const SCHEDULER_TIMELINE_PROJECTION_VERSION: i64 = 1;
+pub const RUN_LIST_PROJECTION_NAME: &str = "run_list";
+pub const RUN_LIST_PROJECTION_VERSION: i64 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -579,6 +581,98 @@ pub struct SchedulerTimelineProjectionRecord {
     pub summary: String,
     pub detail: Option<String>,
     pub payload_json: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RunListProjectionStatus {
+    Accepted,
+    Queued,
+    Running,
+    Completed,
+    Failed,
+    Cancelled,
+}
+
+impl RunListProjectionStatus {
+    pub(crate) fn as_db(self) -> &'static str {
+        match self {
+            Self::Accepted => "accepted",
+            Self::Queued => "queued",
+            Self::Running => "running",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+            Self::Cancelled => "cancelled",
+        }
+    }
+
+    pub(crate) fn from_db(value: &str) -> Result<Self, DiagnosticsLedgerError> {
+        match value {
+            "accepted" => Ok(Self::Accepted),
+            "queued" => Ok(Self::Queued),
+            "running" => Ok(Self::Running),
+            "completed" => Ok(Self::Completed),
+            "failed" => Ok(Self::Failed),
+            "cancelled" => Ok(Self::Cancelled),
+            _ => Err(DiagnosticsLedgerError::InvalidField {
+                field: "run_list_status",
+            }),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RunListProjectionQuery {
+    pub workflow_id: Option<WorkflowId>,
+    pub status: Option<RunListProjectionStatus>,
+    pub after_event_seq: Option<i64>,
+    pub limit: u32,
+}
+
+impl Default for RunListProjectionQuery {
+    fn default() -> Self {
+        Self {
+            workflow_id: None,
+            status: None,
+            after_event_seq: None,
+            limit: 100,
+        }
+    }
+}
+
+impl RunListProjectionQuery {
+    pub fn validate(&self, max_limit: u32) -> Result<(), DiagnosticsLedgerError> {
+        if self.limit > max_limit {
+            return Err(DiagnosticsLedgerError::QueryLimitExceeded {
+                requested: self.limit,
+                max: max_limit,
+            });
+        }
+        if self.after_event_seq.unwrap_or(0) < 0 {
+            return Err(DiagnosticsLedgerError::InvalidField {
+                field: "after_event_seq",
+            });
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RunListProjectionRecord {
+    pub workflow_run_id: WorkflowRunId,
+    pub workflow_id: WorkflowId,
+    pub workflow_version_id: Option<WorkflowVersionId>,
+    pub workflow_semantic_version: Option<String>,
+    pub status: RunListProjectionStatus,
+    pub accepted_at_ms: Option<i64>,
+    pub enqueued_at_ms: Option<i64>,
+    pub started_at_ms: Option<i64>,
+    pub completed_at_ms: Option<i64>,
+    pub duration_ms: Option<u64>,
+    pub scheduler_policy_id: Option<String>,
+    pub retention_policy_id: Option<String>,
+    pub last_event_seq: i64,
+    pub last_updated_at_ms: i64,
 }
 
 fn validate_text_list(

@@ -8,9 +8,11 @@ use crate::event::{
     DiagnosticEventAppendRequest, DiagnosticEventKind, DiagnosticEventPayload,
     DiagnosticEventPrivacyClass, DiagnosticEventRecord, DiagnosticEventRetentionClass,
     DiagnosticEventSourceComponent, ProjectionStateRecord, ProjectionStateUpdate, ProjectionStatus,
+    RunListProjectionQuery, RunListProjectionRecord, RunListProjectionStatus,
     SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
-    DIAGNOSTIC_EVENT_SCHEMA_VERSION, MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES,
-    SCHEDULER_TIMELINE_PROJECTION_NAME, SCHEDULER_TIMELINE_PROJECTION_VERSION,
+    DIAGNOSTIC_EVENT_SCHEMA_VERSION, MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, RUN_LIST_PROJECTION_NAME,
+    RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
+    SCHEDULER_TIMELINE_PROJECTION_VERSION,
 };
 use crate::records::MAX_PAGE_SIZE;
 use crate::util::now_ms;
@@ -344,6 +346,112 @@ pub(super) fn query_scheduler_timeline_projection(
         .map_err(DiagnosticsLedgerError::from)
 }
 
+pub(super) fn drain_run_list_projection(
+    ledger: &mut SqliteDiagnosticsLedger,
+    limit: u32,
+) -> Result<ProjectionStateRecord, DiagnosticsLedgerError> {
+    if limit > MAX_PAGE_SIZE {
+        return Err(DiagnosticsLedgerError::QueryLimitExceeded {
+            requested: limit,
+            max: MAX_PAGE_SIZE,
+        });
+    }
+    let tx = ledger.conn.transaction()?;
+    let state = {
+        let mut stmt = tx.prepare(
+            "SELECT projection_name, projection_version, last_applied_event_seq, status,
+                    rebuilt_at_ms, updated_at_ms
+             FROM projection_state
+             WHERE projection_name = ?1",
+        )?;
+        stmt.query_row(params![RUN_LIST_PROJECTION_NAME], projection_state_from_row)
+            .optional()?
+    };
+
+    let mut last_applied_event_seq = state
+        .as_ref()
+        .map(|state| state.last_applied_event_seq)
+        .unwrap_or(0);
+    let mut rebuilt_at_ms = state.as_ref().and_then(|state| state.rebuilt_at_ms);
+    if state
+        .as_ref()
+        .map(|state| state.projection_version != RUN_LIST_PROJECTION_VERSION)
+        .unwrap_or(false)
+    {
+        tx.execute("DELETE FROM run_list_projection", [])?;
+        last_applied_event_seq = 0;
+        rebuilt_at_ms = Some(now_ms());
+    }
+
+    let events = diagnostic_projection_events_after(&tx, last_applied_event_seq, limit)?;
+    for event in &events {
+        apply_run_list_projection_event(&tx, event)?;
+        last_applied_event_seq = event.event_seq;
+    }
+
+    let updated_at_ms = now_ms();
+    tx.execute(
+        "INSERT INTO projection_state
+            (projection_name, projection_version, last_applied_event_seq, status,
+             rebuilt_at_ms, updated_at_ms)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+         ON CONFLICT(projection_name) DO UPDATE SET
+            projection_version = excluded.projection_version,
+            last_applied_event_seq = excluded.last_applied_event_seq,
+            status = excluded.status,
+            rebuilt_at_ms = excluded.rebuilt_at_ms,
+            updated_at_ms = excluded.updated_at_ms",
+        params![
+            RUN_LIST_PROJECTION_NAME,
+            RUN_LIST_PROJECTION_VERSION,
+            last_applied_event_seq,
+            ProjectionStatus::Current.as_db(),
+            rebuilt_at_ms,
+            updated_at_ms,
+        ],
+    )?;
+    tx.commit()?;
+
+    Ok(ProjectionStateRecord {
+        projection_name: RUN_LIST_PROJECTION_NAME.to_string(),
+        projection_version: RUN_LIST_PROJECTION_VERSION,
+        last_applied_event_seq,
+        status: ProjectionStatus::Current,
+        rebuilt_at_ms,
+        updated_at_ms,
+    })
+}
+
+pub(super) fn query_run_list_projection(
+    ledger: &SqliteDiagnosticsLedger,
+    query: RunListProjectionQuery,
+) -> Result<Vec<RunListProjectionRecord>, DiagnosticsLedgerError> {
+    query.validate(MAX_PAGE_SIZE)?;
+    let mut stmt = ledger.conn.prepare(
+        "SELECT workflow_run_id, workflow_id, workflow_version_id,
+                workflow_semantic_version, status, accepted_at_ms, enqueued_at_ms,
+                started_at_ms, completed_at_ms, duration_ms, scheduler_policy_id,
+                retention_policy_id, last_event_seq, last_updated_at_ms
+         FROM run_list_projection
+         WHERE (?1 IS NULL OR workflow_id = ?1)
+           AND (?2 IS NULL OR status = ?2)
+           AND last_event_seq > ?3
+         ORDER BY last_updated_at_ms DESC, last_event_seq DESC
+         LIMIT ?4",
+    )?;
+    let rows = stmt.query_map(
+        params![
+            query.workflow_id.as_ref().map(|id| id.as_str()),
+            query.status.map(|status| status.as_db()),
+            query.after_event_seq.unwrap_or(0),
+            query.limit,
+        ],
+        run_list_projection_from_row,
+    )?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(DiagnosticsLedgerError::from)
+}
+
 fn diagnostic_event_from_row(row: &Row<'_>) -> rusqlite::Result<DiagnosticEventRecord> {
     Ok(DiagnosticEventRecord {
         event_seq: row.get(0)?,
@@ -411,6 +519,39 @@ fn diagnostic_event_from_row(row: &Row<'_>) -> rusqlite::Result<DiagnosticEventR
         payload_ref: row.get(28)?,
         payload_json: row.get(29)?,
     })
+}
+
+fn diagnostic_projection_events_after(
+    tx: &rusqlite::Transaction<'_>,
+    last_applied_event_seq: i64,
+    limit: u32,
+) -> Result<Vec<DiagnosticEventRecord>, DiagnosticsLedgerError> {
+    let mut stmt = tx.prepare(
+        "SELECT event_seq, event_id, event_kind, schema_version, source_component,
+                source_instance_id, occurred_at_ms, recorded_at_ms, workflow_run_id,
+                workflow_id, workflow_version_id, workflow_semantic_version, node_id,
+                node_type, node_version, runtime_id, runtime_version, model_id,
+                model_version, client_id, client_session_id, bucket_id, scheduler_policy_id,
+                retention_policy_id, privacy_class, event_retention_class, payload_hash,
+                payload_size_bytes, payload_ref, payload_json
+         FROM diagnostic_events
+         WHERE event_seq > ?1
+           AND event_kind IN (
+                'scheduler.estimate_produced',
+                'scheduler.queue_placement',
+                'run.started',
+                'run.terminal',
+                'run.snapshot_accepted'
+           )
+         ORDER BY event_seq
+         LIMIT ?2",
+    )?;
+    let rows = stmt.query_map(
+        params![last_applied_event_seq, limit],
+        diagnostic_event_from_row,
+    )?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(DiagnosticsLedgerError::from)
 }
 
 fn scheduler_timeline_record_from_event(
@@ -482,6 +623,87 @@ fn scheduler_timeline_record_from_event(
     }))
 }
 
+fn apply_run_list_projection_event(
+    tx: &rusqlite::Transaction<'_>,
+    event: &DiagnosticEventRecord,
+) -> Result<(), DiagnosticsLedgerError> {
+    let Some(workflow_run_id) = event.workflow_run_id.as_ref() else {
+        return Ok(());
+    };
+    let Some(workflow_id) = event.workflow_id.as_ref() else {
+        return Ok(());
+    };
+    let payload: DiagnosticEventPayload = serde_json::from_str(&event.payload_json)?;
+    let status = match &payload {
+        DiagnosticEventPayload::RunSnapshotAccepted(_) => RunListProjectionStatus::Accepted,
+        DiagnosticEventPayload::SchedulerEstimateProduced(_) => RunListProjectionStatus::Accepted,
+        DiagnosticEventPayload::SchedulerQueuePlacement(_) => RunListProjectionStatus::Queued,
+        DiagnosticEventPayload::RunStarted(_) => RunListProjectionStatus::Running,
+        DiagnosticEventPayload::RunTerminal(payload) => match payload.status {
+            crate::event::RunTerminalStatus::Completed => RunListProjectionStatus::Completed,
+            crate::event::RunTerminalStatus::Failed => RunListProjectionStatus::Failed,
+            crate::event::RunTerminalStatus::Cancelled => RunListProjectionStatus::Cancelled,
+        },
+        _ => return Ok(()),
+    };
+    let accepted_at_ms = matches!(payload, DiagnosticEventPayload::RunSnapshotAccepted(_))
+        .then_some(event.occurred_at_ms);
+    let enqueued_at_ms = matches!(payload, DiagnosticEventPayload::SchedulerQueuePlacement(_))
+        .then_some(event.occurred_at_ms);
+    let started_at_ms =
+        matches!(payload, DiagnosticEventPayload::RunStarted(_)).then_some(event.occurred_at_ms);
+    let (completed_at_ms, duration_ms) = match payload {
+        DiagnosticEventPayload::RunTerminal(payload) => (
+            Some(event.occurred_at_ms),
+            payload.duration_ms.map(|value| value as i64),
+        ),
+        _ => (None, None),
+    };
+
+    tx.execute(
+        "INSERT INTO run_list_projection
+            (workflow_run_id, workflow_id, workflow_version_id, workflow_semantic_version,
+             status, accepted_at_ms, enqueued_at_ms, started_at_ms, completed_at_ms,
+             duration_ms, scheduler_policy_id, retention_policy_id, last_event_seq,
+             last_updated_at_ms)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+         ON CONFLICT(workflow_run_id) DO UPDATE SET
+            workflow_id = excluded.workflow_id,
+            workflow_version_id = COALESCE(excluded.workflow_version_id, workflow_version_id),
+            workflow_semantic_version = COALESCE(excluded.workflow_semantic_version, workflow_semantic_version),
+            status = excluded.status,
+            accepted_at_ms = COALESCE(accepted_at_ms, excluded.accepted_at_ms),
+            enqueued_at_ms = COALESCE(enqueued_at_ms, excluded.enqueued_at_ms),
+            started_at_ms = COALESCE(started_at_ms, excluded.started_at_ms),
+            completed_at_ms = COALESCE(excluded.completed_at_ms, completed_at_ms),
+            duration_ms = COALESCE(excluded.duration_ms, duration_ms),
+            scheduler_policy_id = COALESCE(excluded.scheduler_policy_id, scheduler_policy_id),
+            retention_policy_id = COALESCE(excluded.retention_policy_id, retention_policy_id),
+            last_event_seq = excluded.last_event_seq,
+            last_updated_at_ms = excluded.last_updated_at_ms",
+        params![
+            workflow_run_id.as_str(),
+            workflow_id.as_str(),
+            event
+                .workflow_version_id
+                .as_ref()
+                .map(|workflow_version_id| workflow_version_id.as_str()),
+            event.workflow_semantic_version.as_deref(),
+            status.as_db(),
+            accepted_at_ms,
+            enqueued_at_ms,
+            started_at_ms,
+            completed_at_ms,
+            duration_ms,
+            event.scheduler_policy_id.as_deref(),
+            event.retention_policy_id.as_deref(),
+            event.event_seq,
+            event.occurred_at_ms,
+        ],
+    )?;
+    Ok(())
+}
+
 fn insert_scheduler_timeline_projection(
     tx: &rusqlite::Transaction<'_>,
     record: &SchedulerTimelineProjectionRecord,
@@ -551,6 +773,37 @@ fn scheduler_timeline_projection_from_row(
     })
 }
 
+fn run_list_projection_from_row(row: &Row<'_>) -> rusqlite::Result<RunListProjectionRecord> {
+    Ok(RunListProjectionRecord {
+        workflow_run_id: row
+            .get::<_, String>(0)
+            .and_then(|value| WorkflowRunId::try_from(value).map_err(sqlite_conversion_error))?,
+        workflow_id: row
+            .get::<_, String>(1)
+            .and_then(|value| WorkflowId::try_from(value).map_err(sqlite_conversion_error))?,
+        workflow_version_id: row
+            .get::<_, Option<String>>(2)?
+            .map(WorkflowVersionId::try_from)
+            .transpose()
+            .map_err(sqlite_conversion_error)?,
+        workflow_semantic_version: row.get(3)?,
+        status: row
+            .get::<_, String>(4)
+            .and_then(parse_run_list_projection_status)?,
+        accepted_at_ms: row.get(5)?,
+        enqueued_at_ms: row.get(6)?,
+        started_at_ms: row.get(7)?,
+        completed_at_ms: row.get(8)?,
+        duration_ms: row
+            .get::<_, Option<i64>>(9)?
+            .map(|value| u64::try_from(value).unwrap_or(u64::MAX)),
+        scheduler_policy_id: row.get(10)?,
+        retention_policy_id: row.get(11)?,
+        last_event_seq: row.get(12)?,
+        last_updated_at_ms: row.get(13)?,
+    })
+}
+
 fn projection_state_from_row(row: &Row<'_>) -> rusqlite::Result<ProjectionStateRecord> {
     Ok(ProjectionStateRecord {
         projection_name: row.get(0)?,
@@ -580,6 +833,10 @@ fn parse_event_retention_class(value: String) -> rusqlite::Result<DiagnosticEven
 
 fn parse_projection_status(value: String) -> rusqlite::Result<ProjectionStatus> {
     ProjectionStatus::from_db(&value).map_err(sqlite_conversion_error)
+}
+
+fn parse_run_list_projection_status(value: String) -> rusqlite::Result<RunListProjectionStatus> {
+    RunListProjectionStatus::from_db(&value).map_err(sqlite_conversion_error)
 }
 
 fn sqlite_conversion_error<E>(error: E) -> rusqlite::Error

@@ -380,6 +380,7 @@ pub fn run_app() -> AppStartupResult<()> {
             crate::workflow::commands::workflow_cleanup_stale_execution_sessions,
             crate::workflow::commands::workflow_get_scheduler_snapshot,
             crate::workflow::commands::workflow_scheduler_timeline_query,
+            crate::workflow::commands::workflow_run_list_query,
             crate::workflow::commands::workflow_get_diagnostics_snapshot,
             crate::workflow::commands::workflow_get_trace_snapshot,
             crate::workflow::commands::workflow_clear_diagnostics_history,
