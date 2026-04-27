@@ -148,7 +148,7 @@ large patch. Before coding, split it into waves with explicit write sets:
 
 **Tasks:**
 
-- [ ] Decide whether to add a new ADR for workflow version registry ownership.
+- [x] Decide whether to add a new ADR for workflow version registry ownership.
 - [x] Define workflow identity validation rules and error categories.
 - [x] Define canonical executable topology inputs and exclusions.
 - [x] Define presentation revision contract and its relationship to execution
@@ -172,6 +172,8 @@ projection is implemented, workflow-version registry ownership now sits in the
 durable attribution store, and presentation revisions are defined as display
 metadata records that never drive diagnostics identity. Remaining Milestone 1
 snapshot field and cutover decisions are still open.
+`docs/adr/ADR-013-workflow-version-registry-and-run-snapshots.md` now records
+the durable attribution ownership decision.
 
 ### Milestone 2: Workflow Version Registry
 
@@ -363,6 +365,10 @@ records for the same execution fingerprint.
 - 2026-04-27: Quarantined remaining `graph_fingerprint` contracts as legacy
   preflight/cache or timing facets. They are documented as non-version
   identity pending Stage `03` typed event-ledger projections.
+- 2026-04-27: Added
+  `docs/adr/ADR-013-workflow-version-registry-and-run-snapshots.md` to freeze
+  workflow-version registry, presentation-revision, and immutable run-snapshot
+  ownership.
 
 ### Deviations
 
@@ -427,6 +433,8 @@ records for the same execution fingerprint.
   passed for the touched graph-fingerprint quarantine Rust files.
 - 2026-04-27: `git diff --check` passed for the graph-fingerprint quarantine
   slice.
+- 2026-04-27: `git diff --check` passed after adding the workflow-version
+  registry ADR.
 - 2026-04-27: `cargo test -p pantograph-node-contracts` passed.
 - 2026-04-27: `cargo test -p workflow-nodes` passed.
 - 2026-04-27: `cargo test -p pantograph-workflow-service canonicalization`

@@ -82,10 +82,8 @@ credential material, `chrono` for UTC timestamps, `serde` for DTO projection,
 and `thiserror` for typed errors.
 
 ## Related ADRs
-- `None yet.`
-- Reason: Stage `01` implementation must add the durable attribution ADR before
-  completion.
-- Revisit trigger: Stage `01` reaches Wave `03`.
+- `docs/adr/ADR-005-durable-runtime-attribution.md`
+- `docs/adr/ADR-013-workflow-version-registry-and-run-snapshots.md`
 
 ## Usage Examples
 ```rust
