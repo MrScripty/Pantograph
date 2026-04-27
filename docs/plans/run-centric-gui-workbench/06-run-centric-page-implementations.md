@@ -128,7 +128,7 @@ into a second source of truth.
   position, priority, session/bucket, estimate, actual timing, progress,
   runtime/node, models, retention summary, delay reason, and error summary as
   data exists.
-- [ ] Add sorting/filtering/search scaffolding.
+- [x] Add sorting/filtering/search scaffolding.
 - [ ] Add selected-run action surface with client-safe and GUI-admin actions
   gated by projection authority.
 - [ ] Add scheduler event drawer or selected-run timeline entry point.
@@ -147,9 +147,10 @@ into a second source of truth.
 **Status:** Partially complete from Stage `05`. The current Scheduler page
 renders a dense projection-backed run table, first-class queued/future rows
 where present in the run-list projection, selected-run actions, active-run
-updates, and projection freshness. Advanced sorting/filtering, scheduler
-timeline drawer, queue position, priority, estimates, progress, model/runtime
-summaries, delay reason, and retention summaries remain open.
+updates, projection freshness, search, status filtering, and stable local sort
+options. Scheduler timeline drawer, queue position, priority, estimates,
+progress, model/runtime summaries, delay reason, and retention summaries remain
+open.
 
 ### Milestone 2: Diagnostics Page
 
@@ -378,6 +379,10 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
 - Added `src/components/workbench/networkPagePresenters.ts` and tests for byte
   labels, transport labels, degraded CPU/GPU states, scheduler load labels, and
   local capability rows.
+- Added Scheduler table search, status filtering, and local sort controls over
+  the materialized run-list projection.
+- Added `src/components/workbench/schedulerPagePresenters.ts` and tests for
+  Scheduler timestamp/duration labels, status classes, filtering, and sorting.
 
 ### Deviations
 
@@ -427,6 +432,8 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
 - `node --experimental-strip-types --test src/components/workbench/diagnosticsPagePresenters.test.ts`
   passed.
 - `node --experimental-strip-types --test src/components/workbench/networkPagePresenters.test.ts`
+  passed.
+- `node --experimental-strip-types --test src/components/workbench/schedulerPagePresenters.test.ts`
   passed.
 - `npm run test:frontend` passed.
 - `npm run typecheck` passed.
