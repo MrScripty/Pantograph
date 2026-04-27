@@ -168,7 +168,7 @@ before implementation.
 - [ ] Define I/O artifact metadata contract.
 - [ ] Define retention policy/version and artifact retention-state contract.
 - [ ] Define Pumas/Library audit event contract.
-- [ ] Define centralized validators for artifact payload references,
+- [x] Define centralized validators for artifact payload references,
   Library/Pumas resource identifiers, external references, and any filesystem
   paths accepted by download/delete/access operations.
 - [x] Define ledger indexes, projection tables, and migration strategy for
@@ -199,11 +199,11 @@ before implementation.
 **Status:** In progress. `pantograph-diagnostics-ledger` is the accepted
 storage owner. First-pass scheduler/run/I/O/library/runtime/retention event
 contracts, validation errors, source allowlists, payload hashes, embedded
-payload limits, SQLite `diagnostic_events`, and `projection_state` have been
-implemented. Artifact-reference validators, detailed I/O retention contracts,
-Pumas path/resource validators, and hot/warm projection ownership details are
-partially pending; scheduler timeline projection ownership is implemented as
-the first hot projection.
+payload limits, SQLite `diagnostic_events`, `projection_state`, and safe
+payload-reference scheme validation have been implemented. Detailed I/O
+retention contracts, Pumas download/delete path validators, and hot/warm
+projection ownership details are partially pending; scheduler timeline
+projection ownership is implemented as the first hot projection.
 
 ### Milestone 2: Ledger Persistence And Incremental Projections
 
@@ -424,6 +424,8 @@ implicitly on page load.
   `cargo test -p pantograph-workflow-service` passed.
 - 2026-04-27: Documentation-only projection strategy update. No code tests
   required.
+- 2026-04-27: `cargo test -p pantograph-diagnostics-ledger
+  diagnostic_event_ledger_rejects_unsafe_payload_refs` passed.
 
 ### Traceability Links
 

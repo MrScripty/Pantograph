@@ -430,7 +430,7 @@ impl DiagnosticEventAppendRequest {
             self.retention_policy_id.as_deref(),
             MAX_ID_LEN,
         )?;
-        validate_optional_text("payload_ref", self.payload_ref.as_deref(), MAX_JSON_LEN)?;
+        validate_payload_ref(self.payload_ref.as_deref())?;
         self.payload.validate()?;
         validate_event_scope(self)?;
         validate_event_source(self.payload.event_kind(), self.source_component)
@@ -865,6 +865,39 @@ fn validate_text_list(
 ) -> Result<(), DiagnosticsLedgerError> {
     for value in values {
         validate_required_text(field, value, MAX_ID_LEN)?;
+    }
+    Ok(())
+}
+
+fn validate_payload_ref(value: Option<&str>) -> Result<(), DiagnosticsLedgerError> {
+    validate_optional_text("payload_ref", value, MAX_JSON_LEN)?;
+    let Some(value) = value else {
+        return Ok(());
+    };
+    if value.trim() != value || value.chars().any(char::is_whitespace) {
+        return Err(DiagnosticsLedgerError::InvalidField {
+            field: "payload_ref",
+        });
+    }
+    let allowed_scheme = ["artifact://", "pumas://", "pantograph://"]
+        .iter()
+        .find(|scheme| value.starts_with(**scheme));
+    let Some(scheme) = allowed_scheme else {
+        return Err(DiagnosticsLedgerError::InvalidField {
+            field: "payload_ref",
+        });
+    };
+    let reference = &value[scheme.len()..];
+    if reference.is_empty()
+        || reference.starts_with('/')
+        || reference.contains('\\')
+        || reference
+            .split('/')
+            .any(|segment| segment == "." || segment == "..")
+    {
+        return Err(DiagnosticsLedgerError::InvalidField {
+            field: "payload_ref",
+        });
     }
     Ok(())
 }

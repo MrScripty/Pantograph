@@ -577,6 +577,49 @@ fn diagnostic_event_ledger_rejects_oversized_payloads() {
 }
 
 #[test]
+fn diagnostic_event_ledger_rejects_unsafe_payload_refs() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    for payload_ref in [
+        "/tmp/artifact.bin",
+        "file:///tmp/artifact.bin",
+        "https://example.test/artifact.bin",
+        "artifact://../artifact.bin",
+        "artifact:///absolute",
+        "artifact://with space",
+    ] {
+        let mut request = sample_io_artifact_event(
+            "workflow_run_alpha",
+            "node_prompt",
+            "workflow_input",
+            "artifact_prompt",
+        );
+        request.payload_ref = Some(payload_ref.to_string());
+
+        let result = ledger.append_diagnostic_event(request);
+        assert!(
+            matches!(
+                result,
+                Err(DiagnosticsLedgerError::InvalidField {
+                    field: "payload_ref"
+                })
+            ),
+            "expected payload_ref {payload_ref:?} to be rejected"
+        );
+    }
+
+    let mut safe_request = sample_io_artifact_event(
+        "workflow_run_alpha",
+        "node_prompt",
+        "workflow_input",
+        "artifact_prompt",
+    );
+    safe_request.payload_ref = Some("pantograph://artifacts/run-alpha/output".to_string());
+    ledger
+        .append_diagnostic_event(safe_request)
+        .expect("safe payload ref appends");
+}
+
+#[test]
 fn projection_state_tracks_incremental_event_cursors() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     let event = ledger

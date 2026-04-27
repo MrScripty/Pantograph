@@ -435,8 +435,8 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
 - Decide table virtualization threshold during Scheduler implementation.
 - Add richer artifact retention state once backend projections distinguish
   retained, expired, deleted, external, truncated, and too-large payloads.
-- Add first-pass media renderers after payload body access is exposed through a
-  typed service.
+- Add payload-body media previews after typed payload body access is exposed
+  through a service.
 - Add typed Pumas/Library mutation service methods before adding Library action
   buttons.
 - Add node status and output availability overlays once the diagnostics
