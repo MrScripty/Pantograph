@@ -4,11 +4,35 @@ import type {
   WorkflowRunDetailQueryResponse,
   WorkflowRunListQueryRequest,
   WorkflowRunListQueryResponse,
+  WorkflowSchedulerTimelineQueryRequest,
+  WorkflowSchedulerTimelineQueryResponse,
 } from '../diagnostics/types.ts';
 import { WorkflowGraphMutationService } from './WorkflowGraphMutationService.ts';
 import { USE_WORKFLOW_MOCKS } from './workflowServiceConfig.ts';
 
-export class WorkflowRunProjectionService extends WorkflowGraphMutationService {
+export class WorkflowProjectionService extends WorkflowGraphMutationService {
+  async querySchedulerTimeline(
+    request: WorkflowSchedulerTimelineQueryRequest = {},
+  ): Promise<WorkflowSchedulerTimelineQueryResponse> {
+    if (USE_WORKFLOW_MOCKS) {
+      return {
+        events: [],
+        projection_state: {
+          projection_name: 'scheduler_timeline',
+          projection_version: 1,
+          last_applied_event_seq: 0,
+          status: 'current',
+          rebuilt_at_ms: null,
+          updated_at_ms: Date.now(),
+        },
+      };
+    }
+
+    return invoke<WorkflowSchedulerTimelineQueryResponse>('workflow_scheduler_timeline_query', {
+      request,
+    });
+  }
+
   async queryRunList(
     request: WorkflowRunListQueryRequest = {},
   ): Promise<WorkflowRunListQueryResponse> {

@@ -245,12 +245,13 @@ Workflow-service diagnostics tests now include an expired-retention artifact
 fixture that proves `workflow_io_artifact_query` returns the expired
 `retention_state`, clears the payload reference, and reports matching
 retention-summary counts through the public API.
-Frontend workflow run projection tests now use Tauri mock IPC to prove
-`WorkflowRunProjectionService` forwards `workflow_run_list_query` and
-`workflow_run_detail_query` requests under the native `{ request }` envelope and
-preserves backend-authored run-list facets, delayed status, workflow version,
-scheduler estimate fields, queue-placement fields, and projection freshness
-state for GUI consumers.
+Frontend workflow projection tests now use Tauri mock IPC to prove
+`WorkflowProjectionService` forwards `workflow_scheduler_timeline_query`,
+`workflow_run_list_query`, and `workflow_run_detail_query` requests under the
+native `{ request }` envelope. The tests preserve backend-authored typed
+scheduler timeline events, bounded payload JSON, run-list facets, delayed
+status, workflow version, scheduler estimate fields, queue-placement fields,
+and projection freshness state for GUI consumers.
 `workflow_run_list_query` now returns backend-owned comparison facets for
 workflow version, status, scheduler policy, and retention policy from the
 run-list projection. Diagnostics pages use those scoped facets for
@@ -296,8 +297,8 @@ projections while owning only transient UI state.
 - Polling/subscription lifecycle tests exist if any recurring update loop is
   introduced.
 
-**Status:** In progress. Hot run projection invoke wiring is now split into
-`WorkflowRunProjectionService`, with `WorkflowService` inheriting that boundary
+**Status:** In progress. Hot projection invoke wiring is now split into
+`WorkflowProjectionService`, with `WorkflowService` inheriting that boundary
 for existing GUI callers. Broader frontend store ownership, error category
 preservation, and optimistic-update avoidance remain pending.
 
@@ -315,7 +316,7 @@ implementation depends on it.
 - [x] Add fixture data for expired-retention artifact behavior.
 - [x] Add fixture data for no-active-run retained artifact browsing where
   supported.
-- [ ] Add an acceptance path proving a typed event reaches a backend projection
+- [x] Add an acceptance path proving a typed event reaches a backend projection
   and then a frontend service without exposing raw ledger storage details.
 - [ ] Add an acceptance path proving projection freshness/catching-up state is
   preserved for a warm projection when it has not yet applied the latest event
@@ -327,11 +328,11 @@ implementation depends on it.
 - If transport or language bindings changed, cross-layer acceptance includes
   the binding path used by the GUI rather than only in-process Rust fixtures.
 
-**Status:** In progress. Run-list and selected-run detail acceptance now cover
-the frontend service boundary with Tauri mock IPC. Backend fixture coverage for
-retained and expired I/O artifact browsing is also in place. Remaining
-acceptance work needs an event-to-projection-to-service path and a warm
-projection freshness/catching-up path.
+**Status:** In progress. Run-list, selected-run detail, and typed scheduler
+timeline event acceptance now cover the frontend service boundary with Tauri
+mock IPC. Backend fixture coverage for typed event projection, retained
+artifact browsing, and expired I/O artifact state is also in place. Remaining
+acceptance work needs a warm projection freshness/catching-up path.
 
 ## Ownership And Lifecycle Note
 

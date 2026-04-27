@@ -13,8 +13,6 @@ import type {
   WorkflowRetentionPolicyQueryResponse,
   WorkflowRetentionPolicyUpdateRequest,
   WorkflowRetentionPolicyUpdateResponse,
-  WorkflowSchedulerTimelineQueryRequest,
-  WorkflowSchedulerTimelineQueryResponse,
   WorkflowTraceSnapshotRequest,
   WorkflowTraceSnapshotResponse,
 } from '../diagnostics/types.ts';
@@ -48,7 +46,7 @@ import {
   projectWorkflowEventOwnership,
 } from '@pantograph/svelte-graph';
 import { parseWorkflowGraphMutationResponse } from '../../lib/workflowGraphMutationResponse.ts';
-import { WorkflowRunProjectionService } from './WorkflowRunProjectionService.ts';
+import { WorkflowProjectionService } from './WorkflowProjectionService.ts';
 import { USE_WORKFLOW_MOCKS } from './workflowServiceConfig.ts';
 
 /** Undo/redo state from the backend */
@@ -70,7 +68,7 @@ interface WorkflowSessionQueueListRequest {
   session_id: string;
 }
 
-export class WorkflowService extends WorkflowRunProjectionService {
+export class WorkflowService extends WorkflowProjectionService {
   private channel: Channel<WorkflowEvent> | null = null;
   private eventListeners: Set<(event: WorkflowEvent) => void> = new Set();
 
@@ -323,28 +321,6 @@ export class WorkflowService extends WorkflowRunProjectionService {
       request: {
         session_id: id,
       },
-    });
-  }
-
-  async querySchedulerTimeline(
-    request: WorkflowSchedulerTimelineQueryRequest = {},
-  ): Promise<WorkflowSchedulerTimelineQueryResponse> {
-    if (USE_WORKFLOW_MOCKS) {
-      return {
-        events: [],
-        projection_state: {
-          projection_name: 'scheduler_timeline',
-          projection_version: 1,
-          last_applied_event_seq: 0,
-          status: 'current',
-          rebuilt_at_ms: null,
-          updated_at_ms: Date.now(),
-        },
-      };
-    }
-
-    return invoke<WorkflowSchedulerTimelineQueryResponse>('workflow_scheduler_timeline_query', {
-      request,
     });
   }
 

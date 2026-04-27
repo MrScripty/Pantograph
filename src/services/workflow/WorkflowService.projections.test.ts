@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
-import { WorkflowRunProjectionService } from './WorkflowRunProjectionService.ts';
+import { WorkflowProjectionService } from './WorkflowProjectionService.ts';
 import type {
   WorkflowRunDetailQueryResponse,
   WorkflowRunListQueryResponse,
+  WorkflowSchedulerTimelineQueryResponse,
 } from '../diagnostics/types.ts';
 
 function installWindowMock(): void {
@@ -59,7 +60,7 @@ test('queryRunList preserves backend projection rows and facets', async () => {
   });
 
   try {
-    const service = new WorkflowRunProjectionService();
+    const service = new WorkflowProjectionService();
     const result = await service.queryRunList({
       workflow_id: 'workflow-a',
       limit: 25,
@@ -131,7 +132,7 @@ test('queryRunDetail preserves selected-run workflow version and estimate fields
   });
 
   try {
-    const service = new WorkflowRunProjectionService();
+    const service = new WorkflowProjectionService();
     const result = await service.queryRunDetail({ workflow_run_id: 'run-a' });
 
     assert.deepEqual(result, response);
@@ -142,6 +143,67 @@ test('queryRunDetail preserves selected-run workflow version and estimate fields
         workflow_run_id: 'run-a',
       },
     });
+  } finally {
+    clearMocks();
+  }
+});
+
+test('querySchedulerTimeline preserves typed event projection fields', async () => {
+  installWindowMock();
+  const calls: Array<{ cmd: string; args: unknown }> = [];
+  const response: WorkflowSchedulerTimelineQueryResponse = {
+    events: [
+      {
+        event_seq: 8,
+        event_id: 'event-scheduler-queue-a',
+        event_kind: 'scheduler_queue_placement',
+        source_component: 'scheduler',
+        occurred_at_ms: 120,
+        recorded_at_ms: 121,
+        workflow_run_id: 'run-a',
+        workflow_id: 'workflow-a',
+        workflow_version_id: 'wfver-a',
+        workflow_semantic_version: '1.2.3',
+        scheduler_policy_id: 'priority_then_fifo',
+        retention_policy_id: 'ephemeral',
+        summary: 'queued at position 0',
+        detail: 'priority 7',
+        payload_json: '{"queue_position":0,"priority":7}',
+      },
+    ],
+    projection_state: {
+      projection_name: 'scheduler_timeline',
+      projection_version: 1,
+      last_applied_event_seq: 8,
+      status: 'current',
+      rebuilt_at_ms: null,
+      updated_at_ms: 125,
+    },
+  };
+  mockIPC((cmd, args) => {
+    calls.push({ cmd, args });
+    return response;
+  });
+
+  try {
+    const service = new WorkflowProjectionService();
+    const result = await service.querySchedulerTimeline({
+      workflow_run_id: 'run-a',
+      limit: 50,
+    });
+
+    assert.deepEqual(result, response);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].cmd, 'workflow_scheduler_timeline_query');
+    assert.deepEqual(calls[0].args, {
+      request: {
+        workflow_run_id: 'run-a',
+        limit: 50,
+      },
+    });
+    assert.equal(result.events[0].event_kind, 'scheduler_queue_placement');
+    assert.equal(result.events[0].payload_json, '{"queue_position":0,"priority":7}');
+    assert.equal(result.projection_state.last_applied_event_seq, 8);
   } finally {
     clearMocks();
   }
