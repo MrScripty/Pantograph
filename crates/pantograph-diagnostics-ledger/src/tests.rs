@@ -861,6 +861,12 @@ fn run_list_projection_drains_lifecycle_events_incrementally() {
         record.retention_policy_id.as_deref(),
         Some("retention_default")
     );
+    assert_eq!(record.scheduler_queue_position, Some(0));
+    assert_eq!(record.scheduler_priority, Some(7));
+    assert_eq!(
+        record.scheduler_reason.as_deref(),
+        Some("warm_session_reused")
+    );
 
     let completed = ledger
         .query_run_list_projection(RunListProjectionQuery {
@@ -943,6 +949,15 @@ fn run_detail_projection_drains_lifecycle_events_incrementally() {
     assert!(record.latest_queue_placement_json.is_some());
     assert!(record.started_payload_json.is_some());
     assert!(record.terminal_payload_json.is_some());
+    assert_eq!(record.scheduler_queue_position, Some(0));
+    assert_eq!(record.scheduler_priority, Some(7));
+    assert_eq!(record.estimate_confidence.as_deref(), Some("medium"));
+    assert_eq!(record.estimated_queue_wait_ms, Some(1_500));
+    assert_eq!(record.estimated_duration_ms, Some(2_500));
+    assert_eq!(
+        record.scheduler_reason.as_deref(),
+        Some("warm_session_reused")
+    );
     assert_eq!(record.timeline_event_count, 5);
     assert_eq!(record.last_event_seq, terminal_event.event_seq);
 
@@ -1303,6 +1318,15 @@ fn existing_v8_schema_adds_run_list_projection_table() {
         &conn,
         "idx_run_list_projection_retention_updated"
     ));
+    assert!(sqlite_index_exists(
+        &conn,
+        "idx_run_list_projection_status_queue"
+    ));
+    assert!(sqlite_column_exists(
+        &conn,
+        "run_list_projection",
+        "scheduler_queue_position"
+    ));
 }
 
 #[test]
@@ -1331,6 +1355,11 @@ fn existing_v9_schema_adds_run_detail_projection_table() {
     assert!(sqlite_index_exists(
         &conn,
         "idx_run_detail_projection_workflow_updated"
+    ));
+    assert!(sqlite_column_exists(
+        &conn,
+        "run_detail_projection",
+        "scheduler_reason"
     ));
 }
 
@@ -1394,6 +1423,51 @@ fn existing_v11_schema_adds_library_usage_projection_table() {
 }
 
 #[test]
+fn existing_v12_schema_adds_scheduler_projection_fact_columns() {
+    let temp = tempfile::NamedTempFile::new().expect("temp file");
+    let path = temp.path().to_path_buf();
+    {
+        let conn = Connection::open(&path).expect("connection opens");
+        conn.execute_batch(
+            "CREATE TABLE ledger_schema_migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at_ms INTEGER NOT NULL,
+                checksum TEXT NOT NULL
+            );
+            INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
+            VALUES (12, 0, 'pantograph-diagnostics-ledger-v12');
+            CREATE TABLE run_list_projection (
+                workflow_run_id TEXT PRIMARY KEY,
+                status TEXT NOT NULL
+            );
+            CREATE TABLE run_detail_projection (
+                workflow_run_id TEXT PRIMARY KEY
+            );",
+        )
+        .expect("v12 schema marker and old projection tables are installed");
+    }
+    {
+        let _ledger = SqliteDiagnosticsLedger::open(&path).expect("ledger migrates");
+    }
+    let conn = Connection::open(&path).expect("connection reopens");
+
+    assert!(sqlite_column_exists(
+        &conn,
+        "run_list_projection",
+        "estimate_confidence"
+    ));
+    assert!(sqlite_column_exists(
+        &conn,
+        "run_detail_projection",
+        "estimated_duration_ms"
+    ));
+    assert!(sqlite_index_exists(
+        &conn,
+        "idx_run_list_projection_status_queue"
+    ));
+}
+
+#[test]
 fn unsupported_schema_version_is_rejected() {
     let conn = Connection::open_in_memory().expect("connection opens");
     conn.execute_batch(
@@ -1435,6 +1509,19 @@ fn sqlite_table_exists(conn: &Connection, table_name: &str) -> bool {
         |row| row.get::<_, bool>(0),
     )
     .expect("table lookup succeeds")
+}
+
+fn sqlite_column_exists(conn: &Connection, table_name: &str, column_name: &str) -> bool {
+    let mut stmt = conn
+        .prepare(&format!("PRAGMA table_info({table_name})"))
+        .expect("table info statement prepares");
+    let columns = stmt
+        .query_map([], |row| row.get::<_, String>(1))
+        .expect("table info query succeeds");
+    let exists = columns
+        .map(|column| column.expect("column row loads"))
+        .any(|column| column == column_name);
+    exists
 }
 
 #[test]

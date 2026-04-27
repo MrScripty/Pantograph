@@ -103,6 +103,38 @@ export function buildDiagnosticsFactRows(run: RunDetailProjectionRecord): Diagno
     { label: 'Bucket', value: run.bucket_id ?? 'Default', mono: true },
     { label: 'Scheduler Policy', value: run.scheduler_policy_id ?? 'Default', mono: true },
     { label: 'Retention Policy', value: run.retention_policy_id ?? 'Default', mono: true },
+    {
+      label: 'Queue Position',
+      value:
+        run.scheduler_queue_position === null || run.scheduler_queue_position === undefined
+          ? 'Unassigned'
+          : String(run.scheduler_queue_position),
+      mono: false,
+    },
+    {
+      label: 'Priority',
+      value:
+        run.scheduler_priority === null || run.scheduler_priority === undefined ? 'Default' : String(run.scheduler_priority),
+      mono: false,
+    },
+    { label: 'Estimate Confidence', value: run.estimate_confidence ?? 'Unavailable', mono: false },
+    {
+      label: 'Estimated Queue Wait',
+      value:
+        run.estimated_queue_wait_ms === null || run.estimated_queue_wait_ms === undefined
+          ? 'Unavailable'
+          : formatDiagnosticsDuration(run.estimated_queue_wait_ms, run.status),
+      mono: false,
+    },
+    {
+      label: 'Estimated Duration',
+      value:
+        run.estimated_duration_ms === null || run.estimated_duration_ms === undefined
+          ? 'Unavailable'
+          : formatDiagnosticsDuration(run.estimated_duration_ms, run.status),
+      mono: false,
+    },
+    { label: 'Scheduler Reason', value: run.scheduler_reason ?? 'Unavailable', mono: false },
     { label: 'Timeline Events', value: String(run.timeline_event_count), mono: false },
     { label: 'Last Event Seq', value: String(run.last_event_seq), mono: false },
   ];

@@ -195,6 +195,8 @@ fn workflow_run_list_query_drains_and_reads_projection() {
     assert_eq!(response.runs[0].workflow_run_id.as_str(), "run-a");
     assert_eq!(response.runs[0].status, RunListProjectionStatus::Completed);
     assert_eq!(response.runs[0].duration_ms, Some(15));
+    assert_eq!(response.runs[0].scheduler_queue_position, Some(0));
+    assert_eq!(response.runs[0].scheduler_priority, Some(7));
     assert_eq!(response.projection_state.last_applied_event_seq, 4);
 
     let retention_response = service
@@ -273,6 +275,10 @@ fn workflow_run_detail_query_drains_and_reads_projection() {
     assert!(run.latest_queue_placement_json.is_some());
     assert!(run.started_payload_json.is_some());
     assert!(run.terminal_payload_json.is_some());
+    assert_eq!(run.scheduler_queue_position, Some(0));
+    assert_eq!(run.scheduler_priority, Some(7));
+    assert_eq!(run.estimate_confidence.as_deref(), Some("low"));
+    assert_eq!(run.scheduler_reason.as_deref(), Some("warm_session_reused"));
     assert_eq!(run.timeline_event_count, 5);
     assert_eq!(response.projection_state.last_applied_event_seq, 5);
 }

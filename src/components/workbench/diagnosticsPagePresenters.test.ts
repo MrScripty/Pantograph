@@ -27,6 +27,12 @@ function createRunDetail(): RunDetailProjectionRecord {
     duration_ms: null,
     scheduler_policy_id: 'policy-a',
     retention_policy_id: 'retention-a',
+    scheduler_queue_position: 1,
+    scheduler_priority: 5,
+    estimate_confidence: 'low',
+    estimated_queue_wait_ms: 1_500,
+    estimated_duration_ms: 2_500,
+    scheduler_reason: 'warm_session_reused',
     last_event_seq: 9,
     last_updated_at_ms: 10,
     client_id: 'client-a',
@@ -78,6 +84,9 @@ test('buildDiagnosticsFactRows uses projection fields without ledger parsing', (
 
   assert.equal(rows.find((row) => row.label === 'Workflow')?.value, 'workflow-a');
   assert.equal(rows.find((row) => row.label === 'Workflow Version')?.value, '1.2.3');
+  assert.equal(rows.find((row) => row.label === 'Queue Position')?.value, '1');
+  assert.equal(rows.find((row) => row.label === 'Estimated Queue Wait')?.value, '1.5 s');
+  assert.equal(rows.find((row) => row.label === 'Scheduler Reason')?.value, 'warm_session_reused');
   assert.equal(rows.find((row) => row.label === 'Timeline Events')?.value, '4');
 });
 

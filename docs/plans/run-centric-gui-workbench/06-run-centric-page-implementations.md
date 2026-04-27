@@ -139,7 +139,7 @@ into a second source of truth.
 
 **Verification:**
 
-- Presenter tests cover status labels, delay reasons, estimates, and retention
+- Presenter tests cover status labels, scheduler reasons, estimates, and retention
   summaries.
 - Component tests cover row selection and active-run update.
 - Accessibility tests cover table controls and actions.
@@ -149,10 +149,11 @@ renders a dense projection-backed run table, first-class queued/future rows
 where present in the run-list projection, selected-run actions, active-run
 updates, projection freshness, search, status filtering, stable local sort
 options, scheduler policy IDs, retention policy IDs, scheduler-policy and
-retention-policy filters, a selected-run timeline panel, timeline projection
-freshness, and timeline summary/detail rows without raw event parsing. Queue
-position, priority, estimates, progress, model/runtime summaries, delay reason,
-richer retention summaries, and privileged queue action controls remain open.
+retention-policy filters, typed queue position, priority, estimate, and
+scheduler-reason columns, a selected-run timeline panel, timeline projection
+freshness, and timeline summary/detail rows without raw event parsing. Progress,
+model/runtime summaries, richer delay categories, richer retention summaries,
+and privileged queue action controls remain open.
 
 ### Milestone 2: Diagnostics Page
 
@@ -410,6 +411,8 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
   policy IDs already available on `RunListProjectionRecord`.
 - Added Scheduler table filters for the typed scheduler policy and retention
   policy row fields without parsing scheduler event payloads.
+- Added Scheduler table columns for typed queue position, priority, estimate,
+  and scheduler reason fields promoted into run-list projections.
 - Added a Scheduler selected-run timeline panel backed by
   `workflowService.querySchedulerTimeline`, including projection freshness and
   typed summary/detail rendering without raw payload parsing.
@@ -436,9 +439,10 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
   run-keyed resource placement or cache facts.
 - Scheduler timeline rows currently show typed event labels, summary/detail
   text, and payload availability only. The run table shows scheduler and
-  retention policy IDs, but queue position, priority, estimate, delay reason,
-  and detailed retention summary columns need typed projection fields before
-  being shown as dense table columns.
+  retention policy IDs, queue position, priority, estimate, and scheduler
+  reason fields. Richer delay categories and detailed retention summary
+  columns need additional typed projection fields before being shown as dense
+  table columns.
 
 ### Follow-Ups
 

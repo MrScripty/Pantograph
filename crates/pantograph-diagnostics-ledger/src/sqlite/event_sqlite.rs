@@ -437,7 +437,9 @@ pub(super) fn query_run_list_projection(
         "SELECT workflow_run_id, workflow_id, workflow_version_id,
                 workflow_semantic_version, status, accepted_at_ms, enqueued_at_ms,
                 started_at_ms, completed_at_ms, duration_ms, scheduler_policy_id,
-                retention_policy_id, last_event_seq, last_updated_at_ms
+                retention_policy_id, scheduler_queue_position, scheduler_priority,
+                estimate_confidence, estimated_queue_wait_ms, estimated_duration_ms,
+                scheduler_reason, last_event_seq, last_updated_at_ms
          FROM run_list_projection
          WHERE (?1 IS NULL OR workflow_id = ?1)
            AND (?2 IS NULL OR workflow_version_id = ?2)
@@ -559,7 +561,9 @@ pub(super) fn query_run_detail_projection(
                 retention_policy_id, client_id, client_session_id, bucket_id,
                 workflow_run_snapshot_id, workflow_presentation_revision_id,
                 latest_estimate_json, latest_queue_placement_json, started_payload_json,
-                terminal_payload_json, terminal_error, timeline_event_count,
+                terminal_payload_json, terminal_error, scheduler_queue_position,
+                scheduler_priority, estimate_confidence, estimated_queue_wait_ms,
+                estimated_duration_ms, scheduler_reason, timeline_event_count,
                 last_event_seq, last_updated_at_ms
          FROM run_detail_projection
          WHERE workflow_run_id = ?1",
@@ -1185,21 +1189,25 @@ fn apply_run_list_projection_event(
         .then_some(event.occurred_at_ms);
     let started_at_ms =
         matches!(&payload, DiagnosticEventPayload::RunStarted(_)).then_some(event.occurred_at_ms);
-    let (completed_at_ms, duration_ms) = match payload {
+    let (completed_at_ms, duration_ms) = match &payload {
         DiagnosticEventPayload::RunTerminal(payload) => (
             Some(event.occurred_at_ms),
             payload.duration_ms.map(|value| value as i64),
         ),
         _ => (None, None),
     };
+    let scheduler_facts = scheduler_projection_facts(&payload);
 
     tx.execute(
         "INSERT INTO run_list_projection
             (workflow_run_id, workflow_id, workflow_version_id, workflow_semantic_version,
              status, accepted_at_ms, enqueued_at_ms, started_at_ms, completed_at_ms,
-             duration_ms, scheduler_policy_id, retention_policy_id, last_event_seq,
-             last_updated_at_ms)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+             duration_ms, scheduler_policy_id, retention_policy_id,
+             scheduler_queue_position, scheduler_priority, estimate_confidence,
+             estimated_queue_wait_ms, estimated_duration_ms, scheduler_reason,
+             last_event_seq, last_updated_at_ms)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,
+             ?15, ?16, ?17, ?18, ?19, ?20)
          ON CONFLICT(workflow_run_id) DO UPDATE SET
             workflow_id = excluded.workflow_id,
             workflow_version_id = COALESCE(excluded.workflow_version_id, workflow_version_id),
@@ -1212,6 +1220,12 @@ fn apply_run_list_projection_event(
             duration_ms = COALESCE(excluded.duration_ms, duration_ms),
             scheduler_policy_id = COALESCE(excluded.scheduler_policy_id, scheduler_policy_id),
             retention_policy_id = COALESCE(excluded.retention_policy_id, retention_policy_id),
+            scheduler_queue_position = COALESCE(excluded.scheduler_queue_position, scheduler_queue_position),
+            scheduler_priority = COALESCE(excluded.scheduler_priority, scheduler_priority),
+            estimate_confidence = COALESCE(excluded.estimate_confidence, estimate_confidence),
+            estimated_queue_wait_ms = COALESCE(excluded.estimated_queue_wait_ms, estimated_queue_wait_ms),
+            estimated_duration_ms = COALESCE(excluded.estimated_duration_ms, estimated_duration_ms),
+            scheduler_reason = COALESCE(excluded.scheduler_reason, scheduler_reason),
             last_event_seq = excluded.last_event_seq,
             last_updated_at_ms = excluded.last_updated_at_ms",
         params![
@@ -1230,11 +1244,63 @@ fn apply_run_list_projection_event(
             duration_ms,
             event.scheduler_policy_id.as_deref(),
             event.retention_policy_id.as_deref(),
+            scheduler_facts.queue_position.map(i64::from),
+            scheduler_facts.priority.map(i64::from),
+            scheduler_facts.estimate_confidence.as_deref(),
+            scheduler_facts.estimated_queue_wait_ms.map(|value| value as i64),
+            scheduler_facts.estimated_duration_ms.map(|value| value as i64),
+            scheduler_facts.reason.as_deref(),
             event.event_seq,
             event.occurred_at_ms,
         ],
     )?;
     Ok(())
+}
+
+struct SchedulerProjectionFacts {
+    queue_position: Option<u32>,
+    priority: Option<i32>,
+    estimate_confidence: Option<String>,
+    estimated_queue_wait_ms: Option<u64>,
+    estimated_duration_ms: Option<u64>,
+    reason: Option<String>,
+}
+
+fn scheduler_projection_facts(payload: &DiagnosticEventPayload) -> SchedulerProjectionFacts {
+    match payload {
+        DiagnosticEventPayload::SchedulerEstimateProduced(payload) => SchedulerProjectionFacts {
+            queue_position: None,
+            priority: None,
+            estimate_confidence: Some(payload.confidence.clone()),
+            estimated_queue_wait_ms: payload.estimated_queue_wait_ms,
+            estimated_duration_ms: payload.estimated_duration_ms,
+            reason: payload.reasons.first().cloned(),
+        },
+        DiagnosticEventPayload::SchedulerQueuePlacement(payload) => SchedulerProjectionFacts {
+            queue_position: Some(payload.queue_position),
+            priority: Some(payload.priority),
+            estimate_confidence: None,
+            estimated_queue_wait_ms: None,
+            estimated_duration_ms: None,
+            reason: None,
+        },
+        DiagnosticEventPayload::RunStarted(payload) => SchedulerProjectionFacts {
+            queue_position: None,
+            priority: None,
+            estimate_confidence: None,
+            estimated_queue_wait_ms: None,
+            estimated_duration_ms: None,
+            reason: payload.scheduler_decision_reason.clone(),
+        },
+        _ => SchedulerProjectionFacts {
+            queue_position: None,
+            priority: None,
+            estimate_confidence: None,
+            estimated_queue_wait_ms: None,
+            estimated_duration_ms: None,
+            reason: None,
+        },
+    }
 }
 
 fn apply_run_detail_projection_event(
@@ -1294,6 +1360,7 @@ fn apply_run_detail_projection_event(
         .then_some(event.payload_json.as_str());
     let terminal_payload_json = matches!(&payload, DiagnosticEventPayload::RunTerminal(_))
         .then_some(event.payload_json.as_str());
+    let scheduler_facts = scheduler_projection_facts(&payload);
 
     tx.execute(
         "INSERT INTO run_detail_projection
@@ -1303,10 +1370,13 @@ fn apply_run_detail_projection_event(
              client_session_id, bucket_id, workflow_run_snapshot_id,
              workflow_presentation_revision_id, latest_estimate_json,
              latest_queue_placement_json, started_payload_json, terminal_payload_json,
-             terminal_error, timeline_event_count, last_event_seq, last_updated_at_ms)
+             terminal_error, scheduler_queue_position, scheduler_priority,
+             estimate_confidence, estimated_queue_wait_ms, estimated_duration_ms,
+             scheduler_reason, timeline_event_count, last_event_seq, last_updated_at_ms)
          VALUES
             (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15,
-             ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)
+             ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28,
+             ?29, ?30, ?31)
          ON CONFLICT(workflow_run_id) DO UPDATE SET
             workflow_id = excluded.workflow_id,
             workflow_version_id = COALESCE(excluded.workflow_version_id, workflow_version_id),
@@ -1329,6 +1399,12 @@ fn apply_run_detail_projection_event(
             started_payload_json = COALESCE(excluded.started_payload_json, started_payload_json),
             terminal_payload_json = COALESCE(excluded.terminal_payload_json, terminal_payload_json),
             terminal_error = COALESCE(excluded.terminal_error, terminal_error),
+            scheduler_queue_position = COALESCE(excluded.scheduler_queue_position, scheduler_queue_position),
+            scheduler_priority = COALESCE(excluded.scheduler_priority, scheduler_priority),
+            estimate_confidence = COALESCE(excluded.estimate_confidence, estimate_confidence),
+            estimated_queue_wait_ms = COALESCE(excluded.estimated_queue_wait_ms, estimated_queue_wait_ms),
+            estimated_duration_ms = COALESCE(excluded.estimated_duration_ms, estimated_duration_ms),
+            scheduler_reason = COALESCE(excluded.scheduler_reason, scheduler_reason),
             timeline_event_count = timeline_event_count + 1,
             last_event_seq = excluded.last_event_seq,
             last_updated_at_ms = excluded.last_updated_at_ms",
@@ -1361,6 +1437,12 @@ fn apply_run_detail_projection_event(
             started_payload_json,
             terminal_payload_json,
             terminal_error,
+            scheduler_facts.queue_position.map(i64::from),
+            scheduler_facts.priority.map(i64::from),
+            scheduler_facts.estimate_confidence.as_deref(),
+            scheduler_facts.estimated_queue_wait_ms.map(|value| value as i64),
+            scheduler_facts.estimated_duration_ms.map(|value| value as i64),
+            scheduler_facts.reason.as_deref(),
             1_i64,
             event.event_seq,
             event.occurred_at_ms,
@@ -1606,8 +1688,14 @@ fn run_list_projection_from_row(row: &Row<'_>) -> rusqlite::Result<RunListProjec
             .map(|value| u64::try_from(value).unwrap_or(u64::MAX)),
         scheduler_policy_id: row.get(10)?,
         retention_policy_id: row.get(11)?,
-        last_event_seq: row.get(12)?,
-        last_updated_at_ms: row.get(13)?,
+        scheduler_queue_position: row.get::<_, Option<i64>>(12)?.map(i64_to_u32_saturating),
+        scheduler_priority: row.get::<_, Option<i64>>(13)?.map(i64_to_i32_saturating),
+        estimate_confidence: row.get(14)?,
+        estimated_queue_wait_ms: row.get::<_, Option<i64>>(15)?.map(i64_to_u64_saturating),
+        estimated_duration_ms: row.get::<_, Option<i64>>(16)?.map(i64_to_u64_saturating),
+        scheduler_reason: row.get(17)?,
+        last_event_seq: row.get(18)?,
+        last_updated_at_ms: row.get(19)?,
     })
 }
 
@@ -1659,12 +1747,30 @@ fn run_detail_projection_from_row(row: &Row<'_>) -> rusqlite::Result<RunDetailPr
         started_payload_json: row.get(19)?,
         terminal_payload_json: row.get(20)?,
         terminal_error: row.get(21)?,
+        scheduler_queue_position: row.get::<_, Option<i64>>(22)?.map(i64_to_u32_saturating),
+        scheduler_priority: row.get::<_, Option<i64>>(23)?.map(i64_to_i32_saturating),
+        estimate_confidence: row.get(24)?,
+        estimated_queue_wait_ms: row.get::<_, Option<i64>>(25)?.map(i64_to_u64_saturating),
+        estimated_duration_ms: row.get::<_, Option<i64>>(26)?.map(i64_to_u64_saturating),
+        scheduler_reason: row.get(27)?,
         timeline_event_count: row
-            .get::<_, i64>(22)
+            .get::<_, i64>(28)
             .map(|value| u64::try_from(value).unwrap_or(u64::MAX))?,
-        last_event_seq: row.get(23)?,
-        last_updated_at_ms: row.get(24)?,
+        last_event_seq: row.get(29)?,
+        last_updated_at_ms: row.get(30)?,
     })
+}
+
+fn i64_to_u32_saturating(value: i64) -> u32 {
+    u32::try_from(value).unwrap_or(if value < 0 { 0 } else { u32::MAX })
+}
+
+fn i64_to_i32_saturating(value: i64) -> i32 {
+    i32::try_from(value).unwrap_or(if value < 0 { i32::MIN } else { i32::MAX })
+}
+
+fn i64_to_u64_saturating(value: i64) -> u64 {
+    u64::try_from(value).unwrap_or(0)
 }
 
 fn io_artifact_projection_from_row(row: &Row<'_>) -> rusqlite::Result<IoArtifactProjectionRecord> {

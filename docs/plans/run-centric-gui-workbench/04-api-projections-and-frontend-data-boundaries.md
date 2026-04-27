@@ -221,7 +221,11 @@ state. Frontend queue cancel/reprioritize methods now call the backend-owned
 execution-session queue commands, and stale frontend session command names were
 corrected. Retention policy updates now use a backend command that changes the
 global standard policy and records a typed `retention.policy_changed` audit
-event. Broader command boundaries remain pending.
+event. Run-list and run-detail projection DTOs now expose typed scheduler queue
+position, priority, estimate confidence, estimated queue wait, estimated
+duration, and scheduler reason fields rather than requiring consumers to parse
+estimate or queue-placement payload JSON for those facts. Broader command
+boundaries remain pending.
 `workflow_projection_rebuild`
 provides the first explicit admin maintenance boundary for hot projection
 repair and projection-version rebuild scenarios. `workflow_run_graph_query`

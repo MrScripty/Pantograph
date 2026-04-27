@@ -5,7 +5,11 @@ import type { RunListProjectionRecord } from '../../services/diagnostics/types.t
 import {
   filterAndSortSchedulerRuns,
   formatSchedulerPolicyLabel,
+  formatSchedulerPriority,
+  formatSchedulerQueuePosition,
   formatSchedulerProjectionFreshness,
+  formatSchedulerEstimateLabel,
+  formatSchedulerReasonLabel,
   formatSchedulerRetentionLabel,
   formatSchedulerTimelineKind,
   formatSchedulerTimelineSource,
@@ -31,6 +35,12 @@ function run(overrides: Partial<RunListProjectionRecord>): RunListProjectionReco
     duration_ms: null,
     scheduler_policy_id: 'policy-a',
     retention_policy_id: 'retention-a',
+    scheduler_queue_position: null,
+    scheduler_priority: null,
+    estimate_confidence: null,
+    estimated_queue_wait_ms: null,
+    estimated_duration_ms: null,
+    scheduler_reason: null,
     last_event_seq: 1,
     last_updated_at_ms: 10,
     ...overrides,
@@ -60,6 +70,27 @@ test('scheduler policy presenters keep missing dense table facts explicit', () =
   assert.equal(formatSchedulerPolicyLabel(null), 'Unassigned');
   assert.equal(formatSchedulerRetentionLabel('retention-short'), 'retention-short');
   assert.equal(formatSchedulerRetentionLabel(undefined), 'Unassigned');
+});
+
+test('scheduler queue and estimate presenters keep unavailable facts explicit', () => {
+  assert.equal(formatSchedulerQueuePosition(0), '0');
+  assert.equal(formatSchedulerQueuePosition(null), 'Unassigned');
+  assert.equal(formatSchedulerPriority(5), '5');
+  assert.equal(formatSchedulerPriority(undefined), 'Default');
+  assert.equal(
+    formatSchedulerEstimateLabel(
+      run({
+        estimate_confidence: 'low',
+        estimated_queue_wait_ms: 1_500,
+        estimated_duration_ms: 2_500,
+      }),
+    ),
+    'wait 1.5 s / run 2.5 s (low)',
+  );
+  assert.equal(formatSchedulerEstimateLabel(run({ estimate_confidence: 'low' })), 'low confidence');
+  assert.equal(formatSchedulerEstimateLabel(run({})), 'Unavailable');
+  assert.equal(formatSchedulerReasonLabel('warm_session_reused'), 'warm_session_reused');
+  assert.equal(formatSchedulerReasonLabel(''), 'Unavailable');
 });
 
 test('filterAndSortSchedulerRuns filters by status and search text', () => {

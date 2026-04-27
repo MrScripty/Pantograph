@@ -145,8 +145,11 @@ logs or inferred in the frontend.
 **Status:** In progress. The shared typed diagnostic event ledger is available
 in `pantograph-diagnostics-ledger`, and the workflow-session scheduler emits
 durable `scheduler.estimate_produced` and `scheduler.queue_placement` events
-after queue insertion when a diagnostics ledger is configured. Estimate DTOs,
-cache/model state contracts, admin/client action vocabulary, and hot
+after queue insertion when a diagnostics ledger is configured. The hot
+run-list and run-detail projections now promote typed scheduler queue position,
+priority, estimate confidence, estimated queue wait, estimated duration, and
+scheduler reason fields from those events. Richer estimate DTO semantics,
+cache/model state contracts, admin/client action vocabulary, and complete hot
 projection ownership remain pending.
 
 ### Milestone 2: Estimate Production
@@ -170,9 +173,10 @@ projection ownership remain pending.
 - Tests cover sparse-data estimates returning explicit low-confidence state.
 
 **Status:** In progress. Queue insertion now records a low-confidence
-submission-time scheduler estimate for the queued run. Rich estimate inputs
-from model metadata, runtime state, local node capacity, diagnostics history,
-cache/model state changes, and missing-asset analysis remain pending.
+submission-time scheduler estimate for the queued run, and the stable estimate
+facts are queryable from hot run-list/run-detail projections. Rich estimate
+inputs from model metadata, runtime state, local node capacity, diagnostics
+history, cache/model state changes, and missing-asset analysis remain pending.
 
 ### Milestone 3: Scheduler Event Emission And Persistence
 

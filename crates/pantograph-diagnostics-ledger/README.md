@@ -33,6 +33,12 @@ Retention is explicit. The default local policy keeps `standard` usage events
 for 365 days. Pruning deletes complete eligible events and associated rows in
 one transaction and never rewrites retained historical facts.
 
+Run-list and run-detail projections store scheduler queue position, priority,
+estimate confidence, estimated wait/duration, and scheduler reason as typed
+columns. The original scheduler payload JSON remains audit detail and rebuild
+input, but GUI/API consumers should read the typed projection fields for normal
+list and detail views.
+
 Timing expectations are ranges over comparable completed observations, not
 generic progress percentages. Consumers must treat insufficient history as a
 first-class state and must not infer progress from a missing expectation.

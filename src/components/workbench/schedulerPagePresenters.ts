@@ -66,6 +66,40 @@ export function formatSchedulerDuration(
   return `${(value / 1_000).toFixed(1)} s`;
 }
 
+export function formatSchedulerQueuePosition(value: number | null | undefined): string {
+  if (value === null || value === undefined) {
+    return 'Unassigned';
+  }
+  return String(value);
+}
+
+export function formatSchedulerPriority(value: number | null | undefined): string {
+  if (value === null || value === undefined) {
+    return 'Default';
+  }
+  return String(value);
+}
+
+export function formatSchedulerEstimateLabel(run: RunListProjectionRecord): string {
+  const parts = [
+    run.estimated_queue_wait_ms === null || run.estimated_queue_wait_ms === undefined
+      ? null
+      : `wait ${formatSchedulerDuration(run.estimated_queue_wait_ms, run.status)}`,
+    run.estimated_duration_ms === null || run.estimated_duration_ms === undefined
+      ? null
+      : `run ${formatSchedulerDuration(run.estimated_duration_ms, run.status)}`,
+  ].filter((part): part is string => part !== null);
+  if (parts.length === 0) {
+    return run.estimate_confidence ? `${run.estimate_confidence} confidence` : 'Unavailable';
+  }
+  const confidence = run.estimate_confidence ? ` (${run.estimate_confidence})` : '';
+  return `${parts.join(' / ')}${confidence}`;
+}
+
+export function formatSchedulerReasonLabel(value: string | null | undefined): string {
+  return value && value.trim().length > 0 ? value : 'Unavailable';
+}
+
 export function schedulerStatusClass(status: RunListProjectionRecord['status']): string {
   switch (status) {
     case 'completed':

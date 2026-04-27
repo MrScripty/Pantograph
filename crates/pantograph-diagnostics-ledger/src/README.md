@@ -52,10 +52,14 @@ Keep durable diagnostics contracts in this crate and expose
 history and run summaries use `workflow_run_id` for one submitted execution and
 `workflow_id` for cross-run comparisons. Typed diagnostic events add a shared
 append-only audit boundary for scheduler, run, I/O, Library, runtime, and
-retention facts. The scheduler timeline projection is a durable materialized
-read model advanced from the event ledger by cursor. Runtime and workflow
-services may write observations, summaries, and typed events through repository
-methods, but they do not own the schema or query semantics.
+retention facts. The scheduler timeline, run-list, and run-detail projections
+are durable materialized read models advanced from the event ledger by cursor.
+Stable scheduler estimate and queue-placement facts are promoted into typed
+projection columns; consumers do not parse payload JSON for queue position,
+priority, estimate confidence, estimated wait/duration, or scheduler reason.
+Runtime and workflow services may write observations, summaries, and typed
+events through repository methods, but they do not own the schema or query
+semantics.
 
 ## Alternatives Rejected
 
@@ -82,6 +86,9 @@ methods, but they do not own the schema or query semantics.
 - `run_detail_projection` is read directly by selected-run page/API consumers
   after an explicit incremental drain; normal detail reads do not replay raw
   event rows.
+- `run_list_projection` and `run_detail_projection` expose stable scheduler
+  estimate and queue-placement facts as typed columns. Payload JSON remains
+  audit detail, not the normal GUI data path for those facts.
 - `io_artifact_projection` is read directly by I/O Inspector page/API
   consumers after an explicit incremental drain; normal artifact gallery reads
   do not replay raw event rows or load artifact bodies.

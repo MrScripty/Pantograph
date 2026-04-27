@@ -4,8 +4,8 @@ use crate::records::{RetentionClass, DEFAULT_STANDARD_RETENTION_DAYS};
 use crate::util::now_ms;
 use crate::DiagnosticsLedgerError;
 
-pub(crate) const SCHEMA_VERSION: i64 = 12;
-const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v12";
+pub(crate) const SCHEMA_VERSION: i64 = 13;
+const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v13";
 
 pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {
     tx.execute_batch(
@@ -206,6 +206,9 @@ pub(crate) fn migrate_schema(
     if found < 12 {
         apply_library_usage_projection_schema(&tx)?;
     }
+    if found < 13 {
+        apply_scheduler_run_projection_fact_migration(&tx, found)?;
+    }
     if found < SCHEMA_VERSION {
         tx.execute(
             "INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
@@ -334,6 +337,12 @@ fn apply_run_list_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagnost
             duration_ms INTEGER,
             scheduler_policy_id TEXT,
             retention_policy_id TEXT,
+            scheduler_queue_position INTEGER,
+            scheduler_priority INTEGER,
+            estimate_confidence TEXT,
+            estimated_queue_wait_ms INTEGER,
+            estimated_duration_ms INTEGER,
+            scheduler_reason TEXT,
             last_event_seq INTEGER NOT NULL,
             last_updated_at_ms INTEGER NOT NULL
         );
@@ -345,6 +354,8 @@ fn apply_run_list_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagnost
             ON run_list_projection(status, last_updated_at_ms DESC);
         CREATE INDEX IF NOT EXISTS idx_run_list_projection_retention_updated
             ON run_list_projection(retention_policy_id, last_updated_at_ms DESC);
+        CREATE INDEX IF NOT EXISTS idx_run_list_projection_status_queue
+            ON run_list_projection(status, scheduler_queue_position);
         "#,
     )?;
     Ok(())
@@ -376,6 +387,12 @@ fn apply_run_detail_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagno
             started_payload_json TEXT,
             terminal_payload_json TEXT,
             terminal_error TEXT,
+            scheduler_queue_position INTEGER,
+            scheduler_priority INTEGER,
+            estimate_confidence TEXT,
+            estimated_queue_wait_ms INTEGER,
+            estimated_duration_ms INTEGER,
+            scheduler_reason TEXT,
             timeline_event_count INTEGER NOT NULL,
             last_event_seq INTEGER NOT NULL,
             last_updated_at_ms INTEGER NOT NULL
@@ -388,6 +405,72 @@ fn apply_run_detail_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagno
             ON run_detail_projection(status, last_updated_at_ms DESC);
         "#,
     )?;
+    Ok(())
+}
+
+fn apply_scheduler_run_projection_fact_migration(
+    tx: &Transaction<'_>,
+    found: i64,
+) -> Result<(), DiagnosticsLedgerError> {
+    if found >= 9 && table_exists(tx, "run_list_projection")? {
+        tx.execute(
+            "ALTER TABLE run_list_projection ADD COLUMN scheduler_queue_position INTEGER",
+            [],
+        )?;
+        tx.execute(
+            "ALTER TABLE run_list_projection ADD COLUMN scheduler_priority INTEGER",
+            [],
+        )?;
+        tx.execute(
+            "ALTER TABLE run_list_projection ADD COLUMN estimate_confidence TEXT",
+            [],
+        )?;
+        tx.execute(
+            "ALTER TABLE run_list_projection ADD COLUMN estimated_queue_wait_ms INTEGER",
+            [],
+        )?;
+        tx.execute(
+            "ALTER TABLE run_list_projection ADD COLUMN estimated_duration_ms INTEGER",
+            [],
+        )?;
+        tx.execute(
+            "ALTER TABLE run_list_projection ADD COLUMN scheduler_reason TEXT",
+            [],
+        )?;
+        tx.execute(
+            "CREATE INDEX IF NOT EXISTS idx_run_list_projection_status_queue
+                ON run_list_projection(status, scheduler_queue_position)",
+            [],
+        )?;
+    }
+
+    if found >= 10 && table_exists(tx, "run_detail_projection")? {
+        tx.execute(
+            "ALTER TABLE run_detail_projection ADD COLUMN scheduler_queue_position INTEGER",
+            [],
+        )?;
+        tx.execute(
+            "ALTER TABLE run_detail_projection ADD COLUMN scheduler_priority INTEGER",
+            [],
+        )?;
+        tx.execute(
+            "ALTER TABLE run_detail_projection ADD COLUMN estimate_confidence TEXT",
+            [],
+        )?;
+        tx.execute(
+            "ALTER TABLE run_detail_projection ADD COLUMN estimated_queue_wait_ms INTEGER",
+            [],
+        )?;
+        tx.execute(
+            "ALTER TABLE run_detail_projection ADD COLUMN estimated_duration_ms INTEGER",
+            [],
+        )?;
+        tx.execute(
+            "ALTER TABLE run_detail_projection ADD COLUMN scheduler_reason TEXT",
+            [],
+        )?;
+    }
+
     Ok(())
 }
 
