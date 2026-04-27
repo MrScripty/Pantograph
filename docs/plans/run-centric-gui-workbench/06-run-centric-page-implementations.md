@@ -206,7 +206,7 @@ editable workflow behavior.
 - [x] Add visible distinction between run view and edit view.
 - [x] Overlay node output availability when retained I/O artifact projections
   provide node-keyed metadata.
-- [ ] Overlay node runtime status when diagnostics projection supports it.
+- [x] Overlay node runtime status when diagnostics projection supports it.
 
 **Verification:**
 
@@ -224,8 +224,10 @@ applying historic graphs to the editor store. `GraphPage.svelte` now queries the
 I/O artifact projection for the selected run and passes node-keyed artifact
 summaries into `RunGraphSnapshot.svelte`, allowing graph nodes and node rows to
 show retained input/output availability without reading raw ledger rows or
-payload bodies. Node runtime status overlays remain open until diagnostics
-projections expose node-keyed execution status facts.
+payload bodies. The page also queries the typed node-status projection through
+`workflowService.queryNodeStatus`, so graph nodes and node rows can show
+queued/running/waiting/completed/failed/cancelled status without parsing raw
+event payloads.
 
 ### Milestone 4: I/O Inspector Page
 
@@ -398,6 +400,9 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
 - Added graph node output-availability overlays from
   `workflowService.queryIoArtifacts`, keeping artifact metadata as a typed
   projection read model and avoiding payload dereferencing in the graph view.
+- Added graph node runtime-status overlays from
+  `workflowService.queryNodeStatus`, backed by the durable `node_status`
+  projection and presenter tests for latest-status selection.
 - Added `src/components/workbench/DiagnosticsPage.svelte` with active-run
   `queryRunDetail` and `querySchedulerTimeline` projection rendering.
 - Added `src/components/workbench/diagnosticsPagePresenters.ts` and tests for
@@ -460,8 +465,8 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
   through a service.
 - Add typed Pumas/Library mutation service methods before adding Library action
   buttons.
-- Add node runtime status overlays once diagnostics projections expose
-  node-keyed execution status records.
+- Wire runtime producers to append typed node-status ledger events for all
+  executor paths; the projection and graph consumer contract are now in place.
 - Add typed diagnostics facet projections for scheduler estimates, selected and
   rejected runtime/device choices, model load/unload decisions, graph settings,
   and mixed-version comparison filters.

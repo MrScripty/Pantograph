@@ -9,7 +9,8 @@ use crate::{
     DiagnosticsLedgerError, DiagnosticsLedgerRepository, DiagnosticsQuery, ExecutionGuaranteeLevel,
     IoArtifactObservedPayload, IoArtifactProjectionQuery, LibraryAssetAccessedPayload,
     LibraryUsageProjectionQuery, LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent,
-    ModelOutputMeasurement, OutputMeasurementUnavailableReason, OutputModality,
+    ModelOutputMeasurement, NodeExecutionProjectionStatus, NodeExecutionStatusPayload,
+    NodeStatusProjectionQuery, OutputMeasurementUnavailableReason, OutputModality,
     ProjectionStateUpdate, ProjectionStatus, PruneTimingObservationsCommand,
     PruneUsageEventsCommand, RetentionClass, RetentionPolicyChangedPayload,
     RunDetailProjectionQuery, RunListProjectionQuery, RunListProjectionStatus,
@@ -22,9 +23,9 @@ use crate::{
     WorkflowTimingObservationStatus, DEFAULT_STANDARD_RETENTION_DAYS, IO_ARTIFACT_PROJECTION_NAME,
     IO_ARTIFACT_PROJECTION_VERSION, LIBRARY_USAGE_PROJECTION_NAME,
     LIBRARY_USAGE_PROJECTION_VERSION, MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES,
-    RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION, RUN_LIST_PROJECTION_NAME,
-    RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
-    SCHEDULER_TIMELINE_PROJECTION_VERSION,
+    NODE_STATUS_PROJECTION_NAME, NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME,
+    RUN_DETAIL_PROJECTION_VERSION, RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION,
+    SCHEDULER_TIMELINE_PROJECTION_NAME, SCHEDULER_TIMELINE_PROJECTION_VERSION,
 };
 
 #[test]
@@ -1087,6 +1088,53 @@ fn io_artifact_projection_drains_artifact_events_incrementally() {
 }
 
 #[test]
+fn node_status_projection_keeps_latest_status_per_node() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_node_status_event(
+            "workflow_run_alpha",
+            "node_image",
+            NodeExecutionProjectionStatus::Running,
+            10,
+        ))
+        .expect("running status appends");
+    let completed_event = ledger
+        .append_diagnostic_event(sample_node_status_event(
+            "workflow_run_alpha",
+            "node_image",
+            NodeExecutionProjectionStatus::Completed,
+            20,
+        ))
+        .expect("completed status appends");
+
+    let state = ledger
+        .drain_node_status_projection(10)
+        .expect("node status projection drains");
+    assert_eq!(state.projection_name, NODE_STATUS_PROJECTION_NAME);
+    assert_eq!(state.projection_version, NODE_STATUS_PROJECTION_VERSION);
+    assert_eq!(state.last_applied_event_seq, completed_event.event_seq);
+
+    let records = ledger
+        .query_node_status_projection(NodeStatusProjectionQuery {
+            workflow_run_id: Some(
+                WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+            ),
+            node_id: Some("node_image".to_string()),
+            status: None,
+            after_event_seq: None,
+            limit: 10,
+        })
+        .expect("node status projection loads");
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].node_id, "node_image");
+    assert_eq!(records[0].status, NodeExecutionProjectionStatus::Completed);
+    assert_eq!(records[0].started_at_ms, Some(20));
+    assert_eq!(records[0].completed_at_ms, Some(120));
+    assert_eq!(records[0].duration_ms, Some(100));
+    assert_eq!(records[0].last_event_seq, completed_event.event_seq);
+}
+
+#[test]
 fn projection_rebuild_resets_projection_rows_and_cursor() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     ledger
@@ -1882,6 +1930,46 @@ fn sample_io_artifact_event(
             media_type: Some("image/png".to_string()),
             size_bytes: Some(1_024),
             content_hash: Some("blake3:artifact-hash".to_string()),
+        }),
+    }
+}
+
+fn sample_node_status_event(
+    workflow_run_id: &str,
+    node_id: &str,
+    status: NodeExecutionProjectionStatus,
+    started_at_ms: i64,
+) -> DiagnosticEventAppendRequest {
+    DiagnosticEventAppendRequest {
+        source_component: DiagnosticEventSourceComponent::NodeExecution,
+        source_instance_id: Some("node-executor".to_string()),
+        occurred_at_ms: started_at_ms,
+        workflow_run_id: Some(WorkflowRunId::try_from(workflow_run_id.to_string()).unwrap()),
+        workflow_id: Some(WorkflowId::try_from("workflow_alpha".to_string()).unwrap()),
+        workflow_version_id: Some(WorkflowVersionId::try_from("wfver_alpha".to_string()).unwrap()),
+        workflow_semantic_version: Some("1.0.0".to_string()),
+        node_id: Some(node_id.to_string()),
+        node_type: Some("status-node".to_string()),
+        node_version: Some("1.0.0".to_string()),
+        runtime_id: Some("runtime_alpha".to_string()),
+        runtime_version: Some("0.1.0".to_string()),
+        model_id: None,
+        model_version: None,
+        client_id: Some(ClientId::try_from("client_alpha".to_string()).unwrap()),
+        client_session_id: Some(ClientSessionId::try_from("session_alpha".to_string()).unwrap()),
+        bucket_id: Some(BucketId::try_from("bucket_alpha".to_string()).unwrap()),
+        scheduler_policy_id: Some("scheduler_default".to_string()),
+        retention_policy_id: Some("retention_default".to_string()),
+        privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+        retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+        payload_ref: None,
+        payload: DiagnosticEventPayload::NodeExecutionStatus(NodeExecutionStatusPayload {
+            status,
+            started_at_ms: Some(started_at_ms),
+            completed_at_ms: (status == NodeExecutionProjectionStatus::Completed)
+                .then_some(started_at_ms + 100),
+            duration_ms: (status == NodeExecutionProjectionStatus::Completed).then_some(100),
+            error: None,
         }),
     }
 }

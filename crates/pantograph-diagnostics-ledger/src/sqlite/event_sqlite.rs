@@ -8,13 +8,15 @@ use crate::event::{
     DiagnosticEventAppendRequest, DiagnosticEventKind, DiagnosticEventPayload,
     DiagnosticEventPrivacyClass, DiagnosticEventRecord, DiagnosticEventRetentionClass,
     DiagnosticEventSourceComponent, IoArtifactProjectionQuery, IoArtifactProjectionRecord,
-    LibraryUsageProjectionQuery, LibraryUsageProjectionRecord, ProjectionStateRecord,
+    LibraryUsageProjectionQuery, LibraryUsageProjectionRecord, NodeExecutionProjectionStatus,
+    NodeStatusProjectionQuery, NodeStatusProjectionRecord, ProjectionStateRecord,
     ProjectionStateUpdate, ProjectionStatus, RunDetailProjectionQuery, RunDetailProjectionRecord,
     RunListProjectionQuery, RunListProjectionRecord, RunListProjectionStatus,
     SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
     DIAGNOSTIC_EVENT_SCHEMA_VERSION, IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION,
     LIBRARY_USAGE_PROJECTION_NAME, LIBRARY_USAGE_PROJECTION_VERSION,
-    MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION,
+    MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, NODE_STATUS_PROJECTION_NAME,
+    NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION,
     RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
     SCHEDULER_TIMELINE_PROJECTION_VERSION,
 };
@@ -698,6 +700,117 @@ pub(super) fn query_io_artifact_projection(
         .map_err(DiagnosticsLedgerError::from)
 }
 
+pub(super) fn drain_node_status_projection(
+    ledger: &mut SqliteDiagnosticsLedger,
+    limit: u32,
+) -> Result<ProjectionStateRecord, DiagnosticsLedgerError> {
+    if limit > MAX_PAGE_SIZE {
+        return Err(DiagnosticsLedgerError::QueryLimitExceeded {
+            requested: limit,
+            max: MAX_PAGE_SIZE,
+        });
+    }
+    let tx = ledger.conn.transaction()?;
+    let state = {
+        let mut stmt = tx.prepare(
+            "SELECT projection_name, projection_version, last_applied_event_seq, status,
+                    rebuilt_at_ms, updated_at_ms
+             FROM projection_state
+             WHERE projection_name = ?1",
+        )?;
+        stmt.query_row(
+            params![NODE_STATUS_PROJECTION_NAME],
+            projection_state_from_row,
+        )
+        .optional()?
+    };
+
+    let mut last_applied_event_seq = state
+        .as_ref()
+        .map(|state| state.last_applied_event_seq)
+        .unwrap_or(0);
+    let mut rebuilt_at_ms = state.as_ref().and_then(|state| state.rebuilt_at_ms);
+    if state
+        .as_ref()
+        .map(|state| state.projection_version != NODE_STATUS_PROJECTION_VERSION)
+        .unwrap_or(false)
+    {
+        tx.execute("DELETE FROM node_status_projection", [])?;
+        last_applied_event_seq = 0;
+        rebuilt_at_ms = Some(now_ms());
+    }
+
+    let events = node_status_events_after(&tx, last_applied_event_seq, limit)?;
+    for event in &events {
+        apply_node_status_projection_event(&tx, event)?;
+        last_applied_event_seq = event.event_seq;
+    }
+
+    let updated_at_ms = now_ms();
+    tx.execute(
+        "INSERT INTO projection_state
+            (projection_name, projection_version, last_applied_event_seq, status,
+             rebuilt_at_ms, updated_at_ms)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+         ON CONFLICT(projection_name) DO UPDATE SET
+            projection_version = excluded.projection_version,
+            last_applied_event_seq = excluded.last_applied_event_seq,
+            status = excluded.status,
+            rebuilt_at_ms = excluded.rebuilt_at_ms,
+            updated_at_ms = excluded.updated_at_ms",
+        params![
+            NODE_STATUS_PROJECTION_NAME,
+            NODE_STATUS_PROJECTION_VERSION,
+            last_applied_event_seq,
+            ProjectionStatus::Current.as_db(),
+            rebuilt_at_ms,
+            updated_at_ms,
+        ],
+    )?;
+    tx.commit()?;
+
+    Ok(ProjectionStateRecord {
+        projection_name: NODE_STATUS_PROJECTION_NAME.to_string(),
+        projection_version: NODE_STATUS_PROJECTION_VERSION,
+        last_applied_event_seq,
+        status: ProjectionStatus::Current,
+        rebuilt_at_ms,
+        updated_at_ms,
+    })
+}
+
+pub(super) fn query_node_status_projection(
+    ledger: &SqliteDiagnosticsLedger,
+    query: NodeStatusProjectionQuery,
+) -> Result<Vec<NodeStatusProjectionRecord>, DiagnosticsLedgerError> {
+    query.validate(MAX_PAGE_SIZE)?;
+    let mut stmt = ledger.conn.prepare(
+        "SELECT workflow_run_id, workflow_id, workflow_version_id,
+                workflow_semantic_version, node_id, node_type, node_version, runtime_id,
+                runtime_version, model_id, model_version, status, started_at_ms,
+                completed_at_ms, duration_ms, error, last_event_seq, last_updated_at_ms
+         FROM node_status_projection
+         WHERE (?1 IS NULL OR workflow_run_id = ?1)
+           AND (?2 IS NULL OR node_id = ?2)
+           AND (?3 IS NULL OR status = ?3)
+           AND last_event_seq > ?4
+         ORDER BY last_event_seq
+         LIMIT ?5",
+    )?;
+    let rows = stmt.query_map(
+        params![
+            query.workflow_run_id.as_ref().map(|id| id.as_str()),
+            query.node_id.as_deref(),
+            query.status.map(NodeExecutionProjectionStatus::as_db),
+            query.after_event_seq.unwrap_or(0),
+            query.limit,
+        ],
+        node_status_projection_from_row,
+    )?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(DiagnosticsLedgerError::from)
+}
+
 pub(super) fn drain_library_usage_projection(
     ledger: &mut SqliteDiagnosticsLedger,
     limit: u32,
@@ -842,6 +955,7 @@ pub(super) fn rebuild_projection(
             RUN_LIST_PROJECTION_NAME => drain_run_list_projection(ledger, batch_size)?,
             RUN_DETAIL_PROJECTION_NAME => drain_run_detail_projection(ledger, batch_size)?,
             IO_ARTIFACT_PROJECTION_NAME => drain_io_artifact_projection(ledger, batch_size)?,
+            NODE_STATUS_PROJECTION_NAME => drain_node_status_projection(ledger, batch_size)?,
             LIBRARY_USAGE_PROJECTION_NAME => drain_library_usage_projection(ledger, batch_size)?,
             _ => {
                 return Err(DiagnosticsLedgerError::InvalidField {
@@ -873,6 +987,9 @@ fn reset_projection(
         }
         IO_ARTIFACT_PROJECTION_NAME => {
             tx.execute("DELETE FROM io_artifact_projection", [])?;
+        }
+        NODE_STATUS_PROJECTION_NAME => {
+            tx.execute("DELETE FROM node_status_projection", [])?;
         }
         LIBRARY_USAGE_PROJECTION_NAME => {
             tx.execute("DELETE FROM library_usage_projection", [])?;
@@ -1021,6 +1138,33 @@ fn io_artifact_events_after(
         .map_err(DiagnosticsLedgerError::from)
 }
 
+fn node_status_events_after(
+    tx: &rusqlite::Transaction<'_>,
+    last_applied_event_seq: i64,
+    limit: u32,
+) -> Result<Vec<DiagnosticEventRecord>, DiagnosticsLedgerError> {
+    let mut stmt = tx.prepare(
+        "SELECT event_seq, event_id, event_kind, schema_version, source_component,
+                source_instance_id, occurred_at_ms, recorded_at_ms, workflow_run_id,
+                workflow_id, workflow_version_id, workflow_semantic_version, node_id,
+                node_type, node_version, runtime_id, runtime_version, model_id,
+                model_version, client_id, client_session_id, bucket_id, scheduler_policy_id,
+                retention_policy_id, privacy_class, event_retention_class, payload_hash,
+                payload_size_bytes, payload_ref, payload_json
+         FROM diagnostic_events
+         WHERE event_seq > ?1
+           AND event_kind = 'node.execution_status'
+         ORDER BY event_seq
+         LIMIT ?2",
+    )?;
+    let rows = stmt.query_map(
+        params![last_applied_event_seq, limit],
+        diagnostic_event_from_row,
+    )?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(DiagnosticsLedgerError::from)
+}
+
 fn library_usage_events_after(
     tx: &rusqlite::Transaction<'_>,
     last_applied_event_seq: i64,
@@ -1158,6 +1302,84 @@ fn io_artifact_projection_record_from_event(
         payload_ref: event.payload_ref.clone(),
         retention_policy_id: event.retention_policy_id.clone(),
     }))
+}
+
+fn apply_node_status_projection_event(
+    tx: &rusqlite::Transaction<'_>,
+    event: &DiagnosticEventRecord,
+) -> Result<(), DiagnosticsLedgerError> {
+    let payload: DiagnosticEventPayload = serde_json::from_str(&event.payload_json)?;
+    let DiagnosticEventPayload::NodeExecutionStatus(payload) = payload else {
+        return Ok(());
+    };
+    let workflow_run_id =
+        event
+            .workflow_run_id
+            .as_ref()
+            .ok_or(DiagnosticsLedgerError::MissingField {
+                field: "workflow_run_id",
+            })?;
+    let workflow_id = event
+        .workflow_id
+        .as_ref()
+        .ok_or(DiagnosticsLedgerError::MissingField {
+            field: "workflow_id",
+        })?;
+    let node_id = event
+        .node_id
+        .as_ref()
+        .ok_or(DiagnosticsLedgerError::MissingField { field: "node_id" })?;
+
+    tx.execute(
+        "INSERT INTO node_status_projection
+            (workflow_run_id, workflow_id, workflow_version_id,
+             workflow_semantic_version, node_id, node_type, node_version, runtime_id,
+             runtime_version, model_id, model_version, status, started_at_ms,
+             completed_at_ms, duration_ms, error, last_event_seq, last_updated_at_ms)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13,
+                 ?14, ?15, ?16, ?17, ?18)
+         ON CONFLICT(workflow_run_id, node_id) DO UPDATE SET
+            workflow_id = excluded.workflow_id,
+            workflow_version_id = excluded.workflow_version_id,
+            workflow_semantic_version = excluded.workflow_semantic_version,
+            node_type = COALESCE(excluded.node_type, node_status_projection.node_type),
+            node_version = COALESCE(excluded.node_version, node_status_projection.node_version),
+            runtime_id = COALESCE(excluded.runtime_id, node_status_projection.runtime_id),
+            runtime_version = COALESCE(excluded.runtime_version, node_status_projection.runtime_version),
+            model_id = COALESCE(excluded.model_id, node_status_projection.model_id),
+            model_version = COALESCE(excluded.model_version, node_status_projection.model_version),
+            status = excluded.status,
+            started_at_ms = COALESCE(excluded.started_at_ms, node_status_projection.started_at_ms),
+            completed_at_ms = excluded.completed_at_ms,
+            duration_ms = COALESCE(excluded.duration_ms, node_status_projection.duration_ms),
+            error = excluded.error,
+            last_event_seq = excluded.last_event_seq,
+            last_updated_at_ms = excluded.last_updated_at_ms",
+        params![
+            workflow_run_id.as_str(),
+            workflow_id.as_str(),
+            event
+                .workflow_version_id
+                .as_ref()
+                .map(|workflow_version_id| workflow_version_id.as_str()),
+            event.workflow_semantic_version.as_deref(),
+            node_id.as_str(),
+            event.node_type.as_deref(),
+            event.node_version.as_deref(),
+            event.runtime_id.as_deref(),
+            event.runtime_version.as_deref(),
+            event.model_id.as_deref(),
+            event.model_version.as_deref(),
+            payload.status.as_db(),
+            payload.started_at_ms,
+            payload.completed_at_ms,
+            payload.duration_ms.map(|value| value as i64),
+            payload.error.as_deref(),
+            event.event_seq,
+            event.occurred_at_ms,
+        ],
+    )?;
+    Ok(())
 }
 
 fn apply_run_list_projection_event(
@@ -1810,6 +2032,39 @@ fn io_artifact_projection_from_row(row: &Row<'_>) -> rusqlite::Result<IoArtifact
     })
 }
 
+fn node_status_projection_from_row(row: &Row<'_>) -> rusqlite::Result<NodeStatusProjectionRecord> {
+    Ok(NodeStatusProjectionRecord {
+        workflow_run_id: row
+            .get::<_, String>(0)
+            .and_then(|value| WorkflowRunId::try_from(value).map_err(sqlite_conversion_error))?,
+        workflow_id: row
+            .get::<_, String>(1)
+            .and_then(|value| WorkflowId::try_from(value).map_err(sqlite_conversion_error))?,
+        workflow_version_id: row
+            .get::<_, Option<String>>(2)?
+            .map(WorkflowVersionId::try_from)
+            .transpose()
+            .map_err(sqlite_conversion_error)?,
+        workflow_semantic_version: row.get(3)?,
+        node_id: row.get(4)?,
+        node_type: row.get(5)?,
+        node_version: row.get(6)?,
+        runtime_id: row.get(7)?,
+        runtime_version: row.get(8)?,
+        model_id: row.get(9)?,
+        model_version: row.get(10)?,
+        status: row
+            .get::<_, String>(11)
+            .and_then(parse_node_execution_projection_status)?,
+        started_at_ms: row.get(12)?,
+        completed_at_ms: row.get(13)?,
+        duration_ms: row.get::<_, Option<i64>>(14)?.map(i64_to_u64_saturating),
+        error: row.get(15)?,
+        last_event_seq: row.get(16)?,
+        last_updated_at_ms: row.get(17)?,
+    })
+}
+
 fn library_usage_projection_from_row(
     row: &Row<'_>,
 ) -> rusqlite::Result<LibraryUsageProjectionRecord> {
@@ -1896,6 +2151,12 @@ fn parse_projection_status(value: String) -> rusqlite::Result<ProjectionStatus> 
 
 fn parse_run_list_projection_status(value: String) -> rusqlite::Result<RunListProjectionStatus> {
     RunListProjectionStatus::from_db(&value).map_err(sqlite_conversion_error)
+}
+
+fn parse_node_execution_projection_status(
+    value: String,
+) -> rusqlite::Result<NodeExecutionProjectionStatus> {
+    NodeExecutionProjectionStatus::from_db(&value).map_err(sqlite_conversion_error)
 }
 
 fn sqlite_conversion_error<E>(error: E) -> rusqlite::Error

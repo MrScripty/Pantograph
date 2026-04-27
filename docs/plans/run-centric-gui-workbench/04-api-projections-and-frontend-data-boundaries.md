@@ -18,6 +18,7 @@ the run-centric workbench without inventing backend truth in frontend stores.
 - Scheduler estimate and scheduler event query projections.
 - Workflow version and presentation revision graph projections.
 - I/O artifact metadata and retention-state projections.
+- Node runtime-status projection for graph overlays and run diagnostics.
 - Global retention policy read/update projection for privileged GUI surfaces.
 - Library asset usage and Pumas audit projections.
 - Projection contracts derived from the typed diagnostic event ledger.
@@ -173,6 +174,7 @@ policy into adapters.
 - [x] Add I/O metadata and retention policy queries/commands.
   - I/O artifact metadata query is implemented. Retention policy
     query and global update command are implemented.
+- [x] Add node runtime-status query.
 - [x] Add Library/Pumas usage audit queries.
 - [x] Add projection rebuild/query boundaries for typed event ledger derived
   views.
@@ -226,6 +228,8 @@ position, priority, estimate confidence, estimated queue wait, estimated
 duration, and scheduler reason fields rather than requiring consumers to parse
 estimate or queue-placement payload JSON for those facts. Broader command
 boundaries remain pending.
+`workflow_node_status_query` now exposes the hot `node_status` projection over
+typed `node.execution_status` ledger events for graph runtime-status overlays.
 `workflow_projection_rebuild`
 provides the first explicit admin maintenance boundary for hot projection
 repair and projection-version rebuild scenarios. `workflow_run_graph_query`

@@ -301,6 +301,14 @@ pub async fn workflow_io_artifact_query(
 }
 
 #[command]
+pub async fn workflow_node_status_query(
+    request: pantograph_workflow_service::WorkflowNodeStatusQueryRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<pantograph_workflow_service::WorkflowNodeStatusQueryResponse, String> {
+    super::headless_workflow_commands::workflow_node_status_query(request, workflow_service).await
+}
+
+#[command]
 pub async fn workflow_projection_rebuild(
     request: pantograph_workflow_service::WorkflowProjectionRebuildRequest,
     workflow_service: State<'_, SharedWorkflowService>,

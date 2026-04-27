@@ -2,10 +2,11 @@ use pantograph_diagnostics_ledger::{
     DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
     DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
     ExecutionGuaranteeLevel, IoArtifactObservedPayload, LibraryAssetAccessedPayload,
-    LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement, OutputModality,
-    RetentionClass, RunSnapshotAcceptedPayload, RunStartedPayload, RunTerminalPayload,
-    RunTerminalStatus, SchedulerEstimateProducedPayload, SchedulerQueuePlacementPayload,
-    UsageEventStatus, UsageLineage,
+    LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement,
+    NodeExecutionProjectionStatus, NodeExecutionStatusPayload, OutputModality, RetentionClass,
+    RunSnapshotAcceptedPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
+    SchedulerEstimateProducedPayload, SchedulerQueuePlacementPayload, UsageEventStatus,
+    UsageLineage,
 };
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, UsageEventId, WorkflowId, WorkflowRunId, WorkflowVersionId,
@@ -407,6 +408,46 @@ fn workflow_io_artifact_query_validates_bounds() {
 }
 
 #[test]
+fn workflow_node_status_query_projects_latest_node_states() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_node_status_event(
+            "node-a",
+            NodeExecutionProjectionStatus::Running,
+            40,
+        ))
+        .expect("running node status");
+    ledger
+        .append_diagnostic_event(sample_node_status_event(
+            "node-a",
+            NodeExecutionProjectionStatus::Completed,
+            60,
+        ))
+        .expect("completed node status");
+    let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+
+    let response = service
+        .workflow_node_status_query(WorkflowNodeStatusQueryRequest {
+            workflow_run_id: Some("run-a".to_string()),
+            node_id: Some("node-a".to_string()),
+            status: None,
+            after_event_seq: None,
+            limit: Some(10),
+            projection_batch_size: Some(10),
+        })
+        .expect("node status query");
+
+    assert_eq!(response.nodes.len(), 1);
+    assert_eq!(response.nodes[0].node_id, "node-a");
+    assert_eq!(
+        response.nodes[0].status,
+        NodeExecutionProjectionStatus::Completed
+    );
+    assert_eq!(response.nodes[0].duration_ms, Some(120));
+    assert_eq!(response.projection_state.projection_name, "node_status");
+}
+
+#[test]
 fn workflow_projection_rebuild_delegates_to_ledger() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     ledger
@@ -784,6 +825,45 @@ fn sample_io_artifact_event(
             media_type: Some("text/plain".to_string()),
             size_bytes: Some(42),
             content_hash: Some("blake3:test".to_string()),
+        }),
+    }
+}
+
+fn sample_node_status_event(
+    node_id: &str,
+    status: NodeExecutionProjectionStatus,
+    started_at_ms: i64,
+) -> DiagnosticEventAppendRequest {
+    DiagnosticEventAppendRequest {
+        source_component: DiagnosticEventSourceComponent::NodeExecution,
+        source_instance_id: Some("node-executor".to_string()),
+        occurred_at_ms: started_at_ms,
+        workflow_run_id: Some(WorkflowRunId::try_from("run-a".to_string()).unwrap()),
+        workflow_id: Some(WorkflowId::try_from("workflow-a".to_string()).unwrap()),
+        workflow_version_id: Some(WorkflowVersionId::try_from("wfver-a".to_string()).unwrap()),
+        workflow_semantic_version: Some("1.0.0".to_string()),
+        node_id: Some(node_id.to_string()),
+        node_type: Some("status-node".to_string()),
+        node_version: Some("1.0.0".to_string()),
+        runtime_id: Some("runtime-a".to_string()),
+        runtime_version: Some("0.1.0".to_string()),
+        model_id: None,
+        model_version: None,
+        client_id: Some(ClientId::try_from("client-a".to_string()).unwrap()),
+        client_session_id: Some(ClientSessionId::try_from("session-a".to_string()).unwrap()),
+        bucket_id: Some(BucketId::try_from("bucket-a".to_string()).unwrap()),
+        scheduler_policy_id: Some("priority_then_fifo".to_string()),
+        retention_policy_id: Some("ephemeral".to_string()),
+        privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+        retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+        payload_ref: None,
+        payload: DiagnosticEventPayload::NodeExecutionStatus(NodeExecutionStatusPayload {
+            status,
+            started_at_ms: Some(started_at_ms),
+            completed_at_ms: (status == NodeExecutionProjectionStatus::Completed)
+                .then_some(started_at_ms + 120),
+            duration_ms: (status == NodeExecutionProjectionStatus::Completed).then_some(120),
+            error: None,
         }),
     }
 }

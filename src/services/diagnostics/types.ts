@@ -282,7 +282,8 @@ export type DiagnosticEventKind =
   | 'io_artifact_observed'
   | 'library_asset_accessed'
   | 'retention_policy_changed'
-  | 'runtime_capability_observed';
+  | 'runtime_capability_observed'
+  | 'node_execution_status';
 
 export type DiagnosticEventSourceComponent =
   | 'scheduler'
@@ -381,6 +382,35 @@ export interface IoArtifactProjectionRecord {
   retention_policy_id?: string | null;
 }
 
+export type NodeExecutionProjectionStatus =
+  | 'queued'
+  | 'running'
+  | 'waiting'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
+export interface NodeStatusProjectionRecord {
+  workflow_run_id: string;
+  workflow_id: string;
+  workflow_version_id?: string | null;
+  workflow_semantic_version?: string | null;
+  node_id: string;
+  node_type?: string | null;
+  node_version?: string | null;
+  runtime_id?: string | null;
+  runtime_version?: string | null;
+  model_id?: string | null;
+  model_version?: string | null;
+  status: NodeExecutionProjectionStatus;
+  started_at_ms?: number | null;
+  completed_at_ms?: number | null;
+  duration_ms?: number | null;
+  error?: string | null;
+  last_event_seq: number;
+  last_updated_at_ms: number;
+}
+
 export interface WorkflowRunListQueryRequest {
   workflow_id?: string | null;
   workflow_version_id?: string | null;
@@ -423,6 +453,20 @@ export interface WorkflowIoArtifactQueryRequest {
 
 export interface WorkflowIoArtifactQueryResponse {
   artifacts: IoArtifactProjectionRecord[];
+  projection_state: ProjectionStateRecord;
+}
+
+export interface WorkflowNodeStatusQueryRequest {
+  workflow_run_id?: string | null;
+  node_id?: string | null;
+  status?: NodeExecutionProjectionStatus | null;
+  after_event_seq?: number | null;
+  limit?: number | null;
+  projection_batch_size?: number | null;
+}
+
+export interface WorkflowNodeStatusQueryResponse {
+  nodes: NodeStatusProjectionRecord[];
   projection_state: ProjectionStateRecord;
 }
 

@@ -18,6 +18,8 @@ pub const IO_ARTIFACT_PROJECTION_NAME: &str = "io_artifact";
 pub const IO_ARTIFACT_PROJECTION_VERSION: i64 = 1;
 pub const LIBRARY_USAGE_PROJECTION_NAME: &str = "library_usage";
 pub const LIBRARY_USAGE_PROJECTION_VERSION: i64 = 1;
+pub const NODE_STATUS_PROJECTION_NAME: &str = "node_status";
+pub const NODE_STATUS_PROJECTION_VERSION: i64 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -31,6 +33,7 @@ pub enum DiagnosticEventKind {
     LibraryAssetAccessed,
     RetentionPolicyChanged,
     RuntimeCapabilityObserved,
+    NodeExecutionStatus,
 }
 
 impl DiagnosticEventKind {
@@ -45,6 +48,7 @@ impl DiagnosticEventKind {
             Self::LibraryAssetAccessed => "library.asset_accessed",
             Self::RetentionPolicyChanged => "retention.policy_changed",
             Self::RuntimeCapabilityObserved => "runtime.capability_observed",
+            Self::NodeExecutionStatus => "node.execution_status",
         }
     }
 
@@ -59,6 +63,7 @@ impl DiagnosticEventKind {
             "library.asset_accessed" => Ok(Self::LibraryAssetAccessed),
             "retention.policy_changed" => Ok(Self::RetentionPolicyChanged),
             "runtime.capability_observed" => Ok(Self::RuntimeCapabilityObserved),
+            "node.execution_status" => Ok(Self::NodeExecutionStatus),
             _ => Err(DiagnosticsLedgerError::UnsupportedEventKind {
                 event_kind: value.to_string(),
             }),
@@ -174,6 +179,7 @@ pub enum DiagnosticEventPayload {
     LibraryAssetAccessed(LibraryAssetAccessedPayload),
     RetentionPolicyChanged(RetentionPolicyChangedPayload),
     RuntimeCapabilityObserved(RuntimeCapabilityObservedPayload),
+    NodeExecutionStatus(NodeExecutionStatusPayload),
 }
 
 impl DiagnosticEventPayload {
@@ -188,6 +194,7 @@ impl DiagnosticEventPayload {
             Self::LibraryAssetAccessed(_) => DiagnosticEventKind::LibraryAssetAccessed,
             Self::RetentionPolicyChanged(_) => DiagnosticEventKind::RetentionPolicyChanged,
             Self::RuntimeCapabilityObserved(_) => DiagnosticEventKind::RuntimeCapabilityObserved,
+            Self::NodeExecutionStatus(_) => DiagnosticEventKind::NodeExecutionStatus,
         }
     }
 
@@ -202,6 +209,7 @@ impl DiagnosticEventPayload {
             Self::LibraryAssetAccessed(payload) => payload.validate(),
             Self::RetentionPolicyChanged(payload) => payload.validate(),
             Self::RuntimeCapabilityObserved(payload) => payload.validate(),
+            Self::NodeExecutionStatus(payload) => payload.validate(),
         }
     }
 }
@@ -367,6 +375,70 @@ impl RuntimeCapabilityObservedPayload {
             MAX_ID_LEN,
         )?;
         validate_required_text("status", &self.status, MAX_ID_LEN)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NodeExecutionProjectionStatus {
+    Queued,
+    Running,
+    Waiting,
+    Completed,
+    Failed,
+    Cancelled,
+}
+
+impl NodeExecutionProjectionStatus {
+    pub(crate) fn as_db(self) -> &'static str {
+        match self {
+            Self::Queued => "queued",
+            Self::Running => "running",
+            Self::Waiting => "waiting",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+            Self::Cancelled => "cancelled",
+        }
+    }
+
+    pub(crate) fn from_db(value: &str) -> Result<Self, DiagnosticsLedgerError> {
+        match value {
+            "queued" => Ok(Self::Queued),
+            "running" => Ok(Self::Running),
+            "waiting" => Ok(Self::Waiting),
+            "completed" => Ok(Self::Completed),
+            "failed" => Ok(Self::Failed),
+            "cancelled" => Ok(Self::Cancelled),
+            _ => Err(DiagnosticsLedgerError::InvalidField {
+                field: "node_execution_status",
+            }),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct NodeExecutionStatusPayload {
+    pub status: NodeExecutionProjectionStatus,
+    pub started_at_ms: Option<i64>,
+    pub completed_at_ms: Option<i64>,
+    pub duration_ms: Option<u64>,
+    pub error: Option<String>,
+}
+
+impl NodeExecutionStatusPayload {
+    fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        validate_optional_text("error", self.error.as_deref(), MAX_JSON_LEN)?;
+        if let (Some(started_at_ms), Some(completed_at_ms)) =
+            (self.started_at_ms, self.completed_at_ms)
+        {
+            if completed_at_ms < started_at_ms {
+                return Err(DiagnosticsLedgerError::InvalidField {
+                    field: "completed_at_ms",
+                });
+            }
+        }
+        Ok(())
     }
 }
 
@@ -821,6 +893,66 @@ pub struct IoArtifactProjectionRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NodeStatusProjectionQuery {
+    pub workflow_run_id: Option<WorkflowRunId>,
+    pub node_id: Option<String>,
+    pub status: Option<NodeExecutionProjectionStatus>,
+    pub after_event_seq: Option<i64>,
+    pub limit: u32,
+}
+
+impl Default for NodeStatusProjectionQuery {
+    fn default() -> Self {
+        Self {
+            workflow_run_id: None,
+            node_id: None,
+            status: None,
+            after_event_seq: None,
+            limit: 250,
+        }
+    }
+}
+
+impl NodeStatusProjectionQuery {
+    pub fn validate(&self, max_limit: u32) -> Result<(), DiagnosticsLedgerError> {
+        if self.limit > max_limit {
+            return Err(DiagnosticsLedgerError::QueryLimitExceeded {
+                requested: self.limit,
+                max: max_limit,
+            });
+        }
+        if self.after_event_seq.unwrap_or(0) < 0 {
+            return Err(DiagnosticsLedgerError::InvalidField {
+                field: "after_event_seq",
+            });
+        }
+        validate_optional_text("node_id", self.node_id.as_deref(), MAX_ID_LEN)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NodeStatusProjectionRecord {
+    pub workflow_run_id: WorkflowRunId,
+    pub workflow_id: WorkflowId,
+    pub workflow_version_id: Option<WorkflowVersionId>,
+    pub workflow_semantic_version: Option<String>,
+    pub node_id: String,
+    pub node_type: Option<String>,
+    pub node_version: Option<String>,
+    pub runtime_id: Option<String>,
+    pub runtime_version: Option<String>,
+    pub model_id: Option<String>,
+    pub model_version: Option<String>,
+    pub status: NodeExecutionProjectionStatus,
+    pub started_at_ms: Option<i64>,
+    pub completed_at_ms: Option<i64>,
+    pub duration_ms: Option<u64>,
+    pub error: Option<String>,
+    pub last_event_seq: i64,
+    pub last_updated_at_ms: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LibraryUsageProjectionQuery {
     pub asset_id: Option<String>,
     pub workflow_id: Option<WorkflowId>,
@@ -964,7 +1096,8 @@ fn validate_event_scope(
         | DiagnosticEventKind::RunStarted
         | DiagnosticEventKind::RunTerminal
         | DiagnosticEventKind::RunSnapshotAccepted
-        | DiagnosticEventKind::IoArtifactObserved => {
+        | DiagnosticEventKind::IoArtifactObserved
+        | DiagnosticEventKind::NodeExecutionStatus => {
             if request.workflow_run_id.is_none() {
                 return Err(DiagnosticsLedgerError::MissingField {
                     field: "workflow_run_id",
@@ -974,6 +1107,11 @@ fn validate_event_scope(
                 return Err(DiagnosticsLedgerError::MissingField {
                     field: "workflow_id",
                 });
+            }
+            if request.payload.event_kind() == DiagnosticEventKind::NodeExecutionStatus
+                && request.node_id.is_none()
+            {
+                return Err(DiagnosticsLedgerError::MissingField { field: "node_id" });
             }
         }
         DiagnosticEventKind::RetentionPolicyChanged => {
@@ -1026,6 +1164,10 @@ fn validate_event_source(
         DiagnosticEventKind::RuntimeCapabilityObserved => matches!(
             source_component,
             DiagnosticEventSourceComponent::Runtime | DiagnosticEventSourceComponent::LocalObserver
+        ),
+        DiagnosticEventKind::NodeExecutionStatus => matches!(
+            source_component,
+            DiagnosticEventSourceComponent::NodeExecution | DiagnosticEventSourceComponent::Runtime
         ),
     };
     if allowed {

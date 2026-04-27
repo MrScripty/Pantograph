@@ -3,7 +3,8 @@ use pantograph_diagnostics_ledger::{
     DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
     DiagnosticsQuery, DiagnosticsRetentionPolicy, ExecutionGuaranteeLevel,
     IoArtifactProjectionQuery, IoArtifactProjectionRecord, LibraryUsageProjectionQuery,
-    LibraryUsageProjectionRecord, ModelLicenseUsageEvent, ProjectionStateRecord, RetentionClass,
+    LibraryUsageProjectionRecord, ModelLicenseUsageEvent, NodeExecutionProjectionStatus,
+    NodeStatusProjectionQuery, NodeStatusProjectionRecord, ProjectionStateRecord, RetentionClass,
     RetentionPolicyChangedPayload, RunDetailProjectionQuery, RunDetailProjectionRecord,
     RunListProjectionQuery, RunListProjectionRecord, RunListProjectionStatus,
     SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
@@ -174,6 +175,30 @@ pub struct WorkflowIoArtifactQueryRequest {
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowIoArtifactQueryResponse {
     pub artifacts: Vec<IoArtifactProjectionRecord>,
+    pub projection_state: ProjectionStateRecord,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowNodeStatusQueryRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_run_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub node_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<NodeExecutionProjectionStatus>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub after_event_seq: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub projection_batch_size: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowNodeStatusQueryResponse {
+    pub nodes: Vec<NodeStatusProjectionRecord>,
     pub projection_state: ProjectionStateRecord,
 }
 
@@ -359,6 +384,31 @@ impl WorkflowService {
 
         Ok(WorkflowIoArtifactQueryResponse {
             artifacts,
+            projection_state,
+        })
+    }
+
+    pub fn workflow_node_status_query(
+        &self,
+        request: WorkflowNodeStatusQueryRequest,
+    ) -> Result<WorkflowNodeStatusQueryResponse, WorkflowServiceError> {
+        let projection_batch_size = request.projection_batch_size.unwrap_or(500).max(1);
+        if projection_batch_size > 500 {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "projection_batch_size exceeds maximum 500".to_string(),
+            ));
+        }
+        let query = request.into_node_status_query()?;
+        let mut ledger = self.diagnostics_ledger_guard()?;
+        let projection_state = ledger
+            .drain_node_status_projection(projection_batch_size)
+            .map_err(WorkflowServiceError::from)?;
+        let nodes = ledger
+            .query_node_status_projection(query)
+            .map_err(WorkflowServiceError::from)?;
+
+        Ok(WorkflowNodeStatusQueryResponse {
+            nodes,
             projection_state,
         })
     }
@@ -563,6 +613,20 @@ impl WorkflowIoArtifactQueryRequest {
             model_id: self.model_id,
             after_event_seq: self.after_event_seq,
             limit: self.limit.unwrap_or(100).max(1),
+        };
+        query.validate(500).map_err(WorkflowServiceError::from)?;
+        Ok(query)
+    }
+}
+
+impl WorkflowNodeStatusQueryRequest {
+    fn into_node_status_query(self) -> Result<NodeStatusProjectionQuery, WorkflowServiceError> {
+        let query = NodeStatusProjectionQuery {
+            workflow_run_id: parse_optional_id("workflow_run_id", self.workflow_run_id)?,
+            node_id: self.node_id,
+            status: self.status,
+            after_event_seq: self.after_event_seq,
+            limit: self.limit.unwrap_or(250).max(1),
         };
         query.validate(500).map_err(WorkflowServiceError::from)?;
         Ok(query)

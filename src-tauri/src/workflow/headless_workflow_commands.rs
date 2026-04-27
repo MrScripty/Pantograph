@@ -17,13 +17,13 @@ use pantograph_workflow_service::{
     WorkflowIoArtifactQueryRequest, WorkflowIoArtifactQueryResponse, WorkflowIoRequest,
     WorkflowIoResponse, WorkflowLibraryUsageQueryRequest, WorkflowLibraryUsageQueryResponse,
     WorkflowLocalNetworkStatusQueryRequest, WorkflowLocalNetworkStatusQueryResponse,
-    WorkflowPreflightRequest, WorkflowPreflightResponse, WorkflowProjectionRebuildRequest,
-    WorkflowProjectionRebuildResponse, WorkflowRetentionPolicyQueryRequest,
-    WorkflowRetentionPolicyQueryResponse, WorkflowRetentionPolicyUpdateRequest,
-    WorkflowRetentionPolicyUpdateResponse, WorkflowRunDetailQueryRequest,
-    WorkflowRunDetailQueryResponse, WorkflowRunGraphQueryRequest, WorkflowRunGraphQueryResponse,
-    WorkflowRunListQueryRequest, WorkflowRunListQueryResponse, WorkflowRunResponse,
-    WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse,
+    WorkflowNodeStatusQueryRequest, WorkflowNodeStatusQueryResponse, WorkflowPreflightRequest,
+    WorkflowPreflightResponse, WorkflowProjectionRebuildRequest, WorkflowProjectionRebuildResponse,
+    WorkflowRetentionPolicyQueryRequest, WorkflowRetentionPolicyQueryResponse,
+    WorkflowRetentionPolicyUpdateRequest, WorkflowRetentionPolicyUpdateResponse,
+    WorkflowRunDetailQueryRequest, WorkflowRunDetailQueryResponse, WorkflowRunGraphQueryRequest,
+    WorkflowRunGraphQueryResponse, WorkflowRunListQueryRequest, WorkflowRunListQueryResponse,
+    WorkflowRunResponse, WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse,
     WorkflowSchedulerTimelineQueryRequest, WorkflowSchedulerTimelineQueryResponse,
     WorkflowServiceError,
 };
@@ -258,6 +258,15 @@ pub async fn workflow_io_artifact_query(
 ) -> Result<WorkflowIoArtifactQueryResponse, String> {
     workflow_service
         .workflow_io_artifact_query(request)
+        .map_err(workflow_error_json)
+}
+
+pub async fn workflow_node_status_query(
+    request: WorkflowNodeStatusQueryRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowNodeStatusQueryResponse, String> {
+    workflow_service
+        .workflow_node_status_query(request)
         .map_err(workflow_error_json)
 }
 

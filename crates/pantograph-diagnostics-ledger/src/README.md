@@ -51,9 +51,10 @@ Keep durable diagnostics contracts in this crate and expose
 `SqliteDiagnosticsLedger` as the concrete persistence owner. Workflow timing
 history and run summaries use `workflow_run_id` for one submitted execution and
 `workflow_id` for cross-run comparisons. Typed diagnostic events add a shared
-append-only audit boundary for scheduler, run, I/O, Library, runtime, and
-retention facts. The scheduler timeline, run-list, and run-detail projections
-are durable materialized read models advanced from the event ledger by cursor.
+append-only audit boundary for scheduler, run, node execution, I/O, Library,
+runtime, and retention facts. The scheduler timeline, run-list, run-detail, and
+node-status projections are durable materialized read models advanced from the
+event ledger by cursor.
 Stable scheduler estimate and queue-placement facts are promoted into typed
 projection columns; consumers do not parse payload JSON for queue position,
 priority, estimate confidence, estimated wait/duration, or scheduler reason.

@@ -7,9 +7,12 @@ import {
   buildRunGraphEdgeRows,
   buildRunGraphNodeArtifactSummaries,
   buildRunGraphNodeRows,
+  buildRunGraphNodeStatusMap,
   formatRunGraphArtifactDetail,
   formatRunGraphArtifactSummary,
+  formatRunGraphNodeStatusLabel,
   formatRunGraphCountLabel,
+  runGraphNodeStatusClass,
   resolveRunGraphCounts,
   resolveRunGraphPresentationLabel,
 } from './runGraphPresenters.ts';
@@ -120,6 +123,7 @@ test('buildRunGraphNodeRows joins topology versions without editor state', () =>
   assert.equal(rows[0].positionLabel, '10, 20');
   assert.equal(rows[0].settingsState, 'Run settings captured');
   assert.equal(rows[0].artifactSummaryLabel, 'No retained I/O');
+  assert.equal(rows[0].statusLabel, 'No status');
 });
 
 test('buildRunGraphEdgeRows renders captured graph edges before topology fallback', () => {
@@ -242,4 +246,61 @@ test('formatRunGraphArtifactSummary distinguishes metadata-only nodes', () => {
   assert.equal(formatRunGraphArtifactSummary(null), 'No retained I/O');
   assert.equal(formatRunGraphArtifactSummary(summary), '0 outputs / 1 input');
   assert.equal(formatRunGraphArtifactDetail(summary), '1 artifact, 0 payload references, media unknown');
+});
+
+test('buildRunGraphNodeStatusMap keeps the latest node status by event sequence', () => {
+  const statuses = buildRunGraphNodeStatusMap([
+    {
+      workflow_run_id: 'run-1',
+      workflow_id: 'workflow-a',
+      workflow_version_id: 'wfver-1',
+      workflow_semantic_version: '1.2.3',
+      node_id: 'output-1',
+      node_type: 'text-output',
+      node_version: '1.0.1',
+      runtime_id: null,
+      runtime_version: null,
+      model_id: null,
+      model_version: null,
+      status: 'running',
+      started_at_ms: 1_000,
+      completed_at_ms: null,
+      duration_ms: null,
+      error: null,
+      last_event_seq: 10,
+      last_updated_at_ms: 1_000,
+    },
+    {
+      workflow_run_id: 'run-1',
+      workflow_id: 'workflow-a',
+      workflow_version_id: 'wfver-1',
+      workflow_semantic_version: '1.2.3',
+      node_id: 'output-1',
+      node_type: 'text-output',
+      node_version: '1.0.1',
+      runtime_id: null,
+      runtime_version: null,
+      model_id: null,
+      model_version: null,
+      status: 'completed',
+      started_at_ms: 1_000,
+      completed_at_ms: 1_500,
+      duration_ms: 500,
+      error: null,
+      last_event_seq: 12,
+      last_updated_at_ms: 1_500,
+    },
+  ]);
+
+  assert.equal(statuses['output-1'].status, 'completed');
+  assert.equal(formatRunGraphNodeStatusLabel(statuses['output-1'].status), 'Completed');
+  assert.equal(runGraphNodeStatusClass(statuses['output-1'].status), 'completed');
+
+  const rows = buildRunGraphNodeRows(createRunGraph(), {}, statuses);
+  const outputRow = rows.find((row) => row.nodeId === 'output-1');
+  assert.equal(outputRow?.statusLabel, 'Completed');
+
+  const canvas = buildRunGraphCanvasModel(createRunGraph().graph, {}, statuses);
+  const outputNode = canvas.nodes.find((node) => node.id === 'output-1');
+  assert.equal(outputNode?.statusClass, 'completed');
 });

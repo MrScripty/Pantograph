@@ -38,6 +38,9 @@ estimate confidence, estimated wait/duration, and scheduler reason as typed
 columns. The original scheduler payload JSON remains audit detail and rebuild
 input, but GUI/API consumers should read the typed projection fields for normal
 list and detail views.
+The node-status projection stores the latest typed execution status per
+`workflow_run_id` and `node_id` so graph overlays can render node state without
+replaying scheduler timelines or parsing raw diagnostic event payloads.
 
 Timing expectations are ranges over comparable completed observations, not
 generic progress percentages. Consumers must treat insufficient history as a

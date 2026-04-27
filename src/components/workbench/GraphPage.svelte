@@ -3,27 +3,38 @@
   import NodePalette from '../NodePalette.svelte';
   import WorkflowGraph from '../WorkflowGraph.svelte';
   import WorkflowToolbar from '../WorkflowToolbar.svelte';
-  import type { IoArtifactProjectionRecord } from '../../services/diagnostics/types';
+  import type {
+    IoArtifactProjectionRecord,
+    NodeStatusProjectionRecord,
+  } from '../../services/diagnostics/types';
   import type { WorkflowRunGraphProjection } from '../../services/workflow/types';
   import { workflowService } from '../../services/workflow/WorkflowService';
   import { isReadOnly } from '../../stores/graphSessionStore';
   import { activeWorkflowRun } from '../../stores/workbenchStore';
   import RunGraphSnapshot from './RunGraphSnapshot.svelte';
-  import { buildRunGraphNodeArtifactSummaries } from './runGraphPresenters';
+  import {
+    buildRunGraphNodeArtifactSummaries,
+    buildRunGraphNodeStatusMap,
+  } from './runGraphPresenters';
 
   type GraphPageMode = 'run_snapshot' | 'editor';
 
   let mode = $state<GraphPageMode>('editor');
   let runGraph = $state<WorkflowRunGraphProjection | null>(null);
   let runArtifacts = $state<IoArtifactProjectionRecord[]>([]);
+  let runNodeStatuses = $state<NodeStatusProjectionRecord[]>([]);
   let loadingRunGraph = $state(false);
   let loadingRunArtifacts = $state(false);
+  let loadingRunNodeStatuses = $state(false);
   let runGraphError = $state<string | null>(null);
   let runArtifactError = $state<string | null>(null);
+  let runNodeStatusError = $state<string | null>(null);
   let lastRunId = $state<string | null>(null);
   let runGraphRequestSerial = 0;
   let runArtifactRequestSerial = 0;
+  let runNodeStatusRequestSerial = 0;
   let artifactSummaries = $derived(buildRunGraphNodeArtifactSummaries(runArtifacts));
+  let nodeStatuses = $derived(buildRunGraphNodeStatusMap(runNodeStatuses));
 
   function activeRunId(): string | null {
     return $activeWorkflowRun?.workflow_run_id ?? null;
@@ -36,6 +47,7 @@
     if (!runId) {
       runGraph = null;
       runArtifacts = [];
+      runNodeStatuses = [];
       loadingRunGraph = false;
       return;
     }
@@ -95,9 +107,43 @@
     }
   }
 
+  async function refreshRunNodeStatuses(runId = activeRunId()): Promise<void> {
+    const requestSerial = ++runNodeStatusRequestSerial;
+    runNodeStatusError = null;
+
+    if (!runId) {
+      runNodeStatuses = [];
+      loadingRunNodeStatuses = false;
+      return;
+    }
+
+    loadingRunNodeStatuses = true;
+    try {
+      const response = await workflowService.queryNodeStatus({
+        workflow_run_id: runId,
+        limit: 250,
+      });
+      if (requestSerial !== runNodeStatusRequestSerial) {
+        return;
+      }
+      runNodeStatuses = response.nodes;
+    } catch (error) {
+      if (requestSerial !== runNodeStatusRequestSerial) {
+        return;
+      }
+      runNodeStatusError = error instanceof Error ? error.message : String(error);
+      runNodeStatuses = [];
+    } finally {
+      if (requestSerial === runNodeStatusRequestSerial) {
+        loadingRunNodeStatuses = false;
+      }
+    }
+  }
+
   function refreshRunSnapshot(): void {
     void refreshRunGraph();
     void refreshRunArtifacts();
+    void refreshRunNodeStatuses();
   }
 
   $effect(() => {
@@ -110,6 +156,7 @@
     mode = runId ? 'run_snapshot' : 'editor';
     void refreshRunGraph(runId);
     void refreshRunArtifacts(runId);
+    void refreshRunNodeStatuses(runId);
   });
 </script>
 
@@ -148,12 +195,12 @@
             type="button"
             class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
             onclick={refreshRunSnapshot}
-            disabled={loadingRunGraph || loadingRunArtifacts}
+            disabled={loadingRunGraph || loadingRunArtifacts || loadingRunNodeStatuses}
           >
             <RefreshCw
               size={14}
               aria-hidden="true"
-              class={loadingRunGraph || loadingRunArtifacts ? 'animate-spin' : ''}
+              class={loadingRunGraph || loadingRunArtifacts || loadingRunNodeStatuses ? 'animate-spin' : ''}
             />
             Refresh
           </button>
@@ -198,6 +245,11 @@
         I/O artifact overlays unavailable: {runArtifactError}
       </div>
     {/if}
-    <RunGraphSnapshot {runGraph} {artifactSummaries} />
+    {#if runNodeStatusError}
+      <div class="border-b border-amber-900 bg-amber-950/50 px-4 py-2 text-sm text-amber-100">
+        Node status overlays unavailable: {runNodeStatusError}
+      </div>
+    {/if}
+    <RunGraphSnapshot {runGraph} {artifactSummaries} {nodeStatuses} />
   {/if}
 </section>

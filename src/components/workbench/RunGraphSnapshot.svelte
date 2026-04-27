@@ -9,19 +9,22 @@
     resolveRunGraphCounts,
     resolveRunGraphPresentationLabel,
     type RunGraphNodeArtifactSummaryByNodeId,
+    type RunGraphNodeStatusByNodeId,
   } from './runGraphPresenters';
 
   let {
     runGraph,
     artifactSummaries = {},
+    nodeStatuses = {},
   }: {
     runGraph: WorkflowRunGraphProjection;
     artifactSummaries?: RunGraphNodeArtifactSummaryByNodeId;
+    nodeStatuses?: RunGraphNodeStatusByNodeId;
   } = $props();
 
-  let canvas = $derived(buildRunGraphCanvasModel(runGraph.graph, artifactSummaries));
+  let canvas = $derived(buildRunGraphCanvasModel(runGraph.graph, artifactSummaries, nodeStatuses));
   let counts = $derived(resolveRunGraphCounts(runGraph.graph));
-  let nodeRows = $derived(buildRunGraphNodeRows(runGraph, artifactSummaries));
+  let nodeRows = $derived(buildRunGraphNodeRows(runGraph, artifactSummaries, nodeStatuses));
   let edgeRows = $derived(buildRunGraphEdgeRows(runGraph));
   let presentationLabel = $derived(resolveRunGraphPresentationLabel(runGraph));
 
@@ -85,8 +88,8 @@
                   height={node.height}
                   rx="6"
                   fill="#171717"
-                  stroke={node.hasOutputArtifacts ? '#22c55e' : '#404040'}
-                  stroke-width={node.hasOutputArtifacts ? '2' : '1'}
+                  stroke={node.statusClass === 'failed' ? '#ef4444' : node.hasOutputArtifacts ? '#22c55e' : '#404040'}
+                  stroke-width={node.statusClass === 'unknown' && !node.hasOutputArtifacts ? '1' : '2'}
                 />
                 <text x="14" y="26" fill="#f5f5f5" font-size="13" font-family="ui-monospace, monospace">
                   {compactValue(node.id)}
@@ -108,6 +111,14 @@
                   <text x="20" y="70" fill="#d4d4d4" font-size="10" font-family="ui-sans-serif, system-ui">
                     {compactValue(node.artifactSummaryLabel, 18)}
                   </text>
+                {/if}
+                {#if node.statusClass !== 'unknown'}
+                  <circle
+                    cx={node.width - 18}
+                    cy="18"
+                    r="6"
+                    fill={node.statusClass === 'completed' ? '#22c55e' : node.statusClass === 'failed' ? '#ef4444' : node.statusClass === 'running' ? '#38bdf8' : '#a3a3a3'}
+                  />
                 {/if}
               </g>
             {/each}
@@ -159,6 +170,7 @@
           <thead class="sticky top-0 bg-neutral-950 text-neutral-500">
             <tr>
               <th class="px-3 py-2 font-medium">Node</th>
+              <th class="px-3 py-2 font-medium">Status</th>
               <th class="px-3 py-2 font-medium">Contract</th>
               <th class="px-3 py-2 font-medium">I/O</th>
             </tr>
@@ -170,6 +182,14 @@
                   <div class="truncate font-mono text-neutral-200" title={node.nodeId}>{node.nodeId}</div>
                   <div class="truncate text-neutral-500" title={node.nodeType}>{node.nodeType}</div>
                   <div class="truncate text-neutral-600" title={node.positionLabel}>{node.positionLabel}</div>
+                </td>
+                <td class="max-w-[7rem] px-3 py-2">
+                  <span
+                    class={`inline-flex max-w-full rounded border px-2 py-0.5 text-xs ${node.statusClass === 'completed' ? 'border-green-800 bg-green-950 text-green-200' : node.statusClass === 'failed' ? 'border-red-800 bg-red-950 text-red-200' : node.statusClass === 'running' ? 'border-cyan-800 bg-cyan-950 text-cyan-200' : 'border-neutral-800 bg-neutral-900 text-neutral-400'}`}
+                    title={node.statusLabel}
+                  >
+                    {node.statusLabel}
+                  </span>
                 </td>
                 <td class="max-w-[10rem] px-3 py-2">
                   <div class="truncate text-neutral-300" title={node.contractVersion}>{node.contractVersion}</div>

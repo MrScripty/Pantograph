@@ -2,13 +2,14 @@ use crate::{
     DiagnosticEventAppendRequest, DiagnosticEventRecord, DiagnosticsLedgerError,
     DiagnosticsProjection, DiagnosticsQuery, DiagnosticsRetentionPolicy, IoArtifactProjectionQuery,
     IoArtifactProjectionRecord, LibraryUsageProjectionQuery, LibraryUsageProjectionRecord,
-    ModelLicenseUsageEvent, ProjectionStateRecord, ProjectionStateUpdate,
-    PruneTimingObservationsCommand, PruneTimingObservationsResult, PruneUsageEventsCommand,
-    PruneUsageEventsResult, RunDetailProjectionQuery, RunDetailProjectionRecord,
-    RunListProjectionQuery, RunListProjectionRecord, SchedulerTimelineProjectionQuery,
-    SchedulerTimelineProjectionRecord, UpdateRetentionPolicyCommand, WorkflowRunSummaryProjection,
-    WorkflowRunSummaryQuery, WorkflowRunSummaryRecord, WorkflowTimingExpectation,
-    WorkflowTimingExpectationQuery, WorkflowTimingObservation,
+    ModelLicenseUsageEvent, NodeStatusProjectionQuery, NodeStatusProjectionRecord,
+    ProjectionStateRecord, ProjectionStateUpdate, PruneTimingObservationsCommand,
+    PruneTimingObservationsResult, PruneUsageEventsCommand, PruneUsageEventsResult,
+    RunDetailProjectionQuery, RunDetailProjectionRecord, RunListProjectionQuery,
+    RunListProjectionRecord, SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
+    UpdateRetentionPolicyCommand, WorkflowRunSummaryProjection, WorkflowRunSummaryQuery,
+    WorkflowRunSummaryRecord, WorkflowTimingExpectation, WorkflowTimingExpectationQuery,
+    WorkflowTimingObservation,
 };
 
 pub trait DiagnosticsLedgerRepository {
@@ -94,6 +95,16 @@ pub trait DiagnosticsLedgerRepository {
         &self,
         query: IoArtifactProjectionQuery,
     ) -> Result<Vec<IoArtifactProjectionRecord>, DiagnosticsLedgerError>;
+
+    fn drain_node_status_projection(
+        &mut self,
+        limit: u32,
+    ) -> Result<ProjectionStateRecord, DiagnosticsLedgerError>;
+
+    fn query_node_status_projection(
+        &self,
+        query: NodeStatusProjectionQuery,
+    ) -> Result<Vec<NodeStatusProjectionRecord>, DiagnosticsLedgerError>;
 
     fn drain_library_usage_projection(
         &mut self,

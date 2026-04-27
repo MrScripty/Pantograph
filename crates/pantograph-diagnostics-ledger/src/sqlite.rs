@@ -12,9 +12,10 @@ mod timing_sqlite;
 use crate::event::{
     DiagnosticEventAppendRequest, DiagnosticEventRecord, IoArtifactProjectionQuery,
     IoArtifactProjectionRecord, LibraryUsageProjectionQuery, LibraryUsageProjectionRecord,
-    ProjectionStateRecord, ProjectionStateUpdate, RunDetailProjectionQuery,
-    RunDetailProjectionRecord, RunListProjectionQuery, RunListProjectionRecord,
-    SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
+    NodeStatusProjectionQuery, NodeStatusProjectionRecord, ProjectionStateRecord,
+    ProjectionStateUpdate, RunDetailProjectionQuery, RunDetailProjectionRecord,
+    RunListProjectionQuery, RunListProjectionRecord, SchedulerTimelineProjectionQuery,
+    SchedulerTimelineProjectionRecord,
 };
 use crate::records::{
     DiagnosticsProjection, DiagnosticsQuery, DiagnosticsRetentionPolicy, ExecutionGuaranteeLevel,
@@ -436,6 +437,20 @@ impl DiagnosticsLedgerRepository for SqliteDiagnosticsLedger {
         query: IoArtifactProjectionQuery,
     ) -> Result<Vec<IoArtifactProjectionRecord>, DiagnosticsLedgerError> {
         event_sqlite::query_io_artifact_projection(self, query)
+    }
+
+    fn drain_node_status_projection(
+        &mut self,
+        limit: u32,
+    ) -> Result<ProjectionStateRecord, DiagnosticsLedgerError> {
+        event_sqlite::drain_node_status_projection(self, limit)
+    }
+
+    fn query_node_status_projection(
+        &self,
+        query: NodeStatusProjectionQuery,
+    ) -> Result<Vec<NodeStatusProjectionRecord>, DiagnosticsLedgerError> {
+        event_sqlite::query_node_status_projection(self, query)
     }
 
     fn drain_library_usage_projection(

@@ -5,6 +5,8 @@ import type {
   WorkflowIoArtifactQueryResponse,
   WorkflowLibraryUsageQueryRequest,
   WorkflowLibraryUsageQueryResponse,
+  WorkflowNodeStatusQueryRequest,
+  WorkflowNodeStatusQueryResponse,
   WorkflowProjectionRebuildRequest,
   WorkflowProjectionRebuildResponse,
   WorkflowRetentionPolicyQueryRequest,
@@ -426,6 +428,28 @@ export class WorkflowService extends WorkflowGraphMutationService {
     }
 
     return invoke<WorkflowIoArtifactQueryResponse>('workflow_io_artifact_query', {
+      request,
+    });
+  }
+
+  async queryNodeStatus(
+    request: WorkflowNodeStatusQueryRequest,
+  ): Promise<WorkflowNodeStatusQueryResponse> {
+    if (USE_WORKFLOW_MOCKS) {
+      return {
+        nodes: [],
+        projection_state: {
+          projection_name: 'node_status',
+          projection_version: 1,
+          last_applied_event_seq: 0,
+          status: 'current',
+          rebuilt_at_ms: null,
+          updated_at_ms: Date.now(),
+        },
+      };
+    }
+
+    return invoke<WorkflowNodeStatusQueryResponse>('workflow_node_status_query', {
       request,
     });
   }

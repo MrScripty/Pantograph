@@ -134,8 +134,9 @@ triggered by workflow events rather than polling.
 - `GraphPage.svelte` reads historic workflow versions through
   `workflowService.queryRunGraph` and renders them through
   `RunGraphSnapshot.svelte`. It reads selected-run artifact metadata through
-  `workflowService.queryIoArtifacts` for node output-availability overlays. It
-  never applies that graph to the editor store.
+  `workflowService.queryIoArtifacts` for node output-availability overlays and
+  selected-run node status through `workflowService.queryNodeStatus` for
+  runtime-status overlays. It never applies that graph to the editor store.
 - `DiagnosticsPage.svelte` reads selected-run facts through
   `workflowService.queryRunDetail` and scheduler history through
   `workflowService.querySchedulerTimeline`.
@@ -166,7 +167,8 @@ triggered by workflow events rather than polling.
 - Run graph snapshot rows render `WorkflowRunGraphProjection` topology,
   presentation revision, graph settings, and execution fingerprint fields.
   Node I/O overlays render summarized `IoArtifactProjectionRecord` metadata and
-  must not dereference payload bodies or inspect raw ledger rows.
+  must not dereference payload bodies or inspect raw ledger rows. Node status
+  overlays render `NodeStatusProjectionRecord` rows, not raw diagnostic events.
 - Diagnostics fact rows render `RunDetailProjectionRecord` fields, and
   comparison facets use `RunListProjectionRecord` fields. Scheduler estimate
   and queue facts are read from typed projection fields. Timeline rows render

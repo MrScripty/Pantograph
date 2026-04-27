@@ -4,7 +4,11 @@ import type {
   WorkflowGraph,
   WorkflowRunGraphProjection,
 } from '../../services/workflow/types';
-import type { IoArtifactProjectionRecord } from '../../services/diagnostics/types';
+import type {
+  IoArtifactProjectionRecord,
+  NodeExecutionProjectionStatus,
+  NodeStatusProjectionRecord,
+} from '../../services/diagnostics/types';
 
 export interface RunGraphCounts {
   nodeCount: number;
@@ -21,6 +25,8 @@ export interface RunGraphNodeRow {
   artifactSummaryLabel: string;
   artifactDetailLabel: string;
   hasOutputArtifacts: boolean;
+  statusLabel: string;
+  statusClass: string;
 }
 
 export interface RunGraphEdgeRow {
@@ -41,6 +47,8 @@ export interface RunGraphCanvasNode {
   artifactCount: number;
   artifactSummaryLabel: string;
   hasOutputArtifacts: boolean;
+  statusLabel: string;
+  statusClass: string;
 }
 
 export interface RunGraphCanvasEdge {
@@ -68,6 +76,7 @@ export interface RunGraphNodeArtifactSummary {
 }
 
 export type RunGraphNodeArtifactSummaryByNodeId = Record<string, RunGraphNodeArtifactSummary>;
+export type RunGraphNodeStatusByNodeId = Record<string, NodeStatusProjectionRecord>;
 
 const NODE_WIDTH = 190;
 const NODE_HEIGHT = 84;
@@ -104,6 +113,7 @@ export function resolveRunGraphPresentationLabel(runGraph: WorkflowRunGraphProje
 export function buildRunGraphNodeRows(
   runGraph: WorkflowRunGraphProjection,
   artifactSummaries: RunGraphNodeArtifactSummaryByNodeId = {},
+  nodeStatuses: RunGraphNodeStatusByNodeId = {},
 ): RunGraphNodeRow[] {
   const topologyByNodeId = new Map(
     runGraph.executable_topology.nodes.map((node) => [node.node_id, node]),
@@ -116,6 +126,7 @@ export function buildRunGraphNodeRows(
     const topology = topologyByNodeId.get(node.id);
     const settings = settingsByNodeId.get(node.id);
     const artifactSummary = artifactSummaries[node.id];
+    const nodeStatus = nodeStatuses[node.id];
     return {
       nodeId: node.id,
       nodeType: topology?.node_type ?? node.node_type,
@@ -126,6 +137,8 @@ export function buildRunGraphNodeRows(
       artifactSummaryLabel: formatRunGraphArtifactSummary(artifactSummary),
       artifactDetailLabel: formatRunGraphArtifactDetail(artifactSummary),
       hasOutputArtifacts: (artifactSummary?.outputCount ?? 0) > 0,
+      statusLabel: formatRunGraphNodeStatusLabel(nodeStatus?.status),
+      statusClass: runGraphNodeStatusClass(nodeStatus?.status),
     };
   });
 }
@@ -149,6 +162,7 @@ export function buildRunGraphEdgeRows(runGraph: WorkflowRunGraphProjection): Run
 export function buildRunGraphCanvasModel(
   graph: WorkflowGraph,
   artifactSummaries: RunGraphNodeArtifactSummaryByNodeId = {},
+  nodeStatuses: RunGraphNodeStatusByNodeId = {},
 ): RunGraphCanvasModel {
   if (graph.nodes.length === 0) {
     return {
@@ -170,6 +184,8 @@ export function buildRunGraphCanvasModel(
     artifactCount: artifactSummaries[node.id]?.artifactCount ?? 0,
     artifactSummaryLabel: formatRunGraphArtifactSummary(artifactSummaries[node.id]),
     hasOutputArtifacts: (artifactSummaries[node.id]?.outputCount ?? 0) > 0,
+    statusLabel: formatRunGraphNodeStatusLabel(nodeStatuses[node.id]?.status),
+    statusClass: runGraphNodeStatusClass(nodeStatuses[node.id]?.status),
   }));
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const edges = graph.edges
@@ -186,6 +202,61 @@ export function buildRunGraphCanvasModel(
     nodes,
     edges,
   };
+}
+
+export function buildRunGraphNodeStatusMap(
+  statuses: NodeStatusProjectionRecord[],
+): RunGraphNodeStatusByNodeId {
+  const byNodeId: RunGraphNodeStatusByNodeId = {};
+  for (const status of statuses) {
+    const previous = byNodeId[status.node_id];
+    if (!previous || status.last_event_seq >= previous.last_event_seq) {
+      byNodeId[status.node_id] = status;
+    }
+  }
+  return byNodeId;
+}
+
+export function formatRunGraphNodeStatusLabel(
+  status: NodeExecutionProjectionStatus | null | undefined,
+): string {
+  switch (status) {
+    case 'queued':
+      return 'Queued';
+    case 'running':
+      return 'Running';
+    case 'waiting':
+      return 'Waiting';
+    case 'completed':
+      return 'Completed';
+    case 'failed':
+      return 'Failed';
+    case 'cancelled':
+      return 'Cancelled';
+    default:
+      return 'No status';
+  }
+}
+
+export function runGraphNodeStatusClass(
+  status: NodeExecutionProjectionStatus | null | undefined,
+): string {
+  switch (status) {
+    case 'running':
+      return 'running';
+    case 'waiting':
+      return 'waiting';
+    case 'completed':
+      return 'completed';
+    case 'failed':
+      return 'failed';
+    case 'cancelled':
+      return 'cancelled';
+    case 'queued':
+      return 'queued';
+    default:
+      return 'unknown';
+  }
 }
 
 export function buildRunGraphNodeArtifactSummaries(

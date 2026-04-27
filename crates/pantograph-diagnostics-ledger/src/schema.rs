@@ -4,7 +4,7 @@ use crate::records::{RetentionClass, DEFAULT_STANDARD_RETENTION_DAYS};
 use crate::util::now_ms;
 use crate::DiagnosticsLedgerError;
 
-pub(crate) const SCHEMA_VERSION: i64 = 13;
+pub(crate) const SCHEMA_VERSION: i64 = 14;
 const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v13";
 
 pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {
@@ -209,6 +209,9 @@ pub(crate) fn migrate_schema(
     if found < 13 {
         apply_scheduler_run_projection_fact_migration(&tx, found)?;
     }
+    if found < 14 {
+        apply_node_status_projection_schema(&tx)?;
+    }
     if found < SCHEMA_VERSION {
         tx.execute(
             "INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
@@ -285,6 +288,7 @@ fn apply_event_ledger_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedg
     apply_run_detail_projection_schema(tx)?;
     apply_io_artifact_projection_schema(tx)?;
     apply_library_usage_projection_schema(tx)?;
+    apply_node_status_projection_schema(tx)?;
     Ok(())
 }
 
@@ -557,6 +561,39 @@ fn apply_library_usage_projection_schema(
             ON library_usage_run_projection(workflow_id, asset_id);
         CREATE INDEX IF NOT EXISTS idx_library_usage_run_projection_version
             ON library_usage_run_projection(workflow_version_id, asset_id);
+        "#,
+    )?;
+    Ok(())
+}
+
+fn apply_node_status_projection_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {
+    tx.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS node_status_projection (
+            workflow_run_id TEXT NOT NULL,
+            workflow_id TEXT NOT NULL,
+            workflow_version_id TEXT,
+            workflow_semantic_version TEXT,
+            node_id TEXT NOT NULL,
+            node_type TEXT,
+            node_version TEXT,
+            runtime_id TEXT,
+            runtime_version TEXT,
+            model_id TEXT,
+            model_version TEXT,
+            status TEXT NOT NULL,
+            started_at_ms INTEGER,
+            completed_at_ms INTEGER,
+            duration_ms INTEGER,
+            error TEXT,
+            last_event_seq INTEGER NOT NULL,
+            last_updated_at_ms INTEGER NOT NULL,
+            PRIMARY KEY(workflow_run_id, node_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_node_status_projection_run_status
+            ON node_status_projection(workflow_run_id, status, last_event_seq);
+        CREATE INDEX IF NOT EXISTS idx_node_status_projection_workflow_version_status
+            ON node_status_projection(workflow_version_id, status, last_event_seq);
         "#,
     )?;
     Ok(())

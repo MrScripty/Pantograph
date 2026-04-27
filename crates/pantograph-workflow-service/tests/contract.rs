@@ -1,9 +1,10 @@
 use async_trait::async_trait;
 use pantograph_diagnostics_ledger::{
     DiagnosticEventKind, DiagnosticEventSourceComponent, DiagnosticsRetentionPolicy,
-    IoArtifactProjectionRecord, LibraryUsageProjectionRecord, ProjectionStateRecord,
-    ProjectionStatus, RetentionClass, RunDetailProjectionRecord, RunListProjectionRecord,
-    RunListProjectionStatus, SchedulerTimelineProjectionRecord,
+    IoArtifactProjectionRecord, LibraryUsageProjectionRecord, NodeExecutionProjectionStatus,
+    NodeStatusProjectionRecord, ProjectionStateRecord, ProjectionStatus, RetentionClass,
+    RunDetailProjectionRecord, RunListProjectionRecord, RunListProjectionStatus,
+    SchedulerTimelineProjectionRecord,
 };
 use pantograph_workflow_service::graph::WorkflowExecutionSessionKind;
 use pantograph_workflow_service::{
@@ -13,7 +14,8 @@ use pantograph_workflow_service::{
     WorkflowExecutionSessionSummary, WorkflowHost, WorkflowHostCapabilities,
     WorkflowIoArtifactQueryRequest, WorkflowIoArtifactQueryResponse, WorkflowIoNode,
     WorkflowIoPort, WorkflowIoRequest, WorkflowIoResponse, WorkflowLibraryUsageQueryRequest,
-    WorkflowLibraryUsageQueryResponse, WorkflowOutputTarget, WorkflowPortBinding,
+    WorkflowLibraryUsageQueryResponse, WorkflowNodeStatusQueryRequest,
+    WorkflowNodeStatusQueryResponse, WorkflowOutputTarget, WorkflowPortBinding,
     WorkflowPreflightRequest, WorkflowProjectionRebuildRequest, WorkflowProjectionRebuildResponse,
     WorkflowRetentionPolicyQueryRequest, WorkflowRetentionPolicyQueryResponse,
     WorkflowRunDetailQueryRequest, WorkflowRunDetailQueryResponse, WorkflowRuntimeCapability,
@@ -918,6 +920,92 @@ fn workflow_io_artifact_query_contract_snapshot() {
             "status": "current",
             "rebuilt_at_ms": null,
             "updated_at_ms": 1210
+        }
+    });
+    assert_eq!(response_value, expected_response);
+}
+
+#[test]
+fn workflow_node_status_query_contract_snapshot() {
+    let request = WorkflowNodeStatusQueryRequest {
+        workflow_run_id: Some("run-1".to_string()),
+        node_id: Some("node-1".to_string()),
+        status: Some(NodeExecutionProjectionStatus::Completed),
+        after_event_seq: Some(30),
+        limit: Some(25),
+        projection_batch_size: Some(100),
+    };
+    let response = WorkflowNodeStatusQueryResponse {
+        nodes: vec![NodeStatusProjectionRecord {
+            workflow_run_id: "run-1".to_string().try_into().expect("run id"),
+            workflow_id: "wf-1".to_string().try_into().expect("workflow id"),
+            workflow_version_id: Some("version-1".to_string().try_into().expect("version id")),
+            workflow_semantic_version: Some("1.2.3".to_string()),
+            node_id: "node-1".to_string(),
+            node_type: Some("image-output".to_string()),
+            node_version: Some("2.0.0".to_string()),
+            runtime_id: Some("runtime-1".to_string()),
+            runtime_version: Some("0.4.0".to_string()),
+            model_id: Some("model-1".to_string()),
+            model_version: Some("rev-1".to_string()),
+            status: NodeExecutionProjectionStatus::Completed,
+            started_at_ms: Some(1200),
+            completed_at_ms: Some(1500),
+            duration_ms: Some(300),
+            error: None,
+            last_event_seq: 31,
+            last_updated_at_ms: 1505,
+        }],
+        projection_state: ProjectionStateRecord {
+            projection_name: "node_status".to_string(),
+            projection_version: 1,
+            last_applied_event_seq: 31,
+            status: ProjectionStatus::Current,
+            rebuilt_at_ms: None,
+            updated_at_ms: 1510,
+        },
+    };
+
+    let request_value = serde_json::to_value(request).expect("serialize node status request");
+    let expected_request = serde_json::json!({
+        "workflow_run_id": "run-1",
+        "node_id": "node-1",
+        "status": "completed",
+        "after_event_seq": 30,
+        "limit": 25,
+        "projection_batch_size": 100
+    });
+    assert_eq!(request_value, expected_request);
+
+    let response_value = serde_json::to_value(response).expect("serialize node status response");
+    let expected_response = serde_json::json!({
+        "nodes": [{
+            "workflow_run_id": "run-1",
+            "workflow_id": "wf-1",
+            "workflow_version_id": "version-1",
+            "workflow_semantic_version": "1.2.3",
+            "node_id": "node-1",
+            "node_type": "image-output",
+            "node_version": "2.0.0",
+            "runtime_id": "runtime-1",
+            "runtime_version": "0.4.0",
+            "model_id": "model-1",
+            "model_version": "rev-1",
+            "status": "completed",
+            "started_at_ms": 1200,
+            "completed_at_ms": 1500,
+            "duration_ms": 300,
+            "error": null,
+            "last_event_seq": 31,
+            "last_updated_at_ms": 1505
+        }],
+        "projection_state": {
+            "projection_name": "node_status",
+            "projection_version": 1,
+            "last_applied_event_seq": 31,
+            "status": "current",
+            "rebuilt_at_ms": null,
+            "updated_at_ms": 1510
         }
     });
     assert_eq!(response_value, expected_response);
