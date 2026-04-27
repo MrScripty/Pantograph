@@ -2,12 +2,17 @@
 
 ## Status
 
-Draft plan. Not implemented.
+In progress. Stage `05` delivered the Scheduler-first shell, dense Scheduler
+table, local Network status page, and Node Editor reserved page. This stage now
+has a first-pass I/O Inspector artifact metadata browser and global retention
+policy form. Library, historic run graph rendering, deeper diagnostics facets,
+and richer artifact payload renderers remain open.
 
 ## Objective
 
 Implement the top-level run-centric pages against backend-owned projections:
-Scheduler, Diagnostics, Graph, I/O Inspector, Library, Network, and Node Lab.
+Scheduler, Diagnostics, Graph, I/O Inspector, Library, Network, and Node
+Editor.
 
 ## Scope
 
@@ -20,7 +25,7 @@ Scheduler, Diagnostics, Graph, I/O Inspector, Library, Network, and Node Lab.
 - Library page with active-run asset highlighting and Pumas management entry
   points.
 - Network page local-only system/node stats with future peer-ready structure.
-- Node Lab reserved/future page state.
+- Node Editor reserved/future page state.
 - Page-level loading, error, empty, and no-active-run states.
 - Focused frontend tests for presenters, stores, and page interactions.
 
@@ -29,7 +34,7 @@ Scheduler, Diagnostics, Graph, I/O Inspector, Library, Network, and Node Lab.
 - Full advanced comparison workflows.
 - Full media viewers for every possible artifact type in the first pass.
 - Full Iroh peer discovery.
-- Full Node Lab local-agent authoring.
+- Full Node Editor local-agent authoring.
 - Advanced scheduler optimization tuning beyond displaying backend facts.
 
 ## Inputs
@@ -52,7 +57,7 @@ into a second source of truth.
   diagnostics on navigation.
 - Table and gallery UI must be dense, stable, and accessible.
 - Network starts local-only but must not block future peer expansion.
-- Node Lab is future-facing and should not imply unavailable authoring support
+- Node Editor is future-facing and should not imply unavailable authoring support
   is implemented.
 
 ### Assumptions
@@ -105,7 +110,7 @@ into a second source of truth.
 - Network shows local instance capabilities/load/cache state.
 - Network highlights active-run relevant scheduler decisions and local
   runtime/model/device state.
-- Node Lab has a truthful future/disabled surface.
+- Node Editor has a truthful future/disabled surface.
 - Frontend lint, typecheck, and focused tests pass.
 
 ## Milestones
@@ -138,7 +143,12 @@ into a second source of truth.
 - Component tests cover row selection and active-run update.
 - Accessibility tests cover table controls and actions.
 
-**Status:** Not started.
+**Status:** Partially complete from Stage `05`. The current Scheduler page
+renders a dense projection-backed run table, first-class queued/future rows
+where present in the run-list projection, selected-run actions, active-run
+updates, and projection freshness. Advanced sorting/filtering, scheduler
+timeline drawer, queue position, priority, estimates, progress, model/runtime
+summaries, delay reason, and retention summaries remain open.
 
 ### Milestone 2: Diagnostics Page
 
@@ -166,7 +176,8 @@ into a second source of truth.
 - Presenter tests cover mixed-version labels and scheduler decision summaries.
 - Component tests cover active-run and no-active-run states.
 
-**Status:** Not started.
+**Status:** Not started beyond embedding the existing diagnostics panel as a
+workbench page in Stage `05`.
 
 ### Milestone 3: Graph Page
 
@@ -188,7 +199,9 @@ editable workflow behavior.
 - Tests cover presentation fallback layout behavior.
 - Existing graph interaction tests pass for edit view.
 
-**Status:** Not started.
+**Status:** Not started beyond preserving the editable graph page in Stage
+`05`. Historic run graph rendering still needs an isolated run-view
+implementation.
 
 ### Milestone 4: I/O Inspector Page
 
@@ -199,22 +212,22 @@ rendering.
 
 - [ ] Add workflow inputs and outputs sections.
 - [ ] Add node-centric input/output view.
-- [ ] Add artifact-centric gallery view.
+- [x] Add artifact-centric gallery view.
 - [ ] Add no-active-run retained artifact browsing where backend projections
   support it.
-- [ ] Render artifact gallery projection with event-derived retention state and
+- [x] Render artifact gallery projection with event-derived retention state and
   payload availability labels.
-- [ ] Render backend-provided projection freshness/catching-up state for
+- [x] Render backend-provided projection freshness/catching-up state for
   retained-artifact galleries when the projection is warm or rebuilding.
 - [ ] Add renderers for text, image metadata/preview, audio placeholder/player
   where available, video placeholder/player where available, tables, JSON,
   files, and unknown/raw fallback.
-- [ ] Show retention state and cleanup/policy details for each item.
+- [x] Show retention state and cleanup/policy details for each item.
 - [ ] Surface global retention settings for final outputs, workflow inputs,
   intermediate node I/O, failed-run data, maximum artifact size, maximum total
   storage, media behavior, compression/archive behavior, and cleanup
   trigger/status where Stage `04` exposes them.
-- [ ] Add global retention policy controls for privileged GUI users if Stage
+- [x] Add global retention policy controls for privileged GUI users if Stage
   `04` exposes them.
 
 **Verification:**
@@ -223,7 +236,13 @@ rendering.
 - Component tests cover expired/deleted payload states.
 - Accessibility checks cover gallery navigation and policy controls.
 
-**Status:** Not started.
+**Status:** Partially complete. `IoInspectorPage.svelte` now queries
+`workflowService.queryIoArtifacts`, renders artifact metadata cards, separates
+payload-reference availability from metadata-only rows, displays projection
+freshness, and exposes the global retention policy read/update command without
+optimistic local mutation. Workflow I/O grouping, node-centric views,
+no-active-run browsing, rich media previews, detailed payload retention state,
+and cleanup/storage controls remain open pending richer backend projections.
 
 ### Milestone 5: Library Page
 
@@ -251,7 +270,7 @@ rendering.
 
 **Status:** Not started.
 
-### Milestone 6: Network And Node Lab Pages
+### Milestone 6: Network And Node Editor Pages
 
 **Goal:** Add local-first system/node visibility and reserve future node
 authoring page.
@@ -267,7 +286,7 @@ authoring page.
 - [ ] Reserve peer pairing/trust state in the data and page model so future
   Iroh work can add discovered peers, codes/keys, and verification state
   without a page rewrite.
-- [ ] Add Node Lab page with clear future/experimental state and no false
+- [x] Add Node Editor page with clear future/experimental state and no false
   authoring affordances.
 
 **Verification:**
@@ -275,9 +294,13 @@ authoring page.
 - Tests cover local-only Network empty/loaded/error states.
 - Tests cover platform-degraded metrics states without page crashes or fake
   values.
-- Tests cover Node Lab disabled/future state.
+- Tests cover Node Editor disabled/future state.
 
-**Status:** Not started.
+**Status:** Partially complete from Stage `05`. The Network page displays local
+identity, transport state, CPU, memory, and scheduler load through
+`workflowService.queryLocalNetworkStatus`, and the Node Editor page has a
+truthful unavailable state. Peer pairing, active-run runtime/model highlights,
+cache state, and detailed degraded-metric tests remain open.
 
 ## Ownership And Lifecycle Note
 
@@ -299,23 +322,46 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
 
 ### Completed
 
-- None. Draft plan only.
+- Stage `05` added the Scheduler-first shell, dense Scheduler run table,
+  active-run row selection, Graph and Diagnostics page wrappers, local Network
+  status cards, and Node Editor unavailable state.
+- Added `src/components/workbench/IoInspectorPage.svelte` with active-run
+  artifact metadata browsing from `workflowService.queryIoArtifacts`.
+- Added global retention policy read/update controls using
+  `workflowService.queryRetentionPolicy` and
+  `workflowService.updateRetentionPolicy` with no optimistic mutation.
+- Added `src/components/workbench/ioInspectorPresenters.ts` and tests for media
+  labels, payload-reference availability labels, byte labels, and projection
+  freshness labels.
 
 ### Deviations
 
-- None.
+- First-pass I/O rendering is metadata-only. The page shows `payload_ref`
+  availability but does not dereference payload bodies because there is no
+  typed payload body API in Stage `04`.
+- No-active-run retained artifact browsing remains unavailable because the
+  current I/O artifact query contract requires `workflow_run_id`.
 
 ### Follow-Ups
 
 - Decide table virtualization threshold during Scheduler implementation.
-- Decide first-pass media renderer depth for I/O Inspector.
+- Add richer artifact retention state once backend projections distinguish
+  retained, expired, deleted, external, truncated, and too-large payloads.
+- Add first-pass media renderers after payload body access is exposed through a
+  typed service.
 
 ### Verification Summary
 
-- Not run. Draft plan only.
+- `node --experimental-strip-types --test src/components/workbench/ioInspectorPresenters.test.ts`
+  passed.
+- `npm run test:frontend` passed.
+- `npm run typecheck` passed.
+- `npm run lint:a11y` passed.
+- `npm run build` passed.
+- `git diff --check` passed for the I/O Inspector slice.
 
 ### Traceability Links
 
 - Requirement sections: Scheduler Page Requirements, Diagnostics Requirements,
   Graph Page Requirements, I/O Inspector Requirements, Library Requirements,
-  Network Page Requirements, Node Lab Requirements.
+  Network Page Requirements, Node Editor Requirements.

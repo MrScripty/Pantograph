@@ -1,0 +1,117 @@
+import type {
+  IoArtifactProjectionRecord,
+  ProjectionStateRecord,
+} from '../../services/diagnostics/types';
+
+export type IoArtifactMediaFamily =
+  | 'text'
+  | 'image'
+  | 'audio'
+  | 'video'
+  | 'table'
+  | 'json'
+  | 'file'
+  | 'unknown';
+
+export type IoArtifactPayloadAvailability =
+  | 'referenced'
+  | 'metadata_only';
+
+export function classifyIoArtifactMedia(mediaType: string | null | undefined): IoArtifactMediaFamily {
+  if (!mediaType) {
+    return 'unknown';
+  }
+  const normalized = mediaType.toLowerCase();
+  if (normalized.includes('csv') || normalized.includes('parquet') || normalized.includes('table')) {
+    return 'table';
+  }
+  if (normalized.startsWith('text/')) {
+    return 'text';
+  }
+  if (normalized.startsWith('image/')) {
+    return 'image';
+  }
+  if (normalized.startsWith('audio/')) {
+    return 'audio';
+  }
+  if (normalized.startsWith('video/')) {
+    return 'video';
+  }
+  if (normalized.includes('json')) {
+    return 'json';
+  }
+  return 'file';
+}
+
+export function formatIoArtifactMediaLabel(mediaType: string | null | undefined): string {
+  switch (classifyIoArtifactMedia(mediaType)) {
+    case 'text':
+      return 'Text';
+    case 'image':
+      return 'Image';
+    case 'audio':
+      return 'Audio';
+    case 'video':
+      return 'Video';
+    case 'table':
+      return 'Table';
+    case 'json':
+      return 'JSON';
+    case 'file':
+      return 'File';
+    case 'unknown':
+      return 'Unknown';
+  }
+}
+
+export function resolveIoArtifactPayloadAvailability(
+  artifact: Pick<IoArtifactProjectionRecord, 'payload_ref'>,
+): IoArtifactPayloadAvailability {
+  return artifact.payload_ref && artifact.payload_ref.trim().length > 0
+    ? 'referenced'
+    : 'metadata_only';
+}
+
+export function formatIoArtifactAvailabilityLabel(
+  artifact: Pick<IoArtifactProjectionRecord, 'payload_ref'>,
+): string {
+  switch (resolveIoArtifactPayloadAvailability(artifact)) {
+    case 'referenced':
+      return 'Payload referenced';
+    case 'metadata_only':
+      return 'Metadata only';
+  }
+}
+
+export function formatIoArtifactBytes(bytes: number | null | undefined): string {
+  if (bytes === null || bytes === undefined) {
+    return 'Size unknown';
+  }
+  if (bytes >= 1_073_741_824) {
+    return `${(bytes / 1_073_741_824).toFixed(1)} GiB`;
+  }
+  if (bytes >= 1_048_576) {
+    return `${(bytes / 1_048_576).toFixed(1)} MiB`;
+  }
+  if (bytes >= 1_024) {
+    return `${(bytes / 1_024).toFixed(1)} KiB`;
+  }
+  return `${bytes} B`;
+}
+
+export function formatProjectionFreshness(state: ProjectionStateRecord | null): string {
+  if (!state) {
+    return 'Projection unavailable';
+  }
+  const cursor = `seq ${state.last_applied_event_seq}`;
+  switch (state.status) {
+    case 'current':
+      return `Current at ${cursor}`;
+    case 'rebuilding':
+      return `Rebuilding at ${cursor}`;
+    case 'needs_rebuild':
+      return `Needs rebuild at ${cursor}`;
+    case 'failed':
+      return `Failed at ${cursor}`;
+  }
+}
