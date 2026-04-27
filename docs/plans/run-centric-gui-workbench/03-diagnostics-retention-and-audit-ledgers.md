@@ -426,6 +426,10 @@ implicitly on page load.
   required.
 - 2026-04-27: `cargo test -p pantograph-diagnostics-ledger
   diagnostic_event_ledger_rejects_unsafe_payload_refs` passed.
+- 2026-04-27: `cargo test -p pantograph-diagnostics-ledger
+  diagnostic_event_ledger_rejects_unsafe_library_asset_ids` passed.
+- 2026-04-27: `cargo test -p pantograph-workflow-service
+  workflow_library_usage_query_validates_bounds` passed.
 
 ### Traceability Links
 

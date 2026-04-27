@@ -620,6 +620,44 @@ fn diagnostic_event_ledger_rejects_unsafe_payload_refs() {
 }
 
 #[test]
+fn diagnostic_event_ledger_rejects_unsafe_library_asset_ids() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    for asset_id in [
+        "/tmp/model.bin",
+        "file:///tmp/model.bin",
+        "https://example.test/model.bin",
+        "org/../model",
+        "org//model",
+        "org\\model",
+        "org/model with space",
+    ] {
+        let request = sample_library_asset_access_event(asset_id, Some("workflow_run_alpha"), 1);
+
+        let result = ledger.append_diagnostic_event(request);
+        assert!(
+            matches!(
+                result,
+                Err(DiagnosticsLedgerError::InvalidField { field: "asset_id" })
+            ),
+            "expected asset_id {asset_id:?} to be rejected"
+        );
+    }
+
+    for asset_id in [
+        "org/model",
+        "model:local",
+        "pumas://models/org/model",
+        "pantograph://library/local-model",
+        "hf://org/model",
+    ] {
+        let request = sample_library_asset_access_event(asset_id, Some("workflow_run_alpha"), 1);
+        ledger
+            .append_diagnostic_event(request)
+            .expect("safe library asset id appends");
+    }
+}
+
+#[test]
 fn projection_state_tracks_incremental_event_cursors() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     let event = ledger

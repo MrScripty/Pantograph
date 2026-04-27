@@ -489,6 +489,19 @@ fn workflow_library_usage_query_validates_bounds() {
         Err(WorkflowServiceError::InvalidRequest(_))
     ));
 
+    let invalid_asset_id = service.workflow_library_usage_query(WorkflowLibraryUsageQueryRequest {
+        asset_id: Some("https://example.test/model".to_string()),
+        workflow_id: None,
+        workflow_version_id: None,
+        after_event_seq: None,
+        limit: None,
+        projection_batch_size: None,
+    });
+    assert!(matches!(
+        invalid_asset_id,
+        Err(WorkflowServiceError::InvalidRequest(_))
+    ));
+
     let oversized_limit = service.workflow_library_usage_query(WorkflowLibraryUsageQueryRequest {
         asset_id: None,
         workflow_id: None,

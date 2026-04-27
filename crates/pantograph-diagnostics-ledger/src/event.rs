@@ -330,7 +330,7 @@ pub struct LibraryAssetAccessedPayload {
 
 impl LibraryAssetAccessedPayload {
     fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
-        validate_required_text("asset_id", &self.asset_id, MAX_ID_LEN)?;
+        validate_library_resource_id("asset_id", &self.asset_id)?;
         validate_required_text("operation", &self.operation, MAX_ID_LEN)?;
         validate_optional_text("cache_status", self.cache_status.as_deref(), MAX_ID_LEN)
     }
@@ -835,7 +835,10 @@ impl LibraryUsageProjectionQuery {
                 field: "after_event_seq",
             });
         }
-        validate_optional_text("asset_id", self.asset_id.as_deref(), MAX_ID_LEN)
+        if let Some(asset_id) = self.asset_id.as_deref() {
+            validate_library_resource_id("asset_id", asset_id)?;
+        }
+        Ok(())
     }
 }
 
@@ -898,6 +901,37 @@ fn validate_payload_ref(value: Option<&str>) -> Result<(), DiagnosticsLedgerErro
         return Err(DiagnosticsLedgerError::InvalidField {
             field: "payload_ref",
         });
+    }
+    Ok(())
+}
+
+fn validate_library_resource_id(
+    field: &'static str,
+    value: &str,
+) -> Result<(), DiagnosticsLedgerError> {
+    validate_required_text(field, value, MAX_ID_LEN)?;
+    if value.trim() != value || value.chars().any(char::is_whitespace) {
+        return Err(DiagnosticsLedgerError::InvalidField { field });
+    }
+    if value.contains("://")
+        && !["pumas://", "pantograph://", "hf://"]
+            .iter()
+            .any(|scheme| value.starts_with(*scheme))
+    {
+        return Err(DiagnosticsLedgerError::InvalidField { field });
+    }
+    let reference = ["pumas://", "pantograph://", "hf://"]
+        .iter()
+        .find_map(|scheme| value.strip_prefix(*scheme))
+        .unwrap_or(value);
+    if reference.starts_with('/')
+        || reference.is_empty()
+        || reference.contains('\\')
+        || reference
+            .split('/')
+            .any(|segment| segment == "." || segment == ".." || segment.is_empty())
+    {
+        return Err(DiagnosticsLedgerError::InvalidField { field });
     }
     Ok(())
 }
