@@ -22,7 +22,8 @@ pub use graph::{
     GraphEdge, GraphNode, InsertNodeConnectionResponse, InsertNodeOnEdgeResponse,
     InsertNodePositionHint, InsertableNodeTypeCandidate, IoBindingOrigin, NodeCategory,
     NodeDefinition, NodeGroup, NodeRegistry, PortDataType, PortDefinition, PortMapping, Position,
-    UndoRedoState, Viewport, WorkflowFile, WorkflowGraph, WorkflowGraphAddEdgeRequest,
+    UndoRedoState, Viewport, WorkflowExecutableTopology, WorkflowExecutableTopologyEdge,
+    WorkflowExecutableTopologyNode, WorkflowFile, WorkflowGraph, WorkflowGraphAddEdgeRequest,
     WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest, WorkflowGraphCreateGroupRequest,
     WorkflowGraphDeleteRequest, WorkflowGraphDeleteResponse, WorkflowGraphDeleteSelectionRequest,
     WorkflowGraphEditSessionCloseRequest, WorkflowGraphEditSessionCloseResponse,
@@ -38,7 +39,9 @@ pub use graph::{
     WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest,
     convert_graph_from_node_engine, convert_graph_to_node_engine,
     graph_memory_impact_from_node_engine_graph_change, validate_workflow_connection,
-    validate_workflow_graph_contract,
+    validate_workflow_graph_contract, workflow_executable_topology,
+    workflow_executable_topology_with_node_versions, workflow_execution_fingerprint,
+    workflow_execution_fingerprint_for_topology,
 };
 pub use pantograph_runtime_attribution::{ClientSessionId, WorkflowId, WorkflowRunId};
 pub use scheduler::{

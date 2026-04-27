@@ -2,6 +2,7 @@ mod canonicalization;
 mod connection_intent;
 mod contract_validation;
 mod effective_definition;
+mod executable_topology;
 mod group_mutation;
 mod memory_impact;
 mod persistence;
@@ -27,6 +28,11 @@ pub use connection_intent::{
     rejected_insert_on_edge_response, rejected_insert_response,
 };
 pub use contract_validation::validate_workflow_graph_contract;
+pub use executable_topology::{
+    WorkflowExecutableTopology, WorkflowExecutableTopologyEdge, WorkflowExecutableTopologyNode,
+    workflow_executable_topology, workflow_executable_topology_with_node_versions,
+    workflow_execution_fingerprint, workflow_execution_fingerprint_for_topology,
+};
 pub use memory_impact::graph_memory_impact_from_node_engine_graph_change;
 pub use persistence::{
     FileSystemWorkflowGraphStore, WorkflowGraphDeleteRequest, WorkflowGraphDeleteResponse,

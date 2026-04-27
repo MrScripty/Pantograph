@@ -17,6 +17,7 @@ and persistence abstractions so adapters do not implement graph business logic.
 | `canonicalization_legacy_migration.rs` | Legacy saved-node rewrites and typed contract-upgrade record production. |
 | `canonicalization_tests.rs` | Canonicalization migration and inference-overlay regression tests. |
 | `effective_definition.rs` | Resolves backend-owned effective node contracts and projects them into graph DTOs before validation or candidate lookup. |
+| `executable_topology.rs` | Canonical executable-topology projection and BLAKE3 workflow execution fingerprint calculation for workflow versioning. |
 | `validation.rs` | Shared connection compatibility helpers used by graph-edit flows. |
 | `connection_intent.rs` | Canonical candidate-discovery and revision-aware connection/insert validation. |
 | `connection_insert.rs` | Internal node-insert, edge-insert preview, and edge-bridge helpers used by `connection_intent.rs` while preserving the public graph-edit facade. |
@@ -115,6 +116,10 @@ for existing graph-edit callers.
   `session.rs` remains focused on production session orchestration.
 - Connection candidate lookup never mutates session state.
 - Persisted derived graph metadata is advisory and must be recomputed when stale.
+- Workflow execution fingerprints are computed from executable topology only:
+  sorted node ids, node types, node behavior versions, and sorted port
+  connections. Node positions, node data, edge ids, derived graph caches, and
+  other display metadata are excluded.
 - Workflow save/delete file stems are not sanitized from arbitrary names; they
   must already be valid workflow identities so diagnostics and future workflow
   versions can use the same stable id.
@@ -172,6 +177,9 @@ let response = service
 - Request/response DTO field names are stable unless an explicit breaking change is documented.
 - `WorkflowFile.version` is the persisted file-format version.
 - `WorkflowGraph.derived_graph` is volatile advisory metadata and may be regenerated.
+- `WorkflowExecutableTopology` is the contract used for execution
+  fingerprinting; callers must not use `WorkflowGraph.compute_fingerprint()` as
+  workflow-version identity.
 - `WorkflowGraphMetadata.id` is derived from the persisted filename stem when listed from a store.
 - `node.data.definition.inputs` and `node.data.definition.outputs` are additive
   per-node overlays resolved into `EffectiveNodeContract` during connection

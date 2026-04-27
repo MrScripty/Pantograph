@@ -7370,6 +7370,7 @@ name = "pantograph-workflow-service"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "blake3",
  "chrono",
  "node-engine",
  "pantograph-diagnostics-ledger",

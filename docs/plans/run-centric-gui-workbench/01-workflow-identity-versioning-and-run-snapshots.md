@@ -148,7 +148,7 @@ large patch. Before coding, split it into waves with explicit write sets:
 
 - [ ] Decide whether to add a new ADR for workflow version registry ownership.
 - [x] Define workflow identity validation rules and error categories.
-- [ ] Define canonical executable topology inputs and exclusions.
+- [x] Define canonical executable topology inputs and exclusions.
 - [ ] Define presentation revision contract and its relationship to execution
   versions.
 - [ ] Define run snapshot fields and breaking cutover cleanup strategy.
@@ -165,8 +165,9 @@ large patch. Before coding, split it into waves with explicit write sets:
 
 **Status:** In progress. Workflow identity grammar has a first implementation
 in `pantograph-workflow-service`, and node behavior version facts are now
-available from `pantograph-node-contracts`; remaining Milestone 1 contract
-decisions are still open.
+available from `pantograph-node-contracts`. Canonical executable topology
+projection is implemented, but remaining Milestone 1 storage and snapshot
+contract decisions are still open.
 
 ### Milestone 2: Workflow Version Registry
 
@@ -288,21 +289,24 @@ records for the same execution fingerprint.
   semantic contract versions and BLAKE3 behavior digests, and updated
   built-in contract producers plus legacy migration metadata to semantic
   versions.
+- 2026-04-27: Added `WorkflowExecutableTopology` in
+  `pantograph-workflow-service`. Execution fingerprints now have an explicit
+  BLAKE3 projection that includes sorted node ids, node types, node behavior
+  versions, and sorted port connections while excluding node positions, node
+  data, edge ids, derived graph caches, and display metadata.
 
 ### Deviations
 
 - Full workflow-version registry and run-snapshot storage are intentionally not
-  part of this first slice. This keeps the initial cutover limited to identity
-  validation before topology/node-version fingerprint contracts are added.
-- Workflow execution fingerprints do not consume `NodeBehaviorVersion` yet.
-  That wiring remains in the topology and workflow-version registry slices.
+  part of the completed slices so far. This keeps the initial cutover limited
+  to identity validation and executable fingerprint contract work.
+- Workflow execution fingerprints are not yet written to a workflow-version
+  registry or run snapshot. That wiring remains in the registry and submission
+  slices.
 
 ### Follow-Ups
 
 - Decide whether workflow version ownership needs an ADR.
-- Define canonical executable topology inputs and exclusions, including how
-  derived node behavior digests are embedded into workflow execution
-  fingerprints.
 - Define workflow-version registry storage owner before schema work.
 
 ### Verification Summary
@@ -322,6 +326,10 @@ records for the same execution fingerprint.
   passed.
 - 2026-04-27: `cargo test -p pantograph-workflow-service` passed after the
   semantic node contract-version cutover.
+- 2026-04-27: `cargo test -p pantograph-workflow-service
+  executable_topology` passed.
+- 2026-04-27: `cargo test -p pantograph-workflow-service` passed after adding
+  executable topology contracts.
 
 ### Traceability Links
 
