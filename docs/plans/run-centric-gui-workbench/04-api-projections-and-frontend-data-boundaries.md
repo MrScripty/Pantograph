@@ -245,6 +245,12 @@ Workflow-service diagnostics tests now include an expired-retention artifact
 fixture that proves `workflow_io_artifact_query` returns the expired
 `retention_state`, clears the payload reference, and reports matching
 retention-summary counts through the public API.
+Frontend workflow run projection tests now use Tauri mock IPC to prove
+`WorkflowRunProjectionService` forwards `workflow_run_list_query` and
+`workflow_run_detail_query` requests under the native `{ request }` envelope and
+preserves backend-authored run-list facets, delayed status, workflow version,
+scheduler estimate fields, queue-placement fields, and projection freshness
+state for GUI consumers.
 `workflow_run_list_query` now returns backend-owned comparison facets for
 workflow version, status, scheduler policy, and retention policy from the
 run-list projection. Diagnostics pages use those scoped facets for
@@ -290,7 +296,10 @@ projections while owning only transient UI state.
 - Polling/subscription lifecycle tests exist if any recurring update loop is
   introduced.
 
-**Status:** Not started.
+**Status:** In progress. Hot run projection invoke wiring is now split into
+`WorkflowRunProjectionService`, with `WorkflowService` inheriting that boundary
+for existing GUI callers. Broader frontend store ownership, error category
+preservation, and optimistic-update avoidance remain pending.
 
 ### Milestone 4: Cross-Layer Acceptance
 
@@ -299,9 +308,9 @@ implementation depends on it.
 
 **Tasks:**
 
-- [ ] Add an acceptance path for run list projection from backend fixture/state
+- [x] Add an acceptance path for run list projection from backend fixture/state
   to frontend service consumer.
-- [ ] Add an acceptance path for selected run detail with workflow version and
+- [x] Add an acceptance path for selected run detail with workflow version and
   scheduler estimate.
 - [x] Add fixture data for expired-retention artifact behavior.
 - [x] Add fixture data for no-active-run retained artifact browsing where
@@ -318,7 +327,11 @@ implementation depends on it.
 - If transport or language bindings changed, cross-layer acceptance includes
   the binding path used by the GUI rather than only in-process Rust fixtures.
 
-**Status:** Not started.
+**Status:** In progress. Run-list and selected-run detail acceptance now cover
+the frontend service boundary with Tauri mock IPC. Backend fixture coverage for
+retained and expired I/O artifact browsing is also in place. Remaining
+acceptance work needs an event-to-projection-to-service path and a warm
+projection freshness/catching-up path.
 
 ## Ownership And Lifecycle Note
 

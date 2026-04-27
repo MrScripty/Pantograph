@@ -13,10 +13,6 @@ import type {
   WorkflowRetentionPolicyQueryResponse,
   WorkflowRetentionPolicyUpdateRequest,
   WorkflowRetentionPolicyUpdateResponse,
-  WorkflowRunDetailQueryRequest,
-  WorkflowRunDetailQueryResponse,
-  WorkflowRunListQueryRequest,
-  WorkflowRunListQueryResponse,
   WorkflowSchedulerTimelineQueryRequest,
   WorkflowSchedulerTimelineQueryResponse,
   WorkflowTraceSnapshotRequest,
@@ -52,7 +48,7 @@ import {
   projectWorkflowEventOwnership,
 } from '@pantograph/svelte-graph';
 import { parseWorkflowGraphMutationResponse } from '../../lib/workflowGraphMutationResponse.ts';
-import { WorkflowGraphMutationService } from './WorkflowGraphMutationService.ts';
+import { WorkflowRunProjectionService } from './WorkflowRunProjectionService.ts';
 import { USE_WORKFLOW_MOCKS } from './workflowServiceConfig.ts';
 
 /** Undo/redo state from the backend */
@@ -74,7 +70,7 @@ interface WorkflowSessionQueueListRequest {
   session_id: string;
 }
 
-export class WorkflowService extends WorkflowGraphMutationService {
+export class WorkflowService extends WorkflowRunProjectionService {
   private channel: Channel<WorkflowEvent> | null = null;
   private eventListeners: Set<(event: WorkflowEvent) => void> = new Set();
 
@@ -348,51 +344,6 @@ export class WorkflowService extends WorkflowGraphMutationService {
     }
 
     return invoke<WorkflowSchedulerTimelineQueryResponse>('workflow_scheduler_timeline_query', {
-      request,
-    });
-  }
-
-  async queryRunList(
-    request: WorkflowRunListQueryRequest = {},
-  ): Promise<WorkflowRunListQueryResponse> {
-    if (USE_WORKFLOW_MOCKS) {
-      return {
-        runs: [],
-        facets: [],
-        projection_state: {
-          projection_name: 'run_list',
-          projection_version: 1,
-          last_applied_event_seq: 0,
-          status: 'current',
-          rebuilt_at_ms: null,
-          updated_at_ms: Date.now(),
-        },
-      };
-    }
-
-    return invoke<WorkflowRunListQueryResponse>('workflow_run_list_query', {
-      request,
-    });
-  }
-
-  async queryRunDetail(
-    request: WorkflowRunDetailQueryRequest,
-  ): Promise<WorkflowRunDetailQueryResponse> {
-    if (USE_WORKFLOW_MOCKS) {
-      return {
-        run: null,
-        projection_state: {
-          projection_name: 'run_detail',
-          projection_version: 1,
-          last_applied_event_seq: 0,
-          status: 'current',
-          rebuilt_at_ms: null,
-          updated_at_ms: Date.now(),
-        },
-      };
-    }
-
-    return invoke<WorkflowRunDetailQueryResponse>('workflow_run_detail_query', {
       request,
     });
   }

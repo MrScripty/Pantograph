@@ -10,6 +10,8 @@ on raw invoke payloads.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `WorkflowService.ts` | Main client-side workflow service, including session lifecycle, graph mutation, connection-intent commands, and atomic insert-and-connect. |
+| `WorkflowRunProjectionService.ts` | Focused run-list and selected-run projection service used by `WorkflowService` and projection boundary tests. |
+| `WorkflowService.projections.test.ts` | Tauri mock IPC tests proving run-list facets and selected-run scheduler estimate fields survive the service boundary. |
 | `workflowConnectionActions.ts` | Focused Tauri invoke helpers for connection-intent candidate, commit, and edge-insert commands. |
 | `types.ts` | App-local workflow DTO mirrors used by the service and legacy callers. |
 | `mocks.ts` | Mock workflow data and behaviors used when the app runs in mock mode. |
@@ -57,6 +59,11 @@ them.
 Connection-intent invoke wiring now lives in
 `workflowConnectionActions.ts` so `WorkflowService.ts` stays focused on
 session ownership, mock branching, and legacy app-facing method shapes.
+Hot run projection invoke wiring now lives in `WorkflowRunProjectionService.ts`
+so the run-list and selected-run read paths can be tested without loading the
+graph package runtime. `WorkflowService` inherits that boundary so existing GUI
+callers keep the same method names while projection DTO tests stay focused on
+Tauri request/response contracts.
 
 ## Alternatives Rejected
 - Remove `WorkflowService` and switch every app caller to `TauriWorkflowBackend`
@@ -90,6 +97,9 @@ session ownership, mock branching, and legacy app-facing method shapes.
 - Connection-intent invoke helpers stay in `workflowConnectionActions.ts` so
   the service keeps one legacy-facing wrapper surface while the raw Tauri
   command wiring remains focused and reusable.
+- Run-list and selected-run projection invoke helpers stay in
+  `WorkflowRunProjectionService.ts`; `WorkflowService` must not reimplement
+  those methods separately.
 - Mock-mode payload shapes must remain compatible enough for callers to compile
   and branch safely.
 - Mock-mode diagnostics projections must include the same projection context
@@ -97,6 +107,9 @@ session ownership, mock branching, and legacy app-facing method shapes.
 - Workflow execution must use a backend-owned session. Raw graph execution is
   not exposed because scheduler diagnostics and runtime admission depend on
   session-scoped run lifecycle state.
+- Run-list projection reads must preserve backend-owned facets, projection
+  state, scheduler estimate fields, queue-placement fields, and delayed status
+  without reconstructing them client-side.
 
 ## Revisit Triggers
 - The app graph and all remaining callers migrate to package backends directly.
@@ -187,3 +200,6 @@ const preview = await workflowService.previewNodeInsertOnEdge(
 - `WorkflowRunListQueryResponse.facets` is a backend-owned comparison summary.
   Native and mock paths must preserve the field so workbench pages do not infer
   workflow-version or policy counts from partial client-side pages.
+- `WorkflowRunProjectionService` forwards `workflow_run_list_query` and
+  `workflow_run_detail_query` requests under a `{ request }` envelope and
+  preserves backend DTO fields exactly for projection consumers.
