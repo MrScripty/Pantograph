@@ -1518,7 +1518,7 @@ fn io_artifact_projection_record_from_event(
         model_id: event.model_id.clone(),
         model_version: event.model_version.clone(),
         artifact_id: payload.artifact_id,
-        artifact_role: payload.artifact_role,
+        artifact_role: payload.artifact_role.as_db().to_string(),
         media_type: payload.media_type,
         size_bytes: payload.size_bytes,
         content_hash: payload.content_hash,

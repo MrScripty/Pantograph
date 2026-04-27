@@ -77,6 +77,8 @@ helpers own restart-visible workflow run summaries.
 - I/O artifact drains apply artifact observation and retention state-change
   events after the stored projection cursor and write the latest bounded
   metadata/reference row per `workflow_run_id` and `artifact_id`.
+- I/O artifact roles are persisted from typed event enums to canonical labels;
+  SQLite projection code must not accept ad hoc role strings from payloads.
 - I/O artifact drains persist typed retention-state columns so page/API
   consumers can distinguish retained, metadata-only, external, truncated,
   too-large, expired, and deleted payload states without parsing event payloads.

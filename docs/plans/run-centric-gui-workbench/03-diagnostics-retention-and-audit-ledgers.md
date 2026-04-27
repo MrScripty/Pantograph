@@ -165,7 +165,7 @@ before implementation.
   kinds.
 - [x] Define event builders and validation errors. Direct raw event writes
   should be test/migration-only.
-- [ ] Define I/O artifact metadata contract.
+- [x] Define I/O artifact metadata contract.
 - [ ] Define retention policy/version and artifact retention-state contract.
 - [x] Define Pumas/Library audit event contract.
 - [x] Define centralized validators for artifact payload references,
@@ -204,6 +204,8 @@ payload-reference scheme validation have been implemented. Detailed I/O
 retention contracts, Pumas download/delete path validators, and hot/warm
 projection ownership details are partially pending; scheduler timeline
 projection ownership is implemented as the first hot projection. The
+I/O artifact payload now uses a typed artifact-role enum so future node
+input/output emitters share the same workflow/node role contract. The
 Library/Pumas audit payload now uses typed operation and cache-status enums so
 future search/download/delete/access producers can extend coverage without
 opening the ledger to arbitrary action strings.
@@ -453,6 +455,9 @@ implicitly on page load.
 - 2026-04-27: Tightened the Library/Pumas audit event contract by replacing
   free-form `operation` and `cache_status` payload strings with typed enums
   while preserving the canonical serialized labels used by projections.
+- 2026-04-27: Tightened the I/O artifact metadata contract by replacing
+  free-form artifact role payload strings with typed `IoArtifactRole` values
+  that project to canonical role labels for query filters.
 
 ### Deviations
 
@@ -499,6 +504,12 @@ implicitly on page load.
   workflow_library_usage_query_drains_and_reads_projection --lib` passed after
   updating workflow-service diagnostics tests to use typed Library audit
   operation/cache-status values.
+- 2026-04-27: `cargo test -p pantograph-diagnostics-ledger
+  io_artifact_projection_drains_artifact_events_incrementally --lib` passed
+  after tightening I/O artifact role typing.
+- 2026-04-27: `cargo test -p pantograph-workflow-service
+  workflow_io_artifact_query_drains_and_reads_projection --lib` passed after
+  updating workflow-service diagnostics tests to use typed I/O artifact roles.
 
 ### Traceability Links
 

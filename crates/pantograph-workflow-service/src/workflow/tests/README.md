@@ -67,6 +67,8 @@ Use `workflow/tests/` for behavior-specific child modules under the parent
 - I/O artifact query tests must include no-active-run browsing coverage so
   global retained-artifact reads remain explicitly supported for the workbench
   gallery.
+- I/O artifact fixture events must use diagnostics-ledger typed artifact roles
+  and assert the projected canonical labels through public query responses.
 - Library usage query tests must cover warm projection catching-up status so
   service callers preserve backend freshness state when bounded projection
   batches leave later Library events unapplied.

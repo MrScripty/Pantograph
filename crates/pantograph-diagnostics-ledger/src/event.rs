@@ -529,9 +529,29 @@ impl RunSnapshotNodeVersionPayload {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub enum IoArtifactRole {
+    NodeInput,
+    NodeOutput,
+    WorkflowInput,
+    WorkflowOutput,
+}
+
+impl IoArtifactRole {
+    pub(crate) fn as_db(&self) -> &'static str {
+        match self {
+            Self::NodeInput => "node_input",
+            Self::NodeOutput => "node_output",
+            Self::WorkflowInput => "workflow_input",
+            Self::WorkflowOutput => "workflow_output",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub struct IoArtifactObservedPayload {
     pub artifact_id: String,
-    pub artifact_role: String,
+    pub artifact_role: IoArtifactRole,
     pub media_type: Option<String>,
     pub size_bytes: Option<u64>,
     pub content_hash: Option<String>,
@@ -544,7 +564,6 @@ pub struct IoArtifactObservedPayload {
 impl IoArtifactObservedPayload {
     fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
         validate_required_text("artifact_id", &self.artifact_id, MAX_ID_LEN)?;
-        validate_required_text("artifact_role", &self.artifact_role, MAX_ID_LEN)?;
         validate_optional_text("media_type", self.media_type.as_deref(), MAX_ID_LEN)?;
         validate_optional_text("content_hash", self.content_hash.as_deref(), MAX_ID_LEN)?;
         validate_optional_text(

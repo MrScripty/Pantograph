@@ -102,6 +102,9 @@ runtime readiness, session-runtime workflows, and the root facade test module.
   and, when attribution storage is configured, records the immutable workflow
   version/run snapshot and emits a `run.snapshot_accepted` event with the node
   behavior-version set before handing the run to scheduler admission.
+- Session run I/O artifact events use diagnostics-ledger typed artifact roles
+  for workflow inputs and outputs. Workflow-service should pass role enums to
+  the ledger and use string labels only for deterministic artifact ids.
 - Session run Library audit events use diagnostics-ledger typed operation and
   cache-status enums. Workflow-service must not author free-form Library action
   labels when emitting run-linked model usage facts.

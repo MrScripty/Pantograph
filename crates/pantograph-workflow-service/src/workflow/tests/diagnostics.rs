@@ -1,7 +1,7 @@
 use pantograph_diagnostics_ledger::{
     DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
     DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
-    ExecutionGuaranteeLevel, IoArtifactObservedPayload, IoArtifactRetentionState,
+    ExecutionGuaranteeLevel, IoArtifactObservedPayload, IoArtifactRetentionState, IoArtifactRole,
     LibraryAssetAccessedPayload, LibraryAssetCacheStatus, LibraryAssetOperation, LicenseSnapshot,
     ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement, NodeExecutionProjectionStatus,
     NodeExecutionStatusPayload, OutputModality, ProjectionStatus,
@@ -1007,13 +1007,23 @@ fn sample_io_artifact_event(
         payload_ref: Some(format!("artifact://{artifact_id}")),
         payload: DiagnosticEventPayload::IoArtifactObserved(IoArtifactObservedPayload {
             artifact_id: artifact_id.to_string(),
-            artifact_role: artifact_role.to_string(),
+            artifact_role: io_artifact_role(artifact_role),
             media_type: Some("text/plain".to_string()),
             size_bytes: Some(42),
             content_hash: Some("blake3:test".to_string()),
             retention_state: Some(IoArtifactRetentionState::Retained),
             retention_reason: None,
         }),
+    }
+}
+
+fn io_artifact_role(artifact_role: &str) -> IoArtifactRole {
+    match artifact_role {
+        "node_input" => IoArtifactRole::NodeInput,
+        "node_output" => IoArtifactRole::NodeOutput,
+        "workflow_input" => IoArtifactRole::WorkflowInput,
+        "workflow_output" => IoArtifactRole::WorkflowOutput,
+        _ => panic!("unsupported test artifact role: {artifact_role}"),
     }
 }
 

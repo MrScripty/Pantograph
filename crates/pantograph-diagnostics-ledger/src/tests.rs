@@ -8,9 +8,9 @@ use crate::{
     DiagnosticEventPrivacyClass, DiagnosticEventRetentionClass, DiagnosticEventSourceComponent,
     DiagnosticsLedgerError, DiagnosticsLedgerRepository, DiagnosticsQuery, ExecutionGuaranteeLevel,
     IoArtifactObservedPayload, IoArtifactProjectionQuery, IoArtifactRetentionState,
-    IoArtifactRetentionSummaryQuery, LibraryAssetAccessedPayload, LibraryAssetCacheStatus,
-    LibraryAssetOperation, LibraryUsageProjectionQuery, LicenseSnapshot, ModelIdentity,
-    ModelLicenseUsageEvent, ModelOutputMeasurement, NodeExecutionProjectionStatus,
+    IoArtifactRetentionSummaryQuery, IoArtifactRole, LibraryAssetAccessedPayload,
+    LibraryAssetCacheStatus, LibraryAssetOperation, LibraryUsageProjectionQuery, LicenseSnapshot,
+    ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement, NodeExecutionProjectionStatus,
     NodeExecutionStatusPayload, NodeStatusProjectionQuery, OutputMeasurementUnavailableReason,
     OutputModality, ProjectionStateUpdate, ProjectionStatus, PruneTimingObservationsCommand,
     PruneUsageEventsCommand, RetentionArtifactStateChangedPayload, RetentionClass,
@@ -2424,13 +2424,23 @@ fn sample_io_artifact_event(
         payload_ref: Some(format!("artifact://{artifact_id}")),
         payload: DiagnosticEventPayload::IoArtifactObserved(IoArtifactObservedPayload {
             artifact_id: artifact_id.to_string(),
-            artifact_role: artifact_role.to_string(),
+            artifact_role: io_artifact_role(artifact_role),
             media_type: Some("image/png".to_string()),
             size_bytes: Some(1_024),
             content_hash: Some("blake3:artifact-hash".to_string()),
             retention_state: Some(IoArtifactRetentionState::Retained),
             retention_reason: None,
         }),
+    }
+}
+
+fn io_artifact_role(artifact_role: &str) -> IoArtifactRole {
+    match artifact_role {
+        "node_input" => IoArtifactRole::NodeInput,
+        "node_output" => IoArtifactRole::NodeOutput,
+        "workflow_input" => IoArtifactRole::WorkflowInput,
+        "workflow_output" => IoArtifactRole::WorkflowOutput,
+        _ => panic!("unsupported test artifact role: {artifact_role}"),
     }
 }
 

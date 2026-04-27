@@ -42,6 +42,8 @@ state, the GUI loses previous workflow timing and runtime history after restart.
 - Retention/pruning must be caller-driven and auditable.
 - Diagnostic events must use allowlisted typed payloads; raw arbitrary JSON is
   not accepted at the repository boundary.
+- I/O artifact events must use typed artifact-role enums; callers must not
+  submit arbitrary role labels for workflow or node artifacts.
 - Library audit events must use typed operation and cache-status enums; callers
   must not submit arbitrary operation labels through payload strings.
 - Materialized projections are rebuildable, but normal read paths advance from
@@ -115,6 +117,9 @@ semantics.
 - `io_artifact_projection.retention_state` is a typed retention summary.
   Consumers must not infer expired, deleted, external, truncated, or too-large
   payload states from `payload_ref` alone.
+- `io_artifact_projection.artifact_role` stores canonical labels derived from
+  `IoArtifactRole`, keeping workflow/node artifact roles typed at write time
+  while preserving simple string filters for query contracts.
 - I/O retention completeness queries group the materialized artifact projection
   by typed retention state. They must not scan raw ledger events during normal
   page reads.

@@ -3,10 +3,11 @@ use std::time::Duration;
 use pantograph_diagnostics_ledger::{
     DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
     DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
-    IoArtifactObservedPayload, IoArtifactRetentionState, LibraryAssetAccessedPayload,
-    LibraryAssetOperation, RunSnapshotAcceptedPayload, RunSnapshotNodeVersionPayload,
-    RunStartedPayload, RunTerminalPayload, RunTerminalStatus, SchedulerEstimateProducedPayload,
-    SchedulerQueuePlacementPayload, SchedulerRunAdmittedPayload, SchedulerRunDelayedPayload,
+    IoArtifactObservedPayload, IoArtifactRetentionState, IoArtifactRole,
+    LibraryAssetAccessedPayload, LibraryAssetOperation, RunSnapshotAcceptedPayload,
+    RunSnapshotNodeVersionPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
+    SchedulerEstimateProducedPayload, SchedulerQueuePlacementPayload, SchedulerRunAdmittedPayload,
+    SchedulerRunDelayedPayload,
 };
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, WorkflowId, WorkflowRunAttributionResolveRequest,
@@ -905,14 +906,18 @@ impl WorkflowService {
             WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
         })?;
 
-        for (role, binding) in inputs
+        for (role, role_label, binding) in inputs
             .iter()
-            .map(|binding| ("workflow_input", binding))
-            .chain(outputs.iter().map(|binding| ("workflow_output", binding)))
+            .map(|binding| (IoArtifactRole::WorkflowInput, "workflow_input", binding))
+            .chain(
+                outputs
+                    .iter()
+                    .map(|binding| (IoArtifactRole::WorkflowOutput, "workflow_output", binding)),
+            )
         {
             let value_json = serde_json::to_vec(&binding.value).map_err(|error| {
                 WorkflowServiceError::CapabilityViolation(format!(
-                    "failed to encode workflow {role} metadata: {error}"
+                    "failed to encode workflow {role_label} metadata: {error}"
                 ))
             })?;
             DiagnosticsLedgerRepository::append_diagnostic_event(
@@ -949,11 +954,11 @@ impl WorkflowService {
                         IoArtifactObservedPayload {
                             artifact_id: workflow_io_artifact_id(
                                 workflow_run_id.as_str(),
-                                role,
+                                role_label,
                                 &binding.node_id,
                                 &binding.port_id,
                             ),
-                            artifact_role: role.to_string(),
+                            artifact_role: role,
                             media_type: Some("application/json".to_string()),
                             size_bytes: Some(value_json.len() as u64),
                             content_hash: Some(format!("blake3:{}", blake3::hash(&value_json))),
