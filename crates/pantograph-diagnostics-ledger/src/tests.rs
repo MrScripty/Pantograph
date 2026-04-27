@@ -1436,6 +1436,7 @@ fn library_usage_projection_drains_asset_events_incrementally() {
     let records = ledger
         .query_library_usage_projection(LibraryUsageProjectionQuery {
             asset_id: Some("asset_alpha".to_string()),
+            workflow_run_id: None,
             workflow_id: None,
             workflow_version_id: None,
             after_event_seq: None,
@@ -1459,6 +1460,7 @@ fn library_usage_projection_drains_asset_events_incrementally() {
     let by_workflow = ledger
         .query_library_usage_projection(LibraryUsageProjectionQuery {
             asset_id: None,
+            workflow_run_id: None,
             workflow_id: Some(WorkflowId::try_from("workflow_alpha".to_string()).unwrap()),
             workflow_version_id: None,
             after_event_seq: Some(first_event.event_seq),
@@ -1468,10 +1470,56 @@ fn library_usage_projection_drains_asset_events_incrementally() {
     assert_eq!(by_workflow.len(), 1);
     assert_eq!(by_workflow[0].asset_id, "asset_alpha");
 
+    let by_run = ledger
+        .query_library_usage_projection(LibraryUsageProjectionQuery {
+            asset_id: None,
+            workflow_run_id: Some(
+                WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+            ),
+            workflow_id: None,
+            workflow_version_id: None,
+            after_event_seq: None,
+            limit: 10,
+        })
+        .expect("library usage run filter loads");
+    assert_eq!(by_run.len(), 1);
+    assert_eq!(by_run[0].asset_id, "asset_alpha");
+
     let no_new_state = ledger
         .drain_library_usage_projection(10)
         .expect("library usage projection drains idempotently");
     assert_eq!(no_new_state.last_applied_event_seq, third_event.event_seq);
+
+    let mut other_workflow_event =
+        sample_library_asset_access_event("asset_alpha", Some("workflow_run_beta"), 512);
+    other_workflow_event.workflow_id =
+        Some(WorkflowId::try_from("workflow_beta".to_string()).unwrap());
+    other_workflow_event.workflow_version_id =
+        Some(WorkflowVersionId::try_from("wfver_beta".to_string()).unwrap());
+    let fourth_event = ledger
+        .append_diagnostic_event(other_workflow_event)
+        .expect("other workflow library asset access appends");
+    let later_state = ledger
+        .drain_library_usage_projection(10)
+        .expect("library usage projection drains later workflow event");
+    assert_eq!(later_state.last_applied_event_seq, fourth_event.event_seq);
+
+    let mismatched_run_and_workflow = ledger
+        .query_library_usage_projection(LibraryUsageProjectionQuery {
+            asset_id: Some("asset_alpha".to_string()),
+            workflow_run_id: Some(
+                WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+            ),
+            workflow_id: Some(WorkflowId::try_from("workflow_beta".to_string()).unwrap()),
+            workflow_version_id: None,
+            after_event_seq: None,
+            limit: 10,
+        })
+        .expect("library usage combined run and workflow filter loads");
+    assert!(
+        mismatched_run_and_workflow.is_empty(),
+        "combined Library usage filters must match one run-link row"
+    );
 }
 
 #[test]
@@ -1501,6 +1549,7 @@ fn library_usage_projection_reports_rebuilding_while_batch_is_incomplete() {
     let partial_records = ledger
         .query_library_usage_projection(LibraryUsageProjectionQuery {
             asset_id: Some("asset_alpha".to_string()),
+            workflow_run_id: None,
             workflow_id: None,
             workflow_version_id: None,
             after_event_seq: None,

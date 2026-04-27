@@ -87,6 +87,9 @@ helpers own restart-visible workflow run summaries.
 - Library usage drains apply asset-access events incrementally and report
   `rebuilding` while a limited batch has not caught up to all pending
   `library.asset_accessed` events.
+- Library usage reads filter active-run assets through
+  `library_usage_run_projection.workflow_run_id`; they must not replay raw
+  event rows to answer selected-run Library queries.
 
 ## Revisit Triggers
 - Diagnostics storage moves away from local SQLite.

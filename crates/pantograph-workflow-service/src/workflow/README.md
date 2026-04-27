@@ -78,6 +78,9 @@ runtime readiness, session-runtime workflows, and the root facade test module.
 - Workflow diagnostics projection tests cover Library usage warm projection
   catching-up state so service callers preserve backend projection freshness
   instead of inferring it from raw ledger rows.
+- Workflow Library usage queries accept `workflow_run_id` filters for
+  active-run Library views and delegate that filtering to diagnostics-ledger
+  projections.
 - Shared workflow facade test fixtures live under `workflow/tests/fixtures/`
   and are re-exported by `workflow/tests/fixtures.rs`, keeping
   `workflow/tests.rs` as the module index for behavior slices.

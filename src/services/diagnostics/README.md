@@ -70,6 +70,9 @@ projection without inventing fallback run identities or workflow display names.
 - Run-list responses carry backend-owned `facets` derived from materialized
   projections. Consumers should use those counts for mixed-version and policy
   summaries instead of rebuilding them from raw ledger events or sampled pages.
+- Library usage query DTOs include optional `workflow_run_id` filters so
+  frontend consumers can request selected-run asset usage without reconstructing
+  active-run Library state from raw ledger events.
 
 ## Revisit Triggers
 - Diagnostics needs durable persistence or export/replay support.

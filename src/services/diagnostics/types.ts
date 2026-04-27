@@ -535,6 +535,7 @@ export interface LibraryUsageProjectionRecord {
 
 export interface WorkflowLibraryUsageQueryRequest {
   asset_id?: string | null;
+  workflow_run_id?: string | null;
   workflow_id?: string | null;
   workflow_version_id?: string | null;
   after_event_seq?: number | null;

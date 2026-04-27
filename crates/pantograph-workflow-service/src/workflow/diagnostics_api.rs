@@ -213,6 +213,8 @@ pub struct WorkflowLibraryUsageQueryRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub asset_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_run_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workflow_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workflow_version_id: Option<String>,
@@ -670,6 +672,7 @@ impl WorkflowLibraryUsageQueryRequest {
     fn into_library_usage_query(self) -> Result<LibraryUsageProjectionQuery, WorkflowServiceError> {
         let query = LibraryUsageProjectionQuery {
             asset_id: self.asset_id,
+            workflow_run_id: parse_optional_id("workflow_run_id", self.workflow_run_id)?,
             workflow_id: parse_optional_id("workflow_id", self.workflow_id)?,
             workflow_version_id: parse_optional_id(
                 "workflow_version_id",

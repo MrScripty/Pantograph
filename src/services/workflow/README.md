@@ -113,6 +113,8 @@ importing the full graph event runtime required by `WorkflowService.ts`.
 - Scheduler timeline, run-list, selected-run, and Library usage projection
   invoke helpers stay in `WorkflowProjectionService.ts`; `WorkflowService`
   must not reimplement those methods separately.
+- Library usage request coverage includes active-run `workflow_run_id`
+  filtering so frontend services preserve the backend projection contract.
 - Mock-mode payload shapes must remain compatible enough for callers to compile
   and branch safely.
 - Mock-mode diagnostics projections must include the same projection context

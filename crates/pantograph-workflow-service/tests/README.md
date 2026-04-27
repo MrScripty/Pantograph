@@ -49,6 +49,9 @@ by external adapters.
   the GUI depends on those counts for retention-completeness display.
 - Run-list contract snapshots must include backend-owned facet records when
   those records are observable through serialized service contracts.
+- Library usage query contract snapshots must include active-run
+  `workflow_run_id` filters because the GUI highlights assets used by the
+  selected run through the public diagnostics API.
 
 ## Revisit Triggers
 - Contract snapshots become large enough to justify fixture files.

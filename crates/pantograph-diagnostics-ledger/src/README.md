@@ -125,6 +125,9 @@ semantics.
 - I/O retention completeness queries group the materialized artifact projection
   by typed retention state. They must not scan raw ledger events during normal
   page reads.
+- Library usage projection queries may filter by `workflow_run_id` through the
+  materialized run-link table so active-run Library pages do not scan raw
+  `library.asset_accessed` events.
 - Schema migrations are forward-only and covered by repository tests.
 - Query results must not require frontend-side identity repair or workflow-name
   side channels.

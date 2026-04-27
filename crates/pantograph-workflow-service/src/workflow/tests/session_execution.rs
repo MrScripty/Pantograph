@@ -559,6 +559,7 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
     let library_usage = service
         .workflow_library_usage_query(WorkflowLibraryUsageQueryRequest {
             asset_id: Some("pumas://models/model-a".to_string()),
+            workflow_run_id: Some(response.workflow_run_id.clone()),
             workflow_id: None,
             workflow_version_id: None,
             after_event_seq: None,

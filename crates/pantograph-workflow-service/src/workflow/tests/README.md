@@ -72,6 +72,9 @@ Use `workflow/tests/` for behavior-specific child modules under the parent
 - Library usage query tests must cover warm projection catching-up status so
   service callers preserve backend freshness state when bounded projection
   batches leave later Library events unapplied.
+- Library usage query tests must cover active-run filtering by
+  `workflow_run_id` so the workbench can ask for selected-run assets without
+  scanning raw ledger events.
 - Diagnostics and session-execution tests that emit Library audit facts must
   use diagnostics-ledger typed operation/cache-status values, not arbitrary
   payload strings.

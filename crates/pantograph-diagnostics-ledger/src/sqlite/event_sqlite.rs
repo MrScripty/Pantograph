@@ -1038,23 +1038,21 @@ pub(super) fn query_library_usage_projection(
                 last_bucket_id, last_event_seq, last_updated_at_ms
          FROM library_usage_projection
          WHERE (?1 IS NULL OR asset_id = ?1)
-           AND (?2 IS NULL OR EXISTS (
+           AND ((?2 IS NULL AND ?3 IS NULL AND ?4 IS NULL) OR EXISTS (
                 SELECT 1 FROM library_usage_run_projection run_link
                 WHERE run_link.asset_id = library_usage_projection.asset_id
-                  AND run_link.workflow_id = ?2
+                  AND (?2 IS NULL OR run_link.workflow_run_id = ?2)
+                  AND (?3 IS NULL OR run_link.workflow_id = ?3)
+                  AND (?4 IS NULL OR run_link.workflow_version_id = ?4)
            ))
-           AND (?3 IS NULL OR EXISTS (
-                SELECT 1 FROM library_usage_run_projection run_link
-                WHERE run_link.asset_id = library_usage_projection.asset_id
-                  AND run_link.workflow_version_id = ?3
-           ))
-           AND last_event_seq > ?4
+           AND last_event_seq > ?5
          ORDER BY last_accessed_at_ms DESC, last_event_seq DESC
-         LIMIT ?5",
+         LIMIT ?6",
     )?;
     let rows = stmt.query_map(
         params![
             query.asset_id.as_deref(),
+            query.workflow_run_id.as_ref().map(|id| id.as_str()),
             query.workflow_id.as_ref().map(|id| id.as_str()),
             query.workflow_version_id.as_ref().map(|id| id.as_str()),
             query.after_event_seq.unwrap_or(0),

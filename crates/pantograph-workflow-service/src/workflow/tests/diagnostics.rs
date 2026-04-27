@@ -636,6 +636,7 @@ fn workflow_library_usage_query_drains_and_reads_projection() {
     let response = service
         .workflow_library_usage_query(WorkflowLibraryUsageQueryRequest {
             asset_id: Some("model-a".to_string()),
+            workflow_run_id: None,
             workflow_id: Some("workflow-a".to_string()),
             workflow_version_id: None,
             after_event_seq: None,
@@ -650,6 +651,20 @@ fn workflow_library_usage_query_drains_and_reads_projection() {
     assert_eq!(response.assets[0].run_access_count, 1);
     assert_eq!(response.assets[0].total_network_bytes, 384);
     assert_eq!(response.projection_state.last_applied_event_seq, 2);
+
+    let active_run_assets = service
+        .workflow_library_usage_query(WorkflowLibraryUsageQueryRequest {
+            asset_id: None,
+            workflow_run_id: Some("run-a".to_string()),
+            workflow_id: None,
+            workflow_version_id: None,
+            after_event_seq: None,
+            limit: Some(10),
+            projection_batch_size: Some(10),
+        })
+        .expect("library usage active-run query");
+    assert_eq!(active_run_assets.assets.len(), 1);
+    assert_eq!(active_run_assets.assets[0].asset_id, "model-a");
 }
 
 #[test]
@@ -674,6 +689,7 @@ fn workflow_library_usage_query_preserves_catching_up_projection_state() {
     let catching_up = service
         .workflow_library_usage_query(WorkflowLibraryUsageQueryRequest {
             asset_id: Some("model-a".to_string()),
+            workflow_run_id: None,
             workflow_id: Some("workflow-a".to_string()),
             workflow_version_id: None,
             after_event_seq: None,
@@ -693,6 +709,7 @@ fn workflow_library_usage_query_preserves_catching_up_projection_state() {
     let current = service
         .workflow_library_usage_query(WorkflowLibraryUsageQueryRequest {
             asset_id: Some("model-a".to_string()),
+            workflow_run_id: None,
             workflow_id: Some("workflow-a".to_string()),
             workflow_version_id: None,
             after_event_seq: None,
@@ -712,6 +729,7 @@ fn workflow_library_usage_query_validates_bounds() {
 
     let invalid_id = service.workflow_library_usage_query(WorkflowLibraryUsageQueryRequest {
         asset_id: None,
+        workflow_run_id: None,
         workflow_id: Some("bad\nid".to_string()),
         workflow_version_id: None,
         after_event_seq: None,
@@ -725,6 +743,7 @@ fn workflow_library_usage_query_validates_bounds() {
 
     let invalid_asset_id = service.workflow_library_usage_query(WorkflowLibraryUsageQueryRequest {
         asset_id: Some("https://example.test/model".to_string()),
+        workflow_run_id: None,
         workflow_id: None,
         workflow_version_id: None,
         after_event_seq: None,
@@ -738,6 +757,7 @@ fn workflow_library_usage_query_validates_bounds() {
 
     let oversized_limit = service.workflow_library_usage_query(WorkflowLibraryUsageQueryRequest {
         asset_id: None,
+        workflow_run_id: None,
         workflow_id: None,
         workflow_version_id: None,
         after_event_seq: None,

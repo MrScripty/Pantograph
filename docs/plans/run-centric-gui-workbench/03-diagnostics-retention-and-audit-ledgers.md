@@ -371,6 +371,9 @@ Scheduler, and Diagnostics pages.
 - [ ] Emit typed cache hit/miss and network byte observations where available.
 - [x] Add Library usage projections: used by active run, used by N runs, last
   accessed, total access count, linked workflow/node versions.
+  - Library usage projection queries now accept `workflow_run_id`, allowing
+    active-run asset reads through the materialized run-link table instead of
+    raw event replay.
 - [x] Update Library usage counts through warm projection drains with recorded
   projection freshness.
   - Library usage drains now report `rebuilding` while a bounded batch has not
@@ -460,6 +463,8 @@ implicitly on page load.
   that project to canonical role labels for query filters.
 - 2026-04-27: Added typed actor scope to `retention.policy_changed` payloads
   and marked GUI retention policy updates as `gui_admin` actions.
+- 2026-04-27: Added `workflow_run_id` filtering to Library usage projection
+  queries so selected-run Library views can ask for active-run assets directly.
 
 ### Deviations
 
@@ -515,6 +520,9 @@ implicitly on page load.
 - 2026-04-27: `cargo test -p pantograph-workflow-service
   workflow_retention_policy_update_changes_policy_and_records_event --lib`
   passed after adding typed retention actor-scope assertions.
+- 2026-04-27: `cargo test -p pantograph-workflow-service
+  workflow_library_usage_query_drains_and_reads_projection --lib` passed after
+  adding active-run Library usage query filtering.
 
 ### Traceability Links
 

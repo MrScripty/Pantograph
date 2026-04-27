@@ -276,6 +276,7 @@ test('queryLibraryUsage preserves warm projection catching-up state', async () =
     const service = new WorkflowProjectionService();
     const result = await service.queryLibraryUsage({
       asset_id: 'model-a',
+      workflow_run_id: 'run-a',
       projection_batch_size: 1,
       limit: 10,
     });
@@ -286,6 +287,7 @@ test('queryLibraryUsage preserves warm projection catching-up state', async () =
     assert.deepEqual(calls[0].args, {
       request: {
         asset_id: 'model-a',
+        workflow_run_id: 'run-a',
         projection_batch_size: 1,
         limit: 10,
       },

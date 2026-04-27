@@ -1090,6 +1090,7 @@ fn workflow_projection_rebuild_contract_snapshot() {
 fn workflow_library_usage_query_contract_snapshot() {
     let request = WorkflowLibraryUsageQueryRequest {
         asset_id: Some("model-1".to_string()),
+        workflow_run_id: Some("run-1".to_string()),
         workflow_id: Some("wf-1".to_string()),
         workflow_version_id: Some("version-1".to_string()),
         after_event_seq: Some(30),
@@ -1128,6 +1129,7 @@ fn workflow_library_usage_query_contract_snapshot() {
     let request_value = serde_json::to_value(request).expect("serialize library usage request");
     let expected_request = serde_json::json!({
         "asset_id": "model-1",
+        "workflow_run_id": "run-1",
         "workflow_id": "wf-1",
         "workflow_version_id": "version-1",
         "after_event_seq": 30,

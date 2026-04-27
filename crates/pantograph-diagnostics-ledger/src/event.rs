@@ -1328,6 +1328,7 @@ pub struct NodeStatusProjectionRecord {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LibraryUsageProjectionQuery {
     pub asset_id: Option<String>,
+    pub workflow_run_id: Option<WorkflowRunId>,
     pub workflow_id: Option<WorkflowId>,
     pub workflow_version_id: Option<WorkflowVersionId>,
     pub after_event_seq: Option<i64>,
@@ -1338,6 +1339,7 @@ impl Default for LibraryUsageProjectionQuery {
     fn default() -> Self {
         Self {
             asset_id: None,
+            workflow_run_id: None,
             workflow_id: None,
             workflow_version_id: None,
             after_event_seq: None,
