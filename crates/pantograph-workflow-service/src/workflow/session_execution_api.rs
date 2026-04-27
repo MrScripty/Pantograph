@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use pantograph_runtime_attribution::{WorkflowRunId, WorkflowRunSnapshotRequest};
 
+use crate::graph::WorkflowExecutionSessionKind;
 use crate::scheduler::WORKFLOW_SESSION_QUEUE_POLL_MS;
 use crate::technical_fit::WorkflowTechnicalFitOverride;
 
@@ -16,6 +17,10 @@ use super::{
     WorkflowExecutionSessionUnloadReason, WorkflowHost, WorkflowRunRequest, WorkflowRunResponse,
     WorkflowSchedulerDecisionReason, WorkflowService, WorkflowServiceError,
 };
+
+const WORKFLOW_SESSION_SCHEDULER_POLICY: &str = "priority_then_fifo";
+const WORKFLOW_SESSION_RETENTION_KEEP_ALIVE: &str = "keep_alive";
+const WORKFLOW_SESSION_RETENTION_EPHEMERAL: &str = "ephemeral";
 
 impl WorkflowService {
     pub async fn create_workflow_execution_session<H: WorkflowHost>(
@@ -221,6 +226,14 @@ impl WorkflowService {
             workflow_semantic_version: version.semantic_version,
             workflow_execution_fingerprint: version.execution_fingerprint,
             workflow_execution_session_id: session.session_id.clone(),
+            workflow_execution_session_kind: workflow_execution_session_kind_label(
+                &session.session_kind,
+            )
+            .to_string(),
+            usage_profile: session.usage_profile.clone(),
+            keep_alive: session.keep_alive,
+            retention_policy: workflow_execution_session_retention_policy(session).to_string(),
+            scheduler_policy: WORKFLOW_SESSION_SCHEDULER_POLICY.to_string(),
             priority: request.priority.unwrap_or(0),
             timeout_ms: request.timeout_ms,
             inputs_json: serde_json::to_string(&request.inputs).map_err(|error| {
@@ -253,5 +266,22 @@ impl WorkflowService {
             .create_workflow_run_snapshot(snapshot)
             .map_err(WorkflowServiceError::from)?;
         Ok(())
+    }
+}
+
+fn workflow_execution_session_kind_label(kind: &WorkflowExecutionSessionKind) -> &'static str {
+    match kind {
+        WorkflowExecutionSessionKind::Edit => "edit",
+        WorkflowExecutionSessionKind::Workflow => "workflow",
+    }
+}
+
+fn workflow_execution_session_retention_policy(
+    session: &WorkflowExecutionSessionSummary,
+) -> &'static str {
+    if session.keep_alive {
+        WORKFLOW_SESSION_RETENTION_KEEP_ALIVE
+    } else {
+        WORKFLOW_SESSION_RETENTION_EPHEMERAL
     }
 }

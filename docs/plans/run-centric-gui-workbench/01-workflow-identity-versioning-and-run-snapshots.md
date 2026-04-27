@@ -317,12 +317,15 @@ records for the same execution fingerprint.
   session run request contracts, validate it at the workflow-service boundary,
   and use it for queued run snapshot version resolution instead of a temporary
   default.
+- 2026-04-27: Expanded workflow-run snapshots with session kind, usage
+  profile, keep-alive state, retention policy, and scheduler policy facts
+  currently owned by the session scheduler.
 
 ### Deviations
 
 - The first run-snapshot storage contract captures the queue/session fields
-  available today. Full model/runtime, graph-settings, retention-policy, and
-  bucket fields still need to be filled during queue cutover.
+  available today. Full model/runtime, graph-settings, client, and bucket
+  fields still need to be filled during queue cutover.
 - Workflow-version registry ownership is implemented in the attribution store
   without a standalone ADR. The choice is documented here and in crate READMEs
   because the registry must share the future run snapshot transaction boundary.
@@ -366,6 +369,10 @@ records for the same execution fingerprint.
 - 2026-04-27: `cargo check -p pantograph-frontend-http-adapter -p
   pantograph_rustler -p pantograph-uniffi -p pantograph-embedded-runtime`
   passed after updating adapter and embedded runtime request construction.
+- 2026-04-27: `cargo test -p pantograph-runtime-attribution` passed after
+  adding scheduler/session context fields to workflow-run snapshots.
+- 2026-04-27: `cargo test -p pantograph-workflow-service` passed after
+  projecting scheduler/session context into queued run snapshots.
 
 ### Traceability Links
 

@@ -245,6 +245,11 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
     assert_eq!(snapshot.workflow_run_id.as_str(), response.workflow_run_id);
     assert_eq!(snapshot.workflow_id.as_str(), "wf-snapshot");
     assert_eq!(snapshot.workflow_execution_session_id, created.session_id);
+    assert_eq!(snapshot.workflow_execution_session_kind, "workflow");
+    assert_eq!(snapshot.usage_profile, None);
+    assert!(!snapshot.keep_alive);
+    assert_eq!(snapshot.retention_policy, "ephemeral");
+    assert_eq!(snapshot.scheduler_policy, "priority_then_fifo");
     assert_eq!(snapshot.workflow_semantic_version, "1.2.3");
     assert_eq!(snapshot.priority, 7);
     assert_eq!(snapshot.timeout_ms, Some(5000));

@@ -564,6 +564,26 @@ impl AttributionRepository for SqliteAttributionStore {
             request.workflow_execution_session_id,
             MAX_WORKFLOW_EXECUTION_SESSION_ID_LEN,
         )?;
+        let workflow_execution_session_kind = validate_required_boundary_text(
+            "workflow_execution_session_kind",
+            request.workflow_execution_session_kind,
+            MAX_NAME_LEN,
+        )?;
+        let usage_profile = request
+            .usage_profile
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+        validate_optional_text("usage_profile", usage_profile.as_deref(), MAX_NAME_LEN)?;
+        let retention_policy = validate_required_boundary_text(
+            "retention_policy",
+            request.retention_policy,
+            MAX_NAME_LEN,
+        )?;
+        let scheduler_policy = validate_required_boundary_text(
+            "scheduler_policy",
+            request.scheduler_policy,
+            MAX_NAME_LEN,
+        )?;
         let inputs_json = validate_json_text("inputs_json", request.inputs_json)?;
         let output_targets_json =
             validate_optional_json_text("output_targets_json", request.output_targets_json)?;
@@ -597,9 +617,11 @@ impl AttributionRepository for SqliteAttributionStore {
             "INSERT INTO workflow_run_snapshots
                 (workflow_run_snapshot_id, workflow_run_id, workflow_id, workflow_version_id,
                  workflow_semantic_version, workflow_execution_fingerprint,
-                 workflow_execution_session_id, priority, timeout_ms, inputs_json,
-                 output_targets_json, override_selection_json, created_at_ms)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                 workflow_execution_session_id, workflow_execution_session_kind,
+                 usage_profile, keep_alive, retention_policy, scheduler_policy,
+                 priority, timeout_ms, inputs_json, output_targets_json,
+                 override_selection_json, created_at_ms)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
             params![
                 workflow_run_snapshot_id.as_str(),
                 request.workflow_run_id.as_str(),
@@ -608,6 +630,11 @@ impl AttributionRepository for SqliteAttributionStore {
                 workflow_semantic_version.as_str(),
                 workflow_execution_fingerprint.as_str(),
                 workflow_execution_session_id.as_str(),
+                workflow_execution_session_kind.as_str(),
+                usage_profile.as_deref(),
+                request.keep_alive,
+                retention_policy.as_str(),
+                scheduler_policy.as_str(),
                 request.priority,
                 timeout_ms,
                 inputs_json.as_str(),
@@ -626,6 +653,11 @@ impl AttributionRepository for SqliteAttributionStore {
             workflow_semantic_version,
             workflow_execution_fingerprint,
             workflow_execution_session_id,
+            workflow_execution_session_kind,
+            usage_profile,
+            keep_alive: request.keep_alive,
+            retention_policy,
+            scheduler_policy,
             priority: request.priority,
             timeout_ms: request.timeout_ms,
             inputs_json,
@@ -715,8 +747,10 @@ fn workflow_run_snapshot_by_run_id(
     let mut stmt = conn.prepare(
         "SELECT workflow_run_snapshot_id, workflow_run_id, workflow_id, workflow_version_id,
                 workflow_semantic_version, workflow_execution_fingerprint,
-                workflow_execution_session_id, priority, timeout_ms, inputs_json,
-                output_targets_json, override_selection_json, created_at_ms
+                workflow_execution_session_id, workflow_execution_session_kind,
+                usage_profile, keep_alive, retention_policy, scheduler_policy,
+                priority, timeout_ms, inputs_json, output_targets_json,
+                override_selection_json, created_at_ms
          FROM workflow_run_snapshots
          WHERE workflow_run_id = ?1",
     )?;
@@ -733,7 +767,7 @@ fn workflow_run_snapshot_from_row(
     row: &rusqlite::Row<'_>,
 ) -> rusqlite::Result<WorkflowRunSnapshotRecord> {
     let timeout_ms = row
-        .get::<_, Option<i64>>(8)?
+        .get::<_, Option<i64>>(13)?
         .map(|value| u64::try_from(value).unwrap_or(u64::MAX));
     Ok(WorkflowRunSnapshotRecord {
         workflow_run_snapshot_id: row
@@ -747,12 +781,17 @@ fn workflow_run_snapshot_from_row(
         workflow_semantic_version: row.get(4)?,
         workflow_execution_fingerprint: row.get(5)?,
         workflow_execution_session_id: row.get(6)?,
-        priority: row.get(7)?,
+        workflow_execution_session_kind: row.get(7)?,
+        usage_profile: row.get(8)?,
+        keep_alive: row.get(9)?,
+        retention_policy: row.get(10)?,
+        scheduler_policy: row.get(11)?,
+        priority: row.get(12)?,
         timeout_ms,
-        inputs_json: row.get(9)?,
-        output_targets_json: row.get(10)?,
-        override_selection_json: row.get(11)?,
-        created_at_ms: row.get(12)?,
+        inputs_json: row.get(14)?,
+        output_targets_json: row.get(15)?,
+        override_selection_json: row.get(16)?,
+        created_at_ms: row.get(17)?,
     })
 }
 

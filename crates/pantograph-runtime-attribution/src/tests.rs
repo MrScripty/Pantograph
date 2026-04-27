@@ -256,6 +256,11 @@ fn workflow_run_snapshot_records_immutable_version_and_queue_context() {
             workflow_semantic_version: version.semantic_version.clone(),
             workflow_execution_fingerprint: version.execution_fingerprint.clone(),
             workflow_execution_session_id: "session-1".to_string(),
+            workflow_execution_session_kind: "workflow".to_string(),
+            usage_profile: Some("interactive".to_string()),
+            keep_alive: true,
+            retention_policy: "keep_alive".to_string(),
+            scheduler_policy: "priority_then_fifo".to_string(),
             priority: 5,
             timeout_ms: Some(1000),
             inputs_json: serde_json::json!([{"node_id": "input"}]).to_string(),
@@ -266,6 +271,11 @@ fn workflow_run_snapshot_records_immutable_version_and_queue_context() {
 
     assert_eq!(snapshot.workflow_run_id, run_id);
     assert_eq!(snapshot.workflow_version_id, version.workflow_version_id);
+    assert_eq!(snapshot.workflow_execution_session_kind, "workflow");
+    assert_eq!(snapshot.usage_profile.as_deref(), Some("interactive"));
+    assert!(snapshot.keep_alive);
+    assert_eq!(snapshot.retention_policy, "keep_alive");
+    assert_eq!(snapshot.scheduler_policy, "priority_then_fifo");
     assert_eq!(snapshot.priority, 5);
     assert_eq!(snapshot.timeout_ms, Some(1000));
 }
@@ -288,6 +298,11 @@ fn workflow_run_snapshot_rejects_mismatched_version_facts() {
             workflow_semantic_version: "1.0.0".to_string(),
             workflow_execution_fingerprint: "workflow-exec-blake3:def".to_string(),
             workflow_execution_session_id: "session-1".to_string(),
+            workflow_execution_session_kind: "workflow".to_string(),
+            usage_profile: None,
+            keep_alive: false,
+            retention_policy: "ephemeral".to_string(),
+            scheduler_policy: "priority_then_fifo".to_string(),
             priority: 0,
             timeout_ms: None,
             inputs_json: "[]".to_string(),
