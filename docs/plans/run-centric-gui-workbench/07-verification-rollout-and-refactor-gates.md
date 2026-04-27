@@ -71,6 +71,7 @@ backend truth exists.
 | Cross-layer behavior is only typechecked, not exercised. | High | Require acceptance checks for backend-to-frontend projections. |
 | Old and new identity/version contracts coexist in active paths. | High | Treat Stage `01` as a breaking cutover and reject, delete, or regenerate old records that cannot satisfy new invariants. |
 | New diagnostics bypass typed event validation. | High | Require event-builder tests and source audits for any new diagnostic/scheduler/audit fact. |
+| Projection rebuild cost grows with total event history. | High | Require materialized projection cursors, hot/warm/cold update classes, startup/page-load no-full-replay checks, and non-trivial event-count projection tests. |
 | READMEs/ADRs drift from new ownership. | Medium | Update docs in the same logical slice as ownership changes. |
 | A stage becomes too broad for one implementer. | Medium | Split into implementation waves with non-overlapping write sets. |
 | Shell rollout leaves two competing navigation models. | Medium | Relocate or retire old surfaces under one workbench shell. |
@@ -82,6 +83,9 @@ backend truth exists.
 - New diagnostic, scheduler, I/O, retention, and Library audit facts are
   emitted through typed event builders or explicitly documented as
   non-diagnostic authoritative state.
+- Ledger-derived page projections are materialized read models with
+  projection-version and event-sequence cursors. Full rebuild is an explicit
+  maintenance/migration/test path, not normal page-load behavior.
 - Scheduler-first shell is rolled out with explicit relocation or retirement of
   old surfaces.
 - Old persisted workflow/run data that cannot satisfy the new identity/version
@@ -142,6 +146,15 @@ Expected checks:
 - persistence migration tests
 - typed event envelope and payload validation tests
 - projection rebuild tests from ledger events
+- projection cursor/checkpoint tests proving only events after
+  `last_applied_event_seq` are applied during normal recovery
+- idempotency tests for duplicate projection-application attempts
+- hot/warm/cold projection class tests or contract tests proving page-critical
+  projections are current and warm projections expose freshness state
+- non-trivial event-count projection tests to make full-replay regressions
+  visible
+- tests proving normal startup/page/API read paths do not full-replay the
+  ledger
 - retention cleanup/replay tests
 - Pumas/Library audit tests or documented local limitations
 - durable-resource isolation for persistence, migration, replay, cleanup, and
@@ -228,7 +241,9 @@ semantics are gone or explicitly quarantined:
 - Stage `02`: audit scheduler queue, event, estimate, delay, model load, and
   model unload terms against the accepted typed scheduler event owner.
 - Stage `03`: audit retention, artifact, payload, and Pumas/Library audit
-  usage against the accepted typed event builders and ledger owners.
+  usage against the accepted typed event builders, ledger owners,
+  `event_seq`, `projection_state`, and materialized projection readers. Audit
+  that normal page/API paths do not call explicit full-rebuild commands.
 - Stage `04`: audit Rust and TypeScript projection DTOs for field parity,
   default behavior, optional degraded states, and error taxonomy.
 - Stage `05`: audit `viewMode`, canvas/workflow mode toggles, shortcuts, and
@@ -245,8 +260,9 @@ Execute the architecture change in controlled cutovers:
    snapshot contracts. Existing data that cannot satisfy the new invariants is
    deleted, ignored, or regenerated.
 2. Stage `03` ledger bootstrap introduces the shared typed diagnostic event
-   envelope, append boundary, validation, and projection rebuild pattern before
-   any durable scheduler event persistence is completed.
+   envelope, append boundary, validation, monotonic event sequences,
+   projection state/cursors, and incremental materialized projection pattern
+   before any durable scheduler event persistence is completed.
 3. Stage `02` durable scheduler estimates/events/control persist through the
    shared event ledger and keep `scheduler.*` ownership separate from `run.*`
    lifecycle ownership.
@@ -269,9 +285,9 @@ Potential wave split if needed:
 | Owner/Agent | Scope | Output Contract | Handoff Checkpoint |
 | ----------- | ----- | --------------- | ------------------ |
 | backend-versioning | Stage 01 storage/contracts | committed backend tests and README/ADR notes | workflow version API frozen |
-| diagnostics-ledger-bootstrap | Stage 03 shared event envelope, append boundary, validation, and projection rebuild pattern | validation, migration, source ownership, and projection contracts | shared event ledger core frozen |
+| diagnostics-ledger-bootstrap | Stage 03 shared event envelope, append boundary, validation, event cursors, and incremental projection pattern | validation, migration, source ownership, and projection contracts | shared event ledger core frozen |
 | scheduler-events | Stage 02 scheduler estimates/events | scheduler tests and typed event projections using the shared ledger | scheduler event family frozen |
-| diagnostics-retention | Stage 03 retention/I/O/Library audit | retention, artifact, Library audit, projection rebuild, and query contracts | artifact/retention DTO frozen |
+| diagnostics-retention | Stage 03 retention/I/O/Library audit | retention, artifact, Library audit, incremental projection, explicit rebuild, and query contracts | artifact/retention DTO frozen |
 | frontend-shell | Stage 05 shell/active-run | app shell tests and route scaffolding | shell can render page placeholders |
 | frontend-pages | Stage 06 page bodies | page tests and presenter updates | backend DTOs stable |
 
@@ -300,6 +316,8 @@ Before launching workers, create a dedicated implementation-wave plan with:
   can safely cover.
 - Typed diagnostic event volume or projection rebuild cost requires a storage
   redesign before page implementation.
+- Any implementation path makes startup, Scheduler page load, run detail, or
+  I/O Inspector reads depend on replaying all diagnostic events.
 - Parallel workers are needed.
 
 ## Completion Summary

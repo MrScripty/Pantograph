@@ -62,6 +62,9 @@ and local/future network capacity are visible through coherent pages.
 - Diagnostics extensibility uses a typed append-only event ledger with strict
   backend-owned writers and rebuildable projections, not free-form metadata
   writes.
+- Rebuildable projections must be durable materialized read models with
+  event-sequence cursors. Full replay is for migration, repair,
+  projection-version changes, and tests, not normal startup or page load.
 - The current app root owns a canvas/workflow toggle; the new workbench may
   replace that model through an intentional shell cutover rather than a
   compatibility layer.
@@ -131,8 +134,11 @@ schema versions, validation before persistence, privacy/retention classes, and
 payload references for large or sensitive data.
 
 Payload storage may be separate, but event metadata and audit history stay
-queryable. Page-specific read models are rebuildable projections over the typed
-event ledger.
+queryable. Page-specific read models are durable materialized projections over
+the typed event ledger. They store projection versions and event-sequence
+cursors so normal operation applies only new events. Full rebuild remains
+available for migration, corruption repair, projection-version changes, and
+tests.
 
 ### API Projection Layer
 
@@ -170,6 +176,10 @@ Event ownership must also stay split:
   reservations, admission, model load/unload decisions, and authority actions.
 - Page APIs consume projections that may join both families, but producers do
   not double-record the same fact in both families.
+- Hot projections cover Scheduler/run-detail/current-status/active-run I/O
+  page needs and stay current enough for normal rendering. Warm projections may
+  catch up asynchronously or lazily and expose freshness state. Cold rebuilds
+  are explicit maintenance paths.
 
 ## Milestones
 
@@ -219,7 +229,8 @@ retention state, and Pumas/Library audit records.
 
 - [ ] Execute Stage `03`.
 - [ ] Follow `diagnostic-event-ledger-architecture.md` for event envelope,
-  typed payloads, validation, retention, and projection ownership.
+  typed payloads, validation, retention, projection cursors, incremental
+  materialized projection ownership, and explicit rebuild behavior.
 - [ ] Ensure metadata survives payload cleanup.
 - [ ] Make global retention policy retroactive and auditable.
 
@@ -309,6 +320,8 @@ document why push/event delivery is not available yet.
   one coherent cutover.
 - Scheduler event persistence cannot fit the existing diagnostics or workflow
   service boundaries.
+- Ledger-derived page reads require full event replay instead of materialized
+  projection queries.
 - The frontend shell migration cannot clearly relocate or retire an old surface.
 - A stage touches enough files to require parallel implementation waves.
 

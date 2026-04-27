@@ -47,6 +47,9 @@ into a second source of truth.
 - Scheduler timelines, diagnostics summaries, I/O galleries, retention state,
   and Library usage are consumed as projections derived from typed diagnostic
   events. Pages do not query or interpret raw ledger rows.
+- Pages consume materialized projections and projection freshness states from
+  Stage `04`; they do not trigger full ledger replay or locally rebuild
+  diagnostics on navigation.
 - Table and gallery UI must be dense, stable, and accessible.
 - Network starts local-only but must not block future peer expansion.
 - Node Lab is future-facing and should not imply unavailable authoring support
@@ -76,6 +79,7 @@ into a second source of truth.
 | Dense Scheduler table becomes unreadable or unstable. | Medium | Use fixed column sizing, resizable columns later, and presenter tests for compact labels. |
 | I/O Inspector tries to render unavailable payloads as failures. | Medium | Treat expired/deleted payloads as explicit retention states. |
 | Pages recreate diagnostic truth from raw events. | High | Consume backend projections only; keep raw event inspection out of normal page implementations. |
+| Page navigation triggers expensive projection rebuilds. | High | Treat rebuilds as admin/maintenance flows; page services read materialized projections and show freshness/catching-up state where needed. |
 | Graph page shows current workflow instead of historic version. | High | Require run-view graph projection by workflow version id. |
 | Library management actions mutate state optimistically. | Medium | Wait for backend confirmation and refresh projections. |
 | Network page overpromises future P2P behavior. | Low | Label local-only facts and reserve peer concepts structurally. |
@@ -95,6 +99,8 @@ into a second source of truth.
   external, truncated, and too-large states where backend projects them.
 - I/O Inspector no-active-run state supports general retained artifact browsing
   where backend projections support it.
+- Warm projection lag is represented through backend-provided freshness or
+  catching-up states rather than frontend event replay.
 - Library highlights active-run assets and shows usage/audit summaries.
 - Network shows local instance capabilities/load/cache state.
 - Network highlights active-run relevant scheduler decisions and local
@@ -122,6 +128,8 @@ into a second source of truth.
 - [ ] Add scheduler event drawer or selected-run timeline entry point.
 - [ ] Render scheduler timeline projection; do not parse raw scheduler event
   payloads in the component.
+- [ ] Render projection freshness/catching-up state if the scheduler timeline
+  or related warm summaries are behind the latest event cursor.
 
 **Verification:**
 
@@ -150,6 +158,8 @@ into a second source of truth.
   runtime-version, model-version, device, and input-profile comparisons.
 - [ ] Render diagnostics projections built from typed event ledger data without
   embedding event-family-specific parsing in page components.
+- [ ] Render backend-provided projection freshness/catching-up state for warm
+  diagnostics summaries.
 
 **Verification:**
 
@@ -194,6 +204,8 @@ rendering.
   support it.
 - [ ] Render artifact gallery projection with event-derived retention state and
   payload availability labels.
+- [ ] Render backend-provided projection freshness/catching-up state for
+  retained-artifact galleries when the projection is warm or rebuilding.
 - [ ] Add renderers for text, image metadata/preview, audio placeholder/player
   where available, video placeholder/player where available, tables, JSON,
   files, and unknown/raw fallback.
@@ -225,6 +237,8 @@ rendering.
 - [ ] Show source, version, fingerprint where available, usage count, last
   accessed, linked workflow/node versions, and audit summaries.
 - [ ] Render Library usage projections derived from typed `library.*` events.
+- [ ] Render backend-provided projection freshness/catching-up state for
+  Library usage counts.
 - [ ] Add Pumas search/download/delete actions where backend support exists.
 - [ ] Avoid optimistic display of asset mutations.
 

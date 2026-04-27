@@ -9,11 +9,11 @@ retention, I/O, and Library/Pumas audit work is still not started.
 
 ## Objective
 
-Introduce a typed append-only diagnostic event ledger and rebuildable
-projections so run-centric pages can query version-aware diagnostics, I/O
-artifact metadata, retroactive global retention state, retention cleanup
-events, and Pumas/Library usage audits without losing auditability when
-payloads expire.
+Introduce a typed append-only diagnostic event ledger and durable
+materialized projections so run-centric pages can query version-aware
+diagnostics, I/O artifact metadata, retroactive global retention state,
+retention cleanup events, and Pumas/Library usage audits without losing
+auditability when payloads expire.
 
 ## Scope
 
@@ -28,8 +28,11 @@ payloads expire.
 - Global retention policy versioning and retroactive cleanup behavior.
 - Pumas/Library audit records for search, download, deletion, asset access,
   run usage, network bytes where available, and cache hits/misses.
-- Rebuildable query projections for active-run page views, timelines,
-  galleries, audit summaries, and aggregate diagnostics.
+- Rebuildable materialized query projections for active-run page views,
+  timelines, galleries, audit summaries, and aggregate diagnostics.
+- Durable projection state, projection versions, and event cursors so normal
+  page/API reads use incremental materialized projections rather than full
+  ledger replay.
 
 ### Out of Scope
 
@@ -58,6 +61,11 @@ network traffic, and model usage accountability.
 - Diagnostic writes must use allowlisted typed event payloads. Free-form
   frontend or client-supplied diagnostic metadata is not accepted.
 - Page APIs consume projections by default, not raw event rows.
+- Rebuildable projections are a repair and migration capability. Normal
+  startup, page load, and query paths must not replay all diagnostic events.
+- Event payloads are bounded metadata and payload references. Stream chunks,
+  raw media bytes, token-by-token output, and full artifact bodies do not
+  belong in the event ledger.
 
 ### Assumptions
 
@@ -92,7 +100,9 @@ network traffic, and model usage accountability.
 | Audit tables grow without bounds. | Medium | Define metadata retention invariant and separate payload cleanup from audit compaction. |
 | Pumas network/use audits miss caller/run attribution. | Medium | Require run/session/bucket/client actor where available and explicit unknown actor otherwise. |
 | Query filters become slow as history grows. | Medium | Add indexes with migration tests for version/time/status filters. |
-| Event-family owners create their own durable stores. | High | Keep one shared event envelope, append path, validation boundary, and projection rebuild model. |
+| Event-family owners create their own durable stores. | High | Keep one shared event envelope, append path, validation boundary, and incremental materialized projection model. |
+| Naive projection rebuild replays all events for every page or projection. | High | Store monotonic event cursors in `projection_state`, update hot projections incrementally, and reserve full rebuild for migration, repair, projection-version changes, and tests. |
+| Event volume grows because producers log overly granular stream or payload data. | High | Persist bounded metadata and payload references only; reject oversized embedded payloads and define event granularity rules per family. |
 
 ## Definition of Done
 
@@ -110,11 +120,20 @@ network traffic, and model usage accountability.
 - Library/Pumas audit events are persistently queryable.
 - Projections for active-run diagnostics, scheduler timelines, I/O galleries,
   retention state, and Library usage are rebuildable from the ledger.
+- Normal projection operation is incremental: every event has a monotonic
+  `event_seq`, every projection stores `projection_version`,
+  `last_applied_event_seq`, and status, and page/API reads use materialized
+  projection tables.
+- Full projection rebuild is available only for explicit rebuild commands,
+  migration, repair, projection-version changes, and tests.
+- Terminal runs have compact summary rows for normal run-list and run-detail
+  reads so old completed runs do not require timeline replay.
 - Projection facets preserve future comparison keys for run-vs-run,
   workflow-version, runtime-version, model-version, device, and input-profile
   comparisons even when first-pass comparison workflows are out of scope.
-- Tests cover event validation, retention metadata survival, projection rebuild,
-  and version-aware filtering.
+- Tests cover event validation, retention metadata survival, incremental
+  projection application, projection rebuild, cursor recovery, idempotency,
+  non-trivial event counts, and version-aware filtering.
 
 ## Milestones
 
@@ -131,7 +150,8 @@ before implementation.
   sibling repositories.
 - [ ] Define event envelope fields, event id behavior, timestamps, source
   ownership, correlation identifiers, privacy classes, retention classes,
-  payload hashes, embedded payload size limits, and payload references.
+  payload hashes, embedded payload size limits, payload references, and
+  monotonic `event_seq`.
 - [ ] Define initial event families: `scheduler.*`, `run.*`, `node.*`,
   `io.*`, `library.*`, `runtime.*`, and `retention.*`.
 - [ ] Define typed payload structs and schema versions for first-pass event
@@ -146,6 +166,12 @@ before implementation.
   paths accepted by download/delete/access operations.
 - [ ] Define ledger indexes, projection tables, and migration strategy for
   version-aware diagnostics.
+- [ ] Define `projection_state` with projection name, projection version,
+  last applied event sequence, status, and rebuild timestamp.
+- [ ] Define hot, warm, and cold projection classes and which component owns
+  synchronous, asynchronous, lazy, and explicit rebuild application.
+- [ ] Define event granularity rules that reject chunk/token/raw-artifact event
+  spam and require bounded metadata plus payload references.
 - [ ] Define event family ownership: `run.*` owns execution lifecycle,
   `scheduler.*` owns scheduling decisions/control/resource events, and
   projections join families instead of duplicating facts.
@@ -156,6 +182,8 @@ before implementation.
 - Validation tests reject unsupported event kinds, missing required correlation
   fields, unsupported schema versions, disallowed producers, and oversized
   embedded payloads.
+- Validation tests reject event payloads that exceed embedded payload limits or
+  attempt to store raw stream/media/artifact bodies instead of references.
 - Validation tests reject unsafe artifact references, invalid Library/Pumas
   resource identifiers, and paths that do not resolve through approved
   workspace/cache roots.
@@ -163,17 +191,30 @@ before implementation.
 
 **Status:** Not started.
 
-### Milestone 2: Ledger Persistence And Projection Rebuild
+### Milestone 2: Ledger Persistence And Incremental Projections
 
-**Goal:** Persist typed events and rebuild first-pass projections from the
-ledger.
+**Goal:** Persist typed events and maintain first-pass materialized
+projections incrementally, while preserving explicit full-rebuild support for
+repair, migration, projection-version changes, and tests.
 
 **Tasks:**
 
 - [ ] Implement append-only event persistence.
-- [ ] Implement projection rebuild for run summary, run detail, scheduler
-  timeline, diagnostics summary, I/O artifact gallery, retention state, and
-  Library usage where first-pass event families exist.
+- [ ] Assign each event a monotonic durable `event_seq` and index event
+  queries by `event_seq`, `event_kind`, `workflow_run_id`, version ids, node
+  ids, model/runtime ids, and status fields needed by projections.
+- [ ] Implement `projection_state` persistence and cursor updates for every
+  first-pass projection.
+- [ ] Implement hot projection updates for run summary, run detail/current
+  status, scheduler timeline, and active-run I/O artifact metadata.
+- [ ] Implement warm projection drains for diagnostics summary, retention
+  completeness, workflow-version performance, model/runtime comparison facets,
+  and Library usage where first-pass event families exist.
+- [ ] Implement explicit full-rebuild commands for migration, corruption
+  repair, projection-version changes, and tests. Ordinary startup and page
+  load must not call these commands.
+- [ ] Add compact terminal run summary rows for completed/failed/cancelled runs
+  so normal historic run-list and run-detail reads do not replay timelines.
 - [x] Add workflow execution version and node version fields to projections.
 - [ ] Add model/runtime/version and scheduler policy filters where not already
   present.
@@ -185,16 +226,23 @@ ledger.
 
 **Verification:**
 
-- Repository tests cover event append, query, and projection rebuild.
+- Repository tests cover event append, query, incremental projection
+  application, cursor persistence, duplicate-application idempotency, and
+  explicit projection rebuild.
 - Repository tests cover each new filter.
 - Tests cover mixed-version result metadata.
+- Tests cover startup/reopen recovery applying only events after
+  `last_applied_event_seq`.
+- Projection rebuild tests include a non-trivial event count and assert normal
+  query paths use materialized projections rather than full event replay.
 - Persistence, migration, replay, and projection tests each own isolated
   durable resources: SQLite/database files, temporary roots, payload stores,
   and cache paths must not be shared between parallel tests.
 
 **Status:** In progress. Existing model/license usage projections now carry
 workflow-version fields and can filter by node contract version/digest. Typed
-event append and projection rebuild work remains pending.
+event append, projection cursors, incremental materialized read models, and
+explicit rebuild work remain pending.
 
 ### Milestone 3: I/O Artifact Metadata And Retention
 
@@ -217,6 +265,8 @@ availability.
   expiring payloads.
 - [ ] Emit typed `retention.*` events with policy version, timestamp, actor,
   affected artifact, and reason.
+- [ ] Update affected hot/warm projections through event cursors rather than
+  direct page-time artifact ledger scans.
 
 **Verification:**
 
@@ -241,6 +291,8 @@ Scheduler, and Diagnostics pages.
 - [ ] Emit typed cache hit/miss and network byte observations where available.
 - [ ] Add Library usage projections: used by active run, used by N runs, last
   accessed, total access count, linked workflow/node versions.
+- [ ] Update Library usage counts through warm projection drains with recorded
+  projection freshness.
 - [ ] Ensure audit events are queryable without requiring payload retention.
 
 **Verification:**
@@ -265,6 +317,16 @@ Diagnostic event production must also have explicit owners. Scheduler, runtime,
 node execution, retention cleanup, Pumas/Library wrappers, and local observers
 may produce events only through their approved typed builders.
 
+Projection application has separate ownership. The diagnostics ledger owns the
+append boundary, event sequence, projection state rows, and explicit rebuild
+commands. Hot projection updates run synchronously or near-synchronously with
+event append when they are required for Scheduler, run detail, current status,
+or active-run I/O pages. Warm projection drains must have one lifecycle owner,
+record their cursor before yielding ownership, prevent overlapping drains for
+the same projection, and expose stale/catching-up status to API projections.
+Cold rebuild commands are admin/migration/repair paths and must not run
+implicitly on page load.
+
 ## Re-Plan Triggers
 
 - Payload storage is not discoverable from run/artifact metadata.
@@ -272,6 +334,12 @@ may produce events only through their approved typed builders.
 - Retention cleanup needs a background worker earlier than expected.
 - Version-aware query performance requires a larger storage redesign.
 - Event volume requires projection snapshotting, compaction, or partitioning.
+- A normal startup, page load, or API query requires full ledger replay instead
+  of reading materialized projections.
+- Hot projections cannot stay current without blocking event append or run
+  execution for unacceptable time.
+- Warm projection lag cannot be represented clearly enough for API/frontend
+  consumers.
 - Raw developer event inspection is needed earlier than planned.
 
 ## Completion Summary
@@ -282,6 +350,10 @@ may produce events only through their approved typed builders.
   version/digest filters to the existing model/license usage diagnostics
   projection. This is a transitional Stage `01` filter cutover, not the full
   typed event ledger from this stage.
+- 2026-04-27: Updated the diagnostics plan to treat projections as durable
+  materialized read models with event cursors. Rebuildable now means explicit
+  rebuild support for migration, repair, projection-version changes, and tests,
+  not full replay during normal startup or page reads.
 
 ### Deviations
 
@@ -291,6 +363,9 @@ may produce events only through their approved typed builders.
 
 - Decide typed event ledger storage ownership in Milestone 1.
 - Decide whether pinning belongs in first implementation or stays future.
+- During implementation, audit any already-added diagnostics filters and
+  summaries so they either become materialized projections with cursors or stay
+  explicitly documented transitional query paths until Stage `03` cutover.
 
 ### Verification Summary
 
@@ -301,6 +376,8 @@ may produce events only through their approved typed builders.
   passed.
 - 2026-04-27: `cargo test -p pantograph-diagnostics-ledger` and
   `cargo test -p pantograph-workflow-service` passed.
+- 2026-04-27: Documentation-only projection strategy update. No code tests
+  required.
 
 ### Traceability Links
 

@@ -90,6 +90,14 @@ not create a scheduler-specific event repository. If the shared ledger core is
 not available, execute the Stage `03` ledger bootstrap before Stage `02`
 durable event persistence.
 
+Implementation has a second diagnostics refinement: projections are durable
+materialized read models with event-sequence cursors. They are rebuildable from
+the typed ledger for migrations, repair, projection-version changes, and tests,
+but normal startup, page load, and API queries must not replay the full event
+history. Hot projections stay current for page-critical run and scheduler
+views; warm projections may expose catching-up state; cold rebuilds are
+explicit maintenance paths.
+
 ## Alternatives Rejected
 
 - Start with the frontend shell and mock missing backend facts.
@@ -120,6 +128,8 @@ durable event persistence.
 - Diagnostics, scheduler events, I/O observations, retention changes, and
   Library/Pumas audits use the typed diagnostic event ledger pattern described
   in `diagnostic-event-ledger-architecture.md`.
+- Ledger-derived page projections are materialized with projection versions and
+  event-sequence cursors; full replay is not a normal GUI/API read path.
 - Payload retention may expire, but audit metadata must remain queryable.
 
 ## Revisit Triggers

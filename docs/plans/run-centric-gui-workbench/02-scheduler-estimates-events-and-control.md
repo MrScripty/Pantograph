@@ -90,6 +90,7 @@ logs or inferred in the frontend.
 | Scheduler delay looks like starvation. | Medium | Emit explicit delay reason and fairness evidence in scheduler events. |
 | Model load/unload state splits across runtime and scheduler. | Medium | Define one projection owner for scheduler-visible cache/model state. |
 | Scheduler events duplicate `run.*` lifecycle truth. | High | Keep terminal execution lifecycle in `run.*`; scheduler events record decisions, controls, admission, and resource actions. |
+| Scheduler timeline queries replay all scheduler events as history grows. | High | Treat scheduler timeline as a hot materialized projection maintained through the shared event ledger cursor model. |
 
 ## Definition of Done
 
@@ -100,6 +101,8 @@ logs or inferred in the frontend.
 - Scheduler timeline projections include relevant `run.*` and `node.*`
   lifecycle events for audit visibility without duplicating those facts as
   `scheduler.*` event truth.
+- Scheduler run-list/detail/timeline views read materialized hot projections;
+  they do not replay all scheduler events on normal Scheduler page load.
 - Delay for better cache/model/runtime state is explicit and auditable.
 - Client/session-scoped actions cannot modify other sessions.
 - Privileged GUI/admin actions are represented distinctly from normal client
@@ -129,6 +132,9 @@ logs or inferred in the frontend.
   persistence so scheduler/session locks are not held during durable writes.
 - [ ] Define the ownership split between `run.*` lifecycle events and
   `scheduler.*` decision/control events.
+- [ ] Define scheduler hot projection ownership for run list, run detail,
+  current status, and scheduler timeline updates through the shared
+  `projection_state` cursor model.
 
 **Verification:**
 
@@ -179,7 +185,7 @@ scheduler activity.
   without duplicating terminal execution lifecycle facts as scheduler events.
 - [ ] Persist typed scheduler events through the event ledger owner.
 - [ ] Build scheduler event projections from ledger events for run-scoped and
-  system-scoped queries.
+  system-scoped queries using incremental materialized projection cursors.
 - [ ] Include relevant `run.*` and `node.*` lifecycle events in scheduler
   timeline projections where the requirements call for execution/node
   visibility.
@@ -194,6 +200,8 @@ scheduler activity.
   transitions.
 - Replay/recovery tests cover event visibility after restart if persistence is
   implemented in this stage.
+- Tests prove Scheduler page projection queries read materialized hot
+  projections and do not full-replay all scheduler events.
 
 **Status:** Not started.
 
@@ -233,6 +241,8 @@ duplicate, unvalidated, or contradictory event streams.
 
 - Shared typed event ledger bootstrap cannot support scheduler event volume,
   validation, or query needs.
+- Scheduler timeline projection cannot stay current without blocking run
+  admission or replaying full event history on page load.
 - Scheduler estimates require asynchronous model/library metadata loading.
 - Existing runtime load/unload callbacks do not expose enough facts.
 - Admin GUI authority needs a full user/auth model rather than the current

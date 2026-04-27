@@ -19,6 +19,13 @@ Library fact.
 Use a typed append-only diagnostic event ledger as the durable write model, and
 derive page/query-specific read models from that ledger.
 
+Projection rebuild cost is a primary design constraint. "Rebuildable" means a
+projection can be reconstructed from the ledger during migration, corruption
+repair, tests, or projection-version changes. It does not mean normal startup,
+page load, or every query should replay all events. Normal operation uses
+durable materialized projections with stored cursors and applies only new
+events.
+
 The database/storage shape may be flexible enough to accept future event
 families, but the write contract is strict:
 
@@ -30,7 +37,8 @@ families, but the write contract is strict:
 - every event records source ownership and correlation identifiers
 - privacy and retention class are required
 - large or sensitive payloads are stored by reference, not embedded blindly
-- projections are rebuildable from the ledger
+- projections are materialized during normal operation and explicitly
+  rebuildable from the ledger when needed
 
 ## Core Pattern
 
@@ -47,6 +55,7 @@ ledger serializes validated payloads into durable storage.
 The stable event envelope should include:
 
 ```text
+event_seq
 event_id
 event_kind
 schema_version
@@ -155,6 +164,73 @@ Raw event access can exist later for developer/admin inspection, but it must be
 separate from user-facing page contracts and protected by the same validation,
 privacy, and retention model.
 
+Projection storage should follow this pattern:
+
+```text
+diagnostic_events
+  event_seq
+  event_id
+  event_kind
+  occurred_at_ms
+  workflow_run_id?
+  workflow_version_id?
+  node_id?
+  model_id?
+  runtime_id?
+  payload_json?
+  payload_ref?
+
+projection_state
+  projection_name
+  projection_version
+  last_applied_event_seq
+  status
+  rebuilt_at_ms?
+
+run_list_projection
+run_detail_projection
+scheduler_timeline_projection
+io_artifact_projection
+library_usage_projection
+retention_status_projection
+diagnostics_summary_projection
+```
+
+The append path writes a typed event once, then updates affected hot
+projections synchronously or near-synchronously inside the same durable
+boundary where practical. Warm projections may drain new events asynchronously
+or lazily from:
+
+```sql
+SELECT *
+FROM diagnostic_events
+WHERE event_seq > ?
+ORDER BY event_seq;
+```
+
+Each projection owns a `projection_version` and `last_applied_event_seq`.
+Projection code must be idempotent for duplicate application attempts and
+recover by replaying only events after the last committed cursor. Full replay
+is reserved for explicit rebuild commands, migration, repair, projection
+version changes, and test fixtures.
+
+Projection classes:
+
+- Hot projections: run list, run detail, current run status, scheduler
+  timeline, and active-run I/O artifact metadata. These feed the default GUI
+  pages and should be cheap, indexed, and current enough for page rendering.
+- Warm projections: workflow-version performance summaries, model/runtime
+  comparison facets, Library usage counts, and retention completeness
+  summaries. These can update asynchronously or lazily and expose freshness
+  status when not caught up.
+- Cold rebuilds: full diagnostics summary rebuilds, all-runs artifact gallery
+  rebuilds, and historical aggregate recomputation. These are admin,
+  migration, repair, or test paths, not page-load behavior.
+
+Terminal runs should write or project compact summary rows so normal run-list
+and run-detail views for old completed runs do not need to replay full
+timelines.
+
 ## Retention And Privacy
 
 Payload retention and audit retention are separate.
@@ -167,6 +243,12 @@ data is unavailable.
 Large media, binary data, model outputs, and sensitive data should use
 `payload_ref` plus size/hash/type metadata. Embedded JSON is for bounded typed
 payloads only.
+
+The ledger must not store every stream chunk, token, image byte, audio sample,
+or raw artifact body as diagnostic events. Event payloads are bounded metadata
+and references. High-volume data belongs in payload stores or streaming
+channels with ledger events recording durable audit facts and retained
+references.
 
 ## Security Boundary
 
@@ -184,7 +266,8 @@ service wrappers, and local system/runtime observers.
 - Stage `02` scheduler events should be typed ledger events, not a separate
   unstructured log stream.
 - Stage `03` owns ledger schema, typed event contracts, retention classes,
-  artifact metadata, and projection rebuild behavior.
+  artifact metadata, projection state/cursors, hot/warm/cold projection
+  classes, incremental projection application, and explicit rebuild behavior.
 - Stage `04` exposes projections derived from the ledger, not storage tables.
 - Stages `05` and `06` render projections and may show timelines/galleries,
   but they do not own diagnostic truth.
@@ -206,7 +289,10 @@ service wrappers, and local system/runtime observers.
 ## Revisit Triggers
 
 - Event volume requires compaction, partitioning, or snapshotting.
-- Projections cannot be rebuilt within acceptable time from the ledger.
+- Projections cannot be incrementally maintained or rebuilt within acceptable
+  time from the ledger.
+- Startup, page load, or ordinary query paths begin replaying full event
+  history instead of reading durable materialized projections.
 - Privacy policy requires cryptographic erasure or tenant-level separation.
 - A remote/multi-node deployment changes event producer trust boundaries.
 - Raw developer event inspection becomes a product feature.

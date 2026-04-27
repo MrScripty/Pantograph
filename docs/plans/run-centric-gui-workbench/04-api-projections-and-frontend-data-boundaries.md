@@ -59,6 +59,9 @@ transport calls.
 - API consumers use page/read-model projections by default. Raw diagnostic
   event access is not a normal page API and must remain a separate privileged
   developer/admin concern if added later.
+- Ledger-derived page APIs read durable materialized projections and may expose
+  projection freshness/status. They must not trigger full ledger replay during
+  normal startup, page load, or query handling.
 
 ### Assumptions
 
@@ -82,6 +85,7 @@ transport calls.
 | ---- | ------ | ---------- |
 | DTOs mirror storage internals too closely. | Medium | Define page/use-case projections at backend facade boundaries. |
 | Raw event rows leak into normal page APIs. | High | Expose ledger-derived projections for pages; reserve raw event inspection for explicit privileged tooling. |
+| API projections rebuild history on every page load. | High | Read materialized projection tables with cursors and expose stale/catching-up status for warm projections. |
 | Frontend starts polling many endpoints. | Medium | Prefer event/subscription design; document any temporary polling owner and cleanup. |
 | API errors are collapsed into generic failures. | High | Preserve explicit backend error categories through service adapters. |
 | New projections inherit ambiguous old workflow graph API semantics. | High | Replace or delete old transport methods that conflict with run/version projections during the cutover stage. |
@@ -93,6 +97,8 @@ transport calls.
   I/O metadata, Library usage, and local Network state through stable services.
 - GUI page DTOs are projections derived from typed events or authoritative
   backend state, not raw ledger rows.
+- Ledger-derived DTOs are served from materialized projections with recorded
+  freshness/cursor state; normal DTO reads do not perform full event replay.
 - Frontend service adapters preserve backend error categories.
 - TypeScript DTOs and Rust/adapter DTOs are aligned and tested.
 - DTO drift checks cover each new projection field, including defaults and
@@ -115,6 +121,8 @@ transport calls.
 - [ ] Define scheduler estimate/event DTOs.
 - [ ] Define which DTOs are direct authoritative-state projections and which
   are rebuilt from typed diagnostic ledger events.
+- [ ] Define which ledger-derived DTOs are hot, warm, or cold projections and
+  how projection freshness/catching-up/degraded states appear in API responses.
 - [ ] Define graph-version DTOs for historic run view.
 - [ ] Define I/O artifact and retention DTOs.
 - [ ] Define Library usage/Pumas audit DTOs.
@@ -156,6 +164,10 @@ policy into adapters.
 - [ ] Add Library/Pumas usage audit queries.
 - [ ] Add projection rebuild/query boundaries for typed event ledger derived
   views.
+- [ ] Ensure backend projection queries read materialized projection tables or
+  authoritative state, not raw event replay, during ordinary API requests.
+- [ ] Add explicit admin/maintenance command boundaries for projection rebuild
+  where Stage `03` exposes them.
 - [ ] Add local Network/system-node status query.
 - [ ] Add immutable run submission and cancel/resubmit command boundaries.
 - [ ] Add scoped client queue action command boundaries.
@@ -166,6 +178,8 @@ policy into adapters.
 **Verification:**
 
 - Rust unit/integration tests cover projection shape and error mapping.
+- Tests prove normal run list/detail and scheduler timeline projection reads do
+  not trigger full diagnostic-event replay.
 - Tests prove adapters forward policy decisions instead of recomputing them.
 - If Rustler, UniFFI, Tauri commands, or HTTP adapter binding contracts are
   touched, native and host-language binding checks cover the changed projection
@@ -212,6 +226,9 @@ implementation depends on it.
   supported.
 - [ ] Add an acceptance path proving a typed event reaches a backend projection
   and then a frontend service without exposing raw ledger storage details.
+- [ ] Add an acceptance path proving projection freshness/catching-up state is
+  preserved for a warm projection when it has not yet applied the latest event
+  cursor.
 
 **Verification:**
 

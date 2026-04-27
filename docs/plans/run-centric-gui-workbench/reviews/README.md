@@ -28,6 +28,7 @@ The implementation authority remains in the parent directory:
 | `blast-radius-analysis.md` | Source blast-radius review by stage, including affected code areas, implementation-wave risks, and required source-audit gates. |
 | `diagnostics-code-against-event-ledger.md` | Detailed source analysis comparing current diagnostics code to the planned typed event-ledger architecture. |
 | `plan-continuity-review.md` | Consistency pass over the plan set, including corrected ordering, event ownership, and anti-pattern controls. |
+| `projection-materialization-standards-pass.md` | Standards pass for the projection cursor/materialized read-model update. |
 | `requirements-coverage-review.md` | Requirement-by-requirement coverage review proving the staged plans satisfy the GUI workbench requirements and recording remaining open decisions. |
 
 ## Usage
