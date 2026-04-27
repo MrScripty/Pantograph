@@ -14,6 +14,8 @@ pub const RUN_LIST_PROJECTION_NAME: &str = "run_list";
 pub const RUN_LIST_PROJECTION_VERSION: i64 = 1;
 pub const RUN_DETAIL_PROJECTION_NAME: &str = "run_detail";
 pub const RUN_DETAIL_PROJECTION_VERSION: i64 = 1;
+pub const IO_ARTIFACT_PROJECTION_NAME: &str = "io_artifact";
+pub const IO_ARTIFACT_PROJECTION_VERSION: i64 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -709,6 +711,59 @@ pub struct RunDetailProjectionRecord {
     pub timeline_event_count: u64,
     pub last_event_seq: i64,
     pub last_updated_at_ms: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IoArtifactProjectionQuery {
+    pub workflow_run_id: WorkflowRunId,
+    pub node_id: Option<String>,
+    pub artifact_role: Option<String>,
+    pub after_event_seq: Option<i64>,
+    pub limit: u32,
+}
+
+impl IoArtifactProjectionQuery {
+    pub fn validate(&self, max_limit: u32) -> Result<(), DiagnosticsLedgerError> {
+        if self.limit > max_limit {
+            return Err(DiagnosticsLedgerError::QueryLimitExceeded {
+                requested: self.limit,
+                max: max_limit,
+            });
+        }
+        if self.after_event_seq.unwrap_or(0) < 0 {
+            return Err(DiagnosticsLedgerError::InvalidField {
+                field: "after_event_seq",
+            });
+        }
+        validate_optional_text("node_id", self.node_id.as_deref(), MAX_ID_LEN)?;
+        validate_optional_text("artifact_role", self.artifact_role.as_deref(), MAX_ID_LEN)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IoArtifactProjectionRecord {
+    pub event_seq: i64,
+    pub event_id: String,
+    pub occurred_at_ms: i64,
+    pub recorded_at_ms: i64,
+    pub workflow_run_id: WorkflowRunId,
+    pub workflow_id: WorkflowId,
+    pub workflow_version_id: Option<WorkflowVersionId>,
+    pub workflow_semantic_version: Option<String>,
+    pub node_id: Option<String>,
+    pub node_type: Option<String>,
+    pub node_version: Option<String>,
+    pub runtime_id: Option<String>,
+    pub runtime_version: Option<String>,
+    pub model_id: Option<String>,
+    pub model_version: Option<String>,
+    pub artifact_id: String,
+    pub artifact_role: String,
+    pub media_type: Option<String>,
+    pub size_bytes: Option<u64>,
+    pub content_hash: Option<String>,
+    pub payload_ref: Option<String>,
+    pub retention_policy_id: Option<String>,
 }
 
 fn validate_text_list(

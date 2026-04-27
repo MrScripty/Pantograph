@@ -7,19 +7,20 @@ use crate::{
     DiagnosticEventAppendRequest, DiagnosticEventKind, DiagnosticEventPayload,
     DiagnosticEventPrivacyClass, DiagnosticEventRetentionClass, DiagnosticEventSourceComponent,
     DiagnosticsLedgerError, DiagnosticsLedgerRepository, DiagnosticsQuery, ExecutionGuaranteeLevel,
-    LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement,
-    OutputMeasurementUnavailableReason, OutputModality, ProjectionStateUpdate, ProjectionStatus,
-    PruneTimingObservationsCommand, PruneUsageEventsCommand, RetentionClass,
-    RetentionPolicyChangedPayload, RunDetailProjectionQuery, RunListProjectionQuery,
-    RunListProjectionStatus, RunSnapshotAcceptedPayload, RunStartedPayload, RunTerminalPayload,
-    RunTerminalStatus, SchedulerEstimateProducedPayload, SchedulerQueuePlacementPayload,
+    IoArtifactObservedPayload, IoArtifactProjectionQuery, LicenseSnapshot, ModelIdentity,
+    ModelLicenseUsageEvent, ModelOutputMeasurement, OutputMeasurementUnavailableReason,
+    OutputModality, ProjectionStateUpdate, ProjectionStatus, PruneTimingObservationsCommand,
+    PruneUsageEventsCommand, RetentionClass, RetentionPolicyChangedPayload,
+    RunDetailProjectionQuery, RunListProjectionQuery, RunListProjectionStatus,
+    RunSnapshotAcceptedPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
+    SchedulerEstimateProducedPayload, SchedulerQueuePlacementPayload,
     SchedulerTimelineProjectionQuery, SqliteDiagnosticsLedger, UsageEventStatus, UsageLineage,
     WorkflowRunSummaryQuery, WorkflowRunSummaryRecord, WorkflowRunSummaryStatus,
     WorkflowTimingExpectation, WorkflowTimingExpectationComparison, WorkflowTimingExpectationQuery,
     WorkflowTimingObservation, WorkflowTimingObservationScope, WorkflowTimingObservationStatus,
-    DEFAULT_STANDARD_RETENTION_DAYS, MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES,
-    RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION, RUN_LIST_PROJECTION_NAME,
-    RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
+    DEFAULT_STANDARD_RETENTION_DAYS, IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION,
+    MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION,
+    RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
     SCHEDULER_TIMELINE_PROJECTION_VERSION,
 };
 
@@ -870,6 +871,82 @@ fn run_detail_projection_drains_lifecycle_events_incrementally() {
 }
 
 #[test]
+fn io_artifact_projection_drains_artifact_events_incrementally() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    let input_event = ledger
+        .append_diagnostic_event(sample_io_artifact_event(
+            "workflow_run_alpha",
+            "node_prompt",
+            "workflow_input",
+            "artifact_prompt",
+        ))
+        .expect("input artifact event appends");
+    let output_event = ledger
+        .append_diagnostic_event(sample_io_artifact_event(
+            "workflow_run_alpha",
+            "node_image",
+            "node_output",
+            "artifact_image",
+        ))
+        .expect("output artifact event appends");
+
+    let state = ledger
+        .drain_io_artifact_projection(10)
+        .expect("io artifact projection drains");
+    assert_eq!(state.projection_name, IO_ARTIFACT_PROJECTION_NAME);
+    assert_eq!(state.projection_version, IO_ARTIFACT_PROJECTION_VERSION);
+    assert_eq!(state.last_applied_event_seq, output_event.event_seq);
+
+    let records = ledger
+        .query_io_artifact_projection(IoArtifactProjectionQuery {
+            workflow_run_id: WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+            node_id: None,
+            artifact_role: None,
+            after_event_seq: None,
+            limit: 10,
+        })
+        .expect("io artifact projection loads");
+    assert_eq!(records.len(), 2);
+    assert_eq!(records[0].event_seq, input_event.event_seq);
+    assert_eq!(records[0].artifact_id, "artifact_prompt");
+    assert_eq!(records[0].artifact_role, "workflow_input");
+    assert_eq!(
+        records[0].payload_ref.as_deref(),
+        Some("artifact://artifact_prompt")
+    );
+    assert_eq!(records[1].event_seq, output_event.event_seq);
+    assert_eq!(records[1].media_type.as_deref(), Some("image/png"));
+    assert_eq!(records[1].size_bytes, Some(1_024));
+
+    let node_records = ledger
+        .query_io_artifact_projection(IoArtifactProjectionQuery {
+            workflow_run_id: WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+            node_id: Some("node_image".to_string()),
+            artifact_role: None,
+            after_event_seq: Some(input_event.event_seq),
+            limit: 10,
+        })
+        .expect("io artifact node filter loads");
+    assert_eq!(node_records.len(), 1);
+    assert_eq!(node_records[0].artifact_id, "artifact_image");
+
+    let no_new_state = ledger
+        .drain_io_artifact_projection(10)
+        .expect("io artifact projection drains idempotently");
+    assert_eq!(no_new_state.last_applied_event_seq, output_event.event_seq);
+    let after_idempotent = ledger
+        .query_io_artifact_projection(IoArtifactProjectionQuery {
+            workflow_run_id: WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+            node_id: None,
+            artifact_role: None,
+            after_event_seq: None,
+            limit: 10,
+        })
+        .expect("io artifact projection loads after idempotent drain");
+    assert_eq!(after_idempotent.len(), 2);
+}
+
+#[test]
 fn existing_v5_schema_adds_usage_lineage_contract_indexes() {
     let temp = tempfile::NamedTempFile::new().expect("temp file");
     let path = temp.path().to_path_buf();
@@ -1018,6 +1095,35 @@ fn existing_v9_schema_adds_run_detail_projection_table() {
     assert!(sqlite_index_exists(
         &conn,
         "idx_run_detail_projection_workflow_updated"
+    ));
+}
+
+#[test]
+fn existing_v10_schema_adds_io_artifact_projection_table() {
+    let temp = tempfile::NamedTempFile::new().expect("temp file");
+    let path = temp.path().to_path_buf();
+    {
+        let conn = Connection::open(&path).expect("connection opens");
+        conn.execute_batch(
+            "CREATE TABLE ledger_schema_migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at_ms INTEGER NOT NULL,
+                checksum TEXT NOT NULL
+            );
+            INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
+            VALUES (10, 0, 'pantograph-diagnostics-ledger-v10');",
+        )
+        .expect("v10 schema marker is installed");
+    }
+    {
+        let _ledger = SqliteDiagnosticsLedger::open(&path).expect("ledger migrates");
+    }
+    let conn = Connection::open(&path).expect("connection reopens");
+
+    assert!(sqlite_table_exists(&conn, "io_artifact_projection"));
+    assert!(sqlite_index_exists(
+        &conn,
+        "idx_io_artifact_projection_run_seq"
     ));
 }
 
@@ -1360,6 +1466,45 @@ fn sample_run_snapshot_event(workflow_run_id: &str) -> DiagnosticEventAppendRequ
         payload: DiagnosticEventPayload::RunSnapshotAccepted(RunSnapshotAcceptedPayload {
             workflow_run_snapshot_id: "runsnap_alpha".to_string(),
             workflow_presentation_revision_id: "wfpres_alpha".to_string(),
+        }),
+    }
+}
+
+fn sample_io_artifact_event(
+    workflow_run_id: &str,
+    node_id: &str,
+    artifact_role: &str,
+    artifact_id: &str,
+) -> DiagnosticEventAppendRequest {
+    DiagnosticEventAppendRequest {
+        source_component: DiagnosticEventSourceComponent::NodeExecution,
+        source_instance_id: Some("node-executor".to_string()),
+        occurred_at_ms: 1_200,
+        workflow_run_id: Some(WorkflowRunId::try_from(workflow_run_id.to_string()).unwrap()),
+        workflow_id: Some(WorkflowId::try_from("workflow_alpha".to_string()).unwrap()),
+        workflow_version_id: Some(WorkflowVersionId::try_from("wfver_alpha".to_string()).unwrap()),
+        workflow_semantic_version: Some("1.0.0".to_string()),
+        node_id: Some(node_id.to_string()),
+        node_type: Some("artifact-node".to_string()),
+        node_version: Some("1.0.0".to_string()),
+        runtime_id: Some("runtime_alpha".to_string()),
+        runtime_version: Some("0.1.0".to_string()),
+        model_id: None,
+        model_version: None,
+        client_id: Some(ClientId::try_from("client_alpha".to_string()).unwrap()),
+        client_session_id: Some(ClientSessionId::try_from("session_alpha".to_string()).unwrap()),
+        bucket_id: Some(BucketId::try_from("bucket_alpha".to_string()).unwrap()),
+        scheduler_policy_id: Some("scheduler_default".to_string()),
+        retention_policy_id: Some("retention_default".to_string()),
+        privacy_class: DiagnosticEventPrivacyClass::SensitiveReference,
+        retention_class: DiagnosticEventRetentionClass::PayloadReference,
+        payload_ref: Some(format!("artifact://{artifact_id}")),
+        payload: DiagnosticEventPayload::IoArtifactObserved(IoArtifactObservedPayload {
+            artifact_id: artifact_id.to_string(),
+            artifact_role: artifact_role.to_string(),
+            media_type: Some("image/png".to_string()),
+            size_bytes: Some(1_024),
+            content_hash: Some("blake3:artifact-hash".to_string()),
         }),
     }
 }

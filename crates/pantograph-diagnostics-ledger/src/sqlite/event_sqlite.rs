@@ -7,10 +7,11 @@ use uuid::Uuid;
 use crate::event::{
     DiagnosticEventAppendRequest, DiagnosticEventKind, DiagnosticEventPayload,
     DiagnosticEventPrivacyClass, DiagnosticEventRecord, DiagnosticEventRetentionClass,
-    DiagnosticEventSourceComponent, ProjectionStateRecord, ProjectionStateUpdate, ProjectionStatus,
-    RunDetailProjectionQuery, RunDetailProjectionRecord, RunListProjectionQuery,
-    RunListProjectionRecord, RunListProjectionStatus, SchedulerTimelineProjectionQuery,
-    SchedulerTimelineProjectionRecord, DIAGNOSTIC_EVENT_SCHEMA_VERSION,
+    DiagnosticEventSourceComponent, IoArtifactProjectionQuery, IoArtifactProjectionRecord,
+    ProjectionStateRecord, ProjectionStateUpdate, ProjectionStatus, RunDetailProjectionQuery,
+    RunDetailProjectionRecord, RunListProjectionQuery, RunListProjectionRecord,
+    RunListProjectionStatus, SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
+    DIAGNOSTIC_EVENT_SCHEMA_VERSION, IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION,
     MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION,
     RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
     SCHEDULER_TIMELINE_PROJECTION_VERSION,
@@ -556,6 +557,120 @@ pub(super) fn query_run_detail_projection(
     .map_err(DiagnosticsLedgerError::from)
 }
 
+pub(super) fn drain_io_artifact_projection(
+    ledger: &mut SqliteDiagnosticsLedger,
+    limit: u32,
+) -> Result<ProjectionStateRecord, DiagnosticsLedgerError> {
+    if limit > MAX_PAGE_SIZE {
+        return Err(DiagnosticsLedgerError::QueryLimitExceeded {
+            requested: limit,
+            max: MAX_PAGE_SIZE,
+        });
+    }
+    let tx = ledger.conn.transaction()?;
+    let state = {
+        let mut stmt = tx.prepare(
+            "SELECT projection_name, projection_version, last_applied_event_seq, status,
+                    rebuilt_at_ms, updated_at_ms
+             FROM projection_state
+             WHERE projection_name = ?1",
+        )?;
+        stmt.query_row(
+            params![IO_ARTIFACT_PROJECTION_NAME],
+            projection_state_from_row,
+        )
+        .optional()?
+    };
+
+    let mut last_applied_event_seq = state
+        .as_ref()
+        .map(|state| state.last_applied_event_seq)
+        .unwrap_or(0);
+    let mut rebuilt_at_ms = state.as_ref().and_then(|state| state.rebuilt_at_ms);
+    if state
+        .as_ref()
+        .map(|state| state.projection_version != IO_ARTIFACT_PROJECTION_VERSION)
+        .unwrap_or(false)
+    {
+        tx.execute("DELETE FROM io_artifact_projection", [])?;
+        last_applied_event_seq = 0;
+        rebuilt_at_ms = Some(now_ms());
+    }
+
+    let events = io_artifact_events_after(&tx, last_applied_event_seq, limit)?;
+    for event in &events {
+        if let Some(record) = io_artifact_projection_record_from_event(event)? {
+            insert_io_artifact_projection(&tx, &record)?;
+        }
+        last_applied_event_seq = event.event_seq;
+    }
+
+    let updated_at_ms = now_ms();
+    tx.execute(
+        "INSERT INTO projection_state
+            (projection_name, projection_version, last_applied_event_seq, status,
+             rebuilt_at_ms, updated_at_ms)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+         ON CONFLICT(projection_name) DO UPDATE SET
+            projection_version = excluded.projection_version,
+            last_applied_event_seq = excluded.last_applied_event_seq,
+            status = excluded.status,
+            rebuilt_at_ms = excluded.rebuilt_at_ms,
+            updated_at_ms = excluded.updated_at_ms",
+        params![
+            IO_ARTIFACT_PROJECTION_NAME,
+            IO_ARTIFACT_PROJECTION_VERSION,
+            last_applied_event_seq,
+            ProjectionStatus::Current.as_db(),
+            rebuilt_at_ms,
+            updated_at_ms,
+        ],
+    )?;
+    tx.commit()?;
+
+    Ok(ProjectionStateRecord {
+        projection_name: IO_ARTIFACT_PROJECTION_NAME.to_string(),
+        projection_version: IO_ARTIFACT_PROJECTION_VERSION,
+        last_applied_event_seq,
+        status: ProjectionStatus::Current,
+        rebuilt_at_ms,
+        updated_at_ms,
+    })
+}
+
+pub(super) fn query_io_artifact_projection(
+    ledger: &SqliteDiagnosticsLedger,
+    query: IoArtifactProjectionQuery,
+) -> Result<Vec<IoArtifactProjectionRecord>, DiagnosticsLedgerError> {
+    query.validate(MAX_PAGE_SIZE)?;
+    let mut stmt = ledger.conn.prepare(
+        "SELECT event_seq, event_id, occurred_at_ms, recorded_at_ms, workflow_run_id,
+                workflow_id, workflow_version_id, workflow_semantic_version, node_id,
+                node_type, node_version, runtime_id, runtime_version, model_id,
+                model_version, artifact_id, artifact_role, media_type, size_bytes,
+                content_hash, payload_ref, retention_policy_id
+         FROM io_artifact_projection
+         WHERE workflow_run_id = ?1
+           AND (?2 IS NULL OR node_id = ?2)
+           AND (?3 IS NULL OR artifact_role = ?3)
+           AND event_seq > ?4
+         ORDER BY event_seq
+         LIMIT ?5",
+    )?;
+    let rows = stmt.query_map(
+        params![
+            query.workflow_run_id.as_str(),
+            query.node_id.as_deref(),
+            query.artifact_role.as_deref(),
+            query.after_event_seq.unwrap_or(0),
+            query.limit,
+        ],
+        io_artifact_projection_from_row,
+    )?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(DiagnosticsLedgerError::from)
+}
+
 fn diagnostic_event_from_row(row: &Row<'_>) -> rusqlite::Result<DiagnosticEventRecord> {
     Ok(DiagnosticEventRecord {
         event_seq: row.get(0)?,
@@ -658,6 +773,33 @@ fn diagnostic_projection_events_after(
         .map_err(DiagnosticsLedgerError::from)
 }
 
+fn io_artifact_events_after(
+    tx: &rusqlite::Transaction<'_>,
+    last_applied_event_seq: i64,
+    limit: u32,
+) -> Result<Vec<DiagnosticEventRecord>, DiagnosticsLedgerError> {
+    let mut stmt = tx.prepare(
+        "SELECT event_seq, event_id, event_kind, schema_version, source_component,
+                source_instance_id, occurred_at_ms, recorded_at_ms, workflow_run_id,
+                workflow_id, workflow_version_id, workflow_semantic_version, node_id,
+                node_type, node_version, runtime_id, runtime_version, model_id,
+                model_version, client_id, client_session_id, bucket_id, scheduler_policy_id,
+                retention_policy_id, privacy_class, event_retention_class, payload_hash,
+                payload_size_bytes, payload_ref, payload_json
+         FROM diagnostic_events
+         WHERE event_seq > ?1
+           AND event_kind = 'io.artifact_observed'
+         ORDER BY event_seq
+         LIMIT ?2",
+    )?;
+    let rows = stmt.query_map(
+        params![last_applied_event_seq, limit],
+        diagnostic_event_from_row,
+    )?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(DiagnosticsLedgerError::from)
+}
+
 fn scheduler_timeline_record_from_event(
     event: &DiagnosticEventRecord,
 ) -> Result<Option<SchedulerTimelineProjectionRecord>, DiagnosticsLedgerError> {
@@ -724,6 +866,49 @@ fn scheduler_timeline_record_from_event(
         summary,
         detail,
         payload_json: event.payload_json.clone(),
+    }))
+}
+
+fn io_artifact_projection_record_from_event(
+    event: &DiagnosticEventRecord,
+) -> Result<Option<IoArtifactProjectionRecord>, DiagnosticsLedgerError> {
+    let payload: DiagnosticEventPayload = serde_json::from_str(&event.payload_json)?;
+    let DiagnosticEventPayload::IoArtifactObserved(payload) = payload else {
+        return Ok(None);
+    };
+
+    Ok(Some(IoArtifactProjectionRecord {
+        event_seq: event.event_seq,
+        event_id: event.event_id.clone(),
+        occurred_at_ms: event.occurred_at_ms,
+        recorded_at_ms: event.recorded_at_ms,
+        workflow_run_id: event.workflow_run_id.clone().ok_or(
+            DiagnosticsLedgerError::MissingField {
+                field: "workflow_run_id",
+            },
+        )?,
+        workflow_id: event
+            .workflow_id
+            .clone()
+            .ok_or(DiagnosticsLedgerError::MissingField {
+                field: "workflow_id",
+            })?,
+        workflow_version_id: event.workflow_version_id.clone(),
+        workflow_semantic_version: event.workflow_semantic_version.clone(),
+        node_id: event.node_id.clone(),
+        node_type: event.node_type.clone(),
+        node_version: event.node_version.clone(),
+        runtime_id: event.runtime_id.clone(),
+        runtime_version: event.runtime_version.clone(),
+        model_id: event.model_id.clone(),
+        model_version: event.model_version.clone(),
+        artifact_id: payload.artifact_id,
+        artifact_role: payload.artifact_role,
+        media_type: payload.media_type,
+        size_bytes: payload.size_bytes,
+        content_hash: payload.content_hash,
+        payload_ref: event.payload_ref.clone(),
+        retention_policy_id: event.retention_policy_id.clone(),
     }))
 }
 
@@ -975,6 +1160,50 @@ fn insert_scheduler_timeline_projection(
     Ok(())
 }
 
+fn insert_io_artifact_projection(
+    tx: &rusqlite::Transaction<'_>,
+    record: &IoArtifactProjectionRecord,
+) -> Result<(), DiagnosticsLedgerError> {
+    tx.execute(
+        "INSERT OR IGNORE INTO io_artifact_projection
+            (event_seq, event_id, occurred_at_ms, recorded_at_ms, workflow_run_id,
+             workflow_id, workflow_version_id, workflow_semantic_version, node_id,
+             node_type, node_version, runtime_id, runtime_version, model_id,
+             model_version, artifact_id, artifact_role, media_type, size_bytes,
+             content_hash, payload_ref, retention_policy_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13,
+                 ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)",
+        params![
+            record.event_seq,
+            record.event_id.as_str(),
+            record.occurred_at_ms,
+            record.recorded_at_ms,
+            record.workflow_run_id.as_str(),
+            record.workflow_id.as_str(),
+            record
+                .workflow_version_id
+                .as_ref()
+                .map(|workflow_version_id| workflow_version_id.as_str()),
+            record.workflow_semantic_version.as_deref(),
+            record.node_id.as_deref(),
+            record.node_type.as_deref(),
+            record.node_version.as_deref(),
+            record.runtime_id.as_deref(),
+            record.runtime_version.as_deref(),
+            record.model_id.as_deref(),
+            record.model_version.as_deref(),
+            record.artifact_id.as_str(),
+            record.artifact_role.as_str(),
+            record.media_type.as_deref(),
+            record.size_bytes.map(|value| value as i64),
+            record.content_hash.as_deref(),
+            record.payload_ref.as_deref(),
+            record.retention_policy_id.as_deref(),
+        ],
+    )?;
+    Ok(())
+}
+
 fn scheduler_timeline_projection_from_row(
     row: &Row<'_>,
 ) -> rusqlite::Result<SchedulerTimelineProjectionRecord> {
@@ -1093,6 +1322,43 @@ fn run_detail_projection_from_row(row: &Row<'_>) -> rusqlite::Result<RunDetailPr
             .map(|value| u64::try_from(value).unwrap_or(u64::MAX))?,
         last_event_seq: row.get(23)?,
         last_updated_at_ms: row.get(24)?,
+    })
+}
+
+fn io_artifact_projection_from_row(row: &Row<'_>) -> rusqlite::Result<IoArtifactProjectionRecord> {
+    Ok(IoArtifactProjectionRecord {
+        event_seq: row.get(0)?,
+        event_id: row.get(1)?,
+        occurred_at_ms: row.get(2)?,
+        recorded_at_ms: row.get(3)?,
+        workflow_run_id: row
+            .get::<_, String>(4)
+            .and_then(|value| WorkflowRunId::try_from(value).map_err(sqlite_conversion_error))?,
+        workflow_id: row
+            .get::<_, String>(5)
+            .and_then(|value| WorkflowId::try_from(value).map_err(sqlite_conversion_error))?,
+        workflow_version_id: row
+            .get::<_, Option<String>>(6)?
+            .map(WorkflowVersionId::try_from)
+            .transpose()
+            .map_err(sqlite_conversion_error)?,
+        workflow_semantic_version: row.get(7)?,
+        node_id: row.get(8)?,
+        node_type: row.get(9)?,
+        node_version: row.get(10)?,
+        runtime_id: row.get(11)?,
+        runtime_version: row.get(12)?,
+        model_id: row.get(13)?,
+        model_version: row.get(14)?,
+        artifact_id: row.get(15)?,
+        artifact_role: row.get(16)?,
+        media_type: row.get(17)?,
+        size_bytes: row
+            .get::<_, Option<i64>>(18)?
+            .map(|value| u64::try_from(value).unwrap_or(u64::MAX)),
+        content_hash: row.get(19)?,
+        payload_ref: row.get(20)?,
+        retention_policy_id: row.get(21)?,
     })
 }
 

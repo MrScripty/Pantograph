@@ -1,10 +1,11 @@
 use crate::{
     DiagnosticEventAppendRequest, DiagnosticEventRecord, DiagnosticsLedgerError,
-    DiagnosticsProjection, DiagnosticsQuery, DiagnosticsRetentionPolicy, ModelLicenseUsageEvent,
-    ProjectionStateRecord, ProjectionStateUpdate, PruneTimingObservationsCommand,
-    PruneTimingObservationsResult, PruneUsageEventsCommand, PruneUsageEventsResult,
-    RunDetailProjectionQuery, RunDetailProjectionRecord, RunListProjectionQuery,
-    RunListProjectionRecord, SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
+    DiagnosticsProjection, DiagnosticsQuery, DiagnosticsRetentionPolicy, IoArtifactProjectionQuery,
+    IoArtifactProjectionRecord, ModelLicenseUsageEvent, ProjectionStateRecord,
+    ProjectionStateUpdate, PruneTimingObservationsCommand, PruneTimingObservationsResult,
+    PruneUsageEventsCommand, PruneUsageEventsResult, RunDetailProjectionQuery,
+    RunDetailProjectionRecord, RunListProjectionQuery, RunListProjectionRecord,
+    SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
     WorkflowRunSummaryProjection, WorkflowRunSummaryQuery, WorkflowRunSummaryRecord,
     WorkflowTimingExpectation, WorkflowTimingExpectationQuery, WorkflowTimingObservation,
 };
@@ -77,6 +78,16 @@ pub trait DiagnosticsLedgerRepository {
         &self,
         query: RunDetailProjectionQuery,
     ) -> Result<Option<RunDetailProjectionRecord>, DiagnosticsLedgerError>;
+
+    fn drain_io_artifact_projection(
+        &mut self,
+        limit: u32,
+    ) -> Result<ProjectionStateRecord, DiagnosticsLedgerError>;
+
+    fn query_io_artifact_projection(
+        &self,
+        query: IoArtifactProjectionQuery,
+    ) -> Result<Vec<IoArtifactProjectionRecord>, DiagnosticsLedgerError>;
 
     fn record_timing_observation(
         &mut self,

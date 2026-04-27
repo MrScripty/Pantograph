@@ -1,6 +1,8 @@
 import { invoke, Channel } from '@tauri-apps/api/core';
 import type {
   WorkflowDiagnosticsProjection,
+  WorkflowIoArtifactQueryRequest,
+  WorkflowIoArtifactQueryResponse,
   WorkflowRunDetailQueryRequest,
   WorkflowRunDetailQueryResponse,
   WorkflowRunListQueryRequest,
@@ -346,6 +348,28 @@ export class WorkflowService extends WorkflowGraphMutationService {
     }
 
     return invoke<WorkflowRunDetailQueryResponse>('workflow_run_detail_query', {
+      request,
+    });
+  }
+
+  async queryIoArtifacts(
+    request: WorkflowIoArtifactQueryRequest,
+  ): Promise<WorkflowIoArtifactQueryResponse> {
+    if (USE_WORKFLOW_MOCKS) {
+      return {
+        artifacts: [],
+        projection_state: {
+          projection_name: 'io_artifact',
+          projection_version: 1,
+          last_applied_event_seq: 0,
+          status: 'current',
+          rebuilt_at_ms: null,
+          updated_at_ms: Date.now(),
+        },
+      };
+    }
+
+    return invoke<WorkflowIoArtifactQueryResponse>('workflow_io_artifact_query', {
       request,
     });
   }

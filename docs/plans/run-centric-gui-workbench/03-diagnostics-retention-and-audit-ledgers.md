@@ -219,11 +219,12 @@ repair, migration, projection-version changes, and tests.
   ids, model/runtime ids, and status fields needed by projections.
 - [x] Implement `projection_state` persistence and cursor updates for every
   first-pass projection.
-- [ ] Implement hot projection updates for run summary, run detail/current
+- [x] Implement hot projection updates for run summary, run detail/current
   status, scheduler timeline, and active-run I/O artifact metadata.
   - Run summary, run list, scheduler timeline, and selected-run detail/current
-    status are implemented as incremental materialized projections. Active-run
-    I/O metadata remains pending for the I/O Inspector stage.
+    status are implemented as incremental materialized projections. I/O
+    artifact metadata is implemented as a bounded metadata/reference projection
+    for selected-run and active-run I/O Inspector reads.
 - [ ] Implement warm projection drains for diagnostics summary, retention
   completeness, workflow-version performance, model/runtime comparison facets,
   and Library usage where first-pass event families exist.
@@ -269,7 +270,9 @@ now materializes one row per run from the same cursor-drained lifecycle events
 for scheduler-page list reads. `run_detail_projection` now materializes the
 selected run's lifecycle payloads, snapshot identity, client/session/bucket
 identity, current status, terminal summary, and timeline event count for
-selected-run pages. Active-run I/O artifact metadata, warm projection drains,
+selected-run pages. `io_artifact_projection` now materializes bounded artifact
+metadata and payload references from `io.artifact_observed` events by run,
+node, role, and event cursor for I/O Inspector reads. Warm projection drains,
 additional filters, and explicit rebuild commands remain pending.
 
 ### Milestone 3: I/O Artifact Metadata And Retention
@@ -282,6 +285,10 @@ availability.
 - [ ] Record workflow inputs/outputs and node input/output metadata.
 - [ ] Store artifact type, size, content hash where available, producer node,
   consumer node, run id, timestamps, and payload reference.
+  - First-pass projection stores artifact role, media type, size, content
+    hash, event node identity, run id, timestamps, and payload reference.
+    Explicit producer/consumer edge roles remain pending with richer I/O
+    event payloads.
 - [ ] Emit typed `io.*` events for artifact observation, retention state
   changes, truncation, externalization, expiration, and deletion.
 - [ ] Add global retention policy record and policy version.
@@ -293,7 +300,7 @@ availability.
   expiring payloads.
 - [ ] Emit typed `retention.*` events with policy version, timestamp, actor,
   affected artifact, and reason.
-- [ ] Update affected hot/warm projections through event cursors rather than
+- [x] Update affected hot/warm projections through event cursors rather than
   direct page-time artifact ledger scans.
 
 **Verification:**

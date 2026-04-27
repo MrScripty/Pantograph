@@ -4,8 +4,8 @@ use crate::records::{RetentionClass, DEFAULT_STANDARD_RETENTION_DAYS};
 use crate::util::now_ms;
 use crate::DiagnosticsLedgerError;
 
-pub(crate) const SCHEMA_VERSION: i64 = 10;
-const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v10";
+pub(crate) const SCHEMA_VERSION: i64 = 11;
+const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v11";
 
 pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {
     tx.execute_batch(
@@ -200,6 +200,9 @@ pub(crate) fn migrate_schema(
     if found < 10 {
         apply_run_detail_projection_schema(&tx)?;
     }
+    if found < 11 {
+        apply_io_artifact_projection_schema(&tx)?;
+    }
     if found < SCHEMA_VERSION {
         tx.execute(
             "INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
@@ -274,6 +277,7 @@ fn apply_event_ledger_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedg
     apply_scheduler_timeline_projection_schema(tx)?;
     apply_run_list_projection_schema(tx)?;
     apply_run_detail_projection_schema(tx)?;
+    apply_io_artifact_projection_schema(tx)?;
     Ok(())
 }
 
@@ -376,6 +380,44 @@ fn apply_run_detail_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagno
             ON run_detail_projection(workflow_version_id, last_updated_at_ms DESC);
         CREATE INDEX IF NOT EXISTS idx_run_detail_projection_status_updated
             ON run_detail_projection(status, last_updated_at_ms DESC);
+        "#,
+    )?;
+    Ok(())
+}
+
+fn apply_io_artifact_projection_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {
+    tx.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS io_artifact_projection (
+            event_seq INTEGER PRIMARY KEY,
+            event_id TEXT NOT NULL UNIQUE,
+            occurred_at_ms INTEGER NOT NULL,
+            recorded_at_ms INTEGER NOT NULL,
+            workflow_run_id TEXT NOT NULL,
+            workflow_id TEXT NOT NULL,
+            workflow_version_id TEXT,
+            workflow_semantic_version TEXT,
+            node_id TEXT,
+            node_type TEXT,
+            node_version TEXT,
+            runtime_id TEXT,
+            runtime_version TEXT,
+            model_id TEXT,
+            model_version TEXT,
+            artifact_id TEXT NOT NULL,
+            artifact_role TEXT NOT NULL,
+            media_type TEXT,
+            size_bytes INTEGER,
+            content_hash TEXT,
+            payload_ref TEXT,
+            retention_policy_id TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_io_artifact_projection_run_seq
+            ON io_artifact_projection(workflow_run_id, event_seq);
+        CREATE INDEX IF NOT EXISTS idx_io_artifact_projection_run_node_seq
+            ON io_artifact_projection(workflow_run_id, node_id, event_seq);
+        CREATE INDEX IF NOT EXISTS idx_io_artifact_projection_role_seq
+            ON io_artifact_projection(artifact_role, event_seq);
         "#,
     )?;
     Ok(())

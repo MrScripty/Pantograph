@@ -82,6 +82,9 @@ methods, but they do not own the schema or query semantics.
 - `run_detail_projection` is read directly by selected-run page/API consumers
   after an explicit incremental drain; normal detail reads do not replay raw
   event rows.
+- `io_artifact_projection` is read directly by I/O Inspector page/API
+  consumers after an explicit incremental drain; normal artifact gallery reads
+  do not replay raw event rows or load artifact bodies.
 - Schema migrations are forward-only and covered by repository tests.
 - Query results must not require frontend-side identity repair or workflow-name
   side channels.

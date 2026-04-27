@@ -1,9 +1,9 @@
 use pantograph_diagnostics_ledger::{
     DiagnosticsLedgerRepository, DiagnosticsQuery, DiagnosticsRetentionPolicy,
-    ExecutionGuaranteeLevel, ModelLicenseUsageEvent, ProjectionStateRecord,
-    RunDetailProjectionQuery, RunDetailProjectionRecord, RunListProjectionQuery,
-    RunListProjectionRecord, RunListProjectionStatus, SchedulerTimelineProjectionQuery,
-    SchedulerTimelineProjectionRecord,
+    ExecutionGuaranteeLevel, IoArtifactProjectionQuery, IoArtifactProjectionRecord,
+    ModelLicenseUsageEvent, ProjectionStateRecord, RunDetailProjectionQuery,
+    RunDetailProjectionRecord, RunListProjectionQuery, RunListProjectionRecord,
+    RunListProjectionStatus, SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
 };
 use serde::{Deserialize, Serialize};
 
@@ -129,6 +129,29 @@ pub struct WorkflowRunDetailQueryResponse {
     pub projection_state: ProjectionStateRecord,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowIoArtifactQueryRequest {
+    pub workflow_run_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub node_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artifact_role: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub after_event_seq: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub projection_batch_size: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowIoArtifactQueryResponse {
+    pub artifacts: Vec<IoArtifactProjectionRecord>,
+    pub projection_state: ProjectionStateRecord,
+}
+
 impl WorkflowService {
     pub fn workflow_diagnostics_usage_query(
         &self,
@@ -227,6 +250,31 @@ impl WorkflowService {
             projection_state,
         })
     }
+
+    pub fn workflow_io_artifact_query(
+        &self,
+        request: WorkflowIoArtifactQueryRequest,
+    ) -> Result<WorkflowIoArtifactQueryResponse, WorkflowServiceError> {
+        let projection_batch_size = request.projection_batch_size.unwrap_or(500).max(1);
+        if projection_batch_size > 500 {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "projection_batch_size exceeds maximum 500".to_string(),
+            ));
+        }
+        let query = request.into_io_artifact_query()?;
+        let mut ledger = self.diagnostics_ledger_guard()?;
+        let projection_state = ledger
+            .drain_io_artifact_projection(projection_batch_size)
+            .map_err(WorkflowServiceError::from)?;
+        let artifacts = ledger
+            .query_io_artifact_projection(query)
+            .map_err(WorkflowServiceError::from)?;
+
+        Ok(WorkflowIoArtifactQueryResponse {
+            artifacts,
+            projection_state,
+        })
+    }
 }
 
 impl WorkflowDiagnosticsUsageQueryRequest {
@@ -296,6 +344,20 @@ impl WorkflowRunDetailQueryRequest {
         Ok(RunDetailProjectionQuery {
             workflow_run_id: parse_id("workflow_run_id", self.workflow_run_id)?,
         })
+    }
+}
+
+impl WorkflowIoArtifactQueryRequest {
+    fn into_io_artifact_query(self) -> Result<IoArtifactProjectionQuery, WorkflowServiceError> {
+        let query = IoArtifactProjectionQuery {
+            workflow_run_id: parse_id("workflow_run_id", self.workflow_run_id)?,
+            node_id: self.node_id,
+            artifact_role: self.artifact_role,
+            after_event_seq: self.after_event_seq,
+            limit: self.limit.unwrap_or(100).max(1),
+        };
+        query.validate(500).map_err(WorkflowServiceError::from)?;
+        Ok(query)
     }
 }
 

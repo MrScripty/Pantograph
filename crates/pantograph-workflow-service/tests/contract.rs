@@ -1,14 +1,16 @@
 use async_trait::async_trait;
 use pantograph_diagnostics_ledger::{
-    DiagnosticEventKind, DiagnosticEventSourceComponent, ProjectionStateRecord, ProjectionStatus,
-    RunDetailProjectionRecord, RunListProjectionStatus, SchedulerTimelineProjectionRecord,
+    DiagnosticEventKind, DiagnosticEventSourceComponent, IoArtifactProjectionRecord,
+    ProjectionStateRecord, ProjectionStatus, RunDetailProjectionRecord, RunListProjectionStatus,
+    SchedulerTimelineProjectionRecord,
 };
 use pantograph_workflow_service::graph::WorkflowExecutionSessionKind;
 use pantograph_workflow_service::{
     WorkflowCapabilitiesRequest, WorkflowCapabilityModel, WorkflowExecutionSessionCreateRequest,
     WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionQueueItemStatus,
     WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionState,
-    WorkflowExecutionSessionSummary, WorkflowHost, WorkflowHostCapabilities, WorkflowIoNode,
+    WorkflowExecutionSessionSummary, WorkflowHost, WorkflowHostCapabilities,
+    WorkflowIoArtifactQueryRequest, WorkflowIoArtifactQueryResponse, WorkflowIoNode,
     WorkflowIoPort, WorkflowIoRequest, WorkflowIoResponse, WorkflowOutputTarget,
     WorkflowPortBinding, WorkflowPreflightRequest, WorkflowRunDetailQueryRequest,
     WorkflowRunDetailQueryResponse, WorkflowRuntimeCapability, WorkflowRuntimeInstallState,
@@ -700,6 +702,100 @@ fn workflow_run_detail_query_contract_snapshot() {
             "status": "current",
             "rebuilt_at_ms": null,
             "updated_at_ms": 1110
+        }
+    });
+    assert_eq!(response_value, expected_response);
+}
+
+#[test]
+fn workflow_io_artifact_query_contract_snapshot() {
+    let request = WorkflowIoArtifactQueryRequest {
+        workflow_run_id: "run-1".to_string(),
+        node_id: Some("node-1".to_string()),
+        artifact_role: Some("node_output".to_string()),
+        after_event_seq: Some(20),
+        limit: Some(25),
+        projection_batch_size: Some(100),
+    };
+    let response = WorkflowIoArtifactQueryResponse {
+        artifacts: vec![IoArtifactProjectionRecord {
+            event_seq: 21,
+            event_id: "event-21".to_string(),
+            occurred_at_ms: 1200,
+            recorded_at_ms: 1205,
+            workflow_run_id: "run-1".to_string().try_into().expect("run id"),
+            workflow_id: "wf-1".to_string().try_into().expect("workflow id"),
+            workflow_version_id: Some("version-1".to_string().try_into().expect("version id")),
+            workflow_semantic_version: Some("1.2.3".to_string()),
+            node_id: Some("node-1".to_string()),
+            node_type: Some("image-output".to_string()),
+            node_version: Some("2.0.0".to_string()),
+            runtime_id: Some("runtime-1".to_string()),
+            runtime_version: Some("0.4.0".to_string()),
+            model_id: Some("model-1".to_string()),
+            model_version: Some("rev-1".to_string()),
+            artifact_id: "artifact-1".to_string(),
+            artifact_role: "node_output".to_string(),
+            media_type: Some("image/png".to_string()),
+            size_bytes: Some(2048),
+            content_hash: Some("blake3:artifact".to_string()),
+            payload_ref: Some("artifact://artifact-1".to_string()),
+            retention_policy_id: Some("standard-local-v1".to_string()),
+        }],
+        projection_state: ProjectionStateRecord {
+            projection_name: "io_artifact".to_string(),
+            projection_version: 1,
+            last_applied_event_seq: 21,
+            status: ProjectionStatus::Current,
+            rebuilt_at_ms: None,
+            updated_at_ms: 1210,
+        },
+    };
+
+    let request_value = serde_json::to_value(request).expect("serialize io artifact request");
+    let expected_request = serde_json::json!({
+        "workflow_run_id": "run-1",
+        "node_id": "node-1",
+        "artifact_role": "node_output",
+        "after_event_seq": 20,
+        "limit": 25,
+        "projection_batch_size": 100
+    });
+    assert_eq!(request_value, expected_request);
+
+    let response_value = serde_json::to_value(response).expect("serialize io artifact response");
+    let expected_response = serde_json::json!({
+        "artifacts": [{
+            "event_seq": 21,
+            "event_id": "event-21",
+            "occurred_at_ms": 1200,
+            "recorded_at_ms": 1205,
+            "workflow_run_id": "run-1",
+            "workflow_id": "wf-1",
+            "workflow_version_id": "version-1",
+            "workflow_semantic_version": "1.2.3",
+            "node_id": "node-1",
+            "node_type": "image-output",
+            "node_version": "2.0.0",
+            "runtime_id": "runtime-1",
+            "runtime_version": "0.4.0",
+            "model_id": "model-1",
+            "model_version": "rev-1",
+            "artifact_id": "artifact-1",
+            "artifact_role": "node_output",
+            "media_type": "image/png",
+            "size_bytes": 2048,
+            "content_hash": "blake3:artifact",
+            "payload_ref": "artifact://artifact-1",
+            "retention_policy_id": "standard-local-v1"
+        }],
+        "projection_state": {
+            "projection_name": "io_artifact",
+            "projection_version": 1,
+            "last_applied_event_seq": 21,
+            "status": "current",
+            "rebuilt_at_ms": null,
+            "updated_at_ms": 1210
         }
     });
     assert_eq!(response_value, expected_response);

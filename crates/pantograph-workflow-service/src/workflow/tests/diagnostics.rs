@@ -1,10 +1,11 @@
 use pantograph_diagnostics_ledger::{
     DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
     DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
-    ExecutionGuaranteeLevel, LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent,
-    ModelOutputMeasurement, OutputModality, RetentionClass, RunSnapshotAcceptedPayload,
-    RunStartedPayload, RunTerminalPayload, RunTerminalStatus, SchedulerEstimateProducedPayload,
-    SchedulerQueuePlacementPayload, UsageEventStatus, UsageLineage,
+    ExecutionGuaranteeLevel, IoArtifactObservedPayload, LicenseSnapshot, ModelIdentity,
+    ModelLicenseUsageEvent, ModelOutputMeasurement, OutputModality, RetentionClass,
+    RunSnapshotAcceptedPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
+    SchedulerEstimateProducedPayload, SchedulerQueuePlacementPayload, UsageEventStatus,
+    UsageLineage,
 };
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, UsageEventId, WorkflowId, WorkflowRunId, WorkflowVersionId,
@@ -289,6 +290,77 @@ fn workflow_run_detail_query_validates_bounds() {
     ));
 }
 
+#[test]
+fn workflow_io_artifact_query_drains_and_reads_projection() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_io_artifact_event(
+            "node-a",
+            "node_output",
+            "artifact-a",
+        ))
+        .expect("io artifact event");
+    ledger
+        .append_diagnostic_event(sample_io_artifact_event(
+            "node-b",
+            "workflow_output",
+            "artifact-b",
+        ))
+        .expect("io artifact event");
+    let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+
+    let response = service
+        .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
+            workflow_run_id: "run-a".to_string(),
+            node_id: Some("node-b".to_string()),
+            artifact_role: None,
+            after_event_seq: None,
+            limit: Some(10),
+            projection_batch_size: Some(10),
+        })
+        .expect("io artifact query");
+
+    assert_eq!(response.artifacts.len(), 1);
+    assert_eq!(response.artifacts[0].artifact_id, "artifact-b");
+    assert_eq!(response.artifacts[0].artifact_role, "workflow_output");
+    assert_eq!(
+        response.artifacts[0].payload_ref.as_deref(),
+        Some("artifact://artifact-b")
+    );
+    assert_eq!(response.projection_state.last_applied_event_seq, 2);
+}
+
+#[test]
+fn workflow_io_artifact_query_validates_bounds() {
+    let service = WorkflowService::with_ephemeral_diagnostics_ledger().expect("service");
+
+    let invalid_id = service.workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
+        workflow_run_id: "bad\nid".to_string(),
+        node_id: None,
+        artifact_role: None,
+        after_event_seq: None,
+        limit: None,
+        projection_batch_size: None,
+    });
+    assert!(matches!(
+        invalid_id,
+        Err(WorkflowServiceError::InvalidRequest(_))
+    ));
+
+    let oversized_limit = service.workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
+        workflow_run_id: "run-a".to_string(),
+        node_id: None,
+        artifact_role: None,
+        after_event_seq: None,
+        limit: Some(501),
+        projection_batch_size: None,
+    });
+    assert!(matches!(
+        oversized_limit,
+        Err(WorkflowServiceError::InvalidRequest(_))
+    ));
+}
+
 fn sample_run_snapshot_event() -> DiagnosticEventAppendRequest {
     DiagnosticEventAppendRequest {
         source_component: DiagnosticEventSourceComponent::WorkflowService,
@@ -447,6 +519,44 @@ fn sample_scheduler_queue_event() -> DiagnosticEventAppendRequest {
             queue_position: 0,
             priority: 7,
             scheduler_policy_id: "priority_then_fifo".to_string(),
+        }),
+    }
+}
+
+fn sample_io_artifact_event(
+    node_id: &str,
+    artifact_role: &str,
+    artifact_id: &str,
+) -> DiagnosticEventAppendRequest {
+    DiagnosticEventAppendRequest {
+        source_component: DiagnosticEventSourceComponent::NodeExecution,
+        source_instance_id: Some("node-executor".to_string()),
+        occurred_at_ms: 30,
+        workflow_run_id: Some(WorkflowRunId::try_from("run-a".to_string()).unwrap()),
+        workflow_id: Some(WorkflowId::try_from("workflow-a".to_string()).unwrap()),
+        workflow_version_id: Some(WorkflowVersionId::try_from("wfver-a".to_string()).unwrap()),
+        workflow_semantic_version: Some("1.0.0".to_string()),
+        node_id: Some(node_id.to_string()),
+        node_type: Some("artifact-node".to_string()),
+        node_version: Some("1.0.0".to_string()),
+        runtime_id: Some("runtime-a".to_string()),
+        runtime_version: Some("0.1.0".to_string()),
+        model_id: None,
+        model_version: None,
+        client_id: Some(ClientId::try_from("client-a".to_string()).unwrap()),
+        client_session_id: Some(ClientSessionId::try_from("session-a".to_string()).unwrap()),
+        bucket_id: Some(BucketId::try_from("bucket-a".to_string()).unwrap()),
+        scheduler_policy_id: Some("priority_then_fifo".to_string()),
+        retention_policy_id: Some("ephemeral".to_string()),
+        privacy_class: DiagnosticEventPrivacyClass::SensitiveReference,
+        retention_class: DiagnosticEventRetentionClass::PayloadReference,
+        payload_ref: Some(format!("artifact://{artifact_id}")),
+        payload: DiagnosticEventPayload::IoArtifactObserved(IoArtifactObservedPayload {
+            artifact_id: artifact_id.to_string(),
+            artifact_role: artifact_role.to_string(),
+            media_type: Some("text/plain".to_string()),
+            size_bytes: Some(42),
+            content_hash: Some("blake3:test".to_string()),
         }),
     }
 }

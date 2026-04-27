@@ -16,16 +16,17 @@ pub use error::DiagnosticsLedgerError;
 pub use event::{
     DiagnosticEventAppendRequest, DiagnosticEventKind, DiagnosticEventPayload,
     DiagnosticEventPrivacyClass, DiagnosticEventRecord, DiagnosticEventRetentionClass,
-    DiagnosticEventSourceComponent, IoArtifactObservedPayload, LibraryAssetAccessedPayload,
-    ProjectionStateRecord, ProjectionStateUpdate, ProjectionStatus, RetentionPolicyChangedPayload,
+    DiagnosticEventSourceComponent, IoArtifactObservedPayload, IoArtifactProjectionQuery,
+    IoArtifactProjectionRecord, LibraryAssetAccessedPayload, ProjectionStateRecord,
+    ProjectionStateUpdate, ProjectionStatus, RetentionPolicyChangedPayload,
     RunDetailProjectionQuery, RunDetailProjectionRecord, RunListProjectionQuery,
     RunListProjectionRecord, RunListProjectionStatus, RunSnapshotAcceptedPayload,
     RunStartedPayload, RunTerminalPayload, RunTerminalStatus, RuntimeCapabilityObservedPayload,
     SchedulerEstimateProducedPayload, SchedulerQueuePlacementPayload,
     SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
-    DIAGNOSTIC_EVENT_SCHEMA_VERSION, MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES,
-    RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION, RUN_LIST_PROJECTION_NAME,
-    RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
+    DIAGNOSTIC_EVENT_SCHEMA_VERSION, IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION,
+    MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION,
+    RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
     SCHEDULER_TIMELINE_PROJECTION_VERSION,
 };
 pub use records::{

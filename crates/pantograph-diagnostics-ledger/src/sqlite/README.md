@@ -32,6 +32,9 @@ ledger.
   not `diagnostic_events`.
 - Run detail drains apply only events after the stored projection cursor and
   update one row per workflow run for selected-run page/query reads.
+- I/O artifact drains apply only artifact observation events after the stored
+  projection cursor and write bounded metadata/reference rows keyed by
+  `event_seq`.
 
 ## Dependencies
 **Internal:** parent `sqlite.rs`, diagnostics ledger event/timing/run-summary

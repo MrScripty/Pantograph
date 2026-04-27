@@ -14,7 +14,8 @@ use pantograph_workflow_service::{
     WorkflowExecutionSessionQueueReprioritizeResponse, WorkflowExecutionSessionRunRequest,
     WorkflowExecutionSessionStaleCleanupRequest, WorkflowExecutionSessionStaleCleanupResponse,
     WorkflowExecutionSessionStatusRequest, WorkflowExecutionSessionStatusResponse,
-    WorkflowIoRequest, WorkflowIoResponse, WorkflowPreflightRequest, WorkflowPreflightResponse,
+    WorkflowIoArtifactQueryRequest, WorkflowIoArtifactQueryResponse, WorkflowIoRequest,
+    WorkflowIoResponse, WorkflowPreflightRequest, WorkflowPreflightResponse,
     WorkflowRunDetailQueryRequest, WorkflowRunDetailQueryResponse, WorkflowRunListQueryRequest,
     WorkflowRunListQueryResponse, WorkflowRunResponse, WorkflowSchedulerSnapshotRequest,
     WorkflowSchedulerSnapshotResponse, WorkflowSchedulerTimelineQueryRequest,
@@ -233,6 +234,15 @@ pub async fn workflow_run_detail_query(
 ) -> Result<WorkflowRunDetailQueryResponse, String> {
     workflow_service
         .workflow_run_detail_query(request)
+        .map_err(workflow_error_json)
+}
+
+pub async fn workflow_io_artifact_query(
+    request: WorkflowIoArtifactQueryRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowIoArtifactQueryResponse, String> {
+    workflow_service
+        .workflow_io_artifact_query(request)
         .map_err(workflow_error_json)
 }
 

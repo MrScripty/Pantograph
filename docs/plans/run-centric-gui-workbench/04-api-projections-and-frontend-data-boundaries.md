@@ -125,6 +125,8 @@ transport calls.
   how projection freshness/catching-up/degraded states appear in API responses.
 - [ ] Define graph-version DTOs for historic run view.
 - [ ] Define I/O artifact and retention DTOs.
+  - First-pass I/O artifact DTOs cover bounded metadata and payload
+    references. Retention-state DTOs remain pending with retention policy work.
 - [ ] Define Library usage/Pumas audit DTOs.
 - [ ] Define local Network node DTOs.
 - [ ] Define future peer pairing/trust DTO placeholders for Network so Iroh
@@ -162,6 +164,8 @@ policy into adapters.
 - [x] Add scheduler estimate and event queries.
 - [ ] Add workflow-version graph lookup by run id.
 - [ ] Add I/O metadata and retention policy queries/commands.
+  - I/O artifact metadata query is implemented. Retention policy
+    queries/commands remain pending.
 - [ ] Add Library/Pumas usage audit queries.
 - [x] Add projection rebuild/query boundaries for typed event ledger derived
   views.
@@ -195,8 +199,10 @@ scheduler-page run lists. The Tauri app now configures the shared
 `WorkflowService` with the persistent diagnostics ledger and exposes these
 projection queries with frontend service/type boundaries. `workflow_run_detail_query`
 now exposes selected-run detail over durable `run_detail_projection` rows with
-projection freshness state. I/O, Library/Pumas, Network/system-node, admin
-maintenance, and broader command boundaries remain pending.
+projection freshness state. `workflow_io_artifact_query` now exposes bounded
+artifact metadata/reference rows for I/O Inspector reads. Retention policy,
+Library/Pumas, Network/system-node, admin maintenance, and broader command
+boundaries remain pending.
 
 ### Milestone 3: Frontend Services And Stores
 
@@ -212,6 +218,8 @@ projections while owning only transient UI state.
   TypeScript DTOs.
 - [x] Add the initial selected-run detail projection service method and
   TypeScript DTOs.
+- [x] Add the initial I/O artifact projection service method and TypeScript
+  DTOs.
 - [ ] Add active-run store as transient UI state.
 - [ ] Add focused stores for run list filters/sort/column state.
 - [ ] Preserve backend error categories through presenters.

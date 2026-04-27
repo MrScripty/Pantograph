@@ -350,6 +350,31 @@ export interface RunDetailProjectionRecord extends RunListProjectionRecord {
   timeline_event_count: number;
 }
 
+export interface IoArtifactProjectionRecord {
+  event_seq: number;
+  event_id: string;
+  occurred_at_ms: number;
+  recorded_at_ms: number;
+  workflow_run_id: string;
+  workflow_id: string;
+  workflow_version_id?: string | null;
+  workflow_semantic_version?: string | null;
+  node_id?: string | null;
+  node_type?: string | null;
+  node_version?: string | null;
+  runtime_id?: string | null;
+  runtime_version?: string | null;
+  model_id?: string | null;
+  model_version?: string | null;
+  artifact_id: string;
+  artifact_role: string;
+  media_type?: string | null;
+  size_bytes?: number | null;
+  content_hash?: string | null;
+  payload_ref?: string | null;
+  retention_policy_id?: string | null;
+}
+
 export interface WorkflowRunListQueryRequest {
   workflow_id?: string | null;
   status?: RunListProjectionStatus | null;
@@ -370,6 +395,20 @@ export interface WorkflowRunDetailQueryRequest {
 
 export interface WorkflowRunDetailQueryResponse {
   run?: RunDetailProjectionRecord | null;
+  projection_state: ProjectionStateRecord;
+}
+
+export interface WorkflowIoArtifactQueryRequest {
+  workflow_run_id: string;
+  node_id?: string | null;
+  artifact_role?: string | null;
+  after_event_seq?: number | null;
+  limit?: number | null;
+  projection_batch_size?: number | null;
+}
+
+export interface WorkflowIoArtifactQueryResponse {
+  artifacts: IoArtifactProjectionRecord[];
   projection_state: ProjectionStateRecord;
 }
 

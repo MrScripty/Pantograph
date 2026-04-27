@@ -35,7 +35,8 @@ mod workflow_run_api;
 pub use self::contracts::*;
 pub use self::diagnostics_api::{
     WorkflowDiagnosticsUsageQueryRequest, WorkflowDiagnosticsUsageQueryResponse,
-    WorkflowDiagnosticsUsageSummary, WorkflowRunDetailQueryRequest, WorkflowRunDetailQueryResponse,
+    WorkflowDiagnosticsUsageSummary, WorkflowIoArtifactQueryRequest,
+    WorkflowIoArtifactQueryResponse, WorkflowRunDetailQueryRequest, WorkflowRunDetailQueryResponse,
     WorkflowRunListQueryRequest, WorkflowRunListQueryResponse,
     WorkflowSchedulerTimelineQueryRequest, WorkflowSchedulerTimelineQueryResponse,
 };
@@ -48,9 +49,9 @@ pub use self::runtime_preflight::{evaluate_runtime_preflight, format_runtime_not
 pub(crate) use self::validation::validate_workflow_id;
 
 pub use pantograph_diagnostics_ledger::{
-    ProjectionStateRecord, RunDetailProjectionRecord, RunListProjectionRecord,
-    RunListProjectionStatus, SchedulerTimelineProjectionRecord, SqliteDiagnosticsLedger,
-    WorkflowTimingExpectation, WorkflowTimingExpectationComparison,
+    IoArtifactProjectionRecord, ProjectionStateRecord, RunDetailProjectionRecord,
+    RunListProjectionRecord, RunListProjectionStatus, SchedulerTimelineProjectionRecord,
+    SqliteDiagnosticsLedger, WorkflowTimingExpectation, WorkflowTimingExpectationComparison,
 };
 pub use pantograph_runtime_attribution::{
     AttributionRepository, BucketCreateRequest, BucketDeleteRequest, BucketRecord, BucketSelection,
