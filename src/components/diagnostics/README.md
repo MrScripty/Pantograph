@@ -1,15 +1,14 @@
 # src/components/diagnostics
 
 ## Purpose
-This directory contains the workflow diagnostics view for Pantograph's existing
-GUI. It renders retained diagnostics snapshots from `src/stores/diagnosticsStore.ts`
-without owning event subscriptions, runtime state machines, or workflow service
-logic.
+This directory contains Pantograph's workflow diagnostics view. It renders
+retained diagnostics snapshots from `src/stores/diagnosticsStore.ts` without
+owning event subscriptions, runtime state machines, or workflow service logic.
 
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `DiagnosticsPanel.svelte` | Shell component that renders the bottom diagnostics panel, retained run list, and all diagnostics tabs. |
+| `DiagnosticsPanel.svelte` | Shell component that renders the retained run list and all diagnostics tabs as either an embedded workbench page or a collapsible panel. |
 | `DiagnosticsOverview.svelte` | Overview tab with run-level summary cards and node detail panels. |
 | `DiagnosticsNodeDetail.svelte` | Focused selected-node inspector that renders lifecycle, duration expectation, optional reported progress, messages, and errors. |
 | `DiagnosticsTimingExpectation.svelte` | Small reusable duration-expectation badge used by overview and timeline views. |
@@ -28,8 +27,8 @@ second owner of workflow transport state.
 
 ## Constraints
 - Components in this directory must consume diagnostics snapshots declaratively.
-- The panel must fit inside the existing workflow editor rather than introducing
-  a parallel top-level screen.
+- The panel must support an embedded workbench page while preserving the
+  collapsible rendering path for graph-adjacent diagnostics controls.
 - Scheduler, runtime, and graph tabs should render workflow-service-backed or
   diagnostics-store-backed state instead of inventing component-local shadow
   models.
@@ -43,20 +42,22 @@ second owner of workflow transport state.
   they must not infer or repair those facts locally.
 
 ## Decision
-Render the diagnostics surface as a bottom panel under the workflow graph.
+Render the diagnostics surface as a page-compatible diagnostics shell.
 `DiagnosticsPanel.svelte` owns panel composition and delegates each active tab
-to focused child components. Formatting logic stays in `presenters.ts` so Svelte
-files mostly express layout and interaction. Duration expectation rendering is
-shared through `DiagnosticsTimingExpectation.svelte` so the overview and
-timeline views do not reinterpret backend timing fields independently.
+to focused child components. The `embedded` prop lets the workbench Diagnostics
+page render the same surface at full height without making the component own
+application routing. Formatting logic stays in `presenters.ts` so Svelte files
+mostly express layout and interaction. Duration expectation rendering is shared
+through `DiagnosticsTimingExpectation.svelte` so the overview and timeline
+views do not reinterpret backend timing fields independently.
 When no retained run is selected, `DiagnosticsWorkflowHistory.svelte` renders
 the backend-projected timing history for the opened workflow graph so previous
 diagnostics remain visible before a new run starts.
 
 ## Alternatives Rejected
-- Add diagnostics as a third top-level app mode.
-  Rejected because the user needs graph editing and diagnostics in the same
-  workflow workspace.
+- Keep diagnostics only as a graph bottom panel.
+  Rejected because the run-centric workbench requires Diagnostics to be a
+  top-level page sharing active-run context with Scheduler and other pages.
 - Put event normalization directly into these components.
   Rejected because trace ownership belongs to the diagnostics service/store
   boundary.
@@ -91,7 +92,7 @@ diagnostics remain visible before a new run starts.
 ## Dependencies
 **Internal:** `src/stores/diagnosticsStore.ts`,
 `src/services/diagnostics`, `src/components/WorkflowToolbar.svelte`,
-`src/App.svelte`.
+`src/components/workbench/DiagnosticsPage.svelte`.
 **External:** Svelte 5 and Tailwind utility classes already used by the app.
 
 ## Related ADRs
@@ -102,7 +103,7 @@ diagnostics remain visible before a new run starts.
 
 ## Usage Examples
 ```svelte
-<DiagnosticsPanel />
+<DiagnosticsPanel embedded={true} />
 ```
 
 ## API Consumer Contract

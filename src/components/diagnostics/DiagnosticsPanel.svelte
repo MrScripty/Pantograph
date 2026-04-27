@@ -14,6 +14,8 @@
     getDiagnosticsStatusClasses,
   } from './presenters';
 
+  let { embedded = false }: { embedded?: boolean } = $props();
+
   const tabDefinitions: Array<{ id: DiagnosticsTab; label: string; available: boolean }> = [
     { id: 'overview', label: 'Overview', available: true },
     { id: 'timeline', label: 'Timeline', available: true },
@@ -41,8 +43,14 @@
 
 </script>
 
-{#if snapshot.state.panelOpen}
-  <section class="h-[26rem] min-h-0 border-t border-neutral-800 bg-neutral-950/95 backdrop-blur-sm">
+{#if embedded || snapshot.state.panelOpen}
+  <section
+    class="min-h-0 bg-neutral-950/95 backdrop-blur-sm"
+    class:h-full={embedded}
+    class:h-[26rem]={!embedded}
+    class:border-t={!embedded}
+    class:border-neutral-800={!embedded}
+  >
     <div class="flex h-full min-h-0">
       <aside class="flex w-80 min-w-[18rem] flex-col border-r border-neutral-800 bg-neutral-950/80">
         <div class="border-b border-neutral-800 px-4 py-4">
@@ -53,13 +61,15 @@
                 {snapshot.state.currentWorkflowId ?? 'Active Workflow'}
               </div>
             </div>
-            <button
-              type="button"
-              class="rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100"
-              onclick={() => setDiagnosticsPanelOpen(false)}
-            >
-              Hide
-            </button>
+            {#if !embedded}
+              <button
+                type="button"
+                class="rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100"
+                onclick={() => setDiagnosticsPanelOpen(false)}
+              >
+                Hide
+              </button>
+            {/if}
           </div>
 
           <div class="mt-3 space-y-1 text-xs text-neutral-500">

@@ -36,6 +36,7 @@ architecture views on top of the shared editor.
 | `NodeGroupEditor.svelte` | App wrapper for group editing and exposed-port management. |
 | `NavigationBreadcrumb.svelte` | Breadcrumb UI for group/orchestration navigation. |
 | `WorkflowToolbar.svelte` | Toolbar actions for workflow graph editing. |
+| `workbench/` | Scheduler-first app shell, page wrappers, and active-run workbench views. |
 | `diagnostics/` | Workflow diagnostics panel, tab views, and presentation helpers for retained execution traces. |
 | `nodes/` | Pantograph-specific node renderers and the shared app node shell. |
 | `runtime-manager/` | Mounted Settings runtime-manager cards and panel for backend-owned redistributable inspection and version policy. |
@@ -54,8 +55,8 @@ as the package graph so GUI behavior and backend validation stay aligned.
   is incremental.
 - Built-in node UI must stay aligned with backend-owned node contracts and
   starter workflow templates.
-- Diagnostics rendering should stay inside the workflow workspace without
-  becoming a parallel app shell.
+- Diagnostics rendering should be owned by the workbench Diagnostics page while
+  remaining available to graph execution controls through explicit props only.
 - Settings-side runtime management must remain a presentation surface over the
   backend-owned managed-runtime contract rather than introducing GUI-owned
   runtime policy.
@@ -97,6 +98,11 @@ without continuing to grow one large component file.
 Toolbar execution-event handling now delegates execution-id claiming and stale
 event filtering to the shared package workflow execution projector so the app
 toolbar does not maintain a second local relevance gate.
+The root app shell now lives in `workbench/`, which gives Scheduler,
+Diagnostics, Graph, I/O Inspector, Library, Network, and Node Editor a shared
+navigation surface and selected-run context. Existing graph and diagnostics
+components are mounted through page wrappers instead of being selected by the
+old root canvas/workflow mode switch.
 The app workflow graph delegates orchestration boundary overlay rendering to
 `WorkflowContainerBoundary.svelte` and boundary math to
 `workflowContainerBoundary.ts`, while the parent keeps viewport tracking,

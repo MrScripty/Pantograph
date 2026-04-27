@@ -12,7 +12,14 @@ export const PANTOGRAPH_ARCHITECTURE: ArchitectureGraph = {
       category: 'component',
       label: 'App',
       filePath: 'src/App.svelte',
-      description: 'Root application component with view mode switching'
+      description: 'Root application component that mounts the run-centric workbench shell'
+    },
+    {
+      id: 'component:WorkbenchShell',
+      category: 'component',
+      label: 'WorkbenchShell',
+      filePath: 'src/components/workbench/WorkbenchShell.svelte',
+      description: 'Scheduler-first workbench shell with top-level pages and transient active-run context'
     },
     {
       id: 'component:Canvas',
@@ -33,14 +40,14 @@ export const PANTOGRAPH_ARCHITECTURE: ArchitectureGraph = {
       category: 'component',
       label: 'WorkflowToolbar',
       filePath: 'src/components/WorkflowToolbar.svelte',
-      description: 'Workflow actions and diagnostics panel toggle'
+      description: 'Workflow graph editing and execution actions'
     },
     {
       id: 'component:DiagnosticsPanel',
       category: 'component',
       label: 'DiagnosticsPanel',
       filePath: 'src/components/diagnostics/DiagnosticsPanel.svelte',
-      description: 'Bottom-panel workflow diagnostics view with run selection and tabs'
+      description: 'Workflow diagnostics view with run selection and tabs'
     },
     {
       id: 'component:NodePalette',
@@ -180,11 +187,11 @@ export const PANTOGRAPH_ARCHITECTURE: ArchitectureGraph = {
 
     // ==================== STORES ====================
     {
-      id: 'store:viewModeStore',
+      id: 'store:workbenchStore',
       category: 'store',
-      label: 'viewModeStore',
-      filePath: 'src/stores/viewModeStore.ts',
-      description: 'Current view mode (canvas/node-graph/workflow)'
+      label: 'workbenchStore',
+      filePath: 'src/stores/workbenchStore.ts',
+      description: 'Transient workbench page selection and active workflow run context'
     },
     {
       id: 'store:workflowStore',
@@ -347,18 +354,16 @@ export const PANTOGRAPH_ARCHITECTURE: ArchitectureGraph = {
 
   connections: [
     // ==================== App imports components ====================
-    { id: 'c1', source: 'component:App', target: 'component:Canvas', connectionType: 'import' },
-    { id: 'c3', source: 'component:App', target: 'component:WorkflowGraph', connectionType: 'import' },
+    { id: 'c1', source: 'component:App', target: 'component:WorkbenchShell', connectionType: 'import' },
     { id: 'c4', source: 'component:App', target: 'component:SidePanel', connectionType: 'import' },
-    { id: 'c5', source: 'component:App', target: 'component:TopBar', connectionType: 'import' },
-    { id: 'c6', source: 'component:App', target: 'component:Toolbar', connectionType: 'import' },
-    { id: 'c7', source: 'component:App', target: 'component:WorkflowToolbar', connectionType: 'import' },
-    { id: 'c8', source: 'component:App', target: 'component:NodePalette', connectionType: 'import' },
-    { id: 'c9', source: 'component:App', target: 'component:HotLoadContainer', connectionType: 'import' },
-    { id: 'c9a', source: 'component:App', target: 'component:DiagnosticsPanel', connectionType: 'import' },
+    { id: 'c9', source: 'component:App', target: 'component:ChunkPreview', connectionType: 'import' },
+    { id: 'c9a', source: 'component:WorkbenchShell', target: 'component:WorkflowGraph', connectionType: 'import' },
+    { id: 'c9b', source: 'component:WorkbenchShell', target: 'component:WorkflowToolbar', connectionType: 'import' },
+    { id: 'c9c', source: 'component:WorkbenchShell', target: 'component:NodePalette', connectionType: 'import' },
+    { id: 'c9d', source: 'component:WorkbenchShell', target: 'component:DiagnosticsPanel', connectionType: 'import' },
 
     // ==================== Component → Store subscriptions ====================
-    { id: 'c10', source: 'component:App', target: 'store:viewModeStore', connectionType: 'subscription' },
+    { id: 'c10', source: 'component:WorkbenchShell', target: 'store:workbenchStore', connectionType: 'subscription' },
     { id: 'c11', source: 'component:App', target: 'store:panelStore', connectionType: 'subscription' },
     { id: 'c12', source: 'component:Canvas', target: 'store:canvasStore', connectionType: 'subscription' },
     { id: 'c13', source: 'component:Canvas', target: 'store:interactionModeStore', connectionType: 'subscription' },

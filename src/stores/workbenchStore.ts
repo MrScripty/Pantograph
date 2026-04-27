@@ -38,7 +38,7 @@ export const WORKBENCH_PAGES: WorkbenchPageDefinition[] = [
   { id: 'io_inspector', label: 'I/O Inspector' },
   { id: 'library', label: 'Library' },
   { id: 'network', label: 'Network' },
-  { id: 'node_lab', label: 'Node Lab' },
+  { id: 'node_lab', label: 'Node Editor' },
 ];
 
 export const DEFAULT_WORKBENCH_STATE: WorkbenchState = {

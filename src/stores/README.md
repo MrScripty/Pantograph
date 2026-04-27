@@ -13,7 +13,7 @@ components observe the same graph state.
 | `workflowStore.ts` | Thin compatibility layer that re-exports workflow store instances and actions for app components. |
 | `diagnosticsStore.ts` | Single app-level owner for diagnostics subscriptions, trace snapshots, and diagnostics panel state. |
 | `diagnosticsProjection.ts` | Pure helper module that normalizes diagnostics projections and builds immutable UI snapshots without subscribing to workflow events itself. |
-| `workbenchStore.ts` | Transient workbench navigation and active-run context shared by Scheduler, Diagnostics, Graph, I/O Inspector, Library, Network, and Node Lab pages. |
+| `workbenchStore.ts` | Transient workbench navigation and active-run context shared by Scheduler, Diagnostics, Graph, I/O Inspector, Library, Network, and Node Editor pages. |
 | `graphSessionStore.ts` | Tracks the active graph/session identity at the app layer. |
 | `viewStore.ts` | App navigation and zoom wrappers built around the package view stores. |
 | `architectureStore.ts` | Converts architecture data into workflow-like graph structures for the shared canvas. |

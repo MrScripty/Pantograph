@@ -2,9 +2,10 @@
 
 ## Status
 
-In progress. Milestone 1 has a frontend workbench-state contract for page ids,
-navigation order, and transient active-run context. The app shell and page
-bodies are not yet migrated.
+In progress. The frontend now has a Scheduler-first workbench shell, transient
+active-run navigation, graph and diagnostics page wrappers, and reserved pages
+for I/O Inspector, Library, Network, and Node Editor. Rich I/O and Library page
+bodies remain later-stage work.
 
 ## Objective
 
@@ -19,7 +20,7 @@ context shared across Diagnostics, Graph, I/O Inspector, Library, and Network.
 - Top-level workbench shell.
 - Default route/page set to Scheduler.
 - Toolbar or rail navigation for Scheduler, Diagnostics, Graph, I/O Inspector,
-  Library, Network, and Node Lab.
+  Library, Network, and Node Editor.
 - Active-run store and top-bar context display.
 - No-active-run states per page.
 - Explicit relocation or retirement path for existing drawing-to-Svelte and
@@ -59,16 +60,16 @@ The shell must change before page implementations can feel coherent.
 
 - A lightweight in-app route/page store is sufficient unless the repo already
   adopts a router during implementation.
-- Node Lab can start as a reserved page/route with an explicit future/disabled
+- Node Editor can start as a reserved page/route with an explicit future/disabled
   state.
 - The drawing-to-Svelte tool can be moved to a secondary page, converted into a
-  Library/Node Lab tool, or retired if it no longer fits the workbench.
+  Library/Node Editor tool, or retired if it no longer fits the workbench.
 
 ### Dependencies
 
 - Stage `04` frontend services and active-run DTOs.
-- Existing `src/App.svelte`, `src/stores/viewModeStore.ts`,
-  `WorkflowGraph.svelte`, `DiagnosticsPanel.svelte`, drawing feature modules,
+- Existing `src/App.svelte`, `WorkflowGraph.svelte`,
+  `DiagnosticsPanel.svelte`, drawing feature modules,
   and design-system components.
 
 ### Risks
@@ -84,7 +85,7 @@ The shell must change before page implementations can feel coherent.
 
 - App opens to Scheduler page.
 - Top-level navigation includes Scheduler, Diagnostics, Graph, I/O Inspector,
-  Library, Network, and Node Lab.
+  Library, Network, and Node Editor.
 - Selecting a run updates transient active-run context.
 - Page switching preserves active-run context for the current GUI session.
 - No-active-run states are available.
@@ -105,8 +106,8 @@ The shell must change before page implementations can feel coherent.
 - [x] Define page ids and navigation order.
 - [x] Add transient active-run store and selected page store.
 - [x] Define active-run top-bar summary model.
-- [ ] Define no-active-run behavior per page.
-- [ ] Decide whether drawing-to-Svelte becomes a workbench page/tool or is
+- [x] Define no-active-run behavior per page.
+- [x] Decide whether drawing-to-Svelte becomes a workbench page/tool or is
   retired.
 
 **Verification:**
@@ -115,10 +116,10 @@ The shell must change before page implementations can feel coherent.
   current session only.
 - Typecheck passes for shell contracts.
 
-**Status:** In progress. `src/stores/workbenchStore.ts` defines the page ids,
+**Status:** Complete. `src/stores/workbenchStore.ts` defines the page ids,
 navigation order, selected page store, and active-run summary context used by
-later shell work. No-active-run page behavior and legacy surface placement are
-still open.
+the shell. Reserved pages provide explicit no-active-run states, and the
+drawing-to-Svelte startup surface is retired from root navigation.
 
 ### Milestone 2: App Shell Refactor
 
@@ -127,13 +128,13 @@ the workbench shell.
 
 **Tasks:**
 
-- [ ] Extract current canvas/workflow surfaces into route/page components if
+- [x] Extract current canvas/workflow surfaces into route/page components if
   needed.
-- [ ] Add workbench layout with toolbar/rail, top bar, main content region, and
+- [x] Add workbench layout with toolbar/rail, top bar, main content region, and
   optional contextual drawer/bottom events area.
-- [ ] Set Scheduler as default page.
-- [ ] Add accessible navigation controls with labels and selected state.
-- [ ] Preserve keyboard behavior that still applies, and remove or remap
+- [x] Set Scheduler as default page.
+- [x] Add accessible navigation controls with labels and selected state.
+- [x] Preserve keyboard behavior that still applies, and remove or remap
   obsolete global shortcuts.
 
 **Verification:**
@@ -143,7 +144,10 @@ the workbench shell.
 - Existing graph interaction tests still pass or are updated for new shell
   ownership.
 
-**Status:** Not started.
+**Status:** Complete. `src/App.svelte` now mounts `WorkbenchShell.svelte`
+instead of switching between canvas and workflow modes. Graph editing is a
+workbench page, Scheduler is the default page, and obsolete root mode shortcuts
+were removed.
 
 ### Milestone 3: Active Run Wiring
 
@@ -152,11 +156,11 @@ restart.
 
 **Tasks:**
 
-- [ ] Wire Scheduler row selection to active-run store.
-- [ ] Add active-run summary in top bar.
-- [ ] Pass active-run id/context to page shells.
-- [ ] Add clear active run action if supported by UX.
-- [ ] Ensure page refresh/startup has no selected active run.
+- [x] Wire Scheduler row selection to active-run store.
+- [x] Add active-run summary in top bar.
+- [x] Pass active-run id/context to page shells.
+- [x] Add clear active run action if supported by UX.
+- [x] Ensure page refresh/startup has no selected active run.
 
 **Verification:**
 
@@ -164,7 +168,9 @@ restart.
   persistence.
 - Tests cover pages receiving no-active-run versus active-run props/state.
 
-**Status:** Not started.
+**Status:** Complete for the shell slice. Scheduler rows set active-run
+context, page switching preserves it during the current GUI session, and
+startup still initializes with no selected run.
 
 ### Milestone 4: Legacy Surface Migration
 
@@ -173,12 +179,12 @@ surfaces.
 
 **Tasks:**
 
-- [ ] Move drawing-to-Svelte surface under an explicit workbench page/tool if
+- [x] Move drawing-to-Svelte surface under an explicit workbench page/tool if
   it remains in the app, otherwise retire it.
-- [ ] Move existing workflow graph view into Graph page shell.
-- [ ] Move existing diagnostics panel into Diagnostics page shell or embed it
+- [x] Move existing workflow graph view into Graph page shell.
+- [x] Move existing diagnostics panel into Diagnostics page shell or embed it
   as an interim page body.
-- [ ] Update README documentation for new frontend shell ownership.
+- [x] Update README documentation for new frontend shell ownership.
 
 **Verification:**
 
@@ -186,7 +192,10 @@ surfaces.
   targeted updates.
 - README updates satisfy documentation standards for changed directories.
 
-**Status:** Not started.
+**Status:** Complete for root-shell ownership. The old drawing-to-Svelte
+startup surface is retired from app-root navigation; its implementation files
+remain for separate cleanup or future reuse under a standards-compliant tool
+surface.
 
 ## Ownership And Lifecycle Note
 
@@ -213,19 +222,36 @@ shell must not consume or interpret raw diagnostic ledger events.
   page-switch persistence of the current active run, and explicit active-run
   clearing.
 - Documented the workbench store boundary in `src/stores/README.md`.
+- Added `src/components/workbench/WorkbenchShell.svelte` as the Scheduler-first
+  root shell with accessible page navigation and active-run summary.
+- Added Scheduler, Graph, Diagnostics, I/O Inspector, Library, Network, and
+  Node Editor workbench page wrappers.
+- Wired Scheduler run-list projection rows to the active-run store and page
+  handoff actions.
+- Embedded the existing workflow graph and diagnostics panel under workbench
+  page ownership.
+- Removed `src/stores/viewModeStore.ts` and the root canvas/workflow mode
+  shortcut path from `src/App.svelte`.
+- Updated source READMEs and architecture metadata for workbench ownership.
 
 ### Deviations
 
-- None.
+- The Network page received a small local-status projection view during the
+  shell slice because the local network status service already exists and gives
+  the reserved page a typed backend-owned data path.
+- The drawing-to-Svelte startup surface was retired from root navigation rather
+  than relocated into Node Editor. Its files are intentionally left in place
+  until a later cleanup or reuse decision can remove them without mixing that
+  deletion into the shell cutover.
 
 ### Follow-Ups
 
-- Decide final name for Node Lab before implementation.
-- Decide whether drawing-to-Svelte becomes a page, a Library/Node Lab tool, or
-  is retired.
-- Define each page's no-active-run empty state before wiring page shells.
-- Refactor `src/App.svelte` to consume the workbench store and retire the
-  current canvas/workflow mode switch.
+- Fill in the I/O Inspector gallery and retention controls in the dedicated
+  I/O page stage.
+- Fill in Library usage and Pumas-backed Library actions in the Library page
+  stage.
+- Decide whether retired drawing-to-Svelte implementation files should be
+  deleted or reused under a future Node Editor tool.
 
 ### Verification Summary
 
@@ -233,7 +259,10 @@ shell must not consume or interpret raw diagnostic ledger events.
   passed.
 - `npm run test:frontend` passed.
 - `npm run typecheck` passed.
-- `git diff --check` passed for the staged slice.
+- `npm run lint:critical` passed after the workbench shell cutover.
+- `npm run lint:a11y` passed after the workbench shell cutover.
+- `npm run build` passed after the workbench shell cutover.
+- `git diff --check` passed for the staged slices.
 
 ### Traceability Links
 
