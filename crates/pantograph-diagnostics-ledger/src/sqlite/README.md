@@ -56,6 +56,9 @@ helpers own restart-visible workflow run summaries.
   cursors.
 - `projection_state` is the durable resume point for incremental materialized
   projections; full rebuilds should update the same cursor/version contract.
+- Warm projection drains that stop because a bounded batch leaves matching
+  events unapplied report `rebuilding` status with the last applied cursor so
+  API/GUI callers can show catching-up state without reading raw event rows.
 - Scheduler timeline drains apply only events after the stored projection
   cursor and write idempotent rows keyed by `event_seq`.
 - Scheduler timeline page/query reads use `scheduler_timeline_projection`,
@@ -76,6 +79,9 @@ helpers own restart-visible workflow run summaries.
   too-large, expired, and deleted payload states without parsing event payloads.
 - I/O retention summary reads group `io_artifact_projection` rows and must not
   replay `diagnostic_events` for normal retention-completeness display.
+- Library usage drains apply asset-access events incrementally and report
+  `rebuilding` while a limited batch has not caught up to all pending
+  `library.asset_accessed` events.
 
 ## Revisit Triggers
 - Diagnostics storage moves away from local SQLite.

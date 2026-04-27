@@ -10,8 +10,8 @@ on raw invoke payloads.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `WorkflowService.ts` | Main client-side workflow service, including session lifecycle, graph mutation, connection-intent commands, and atomic insert-and-connect. |
-| `WorkflowProjectionService.ts` | Focused hot projection service for scheduler timeline, run-list, and selected-run reads used by `WorkflowService` and projection boundary tests. |
-| `WorkflowService.projections.test.ts` | Tauri mock IPC tests proving scheduler timeline events, run-list facets, and selected-run scheduler estimate fields survive the service boundary. |
+| `WorkflowProjectionService.ts` | Focused projection service for scheduler timeline, run-list, selected-run, and warm Library usage reads used by `WorkflowService` and projection boundary tests. |
+| `WorkflowService.projections.test.ts` | Tauri mock IPC tests proving scheduler timeline events, run-list facets, selected-run scheduler estimate fields, and warm projection freshness state survive the service boundary. |
 | `workflowConnectionActions.ts` | Focused Tauri invoke helpers for connection-intent candidate, commit, and edge-insert commands. |
 | `types.ts` | App-local workflow DTO mirrors used by the service and legacy callers. |
 | `mocks.ts` | Mock workflow data and behaviors used when the app runs in mock mode. |
@@ -59,11 +59,11 @@ them.
 Connection-intent invoke wiring now lives in
 `workflowConnectionActions.ts` so `WorkflowService.ts` stays focused on
 session ownership, mock branching, and legacy app-facing method shapes.
-Hot projection invoke wiring now lives in `WorkflowProjectionService.ts` so the
-scheduler timeline, run-list, and selected-run read paths can be tested without
-loading the graph package runtime. `WorkflowService` inherits that boundary so
-existing GUI callers keep the same method names while projection DTO tests stay
-focused on Tauri request/response contracts.
+Projection invoke wiring now lives in `WorkflowProjectionService.ts` so the
+scheduler timeline, run-list, selected-run, and warm Library usage read paths
+can be tested without loading the graph package runtime. `WorkflowService`
+inherits that boundary so existing GUI callers keep the same method names while
+projection DTO tests stay focused on Tauri request/response contracts.
 
 ## Alternatives Rejected
 - Remove `WorkflowService` and switch every app caller to `TauriWorkflowBackend`
@@ -97,9 +97,9 @@ focused on Tauri request/response contracts.
 - Connection-intent invoke helpers stay in `workflowConnectionActions.ts` so
   the service keeps one legacy-facing wrapper surface while the raw Tauri
   command wiring remains focused and reusable.
-- Scheduler timeline, run-list, and selected-run projection invoke helpers stay
-  in `WorkflowProjectionService.ts`; `WorkflowService` must not reimplement
-  those methods separately.
+- Scheduler timeline, run-list, selected-run, and Library usage projection
+  invoke helpers stay in `WorkflowProjectionService.ts`; `WorkflowService`
+  must not reimplement those methods separately.
 - Mock-mode payload shapes must remain compatible enough for callers to compile
   and branch safely.
 - Mock-mode diagnostics projections must include the same projection context
@@ -201,6 +201,6 @@ const preview = await workflowService.previewNodeInsertOnEdge(
   Native and mock paths must preserve the field so workbench pages do not infer
   workflow-version or policy counts from partial client-side pages.
 - `WorkflowProjectionService` forwards `workflow_scheduler_timeline_query`,
-  `workflow_run_list_query`, and `workflow_run_detail_query` requests under a
-  `{ request }` envelope and preserves backend DTO fields exactly for
-  projection consumers.
+  `workflow_run_list_query`, `workflow_run_detail_query`, and
+  `workflow_library_usage_query` requests under a `{ request }` envelope and
+  preserves backend DTO fields exactly for projection consumers.

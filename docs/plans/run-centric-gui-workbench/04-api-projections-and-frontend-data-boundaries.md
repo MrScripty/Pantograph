@@ -252,6 +252,11 @@ native `{ request }` envelope. The tests preserve backend-authored typed
 scheduler timeline events, bounded payload JSON, run-list facets, delayed
 status, workflow version, scheduler estimate fields, queue-placement fields,
 and projection freshness state for GUI consumers.
+`workflow_library_usage_query` now reports `rebuilding` projection status when
+a bounded warm-projection batch applies only part of the pending Library usage
+event cursor. Frontend projection tests preserve that warm catching-up state
+through Tauri mock IPC so Library pages can display freshness without reading
+raw ledger rows.
 `workflow_run_list_query` now returns backend-owned comparison facets for
 workflow version, status, scheduler policy, and retention policy from the
 run-list projection. Diagnostics pages use those scoped facets for
@@ -297,10 +302,11 @@ projections while owning only transient UI state.
 - Polling/subscription lifecycle tests exist if any recurring update loop is
   introduced.
 
-**Status:** In progress. Hot projection invoke wiring is now split into
+**Status:** In progress. Projection invoke wiring is now split into
 `WorkflowProjectionService`, with `WorkflowService` inheriting that boundary
-for existing GUI callers. Broader frontend store ownership, error category
-preservation, and optimistic-update avoidance remain pending.
+for existing GUI callers. The adapter covers scheduler timeline, run-list,
+selected-run, and warm Library usage reads. Broader frontend store ownership,
+error category preservation, and optimistic-update avoidance remain pending.
 
 ### Milestone 4: Cross-Layer Acceptance
 
@@ -318,7 +324,7 @@ implementation depends on it.
   supported.
 - [x] Add an acceptance path proving a typed event reaches a backend projection
   and then a frontend service without exposing raw ledger storage details.
-- [ ] Add an acceptance path proving projection freshness/catching-up state is
+- [x] Add an acceptance path proving projection freshness/catching-up state is
   preserved for a warm projection when it has not yet applied the latest event
   cursor.
 
@@ -331,8 +337,9 @@ implementation depends on it.
 **Status:** In progress. Run-list, selected-run detail, and typed scheduler
 timeline event acceptance now cover the frontend service boundary with Tauri
 mock IPC. Backend fixture coverage for typed event projection, retained
-artifact browsing, and expired I/O artifact state is also in place. Remaining
-acceptance work needs a warm projection freshness/catching-up path.
+artifact browsing, expired I/O artifact state, and warm Library usage
+catching-up state is also in place. Remaining work is broader Milestone 3
+frontend store ownership and error-preservation coverage.
 
 ## Ownership And Lifecycle Note
 

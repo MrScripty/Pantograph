@@ -67,6 +67,9 @@ Use `workflow/tests/` for behavior-specific child modules under the parent
 - I/O artifact query tests must include no-active-run browsing coverage so
   global retained-artifact reads remain explicitly supported for the workbench
   gallery.
+- Library usage query tests must cover warm projection catching-up status so
+  service callers preserve backend freshness state when bounded projection
+  batches leave later Library events unapplied.
 - Session admission tests with diagnostics enabled must verify durable
   scheduler delay events for runtime admission waits without depending on raw
   scheduler-store internals.

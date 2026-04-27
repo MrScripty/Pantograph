@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { WorkflowProjectionService } from './WorkflowProjectionService.ts';
 import type {
+  WorkflowLibraryUsageQueryResponse,
   WorkflowRunDetailQueryResponse,
   WorkflowRunListQueryResponse,
   WorkflowSchedulerTimelineQueryResponse,
@@ -204,6 +205,70 @@ test('querySchedulerTimeline preserves typed event projection fields', async () 
     assert.equal(result.events[0].event_kind, 'scheduler_queue_placement');
     assert.equal(result.events[0].payload_json, '{"queue_position":0,"priority":7}');
     assert.equal(result.projection_state.last_applied_event_seq, 8);
+  } finally {
+    clearMocks();
+  }
+});
+
+test('queryLibraryUsage preserves warm projection catching-up state', async () => {
+  installWindowMock();
+  const calls: Array<{ cmd: string; args: unknown }> = [];
+  const response: WorkflowLibraryUsageQueryResponse = {
+    assets: [
+      {
+        asset_id: 'model-a',
+        total_access_count: 1,
+        run_access_count: 1,
+        total_network_bytes: 128,
+        last_accessed_at_ms: 200,
+        last_operation: 'download',
+        last_cache_status: 'miss',
+        last_workflow_run_id: 'run-a',
+        last_workflow_id: 'workflow-a',
+        last_workflow_version_id: 'wfver-a',
+        last_workflow_semantic_version: '1.2.3',
+        last_client_id: 'client-a',
+        last_client_session_id: 'session-a',
+        last_bucket_id: 'bucket-a',
+        last_event_seq: 9,
+        last_updated_at_ms: 205,
+      },
+    ],
+    projection_state: {
+      projection_name: 'library_usage',
+      projection_version: 1,
+      last_applied_event_seq: 9,
+      status: 'rebuilding',
+      rebuilt_at_ms: null,
+      updated_at_ms: 206,
+    },
+  };
+  mockIPC((cmd, args) => {
+    calls.push({ cmd, args });
+    return response;
+  });
+
+  try {
+    const service = new WorkflowProjectionService();
+    const result = await service.queryLibraryUsage({
+      asset_id: 'model-a',
+      projection_batch_size: 1,
+      limit: 10,
+    });
+
+    assert.deepEqual(result, response);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].cmd, 'workflow_library_usage_query');
+    assert.deepEqual(calls[0].args, {
+      request: {
+        asset_id: 'model-a',
+        projection_batch_size: 1,
+        limit: 10,
+      },
+    });
+    assert.equal(result.projection_state.status, 'rebuilding');
+    assert.equal(result.projection_state.last_applied_event_seq, 9);
+    assert.equal(result.assets[0].last_event_seq, 9);
   } finally {
     clearMocks();
   }

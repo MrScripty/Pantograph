@@ -4,10 +4,10 @@ use pantograph_diagnostics_ledger::{
     ExecutionGuaranteeLevel, IoArtifactObservedPayload, IoArtifactRetentionState,
     LibraryAssetAccessedPayload, LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent,
     ModelOutputMeasurement, NodeExecutionProjectionStatus, NodeExecutionStatusPayload,
-    OutputModality, RetentionArtifactStateChangedPayload, RetentionClass, RunListFacetKind,
-    RunSnapshotAcceptedPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
-    SchedulerEstimateProducedPayload, SchedulerQueuePlacementPayload, UsageEventStatus,
-    UsageLineage,
+    OutputModality, ProjectionStatus, RetentionArtifactStateChangedPayload, RetentionClass,
+    RunListFacetKind, RunSnapshotAcceptedPayload, RunStartedPayload, RunTerminalPayload,
+    RunTerminalStatus, SchedulerEstimateProducedPayload, SchedulerQueuePlacementPayload,
+    UsageEventStatus, UsageLineage,
 };
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, UsageEventId, WorkflowId, WorkflowRunId, WorkflowVersionId,
@@ -649,6 +649,60 @@ fn workflow_library_usage_query_drains_and_reads_projection() {
     assert_eq!(response.assets[0].run_access_count, 1);
     assert_eq!(response.assets[0].total_network_bytes, 384);
     assert_eq!(response.projection_state.last_applied_event_seq, 2);
+}
+
+#[test]
+fn workflow_library_usage_query_preserves_catching_up_projection_state() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_library_asset_access_event(
+            "model-a",
+            Some("run-a"),
+            128,
+        ))
+        .expect("library access event");
+    ledger
+        .append_diagnostic_event(sample_library_asset_access_event(
+            "model-a",
+            Some("run-a"),
+            256,
+        ))
+        .expect("library access event");
+    let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+
+    let catching_up = service
+        .workflow_library_usage_query(WorkflowLibraryUsageQueryRequest {
+            asset_id: Some("model-a".to_string()),
+            workflow_id: Some("workflow-a".to_string()),
+            workflow_version_id: None,
+            after_event_seq: None,
+            limit: Some(10),
+            projection_batch_size: Some(1),
+        })
+        .expect("library usage catching-up query");
+
+    assert_eq!(catching_up.assets.len(), 1);
+    assert_eq!(catching_up.assets[0].total_access_count, 1);
+    assert_eq!(catching_up.projection_state.last_applied_event_seq, 1);
+    assert_eq!(
+        catching_up.projection_state.status,
+        ProjectionStatus::Rebuilding
+    );
+
+    let current = service
+        .workflow_library_usage_query(WorkflowLibraryUsageQueryRequest {
+            asset_id: Some("model-a".to_string()),
+            workflow_id: Some("workflow-a".to_string()),
+            workflow_version_id: None,
+            after_event_seq: None,
+            limit: Some(10),
+            projection_batch_size: Some(10),
+        })
+        .expect("library usage current query");
+
+    assert_eq!(current.assets[0].total_access_count, 2);
+    assert_eq!(current.projection_state.last_applied_event_seq, 2);
+    assert_eq!(current.projection_state.status, ProjectionStatus::Current);
 }
 
 #[test]

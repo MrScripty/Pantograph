@@ -1,5 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import type {
+  WorkflowLibraryUsageQueryRequest,
+  WorkflowLibraryUsageQueryResponse,
   WorkflowRunDetailQueryRequest,
   WorkflowRunDetailQueryResponse,
   WorkflowRunListQueryRequest,
@@ -74,6 +76,28 @@ export class WorkflowProjectionService extends WorkflowGraphMutationService {
     }
 
     return invoke<WorkflowRunDetailQueryResponse>('workflow_run_detail_query', {
+      request,
+    });
+  }
+
+  async queryLibraryUsage(
+    request: WorkflowLibraryUsageQueryRequest = {},
+  ): Promise<WorkflowLibraryUsageQueryResponse> {
+    if (USE_WORKFLOW_MOCKS) {
+      return {
+        assets: [],
+        projection_state: {
+          projection_name: 'library_usage',
+          projection_version: 1,
+          last_applied_event_seq: 0,
+          status: 'current',
+          rebuilt_at_ms: null,
+          updated_at_ms: Date.now(),
+        },
+      };
+    }
+
+    return invoke<WorkflowLibraryUsageQueryResponse>('workflow_library_usage_query', {
       request,
     });
   }

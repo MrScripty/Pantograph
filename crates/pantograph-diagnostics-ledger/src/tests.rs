@@ -1455,6 +1455,50 @@ fn library_usage_projection_drains_asset_events_incrementally() {
 }
 
 #[test]
+fn library_usage_projection_reports_rebuilding_while_batch_is_incomplete() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    let first_event = ledger
+        .append_diagnostic_event(sample_library_asset_access_event(
+            "asset_alpha",
+            Some("workflow_run_alpha"),
+            1_024,
+        ))
+        .expect("library asset access appends");
+    let second_event = ledger
+        .append_diagnostic_event(sample_library_asset_access_event(
+            "asset_alpha",
+            Some("workflow_run_alpha"),
+            2_048,
+        ))
+        .expect("library asset access appends");
+
+    let catching_up = ledger
+        .drain_library_usage_projection(1)
+        .expect("library usage projection drains first batch");
+    assert_eq!(catching_up.last_applied_event_seq, first_event.event_seq);
+    assert_eq!(catching_up.status, ProjectionStatus::Rebuilding);
+
+    let partial_records = ledger
+        .query_library_usage_projection(LibraryUsageProjectionQuery {
+            asset_id: Some("asset_alpha".to_string()),
+            workflow_id: None,
+            workflow_version_id: None,
+            after_event_seq: None,
+            limit: 10,
+        })
+        .expect("partial library usage projection loads");
+    assert_eq!(partial_records.len(), 1);
+    assert_eq!(partial_records[0].total_access_count, 1);
+    assert_eq!(partial_records[0].last_event_seq, first_event.event_seq);
+
+    let current = ledger
+        .drain_library_usage_projection(10)
+        .expect("library usage projection drains remaining batch");
+    assert_eq!(current.last_applied_event_seq, second_event.event_seq);
+    assert_eq!(current.status, ProjectionStatus::Current);
+}
+
+#[test]
 fn existing_v5_schema_adds_usage_lineage_contract_indexes() {
     let temp = tempfile::NamedTempFile::new().expect("temp file");
     let path = temp.path().to_path_buf();

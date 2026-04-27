@@ -347,6 +347,9 @@ Scheduler, and Diagnostics pages.
   accessed, total access count, linked workflow/node versions.
 - [x] Update Library usage counts through warm projection drains with recorded
   projection freshness.
+  - Library usage drains now report `rebuilding` while a bounded batch has not
+    applied all pending `library.asset_accessed` events, then return `current`
+    once the stored cursor catches up.
 - [ ] Ensure audit events are queryable without requiring payload retention.
 
 **Verification:**

@@ -974,13 +974,23 @@ pub(super) fn drain_library_usage_projection(
         rebuilt_at_ms = Some(now_ms());
     }
 
-    let events = library_usage_events_after(&tx, last_applied_event_seq, limit)?;
+    let mut events =
+        library_usage_events_after(&tx, last_applied_event_seq, limit.saturating_add(1))?;
+    let has_more_events = events.len() > limit as usize;
+    if has_more_events {
+        events.truncate(limit as usize);
+    }
     for event in &events {
         apply_library_usage_projection_event(&tx, event)?;
         last_applied_event_seq = event.event_seq;
     }
 
     let updated_at_ms = now_ms();
+    let projection_status = if has_more_events {
+        ProjectionStatus::Rebuilding
+    } else {
+        ProjectionStatus::Current
+    };
     tx.execute(
         "INSERT INTO projection_state
             (projection_name, projection_version, last_applied_event_seq, status,
@@ -996,7 +1006,7 @@ pub(super) fn drain_library_usage_projection(
             LIBRARY_USAGE_PROJECTION_NAME,
             LIBRARY_USAGE_PROJECTION_VERSION,
             last_applied_event_seq,
-            ProjectionStatus::Current.as_db(),
+            projection_status.as_db(),
             rebuilt_at_ms,
             updated_at_ms,
         ],
@@ -1007,7 +1017,7 @@ pub(super) fn drain_library_usage_projection(
         projection_name: LIBRARY_USAGE_PROJECTION_NAME.to_string(),
         projection_version: LIBRARY_USAGE_PROJECTION_VERSION,
         last_applied_event_seq,
-        status: ProjectionStatus::Current,
+        status: projection_status,
         rebuilt_at_ms,
         updated_at_ms,
     })
