@@ -88,6 +88,13 @@ impl SqliteAttributionStore {
             .collect::<Result<Vec<_>, _>>()?;
         Ok(rows)
     }
+
+    pub fn workflow_run_snapshot(
+        &self,
+        workflow_run_id: &crate::WorkflowRunId,
+    ) -> Result<Option<WorkflowRunSnapshotRecord>, AttributionError> {
+        workflow_run_snapshot_by_run_id(&self.conn, workflow_run_id)
+    }
 }
 
 impl AttributionRepository for SqliteAttributionStore {
@@ -699,6 +706,63 @@ fn workflow_version_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Workfl
         executable_topology_json: row.get(4)?,
         created_at_ms: row.get(5)?,
     })
+}
+
+fn workflow_run_snapshot_by_run_id(
+    conn: &rusqlite::Connection,
+    workflow_run_id: &crate::WorkflowRunId,
+) -> Result<Option<WorkflowRunSnapshotRecord>, AttributionError> {
+    let mut stmt = conn.prepare(
+        "SELECT workflow_run_snapshot_id, workflow_run_id, workflow_id, workflow_version_id,
+                workflow_semantic_version, workflow_execution_fingerprint,
+                workflow_execution_session_id, priority, timeout_ms, inputs_json,
+                output_targets_json, override_selection_json, created_at_ms
+         FROM workflow_run_snapshots
+         WHERE workflow_run_id = ?1",
+    )?;
+    let record = stmt
+        .query_row(
+            params![workflow_run_id.as_str()],
+            workflow_run_snapshot_from_row,
+        )
+        .optional()?;
+    Ok(record)
+}
+
+fn workflow_run_snapshot_from_row(
+    row: &rusqlite::Row<'_>,
+) -> rusqlite::Result<WorkflowRunSnapshotRecord> {
+    let timeout_ms = row
+        .get::<_, Option<i64>>(8)?
+        .map(|value| u64::try_from(value).unwrap_or(u64::MAX));
+    Ok(WorkflowRunSnapshotRecord {
+        workflow_run_snapshot_id: row
+            .get::<_, String>(0)
+            .and_then(parse_workflow_run_snapshot_id)?,
+        workflow_run_id: row.get::<_, String>(1).and_then(parse_workflow_run_id)?,
+        workflow_id: row.get::<_, String>(2).and_then(parse_workflow_id)?,
+        workflow_version_id: row
+            .get::<_, String>(3)
+            .and_then(parse_workflow_version_id)?,
+        workflow_semantic_version: row.get(4)?,
+        workflow_execution_fingerprint: row.get(5)?,
+        workflow_execution_session_id: row.get(6)?,
+        priority: row.get(7)?,
+        timeout_ms,
+        inputs_json: row.get(9)?,
+        output_targets_json: row.get(10)?,
+        override_selection_json: row.get(11)?,
+        created_at_ms: row.get(12)?,
+    })
+}
+
+fn parse_workflow_run_snapshot_id(value: String) -> rusqlite::Result<crate::WorkflowRunSnapshotId> {
+    crate::WorkflowRunSnapshotId::try_from(value)
+        .map_err(crate::sqlite_rows::sqlite_conversion_error)
+}
+
+fn parse_workflow_run_id(value: String) -> rusqlite::Result<crate::WorkflowRunId> {
+    crate::WorkflowRunId::try_from(value).map_err(crate::sqlite_rows::sqlite_conversion_error)
 }
 
 fn parse_workflow_version_id(value: String) -> rusqlite::Result<crate::WorkflowVersionId> {

@@ -1,16 +1,22 @@
 use std::time::Duration;
 
+use pantograph_runtime_attribution::{WorkflowRunId, WorkflowRunSnapshotRequest};
+
 use crate::scheduler::WORKFLOW_SESSION_QUEUE_POLL_MS;
+use crate::technical_fit::WorkflowTechnicalFitOverride;
 
 use super::validation::{
     validate_bindings, validate_output_targets, validate_timeout_ms, validate_workflow_id,
 };
 use super::{
-    WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionCreateResponse,
-    WorkflowExecutionSessionRetentionHint, WorkflowExecutionSessionRunRequest,
+    AttributionRepository, WorkflowExecutionSessionCreateRequest,
+    WorkflowExecutionSessionCreateResponse, WorkflowExecutionSessionRetentionHint,
+    WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionSummary,
     WorkflowExecutionSessionUnloadReason, WorkflowHost, WorkflowRunRequest, WorkflowRunResponse,
     WorkflowSchedulerDecisionReason, WorkflowService, WorkflowServiceError,
 };
+
+const DEFAULT_WORKFLOW_SEMANTIC_VERSION: &str = "0.1.0";
 
 impl WorkflowService {
     pub async fn create_workflow_execution_session<H: WorkflowHost>(
@@ -71,9 +77,16 @@ impl WorkflowService {
             validate_output_targets(targets)?;
         }
 
-        let workflow_run_id = {
+        let session = {
+            let store = self.session_store_guard()?;
+            store.session_summary(&session_id)?
+        };
+        let workflow_run_id = WorkflowRunId::generate().to_string();
+        self.create_queued_run_snapshot_if_configured(host, &session, &workflow_run_id, &request)
+            .await?;
+        {
             let mut store = self.session_store_guard()?;
-            store.enqueue_run(&session_id, &request)?
+            store.enqueue_run_with_id(&session_id, &request, workflow_run_id.clone())?
         };
 
         let queued_run = loop {
@@ -177,5 +190,67 @@ impl WorkflowService {
         }
 
         run_result
+    }
+
+    async fn create_queued_run_snapshot_if_configured<H: WorkflowHost>(
+        &self,
+        host: &H,
+        session: &WorkflowExecutionSessionSummary,
+        workflow_run_id: &str,
+        request: &WorkflowExecutionSessionRunRequest,
+    ) -> Result<(), WorkflowServiceError> {
+        if self.attribution_store.is_none() {
+            return Ok(());
+        }
+
+        let graph = host.workflow_graph(&session.workflow_id).await?;
+        let version = self.resolve_workflow_graph_version(
+            &session.workflow_id,
+            DEFAULT_WORKFLOW_SEMANTIC_VERSION,
+            &graph,
+        )?;
+        let override_selection = request
+            .override_selection
+            .as_ref()
+            .and_then(WorkflowTechnicalFitOverride::normalized);
+        let snapshot = WorkflowRunSnapshotRequest {
+            workflow_run_id: WorkflowRunId::try_from(workflow_run_id.to_string())?,
+            workflow_id: version.workflow_id.clone(),
+            workflow_version_id: version.workflow_version_id.clone(),
+            workflow_semantic_version: version.semantic_version,
+            workflow_execution_fingerprint: version.execution_fingerprint,
+            workflow_execution_session_id: session.session_id.clone(),
+            priority: request.priority.unwrap_or(0),
+            timeout_ms: request.timeout_ms,
+            inputs_json: serde_json::to_string(&request.inputs).map_err(|error| {
+                WorkflowServiceError::CapabilityViolation(format!(
+                    "failed to encode workflow run snapshot inputs: {error}"
+                ))
+            })?,
+            output_targets_json: request
+                .output_targets
+                .as_ref()
+                .map(serde_json::to_string)
+                .transpose()
+                .map_err(|error| {
+                    WorkflowServiceError::CapabilityViolation(format!(
+                        "failed to encode workflow run snapshot output targets: {error}"
+                    ))
+                })?,
+            override_selection_json: override_selection
+                .as_ref()
+                .map(serde_json::to_string)
+                .transpose()
+                .map_err(|error| {
+                    WorkflowServiceError::CapabilityViolation(format!(
+                        "failed to encode workflow run snapshot override selection: {error}"
+                    ))
+                })?,
+        };
+        let mut store = self.attribution_store_guard()?;
+        store
+            .create_workflow_run_snapshot(snapshot)
+            .map_err(WorkflowServiceError::from)?;
+        Ok(())
     }
 }

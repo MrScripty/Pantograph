@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use crate::capabilities;
-use crate::graph::WorkflowGraphSessionStateView;
+use crate::graph::{WorkflowGraph, WorkflowGraphSessionStateView};
 use crate::scheduler::{
     select_runtime_unload_candidate_by_affinity, WorkflowExecutionSessionRetentionHint,
     WorkflowExecutionSessionRuntimeSelectionTarget, WorkflowExecutionSessionRuntimeUnloadCandidate,
@@ -82,6 +82,15 @@ pub trait WorkflowHost: Send + Sync {
         workflow_id: &str,
     ) -> Result<String, WorkflowServiceError> {
         capabilities::workflow_graph_fingerprint(workflow_id, &self.workflow_roots())
+    }
+
+    /// Return the current workflow graph for version/snapshot projection.
+    async fn workflow_graph(
+        &self,
+        workflow_id: &str,
+    ) -> Result<WorkflowGraph, WorkflowServiceError> {
+        let stored = capabilities::load_and_validate_workflow(workflow_id, &self.workflow_roots())?;
+        Ok(stored.to_service_workflow_graph())
     }
 
     /// Return capability limits and model support metadata.

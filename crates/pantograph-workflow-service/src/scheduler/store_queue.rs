@@ -3,6 +3,7 @@ use crate::workflow::{
     WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionQueueItemStatus,
     WorkflowExecutionSessionRunRequest, WorkflowServiceError,
 };
+#[cfg(test)]
 use crate::WorkflowRunId;
 
 use super::super::policy::{
@@ -59,10 +60,21 @@ impl WorkflowExecutionSessionStore {
         Ok(items)
     }
 
+    #[cfg(test)]
     pub(crate) fn enqueue_run(
         &mut self,
         session_id: &str,
         request: &WorkflowExecutionSessionRunRequest,
+    ) -> Result<String, WorkflowServiceError> {
+        let workflow_run_id = WorkflowRunId::generate().to_string();
+        self.enqueue_run_with_id(session_id, request, workflow_run_id)
+    }
+
+    pub(crate) fn enqueue_run_with_id(
+        &mut self,
+        session_id: &str,
+        request: &WorkflowExecutionSessionRunRequest,
+        workflow_run_id: String,
     ) -> Result<String, WorkflowServiceError> {
         let tick = self.next_tick();
         let state = self.active.get_mut(session_id).ok_or_else(|| {
@@ -70,7 +82,6 @@ impl WorkflowExecutionSessionStore {
         })?;
 
         let policy = PriorityThenFifoSchedulerPolicy;
-        let workflow_run_id = WorkflowRunId::generate().to_string();
         let queued = WorkflowExecutionSessionQueuedRun {
             workflow_run_id: workflow_run_id.clone(),
             enqueued_at_ms: unix_timestamp_ms(),

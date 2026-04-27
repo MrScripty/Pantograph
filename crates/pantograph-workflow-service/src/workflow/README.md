@@ -95,6 +95,9 @@ runtime readiness, session-runtime workflows, and the root facade test module.
   creation so cancellation state starts from one backend-owned shape.
 - Session execution APIs keep queue admission, runtime preflight, runtime load,
   and run finalization in one helper behind the public facade.
+- Session run submission generates the backend workflow run id before enqueue
+  and, when attribution storage is configured, records the immutable workflow
+  version/run snapshot before handing the run to scheduler admission.
 - Session lifecycle APIs keep cleanup, keep-alive, and close-session behavior
   together so runtime unload side effects remain visible in one helper.
 - Session queue inspection and scheduler snapshot APIs stay behind the public
@@ -163,6 +166,8 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
 - Validation: blank workflow ids, empty binding endpoints, duplicate endpoints,
   invalid output targets, oversized values, and missing produced outputs keep
   the same error codes as the parent facade.
+- Snapshotting: queued workflow execution sessions use semantic workflow
+  version `0.1.0` until the public run request grows an explicit version field.
 - Enums and labels: runtime install/readiness states retain the parent service
   contract semantics.
 - Ordering: runtime issues are sorted and deduplicated before public exposure.

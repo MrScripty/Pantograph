@@ -53,7 +53,8 @@ pub use pantograph_runtime_attribution::{
     ClientRegistrationRequest, ClientRegistrationResponse, ClientSessionOpenRequest,
     ClientSessionOpenResponse, ClientSessionRecord, ClientSessionResumeRequest,
     CredentialProofRequest, CredentialSecret, SqliteAttributionStore, WorkflowRunAttribution,
-    WorkflowRunRecord, WorkflowVersionRecord, WorkflowVersionResolveRequest,
+    WorkflowRunRecord, WorkflowRunSnapshotRecord, WorkflowRunSnapshotRequest,
+    WorkflowVersionRecord, WorkflowVersionResolveRequest,
 };
 
 #[cfg(test)]

@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use pantograph_runtime_identity::canonical_runtime_backend_key;
 use serde::Deserialize;
 
+use crate::graph::{GraphEdge, GraphNode, Position, WorkflowGraph};
 use crate::workflow::WorkflowServiceError;
 
 pub const DEFAULT_MAX_INPUT_BINDINGS: usize = 128;
@@ -60,6 +61,38 @@ impl StoredWorkflowFile {
                 })
                 .collect(),
             groups: Vec::new(),
+        }
+    }
+
+    pub fn to_service_workflow_graph(&self) -> WorkflowGraph {
+        WorkflowGraph {
+            nodes: self
+                .graph
+                .nodes
+                .iter()
+                .map(|node| GraphNode {
+                    id: node.id.clone(),
+                    node_type: node.node_type.clone(),
+                    position: Position {
+                        x: node.position.x,
+                        y: node.position.y,
+                    },
+                    data: node.data.clone(),
+                })
+                .collect(),
+            edges: self
+                .graph
+                .edges
+                .iter()
+                .map(|edge| GraphEdge {
+                    id: edge.id.clone(),
+                    source: edge.source.clone(),
+                    source_handle: edge.source_handle.clone(),
+                    target: edge.target.clone(),
+                    target_handle: edge.target_handle.clone(),
+                })
+                .collect(),
+            derived_graph: None,
         }
     }
 }

@@ -1,4 +1,5 @@
 use super::*;
+use crate::{GraphEdge, GraphNode, Position, WorkflowGraph};
 
 pub(in crate::workflow::tests) struct MockWorkflowHost {
     pub(in crate::workflow::tests) capabilities: WorkflowHostCapabilities,
@@ -175,6 +176,36 @@ impl WorkflowHost for MockWorkflowHost {
         _workflow_id: &str,
     ) -> Result<String, WorkflowServiceError> {
         Ok("mock-graph".to_string())
+    }
+
+    async fn workflow_graph(
+        &self,
+        _workflow_id: &str,
+    ) -> Result<WorkflowGraph, WorkflowServiceError> {
+        Ok(WorkflowGraph {
+            nodes: vec![
+                GraphNode {
+                    id: "text-input-1".to_string(),
+                    node_type: "text-input".to_string(),
+                    position: Position { x: 0.0, y: 0.0 },
+                    data: serde_json::json!({}),
+                },
+                GraphNode {
+                    id: "text-output-1".to_string(),
+                    node_type: "text-output".to_string(),
+                    position: Position { x: 100.0, y: 0.0 },
+                    data: serde_json::json!({}),
+                },
+            ],
+            edges: vec![GraphEdge {
+                id: "edge".to_string(),
+                source: "text-input-1".to_string(),
+                source_handle: "text".to_string(),
+                target: "text-output-1".to_string(),
+                target_handle: "text".to_string(),
+            }],
+            derived_graph: None,
+        })
     }
 
     async fn workflow_capabilities(

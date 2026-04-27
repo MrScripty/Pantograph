@@ -203,7 +203,7 @@ workflow version and run context.
 
 **Tasks:**
 
-- [ ] Update run submission path to resolve or create workflow version before
+- [x] Update run submission path to resolve or create workflow version before
   queue insertion.
 - [ ] Attach run snapshot fields for model/runtime choices, graph settings,
   scheduler policy, retention policy, session, bucket, and immutable input
@@ -307,12 +307,18 @@ records for the same execution fingerprint.
   workflow version id, semantic version, execution fingerprint, execution
   session id, priority, timeout, serialized inputs, output targets, and runtime
   override selection.
+- 2026-04-27: Changed queued workflow execution session submission to generate
+  the backend run id before enqueue and record the workflow version/run
+  snapshot before scheduler admission when attribution storage is configured.
 
 ### Deviations
 
 - The first run-snapshot storage contract captures the queue/session fields
   available today. Full model/runtime, graph-settings, retention-policy, and
   bucket fields still need to be filled during queue cutover.
+- Queued session submission uses default semantic workflow version `0.1.0`
+  until the public run request grows an explicit client-supplied workflow
+  version field.
 - Workflow-version registry ownership is implemented in the attribution store
   without a standalone ADR. The choice is documented here and in crate READMEs
   because the registry must share the future run snapshot transaction boundary.
@@ -349,6 +355,8 @@ records for the same execution fingerprint.
   passed.
 - 2026-04-27: `cargo test -p pantograph-runtime-attribution` passed after
   adding workflow-run snapshot storage.
+- 2026-04-27: `cargo test -p pantograph-workflow-service
+  workflow_execution_session_run_records_snapshot_before_execution` passed.
 
 ### Traceability Links
 

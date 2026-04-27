@@ -193,6 +193,62 @@ async fn workflow_execution_session_repeated_runs_create_distinct_backend_run_id
 }
 
 #[tokio::test]
+async fn workflow_execution_session_run_records_snapshot_before_execution() {
+    let host = MockWorkflowHost::new(8, 1024);
+    let service = WorkflowService::with_max_sessions(2)
+        .with_attribution_store(SqliteAttributionStore::open_in_memory().expect("store"));
+
+    let created = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "wf-snapshot".to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create session");
+
+    let response = service
+        .run_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionRunRequest {
+                session_id: created.session_id.clone(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("snapshotted"),
+                }],
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: Some(5000),
+                priority: Some(7),
+            },
+        )
+        .await
+        .expect("run session");
+
+    let snapshot = service
+        .workflow_run_snapshot(&response.workflow_run_id)
+        .expect("query snapshot")
+        .expect("snapshot");
+    assert_eq!(snapshot.workflow_run_id.as_str(), response.workflow_run_id);
+    assert_eq!(snapshot.workflow_id.as_str(), "wf-snapshot");
+    assert_eq!(snapshot.workflow_execution_session_id, created.session_id);
+    assert_eq!(snapshot.workflow_semantic_version, "0.1.0");
+    assert_eq!(snapshot.priority, 7);
+    assert_eq!(snapshot.timeout_ms, Some(5000));
+    assert!(snapshot
+        .workflow_execution_fingerprint
+        .starts_with("workflow-exec-blake3:"));
+    assert!(snapshot.inputs_json.contains("snapshotted"));
+}
+
+#[tokio::test]
 async fn keep_alive_session_loads_runtime_with_keep_alive_retention_hint() {
     let retention_hints = Arc::new(Mutex::new(Vec::new()));
     let host = RecordingRuntimeHost::new(retention_hints.clone());
