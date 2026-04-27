@@ -10,6 +10,7 @@ pub const DEFAULT_PAGE_SIZE: u32 = 100;
 pub const MAX_PAGE_SIZE: u32 = 500;
 pub const DEFAULT_STANDARD_RETENTION_DAYS: u32 = 365;
 pub const MAX_RETENTION_DAYS: u32 = 3650;
+pub const MILLIS_PER_DAY: i64 = 86_400_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ExecutionGuaranteeLevel {
@@ -254,6 +255,39 @@ pub struct DiagnosticsRetentionPolicy {
     pub retention_days: u32,
     pub applied_at_ms: i64,
     pub explanation: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ApplyArtifactRetentionPolicyCommand {
+    pub retention_class: RetentionClass,
+    pub now_ms: i64,
+    pub limit: u32,
+    pub reason: String,
+}
+
+impl ApplyArtifactRetentionPolicyCommand {
+    pub fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        if self.now_ms < 0 {
+            return Err(DiagnosticsLedgerError::InvalidField { field: "now_ms" });
+        }
+        if self.limit > MAX_PAGE_SIZE {
+            return Err(DiagnosticsLedgerError::QueryLimitExceeded {
+                requested: self.limit,
+                max: MAX_PAGE_SIZE,
+            });
+        }
+        validate_required_text("retention_cleanup_reason", &self.reason, MAX_JSON_LEN)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ApplyArtifactRetentionPolicyResult {
+    pub policy_id: String,
+    pub policy_version: u32,
+    pub retention_class: RetentionClass,
+    pub cutoff_occurred_before_ms: i64,
+    pub expired_artifact_count: u64,
+    pub last_event_seq: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

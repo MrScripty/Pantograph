@@ -324,13 +324,15 @@ availability.
   inputs, intermediate node I/O, failed-run data, maximum artifact size,
   maximum total storage, media behavior, compression/archive behavior, and
   cleanup trigger/status.
-- [ ] Add retroactive cleanup command that updates metadata before deleting or
+- [x] Add retroactive cleanup command that updates metadata before deleting or
   expiring payloads.
 - [ ] Emit typed `retention.*` events with policy version, timestamp, actor,
   affected artifact, and reason.
   - Policy update events now include policy id, policy version, retention
     days, timestamp, typed actor scope, and reason. Artifact-specific cleanup
-    events remain pending.
+    cleanup events now expire retained artifact projection rows through typed
+    `retention.artifact_state_changed` events carrying the active policy
+    version in the reason.
 - [x] Update affected hot/warm projections through event cursors rather than
   direct page-time artifact ledger scans.
 
@@ -350,8 +352,10 @@ retroactive behavior to a concrete policy revision. Successful workflow-session
 runs now emit metadata-only `io.artifact_observed` events for workflow inputs
 and outputs, including artifact role, node id, media type, JSON byte size,
 content hash, retention state, and retention reason without storing raw values
-in the ledger. Node-to-node intermediate I/O, first-pass setting groups,
-retroactive cleanup, actor context, and artifact-specific cleanup events remain
+in the ledger. A first-pass retroactive cleanup command now expires retained
+artifact projection rows older than the active global policy cutoff while
+leaving metadata queryable. Node-to-node intermediate I/O, first-pass setting
+groups, cleanup actor context, and physical payload-store deletion remain
 pending.
 
 ### Milestone 4: Library And Pumas Audit
@@ -465,6 +469,9 @@ implicitly on page load.
   and marked GUI retention policy updates as `gui_admin` actions.
 - 2026-04-27: Added `workflow_run_id` filtering to Library usage projection
   queries so selected-run Library views can ask for active-run assets directly.
+- 2026-04-27: Added a first-pass artifact retention cleanup command that
+  emits typed artifact expiration events from retained projection rows older
+  than the active global policy cutoff.
 
 ### Deviations
 
@@ -523,6 +530,9 @@ implicitly on page load.
 - 2026-04-27: `cargo test -p pantograph-workflow-service
   workflow_library_usage_query_drains_and_reads_projection --lib` passed after
   adding active-run Library usage query filtering.
+- 2026-04-27: `cargo test -p pantograph-diagnostics-ledger
+  apply_artifact_retention_policy_expires_projected_payload_references --lib`
+  passed after adding the first-pass artifact retention cleanup command.
 
 ### Traceability Links
 

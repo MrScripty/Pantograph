@@ -1,4 +1,5 @@
 use crate::{
+    ApplyArtifactRetentionPolicyCommand, ApplyArtifactRetentionPolicyResult,
     DiagnosticEventAppendRequest, DiagnosticEventRecord, DiagnosticsLedgerError,
     DiagnosticsProjection, DiagnosticsQuery, DiagnosticsRetentionPolicy, IoArtifactProjectionQuery,
     IoArtifactProjectionRecord, IoArtifactRetentionSummaryQuery, IoArtifactRetentionSummaryRecord,
@@ -30,6 +31,11 @@ pub trait DiagnosticsLedgerRepository {
         &mut self,
         command: UpdateRetentionPolicyCommand,
     ) -> Result<DiagnosticsRetentionPolicy, DiagnosticsLedgerError>;
+
+    fn apply_artifact_retention_policy(
+        &mut self,
+        command: ApplyArtifactRetentionPolicyCommand,
+    ) -> Result<ApplyArtifactRetentionPolicyResult, DiagnosticsLedgerError>;
 
     fn prune_usage_events(
         &mut self,

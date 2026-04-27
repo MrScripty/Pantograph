@@ -4,15 +4,16 @@ use pantograph_runtime_attribution::{
 use rusqlite::Connection;
 
 use crate::{
-    DiagnosticEventAppendRequest, DiagnosticEventKind, DiagnosticEventPayload,
-    DiagnosticEventPrivacyClass, DiagnosticEventRetentionClass, DiagnosticEventSourceComponent,
-    DiagnosticsLedgerError, DiagnosticsLedgerRepository, DiagnosticsQuery, ExecutionGuaranteeLevel,
-    IoArtifactObservedPayload, IoArtifactProjectionQuery, IoArtifactRetentionState,
-    IoArtifactRetentionSummaryQuery, IoArtifactRole, LibraryAssetAccessedPayload,
-    LibraryAssetCacheStatus, LibraryAssetOperation, LibraryUsageProjectionQuery, LicenseSnapshot,
-    ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement, NodeExecutionProjectionStatus,
-    NodeExecutionStatusPayload, NodeStatusProjectionQuery, OutputMeasurementUnavailableReason,
-    OutputModality, ProjectionStateUpdate, ProjectionStatus, PruneTimingObservationsCommand,
+    ApplyArtifactRetentionPolicyCommand, DiagnosticEventAppendRequest, DiagnosticEventKind,
+    DiagnosticEventPayload, DiagnosticEventPrivacyClass, DiagnosticEventRetentionClass,
+    DiagnosticEventSourceComponent, DiagnosticsLedgerError, DiagnosticsLedgerRepository,
+    DiagnosticsQuery, ExecutionGuaranteeLevel, IoArtifactObservedPayload,
+    IoArtifactProjectionQuery, IoArtifactRetentionState, IoArtifactRetentionSummaryQuery,
+    IoArtifactRole, LibraryAssetAccessedPayload, LibraryAssetCacheStatus, LibraryAssetOperation,
+    LibraryUsageProjectionQuery, LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent,
+    ModelOutputMeasurement, NodeExecutionProjectionStatus, NodeExecutionStatusPayload,
+    NodeStatusProjectionQuery, OutputMeasurementUnavailableReason, OutputModality,
+    ProjectionStateUpdate, ProjectionStatus, PruneTimingObservationsCommand,
     PruneUsageEventsCommand, RetentionArtifactStateChangedPayload, RetentionClass,
     RetentionPolicyActorScope, RetentionPolicyChangedPayload, RunDetailProjectionQuery,
     RunListFacetKind, RunListProjectionQuery, RunListProjectionStatus, RunSnapshotAcceptedPayload,
@@ -26,7 +27,7 @@ use crate::{
     WorkflowTimingObservationScope, WorkflowTimingObservationStatus,
     DEFAULT_STANDARD_RETENTION_DAYS, IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION,
     LIBRARY_USAGE_PROJECTION_NAME, LIBRARY_USAGE_PROJECTION_VERSION,
-    MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, NODE_STATUS_PROJECTION_NAME,
+    MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, MILLIS_PER_DAY, NODE_STATUS_PROJECTION_NAME,
     NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION,
     RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
     SCHEDULER_TIMELINE_PROJECTION_VERSION,
@@ -2048,6 +2049,70 @@ fn update_retention_policy_updates_standard_policy() {
             .retention_days,
         30
     );
+}
+
+#[test]
+fn apply_artifact_retention_policy_expires_projected_payload_references() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_io_artifact_event(
+            "workflow_run_alpha",
+            "output_node",
+            "workflow_output",
+            "artifact_expired",
+        ))
+        .expect("artifact event appends");
+    ledger
+        .drain_io_artifact_projection(10)
+        .expect("artifact projection drains before cleanup");
+
+    let now_ms = 1_200 + (i64::from(DEFAULT_STANDARD_RETENTION_DAYS) + 1) * MILLIS_PER_DAY;
+    let result = ledger
+        .apply_artifact_retention_policy(ApplyArtifactRetentionPolicyCommand {
+            retention_class: RetentionClass::Standard,
+            now_ms,
+            limit: 10,
+            reason: "standard retention window elapsed".to_string(),
+        })
+        .expect("artifact retention policy applies");
+
+    assert_eq!(result.policy_version, 1);
+    assert_eq!(result.expired_artifact_count, 1);
+    assert_eq!(result.cutoff_occurred_before_ms, 1_200 + MILLIS_PER_DAY);
+    assert!(result.last_event_seq.is_some());
+
+    let expired_records = ledger
+        .query_io_artifact_projection(IoArtifactProjectionQuery {
+            workflow_run_id: Some(
+                WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+            ),
+            node_id: None,
+            artifact_role: None,
+            media_type: None,
+            retention_state: Some(IoArtifactRetentionState::Expired),
+            retention_policy_id: Some("standard-local-v1".to_string()),
+            runtime_id: None,
+            model_id: None,
+            after_event_seq: None,
+            limit: 10,
+        })
+        .expect("expired artifact projection loads");
+    assert_eq!(expired_records.len(), 1);
+    assert_eq!(expired_records[0].artifact_id, "artifact_expired");
+    assert_eq!(expired_records[0].payload_ref, None);
+    assert_eq!(
+        expired_records[0].retention_reason.as_deref(),
+        Some("standard retention window elapsed; policy_version=1")
+    );
+
+    let events = ledger
+        .diagnostic_events_after(0, 10)
+        .expect("diagnostic events load");
+    assert!(events.iter().any(|event| {
+        event.event_kind == DiagnosticEventKind::RetentionArtifactStateChanged
+            && event.workflow_run_id.as_ref().map(|id| id.as_str()) == Some("workflow_run_alpha")
+            && event.retention_policy_id.as_deref() == Some("standard-local-v1")
+    }));
 }
 
 #[test]

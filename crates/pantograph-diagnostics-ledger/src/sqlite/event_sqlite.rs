@@ -824,6 +824,42 @@ pub(super) fn query_io_artifact_retention_summary(
         .map_err(DiagnosticsLedgerError::from)
 }
 
+pub(super) fn query_expirable_io_artifact_projection(
+    ledger: &SqliteDiagnosticsLedger,
+    cutoff_occurred_before_ms: i64,
+    limit: u32,
+) -> Result<Vec<IoArtifactProjectionRecord>, DiagnosticsLedgerError> {
+    if limit > MAX_PAGE_SIZE {
+        return Err(DiagnosticsLedgerError::QueryLimitExceeded {
+            requested: limit,
+            max: MAX_PAGE_SIZE,
+        });
+    }
+    let mut stmt = ledger.conn.prepare(
+        "SELECT event_seq, event_id, occurred_at_ms, recorded_at_ms, workflow_run_id,
+                workflow_id, workflow_version_id, workflow_semantic_version, node_id,
+                node_type, node_version, runtime_id, runtime_version, model_id,
+                model_version, artifact_id, artifact_role, media_type, size_bytes,
+                content_hash, payload_ref, retention_state, retention_reason,
+                retention_policy_id
+         FROM io_artifact_projection
+         WHERE retention_state = ?1
+           AND occurred_at_ms < ?2
+         ORDER BY occurred_at_ms, event_seq
+         LIMIT ?3",
+    )?;
+    let rows = stmt.query_map(
+        params![
+            IoArtifactRetentionState::Retained.as_db(),
+            cutoff_occurred_before_ms,
+            limit,
+        ],
+        io_artifact_projection_from_row,
+    )?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(DiagnosticsLedgerError::from)
+}
+
 pub(super) fn drain_node_status_projection(
     ledger: &mut SqliteDiagnosticsLedger,
     limit: u32,

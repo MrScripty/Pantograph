@@ -10,19 +10,22 @@ mod run_summary_sqlite;
 mod timing_sqlite;
 
 use crate::event::{
-    DiagnosticEventAppendRequest, DiagnosticEventRecord, IoArtifactProjectionQuery,
-    IoArtifactProjectionRecord, IoArtifactRetentionSummaryQuery, IoArtifactRetentionSummaryRecord,
-    LibraryUsageProjectionQuery, LibraryUsageProjectionRecord, NodeStatusProjectionQuery,
-    NodeStatusProjectionRecord, ProjectionStateRecord, ProjectionStateUpdate,
+    DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
+    DiagnosticEventRecord, DiagnosticEventRetentionClass, DiagnosticEventSourceComponent,
+    IoArtifactProjectionQuery, IoArtifactProjectionRecord, IoArtifactRetentionState,
+    IoArtifactRetentionSummaryQuery, IoArtifactRetentionSummaryRecord, LibraryUsageProjectionQuery,
+    LibraryUsageProjectionRecord, NodeStatusProjectionQuery, NodeStatusProjectionRecord,
+    ProjectionStateRecord, ProjectionStateUpdate, RetentionArtifactStateChangedPayload,
     RunDetailProjectionQuery, RunDetailProjectionRecord, RunListFacetRecord,
     RunListProjectionQuery, RunListProjectionRecord, SchedulerTimelineProjectionQuery,
     SchedulerTimelineProjectionRecord,
 };
 use crate::records::{
-    DiagnosticsProjection, DiagnosticsQuery, DiagnosticsRetentionPolicy, ExecutionGuaranteeLevel,
-    LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement, OutputModality,
+    ApplyArtifactRetentionPolicyCommand, ApplyArtifactRetentionPolicyResult, DiagnosticsProjection,
+    DiagnosticsQuery, DiagnosticsRetentionPolicy, ExecutionGuaranteeLevel, LicenseSnapshot,
+    ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement, OutputModality,
     PruneUsageEventsCommand, PruneUsageEventsResult, RetentionClass, UpdateRetentionPolicyCommand,
-    UsageEventStatus, UsageLineage,
+    UsageEventStatus, UsageLineage, MILLIS_PER_DAY,
 };
 use crate::schema::{apply_schema, current_schema_version, migrate_schema, SCHEMA_VERSION};
 use crate::timing::{
@@ -323,6 +326,79 @@ impl DiagnosticsLedgerRepository for SqliteDiagnosticsLedger {
         )?;
         tx.commit()?;
         Ok(policy)
+    }
+
+    fn apply_artifact_retention_policy(
+        &mut self,
+        command: ApplyArtifactRetentionPolicyCommand,
+    ) -> Result<ApplyArtifactRetentionPolicyResult, DiagnosticsLedgerError> {
+        command.validate()?;
+        let policy = self.retention_policy()?;
+        if policy.retention_class != command.retention_class {
+            return Err(DiagnosticsLedgerError::InvalidField {
+                field: "retention_class",
+            });
+        }
+        let cutoff_occurred_before_ms =
+            command.now_ms - i64::from(policy.retention_days) * MILLIS_PER_DAY;
+        let artifacts = event_sqlite::query_expirable_io_artifact_projection(
+            self,
+            cutoff_occurred_before_ms,
+            command.limit,
+        )?;
+
+        let reason = format!(
+            "{}; policy_version={}",
+            command.reason, policy.policy_version
+        );
+        let mut last_event_seq = None;
+        for artifact in &artifacts {
+            let event = self.append_diagnostic_event(DiagnosticEventAppendRequest {
+                source_component: DiagnosticEventSourceComponent::Retention,
+                source_instance_id: Some("retention-local".to_string()),
+                occurred_at_ms: command.now_ms,
+                workflow_run_id: Some(artifact.workflow_run_id.clone()),
+                workflow_id: Some(artifact.workflow_id.clone()),
+                workflow_version_id: artifact.workflow_version_id.clone(),
+                workflow_semantic_version: artifact.workflow_semantic_version.clone(),
+                node_id: artifact.node_id.clone(),
+                node_type: artifact.node_type.clone(),
+                node_version: artifact.node_version.clone(),
+                runtime_id: artifact.runtime_id.clone(),
+                runtime_version: artifact.runtime_version.clone(),
+                model_id: artifact.model_id.clone(),
+                model_version: artifact.model_version.clone(),
+                client_id: None,
+                client_session_id: None,
+                bucket_id: None,
+                scheduler_policy_id: None,
+                retention_policy_id: Some(policy.policy_id.clone()),
+                privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+                retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+                payload_ref: None,
+                payload: DiagnosticEventPayload::RetentionArtifactStateChanged(
+                    RetentionArtifactStateChangedPayload {
+                        artifact_id: artifact.artifact_id.clone(),
+                        retention_state: IoArtifactRetentionState::Expired,
+                        reason: reason.clone(),
+                    },
+                ),
+            })?;
+            last_event_seq = Some(event.event_seq);
+        }
+
+        if !artifacts.is_empty() {
+            self.drain_io_artifact_projection(command.limit)?;
+        }
+
+        Ok(ApplyArtifactRetentionPolicyResult {
+            policy_id: policy.policy_id,
+            policy_version: policy.policy_version,
+            retention_class: policy.retention_class,
+            cutoff_occurred_before_ms,
+            expired_artifact_count: artifacts.len() as u64,
+            last_event_seq,
+        })
     }
 
     fn prune_usage_events(

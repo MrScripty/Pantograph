@@ -84,6 +84,10 @@ helpers own restart-visible workflow run summaries.
   too-large, expired, and deleted payload states without parsing event payloads.
 - I/O retention summary reads group `io_artifact_projection` rows and must not
   replay `diagnostic_events` for normal retention-completeness display.
+- Artifact retention cleanup selects candidate rows from
+  `io_artifact_projection`, emits typed retention audit events, and advances
+  the same artifact projection path so cleanup remains observable without
+  page-time ledger replay.
 - Library usage drains apply asset-access events incrementally and report
   `rebuilding` while a limited batch has not caught up to all pending
   `library.asset_accessed` events.

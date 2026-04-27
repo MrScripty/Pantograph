@@ -40,11 +40,12 @@ pub use event::{
     SCHEDULER_TIMELINE_PROJECTION_NAME, SCHEDULER_TIMELINE_PROJECTION_VERSION,
 };
 pub use records::{
-    DiagnosticsProjection, DiagnosticsQuery, DiagnosticsRetentionPolicy, ExecutionGuaranteeLevel,
-    LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement,
+    ApplyArtifactRetentionPolicyCommand, ApplyArtifactRetentionPolicyResult, DiagnosticsProjection,
+    DiagnosticsQuery, DiagnosticsRetentionPolicy, ExecutionGuaranteeLevel, LicenseSnapshot,
+    ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement,
     OutputMeasurementUnavailableReason, OutputModality, PruneUsageEventsCommand,
     PruneUsageEventsResult, RetentionClass, UpdateRetentionPolicyCommand, UsageEventStatus,
-    UsageLineage, DEFAULT_STANDARD_RETENTION_DAYS, MAX_RETENTION_DAYS,
+    UsageLineage, DEFAULT_STANDARD_RETENTION_DAYS, MAX_RETENTION_DAYS, MILLIS_PER_DAY,
 };
 pub use repository::DiagnosticsLedgerRepository;
 pub use sqlite::SqliteDiagnosticsLedger;
