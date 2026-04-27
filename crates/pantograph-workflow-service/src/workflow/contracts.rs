@@ -268,6 +268,140 @@ pub struct WorkflowRunGraphProjection {
     pub graph_settings: WorkflowGraphRunSettings,
 }
 
+/// Request local Network page state for the current Pantograph instance.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
+pub struct WorkflowLocalNetworkStatusQueryRequest {
+    #[serde(default = "default_include_network_interfaces")]
+    pub include_network_interfaces: bool,
+    #[serde(default = "default_include_disks")]
+    pub include_disks: bool,
+}
+
+fn default_include_network_interfaces() -> bool {
+    true
+}
+
+fn default_include_disks() -> bool {
+    true
+}
+
+/// Local-first Network page response. Peer nodes are intentionally empty until
+/// the future Iroh transport supplies trusted peer records.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowLocalNetworkStatusQueryResponse {
+    pub local_node: WorkflowLocalNetworkNodeStatus,
+    #[serde(default)]
+    pub peer_nodes: Vec<WorkflowPeerNetworkNodeStatus>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowNetworkTransportState {
+    LocalOnly,
+    PeerNetworkingUnavailable,
+    PairingRequired,
+    Connected,
+    Degraded,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowLocalNetworkNodeStatus {
+    pub node_id: String,
+    pub display_name: String,
+    pub captured_at_ms: u64,
+    pub transport_state: WorkflowNetworkTransportState,
+    pub system: WorkflowLocalSystemMetrics,
+    pub scheduler_load: WorkflowLocalSchedulerLoad,
+    #[serde(default)]
+    pub degradation_warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowPeerNetworkNodeStatus {
+    pub node_id: String,
+    pub display_name: String,
+    pub transport_state: WorkflowNetworkTransportState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_seen_at_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowLocalSystemMetrics {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hostname: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub os_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub os_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kernel_version: Option<String>,
+    pub cpu: WorkflowLocalCpuMetrics,
+    pub memory: WorkflowLocalMemoryMetrics,
+    #[serde(default)]
+    pub disks: Vec<WorkflowLocalDiskMetrics>,
+    #[serde(default)]
+    pub network_interfaces: Vec<WorkflowLocalNetworkInterfaceMetrics>,
+    pub gpu: WorkflowLocalGpuMetrics,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowLocalCpuMetrics {
+    pub logical_core_count: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub average_usage_percent: Option<f32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowLocalMemoryMetrics {
+    pub total_bytes: u64,
+    pub used_bytes: u64,
+    pub available_bytes: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowLocalDiskMetrics {
+    pub name: String,
+    pub mount_point: String,
+    pub total_bytes: u64,
+    pub available_bytes: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowLocalNetworkInterfaceMetrics {
+    pub name: String,
+    pub total_received_bytes: u64,
+    pub total_transmitted_bytes: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowLocalGpuMetrics {
+    pub available: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowLocalSchedulerLoad {
+    pub max_sessions: usize,
+    pub active_session_count: usize,
+    pub max_loaded_sessions: usize,
+    pub loaded_session_count: usize,
+    pub active_run_count: usize,
+    pub queued_run_count: usize,
+}
+
 /// Workflow preflight request for request-shape and runtime-readiness validation.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]

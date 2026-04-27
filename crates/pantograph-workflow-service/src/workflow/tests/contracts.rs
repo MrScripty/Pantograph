@@ -206,6 +206,77 @@ fn workflow_run_graph_query_roundtrip_uses_snake_case() {
 }
 
 #[test]
+fn workflow_local_network_status_roundtrip_uses_snake_case() {
+    let response = WorkflowLocalNetworkStatusQueryResponse {
+        local_node: WorkflowLocalNetworkNodeStatus {
+            node_id: "local".to_string(),
+            display_name: "Local Pantograph".to_string(),
+            captured_at_ms: 42,
+            transport_state: WorkflowNetworkTransportState::LocalOnly,
+            system: WorkflowLocalSystemMetrics {
+                hostname: Some("host-a".to_string()),
+                os_name: Some("Linux".to_string()),
+                os_version: None,
+                kernel_version: None,
+                cpu: WorkflowLocalCpuMetrics {
+                    logical_core_count: 8,
+                    average_usage_percent: Some(12.5),
+                },
+                memory: WorkflowLocalMemoryMetrics {
+                    total_bytes: 100,
+                    used_bytes: 40,
+                    available_bytes: 60,
+                },
+                disks: vec![WorkflowLocalDiskMetrics {
+                    name: "disk-a".to_string(),
+                    mount_point: "/".to_string(),
+                    total_bytes: 1000,
+                    available_bytes: 500,
+                }],
+                network_interfaces: vec![WorkflowLocalNetworkInterfaceMetrics {
+                    name: "eth0".to_string(),
+                    total_received_bytes: 10,
+                    total_transmitted_bytes: 20,
+                }],
+                gpu: WorkflowLocalGpuMetrics {
+                    available: false,
+                    reason: Some("not implemented".to_string()),
+                },
+            },
+            scheduler_load: WorkflowLocalSchedulerLoad {
+                max_sessions: 4,
+                active_session_count: 1,
+                max_loaded_sessions: 2,
+                loaded_session_count: 1,
+                active_run_count: 0,
+                queued_run_count: 3,
+            },
+            degradation_warnings: vec!["not implemented".to_string()],
+        },
+        peer_nodes: vec![WorkflowPeerNetworkNodeStatus {
+            node_id: "peer-a".to_string(),
+            display_name: "Peer A".to_string(),
+            transport_state: WorkflowNetworkTransportState::PairingRequired,
+            last_seen_at_ms: None,
+        }],
+    };
+
+    let json = serde_json::to_value(&response).expect("serialize network response");
+    assert_eq!(json["local_node"]["transport_state"], "local_only");
+    assert_eq!(json["local_node"]["scheduler_load"]["queued_run_count"], 3);
+    assert_eq!(
+        json["local_node"]["system"]["network_interfaces"][0]["total_received_bytes"],
+        10
+    );
+    assert_eq!(json["peer_nodes"][0]["transport_state"], "pairing_required");
+
+    let parsed: WorkflowLocalNetworkStatusQueryResponse =
+        serde_json::from_value(json).expect("parse network response");
+    assert_eq!(parsed.local_node.node_id, "local");
+    assert_eq!(parsed.peer_nodes[0].node_id, "peer-a");
+}
+
+#[test]
 fn workflow_service_error_envelope_roundtrip() {
     let err = WorkflowServiceError::OutputNotProduced(
         "requested output target 'vector-output-1.vector' was not produced".to_string(),

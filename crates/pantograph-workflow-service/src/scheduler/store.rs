@@ -182,6 +182,20 @@ impl WorkflowExecutionSessionStore {
             .count()
     }
 
+    pub(crate) fn active_run_count(&self) -> usize {
+        self.active
+            .values()
+            .filter(|state| state.active_run.is_some())
+            .count()
+    }
+
+    pub(crate) fn queued_run_count(&self) -> usize {
+        self.active
+            .values()
+            .map(WorkflowExecutionSessionRecord::queue_len)
+            .sum()
+    }
+
     pub(crate) fn runtime_unload_candidates(
         &self,
         exclude_session_id: &str,

@@ -387,6 +387,7 @@ pub fn run_app() -> AppStartupResult<()> {
             crate::workflow::commands::workflow_projection_rebuild,
             crate::workflow::commands::workflow_library_usage_query,
             crate::workflow::commands::workflow_retention_policy_query,
+            crate::workflow::commands::workflow_local_network_status_query,
             crate::workflow::commands::workflow_get_diagnostics_snapshot,
             crate::workflow::commands::workflow_get_trace_snapshot,
             crate::workflow::commands::workflow_clear_diagnostics_history,

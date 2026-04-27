@@ -16,6 +16,7 @@ use fixtures::*;
 
 mod contracts;
 mod diagnostics;
+mod local_network;
 mod runtime_preflight;
 mod scheduler_snapshot;
 mod scheduler_snapshot_diagnostics;

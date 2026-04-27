@@ -184,6 +184,10 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
   `WorkflowGraph` from the immutable run snapshot, workflow executable
   topology, and presentation revision records. It must not read current graph
   files for historic run views.
+- Local Network status: `workflow_local_network_status_query` reports
+  local-only system and scheduler-load facts through a provider abstraction.
+  Future peer records must extend the peer DTOs instead of changing local-node
+  semantics.
 - Diagnostics: usage diagnostics accept workflow-version and node contract
   version/digest filters so historic comparisons can avoid mixing different
   executable node behavior.

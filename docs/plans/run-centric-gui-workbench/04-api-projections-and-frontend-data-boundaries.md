@@ -123,23 +123,30 @@ transport calls.
   are rebuilt from typed diagnostic ledger events.
 - [ ] Define which ledger-derived DTOs are hot, warm, or cold projections and
   how projection freshness/catching-up/degraded states appear in API responses.
-- [ ] Define graph-version DTOs for historic run view.
+- [x] Define graph-version DTOs for historic run view.
 - [ ] Define I/O artifact and retention DTOs.
   - First-pass I/O artifact DTOs cover bounded metadata and payload
     references. Retention-state DTOs remain pending with retention policy work.
 - [ ] Define Library usage/Pumas audit DTOs.
-- [ ] Define local Network node DTOs.
-- [ ] Define future peer pairing/trust DTO placeholders for Network so Iroh
+- [x] Define local Network node DTOs.
+- [x] Define future peer pairing/trust DTO placeholders for Network so Iroh
   can extend the model without replacing the page contract.
 - [ ] Define explicit error taxonomy.
-- [ ] Define local Network/system metrics behind a platform abstraction with
+- [x] Define local Network/system metrics behind a platform abstraction with
   degraded-state DTOs for unavailable or unauthorized metrics.
 - [ ] Choose the DTO parity mechanism before page work begins: generated
   bindings/schema checks, or paired Rust serialization tests plus TypeScript
   normalization/fixture tests for every projection.
-- [ ] If any new dependency is needed for DTO generation, media metadata,
+- [x] If any new dependency is needed for DTO generation, media metadata,
   system metrics, or projection plumbing, record the owner, reason, alternatives
   considered, and lockfile impact before adding it.
+  - Added `sysinfo = "0.32"` to `pantograph-workflow-service` for local
+    CPU/memory/disk/network-interface metrics. Owner: workflow-service local
+    Network status provider. Alternatives considered: std-only host facts
+    without resource metrics, or routing through the inference crate. Direct
+    `sysinfo` use keeps the API provider focused and avoids coupling Network
+    state to inference. Lockfile impact: no new transitive package version;
+    `sysinfo` was already present through `crates/inference`.
 
 **Verification:**
 
@@ -173,7 +180,7 @@ policy into adapters.
   authoritative state, not raw event replay, during ordinary API requests.
 - [x] Add explicit admin/maintenance command boundaries for projection rebuild
   where Stage `03` exposes them.
-- [ ] Add local Network/system-node status query.
+- [x] Add local Network/system-node status query.
 - [ ] Add immutable run submission and cancel/resubmit command boundaries.
 - [ ] Add scoped client queue action command boundaries.
 - [ ] Add privileged/admin command boundaries for GUI-only actions.
@@ -205,8 +212,10 @@ DTOs now expose backend-owned filters for workflow version, scheduler policy,
 runtime/model ids, media type, retention policy, node id, and artifact role
 where those fields exist. `workflow_library_usage_query` now exposes warm
 Library/Pumas usage aggregates with projection freshness state. Retention
-policy query is exposed for GUI retention settings/inspectors. Retention policy
-commands, Network/system-node, and broader command boundaries remain pending.
+policy query is exposed for GUI retention settings/inspectors. Local Network
+status query is exposed with local-only CPU/memory/disk/network-interface
+facts, scheduler load, future peer DTO placeholders, and explicit degraded GPU
+state. Retention policy commands and broader command boundaries remain pending.
 `workflow_projection_rebuild`
 provides the first explicit admin maintenance boundary for hot projection
 repair and projection-version rebuild scenarios. `workflow_run_graph_query`
@@ -232,6 +241,7 @@ projections while owning only transient UI state.
   DTOs.
 - [x] Add the initial I/O artifact projection service method and TypeScript
   DTOs.
+- [x] Add the initial local Network status service method and TypeScript DTOs.
 - [ ] Add active-run store as transient UI state.
 - [ ] Add focused stores for run list filters/sort/column state.
 - [ ] Preserve backend error categories through presenters.
@@ -298,9 +308,10 @@ event consumer for normal page state.
 
 - Backend projection boundaries implemented so far: run list, run detail,
   scheduler timeline, I/O artifact metadata, Library/Pumas usage, retention
-  policy query, projection rebuild, and historic run graph lookup by run id.
+  policy query, projection rebuild, historic run graph lookup by run id, and
+  local Network status query.
 - Frontend service/type boundaries implemented so far for those projection
-  reads and the historic run graph lookup.
+  reads, the historic run graph lookup, and local Network status query.
 
 ### Deviations
 

@@ -29,6 +29,8 @@ import type {
   WorkflowEditSessionRunResponse,
   WorkflowRunGraphQueryRequest,
   WorkflowRunGraphQueryResponse,
+  WorkflowLocalNetworkStatusQueryRequest,
+  WorkflowLocalNetworkStatusQueryResponse,
   WorkflowMetadata,
   WorkflowSessionQueueListResponse,
   WorkflowSessionStatusResponse,
@@ -457,6 +459,59 @@ export class WorkflowService extends WorkflowGraphMutationService {
     return invoke<WorkflowRetentionPolicyQueryResponse>('workflow_retention_policy_query', {
       request,
     });
+  }
+
+  async queryLocalNetworkStatus(
+    request: WorkflowLocalNetworkStatusQueryRequest = {},
+  ): Promise<WorkflowLocalNetworkStatusQueryResponse> {
+    if (USE_WORKFLOW_MOCKS) {
+      return {
+        local_node: {
+          node_id: 'local',
+          display_name: 'Local Pantograph',
+          captured_at_ms: Date.now(),
+          transport_state: 'local_only',
+          system: {
+            hostname: 'mock-host',
+            os_name: 'mock-os',
+            os_version: null,
+            kernel_version: null,
+            cpu: {
+              logical_core_count: 1,
+              average_usage_percent: 0,
+            },
+            memory: {
+              total_bytes: 0,
+              used_bytes: 0,
+              available_bytes: 0,
+            },
+            disks: [],
+            network_interfaces: [],
+            gpu: {
+              available: false,
+              reason: 'GPU metrics are not available in mock workflow service',
+            },
+          },
+          scheduler_load: {
+            max_sessions: 0,
+            active_session_count: 0,
+            max_loaded_sessions: 0,
+            loaded_session_count: 0,
+            active_run_count: 0,
+            queued_run_count: 0,
+          },
+          degradation_warnings: ['GPU metrics are not available in mock workflow service'],
+        },
+        peer_nodes: [],
+      };
+    }
+
+    return invoke<WorkflowLocalNetworkStatusQueryResponse>(
+      'workflow_local_network_status_query',
+      {
+        request,
+      },
+    );
   }
 
   async getDiagnosticsSnapshot(

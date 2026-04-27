@@ -22,6 +22,7 @@ mod graph_api;
 mod host;
 mod identity;
 mod io_contract;
+mod local_network_api;
 mod preflight_api;
 mod runtime_preflight;
 mod service_config;

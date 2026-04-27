@@ -248,6 +248,90 @@ export interface WorkflowGraphRunSettingsNode {
   data: unknown;
 }
 
+export interface WorkflowLocalNetworkStatusQueryRequest {
+  include_network_interfaces?: boolean;
+  include_disks?: boolean;
+}
+
+export interface WorkflowLocalNetworkStatusQueryResponse {
+  local_node: WorkflowLocalNetworkNodeStatus;
+  peer_nodes: WorkflowPeerNetworkNodeStatus[];
+}
+
+export type WorkflowNetworkTransportState =
+  | 'local_only'
+  | 'peer_networking_unavailable'
+  | 'pairing_required'
+  | 'connected'
+  | 'degraded';
+
+export interface WorkflowLocalNetworkNodeStatus {
+  node_id: string;
+  display_name: string;
+  captured_at_ms: number;
+  transport_state: WorkflowNetworkTransportState;
+  system: WorkflowLocalSystemMetrics;
+  scheduler_load: WorkflowLocalSchedulerLoad;
+  degradation_warnings: string[];
+}
+
+export interface WorkflowPeerNetworkNodeStatus {
+  node_id: string;
+  display_name: string;
+  transport_state: WorkflowNetworkTransportState;
+  last_seen_at_ms?: number | null;
+}
+
+export interface WorkflowLocalSystemMetrics {
+  hostname?: string | null;
+  os_name?: string | null;
+  os_version?: string | null;
+  kernel_version?: string | null;
+  cpu: WorkflowLocalCpuMetrics;
+  memory: WorkflowLocalMemoryMetrics;
+  disks: WorkflowLocalDiskMetrics[];
+  network_interfaces: WorkflowLocalNetworkInterfaceMetrics[];
+  gpu: WorkflowLocalGpuMetrics;
+}
+
+export interface WorkflowLocalCpuMetrics {
+  logical_core_count: number;
+  average_usage_percent?: number | null;
+}
+
+export interface WorkflowLocalMemoryMetrics {
+  total_bytes: number;
+  used_bytes: number;
+  available_bytes: number;
+}
+
+export interface WorkflowLocalDiskMetrics {
+  name: string;
+  mount_point: string;
+  total_bytes: number;
+  available_bytes: number;
+}
+
+export interface WorkflowLocalNetworkInterfaceMetrics {
+  name: string;
+  total_received_bytes: number;
+  total_transmitted_bytes: number;
+}
+
+export interface WorkflowLocalGpuMetrics {
+  available: boolean;
+  reason?: string | null;
+}
+
+export interface WorkflowLocalSchedulerLoad {
+  max_sessions: number;
+  active_session_count: number;
+  max_loaded_sessions: number;
+  loaded_session_count: number;
+  active_run_count: number;
+  queued_run_count: number;
+}
+
 export interface WorkflowDerivedGraph {
   schema_version: number;
   graph_fingerprint: string;
