@@ -11,6 +11,36 @@ ledger.
 | `run_summary_sqlite.rs` | Workflow run-summary upsert and query persistence for restart-visible run lists. |
 | `timing_sqlite.rs` | Workflow timing observation persistence, expectation lookup, and timing retention pruning. |
 
+## Problem
+The SQLite repository implementation has several persistence responsibilities:
+timing history, run summaries, typed diagnostic events, projection cursors, and
+projection read models. Keeping all of that logic in one large file makes schema
+ownership and projection behavior harder to audit.
+
+## Constraints
+- SQLite schema ownership stays in the parent diagnostics ledger crate.
+- Helpers in this directory must not expose a second public repository API.
+- Projection drains must be incremental from stored `projection_state` cursors.
+- Page/query reads must use projection tables instead of replaying
+  `diagnostic_events`.
+- Event and artifact payload bodies must stay bounded metadata or references,
+  not unbounded raw artifact storage.
+
+## Decision
+Split SQLite behavior by persistence responsibility inside this directory while
+keeping `SqliteDiagnosticsLedger` as the public repository owner. Event helpers
+own typed event append/query storage and projection cursor application. Timing
+helpers own timing observations and timing expectation lookups. Run-summary
+helpers own restart-visible workflow run summaries.
+
+## Alternatives Rejected
+- Keep all SQLite behavior in the parent `sqlite.rs` file.
+  Rejected because typed event ledger and projection cursor logic make one file
+  too broad to review safely.
+- Expose each helper module as a public API.
+  Rejected because public callers should depend on one repository trait and not
+  on storage layout details.
+
 ## Invariants
 - Timing observation writes remain idempotent through `observation_key`.
 - Expectation lookups require workflow id, graph fingerprint, and node id for
@@ -36,11 +66,28 @@ ledger.
   projection cursor and write bounded metadata/reference rows keyed by
   `event_seq`.
 
+## Revisit Triggers
+- Diagnostics storage moves away from local SQLite.
+- Projection drains require asynchronous workers or background scheduling.
+- Artifact payload storage moves into a separate approved-root payload store
+  with its own repository boundary.
+- Schema migrations need per-module migration owners instead of the parent
+  schema module.
+
 ## Dependencies
 **Internal:** parent `sqlite.rs`, diagnostics ledger event/timing/run-summary
 contracts, and schema-owned diagnostics tables.
 
 **External:** `rusqlite` only.
+
+## Related ADRs
+- `docs/adr/ADR-008-durable-model-license-diagnostics-ledger.md`
+- `docs/adr/ADR-012-canonical-workflow-run-identity.md`
+- `docs/adr/ADR-014-run-centric-workbench-projection-boundary.md`
+
+## Usage Examples
+Public callers do not use these modules directly. They open
+`SqliteDiagnosticsLedger` and call `DiagnosticsLedgerRepository` methods.
 
 ## API Consumer Contract
 This directory is not a public API. Public callers use

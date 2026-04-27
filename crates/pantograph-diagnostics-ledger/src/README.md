@@ -127,7 +127,7 @@ use pantograph_diagnostics_ledger::{
 let ledger = SqliteDiagnosticsLedger::open(path)?;
 let history = ledger.query_workflow_run_summaries(&WorkflowRunSummaryQuery {
     workflow_id: Some("workflow-1".to_string()),
-    workflow_run_id: None,
+    workflow_run_id: Some("run-1".to_string()),
     limit: Some(10),
 })?;
 ```
