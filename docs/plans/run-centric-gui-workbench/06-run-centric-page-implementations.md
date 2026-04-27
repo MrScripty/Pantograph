@@ -4,9 +4,9 @@
 
 In progress. Stage `05` delivered the Scheduler-first shell, dense Scheduler
 table, local Network status page, and Node Editor reserved page. This stage now
-has first-pass Graph, I/O Inspector, and Library pages backed by projection
-services. Deeper diagnostics facets, node status graph overlays, Pumas mutation
-actions, and richer artifact payload renderers remain open.
+has first-pass Diagnostics, Graph, I/O Inspector, and Library pages backed by
+projection services. Deeper diagnostics facets, node status graph overlays,
+Pumas mutation actions, and richer artifact payload renderers remain open.
 
 ## Objective
 
@@ -157,19 +157,19 @@ summaries, delay reason, and retention summaries remain open.
 
 **Tasks:**
 
-- [ ] Adapt existing diagnostics components to active-run detail projections.
-- [ ] Show scheduler decision section: facts, estimates, selected/rejected
+- [x] Adapt existing diagnostics components to active-run detail projections.
+- [x] Show scheduler decision section: facts, estimates, selected/rejected
   runtime/device, delay reasons, model load/unload, actions, and observed
-  result.
+  result where the current scheduler timeline projection summarizes them.
 - [ ] Add filters for workflow/node/model/runtime versions, scheduler policy,
   graph settings, session/bucket/client, status, date, and retention
   completeness where data exists.
 - [ ] Display mixed-version warnings/facets.
 - [ ] Preserve comparison-ready labels/facets for future run, workflow-version,
   runtime-version, model-version, device, and input-profile comparisons.
-- [ ] Render diagnostics projections built from typed event ledger data without
+- [x] Render diagnostics projections built from typed event ledger data without
   embedding event-family-specific parsing in page components.
-- [ ] Render backend-provided projection freshness/catching-up state for warm
+- [x] Render backend-provided projection freshness/catching-up state for warm
   diagnostics summaries.
 
 **Verification:**
@@ -177,8 +177,14 @@ summaries, delay reason, and retention summaries remain open.
 - Presenter tests cover mixed-version labels and scheduler decision summaries.
 - Component tests cover active-run and no-active-run states.
 
-**Status:** Not started beyond embedding the existing diagnostics panel as a
-workbench page in Stage `05`.
+**Status:** Partially complete. `DiagnosticsPage.svelte` now queries
+`workflowService.queryRunDetail` and
+`workflowService.querySchedulerTimeline` for the active run, renders run detail
+facts, status, timing, terminal error, projection freshness, and scheduler
+timeline summaries without parsing raw ledger rows or event-family payloads in
+the component. Version-aware aggregate filters, mixed-version facets,
+comparison-ready diagnostics labels, and richer scheduler decision facets remain
+open pending additional typed projection fields.
 
 ### Milestone 3: Graph Page
 
@@ -357,6 +363,11 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
   `src/components/workbench/runGraphPresenters.ts` with tests for immutable run
   graph summary, topology rows, presentation fallback labels, and stable SVG
   layout inputs.
+- Added `src/components/workbench/DiagnosticsPage.svelte` with active-run
+  `queryRunDetail` and `querySchedulerTimeline` projection rendering.
+- Added `src/components/workbench/diagnosticsPagePresenters.ts` and tests for
+  run status classes, duration labels, projection freshness labels, run fact
+  rows, typed timeline labels, and payload availability labels.
 
 ### Deviations
 
@@ -371,6 +382,9 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
 - The first run graph view uses a lightweight read-only SVG snapshot instead
   of the full graph editor package because the current editor components are
   bound to the live workflow store.
+- The first run diagnostics page renders scheduler timeline summary/detail
+  fields and payload availability only. It does not parse `payload_json` because
+  richer decision facets should be promoted into typed projection fields.
 
 ### Follow-Ups
 
@@ -383,6 +397,9 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
   buttons.
 - Add node status and output availability overlays once the diagnostics
   projection exposes node-keyed status/artifact summary records.
+- Add typed diagnostics facet projections for scheduler estimates, selected and
+  rejected runtime/device choices, model load/unload decisions, graph settings,
+  and mixed-version comparison filters.
 
 ### Verification Summary
 
@@ -391,6 +408,8 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
 - `node --experimental-strip-types --test src/components/workbench/libraryUsagePresenters.test.ts`
   passed.
 - `node --experimental-strip-types --test src/components/workbench/runGraphPresenters.test.ts`
+  passed.
+- `node --experimental-strip-types --test src/components/workbench/diagnosticsPagePresenters.test.ts`
   passed.
 - `npm run test:frontend` passed.
 - `npm run typecheck` passed.

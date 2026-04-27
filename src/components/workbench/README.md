@@ -12,7 +12,9 @@ later plan stages fill in richer page bodies.
 | `SchedulerPage.svelte` | Dense run-list view backed by the run-list projection service and active-run selection store. |
 | `GraphPage.svelte` | Workbench page that switches between the active run's immutable graph snapshot and the current editable workflow graph. |
 | `RunGraphSnapshot.svelte` | Read-only run graph renderer backed by `workflowService.queryRunGraph`; it does not load historic graphs into the editor store. |
-| `DiagnosticsPage.svelte` | Workbench page wrapper for the existing diagnostics panel. |
+| `DiagnosticsPage.svelte` | Projection-backed selected-run diagnostics page with run detail facts and scheduler timeline records. |
+| `diagnosticsPagePresenters.ts` | Pure diagnostics page status, duration, projection freshness, fact, and timeline label presenters. |
+| `diagnosticsPagePresenters.test.ts` | Unit coverage for diagnostics page labels and payload availability presentation. |
 | `IoInspectorPage.svelte` | Projection-backed I/O artifact browser and global retention policy form. |
 | `ioInspectorPresenters.ts` | Pure I/O media, payload availability, byte-size, and projection freshness presenters. |
 | `ioInspectorPresenters.test.ts` | Unit coverage for I/O Inspector presentation labels. |
@@ -36,6 +38,8 @@ grow separate navigation and selection models.
   GUI restart.
 - Page bodies must consume backend projection services instead of raw
   diagnostic event ledger rows.
+- Diagnostics pages must consume run-detail and scheduler-timeline projections
+  without parsing raw event ledger rows in the component.
 - I/O pages must treat artifact rows as metadata projections. Payload bodies
   are not loaded unless a dedicated typed payload API exists.
 - Library pages must render usage projections without issuing optimistic Pumas
@@ -72,6 +76,9 @@ triggered by workflow events rather than polling.
 - Run graph snapshots are read-only projection views. Switching to the current
   editor keeps the selected run context for other pages but does not imply the
   editor graph matches that run.
+- Diagnostics timeline rows render typed scheduler projection summaries and
+  payload availability only; detailed payload parsing belongs in backend
+  projections or future typed presenters.
 - Workbench pages must not consume raw diagnostic ledger events.
 - Reserved pages must not invent backend state; they should display only data
   available through typed services or explicit unavailable states.
@@ -113,6 +120,9 @@ triggered by workflow events rather than polling.
 - `GraphPage.svelte` reads historic workflow versions through
   `workflowService.queryRunGraph` and renders them through
   `RunGraphSnapshot.svelte`. It never applies that graph to the editor store.
+- `DiagnosticsPage.svelte` reads selected-run facts through
+  `workflowService.queryRunDetail` and scheduler history through
+  `workflowService.querySchedulerTimeline`.
 - `IoInspectorPage.svelte` reads artifact metadata through
   `workflowService.queryIoArtifacts` and global retention state through
   `workflowService.queryRetentionPolicy`.
@@ -132,6 +142,8 @@ triggered by workflow events rather than polling.
   highlight only rows whose `last_workflow_run_id` equals the active run.
 - Run graph snapshot rows render `WorkflowRunGraphProjection` topology,
   presentation revision, graph settings, and execution fingerprint fields.
+- Diagnostics fact rows render `RunDetailProjectionRecord` fields, and
+  timeline rows render `SchedulerTimelineProjectionRecord` summaries.
 - Network status cards are derived from `WorkflowLocalNetworkStatusQueryResponse`.
 - Reserved page unavailable states are not persisted and do not imply backend
   capability flags.
