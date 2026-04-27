@@ -259,6 +259,9 @@ pub struct WorkflowPreflightResponse {
     pub invalid_targets: Vec<WorkflowOutputTarget>,
     #[serde(default)]
     pub warnings: Vec<String>,
+    /// Legacy structural fingerprint used for preflight/cache invalidation.
+    /// It is not workflow-version identity; version-aware diagnostics must use
+    /// workflow_version_id and node behavior-version facts instead.
     pub graph_fingerprint: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub technical_fit_decision: Option<WorkflowTechnicalFitDecision>,

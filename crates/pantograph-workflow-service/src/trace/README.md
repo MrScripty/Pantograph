@@ -94,8 +94,9 @@ they do not own trace lifecycle rules.
   The active execution is not recorded until after its terminal snapshot is
   enriched, so completion diagnostics compare against previous history rather
   than including themselves in their baseline.
-- Opened-graph timing expectations are ledger projections keyed by workflow id
-  and graph fingerprint. They must not require an active execution id.
+- Opened-graph timing expectations are legacy ledger projections keyed by
+  workflow id and graph fingerprint. They must not require an active execution
+  id, and they must not be treated as workflow-version identity.
 - Trace DTO serialization, runtime inference, lifecycle reason, snapshot
   filtering, replay, baseline scheduler attribution, waiting/resume, and
   dirty-task tests stay indexed by `tests.rs`, while larger lifecycle/restart

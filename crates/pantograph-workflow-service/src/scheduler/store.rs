@@ -46,6 +46,8 @@ struct WorkflowExecutionSessionActiveRun {
 
 #[derive(Debug, Clone)]
 pub(crate) struct WorkflowExecutionSessionPreflightCache {
+    /// Runtime cache invalidation fingerprint only. Do not use this as
+    /// workflow-version identity or diagnostics grouping state.
     pub(crate) graph_fingerprint: String,
     pub(crate) runtime_capability_fingerprint: String,
     pub(crate) override_selection: Option<WorkflowTechnicalFitOverride>,

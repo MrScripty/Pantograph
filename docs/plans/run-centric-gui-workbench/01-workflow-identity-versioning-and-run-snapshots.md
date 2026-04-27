@@ -246,7 +246,7 @@ correlation fields.
 - [ ] Make diagnostics query contracts consume projections derived from typed
   event ledger correlation fields rather than raw mutable graph state.
 - [x] Add run-to-workflow-version projection for Graph page consumers.
-- [ ] Remove or quarantine old graph-fingerprint-only diagnostics grouping.
+- [x] Remove or quarantine old graph-fingerprint-only diagnostics grouping.
 - [ ] Update READMEs for changed host-facing contracts.
 
 **Verification:**
@@ -256,8 +256,10 @@ correlation fields.
 
 **Status:** In progress. Workflow-version id, workflow semantic-version, and
 node contract version/digest filters now exist for model/license usage
-diagnostics. Graph projections and graph-fingerprint quarantine remain
-pending.
+diagnostics. Graph projections exist for run-to-version/presentation lookup.
+Legacy `graph_fingerprint` fields are explicitly documented as cache/timing
+facets, not workflow-version identity. Full replacement with typed event-ledger
+projections remains in Stage `03`.
 
 ## Public Facade Preservation Note
 
@@ -358,6 +360,9 @@ records for the same execution fingerprint.
 - 2026-04-27: Expanded immutable workflow-run snapshots with graph settings,
   runtime requirements, capability model inventory, and runtime capabilities
   captured before queue admission.
+- 2026-04-27: Quarantined remaining `graph_fingerprint` contracts as legacy
+  preflight/cache or timing facets. They are documented as non-version
+  identity pending Stage `03` typed event-ledger projections.
 
 ### Deviations
 
@@ -372,7 +377,8 @@ records for the same execution fingerprint.
 
 - Fill remaining run snapshot fields for client/bucket attribution and
   event-builder correlation.
-- Quarantine or remove old graph-fingerprint-only diagnostics grouping.
+- Replace legacy graph-fingerprint timing facets with typed event-ledger
+  projections in Stage `03`.
 
 ### Verification Summary
 
@@ -412,6 +418,14 @@ records for the same execution fingerprint.
 - 2026-04-27: `rustfmt --edition 2021 --config skip_children=true --check`
   passed for the touched snapshot context Rust files.
 - 2026-04-27: `git diff --check` passed for the model/runtime snapshot context
+  slice.
+- 2026-04-27: `cargo test -p pantograph-diagnostics-ledger timing` passed
+  after documenting `graph_fingerprint` as a legacy timing facet.
+- 2026-04-27: `cargo test -p pantograph-workflow-service workflow_preflight`
+  passed after documenting preflight graph fingerprints as cache context.
+- 2026-04-27: `rustfmt --edition 2021 --config skip_children=true --check`
+  passed for the touched graph-fingerprint quarantine Rust files.
+- 2026-04-27: `git diff --check` passed for the graph-fingerprint quarantine
   slice.
 - 2026-04-27: `cargo test -p pantograph-node-contracts` passed.
 - 2026-04-27: `cargo test -p workflow-nodes` passed.

@@ -127,6 +127,10 @@ let history = ledger.query_workflow_run_summaries(&WorkflowRunSummaryQuery {
   durations, usage-event identity, model identity, workflow-version fields,
   and lineage node contract version/digest facts are machine-consumed by
   diagnostics projections.
+- Legacy fields: timing `graph_fingerprint` remains a compatibility facet for
+  existing timing expectation history only. New diagnostics grouping must use
+  workflow-version and node behavior-version correlation from immutable run
+  snapshots and the typed event ledger.
 - Defaults: omitted optional filters mean unfiltered queries within the
   caller-provided limit.
 - Enums and labels: timing statuses, run-summary statuses, and usage statuses

@@ -105,6 +105,8 @@ pub struct WorkflowTraceSummary {
     pub session_id: Option<String>,
     #[serde(default)]
     pub workflow_id: Option<String>,
+    /// Legacy timing context retained until typed event-ledger projections
+    /// replace graph-fingerprint diagnostics grouping.
     #[serde(default)]
     pub graph_fingerprint: Option<String>,
     pub status: WorkflowTraceStatus,
@@ -141,6 +143,8 @@ pub struct WorkflowTraceSummary {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct WorkflowTraceGraphContext {
+    /// Legacy timing context only; execution identity belongs to immutable
+    /// workflow-version/run snapshots.
     pub graph_fingerprint: Option<String>,
     pub node_count_at_start: usize,
     pub node_types_by_id: HashMap<String, String>,
@@ -150,6 +154,8 @@ pub struct WorkflowTraceGraphContext {
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowTraceGraphTimingExpectations {
     pub workflow_id: String,
+    /// Legacy timing facet retained for old timing expectations. New
+    /// diagnostics projections should prefer workflow-version correlation.
     #[serde(default)]
     pub graph_fingerprint: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

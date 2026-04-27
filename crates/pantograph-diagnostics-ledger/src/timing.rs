@@ -76,6 +76,8 @@ pub struct WorkflowTimingObservation {
     pub scope: WorkflowTimingObservationScope,
     pub workflow_run_id: String,
     pub workflow_id: String,
+    /// Legacy timing facet. This must not be treated as workflow-version
+    /// identity once version-aware diagnostic projections are available.
     pub graph_fingerprint: String,
     pub node_id: Option<String>,
     pub node_type: Option<String>,
@@ -112,6 +114,7 @@ impl WorkflowTimingObservation {
 pub struct WorkflowTimingExpectationQuery {
     pub scope: WorkflowTimingObservationScope,
     pub workflow_id: String,
+    /// Legacy timing facet for existing expectation history.
     pub graph_fingerprint: String,
     pub node_id: Option<String>,
     pub node_type: Option<String>,
