@@ -758,6 +758,7 @@ fn workflow_retention_policy_query_reads_current_policy() {
         .expect("retention policy query");
 
     assert_eq!(response.retention_policy.policy_id, "standard-local-v1");
+    assert_eq!(response.retention_policy.policy_version, 1);
     assert_eq!(response.retention_policy.retention_days, 365);
 }
 
@@ -774,6 +775,7 @@ fn workflow_retention_policy_update_changes_policy_and_records_event() {
         .expect("retention policy update");
 
     assert_eq!(response.retention_policy.policy_id, "standard-local-v1");
+    assert_eq!(response.retention_policy.policy_version, 2);
     assert_eq!(response.retention_policy.retention_days, 120);
     assert_eq!(
         service
@@ -802,6 +804,8 @@ fn workflow_retention_policy_update_changes_policy_and_records_event() {
         events[0].retention_policy_id.as_deref(),
         Some("standard-local-v1")
     );
+    assert!(events[0].payload_json.contains("\"policy_version\":2"));
+    assert!(events[0].payload_json.contains("\"retention_days\":120"));
 }
 
 fn sample_run_snapshot_event() -> DiagnosticEventAppendRequest {

@@ -1174,6 +1174,7 @@ fn workflow_retention_policy_query_contract_snapshot() {
     let response = WorkflowRetentionPolicyQueryResponse {
         retention_policy: DiagnosticsRetentionPolicy {
             policy_id: "standard-local-v1".to_string(),
+            policy_version: 1,
             retention_class: RetentionClass::Standard,
             retention_days: 365,
             applied_at_ms: 1500,
@@ -1189,6 +1190,7 @@ fn workflow_retention_policy_query_contract_snapshot() {
     let expected_response = serde_json::json!({
         "retention_policy": {
             "policy_id": "standard-local-v1",
+            "policy_version": 1,
             "retention_class": "standard",
             "retention_days": 365,
             "applied_at_ms": 1500,

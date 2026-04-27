@@ -19,6 +19,7 @@ test('updateRetentionPolicy returns backend policy state without client-side opt
   const response: WorkflowRetentionPolicyUpdateResponse = {
     retention_policy: {
       policy_id: 'standard-local-v2',
+      policy_version: 2,
       retention_class: 'standard',
       retention_days: 14,
       applied_at_ms: 123,

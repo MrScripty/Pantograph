@@ -551,6 +551,7 @@ export type DiagnosticsRetentionClass = 'standard';
 
 export interface DiagnosticsRetentionPolicy {
   policy_id: string;
+  policy_version: number;
   retention_class: DiagnosticsRetentionClass;
   retention_days: number;
   applied_at_ms: number;

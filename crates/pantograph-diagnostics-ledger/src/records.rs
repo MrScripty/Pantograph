@@ -249,6 +249,7 @@ impl ModelLicenseUsageEvent {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DiagnosticsRetentionPolicy {
     pub policy_id: String,
+    pub policy_version: u32,
     pub retention_class: RetentionClass,
     pub retention_days: u32,
     pub applied_at_ms: i64,

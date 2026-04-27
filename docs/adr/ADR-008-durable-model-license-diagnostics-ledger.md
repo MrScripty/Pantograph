@@ -41,6 +41,10 @@ License metadata is captured as a time-of-use snapshot. Retention defaults to
 the `standard` class for 365 days. Pruning is explicit and transactional: it
 deletes complete eligible usage events and their dependent snapshot,
 measurement, and lineage rows, but never rewrites retained historical facts.
+The standard retention policy is a versioned ledger record. Policy version
+starts at `1`, increments on every update, and is included in typed
+`retention.policy_changed` audit events so future cleanup decisions can be
+traced to a concrete policy revision.
 
 `pantograph-embedded-runtime` submits validated usage facts through the managed
 model capability and runtime-created node execution context boundary. It owns

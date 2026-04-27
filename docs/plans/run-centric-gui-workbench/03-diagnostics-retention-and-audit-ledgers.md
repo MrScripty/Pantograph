@@ -310,7 +310,8 @@ availability.
   truncation, externalization, expiration, and deletion.
 - [ ] Add global retention policy record and policy version.
   - Existing standard local retention policy is now exposed as a first-class
-    backend/API query. Policy mutation/version history remains pending.
+    backend/API query. The policy now carries a durable `policy_version` that
+    starts at `1` and increments on each update.
 - [ ] Define first-pass global retention settings for final outputs, workflow
   inputs, intermediate node I/O, failed-run data, maximum artifact size,
   maximum total storage, media behavior, compression/archive behavior, and
@@ -319,6 +320,9 @@ availability.
   expiring payloads.
 - [ ] Emit typed `retention.*` events with policy version, timestamp, actor,
   affected artifact, and reason.
+  - Policy update events now include policy id, policy version, retention
+    days, timestamp, and reason. Actor context and artifact-specific cleanup
+    events remain pending.
 - [x] Update affected hot/warm projections through event cursors rather than
   direct page-time artifact ledger scans.
 
@@ -330,7 +334,13 @@ availability.
 - Tests cover artifact reference/path validation before payload metadata or
   retention state can be persisted.
 
-**Status:** Not started.
+**Status:** In progress. The standard global retention policy is now a
+versioned ledger record exposed through backend/API DTOs. Updates increment
+`policy_version`, and `retention.policy_changed` events include the new
+version and retention duration so later cleanup and audit views can tie
+retroactive behavior to a concrete policy revision. First-pass setting groups,
+retroactive cleanup, actor context, and artifact-specific cleanup events remain
+pending.
 
 ### Milestone 4: Library And Pumas Audit
 
@@ -411,6 +421,9 @@ implicitly on page load.
   materialized read models with event cursors. Rebuildable now means explicit
   rebuild support for migration, repair, projection-version changes, and tests,
   not full replay during normal startup or page reads.
+- 2026-04-27: Added versioning to the standard global retention policy. Policy
+  updates now increment `policy_version`, and `retention.policy_changed` events
+  carry policy version plus retention duration.
 
 ### Deviations
 
@@ -441,6 +454,9 @@ implicitly on page load.
   diagnostic_event_ledger_rejects_unsafe_library_asset_ids` passed.
 - 2026-04-27: `cargo test -p pantograph-workflow-service
   workflow_library_usage_query_validates_bounds` passed.
+- 2026-04-27: `cargo test -p pantograph-diagnostics-ledger retention_policy
+  --lib` and `cargo test -p pantograph-workflow-service
+  workflow_retention_policy --lib` passed.
 
 ### Traceability Links
 

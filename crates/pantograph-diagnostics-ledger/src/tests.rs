@@ -576,6 +576,8 @@ fn diagnostic_event_ledger_rejects_oversized_payloads() {
         payload_ref: None,
         payload: DiagnosticEventPayload::RetentionPolicyChanged(RetentionPolicyChangedPayload {
             policy_id: "retention_standard".to_string(),
+            policy_version: 1,
+            retention_days: DEFAULT_STANDARD_RETENTION_DAYS,
             reason: "x".repeat(MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES + 1),
         }),
     };
@@ -1849,6 +1851,54 @@ fn existing_v14_schema_adds_io_artifact_retention_state_columns() {
 }
 
 #[test]
+fn existing_v15_schema_adds_retention_policy_version() {
+    let temp = tempfile::NamedTempFile::new().expect("temp file");
+    let path = temp.path().to_path_buf();
+    {
+        let conn = Connection::open(&path).expect("connection opens");
+        conn.execute_batch(
+            "CREATE TABLE ledger_schema_migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at_ms INTEGER NOT NULL,
+                checksum TEXT NOT NULL
+            );
+            INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
+            VALUES (15, 0, 'pantograph-diagnostics-ledger-v15');
+            CREATE TABLE diagnostics_retention_policy (
+                policy_id TEXT PRIMARY KEY,
+                retention_class TEXT NOT NULL UNIQUE,
+                retention_days INTEGER NOT NULL,
+                applied_at_ms INTEGER NOT NULL,
+                explanation TEXT NOT NULL
+            );
+            INSERT INTO diagnostics_retention_policy
+                (policy_id, retention_class, retention_days, applied_at_ms, explanation)
+            VALUES ('standard-local-v1', 'standard', 120, 1000, 'Existing policy');",
+        )
+        .expect("v15 schema marker and old retention policy table are installed");
+    }
+    {
+        let _ledger = SqliteDiagnosticsLedger::open(&path).expect("ledger migrates");
+    }
+    let conn = Connection::open(&path).expect("connection reopens");
+
+    assert!(sqlite_column_exists(
+        &conn,
+        "diagnostics_retention_policy",
+        "policy_version"
+    ));
+    let policy_version = conn
+        .query_row(
+            "SELECT policy_version FROM diagnostics_retention_policy
+             WHERE policy_id = 'standard-local-v1'",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .expect("policy version loads");
+    assert_eq!(policy_version, 1);
+}
+
+#[test]
 fn unsupported_schema_version_is_rejected() {
     let conn = Connection::open_in_memory().expect("connection opens");
     conn.execute_batch(
@@ -1912,6 +1962,7 @@ fn retention_policy_uses_standard_local_default() {
     let policy = ledger.retention_policy().expect("policy loads");
 
     assert_eq!(policy.retention_class, RetentionClass::Standard);
+    assert_eq!(policy.policy_version, 1);
     assert_eq!(policy.retention_days, DEFAULT_STANDARD_RETENTION_DAYS);
 }
 
@@ -1928,14 +1979,23 @@ fn update_retention_policy_updates_standard_policy() {
         .expect("policy updates");
 
     assert_eq!(policy.retention_class, RetentionClass::Standard);
+    assert_eq!(policy.policy_version, 2);
     assert_eq!(policy.retention_days, 90);
     assert_eq!(policy.explanation, "Short local retention for test");
+    let second_policy = ledger
+        .update_retention_policy(UpdateRetentionPolicyCommand {
+            retention_class: RetentionClass::Standard,
+            retention_days: 30,
+            explanation: "Shorter local retention for test".to_string(),
+        })
+        .expect("policy updates again");
+    assert_eq!(second_policy.policy_version, 3);
     assert_eq!(
         ledger
             .retention_policy()
             .expect("policy loads")
             .retention_days,
-        90
+        30
     );
 }
 

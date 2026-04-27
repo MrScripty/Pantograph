@@ -4,8 +4,8 @@ use crate::records::{RetentionClass, DEFAULT_STANDARD_RETENTION_DAYS};
 use crate::util::now_ms;
 use crate::DiagnosticsLedgerError;
 
-pub(crate) const SCHEMA_VERSION: i64 = 15;
-const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v15";
+pub(crate) const SCHEMA_VERSION: i64 = 16;
+const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v16";
 
 pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {
     tx.execute_batch(
@@ -112,6 +112,7 @@ pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedger
 
         CREATE TABLE diagnostics_retention_policy (
             policy_id TEXT PRIMARY KEY,
+            policy_version INTEGER NOT NULL,
             retention_class TEXT NOT NULL UNIQUE,
             retention_days INTEGER NOT NULL,
             applied_at_ms INTEGER NOT NULL,
@@ -129,10 +130,11 @@ pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedger
     )?;
     tx.execute(
         "INSERT INTO diagnostics_retention_policy
-            (policy_id, retention_class, retention_days, applied_at_ms, explanation)
-         VALUES (?1, ?2, ?3, ?4, ?5)",
+            (policy_id, policy_version, retention_class, retention_days, applied_at_ms, explanation)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         params![
             "standard-local-v1",
+            1_i64,
             RetentionClass::Standard.as_db(),
             DEFAULT_STANDARD_RETENTION_DAYS,
             now_ms(),
@@ -215,6 +217,9 @@ pub(crate) fn migrate_schema(
     if found < 15 {
         apply_io_artifact_retention_state_migration(&tx)?;
     }
+    if found < 16 {
+        apply_retention_policy_version_migration(&tx)?;
+    }
     if found < SCHEMA_VERSION {
         tx.execute(
             "INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
@@ -223,6 +228,47 @@ pub(crate) fn migrate_schema(
         )?;
     }
     tx.commit()?;
+    Ok(())
+}
+
+fn apply_retention_policy_version_migration(
+    tx: &Transaction<'_>,
+) -> Result<(), DiagnosticsLedgerError> {
+    if !table_exists(tx, "diagnostics_retention_policy")? {
+        tx.execute_batch(
+            r#"
+            CREATE TABLE diagnostics_retention_policy (
+                policy_id TEXT PRIMARY KEY,
+                policy_version INTEGER NOT NULL,
+                retention_class TEXT NOT NULL UNIQUE,
+                retention_days INTEGER NOT NULL,
+                applied_at_ms INTEGER NOT NULL,
+                explanation TEXT NOT NULL
+            );
+            "#,
+        )?;
+        tx.execute(
+            "INSERT INTO diagnostics_retention_policy
+                (policy_id, policy_version, retention_class, retention_days, applied_at_ms, explanation)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                "standard-local-v1",
+                1_i64,
+                RetentionClass::Standard.as_db(),
+                DEFAULT_STANDARD_RETENTION_DAYS,
+                now_ms(),
+                "Default local model/license usage retention policy"
+            ],
+        )?;
+        return Ok(());
+    }
+    if !column_exists(tx, "diagnostics_retention_policy", "policy_version")? {
+        tx.execute(
+            "ALTER TABLE diagnostics_retention_policy
+             ADD COLUMN policy_version INTEGER NOT NULL DEFAULT 1",
+            [],
+        )?;
+    }
     Ok(())
 }
 

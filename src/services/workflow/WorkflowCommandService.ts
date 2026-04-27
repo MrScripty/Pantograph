@@ -48,6 +48,7 @@ export class WorkflowCommandService extends WorkflowProjectionService {
       return {
         retention_policy: {
           policy_id: 'standard-local-v1',
+          policy_version: 1,
           retention_class: 'standard',
           retention_days: 365,
           applied_at_ms: Date.now(),
@@ -68,6 +69,7 @@ export class WorkflowCommandService extends WorkflowProjectionService {
       return {
         retention_policy: {
           policy_id: 'standard-local-v1',
+          policy_version: 2,
           retention_class: 'standard',
           retention_days: request.retention_days,
           applied_at_ms: Date.now(),

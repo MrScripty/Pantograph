@@ -528,6 +528,8 @@ impl WorkflowService {
                 payload: DiagnosticEventPayload::RetentionPolicyChanged(
                     RetentionPolicyChangedPayload {
                         policy_id: retention_policy.policy_id.clone(),
+                        policy_version: retention_policy.policy_version,
+                        retention_days: retention_policy.retention_days,
                         reason: request.reason,
                     },
                 ),

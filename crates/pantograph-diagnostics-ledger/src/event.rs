@@ -576,12 +576,19 @@ impl LibraryAssetAccessedPayload {
 #[serde(rename_all = "snake_case")]
 pub struct RetentionPolicyChangedPayload {
     pub policy_id: String,
+    pub policy_version: u32,
+    pub retention_days: u32,
     pub reason: String,
 }
 
 impl RetentionPolicyChangedPayload {
     fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
         validate_required_text("policy_id", &self.policy_id, MAX_ID_LEN)?;
+        if self.policy_version == 0 || self.retention_days == 0 {
+            return Err(DiagnosticsLedgerError::InvalidField {
+                field: "retention_policy",
+            });
+        }
         validate_required_text("reason", &self.reason, MAX_JSON_LEN)
     }
 }
