@@ -204,8 +204,9 @@ editable workflow behavior.
 - [x] Implement or preserve edit view for current editable workflow.
 - [x] Use presentation revision when available and generated layout otherwise.
 - [x] Add visible distinction between run view and edit view.
-- [ ] Overlay node status/output availability when diagnostics projection
-  supports it.
+- [x] Overlay node output availability when retained I/O artifact projections
+  provide node-keyed metadata.
+- [ ] Overlay node runtime status when diagnostics projection supports it.
 
 **Verification:**
 
@@ -219,9 +220,12 @@ to a read-only run snapshot when an active run is selected, and keeps the
 current editable graph behind an explicit `Current Editor` mode. The snapshot
 renders version identity, execution fingerprint, presentation revision,
 captured topology, run settings availability, and an isolated SVG graph without
-applying historic graphs to the editor store. Node status and output
-availability overlays remain open until diagnostics projections expose those
-facts by node.
+applying historic graphs to the editor store. `GraphPage.svelte` now queries the
+I/O artifact projection for the selected run and passes node-keyed artifact
+summaries into `RunGraphSnapshot.svelte`, allowing graph nodes and node rows to
+show retained input/output availability without reading raw ledger rows or
+payload bodies. Node runtime status overlays remain open until diagnostics
+projections expose node-keyed execution status facts.
 
 ### Milestone 4: I/O Inspector Page
 
@@ -391,6 +395,9 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
   `src/components/workbench/runGraphPresenters.ts` with tests for immutable run
   graph summary, topology rows, presentation fallback labels, and stable SVG
   layout inputs.
+- Added graph node output-availability overlays from
+  `workflowService.queryIoArtifacts`, keeping artifact metadata as a typed
+  projection read model and avoiding payload dereferencing in the graph view.
 - Added `src/components/workbench/DiagnosticsPage.svelte` with active-run
   `queryRunDetail` and `querySchedulerTimeline` projection rendering.
 - Added `src/components/workbench/diagnosticsPagePresenters.ts` and tests for
@@ -453,8 +460,8 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
   through a service.
 - Add typed Pumas/Library mutation service methods before adding Library action
   buttons.
-- Add node status and output availability overlays once the diagnostics
-  projection exposes node-keyed status/artifact summary records.
+- Add node runtime status overlays once diagnostics projections expose
+  node-keyed execution status records.
 - Add typed diagnostics facet projections for scheduler estimates, selected and
   rejected runtime/device choices, model load/unload decisions, graph settings,
   and mixed-version comparison filters.

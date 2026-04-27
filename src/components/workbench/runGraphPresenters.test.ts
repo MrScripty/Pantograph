@@ -5,7 +5,10 @@ import type { WorkflowRunGraphProjection } from '../../services/workflow/types.t
 import {
   buildRunGraphCanvasModel,
   buildRunGraphEdgeRows,
+  buildRunGraphNodeArtifactSummaries,
   buildRunGraphNodeRows,
+  formatRunGraphArtifactDetail,
+  formatRunGraphArtifactSummary,
   formatRunGraphCountLabel,
   resolveRunGraphCounts,
   resolveRunGraphPresentationLabel,
@@ -116,6 +119,7 @@ test('buildRunGraphNodeRows joins topology versions without editor state', () =>
   assert.equal(rows[0].behaviorDigest, 'digest-input');
   assert.equal(rows[0].positionLabel, '10, 20');
   assert.equal(rows[0].settingsState, 'Run settings captured');
+  assert.equal(rows[0].artifactSummaryLabel, 'No retained I/O');
 });
 
 test('buildRunGraphEdgeRows renders captured graph edges before topology fallback', () => {
@@ -150,7 +154,92 @@ test('buildRunGraphCanvasModel derives stable viewbox and skips broken edges', (
 
   const canvas = buildRunGraphCanvasModel(runGraph.graph);
 
-  assert.equal(canvas.viewBox, '-86 -76 672 256');
+  assert.equal(canvas.viewBox, '-86 -76 672 276');
   assert.deepEqual(canvas.nodes.map((node) => node.id), ['input-1', 'output-1']);
   assert.deepEqual(canvas.edges.map((edge) => edge.id), ['edge-1']);
+});
+
+test('buildRunGraphNodeArtifactSummaries groups retained node io facts', () => {
+  const summaries = buildRunGraphNodeArtifactSummaries([
+    {
+      node_id: 'input-1',
+      artifact_role: 'node_input',
+      event_seq: 10,
+      payload_ref: 'artifact://input',
+      media_type: 'text/plain',
+    },
+    {
+      node_id: 'input-1',
+      artifact_role: 'node_output',
+      event_seq: 12,
+      payload_ref: null,
+      media_type: 'application/json',
+    },
+    {
+      node_id: 'output-1',
+      artifact_role: 'node_output',
+      event_seq: 14,
+      payload_ref: 'artifact://output',
+      media_type: 'image/png',
+    },
+    {
+      node_id: null,
+      artifact_role: 'workflow_output',
+      event_seq: 15,
+      payload_ref: 'artifact://workflow-output',
+      media_type: 'text/plain',
+    },
+  ]);
+
+  assert.deepEqual(summaries['input-1'], {
+    nodeId: 'input-1',
+    inputCount: 1,
+    outputCount: 1,
+    artifactCount: 2,
+    payloadRefCount: 1,
+    latestEventSeq: 12,
+    mediaTypes: ['application/json', 'text/plain'],
+  });
+  assert.equal(summaries['output-1'].outputCount, 1);
+  assert.equal(summaries['output-1'].payloadRefCount, 1);
+  assert.equal(Object.hasOwn(summaries, 'workflow-output'), false);
+});
+
+test('buildRunGraphNodeRows and canvas expose artifact availability labels', () => {
+  const summaries = buildRunGraphNodeArtifactSummaries([
+    {
+      node_id: 'output-1',
+      artifact_role: 'node_output',
+      event_seq: 14,
+      payload_ref: 'artifact://output',
+      media_type: 'image/png',
+    },
+  ]);
+
+  const rows = buildRunGraphNodeRows(createRunGraph(), summaries);
+  const outputRow = rows.find((row) => row.nodeId === 'output-1');
+  assert.equal(outputRow?.artifactSummaryLabel, '1 output / 0 inputs');
+  assert.equal(outputRow?.artifactDetailLabel, '1 artifact, 1 payload reference, image/png');
+  assert.equal(outputRow?.hasOutputArtifacts, true);
+
+  const canvas = buildRunGraphCanvasModel(createRunGraph().graph, summaries);
+  const outputNode = canvas.nodes.find((node) => node.id === 'output-1');
+  assert.equal(outputNode?.artifactCount, 1);
+  assert.equal(outputNode?.hasOutputArtifacts, true);
+});
+
+test('formatRunGraphArtifactSummary distinguishes metadata-only nodes', () => {
+  const summary = buildRunGraphNodeArtifactSummaries([
+    {
+      node_id: 'input-1',
+      artifact_role: 'node_input',
+      event_seq: 10,
+      payload_ref: null,
+      media_type: null,
+    },
+  ])['input-1'];
+
+  assert.equal(formatRunGraphArtifactSummary(null), 'No retained I/O');
+  assert.equal(formatRunGraphArtifactSummary(summary), '0 outputs / 1 input');
+  assert.equal(formatRunGraphArtifactDetail(summary), '1 artifact, 0 payload references, media unknown');
 });

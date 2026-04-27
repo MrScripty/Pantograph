@@ -4,6 +4,7 @@ import type {
   WorkflowGraph,
   WorkflowRunGraphProjection,
 } from '../../services/workflow/types';
+import type { IoArtifactProjectionRecord } from '../../services/diagnostics/types';
 
 export interface RunGraphCounts {
   nodeCount: number;
@@ -17,6 +18,9 @@ export interface RunGraphNodeRow {
   behaviorDigest: string;
   positionLabel: string;
   settingsState: string;
+  artifactSummaryLabel: string;
+  artifactDetailLabel: string;
+  hasOutputArtifacts: boolean;
 }
 
 export interface RunGraphEdgeRow {
@@ -32,6 +36,11 @@ export interface RunGraphCanvasNode {
   y: number;
   width: number;
   height: number;
+  inputCount: number;
+  outputCount: number;
+  artifactCount: number;
+  artifactSummaryLabel: string;
+  hasOutputArtifacts: boolean;
 }
 
 export interface RunGraphCanvasEdge {
@@ -48,8 +57,20 @@ export interface RunGraphCanvasModel {
   edges: RunGraphCanvasEdge[];
 }
 
+export interface RunGraphNodeArtifactSummary {
+  nodeId: string;
+  inputCount: number;
+  outputCount: number;
+  artifactCount: number;
+  payloadRefCount: number;
+  latestEventSeq: number;
+  mediaTypes: string[];
+}
+
+export type RunGraphNodeArtifactSummaryByNodeId = Record<string, RunGraphNodeArtifactSummary>;
+
 const NODE_WIDTH = 190;
-const NODE_HEIGHT = 64;
+const NODE_HEIGHT = 84;
 const CANVAS_PADDING = 96;
 const EMPTY_CANVAS_VIEWBOX = '0 0 640 360';
 
@@ -80,7 +101,10 @@ export function resolveRunGraphPresentationLabel(runGraph: WorkflowRunGraphProje
   return 'Generated layout fallback';
 }
 
-export function buildRunGraphNodeRows(runGraph: WorkflowRunGraphProjection): RunGraphNodeRow[] {
+export function buildRunGraphNodeRows(
+  runGraph: WorkflowRunGraphProjection,
+  artifactSummaries: RunGraphNodeArtifactSummaryByNodeId = {},
+): RunGraphNodeRow[] {
   const topologyByNodeId = new Map(
     runGraph.executable_topology.nodes.map((node) => [node.node_id, node]),
   );
@@ -91,6 +115,7 @@ export function buildRunGraphNodeRows(runGraph: WorkflowRunGraphProjection): Run
   return runGraph.graph.nodes.map((node) => {
     const topology = topologyByNodeId.get(node.id);
     const settings = settingsByNodeId.get(node.id);
+    const artifactSummary = artifactSummaries[node.id];
     return {
       nodeId: node.id,
       nodeType: topology?.node_type ?? node.node_type,
@@ -98,6 +123,9 @@ export function buildRunGraphNodeRows(runGraph: WorkflowRunGraphProjection): Run
       behaviorDigest: topology?.behavior_digest || 'Unknown',
       positionLabel: formatNodePosition(node),
       settingsState: settings ? 'Run settings captured' : 'Run settings unavailable',
+      artifactSummaryLabel: formatRunGraphArtifactSummary(artifactSummary),
+      artifactDetailLabel: formatRunGraphArtifactDetail(artifactSummary),
+      hasOutputArtifacts: (artifactSummary?.outputCount ?? 0) > 0,
     };
   });
 }
@@ -118,7 +146,10 @@ export function buildRunGraphEdgeRows(runGraph: WorkflowRunGraphProjection): Run
   }));
 }
 
-export function buildRunGraphCanvasModel(graph: WorkflowGraph): RunGraphCanvasModel {
+export function buildRunGraphCanvasModel(
+  graph: WorkflowGraph,
+  artifactSummaries: RunGraphNodeArtifactSummaryByNodeId = {},
+): RunGraphCanvasModel {
   if (graph.nodes.length === 0) {
     return {
       viewBox: EMPTY_CANVAS_VIEWBOX,
@@ -134,6 +165,11 @@ export function buildRunGraphCanvasModel(graph: WorkflowGraph): RunGraphCanvasMo
     y: node.position.y,
     width: NODE_WIDTH,
     height: NODE_HEIGHT,
+    inputCount: artifactSummaries[node.id]?.inputCount ?? 0,
+    outputCount: artifactSummaries[node.id]?.outputCount ?? 0,
+    artifactCount: artifactSummaries[node.id]?.artifactCount ?? 0,
+    artifactSummaryLabel: formatRunGraphArtifactSummary(artifactSummaries[node.id]),
+    hasOutputArtifacts: (artifactSummaries[node.id]?.outputCount ?? 0) > 0,
   }));
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const edges = graph.edges
@@ -152,8 +188,88 @@ export function buildRunGraphCanvasModel(graph: WorkflowGraph): RunGraphCanvasMo
   };
 }
 
+export function buildRunGraphNodeArtifactSummaries(
+  artifacts: Pick<
+    IoArtifactProjectionRecord,
+    'node_id' | 'artifact_role' | 'event_seq' | 'payload_ref' | 'media_type'
+  >[],
+): RunGraphNodeArtifactSummaryByNodeId {
+  const summaries: RunGraphNodeArtifactSummaryByNodeId = {};
+  const mediaTypesByNodeId = new Map<string, Set<string>>();
+
+  for (const artifact of artifacts) {
+    if (!artifact.node_id) {
+      continue;
+    }
+
+    const summary = summaries[artifact.node_id] ?? {
+      nodeId: artifact.node_id,
+      inputCount: 0,
+      outputCount: 0,
+      artifactCount: 0,
+      payloadRefCount: 0,
+      latestEventSeq: artifact.event_seq,
+      mediaTypes: [],
+    };
+
+    summary.artifactCount += 1;
+    summary.latestEventSeq = Math.max(summary.latestEventSeq, artifact.event_seq);
+    if (artifact.artifact_role === 'node_input') {
+      summary.inputCount += 1;
+    }
+    if (artifact.artifact_role === 'node_output') {
+      summary.outputCount += 1;
+    }
+    if (artifact.payload_ref?.trim()) {
+      summary.payloadRefCount += 1;
+    }
+    if (artifact.media_type?.trim()) {
+      const mediaTypes = mediaTypesByNodeId.get(artifact.node_id) ?? new Set<string>();
+      mediaTypes.add(artifact.media_type);
+      mediaTypesByNodeId.set(artifact.node_id, mediaTypes);
+    }
+
+    summaries[artifact.node_id] = summary;
+  }
+
+  for (const [nodeId, mediaTypes] of mediaTypesByNodeId.entries()) {
+    summaries[nodeId].mediaTypes = [...mediaTypes].sort();
+  }
+
+  return summaries;
+}
+
+export function formatRunGraphArtifactSummary(
+  summary: RunGraphNodeArtifactSummary | null | undefined,
+): string {
+  if (!summary || summary.artifactCount === 0) {
+    return 'No retained I/O';
+  }
+  return `${formatCount(summary.outputCount, 'output')} / ${formatCount(summary.inputCount, 'input')}`;
+}
+
+export function formatRunGraphArtifactDetail(
+  summary: RunGraphNodeArtifactSummary | null | undefined,
+): string {
+  if (!summary || summary.artifactCount === 0) {
+    return 'No retained artifact metadata for this node';
+  }
+
+  const payloadLabel =
+    summary.payloadRefCount === 1
+      ? '1 payload reference'
+      : `${summary.payloadRefCount} payload references`;
+  const mediaLabel =
+    summary.mediaTypes.length === 0 ? 'media unknown' : summary.mediaTypes.join(', ');
+  return `${formatCount(summary.artifactCount, 'artifact')}, ${payloadLabel}, ${mediaLabel}`;
+}
+
 function formatGraphEdgeEndpoint(nodeId: string, portId: string): string {
   return `${nodeId}:${portId}`;
+}
+
+function formatCount(count: number, noun: string): string {
+  return count === 1 ? `1 ${noun}` : `${count} ${noun}s`;
 }
 
 function formatNodePosition(node: GraphNode): string {

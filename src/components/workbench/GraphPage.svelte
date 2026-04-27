@@ -3,20 +3,27 @@
   import NodePalette from '../NodePalette.svelte';
   import WorkflowGraph from '../WorkflowGraph.svelte';
   import WorkflowToolbar from '../WorkflowToolbar.svelte';
+  import type { IoArtifactProjectionRecord } from '../../services/diagnostics/types';
   import type { WorkflowRunGraphProjection } from '../../services/workflow/types';
   import { workflowService } from '../../services/workflow/WorkflowService';
   import { isReadOnly } from '../../stores/graphSessionStore';
   import { activeWorkflowRun } from '../../stores/workbenchStore';
   import RunGraphSnapshot from './RunGraphSnapshot.svelte';
+  import { buildRunGraphNodeArtifactSummaries } from './runGraphPresenters';
 
   type GraphPageMode = 'run_snapshot' | 'editor';
 
   let mode = $state<GraphPageMode>('editor');
   let runGraph = $state<WorkflowRunGraphProjection | null>(null);
+  let runArtifacts = $state<IoArtifactProjectionRecord[]>([]);
   let loadingRunGraph = $state(false);
+  let loadingRunArtifacts = $state(false);
   let runGraphError = $state<string | null>(null);
+  let runArtifactError = $state<string | null>(null);
   let lastRunId = $state<string | null>(null);
   let runGraphRequestSerial = 0;
+  let runArtifactRequestSerial = 0;
+  let artifactSummaries = $derived(buildRunGraphNodeArtifactSummaries(runArtifacts));
 
   function activeRunId(): string | null {
     return $activeWorkflowRun?.workflow_run_id ?? null;
@@ -28,6 +35,7 @@
 
     if (!runId) {
       runGraph = null;
+      runArtifacts = [];
       loadingRunGraph = false;
       return;
     }
@@ -54,6 +62,44 @@
     }
   }
 
+  async function refreshRunArtifacts(runId = activeRunId()): Promise<void> {
+    const requestSerial = ++runArtifactRequestSerial;
+    runArtifactError = null;
+
+    if (!runId) {
+      runArtifacts = [];
+      loadingRunArtifacts = false;
+      return;
+    }
+
+    loadingRunArtifacts = true;
+    try {
+      const response = await workflowService.queryIoArtifacts({
+        workflow_run_id: runId,
+        limit: 250,
+      });
+      if (requestSerial !== runArtifactRequestSerial) {
+        return;
+      }
+      runArtifacts = response.artifacts;
+    } catch (error) {
+      if (requestSerial !== runArtifactRequestSerial) {
+        return;
+      }
+      runArtifactError = error instanceof Error ? error.message : String(error);
+      runArtifacts = [];
+    } finally {
+      if (requestSerial === runArtifactRequestSerial) {
+        loadingRunArtifacts = false;
+      }
+    }
+  }
+
+  function refreshRunSnapshot(): void {
+    void refreshRunGraph();
+    void refreshRunArtifacts();
+  }
+
   $effect(() => {
     const runId = activeRunId();
     if (runId === lastRunId) {
@@ -63,6 +109,7 @@
     lastRunId = runId;
     mode = runId ? 'run_snapshot' : 'editor';
     void refreshRunGraph(runId);
+    void refreshRunArtifacts(runId);
   });
 </script>
 
@@ -100,10 +147,14 @@
           <button
             type="button"
             class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
-            onclick={() => refreshRunGraph()}
-            disabled={loadingRunGraph}
+            onclick={refreshRunSnapshot}
+            disabled={loadingRunGraph || loadingRunArtifacts}
           >
-            <RefreshCw size={14} aria-hidden="true" class={loadingRunGraph ? 'animate-spin' : ''} />
+            <RefreshCw
+              size={14}
+              aria-hidden="true"
+              class={loadingRunGraph || loadingRunArtifacts ? 'animate-spin' : ''}
+            />
             Refresh
           </button>
         {/if}
@@ -142,6 +193,11 @@
       No versioned graph captured for this run
     </div>
   {:else}
-    <RunGraphSnapshot {runGraph} />
+    {#if runArtifactError}
+      <div class="border-b border-amber-900 bg-amber-950/50 px-4 py-2 text-sm text-amber-100">
+        I/O artifact overlays unavailable: {runArtifactError}
+      </div>
+    {/if}
+    <RunGraphSnapshot {runGraph} {artifactSummaries} />
   {/if}
 </section>

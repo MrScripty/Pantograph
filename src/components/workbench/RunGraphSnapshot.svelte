@@ -8,13 +8,20 @@
     formatRunGraphTimestamp,
     resolveRunGraphCounts,
     resolveRunGraphPresentationLabel,
+    type RunGraphNodeArtifactSummaryByNodeId,
   } from './runGraphPresenters';
 
-  let { runGraph }: { runGraph: WorkflowRunGraphProjection } = $props();
+  let {
+    runGraph,
+    artifactSummaries = {},
+  }: {
+    runGraph: WorkflowRunGraphProjection;
+    artifactSummaries?: RunGraphNodeArtifactSummaryByNodeId;
+  } = $props();
 
-  let canvas = $derived(buildRunGraphCanvasModel(runGraph.graph));
+  let canvas = $derived(buildRunGraphCanvasModel(runGraph.graph, artifactSummaries));
   let counts = $derived(resolveRunGraphCounts(runGraph.graph));
-  let nodeRows = $derived(buildRunGraphNodeRows(runGraph));
+  let nodeRows = $derived(buildRunGraphNodeRows(runGraph, artifactSummaries));
   let edgeRows = $derived(buildRunGraphEdgeRows(runGraph));
   let presentationLabel = $derived(resolveRunGraphPresentationLabel(runGraph));
 
@@ -78,8 +85,8 @@
                   height={node.height}
                   rx="6"
                   fill="#171717"
-                  stroke="#404040"
-                  stroke-width="1"
+                  stroke={node.hasOutputArtifacts ? '#22c55e' : '#404040'}
+                  stroke-width={node.hasOutputArtifacts ? '2' : '1'}
                 />
                 <text x="14" y="26" fill="#f5f5f5" font-size="13" font-family="ui-monospace, monospace">
                   {compactValue(node.id)}
@@ -87,6 +94,21 @@
                 <text x="14" y="48" fill="#a3a3a3" font-size="12" font-family="ui-sans-serif, system-ui">
                   {compactValue(node.nodeType, 22)}
                 </text>
+                {#if node.artifactCount > 0}
+                  <rect
+                    x="14"
+                    y="58"
+                    width="118"
+                    height="16"
+                    rx="4"
+                    fill={node.hasOutputArtifacts ? '#052e16' : '#262626'}
+                    stroke={node.hasOutputArtifacts ? '#16a34a' : '#525252'}
+                    stroke-width="1"
+                  />
+                  <text x="20" y="70" fill="#d4d4d4" font-size="10" font-family="ui-sans-serif, system-ui">
+                    {compactValue(node.artifactSummaryLabel, 18)}
+                  </text>
+                {/if}
               </g>
             {/each}
           </svg>
@@ -138,6 +160,7 @@
             <tr>
               <th class="px-3 py-2 font-medium">Node</th>
               <th class="px-3 py-2 font-medium">Contract</th>
+              <th class="px-3 py-2 font-medium">I/O</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-neutral-900">
@@ -154,6 +177,17 @@
                     {node.behaviorDigest}
                   </div>
                   <div class="truncate text-neutral-600" title={node.settingsState}>{node.settingsState}</div>
+                </td>
+                <td class="max-w-[9rem] px-3 py-2">
+                  <div
+                    class={node.hasOutputArtifacts ? 'truncate text-green-300' : 'truncate text-neutral-400'}
+                    title={node.artifactSummaryLabel}
+                  >
+                    {node.artifactSummaryLabel}
+                  </div>
+                  <div class="truncate text-neutral-600" title={node.artifactDetailLabel}>
+                    {node.artifactDetailLabel}
+                  </div>
                 </td>
               </tr>
             {/each}
