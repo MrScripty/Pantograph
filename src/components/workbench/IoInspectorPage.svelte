@@ -32,6 +32,7 @@
     isWorkflowInputArtifact,
     isWorkflowOutputArtifact,
   } from './ioInspectorPresenters';
+  import { formatWorkflowCommandError } from './workflowErrorPresenters';
 
   let artifacts = $state<IoArtifactProjectionRecord[]>([]);
   let retentionSummary = $state<IoArtifactRetentionSummaryRecord[]>([]);
@@ -86,7 +87,7 @@
       if (requestSerial !== artifactRequestSerial) {
         return;
       }
-      artifactError = error instanceof Error ? error.message : String(error);
+      artifactError = formatWorkflowCommandError(error);
     } finally {
       if (requestSerial === artifactRequestSerial) {
         loadingArtifacts = false;
@@ -101,7 +102,7 @@
       const response = await workflowService.queryRetentionPolicy();
       applyRetentionPolicy(response.retention_policy);
     } catch (error) {
-      retentionError = error instanceof Error ? error.message : String(error);
+      retentionError = formatWorkflowCommandError(error);
     } finally {
       loadingRetention = false;
     }
@@ -131,7 +132,7 @@
       applyRetentionPolicy(response.retention_policy);
       await refreshArtifacts();
     } catch (error) {
-      retentionError = error instanceof Error ? error.message : String(error);
+      retentionError = formatWorkflowCommandError(error);
     } finally {
       savingRetention = false;
     }

@@ -46,6 +46,7 @@ import {
 import { parseWorkflowGraphMutationResponse } from '../../lib/workflowGraphMutationResponse.ts';
 import { WorkflowProjectionService } from './WorkflowProjectionService.ts';
 import { USE_WORKFLOW_MOCKS } from './workflowServiceConfig.ts';
+import { invokeWorkflowCommand } from './workflowServiceErrors.ts';
 
 /** Undo/redo state from the backend */
 export interface UndoRedoState {
@@ -211,7 +212,7 @@ export class WorkflowService extends WorkflowProjectionService {
       };
     }
 
-    return invoke<WorkflowCapabilitiesResponse>('workflow_get_capabilities', {
+    return invokeWorkflowCommand<WorkflowCapabilitiesResponse>('workflow_get_capabilities', {
       request: {
         workflow_id: workflowId,
       } satisfies WorkflowCapabilitiesRequest,
@@ -238,7 +239,7 @@ export class WorkflowService extends WorkflowProjectionService {
       };
     }
 
-    return invoke<WorkflowSessionStatusResponse>('workflow_get_execution_session_status', {
+    return invokeWorkflowCommand<WorkflowSessionStatusResponse>('workflow_get_execution_session_status', {
       request: {
         session_id: id,
       } satisfies WorkflowSessionStatusRequest,
@@ -258,7 +259,7 @@ export class WorkflowService extends WorkflowProjectionService {
       };
     }
 
-    return invoke<WorkflowSessionQueueListResponse>('workflow_list_execution_session_queue', {
+    return invokeWorkflowCommand<WorkflowSessionQueueListResponse>('workflow_list_execution_session_queue', {
       request: {
         session_id: id,
       } satisfies WorkflowSessionQueueListRequest,
@@ -272,7 +273,7 @@ export class WorkflowService extends WorkflowProjectionService {
       return { ok: true };
     }
 
-    return invoke<WorkflowSessionQueueCancelResponse>(
+    return invokeWorkflowCommand<WorkflowSessionQueueCancelResponse>(
       'workflow_cancel_execution_session_queue_item',
       { request },
     );
@@ -285,7 +286,7 @@ export class WorkflowService extends WorkflowProjectionService {
       return { ok: true };
     }
 
-    return invoke<WorkflowSessionQueueReprioritizeResponse>(
+    return invokeWorkflowCommand<WorkflowSessionQueueReprioritizeResponse>(
       'workflow_reprioritize_execution_session_queue_item',
       { request },
     );
@@ -315,7 +316,7 @@ export class WorkflowService extends WorkflowProjectionService {
       };
     }
 
-    return invoke<WorkflowSchedulerSnapshotResponse>('workflow_get_scheduler_snapshot', {
+    return invokeWorkflowCommand<WorkflowSchedulerSnapshotResponse>('workflow_get_scheduler_snapshot', {
       request: {
         session_id: id,
       },
@@ -331,7 +332,7 @@ export class WorkflowService extends WorkflowProjectionService {
       };
     }
 
-    return invoke<WorkflowRunGraphQueryResponse>('workflow_run_graph_query', {
+    return invokeWorkflowCommand<WorkflowRunGraphQueryResponse>('workflow_run_graph_query', {
       request,
     });
   }
@@ -354,7 +355,7 @@ export class WorkflowService extends WorkflowProjectionService {
       };
     }
 
-    return invoke<WorkflowIoArtifactQueryResponse>('workflow_io_artifact_query', {
+    return invokeWorkflowCommand<WorkflowIoArtifactQueryResponse>('workflow_io_artifact_query', {
       request,
     });
   }
@@ -376,7 +377,7 @@ export class WorkflowService extends WorkflowProjectionService {
       };
     }
 
-    return invoke<WorkflowNodeStatusQueryResponse>('workflow_node_status_query', {
+    return invokeWorkflowCommand<WorkflowNodeStatusQueryResponse>('workflow_node_status_query', {
       request,
     });
   }
@@ -397,7 +398,7 @@ export class WorkflowService extends WorkflowProjectionService {
       };
     }
 
-    return invoke<WorkflowProjectionRebuildResponse>('workflow_projection_rebuild', {
+    return invokeWorkflowCommand<WorkflowProjectionRebuildResponse>('workflow_projection_rebuild', {
       request,
     });
   }
@@ -417,7 +418,7 @@ export class WorkflowService extends WorkflowProjectionService {
       };
     }
 
-    return invoke<WorkflowRetentionPolicyQueryResponse>('workflow_retention_policy_query', {
+    return invokeWorkflowCommand<WorkflowRetentionPolicyQueryResponse>('workflow_retention_policy_query', {
       request,
     });
   }
@@ -437,7 +438,7 @@ export class WorkflowService extends WorkflowProjectionService {
       };
     }
 
-    return invoke<WorkflowRetentionPolicyUpdateResponse>('workflow_retention_policy_update', {
+    return invokeWorkflowCommand<WorkflowRetentionPolicyUpdateResponse>('workflow_retention_policy_update', {
       request,
     });
   }
@@ -487,7 +488,7 @@ export class WorkflowService extends WorkflowProjectionService {
       };
     }
 
-    return invoke<WorkflowLocalNetworkStatusQueryResponse>(
+    return invokeWorkflowCommand<WorkflowLocalNetworkStatusQueryResponse>(
       'workflow_local_network_status_query',
       {
         request,

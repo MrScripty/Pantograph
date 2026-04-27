@@ -12,6 +12,8 @@ on raw invoke payloads.
 | `WorkflowService.ts` | Main client-side workflow service, including session lifecycle, graph mutation, connection-intent commands, and atomic insert-and-connect. |
 | `WorkflowProjectionService.ts` | Focused projection service for scheduler timeline, run-list, selected-run, and warm Library usage reads used by `WorkflowService` and projection boundary tests. |
 | `WorkflowService.projections.test.ts` | Tauri mock IPC tests proving scheduler timeline events, run-list facets, selected-run scheduler estimate fields, and warm projection freshness state survive the service boundary. |
+| `workflowServiceErrors.ts` | Typed workflow command error normalizer and invoke wrapper for backend JSON error envelopes. |
+| `workflowServiceErrors.test.ts` | Unit coverage for backend error-envelope parsing and transport-error fallback behavior. |
 | `workflowConnectionActions.ts` | Focused Tauri invoke helpers for connection-intent candidate, commit, and edge-insert commands. |
 | `types.ts` | App-local workflow DTO mirrors used by the service and legacy callers. |
 | `mocks.ts` | Mock workflow data and behaviors used when the app runs in mock mode. |
@@ -29,6 +31,8 @@ intent.
 - Existing app callers still expect `WorkflowService` to track the current
   execution/session id internally.
 - DTOs must stay aligned with Rust serialization and the package contracts.
+- Backend workflow error envelopes must keep their `code`, `message`, and
+  `details` through the TypeScript service boundary.
 
 ## Decision
 Keep `WorkflowService.ts` as the legacy-friendly workflow adapter and extend it
@@ -64,6 +68,10 @@ scheduler timeline, run-list, selected-run, and warm Library usage read paths
 can be tested without loading the graph package runtime. `WorkflowService`
 inherits that boundary so existing GUI callers keep the same method names while
 projection DTO tests stay focused on Tauri request/response contracts.
+Workflow command invoke paths that back workbench projections and queue,
+retention, Network, and runtime-status reads use `invokeWorkflowCommand`, which
+normalizes Tauri's JSON error strings into typed `WorkflowServiceError`
+instances while preserving backend error codes and details.
 
 ## Alternatives Rejected
 - Remove `WorkflowService` and switch every app caller to `TauriWorkflowBackend`
@@ -110,6 +118,9 @@ projection DTO tests stay focused on Tauri request/response contracts.
 - Run-list projection reads must preserve backend-owned facets, projection
   state, scheduler estimate fields, queue-placement fields, and delayed status
   without reconstructing them client-side.
+- Workbench-facing workflow command methods must throw `WorkflowServiceError`
+  when the backend returns a `WorkflowErrorEnvelope`; callers must not parse
+  raw JSON error strings.
 
 ## Revisit Triggers
 - The app graph and all remaining callers migrate to package backends directly.
@@ -204,3 +215,7 @@ const preview = await workflowService.previewNodeInsertOnEdge(
   `workflow_run_list_query`, `workflow_run_detail_query`, and
   `workflow_library_usage_query` requests under a `{ request }` envelope and
   preserves backend DTO fields exactly for projection consumers.
+- Workbench-facing workflow commands preserve backend error categories through
+  `WorkflowServiceError.code`. Non-envelope IPC or setup failures are
+  classified as `transport_error` so they are not confused with backend policy
+  rejections.

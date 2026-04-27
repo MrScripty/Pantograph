@@ -1,4 +1,3 @@
-import { invoke } from '@tauri-apps/api/core';
 import type {
   WorkflowLibraryUsageQueryRequest,
   WorkflowLibraryUsageQueryResponse,
@@ -11,6 +10,7 @@ import type {
 } from '../diagnostics/types.ts';
 import { WorkflowGraphMutationService } from './WorkflowGraphMutationService.ts';
 import { USE_WORKFLOW_MOCKS } from './workflowServiceConfig.ts';
+import { invokeWorkflowCommand } from './workflowServiceErrors.ts';
 
 export class WorkflowProjectionService extends WorkflowGraphMutationService {
   async querySchedulerTimeline(
@@ -30,7 +30,7 @@ export class WorkflowProjectionService extends WorkflowGraphMutationService {
       };
     }
 
-    return invoke<WorkflowSchedulerTimelineQueryResponse>('workflow_scheduler_timeline_query', {
+    return invokeWorkflowCommand<WorkflowSchedulerTimelineQueryResponse>('workflow_scheduler_timeline_query', {
       request,
     });
   }
@@ -53,7 +53,7 @@ export class WorkflowProjectionService extends WorkflowGraphMutationService {
       };
     }
 
-    return invoke<WorkflowRunListQueryResponse>('workflow_run_list_query', {
+    return invokeWorkflowCommand<WorkflowRunListQueryResponse>('workflow_run_list_query', {
       request,
     });
   }
@@ -75,7 +75,7 @@ export class WorkflowProjectionService extends WorkflowGraphMutationService {
       };
     }
 
-    return invoke<WorkflowRunDetailQueryResponse>('workflow_run_detail_query', {
+    return invokeWorkflowCommand<WorkflowRunDetailQueryResponse>('workflow_run_detail_query', {
       request,
     });
   }
@@ -97,7 +97,7 @@ export class WorkflowProjectionService extends WorkflowGraphMutationService {
       };
     }
 
-    return invoke<WorkflowLibraryUsageQueryResponse>('workflow_library_usage_query', {
+    return invokeWorkflowCommand<WorkflowLibraryUsageQueryResponse>('workflow_library_usage_query', {
       request,
     });
   }

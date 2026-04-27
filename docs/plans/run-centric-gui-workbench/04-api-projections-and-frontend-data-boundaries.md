@@ -296,7 +296,7 @@ projections while owning only transient UI state.
   actions.
 - [x] Add active-run store as transient UI state.
 - [x] Add focused stores for run list filters/sort/column state.
-- [ ] Preserve backend error categories through presenters.
+- [x] Preserve backend error categories through presenters.
 - [ ] Avoid optimistic updates for backend-owned queue and retention state.
 
 **Verification:**
@@ -309,8 +309,12 @@ projections while owning only transient UI state.
 **Status:** In progress. Projection invoke wiring is now split into
 `WorkflowProjectionService`, with `WorkflowService` inheriting that boundary
 for existing GUI callers. The adapter covers scheduler timeline, run-list,
-selected-run, and warm Library usage reads. Broader frontend store ownership,
-error category preservation, and optimistic-update avoidance remain pending.
+selected-run, and warm Library usage reads. Workbench-facing workflow command
+paths now normalize backend JSON error envelopes into typed
+`WorkflowServiceError` values, and workbench pages format failures through a
+shared presenter so categories such as `invalid_request`, `scheduler_busy`, and
+`queue_item_not_found` are not collapsed into generic strings. Broader
+optimistic-update avoidance remains pending.
 Active-run selection is already transient in `workbenchStore.ts`; Scheduler
 run-list filters, sort order, and column visibility now live in
 `schedulerRunListStore.ts`.
@@ -345,8 +349,10 @@ implementation depends on it.
 timeline event acceptance now cover the frontend service boundary with Tauri
 mock IPC. Backend fixture coverage for typed event projection, retained
 artifact browsing, expired I/O artifact state, and warm Library usage
-catching-up state is also in place. Remaining work is broader Milestone 3
-frontend store ownership and error-preservation coverage.
+catching-up state is also in place. Frontend error-envelope coverage now proves
+projection service calls preserve backend error categories through typed
+service errors and shared workbench presenters. Remaining work is broader
+Milestone 3 optimistic-update avoidance.
 
 ## Ownership And Lifecycle Note
 

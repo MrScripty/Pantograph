@@ -20,6 +20,7 @@
     formatDiagnosticsTimestamp,
     hasTimelinePayload,
   } from './diagnosticsPagePresenters';
+  import { formatWorkflowCommandError } from './workflowErrorPresenters';
 
   let runDetail = $state<RunDetailProjectionRecord | null>(null);
   let runList = $state<RunListProjectionRecord[]>([]);
@@ -85,7 +86,7 @@
       if (currentRequest !== requestSerial) {
         return;
       }
-      error = refreshError instanceof Error ? refreshError.message : String(refreshError);
+      error = formatWorkflowCommandError(refreshError);
       runDetail = null;
       runList = [];
       runListFacets = [];

@@ -28,6 +28,8 @@ later plan stages fill in richer page bodies.
 | `NetworkPage.svelte` | Local-first node capability, scheduler load, disk, network-interface, degradation, and peer status page. |
 | `networkPagePresenters.ts` | Pure Network page byte, transport, degraded metric, scheduler load, and local capability presenters. |
 | `networkPagePresenters.test.ts` | Unit coverage for Network page metric labels and degraded platform states. |
+| `workflowErrorPresenters.ts` | Shared workbench formatter for typed workflow service errors so backend categories remain visible in page messages. |
+| `workflowErrorPresenters.test.ts` | Unit coverage for backend error-envelope and transport-error formatting. |
 | `NodeLabPage.svelte` | Reserved Node Editor page for future node authoring workflows. |
 
 ## Problem
@@ -42,6 +44,8 @@ grow separate navigation and selection models.
   GUI restart.
 - Page bodies must consume backend projection services instead of raw
   diagnostic event ledger rows.
+- Page bodies must display workflow command failures through presenters that
+  preserve backend error categories.
 - Diagnostics pages must consume run-detail and scheduler-timeline projections
   without parsing raw event ledger rows in the component.
 - I/O pages must treat artifact rows as metadata projections. Payload bodies
@@ -105,6 +109,8 @@ transient UI state without becoming backend scheduler policy.
 - Workbench pages must not consume raw diagnostic ledger events.
 - Reserved pages must not invent backend state; they should display only data
   available through typed services or explicit unavailable states.
+- Workbench error messages must be formatted from typed workflow service
+  errors. Components must not stringify backend envelopes directly.
 
 ## Revisit Triggers
 - A router is introduced for deep links or browser-style navigation.
@@ -189,5 +195,8 @@ transient UI state without becoming backend scheduler policy.
 - Network status cards are derived from `WorkflowLocalNetworkStatusQueryResponse`.
 - Network disk and interface rows render reported local metrics and show
   unavailable states when platform probes do not provide rows.
+- Workflow command errors use `formatWorkflowCommandError`, preserving backend
+  category labels such as `invalid_request`, `scheduler_busy`, and
+  `queue_item_not_found` for users and tests.
 - Reserved page unavailable states are not persisted and do not imply backend
   capability flags.

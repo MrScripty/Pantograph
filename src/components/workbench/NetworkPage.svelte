@@ -13,6 +13,7 @@
     formatSessionLoad,
     formatTransportState,
   } from './networkPagePresenters';
+  import { formatWorkflowCommandError } from './workflowErrorPresenters';
 
   let status = $state<WorkflowLocalNetworkStatusQueryResponse | null>(null);
   let loading = $state(false);
@@ -29,7 +30,7 @@
         include_network_interfaces: true,
       });
     } catch (statusError) {
-      error = statusError instanceof Error ? statusError.message : String(statusError);
+      error = formatWorkflowCommandError(statusError);
     } finally {
       loading = false;
     }

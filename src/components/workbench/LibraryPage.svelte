@@ -13,6 +13,7 @@
     formatLibraryProjectionFreshness,
     isLibraryAssetLastUsedByRun,
   } from './libraryUsagePresenters';
+  import { formatWorkflowCommandError } from './workflowErrorPresenters';
 
   let assets = $state<LibraryUsageProjectionRecord[]>([]);
   let projectionState = $state<ProjectionStateRecord | null>(null);
@@ -39,7 +40,7 @@
       if (serial !== requestSerial) {
         return;
       }
-      error = usageError instanceof Error ? usageError.message : String(usageError);
+      error = formatWorkflowCommandError(usageError);
     } finally {
       if (serial === requestSerial) {
         loading = false;

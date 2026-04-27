@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { WorkflowProjectionService } from './WorkflowProjectionService.ts';
+import { WorkflowServiceError } from './workflowServiceErrors.ts';
 import type {
   WorkflowLibraryUsageQueryResponse,
   WorkflowRunDetailQueryResponse,
@@ -76,6 +77,29 @@ test('queryRunList preserves backend projection rows and facets', async () => {
         limit: 25,
       },
     });
+  } finally {
+    clearMocks();
+  }
+});
+
+test('queryRunDetail normalizes backend error envelopes', async () => {
+  installWindowMock();
+  mockIPC(() => {
+    throw JSON.stringify({
+      code: 'invalid_request',
+      message: 'workflow_run_id must be non-empty',
+    });
+  });
+
+  try {
+    const service = new WorkflowProjectionService();
+    await assert.rejects(
+      service.queryRunDetail({ workflow_run_id: '' }),
+      (error) =>
+        error instanceof WorkflowServiceError &&
+        error.code === 'invalid_request' &&
+        error.message === 'workflow_run_id must be non-empty',
+    );
   } finally {
     clearMocks();
   }

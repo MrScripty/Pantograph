@@ -38,6 +38,7 @@
     schedulerRetentionFilterOptions,
     schedulerTimelinePayloadLabel,
   } from './schedulerPagePresenters';
+  import { formatWorkflowCommandError } from './workflowErrorPresenters';
 
   let runs = $state<RunListProjectionRecord[]>([]);
   let loading = $state(false);
@@ -78,7 +79,7 @@
       runs = response.runs;
       projectionUpdatedAtMs = response.projection_state.updated_at_ms;
     } catch (refreshError) {
-      error = refreshError instanceof Error ? refreshError.message : String(refreshError);
+      error = formatWorkflowCommandError(refreshError);
     } finally {
       loading = false;
       refreshInFlight = false;
@@ -115,7 +116,7 @@
       if (requestSerial !== timelineRequestSerial) {
         return;
       }
-      timelineError = refreshError instanceof Error ? refreshError.message : String(refreshError);
+      timelineError = formatWorkflowCommandError(refreshError);
       timelineEvents = [];
     } finally {
       if (requestSerial === timelineRequestSerial) {

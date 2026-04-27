@@ -16,6 +16,7 @@
     buildRunGraphNodeArtifactSummaries,
     buildRunGraphNodeStatusMap,
   } from './runGraphPresenters';
+  import { formatWorkflowCommandError } from './workflowErrorPresenters';
 
   type GraphPageMode = 'run_snapshot' | 'editor';
 
@@ -65,7 +66,7 @@
       if (requestSerial !== runGraphRequestSerial) {
         return;
       }
-      runGraphError = error instanceof Error ? error.message : String(error);
+      runGraphError = formatWorkflowCommandError(error);
       runGraph = null;
     } finally {
       if (requestSerial === runGraphRequestSerial) {
@@ -98,7 +99,7 @@
       if (requestSerial !== runArtifactRequestSerial) {
         return;
       }
-      runArtifactError = error instanceof Error ? error.message : String(error);
+      runArtifactError = formatWorkflowCommandError(error);
       runArtifacts = [];
     } finally {
       if (requestSerial === runArtifactRequestSerial) {
@@ -131,7 +132,7 @@
       if (requestSerial !== runNodeStatusRequestSerial) {
         return;
       }
-      runNodeStatusError = error instanceof Error ? error.message : String(error);
+      runNodeStatusError = formatWorkflowCommandError(error);
       runNodeStatuses = [];
     } finally {
       if (requestSerial === runNodeStatusRequestSerial) {
