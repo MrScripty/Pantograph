@@ -276,6 +276,8 @@ export interface ProjectionStateRecord {
 export type DiagnosticEventKind =
   | 'scheduler_estimate_produced'
   | 'scheduler_queue_placement'
+  | 'run_started'
+  | 'run_terminal'
   | 'run_snapshot_accepted'
   | 'io_artifact_observed'
   | 'library_asset_accessed'

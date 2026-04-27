@@ -257,6 +257,8 @@ pub(super) fn drain_scheduler_timeline_projection(
                AND event_kind IN (
                     'scheduler.estimate_produced',
                     'scheduler.queue_placement',
+                    'run.started',
+                    'run.terminal',
                     'run.snapshot_accepted'
                )
              ORDER BY event_seq
@@ -428,6 +430,24 @@ fn scheduler_timeline_record_from_event(
             format!("queued at position {}", payload.queue_position),
             Some(format!("priority {}", payload.priority)),
         ),
+        DiagnosticEventPayload::RunStarted(payload) => {
+            let detail = match (
+                payload.queue_wait_ms,
+                payload.scheduler_decision_reason.as_deref(),
+            ) {
+                (Some(queue_wait_ms), Some(reason)) => {
+                    Some(format!("queue wait {queue_wait_ms} ms; {reason}"))
+                }
+                (Some(queue_wait_ms), None) => Some(format!("queue wait {queue_wait_ms} ms")),
+                (None, Some(reason)) => Some(reason.to_string()),
+                (None, None) => None,
+            };
+            ("run started".to_string(), detail)
+        }
+        DiagnosticEventPayload::RunTerminal(payload) => {
+            let summary = format!("run {:?}", payload.status).to_lowercase();
+            (summary, payload.error)
+        }
         DiagnosticEventPayload::RunSnapshotAccepted(payload) => (
             "run snapshot accepted".to_string(),
             Some(payload.workflow_run_snapshot_id),

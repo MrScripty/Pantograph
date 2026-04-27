@@ -309,7 +309,7 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         )
         .expect("diagnostic events")
     };
-    assert_eq!(diagnostic_events.len(), 3);
+    assert_eq!(diagnostic_events.len(), 5);
     let event = diagnostic_events
         .iter()
         .find(|event| {
@@ -403,6 +403,48 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
     );
     assert!(queue_event.payload_json.contains("\"queue_position\":0"));
     assert!(queue_event.payload_json.contains("\"priority\":7"));
+
+    let started_event = diagnostic_events
+        .iter()
+        .find(|event| {
+            event.event_kind == pantograph_diagnostics_ledger::DiagnosticEventKind::RunStarted
+        })
+        .expect("run started event");
+    assert_eq!(
+        started_event.source_component,
+        pantograph_diagnostics_ledger::DiagnosticEventSourceComponent::Scheduler
+    );
+    assert_eq!(
+        started_event.workflow_run_id.as_ref().map(|id| id.as_str()),
+        Some(response.workflow_run_id.as_str())
+    );
+    assert!(started_event.event_seq > queue_event.event_seq);
+    assert!(started_event
+        .payload_json
+        .contains("\"scheduler_decision_reason\":"));
+
+    let terminal_event = diagnostic_events
+        .iter()
+        .find(|event| {
+            event.event_kind == pantograph_diagnostics_ledger::DiagnosticEventKind::RunTerminal
+        })
+        .expect("run terminal event");
+    assert_eq!(
+        terminal_event.source_component,
+        pantograph_diagnostics_ledger::DiagnosticEventSourceComponent::WorkflowService
+    );
+    assert_eq!(
+        terminal_event
+            .workflow_run_id
+            .as_ref()
+            .map(|id| id.as_str()),
+        Some(response.workflow_run_id.as_str())
+    );
+    assert!(terminal_event.event_seq > started_event.event_seq);
+    assert!(terminal_event
+        .payload_json
+        .contains("\"status\":\"completed\""));
+    assert!(terminal_event.payload_json.contains("\"duration_ms\":"));
 }
 
 #[tokio::test]

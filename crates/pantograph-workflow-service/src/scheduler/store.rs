@@ -88,6 +88,9 @@ pub(crate) struct WorkflowExecutionSessionStaleCleanupCandidate {
 pub(crate) struct WorkflowExecutionSessionDequeuedRun {
     pub(crate) workflow_id: String,
     pub(crate) queued: WorkflowExecutionSessionQueuedRun,
+    pub(crate) enqueued_at_ms: u64,
+    pub(crate) dequeued_at_ms: u64,
+    pub(crate) scheduler_decision_reason: WorkflowSchedulerDecisionReason,
 }
 
 pub(crate) fn unix_timestamp_ms() -> u64 {

@@ -254,22 +254,27 @@ impl WorkflowExecutionSessionStore {
             item.starvation_bypass_count = item.starvation_bypass_count.saturating_add(1);
         }
         policy.refresh_queue(&mut state.queue);
+        let dequeued_at_ms = unix_timestamp_ms();
+        let scheduler_decision_reason = decision.reason.ok_or_else(|| {
+            WorkflowServiceError::Internal(format!(
+                "admitted queue item '{}' in session '{}' missing scheduler reason",
+                admitted_workflow_run_id, session_id
+            ))
+        })?;
         state.active_run = Some(WorkflowExecutionSessionActiveRun {
             workflow_run_id: queued.workflow_run_id.clone(),
             enqueued_at_ms: queued.enqueued_at_ms,
-            dequeued_at_ms: unix_timestamp_ms(),
+            dequeued_at_ms,
             priority: queued.priority,
-            scheduler_decision_reason: decision.reason.ok_or_else(|| {
-                WorkflowServiceError::Internal(format!(
-                    "admitted queue item '{}' in session '{}' missing scheduler reason",
-                    admitted_workflow_run_id, session_id
-                ))
-            })?,
+            scheduler_decision_reason,
         });
         Self::mark_session_access(state, tick);
         Ok(Some(WorkflowExecutionSessionDequeuedRun {
             workflow_id: state.workflow_id.clone(),
+            enqueued_at_ms: queued.enqueued_at_ms,
             queued,
+            dequeued_at_ms,
+            scheduler_decision_reason,
         }))
     }
 

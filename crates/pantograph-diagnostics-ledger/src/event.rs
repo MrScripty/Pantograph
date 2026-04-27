@@ -16,6 +16,8 @@ pub const SCHEDULER_TIMELINE_PROJECTION_VERSION: i64 = 1;
 pub enum DiagnosticEventKind {
     SchedulerEstimateProduced,
     SchedulerQueuePlacement,
+    RunStarted,
+    RunTerminal,
     RunSnapshotAccepted,
     IoArtifactObserved,
     LibraryAssetAccessed,
@@ -28,6 +30,8 @@ impl DiagnosticEventKind {
         match self {
             Self::SchedulerEstimateProduced => "scheduler.estimate_produced",
             Self::SchedulerQueuePlacement => "scheduler.queue_placement",
+            Self::RunStarted => "run.started",
+            Self::RunTerminal => "run.terminal",
             Self::RunSnapshotAccepted => "run.snapshot_accepted",
             Self::IoArtifactObserved => "io.artifact_observed",
             Self::LibraryAssetAccessed => "library.asset_accessed",
@@ -40,6 +44,8 @@ impl DiagnosticEventKind {
         match value {
             "scheduler.estimate_produced" => Ok(Self::SchedulerEstimateProduced),
             "scheduler.queue_placement" => Ok(Self::SchedulerQueuePlacement),
+            "run.started" => Ok(Self::RunStarted),
+            "run.terminal" => Ok(Self::RunTerminal),
             "run.snapshot_accepted" => Ok(Self::RunSnapshotAccepted),
             "io.artifact_observed" => Ok(Self::IoArtifactObserved),
             "library.asset_accessed" => Ok(Self::LibraryAssetAccessed),
@@ -153,6 +159,8 @@ impl DiagnosticEventRetentionClass {
 pub enum DiagnosticEventPayload {
     SchedulerEstimateProduced(SchedulerEstimateProducedPayload),
     SchedulerQueuePlacement(SchedulerQueuePlacementPayload),
+    RunStarted(RunStartedPayload),
+    RunTerminal(RunTerminalPayload),
     RunSnapshotAccepted(RunSnapshotAcceptedPayload),
     IoArtifactObserved(IoArtifactObservedPayload),
     LibraryAssetAccessed(LibraryAssetAccessedPayload),
@@ -165,6 +173,8 @@ impl DiagnosticEventPayload {
         match self {
             Self::SchedulerEstimateProduced(_) => DiagnosticEventKind::SchedulerEstimateProduced,
             Self::SchedulerQueuePlacement(_) => DiagnosticEventKind::SchedulerQueuePlacement,
+            Self::RunStarted(_) => DiagnosticEventKind::RunStarted,
+            Self::RunTerminal(_) => DiagnosticEventKind::RunTerminal,
             Self::RunSnapshotAccepted(_) => DiagnosticEventKind::RunSnapshotAccepted,
             Self::IoArtifactObserved(_) => DiagnosticEventKind::IoArtifactObserved,
             Self::LibraryAssetAccessed(_) => DiagnosticEventKind::LibraryAssetAccessed,
@@ -177,6 +187,8 @@ impl DiagnosticEventPayload {
         match self {
             Self::SchedulerEstimateProduced(payload) => payload.validate(),
             Self::SchedulerQueuePlacement(payload) => payload.validate(),
+            Self::RunStarted(payload) => payload.validate(),
+            Self::RunTerminal(payload) => payload.validate(),
             Self::RunSnapshotAccepted(payload) => payload.validate(),
             Self::IoArtifactObserved(payload) => payload.validate(),
             Self::LibraryAssetAccessed(payload) => payload.validate(),
@@ -216,6 +228,45 @@ pub struct SchedulerQueuePlacementPayload {
 impl SchedulerQueuePlacementPayload {
     fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
         validate_required_text("scheduler_policy_id", &self.scheduler_policy_id, MAX_ID_LEN)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct RunStartedPayload {
+    pub queue_wait_ms: Option<u64>,
+    pub scheduler_decision_reason: Option<String>,
+}
+
+impl RunStartedPayload {
+    fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        validate_optional_text(
+            "scheduler_decision_reason",
+            self.scheduler_decision_reason.as_deref(),
+            MAX_ID_LEN,
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RunTerminalStatus {
+    Completed,
+    Failed,
+    Cancelled,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct RunTerminalPayload {
+    pub status: RunTerminalStatus,
+    pub duration_ms: Option<u64>,
+    pub error: Option<String>,
+}
+
+impl RunTerminalPayload {
+    fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        validate_optional_text("error", self.error.as_deref(), MAX_JSON_LEN)
     }
 }
 
@@ -546,6 +597,8 @@ fn validate_event_scope(
     match request.payload.event_kind() {
         DiagnosticEventKind::SchedulerEstimateProduced
         | DiagnosticEventKind::SchedulerQueuePlacement
+        | DiagnosticEventKind::RunStarted
+        | DiagnosticEventKind::RunTerminal
         | DiagnosticEventKind::RunSnapshotAccepted
         | DiagnosticEventKind::IoArtifactObserved => {
             if request.workflow_run_id.is_none() {
@@ -584,10 +637,11 @@ fn validate_event_source(
 ) -> Result<(), DiagnosticsLedgerError> {
     let allowed = match event_kind {
         DiagnosticEventKind::SchedulerEstimateProduced
-        | DiagnosticEventKind::SchedulerQueuePlacement => {
+        | DiagnosticEventKind::SchedulerQueuePlacement
+        | DiagnosticEventKind::RunStarted => {
             matches!(source_component, DiagnosticEventSourceComponent::Scheduler)
         }
-        DiagnosticEventKind::RunSnapshotAccepted => {
+        DiagnosticEventKind::RunSnapshotAccepted | DiagnosticEventKind::RunTerminal => {
             matches!(
                 source_component,
                 DiagnosticEventSourceComponent::WorkflowService
