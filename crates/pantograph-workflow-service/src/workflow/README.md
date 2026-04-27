@@ -50,8 +50,9 @@ facade. The parent facade remains the public export point while helpers own
 cohesive contract definitions, host/runtime trait defaults, request
 validation, graph edit-session methods, capability/preflight methods, session
 execution methods, session queue inspection methods, session lifecycle methods,
-service configuration methods, workflow run execution, workflow I/O derivation,
-runtime readiness, session-runtime workflows, and the root facade test module.
+service configuration methods, diagnostics projection and audit helpers,
+workflow run execution, workflow I/O derivation, runtime readiness,
+session-runtime workflows, and the root facade test module.
 
 ## Alternatives Rejected
 - Leave all helpers in `workflow.rs`: rejected because runtime readiness and
@@ -78,6 +79,9 @@ runtime readiness, session-runtime workflows, and the root facade test module.
 - Workflow diagnostics projection tests cover Library usage warm projection
   catching-up state so service callers preserve backend projection freshness
   instead of inferring it from raw ledger rows.
+- Workflow Library asset access audit writes must enter through the diagnostics
+  API helper, use diagnostics-ledger typed operation/cache-status enums, and
+  remain optional when diagnostics storage is not configured.
 - Workflow Library usage queries accept `workflow_run_id` filters for
   active-run Library views and delegate that filtering to diagnostics-ledger
   projections.

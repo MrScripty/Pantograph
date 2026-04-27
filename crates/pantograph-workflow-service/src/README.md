@@ -97,6 +97,9 @@ for storage and query semantics.
 Retention cleanup now lives behind the same diagnostics API helper and is
 re-exported by the crate facade so Tauri and frontend command adapters can
 trigger backend-owned artifact expiration without touching ledger internals.
+Library asset access audit recording now lives behind the diagnostics API
+helper and is re-exported by the crate facade so adapters can record typed
+Pumas/Library operations without appending raw diagnostic ledger events.
 
 ## Alternatives Rejected
 - Keep workflow behavior in Tauri commands: rejected because native bindings
@@ -148,6 +151,9 @@ trigger backend-owned artifact expiration without touching ledger internals.
 - Retention cleanup request/response DTOs are public workflow-service
   contracts and must preserve backend cleanup counts rather than client-side
   artifact deletion state.
+- Library asset access audit request/response DTOs are public workflow-service
+  contracts and must preserve typed operation/cache labels rather than
+  adapter-authored free-form audit rows.
 
 ## Revisit Triggers
 - Public workflow DTOs need versioning rather than additive migration.

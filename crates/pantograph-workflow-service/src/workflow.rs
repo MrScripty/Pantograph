@@ -37,7 +37,8 @@ pub use self::contracts::*;
 pub use self::diagnostics_api::{
     WorkflowDiagnosticsUsageQueryRequest, WorkflowDiagnosticsUsageQueryResponse,
     WorkflowDiagnosticsUsageSummary, WorkflowIoArtifactQueryRequest,
-    WorkflowIoArtifactQueryResponse, WorkflowLibraryUsageQueryRequest,
+    WorkflowIoArtifactQueryResponse, WorkflowLibraryAssetAccessRecordRequest,
+    WorkflowLibraryAssetAccessRecordResponse, WorkflowLibraryUsageQueryRequest,
     WorkflowLibraryUsageQueryResponse, WorkflowNodeStatusQueryRequest,
     WorkflowNodeStatusQueryResponse, WorkflowProjectionRebuildRequest,
     WorkflowProjectionRebuildResponse, WorkflowRetentionCleanupRequest,
@@ -57,10 +58,10 @@ pub(crate) use self::validation::validate_workflow_id;
 
 pub use pantograph_diagnostics_ledger::{
     IoArtifactProjectionRecord, IoArtifactRetentionState, IoArtifactRetentionSummaryRecord,
-    LibraryUsageProjectionRecord, ProjectionStateRecord, RunDetailProjectionRecord,
-    RunListFacetRecord, RunListProjectionRecord, RunListProjectionStatus,
-    SchedulerTimelineProjectionRecord, SqliteDiagnosticsLedger, WorkflowTimingExpectation,
-    WorkflowTimingExpectationComparison,
+    LibraryAssetCacheStatus, LibraryAssetOperation, LibraryUsageProjectionRecord,
+    ProjectionStateRecord, RunDetailProjectionRecord, RunListFacetRecord, RunListProjectionRecord,
+    RunListProjectionStatus, SchedulerTimelineProjectionRecord, SqliteDiagnosticsLedger,
+    WorkflowTimingExpectation, WorkflowTimingExpectationComparison,
 };
 pub use pantograph_runtime_attribution::{
     AttributionRepository, BucketCreateRequest, BucketDeleteRequest, BucketRecord, BucketSelection,

@@ -366,12 +366,19 @@ Scheduler, and Diagnostics pages.
 **Tasks:**
 
 - [ ] Wrap or instrument Pumas model search/download/delete/access paths.
+  - Existing Puma-Lib model option queries now record successful collection
+    access/search operations through a workflow-service audit boundary instead
+    of writing raw ledger events from Tauri/frontend code. Download/delete
+    wrappers remain pending.
 - [ ] Emit typed `library.*` events for asset access by run, session, bucket,
   client, or GUI actor where available.
   - Workflow-session run snapshots now emit `library.asset_accessed` events
     for model assets used by the run, carrying run, workflow version,
     client/session/bucket, scheduler policy, retention policy, model id, and
     model revision/hash where available.
+  - Puma-Lib option queries now emit GUI-side `library.asset_accessed` events
+    for `pumas://models` with source instance `puma-lib-port-options` after the
+    underlying Pumas query succeeds.
 - [ ] Emit typed cache hit/miss and network byte observations where available.
 - [x] Add Library usage projections: used by active run, used by N runs, last
   accessed, total access count, linked workflow/node versions.
@@ -398,9 +405,12 @@ Scheduler, and Diagnostics pages.
 model asset run usage from workflow-session run snapshots as typed
 `library.asset_accessed` events. The existing warm Library usage projection can
 then report run-linked usage counts and last-access facts for
-`pumas://models/<model_id>` assets. Pumas search/download/delete wrappers,
-cache hit/miss facts, network byte observations, GUI actor audit, and rejected
-operation tests remain pending.
+`pumas://models/<model_id>` assets. Puma-Lib model option access/search now
+records successful GUI/library collection operations through
+`workflow_library_asset_access_record`, giving the GUI a typed audit boundary
+without exposing raw event appends. Pumas download/delete wrappers, cache
+hit/miss facts, network byte observations, and rejected operation tests remain
+pending.
 
 ## Ownership And Lifecycle Note
 
@@ -476,6 +486,9 @@ implicitly on page load.
 - 2026-04-27: Exposed artifact retention cleanup through workflow-service,
   Tauri, and frontend command DTOs so GUI/admin controls can trigger cleanup
   without bypassing the ledger/projection boundary.
+- 2026-04-27: Added a workflow-service Library asset audit boundary and wired
+  Puma-Lib model option queries to record successful `pumas://models`
+  access/search events after the underlying Pumas query succeeds.
 
 ### Deviations
 
@@ -542,6 +555,14 @@ implicitly on page load.
   `node --experimental-strip-types --test
   src/services/workflow/WorkflowService.commands.test.ts` passed after exposing
   retention cleanup through service and frontend command boundaries.
+- 2026-04-27: `cargo test -p pantograph-workflow-service
+  workflow_library_asset_access_record --lib`,
+  `cargo test -p pantograph-workflow-service
+  workflow_library_asset_access_record_contract_snapshot --test contract`, and
+  `cargo check -p pantograph` passed after adding the Library asset audit
+  boundary and Puma-Lib port-option instrumentation.
+- 2026-04-27: `cargo test -p pantograph-workflow-service` passed for the same
+  Library asset audit boundary changes.
 
 ### Traceability Links
 

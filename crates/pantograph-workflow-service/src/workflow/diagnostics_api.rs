@@ -4,7 +4,8 @@ use pantograph_diagnostics_ledger::{
     DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
     DiagnosticsQuery, DiagnosticsRetentionPolicy, ExecutionGuaranteeLevel,
     IoArtifactProjectionQuery, IoArtifactProjectionRecord, IoArtifactRetentionState,
-    IoArtifactRetentionSummaryQuery, IoArtifactRetentionSummaryRecord, LibraryUsageProjectionQuery,
+    IoArtifactRetentionSummaryQuery, IoArtifactRetentionSummaryRecord, LibraryAssetAccessedPayload,
+    LibraryAssetCacheStatus, LibraryAssetOperation, LibraryUsageProjectionQuery,
     LibraryUsageProjectionRecord, ModelLicenseUsageEvent, NodeExecutionProjectionStatus,
     NodeStatusProjectionQuery, NodeStatusProjectionRecord, ProjectionStateRecord, RetentionClass,
     RetentionPolicyActorScope, RetentionPolicyChangedPayload, RunDetailProjectionQuery,
@@ -232,6 +233,26 @@ pub struct WorkflowLibraryUsageQueryRequest {
 pub struct WorkflowLibraryUsageQueryResponse {
     pub assets: Vec<LibraryUsageProjectionRecord>,
     pub projection_state: ProjectionStateRecord,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowLibraryAssetAccessRecordRequest {
+    pub asset_id: String,
+    pub operation: LibraryAssetOperation,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_status: Option<LibraryAssetCacheStatus>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub network_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_instance_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowLibraryAssetAccessRecordResponse {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event_seq: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -467,6 +488,58 @@ impl WorkflowService {
         Ok(WorkflowLibraryUsageQueryResponse {
             assets,
             projection_state,
+        })
+    }
+
+    pub fn workflow_library_asset_access_record(
+        &self,
+        request: WorkflowLibraryAssetAccessRecordRequest,
+    ) -> Result<WorkflowLibraryAssetAccessRecordResponse, WorkflowServiceError> {
+        let Some(ledger) = self.diagnostics_ledger.as_ref() else {
+            return Ok(WorkflowLibraryAssetAccessRecordResponse { event_seq: None });
+        };
+        let mut ledger = ledger.lock().map_err(|_| {
+            WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
+        })?;
+        let event = ledger
+            .append_diagnostic_event(DiagnosticEventAppendRequest {
+                source_component: DiagnosticEventSourceComponent::Library,
+                source_instance_id: request
+                    .source_instance_id
+                    .or_else(|| Some("workflow-library-audit".to_string())),
+                occurred_at_ms: unix_timestamp_ms() as i64,
+                workflow_run_id: None,
+                workflow_id: None,
+                workflow_version_id: None,
+                workflow_semantic_version: None,
+                node_id: None,
+                node_type: None,
+                node_version: None,
+                runtime_id: None,
+                runtime_version: None,
+                model_id: None,
+                model_version: None,
+                client_id: None,
+                client_session_id: None,
+                bucket_id: None,
+                scheduler_policy_id: None,
+                retention_policy_id: None,
+                privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+                retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+                payload_ref: None,
+                payload: DiagnosticEventPayload::LibraryAssetAccessed(
+                    LibraryAssetAccessedPayload {
+                        asset_id: request.asset_id,
+                        operation: request.operation,
+                        cache_status: request.cache_status,
+                        network_bytes: request.network_bytes,
+                    },
+                ),
+            })
+            .map_err(WorkflowServiceError::from)?;
+
+        Ok(WorkflowLibraryAssetAccessRecordResponse {
+            event_seq: Some(event.event_seq),
         })
     }
 

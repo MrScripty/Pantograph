@@ -55,6 +55,9 @@ by external adapters.
 - Library usage query contract snapshots must include active-run
   `workflow_run_id` filters because the GUI highlights assets used by the
   selected run through the public diagnostics API.
+- Library asset access audit contract snapshots must preserve typed operation,
+  cache-status, source-instance, and event-sequence fields because adapters use
+  this API instead of raw ledger writes for Pumas/Library actions.
 
 ## Revisit Triggers
 - Contract snapshots become large enough to justify fixture files.

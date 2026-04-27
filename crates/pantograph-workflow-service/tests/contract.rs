@@ -2,10 +2,11 @@ use async_trait::async_trait;
 use pantograph_diagnostics_ledger::{
     ApplyArtifactRetentionPolicyResult, DiagnosticEventKind, DiagnosticEventSourceComponent,
     DiagnosticsRetentionPolicy, IoArtifactProjectionRecord, IoArtifactRetentionState,
-    IoArtifactRetentionSummaryRecord, LibraryUsageProjectionRecord, NodeExecutionProjectionStatus,
-    NodeStatusProjectionRecord, ProjectionStateRecord, ProjectionStatus, RetentionClass,
-    RunDetailProjectionRecord, RunListFacetKind, RunListFacetRecord, RunListProjectionRecord,
-    RunListProjectionStatus, SchedulerTimelineProjectionRecord,
+    IoArtifactRetentionSummaryRecord, LibraryAssetCacheStatus, LibraryAssetOperation,
+    LibraryUsageProjectionRecord, NodeExecutionProjectionStatus, NodeStatusProjectionRecord,
+    ProjectionStateRecord, ProjectionStatus, RetentionClass, RunDetailProjectionRecord,
+    RunListFacetKind, RunListFacetRecord, RunListProjectionRecord, RunListProjectionStatus,
+    SchedulerTimelineProjectionRecord,
 };
 use pantograph_workflow_service::graph::WorkflowExecutionSessionKind;
 use pantograph_workflow_service::{
@@ -14,7 +15,8 @@ use pantograph_workflow_service::{
     WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionState,
     WorkflowExecutionSessionSummary, WorkflowHost, WorkflowHostCapabilities,
     WorkflowIoArtifactQueryRequest, WorkflowIoArtifactQueryResponse, WorkflowIoNode,
-    WorkflowIoPort, WorkflowIoRequest, WorkflowIoResponse, WorkflowLibraryUsageQueryRequest,
+    WorkflowIoPort, WorkflowIoRequest, WorkflowIoResponse, WorkflowLibraryAssetAccessRecordRequest,
+    WorkflowLibraryAssetAccessRecordResponse, WorkflowLibraryUsageQueryRequest,
     WorkflowLibraryUsageQueryResponse, WorkflowNodeStatusQueryRequest,
     WorkflowNodeStatusQueryResponse, WorkflowOutputTarget, WorkflowPortBinding,
     WorkflowPreflightRequest, WorkflowProjectionRebuildRequest, WorkflowProjectionRebuildResponse,
@@ -1167,6 +1169,38 @@ fn workflow_library_usage_query_contract_snapshot() {
             "rebuilt_at_ms": null,
             "updated_at_ms": 1410
         }
+    });
+    assert_eq!(response_value, expected_response);
+}
+
+#[test]
+fn workflow_library_asset_access_record_contract_snapshot() {
+    let request = WorkflowLibraryAssetAccessRecordRequest {
+        asset_id: "pumas://models".to_string(),
+        operation: LibraryAssetOperation::Search,
+        cache_status: Some(LibraryAssetCacheStatus::Unknown),
+        network_bytes: Some(4096),
+        source_instance_id: Some("puma-lib-port-options".to_string()),
+    };
+    let response = WorkflowLibraryAssetAccessRecordResponse {
+        event_seq: Some(42),
+    };
+
+    let request_value =
+        serde_json::to_value(request).expect("serialize library asset access request");
+    let expected_request = serde_json::json!({
+        "asset_id": "pumas://models",
+        "operation": "search",
+        "cache_status": "unknown",
+        "network_bytes": 4096,
+        "source_instance_id": "puma-lib-port-options"
+    });
+    assert_eq!(request_value, expected_request);
+
+    let response_value =
+        serde_json::to_value(response).expect("serialize library asset access response");
+    let expected_response = serde_json::json!({
+        "event_seq": 42
     });
     assert_eq!(response_value, expected_response);
 }

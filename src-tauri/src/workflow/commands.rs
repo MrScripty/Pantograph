@@ -451,6 +451,7 @@ pub async fn workflow_clear_diagnostics_history(
 pub async fn query_port_options(
     registry: State<'_, SharedNodeRegistry>,
     extensions: State<'_, SharedExtensions>,
+    workflow_service: State<'_, SharedWorkflowService>,
     node_type: String,
     port_id: String,
     search: Option<String>,
@@ -458,7 +459,14 @@ pub async fn query_port_options(
     offset: Option<usize>,
 ) -> Result<node_engine::PortOptionsResult, String> {
     super::workflow_port_query_commands::query_port_options(
-        registry, extensions, node_type, port_id, search, limit, offset,
+        registry,
+        extensions,
+        workflow_service,
+        node_type,
+        port_id,
+        search,
+        limit,
+        offset,
     )
     .await
 }

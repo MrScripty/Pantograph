@@ -51,6 +51,10 @@ while still handling desktop runtime execution concerns.
 - Retention cleanup command handlers must stay transport-thin and delegate to
   `pantograph-workflow-service` so audit events and projection updates have one
   backend owner.
+- Pumas/Library audit emission from command handlers must stay transport-thin
+  and delegate to `pantograph-workflow-service`; successful Puma-Lib option
+  queries may record collection access/search after the underlying provider
+  returns, but handlers must not append raw diagnostic ledger events.
 - Tauri execution-handle lifecycle and undo/redo projection must stay thin
   wrappers around backend-owned `node-engine` behavior rather than becoming a
   second owner of workflow-session policy.
@@ -267,6 +271,9 @@ let snapshot = workflow_service
   capabilities are introduced.
 - Workflow dependency resolution and execution treat Pumas as the source of
   truth for executable model asset paths when bundle metadata requires it.
+- Puma-Lib option queries record successful model collection access/search
+  through the workflow-service Library asset audit API and do not emit audit
+  events for failed provider calls.
 
 ## Structured Producer Contract
 - `ConnectionCandidatesResponse` always includes `graph_revision`,

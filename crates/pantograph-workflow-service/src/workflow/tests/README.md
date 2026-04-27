@@ -75,6 +75,9 @@ Use `workflow/tests/` for behavior-specific child modules under the parent
 - Library usage query tests must cover active-run filtering by
   `workflow_run_id` so the workbench can ask for selected-run assets without
   scanning raw ledger events.
+- Library asset access record tests must prove adapters can append typed
+  Pumas/Library audit events through the public service facade without direct
+  diagnostics-ledger writes.
 - Diagnostics and session-execution tests that emit Library audit facts must
   use diagnostics-ledger typed operation/cache-status values, not arbitrary
   payload strings.

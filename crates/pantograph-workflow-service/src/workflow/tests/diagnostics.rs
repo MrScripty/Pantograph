@@ -771,6 +771,49 @@ fn workflow_library_usage_query_validates_bounds() {
 }
 
 #[test]
+fn workflow_library_asset_access_record_appends_typed_event() {
+    let service = WorkflowService::with_ephemeral_diagnostics_ledger().expect("service");
+
+    let response = service
+        .workflow_library_asset_access_record(WorkflowLibraryAssetAccessRecordRequest {
+            asset_id: "pumas://models".to_string(),
+            operation: LibraryAssetOperation::Search,
+            cache_status: Some(LibraryAssetCacheStatus::Unknown),
+            network_bytes: None,
+            source_instance_id: Some("puma-lib-port-options".to_string()),
+        })
+        .expect("library asset access event records");
+
+    assert_eq!(response.event_seq, Some(1));
+    let events = {
+        let ledger = service
+            .diagnostics_ledger_guard()
+            .expect("diagnostics ledger");
+        pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::diagnostic_events_after(
+            &*ledger, 0, 10,
+        )
+        .expect("diagnostic events")
+    };
+    assert_eq!(events.len(), 1);
+    assert_eq!(
+        events[0].event_kind,
+        pantograph_diagnostics_ledger::DiagnosticEventKind::LibraryAssetAccessed
+    );
+    assert_eq!(
+        events[0].source_component,
+        DiagnosticEventSourceComponent::Library
+    );
+    assert_eq!(
+        events[0].source_instance_id.as_deref(),
+        Some("puma-lib-port-options")
+    );
+    assert!(events[0]
+        .payload_json
+        .contains("\"asset_id\":\"pumas://models\""));
+    assert!(events[0].payload_json.contains("\"operation\":\"search\""));
+}
+
+#[test]
 fn workflow_retention_policy_query_reads_current_policy() {
     let service = WorkflowService::with_ephemeral_diagnostics_ledger().expect("service");
 
