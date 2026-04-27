@@ -10,9 +10,10 @@ use crate::event::{
     DiagnosticEventSourceComponent, IoArtifactProjectionQuery, IoArtifactProjectionRecord,
     IoArtifactRetentionState, LibraryUsageProjectionQuery, LibraryUsageProjectionRecord,
     NodeExecutionProjectionStatus, NodeStatusProjectionQuery, NodeStatusProjectionRecord,
-    ProjectionStateRecord, ProjectionStateUpdate, ProjectionStatus, RunDetailProjectionQuery,
-    RunDetailProjectionRecord, RunListProjectionQuery, RunListProjectionRecord,
-    RunListProjectionStatus, SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
+    ProjectionStateRecord, ProjectionStateUpdate, ProjectionStatus,
+    RetentionArtifactStateChangedPayload, RunDetailProjectionQuery, RunDetailProjectionRecord,
+    RunListProjectionQuery, RunListProjectionRecord, RunListProjectionStatus,
+    SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
     DIAGNOSTIC_EVENT_SCHEMA_VERSION, IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION,
     LIBRARY_USAGE_PROJECTION_NAME, LIBRARY_USAGE_PROJECTION_VERSION,
     MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, NODE_STATUS_PROJECTION_NAME,
@@ -620,9 +621,7 @@ pub(super) fn drain_io_artifact_projection(
 
     let events = io_artifact_events_after(&tx, last_applied_event_seq, limit)?;
     for event in &events {
-        if let Some(record) = io_artifact_projection_record_from_event(event)? {
-            insert_io_artifact_projection(&tx, &record)?;
-        }
+        apply_io_artifact_projection_event(&tx, event)?;
         last_applied_event_seq = event.event_seq;
     }
 
@@ -1129,7 +1128,10 @@ fn io_artifact_events_after(
                 payload_size_bytes, payload_ref, payload_json
          FROM diagnostic_events
          WHERE event_seq > ?1
-           AND event_kind = 'io.artifact_observed'
+           AND event_kind IN (
+                'io.artifact_observed',
+                'retention.artifact_state_changed'
+           )
          ORDER BY event_seq
          LIMIT ?2",
     )?;
@@ -1309,6 +1311,78 @@ fn io_artifact_projection_record_from_event(
         retention_reason: payload.retention_reason,
         retention_policy_id: event.retention_policy_id.clone(),
     }))
+}
+
+fn apply_io_artifact_projection_event(
+    tx: &rusqlite::Transaction<'_>,
+    event: &DiagnosticEventRecord,
+) -> Result<(), DiagnosticsLedgerError> {
+    let payload: DiagnosticEventPayload = serde_json::from_str(&event.payload_json)?;
+    match payload {
+        DiagnosticEventPayload::IoArtifactObserved(_) => {
+            if let Some(record) = io_artifact_projection_record_from_event(event)? {
+                insert_io_artifact_projection(tx, &record)?;
+            }
+        }
+        DiagnosticEventPayload::RetentionArtifactStateChanged(payload) => {
+            apply_io_artifact_retention_state_change(tx, event, &payload)?;
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn apply_io_artifact_retention_state_change(
+    tx: &rusqlite::Transaction<'_>,
+    event: &DiagnosticEventRecord,
+    payload: &RetentionArtifactStateChangedPayload,
+) -> Result<(), DiagnosticsLedgerError> {
+    let workflow_run_id =
+        event
+            .workflow_run_id
+            .as_ref()
+            .ok_or(DiagnosticsLedgerError::MissingField {
+                field: "workflow_run_id",
+            })?;
+    let clear_payload_ref = matches!(
+        payload.retention_state,
+        IoArtifactRetentionState::MetadataOnly
+            | IoArtifactRetentionState::TooLarge
+            | IoArtifactRetentionState::Expired
+            | IoArtifactRetentionState::Deleted
+    );
+
+    tx.execute(
+        "UPDATE io_artifact_projection
+         SET event_seq = ?1,
+             event_id = ?2,
+             occurred_at_ms = ?3,
+             recorded_at_ms = ?4,
+             payload_ref = CASE
+                WHEN ?5 IS NOT NULL THEN ?5
+                WHEN ?6 THEN NULL
+                ELSE payload_ref
+             END,
+             retention_state = ?7,
+             retention_reason = ?8,
+             retention_policy_id = COALESCE(?9, retention_policy_id)
+         WHERE workflow_run_id = ?10
+           AND artifact_id = ?11",
+        params![
+            event.event_seq,
+            event.event_id.as_str(),
+            event.occurred_at_ms,
+            event.recorded_at_ms,
+            event.payload_ref.as_deref(),
+            clear_payload_ref,
+            payload.retention_state.as_db(),
+            payload.reason.as_str(),
+            event.retention_policy_id.as_deref(),
+            workflow_run_id.as_str(),
+            payload.artifact_id.as_str(),
+        ],
+    )?;
+    Ok(())
 }
 
 fn io_artifact_retention_state_from_payload_ref(
@@ -1828,7 +1902,13 @@ fn insert_io_artifact_projection(
     record: &IoArtifactProjectionRecord,
 ) -> Result<(), DiagnosticsLedgerError> {
     tx.execute(
-        "INSERT OR IGNORE INTO io_artifact_projection
+        "DELETE FROM io_artifact_projection
+         WHERE workflow_run_id = ?1
+           AND artifact_id = ?2",
+        params![record.workflow_run_id.as_str(), record.artifact_id.as_str()],
+    )?;
+    tx.execute(
+        "INSERT INTO io_artifact_projection
             (event_seq, event_id, occurred_at_ms, recorded_at_ms, workflow_run_id,
              workflow_id, workflow_version_id, workflow_semantic_version, node_id,
              node_type, node_version, runtime_id, runtime_version, model_id,

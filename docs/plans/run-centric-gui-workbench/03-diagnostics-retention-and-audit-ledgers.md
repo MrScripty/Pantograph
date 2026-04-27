@@ -274,12 +274,15 @@ now materializes one row per run from the same cursor-drained lifecycle events
 for scheduler-page list reads. `run_detail_projection` now materializes the
 selected run's lifecycle payloads, snapshot identity, client/session/bucket
 identity, current status, terminal summary, and timeline event count for
-selected-run pages. `io_artifact_projection` now materializes bounded artifact
-metadata and payload references from `io.artifact_observed` events by run,
-node, role, and event cursor for I/O Inspector reads. Projection filters now
-cover workflow version, scheduler policy, runtime/model ids, media type,
-retention policy/state, and artifact role where those facts exist in the read
-model.
+selected-run pages. `io_artifact_projection` now materializes current bounded
+artifact metadata and payload references from `io.artifact_observed` events by
+run, node, role, and event cursor for I/O Inspector reads. It also applies
+typed `retention.artifact_state_changed` events incrementally so cleanup,
+expiration, deletion, externalization, and truncation decisions remain audited
+in the ledger while the gallery reads one current row per run artifact.
+Projection filters now cover workflow version, scheduler policy,
+runtime/model ids, media type, retention policy/state, and artifact role where
+those facts exist in the read model.
 The first warm projection, `library_usage_projection`, now aggregates
 Library/Pumas asset access counts, distinct run counts, network bytes, last
 access facts, and workflow-version run links. Remaining warm drains and
@@ -299,8 +302,8 @@ availability.
     hash, event node identity, run id, timestamps, payload reference, typed
     retention state, and retention reason. Explicit producer/consumer edge
     roles remain pending with richer I/O event payloads.
-- [ ] Emit typed `io.*` events for artifact observation, retention state
-  changes, truncation, externalization, expiration, and deletion.
+- [x] Emit typed artifact events for observation, retention state changes,
+  truncation, externalization, expiration, and deletion.
 - [ ] Add global retention policy record and policy version.
   - Existing standard local retention policy is now exposed as a first-class
     backend/API query. Policy mutation/version history remains pending.

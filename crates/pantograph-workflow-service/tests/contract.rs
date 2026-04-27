@@ -867,7 +867,7 @@ fn workflow_io_artifact_query_contract_snapshot() {
         }],
         projection_state: ProjectionStateRecord {
             projection_name: "io_artifact".to_string(),
-            projection_version: 2,
+            projection_version: 3,
             last_applied_event_seq: 21,
             status: ProjectionStatus::Current,
             rebuilt_at_ms: None,
@@ -921,7 +921,7 @@ fn workflow_io_artifact_query_contract_snapshot() {
         }],
         "projection_state": {
             "projection_name": "io_artifact",
-            "projection_version": 2,
+            "projection_version": 3,
             "last_applied_event_seq": 21,
             "status": "current",
             "rebuilt_at_ms": null,

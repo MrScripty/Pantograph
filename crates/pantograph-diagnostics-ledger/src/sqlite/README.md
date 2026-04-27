@@ -7,7 +7,7 @@ ledger.
 ## Contents
 | File | Description |
 | ---- | ----------- |
-| `event_sqlite.rs` | Typed diagnostic event append/query persistence, scheduler timeline projection, and projection cursor storage. |
+| `event_sqlite.rs` | Typed diagnostic event append/query persistence, scheduler timeline, run, node, I/O artifact, Library usage projections, and projection cursor storage. |
 | `run_summary_sqlite.rs` | Workflow run-summary upsert and query persistence for restart-visible run lists. |
 | `timing_sqlite.rs` | Workflow timing observation persistence, expectation lookup, and timing retention pruning. |
 
@@ -62,9 +62,9 @@ helpers own restart-visible workflow run summaries.
   not `diagnostic_events`.
 - Run detail drains apply only events after the stored projection cursor and
   update one row per workflow run for selected-run page/query reads.
-- I/O artifact drains apply only artifact observation events after the stored
-  projection cursor and write bounded metadata/reference rows keyed by
-  `event_seq`.
+- I/O artifact drains apply artifact observation and retention state-change
+  events after the stored projection cursor and write the latest bounded
+  metadata/reference row per `workflow_run_id` and `artifact_id`.
 - I/O artifact drains persist typed retention-state columns so page/API
   consumers can distinguish retained, metadata-only, external, truncated,
   too-large, expired, and deleted payload states without parsing event payloads.

@@ -235,7 +235,9 @@ lifecycle transitions, while progress and stream observations remain outside
 the typed event ledger.
 `workflow_io_artifact_query` now carries typed artifact `retention_state` and
 `retention_reason` fields so I/O pages do not infer retention from
-`payload_ref`.
+`payload_ref`. The I/O projection now treats retention changes as audited
+ledger events and materializes the latest current state per run artifact,
+including payload-reference removal after expiration or deletion.
 `workflow_projection_rebuild`
 provides the first explicit admin maintenance boundary for hot projection
 repair and projection-version rebuild scenarios. `workflow_run_graph_query`

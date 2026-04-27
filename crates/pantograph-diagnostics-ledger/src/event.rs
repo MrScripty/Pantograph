@@ -15,7 +15,7 @@ pub const RUN_LIST_PROJECTION_VERSION: i64 = 1;
 pub const RUN_DETAIL_PROJECTION_NAME: &str = "run_detail";
 pub const RUN_DETAIL_PROJECTION_VERSION: i64 = 1;
 pub const IO_ARTIFACT_PROJECTION_NAME: &str = "io_artifact";
-pub const IO_ARTIFACT_PROJECTION_VERSION: i64 = 2;
+pub const IO_ARTIFACT_PROJECTION_VERSION: i64 = 3;
 pub const LIBRARY_USAGE_PROJECTION_NAME: &str = "library_usage";
 pub const LIBRARY_USAGE_PROJECTION_VERSION: i64 = 1;
 pub const NODE_STATUS_PROJECTION_NAME: &str = "node_status";
@@ -30,6 +30,7 @@ pub enum DiagnosticEventKind {
     RunTerminal,
     RunSnapshotAccepted,
     IoArtifactObserved,
+    RetentionArtifactStateChanged,
     LibraryAssetAccessed,
     RetentionPolicyChanged,
     RuntimeCapabilityObserved,
@@ -45,6 +46,7 @@ impl DiagnosticEventKind {
             Self::RunTerminal => "run.terminal",
             Self::RunSnapshotAccepted => "run.snapshot_accepted",
             Self::IoArtifactObserved => "io.artifact_observed",
+            Self::RetentionArtifactStateChanged => "retention.artifact_state_changed",
             Self::LibraryAssetAccessed => "library.asset_accessed",
             Self::RetentionPolicyChanged => "retention.policy_changed",
             Self::RuntimeCapabilityObserved => "runtime.capability_observed",
@@ -60,6 +62,7 @@ impl DiagnosticEventKind {
             "run.terminal" => Ok(Self::RunTerminal),
             "run.snapshot_accepted" => Ok(Self::RunSnapshotAccepted),
             "io.artifact_observed" => Ok(Self::IoArtifactObserved),
+            "retention.artifact_state_changed" => Ok(Self::RetentionArtifactStateChanged),
             "library.asset_accessed" => Ok(Self::LibraryAssetAccessed),
             "retention.policy_changed" => Ok(Self::RetentionPolicyChanged),
             "runtime.capability_observed" => Ok(Self::RuntimeCapabilityObserved),
@@ -217,6 +220,7 @@ pub enum DiagnosticEventPayload {
     RunTerminal(RunTerminalPayload),
     RunSnapshotAccepted(RunSnapshotAcceptedPayload),
     IoArtifactObserved(IoArtifactObservedPayload),
+    RetentionArtifactStateChanged(RetentionArtifactStateChangedPayload),
     LibraryAssetAccessed(LibraryAssetAccessedPayload),
     RetentionPolicyChanged(RetentionPolicyChangedPayload),
     RuntimeCapabilityObserved(RuntimeCapabilityObservedPayload),
@@ -232,6 +236,9 @@ impl DiagnosticEventPayload {
             Self::RunTerminal(_) => DiagnosticEventKind::RunTerminal,
             Self::RunSnapshotAccepted(_) => DiagnosticEventKind::RunSnapshotAccepted,
             Self::IoArtifactObserved(_) => DiagnosticEventKind::IoArtifactObserved,
+            Self::RetentionArtifactStateChanged(_) => {
+                DiagnosticEventKind::RetentionArtifactStateChanged
+            }
             Self::LibraryAssetAccessed(_) => DiagnosticEventKind::LibraryAssetAccessed,
             Self::RetentionPolicyChanged(_) => DiagnosticEventKind::RetentionPolicyChanged,
             Self::RuntimeCapabilityObserved(_) => DiagnosticEventKind::RuntimeCapabilityObserved,
@@ -247,6 +254,7 @@ impl DiagnosticEventPayload {
             Self::RunTerminal(payload) => payload.validate(),
             Self::RunSnapshotAccepted(payload) => payload.validate(),
             Self::IoArtifactObserved(payload) => payload.validate(),
+            Self::RetentionArtifactStateChanged(payload) => payload.validate(),
             Self::LibraryAssetAccessed(payload) => payload.validate(),
             Self::RetentionPolicyChanged(payload) => payload.validate(),
             Self::RuntimeCapabilityObserved(payload) => payload.validate(),
@@ -404,6 +412,21 @@ pub struct RetentionPolicyChangedPayload {
 impl RetentionPolicyChangedPayload {
     fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
         validate_required_text("policy_id", &self.policy_id, MAX_ID_LEN)?;
+        validate_required_text("reason", &self.reason, MAX_JSON_LEN)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct RetentionArtifactStateChangedPayload {
+    pub artifact_id: String,
+    pub retention_state: IoArtifactRetentionState,
+    pub reason: String,
+}
+
+impl RetentionArtifactStateChangedPayload {
+    fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        validate_required_text("artifact_id", &self.artifact_id, MAX_ID_LEN)?;
         validate_required_text("reason", &self.reason, MAX_JSON_LEN)
     }
 }
@@ -1150,6 +1173,7 @@ fn validate_event_scope(
         | DiagnosticEventKind::RunTerminal
         | DiagnosticEventKind::RunSnapshotAccepted
         | DiagnosticEventKind::IoArtifactObserved
+        | DiagnosticEventKind::RetentionArtifactStateChanged
         | DiagnosticEventKind::NodeExecutionStatus => {
             if request.workflow_run_id.is_none() {
                 return Err(DiagnosticsLedgerError::MissingField {
@@ -1159,6 +1183,13 @@ fn validate_event_scope(
             if request.workflow_id.is_none() {
                 return Err(DiagnosticsLedgerError::MissingField {
                     field: "workflow_id",
+                });
+            }
+            if request.payload.event_kind() == DiagnosticEventKind::RetentionArtifactStateChanged
+                && request.retention_policy_id.is_none()
+            {
+                return Err(DiagnosticsLedgerError::MissingField {
+                    field: "retention_policy_id",
                 });
             }
             if request.payload.event_kind() == DiagnosticEventKind::NodeExecutionStatus
@@ -1212,6 +1243,9 @@ fn validate_event_source(
             matches!(source_component, DiagnosticEventSourceComponent::Library)
         }
         DiagnosticEventKind::RetentionPolicyChanged => {
+            matches!(source_component, DiagnosticEventSourceComponent::Retention)
+        }
+        DiagnosticEventKind::RetentionArtifactStateChanged => {
             matches!(source_component, DiagnosticEventSourceComponent::Retention)
         }
         DiagnosticEventKind::RuntimeCapabilityObserved => matches!(

@@ -193,7 +193,9 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
   `retention.policy_changed` audit event.
 - I/O artifact queries expose typed retention state from the diagnostics
   projection. Callers must treat `retention_state` as authoritative instead of
-  deriving payload state from `payload_ref`.
+  deriving payload state from `payload_ref`; retention cleanup updates arrive
+  through typed ledger events and are materialized into the current artifact
+  projection row.
 - Diagnostics: usage diagnostics accept workflow-version and node contract
   version/digest filters so historic comparisons can avoid mixing different
   executable node behavior.

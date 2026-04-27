@@ -39,6 +39,8 @@ by external adapters.
 ## Invariants
 - Tests must not depend on Tauri, UniFFI, Rustler, or frontend packages.
 - Expected JSON should preserve semantic field names, enum labels, and ordering.
+- Projection-state snapshots should preserve projection version changes because
+  those versions trigger rebuild behavior in native diagnostics storage.
 - Test hosts should return backend-shaped facts and avoid duplicating policy
   logic under test.
 - Public diagnostics projection snapshots must include typed retention fields

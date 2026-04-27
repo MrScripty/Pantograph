@@ -12,10 +12,10 @@ use crate::{
     ModelLicenseUsageEvent, ModelOutputMeasurement, NodeExecutionProjectionStatus,
     NodeExecutionStatusPayload, NodeStatusProjectionQuery, OutputMeasurementUnavailableReason,
     OutputModality, ProjectionStateUpdate, ProjectionStatus, PruneTimingObservationsCommand,
-    PruneUsageEventsCommand, RetentionClass, RetentionPolicyChangedPayload,
-    RunDetailProjectionQuery, RunListProjectionQuery, RunListProjectionStatus,
-    RunSnapshotAcceptedPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
-    SchedulerEstimateProducedPayload, SchedulerQueuePlacementPayload,
+    PruneUsageEventsCommand, RetentionArtifactStateChangedPayload, RetentionClass,
+    RetentionPolicyChangedPayload, RunDetailProjectionQuery, RunListProjectionQuery,
+    RunListProjectionStatus, RunSnapshotAcceptedPayload, RunStartedPayload, RunTerminalPayload,
+    RunTerminalStatus, SchedulerEstimateProducedPayload, SchedulerQueuePlacementPayload,
     SchedulerTimelineProjectionQuery, SqliteDiagnosticsLedger, UpdateRetentionPolicyCommand,
     UsageEventStatus, UsageLineage, WorkflowRunSummaryQuery, WorkflowRunSummaryRecord,
     WorkflowRunSummaryStatus, WorkflowTimingExpectation, WorkflowTimingExpectationComparison,
@@ -1097,6 +1097,85 @@ fn io_artifact_projection_drains_artifact_events_incrementally() {
 }
 
 #[test]
+fn io_artifact_projection_applies_retention_state_changes() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_io_artifact_event(
+            "workflow_run_alpha",
+            "node_image",
+            "node_output",
+            "artifact_image",
+        ))
+        .expect("io artifact event appends");
+    let retention_event = ledger
+        .append_diagnostic_event(sample_retention_artifact_state_changed_event(
+            "workflow_run_alpha",
+            "artifact_image",
+            IoArtifactRetentionState::Expired,
+            "global retention window elapsed",
+        ))
+        .expect("retention state event appends");
+
+    let state = ledger
+        .drain_io_artifact_projection(10)
+        .expect("io artifact projection drains retention state");
+    assert_eq!(state.last_applied_event_seq, retention_event.event_seq);
+
+    let records = ledger
+        .query_io_artifact_projection(IoArtifactProjectionQuery {
+            workflow_run_id: Some(
+                WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+            ),
+            node_id: None,
+            artifact_role: None,
+            media_type: None,
+            retention_state: None,
+            retention_policy_id: None,
+            runtime_id: None,
+            model_id: None,
+            after_event_seq: None,
+            limit: 10,
+        })
+        .expect("io artifact projection loads after retention event");
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].event_seq, retention_event.event_seq);
+    assert_eq!(records[0].artifact_id, "artifact_image");
+    assert_eq!(records[0].artifact_role, "node_output");
+    assert_eq!(records[0].payload_ref, None);
+    assert_eq!(
+        records[0].retention_state,
+        IoArtifactRetentionState::Expired
+    );
+    assert_eq!(
+        records[0].retention_reason.as_deref(),
+        Some("global retention window elapsed")
+    );
+
+    ledger
+        .rebuild_projection(IO_ARTIFACT_PROJECTION_NAME, 1)
+        .expect("io artifact projection rebuilds from retention ledger events");
+    let rebuilt_records = ledger
+        .query_io_artifact_projection(IoArtifactProjectionQuery {
+            workflow_run_id: Some(
+                WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+            ),
+            node_id: None,
+            artifact_role: None,
+            media_type: None,
+            retention_state: Some(IoArtifactRetentionState::Expired),
+            retention_policy_id: Some("retention_default".to_string()),
+            runtime_id: None,
+            model_id: None,
+            after_event_seq: None,
+            limit: 10,
+        })
+        .expect("rebuilt io artifact projection loads");
+    assert_eq!(rebuilt_records.len(), 1);
+    assert_eq!(rebuilt_records[0].event_seq, retention_event.event_seq);
+    assert_eq!(rebuilt_records[0].payload_ref, None);
+}
+
+#[test]
 fn node_status_projection_keeps_latest_status_per_node() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     ledger
@@ -2002,6 +2081,45 @@ fn sample_io_artifact_event(
             retention_state: Some(IoArtifactRetentionState::Retained),
             retention_reason: None,
         }),
+    }
+}
+
+fn sample_retention_artifact_state_changed_event(
+    workflow_run_id: &str,
+    artifact_id: &str,
+    retention_state: IoArtifactRetentionState,
+    reason: &str,
+) -> DiagnosticEventAppendRequest {
+    DiagnosticEventAppendRequest {
+        source_component: DiagnosticEventSourceComponent::Retention,
+        source_instance_id: Some("retention-local".to_string()),
+        occurred_at_ms: 1_400,
+        workflow_run_id: Some(WorkflowRunId::try_from(workflow_run_id.to_string()).unwrap()),
+        workflow_id: Some(WorkflowId::try_from("workflow_alpha".to_string()).unwrap()),
+        workflow_version_id: Some(WorkflowVersionId::try_from("wfver_alpha".to_string()).unwrap()),
+        workflow_semantic_version: Some("1.0.0".to_string()),
+        node_id: None,
+        node_type: None,
+        node_version: None,
+        runtime_id: None,
+        runtime_version: None,
+        model_id: None,
+        model_version: None,
+        client_id: Some(ClientId::try_from("client_alpha".to_string()).unwrap()),
+        client_session_id: Some(ClientSessionId::try_from("session_alpha".to_string()).unwrap()),
+        bucket_id: Some(BucketId::try_from("bucket_alpha".to_string()).unwrap()),
+        scheduler_policy_id: None,
+        retention_policy_id: Some("retention_default".to_string()),
+        privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+        retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+        payload_ref: None,
+        payload: DiagnosticEventPayload::RetentionArtifactStateChanged(
+            RetentionArtifactStateChangedPayload {
+                artifact_id: artifact_id.to_string(),
+                retention_state,
+                reason: reason.to_string(),
+            },
+        ),
     }
 }
 

@@ -93,6 +93,9 @@ semantics.
 - `io_artifact_projection` is read directly by I/O Inspector page/API
   consumers after an explicit incremental drain; normal artifact gallery reads
   do not replay raw event rows or load artifact bodies.
+- `io_artifact_projection` keeps the latest current row per
+  `workflow_run_id` and `artifact_id`; append-only ledger events remain the
+  source of historical observation and retention cleanup decisions.
 - `io_artifact_projection.retention_state` is a typed retention summary.
   Consumers must not infer expired, deleted, external, truncated, or too-large
   payload states from `payload_ref` alone.
