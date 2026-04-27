@@ -16,6 +16,7 @@ use pantograph_workflow_service::{
     WorkflowExecutionSessionStatusRequest, WorkflowExecutionSessionStatusResponse,
     WorkflowIoRequest, WorkflowIoResponse, WorkflowPreflightRequest, WorkflowPreflightResponse,
     WorkflowRunResponse, WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse,
+    WorkflowSchedulerTimelineQueryRequest, WorkflowSchedulerTimelineQueryResponse,
     WorkflowServiceError,
 };
 use tauri::{AppHandle, State};
@@ -205,6 +206,15 @@ pub async fn workflow_get_scheduler_snapshot(
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<WorkflowSchedulerSnapshotResponse, String> {
     workflow_scheduler_snapshot_response(workflow_service.inner(), request).await
+}
+
+pub async fn workflow_scheduler_timeline_query(
+    request: WorkflowSchedulerTimelineQueryRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowSchedulerTimelineQueryResponse, String> {
+    workflow_service
+        .workflow_scheduler_timeline_query(request)
+        .map_err(workflow_error_json)
 }
 
 pub async fn workflow_cancel_execution_session_queue_item(

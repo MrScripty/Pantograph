@@ -188,9 +188,12 @@ policy into adapters.
 **Status:** In progress. Workflow service now exposes
 `workflow_scheduler_timeline_query`, which advances the scheduler timeline
 projection incrementally through the diagnostics ledger cursor and then reads
-materialized `scheduler_timeline_projection` rows. Run list/detail, I/O,
-Library/Pumas, Network/system-node, admin maintenance, and broader command
-boundaries remain pending.
+materialized `scheduler_timeline_projection` rows. The Tauri app now configures
+the shared `WorkflowService` with the persistent diagnostics ledger, exposes the
+query through `workflow_scheduler_timeline_query`, and adds a frontend service
+adapter/type boundary for scheduler timeline projection responses. Run
+list/detail, I/O, Library/Pumas, Network/system-node, admin maintenance, and
+broader command boundaries remain pending.
 
 ### Milestone 3: Frontend Services And Stores
 
@@ -201,6 +204,8 @@ projections while owning only transient UI state.
 
 - [ ] Add or extend `src/services/` modules for run, scheduler, I/O, Library,
   and Network projections.
+- [x] Add the initial scheduler timeline projection service method and
+  TypeScript DTOs.
 - [ ] Add active-run store as transient UI state.
 - [ ] Add focused stores for run list filters/sort/column state.
 - [ ] Preserve backend error categories through presenters.

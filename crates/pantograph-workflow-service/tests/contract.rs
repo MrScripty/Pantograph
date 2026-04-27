@@ -1,4 +1,8 @@
 use async_trait::async_trait;
+use pantograph_diagnostics_ledger::{
+    DiagnosticEventKind, DiagnosticEventSourceComponent, ProjectionStateRecord, ProjectionStatus,
+    SchedulerTimelineProjectionRecord,
+};
 use pantograph_workflow_service::graph::WorkflowExecutionSessionKind;
 use pantograph_workflow_service::{
     WorkflowCapabilitiesRequest, WorkflowCapabilityModel, WorkflowExecutionSessionCreateRequest,
@@ -8,7 +12,8 @@ use pantograph_workflow_service::{
     WorkflowIoPort, WorkflowIoRequest, WorkflowIoResponse, WorkflowOutputTarget,
     WorkflowPortBinding, WorkflowPreflightRequest, WorkflowRuntimeCapability,
     WorkflowRuntimeInstallState, WorkflowRuntimeRequirements, WorkflowRuntimeSourceKind,
-    WorkflowSchedulerSnapshotResponse, WorkflowService, WorkflowServiceError,
+    WorkflowSchedulerSnapshotResponse, WorkflowSchedulerTimelineQueryRequest,
+    WorkflowSchedulerTimelineQueryResponse, WorkflowService, WorkflowServiceError,
     WorkflowTraceNodeRecord, WorkflowTraceNodeStatus, WorkflowTraceQueueMetrics,
     WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
     WorkflowTraceStatus, WorkflowTraceSummary,
@@ -528,6 +533,84 @@ fn workflow_scheduler_snapshot_response_contract_snapshot() {
     });
 
     assert_eq!(value, expected);
+}
+
+#[test]
+fn workflow_scheduler_timeline_query_contract_snapshot() {
+    let request = WorkflowSchedulerTimelineQueryRequest {
+        workflow_run_id: Some("run-1".to_string()),
+        workflow_id: Some("wf-1".to_string()),
+        after_event_seq: Some(10),
+        limit: Some(25),
+        projection_batch_size: Some(100),
+    };
+    let response = WorkflowSchedulerTimelineQueryResponse {
+        events: vec![SchedulerTimelineProjectionRecord {
+            event_seq: 11,
+            event_id: "event-11".to_string(),
+            event_kind: DiagnosticEventKind::SchedulerQueuePlacement,
+            source_component: DiagnosticEventSourceComponent::Scheduler,
+            occurred_at_ms: 1000,
+            recorded_at_ms: 1005,
+            workflow_run_id: "run-1".to_string().try_into().expect("run id"),
+            workflow_id: "wf-1".to_string().try_into().expect("workflow id"),
+            workflow_version_id: Some("version-1".to_string().try_into().expect("version id")),
+            workflow_semantic_version: Some("1.2.3".to_string()),
+            scheduler_policy_id: Some("session_fifo_v1".to_string()),
+            retention_policy_id: None,
+            summary: "queued at position 1 with priority 0".to_string(),
+            detail: Some("scheduler accepted the immutable run snapshot".to_string()),
+            payload_json: r#"{"queue_position":1,"priority":0}"#.to_string(),
+        }],
+        projection_state: ProjectionStateRecord {
+            projection_name: "scheduler_timeline".to_string(),
+            projection_version: 1,
+            last_applied_event_seq: 11,
+            status: ProjectionStatus::Current,
+            rebuilt_at_ms: None,
+            updated_at_ms: 1010,
+        },
+    };
+
+    let request_value = serde_json::to_value(request).expect("serialize timeline request");
+    let expected_request = serde_json::json!({
+        "workflow_run_id": "run-1",
+        "workflow_id": "wf-1",
+        "after_event_seq": 10,
+        "limit": 25,
+        "projection_batch_size": 100
+    });
+    assert_eq!(request_value, expected_request);
+
+    let response_value = serde_json::to_value(response).expect("serialize timeline response");
+    let expected_response = serde_json::json!({
+        "events": [{
+            "event_seq": 11,
+            "event_id": "event-11",
+            "event_kind": "scheduler_queue_placement",
+            "source_component": "scheduler",
+            "occurred_at_ms": 1000,
+            "recorded_at_ms": 1005,
+            "workflow_run_id": "run-1",
+            "workflow_id": "wf-1",
+            "workflow_version_id": "version-1",
+            "workflow_semantic_version": "1.2.3",
+            "scheduler_policy_id": "session_fifo_v1",
+            "retention_policy_id": null,
+            "summary": "queued at position 1 with priority 0",
+            "detail": "scheduler accepted the immutable run snapshot",
+            "payload_json": "{\"queue_position\":1,\"priority\":0}"
+        }],
+        "projection_state": {
+            "projection_name": "scheduler_timeline",
+            "projection_version": 1,
+            "last_applied_event_seq": 11,
+            "status": "current",
+            "rebuilt_at_ms": null,
+            "updated_at_ms": 1010
+        }
+    });
+    assert_eq!(response_value, expected_response);
 }
 
 #[test]

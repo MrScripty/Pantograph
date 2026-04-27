@@ -23,9 +23,6 @@ pub fn run_app() -> AppStartupResult<()> {
 
     // Gateway is created in setup() where the AppHandle is available for ProcessSpawner
 
-    let workflow_service: workflow::commands::SharedWorkflowService =
-        Arc::new(pantograph_workflow_service::WorkflowService::new());
-
     // Resolve the real repo root at runtime so saved workflows survive source tree moves.
     let project_root = resolve_project_root().map_err(|error| {
         startup_error(format!(
@@ -40,6 +37,18 @@ pub fn run_app() -> AppStartupResult<()> {
         ))
     })?;
     let workflow_timing_ledger_path = pantograph_data_dir.join("workflow-diagnostics.sqlite");
+    let workflow_service_ledger =
+        pantograph_workflow_service::SqliteDiagnosticsLedger::open(&workflow_timing_ledger_path)
+            .map_err(|error| {
+                startup_error(format!(
+                    "failed to open workflow service diagnostics ledger {:?}: {error}",
+                    workflow_timing_ledger_path
+                ))
+            })?;
+    let workflow_service: workflow::commands::SharedWorkflowService = Arc::new(
+        pantograph_workflow_service::WorkflowService::new()
+            .with_diagnostics_ledger(workflow_service_ledger),
+    );
     let workflow_timing_ledger =
         pantograph_workflow_service::SqliteDiagnosticsLedger::open(&workflow_timing_ledger_path)
             .map_err(|error| {
@@ -370,6 +379,7 @@ pub fn run_app() -> AppStartupResult<()> {
             crate::workflow::commands::workflow_list_execution_session_queue,
             crate::workflow::commands::workflow_cleanup_stale_execution_sessions,
             crate::workflow::commands::workflow_get_scheduler_snapshot,
+            crate::workflow::commands::workflow_scheduler_timeline_query,
             crate::workflow::commands::workflow_get_diagnostics_snapshot,
             crate::workflow::commands::workflow_get_trace_snapshot,
             crate::workflow::commands::workflow_clear_diagnostics_history,

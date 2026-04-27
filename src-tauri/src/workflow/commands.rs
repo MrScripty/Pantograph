@@ -260,6 +260,15 @@ pub async fn workflow_get_scheduler_snapshot(
 }
 
 #[command]
+pub async fn workflow_scheduler_timeline_query(
+    request: pantograph_workflow_service::WorkflowSchedulerTimelineQueryRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<pantograph_workflow_service::WorkflowSchedulerTimelineQueryResponse, String> {
+    super::headless_workflow_commands::workflow_scheduler_timeline_query(request, workflow_service)
+        .await
+}
+
+#[command]
 pub async fn workflow_cancel_execution_session_queue_item(
     request: pantograph_workflow_service::WorkflowExecutionSessionQueueCancelRequest,
     workflow_service: State<'_, SharedWorkflowService>,

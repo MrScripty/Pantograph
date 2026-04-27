@@ -262,6 +262,66 @@ export interface WorkflowTraceSnapshotResponse {
   retained_trace_limit: number;
 }
 
+export type ProjectionStatus = 'current' | 'rebuilding' | 'needs_rebuild' | 'failed';
+
+export interface ProjectionStateRecord {
+  projection_name: string;
+  projection_version: number;
+  last_applied_event_seq: number;
+  status: ProjectionStatus;
+  rebuilt_at_ms?: number | null;
+  updated_at_ms: number;
+}
+
+export type DiagnosticEventKind =
+  | 'scheduler_estimate_produced'
+  | 'scheduler_queue_placement'
+  | 'run_snapshot_accepted'
+  | 'io_artifact_observed'
+  | 'library_asset_accessed'
+  | 'retention_policy_changed'
+  | 'runtime_capability_observed';
+
+export type DiagnosticEventSourceComponent =
+  | 'scheduler'
+  | 'workflow_service'
+  | 'runtime'
+  | 'node_execution'
+  | 'retention'
+  | 'library'
+  | 'local_observer';
+
+export interface SchedulerTimelineProjectionRecord {
+  event_seq: number;
+  event_id: string;
+  event_kind: DiagnosticEventKind;
+  source_component: DiagnosticEventSourceComponent;
+  occurred_at_ms: number;
+  recorded_at_ms: number;
+  workflow_run_id: string;
+  workflow_id: string;
+  workflow_version_id?: string | null;
+  workflow_semantic_version?: string | null;
+  scheduler_policy_id?: string | null;
+  retention_policy_id?: string | null;
+  summary: string;
+  detail?: string | null;
+  payload_json: string;
+}
+
+export interface WorkflowSchedulerTimelineQueryRequest {
+  workflow_run_id?: string | null;
+  workflow_id?: string | null;
+  after_event_seq?: number | null;
+  limit?: number | null;
+  projection_batch_size?: number | null;
+}
+
+export interface WorkflowSchedulerTimelineQueryResponse {
+  events: SchedulerTimelineProjectionRecord[];
+  projection_state: ProjectionStateRecord;
+}
+
 export interface WorkflowDiagnosticsState extends WorkflowDiagnosticsProjection {
   panelOpen: boolean;
   activeTab: DiagnosticsTab;
