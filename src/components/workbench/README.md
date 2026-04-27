@@ -162,7 +162,9 @@ transient UI state without becoming backend scheduler policy.
   inference. Retention completeness counts come from the response
   `retention_summary`, not from raw ledger events.
 - Retention policy saves call `workflowService.updateRetentionPolicy` and
-  update displayed state only from the backend response.
+  update displayed state only from the backend response. The page may show a
+  saving state, but it must not apply the requested policy as if it were
+  accepted before the backend responds.
 - `LibraryPage.svelte` reads usage and audit summaries through
   `workflowService.queryLibraryUsage`.
 
@@ -198,5 +200,8 @@ transient UI state without becoming backend scheduler policy.
 - Workflow command errors use `formatWorkflowCommandError`, preserving backend
   category labels such as `invalid_request`, `scheduler_busy`, and
   `queue_item_not_found` for users and tests.
+- Queue and retention command results are backend-owned. Workbench components
+  must refresh projections or use returned DTOs instead of editing queue rows
+  or retention facts optimistically.
 - Reserved page unavailable states are not persisted and do not imply backend
   capability flags.

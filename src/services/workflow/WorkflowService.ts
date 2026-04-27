@@ -7,10 +7,6 @@ import type {
   WorkflowNodeStatusQueryResponse,
   WorkflowProjectionRebuildRequest,
   WorkflowProjectionRebuildResponse,
-  WorkflowRetentionPolicyQueryRequest,
-  WorkflowRetentionPolicyQueryResponse,
-  WorkflowRetentionPolicyUpdateRequest,
-  WorkflowRetentionPolicyUpdateResponse,
   WorkflowTraceSnapshotRequest,
   WorkflowTraceSnapshotResponse,
 } from '../diagnostics/types.ts';
@@ -28,11 +24,7 @@ import type {
   WorkflowLocalNetworkStatusQueryRequest,
   WorkflowLocalNetworkStatusQueryResponse,
   WorkflowMetadata,
-  WorkflowSessionQueueCancelRequest,
-  WorkflowSessionQueueCancelResponse,
   WorkflowSessionQueueListResponse,
-  WorkflowSessionQueueReprioritizeRequest,
-  WorkflowSessionQueueReprioritizeResponse,
   WorkflowSessionStatusResponse,
 } from './types.ts';
 import {
@@ -44,7 +36,7 @@ import {
   projectWorkflowEventOwnership,
 } from '@pantograph/svelte-graph';
 import { parseWorkflowGraphMutationResponse } from '../../lib/workflowGraphMutationResponse.ts';
-import { WorkflowProjectionService } from './WorkflowProjectionService.ts';
+import { WorkflowCommandService } from './WorkflowCommandService.ts';
 import { USE_WORKFLOW_MOCKS } from './workflowServiceConfig.ts';
 import { invokeWorkflowCommand } from './workflowServiceErrors.ts';
 
@@ -67,7 +59,7 @@ interface WorkflowSessionQueueListRequest {
   session_id: string;
 }
 
-export class WorkflowService extends WorkflowProjectionService {
+export class WorkflowService extends WorkflowCommandService {
   private channel: Channel<WorkflowEvent> | null = null;
   private eventListeners: Set<(event: WorkflowEvent) => void> = new Set();
 
@@ -266,32 +258,6 @@ export class WorkflowService extends WorkflowProjectionService {
     });
   }
 
-  async cancelSessionQueueItem(
-    request: WorkflowSessionQueueCancelRequest,
-  ): Promise<WorkflowSessionQueueCancelResponse> {
-    if (USE_WORKFLOW_MOCKS) {
-      return { ok: true };
-    }
-
-    return invokeWorkflowCommand<WorkflowSessionQueueCancelResponse>(
-      'workflow_cancel_execution_session_queue_item',
-      { request },
-    );
-  }
-
-  async reprioritizeSessionQueueItem(
-    request: WorkflowSessionQueueReprioritizeRequest,
-  ): Promise<WorkflowSessionQueueReprioritizeResponse> {
-    if (USE_WORKFLOW_MOCKS) {
-      return { ok: true };
-    }
-
-    return invokeWorkflowCommand<WorkflowSessionQueueReprioritizeResponse>(
-      'workflow_reprioritize_execution_session_queue_item',
-      { request },
-    );
-  }
-
   async getSchedulerSnapshot(sessionId?: string): Promise<WorkflowSchedulerSnapshotResponse | null> {
     const id = sessionId ?? this.currentExecutionId;
     if (!id) {
@@ -399,46 +365,6 @@ export class WorkflowService extends WorkflowProjectionService {
     }
 
     return invokeWorkflowCommand<WorkflowProjectionRebuildResponse>('workflow_projection_rebuild', {
-      request,
-    });
-  }
-
-  async queryRetentionPolicy(
-    request: WorkflowRetentionPolicyQueryRequest = {},
-  ): Promise<WorkflowRetentionPolicyQueryResponse> {
-    if (USE_WORKFLOW_MOCKS) {
-      return {
-        retention_policy: {
-          policy_id: 'standard-local-v1',
-          retention_class: 'standard',
-          retention_days: 365,
-          applied_at_ms: Date.now(),
-          explanation: 'Default local model/license usage retention policy',
-        },
-      };
-    }
-
-    return invokeWorkflowCommand<WorkflowRetentionPolicyQueryResponse>('workflow_retention_policy_query', {
-      request,
-    });
-  }
-
-  async updateRetentionPolicy(
-    request: WorkflowRetentionPolicyUpdateRequest,
-  ): Promise<WorkflowRetentionPolicyUpdateResponse> {
-    if (USE_WORKFLOW_MOCKS) {
-      return {
-        retention_policy: {
-          policy_id: 'standard-local-v1',
-          retention_class: 'standard',
-          retention_days: request.retention_days,
-          applied_at_ms: Date.now(),
-          explanation: request.explanation,
-        },
-      };
-    }
-
-    return invokeWorkflowCommand<WorkflowRetentionPolicyUpdateResponse>('workflow_retention_policy_update', {
       request,
     });
   }

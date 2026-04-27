@@ -279,7 +279,7 @@ projections while owning only transient UI state.
 
 **Tasks:**
 
-- [ ] Add or extend `src/services/` modules for run, scheduler, I/O, Library,
+- [x] Add or extend `src/services/` modules for run, scheduler, I/O, Library,
   and Network projections.
 - [x] Add the initial run list projection service method and TypeScript DTOs.
 - [x] Add the initial scheduler timeline projection service method and
@@ -297,7 +297,7 @@ projections while owning only transient UI state.
 - [x] Add active-run store as transient UI state.
 - [x] Add focused stores for run list filters/sort/column state.
 - [x] Preserve backend error categories through presenters.
-- [ ] Avoid optimistic updates for backend-owned queue and retention state.
+- [x] Avoid optimistic updates for backend-owned queue and retention state.
 
 **Verification:**
 
@@ -306,7 +306,7 @@ projections while owning only transient UI state.
 - Polling/subscription lifecycle tests exist if any recurring update loop is
   introduced.
 
-**Status:** In progress. Projection invoke wiring is now split into
+**Status:** Complete. Projection invoke wiring is now split into
 `WorkflowProjectionService`, with `WorkflowService` inheriting that boundary
 for existing GUI callers. The adapter covers scheduler timeline, run-list,
 selected-run, and warm Library usage reads. Workbench-facing workflow command
@@ -314,7 +314,9 @@ paths now normalize backend JSON error envelopes into typed
 `WorkflowServiceError` values, and workbench pages format failures through a
 shared presenter so categories such as `invalid_request`, `scheduler_busy`, and
 `queue_item_not_found` are not collapsed into generic strings. Broader
-optimistic-update avoidance remains pending.
+queue and retention command tests now prove service methods return
+backend-authored responses exactly rather than synthesizing local replacement
+state.
 Active-run selection is already transient in `workbenchStore.ts`; Scheduler
 run-list filters, sort order, and column visibility now live in
 `schedulerRunListStore.ts`.
@@ -351,8 +353,9 @@ mock IPC. Backend fixture coverage for typed event projection, retained
 artifact browsing, expired I/O artifact state, and warm Library usage
 catching-up state is also in place. Frontend error-envelope coverage now proves
 projection service calls preserve backend error categories through typed
-service errors and shared workbench presenters. Remaining work is broader
-Milestone 3 optimistic-update avoidance.
+service errors and shared workbench presenters. Queue and retention command
+coverage proves frontend service consumers receive backend-owned command DTOs
+without optimistic replacement.
 
 ## Ownership And Lifecycle Note
 

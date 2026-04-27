@@ -10,6 +10,8 @@ on raw invoke payloads.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `WorkflowService.ts` | Main client-side workflow service, including session lifecycle, graph mutation, connection-intent commands, and atomic insert-and-connect. |
+| `WorkflowCommandService.ts` | Focused backend-owned queue and retention command service inherited by `WorkflowService` and tested without loading the graph runtime. |
+| `WorkflowService.commands.test.ts` | Tauri mock IPC tests proving queue and retention commands return backend-owned results without optimistic client replacement. |
 | `WorkflowProjectionService.ts` | Focused projection service for scheduler timeline, run-list, selected-run, and warm Library usage reads used by `WorkflowService` and projection boundary tests. |
 | `WorkflowService.projections.test.ts` | Tauri mock IPC tests proving scheduler timeline events, run-list facets, selected-run scheduler estimate fields, and warm projection freshness state survive the service boundary. |
 | `workflowServiceErrors.ts` | Typed workflow command error normalizer and invoke wrapper for backend JSON error envelopes. |
@@ -72,6 +74,9 @@ Workflow command invoke paths that back workbench projections and queue,
 retention, Network, and runtime-status reads use `invokeWorkflowCommand`, which
 normalizes Tauri's JSON error strings into typed `WorkflowServiceError`
 instances while preserving backend error codes and details.
+Queue and retention command methods live in `WorkflowCommandService.ts` so
+their backend-owned no-optimistic-update contract can be tested without
+importing the full graph event runtime required by `WorkflowService.ts`.
 
 ## Alternatives Rejected
 - Remove `WorkflowService` and switch every app caller to `TauriWorkflowBackend`
@@ -121,6 +126,9 @@ instances while preserving backend error codes and details.
 - Workbench-facing workflow command methods must throw `WorkflowServiceError`
   when the backend returns a `WorkflowErrorEnvelope`; callers must not parse
   raw JSON error strings.
+- Queue and retention command methods must return backend-authored command
+  responses exactly. Frontend code may show pending state while waiting, but it
+  must not synthesize replacement queue state or retention policy facts.
 
 ## Revisit Triggers
 - The app graph and all remaining callers migrate to package backends directly.
@@ -219,3 +227,7 @@ const preview = await workflowService.previewNodeInsertOnEdge(
   `WorkflowServiceError.code`. Non-envelope IPC or setup failures are
   classified as `transport_error` so they are not confused with backend policy
   rejections.
+- `updateRetentionPolicy`, `cancelSessionQueueItem`, and
+  `reprioritizeSessionQueueItem` resolve only with backend response DTOs.
+  Callers refresh projections or apply the returned backend policy; they do not
+  optimistically mutate queue rows or retention facts.
