@@ -1,45 +1,9 @@
 import type {
   ProjectionStateRecord,
   RunListProjectionRecord,
-  RunListProjectionStatus,
   SchedulerTimelineProjectionRecord,
 } from '../../services/diagnostics/types';
-
-export type SchedulerStatusFilter = 'all' | RunListProjectionStatus;
-
-export type SchedulerSortKey =
-  | 'last_updated_desc'
-  | 'queued_desc'
-  | 'duration_desc'
-  | 'workflow_asc'
-  | 'status_asc';
-
-export interface SchedulerRunFilters {
-  search: string;
-  status: SchedulerStatusFilter;
-  schedulerPolicy: string;
-  retentionPolicy: string;
-  sort: SchedulerSortKey;
-}
-
-export const SCHEDULER_STATUS_FILTERS: SchedulerStatusFilter[] = [
-  'all',
-  'accepted',
-  'queued',
-  'delayed',
-  'running',
-  'completed',
-  'failed',
-  'cancelled',
-];
-
-export const SCHEDULER_SORT_OPTIONS: { label: string; value: SchedulerSortKey }[] = [
-  { label: 'Updated', value: 'last_updated_desc' },
-  { label: 'Queued', value: 'queued_desc' },
-  { label: 'Duration', value: 'duration_desc' },
-  { label: 'Workflow', value: 'workflow_asc' },
-  { label: 'Status', value: 'status_asc' },
-];
+import type { SchedulerRunFilters, SchedulerSortKey } from '../../stores/schedulerRunListStore';
 
 export function formatSchedulerTimestamp(value: number | null | undefined): string {
   if (!value) {

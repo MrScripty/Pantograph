@@ -13,6 +13,14 @@
     setWorkbenchPage,
   } from '../../stores/workbenchStore';
   import {
+    schedulerRunFilters,
+    setSchedulerRunFilters,
+    SCHEDULER_SORT_OPTIONS,
+    SCHEDULER_STATUS_FILTERS,
+    type SchedulerSortKey,
+    type SchedulerStatusFilter,
+  } from '../../stores/schedulerRunListStore';
+  import {
     filterAndSortSchedulerRuns,
     formatSchedulerProjectionFreshness,
     formatSchedulerPolicyLabel,
@@ -29,18 +37,9 @@
     schedulerPolicyFilterOptions,
     schedulerRetentionFilterOptions,
     schedulerTimelinePayloadLabel,
-    SCHEDULER_SORT_OPTIONS,
-    SCHEDULER_STATUS_FILTERS,
-    type SchedulerSortKey,
-    type SchedulerStatusFilter,
   } from './schedulerPagePresenters';
 
   let runs = $state<RunListProjectionRecord[]>([]);
-  let searchQuery = $state('');
-  let statusFilter = $state<SchedulerStatusFilter>('all');
-  let schedulerPolicyFilter = $state('all');
-  let retentionPolicyFilter = $state('all');
-  let sortKey = $state<SchedulerSortKey>('last_updated_desc');
   let loading = $state(false);
   let error = $state<string | null>(null);
   let projectionUpdatedAtMs = $state<number | null>(null);
@@ -53,20 +52,16 @@
   let refreshInFlight = false;
   let refreshAgain = false;
   let eventUnsubscribe: (() => void) | null = null;
-  let displayedRuns = $derived(
-    filterAndSortSchedulerRuns(runs, {
-      search: searchQuery,
-      status: statusFilter,
-      schedulerPolicy: schedulerPolicyFilter,
-      retentionPolicy: retentionPolicyFilter,
-      sort: sortKey,
-    }),
-  );
+  let displayedRuns = $derived(filterAndSortSchedulerRuns(runs, $schedulerRunFilters));
   let schedulerPolicyOptions = $derived(schedulerPolicyFilterOptions(runs));
   let retentionPolicyOptions = $derived(schedulerRetentionFilterOptions(runs));
 
   function activeRunId(): string | null {
     return $activeWorkflowRun?.workflow_run_id ?? null;
+  }
+
+  function eventValue(event: Event): string {
+    return (event.currentTarget as HTMLInputElement | HTMLSelectElement).value;
   }
 
   async function refreshRuns(): Promise<void> {
@@ -199,7 +194,8 @@
       <input
         id="scheduler-run-search"
         type="search"
-        bind:value={searchQuery}
+        value={$schedulerRunFilters.search}
+        oninput={(event) => setSchedulerRunFilters({ search: eventValue(event) })}
         class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
       />
     </div>
@@ -209,7 +205,9 @@
       </label>
       <select
         id="scheduler-status-filter"
-        bind:value={statusFilter}
+        value={$schedulerRunFilters.status}
+        onchange={(event) =>
+          setSchedulerRunFilters({ status: eventValue(event) as SchedulerStatusFilter })}
         class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
       >
         {#each SCHEDULER_STATUS_FILTERS as status (status)}
@@ -223,7 +221,8 @@
       </label>
       <select
         id="scheduler-sort"
-        bind:value={sortKey}
+        value={$schedulerRunFilters.sort}
+        onchange={(event) => setSchedulerRunFilters({ sort: eventValue(event) as SchedulerSortKey })}
         class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
       >
         {#each SCHEDULER_SORT_OPTIONS as option (option.value)}
@@ -237,7 +236,8 @@
       </label>
       <select
         id="scheduler-policy-filter"
-        bind:value={schedulerPolicyFilter}
+        value={$schedulerRunFilters.schedulerPolicy}
+        onchange={(event) => setSchedulerRunFilters({ schedulerPolicy: eventValue(event) })}
         class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
       >
         <option value="all">all</option>
@@ -252,7 +252,8 @@
       </label>
       <select
         id="scheduler-retention-filter"
-        bind:value={retentionPolicyFilter}
+        value={$schedulerRunFilters.retentionPolicy}
+        onchange={(event) => setSchedulerRunFilters({ retentionPolicy: eventValue(event) })}
         class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
       >
         <option value="all">all</option>

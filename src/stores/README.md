@@ -14,6 +14,7 @@ components observe the same graph state.
 | `diagnosticsStore.ts` | Single app-level owner for diagnostics subscriptions, trace snapshots, and diagnostics panel state. |
 | `diagnosticsProjection.ts` | Pure helper module that normalizes diagnostics projections and builds immutable UI snapshots without subscribing to workflow events itself. |
 | `workbenchStore.ts` | Transient workbench navigation and active-run context shared by Scheduler, Diagnostics, Graph, I/O Inspector, Library, Network, and Node Editor pages. |
+| `schedulerRunListStore.ts` | Transient Scheduler run-table filter, sort, and column-visibility state shared by the Scheduler page and presenter tests. |
 | `graphSessionStore.ts` | Tracks the active graph/session identity at the app layer. |
 | `viewStore.ts` | App navigation and zoom wrappers built around the package view stores. |
 | `architectureStore.ts` | Converts architecture data into workflow-like graph structures for the shared canvas. |
@@ -56,6 +57,10 @@ irrelevant by that context. `workbenchStore.ts` owns the frontend-only page
 selection and active-run context used by the run-centric shell. That state is
 deliberately transient: it coordinates pages during the current GUI session, but
 does not persist active-run selection or become a backend source of run truth.
+`schedulerRunListStore.ts` owns dense Scheduler table filter, sort, and
+column-visibility state so the page does not duplicate run-list UI state in
+component-local variables while backend projection services remain the only
+source of run data.
 
 ## Alternatives Rejected
 - Keep separate app-only and package-only workflow stores.
@@ -84,6 +89,9 @@ does not persist active-run selection or become a backend source of run truth.
   only. Components must fetch run details, timelines, I/O metadata, and Library
   usage through backend projection services rather than enriching the selected
   active-run context with durable data.
+- Scheduler run-list filters, sort order, and column visibility are transient
+  UI preferences. They must not mutate backend queue state or be treated as
+  scheduler policy.
 
 ## Revisit Triggers
 - The legacy store facade is no longer imported anywhere.
@@ -153,6 +161,8 @@ diagnosticsSnapshot.subscribe(({ selectedRun }) => {
   events; they are not durable artifacts in v1.
 - Workbench active-run context is in-memory GUI state and may be `null` at
   startup even when runs exist in scheduler projections.
+- Scheduler run-list filter state is in-memory GUI state. It may be reset
+  without changing queued runs, selected active run, or backend projections.
 - `currentSessionState` is an additive backend-owned inspection snapshot and
   may be absent from event-driven projections even when a direct diagnostics
   fetch has already populated it.

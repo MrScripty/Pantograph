@@ -257,6 +257,10 @@ a bounded warm-projection batch applies only part of the pending Library usage
 event cursor. Frontend projection tests preserve that warm catching-up state
 through Tauri mock IPC so Library pages can display freshness without reading
 raw ledger rows.
+`workbenchStore.ts` owns transient active-run selection and
+`schedulerRunListStore.ts` now owns Scheduler table filters, sort order, and
+column visibility, so the Scheduler page consumes backend projections without
+turning UI preferences into backend queue policy.
 `workflow_run_list_query` now returns backend-owned comparison facets for
 workflow version, status, scheduler policy, and retention policy from the
 run-list projection. Diagnostics pages use those scoped facets for
@@ -290,8 +294,8 @@ projections while owning only transient UI state.
 - [x] Add the initial local Network status service method and TypeScript DTOs.
 - [x] Add frontend methods and DTOs for scoped queue cancel/reprioritize
   actions.
-- [ ] Add active-run store as transient UI state.
-- [ ] Add focused stores for run list filters/sort/column state.
+- [x] Add active-run store as transient UI state.
+- [x] Add focused stores for run list filters/sort/column state.
 - [ ] Preserve backend error categories through presenters.
 - [ ] Avoid optimistic updates for backend-owned queue and retention state.
 
@@ -307,6 +311,9 @@ projections while owning only transient UI state.
 for existing GUI callers. The adapter covers scheduler timeline, run-list,
 selected-run, and warm Library usage reads. Broader frontend store ownership,
 error category preservation, and optimistic-update avoidance remain pending.
+Active-run selection is already transient in `workbenchStore.ts`; Scheduler
+run-list filters, sort order, and column visibility now live in
+`schedulerRunListStore.ts`.
 
 ### Milestone 4: Cross-Layer Acceptance
 

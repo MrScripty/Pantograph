@@ -60,7 +60,9 @@ Create a dedicated workbench component boundary under `src/components` and let
 `App.svelte` mount it as the only root workspace. The shell reads page and
 active-run state from `workbenchStore.ts`. Scheduler uses the typed run-list
 projection service to populate the initial dense list and coalesces refreshes
-triggered by workflow events rather than polling.
+triggered by workflow events rather than polling. Scheduler table filters, sort
+order, and column visibility live in `schedulerRunListStore.ts` so they remain
+transient UI state without becoming backend scheduler policy.
 
 ## Alternatives Rejected
 - Keep the old canvas/workflow view-mode toggle as the root shell.
@@ -74,9 +76,11 @@ triggered by workflow events rather than polling.
 - `WorkbenchShell.svelte` owns page routing, not page bodies.
 - Scheduler row selection may set active-run context, but durable run data must
   still be fetched from projection services by each page.
-- Scheduler table search, status filter, policy-field filters, and sort
-  controls operate only on the materialized run-list projection returned by the
-  backend.
+- Scheduler table search, status filter, policy-field filters, sort controls,
+  and column visibility operate only on the materialized run-list projection
+  returned by the backend. The control state is owned by
+  `schedulerRunListStore.ts`, not by the backend scheduler and not by
+  component-local durable state.
 - Scheduler timeline rows come from `workflowService.querySchedulerTimeline`.
   Components render typed summary/detail fields and payload availability only.
 - Scheduler status presentation includes delayed rows from the run-list
