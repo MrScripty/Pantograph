@@ -241,6 +241,10 @@ including payload-reference removal after expiration or deletion. The same API
 response now includes retention-state summary counts from the materialized
 artifact projection so pages can show retention completeness without issuing
 raw ledger scans.
+Workflow-service diagnostics tests now include an expired-retention artifact
+fixture that proves `workflow_io_artifact_query` returns the expired
+`retention_state`, clears the payload reference, and reports matching
+retention-summary counts through the public API.
 `workflow_run_list_query` now returns backend-owned comparison facets for
 workflow version, status, scheduler policy, and retention policy from the
 run-list projection. Diagnostics pages use those scoped facets for
@@ -299,7 +303,7 @@ implementation depends on it.
   to frontend service consumer.
 - [ ] Add an acceptance path for selected run detail with workflow version and
   scheduler estimate.
-- [ ] Add fixture data for expired-retention artifact behavior.
+- [x] Add fixture data for expired-retention artifact behavior.
 - [ ] Add fixture data for no-active-run retained artifact browsing where
   supported.
 - [ ] Add an acceptance path proving a typed event reaches a backend projection

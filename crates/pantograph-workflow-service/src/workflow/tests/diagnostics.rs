@@ -4,9 +4,10 @@ use pantograph_diagnostics_ledger::{
     ExecutionGuaranteeLevel, IoArtifactObservedPayload, IoArtifactRetentionState,
     LibraryAssetAccessedPayload, LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent,
     ModelOutputMeasurement, NodeExecutionProjectionStatus, NodeExecutionStatusPayload,
-    OutputModality, RetentionClass, RunListFacetKind, RunSnapshotAcceptedPayload,
-    RunStartedPayload, RunTerminalPayload, RunTerminalStatus, SchedulerEstimateProducedPayload,
-    SchedulerQueuePlacementPayload, UsageEventStatus, UsageLineage,
+    OutputModality, RetentionArtifactStateChangedPayload, RetentionClass, RunListFacetKind,
+    RunSnapshotAcceptedPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
+    SchedulerEstimateProducedPayload, SchedulerQueuePlacementPayload, UsageEventStatus,
+    UsageLineage,
 };
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, UsageEventId, WorkflowId, WorkflowRunId, WorkflowVersionId,
@@ -384,6 +385,59 @@ fn workflow_io_artifact_query_drains_and_reads_projection() {
         .expect("global io artifact query");
     assert_eq!(global_response.artifacts.len(), 2);
     assert_eq!(global_response.retention_summary[0].artifact_count, 2);
+}
+
+#[test]
+fn workflow_io_artifact_query_exposes_expired_retention_state() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_io_artifact_event(
+            "node-a",
+            "workflow_output",
+            "artifact-expired",
+        ))
+        .expect("io artifact event");
+    ledger
+        .append_diagnostic_event(sample_retention_artifact_state_changed_event(
+            "artifact-expired",
+            IoArtifactRetentionState::Expired,
+        ))
+        .expect("retention state change event");
+    let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+
+    let response = service
+        .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
+            workflow_run_id: Some("run-a".to_string()),
+            node_id: None,
+            artifact_role: None,
+            media_type: None,
+            retention_state: Some(IoArtifactRetentionState::Expired),
+            retention_policy_id: Some("ephemeral".to_string()),
+            runtime_id: None,
+            model_id: None,
+            after_event_seq: None,
+            limit: Some(10),
+            projection_batch_size: Some(10),
+        })
+        .expect("expired io artifact query");
+
+    assert_eq!(response.artifacts.len(), 1);
+    assert_eq!(response.artifacts[0].artifact_id, "artifact-expired");
+    assert_eq!(
+        response.artifacts[0].retention_state,
+        IoArtifactRetentionState::Expired
+    );
+    assert_eq!(response.artifacts[0].payload_ref, None);
+    assert_eq!(
+        response.artifacts[0].retention_reason.as_deref(),
+        Some("retention policy expired payload")
+    );
+    assert_eq!(response.retention_summary.len(), 1);
+    assert_eq!(
+        response.retention_summary[0].retention_state,
+        IoArtifactRetentionState::Expired
+    );
+    assert_eq!(response.retention_summary[0].artifact_count, 1);
 }
 
 #[test]
@@ -848,6 +902,43 @@ fn sample_io_artifact_event(
             retention_state: Some(IoArtifactRetentionState::Retained),
             retention_reason: None,
         }),
+    }
+}
+
+fn sample_retention_artifact_state_changed_event(
+    artifact_id: &str,
+    retention_state: IoArtifactRetentionState,
+) -> DiagnosticEventAppendRequest {
+    DiagnosticEventAppendRequest {
+        source_component: DiagnosticEventSourceComponent::Retention,
+        source_instance_id: Some("retention-worker".to_string()),
+        occurred_at_ms: 40,
+        workflow_run_id: Some(WorkflowRunId::try_from("run-a".to_string()).unwrap()),
+        workflow_id: Some(WorkflowId::try_from("workflow-a".to_string()).unwrap()),
+        workflow_version_id: Some(WorkflowVersionId::try_from("wfver-a".to_string()).unwrap()),
+        workflow_semantic_version: Some("1.0.0".to_string()),
+        node_id: None,
+        node_type: None,
+        node_version: None,
+        runtime_id: None,
+        runtime_version: None,
+        model_id: None,
+        model_version: None,
+        client_id: Some(ClientId::try_from("client-a".to_string()).unwrap()),
+        client_session_id: Some(ClientSessionId::try_from("session-a".to_string()).unwrap()),
+        bucket_id: Some(BucketId::try_from("bucket-a".to_string()).unwrap()),
+        scheduler_policy_id: Some("priority_then_fifo".to_string()),
+        retention_policy_id: Some("ephemeral".to_string()),
+        privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+        retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+        payload_ref: None,
+        payload: DiagnosticEventPayload::RetentionArtifactStateChanged(
+            RetentionArtifactStateChangedPayload {
+                artifact_id: artifact_id.to_string(),
+                retention_state,
+                reason: "retention policy expired payload".to_string(),
+            },
+        ),
     }
 }
 
