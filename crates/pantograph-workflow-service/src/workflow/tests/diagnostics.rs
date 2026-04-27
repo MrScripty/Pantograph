@@ -487,6 +487,18 @@ fn workflow_library_usage_query_validates_bounds() {
     ));
 }
 
+#[test]
+fn workflow_retention_policy_query_reads_current_policy() {
+    let service = WorkflowService::with_ephemeral_diagnostics_ledger().expect("service");
+
+    let response = service
+        .workflow_retention_policy_query(WorkflowRetentionPolicyQueryRequest {})
+        .expect("retention policy query");
+
+    assert_eq!(response.retention_policy.policy_id, "standard-local-v1");
+    assert_eq!(response.retention_policy.retention_days, 365);
+}
+
 fn sample_run_snapshot_event() -> DiagnosticEventAppendRequest {
     DiagnosticEventAppendRequest {
         source_component: DiagnosticEventSourceComponent::WorkflowService,

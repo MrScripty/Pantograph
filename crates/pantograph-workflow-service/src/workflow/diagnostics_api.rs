@@ -207,6 +207,16 @@ pub struct WorkflowProjectionRebuildResponse {
     pub projection_state: ProjectionStateRecord,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowRetentionPolicyQueryRequest {}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowRetentionPolicyQueryResponse {
+    pub retention_policy: DiagnosticsRetentionPolicy,
+}
+
 impl WorkflowService {
     pub fn workflow_diagnostics_usage_query(
         &self,
@@ -372,6 +382,18 @@ impl WorkflowService {
             .map_err(WorkflowServiceError::from)?;
 
         Ok(WorkflowProjectionRebuildResponse { projection_state })
+    }
+
+    pub fn workflow_retention_policy_query(
+        &self,
+        _request: WorkflowRetentionPolicyQueryRequest,
+    ) -> Result<WorkflowRetentionPolicyQueryResponse, WorkflowServiceError> {
+        let ledger = self.diagnostics_ledger_guard()?;
+        let retention_policy = ledger
+            .retention_policy()
+            .map_err(WorkflowServiceError::from)?;
+
+        Ok(WorkflowRetentionPolicyQueryResponse { retention_policy })
     }
 }
 

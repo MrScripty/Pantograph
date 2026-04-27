@@ -165,7 +165,7 @@ policy into adapters.
 - [ ] Add workflow-version graph lookup by run id.
 - [ ] Add I/O metadata and retention policy queries/commands.
   - I/O artifact metadata query is implemented. Retention policy
-    queries/commands remain pending.
+    query is implemented. Retention policy commands remain pending.
 - [x] Add Library/Pumas usage audit queries.
 - [x] Add projection rebuild/query boundaries for typed event ledger derived
   views.
@@ -205,7 +205,8 @@ DTOs now expose backend-owned filters for workflow version, scheduler policy,
 runtime/model ids, media type, retention policy, node id, and artifact role
 where those fields exist. `workflow_library_usage_query` now exposes warm
 Library/Pumas usage aggregates with projection freshness state. Retention
-policy, Network/system-node, and broader command boundaries remain pending.
+policy query is exposed for GUI retention settings/inspectors. Retention policy
+commands, Network/system-node, and broader command boundaries remain pending.
 `workflow_projection_rebuild`
 provides the first explicit admin maintenance boundary for hot projection
 repair and projection-version rebuild scenarios.

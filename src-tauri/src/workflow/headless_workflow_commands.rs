@@ -17,7 +17,8 @@ use pantograph_workflow_service::{
     WorkflowIoArtifactQueryRequest, WorkflowIoArtifactQueryResponse, WorkflowIoRequest,
     WorkflowIoResponse, WorkflowLibraryUsageQueryRequest, WorkflowLibraryUsageQueryResponse,
     WorkflowPreflightRequest, WorkflowPreflightResponse, WorkflowProjectionRebuildRequest,
-    WorkflowProjectionRebuildResponse, WorkflowRunDetailQueryRequest,
+    WorkflowProjectionRebuildResponse, WorkflowRetentionPolicyQueryRequest,
+    WorkflowRetentionPolicyQueryResponse, WorkflowRunDetailQueryRequest,
     WorkflowRunDetailQueryResponse, WorkflowRunListQueryRequest, WorkflowRunListQueryResponse,
     WorkflowRunResponse, WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse,
     WorkflowSchedulerTimelineQueryRequest, WorkflowSchedulerTimelineQueryResponse,
@@ -263,6 +264,15 @@ pub async fn workflow_library_usage_query(
 ) -> Result<WorkflowLibraryUsageQueryResponse, String> {
     workflow_service
         .workflow_library_usage_query(request)
+        .map_err(workflow_error_json)
+}
+
+pub async fn workflow_retention_policy_query(
+    request: WorkflowRetentionPolicyQueryRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowRetentionPolicyQueryResponse, String> {
+    workflow_service
+        .workflow_retention_policy_query(request)
         .map_err(workflow_error_json)
 }
 

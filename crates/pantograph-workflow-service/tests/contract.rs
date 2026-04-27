@@ -1,8 +1,9 @@
 use async_trait::async_trait;
 use pantograph_diagnostics_ledger::{
-    DiagnosticEventKind, DiagnosticEventSourceComponent, IoArtifactProjectionRecord,
-    LibraryUsageProjectionRecord, ProjectionStateRecord, ProjectionStatus,
-    RunDetailProjectionRecord, RunListProjectionStatus, SchedulerTimelineProjectionRecord,
+    DiagnosticEventKind, DiagnosticEventSourceComponent, DiagnosticsRetentionPolicy,
+    IoArtifactProjectionRecord, LibraryUsageProjectionRecord, ProjectionStateRecord,
+    ProjectionStatus, RetentionClass, RunDetailProjectionRecord, RunListProjectionStatus,
+    SchedulerTimelineProjectionRecord,
 };
 use pantograph_workflow_service::graph::WorkflowExecutionSessionKind;
 use pantograph_workflow_service::{
@@ -14,6 +15,7 @@ use pantograph_workflow_service::{
     WorkflowIoPort, WorkflowIoRequest, WorkflowIoResponse, WorkflowLibraryUsageQueryRequest,
     WorkflowLibraryUsageQueryResponse, WorkflowOutputTarget, WorkflowPortBinding,
     WorkflowPreflightRequest, WorkflowProjectionRebuildRequest, WorkflowProjectionRebuildResponse,
+    WorkflowRetentionPolicyQueryRequest, WorkflowRetentionPolicyQueryResponse,
     WorkflowRunDetailQueryRequest, WorkflowRunDetailQueryResponse, WorkflowRuntimeCapability,
     WorkflowRuntimeInstallState, WorkflowRuntimeRequirements, WorkflowRuntimeSourceKind,
     WorkflowSchedulerSnapshotResponse, WorkflowSchedulerTimelineQueryRequest,
@@ -928,6 +930,36 @@ fn workflow_library_usage_query_contract_snapshot() {
             "status": "current",
             "rebuilt_at_ms": null,
             "updated_at_ms": 1410
+        }
+    });
+    assert_eq!(response_value, expected_response);
+}
+
+#[test]
+fn workflow_retention_policy_query_contract_snapshot() {
+    let request = WorkflowRetentionPolicyQueryRequest {};
+    let response = WorkflowRetentionPolicyQueryResponse {
+        retention_policy: DiagnosticsRetentionPolicy {
+            policy_id: "standard-local-v1".to_string(),
+            retention_class: RetentionClass::Standard,
+            retention_days: 365,
+            applied_at_ms: 1500,
+            explanation: "Default local model/license usage retention policy".to_string(),
+        },
+    };
+
+    let request_value = serde_json::to_value(request).expect("serialize retention request");
+    let expected_request = serde_json::json!({});
+    assert_eq!(request_value, expected_request);
+
+    let response_value = serde_json::to_value(response).expect("serialize retention response");
+    let expected_response = serde_json::json!({
+        "retention_policy": {
+            "policy_id": "standard-local-v1",
+            "retention_class": "standard",
+            "retention_days": 365,
+            "applied_at_ms": 1500,
+            "explanation": "Default local model/license usage retention policy"
         }
     });
     assert_eq!(response_value, expected_response);

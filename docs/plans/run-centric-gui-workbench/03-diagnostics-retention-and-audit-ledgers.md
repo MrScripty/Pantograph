@@ -301,6 +301,8 @@ availability.
 - [ ] Emit typed `io.*` events for artifact observation, retention state
   changes, truncation, externalization, expiration, and deletion.
 - [ ] Add global retention policy record and policy version.
+  - Existing standard local retention policy is now exposed as a first-class
+    backend/API query. Policy mutation/version history remains pending.
 - [ ] Define first-pass global retention settings for final outputs, workflow
   inputs, intermediate node I/O, failed-run data, maximum artifact size,
   maximum total storage, media behavior, compression/archive behavior, and

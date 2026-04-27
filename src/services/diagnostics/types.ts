@@ -461,6 +461,22 @@ export interface WorkflowLibraryUsageQueryResponse {
   projection_state: ProjectionStateRecord;
 }
 
+export type DiagnosticsRetentionClass = 'standard';
+
+export interface DiagnosticsRetentionPolicy {
+  policy_id: string;
+  retention_class: DiagnosticsRetentionClass;
+  retention_days: number;
+  applied_at_ms: number;
+  explanation: string;
+}
+
+export interface WorkflowRetentionPolicyQueryRequest {}
+
+export interface WorkflowRetentionPolicyQueryResponse {
+  retention_policy: DiagnosticsRetentionPolicy;
+}
+
 export interface WorkflowSchedulerTimelineQueryRequest {
   workflow_run_id?: string | null;
   workflow_id?: string | null;

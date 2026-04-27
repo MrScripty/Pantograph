@@ -7,6 +7,8 @@ import type {
   WorkflowLibraryUsageQueryResponse,
   WorkflowProjectionRebuildRequest,
   WorkflowProjectionRebuildResponse,
+  WorkflowRetentionPolicyQueryRequest,
+  WorkflowRetentionPolicyQueryResponse,
   WorkflowRunDetailQueryRequest,
   WorkflowRunDetailQueryResponse,
   WorkflowRunListQueryRequest,
@@ -417,6 +419,26 @@ export class WorkflowService extends WorkflowGraphMutationService {
     }
 
     return invoke<WorkflowLibraryUsageQueryResponse>('workflow_library_usage_query', {
+      request,
+    });
+  }
+
+  async queryRetentionPolicy(
+    request: WorkflowRetentionPolicyQueryRequest = {},
+  ): Promise<WorkflowRetentionPolicyQueryResponse> {
+    if (USE_WORKFLOW_MOCKS) {
+      return {
+        retention_policy: {
+          policy_id: 'standard-local-v1',
+          retention_class: 'standard',
+          retention_days: 365,
+          applied_at_ms: Date.now(),
+          explanation: 'Default local model/license usage retention policy',
+        },
+      };
+    }
+
+    return invoke<WorkflowRetentionPolicyQueryResponse>('workflow_retention_policy_query', {
       request,
     });
   }
