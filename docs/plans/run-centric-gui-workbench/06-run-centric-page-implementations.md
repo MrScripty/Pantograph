@@ -148,11 +148,11 @@ into a second source of truth.
 renders a dense projection-backed run table, first-class queued/future rows
 where present in the run-list projection, selected-run actions, active-run
 updates, projection freshness, search, status filtering, stable local sort
-options, scheduler policy IDs, retention policy IDs, a selected-run timeline
-panel, timeline projection freshness, and timeline summary/detail rows without
-raw event parsing. Queue position, priority, estimates, progress,
-model/runtime summaries, delay reason, richer retention summaries, and
-privileged queue action controls remain open.
+options, scheduler policy IDs, retention policy IDs, scheduler-policy and
+retention-policy filters, a selected-run timeline panel, timeline projection
+freshness, and timeline summary/detail rows without raw event parsing. Queue
+position, priority, estimates, progress, model/runtime summaries, delay reason,
+richer retention summaries, and privileged queue action controls remain open.
 
 ### Milestone 2: Diagnostics Page
 
@@ -408,6 +408,8 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
   Scheduler timestamp/duration labels, status classes, filtering, and sorting.
 - Added Scheduler table columns for the typed scheduler policy and retention
   policy IDs already available on `RunListProjectionRecord`.
+- Added Scheduler table filters for the typed scheduler policy and retention
+  policy row fields without parsing scheduler event payloads.
 - Added a Scheduler selected-run timeline panel backed by
   `workflowService.querySchedulerTimeline`, including projection freshness and
   typed summary/detail rendering without raw payload parsing.

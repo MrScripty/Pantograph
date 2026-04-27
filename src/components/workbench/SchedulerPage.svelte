@@ -22,6 +22,8 @@
     formatSchedulerDuration,
     formatSchedulerTimestamp,
     schedulerStatusClass,
+    schedulerPolicyFilterOptions,
+    schedulerRetentionFilterOptions,
     schedulerTimelinePayloadLabel,
     SCHEDULER_SORT_OPTIONS,
     SCHEDULER_STATUS_FILTERS,
@@ -32,6 +34,8 @@
   let runs = $state<RunListProjectionRecord[]>([]);
   let searchQuery = $state('');
   let statusFilter = $state<SchedulerStatusFilter>('all');
+  let schedulerPolicyFilter = $state('all');
+  let retentionPolicyFilter = $state('all');
   let sortKey = $state<SchedulerSortKey>('last_updated_desc');
   let loading = $state(false);
   let error = $state<string | null>(null);
@@ -49,9 +53,13 @@
     filterAndSortSchedulerRuns(runs, {
       search: searchQuery,
       status: statusFilter,
+      schedulerPolicy: schedulerPolicyFilter,
+      retentionPolicy: retentionPolicyFilter,
       sort: sortKey,
     }),
   );
+  let schedulerPolicyOptions = $derived(schedulerPolicyFilterOptions(runs));
+  let retentionPolicyOptions = $derived(schedulerRetentionFilterOptions(runs));
 
   function activeRunId(): string | null {
     return $activeWorkflowRun?.workflow_run_id ?? null;
@@ -179,7 +187,7 @@
     <div class="border-b border-red-900 bg-red-950/50 px-4 py-2 text-sm text-red-200">{error}</div>
   {/if}
 
-  <div class="grid shrink-0 gap-3 border-b border-neutral-900 px-4 py-3 md:grid-cols-[minmax(12rem,1fr)_12rem_12rem]">
+  <div class="grid shrink-0 gap-3 border-b border-neutral-900 px-4 py-3 md:grid-cols-[minmax(12rem,1fr)_12rem_12rem] xl:grid-cols-[minmax(12rem,1fr)_12rem_12rem_12rem_12rem]">
     <div>
       <label for="scheduler-run-search" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
         Search
@@ -216,6 +224,36 @@
       >
         {#each SCHEDULER_SORT_OPTIONS as option (option.value)}
           <option value={option.value}>{option.label}</option>
+        {/each}
+      </select>
+    </div>
+    <div>
+      <label for="scheduler-policy-filter" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
+        Policy
+      </label>
+      <select
+        id="scheduler-policy-filter"
+        bind:value={schedulerPolicyFilter}
+        class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
+      >
+        <option value="all">all</option>
+        {#each schedulerPolicyOptions as policy (policy)}
+          <option value={policy}>{policy}</option>
+        {/each}
+      </select>
+    </div>
+    <div>
+      <label for="scheduler-retention-filter" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
+        Retention
+      </label>
+      <select
+        id="scheduler-retention-filter"
+        bind:value={retentionPolicyFilter}
+        class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
+      >
+        <option value="all">all</option>
+        {#each retentionPolicyOptions as retention (retention)}
+          <option value={retention}>{retention}</option>
         {/each}
       </select>
     </div>

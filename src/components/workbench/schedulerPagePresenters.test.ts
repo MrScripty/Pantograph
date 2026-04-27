@@ -11,6 +11,8 @@ import {
   formatSchedulerTimelineSource,
   formatSchedulerDuration,
   formatSchedulerTimestamp,
+  schedulerPolicyFilterOptions,
+  schedulerRetentionFilterOptions,
   schedulerTimelinePayloadLabel,
   schedulerStatusClass,
 } from './schedulerPagePresenters.ts';
@@ -70,6 +72,8 @@ test('filterAndSortSchedulerRuns filters by status and search text', () => {
   const filtered = filterAndSortSchedulerRuns(runs, {
     search: 'caption',
     status: 'queued',
+    schedulerPolicy: 'all',
+    retentionPolicy: 'all',
     sort: 'workflow_asc',
   });
 
@@ -87,6 +91,8 @@ test('filterAndSortSchedulerRuns sorts by operational fields', () => {
     filterAndSortSchedulerRuns(runs, {
       search: '',
       status: 'all',
+      schedulerPolicy: 'all',
+      retentionPolicy: 'all',
       sort: 'last_updated_desc',
     }).map((item) => item.workflow_run_id),
     ['run-b', 'run-c', 'run-a'],
@@ -95,9 +101,44 @@ test('filterAndSortSchedulerRuns sorts by operational fields', () => {
     filterAndSortSchedulerRuns(runs, {
       search: '',
       status: 'all',
+      schedulerPolicy: 'all',
+      retentionPolicy: 'all',
       sort: 'duration_desc',
     }).map((item) => item.workflow_run_id),
     ['run-b', 'run-a', 'run-c'],
+  );
+});
+
+test('scheduler policy filters use explicit projection labels', () => {
+  const runs = [
+    run({
+      workflow_run_id: 'run-a',
+      scheduler_policy_id: 'policy-b',
+      retention_policy_id: 'retention-a',
+    }),
+    run({
+      workflow_run_id: 'run-b',
+      scheduler_policy_id: 'policy-a',
+      retention_policy_id: null,
+    }),
+    run({
+      workflow_run_id: 'run-c',
+      scheduler_policy_id: '',
+      retention_policy_id: 'retention-b',
+    }),
+  ];
+
+  assert.deepEqual(schedulerPolicyFilterOptions(runs), ['Unassigned', 'policy-a', 'policy-b']);
+  assert.deepEqual(schedulerRetentionFilterOptions(runs), ['Unassigned', 'retention-a', 'retention-b']);
+  assert.deepEqual(
+    filterAndSortSchedulerRuns(runs, {
+      search: '',
+      status: 'all',
+      schedulerPolicy: 'policy-a',
+      retentionPolicy: 'Unassigned',
+      sort: 'workflow_asc',
+    }).map((item) => item.workflow_run_id),
+    ['run-b'],
   );
 });
 

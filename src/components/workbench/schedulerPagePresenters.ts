@@ -17,6 +17,8 @@ export type SchedulerSortKey =
 export interface SchedulerRunFilters {
   search: string;
   status: SchedulerStatusFilter;
+  schedulerPolicy: string;
+  retentionPolicy: string;
   sort: SchedulerSortKey;
 }
 
@@ -105,6 +107,14 @@ export function formatSchedulerRetentionLabel(value: string | null | undefined):
   return value && value.trim().length > 0 ? value : 'Unassigned';
 }
 
+export function schedulerPolicyFilterOptions(runs: RunListProjectionRecord[]): string[] {
+  return uniqueSortedOptions(runs.map((run) => formatSchedulerPolicyLabel(run.scheduler_policy_id)));
+}
+
+export function schedulerRetentionFilterOptions(runs: RunListProjectionRecord[]): string[] {
+  return uniqueSortedOptions(runs.map((run) => formatSchedulerRetentionLabel(run.retention_policy_id)));
+}
+
 export function formatSchedulerTimelineKind(
   event: Pick<SchedulerTimelineProjectionRecord, 'event_kind'>,
 ): string {
@@ -140,8 +150,32 @@ export function filterAndSortSchedulerRuns(
   const search = filters.search.trim().toLowerCase();
   const filtered = runs
     .filter((run) => filters.status === 'all' || run.status === filters.status)
+    .filter(
+      (run) =>
+        filters.schedulerPolicy === 'all' ||
+        formatSchedulerPolicyLabel(run.scheduler_policy_id) === filters.schedulerPolicy,
+    )
+    .filter(
+      (run) =>
+        filters.retentionPolicy === 'all' ||
+        formatSchedulerRetentionLabel(run.retention_policy_id) === filters.retentionPolicy,
+    )
     .filter((run) => search.length === 0 || schedulerRunMatchesSearch(run, search));
   return [...filtered].sort((left, right) => compareSchedulerRuns(left, right, filters.sort));
+}
+
+function uniqueSortedOptions(values: string[]): string[] {
+  return [...new Set(values)].sort(compareFilterOptions);
+}
+
+function compareFilterOptions(left: string, right: string): number {
+  if (left === 'Unassigned' && right !== 'Unassigned') {
+    return -1;
+  }
+  if (right === 'Unassigned' && left !== 'Unassigned') {
+    return 1;
+  }
+  return compareStrings(left, right);
 }
 
 function schedulerRunMatchesSearch(run: RunListProjectionRecord, search: string): boolean {
