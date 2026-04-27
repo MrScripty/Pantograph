@@ -444,9 +444,10 @@ pub(super) fn query_run_list_projection(
            AND (?3 IS NULL OR workflow_semantic_version = ?3)
            AND (?4 IS NULL OR status = ?4)
            AND (?5 IS NULL OR scheduler_policy_id = ?5)
-           AND last_event_seq > ?6
+           AND (?6 IS NULL OR retention_policy_id = ?6)
+           AND last_event_seq > ?7
          ORDER BY last_updated_at_ms DESC, last_event_seq DESC
-         LIMIT ?7",
+         LIMIT ?8",
     )?;
     let rows = stmt.query_map(
         params![
@@ -458,6 +459,7 @@ pub(super) fn query_run_list_projection(
             query.workflow_semantic_version.as_deref(),
             query.status.map(|status| status.as_db()),
             query.scheduler_policy_id.as_deref(),
+            query.retention_policy_id.as_deref(),
             query.after_event_seq.unwrap_or(0),
             query.limit,
         ],

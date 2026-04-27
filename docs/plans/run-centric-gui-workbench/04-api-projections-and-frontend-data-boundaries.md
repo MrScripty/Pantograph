@@ -210,7 +210,9 @@ projection freshness state. `workflow_io_artifact_query` now exposes bounded
 artifact metadata/reference rows for I/O Inspector reads. Projection query
 DTOs now expose backend-owned filters for workflow version, scheduler policy,
 runtime/model ids, media type, retention policy, node id, and artifact role
-where those fields exist. `workflow_library_usage_query` now exposes warm
+where those fields exist. The run-list projection now supports server-side
+retention-policy filtering in addition to returning the retention policy on
+each run row. `workflow_library_usage_query` now exposes warm
 Library/Pumas usage aggregates with projection freshness state. Retention
 policy query is exposed for GUI retention settings/inspectors. Local Network
 status query is exposed with local-only CPU/memory/disk/network-interface

@@ -113,6 +113,8 @@ pub struct WorkflowRunListQueryRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scheduler_policy_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retention_policy_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub after_event_seq: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
@@ -531,6 +533,7 @@ impl WorkflowRunListQueryRequest {
             workflow_semantic_version: self.workflow_semantic_version,
             status: self.status,
             scheduler_policy_id: self.scheduler_policy_id,
+            retention_policy_id: self.retention_policy_id,
             after_event_seq: self.after_event_seq,
             limit: self
                 .limit

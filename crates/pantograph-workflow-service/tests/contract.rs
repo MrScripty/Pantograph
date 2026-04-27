@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use pantograph_diagnostics_ledger::{
     DiagnosticEventKind, DiagnosticEventSourceComponent, DiagnosticsRetentionPolicy,
     IoArtifactProjectionRecord, LibraryUsageProjectionRecord, ProjectionStateRecord,
-    ProjectionStatus, RetentionClass, RunDetailProjectionRecord, RunListProjectionStatus,
-    SchedulerTimelineProjectionRecord,
+    ProjectionStatus, RetentionClass, RunDetailProjectionRecord, RunListProjectionRecord,
+    RunListProjectionStatus, SchedulerTimelineProjectionRecord,
 };
 use pantograph_workflow_service::graph::WorkflowExecutionSessionKind;
 use pantograph_workflow_service::{
@@ -616,6 +616,90 @@ fn workflow_scheduler_timeline_query_contract_snapshot() {
             "status": "current",
             "rebuilt_at_ms": null,
             "updated_at_ms": 1010
+        }
+    });
+    assert_eq!(response_value, expected_response);
+}
+
+#[test]
+fn workflow_run_list_query_contract_snapshot() {
+    let request = pantograph_workflow_service::WorkflowRunListQueryRequest {
+        workflow_id: Some("wf-1".to_string()),
+        workflow_version_id: Some("version-1".to_string()),
+        workflow_semantic_version: Some("1.2.3".to_string()),
+        status: Some(RunListProjectionStatus::Completed),
+        scheduler_policy_id: Some("session_fifo_v1".to_string()),
+        retention_policy_id: Some("standard-local-v1".to_string()),
+        after_event_seq: Some(10),
+        limit: Some(25),
+        projection_batch_size: Some(100),
+    };
+    let response = pantograph_workflow_service::WorkflowRunListQueryResponse {
+        runs: vec![RunListProjectionRecord {
+            workflow_run_id: "run-1".to_string().try_into().expect("run id"),
+            workflow_id: "wf-1".to_string().try_into().expect("workflow id"),
+            workflow_version_id: Some("version-1".to_string().try_into().expect("version id")),
+            workflow_semantic_version: Some("1.2.3".to_string()),
+            status: RunListProjectionStatus::Completed,
+            accepted_at_ms: Some(1000),
+            enqueued_at_ms: Some(1010),
+            started_at_ms: Some(1020),
+            completed_at_ms: Some(1100),
+            duration_ms: Some(80),
+            scheduler_policy_id: Some("session_fifo_v1".to_string()),
+            retention_policy_id: Some("standard-local-v1".to_string()),
+            last_event_seq: 15,
+            last_updated_at_ms: 1100,
+        }],
+        projection_state: ProjectionStateRecord {
+            projection_name: "run_list".to_string(),
+            projection_version: 1,
+            last_applied_event_seq: 15,
+            status: ProjectionStatus::Current,
+            rebuilt_at_ms: None,
+            updated_at_ms: 1110,
+        },
+    };
+
+    let request_value = serde_json::to_value(request).expect("serialize run list request");
+    let expected_request = serde_json::json!({
+        "workflow_id": "wf-1",
+        "workflow_version_id": "version-1",
+        "workflow_semantic_version": "1.2.3",
+        "status": "completed",
+        "scheduler_policy_id": "session_fifo_v1",
+        "retention_policy_id": "standard-local-v1",
+        "after_event_seq": 10,
+        "limit": 25,
+        "projection_batch_size": 100
+    });
+    assert_eq!(request_value, expected_request);
+
+    let response_value = serde_json::to_value(response).expect("serialize run list response");
+    let expected_response = serde_json::json!({
+        "runs": [{
+            "workflow_run_id": "run-1",
+            "workflow_id": "wf-1",
+            "workflow_version_id": "version-1",
+            "workflow_semantic_version": "1.2.3",
+            "status": "completed",
+            "accepted_at_ms": 1000,
+            "enqueued_at_ms": 1010,
+            "started_at_ms": 1020,
+            "completed_at_ms": 1100,
+            "duration_ms": 80,
+            "scheduler_policy_id": "session_fifo_v1",
+            "retention_policy_id": "standard-local-v1",
+            "last_event_seq": 15,
+            "last_updated_at_ms": 1100
+        }],
+        "projection_state": {
+            "projection_name": "run_list",
+            "projection_version": 1,
+            "last_applied_event_seq": 15,
+            "status": "current",
+            "rebuilt_at_ms": null,
+            "updated_at_ms": 1110
         }
     });
     assert_eq!(response_value, expected_response);

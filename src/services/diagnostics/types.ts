@@ -381,6 +381,7 @@ export interface WorkflowRunListQueryRequest {
   workflow_semantic_version?: string | null;
   status?: RunListProjectionStatus | null;
   scheduler_policy_id?: string | null;
+  retention_policy_id?: string | null;
   after_event_seq?: number | null;
   limit?: number | null;
   projection_batch_size?: number | null;

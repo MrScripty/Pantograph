@@ -196,6 +196,17 @@ fn workflow_run_list_query_drains_and_reads_projection() {
     assert_eq!(response.runs[0].status, RunListProjectionStatus::Completed);
     assert_eq!(response.runs[0].duration_ms, Some(15));
     assert_eq!(response.projection_state.last_applied_event_seq, 4);
+
+    let retention_response = service
+        .workflow_run_list_query(WorkflowRunListQueryRequest {
+            retention_policy_id: Some("ephemeral".to_string()),
+            limit: Some(10),
+            projection_batch_size: Some(10),
+            ..WorkflowRunListQueryRequest::default()
+        })
+        .expect("run list retention query");
+    assert_eq!(retention_response.runs.len(), 1);
+    assert_eq!(retention_response.runs[0].workflow_run_id.as_str(), "run-a");
 }
 
 #[test]

@@ -869,6 +869,14 @@ fn run_list_projection_drains_lifecycle_events_incrementally() {
         })
         .expect("run list status filter loads");
     assert_eq!(completed.len(), 1);
+
+    let retained = ledger
+        .query_run_list_projection(RunListProjectionQuery {
+            retention_policy_id: Some("retention_default".to_string()),
+            ..RunListProjectionQuery::default()
+        })
+        .expect("run list retention filter loads");
+    assert_eq!(retained.len(), 1);
 }
 
 #[test]
@@ -1290,6 +1298,10 @@ fn existing_v8_schema_adds_run_list_projection_table() {
     assert!(sqlite_index_exists(
         &conn,
         "idx_run_list_projection_updated"
+    ));
+    assert!(sqlite_index_exists(
+        &conn,
+        "idx_run_list_projection_retention_updated"
     ));
 }
 

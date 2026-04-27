@@ -640,6 +640,7 @@ pub struct RunListProjectionQuery {
     pub workflow_semantic_version: Option<String>,
     pub status: Option<RunListProjectionStatus>,
     pub scheduler_policy_id: Option<String>,
+    pub retention_policy_id: Option<String>,
     pub after_event_seq: Option<i64>,
     pub limit: u32,
 }
@@ -652,6 +653,7 @@ impl Default for RunListProjectionQuery {
             workflow_semantic_version: None,
             status: None,
             scheduler_policy_id: None,
+            retention_policy_id: None,
             after_event_seq: None,
             limit: 100,
         }
@@ -679,6 +681,11 @@ impl RunListProjectionQuery {
         validate_optional_text(
             "scheduler_policy_id",
             self.scheduler_policy_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "retention_policy_id",
+            self.retention_policy_id.as_deref(),
             MAX_ID_LEN,
         )
     }
