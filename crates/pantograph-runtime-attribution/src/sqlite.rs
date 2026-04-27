@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use uuid::Uuid;
 
 use crate::ids::{
@@ -21,8 +21,13 @@ use crate::{
     ClientSessionLifecycleState, ClientSessionOpenRequest, ClientSessionOpenResponse,
     ClientSessionRecord, ClientSessionResumeRequest, ClientStatus, CredentialProofRequest,
     CredentialSecret, DefaultBucketAssignment, SessionLifecycleRecord, WorkflowRunRecord,
-    WorkflowRunStartRequest, WorkflowRunStatus,
+    WorkflowRunStartRequest, WorkflowRunStatus, WorkflowVersionRecord,
+    WorkflowVersionResolveRequest,
 };
+
+const MAX_SEMANTIC_VERSION_LEN: usize = 64;
+const MAX_EXECUTION_FINGERPRINT_LEN: usize = 256;
+const MAX_EXECUTABLE_TOPOLOGY_JSON_LEN: usize = 262_144;
 
 pub struct SqliteAttributionStore {
     pub(crate) conn: Connection,
@@ -464,6 +469,186 @@ impl AttributionRepository for SqliteAttributionStore {
             completed_at_ms: None,
         })
     }
+
+    fn resolve_workflow_version(
+        &mut self,
+        request: WorkflowVersionResolveRequest,
+    ) -> Result<WorkflowVersionRecord, AttributionError> {
+        let semantic_version = validate_semantic_version(request.semantic_version)?;
+        let execution_fingerprint = validate_required_boundary_text(
+            "execution_fingerprint",
+            request.execution_fingerprint,
+            MAX_EXECUTION_FINGERPRINT_LEN,
+        )?;
+        let executable_topology_json =
+            validate_executable_topology_json(request.executable_topology_json)?;
+
+        let tx = self.conn.transaction()?;
+        let semantic_match =
+            workflow_version_by_semantic_version(&tx, &request.workflow_id, &semantic_version)?;
+        if let Some(record) = semantic_match {
+            if record.execution_fingerprint != execution_fingerprint {
+                return Err(AttributionError::WorkflowSemanticVersionConflict {
+                    workflow_id: request.workflow_id,
+                    semantic_version,
+                });
+            }
+            return Ok(record);
+        }
+
+        let fingerprint_match = workflow_version_by_execution_fingerprint(
+            &tx,
+            &request.workflow_id,
+            &execution_fingerprint,
+        )?;
+        if let Some(record) = fingerprint_match {
+            if record.semantic_version != semantic_version {
+                return Err(AttributionError::WorkflowFingerprintVersionConflict {
+                    workflow_id: request.workflow_id,
+                    execution_fingerprint,
+                });
+            }
+            return Ok(record);
+        }
+
+        let now = now_ms();
+        let workflow_version_id = crate::WorkflowVersionId::generate();
+        tx.execute(
+            "INSERT INTO workflow_versions
+                (workflow_version_id, workflow_id, semantic_version, execution_fingerprint,
+                 executable_topology_json, created_at_ms)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                workflow_version_id.as_str(),
+                request.workflow_id.as_str(),
+                semantic_version.as_str(),
+                execution_fingerprint.as_str(),
+                executable_topology_json.as_str(),
+                now
+            ],
+        )?;
+        tx.commit()?;
+
+        Ok(WorkflowVersionRecord {
+            workflow_version_id,
+            workflow_id: request.workflow_id,
+            semantic_version,
+            execution_fingerprint,
+            executable_topology_json,
+            created_at_ms: now,
+        })
+    }
+}
+
+fn workflow_version_by_semantic_version(
+    conn: &rusqlite::Connection,
+    workflow_id: &crate::WorkflowId,
+    semantic_version: &str,
+) -> Result<Option<WorkflowVersionRecord>, AttributionError> {
+    let mut stmt = conn.prepare(
+        "SELECT workflow_version_id, workflow_id, semantic_version, execution_fingerprint,
+                executable_topology_json, created_at_ms
+         FROM workflow_versions
+         WHERE workflow_id = ?1 AND semantic_version = ?2",
+    )?;
+    let record = stmt
+        .query_row(
+            params![workflow_id.as_str(), semantic_version],
+            workflow_version_from_row,
+        )
+        .optional()?;
+    Ok(record)
+}
+
+fn workflow_version_by_execution_fingerprint(
+    conn: &rusqlite::Connection,
+    workflow_id: &crate::WorkflowId,
+    execution_fingerprint: &str,
+) -> Result<Option<WorkflowVersionRecord>, AttributionError> {
+    let mut stmt = conn.prepare(
+        "SELECT workflow_version_id, workflow_id, semantic_version, execution_fingerprint,
+                executable_topology_json, created_at_ms
+         FROM workflow_versions
+         WHERE workflow_id = ?1 AND execution_fingerprint = ?2",
+    )?;
+    let record = stmt
+        .query_row(
+            params![workflow_id.as_str(), execution_fingerprint],
+            workflow_version_from_row,
+        )
+        .optional()?;
+    Ok(record)
+}
+
+fn workflow_version_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<WorkflowVersionRecord> {
+    Ok(WorkflowVersionRecord {
+        workflow_version_id: row
+            .get::<_, String>(0)
+            .and_then(parse_workflow_version_id)?,
+        workflow_id: row.get::<_, String>(1).and_then(parse_workflow_id)?,
+        semantic_version: row.get(2)?,
+        execution_fingerprint: row.get(3)?,
+        executable_topology_json: row.get(4)?,
+        created_at_ms: row.get(5)?,
+    })
+}
+
+fn parse_workflow_version_id(value: String) -> rusqlite::Result<crate::WorkflowVersionId> {
+    crate::WorkflowVersionId::try_from(value).map_err(crate::sqlite_rows::sqlite_conversion_error)
+}
+
+fn parse_workflow_id(value: String) -> rusqlite::Result<crate::WorkflowId> {
+    crate::WorkflowId::try_from(value).map_err(crate::sqlite_rows::sqlite_conversion_error)
+}
+
+fn validate_semantic_version(value: String) -> Result<String, AttributionError> {
+    let value =
+        validate_required_boundary_text("semantic_version", value, MAX_SEMANTIC_VERSION_LEN)?;
+    let mut parts = value.split('.');
+    let valid = parts.next().is_some_and(is_numeric_semver_part)
+        && parts.next().is_some_and(is_numeric_semver_part)
+        && parts.next().is_some_and(is_numeric_semver_part)
+        && parts.next().is_none();
+    if !valid {
+        return Err(AttributionError::InvalidWorkflowSemanticVersion { value });
+    }
+    Ok(value)
+}
+
+fn is_numeric_semver_part(value: &str) -> bool {
+    !value.is_empty() && value.chars().all(|character| character.is_ascii_digit())
+}
+
+fn validate_executable_topology_json(value: String) -> Result<String, AttributionError> {
+    let value = validate_required_boundary_text(
+        "executable_topology_json",
+        value,
+        MAX_EXECUTABLE_TOPOLOGY_JSON_LEN,
+    )?;
+    serde_json::from_str::<serde_json::Value>(&value).map_err(|_| {
+        AttributionError::InvalidField {
+            field: "executable_topology_json",
+        }
+    })?;
+    Ok(value)
+}
+
+fn validate_required_boundary_text(
+    field: &'static str,
+    value: String,
+    max_len: usize,
+) -> Result<String, AttributionError> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(AttributionError::MissingField { field });
+    }
+    if trimmed.len() > max_len {
+        return Err(AttributionError::FieldTooLong { field, max_len });
+    }
+    if trimmed.chars().any(char::is_control) {
+        return Err(AttributionError::InvalidField { field });
+    }
+    Ok(trimmed.to_string())
 }
 
 fn ensure_default_bucket(

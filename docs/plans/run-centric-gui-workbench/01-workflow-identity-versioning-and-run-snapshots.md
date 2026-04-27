@@ -166,8 +166,9 @@ large patch. Before coding, split it into waves with explicit write sets:
 **Status:** In progress. Workflow identity grammar has a first implementation
 in `pantograph-workflow-service`, and node behavior version facts are now
 available from `pantograph-node-contracts`. Canonical executable topology
-projection is implemented, but remaining Milestone 1 storage and snapshot
-contract decisions are still open.
+projection is implemented, and workflow-version registry ownership now sits in
+the durable attribution store. Remaining Milestone 1 snapshot and presentation
+revision decisions are still open.
 
 ### Milestone 2: Workflow Version Registry
 
@@ -177,9 +178,9 @@ version, execution fingerprint, and presentation revision lookup.
 **Tasks:**
 
 - [ ] Add canonical fingerprint generation for executable graph topology.
-- [ ] Store or project workflow versions under stable workflow identity.
-- [ ] Reuse an existing workflow version when identity and fingerprint match.
-- [ ] Reject same semantic version with different fingerprint.
+- [x] Store or project workflow versions under stable workflow identity.
+- [x] Reuse an existing workflow version when identity and fingerprint match.
+- [x] Reject same semantic version with different fingerprint.
 - [ ] Track presentation revisions separately from execution versions.
 - [ ] Replace old active diagnostics grouping keys with workflow execution
   version ids.
@@ -191,7 +192,9 @@ version, execution fingerprint, and presentation revision lookup.
 - Unit tests cover display-only changes not changing execution version.
 - Unit tests cover semantic version conflict rejection.
 
-**Status:** Not started.
+**Status:** In progress. Durable attribution storage now owns
+workflow-version records and strict semantic-version/fingerprint conflict
+checks; diagnostics and presentation revision cutover remain open.
 
 ### Milestone 3: Run Submission And Immutability
 
@@ -294,20 +297,25 @@ records for the same execution fingerprint.
   BLAKE3 projection that includes sorted node ids, node types, node behavior
   versions, and sorted port connections while excluding node positions, node
   data, edge ids, derived graph caches, and display metadata.
+- 2026-04-27: Added durable workflow-version records to
+  `pantograph-runtime-attribution` and a `WorkflowService`
+  `resolve_workflow_graph_version` facade. The registry reuses matching
+  workflow id/fingerprint/version rows and rejects both semantic-version and
+  execution-fingerprint disagreements.
 
 ### Deviations
 
-- Full workflow-version registry and run-snapshot storage are intentionally not
-  part of the completed slices so far. This keeps the initial cutover limited
-  to identity validation and executable fingerprint contract work.
-- Workflow execution fingerprints are not yet written to a workflow-version
-  registry or run snapshot. That wiring remains in the registry and submission
-  slices.
+- Run-snapshot storage is intentionally not part of the completed slices so
+  far. Queue submission still needs to resolve versions and snapshots as one
+  transaction before this stage is complete.
+- Workflow-version registry ownership is implemented in the attribution store
+  without a standalone ADR. The choice is documented here and in crate READMEs
+  because the registry must share the future run snapshot transaction boundary.
 
 ### Follow-Ups
 
-- Decide whether workflow version ownership needs an ADR.
-- Define workflow-version registry storage owner before schema work.
+- Define presentation revision storage and API fields.
+- Define run snapshot schema and queue submission transaction wiring.
 
 ### Verification Summary
 
@@ -330,6 +338,10 @@ records for the same execution fingerprint.
   executable_topology` passed.
 - 2026-04-27: `cargo test -p pantograph-workflow-service` passed after adding
   executable topology contracts.
+- 2026-04-27: `cargo test -p pantograph-runtime-attribution` passed after
+  adding workflow-version registry storage.
+- 2026-04-27: `cargo test -p pantograph-workflow-service workflow_version`
+  passed.
 
 ### Traceability Links
 

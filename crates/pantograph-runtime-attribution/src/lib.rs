@@ -15,7 +15,7 @@ mod util;
 pub use error::AttributionError;
 pub use ids::{
     BucketId, ClientCredentialId, ClientId, ClientSessionId, UsageEventId, WorkflowId,
-    WorkflowRunId,
+    WorkflowRunId, WorkflowVersionId,
 };
 pub use records::{
     BucketCreateRequest, BucketDeleteRequest, BucketRecord, BucketSelection, BucketStatus,
@@ -24,7 +24,8 @@ pub use records::{
     ClientSessionLifecycleState, ClientSessionOpenRequest, ClientSessionOpenResponse,
     ClientSessionRecord, ClientSessionResumeRequest, ClientStatus, CredentialProofRequest,
     CredentialSecret, DefaultBucketAssignment, SessionLifecycleRecord, WorkflowRunAttribution,
-    WorkflowRunRecord, WorkflowRunStartRequest, WorkflowRunStatus,
+    WorkflowRunRecord, WorkflowRunStartRequest, WorkflowRunStatus, WorkflowVersionRecord,
+    WorkflowVersionResolveRequest,
 };
 pub use repository::AttributionRepository;
 pub use sqlite::SqliteAttributionStore;

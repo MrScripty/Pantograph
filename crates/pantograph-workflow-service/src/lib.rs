@@ -94,7 +94,8 @@ pub use workflow::{
     WorkflowSchedulerErrorDetails, WorkflowSchedulerErrorReason,
     WorkflowSchedulerRuntimeDiagnosticsRequest, WorkflowSchedulerSnapshotRequest,
     WorkflowSchedulerSnapshotResponse, WorkflowService, WorkflowServiceError,
-    evaluate_runtime_preflight, format_runtime_not_ready_message,
+    WorkflowVersionRecord, WorkflowVersionResolveRequest, evaluate_runtime_preflight,
+    format_runtime_not_ready_message,
 };
 pub use workflow::{
     SqliteDiagnosticsLedger, WorkflowTimingExpectation, WorkflowTimingExpectationComparison,

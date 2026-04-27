@@ -11,6 +11,7 @@ public exports out of the service crate.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
+| `attribution_api.rs` | Client/session/bucket facade methods plus workflow-version resolution against the durable attribution store. |
 | `contracts.rs` | Public workflow request/response/error DTO definitions re-exported by the parent facade. |
 | `graph_api.rs` | Graph edit-session, mutation, connection, persistence, and runtime snapshot facade methods. |
 | `host.rs` | Host trait defaults and scheduler diagnostics provider contracts re-exported by the parent facade. |
@@ -104,6 +105,9 @@ runtime readiness, session-runtime workflows, and the root facade test module.
   helper that owns load-state transitions.
 - Session runtime loaded state is updated only after host load/unload calls
   succeed or return a service error.
+- Workflow version resolution validates `WorkflowIdentity`, computes
+  `WorkflowExecutableTopology`, and persists semantic-version/fingerprint
+  agreement through the attribution store.
 
 ## Revisit Triggers
 - Runtime preflight becomes a public reusable crate-level policy.
@@ -184,6 +188,7 @@ cargo test -p pantograph-workflow-service workflow_preflight
 cargo test -p pantograph-workflow-service workflow::tests::workflow_run
 cargo test -p pantograph-workflow-service workflow_get_scheduler_snapshot
 cargo test -p pantograph-workflow-service workflow_session_queue
+cargo test -p pantograph-workflow-service workflow_version
 ```
 
 ## Notes

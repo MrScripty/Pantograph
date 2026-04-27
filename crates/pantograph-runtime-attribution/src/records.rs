@@ -3,7 +3,10 @@ use std::fmt;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use uuid::Uuid;
 
-use crate::{BucketId, ClientCredentialId, ClientId, ClientSessionId, WorkflowId, WorkflowRunId};
+use crate::{
+    BucketId, ClientCredentialId, ClientId, ClientSessionId, WorkflowId, WorkflowRunId,
+    WorkflowVersionId,
+};
 
 const MAX_CREDENTIAL_SECRET_LEN: usize = 256;
 
@@ -273,6 +276,16 @@ pub struct WorkflowRunRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkflowVersionRecord {
+    pub workflow_version_id: WorkflowVersionId,
+    pub workflow_id: WorkflowId,
+    pub semantic_version: String,
+    pub execution_fingerprint: String,
+    pub executable_topology_json: String,
+    pub created_at_ms: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkflowRunAttribution {
     pub client_id: ClientId,
     pub client_session_id: ClientSessionId,
@@ -343,4 +356,12 @@ pub struct WorkflowRunStartRequest {
     pub client_session_id: ClientSessionId,
     pub workflow_id: WorkflowId,
     pub bucket_selection: BucketSelection,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkflowVersionResolveRequest {
+    pub workflow_id: WorkflowId,
+    pub semantic_version: String,
+    pub execution_fingerprint: String,
+    pub executable_topology_json: String,
 }

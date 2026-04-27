@@ -2,9 +2,10 @@
 
 ## Purpose
 This directory owns Pantograph's durable attribution domain for clients,
-credentials, client sessions, buckets, and workflow runs. Runtime execution,
-diagnostics, adapters, bindings, and nodes consume validated attribution facts
-from this crate instead of trusting caller-supplied ids.
+credentials, client sessions, buckets, workflow versions, and workflow runs.
+Runtime execution, diagnostics, adapters, bindings, and nodes consume
+validated attribution facts from this crate instead of trusting caller-supplied
+ids.
 
 ## Contents
 | File/Folder | Description |
@@ -24,6 +25,8 @@ verification, bucket lineage, or one-active-session enforcement.
 - Client-session lifecycle transitions are owned by one store and persisted in
   complete SQLite transactions.
 - Workflow-run attribution must exist before runtime scheduling begins.
+- Workflow-version records are resolved before immutable queue/run snapshot
+  creation and enforce strict semantic-version/fingerprint agreement.
 - This crate must not depend on GUI, binding, adapter, or runtime execution
   crates.
 
@@ -48,6 +51,9 @@ paths.
 - Every active client session has exactly one default bucket assignment.
 - At most one active session exists per client.
 - Every workflow run points to one client, one client session, and one bucket.
+- Each `(workflow_id, semantic_version)` maps to exactly one execution
+  fingerprint, and each `(workflow_id, execution_fingerprint)` maps to exactly
+  one semantic version.
 - Explicit bucket selection must stay inside the session client's namespace.
 - Credential verification compares digest-only persistent state.
 
@@ -100,9 +106,12 @@ assert_eq!(opened.session.client_id, registered.client.client_id);
 - Use returned `WorkflowRunRecord` values as the trusted execution attribution.
 
 ## Structured Producer Contract
-- SQLite schema version `1` is the first supported migration version.
+- SQLite schema version `2` is the current breaking-cutover schema version.
 - Persisted credential rows contain credential id, client id, salt bytes,
   digest bytes, status, timestamps, and no raw secret.
+- Persisted workflow-version rows contain workflow id, semantic version,
+  execution fingerprint, canonical executable topology JSON, and creation
+  timestamp.
 - Lifecycle history is append-only through `session_lifecycle_records`.
 - Diagnostic query indexes are maintained for client, session, bucket,
   workflow, and workflow-run lookup.

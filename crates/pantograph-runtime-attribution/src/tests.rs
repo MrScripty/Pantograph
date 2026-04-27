@@ -7,7 +7,7 @@ use crate::{
     BucketSelection, ClientRegistrationRequest, ClientRegistrationResponse,
     ClientSessionLifecycleState, ClientSessionOpenRequest, ClientSessionResumeRequest,
     CredentialProofRequest, CredentialSecret, SqliteAttributionStore, WorkflowId,
-    WorkflowRunStartRequest,
+    WorkflowRunStartRequest, WorkflowVersionResolveRequest,
 };
 
 fn register(store: &mut SqliteAttributionStore) -> ClientRegistrationResponse {
@@ -21,6 +21,23 @@ fn register(store: &mut SqliteAttributionStore) -> ClientRegistrationResponse {
 
 fn workflow_id() -> WorkflowId {
     WorkflowId::try_from("workflow-alpha".to_string()).expect("valid workflow id")
+}
+
+fn workflow_version_request(
+    semantic_version: &str,
+    execution_fingerprint: &str,
+) -> WorkflowVersionResolveRequest {
+    WorkflowVersionResolveRequest {
+        workflow_id: workflow_id(),
+        semantic_version: semantic_version.to_string(),
+        execution_fingerprint: execution_fingerprint.to_string(),
+        executable_topology_json: serde_json::json!({
+            "schema_version": 1,
+            "nodes": [],
+            "edges": []
+        })
+        .to_string(),
+    }
 }
 
 #[test]
@@ -138,6 +155,86 @@ fn workflow_run_uses_default_bucket_and_survives_reopen() {
         )
         .expect("query run");
     assert_eq!(count, 1);
+}
+
+#[test]
+fn workflow_version_resolution_creates_and_reuses_existing_fingerprint() {
+    let mut store = SqliteAttributionStore::open_in_memory().expect("store");
+    let first = store
+        .resolve_workflow_version(workflow_version_request(
+            "1.0.0",
+            "workflow-exec-blake3:abc",
+        ))
+        .expect("resolve version");
+    let second = store
+        .resolve_workflow_version(workflow_version_request(
+            "1.0.0",
+            "workflow-exec-blake3:abc",
+        ))
+        .expect("reuse version");
+
+    assert_eq!(first.workflow_version_id, second.workflow_version_id);
+    assert_eq!(first.semantic_version, "1.0.0");
+    assert_eq!(first.execution_fingerprint, "workflow-exec-blake3:abc");
+}
+
+#[test]
+fn workflow_version_resolution_rejects_semantic_version_conflicts() {
+    let mut store = SqliteAttributionStore::open_in_memory().expect("store");
+    store
+        .resolve_workflow_version(workflow_version_request(
+            "1.0.0",
+            "workflow-exec-blake3:abc",
+        ))
+        .expect("resolve version");
+
+    let err = store
+        .resolve_workflow_version(workflow_version_request(
+            "1.0.0",
+            "workflow-exec-blake3:def",
+        ))
+        .expect_err("semantic conflict");
+
+    assert!(matches!(
+        err,
+        AttributionError::WorkflowSemanticVersionConflict { .. }
+    ));
+}
+
+#[test]
+fn workflow_version_resolution_rejects_fingerprint_version_conflicts() {
+    let mut store = SqliteAttributionStore::open_in_memory().expect("store");
+    store
+        .resolve_workflow_version(workflow_version_request(
+            "1.0.0",
+            "workflow-exec-blake3:abc",
+        ))
+        .expect("resolve version");
+
+    let err = store
+        .resolve_workflow_version(workflow_version_request(
+            "1.0.1",
+            "workflow-exec-blake3:abc",
+        ))
+        .expect_err("fingerprint conflict");
+
+    assert!(matches!(
+        err,
+        AttributionError::WorkflowFingerprintVersionConflict { .. }
+    ));
+}
+
+#[test]
+fn workflow_version_resolution_rejects_invalid_semantic_versions() {
+    let mut store = SqliteAttributionStore::open_in_memory().expect("store");
+    let err = store
+        .resolve_workflow_version(workflow_version_request("1", "workflow-exec-blake3:abc"))
+        .expect_err("invalid semantic version");
+
+    assert!(matches!(
+        err,
+        AttributionError::InvalidWorkflowSemanticVersion { .. }
+    ));
 }
 
 #[test]

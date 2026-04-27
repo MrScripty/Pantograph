@@ -3,7 +3,7 @@ use crate::{
     ClientRegistrationRequest, ClientRegistrationResponse, ClientSessionDisconnectRequest,
     ClientSessionExpireRequest, ClientSessionOpenRequest, ClientSessionOpenResponse,
     ClientSessionRecord, ClientSessionResumeRequest, CredentialProofRequest, WorkflowRunRecord,
-    WorkflowRunStartRequest,
+    WorkflowRunStartRequest, WorkflowVersionRecord, WorkflowVersionResolveRequest,
 };
 
 pub trait AttributionRepository {
@@ -51,4 +51,9 @@ pub trait AttributionRepository {
         &mut self,
         request: WorkflowRunStartRequest,
     ) -> Result<WorkflowRunRecord, AttributionError>;
+
+    fn resolve_workflow_version(
+        &mut self,
+        request: WorkflowVersionResolveRequest,
+    ) -> Result<WorkflowVersionRecord, AttributionError>;
 }

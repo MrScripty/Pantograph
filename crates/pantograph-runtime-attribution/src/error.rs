@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::{BucketId, ClientId, ClientSessionLifecycleState};
+use crate::{BucketId, ClientId, ClientSessionLifecycleState, WorkflowId};
 
 #[derive(Debug, Error)]
 pub enum AttributionError {
@@ -41,6 +41,18 @@ pub enum AttributionError {
     BucketDeletionProtected { bucket_id: BucketId },
     #[error("bucket rename is unsupported because bucket names are immutable")]
     BucketRenameUnsupported,
+    #[error("workflow semantic version is invalid")]
+    InvalidWorkflowSemanticVersion { value: String },
+    #[error("workflow semantic version already points at a different execution fingerprint")]
+    WorkflowSemanticVersionConflict {
+        workflow_id: WorkflowId,
+        semantic_version: String,
+    },
+    #[error("workflow execution fingerprint already points at a different semantic version")]
+    WorkflowFingerprintVersionConflict {
+        workflow_id: WorkflowId,
+        execution_fingerprint: String,
+    },
     #[error("record was not found")]
     NotFound { entity: &'static str },
     #[error("unsupported attribution schema version {found}")]
