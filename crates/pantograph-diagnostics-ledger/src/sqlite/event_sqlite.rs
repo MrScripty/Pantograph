@@ -8,10 +8,11 @@ use crate::event::{
     DiagnosticEventAppendRequest, DiagnosticEventKind, DiagnosticEventPayload,
     DiagnosticEventPrivacyClass, DiagnosticEventRecord, DiagnosticEventRetentionClass,
     DiagnosticEventSourceComponent, ProjectionStateRecord, ProjectionStateUpdate, ProjectionStatus,
-    RunListProjectionQuery, RunListProjectionRecord, RunListProjectionStatus,
-    SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
-    DIAGNOSTIC_EVENT_SCHEMA_VERSION, MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, RUN_LIST_PROJECTION_NAME,
-    RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
+    RunDetailProjectionQuery, RunDetailProjectionRecord, RunListProjectionQuery,
+    RunListProjectionRecord, RunListProjectionStatus, SchedulerTimelineProjectionQuery,
+    SchedulerTimelineProjectionRecord, DIAGNOSTIC_EVENT_SCHEMA_VERSION,
+    MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION,
+    RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
     SCHEDULER_TIMELINE_PROJECTION_VERSION,
 };
 use crate::records::MAX_PAGE_SIZE;
@@ -452,6 +453,109 @@ pub(super) fn query_run_list_projection(
         .map_err(DiagnosticsLedgerError::from)
 }
 
+pub(super) fn drain_run_detail_projection(
+    ledger: &mut SqliteDiagnosticsLedger,
+    limit: u32,
+) -> Result<ProjectionStateRecord, DiagnosticsLedgerError> {
+    if limit > MAX_PAGE_SIZE {
+        return Err(DiagnosticsLedgerError::QueryLimitExceeded {
+            requested: limit,
+            max: MAX_PAGE_SIZE,
+        });
+    }
+    let tx = ledger.conn.transaction()?;
+    let state = {
+        let mut stmt = tx.prepare(
+            "SELECT projection_name, projection_version, last_applied_event_seq, status,
+                    rebuilt_at_ms, updated_at_ms
+             FROM projection_state
+             WHERE projection_name = ?1",
+        )?;
+        stmt.query_row(
+            params![RUN_DETAIL_PROJECTION_NAME],
+            projection_state_from_row,
+        )
+        .optional()?
+    };
+
+    let mut last_applied_event_seq = state
+        .as_ref()
+        .map(|state| state.last_applied_event_seq)
+        .unwrap_or(0);
+    let mut rebuilt_at_ms = state.as_ref().and_then(|state| state.rebuilt_at_ms);
+    if state
+        .as_ref()
+        .map(|state| state.projection_version != RUN_DETAIL_PROJECTION_VERSION)
+        .unwrap_or(false)
+    {
+        tx.execute("DELETE FROM run_detail_projection", [])?;
+        last_applied_event_seq = 0;
+        rebuilt_at_ms = Some(now_ms());
+    }
+
+    let events = diagnostic_projection_events_after(&tx, last_applied_event_seq, limit)?;
+    for event in &events {
+        apply_run_detail_projection_event(&tx, event)?;
+        last_applied_event_seq = event.event_seq;
+    }
+
+    let updated_at_ms = now_ms();
+    tx.execute(
+        "INSERT INTO projection_state
+            (projection_name, projection_version, last_applied_event_seq, status,
+             rebuilt_at_ms, updated_at_ms)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+         ON CONFLICT(projection_name) DO UPDATE SET
+            projection_version = excluded.projection_version,
+            last_applied_event_seq = excluded.last_applied_event_seq,
+            status = excluded.status,
+            rebuilt_at_ms = excluded.rebuilt_at_ms,
+            updated_at_ms = excluded.updated_at_ms",
+        params![
+            RUN_DETAIL_PROJECTION_NAME,
+            RUN_DETAIL_PROJECTION_VERSION,
+            last_applied_event_seq,
+            ProjectionStatus::Current.as_db(),
+            rebuilt_at_ms,
+            updated_at_ms,
+        ],
+    )?;
+    tx.commit()?;
+
+    Ok(ProjectionStateRecord {
+        projection_name: RUN_DETAIL_PROJECTION_NAME.to_string(),
+        projection_version: RUN_DETAIL_PROJECTION_VERSION,
+        last_applied_event_seq,
+        status: ProjectionStatus::Current,
+        rebuilt_at_ms,
+        updated_at_ms,
+    })
+}
+
+pub(super) fn query_run_detail_projection(
+    ledger: &SqliteDiagnosticsLedger,
+    query: RunDetailProjectionQuery,
+) -> Result<Option<RunDetailProjectionRecord>, DiagnosticsLedgerError> {
+    let mut stmt = ledger.conn.prepare(
+        "SELECT workflow_run_id, workflow_id, workflow_version_id,
+                workflow_semantic_version, status, accepted_at_ms, enqueued_at_ms,
+                started_at_ms, completed_at_ms, duration_ms, scheduler_policy_id,
+                retention_policy_id, client_id, client_session_id, bucket_id,
+                workflow_run_snapshot_id, workflow_presentation_revision_id,
+                latest_estimate_json, latest_queue_placement_json, started_payload_json,
+                terminal_payload_json, terminal_error, timeline_event_count,
+                last_event_seq, last_updated_at_ms
+         FROM run_detail_projection
+         WHERE workflow_run_id = ?1",
+    )?;
+    stmt.query_row(
+        params![query.workflow_run_id.as_str()],
+        run_detail_projection_from_row,
+    )
+    .optional()
+    .map_err(DiagnosticsLedgerError::from)
+}
+
 fn diagnostic_event_from_row(row: &Row<'_>) -> rusqlite::Result<DiagnosticEventRecord> {
     Ok(DiagnosticEventRecord {
         event_seq: row.get(0)?,
@@ -646,12 +750,12 @@ fn apply_run_list_projection_event(
         },
         _ => return Ok(()),
     };
-    let accepted_at_ms = matches!(payload, DiagnosticEventPayload::RunSnapshotAccepted(_))
+    let accepted_at_ms = matches!(&payload, DiagnosticEventPayload::RunSnapshotAccepted(_))
         .then_some(event.occurred_at_ms);
-    let enqueued_at_ms = matches!(payload, DiagnosticEventPayload::SchedulerQueuePlacement(_))
+    let enqueued_at_ms = matches!(&payload, DiagnosticEventPayload::SchedulerQueuePlacement(_))
         .then_some(event.occurred_at_ms);
     let started_at_ms =
-        matches!(payload, DiagnosticEventPayload::RunStarted(_)).then_some(event.occurred_at_ms);
+        matches!(&payload, DiagnosticEventPayload::RunStarted(_)).then_some(event.occurred_at_ms);
     let (completed_at_ms, duration_ms) = match payload {
         DiagnosticEventPayload::RunTerminal(payload) => (
             Some(event.occurred_at_ms),
@@ -697,6 +801,138 @@ fn apply_run_list_projection_event(
             duration_ms,
             event.scheduler_policy_id.as_deref(),
             event.retention_policy_id.as_deref(),
+            event.event_seq,
+            event.occurred_at_ms,
+        ],
+    )?;
+    Ok(())
+}
+
+fn apply_run_detail_projection_event(
+    tx: &rusqlite::Transaction<'_>,
+    event: &DiagnosticEventRecord,
+) -> Result<(), DiagnosticsLedgerError> {
+    let Some(workflow_run_id) = event.workflow_run_id.as_ref() else {
+        return Ok(());
+    };
+    let Some(workflow_id) = event.workflow_id.as_ref() else {
+        return Ok(());
+    };
+    let payload: DiagnosticEventPayload = serde_json::from_str(&event.payload_json)?;
+    let status = match &payload {
+        DiagnosticEventPayload::RunSnapshotAccepted(_) => RunListProjectionStatus::Accepted,
+        DiagnosticEventPayload::SchedulerEstimateProduced(_) => RunListProjectionStatus::Accepted,
+        DiagnosticEventPayload::SchedulerQueuePlacement(_) => RunListProjectionStatus::Queued,
+        DiagnosticEventPayload::RunStarted(_) => RunListProjectionStatus::Running,
+        DiagnosticEventPayload::RunTerminal(payload) => match payload.status {
+            crate::event::RunTerminalStatus::Completed => RunListProjectionStatus::Completed,
+            crate::event::RunTerminalStatus::Failed => RunListProjectionStatus::Failed,
+            crate::event::RunTerminalStatus::Cancelled => RunListProjectionStatus::Cancelled,
+        },
+        _ => return Ok(()),
+    };
+
+    let accepted_at_ms = matches!(payload, DiagnosticEventPayload::RunSnapshotAccepted(_))
+        .then_some(event.occurred_at_ms);
+    let enqueued_at_ms = matches!(payload, DiagnosticEventPayload::SchedulerQueuePlacement(_))
+        .then_some(event.occurred_at_ms);
+    let started_at_ms =
+        matches!(payload, DiagnosticEventPayload::RunStarted(_)).then_some(event.occurred_at_ms);
+    let (completed_at_ms, duration_ms, terminal_error) = match &payload {
+        DiagnosticEventPayload::RunTerminal(payload) => (
+            Some(event.occurred_at_ms),
+            payload.duration_ms.map(|value| value as i64),
+            payload.error.as_deref(),
+        ),
+        _ => (None, None, None),
+    };
+    let (workflow_run_snapshot_id, workflow_presentation_revision_id) = match &payload {
+        DiagnosticEventPayload::RunSnapshotAccepted(payload) => (
+            Some(payload.workflow_run_snapshot_id.as_str()),
+            Some(payload.workflow_presentation_revision_id.as_str()),
+        ),
+        _ => (None, None),
+    };
+    let latest_estimate_json = matches!(
+        &payload,
+        DiagnosticEventPayload::SchedulerEstimateProduced(_)
+    )
+    .then_some(event.payload_json.as_str());
+    let latest_queue_placement_json =
+        matches!(&payload, DiagnosticEventPayload::SchedulerQueuePlacement(_))
+            .then_some(event.payload_json.as_str());
+    let started_payload_json = matches!(&payload, DiagnosticEventPayload::RunStarted(_))
+        .then_some(event.payload_json.as_str());
+    let terminal_payload_json = matches!(&payload, DiagnosticEventPayload::RunTerminal(_))
+        .then_some(event.payload_json.as_str());
+
+    tx.execute(
+        "INSERT INTO run_detail_projection
+            (workflow_run_id, workflow_id, workflow_version_id, workflow_semantic_version,
+             status, accepted_at_ms, enqueued_at_ms, started_at_ms, completed_at_ms,
+             duration_ms, scheduler_policy_id, retention_policy_id, client_id,
+             client_session_id, bucket_id, workflow_run_snapshot_id,
+             workflow_presentation_revision_id, latest_estimate_json,
+             latest_queue_placement_json, started_payload_json, terminal_payload_json,
+             terminal_error, timeline_event_count, last_event_seq, last_updated_at_ms)
+         VALUES
+            (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15,
+             ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)
+         ON CONFLICT(workflow_run_id) DO UPDATE SET
+            workflow_id = excluded.workflow_id,
+            workflow_version_id = COALESCE(excluded.workflow_version_id, workflow_version_id),
+            workflow_semantic_version = COALESCE(excluded.workflow_semantic_version, workflow_semantic_version),
+            status = excluded.status,
+            accepted_at_ms = COALESCE(accepted_at_ms, excluded.accepted_at_ms),
+            enqueued_at_ms = COALESCE(enqueued_at_ms, excluded.enqueued_at_ms),
+            started_at_ms = COALESCE(started_at_ms, excluded.started_at_ms),
+            completed_at_ms = COALESCE(excluded.completed_at_ms, completed_at_ms),
+            duration_ms = COALESCE(excluded.duration_ms, duration_ms),
+            scheduler_policy_id = COALESCE(excluded.scheduler_policy_id, scheduler_policy_id),
+            retention_policy_id = COALESCE(excluded.retention_policy_id, retention_policy_id),
+            client_id = COALESCE(excluded.client_id, client_id),
+            client_session_id = COALESCE(excluded.client_session_id, client_session_id),
+            bucket_id = COALESCE(excluded.bucket_id, bucket_id),
+            workflow_run_snapshot_id = COALESCE(excluded.workflow_run_snapshot_id, workflow_run_snapshot_id),
+            workflow_presentation_revision_id = COALESCE(excluded.workflow_presentation_revision_id, workflow_presentation_revision_id),
+            latest_estimate_json = COALESCE(excluded.latest_estimate_json, latest_estimate_json),
+            latest_queue_placement_json = COALESCE(excluded.latest_queue_placement_json, latest_queue_placement_json),
+            started_payload_json = COALESCE(excluded.started_payload_json, started_payload_json),
+            terminal_payload_json = COALESCE(excluded.terminal_payload_json, terminal_payload_json),
+            terminal_error = COALESCE(excluded.terminal_error, terminal_error),
+            timeline_event_count = timeline_event_count + 1,
+            last_event_seq = excluded.last_event_seq,
+            last_updated_at_ms = excluded.last_updated_at_ms",
+        params![
+            workflow_run_id.as_str(),
+            workflow_id.as_str(),
+            event
+                .workflow_version_id
+                .as_ref()
+                .map(|workflow_version_id| workflow_version_id.as_str()),
+            event.workflow_semantic_version.as_deref(),
+            status.as_db(),
+            accepted_at_ms,
+            enqueued_at_ms,
+            started_at_ms,
+            completed_at_ms,
+            duration_ms,
+            event.scheduler_policy_id.as_deref(),
+            event.retention_policy_id.as_deref(),
+            event.client_id.as_ref().map(|client_id| client_id.as_str()),
+            event
+                .client_session_id
+                .as_ref()
+                .map(|client_session_id| client_session_id.as_str()),
+            event.bucket_id.as_ref().map(|bucket_id| bucket_id.as_str()),
+            workflow_run_snapshot_id,
+            workflow_presentation_revision_id,
+            latest_estimate_json,
+            latest_queue_placement_json,
+            started_payload_json,
+            terminal_payload_json,
+            terminal_error,
+            1_i64,
             event.event_seq,
             event.occurred_at_ms,
         ],
@@ -801,6 +1037,62 @@ fn run_list_projection_from_row(row: &Row<'_>) -> rusqlite::Result<RunListProjec
         retention_policy_id: row.get(11)?,
         last_event_seq: row.get(12)?,
         last_updated_at_ms: row.get(13)?,
+    })
+}
+
+fn run_detail_projection_from_row(row: &Row<'_>) -> rusqlite::Result<RunDetailProjectionRecord> {
+    Ok(RunDetailProjectionRecord {
+        workflow_run_id: row
+            .get::<_, String>(0)
+            .and_then(|value| WorkflowRunId::try_from(value).map_err(sqlite_conversion_error))?,
+        workflow_id: row
+            .get::<_, String>(1)
+            .and_then(|value| WorkflowId::try_from(value).map_err(sqlite_conversion_error))?,
+        workflow_version_id: row
+            .get::<_, Option<String>>(2)?
+            .map(WorkflowVersionId::try_from)
+            .transpose()
+            .map_err(sqlite_conversion_error)?,
+        workflow_semantic_version: row.get(3)?,
+        status: row
+            .get::<_, String>(4)
+            .and_then(parse_run_list_projection_status)?,
+        accepted_at_ms: row.get(5)?,
+        enqueued_at_ms: row.get(6)?,
+        started_at_ms: row.get(7)?,
+        completed_at_ms: row.get(8)?,
+        duration_ms: row
+            .get::<_, Option<i64>>(9)?
+            .map(|value| u64::try_from(value).unwrap_or(u64::MAX)),
+        scheduler_policy_id: row.get(10)?,
+        retention_policy_id: row.get(11)?,
+        client_id: row
+            .get::<_, Option<String>>(12)?
+            .map(ClientId::try_from)
+            .transpose()
+            .map_err(sqlite_conversion_error)?,
+        client_session_id: row
+            .get::<_, Option<String>>(13)?
+            .map(ClientSessionId::try_from)
+            .transpose()
+            .map_err(sqlite_conversion_error)?,
+        bucket_id: row
+            .get::<_, Option<String>>(14)?
+            .map(BucketId::try_from)
+            .transpose()
+            .map_err(sqlite_conversion_error)?,
+        workflow_run_snapshot_id: row.get(15)?,
+        workflow_presentation_revision_id: row.get(16)?,
+        latest_estimate_json: row.get(17)?,
+        latest_queue_placement_json: row.get(18)?,
+        started_payload_json: row.get(19)?,
+        terminal_payload_json: row.get(20)?,
+        terminal_error: row.get(21)?,
+        timeline_event_count: row
+            .get::<_, i64>(22)
+            .map(|value| u64::try_from(value).unwrap_or(u64::MAX))?,
+        last_event_seq: row.get(23)?,
+        last_updated_at_ms: row.get(24)?,
     })
 }
 

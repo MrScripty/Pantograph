@@ -220,6 +220,75 @@ fn workflow_run_list_query_validates_bounds() {
     ));
 }
 
+#[test]
+fn workflow_run_detail_query_drains_and_reads_projection() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_run_snapshot_event())
+        .expect("run snapshot event");
+    ledger
+        .append_diagnostic_event(sample_scheduler_estimate_event())
+        .expect("scheduler estimate event");
+    ledger
+        .append_diagnostic_event(sample_scheduler_queue_event())
+        .expect("scheduler queue event");
+    ledger
+        .append_diagnostic_event(sample_run_started_event())
+        .expect("run started event");
+    ledger
+        .append_diagnostic_event(sample_run_terminal_event())
+        .expect("run terminal event");
+    let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+
+    let response = service
+        .workflow_run_detail_query(WorkflowRunDetailQueryRequest {
+            workflow_run_id: "run-a".to_string(),
+            projection_batch_size: Some(10),
+        })
+        .expect("run detail query");
+
+    let run = response.run.expect("run detail exists");
+    assert_eq!(run.workflow_run_id.as_str(), "run-a");
+    assert_eq!(run.workflow_id.as_str(), "workflow-a");
+    assert_eq!(run.status, RunListProjectionStatus::Completed);
+    assert_eq!(run.duration_ms, Some(15));
+    assert_eq!(run.workflow_run_snapshot_id.as_deref(), Some("runsnap-a"));
+    assert_eq!(
+        run.workflow_presentation_revision_id.as_deref(),
+        Some("wfpres-a")
+    );
+    assert!(run.latest_estimate_json.is_some());
+    assert!(run.latest_queue_placement_json.is_some());
+    assert!(run.started_payload_json.is_some());
+    assert!(run.terminal_payload_json.is_some());
+    assert_eq!(run.timeline_event_count, 5);
+    assert_eq!(response.projection_state.last_applied_event_seq, 5);
+}
+
+#[test]
+fn workflow_run_detail_query_validates_bounds() {
+    let service = WorkflowService::with_ephemeral_diagnostics_ledger().expect("service");
+
+    let invalid_id = service.workflow_run_detail_query(WorkflowRunDetailQueryRequest {
+        workflow_run_id: "bad\nid".to_string(),
+        projection_batch_size: None,
+    });
+    assert!(matches!(
+        invalid_id,
+        Err(WorkflowServiceError::InvalidRequest(_))
+    ));
+
+    let oversized_projection_batch =
+        service.workflow_run_detail_query(WorkflowRunDetailQueryRequest {
+            workflow_run_id: "run-a".to_string(),
+            projection_batch_size: Some(501),
+        });
+    assert!(matches!(
+        oversized_projection_batch,
+        Err(WorkflowServiceError::InvalidRequest(_))
+    ));
+}
+
 fn sample_run_snapshot_event() -> DiagnosticEventAppendRequest {
     DiagnosticEventAppendRequest {
         source_component: DiagnosticEventSourceComponent::WorkflowService,

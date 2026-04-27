@@ -12,6 +12,8 @@ pub const SCHEDULER_TIMELINE_PROJECTION_NAME: &str = "scheduler_timeline";
 pub const SCHEDULER_TIMELINE_PROJECTION_VERSION: i64 = 1;
 pub const RUN_LIST_PROJECTION_NAME: &str = "run_list";
 pub const RUN_LIST_PROJECTION_VERSION: i64 = 1;
+pub const RUN_DETAIL_PROJECTION_NAME: &str = "run_detail";
+pub const RUN_DETAIL_PROJECTION_VERSION: i64 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -671,6 +673,40 @@ pub struct RunListProjectionRecord {
     pub duration_ms: Option<u64>,
     pub scheduler_policy_id: Option<String>,
     pub retention_policy_id: Option<String>,
+    pub last_event_seq: i64,
+    pub last_updated_at_ms: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RunDetailProjectionQuery {
+    pub workflow_run_id: WorkflowRunId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RunDetailProjectionRecord {
+    pub workflow_run_id: WorkflowRunId,
+    pub workflow_id: WorkflowId,
+    pub workflow_version_id: Option<WorkflowVersionId>,
+    pub workflow_semantic_version: Option<String>,
+    pub status: RunListProjectionStatus,
+    pub accepted_at_ms: Option<i64>,
+    pub enqueued_at_ms: Option<i64>,
+    pub started_at_ms: Option<i64>,
+    pub completed_at_ms: Option<i64>,
+    pub duration_ms: Option<u64>,
+    pub scheduler_policy_id: Option<String>,
+    pub retention_policy_id: Option<String>,
+    pub client_id: Option<ClientId>,
+    pub client_session_id: Option<ClientSessionId>,
+    pub bucket_id: Option<BucketId>,
+    pub workflow_run_snapshot_id: Option<String>,
+    pub workflow_presentation_revision_id: Option<String>,
+    pub latest_estimate_json: Option<String>,
+    pub latest_queue_placement_json: Option<String>,
+    pub started_payload_json: Option<String>,
+    pub terminal_payload_json: Option<String>,
+    pub terminal_error: Option<String>,
+    pub timeline_event_count: u64,
     pub last_event_seq: i64,
     pub last_updated_at_ms: i64,
 }

@@ -3,10 +3,10 @@ use crate::{
     DiagnosticsProjection, DiagnosticsQuery, DiagnosticsRetentionPolicy, ModelLicenseUsageEvent,
     ProjectionStateRecord, ProjectionStateUpdate, PruneTimingObservationsCommand,
     PruneTimingObservationsResult, PruneUsageEventsCommand, PruneUsageEventsResult,
-    RunListProjectionQuery, RunListProjectionRecord, SchedulerTimelineProjectionQuery,
-    SchedulerTimelineProjectionRecord, WorkflowRunSummaryProjection, WorkflowRunSummaryQuery,
-    WorkflowRunSummaryRecord, WorkflowTimingExpectation, WorkflowTimingExpectationQuery,
-    WorkflowTimingObservation,
+    RunDetailProjectionQuery, RunDetailProjectionRecord, RunListProjectionQuery,
+    RunListProjectionRecord, SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
+    WorkflowRunSummaryProjection, WorkflowRunSummaryQuery, WorkflowRunSummaryRecord,
+    WorkflowTimingExpectation, WorkflowTimingExpectationQuery, WorkflowTimingObservation,
 };
 
 pub trait DiagnosticsLedgerRepository {
@@ -67,6 +67,16 @@ pub trait DiagnosticsLedgerRepository {
         &self,
         query: RunListProjectionQuery,
     ) -> Result<Vec<RunListProjectionRecord>, DiagnosticsLedgerError>;
+
+    fn drain_run_detail_projection(
+        &mut self,
+        limit: u32,
+    ) -> Result<ProjectionStateRecord, DiagnosticsLedgerError>;
+
+    fn query_run_detail_projection(
+        &self,
+        query: RunDetailProjectionQuery,
+    ) -> Result<Option<RunDetailProjectionRecord>, DiagnosticsLedgerError>;
 
     fn record_timing_observation(
         &mut self,

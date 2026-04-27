@@ -1,6 +1,7 @@
 use pantograph_diagnostics_ledger::{
     DiagnosticsLedgerRepository, DiagnosticsQuery, DiagnosticsRetentionPolicy,
-    ExecutionGuaranteeLevel, ModelLicenseUsageEvent, ProjectionStateRecord, RunListProjectionQuery,
+    ExecutionGuaranteeLevel, ModelLicenseUsageEvent, ProjectionStateRecord,
+    RunDetailProjectionQuery, RunDetailProjectionRecord, RunListProjectionQuery,
     RunListProjectionRecord, RunListProjectionStatus, SchedulerTimelineProjectionQuery,
     SchedulerTimelineProjectionRecord,
 };
@@ -112,6 +113,22 @@ pub struct WorkflowRunListQueryResponse {
     pub projection_state: ProjectionStateRecord,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowRunDetailQueryRequest {
+    pub workflow_run_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub projection_batch_size: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowRunDetailQueryResponse {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run: Option<RunDetailProjectionRecord>,
+    pub projection_state: ProjectionStateRecord,
+}
+
 impl WorkflowService {
     pub fn workflow_diagnostics_usage_query(
         &self,
@@ -185,6 +202,31 @@ impl WorkflowService {
             projection_state,
         })
     }
+
+    pub fn workflow_run_detail_query(
+        &self,
+        request: WorkflowRunDetailQueryRequest,
+    ) -> Result<WorkflowRunDetailQueryResponse, WorkflowServiceError> {
+        let projection_batch_size = request.projection_batch_size.unwrap_or(500).max(1);
+        if projection_batch_size > 500 {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "projection_batch_size exceeds maximum 500".to_string(),
+            ));
+        }
+        let query = request.into_run_detail_query()?;
+        let mut ledger = self.diagnostics_ledger_guard()?;
+        let projection_state = ledger
+            .drain_run_detail_projection(projection_batch_size)
+            .map_err(WorkflowServiceError::from)?;
+        let run = ledger
+            .query_run_detail_projection(query)
+            .map_err(WorkflowServiceError::from)?;
+
+        Ok(WorkflowRunDetailQueryResponse {
+            run,
+            projection_state,
+        })
+    }
 }
 
 impl WorkflowDiagnosticsUsageQueryRequest {
@@ -247,6 +289,24 @@ impl WorkflowRunListQueryRequest {
                 .max(1),
         })
     }
+}
+
+impl WorkflowRunDetailQueryRequest {
+    fn into_run_detail_query(self) -> Result<RunDetailProjectionQuery, WorkflowServiceError> {
+        Ok(RunDetailProjectionQuery {
+            workflow_run_id: parse_id("workflow_run_id", self.workflow_run_id)?,
+        })
+    }
+}
+
+fn parse_id<T>(field: &'static str, value: String) -> Result<T, WorkflowServiceError>
+where
+    T: TryFrom<String>,
+    T::Error: std::fmt::Display,
+{
+    T::try_from(value).map_err(|error| {
+        WorkflowServiceError::InvalidRequest(format!("invalid {}: {}", field, error))
+    })
 }
 
 fn parse_optional_id<T>(

@@ -79,6 +79,9 @@ methods, but they do not own the schema or query semantics.
   sequence so incremental projection drains can resume after restart.
 - `scheduler_timeline_projection` is read directly by page/API consumers after
   an explicit incremental drain; normal reads do not replay raw event rows.
+- `run_detail_projection` is read directly by selected-run page/API consumers
+  after an explicit incremental drain; normal detail reads do not replay raw
+  event rows.
 - Schema migrations are forward-only and covered by repository tests.
 - Query results must not require frontend-side identity repair or workflow-name
   side channels.

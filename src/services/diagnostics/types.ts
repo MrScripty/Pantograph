@@ -336,6 +336,20 @@ export interface RunListProjectionRecord {
   last_updated_at_ms: number;
 }
 
+export interface RunDetailProjectionRecord extends RunListProjectionRecord {
+  client_id?: string | null;
+  client_session_id?: string | null;
+  bucket_id?: string | null;
+  workflow_run_snapshot_id?: string | null;
+  workflow_presentation_revision_id?: string | null;
+  latest_estimate_json?: string | null;
+  latest_queue_placement_json?: string | null;
+  started_payload_json?: string | null;
+  terminal_payload_json?: string | null;
+  terminal_error?: string | null;
+  timeline_event_count: number;
+}
+
 export interface WorkflowRunListQueryRequest {
   workflow_id?: string | null;
   status?: RunListProjectionStatus | null;
@@ -346,6 +360,16 @@ export interface WorkflowRunListQueryRequest {
 
 export interface WorkflowRunListQueryResponse {
   runs: RunListProjectionRecord[];
+  projection_state: ProjectionStateRecord;
+}
+
+export interface WorkflowRunDetailQueryRequest {
+  workflow_run_id: string;
+  projection_batch_size?: number | null;
+}
+
+export interface WorkflowRunDetailQueryResponse {
+  run?: RunDetailProjectionRecord | null;
   projection_state: ProjectionStateRecord;
 }
 

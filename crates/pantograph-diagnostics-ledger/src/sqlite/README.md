@@ -30,6 +30,8 @@ ledger.
   cursor and write idempotent rows keyed by `event_seq`.
 - Scheduler timeline page/query reads use `scheduler_timeline_projection`,
   not `diagnostic_events`.
+- Run detail drains apply only events after the stored projection cursor and
+  update one row per workflow run for selected-run page/query reads.
 
 ## Dependencies
 **Internal:** parent `sqlite.rs`, diagnostics ledger event/timing/run-summary

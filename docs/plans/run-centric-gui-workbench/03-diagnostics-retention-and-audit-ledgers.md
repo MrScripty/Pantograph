@@ -221,6 +221,9 @@ repair, migration, projection-version changes, and tests.
   first-pass projection.
 - [ ] Implement hot projection updates for run summary, run detail/current
   status, scheduler timeline, and active-run I/O artifact metadata.
+  - Run summary, run list, scheduler timeline, and selected-run detail/current
+    status are implemented as incremental materialized projections. Active-run
+    I/O metadata remains pending for the I/O Inspector stage.
 - [ ] Implement warm projection drains for diagnostics summary, retention
   completeness, workflow-version performance, model/runtime comparison facets,
   and Library usage where first-pass event families exist.
@@ -263,9 +266,11 @@ queries. Typed `run.started` and `run.terminal` events are added to the same
 timeline so selected-run history can cover execution start and terminal
 status without replaying raw legacy diagnostics. A first `run_list_projection`
 now materializes one row per run from the same cursor-drained lifecycle events
-for scheduler-page list reads. Run detail/current status, active-run I/O
-artifact metadata, warm projection drains, additional filters, and explicit
-rebuild commands remain pending.
+for scheduler-page list reads. `run_detail_projection` now materializes the
+selected run's lifecycle payloads, snapshot identity, client/session/bucket
+identity, current status, terminal summary, and timeline event count for
+selected-run pages. Active-run I/O artifact metadata, warm projection drains,
+additional filters, and explicit rebuild commands remain pending.
 
 ### Milestone 3: I/O Artifact Metadata And Retention
 

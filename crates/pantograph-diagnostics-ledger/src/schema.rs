@@ -4,8 +4,8 @@ use crate::records::{RetentionClass, DEFAULT_STANDARD_RETENTION_DAYS};
 use crate::util::now_ms;
 use crate::DiagnosticsLedgerError;
 
-pub(crate) const SCHEMA_VERSION: i64 = 9;
-const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v9";
+pub(crate) const SCHEMA_VERSION: i64 = 10;
+const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v10";
 
 pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {
     tx.execute_batch(
@@ -197,6 +197,9 @@ pub(crate) fn migrate_schema(
     if found < 9 {
         apply_run_list_projection_schema(&tx)?;
     }
+    if found < 10 {
+        apply_run_detail_projection_schema(&tx)?;
+    }
     if found < SCHEMA_VERSION {
         tx.execute(
             "INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
@@ -270,6 +273,7 @@ fn apply_event_ledger_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedg
     )?;
     apply_scheduler_timeline_projection_schema(tx)?;
     apply_run_list_projection_schema(tx)?;
+    apply_run_detail_projection_schema(tx)?;
     Ok(())
 }
 
@@ -331,6 +335,47 @@ fn apply_run_list_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagnost
             ON run_list_projection(workflow_id, last_updated_at_ms DESC);
         CREATE INDEX IF NOT EXISTS idx_run_list_projection_status_updated
             ON run_list_projection(status, last_updated_at_ms DESC);
+        "#,
+    )?;
+    Ok(())
+}
+
+fn apply_run_detail_projection_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {
+    tx.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS run_detail_projection (
+            workflow_run_id TEXT PRIMARY KEY,
+            workflow_id TEXT NOT NULL,
+            workflow_version_id TEXT,
+            workflow_semantic_version TEXT,
+            status TEXT NOT NULL,
+            accepted_at_ms INTEGER,
+            enqueued_at_ms INTEGER,
+            started_at_ms INTEGER,
+            completed_at_ms INTEGER,
+            duration_ms INTEGER,
+            scheduler_policy_id TEXT,
+            retention_policy_id TEXT,
+            client_id TEXT,
+            client_session_id TEXT,
+            bucket_id TEXT,
+            workflow_run_snapshot_id TEXT,
+            workflow_presentation_revision_id TEXT,
+            latest_estimate_json TEXT,
+            latest_queue_placement_json TEXT,
+            started_payload_json TEXT,
+            terminal_payload_json TEXT,
+            terminal_error TEXT,
+            timeline_event_count INTEGER NOT NULL,
+            last_event_seq INTEGER NOT NULL,
+            last_updated_at_ms INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_run_detail_projection_workflow_updated
+            ON run_detail_projection(workflow_id, last_updated_at_ms DESC);
+        CREATE INDEX IF NOT EXISTS idx_run_detail_projection_version_updated
+            ON run_detail_projection(workflow_version_id, last_updated_at_ms DESC);
+        CREATE INDEX IF NOT EXISTS idx_run_detail_projection_status_updated
+            ON run_detail_projection(status, last_updated_at_ms DESC);
         "#,
     )?;
     Ok(())
