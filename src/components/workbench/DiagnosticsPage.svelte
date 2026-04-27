@@ -3,11 +3,13 @@
   import type {
     ProjectionStateRecord,
     RunDetailProjectionRecord,
+    RunListProjectionRecord,
     SchedulerTimelineProjectionRecord,
   } from '../../services/diagnostics/types';
   import { workflowService } from '../../services/workflow/WorkflowService';
   import { activeWorkflowRun } from '../../stores/workbenchStore';
   import {
+    buildDiagnosticsFacetSummary,
     buildDiagnosticsFactRows,
     diagnosticsStatusClass,
     formatDiagnosticEventKind,
@@ -19,14 +21,17 @@
   } from './diagnosticsPagePresenters';
 
   let runDetail = $state<RunDetailProjectionRecord | null>(null);
+  let runList = $state<RunListProjectionRecord[]>([]);
   let timelineEvents = $state<SchedulerTimelineProjectionRecord[]>([]);
   let runDetailProjectionState = $state<ProjectionStateRecord | null>(null);
+  let runListProjectionState = $state<ProjectionStateRecord | null>(null);
   let timelineProjectionState = $state<ProjectionStateRecord | null>(null);
   let loading = $state(false);
   let error = $state<string | null>(null);
   let requestSerial = 0;
 
   let factRows = $derived(runDetail ? buildDiagnosticsFactRows(runDetail) : []);
+  let facetSummary = $derived(runDetail ? buildDiagnosticsFacetSummary(runDetail, runList) : null);
 
   function activeRunId(): string | null {
     return $activeWorkflowRun?.workflow_run_id ?? null;
@@ -38,8 +43,10 @@
 
     if (!runId) {
       runDetail = null;
+      runList = [];
       timelineEvents = [];
       runDetailProjectionState = null;
+      runListProjectionState = null;
       timelineProjectionState = null;
       loading = false;
       return;
@@ -47,8 +54,9 @@
 
     loading = true;
     try {
-      const [runResponse, timelineResponse] = await Promise.all([
+      const [runResponse, runListResponse, timelineResponse] = await Promise.all([
         workflowService.queryRunDetail({ workflow_run_id: runId }),
+        workflowService.queryRunList({ limit: 250 }),
         workflowService.querySchedulerTimeline({
           workflow_run_id: runId,
           limit: 250,
@@ -59,6 +67,8 @@
       }
       runDetail = runResponse.run ?? null;
       runDetailProjectionState = runResponse.projection_state;
+      runList = runListResponse.runs;
+      runListProjectionState = runListResponse.projection_state;
       timelineEvents = timelineResponse.events;
       timelineProjectionState = timelineResponse.projection_state;
     } catch (refreshError) {
@@ -67,6 +77,7 @@
       }
       error = refreshError instanceof Error ? refreshError.message : String(refreshError);
       runDetail = null;
+      runList = [];
       timelineEvents = [];
     } finally {
       if (currentRequest === requestSerial) {
@@ -168,6 +179,10 @@
                 <dt class="text-neutral-500">Scheduler Timeline</dt>
                 <dd class="mt-1 text-neutral-200">{formatDiagnosticsProjectionFreshness(timelineProjectionState)}</dd>
               </div>
+              <div>
+                <dt class="text-neutral-500">Run List</dt>
+                <dd class="mt-1 text-neutral-200">{formatDiagnosticsProjectionFreshness(runListProjectionState)}</dd>
+              </div>
             </dl>
           </section>
 
@@ -182,6 +197,26 @@
                     title={row.value}
                   >
                     {row.value}
+                  </dd>
+                </div>
+              {/each}
+            </dl>
+          </section>
+
+          <section class="rounded border border-neutral-800 bg-neutral-900/50 p-4">
+            <h2 class="text-sm font-semibold text-neutral-100">Comparison Facets</h2>
+            {#if facetSummary?.mixedVersionWarning}
+              <div class="mt-3 rounded border border-amber-900 bg-amber-950/40 px-3 py-2 text-xs text-amber-100">
+                {facetSummary.mixedVersionWarning}
+              </div>
+            {/if}
+            <dl class="mt-4 space-y-3 text-xs">
+              {#each facetSummary?.rows ?? [] as row (row.label)}
+                <div>
+                  <dt class="text-neutral-500">{row.label}</dt>
+                  <dd class="mt-1 flex items-center justify-between gap-3 text-neutral-200">
+                    <span class="min-w-0 truncate font-mono" title={row.value}>{row.value}</span>
+                    <span class="shrink-0 text-neutral-500">{row.count}/{row.total}</span>
                   </dd>
                 </div>
               {/each}

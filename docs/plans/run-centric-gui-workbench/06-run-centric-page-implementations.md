@@ -185,9 +185,12 @@ privileged queue action controls remain open.
 `workflowService.querySchedulerTimeline` for the active run, renders run detail
 facts, status, timing, terminal error, projection freshness, and scheduler
 timeline summaries without parsing raw ledger rows or event-family payloads in
-the component. Version-aware aggregate filters, mixed-version facets,
-comparison-ready diagnostics labels, and richer scheduler decision facets remain
-open pending additional typed projection fields.
+the component. It also uses the run-list projection to render selected-run
+comparison facets, active facet counts across the current workflow's recent
+runs, and mixed workflow-version warnings. Richer aggregate filters, node/model
+and runtime version facets, graph-setting filters, retention-completeness
+facets, and richer scheduler decision facets remain open pending additional
+typed projection fields.
 
 ### Milestone 3: Graph Page
 
@@ -391,7 +394,8 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
   `queryRunDetail` and `querySchedulerTimeline` projection rendering.
 - Added `src/components/workbench/diagnosticsPagePresenters.ts` and tests for
   run status classes, duration labels, projection freshness labels, run fact
-  rows, typed timeline labels, and payload availability labels.
+  rows, comparison-ready run-list facet counts, mixed-version warnings, typed
+  timeline labels, and payload availability labels.
 - Expanded `src/components/workbench/NetworkPage.svelte` to render local
   capabilities, degradation warnings, disks, network interfaces, scheduler
   load/capacity, selected-run context, and future-ready peer records.

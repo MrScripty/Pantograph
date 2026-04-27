@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import type { RunDetailProjectionRecord } from '../../services/diagnostics/types.ts';
 import {
+  buildDiagnosticsFacetSummary,
   buildDiagnosticsFactRows,
   diagnosticsStatusClass,
   formatDiagnosticEventKind,
@@ -78,6 +79,70 @@ test('buildDiagnosticsFactRows uses projection fields without ledger parsing', (
   assert.equal(rows.find((row) => row.label === 'Workflow')?.value, 'workflow-a');
   assert.equal(rows.find((row) => row.label === 'Workflow Version')?.value, '1.2.3');
   assert.equal(rows.find((row) => row.label === 'Timeline Events')?.value, '4');
+});
+
+test('buildDiagnosticsFacetSummary exposes comparison-ready run-list facets', () => {
+  const activeRun = createRunDetail();
+  const summary = buildDiagnosticsFacetSummary(activeRun, [
+    activeRun,
+    {
+      workflow_run_id: 'run-2',
+      workflow_id: 'workflow-a',
+      workflow_version_id: 'wfver-1',
+      workflow_semantic_version: '1.2.3',
+      status: 'completed',
+      scheduler_policy_id: 'policy-a',
+      retention_policy_id: 'retention-b',
+      last_event_seq: 10,
+      last_updated_at_ms: 20,
+    },
+    {
+      workflow_run_id: 'run-3',
+      workflow_id: 'workflow-a',
+      workflow_version_id: 'wfver-2',
+      workflow_semantic_version: '2.0.0',
+      status: 'completed',
+      scheduler_policy_id: 'policy-b',
+      retention_policy_id: 'retention-a',
+      last_event_seq: 11,
+      last_updated_at_ms: 30,
+    },
+    {
+      workflow_run_id: 'run-4',
+      workflow_id: 'workflow-b',
+      workflow_version_id: 'wfver-other',
+      workflow_semantic_version: '9.0.0',
+      status: 'completed',
+      last_event_seq: 12,
+      last_updated_at_ms: 40,
+    },
+  ]);
+
+  assert.equal(summary.rows.find((row) => row.label === 'Workflow Version')?.count, 2);
+  assert.equal(summary.rows.find((row) => row.label === 'Workflow Version')?.total, 3);
+  assert.equal(summary.rows.find((row) => row.label === 'Scheduler Policy')?.count, 2);
+  assert.equal(summary.rows.find((row) => row.label === 'Retention Policy')?.count, 2);
+  assert.match(summary.mixedVersionWarning ?? '', /2 workflow versions/);
+});
+
+test('buildDiagnosticsFacetSummary includes the active run when the run list is paged', () => {
+  const activeRun = createRunDetail();
+  const summary = buildDiagnosticsFacetSummary(activeRun, [
+    {
+      workflow_run_id: 'run-2',
+      workflow_id: 'workflow-a',
+      workflow_version_id: 'wfver-2',
+      workflow_semantic_version: '2.0.0',
+      status: 'completed',
+      scheduler_policy_id: 'policy-b',
+      retention_policy_id: 'retention-b',
+      last_event_seq: 11,
+      last_updated_at_ms: 30,
+    },
+  ]);
+
+  assert.equal(summary.rows.find((row) => row.label === 'Workflow Version')?.count, 1);
+  assert.equal(summary.rows.find((row) => row.label === 'Workflow Version')?.total, 2);
 });
 
 test('timeline label helpers format typed projection enums and payload presence', () => {

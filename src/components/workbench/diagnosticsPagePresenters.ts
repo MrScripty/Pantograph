@@ -3,6 +3,7 @@ import type {
   DiagnosticEventSourceComponent,
   ProjectionStateRecord,
   RunDetailProjectionRecord,
+  RunListProjectionRecord,
   SchedulerTimelineProjectionRecord,
 } from '../../services/diagnostics/types';
 
@@ -10,6 +11,18 @@ export interface DiagnosticsFactRow {
   label: string;
   value: string;
   mono: boolean;
+}
+
+export interface DiagnosticsFacetRow {
+  label: string;
+  value: string;
+  count: number;
+  total: number;
+}
+
+export interface DiagnosticsFacetSummary {
+  rows: DiagnosticsFacetRow[];
+  mixedVersionWarning: string | null;
 }
 
 export function formatDiagnosticsTimestamp(value: number | null | undefined): string {
@@ -93,6 +106,86 @@ export function buildDiagnosticsFactRows(run: RunDetailProjectionRecord): Diagno
     { label: 'Timeline Events', value: String(run.timeline_event_count), mono: false },
     { label: 'Last Event Seq', value: String(run.last_event_seq), mono: false },
   ];
+}
+
+export function buildDiagnosticsFacetSummary(
+  activeRun: RunDetailProjectionRecord,
+  runs: RunListProjectionRecord[],
+): DiagnosticsFacetSummary {
+  const workflowRuns = runs.filter((run) => run.workflow_id === activeRun.workflow_id);
+  const activeRunIsProjected = workflowRuns.some((run) => run.workflow_run_id === activeRun.workflow_run_id);
+  const scopedRuns = activeRunIsProjected ? workflowRuns : [activeRun, ...workflowRuns];
+  const total = scopedRuns.length;
+  const rows = [
+    buildDiagnosticsFacetRow('Workflow Version', workflowVersionLabel(activeRun), scopedRuns, workflowVersionLabel, total),
+    buildDiagnosticsFacetRow('Status', activeRun.status, scopedRuns, (run) => run.status, total),
+    buildDiagnosticsFacetRow(
+      'Scheduler Policy',
+      optionalFacetLabel(activeRun.scheduler_policy_id),
+      scopedRuns,
+      (run) => optionalFacetLabel(run.scheduler_policy_id),
+      total,
+    ),
+    buildDiagnosticsFacetRow(
+      'Retention Policy',
+      optionalFacetLabel(activeRun.retention_policy_id),
+      scopedRuns,
+      (run) => optionalFacetLabel(run.retention_policy_id),
+      total,
+    ),
+    buildDiagnosticsFacetRow(
+      'Client',
+      optionalFacetLabel(activeRun.client_id),
+      [activeRun],
+      (run) => optionalFacetLabel(run.client_id),
+      1,
+    ),
+    buildDiagnosticsFacetRow(
+      'Client Session',
+      optionalFacetLabel(activeRun.client_session_id),
+      [activeRun],
+      (run) => optionalFacetLabel(run.client_session_id),
+      1,
+    ),
+    buildDiagnosticsFacetRow(
+      'Bucket',
+      optionalFacetLabel(activeRun.bucket_id),
+      [activeRun],
+      (run) => optionalFacetLabel(run.bucket_id),
+      1,
+    ),
+  ];
+
+  const workflowVersions = new Set(scopedRuns.map(workflowVersionLabel));
+  const mixedVersionWarning =
+    workflowVersions.size > 1
+      ? `${activeRun.workflow_id} has ${workflowVersions.size} workflow versions in the current run-list projection.`
+      : null;
+
+  return { rows, mixedVersionWarning };
+}
+
+function buildDiagnosticsFacetRow<T extends RunListProjectionRecord>(
+  label: string,
+  value: string,
+  runs: T[],
+  readValue: (run: T) => string,
+  total: number,
+): DiagnosticsFacetRow {
+  return {
+    label,
+    value,
+    count: runs.filter((run) => readValue(run) === value).length,
+    total,
+  };
+}
+
+function workflowVersionLabel(run: RunListProjectionRecord): string {
+  return run.workflow_semantic_version ?? run.workflow_version_id ?? 'Unversioned';
+}
+
+function optionalFacetLabel(value: string | null | undefined): string {
+  return value && value.trim().length > 0 ? value : 'Unassigned';
 }
 
 export function formatDiagnosticEventKind(kind: DiagnosticEventKind): string {
