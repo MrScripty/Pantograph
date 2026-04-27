@@ -48,6 +48,16 @@ fn workflow_diagnostics_usage_query_delegates_to_ledger_and_summarizes_events() 
         })
         .expect("diagnostics version query");
     assert_eq!(by_version.events.len(), 3);
+
+    let by_node_contract = service
+        .workflow_diagnostics_usage_query(WorkflowDiagnosticsUsageQueryRequest {
+            node_contract_version: Some("1.0.0".to_string()),
+            node_contract_digest: Some("digest-a".to_string()),
+            page_size: Some(10),
+            ..WorkflowDiagnosticsUsageQueryRequest::default()
+        })
+        .expect("diagnostics node contract query");
+    assert_eq!(by_node_contract.events.len(), 3);
 }
 
 #[test]
@@ -101,7 +111,7 @@ fn sample_event(
             node_type: "llm-inference".to_string(),
             port_ids: vec!["text".to_string()],
             composed_parent_chain: Vec::new(),
-            effective_contract_version: Some("v1".to_string()),
+            effective_contract_version: Some("1.0.0".to_string()),
             effective_contract_digest: Some("digest-a".to_string()),
             metadata_json: None,
         },

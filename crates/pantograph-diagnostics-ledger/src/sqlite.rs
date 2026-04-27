@@ -230,6 +230,8 @@ impl DiagnosticsLedgerRepository for SqliteDiagnosticsLedger {
                 .map(|workflow_version_id| workflow_version_id.as_str()),
             query.workflow_semantic_version,
             query.node_id,
+            query.node_contract_version,
+            query.node_contract_digest,
             query.model_id,
             query.license_value,
             guarantee,
@@ -382,13 +384,15 @@ WHERE (?1 IS NULL OR e.client_id = ?1)
   AND (?6 IS NULL OR e.workflow_version_id = ?6)
   AND (?7 IS NULL OR e.workflow_semantic_version = ?7)
   AND (?8 IS NULL OR e.node_id = ?8)
-  AND (?9 IS NULL OR e.model_id = ?9)
-  AND (?10 IS NULL OR l.license_value = ?10)
-  AND (?11 IS NULL OR e.guarantee_level = ?11)
-  AND (?12 IS NULL OR e.started_at_ms >= ?12)
-  AND (?13 IS NULL OR e.started_at_ms < ?13)
+  AND (?9 IS NULL OR u.effective_contract_version = ?9)
+  AND (?10 IS NULL OR u.effective_contract_digest = ?10)
+  AND (?11 IS NULL OR e.model_id = ?11)
+  AND (?12 IS NULL OR l.license_value = ?12)
+  AND (?13 IS NULL OR e.guarantee_level = ?13)
+  AND (?14 IS NULL OR e.started_at_ms >= ?14)
+  AND (?15 IS NULL OR e.started_at_ms < ?15)
 ORDER BY e.started_at_ms DESC, e.usage_event_id DESC
-LIMIT ?14 OFFSET ?15
+LIMIT ?16 OFFSET ?17
 "#;
 
 fn event_from_row(row: &Row<'_>) -> Result<ModelLicenseUsageEvent, DiagnosticsLedgerError> {

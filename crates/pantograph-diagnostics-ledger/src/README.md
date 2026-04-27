@@ -124,8 +124,9 @@ let history = ledger.query_workflow_run_summaries(&WorkflowRunSummaryQuery {
 ## Structured Producer Contract
 
 - Stable fields: `workflow_id`, `workflow_run_id`, timing status, timing
-  durations, usage-event identity, model identity, and lineage facts are
-  machine-consumed by diagnostics projections.
+  durations, usage-event identity, model identity, workflow-version fields,
+  and lineage node contract version/digest facts are machine-consumed by
+  diagnostics projections.
 - Defaults: omitted optional filters mean unfiltered queries within the
   caller-provided limit.
 - Enums and labels: timing statuses, run-summary statuses, and usage statuses
@@ -135,7 +136,8 @@ let history = ledger.query_workflow_run_summaries(&WorkflowRunSummaryQuery {
 - Compatibility: old incompatible identity records may be ignored when a plan
   intentionally changes the schema contract.
 - Regeneration/migration: schema version bumps must include migration tests and
-  update the SQLite module README when table ownership changes.
+  update this README or the SQLite module README when persisted query contract
+  ownership changes.
 
 ## Testing
 

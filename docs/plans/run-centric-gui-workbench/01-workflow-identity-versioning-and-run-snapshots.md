@@ -232,7 +232,7 @@ full audit context and event-builder correlation fields.
 
 **Tasks:**
 
-- [ ] Add workflow/node version filters to diagnostics query contracts.
+- [x] Add workflow/node version filters to diagnostics query contracts.
 - [ ] Make diagnostics query contracts consume projections derived from typed
   event ledger correlation fields rather than raw mutable graph state.
 - [x] Add run-to-workflow-version projection for Graph page consumers.
@@ -244,9 +244,10 @@ full audit context and event-builder correlation fields.
 - Diagnostics query tests cover workflow-version filtering.
 - Graph projection tests cover historic run version lookup.
 
-**Status:** In progress. Workflow-version id and semantic-version filters now
-exist for model/license usage diagnostics. Node-version filters, graph
-projections, and graph-fingerprint quarantine remain pending.
+**Status:** In progress. Workflow-version id, workflow semantic-version, and
+node contract version/digest filters now exist for model/license usage
+diagnostics. Graph projections and graph-fingerprint quarantine remain
+pending.
 
 ## Public Facade Preservation Note
 
@@ -328,6 +329,9 @@ records for the same execution fingerprint.
 - 2026-04-27: Added a run-to-workflow-version projection that joins immutable
   run snapshots to their workflow-version record and executable topology JSON
   for Graph page and diagnostics consumers.
+- 2026-04-27: Added diagnostics usage-query filters for node contract
+  version and node contract digest, backed by SQLite lineage indexes and
+  exposed through the workflow-service diagnostics facade.
 
 ### Deviations
 
@@ -392,6 +396,14 @@ records for the same execution fingerprint.
 - 2026-04-27: `cargo test -p pantograph-runtime-attribution` and
   `cargo test -p pantograph-workflow-service` passed after adding the
   run-to-workflow-version projection.
+- 2026-04-27: `cargo test -p pantograph-diagnostics-ledger
+  query_usage_events_filters_by_node_contract_version_and_digest` and
+  `cargo test -p pantograph-workflow-service
+  workflow_diagnostics_usage_query_delegates_to_ledger_and_summarizes_events`
+  passed after adding node contract diagnostics filters.
+- 2026-04-27: `cargo test -p pantograph-diagnostics-ledger` and
+  `cargo test -p pantograph-workflow-service` passed for the same node
+  contract diagnostics filter slice.
 
 ### Traceability Links
 

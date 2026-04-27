@@ -2,7 +2,10 @@
 
 ## Status
 
-Draft plan. Not implemented.
+In progress. Stage `01` has started the version-aware diagnostics filter
+cutover by adding workflow-version and node contract version/digest filters to
+the existing model/license usage diagnostics path. Full typed event ledger,
+retention, I/O, and Library/Pumas audit work is still not started.
 
 ## Objective
 
@@ -171,7 +174,7 @@ ledger.
 - [ ] Implement projection rebuild for run summary, run detail, scheduler
   timeline, diagnostics summary, I/O artifact gallery, retention state, and
   Library usage where first-pass event families exist.
-- [ ] Add workflow execution version and node version fields to projections.
+- [x] Add workflow execution version and node version fields to projections.
 - [ ] Add model/runtime/version and scheduler policy filters where not already
   present.
 - [ ] Add retention-completeness filter/projection.
@@ -189,7 +192,9 @@ ledger.
   durable resources: SQLite/database files, temporary roots, payload stores,
   and cache paths must not be shared between parallel tests.
 
-**Status:** Not started.
+**Status:** In progress. Existing model/license usage projections now carry
+workflow-version fields and can filter by node contract version/digest. Typed
+event append and projection rebuild work remains pending.
 
 ### Milestone 3: I/O Artifact Metadata And Retention
 
@@ -273,7 +278,10 @@ may produce events only through their approved typed builders.
 
 ### Completed
 
-- None. Draft plan only.
+- 2026-04-27: Added workflow execution version and node contract
+  version/digest filters to the existing model/license usage diagnostics
+  projection. This is a transitional Stage `01` filter cutover, not the full
+  typed event ledger from this stage.
 
 ### Deviations
 
@@ -286,7 +294,13 @@ may produce events only through their approved typed builders.
 
 ### Verification Summary
 
-- Not run. Draft plan only.
+- 2026-04-27: `cargo test -p pantograph-diagnostics-ledger
+  query_usage_events_filters_by_node_contract_version_and_digest` passed.
+- 2026-04-27: `cargo test -p pantograph-workflow-service
+  workflow_diagnostics_usage_query_delegates_to_ledger_and_summarizes_events`
+  passed.
+- 2026-04-27: `cargo test -p pantograph-diagnostics-ledger` and
+  `cargo test -p pantograph-workflow-service` passed.
 
 ### Traceability Links
 

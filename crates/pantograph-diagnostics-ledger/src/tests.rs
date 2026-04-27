@@ -71,6 +71,36 @@ fn license_snapshot_is_time_of_use_and_not_rewritten_by_later_events() {
 }
 
 #[test]
+fn query_usage_events_filters_by_node_contract_version_and_digest() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    let matched = sample_event("usage_matched", "model-a", 10, 20);
+    let mut other_version = sample_event("usage_other_version", "model-a", 30, 40);
+    other_version.lineage.effective_contract_version = Some("2".to_string());
+    let mut other_digest = sample_event("usage_other_digest", "model-a", 50, 60);
+    other_digest.lineage.effective_contract_digest = Some("digest-2".to_string());
+
+    ledger
+        .record_usage_event(matched.clone())
+        .expect("matched event is recorded");
+    ledger
+        .record_usage_event(other_version)
+        .expect("other version event is recorded");
+    ledger
+        .record_usage_event(other_digest)
+        .expect("other digest event is recorded");
+
+    let projection = ledger
+        .query_usage_events(DiagnosticsQuery {
+            node_contract_version: Some("1".to_string()),
+            node_contract_digest: Some("digest-1".to_string()),
+            ..DiagnosticsQuery::default()
+        })
+        .expect("node contract query succeeds");
+
+    assert_eq!(projection.events, vec![matched]);
+}
+
+#[test]
 fn query_rejects_unbounded_page_size_and_invalid_time_range() {
     let ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
 
@@ -409,6 +439,45 @@ fn workflow_run_summary_upsert_and_query_preserves_latest_run_state() {
 }
 
 #[test]
+fn existing_v5_schema_adds_usage_lineage_contract_indexes() {
+    let temp = tempfile::NamedTempFile::new().expect("temp file");
+    let path = temp.path().to_path_buf();
+    {
+        let conn = Connection::open(&path).expect("connection opens");
+        conn.execute_batch(
+            "CREATE TABLE ledger_schema_migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at_ms INTEGER NOT NULL,
+                checksum TEXT NOT NULL
+            );
+            INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
+            VALUES (5, 0, 'pantograph-diagnostics-ledger-v5');
+            CREATE TABLE usage_lineage (
+                usage_event_id TEXT PRIMARY KEY,
+                node_id TEXT NOT NULL,
+                node_type TEXT NOT NULL,
+                port_ids_json TEXT NOT NULL,
+                composed_parent_chain_json TEXT NOT NULL,
+                effective_contract_version TEXT,
+                effective_contract_digest TEXT,
+                metadata_json TEXT
+            );",
+        )
+        .expect("v5 usage lineage schema is installed");
+    }
+    {
+        let _ledger = SqliteDiagnosticsLedger::open(&path).expect("ledger migrates");
+    }
+
+    let conn = Connection::open(&path).expect("connection reopens");
+    let has_version_index = sqlite_index_exists(&conn, "idx_usage_lineage_contract_version");
+    let has_digest_index = sqlite_index_exists(&conn, "idx_usage_lineage_contract_digest");
+
+    assert!(has_version_index);
+    assert!(has_digest_index);
+}
+
+#[test]
 fn unsupported_schema_version_is_rejected() {
     let conn = Connection::open_in_memory().expect("connection opens");
     conn.execute_batch(
@@ -428,6 +497,17 @@ fn unsupported_schema_version_is_rejected() {
         result,
         Err(DiagnosticsLedgerError::UnsupportedSchemaVersion { found: 999 })
     ));
+}
+
+fn sqlite_index_exists(conn: &Connection, index_name: &str) -> bool {
+    conn.query_row(
+        "SELECT EXISTS(
+            SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?1
+        )",
+        [index_name],
+        |row| row.get::<_, bool>(0),
+    )
+    .expect("index lookup succeeds")
 }
 
 #[test]

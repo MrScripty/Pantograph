@@ -4,8 +4,8 @@ use crate::records::{RetentionClass, DEFAULT_STANDARD_RETENTION_DAYS};
 use crate::util::now_ms;
 use crate::DiagnosticsLedgerError;
 
-pub(crate) const SCHEMA_VERSION: i64 = 5;
-const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v5";
+pub(crate) const SCHEMA_VERSION: i64 = 6;
+const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v6";
 
 pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {
     tx.execute_batch(
@@ -105,6 +105,10 @@ pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedger
             effective_contract_digest TEXT,
             metadata_json TEXT
         );
+        CREATE INDEX idx_usage_lineage_contract_version
+            ON usage_lineage(effective_contract_version);
+        CREATE INDEX idx_usage_lineage_contract_digest
+            ON usage_lineage(effective_contract_digest);
 
         CREATE TABLE diagnostics_retention_policy (
             policy_id TEXT PRIMARY KEY,
@@ -168,6 +172,18 @@ pub(crate) fn migrate_schema(
         tx.execute(
             "CREATE INDEX IF NOT EXISTS idx_usage_events_workflow_version_time
                 ON model_license_usage_events(workflow_version_id, started_at_ms)",
+            [],
+        )?;
+    }
+    if found < 6 && table_exists(&tx, "usage_lineage")? {
+        tx.execute(
+            "CREATE INDEX IF NOT EXISTS idx_usage_lineage_contract_version
+                ON usage_lineage(effective_contract_version)",
+            [],
+        )?;
+        tx.execute(
+            "CREATE INDEX IF NOT EXISTS idx_usage_lineage_contract_digest
+                ON usage_lineage(effective_contract_digest)",
             [],
         )?;
     }

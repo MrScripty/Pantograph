@@ -169,6 +169,9 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
 - Snapshotting: queued workflow execution sessions require an explicit
   `workflow_semantic_version` and use it when resolving the immutable workflow
   version snapshot.
+- Diagnostics: usage diagnostics accept workflow-version and node contract
+  version/digest filters so historic comparisons can avoid mixing different
+  executable node behavior.
 - Enums and labels: runtime install/readiness states retain the parent service
   contract semantics.
 - Ordering: runtime issues are sorted and deduplicated before public exposure.

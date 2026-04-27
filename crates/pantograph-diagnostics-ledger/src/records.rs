@@ -263,6 +263,8 @@ pub struct DiagnosticsQuery {
     pub workflow_version_id: Option<WorkflowVersionId>,
     pub workflow_semantic_version: Option<String>,
     pub node_id: Option<String>,
+    pub node_contract_version: Option<String>,
+    pub node_contract_digest: Option<String>,
     pub model_id: Option<String>,
     pub license_value: Option<String>,
     pub guarantee_level: Option<ExecutionGuaranteeLevel>,
@@ -283,6 +285,8 @@ impl Default for DiagnosticsQuery {
             workflow_version_id: None,
             workflow_semantic_version: None,
             node_id: None,
+            node_contract_version: None,
+            node_contract_digest: None,
             model_id: None,
             license_value: None,
             guarantee_level: None,
@@ -309,6 +313,16 @@ impl DiagnosticsQuery {
             return Err(DiagnosticsLedgerError::InvalidTimeRange);
         }
         validate_optional_text("node_id", self.node_id.as_deref(), MAX_ID_LEN)?;
+        validate_optional_text(
+            "node_contract_version",
+            self.node_contract_version.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "node_contract_digest",
+            self.node_contract_digest.as_deref(),
+            MAX_ID_LEN,
+        )?;
         validate_optional_text("model_id", self.model_id.as_deref(), MAX_ID_LEN)?;
         validate_optional_text(
             "workflow_semantic_version",

@@ -26,6 +26,10 @@ pub struct WorkflowDiagnosticsUsageQueryRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub node_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub node_contract_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub node_contract_digest: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub license_value: Option<String>,
@@ -101,6 +105,8 @@ impl WorkflowDiagnosticsUsageQueryRequest {
             )?,
             workflow_semantic_version: self.workflow_semantic_version,
             node_id: self.node_id,
+            node_contract_version: self.node_contract_version,
+            node_contract_digest: self.node_contract_digest,
             model_id: self.model_id,
             license_value: self.license_value,
             guarantee_level: self.guarantee_level,
