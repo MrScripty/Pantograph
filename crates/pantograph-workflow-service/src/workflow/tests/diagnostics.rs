@@ -1,7 +1,10 @@
 use pantograph_diagnostics_ledger::{
-    DiagnosticsLedgerRepository, ExecutionGuaranteeLevel, LicenseSnapshot, ModelIdentity,
-    ModelLicenseUsageEvent, ModelOutputMeasurement, OutputModality, RetentionClass,
-    UsageEventStatus, UsageLineage,
+    DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
+    DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
+    ExecutionGuaranteeLevel, LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent,
+    ModelOutputMeasurement, OutputModality, RetentionClass, RunSnapshotAcceptedPayload,
+    SchedulerEstimateProducedPayload, SchedulerQueuePlacementPayload, UsageEventStatus,
+    UsageLineage,
 };
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, UsageEventId, WorkflowId, WorkflowRunId, WorkflowVersionId,
@@ -83,6 +86,181 @@ fn workflow_diagnostics_usage_query_validates_ids_and_bounds() {
         oversized_page,
         Err(WorkflowServiceError::InvalidRequest(_))
     ));
+}
+
+#[test]
+fn workflow_scheduler_timeline_query_drains_and_reads_projection() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_run_snapshot_event())
+        .expect("run snapshot event");
+    ledger
+        .append_diagnostic_event(sample_scheduler_estimate_event())
+        .expect("scheduler estimate event");
+    ledger
+        .append_diagnostic_event(sample_scheduler_queue_event())
+        .expect("scheduler queue event");
+    let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+
+    let response = service
+        .workflow_scheduler_timeline_query(WorkflowSchedulerTimelineQueryRequest {
+            workflow_run_id: Some("run-a".to_string()),
+            limit: Some(10),
+            projection_batch_size: Some(10),
+            ..WorkflowSchedulerTimelineQueryRequest::default()
+        })
+        .expect("scheduler timeline query");
+
+    assert_eq!(response.events.len(), 3);
+    assert_eq!(response.events[0].summary, "run snapshot accepted");
+    assert_eq!(response.events[1].summary, "scheduler estimate produced");
+    assert_eq!(response.events[2].summary, "queued at position 0");
+    assert_eq!(response.projection_state.last_applied_event_seq, 3);
+
+    let cursor_response = service
+        .workflow_scheduler_timeline_query(WorkflowSchedulerTimelineQueryRequest {
+            workflow_run_id: Some("run-a".to_string()),
+            after_event_seq: Some(response.events[0].event_seq),
+            limit: Some(10),
+            projection_batch_size: Some(10),
+            ..WorkflowSchedulerTimelineQueryRequest::default()
+        })
+        .expect("scheduler timeline cursor query");
+    assert_eq!(cursor_response.events.len(), 2);
+}
+
+#[test]
+fn workflow_scheduler_timeline_query_validates_bounds() {
+    let service = WorkflowService::with_ephemeral_diagnostics_ledger().expect("service");
+
+    let invalid_id =
+        service.workflow_scheduler_timeline_query(WorkflowSchedulerTimelineQueryRequest {
+            workflow_run_id: Some("bad\nid".to_string()),
+            ..WorkflowSchedulerTimelineQueryRequest::default()
+        });
+    assert!(matches!(
+        invalid_id,
+        Err(WorkflowServiceError::InvalidRequest(_))
+    ));
+
+    let oversized_limit =
+        service.workflow_scheduler_timeline_query(WorkflowSchedulerTimelineQueryRequest {
+            limit: Some(501),
+            ..WorkflowSchedulerTimelineQueryRequest::default()
+        });
+    assert!(matches!(
+        oversized_limit,
+        Err(WorkflowServiceError::InvalidRequest(_))
+    ));
+
+    let oversized_projection_batch =
+        service.workflow_scheduler_timeline_query(WorkflowSchedulerTimelineQueryRequest {
+            projection_batch_size: Some(501),
+            ..WorkflowSchedulerTimelineQueryRequest::default()
+        });
+    assert!(matches!(
+        oversized_projection_batch,
+        Err(WorkflowServiceError::InvalidRequest(_))
+    ));
+}
+
+fn sample_run_snapshot_event() -> DiagnosticEventAppendRequest {
+    DiagnosticEventAppendRequest {
+        source_component: DiagnosticEventSourceComponent::WorkflowService,
+        source_instance_id: Some("workflow-service".to_string()),
+        occurred_at_ms: 10,
+        workflow_run_id: Some(WorkflowRunId::try_from("run-a".to_string()).unwrap()),
+        workflow_id: Some(WorkflowId::try_from("workflow-a".to_string()).unwrap()),
+        workflow_version_id: Some(WorkflowVersionId::try_from("wfver-a".to_string()).unwrap()),
+        workflow_semantic_version: Some("1.0.0".to_string()),
+        node_id: None,
+        node_type: None,
+        node_version: None,
+        runtime_id: None,
+        runtime_version: None,
+        model_id: None,
+        model_version: None,
+        client_id: Some(ClientId::try_from("client-a".to_string()).unwrap()),
+        client_session_id: Some(ClientSessionId::try_from("session-a".to_string()).unwrap()),
+        bucket_id: Some(BucketId::try_from("bucket-a".to_string()).unwrap()),
+        scheduler_policy_id: Some("priority_then_fifo".to_string()),
+        retention_policy_id: Some("ephemeral".to_string()),
+        privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+        retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+        payload_ref: None,
+        payload: DiagnosticEventPayload::RunSnapshotAccepted(RunSnapshotAcceptedPayload {
+            workflow_run_snapshot_id: "runsnap-a".to_string(),
+            workflow_presentation_revision_id: "wfpres-a".to_string(),
+        }),
+    }
+}
+
+fn sample_scheduler_estimate_event() -> DiagnosticEventAppendRequest {
+    DiagnosticEventAppendRequest {
+        source_component: DiagnosticEventSourceComponent::Scheduler,
+        source_instance_id: Some("workflow-session-scheduler".to_string()),
+        occurred_at_ms: 11,
+        workflow_run_id: Some(WorkflowRunId::try_from("run-a".to_string()).unwrap()),
+        workflow_id: Some(WorkflowId::try_from("workflow-a".to_string()).unwrap()),
+        workflow_version_id: Some(WorkflowVersionId::try_from("wfver-a".to_string()).unwrap()),
+        workflow_semantic_version: Some("1.0.0".to_string()),
+        node_id: None,
+        node_type: None,
+        node_version: None,
+        runtime_id: None,
+        runtime_version: None,
+        model_id: None,
+        model_version: None,
+        client_id: Some(ClientId::try_from("client-a".to_string()).unwrap()),
+        client_session_id: Some(ClientSessionId::try_from("session-a".to_string()).unwrap()),
+        bucket_id: Some(BucketId::try_from("bucket-a".to_string()).unwrap()),
+        scheduler_policy_id: Some("priority_then_fifo".to_string()),
+        retention_policy_id: Some("ephemeral".to_string()),
+        privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+        retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+        payload_ref: None,
+        payload: DiagnosticEventPayload::SchedulerEstimateProduced(
+            SchedulerEstimateProducedPayload {
+                estimate_version: "session-scheduler-v1".to_string(),
+                confidence: "low".to_string(),
+                estimated_queue_wait_ms: None,
+                estimated_duration_ms: None,
+                reasons: vec!["next admission candidate".to_string()],
+            },
+        ),
+    }
+}
+
+fn sample_scheduler_queue_event() -> DiagnosticEventAppendRequest {
+    DiagnosticEventAppendRequest {
+        source_component: DiagnosticEventSourceComponent::Scheduler,
+        source_instance_id: Some("workflow-session-scheduler".to_string()),
+        occurred_at_ms: 12,
+        workflow_run_id: Some(WorkflowRunId::try_from("run-a".to_string()).unwrap()),
+        workflow_id: Some(WorkflowId::try_from("workflow-a".to_string()).unwrap()),
+        workflow_version_id: Some(WorkflowVersionId::try_from("wfver-a".to_string()).unwrap()),
+        workflow_semantic_version: Some("1.0.0".to_string()),
+        node_id: None,
+        node_type: None,
+        node_version: None,
+        runtime_id: None,
+        runtime_version: None,
+        model_id: None,
+        model_version: None,
+        client_id: Some(ClientId::try_from("client-a".to_string()).unwrap()),
+        client_session_id: Some(ClientSessionId::try_from("session-a".to_string()).unwrap()),
+        bucket_id: Some(BucketId::try_from("bucket-a".to_string()).unwrap()),
+        scheduler_policy_id: Some("priority_then_fifo".to_string()),
+        retention_policy_id: Some("ephemeral".to_string()),
+        privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+        retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+        payload_ref: None,
+        payload: DiagnosticEventPayload::SchedulerQueuePlacement(SchedulerQueuePlacementPayload {
+            queue_position: 0,
+            priority: 7,
+            scheduler_policy_id: "priority_then_fifo".to_string(),
+        }),
+    }
 }
 
 fn sample_event(

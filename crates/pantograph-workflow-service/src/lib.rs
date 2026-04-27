@@ -100,9 +100,11 @@ pub use workflow::{
     WorkflowRuntimeSourceKind, WorkflowSchedulerAdmissionOutcome, WorkflowSchedulerDecisionReason,
     WorkflowSchedulerDiagnosticsProvider, WorkflowSchedulerErrorDetails,
     WorkflowSchedulerErrorReason, WorkflowSchedulerRuntimeDiagnosticsRequest,
-    WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse, WorkflowService,
+    WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse,
+    WorkflowSchedulerTimelineQueryRequest, WorkflowSchedulerTimelineQueryResponse, WorkflowService,
     WorkflowServiceError, WorkflowVersionRecord, WorkflowVersionResolveRequest,
 };
 pub use workflow::{
-    SqliteDiagnosticsLedger, WorkflowTimingExpectation, WorkflowTimingExpectationComparison,
+    ProjectionStateRecord, SchedulerTimelineProjectionRecord, SqliteDiagnosticsLedger,
+    WorkflowTimingExpectation, WorkflowTimingExpectationComparison,
 };

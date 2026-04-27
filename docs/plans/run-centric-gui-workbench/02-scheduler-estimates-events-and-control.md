@@ -216,7 +216,8 @@ persisted through the typed event ledger for queued workflow-session runs.
 The first scheduler timeline projection now drains those scheduler events plus
 `run.snapshot_accepted` into materialized timeline rows by event cursor. Other
 scheduler events, action/override events, model load/unload events, admission
-events, and page-facing API wiring remain pending.
+events, and frontend page wiring remain pending; workflow-service now has a
+query boundary for the materialized scheduler timeline.
 
 ### Milestone 4: Queue Authority And Admin Controls
 

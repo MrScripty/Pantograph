@@ -1,6 +1,7 @@
 use pantograph_diagnostics_ledger::{
     DiagnosticsLedgerRepository, DiagnosticsQuery, DiagnosticsRetentionPolicy,
-    ExecutionGuaranteeLevel, ModelLicenseUsageEvent,
+    ExecutionGuaranteeLevel, ModelLicenseUsageEvent, ProjectionStateRecord,
+    SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
 };
 use serde::{Deserialize, Serialize};
 
@@ -66,6 +67,28 @@ pub struct WorkflowDiagnosticsUsageSummary {
     pub event_count: u64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowSchedulerTimelineQueryRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_run_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub after_event_seq: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub projection_batch_size: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowSchedulerTimelineQueryResponse {
+    pub events: Vec<SchedulerTimelineProjectionRecord>,
+    pub projection_state: ProjectionStateRecord,
+}
+
 impl WorkflowService {
     pub fn workflow_diagnostics_usage_query(
         &self,
@@ -87,6 +110,31 @@ impl WorkflowService {
             page: projection.page,
             page_size: projection.page_size,
             may_have_pruned_usage: projection.may_have_pruned_usage,
+        })
+    }
+
+    pub fn workflow_scheduler_timeline_query(
+        &self,
+        request: WorkflowSchedulerTimelineQueryRequest,
+    ) -> Result<WorkflowSchedulerTimelineQueryResponse, WorkflowServiceError> {
+        let projection_batch_size = request.projection_batch_size.unwrap_or(500).max(1);
+        if projection_batch_size > 500 {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "projection_batch_size exceeds maximum 500".to_string(),
+            ));
+        }
+        let query = request.into_scheduler_timeline_query()?;
+        let mut ledger = self.diagnostics_ledger_guard()?;
+        let projection_state = ledger
+            .drain_scheduler_timeline_projection(projection_batch_size)
+            .map_err(WorkflowServiceError::from)?;
+        let events = ledger
+            .query_scheduler_timeline_projection(query)
+            .map_err(WorkflowServiceError::from)?;
+
+        Ok(WorkflowSchedulerTimelineQueryResponse {
+            events,
+            projection_state,
         })
     }
 }
@@ -120,6 +168,22 @@ impl WorkflowDiagnosticsUsageQueryRequest {
         };
         query.validate().map_err(WorkflowServiceError::from)?;
         Ok(query)
+    }
+}
+
+impl WorkflowSchedulerTimelineQueryRequest {
+    fn into_scheduler_timeline_query(
+        self,
+    ) -> Result<SchedulerTimelineProjectionQuery, WorkflowServiceError> {
+        Ok(SchedulerTimelineProjectionQuery {
+            workflow_run_id: parse_optional_id("workflow_run_id", self.workflow_run_id)?,
+            workflow_id: parse_optional_id("workflow_id", self.workflow_id)?,
+            after_event_seq: self.after_event_seq,
+            limit: self
+                .limit
+                .unwrap_or_else(|| SchedulerTimelineProjectionQuery::default().limit)
+                .max(1),
+        })
     }
 }
 

@@ -158,13 +158,13 @@ policy into adapters.
 **Tasks:**
 
 - [ ] Add backend queries for run list and run detail.
-- [ ] Add scheduler estimate and event queries.
+- [x] Add scheduler estimate and event queries.
 - [ ] Add workflow-version graph lookup by run id.
 - [ ] Add I/O metadata and retention policy queries/commands.
 - [ ] Add Library/Pumas usage audit queries.
-- [ ] Add projection rebuild/query boundaries for typed event ledger derived
+- [x] Add projection rebuild/query boundaries for typed event ledger derived
   views.
-- [ ] Ensure backend projection queries read materialized projection tables or
+- [x] Ensure backend projection queries read materialized projection tables or
   authoritative state, not raw event replay, during ordinary API requests.
 - [ ] Add explicit admin/maintenance command boundaries for projection rebuild
   where Stage `03` exposes them.
@@ -185,7 +185,12 @@ policy into adapters.
   touched, native and host-language binding checks cover the changed projection
   and command DTOs.
 
-**Status:** Not started.
+**Status:** In progress. Workflow service now exposes
+`workflow_scheduler_timeline_query`, which advances the scheduler timeline
+projection incrementally through the diagnostics ledger cursor and then reads
+materialized `scheduler_timeline_projection` rows. Run list/detail, I/O,
+Library/Pumas, Network/system-node, admin maintenance, and broader command
+boundaries remain pending.
 
 ### Milestone 3: Frontend Services And Stores
 
