@@ -270,6 +270,7 @@ pub(super) fn drain_scheduler_timeline_projection(
                     'scheduler.queue_control',
                     'scheduler.run_delayed',
                     'scheduler.model_lifecycle_changed',
+                    'scheduler.run_admitted',
                     'run.started',
                     'run.terminal',
                     'run.snapshot_accepted'
@@ -1232,6 +1233,7 @@ fn diagnostic_projection_events_after(
                 'scheduler.queue_control',
                 'scheduler.run_delayed',
                 'scheduler.model_lifecycle_changed',
+                'scheduler.run_admitted',
                 'run.started',
                 'run.terminal',
                 'run.snapshot_accepted'
@@ -1419,6 +1421,16 @@ fn scheduler_timeline_record_from_event(
                 (None, None, None) => None,
             };
             (summary, detail)
+        }
+        DiagnosticEventPayload::SchedulerRunAdmitted(payload) => {
+            let detail = match payload.queue_wait_ms {
+                Some(queue_wait_ms) => Some(format!(
+                    "queue wait {queue_wait_ms} ms; {}",
+                    payload.decision_reason
+                )),
+                None => Some(payload.decision_reason),
+            };
+            ("run admitted".to_string(), detail)
         }
         DiagnosticEventPayload::RunStarted(payload) => {
             let detail = match (
@@ -1701,6 +1713,7 @@ fn apply_run_list_projection_event(
         }
         DiagnosticEventPayload::SchedulerQueueControl(_) => RunListProjectionStatus::Queued,
         DiagnosticEventPayload::SchedulerRunDelayed(_) => RunListProjectionStatus::Delayed,
+        DiagnosticEventPayload::SchedulerRunAdmitted(_) => RunListProjectionStatus::Running,
         DiagnosticEventPayload::RunStarted(_) => RunListProjectionStatus::Running,
         DiagnosticEventPayload::RunTerminal(payload) => match payload.status {
             crate::event::RunTerminalStatus::Completed => RunListProjectionStatus::Completed,
@@ -1836,6 +1849,14 @@ fn scheduler_projection_facts(payload: &DiagnosticEventPayload) -> SchedulerProj
                 reason: payload.reason.clone(),
             }
         }
+        DiagnosticEventPayload::SchedulerRunAdmitted(payload) => SchedulerProjectionFacts {
+            queue_position: None,
+            priority: None,
+            estimate_confidence: None,
+            estimated_queue_wait_ms: None,
+            estimated_duration_ms: None,
+            reason: Some(payload.decision_reason.clone()),
+        },
         DiagnosticEventPayload::RunStarted(payload) => SchedulerProjectionFacts {
             queue_position: None,
             priority: None,
@@ -1877,6 +1898,7 @@ fn apply_run_detail_projection_event(
         }
         DiagnosticEventPayload::SchedulerQueueControl(_) => RunListProjectionStatus::Queued,
         DiagnosticEventPayload::SchedulerRunDelayed(_) => RunListProjectionStatus::Delayed,
+        DiagnosticEventPayload::SchedulerRunAdmitted(_) => RunListProjectionStatus::Running,
         DiagnosticEventPayload::RunStarted(_) => RunListProjectionStatus::Running,
         DiagnosticEventPayload::RunTerminal(payload) => match payload.status {
             crate::event::RunTerminalStatus::Completed => RunListProjectionStatus::Completed,

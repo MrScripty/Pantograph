@@ -36,6 +36,11 @@ Those events record control facts, actor scope, and the queue state observed
 before the mutation, while terminal execution truth remains owned by `run.*`
 lifecycle events.
 
+Scheduler admission must also emit a typed scheduler diagnostic event before
+the run lifecycle starts. This keeps the scheduler's admission decision
+auditable without treating `run.started` as the owner of scheduler control
+semantics.
+
 Binding and frontend contracts must expose scheduler-backed session execution,
 not raw graph or direct workflow-run helpers. Host/runtime traits may still own
 low-level execution mechanics, but those mechanics are implementation surfaces,

@@ -337,7 +337,7 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         )
         .expect("diagnostic events")
     };
-    assert_eq!(diagnostic_events.len(), 5);
+    assert_eq!(diagnostic_events.len(), 6);
     let event = diagnostic_events
         .iter()
         .find(|event| {
@@ -450,6 +450,28 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
     assert!(queue_event.payload_json.contains("\"queue_position\":0"));
     assert!(queue_event.payload_json.contains("\"priority\":7"));
 
+    let admitted_event = diagnostic_events
+        .iter()
+        .find(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerRunAdmitted
+        })
+        .expect("scheduler run admitted event");
+    assert_eq!(
+        admitted_event.source_component,
+        pantograph_diagnostics_ledger::DiagnosticEventSourceComponent::Scheduler
+    );
+    assert_eq!(
+        admitted_event
+            .workflow_run_id
+            .as_ref()
+            .map(|id| id.as_str()),
+        Some(response.workflow_run_id.as_str())
+    );
+    assert!(admitted_event.event_seq > queue_event.event_seq);
+    assert!(admitted_event.payload_json.contains("\"decision_reason\":"));
+    assert!(admitted_event.payload_json.contains("\"queue_wait_ms\":"));
+
     let started_event = diagnostic_events
         .iter()
         .find(|event| {
@@ -464,7 +486,7 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         started_event.workflow_run_id.as_ref().map(|id| id.as_str()),
         Some(response.workflow_run_id.as_str())
     );
-    assert!(started_event.event_seq > queue_event.event_seq);
+    assert!(started_event.event_seq > admitted_event.event_seq);
     assert!(started_event
         .payload_json
         .contains("\"scheduler_decision_reason\":"));

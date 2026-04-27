@@ -17,17 +17,18 @@ use crate::{
     RunListProjectionQuery, RunListProjectionStatus, RunSnapshotAcceptedPayload,
     RunSnapshotNodeVersionPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
     SchedulerEstimateProducedPayload, SchedulerModelLifecycleChangedPayload,
-    SchedulerModelLifecycleTransition, SchedulerQueuePlacementPayload, SchedulerRunDelayedPayload,
-    SchedulerTimelineProjectionQuery, SqliteDiagnosticsLedger, UpdateRetentionPolicyCommand,
-    UsageEventStatus, UsageLineage, WorkflowRunSummaryQuery, WorkflowRunSummaryRecord,
-    WorkflowRunSummaryStatus, WorkflowTimingExpectation, WorkflowTimingExpectationComparison,
-    WorkflowTimingExpectationQuery, WorkflowTimingObservation, WorkflowTimingObservationScope,
-    WorkflowTimingObservationStatus, DEFAULT_STANDARD_RETENTION_DAYS, IO_ARTIFACT_PROJECTION_NAME,
-    IO_ARTIFACT_PROJECTION_VERSION, LIBRARY_USAGE_PROJECTION_NAME,
-    LIBRARY_USAGE_PROJECTION_VERSION, MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES,
-    NODE_STATUS_PROJECTION_NAME, NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME,
-    RUN_DETAIL_PROJECTION_VERSION, RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION,
-    SCHEDULER_TIMELINE_PROJECTION_NAME, SCHEDULER_TIMELINE_PROJECTION_VERSION,
+    SchedulerModelLifecycleTransition, SchedulerQueuePlacementPayload, SchedulerRunAdmittedPayload,
+    SchedulerRunDelayedPayload, SchedulerTimelineProjectionQuery, SqliteDiagnosticsLedger,
+    UpdateRetentionPolicyCommand, UsageEventStatus, UsageLineage, WorkflowRunSummaryQuery,
+    WorkflowRunSummaryRecord, WorkflowRunSummaryStatus, WorkflowTimingExpectation,
+    WorkflowTimingExpectationComparison, WorkflowTimingExpectationQuery, WorkflowTimingObservation,
+    WorkflowTimingObservationScope, WorkflowTimingObservationStatus,
+    DEFAULT_STANDARD_RETENTION_DAYS, IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION,
+    LIBRARY_USAGE_PROJECTION_NAME, LIBRARY_USAGE_PROJECTION_VERSION,
+    MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, NODE_STATUS_PROJECTION_NAME,
+    NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION,
+    RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
+    SCHEDULER_TIMELINE_PROJECTION_VERSION,
 };
 
 #[test]
@@ -726,6 +727,9 @@ fn scheduler_timeline_projection_drains_events_incrementally() {
     let model_event = ledger
         .append_diagnostic_event(sample_scheduler_model_lifecycle_event("workflow_run_alpha"))
         .expect("scheduler model lifecycle event appends");
+    let admitted_event = ledger
+        .append_diagnostic_event(sample_scheduler_admission_event("workflow_run_alpha"))
+        .expect("scheduler admission event appends");
     let started_event = ledger
         .append_diagnostic_event(sample_run_started_event("workflow_run_alpha"))
         .expect("run started event appends");
@@ -752,7 +756,7 @@ fn scheduler_timeline_projection_drains_events_incrementally() {
             ..SchedulerTimelineProjectionQuery::default()
         })
         .expect("scheduler timeline projection loads");
-    assert_eq!(records.len(), 7);
+    assert_eq!(records.len(), 8);
     assert_eq!(records[0].event_seq, snapshot_event.event_seq);
     assert_eq!(records[0].summary, "run snapshot accepted");
     assert_eq!(records[1].event_seq, estimate_event.event_seq);
@@ -773,15 +777,21 @@ fn scheduler_timeline_projection_drains_events_incrementally() {
         records[4].detail.as_deref(),
         Some("cache miss before queued run")
     );
-    assert_eq!(records[5].event_seq, started_event.event_seq);
-    assert_eq!(records[5].summary, "run started");
+    assert_eq!(records[5].event_seq, admitted_event.event_seq);
+    assert_eq!(records[5].summary, "run admitted");
     assert_eq!(
         records[5].detail.as_deref(),
         Some("queue wait 10 ms; warm_session_reused")
     );
-    assert_eq!(records[6].event_seq, terminal_event.event_seq);
-    assert_eq!(records[6].summary, "run completed");
-    assert_eq!(records[6].detail.as_deref(), None);
+    assert_eq!(records[6].event_seq, started_event.event_seq);
+    assert_eq!(records[6].summary, "run started");
+    assert_eq!(
+        records[6].detail.as_deref(),
+        Some("queue wait 10 ms; warm_session_reused")
+    );
+    assert_eq!(records[7].event_seq, terminal_event.event_seq);
+    assert_eq!(records[7].summary, "run completed");
+    assert_eq!(records[7].detail.as_deref(), None);
 
     let after_first = ledger
         .query_scheduler_timeline_projection(SchedulerTimelineProjectionQuery {
@@ -789,7 +799,7 @@ fn scheduler_timeline_projection_drains_events_incrementally() {
             ..SchedulerTimelineProjectionQuery::default()
         })
         .expect("scheduler timeline projection cursor query loads");
-    assert_eq!(after_first.len(), 6);
+    assert_eq!(after_first.len(), 7);
 
     let no_new_state = ledger
         .drain_scheduler_timeline_projection(10)
@@ -801,7 +811,7 @@ fn scheduler_timeline_projection_drains_events_incrementally() {
     let records_after_duplicate_drain = ledger
         .query_scheduler_timeline_projection(SchedulerTimelineProjectionQuery::default())
         .expect("scheduler timeline projection loads after duplicate drain");
-    assert_eq!(records_after_duplicate_drain.len(), 7);
+    assert_eq!(records_after_duplicate_drain.len(), 8);
 
     let later_event = ledger
         .append_diagnostic_event(sample_scheduler_queue_event("workflow_run_alpha", 1))
@@ -813,7 +823,7 @@ fn scheduler_timeline_projection_drains_events_incrementally() {
     let records_after_later_event = ledger
         .query_scheduler_timeline_projection(SchedulerTimelineProjectionQuery::default())
         .expect("scheduler timeline projection loads after later event");
-    assert_eq!(records_after_later_event.len(), 8);
+    assert_eq!(records_after_later_event.len(), 9);
 }
 
 #[test]
@@ -886,6 +896,9 @@ fn run_list_projection_drains_lifecycle_events_incrementally() {
     ledger
         .append_diagnostic_event(sample_scheduler_queue_event("workflow_run_alpha", 0))
         .expect("scheduler queue event appends");
+    ledger
+        .append_diagnostic_event(sample_scheduler_admission_event("workflow_run_alpha"))
+        .expect("scheduler admission event appends");
     ledger
         .append_diagnostic_event(sample_run_started_event("workflow_run_alpha"))
         .expect("run started event appends");
@@ -1004,6 +1017,9 @@ fn run_detail_projection_drains_lifecycle_events_incrementally() {
         .append_diagnostic_event(sample_scheduler_queue_event("workflow_run_alpha", 0))
         .expect("scheduler queue event appends");
     ledger
+        .append_diagnostic_event(sample_scheduler_admission_event("workflow_run_alpha"))
+        .expect("scheduler admission event appends");
+    ledger
         .append_diagnostic_event(sample_run_started_event("workflow_run_alpha"))
         .expect("run started event appends");
     let terminal_event = ledger
@@ -1064,7 +1080,7 @@ fn run_detail_projection_drains_lifecycle_events_incrementally() {
         record.scheduler_reason.as_deref(),
         Some("warm_session_reused")
     );
-    assert_eq!(record.timeline_event_count, 5);
+    assert_eq!(record.timeline_event_count, 6);
     assert_eq!(record.last_event_seq, terminal_event.event_seq);
 
     let no_new_state = ledger
@@ -1080,7 +1096,7 @@ fn run_detail_projection_drains_lifecycle_events_incrementally() {
         })
         .expect("run detail projection loads after idempotent drain")
         .expect("run detail exists after idempotent drain");
-    assert_eq!(after_idempotent.timeline_event_count, 5);
+    assert_eq!(after_idempotent.timeline_event_count, 6);
 }
 
 #[test]
@@ -2182,6 +2198,37 @@ fn sample_scheduler_model_lifecycle_event(workflow_run_id: &str) -> DiagnosticEv
                 error: None,
             },
         ),
+    }
+}
+
+fn sample_scheduler_admission_event(workflow_run_id: &str) -> DiagnosticEventAppendRequest {
+    DiagnosticEventAppendRequest {
+        source_component: DiagnosticEventSourceComponent::Scheduler,
+        source_instance_id: Some("scheduler-local".to_string()),
+        occurred_at_ms: 1_018,
+        workflow_run_id: Some(WorkflowRunId::try_from(workflow_run_id.to_string()).unwrap()),
+        workflow_id: Some(WorkflowId::try_from("workflow_alpha".to_string()).unwrap()),
+        workflow_version_id: Some(WorkflowVersionId::try_from("wfver_alpha".to_string()).unwrap()),
+        workflow_semantic_version: Some("1.0.0".to_string()),
+        node_id: None,
+        node_type: None,
+        node_version: None,
+        runtime_id: None,
+        runtime_version: None,
+        model_id: None,
+        model_version: None,
+        client_id: Some(ClientId::try_from("client_alpha".to_string()).unwrap()),
+        client_session_id: Some(ClientSessionId::try_from("session_alpha".to_string()).unwrap()),
+        bucket_id: Some(BucketId::try_from("bucket_alpha".to_string()).unwrap()),
+        scheduler_policy_id: Some("scheduler_default".to_string()),
+        retention_policy_id: None,
+        privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+        retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+        payload_ref: None,
+        payload: DiagnosticEventPayload::SchedulerRunAdmitted(SchedulerRunAdmittedPayload {
+            queue_wait_ms: Some(10),
+            decision_reason: "warm_session_reused".to_string(),
+        }),
     }
 }
 

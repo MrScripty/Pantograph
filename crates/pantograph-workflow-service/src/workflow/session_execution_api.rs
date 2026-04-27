@@ -5,7 +5,7 @@ use pantograph_diagnostics_ledger::{
     DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
     RunSnapshotAcceptedPayload, RunSnapshotNodeVersionPayload, RunStartedPayload,
     RunTerminalPayload, RunTerminalStatus, SchedulerEstimateProducedPayload,
-    SchedulerQueuePlacementPayload, SchedulerRunDelayedPayload,
+    SchedulerQueuePlacementPayload, SchedulerRunAdmittedPayload, SchedulerRunDelayedPayload,
 };
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, WorkflowId, WorkflowRunAttributionResolveRequest,
@@ -256,6 +256,11 @@ impl WorkflowService {
             }
             tokio::time::sleep(Duration::from_millis(WORKFLOW_SESSION_QUEUE_POLL_MS)).await;
         };
+        self.record_scheduler_run_admitted_event_if_configured(
+            &session,
+            run_snapshot.as_ref(),
+            &queued_run,
+        )?;
         self.record_run_started_event_if_configured(&session, run_snapshot.as_ref(), &queued_run)?;
         let queued_workflow_semantic_version = queued_run.queued.workflow_semantic_version.clone();
 
@@ -746,6 +751,66 @@ impl WorkflowService {
                         queued_run.scheduler_decision_reason.as_str().to_string(),
                     ),
                 }),
+            },
+        )
+        .map(|_| ())
+        .map_err(WorkflowServiceError::from)
+    }
+
+    fn record_scheduler_run_admitted_event_if_configured(
+        &self,
+        session: &WorkflowExecutionSessionSummary,
+        snapshot: Option<&WorkflowRunSnapshotRecord>,
+        queued_run: &crate::scheduler::WorkflowExecutionSessionDequeuedRun,
+    ) -> Result<(), WorkflowServiceError> {
+        let Some(ledger) = self.diagnostics_ledger.as_ref() else {
+            return Ok(());
+        };
+        let workflow_run_id = WorkflowRunId::try_from(queued_run.queued.workflow_run_id.clone())?;
+        let workflow_id = workflow_id_for_scheduler_event(session, snapshot)?;
+        let occurred_at_ms = i64::try_from(queued_run.dequeued_at_ms).unwrap_or(i64::MAX);
+        let queue_wait_ms = queued_run
+            .dequeued_at_ms
+            .checked_sub(queued_run.enqueued_at_ms);
+
+        let mut ledger = ledger.lock().map_err(|_| {
+            WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
+        })?;
+        DiagnosticsLedgerRepository::append_diagnostic_event(
+            &mut *ledger,
+            DiagnosticEventAppendRequest {
+                source_component: DiagnosticEventSourceComponent::Scheduler,
+                source_instance_id: Some("workflow-session-scheduler".to_string()),
+                occurred_at_ms,
+                workflow_run_id: Some(workflow_run_id),
+                workflow_id: Some(workflow_id),
+                workflow_version_id: snapshot.map(|snapshot| snapshot.workflow_version_id.clone()),
+                workflow_semantic_version: Some(
+                    snapshot
+                        .map(|snapshot| snapshot.workflow_semantic_version.clone())
+                        .unwrap_or_else(|| queued_run.queued.workflow_semantic_version.clone()),
+                ),
+                node_id: None,
+                node_type: None,
+                node_version: None,
+                runtime_id: None,
+                runtime_version: None,
+                model_id: None,
+                model_version: None,
+                client_id: event_client_id(session, snapshot)?,
+                client_session_id: event_client_session_id(session, snapshot)?,
+                bucket_id: event_bucket_id(session, snapshot)?,
+                scheduler_policy_id: Some(WORKFLOW_SESSION_SCHEDULER_POLICY.to_string()),
+                retention_policy_id: snapshot.map(|snapshot| snapshot.retention_policy.clone()),
+                privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+                retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+                payload_ref: None,
+                payload: DiagnosticEventPayload::SchedulerRunAdmitted(
+                    SchedulerRunAdmittedPayload {
+                        queue_wait_ms,
+                        decision_reason: queued_run.scheduler_decision_reason.as_str().to_string(),
+                    },
+                ),
             },
         )
         .map(|_| ())

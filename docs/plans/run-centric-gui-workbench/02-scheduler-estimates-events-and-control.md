@@ -233,10 +233,12 @@ cancel/reprioritize controls now emit typed `scheduler.queue_control` events
 with accepted outcome, actor scope, previous queue position, previous priority,
 new priority where applicable, and a bounded reason. Run-list, run-detail, and
 scheduler timeline projections now materialize those queue-control events.
-Production emitters for model load/unload are not wired yet. Broader
-client/admin action vocabulary, admission events, and frontend page wiring
-remain pending; workflow-service now has a query boundary for the materialized
-scheduler timeline.
+Queue admission now emits a typed `scheduler.run_admitted` event before
+`run.started`, so scheduler admission decisions are auditable without making
+`run.*` lifecycle events carry scheduler control semantics. Production emitters
+for model load/unload are not wired yet. Broader client/admin action
+vocabulary and frontend page wiring remain pending; workflow-service now has a
+query boundary for the materialized scheduler timeline.
 
 ### Milestone 4: Queue Authority And Admin Controls
 
@@ -298,9 +300,11 @@ duplicate, unvalidated, or contradictory event streams.
   `scheduler.queue_placement`, `scheduler.run_delayed`, and
   `scheduler.queue_control` event paths for workflow-session scheduling
   behavior implemented so far.
+- Added durable `scheduler.run_admitted` events so scheduler admission is
+  recorded separately from `run.started` lifecycle truth.
 - Added materialized projection coverage for scheduler estimates,
-  placements, delays, queue controls, and run lifecycle visibility required by
-  current Scheduler page query boundaries.
+  placements, delays, admissions, queue controls, and run lifecycle visibility
+  required by current Scheduler page query boundaries.
 
 ### Deviations
 

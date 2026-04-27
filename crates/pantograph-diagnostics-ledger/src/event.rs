@@ -29,6 +29,7 @@ pub enum DiagnosticEventKind {
     SchedulerQueueControl,
     SchedulerRunDelayed,
     SchedulerModelLifecycleChanged,
+    SchedulerRunAdmitted,
     RunStarted,
     RunTerminal,
     RunSnapshotAccepted,
@@ -48,6 +49,7 @@ impl DiagnosticEventKind {
             Self::SchedulerQueueControl => "scheduler.queue_control",
             Self::SchedulerRunDelayed => "scheduler.run_delayed",
             Self::SchedulerModelLifecycleChanged => "scheduler.model_lifecycle_changed",
+            Self::SchedulerRunAdmitted => "scheduler.run_admitted",
             Self::RunStarted => "run.started",
             Self::RunTerminal => "run.terminal",
             Self::RunSnapshotAccepted => "run.snapshot_accepted",
@@ -67,6 +69,7 @@ impl DiagnosticEventKind {
             "scheduler.queue_control" => Ok(Self::SchedulerQueueControl),
             "scheduler.run_delayed" => Ok(Self::SchedulerRunDelayed),
             "scheduler.model_lifecycle_changed" => Ok(Self::SchedulerModelLifecycleChanged),
+            "scheduler.run_admitted" => Ok(Self::SchedulerRunAdmitted),
             "run.started" => Ok(Self::RunStarted),
             "run.terminal" => Ok(Self::RunTerminal),
             "run.snapshot_accepted" => Ok(Self::RunSnapshotAccepted),
@@ -228,6 +231,7 @@ pub enum DiagnosticEventPayload {
     SchedulerQueueControl(SchedulerQueueControlPayload),
     SchedulerRunDelayed(SchedulerRunDelayedPayload),
     SchedulerModelLifecycleChanged(SchedulerModelLifecycleChangedPayload),
+    SchedulerRunAdmitted(SchedulerRunAdmittedPayload),
     RunStarted(RunStartedPayload),
     RunTerminal(RunTerminalPayload),
     RunSnapshotAccepted(RunSnapshotAcceptedPayload),
@@ -249,6 +253,7 @@ impl DiagnosticEventPayload {
             Self::SchedulerModelLifecycleChanged(_) => {
                 DiagnosticEventKind::SchedulerModelLifecycleChanged
             }
+            Self::SchedulerRunAdmitted(_) => DiagnosticEventKind::SchedulerRunAdmitted,
             Self::RunStarted(_) => DiagnosticEventKind::RunStarted,
             Self::RunTerminal(_) => DiagnosticEventKind::RunTerminal,
             Self::RunSnapshotAccepted(_) => DiagnosticEventKind::RunSnapshotAccepted,
@@ -270,6 +275,7 @@ impl DiagnosticEventPayload {
             Self::SchedulerQueueControl(payload) => payload.validate(),
             Self::SchedulerRunDelayed(payload) => payload.validate(),
             Self::SchedulerModelLifecycleChanged(payload) => payload.validate(),
+            Self::SchedulerRunAdmitted(payload) => payload.validate(),
             Self::RunStarted(payload) => payload.validate(),
             Self::RunTerminal(payload) => payload.validate(),
             Self::RunSnapshotAccepted(payload) => payload.validate(),
@@ -368,6 +374,23 @@ impl SchedulerRunDelayedPayload {
             "fairness_context",
             self.fairness_context.as_deref(),
             MAX_JSON_LEN,
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SchedulerRunAdmittedPayload {
+    pub queue_wait_ms: Option<u64>,
+    pub decision_reason: String,
+}
+
+impl SchedulerRunAdmittedPayload {
+    fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        validate_required_text(
+            "admission_decision_reason",
+            &self.decision_reason,
+            MAX_ID_LEN,
         )
     }
 }
@@ -1370,6 +1393,7 @@ fn validate_event_scope(
         | DiagnosticEventKind::SchedulerQueueControl
         | DiagnosticEventKind::SchedulerRunDelayed
         | DiagnosticEventKind::SchedulerModelLifecycleChanged
+        | DiagnosticEventKind::SchedulerRunAdmitted
         | DiagnosticEventKind::RunStarted
         | DiagnosticEventKind::RunTerminal
         | DiagnosticEventKind::RunSnapshotAccepted
@@ -1433,6 +1457,7 @@ fn validate_event_source(
         | DiagnosticEventKind::SchedulerQueueControl
         | DiagnosticEventKind::SchedulerRunDelayed
         | DiagnosticEventKind::SchedulerModelLifecycleChanged
+        | DiagnosticEventKind::SchedulerRunAdmitted
         | DiagnosticEventKind::RunStarted => {
             matches!(source_component, DiagnosticEventSourceComponent::Scheduler)
         }
