@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::{
     BucketId, ClientCredentialId, ClientId, ClientSessionId, WorkflowId, WorkflowRunId,
-    WorkflowVersionId,
+    WorkflowRunSnapshotId, WorkflowVersionId,
 };
 
 const MAX_CREDENTIAL_SECRET_LEN: usize = 256;
@@ -286,6 +286,23 @@ pub struct WorkflowVersionRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkflowRunSnapshotRecord {
+    pub workflow_run_snapshot_id: WorkflowRunSnapshotId,
+    pub workflow_run_id: WorkflowRunId,
+    pub workflow_id: WorkflowId,
+    pub workflow_version_id: WorkflowVersionId,
+    pub workflow_semantic_version: String,
+    pub workflow_execution_fingerprint: String,
+    pub workflow_execution_session_id: String,
+    pub priority: i32,
+    pub timeout_ms: Option<u64>,
+    pub inputs_json: String,
+    pub output_targets_json: Option<String>,
+    pub override_selection_json: Option<String>,
+    pub created_at_ms: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkflowRunAttribution {
     pub client_id: ClientId,
     pub client_session_id: ClientSessionId,
@@ -364,4 +381,19 @@ pub struct WorkflowVersionResolveRequest {
     pub semantic_version: String,
     pub execution_fingerprint: String,
     pub executable_topology_json: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkflowRunSnapshotRequest {
+    pub workflow_run_id: WorkflowRunId,
+    pub workflow_id: WorkflowId,
+    pub workflow_version_id: WorkflowVersionId,
+    pub workflow_semantic_version: String,
+    pub workflow_execution_fingerprint: String,
+    pub workflow_execution_session_id: String,
+    pub priority: i32,
+    pub timeout_ms: Option<u64>,
+    pub inputs_json: String,
+    pub output_targets_json: Option<String>,
+    pub override_selection_json: Option<String>,
 }

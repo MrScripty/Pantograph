@@ -106,6 +106,24 @@ pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), AttributionError>
         );
         CREATE INDEX idx_workflow_versions_workflow
             ON workflow_versions(workflow_id, created_at_ms);
+
+        CREATE TABLE workflow_run_snapshots (
+            workflow_run_snapshot_id TEXT PRIMARY KEY,
+            workflow_run_id TEXT NOT NULL UNIQUE,
+            workflow_id TEXT NOT NULL,
+            workflow_version_id TEXT NOT NULL REFERENCES workflow_versions(workflow_version_id),
+            workflow_semantic_version TEXT NOT NULL,
+            workflow_execution_fingerprint TEXT NOT NULL,
+            workflow_execution_session_id TEXT NOT NULL,
+            priority INTEGER NOT NULL,
+            timeout_ms INTEGER,
+            inputs_json TEXT NOT NULL,
+            output_targets_json TEXT,
+            override_selection_json TEXT,
+            created_at_ms INTEGER NOT NULL
+        );
+        CREATE INDEX idx_workflow_run_snapshots_workflow_version
+            ON workflow_run_snapshots(workflow_version_id, created_at_ms);
         "#,
     )?;
     tx.execute(

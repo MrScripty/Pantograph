@@ -302,12 +302,17 @@ records for the same execution fingerprint.
   `resolve_workflow_graph_version` facade. The registry reuses matching
   workflow id/fingerprint/version rows and rejects both semantic-version and
   execution-fingerprint disagreements.
+- 2026-04-27: Added durable immutable workflow-run snapshot storage to
+  `pantograph-runtime-attribution`. Snapshots capture the workflow run id,
+  workflow version id, semantic version, execution fingerprint, execution
+  session id, priority, timeout, serialized inputs, output targets, and runtime
+  override selection.
 
 ### Deviations
 
-- Run-snapshot storage is intentionally not part of the completed slices so
-  far. Queue submission still needs to resolve versions and snapshots as one
-  transaction before this stage is complete.
+- The first run-snapshot storage contract captures the queue/session fields
+  available today. Full model/runtime, graph-settings, retention-policy, and
+  bucket fields still need to be filled during queue cutover.
 - Workflow-version registry ownership is implemented in the attribution store
   without a standalone ADR. The choice is documented here and in crate READMEs
   because the registry must share the future run snapshot transaction boundary.
@@ -342,6 +347,8 @@ records for the same execution fingerprint.
   adding workflow-version registry storage.
 - 2026-04-27: `cargo test -p pantograph-workflow-service workflow_version`
   passed.
+- 2026-04-27: `cargo test -p pantograph-runtime-attribution` passed after
+  adding workflow-run snapshot storage.
 
 ### Traceability Links
 

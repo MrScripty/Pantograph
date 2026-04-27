@@ -21,13 +21,15 @@ use crate::{
     ClientSessionLifecycleState, ClientSessionOpenRequest, ClientSessionOpenResponse,
     ClientSessionRecord, ClientSessionResumeRequest, ClientStatus, CredentialProofRequest,
     CredentialSecret, DefaultBucketAssignment, SessionLifecycleRecord, WorkflowRunRecord,
-    WorkflowRunStartRequest, WorkflowRunStatus, WorkflowVersionRecord,
-    WorkflowVersionResolveRequest,
+    WorkflowRunSnapshotRecord, WorkflowRunSnapshotRequest, WorkflowRunStartRequest,
+    WorkflowRunStatus, WorkflowVersionRecord, WorkflowVersionResolveRequest,
 };
 
 const MAX_SEMANTIC_VERSION_LEN: usize = 64;
 const MAX_EXECUTION_FINGERPRINT_LEN: usize = 256;
 const MAX_EXECUTABLE_TOPOLOGY_JSON_LEN: usize = 262_144;
+const MAX_WORKFLOW_EXECUTION_SESSION_ID_LEN: usize = 128;
+const MAX_RUN_SNAPSHOT_JSON_LEN: usize = 262_144;
 
 pub struct SqliteAttributionStore {
     pub(crate) conn: Connection,
@@ -538,6 +540,93 @@ impl AttributionRepository for SqliteAttributionStore {
             created_at_ms: now,
         })
     }
+
+    fn create_workflow_run_snapshot(
+        &mut self,
+        request: WorkflowRunSnapshotRequest,
+    ) -> Result<WorkflowRunSnapshotRecord, AttributionError> {
+        let workflow_semantic_version =
+            validate_semantic_version(request.workflow_semantic_version)?;
+        let workflow_execution_fingerprint = validate_required_boundary_text(
+            "workflow_execution_fingerprint",
+            request.workflow_execution_fingerprint,
+            MAX_EXECUTION_FINGERPRINT_LEN,
+        )?;
+        let workflow_execution_session_id = validate_required_boundary_text(
+            "workflow_execution_session_id",
+            request.workflow_execution_session_id,
+            MAX_WORKFLOW_EXECUTION_SESSION_ID_LEN,
+        )?;
+        let inputs_json = validate_json_text("inputs_json", request.inputs_json)?;
+        let output_targets_json =
+            validate_optional_json_text("output_targets_json", request.output_targets_json)?;
+        let override_selection_json = validate_optional_json_text(
+            "override_selection_json",
+            request.override_selection_json,
+        )?;
+        let timeout_ms = request
+            .timeout_ms
+            .map(|value| i64::try_from(value).unwrap_or(i64::MAX));
+
+        let tx = self.conn.transaction()?;
+        let version = workflow_version_by_id(&tx, &request.workflow_version_id)?.ok_or(
+            AttributionError::NotFound {
+                entity: "workflow_version",
+            },
+        )?;
+        if version.workflow_id != request.workflow_id
+            || version.semantic_version != workflow_semantic_version
+            || version.execution_fingerprint != workflow_execution_fingerprint
+        {
+            return Err(AttributionError::WorkflowFingerprintVersionConflict {
+                workflow_id: request.workflow_id,
+                execution_fingerprint: workflow_execution_fingerprint,
+            });
+        }
+
+        let now = now_ms();
+        let workflow_run_snapshot_id = crate::WorkflowRunSnapshotId::generate();
+        tx.execute(
+            "INSERT INTO workflow_run_snapshots
+                (workflow_run_snapshot_id, workflow_run_id, workflow_id, workflow_version_id,
+                 workflow_semantic_version, workflow_execution_fingerprint,
+                 workflow_execution_session_id, priority, timeout_ms, inputs_json,
+                 output_targets_json, override_selection_json, created_at_ms)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            params![
+                workflow_run_snapshot_id.as_str(),
+                request.workflow_run_id.as_str(),
+                request.workflow_id.as_str(),
+                request.workflow_version_id.as_str(),
+                workflow_semantic_version.as_str(),
+                workflow_execution_fingerprint.as_str(),
+                workflow_execution_session_id.as_str(),
+                request.priority,
+                timeout_ms,
+                inputs_json.as_str(),
+                output_targets_json.as_deref(),
+                override_selection_json.as_deref(),
+                now
+            ],
+        )?;
+        tx.commit()?;
+
+        Ok(WorkflowRunSnapshotRecord {
+            workflow_run_snapshot_id,
+            workflow_run_id: request.workflow_run_id,
+            workflow_id: request.workflow_id,
+            workflow_version_id: request.workflow_version_id,
+            workflow_semantic_version,
+            workflow_execution_fingerprint,
+            workflow_execution_session_id,
+            priority: request.priority,
+            timeout_ms: request.timeout_ms,
+            inputs_json,
+            output_targets_json,
+            override_selection_json,
+            created_at_ms: now,
+        })
+    }
 }
 
 fn workflow_version_by_semantic_version(
@@ -574,6 +663,25 @@ fn workflow_version_by_execution_fingerprint(
     let record = stmt
         .query_row(
             params![workflow_id.as_str(), execution_fingerprint],
+            workflow_version_from_row,
+        )
+        .optional()?;
+    Ok(record)
+}
+
+fn workflow_version_by_id(
+    conn: &rusqlite::Connection,
+    workflow_version_id: &crate::WorkflowVersionId,
+) -> Result<Option<WorkflowVersionRecord>, AttributionError> {
+    let mut stmt = conn.prepare(
+        "SELECT workflow_version_id, workflow_id, semantic_version, execution_fingerprint,
+                executable_topology_json, created_at_ms
+         FROM workflow_versions
+         WHERE workflow_version_id = ?1",
+    )?;
+    let record = stmt
+        .query_row(
+            params![workflow_version_id.as_str()],
             workflow_version_from_row,
         )
         .optional()?;
@@ -620,16 +728,34 @@ fn is_numeric_semver_part(value: &str) -> bool {
 }
 
 fn validate_executable_topology_json(value: String) -> Result<String, AttributionError> {
-    let value = validate_required_boundary_text(
+    validate_json_text_with_limit(
         "executable_topology_json",
         value,
         MAX_EXECUTABLE_TOPOLOGY_JSON_LEN,
-    )?;
-    serde_json::from_str::<serde_json::Value>(&value).map_err(|_| {
-        AttributionError::InvalidField {
-            field: "executable_topology_json",
-        }
-    })?;
+    )
+}
+
+fn validate_json_text(field: &'static str, value: String) -> Result<String, AttributionError> {
+    validate_json_text_with_limit(field, value, MAX_RUN_SNAPSHOT_JSON_LEN)
+}
+
+fn validate_optional_json_text(
+    field: &'static str,
+    value: Option<String>,
+) -> Result<Option<String>, AttributionError> {
+    value
+        .map(|json| validate_json_text(field, json))
+        .transpose()
+}
+
+fn validate_json_text_with_limit(
+    field: &'static str,
+    value: String,
+    max_len: usize,
+) -> Result<String, AttributionError> {
+    let value = validate_required_boundary_text(field, value, max_len)?;
+    serde_json::from_str::<serde_json::Value>(&value)
+        .map_err(|_| AttributionError::InvalidField { field })?;
     Ok(value)
 }
 

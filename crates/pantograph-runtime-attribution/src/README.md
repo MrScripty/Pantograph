@@ -27,6 +27,9 @@ verification, bucket lineage, or one-active-session enforcement.
 - Workflow-run attribution must exist before runtime scheduling begins.
 - Workflow-version records are resolved before immutable queue/run snapshot
   creation and enforce strict semantic-version/fingerprint agreement.
+- Workflow-run snapshots capture the immutable workflow version, execution
+  fingerprint, queue/session context, input references, output targets, and
+  override selection that existed when the run was submitted.
 - This crate must not depend on GUI, binding, adapter, or runtime execution
   crates.
 
@@ -112,6 +115,8 @@ assert_eq!(opened.session.client_id, registered.client.client_id);
 - Persisted workflow-version rows contain workflow id, semantic version,
   execution fingerprint, canonical executable topology JSON, and creation
   timestamp.
+- Persisted workflow-run snapshot rows are immutable inserts keyed by
+  workflow-run id and must agree with the referenced workflow-version row.
 - Lifecycle history is append-only through `session_lifecycle_records`.
 - Diagnostic query indexes are maintained for client, session, bucket,
   workflow, and workflow-run lookup.

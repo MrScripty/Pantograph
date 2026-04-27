@@ -63,6 +63,7 @@ attribution_id!(ClientCredentialId, "cred_");
 attribution_id!(ClientSessionId, "session_");
 attribution_id!(BucketId, "bucket_");
 attribution_id!(WorkflowRunId, "run_");
+attribution_id!(WorkflowRunSnapshotId, "runsnap_");
 attribution_id!(WorkflowId, "workflow_");
 attribution_id!(WorkflowVersionId, "wfver_");
 attribution_id!(UsageEventId, "usage_");

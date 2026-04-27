@@ -6,8 +6,8 @@ use crate::{
     AttributionError, AttributionRepository, BucketCreateRequest, BucketDeleteRequest, BucketId,
     BucketSelection, ClientRegistrationRequest, ClientRegistrationResponse,
     ClientSessionLifecycleState, ClientSessionOpenRequest, ClientSessionResumeRequest,
-    CredentialProofRequest, CredentialSecret, SqliteAttributionStore, WorkflowId,
-    WorkflowRunStartRequest, WorkflowVersionResolveRequest,
+    CredentialProofRequest, CredentialSecret, SqliteAttributionStore, WorkflowId, WorkflowRunId,
+    WorkflowRunSnapshotRequest, WorkflowRunStartRequest, WorkflowVersionResolveRequest,
 };
 
 fn register(store: &mut SqliteAttributionStore) -> ClientRegistrationResponse {
@@ -234,6 +234,71 @@ fn workflow_version_resolution_rejects_invalid_semantic_versions() {
     assert!(matches!(
         err,
         AttributionError::InvalidWorkflowSemanticVersion { .. }
+    ));
+}
+
+#[test]
+fn workflow_run_snapshot_records_immutable_version_and_queue_context() {
+    let mut store = SqliteAttributionStore::open_in_memory().expect("store");
+    let version = store
+        .resolve_workflow_version(workflow_version_request(
+            "1.0.0",
+            "workflow-exec-blake3:abc",
+        ))
+        .expect("resolve version");
+    let run_id = WorkflowRunId::generate();
+
+    let snapshot = store
+        .create_workflow_run_snapshot(WorkflowRunSnapshotRequest {
+            workflow_run_id: run_id.clone(),
+            workflow_id: workflow_id(),
+            workflow_version_id: version.workflow_version_id.clone(),
+            workflow_semantic_version: version.semantic_version.clone(),
+            workflow_execution_fingerprint: version.execution_fingerprint.clone(),
+            workflow_execution_session_id: "session-1".to_string(),
+            priority: 5,
+            timeout_ms: Some(1000),
+            inputs_json: serde_json::json!([{"node_id": "input"}]).to_string(),
+            output_targets_json: None,
+            override_selection_json: Some(serde_json::json!({"runtime_id": "local"}).to_string()),
+        })
+        .expect("create snapshot");
+
+    assert_eq!(snapshot.workflow_run_id, run_id);
+    assert_eq!(snapshot.workflow_version_id, version.workflow_version_id);
+    assert_eq!(snapshot.priority, 5);
+    assert_eq!(snapshot.timeout_ms, Some(1000));
+}
+
+#[test]
+fn workflow_run_snapshot_rejects_mismatched_version_facts() {
+    let mut store = SqliteAttributionStore::open_in_memory().expect("store");
+    let version = store
+        .resolve_workflow_version(workflow_version_request(
+            "1.0.0",
+            "workflow-exec-blake3:abc",
+        ))
+        .expect("resolve version");
+
+    let err = store
+        .create_workflow_run_snapshot(WorkflowRunSnapshotRequest {
+            workflow_run_id: WorkflowRunId::generate(),
+            workflow_id: workflow_id(),
+            workflow_version_id: version.workflow_version_id,
+            workflow_semantic_version: "1.0.0".to_string(),
+            workflow_execution_fingerprint: "workflow-exec-blake3:def".to_string(),
+            workflow_execution_session_id: "session-1".to_string(),
+            priority: 0,
+            timeout_ms: None,
+            inputs_json: "[]".to_string(),
+            output_targets_json: None,
+            override_selection_json: None,
+        })
+        .expect_err("mismatched version facts");
+
+    assert!(matches!(
+        err,
+        AttributionError::WorkflowFingerprintVersionConflict { .. }
     ));
 }
 
