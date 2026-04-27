@@ -34,6 +34,7 @@ async fn failed_restore_keeps_checkpoint_until_resume_succeeds() {
     runtime
         .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session.session_id.clone(),
+            workflow_semantic_version: "0.1.0".to_string(),
             inputs: vec![WorkflowPortBinding {
                 node_id: "text-input-1".to_string(),
                 port_id: "text".to_string(),
@@ -78,6 +79,7 @@ async fn failed_restore_keeps_checkpoint_until_resume_succeeds() {
     let error = runtime
         .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session.session_id.clone(),
+            workflow_semantic_version: "0.1.0".to_string(),
             inputs: Vec::new(),
             output_targets: Some(vec![WorkflowOutputTarget {
                 node_id: "text-output-1".to_string(),
@@ -120,6 +122,7 @@ async fn failed_restore_keeps_checkpoint_until_resume_succeeds() {
     let resumed_output = runtime
         .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session.session_id.clone(),
+            workflow_semantic_version: "0.1.0".to_string(),
             inputs: Vec::new(),
             output_targets: Some(vec![WorkflowOutputTarget {
                 node_id: "text-output-1".to_string(),
@@ -187,6 +190,7 @@ async fn runtime_not_ready_resume_keeps_checkpoint_until_runtime_returns() {
     runtime
         .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session.session_id.clone(),
+            workflow_semantic_version: "0.1.0".to_string(),
             inputs: vec![WorkflowPortBinding {
                 node_id: "text-input-1".to_string(),
                 port_id: "text".to_string(),
@@ -221,6 +225,7 @@ async fn runtime_not_ready_resume_keeps_checkpoint_until_runtime_returns() {
     let one_shot_output = runtime
         .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: one_shot.session_id.clone(),
+            workflow_semantic_version: "0.1.0".to_string(),
             inputs: vec![WorkflowPortBinding {
                 node_id: "text-input-1".to_string(),
                 port_id: "text".to_string(),
@@ -252,6 +257,7 @@ async fn runtime_not_ready_resume_keeps_checkpoint_until_runtime_returns() {
     let error = runtime
         .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session.session_id.clone(),
+            workflow_semantic_version: "0.1.0".to_string(),
             inputs: Vec::new(),
             output_targets: Some(vec![WorkflowOutputTarget {
                 node_id: "text-output-1".to_string(),
@@ -294,6 +300,7 @@ async fn runtime_not_ready_resume_keeps_checkpoint_until_runtime_returns() {
     let resumed_output = runtime
         .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session.session_id.clone(),
+            workflow_semantic_version: "0.1.0".to_string(),
             inputs: Vec::new(),
             output_targets: Some(vec![WorkflowOutputTarget {
                 node_id: "text-output-1".to_string(),
@@ -369,6 +376,7 @@ async fn scheduler_reclaim_keeps_checkpointed_sessions_isolated_across_resumes()
     let first_output = runtime
         .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session_a.session_id.clone(),
+            workflow_semantic_version: "0.1.0".to_string(),
             inputs: vec![WorkflowPortBinding {
                 node_id: "text-input-1".to_string(),
                 port_id: "text".to_string(),
@@ -405,6 +413,7 @@ async fn scheduler_reclaim_keeps_checkpointed_sessions_isolated_across_resumes()
     let second_output = runtime
         .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session_b.session_id.clone(),
+            workflow_semantic_version: "0.1.0".to_string(),
             inputs: vec![WorkflowPortBinding {
                 node_id: "text-input-1".to_string(),
                 port_id: "text".to_string(),
@@ -457,6 +466,7 @@ async fn scheduler_reclaim_keeps_checkpointed_sessions_isolated_across_resumes()
     let resumed_a = runtime
         .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session_a.session_id.clone(),
+            workflow_semantic_version: "0.1.0".to_string(),
             inputs: Vec::new(),
             output_targets: Some(vec![WorkflowOutputTarget {
                 node_id: "text-output-1".to_string(),
@@ -524,6 +534,7 @@ async fn scheduler_reclaim_keeps_checkpointed_sessions_isolated_across_resumes()
     let resumed_b = runtime
         .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session_b.session_id.clone(),
+            workflow_semantic_version: "0.1.0".to_string(),
             inputs: Vec::new(),
             output_targets: Some(vec![WorkflowOutputTarget {
                 node_id: "text-output-1".to_string(),

@@ -11,6 +11,7 @@ fn queued_run(
     WorkflowExecutionSessionQueuedRun {
         workflow_run_id: workflow_run_id.to_string(),
         enqueued_at_ms: 0,
+        workflow_semantic_version: "0.1.0".to_string(),
         inputs: Vec::<WorkflowPortBinding>::new(),
         output_targets: Some(Vec::<WorkflowOutputTarget>::new()),
         override_selection: None,

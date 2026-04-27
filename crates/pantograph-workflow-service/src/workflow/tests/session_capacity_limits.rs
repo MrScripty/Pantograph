@@ -186,6 +186,7 @@ async fn workflow_execution_session_create_surfaces_runtime_capacity_details_whe
                 &loaded.session_id,
                 &WorkflowExecutionSessionRunRequest {
                     session_id: loaded.session_id.clone(),
+                    workflow_semantic_version: "0.1.0".to_string(),
                     inputs: Vec::new(),
                     output_targets: None,
                     override_selection: None,

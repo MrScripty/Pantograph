@@ -24,6 +24,7 @@ mod store_queue;
 pub(crate) struct WorkflowExecutionSessionQueuedRun {
     pub(crate) workflow_run_id: String,
     pub(super) enqueued_at_ms: u64,
+    pub(crate) workflow_semantic_version: String,
     pub(crate) inputs: Vec<WorkflowPortBinding>,
     pub(crate) output_targets: Option<Vec<WorkflowOutputTarget>>,
     pub(crate) override_selection: Option<WorkflowTechnicalFitOverride>,

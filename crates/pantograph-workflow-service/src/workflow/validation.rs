@@ -20,6 +20,27 @@ pub(crate) fn validate_workflow_id(workflow_id: &str) -> Result<(), WorkflowServ
         .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))
 }
 
+pub(crate) fn validate_workflow_semantic_version(
+    workflow_semantic_version: &str,
+) -> Result<(), WorkflowServiceError> {
+    let mut parts = workflow_semantic_version.split('.');
+    let valid = parts.next().is_some_and(is_numeric_semver_part)
+        && parts.next().is_some_and(is_numeric_semver_part)
+        && parts.next().is_some_and(is_numeric_semver_part)
+        && parts.next().is_none();
+    if !valid {
+        return Err(WorkflowServiceError::InvalidRequest(
+            "workflow_semantic_version must use major.minor.patch numeric semantic version"
+                .to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn is_numeric_semver_part(value: &str) -> bool {
+    !value.is_empty() && value.chars().all(|character| character.is_ascii_digit())
+}
+
 pub(super) fn validate_bindings(
     bindings: &[WorkflowPortBinding],
     field_name: &str,

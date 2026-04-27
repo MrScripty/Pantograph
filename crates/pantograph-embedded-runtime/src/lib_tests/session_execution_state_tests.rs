@@ -35,6 +35,7 @@ async fn keep_alive_session_reuses_backend_executor_and_carries_forward_inputs()
     let first_run = runtime
         .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session_id.clone(),
+            workflow_semantic_version: "0.1.0".to_string(),
             inputs: vec![WorkflowPortBinding {
                 node_id: "text-input-1".to_string(),
                 port_id: "text".to_string(),
@@ -64,20 +65,17 @@ async fn keep_alive_session_reuses_backend_executor_and_carries_forward_inputs()
             .await
     };
     assert_eq!(first_snapshots.len(), 2);
-    assert!(
-        first_snapshots
-            .iter()
-            .any(|snapshot| snapshot.identity.node_id == "text-input-1")
-    );
-    assert!(
-        first_snapshots
-            .iter()
-            .any(|snapshot| snapshot.identity.node_id == "text-output-1")
-    );
+    assert!(first_snapshots
+        .iter()
+        .any(|snapshot| snapshot.identity.node_id == "text-input-1"));
+    assert!(first_snapshots
+        .iter()
+        .any(|snapshot| snapshot.identity.node_id == "text-output-1"));
 
     let second_run = runtime
         .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session_id.clone(),
+            workflow_semantic_version: "0.1.0".to_string(),
             inputs: Vec::new(),
             output_targets: Some(vec![WorkflowOutputTarget {
                 node_id: "text-output-1".to_string(),
@@ -101,6 +99,7 @@ async fn keep_alive_session_reuses_backend_executor_and_carries_forward_inputs()
     let third_run = runtime
         .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session_id.clone(),
+            workflow_semantic_version: "0.1.0".to_string(),
             inputs: vec![WorkflowPortBinding {
                 node_id: "text-input-1".to_string(),
                 port_id: "text".to_string(),
@@ -131,13 +130,11 @@ async fn keep_alive_session_reuses_backend_executor_and_carries_forward_inputs()
         })
         .await
         .expect("close keep-alive session");
-    assert!(
-        runtime
-            .session_executions
-            .handle(&session_id)
-            .expect("session execution lookup should succeed")
-            .is_none()
-    );
+    assert!(runtime
+        .session_executions
+        .handle(&session_id)
+        .expect("session execution lookup should succeed")
+        .is_none());
 }
 
 #[tokio::test]
@@ -175,6 +172,7 @@ async fn keep_alive_session_reconciles_graph_change_and_replays_carried_inputs()
     let first_run = runtime
         .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session_id.clone(),
+            workflow_semantic_version: "0.1.0".to_string(),
             inputs: vec![WorkflowPortBinding {
                 node_id: "text-input-1".to_string(),
                 port_id: "text".to_string(),
@@ -207,6 +205,7 @@ async fn keep_alive_session_reconciles_graph_change_and_replays_carried_inputs()
     let second_run = runtime
         .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session_id.clone(),
+            workflow_semantic_version: "0.1.0".to_string(),
             inputs: Vec::new(),
             output_targets: Some(vec![WorkflowOutputTarget {
                 node_id: "text-output-1".to_string(),
@@ -234,9 +233,7 @@ async fn keep_alive_session_reconciles_graph_change_and_replays_carried_inputs()
             .await
     };
     assert_eq!(snapshots.len(), 2);
-    assert!(
-        snapshots
-            .iter()
-            .all(|snapshot| snapshot.status == node_engine::NodeMemoryStatus::Ready)
-    );
+    assert!(snapshots
+        .iter()
+        .all(|snapshot| snapshot.status == node_engine::NodeMemoryStatus::Ready));
 }

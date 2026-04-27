@@ -20,6 +20,7 @@ async fn workflow_run_returns_host_outputs() {
             &host,
             WorkflowRunRequest {
                 workflow_id: "wf-1".to_string(),
+                workflow_semantic_version: "0.1.0".to_string(),
                 inputs: vec![WorkflowPortBinding {
                     node_id: "text-output-1".to_string(),
                     port_id: "text".to_string(),
@@ -42,6 +43,29 @@ async fn workflow_run_returns_host_outputs() {
 }
 
 #[tokio::test]
+async fn workflow_run_rejects_invalid_workflow_semantic_version() {
+    let host = MockWorkflowHost::new(10, 256);
+    let service = WorkflowService::new();
+
+    let err = service
+        .workflow_run(
+            &host,
+            WorkflowRunRequest {
+                workflow_id: "wf-1".to_string(),
+                workflow_semantic_version: "1".to_string(),
+                inputs: Vec::new(),
+                output_targets: None,
+                override_selection: None,
+                timeout_ms: None,
+            },
+        )
+        .await
+        .expect_err("expected invalid semantic version");
+
+    assert!(matches!(err, WorkflowServiceError::InvalidRequest(message) if message.contains("workflow_semantic_version")));
+}
+
+#[tokio::test]
 async fn workflow_run_fails_when_host_returns_runtime_error() {
     let host = MockWorkflowHost::new(10, 256);
     let service = WorkflowService::new();
@@ -51,6 +75,7 @@ async fn workflow_run_fails_when_host_returns_runtime_error() {
             &host,
             WorkflowRunRequest {
                 workflow_id: "wf-1".to_string(),
+                workflow_semantic_version: "0.1.0".to_string(),
                 inputs: vec![WorkflowPortBinding {
                     node_id: "input-1".to_string(),
                     port_id: "text".to_string(),
@@ -97,6 +122,7 @@ async fn workflow_run_honors_blocking_backend_technical_fit_decision() {
             &host,
             WorkflowRunRequest {
                 workflow_id: "wf-1".to_string(),
+                workflow_semantic_version: "0.1.0".to_string(),
                 inputs: Vec::new(),
                 output_targets: None,
                 override_selection: None,
@@ -122,6 +148,7 @@ async fn workflow_run_returns_internal_when_host_emits_invalid_output_shape() {
             &host,
             WorkflowRunRequest {
                 workflow_id: "wf-1".to_string(),
+                workflow_semantic_version: "0.1.0".to_string(),
                 inputs: Vec::new(),
                 output_targets: None,
                 override_selection: None,
@@ -147,6 +174,7 @@ async fn workflow_run_rejects_zero_timeout_ms() {
             &host,
             WorkflowRunRequest {
                 workflow_id: "wf-1".to_string(),
+                workflow_semantic_version: "0.1.0".to_string(),
                 inputs: Vec::new(),
                 output_targets: None,
                 override_selection: None,
@@ -171,6 +199,7 @@ async fn workflow_run_timeout_cancels_host_within_grace_window() {
             &host,
             WorkflowRunRequest {
                 workflow_id: "wf-timeout".to_string(),
+                workflow_semantic_version: "0.1.0".to_string(),
                 inputs: Vec::new(),
                 output_targets: None,
                 override_selection: None,
@@ -194,6 +223,7 @@ async fn workflow_run_rejects_empty_node_id() {
             &host,
             WorkflowRunRequest {
                 workflow_id: "wf-1".to_string(),
+                workflow_semantic_version: "0.1.0".to_string(),
                 inputs: vec![WorkflowPortBinding {
                     node_id: "".to_string(),
                     port_id: "text".to_string(),
@@ -220,6 +250,7 @@ async fn workflow_run_rejects_oversized_payload() {
             &host,
             WorkflowRunRequest {
                 workflow_id: "wf-1".to_string(),
+                workflow_semantic_version: "0.1.0".to_string(),
                 inputs: vec![WorkflowPortBinding {
                     node_id: "input-1".to_string(),
                     port_id: "text".to_string(),
@@ -258,6 +289,7 @@ async fn workflow_run_accepts_discovered_output_targets() {
             &host,
             WorkflowRunRequest {
                 workflow_id: "wf-1".to_string(),
+                workflow_semantic_version: "0.1.0".to_string(),
                 inputs: vec![WorkflowPortBinding {
                     node_id: target_node.node_id.clone(),
                     port_id: target_port.port_id.clone(),
@@ -289,6 +321,7 @@ async fn workflow_run_rejects_non_discovered_output_targets() {
             &host,
             WorkflowRunRequest {
                 workflow_id: "wf-1".to_string(),
+                workflow_semantic_version: "0.1.0".to_string(),
                 inputs: Vec::new(),
                 output_targets: Some(vec![WorkflowOutputTarget {
                     node_id: "text-output-1".to_string(),
@@ -314,6 +347,7 @@ async fn workflow_run_returns_output_not_produced_when_target_missing() {
             &host,
             WorkflowRunRequest {
                 workflow_id: "wf-1".to_string(),
+                workflow_semantic_version: "0.1.0".to_string(),
                 inputs: Vec::new(),
                 output_targets: Some(vec![WorkflowOutputTarget {
                     node_id: "text-output-1".to_string(),
@@ -342,6 +376,7 @@ async fn workflow_run_rejects_duplicate_input_bindings() {
             &host,
             WorkflowRunRequest {
                 workflow_id: "wf-1".to_string(),
+                workflow_semantic_version: "0.1.0".to_string(),
                 inputs: vec![
                     WorkflowPortBinding {
                         node_id: "text-input-1".to_string(),

@@ -23,6 +23,7 @@ async fn workflow_execution_session_lifecycle_create_run_close() {
             &host,
             WorkflowExecutionSessionRunRequest {
                 session_id: created.session_id.clone(),
+                workflow_semantic_version: "1.2.3".to_string(),
                 inputs: vec![WorkflowPortBinding {
                     node_id: "text-output-1".to_string(),
                     port_id: "text".to_string(),
@@ -61,6 +62,7 @@ async fn workflow_execution_session_lifecycle_create_run_close() {
             &host,
             WorkflowExecutionSessionRunRequest {
                 session_id: created.session_id,
+                workflow_semantic_version: "0.1.0".to_string(),
                 inputs: Vec::new(),
                 output_targets: None,
                 override_selection: None,
@@ -95,6 +97,7 @@ async fn workflow_execution_session_run_passes_logical_session_id_in_run_options
             &host,
             WorkflowExecutionSessionRunRequest {
                 session_id: created.session_id.clone(),
+                workflow_semantic_version: "1.2.3".to_string(),
                 inputs: vec![WorkflowPortBinding {
                     node_id: "text-output-1".to_string(),
                     port_id: "text".to_string(),
@@ -146,6 +149,7 @@ async fn workflow_execution_session_repeated_runs_create_distinct_backend_run_id
             &host,
             WorkflowExecutionSessionRunRequest {
                 session_id: created.session_id.clone(),
+                workflow_semantic_version: "0.1.0".to_string(),
                 inputs: Vec::new(),
                 output_targets: Some(vec![WorkflowOutputTarget {
                     node_id: "text-output-1".to_string(),
@@ -164,6 +168,7 @@ async fn workflow_execution_session_repeated_runs_create_distinct_backend_run_id
             &host,
             WorkflowExecutionSessionRunRequest {
                 session_id: created.session_id.clone(),
+                workflow_semantic_version: "0.1.0".to_string(),
                 inputs: Vec::new(),
                 output_targets: Some(vec![WorkflowOutputTarget {
                     node_id: "text-output-1".to_string(),
@@ -215,6 +220,7 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
             &host,
             WorkflowExecutionSessionRunRequest {
                 session_id: created.session_id.clone(),
+                workflow_semantic_version: "1.2.3".to_string(),
                 inputs: vec![WorkflowPortBinding {
                     node_id: "text-output-1".to_string(),
                     port_id: "text".to_string(),
@@ -239,7 +245,7 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
     assert_eq!(snapshot.workflow_run_id.as_str(), response.workflow_run_id);
     assert_eq!(snapshot.workflow_id.as_str(), "wf-snapshot");
     assert_eq!(snapshot.workflow_execution_session_id, created.session_id);
-    assert_eq!(snapshot.workflow_semantic_version, "0.1.0");
+    assert_eq!(snapshot.workflow_semantic_version, "1.2.3");
     assert_eq!(snapshot.priority, 7);
     assert_eq!(snapshot.timeout_ms, Some(5000));
     assert!(snapshot
@@ -297,6 +303,7 @@ async fn one_shot_session_run_loads_runtime_with_ephemeral_retention_hint() {
             &host,
             WorkflowExecutionSessionRunRequest {
                 session_id: created.session_id,
+                workflow_semantic_version: "0.1.0".to_string(),
                 inputs: Vec::new(),
                 output_targets: None,
                 override_selection: None,

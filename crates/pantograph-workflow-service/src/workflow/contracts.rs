@@ -30,6 +30,7 @@ pub struct WorkflowOutputTarget {
 #[serde(deny_unknown_fields)]
 pub struct WorkflowRunRequest {
     pub workflow_id: String,
+    pub workflow_semantic_version: String,
     #[serde(default)]
     pub inputs: Vec<WorkflowPortBinding>,
     #[serde(default)]
@@ -324,6 +325,7 @@ pub struct WorkflowExecutionSessionCreateResponse {
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowExecutionSessionRunRequest {
     pub session_id: String,
+    pub workflow_semantic_version: String,
     #[serde(default)]
     pub inputs: Vec<WorkflowPortBinding>,
     #[serde(default)]

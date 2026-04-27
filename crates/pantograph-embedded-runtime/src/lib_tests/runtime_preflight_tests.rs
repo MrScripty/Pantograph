@@ -213,12 +213,10 @@ async fn workflow_preflight_blocks_selected_runtime_failed_after_restart() {
         .await
         .expect("workflow preflight");
     assert!(!preflight.can_run);
-    assert!(
-        preflight
-            .blocking_runtime_issues
-            .iter()
-            .any(|issue| issue.message.contains("validation failed"))
-    );
+    assert!(preflight
+        .blocking_runtime_issues
+        .iter()
+        .any(|issue| issue.message.contains("validation failed")));
 
     let session = runtime
         .create_workflow_execution_session(WorkflowExecutionSessionCreateRequest {
@@ -231,6 +229,7 @@ async fn workflow_preflight_blocks_selected_runtime_failed_after_restart() {
     let error = runtime
         .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session.session_id,
+            workflow_semantic_version: "0.1.0".to_string(),
             inputs: Vec::new(),
             output_targets: Some(vec![WorkflowOutputTarget {
                 node_id: "text-output-1".to_string(),
@@ -289,12 +288,10 @@ async fn workflow_preflight_blocks_interrupted_runtime_job_after_restart() {
         Some(pantograph_workflow_service::WorkflowRuntimeReadinessState::Failed)
     );
     assert!(!runtime_capability.configured);
-    assert!(
-        runtime_capability
-            .unavailable_reason
-            .as_deref()
-            .is_some_and(|reason| reason.contains("reconciled during startup"))
-    );
+    assert!(runtime_capability
+        .unavailable_reason
+        .as_deref()
+        .is_some_and(|reason| reason.contains("reconciled during startup")));
 
     let preflight = runtime
         .workflow_preflight(WorkflowPreflightRequest {
@@ -306,12 +303,10 @@ async fn workflow_preflight_blocks_interrupted_runtime_job_after_restart() {
         .await
         .expect("workflow preflight");
     assert!(!preflight.can_run);
-    assert!(
-        preflight
-            .blocking_runtime_issues
-            .iter()
-            .any(|issue| issue.message.contains("reconciled during startup"))
-    );
+    assert!(preflight
+        .blocking_runtime_issues
+        .iter()
+        .any(|issue| issue.message.contains("reconciled during startup")));
 
     let session = runtime
         .create_workflow_execution_session(WorkflowExecutionSessionCreateRequest {
@@ -324,6 +319,7 @@ async fn workflow_preflight_blocks_interrupted_runtime_job_after_restart() {
     let error = runtime
         .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session.session_id,
+            workflow_semantic_version: "0.1.0".to_string(),
             inputs: Vec::new(),
             output_targets: Some(vec![WorkflowOutputTarget {
                 node_id: "text-output-1".to_string(),

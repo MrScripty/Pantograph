@@ -31,6 +31,7 @@ async fn workflow_execution_session_runtime_preflight_is_cached_until_graph_chan
             &host,
             WorkflowExecutionSessionRunRequest {
                 session_id: created.session_id.clone(),
+                workflow_semantic_version: "0.1.0".to_string(),
                 inputs: Vec::new(),
                 output_targets: None,
                 override_selection: None,
@@ -47,6 +48,7 @@ async fn workflow_execution_session_runtime_preflight_is_cached_until_graph_chan
             &host,
             WorkflowExecutionSessionRunRequest {
                 session_id: created.session_id.clone(),
+                workflow_semantic_version: "0.1.0".to_string(),
                 inputs: Vec::new(),
                 output_targets: None,
                 override_selection: None,
@@ -72,6 +74,7 @@ async fn workflow_execution_session_runtime_preflight_is_cached_until_graph_chan
             &host,
             WorkflowExecutionSessionRunRequest {
                 session_id: created.session_id,
+                workflow_semantic_version: "0.1.0".to_string(),
                 inputs: Vec::new(),
                 output_targets: None,
                 override_selection: None,
@@ -119,6 +122,7 @@ async fn workflow_execution_session_runtime_preflight_cache_invalidates_on_overr
             &host,
             WorkflowExecutionSessionRunRequest {
                 session_id: created.session_id.clone(),
+                workflow_semantic_version: "0.1.0".to_string(),
                 inputs: Vec::new(),
                 output_targets: None,
                 override_selection: Some(WorkflowTechnicalFitOverride {
@@ -137,6 +141,7 @@ async fn workflow_execution_session_runtime_preflight_cache_invalidates_on_overr
             &host,
             WorkflowExecutionSessionRunRequest {
                 session_id: created.session_id,
+                workflow_semantic_version: "0.1.0".to_string(),
                 inputs: Vec::new(),
                 output_targets: None,
                 override_selection: Some(WorkflowTechnicalFitOverride {

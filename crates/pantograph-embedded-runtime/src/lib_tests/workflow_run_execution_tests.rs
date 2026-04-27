@@ -17,6 +17,7 @@ async fn run_workflow_through_scheduler(
     runtime
         .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: created.session_id,
+            workflow_semantic_version: "0.1.0".to_string(),
             inputs,
             output_targets,
             override_selection: None,
@@ -79,6 +80,7 @@ async fn test_runtime_run_and_session_execution() {
     let session_response = runtime
         .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: created.session_id.clone(),
+            workflow_semantic_version: "0.1.0".to_string(),
             inputs: vec![WorkflowPortBinding {
                 node_id: "text-input-1".to_string(),
                 port_id: "text".to_string(),
@@ -202,6 +204,7 @@ async fn workflow_run_execution_session_returns_invalid_request_for_human_input_
     let error = runtime
         .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: created.session_id,
+            workflow_semantic_version: "0.1.0".to_string(),
             inputs: Vec::new(),
             output_targets: Some(vec![WorkflowOutputTarget {
                 node_id: "human-input-1".to_string(),

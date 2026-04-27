@@ -8,6 +8,7 @@ use super::super::policy::{
 fn empty_run_request() -> WorkflowExecutionSessionRunRequest {
     WorkflowExecutionSessionRunRequest {
         session_id: "ignored".to_string(),
+        workflow_semantic_version: "0.1.0".to_string(),
         inputs: Vec::new(),
         output_targets: None,
         override_selection: None,

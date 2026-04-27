@@ -18,6 +18,7 @@ async fn workflow_execution_session_queue_items_include_authoritative_timestamps
 
     let request = WorkflowExecutionSessionRunRequest {
         session_id: created.session_id.clone(),
+        workflow_semantic_version: "0.1.0".to_string(),
         inputs: Vec::new(),
         output_targets: None,
         override_selection: None,
@@ -133,6 +134,7 @@ async fn workflow_execution_session_queue_marks_loaded_compatible_admission_as_w
                 &created.session_id,
                 &WorkflowExecutionSessionRunRequest {
                     session_id: created.session_id.clone(),
+                    workflow_semantic_version: "0.1.0".to_string(),
                     inputs: Vec::new(),
                     output_targets: None,
                     override_selection: None,
@@ -205,6 +207,7 @@ async fn workflow_execution_session_queue_prefers_bounded_warm_reuse_over_same_p
                 &created.session_id,
                 &WorkflowExecutionSessionRunRequest {
                     session_id: created.session_id.clone(),
+                    workflow_semantic_version: "0.1.0".to_string(),
                     inputs: Vec::new(),
                     output_targets: None,
                     override_selection: Some(WorkflowTechnicalFitOverride {
@@ -221,6 +224,7 @@ async fn workflow_execution_session_queue_prefers_bounded_warm_reuse_over_same_p
                 &created.session_id,
                 &WorkflowExecutionSessionRunRequest {
                     session_id: created.session_id.clone(),
+                    workflow_semantic_version: "0.1.0".to_string(),
                     inputs: Vec::new(),
                     output_targets: None,
                     override_selection: None,
@@ -284,6 +288,7 @@ async fn workflow_execution_session_queue_items_expose_authoritative_queue_posit
                 &created.session_id,
                 &WorkflowExecutionSessionRunRequest {
                     session_id: created.session_id.clone(),
+                    workflow_semantic_version: "0.1.0".to_string(),
                     inputs: Vec::new(),
                     output_targets: None,
                     override_selection: None,
@@ -303,6 +308,7 @@ async fn workflow_execution_session_queue_items_expose_authoritative_queue_posit
                 &created.session_id,
                 &WorkflowExecutionSessionRunRequest {
                     session_id: created.session_id.clone(),
+                    workflow_semantic_version: "0.1.0".to_string(),
                     inputs: Vec::new(),
                     output_targets: None,
                     override_selection: None,
@@ -374,6 +380,7 @@ async fn workflow_execution_session_queue_promotes_starved_runs_before_newer_hig
                 &created.session_id,
                 &WorkflowExecutionSessionRunRequest {
                     session_id: created.session_id.clone(),
+                    workflow_semantic_version: "0.1.0".to_string(),
                     inputs: Vec::new(),
                     output_targets: None,
                     override_selection: None,
@@ -400,6 +407,7 @@ async fn workflow_execution_session_queue_promotes_starved_runs_before_newer_hig
                     &created.session_id,
                     &WorkflowExecutionSessionRunRequest {
                         session_id: created.session_id.clone(),
+                        workflow_semantic_version: "0.1.0".to_string(),
                         inputs: Vec::new(),
                         output_targets: None,
                         override_selection: None,

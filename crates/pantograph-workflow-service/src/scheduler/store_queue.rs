@@ -85,6 +85,7 @@ impl WorkflowExecutionSessionStore {
         let queued = WorkflowExecutionSessionQueuedRun {
             workflow_run_id: workflow_run_id.clone(),
             enqueued_at_ms: unix_timestamp_ms(),
+            workflow_semantic_version: request.workflow_semantic_version.clone(),
             inputs: request.inputs.clone(),
             output_targets: request.output_targets.clone(),
             override_selection: request

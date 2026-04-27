@@ -151,6 +151,7 @@ async fn workflow_get_scheduler_snapshot_exposes_single_visible_queue_run_as_tra
                 &created.session_id,
                 &WorkflowExecutionSessionRunRequest {
                     session_id: created.session_id.clone(),
+                    workflow_semantic_version: "0.1.0".to_string(),
                     inputs: Vec::new(),
                     output_targets: None,
                     override_selection: None,
@@ -214,6 +215,7 @@ async fn workflow_get_scheduler_snapshot_reports_bypassed_queue_head_for_warm_re
                 &created.session_id,
                 &WorkflowExecutionSessionRunRequest {
                     session_id: created.session_id.clone(),
+                    workflow_semantic_version: "0.1.0".to_string(),
                     inputs: Vec::new(),
                     output_targets: None,
                     override_selection: Some(WorkflowTechnicalFitOverride {
@@ -230,6 +232,7 @@ async fn workflow_get_scheduler_snapshot_reports_bypassed_queue_head_for_warm_re
                 &created.session_id,
                 &WorkflowExecutionSessionRunRequest {
                     session_id: created.session_id.clone(),
+                    workflow_semantic_version: "0.1.0".to_string(),
                     inputs: Vec::new(),
                     output_targets: None,
                     override_selection: None,
@@ -292,6 +295,7 @@ async fn workflow_get_scheduler_snapshot_omits_trace_execution_for_ambiguous_pen
                     &created.session_id,
                     &WorkflowExecutionSessionRunRequest {
                         session_id: created.session_id.clone(),
+                        workflow_semantic_version: "0.1.0".to_string(),
                         inputs: Vec::new(),
                         output_targets: None,
                         override_selection: None,

@@ -114,6 +114,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             &host,
             WorkflowExecutionSessionRunRequest {
                 session_id: session.session_id,
+                workflow_semantic_version: "0.1.0".to_string(),
                 inputs: vec![WorkflowPortBinding {
                     node_id: "text-input-1".to_string(),
                     port_id: "text".to_string(),

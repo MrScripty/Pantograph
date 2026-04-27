@@ -85,6 +85,7 @@ async fn workflow_cleanup_stale_execution_sessions_keeps_session_with_queued_wor
                 &created.session_id,
                 &WorkflowExecutionSessionRunRequest {
                     session_id: created.session_id.clone(),
+                    workflow_semantic_version: "0.1.0".to_string(),
                     inputs: Vec::new(),
                     output_targets: None,
                     override_selection: None,
@@ -370,6 +371,7 @@ async fn workflow_stale_cleanup_worker_keeps_sessions_with_queued_work() {
                 &created.session_id,
                 &WorkflowExecutionSessionRunRequest {
                     session_id: created.session_id.clone(),
+                    workflow_semantic_version: "0.1.0".to_string(),
                     inputs: Vec::new(),
                     output_targets: None,
                     override_selection: None,

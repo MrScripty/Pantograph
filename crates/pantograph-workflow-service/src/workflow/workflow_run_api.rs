@@ -10,7 +10,7 @@ use super::runtime_preflight::format_runtime_not_ready_message;
 use super::validation::{
     validate_bindings, validate_host_output_bindings, validate_output_targets,
     validate_output_targets_against_io, validate_payload_size, validate_requested_outputs_produced,
-    validate_timeout_ms, validate_workflow_id,
+    validate_timeout_ms, validate_workflow_id, validate_workflow_semantic_version,
 };
 use super::{
     WorkflowHost, WorkflowRunHandle, WorkflowRunOptions, WorkflowRunRequest, WorkflowRunResponse,
@@ -29,6 +29,7 @@ impl WorkflowService {
         workflow_run_id: Option<String>,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
         validate_workflow_id(&request.workflow_id)?;
+        validate_workflow_semantic_version(&request.workflow_semantic_version)?;
         validate_timeout_ms(request.timeout_ms)?;
         validate_bindings(&request.inputs, "inputs")?;
         if let Some(targets) = request.output_targets.as_ref() {

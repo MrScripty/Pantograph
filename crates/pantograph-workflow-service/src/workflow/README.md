@@ -166,8 +166,9 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
 - Validation: blank workflow ids, empty binding endpoints, duplicate endpoints,
   invalid output targets, oversized values, and missing produced outputs keep
   the same error codes as the parent facade.
-- Snapshotting: queued workflow execution sessions use semantic workflow
-  version `0.1.0` until the public run request grows an explicit version field.
+- Snapshotting: queued workflow execution sessions require an explicit
+  `workflow_semantic_version` and use it when resolving the immutable workflow
+  version snapshot.
 - Enums and labels: runtime install/readiness states retain the parent service
   contract semantics.
 - Ordering: runtime issues are sorted and deduplicated before public exposure.

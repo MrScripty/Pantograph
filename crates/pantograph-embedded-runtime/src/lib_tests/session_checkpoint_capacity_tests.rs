@@ -34,6 +34,7 @@ async fn keep_alive_session_retains_checkpoint_across_capacity_rebalance() {
     let first_output = runtime
         .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: first.session_id.clone(),
+            workflow_semantic_version: "0.1.0".to_string(),
             inputs: vec![WorkflowPortBinding {
                 node_id: "text-input-1".to_string(),
                 port_id: "text".to_string(),
@@ -112,6 +113,7 @@ async fn keep_alive_session_retains_checkpoint_across_capacity_rebalance() {
     let resumed_output = runtime
         .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: first.session_id.clone(),
+            workflow_semantic_version: "0.1.0".to_string(),
             inputs: Vec::new(),
             output_targets: Some(vec![WorkflowOutputTarget {
                 node_id: "text-output-1".to_string(),
@@ -203,6 +205,7 @@ async fn scheduler_driven_rebalance_checkpoints_keep_alive_session() {
     let first_output = runtime
         .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: keep_alive.session_id.clone(),
+            workflow_semantic_version: "0.1.0".to_string(),
             inputs: vec![WorkflowPortBinding {
                 node_id: "text-input-1".to_string(),
                 port_id: "text".to_string(),
@@ -238,6 +241,7 @@ async fn scheduler_driven_rebalance_checkpoints_keep_alive_session() {
     let second_output = runtime
         .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: one_shot.session_id.clone(),
+            workflow_semantic_version: "0.1.0".to_string(),
             inputs: vec![WorkflowPortBinding {
                 node_id: "text-input-1".to_string(),
                 port_id: "text".to_string(),
@@ -274,6 +278,7 @@ async fn scheduler_driven_rebalance_checkpoints_keep_alive_session() {
     let resumed_output = runtime
         .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: keep_alive.session_id.clone(),
+            workflow_semantic_version: "0.1.0".to_string(),
             inputs: Vec::new(),
             output_targets: Some(vec![WorkflowOutputTarget {
                 node_id: "text-output-1".to_string(),
@@ -354,6 +359,7 @@ async fn repeated_capacity_unload_keeps_checkpoint_identity_and_keep_alive_disab
     runtime
         .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id: session.session_id.clone(),
+            workflow_semantic_version: "0.1.0".to_string(),
             inputs: vec![WorkflowPortBinding {
                 node_id: "text-input-1".to_string(),
                 port_id: "text".to_string(),
@@ -426,11 +432,9 @@ async fn repeated_capacity_unload_keeps_checkpoint_identity_and_keep_alive_disab
         .await
         .expect("disable keep-alive after checkpoint");
 
-    assert!(
-        runtime
-            .session_executions
-            .handle(&session.session_id)
-            .expect("session execution lookup should succeed")
-            .is_none()
-    );
+    assert!(runtime
+        .session_executions
+        .handle(&session.session_id)
+        .expect("session execution lookup should succeed")
+        .is_none());
 }

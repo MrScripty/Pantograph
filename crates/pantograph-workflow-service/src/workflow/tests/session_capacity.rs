@@ -47,6 +47,7 @@ async fn workflow_execution_session_capacity_rebalance_uses_host_selected_candid
             &selecting_host,
             WorkflowExecutionSessionRunRequest {
                 session_id: third_session_id.clone(),
+                workflow_semantic_version: "0.1.0".to_string(),
                 inputs: Vec::new(),
                 output_targets: None,
                 override_selection: None,
@@ -118,6 +119,7 @@ async fn workflow_execution_session_capacity_rebalance_preserves_affine_idle_run
             &host,
             WorkflowExecutionSessionRunRequest {
                 session_id: target.session_id.clone(),
+                workflow_semantic_version: "0.1.0".to_string(),
                 inputs: Vec::new(),
                 output_targets: None,
                 override_selection: None,
@@ -198,6 +200,7 @@ async fn workflow_execution_session_capacity_rebalance_preserves_shared_model_id
             &host,
             WorkflowExecutionSessionRunRequest {
                 session_id: target.session_id.clone(),
+                workflow_semantic_version: "0.1.0".to_string(),
                 inputs: Vec::new(),
                 output_targets: None,
                 override_selection: None,
@@ -281,6 +284,7 @@ async fn workflow_execution_session_capacity_rebalance_preserves_shared_backend_
             &host,
             WorkflowExecutionSessionRunRequest {
                 session_id: target.session_id.clone(),
+                workflow_semantic_version: "0.1.0".to_string(),
                 inputs: Vec::new(),
                 output_targets: None,
                 override_selection: None,

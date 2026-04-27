@@ -4,6 +4,7 @@ use super::*;
 fn request_roundtrip_uses_snake_case() {
     let req = WorkflowRunRequest {
         workflow_id: "wf-1".to_string(),
+        workflow_semantic_version: "0.1.0".to_string(),
         inputs: vec![WorkflowPortBinding {
             node_id: "input-1".to_string(),
             port_id: "text".to_string(),

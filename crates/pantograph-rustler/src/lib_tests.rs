@@ -212,6 +212,7 @@ async fn test_rustler_workflow_host_contract_success() {
             &host,
             pantograph_workflow_service::WorkflowExecutionSessionRunRequest {
                 session_id: session.session_id,
+                workflow_semantic_version: "0.1.0".to_string(),
                 inputs: vec![pantograph_workflow_service::WorkflowPortBinding {
                     node_id: "text-input-1".to_string(),
                     port_id: "text".to_string(),
@@ -273,6 +274,7 @@ async fn test_rustler_workflow_execution_session_host_contract_preserves_cancell
             &host,
             pantograph_workflow_service::WorkflowExecutionSessionRunRequest {
                 session_id: created.session_id,
+                workflow_semantic_version: "0.1.0".to_string(),
                 inputs: vec![pantograph_workflow_service::WorkflowPortBinding {
                     node_id: "text-input-1".to_string(),
                     port_id: "text".to_string(),
@@ -339,6 +341,7 @@ async fn test_rustler_workflow_execution_session_host_contract_preserves_invalid
             &host,
             pantograph_workflow_service::WorkflowExecutionSessionRunRequest {
                 session_id: created.session_id,
+                workflow_semantic_version: "0.1.0".to_string(),
                 inputs: vec![pantograph_workflow_service::WorkflowPortBinding {
                     node_id: "text-input-1".to_string(),
                     port_id: "text".to_string(),

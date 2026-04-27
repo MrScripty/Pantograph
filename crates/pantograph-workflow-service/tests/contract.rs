@@ -160,6 +160,7 @@ async fn workflow_run_contract_snapshot() {
             &host,
             WorkflowExecutionSessionRunRequest {
                 session_id: session.session_id,
+                workflow_semantic_version: "0.1.0".to_string(),
                 inputs: vec![WorkflowPortBinding {
                     node_id: "text-input-1".to_string(),
                     port_id: "text".to_string(),
@@ -597,6 +598,7 @@ async fn workflow_run_rejects_non_discovered_output_target_contract() {
             &host,
             WorkflowExecutionSessionRunRequest {
                 session_id: session.session_id,
+                workflow_semantic_version: "0.1.0".to_string(),
                 inputs: Vec::new(),
                 output_targets: Some(vec![WorkflowOutputTarget {
                     node_id: "vector-output-1".to_string(),

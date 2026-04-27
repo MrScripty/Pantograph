@@ -26,6 +26,7 @@ async fn workflow_get_scheduler_snapshot_exposes_next_admission_diagnostics() {
                 &created.session_id,
                 &WorkflowExecutionSessionRunRequest {
                     session_id: created.session_id.clone(),
+                    workflow_semantic_version: "0.1.0".to_string(),
                     inputs: Vec::new(),
                     output_targets: None,
                     override_selection: None,
@@ -125,6 +126,7 @@ async fn workflow_get_scheduler_snapshot_merges_runtime_registry_diagnostics_fro
                 &created.session_id,
                 &WorkflowExecutionSessionRunRequest {
                     session_id: created.session_id.clone(),
+                    workflow_semantic_version: "0.1.0".to_string(),
                     inputs: Vec::new(),
                     output_targets: None,
                     override_selection: None,
@@ -215,6 +217,7 @@ async fn workflow_get_scheduler_snapshot_marks_rebalance_required_when_idle_runt
                 &created.session_id,
                 &WorkflowExecutionSessionRunRequest {
                     session_id: created.session_id.clone(),
+                    workflow_semantic_version: "0.1.0".to_string(),
                     inputs: Vec::new(),
                     output_targets: None,
                     override_selection: None,

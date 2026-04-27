@@ -7,6 +7,7 @@ use crate::technical_fit::WorkflowTechnicalFitOverride;
 
 use super::validation::{
     validate_bindings, validate_output_targets, validate_timeout_ms, validate_workflow_id,
+    validate_workflow_semantic_version,
 };
 use super::{
     AttributionRepository, WorkflowExecutionSessionCreateRequest,
@@ -15,8 +16,6 @@ use super::{
     WorkflowExecutionSessionUnloadReason, WorkflowHost, WorkflowRunRequest, WorkflowRunResponse,
     WorkflowSchedulerDecisionReason, WorkflowService, WorkflowServiceError,
 };
-
-const DEFAULT_WORKFLOW_SEMANTIC_VERSION: &str = "0.1.0";
 
 impl WorkflowService {
     pub async fn create_workflow_execution_session<H: WorkflowHost>(
@@ -71,6 +70,7 @@ impl WorkflowService {
                 "session_id must be non-empty".to_string(),
             ));
         }
+        validate_workflow_semantic_version(&request.workflow_semantic_version)?;
         validate_timeout_ms(request.timeout_ms)?;
         validate_bindings(&request.inputs, "inputs")?;
         if let Some(targets) = request.output_targets.as_ref() {
@@ -165,6 +165,7 @@ impl WorkflowService {
                 host,
                 WorkflowRunRequest {
                     workflow_id: queued_run.workflow_id,
+                    workflow_semantic_version: queued_run.queued.workflow_semantic_version,
                     inputs: queued_run.queued.inputs,
                     output_targets: queued_run.queued.output_targets,
                     override_selection: queued_run.queued.override_selection,
@@ -206,7 +207,7 @@ impl WorkflowService {
         let graph = host.workflow_graph(&session.workflow_id).await?;
         let version = self.resolve_workflow_graph_version(
             &session.workflow_id,
-            DEFAULT_WORKFLOW_SEMANTIC_VERSION,
+            &request.workflow_semantic_version,
             &graph,
         )?;
         let override_selection = request

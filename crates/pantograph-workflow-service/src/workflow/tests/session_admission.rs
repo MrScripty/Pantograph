@@ -37,6 +37,7 @@ async fn workflow_execution_session_run_waits_for_runtime_capacity_before_admiss
                 &first_host,
                 WorkflowExecutionSessionRunRequest {
                     session_id: first_session_id,
+                    workflow_semantic_version: "0.1.0".to_string(),
                     inputs: Vec::new(),
                     output_targets: None,
                     override_selection: None,
@@ -58,6 +59,7 @@ async fn workflow_execution_session_run_waits_for_runtime_capacity_before_admiss
                 &second_host,
                 WorkflowExecutionSessionRunRequest {
                     session_id: second_session_id,
+                    workflow_semantic_version: "0.1.0".to_string(),
                     inputs: Vec::new(),
                     output_targets: None,
                     override_selection: None,
@@ -149,6 +151,7 @@ async fn workflow_execution_session_run_waits_for_runtime_admission_before_deque
                 &run_host,
                 WorkflowExecutionSessionRunRequest {
                     session_id,
+                    workflow_semantic_version: "0.1.0".to_string(),
                     inputs: Vec::new(),
                     output_targets: None,
                     override_selection: None,

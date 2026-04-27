@@ -12,10 +12,10 @@ use pantograph_runtime_identity::{
     backend_key_aliases, normalize_runtime_identifier_with_fallback,
 };
 use pantograph_workflow_service::{
-    WorkflowErrorCode, WorkflowErrorDetails, WorkflowErrorEnvelope, WorkflowHost,
+    capabilities, WorkflowErrorCode, WorkflowErrorDetails, WorkflowErrorEnvelope, WorkflowHost,
     WorkflowHostModelDescriptor, WorkflowOutputTarget, WorkflowPortBinding, WorkflowRunHandle,
     WorkflowRunOptions, WorkflowRuntimeCapability, WorkflowRuntimeInstallState,
-    WorkflowRuntimeSourceKind, WorkflowServiceError, capabilities,
+    WorkflowRuntimeSourceKind, WorkflowServiceError,
 };
 
 pub const DEFAULT_BACKEND_NAME: &str = "openai-compatible";
@@ -393,6 +393,7 @@ mod tests {
                 host,
                 WorkflowExecutionSessionRunRequest {
                     session_id: session.session_id,
+                    workflow_semantic_version: request.workflow_semantic_version,
                     inputs: request.inputs,
                     output_targets: request.output_targets,
                     override_selection: request.override_selection,
@@ -571,6 +572,7 @@ mod tests {
                 &host,
                 WorkflowRunRequest {
                     workflow_id: workflow_id.to_string(),
+                    workflow_semantic_version: "0.1.0".to_string(),
                     inputs: Vec::new(),
                     output_targets: Some(vec![WorkflowOutputTarget {
                         node_id: "vector-output-1".to_string(),
@@ -615,6 +617,7 @@ mod tests {
                 &host,
                 WorkflowRunRequest {
                     workflow_id: workflow_id.to_string(),
+                    workflow_semantic_version: "0.1.0".to_string(),
                     inputs: Vec::new(),
                     output_targets: None,
                     override_selection: None,
@@ -661,6 +664,7 @@ mod tests {
                 &host,
                 WorkflowRunRequest {
                     workflow_id: workflow_id.to_string(),
+                    workflow_semantic_version: "0.1.0".to_string(),
                     inputs: Vec::new(),
                     output_targets: None,
                     override_selection: None,
@@ -707,6 +711,7 @@ mod tests {
                 &host,
                 WorkflowRunRequest {
                     workflow_id: workflow_id.to_string(),
+                    workflow_semantic_version: "0.1.0".to_string(),
                     inputs: Vec::new(),
                     output_targets: None,
                     override_selection: None,
@@ -752,6 +757,7 @@ mod tests {
                 &host,
                 WorkflowRunRequest {
                     workflow_id: workflow_id.to_string(),
+                    workflow_semantic_version: "0.1.0".to_string(),
                     inputs: Vec::new(),
                     output_targets: None,
                     override_selection: None,
@@ -763,10 +769,9 @@ mod tests {
 
         server_thread.join().expect("join server");
         assert!(matches!(err, WorkflowServiceError::Internal(_)));
-        assert!(
-            err.to_string()
-                .contains("expected workflow error envelope JSON")
-        );
+        assert!(err
+            .to_string()
+            .contains("expected workflow error envelope JSON"));
     }
 
     #[tokio::test]
@@ -890,10 +895,8 @@ mod tests {
 
         server_thread.join().expect("join server");
         assert!(matches!(error, WorkflowServiceError::Internal(_)));
-        assert!(
-            error
-                .to_string()
-                .contains("expected workflow error envelope JSON")
-        );
+        assert!(error
+            .to_string()
+            .contains("expected workflow error envelope JSON"));
     }
 }
