@@ -1,11 +1,11 @@
 use pantograph_diagnostics_ledger::{
     DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
     DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
-    ExecutionGuaranteeLevel, IoArtifactObservedPayload, LicenseSnapshot, ModelIdentity,
-    ModelLicenseUsageEvent, ModelOutputMeasurement, OutputModality, RetentionClass,
-    RunSnapshotAcceptedPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
-    SchedulerEstimateProducedPayload, SchedulerQueuePlacementPayload, UsageEventStatus,
-    UsageLineage,
+    ExecutionGuaranteeLevel, IoArtifactObservedPayload, LibraryAssetAccessedPayload,
+    LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement, OutputModality,
+    RetentionClass, RunSnapshotAcceptedPayload, RunStartedPayload, RunTerminalPayload,
+    RunTerminalStatus, SchedulerEstimateProducedPayload, SchedulerQueuePlacementPayload,
+    UsageEventStatus, UsageLineage,
 };
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, UsageEventId, WorkflowId, WorkflowRunId, WorkflowVersionId,
@@ -418,6 +418,75 @@ fn workflow_projection_rebuild_validates_bounds() {
     ));
 }
 
+#[test]
+fn workflow_library_usage_query_drains_and_reads_projection() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_library_asset_access_event(
+            "model-a",
+            Some("run-a"),
+            128,
+        ))
+        .expect("library access event");
+    ledger
+        .append_diagnostic_event(sample_library_asset_access_event(
+            "model-a",
+            Some("run-a"),
+            256,
+        ))
+        .expect("library access event");
+    let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+
+    let response = service
+        .workflow_library_usage_query(WorkflowLibraryUsageQueryRequest {
+            asset_id: Some("model-a".to_string()),
+            workflow_id: Some("workflow-a".to_string()),
+            workflow_version_id: None,
+            after_event_seq: None,
+            limit: Some(10),
+            projection_batch_size: Some(10),
+        })
+        .expect("library usage query");
+
+    assert_eq!(response.assets.len(), 1);
+    assert_eq!(response.assets[0].asset_id, "model-a");
+    assert_eq!(response.assets[0].total_access_count, 2);
+    assert_eq!(response.assets[0].run_access_count, 1);
+    assert_eq!(response.assets[0].total_network_bytes, 384);
+    assert_eq!(response.projection_state.last_applied_event_seq, 2);
+}
+
+#[test]
+fn workflow_library_usage_query_validates_bounds() {
+    let service = WorkflowService::with_ephemeral_diagnostics_ledger().expect("service");
+
+    let invalid_id = service.workflow_library_usage_query(WorkflowLibraryUsageQueryRequest {
+        asset_id: None,
+        workflow_id: Some("bad\nid".to_string()),
+        workflow_version_id: None,
+        after_event_seq: None,
+        limit: None,
+        projection_batch_size: None,
+    });
+    assert!(matches!(
+        invalid_id,
+        Err(WorkflowServiceError::InvalidRequest(_))
+    ));
+
+    let oversized_limit = service.workflow_library_usage_query(WorkflowLibraryUsageQueryRequest {
+        asset_id: None,
+        workflow_id: None,
+        workflow_version_id: None,
+        after_event_seq: None,
+        limit: Some(501),
+        projection_batch_size: None,
+    });
+    assert!(matches!(
+        oversized_limit,
+        Err(WorkflowServiceError::InvalidRequest(_))
+    ));
+}
+
 fn sample_run_snapshot_event() -> DiagnosticEventAppendRequest {
     DiagnosticEventAppendRequest {
         source_component: DiagnosticEventSourceComponent::WorkflowService,
@@ -614,6 +683,45 @@ fn sample_io_artifact_event(
             media_type: Some("text/plain".to_string()),
             size_bytes: Some(42),
             content_hash: Some("blake3:test".to_string()),
+        }),
+    }
+}
+
+fn sample_library_asset_access_event(
+    asset_id: &str,
+    workflow_run_id: Option<&str>,
+    network_bytes: u64,
+) -> DiagnosticEventAppendRequest {
+    DiagnosticEventAppendRequest {
+        source_component: DiagnosticEventSourceComponent::Library,
+        source_instance_id: Some("pumas-library".to_string()),
+        occurred_at_ms: 31,
+        workflow_run_id: workflow_run_id.map(|id| WorkflowRunId::try_from(id.to_string()).unwrap()),
+        workflow_id: workflow_run_id
+            .map(|_| WorkflowId::try_from("workflow-a".to_string()).unwrap()),
+        workflow_version_id: workflow_run_id
+            .map(|_| WorkflowVersionId::try_from("wfver-a".to_string()).unwrap()),
+        workflow_semantic_version: workflow_run_id.map(|_| "1.0.0".to_string()),
+        node_id: None,
+        node_type: None,
+        node_version: None,
+        runtime_id: None,
+        runtime_version: None,
+        model_id: Some(asset_id.to_string()),
+        model_version: Some("main".to_string()),
+        client_id: Some(ClientId::try_from("client-a".to_string()).unwrap()),
+        client_session_id: Some(ClientSessionId::try_from("session-a".to_string()).unwrap()),
+        bucket_id: Some(BucketId::try_from("bucket-a".to_string()).unwrap()),
+        scheduler_policy_id: None,
+        retention_policy_id: Some("ephemeral".to_string()),
+        privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+        retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+        payload_ref: None,
+        payload: DiagnosticEventPayload::LibraryAssetAccessed(LibraryAssetAccessedPayload {
+            asset_id: asset_id.to_string(),
+            operation: "download".to_string(),
+            cache_status: Some("miss".to_string()),
+            network_bytes: Some(network_bytes),
         }),
     }
 }

@@ -4,8 +4,8 @@ use crate::records::{RetentionClass, DEFAULT_STANDARD_RETENTION_DAYS};
 use crate::util::now_ms;
 use crate::DiagnosticsLedgerError;
 
-pub(crate) const SCHEMA_VERSION: i64 = 11;
-const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v11";
+pub(crate) const SCHEMA_VERSION: i64 = 12;
+const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v12";
 
 pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {
     tx.execute_batch(
@@ -203,6 +203,9 @@ pub(crate) fn migrate_schema(
     if found < 11 {
         apply_io_artifact_projection_schema(&tx)?;
     }
+    if found < 12 {
+        apply_library_usage_projection_schema(&tx)?;
+    }
     if found < SCHEMA_VERSION {
         tx.execute(
             "INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
@@ -278,6 +281,7 @@ fn apply_event_ledger_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedg
     apply_run_list_projection_schema(tx)?;
     apply_run_detail_projection_schema(tx)?;
     apply_io_artifact_projection_schema(tx)?;
+    apply_library_usage_projection_schema(tx)?;
     Ok(())
 }
 
@@ -418,6 +422,56 @@ fn apply_io_artifact_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagn
             ON io_artifact_projection(workflow_run_id, node_id, event_seq);
         CREATE INDEX IF NOT EXISTS idx_io_artifact_projection_role_seq
             ON io_artifact_projection(artifact_role, event_seq);
+        "#,
+    )?;
+    Ok(())
+}
+
+fn apply_library_usage_projection_schema(
+    tx: &Transaction<'_>,
+) -> Result<(), DiagnosticsLedgerError> {
+    tx.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS library_usage_projection (
+            asset_id TEXT PRIMARY KEY,
+            total_access_count INTEGER NOT NULL,
+            run_access_count INTEGER NOT NULL,
+            total_network_bytes INTEGER NOT NULL,
+            last_accessed_at_ms INTEGER NOT NULL,
+            last_operation TEXT NOT NULL,
+            last_cache_status TEXT,
+            last_workflow_run_id TEXT,
+            last_workflow_id TEXT,
+            last_workflow_version_id TEXT,
+            last_workflow_semantic_version TEXT,
+            last_client_id TEXT,
+            last_client_session_id TEXT,
+            last_bucket_id TEXT,
+            last_event_seq INTEGER NOT NULL,
+            last_updated_at_ms INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_library_usage_projection_accessed
+            ON library_usage_projection(last_accessed_at_ms DESC, last_event_seq DESC);
+        CREATE INDEX IF NOT EXISTS idx_library_usage_projection_workflow
+            ON library_usage_projection(last_workflow_id, last_accessed_at_ms DESC);
+        CREATE INDEX IF NOT EXISTS idx_library_usage_projection_workflow_version
+            ON library_usage_projection(last_workflow_version_id, last_accessed_at_ms DESC);
+
+        CREATE TABLE IF NOT EXISTS library_usage_run_projection (
+            asset_id TEXT NOT NULL,
+            workflow_run_id TEXT NOT NULL,
+            workflow_id TEXT,
+            workflow_version_id TEXT,
+            workflow_semantic_version TEXT,
+            first_event_seq INTEGER NOT NULL,
+            last_event_seq INTEGER NOT NULL,
+            last_accessed_at_ms INTEGER NOT NULL,
+            PRIMARY KEY(asset_id, workflow_run_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_library_usage_run_projection_workflow
+            ON library_usage_run_projection(workflow_id, asset_id);
+        CREATE INDEX IF NOT EXISTS idx_library_usage_run_projection_version
+            ON library_usage_run_projection(workflow_version_id, asset_id);
         "#,
     )?;
     Ok(())

@@ -7,9 +7,10 @@ use crate::{
     DiagnosticEventAppendRequest, DiagnosticEventKind, DiagnosticEventPayload,
     DiagnosticEventPrivacyClass, DiagnosticEventRetentionClass, DiagnosticEventSourceComponent,
     DiagnosticsLedgerError, DiagnosticsLedgerRepository, DiagnosticsQuery, ExecutionGuaranteeLevel,
-    IoArtifactObservedPayload, IoArtifactProjectionQuery, LicenseSnapshot, ModelIdentity,
-    ModelLicenseUsageEvent, ModelOutputMeasurement, OutputMeasurementUnavailableReason,
-    OutputModality, ProjectionStateUpdate, ProjectionStatus, PruneTimingObservationsCommand,
+    IoArtifactObservedPayload, IoArtifactProjectionQuery, LibraryAssetAccessedPayload,
+    LibraryUsageProjectionQuery, LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent,
+    ModelOutputMeasurement, OutputMeasurementUnavailableReason, OutputModality,
+    ProjectionStateUpdate, ProjectionStatus, PruneTimingObservationsCommand,
     PruneUsageEventsCommand, RetentionClass, RetentionPolicyChangedPayload,
     RunDetailProjectionQuery, RunListProjectionQuery, RunListProjectionStatus,
     RunSnapshotAcceptedPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
@@ -19,6 +20,7 @@ use crate::{
     WorkflowTimingExpectation, WorkflowTimingExpectationComparison, WorkflowTimingExpectationQuery,
     WorkflowTimingObservation, WorkflowTimingObservationScope, WorkflowTimingObservationStatus,
     DEFAULT_STANDARD_RETENTION_DAYS, IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION,
+    LIBRARY_USAGE_PROJECTION_NAME, LIBRARY_USAGE_PROJECTION_VERSION,
     MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION,
     RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
     SCHEDULER_TIMELINE_PROJECTION_VERSION,
@@ -997,6 +999,75 @@ fn projection_rebuild_resets_projection_rows_and_cursor() {
 }
 
 #[test]
+fn library_usage_projection_drains_asset_events_incrementally() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    let first_event = ledger
+        .append_diagnostic_event(sample_library_asset_access_event(
+            "asset_alpha",
+            Some("workflow_run_alpha"),
+            1_024,
+        ))
+        .expect("library asset access appends");
+    let second_event = ledger
+        .append_diagnostic_event(sample_library_asset_access_event(
+            "asset_alpha",
+            Some("workflow_run_alpha"),
+            2_048,
+        ))
+        .expect("library asset access appends");
+    let third_event = ledger
+        .append_diagnostic_event(sample_library_asset_access_event("asset_beta", None, 0))
+        .expect("library asset access appends");
+
+    let state = ledger
+        .drain_library_usage_projection(10)
+        .expect("library usage projection drains");
+    assert_eq!(state.projection_name, LIBRARY_USAGE_PROJECTION_NAME);
+    assert_eq!(state.projection_version, LIBRARY_USAGE_PROJECTION_VERSION);
+    assert_eq!(state.last_applied_event_seq, third_event.event_seq);
+
+    let records = ledger
+        .query_library_usage_projection(LibraryUsageProjectionQuery {
+            asset_id: Some("asset_alpha".to_string()),
+            workflow_id: None,
+            workflow_version_id: None,
+            after_event_seq: None,
+            limit: 10,
+        })
+        .expect("library usage projection loads");
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].asset_id, "asset_alpha");
+    assert_eq!(records[0].total_access_count, 2);
+    assert_eq!(records[0].run_access_count, 1);
+    assert_eq!(records[0].total_network_bytes, 3_072);
+    assert_eq!(records[0].last_event_seq, second_event.event_seq);
+    assert_eq!(
+        records[0]
+            .last_workflow_run_id
+            .as_ref()
+            .map(|id| id.as_str()),
+        Some("workflow_run_alpha")
+    );
+
+    let by_workflow = ledger
+        .query_library_usage_projection(LibraryUsageProjectionQuery {
+            asset_id: None,
+            workflow_id: Some(WorkflowId::try_from("workflow_alpha".to_string()).unwrap()),
+            workflow_version_id: None,
+            after_event_seq: Some(first_event.event_seq),
+            limit: 10,
+        })
+        .expect("library usage workflow filter loads");
+    assert_eq!(by_workflow.len(), 1);
+    assert_eq!(by_workflow[0].asset_id, "asset_alpha");
+
+    let no_new_state = ledger
+        .drain_library_usage_projection(10)
+        .expect("library usage projection drains idempotently");
+    assert_eq!(no_new_state.last_applied_event_seq, third_event.event_seq);
+}
+
+#[test]
 fn existing_v5_schema_adds_usage_lineage_contract_indexes() {
     let temp = tempfile::NamedTempFile::new().expect("temp file");
     let path = temp.path().to_path_buf();
@@ -1174,6 +1245,36 @@ fn existing_v10_schema_adds_io_artifact_projection_table() {
     assert!(sqlite_index_exists(
         &conn,
         "idx_io_artifact_projection_run_seq"
+    ));
+}
+
+#[test]
+fn existing_v11_schema_adds_library_usage_projection_table() {
+    let temp = tempfile::NamedTempFile::new().expect("temp file");
+    let path = temp.path().to_path_buf();
+    {
+        let conn = Connection::open(&path).expect("connection opens");
+        conn.execute_batch(
+            "CREATE TABLE ledger_schema_migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at_ms INTEGER NOT NULL,
+                checksum TEXT NOT NULL
+            );
+            INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
+            VALUES (11, 0, 'pantograph-diagnostics-ledger-v11');",
+        )
+        .expect("v11 schema marker is installed");
+    }
+    {
+        let _ledger = SqliteDiagnosticsLedger::open(&path).expect("ledger migrates");
+    }
+    let conn = Connection::open(&path).expect("connection reopens");
+
+    assert!(sqlite_table_exists(&conn, "library_usage_projection"));
+    assert!(sqlite_table_exists(&conn, "library_usage_run_projection"));
+    assert!(sqlite_index_exists(
+        &conn,
+        "idx_library_usage_projection_accessed"
     ));
 }
 
@@ -1555,6 +1656,45 @@ fn sample_io_artifact_event(
             media_type: Some("image/png".to_string()),
             size_bytes: Some(1_024),
             content_hash: Some("blake3:artifact-hash".to_string()),
+        }),
+    }
+}
+
+fn sample_library_asset_access_event(
+    asset_id: &str,
+    workflow_run_id: Option<&str>,
+    network_bytes: u64,
+) -> DiagnosticEventAppendRequest {
+    DiagnosticEventAppendRequest {
+        source_component: DiagnosticEventSourceComponent::Library,
+        source_instance_id: Some("pumas-library".to_string()),
+        occurred_at_ms: 1_300,
+        workflow_run_id: workflow_run_id.map(|id| WorkflowRunId::try_from(id.to_string()).unwrap()),
+        workflow_id: workflow_run_id
+            .map(|_| WorkflowId::try_from("workflow_alpha".to_string()).unwrap()),
+        workflow_version_id: workflow_run_id
+            .map(|_| WorkflowVersionId::try_from("wfver_alpha".to_string()).unwrap()),
+        workflow_semantic_version: workflow_run_id.map(|_| "1.0.0".to_string()),
+        node_id: None,
+        node_type: None,
+        node_version: None,
+        runtime_id: None,
+        runtime_version: None,
+        model_id: Some(asset_id.to_string()),
+        model_version: Some("main".to_string()),
+        client_id: Some(ClientId::try_from("client_alpha".to_string()).unwrap()),
+        client_session_id: Some(ClientSessionId::try_from("session_alpha".to_string()).unwrap()),
+        bucket_id: Some(BucketId::try_from("bucket_alpha".to_string()).unwrap()),
+        scheduler_policy_id: None,
+        retention_policy_id: Some("retention_default".to_string()),
+        privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+        retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+        payload_ref: None,
+        payload: DiagnosticEventPayload::LibraryAssetAccessed(LibraryAssetAccessedPayload {
+            asset_id: asset_id.to_string(),
+            operation: "download".to_string(),
+            cache_status: Some("miss".to_string()),
+            network_bytes: Some(network_bytes),
         }),
     }
 }

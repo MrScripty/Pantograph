@@ -15,12 +15,13 @@ use pantograph_workflow_service::{
     WorkflowExecutionSessionStaleCleanupRequest, WorkflowExecutionSessionStaleCleanupResponse,
     WorkflowExecutionSessionStatusRequest, WorkflowExecutionSessionStatusResponse,
     WorkflowIoArtifactQueryRequest, WorkflowIoArtifactQueryResponse, WorkflowIoRequest,
-    WorkflowIoResponse, WorkflowPreflightRequest, WorkflowPreflightResponse,
-    WorkflowProjectionRebuildRequest, WorkflowProjectionRebuildResponse,
-    WorkflowRunDetailQueryRequest, WorkflowRunDetailQueryResponse, WorkflowRunListQueryRequest,
-    WorkflowRunListQueryResponse, WorkflowRunResponse, WorkflowSchedulerSnapshotRequest,
-    WorkflowSchedulerSnapshotResponse, WorkflowSchedulerTimelineQueryRequest,
-    WorkflowSchedulerTimelineQueryResponse, WorkflowServiceError,
+    WorkflowIoResponse, WorkflowLibraryUsageQueryRequest, WorkflowLibraryUsageQueryResponse,
+    WorkflowPreflightRequest, WorkflowPreflightResponse, WorkflowProjectionRebuildRequest,
+    WorkflowProjectionRebuildResponse, WorkflowRunDetailQueryRequest,
+    WorkflowRunDetailQueryResponse, WorkflowRunListQueryRequest, WorkflowRunListQueryResponse,
+    WorkflowRunResponse, WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse,
+    WorkflowSchedulerTimelineQueryRequest, WorkflowSchedulerTimelineQueryResponse,
+    WorkflowServiceError,
 };
 use tauri::{AppHandle, State};
 
@@ -253,6 +254,15 @@ pub async fn workflow_projection_rebuild(
 ) -> Result<WorkflowProjectionRebuildResponse, String> {
     workflow_service
         .workflow_projection_rebuild(request)
+        .map_err(workflow_error_json)
+}
+
+pub async fn workflow_library_usage_query(
+    request: WorkflowLibraryUsageQueryRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowLibraryUsageQueryResponse, String> {
+    workflow_service
+        .workflow_library_usage_query(request)
         .map_err(workflow_error_json)
 }
 

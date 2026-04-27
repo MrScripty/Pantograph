@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use pantograph_diagnostics_ledger::{
     DiagnosticEventKind, DiagnosticEventSourceComponent, IoArtifactProjectionRecord,
-    ProjectionStateRecord, ProjectionStatus, RunDetailProjectionRecord, RunListProjectionStatus,
-    SchedulerTimelineProjectionRecord,
+    LibraryUsageProjectionRecord, ProjectionStateRecord, ProjectionStatus,
+    RunDetailProjectionRecord, RunListProjectionStatus, SchedulerTimelineProjectionRecord,
 };
 use pantograph_workflow_service::graph::WorkflowExecutionSessionKind;
 use pantograph_workflow_service::{
@@ -11,15 +11,16 @@ use pantograph_workflow_service::{
     WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionState,
     WorkflowExecutionSessionSummary, WorkflowHost, WorkflowHostCapabilities,
     WorkflowIoArtifactQueryRequest, WorkflowIoArtifactQueryResponse, WorkflowIoNode,
-    WorkflowIoPort, WorkflowIoRequest, WorkflowIoResponse, WorkflowOutputTarget,
-    WorkflowPortBinding, WorkflowPreflightRequest, WorkflowProjectionRebuildRequest,
-    WorkflowProjectionRebuildResponse, WorkflowRunDetailQueryRequest,
-    WorkflowRunDetailQueryResponse, WorkflowRuntimeCapability, WorkflowRuntimeInstallState,
-    WorkflowRuntimeRequirements, WorkflowRuntimeSourceKind, WorkflowSchedulerSnapshotResponse,
-    WorkflowSchedulerTimelineQueryRequest, WorkflowSchedulerTimelineQueryResponse, WorkflowService,
-    WorkflowServiceError, WorkflowTraceNodeRecord, WorkflowTraceNodeStatus,
-    WorkflowTraceQueueMetrics, WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest,
-    WorkflowTraceSnapshotResponse, WorkflowTraceStatus, WorkflowTraceSummary,
+    WorkflowIoPort, WorkflowIoRequest, WorkflowIoResponse, WorkflowLibraryUsageQueryRequest,
+    WorkflowLibraryUsageQueryResponse, WorkflowOutputTarget, WorkflowPortBinding,
+    WorkflowPreflightRequest, WorkflowProjectionRebuildRequest, WorkflowProjectionRebuildResponse,
+    WorkflowRunDetailQueryRequest, WorkflowRunDetailQueryResponse, WorkflowRuntimeCapability,
+    WorkflowRuntimeInstallState, WorkflowRuntimeRequirements, WorkflowRuntimeSourceKind,
+    WorkflowSchedulerSnapshotResponse, WorkflowSchedulerTimelineQueryRequest,
+    WorkflowSchedulerTimelineQueryResponse, WorkflowService, WorkflowServiceError,
+    WorkflowTraceNodeRecord, WorkflowTraceNodeStatus, WorkflowTraceQueueMetrics,
+    WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
+    WorkflowTraceStatus, WorkflowTraceSummary,
 };
 
 struct ContractHost;
@@ -845,6 +846,88 @@ fn workflow_projection_rebuild_contract_snapshot() {
             "status": "current",
             "rebuilt_at_ms": null,
             "updated_at_ms": 1300
+        }
+    });
+    assert_eq!(response_value, expected_response);
+}
+
+#[test]
+fn workflow_library_usage_query_contract_snapshot() {
+    let request = WorkflowLibraryUsageQueryRequest {
+        asset_id: Some("model-1".to_string()),
+        workflow_id: Some("wf-1".to_string()),
+        workflow_version_id: Some("version-1".to_string()),
+        after_event_seq: Some(30),
+        limit: Some(25),
+        projection_batch_size: Some(100),
+    };
+    let response = WorkflowLibraryUsageQueryResponse {
+        assets: vec![LibraryUsageProjectionRecord {
+            asset_id: "model-1".to_string(),
+            total_access_count: 4,
+            run_access_count: 2,
+            total_network_bytes: 4096,
+            last_accessed_at_ms: 1400,
+            last_operation: "download".to_string(),
+            last_cache_status: Some("miss".to_string()),
+            last_workflow_run_id: Some("run-1".to_string().try_into().expect("run id")),
+            last_workflow_id: Some("wf-1".to_string().try_into().expect("workflow id")),
+            last_workflow_version_id: Some("version-1".to_string().try_into().expect("version id")),
+            last_workflow_semantic_version: Some("1.2.3".to_string()),
+            last_client_id: Some("client-1".to_string().try_into().expect("client id")),
+            last_client_session_id: Some("session-1".to_string().try_into().expect("session id")),
+            last_bucket_id: Some("bucket-1".to_string().try_into().expect("bucket id")),
+            last_event_seq: 31,
+            last_updated_at_ms: 1400,
+        }],
+        projection_state: ProjectionStateRecord {
+            projection_name: "library_usage".to_string(),
+            projection_version: 1,
+            last_applied_event_seq: 31,
+            status: ProjectionStatus::Current,
+            rebuilt_at_ms: None,
+            updated_at_ms: 1410,
+        },
+    };
+
+    let request_value = serde_json::to_value(request).expect("serialize library usage request");
+    let expected_request = serde_json::json!({
+        "asset_id": "model-1",
+        "workflow_id": "wf-1",
+        "workflow_version_id": "version-1",
+        "after_event_seq": 30,
+        "limit": 25,
+        "projection_batch_size": 100
+    });
+    assert_eq!(request_value, expected_request);
+
+    let response_value = serde_json::to_value(response).expect("serialize library usage response");
+    let expected_response = serde_json::json!({
+        "assets": [{
+            "asset_id": "model-1",
+            "total_access_count": 4,
+            "run_access_count": 2,
+            "total_network_bytes": 4096,
+            "last_accessed_at_ms": 1400,
+            "last_operation": "download",
+            "last_cache_status": "miss",
+            "last_workflow_run_id": "run-1",
+            "last_workflow_id": "wf-1",
+            "last_workflow_version_id": "version-1",
+            "last_workflow_semantic_version": "1.2.3",
+            "last_client_id": "client-1",
+            "last_client_session_id": "session-1",
+            "last_bucket_id": "bucket-1",
+            "last_event_seq": 31,
+            "last_updated_at_ms": 1400
+        }],
+        "projection_state": {
+            "projection_name": "library_usage",
+            "projection_version": 1,
+            "last_applied_event_seq": 31,
+            "status": "current",
+            "rebuilt_at_ms": null,
+            "updated_at_ms": 1410
         }
     });
     assert_eq!(response_value, expected_response);

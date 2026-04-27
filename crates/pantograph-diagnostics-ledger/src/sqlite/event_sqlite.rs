@@ -8,10 +8,12 @@ use crate::event::{
     DiagnosticEventAppendRequest, DiagnosticEventKind, DiagnosticEventPayload,
     DiagnosticEventPrivacyClass, DiagnosticEventRecord, DiagnosticEventRetentionClass,
     DiagnosticEventSourceComponent, IoArtifactProjectionQuery, IoArtifactProjectionRecord,
-    ProjectionStateRecord, ProjectionStateUpdate, ProjectionStatus, RunDetailProjectionQuery,
-    RunDetailProjectionRecord, RunListProjectionQuery, RunListProjectionRecord,
-    RunListProjectionStatus, SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
+    LibraryUsageProjectionQuery, LibraryUsageProjectionRecord, ProjectionStateRecord,
+    ProjectionStateUpdate, ProjectionStatus, RunDetailProjectionQuery, RunDetailProjectionRecord,
+    RunListProjectionQuery, RunListProjectionRecord, RunListProjectionStatus,
+    SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
     DIAGNOSTIC_EVENT_SCHEMA_VERSION, IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION,
+    LIBRARY_USAGE_PROJECTION_NAME, LIBRARY_USAGE_PROJECTION_VERSION,
     MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION,
     RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
     SCHEDULER_TIMELINE_PROJECTION_VERSION,
@@ -690,6 +692,127 @@ pub(super) fn query_io_artifact_projection(
         .map_err(DiagnosticsLedgerError::from)
 }
 
+pub(super) fn drain_library_usage_projection(
+    ledger: &mut SqliteDiagnosticsLedger,
+    limit: u32,
+) -> Result<ProjectionStateRecord, DiagnosticsLedgerError> {
+    if limit > MAX_PAGE_SIZE {
+        return Err(DiagnosticsLedgerError::QueryLimitExceeded {
+            requested: limit,
+            max: MAX_PAGE_SIZE,
+        });
+    }
+    let tx = ledger.conn.transaction()?;
+    let state = {
+        let mut stmt = tx.prepare(
+            "SELECT projection_name, projection_version, last_applied_event_seq, status,
+                    rebuilt_at_ms, updated_at_ms
+             FROM projection_state
+             WHERE projection_name = ?1",
+        )?;
+        stmt.query_row(
+            params![LIBRARY_USAGE_PROJECTION_NAME],
+            projection_state_from_row,
+        )
+        .optional()?
+    };
+
+    let mut last_applied_event_seq = state
+        .as_ref()
+        .map(|state| state.last_applied_event_seq)
+        .unwrap_or(0);
+    let mut rebuilt_at_ms = state.as_ref().and_then(|state| state.rebuilt_at_ms);
+    if state
+        .as_ref()
+        .map(|state| state.projection_version != LIBRARY_USAGE_PROJECTION_VERSION)
+        .unwrap_or(false)
+    {
+        tx.execute("DELETE FROM library_usage_projection", [])?;
+        tx.execute("DELETE FROM library_usage_run_projection", [])?;
+        last_applied_event_seq = 0;
+        rebuilt_at_ms = Some(now_ms());
+    }
+
+    let events = library_usage_events_after(&tx, last_applied_event_seq, limit)?;
+    for event in &events {
+        apply_library_usage_projection_event(&tx, event)?;
+        last_applied_event_seq = event.event_seq;
+    }
+
+    let updated_at_ms = now_ms();
+    tx.execute(
+        "INSERT INTO projection_state
+            (projection_name, projection_version, last_applied_event_seq, status,
+             rebuilt_at_ms, updated_at_ms)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+         ON CONFLICT(projection_name) DO UPDATE SET
+            projection_version = excluded.projection_version,
+            last_applied_event_seq = excluded.last_applied_event_seq,
+            status = excluded.status,
+            rebuilt_at_ms = excluded.rebuilt_at_ms,
+            updated_at_ms = excluded.updated_at_ms",
+        params![
+            LIBRARY_USAGE_PROJECTION_NAME,
+            LIBRARY_USAGE_PROJECTION_VERSION,
+            last_applied_event_seq,
+            ProjectionStatus::Current.as_db(),
+            rebuilt_at_ms,
+            updated_at_ms,
+        ],
+    )?;
+    tx.commit()?;
+
+    Ok(ProjectionStateRecord {
+        projection_name: LIBRARY_USAGE_PROJECTION_NAME.to_string(),
+        projection_version: LIBRARY_USAGE_PROJECTION_VERSION,
+        last_applied_event_seq,
+        status: ProjectionStatus::Current,
+        rebuilt_at_ms,
+        updated_at_ms,
+    })
+}
+
+pub(super) fn query_library_usage_projection(
+    ledger: &SqliteDiagnosticsLedger,
+    query: LibraryUsageProjectionQuery,
+) -> Result<Vec<LibraryUsageProjectionRecord>, DiagnosticsLedgerError> {
+    query.validate(MAX_PAGE_SIZE)?;
+    let mut stmt = ledger.conn.prepare(
+        "SELECT asset_id, total_access_count, run_access_count, total_network_bytes,
+                last_accessed_at_ms, last_operation, last_cache_status,
+                last_workflow_run_id, last_workflow_id, last_workflow_version_id,
+                last_workflow_semantic_version, last_client_id, last_client_session_id,
+                last_bucket_id, last_event_seq, last_updated_at_ms
+         FROM library_usage_projection
+         WHERE (?1 IS NULL OR asset_id = ?1)
+           AND (?2 IS NULL OR EXISTS (
+                SELECT 1 FROM library_usage_run_projection run_link
+                WHERE run_link.asset_id = library_usage_projection.asset_id
+                  AND run_link.workflow_id = ?2
+           ))
+           AND (?3 IS NULL OR EXISTS (
+                SELECT 1 FROM library_usage_run_projection run_link
+                WHERE run_link.asset_id = library_usage_projection.asset_id
+                  AND run_link.workflow_version_id = ?3
+           ))
+           AND last_event_seq > ?4
+         ORDER BY last_accessed_at_ms DESC, last_event_seq DESC
+         LIMIT ?5",
+    )?;
+    let rows = stmt.query_map(
+        params![
+            query.asset_id.as_deref(),
+            query.workflow_id.as_ref().map(|id| id.as_str()),
+            query.workflow_version_id.as_ref().map(|id| id.as_str()),
+            query.after_event_seq.unwrap_or(0),
+            query.limit,
+        ],
+        library_usage_projection_from_row,
+    )?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(DiagnosticsLedgerError::from)
+}
+
 pub(super) fn rebuild_projection(
     ledger: &mut SqliteDiagnosticsLedger,
     projection_name: &str,
@@ -713,6 +836,7 @@ pub(super) fn rebuild_projection(
             RUN_LIST_PROJECTION_NAME => drain_run_list_projection(ledger, batch_size)?,
             RUN_DETAIL_PROJECTION_NAME => drain_run_detail_projection(ledger, batch_size)?,
             IO_ARTIFACT_PROJECTION_NAME => drain_io_artifact_projection(ledger, batch_size)?,
+            LIBRARY_USAGE_PROJECTION_NAME => drain_library_usage_projection(ledger, batch_size)?,
             _ => {
                 return Err(DiagnosticsLedgerError::InvalidField {
                     field: "projection_name",
@@ -743,6 +867,10 @@ fn reset_projection(
         }
         IO_ARTIFACT_PROJECTION_NAME => {
             tx.execute("DELETE FROM io_artifact_projection", [])?;
+        }
+        LIBRARY_USAGE_PROJECTION_NAME => {
+            tx.execute("DELETE FROM library_usage_projection", [])?;
+            tx.execute("DELETE FROM library_usage_run_projection", [])?;
         }
         _ => {
             return Err(DiagnosticsLedgerError::InvalidField {
@@ -876,6 +1004,33 @@ fn io_artifact_events_after(
          FROM diagnostic_events
          WHERE event_seq > ?1
            AND event_kind = 'io.artifact_observed'
+         ORDER BY event_seq
+         LIMIT ?2",
+    )?;
+    let rows = stmt.query_map(
+        params![last_applied_event_seq, limit],
+        diagnostic_event_from_row,
+    )?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(DiagnosticsLedgerError::from)
+}
+
+fn library_usage_events_after(
+    tx: &rusqlite::Transaction<'_>,
+    last_applied_event_seq: i64,
+    limit: u32,
+) -> Result<Vec<DiagnosticEventRecord>, DiagnosticsLedgerError> {
+    let mut stmt = tx.prepare(
+        "SELECT event_seq, event_id, event_kind, schema_version, source_component,
+                source_instance_id, occurred_at_ms, recorded_at_ms, workflow_run_id,
+                workflow_id, workflow_version_id, workflow_semantic_version, node_id,
+                node_type, node_version, runtime_id, runtime_version, model_id,
+                model_version, client_id, client_session_id, bucket_id, scheduler_policy_id,
+                retention_policy_id, privacy_class, event_retention_class, payload_hash,
+                payload_size_bytes, payload_ref, payload_json
+         FROM diagnostic_events
+         WHERE event_seq > ?1
+           AND event_kind = 'library.asset_accessed'
          ORDER BY event_seq
          LIMIT ?2",
     )?;
@@ -1212,6 +1367,104 @@ fn apply_run_detail_projection_event(
     Ok(())
 }
 
+fn apply_library_usage_projection_event(
+    tx: &rusqlite::Transaction<'_>,
+    event: &DiagnosticEventRecord,
+) -> Result<(), DiagnosticsLedgerError> {
+    let payload: DiagnosticEventPayload = serde_json::from_str(&event.payload_json)?;
+    let DiagnosticEventPayload::LibraryAssetAccessed(payload) = payload else {
+        return Ok(());
+    };
+    let run_access_increment = if let Some(workflow_run_id) = event.workflow_run_id.as_ref() {
+        let inserted = tx.execute(
+            "INSERT OR IGNORE INTO library_usage_run_projection
+                (asset_id, workflow_run_id, workflow_id, workflow_version_id,
+                 workflow_semantic_version, first_event_seq, last_event_seq,
+                 last_accessed_at_ms)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                payload.asset_id.as_str(),
+                workflow_run_id.as_str(),
+                event.workflow_id.as_ref().map(|id| id.as_str()),
+                event.workflow_version_id.as_ref().map(|id| id.as_str()),
+                event.workflow_semantic_version.as_deref(),
+                event.event_seq,
+                event.event_seq,
+                event.occurred_at_ms,
+            ],
+        )?;
+        tx.execute(
+            "UPDATE library_usage_run_projection
+             SET workflow_id = COALESCE(?3, workflow_id),
+                 workflow_version_id = COALESCE(?4, workflow_version_id),
+                 workflow_semantic_version = COALESCE(?5, workflow_semantic_version),
+                 last_event_seq = ?6,
+                 last_accessed_at_ms = ?7
+             WHERE asset_id = ?1 AND workflow_run_id = ?2",
+            params![
+                payload.asset_id.as_str(),
+                workflow_run_id.as_str(),
+                event.workflow_id.as_ref().map(|id| id.as_str()),
+                event.workflow_version_id.as_ref().map(|id| id.as_str()),
+                event.workflow_semantic_version.as_deref(),
+                event.event_seq,
+                event.occurred_at_ms,
+            ],
+        )?;
+        i64::try_from(inserted).unwrap_or(0)
+    } else {
+        0
+    };
+
+    tx.execute(
+        "INSERT INTO library_usage_projection
+            (asset_id, total_access_count, run_access_count, total_network_bytes,
+             last_accessed_at_ms, last_operation, last_cache_status,
+             last_workflow_run_id, last_workflow_id, last_workflow_version_id,
+             last_workflow_semantic_version, last_client_id, last_client_session_id,
+             last_bucket_id, last_event_seq, last_updated_at_ms)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
+         ON CONFLICT(asset_id) DO UPDATE SET
+            total_access_count = total_access_count + 1,
+            run_access_count = run_access_count + ?3,
+            total_network_bytes = total_network_bytes + ?4,
+            last_accessed_at_ms = excluded.last_accessed_at_ms,
+            last_operation = excluded.last_operation,
+            last_cache_status = excluded.last_cache_status,
+            last_workflow_run_id = COALESCE(excluded.last_workflow_run_id, last_workflow_run_id),
+            last_workflow_id = COALESCE(excluded.last_workflow_id, last_workflow_id),
+            last_workflow_version_id = COALESCE(excluded.last_workflow_version_id, last_workflow_version_id),
+            last_workflow_semantic_version = COALESCE(excluded.last_workflow_semantic_version, last_workflow_semantic_version),
+            last_client_id = COALESCE(excluded.last_client_id, last_client_id),
+            last_client_session_id = COALESCE(excluded.last_client_session_id, last_client_session_id),
+            last_bucket_id = COALESCE(excluded.last_bucket_id, last_bucket_id),
+            last_event_seq = excluded.last_event_seq,
+            last_updated_at_ms = excluded.last_updated_at_ms",
+        params![
+            payload.asset_id.as_str(),
+            1_i64,
+            run_access_increment,
+            payload.network_bytes.unwrap_or(0) as i64,
+            event.occurred_at_ms,
+            payload.operation.as_str(),
+            payload.cache_status.as_deref(),
+            event.workflow_run_id.as_ref().map(|id| id.as_str()),
+            event.workflow_id.as_ref().map(|id| id.as_str()),
+            event
+                .workflow_version_id
+                .as_ref()
+                .map(|id| id.as_str()),
+            event.workflow_semantic_version.as_deref(),
+            event.client_id.as_ref().map(|id| id.as_str()),
+            event.client_session_id.as_ref().map(|id| id.as_str()),
+            event.bucket_id.as_ref().map(|id| id.as_str()),
+            event.event_seq,
+            event.occurred_at_ms,
+        ],
+    )?;
+    Ok(())
+}
+
 fn insert_scheduler_timeline_projection(
     tx: &rusqlite::Transaction<'_>,
     record: &SchedulerTimelineProjectionRecord,
@@ -1446,6 +1699,59 @@ fn io_artifact_projection_from_row(row: &Row<'_>) -> rusqlite::Result<IoArtifact
         content_hash: row.get(19)?,
         payload_ref: row.get(20)?,
         retention_policy_id: row.get(21)?,
+    })
+}
+
+fn library_usage_projection_from_row(
+    row: &Row<'_>,
+) -> rusqlite::Result<LibraryUsageProjectionRecord> {
+    Ok(LibraryUsageProjectionRecord {
+        asset_id: row.get(0)?,
+        total_access_count: row
+            .get::<_, i64>(1)
+            .map(|value| u64::try_from(value).unwrap_or(u64::MAX))?,
+        run_access_count: row
+            .get::<_, i64>(2)
+            .map(|value| u64::try_from(value).unwrap_or(u64::MAX))?,
+        total_network_bytes: row
+            .get::<_, i64>(3)
+            .map(|value| u64::try_from(value).unwrap_or(u64::MAX))?,
+        last_accessed_at_ms: row.get(4)?,
+        last_operation: row.get(5)?,
+        last_cache_status: row.get(6)?,
+        last_workflow_run_id: row
+            .get::<_, Option<String>>(7)?
+            .map(WorkflowRunId::try_from)
+            .transpose()
+            .map_err(sqlite_conversion_error)?,
+        last_workflow_id: row
+            .get::<_, Option<String>>(8)?
+            .map(WorkflowId::try_from)
+            .transpose()
+            .map_err(sqlite_conversion_error)?,
+        last_workflow_version_id: row
+            .get::<_, Option<String>>(9)?
+            .map(WorkflowVersionId::try_from)
+            .transpose()
+            .map_err(sqlite_conversion_error)?,
+        last_workflow_semantic_version: row.get(10)?,
+        last_client_id: row
+            .get::<_, Option<String>>(11)?
+            .map(ClientId::try_from)
+            .transpose()
+            .map_err(sqlite_conversion_error)?,
+        last_client_session_id: row
+            .get::<_, Option<String>>(12)?
+            .map(ClientSessionId::try_from)
+            .transpose()
+            .map_err(sqlite_conversion_error)?,
+        last_bucket_id: row
+            .get::<_, Option<String>>(13)?
+            .map(BucketId::try_from)
+            .transpose()
+            .map_err(sqlite_conversion_error)?,
+        last_event_seq: row.get(14)?,
+        last_updated_at_ms: row.get(15)?,
     })
 }
 

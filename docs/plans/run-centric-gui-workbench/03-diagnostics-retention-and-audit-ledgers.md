@@ -228,6 +228,10 @@ repair, migration, projection-version changes, and tests.
 - [ ] Implement warm projection drains for diagnostics summary, retention
   completeness, workflow-version performance, model/runtime comparison facets,
   and Library usage where first-pass event families exist.
+  - First-pass Library usage warm projection is implemented from
+    `library.asset_accessed` events. Diagnostics summary, retention
+    completeness, workflow-version performance, and model/runtime comparison
+    facets remain pending.
 - [x] Implement explicit full-rebuild commands for migration, corruption
   repair, projection-version changes, and tests. Ordinary startup and page
   load must not call these commands.
@@ -275,8 +279,9 @@ metadata and payload references from `io.artifact_observed` events by run,
 node, role, and event cursor for I/O Inspector reads. Projection filters now
 cover workflow version, scheduler policy, runtime/model ids, media type,
 retention policy, and artifact role where those facts exist in the read model.
-Warm projection drains, mixed-version facet outputs, and explicit rebuild
-commands for hot projections are implemented. Warm projection drains and
+The first warm projection, `library_usage_projection`, now aggregates
+Library/Pumas asset access counts, distinct run counts, network bytes, last
+access facts, and workflow-version run links. Remaining warm drains and
 mixed-version facet outputs remain pending.
 
 ### Milestone 3: I/O Artifact Metadata And Retention
@@ -328,9 +333,9 @@ Scheduler, and Diagnostics pages.
 - [ ] Emit typed `library.*` events for asset access by run, session, bucket,
   client, or GUI actor where available.
 - [ ] Emit typed cache hit/miss and network byte observations where available.
-- [ ] Add Library usage projections: used by active run, used by N runs, last
+- [x] Add Library usage projections: used by active run, used by N runs, last
   accessed, total access count, linked workflow/node versions.
-- [ ] Update Library usage counts through warm projection drains with recorded
+- [x] Update Library usage counts through warm projection drains with recorded
   projection freshness.
 - [ ] Ensure audit events are queryable without requiring payload retention.
 

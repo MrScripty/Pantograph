@@ -11,9 +11,10 @@ mod timing_sqlite;
 
 use crate::event::{
     DiagnosticEventAppendRequest, DiagnosticEventRecord, IoArtifactProjectionQuery,
-    IoArtifactProjectionRecord, ProjectionStateRecord, ProjectionStateUpdate,
-    RunDetailProjectionQuery, RunDetailProjectionRecord, RunListProjectionQuery,
-    RunListProjectionRecord, SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
+    IoArtifactProjectionRecord, LibraryUsageProjectionQuery, LibraryUsageProjectionRecord,
+    ProjectionStateRecord, ProjectionStateUpdate, RunDetailProjectionQuery,
+    RunDetailProjectionRecord, RunListProjectionQuery, RunListProjectionRecord,
+    SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
 };
 use crate::records::{
     DiagnosticsProjection, DiagnosticsQuery, DiagnosticsRetentionPolicy, ExecutionGuaranteeLevel,
@@ -395,6 +396,20 @@ impl DiagnosticsLedgerRepository for SqliteDiagnosticsLedger {
         query: IoArtifactProjectionQuery,
     ) -> Result<Vec<IoArtifactProjectionRecord>, DiagnosticsLedgerError> {
         event_sqlite::query_io_artifact_projection(self, query)
+    }
+
+    fn drain_library_usage_projection(
+        &mut self,
+        limit: u32,
+    ) -> Result<ProjectionStateRecord, DiagnosticsLedgerError> {
+        event_sqlite::drain_library_usage_projection(self, limit)
+    }
+
+    fn query_library_usage_projection(
+        &self,
+        query: LibraryUsageProjectionQuery,
+    ) -> Result<Vec<LibraryUsageProjectionRecord>, DiagnosticsLedgerError> {
+        event_sqlite::query_library_usage_projection(self, query)
     }
 
     fn rebuild_projection(

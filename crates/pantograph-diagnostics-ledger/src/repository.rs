@@ -1,13 +1,14 @@
 use crate::{
     DiagnosticEventAppendRequest, DiagnosticEventRecord, DiagnosticsLedgerError,
     DiagnosticsProjection, DiagnosticsQuery, DiagnosticsRetentionPolicy, IoArtifactProjectionQuery,
-    IoArtifactProjectionRecord, ModelLicenseUsageEvent, ProjectionStateRecord,
-    ProjectionStateUpdate, PruneTimingObservationsCommand, PruneTimingObservationsResult,
-    PruneUsageEventsCommand, PruneUsageEventsResult, RunDetailProjectionQuery,
-    RunDetailProjectionRecord, RunListProjectionQuery, RunListProjectionRecord,
-    SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
-    WorkflowRunSummaryProjection, WorkflowRunSummaryQuery, WorkflowRunSummaryRecord,
-    WorkflowTimingExpectation, WorkflowTimingExpectationQuery, WorkflowTimingObservation,
+    IoArtifactProjectionRecord, LibraryUsageProjectionQuery, LibraryUsageProjectionRecord,
+    ModelLicenseUsageEvent, ProjectionStateRecord, ProjectionStateUpdate,
+    PruneTimingObservationsCommand, PruneTimingObservationsResult, PruneUsageEventsCommand,
+    PruneUsageEventsResult, RunDetailProjectionQuery, RunDetailProjectionRecord,
+    RunListProjectionQuery, RunListProjectionRecord, SchedulerTimelineProjectionQuery,
+    SchedulerTimelineProjectionRecord, WorkflowRunSummaryProjection, WorkflowRunSummaryQuery,
+    WorkflowRunSummaryRecord, WorkflowTimingExpectation, WorkflowTimingExpectationQuery,
+    WorkflowTimingObservation,
 };
 
 pub trait DiagnosticsLedgerRepository {
@@ -88,6 +89,16 @@ pub trait DiagnosticsLedgerRepository {
         &self,
         query: IoArtifactProjectionQuery,
     ) -> Result<Vec<IoArtifactProjectionRecord>, DiagnosticsLedgerError>;
+
+    fn drain_library_usage_projection(
+        &mut self,
+        limit: u32,
+    ) -> Result<ProjectionStateRecord, DiagnosticsLedgerError>;
+
+    fn query_library_usage_projection(
+        &self,
+        query: LibraryUsageProjectionQuery,
+    ) -> Result<Vec<LibraryUsageProjectionRecord>, DiagnosticsLedgerError>;
 
     fn rebuild_projection(
         &mut self,

@@ -91,7 +91,8 @@ pub use workflow::{
     WorkflowExecutionSessionSummary, WorkflowExecutionSessionUnloadReason, WorkflowHost,
     WorkflowHostCapabilities, WorkflowHostModelDescriptor, WorkflowIdentity, WorkflowIdentityError,
     WorkflowInputTarget, WorkflowIoArtifactQueryRequest, WorkflowIoArtifactQueryResponse,
-    WorkflowIoNode, WorkflowIoPort, WorkflowIoRequest, WorkflowIoResponse, WorkflowOutputTarget,
+    WorkflowIoNode, WorkflowIoPort, WorkflowIoRequest, WorkflowIoResponse,
+    WorkflowLibraryUsageQueryRequest, WorkflowLibraryUsageQueryResponse, WorkflowOutputTarget,
     WorkflowPortBinding, WorkflowPreflightRequest, WorkflowPreflightResponse,
     WorkflowPresentationRevisionRecord, WorkflowPresentationRevisionResolveRequest,
     WorkflowProjectionRebuildRequest, WorkflowProjectionRebuildResponse, WorkflowRunAttribution,
@@ -109,7 +110,8 @@ pub use workflow::{
     WorkflowVersionRecord, WorkflowVersionResolveRequest,
 };
 pub use workflow::{
-    IoArtifactProjectionRecord, ProjectionStateRecord, RunDetailProjectionRecord,
-    RunListProjectionRecord, RunListProjectionStatus, SchedulerTimelineProjectionRecord,
-    SqliteDiagnosticsLedger, WorkflowTimingExpectation, WorkflowTimingExpectationComparison,
+    IoArtifactProjectionRecord, LibraryUsageProjectionRecord, ProjectionStateRecord,
+    RunDetailProjectionRecord, RunListProjectionRecord, RunListProjectionStatus,
+    SchedulerTimelineProjectionRecord, SqliteDiagnosticsLedger, WorkflowTimingExpectation,
+    WorkflowTimingExpectationComparison,
 };

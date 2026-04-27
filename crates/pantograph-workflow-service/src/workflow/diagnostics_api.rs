@@ -1,9 +1,10 @@
 use pantograph_diagnostics_ledger::{
     DiagnosticsLedgerRepository, DiagnosticsQuery, DiagnosticsRetentionPolicy,
     ExecutionGuaranteeLevel, IoArtifactProjectionQuery, IoArtifactProjectionRecord,
-    ModelLicenseUsageEvent, ProjectionStateRecord, RunDetailProjectionQuery,
-    RunDetailProjectionRecord, RunListProjectionQuery, RunListProjectionRecord,
-    RunListProjectionStatus, SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
+    LibraryUsageProjectionQuery, LibraryUsageProjectionRecord, ModelLicenseUsageEvent,
+    ProjectionStateRecord, RunDetailProjectionQuery, RunDetailProjectionRecord,
+    RunListProjectionQuery, RunListProjectionRecord, RunListProjectionStatus,
+    SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
 };
 use serde::{Deserialize, Serialize};
 
@@ -168,6 +169,30 @@ pub struct WorkflowIoArtifactQueryResponse {
     pub projection_state: ProjectionStateRecord,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowLibraryUsageQueryRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub asset_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_version_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub after_event_seq: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub projection_batch_size: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowLibraryUsageQueryResponse {
+    pub assets: Vec<LibraryUsageProjectionRecord>,
+    pub projection_state: ProjectionStateRecord,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowProjectionRebuildRequest {
@@ -306,6 +331,31 @@ impl WorkflowService {
         })
     }
 
+    pub fn workflow_library_usage_query(
+        &self,
+        request: WorkflowLibraryUsageQueryRequest,
+    ) -> Result<WorkflowLibraryUsageQueryResponse, WorkflowServiceError> {
+        let projection_batch_size = request.projection_batch_size.unwrap_or(500).max(1);
+        if projection_batch_size > 500 {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "projection_batch_size exceeds maximum 500".to_string(),
+            ));
+        }
+        let query = request.into_library_usage_query()?;
+        let mut ledger = self.diagnostics_ledger_guard()?;
+        let projection_state = ledger
+            .drain_library_usage_projection(projection_batch_size)
+            .map_err(WorkflowServiceError::from)?;
+        let assets = ledger
+            .query_library_usage_projection(query)
+            .map_err(WorkflowServiceError::from)?;
+
+        Ok(WorkflowLibraryUsageQueryResponse {
+            assets,
+            projection_state,
+        })
+    }
+
     pub fn workflow_projection_rebuild(
         &self,
         request: WorkflowProjectionRebuildRequest,
@@ -412,6 +462,23 @@ impl WorkflowIoArtifactQueryRequest {
             retention_policy_id: self.retention_policy_id,
             runtime_id: self.runtime_id,
             model_id: self.model_id,
+            after_event_seq: self.after_event_seq,
+            limit: self.limit.unwrap_or(100).max(1),
+        };
+        query.validate(500).map_err(WorkflowServiceError::from)?;
+        Ok(query)
+    }
+}
+
+impl WorkflowLibraryUsageQueryRequest {
+    fn into_library_usage_query(self) -> Result<LibraryUsageProjectionQuery, WorkflowServiceError> {
+        let query = LibraryUsageProjectionQuery {
+            asset_id: self.asset_id,
+            workflow_id: parse_optional_id("workflow_id", self.workflow_id)?,
+            workflow_version_id: parse_optional_id(
+                "workflow_version_id",
+                self.workflow_version_id,
+            )?,
             after_event_seq: self.after_event_seq,
             limit: self.limit.unwrap_or(100).max(1),
         };

@@ -301,6 +301,14 @@ pub async fn workflow_projection_rebuild(
 }
 
 #[command]
+pub async fn workflow_library_usage_query(
+    request: pantograph_workflow_service::WorkflowLibraryUsageQueryRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<pantograph_workflow_service::WorkflowLibraryUsageQueryResponse, String> {
+    super::headless_workflow_commands::workflow_library_usage_query(request, workflow_service).await
+}
+
+#[command]
 pub async fn workflow_cancel_execution_session_queue_item(
     request: pantograph_workflow_service::WorkflowExecutionSessionQueueCancelRequest,
     workflow_service: State<'_, SharedWorkflowService>,

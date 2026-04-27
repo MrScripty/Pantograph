@@ -16,6 +16,8 @@ pub const RUN_DETAIL_PROJECTION_NAME: &str = "run_detail";
 pub const RUN_DETAIL_PROJECTION_VERSION: i64 = 1;
 pub const IO_ARTIFACT_PROJECTION_NAME: &str = "io_artifact";
 pub const IO_ARTIFACT_PROJECTION_VERSION: i64 = 1;
+pub const LIBRARY_USAGE_PROJECTION_NAME: &str = "library_usage";
+pub const LIBRARY_USAGE_PROJECTION_VERSION: i64 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -797,6 +799,64 @@ pub struct IoArtifactProjectionRecord {
     pub content_hash: Option<String>,
     pub payload_ref: Option<String>,
     pub retention_policy_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LibraryUsageProjectionQuery {
+    pub asset_id: Option<String>,
+    pub workflow_id: Option<WorkflowId>,
+    pub workflow_version_id: Option<WorkflowVersionId>,
+    pub after_event_seq: Option<i64>,
+    pub limit: u32,
+}
+
+impl Default for LibraryUsageProjectionQuery {
+    fn default() -> Self {
+        Self {
+            asset_id: None,
+            workflow_id: None,
+            workflow_version_id: None,
+            after_event_seq: None,
+            limit: 100,
+        }
+    }
+}
+
+impl LibraryUsageProjectionQuery {
+    pub fn validate(&self, max_limit: u32) -> Result<(), DiagnosticsLedgerError> {
+        if self.limit > max_limit {
+            return Err(DiagnosticsLedgerError::QueryLimitExceeded {
+                requested: self.limit,
+                max: max_limit,
+            });
+        }
+        if self.after_event_seq.unwrap_or(0) < 0 {
+            return Err(DiagnosticsLedgerError::InvalidField {
+                field: "after_event_seq",
+            });
+        }
+        validate_optional_text("asset_id", self.asset_id.as_deref(), MAX_ID_LEN)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LibraryUsageProjectionRecord {
+    pub asset_id: String,
+    pub total_access_count: u64,
+    pub run_access_count: u64,
+    pub total_network_bytes: u64,
+    pub last_accessed_at_ms: i64,
+    pub last_operation: String,
+    pub last_cache_status: Option<String>,
+    pub last_workflow_run_id: Option<WorkflowRunId>,
+    pub last_workflow_id: Option<WorkflowId>,
+    pub last_workflow_version_id: Option<WorkflowVersionId>,
+    pub last_workflow_semantic_version: Option<String>,
+    pub last_client_id: Option<ClientId>,
+    pub last_client_session_id: Option<ClientSessionId>,
+    pub last_bucket_id: Option<BucketId>,
+    pub last_event_seq: i64,
+    pub last_updated_at_ms: i64,
 }
 
 fn validate_text_list(

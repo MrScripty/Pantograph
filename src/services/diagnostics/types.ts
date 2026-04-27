@@ -428,6 +428,39 @@ export interface WorkflowProjectionRebuildResponse {
   projection_state: ProjectionStateRecord;
 }
 
+export interface LibraryUsageProjectionRecord {
+  asset_id: string;
+  total_access_count: number;
+  run_access_count: number;
+  total_network_bytes: number;
+  last_accessed_at_ms: number;
+  last_operation: string;
+  last_cache_status?: string | null;
+  last_workflow_run_id?: string | null;
+  last_workflow_id?: string | null;
+  last_workflow_version_id?: string | null;
+  last_workflow_semantic_version?: string | null;
+  last_client_id?: string | null;
+  last_client_session_id?: string | null;
+  last_bucket_id?: string | null;
+  last_event_seq: number;
+  last_updated_at_ms: number;
+}
+
+export interface WorkflowLibraryUsageQueryRequest {
+  asset_id?: string | null;
+  workflow_id?: string | null;
+  workflow_version_id?: string | null;
+  after_event_seq?: number | null;
+  limit?: number | null;
+  projection_batch_size?: number | null;
+}
+
+export interface WorkflowLibraryUsageQueryResponse {
+  assets: LibraryUsageProjectionRecord[];
+  projection_state: ProjectionStateRecord;
+}
+
 export interface WorkflowSchedulerTimelineQueryRequest {
   workflow_run_id?: string | null;
   workflow_id?: string | null;
