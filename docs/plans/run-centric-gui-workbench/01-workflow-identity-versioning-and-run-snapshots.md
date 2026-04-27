@@ -226,9 +226,14 @@ workflow version and run context.
   run.
 
 **Status:** In progress. Queued session runs now resolve workflow versions and
-persist snapshots before scheduler admission. Public run contracts now require
-the caller to provide `workflow_semantic_version`; remaining work is to fill the
-full audit context and event-builder correlation fields.
+presentation revisions, then persist snapshots before scheduler admission.
+Public run contracts now require the caller to provide
+`workflow_semantic_version`. Snapshots capture graph settings, runtime
+requirements, capability model inventory, runtime capabilities, scheduler
+policy, retention policy, session context, immutable input references, output
+targets, and override selection. Remaining work is to add client/bucket
+correlation to the queued workflow-service path and expose event-builder
+correlation fields.
 
 ### Milestone 4: Diagnostics And Graph Consumers
 
@@ -350,6 +355,9 @@ records for the same execution fingerprint.
   presentation revisions. Run-version projections now include both execution
   version records and the presentation revision record used at queue
   submission time.
+- 2026-04-27: Expanded immutable workflow-run snapshots with graph settings,
+  runtime requirements, capability model inventory, and runtime capabilities
+  captured before queue admission.
 
 ### Deviations
 
@@ -362,8 +370,8 @@ records for the same execution fingerprint.
 
 ### Follow-Ups
 
-- Fill remaining run snapshot fields for model/runtime facts, client/bucket
-  attribution, and event-builder correlation.
+- Fill remaining run snapshot fields for client/bucket attribution and
+  event-builder correlation.
 - Quarantine or remove old graph-fingerprint-only diagnostics grouping.
 
 ### Verification Summary
@@ -393,6 +401,18 @@ records for the same execution fingerprint.
   passed for the touched run snapshot and session submission Rust files.
 - 2026-04-27: `git diff --check` passed for the run snapshot presentation
   revision link slice.
+- 2026-04-27: `cargo test -p pantograph-runtime-attribution` passed after
+  adding graph settings and model/runtime context to run snapshots.
+- 2026-04-27: `cargo test -p pantograph-workflow-service graph_run_settings`
+  passed after adding the graph run-settings audit projection.
+- 2026-04-27: `cargo test -p pantograph-workflow-service
+  workflow_execution_session_run_records_snapshot_before_execution` passed
+  after queued submission began capturing graph settings and model/runtime
+  capability facts.
+- 2026-04-27: `rustfmt --edition 2021 --config skip_children=true --check`
+  passed for the touched snapshot context Rust files.
+- 2026-04-27: `git diff --check` passed for the model/runtime snapshot context
+  slice.
 - 2026-04-27: `cargo test -p pantograph-node-contracts` passed.
 - 2026-04-27: `cargo test -p workflow-nodes` passed.
 - 2026-04-27: `cargo test -p pantograph-workflow-service canonicalization`

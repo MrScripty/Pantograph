@@ -31,8 +31,8 @@ verification, bucket lineage, or one-active-session enforcement.
   version and track display metadata without changing diagnostics grouping.
 - Workflow-run snapshots capture the immutable workflow version, presentation
   revision, execution fingerprint, queue/session context, input references,
-  output targets, and override selection that existed when the run was
-  submitted.
+  output targets, override selection, graph settings, and model/runtime
+  capability facts that existed when the run was submitted.
 - This crate must not depend on GUI, binding, adapter, or runtime execution
   crates.
 
@@ -119,7 +119,7 @@ assert_eq!(opened.session.client_id, registered.client.client_id);
 - Use returned `WorkflowRunRecord` values as the trusted execution attribution.
 
 ## Structured Producer Contract
-- SQLite schema version `5` is the current breaking-cutover schema version.
+- SQLite schema version `6` is the current breaking-cutover schema version.
 - Persisted credential rows contain credential id, client id, salt bytes,
   digest bytes, status, timestamps, and no raw secret.
 - Persisted workflow-version rows contain workflow id, semantic version,
@@ -132,6 +132,9 @@ assert_eq!(opened.session.client_id, registered.client.client_id);
 - Persisted workflow-run snapshot rows are immutable inserts keyed by
   workflow-run id and must agree with the referenced workflow-version and
   workflow-presentation revision rows.
+- Persisted workflow-run snapshot context JSON captures graph settings,
+  runtime requirements, capability model inventory, and runtime capabilities as
+  bounded JSON payloads for later typed projections.
 - Lifecycle history is append-only through `session_lifecycle_records`.
 - Diagnostic query indexes are maintained for client, session, bucket,
   workflow, and workflow-run lookup.

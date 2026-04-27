@@ -315,6 +315,10 @@ pub struct WorkflowRunSnapshotRecord {
     pub inputs_json: String,
     pub output_targets_json: Option<String>,
     pub override_selection_json: Option<String>,
+    pub graph_settings_json: String,
+    pub runtime_requirements_json: String,
+    pub capability_models_json: String,
+    pub runtime_capabilities_json: String,
     pub created_at_ms: i64,
 }
 
@@ -433,4 +437,8 @@ pub struct WorkflowRunSnapshotRequest {
     pub inputs_json: String,
     pub output_targets_json: Option<String>,
     pub override_selection_json: Option<String>,
+    pub graph_settings_json: String,
+    pub runtime_requirements_json: String,
+    pub capability_models_json: String,
+    pub runtime_capabilities_json: String,
 }

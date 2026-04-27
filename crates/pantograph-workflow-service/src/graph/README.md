@@ -19,6 +19,7 @@ and persistence abstractions so adapters do not implement graph business logic.
 | `effective_definition.rs` | Resolves backend-owned effective node contracts and projects them into graph DTOs before validation or candidate lookup. |
 | `executable_topology.rs` | Canonical executable-topology projection and BLAKE3 workflow execution fingerprint calculation for workflow versioning. |
 | `presentation_revision.rs` | Canonical display-metadata projection and BLAKE3 presentation fingerprint calculation for historic graph presentation revisions. |
+| `run_settings.rs` | Canonical node settings projection used by immutable workflow-run audit snapshots. |
 | `validation.rs` | Shared connection compatibility helpers used by graph-edit flows. |
 | `connection_intent.rs` | Canonical candidate-discovery and revision-aware connection/insert validation. |
 | `connection_insert.rs` | Internal node-insert, edge-insert preview, and edge-bridge helpers used by `connection_intent.rs` while preserving the public graph-edit facade. |
@@ -125,6 +126,10 @@ for existing graph-edit callers.
   sorted node positions and edge display ids/endpoints. They are persisted as a
   separate attribution record so historic graph viewers can restore layout
   without changing execution-version diagnostics grouping.
+- Workflow graph run settings snapshots are computed from sorted node ids,
+  node types, and node data. They exclude positions, edges, and derived graph
+  caches so editable execution parameters can be audited as run context without
+  changing workflow-version identity.
 - Workflow save/delete file stems are not sanitized from arbitrary names; they
   must already be valid workflow identities so diagnostics and future workflow
   versions can use the same stable id.
@@ -188,6 +193,8 @@ let response = service
 - `WorkflowPresentationMetadata` is the contract used for presentation
   fingerprinting; consumers must not use it as execution identity or
   diagnostics grouping input.
+- `WorkflowGraphRunSettings` is the contract used when queue submission stores
+  editable node settings in immutable run snapshots.
 - `WorkflowGraphMetadata.id` is derived from the persisted filename stem when listed from a store.
 - `node.data.definition.inputs` and `node.data.definition.outputs` are additive
   per-node overlays resolved into `EffectiveNodeContract` during connection

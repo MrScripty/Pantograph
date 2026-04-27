@@ -261,6 +261,12 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         .workflow_execution_fingerprint
         .starts_with("workflow-exec-blake3:"));
     assert!(snapshot.inputs_json.contains("snapshotted"));
+    assert!(snapshot.graph_settings_json.contains("text-input-1"));
+    assert!(snapshot.runtime_requirements_json.contains("model-a"));
+    assert!(snapshot
+        .capability_models_json
+        .contains("sha256:hash-model-a"));
+    assert!(snapshot.runtime_capabilities_json.contains("llama_cpp"));
 
     let version_projection = service
         .workflow_run_version_projection(&response.workflow_run_id)

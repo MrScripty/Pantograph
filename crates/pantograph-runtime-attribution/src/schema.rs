@@ -3,7 +3,7 @@ use rusqlite::{params, Connection, OptionalExtension, Transaction};
 
 use crate::AttributionError;
 
-pub(crate) const SCHEMA_VERSION: i64 = 5;
+pub(crate) const SCHEMA_VERSION: i64 = 6;
 
 pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), AttributionError> {
     tx.execute_batch(
@@ -140,6 +140,10 @@ pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), AttributionError>
             inputs_json TEXT NOT NULL,
             output_targets_json TEXT,
             override_selection_json TEXT,
+            graph_settings_json TEXT NOT NULL,
+            runtime_requirements_json TEXT NOT NULL,
+            capability_models_json TEXT NOT NULL,
+            runtime_capabilities_json TEXT NOT NULL,
             created_at_ms INTEGER NOT NULL
         );
         CREATE INDEX idx_workflow_run_snapshots_workflow_version

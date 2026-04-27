@@ -10,6 +10,7 @@ mod persistence;
 mod persistence_tests;
 mod presentation_revision;
 mod registry;
+mod run_settings;
 mod session;
 mod session_contract;
 mod session_event;
@@ -46,6 +47,10 @@ pub use presentation_revision::{
     WorkflowPresentationMetadata, WorkflowPresentationNode,
 };
 pub use registry::{validate_workflow_connection, NodeRegistry};
+pub use run_settings::{
+    workflow_graph_run_settings, workflow_graph_run_settings_json, WorkflowGraphRunSettings,
+    WorkflowGraphRunSettingsNode,
+};
 pub use session::GraphSessionStore;
 pub use session_contract::{WorkflowGraphEditSessionGraphResponse, WorkflowGraphSessionStateView};
 pub use session_graph::{convert_graph_from_node_engine, convert_graph_to_node_engine};

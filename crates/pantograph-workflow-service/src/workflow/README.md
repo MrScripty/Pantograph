@@ -173,6 +173,9 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
 - Snapshotting: queued workflow execution sessions require an explicit
   `workflow_semantic_version` and use it when resolving the immutable workflow
   version and presentation revision snapshot.
+- Snapshotting: queued run snapshots also capture backend-derived graph
+  settings, runtime requirements, capability model inventory, and runtime
+  capabilities before scheduler admission.
 - Presentation revisions: display metadata is resolved through the attribution
   facade after workflow-version resolution; callers must keep the returned
   presentation revision id separate from workflow-version ids in diagnostics

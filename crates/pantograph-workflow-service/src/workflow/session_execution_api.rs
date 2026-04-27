@@ -2,7 +2,9 @@ use std::time::Duration;
 
 use pantograph_runtime_attribution::{WorkflowRunId, WorkflowRunSnapshotRequest};
 
-use crate::graph::WorkflowExecutionSessionKind;
+use crate::graph::{
+    workflow_graph_run_settings, workflow_graph_run_settings_json, WorkflowExecutionSessionKind,
+};
 use crate::scheduler::WORKFLOW_SESSION_QUEUE_POLL_MS;
 use crate::technical_fit::WorkflowTechnicalFitOverride;
 
@@ -210,6 +212,7 @@ impl WorkflowService {
         }
 
         let graph = host.workflow_graph(&session.workflow_id).await?;
+        let capabilities = host.workflow_capabilities(&session.workflow_id).await?;
         let version = self.resolve_workflow_graph_version(
             &session.workflow_id,
             &request.workflow_semantic_version,
@@ -224,6 +227,7 @@ impl WorkflowService {
             .override_selection
             .as_ref()
             .and_then(WorkflowTechnicalFitOverride::normalized);
+        let graph_settings = workflow_graph_run_settings(&graph);
         let snapshot = WorkflowRunSnapshotRequest {
             workflow_run_id: WorkflowRunId::try_from(workflow_run_id.to_string())?,
             workflow_id: version.workflow_id.clone(),
@@ -268,6 +272,19 @@ impl WorkflowService {
                         "failed to encode workflow run snapshot override selection: {error}"
                     ))
                 })?,
+            graph_settings_json: workflow_graph_run_settings_json(&graph_settings)?,
+            runtime_requirements_json: encode_workflow_run_snapshot_json(
+                "runtime requirements",
+                &capabilities.runtime_requirements,
+            )?,
+            capability_models_json: encode_workflow_run_snapshot_json(
+                "capability models",
+                &capabilities.models,
+            )?,
+            runtime_capabilities_json: encode_workflow_run_snapshot_json(
+                "runtime capabilities",
+                &capabilities.runtime_capabilities,
+            )?,
         };
         let mut store = self.attribution_store_guard()?;
         store
@@ -275,6 +292,17 @@ impl WorkflowService {
             .map_err(WorkflowServiceError::from)?;
         Ok(())
     }
+}
+
+fn encode_workflow_run_snapshot_json<T: serde::Serialize>(
+    label: &str,
+    value: &T,
+) -> Result<String, WorkflowServiceError> {
+    serde_json::to_string(value).map_err(|error| {
+        WorkflowServiceError::CapabilityViolation(format!(
+            "failed to encode workflow run snapshot {label}: {error}"
+        ))
+    })
 }
 
 fn workflow_execution_session_kind_label(kind: &WorkflowExecutionSessionKind) -> &'static str {

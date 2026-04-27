@@ -58,6 +58,25 @@ fn presentation_revision_request(
     }
 }
 
+fn graph_settings_json() -> String {
+    serde_json::json!({
+        "schema_version": 1,
+        "nodes": []
+    })
+    .to_string()
+}
+
+fn runtime_requirements_json() -> String {
+    serde_json::json!({
+        "estimated_peak_vram_mb": 1024,
+        "required_models": ["model-a"],
+        "required_backends": ["llama_cpp"],
+        "required_extensions": [],
+        "estimation_confidence": "estimated"
+    })
+    .to_string()
+}
+
 #[test]
 fn registered_client_opens_and_resumes_session_with_default_bucket() {
     let mut store = SqliteAttributionStore::open_in_memory().expect("store");
@@ -371,6 +390,10 @@ fn workflow_run_snapshot_records_immutable_version_and_queue_context() {
             inputs_json: serde_json::json!([{"node_id": "input"}]).to_string(),
             output_targets_json: None,
             override_selection_json: Some(serde_json::json!({"runtime_id": "local"}).to_string()),
+            graph_settings_json: graph_settings_json(),
+            runtime_requirements_json: runtime_requirements_json(),
+            capability_models_json: serde_json::json!([{"model_id": "model-a"}]).to_string(),
+            runtime_capabilities_json: serde_json::json!([{"runtime_id": "llama_cpp"}]).to_string(),
         })
         .expect("create snapshot");
 
@@ -387,6 +410,10 @@ fn workflow_run_snapshot_records_immutable_version_and_queue_context() {
     assert_eq!(snapshot.scheduler_policy, "priority_then_fifo");
     assert_eq!(snapshot.priority, 5);
     assert_eq!(snapshot.timeout_ms, Some(1000));
+    assert!(snapshot.graph_settings_json.contains("schema_version"));
+    assert!(snapshot.runtime_requirements_json.contains("model-a"));
+    assert!(snapshot.capability_models_json.contains("model-a"));
+    assert!(snapshot.runtime_capabilities_json.contains("llama_cpp"));
 
     let projection = store
         .workflow_run_version_projection(&run_id)
@@ -445,6 +472,10 @@ fn workflow_run_snapshot_rejects_mismatched_version_facts() {
             inputs_json: "[]".to_string(),
             output_targets_json: None,
             override_selection_json: None,
+            graph_settings_json: graph_settings_json(),
+            runtime_requirements_json: runtime_requirements_json(),
+            capability_models_json: "[]".to_string(),
+            runtime_capabilities_json: "[]".to_string(),
         })
         .expect_err("mismatched version facts");
 
@@ -496,6 +527,10 @@ fn workflow_run_snapshot_rejects_mismatched_presentation_revision() {
             inputs_json: "[]".to_string(),
             output_targets_json: None,
             override_selection_json: None,
+            graph_settings_json: graph_settings_json(),
+            runtime_requirements_json: runtime_requirements_json(),
+            capability_models_json: "[]".to_string(),
+            runtime_capabilities_json: "[]".to_string(),
         })
         .expect_err("mismatched presentation revision");
 

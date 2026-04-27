@@ -687,6 +687,18 @@ impl AttributionRepository for SqliteAttributionStore {
             "override_selection_json",
             request.override_selection_json,
         )?;
+        let graph_settings_json =
+            validate_json_text("graph_settings_json", request.graph_settings_json)?;
+        let runtime_requirements_json = validate_json_text(
+            "runtime_requirements_json",
+            request.runtime_requirements_json,
+        )?;
+        let capability_models_json =
+            validate_json_text("capability_models_json", request.capability_models_json)?;
+        let runtime_capabilities_json = validate_json_text(
+            "runtime_capabilities_json",
+            request.runtime_capabilities_json,
+        )?;
         let timeout_ms = request
             .timeout_ms
             .map(|value| i64::try_from(value).unwrap_or(i64::MAX));
@@ -729,8 +741,9 @@ impl AttributionRepository for SqliteAttributionStore {
                  workflow_execution_fingerprint, workflow_execution_session_id,
                  workflow_execution_session_kind, usage_profile, keep_alive, retention_policy,
                  scheduler_policy, priority, timeout_ms, inputs_json, output_targets_json,
-                 override_selection_json, created_at_ms)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
+                 override_selection_json, graph_settings_json, runtime_requirements_json,
+                 capability_models_json, runtime_capabilities_json, created_at_ms)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23)",
             params![
                 workflow_run_snapshot_id.as_str(),
                 request.workflow_run_id.as_str(),
@@ -750,6 +763,10 @@ impl AttributionRepository for SqliteAttributionStore {
                 inputs_json.as_str(),
                 output_targets_json.as_deref(),
                 override_selection_json.as_deref(),
+                graph_settings_json.as_str(),
+                runtime_requirements_json.as_str(),
+                capability_models_json.as_str(),
+                runtime_capabilities_json.as_str(),
                 now
             ],
         )?;
@@ -774,6 +791,10 @@ impl AttributionRepository for SqliteAttributionStore {
             inputs_json,
             output_targets_json,
             override_selection_json,
+            graph_settings_json,
+            runtime_requirements_json,
+            capability_models_json,
+            runtime_capabilities_json,
             created_at_ms: now,
         })
     }
@@ -917,7 +938,8 @@ fn workflow_run_snapshot_by_run_id(
                 workflow_execution_fingerprint, workflow_execution_session_id,
                 workflow_execution_session_kind, usage_profile, keep_alive, retention_policy,
                 scheduler_policy, priority, timeout_ms, inputs_json, output_targets_json,
-                override_selection_json, created_at_ms
+                override_selection_json, graph_settings_json, runtime_requirements_json,
+                capability_models_json, runtime_capabilities_json, created_at_ms
          FROM workflow_run_snapshots
          WHERE workflow_run_id = ?1",
     )?;
@@ -961,7 +983,11 @@ fn workflow_run_snapshot_from_row(
         inputs_json: row.get(15)?,
         output_targets_json: row.get(16)?,
         override_selection_json: row.get(17)?,
-        created_at_ms: row.get(18)?,
+        graph_settings_json: row.get(18)?,
+        runtime_requirements_json: row.get(19)?,
+        capability_models_json: row.get(20)?,
+        runtime_capabilities_json: row.get(21)?,
+        created_at_ms: row.get(22)?,
     })
 }
 
