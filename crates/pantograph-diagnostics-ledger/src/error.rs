@@ -14,6 +14,15 @@ pub enum DiagnosticsLedgerError {
     QueryLimitExceeded { requested: u32, max: u32 },
     #[error("unsupported diagnostics ledger schema version {found}")]
     UnsupportedSchemaVersion { found: i64 },
+    #[error("unsupported diagnostic event kind {event_kind}")]
+    UnsupportedEventKind { event_kind: String },
+    #[error("{source_component} cannot emit {event_kind}")]
+    InvalidEventSource {
+        event_kind: &'static str,
+        source_component: &'static str,
+    },
+    #[error("diagnostic event payload exceeds {max} bytes")]
+    EventPayloadTooLarge { max: usize },
     #[error("diagnostics ledger storage error: {0}")]
     Storage(#[from] rusqlite::Error),
     #[error("diagnostics ledger serialization error: {0}")]

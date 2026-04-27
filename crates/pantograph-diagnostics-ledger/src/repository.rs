@@ -1,9 +1,10 @@
 use crate::{
-    DiagnosticsLedgerError, DiagnosticsProjection, DiagnosticsQuery, DiagnosticsRetentionPolicy,
-    ModelLicenseUsageEvent, PruneTimingObservationsCommand, PruneTimingObservationsResult,
-    PruneUsageEventsCommand, PruneUsageEventsResult, WorkflowRunSummaryProjection,
-    WorkflowRunSummaryQuery, WorkflowRunSummaryRecord, WorkflowTimingExpectation,
-    WorkflowTimingExpectationQuery, WorkflowTimingObservation,
+    DiagnosticEventAppendRequest, DiagnosticEventRecord, DiagnosticsLedgerError,
+    DiagnosticsProjection, DiagnosticsQuery, DiagnosticsRetentionPolicy, ModelLicenseUsageEvent,
+    ProjectionStateRecord, ProjectionStateUpdate, PruneTimingObservationsCommand,
+    PruneTimingObservationsResult, PruneUsageEventsCommand, PruneUsageEventsResult,
+    WorkflowRunSummaryProjection, WorkflowRunSummaryQuery, WorkflowRunSummaryRecord,
+    WorkflowTimingExpectation, WorkflowTimingExpectationQuery, WorkflowTimingObservation,
 };
 
 pub trait DiagnosticsLedgerRepository {
@@ -23,6 +24,27 @@ pub trait DiagnosticsLedgerRepository {
         &mut self,
         command: PruneUsageEventsCommand,
     ) -> Result<PruneUsageEventsResult, DiagnosticsLedgerError>;
+
+    fn append_diagnostic_event(
+        &mut self,
+        request: DiagnosticEventAppendRequest,
+    ) -> Result<DiagnosticEventRecord, DiagnosticsLedgerError>;
+
+    fn diagnostic_events_after(
+        &self,
+        last_event_seq: i64,
+        limit: u32,
+    ) -> Result<Vec<DiagnosticEventRecord>, DiagnosticsLedgerError>;
+
+    fn projection_state(
+        &self,
+        projection_name: &str,
+    ) -> Result<Option<ProjectionStateRecord>, DiagnosticsLedgerError>;
+
+    fn upsert_projection_state(
+        &mut self,
+        update: ProjectionStateUpdate,
+    ) -> Result<ProjectionStateRecord, DiagnosticsLedgerError>;
 
     fn record_timing_observation(
         &mut self,

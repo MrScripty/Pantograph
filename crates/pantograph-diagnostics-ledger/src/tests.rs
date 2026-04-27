@@ -4,14 +4,18 @@ use pantograph_runtime_attribution::{
 use rusqlite::Connection;
 
 use crate::{
+    DiagnosticEventAppendRequest, DiagnosticEventKind, DiagnosticEventPayload,
+    DiagnosticEventPrivacyClass, DiagnosticEventRetentionClass, DiagnosticEventSourceComponent,
     DiagnosticsLedgerError, DiagnosticsLedgerRepository, DiagnosticsQuery, ExecutionGuaranteeLevel,
     LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement,
-    OutputMeasurementUnavailableReason, OutputModality, PruneTimingObservationsCommand,
-    PruneUsageEventsCommand, RetentionClass, SqliteDiagnosticsLedger, UsageEventStatus,
-    UsageLineage, WorkflowRunSummaryQuery, WorkflowRunSummaryRecord, WorkflowRunSummaryStatus,
-    WorkflowTimingExpectation, WorkflowTimingExpectationComparison, WorkflowTimingExpectationQuery,
-    WorkflowTimingObservation, WorkflowTimingObservationScope, WorkflowTimingObservationStatus,
-    DEFAULT_STANDARD_RETENTION_DAYS,
+    OutputMeasurementUnavailableReason, OutputModality, ProjectionStateUpdate, ProjectionStatus,
+    PruneTimingObservationsCommand, PruneUsageEventsCommand, RetentionClass,
+    RetentionPolicyChangedPayload, SchedulerEstimateProducedPayload, SqliteDiagnosticsLedger,
+    UsageEventStatus, UsageLineage, WorkflowRunSummaryQuery, WorkflowRunSummaryRecord,
+    WorkflowRunSummaryStatus, WorkflowTimingExpectation, WorkflowTimingExpectationComparison,
+    WorkflowTimingExpectationQuery, WorkflowTimingObservation, WorkflowTimingObservationScope,
+    WorkflowTimingObservationStatus, DEFAULT_STANDARD_RETENTION_DAYS,
+    MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES,
 };
 
 #[test]
@@ -439,6 +443,171 @@ fn workflow_run_summary_upsert_and_query_preserves_latest_run_state() {
 }
 
 #[test]
+fn diagnostic_event_ledger_appends_typed_events_and_reads_by_cursor() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    let first = ledger
+        .append_diagnostic_event(sample_scheduler_event("workflow_run_alpha"))
+        .expect("first diagnostic event appends");
+    let second = ledger
+        .append_diagnostic_event(sample_scheduler_event("workflow_run_beta"))
+        .expect("second diagnostic event appends");
+
+    assert!(first.event_seq > 0);
+    assert!(second.event_seq > first.event_seq);
+    assert_eq!(
+        first.event_kind,
+        DiagnosticEventKind::SchedulerEstimateProduced
+    );
+    assert_eq!(first.schema_version, 1);
+    assert!(first.payload_hash.starts_with("diagnostic-event-blake3:"));
+    assert_eq!(first.payload_size_bytes, first.payload_json.len() as u64);
+
+    let events = ledger
+        .diagnostic_events_after(0, 10)
+        .expect("diagnostic events load");
+    assert_eq!(events, vec![first.clone(), second.clone()]);
+
+    let after_first = ledger
+        .diagnostic_events_after(first.event_seq, 10)
+        .expect("diagnostic events load after first cursor");
+    assert_eq!(after_first, vec![second]);
+
+    let after_second = ledger
+        .diagnostic_events_after(after_first[0].event_seq, 10)
+        .expect("diagnostic events load after second cursor");
+    assert!(after_second.is_empty());
+}
+
+#[test]
+fn diagnostic_event_ledger_rejects_unbounded_cursor_queries() {
+    let ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+
+    let oversized = ledger.diagnostic_events_after(0, 501);
+    assert!(matches!(
+        oversized,
+        Err(DiagnosticsLedgerError::QueryLimitExceeded {
+            requested: 501,
+            max: 500
+        })
+    ));
+
+    let negative_cursor = ledger.diagnostic_events_after(-1, 10);
+    assert!(matches!(
+        negative_cursor,
+        Err(DiagnosticsLedgerError::InvalidField {
+            field: "last_event_seq"
+        })
+    ));
+}
+
+#[test]
+fn diagnostic_event_ledger_validates_run_scope_and_event_source() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    let mut missing_run = sample_scheduler_event("workflow_run_alpha");
+    missing_run.workflow_run_id = None;
+
+    let result = ledger.append_diagnostic_event(missing_run);
+    assert!(matches!(
+        result,
+        Err(DiagnosticsLedgerError::MissingField {
+            field: "workflow_run_id"
+        })
+    ));
+
+    let mut wrong_source = sample_scheduler_event("workflow_run_alpha");
+    wrong_source.source_component = DiagnosticEventSourceComponent::Library;
+
+    let result = ledger.append_diagnostic_event(wrong_source);
+    assert!(matches!(
+        result,
+        Err(DiagnosticsLedgerError::InvalidEventSource {
+            event_kind: "scheduler.estimate_produced",
+            source_component: "library"
+        })
+    ));
+}
+
+#[test]
+fn diagnostic_event_ledger_rejects_oversized_payloads() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    let request = DiagnosticEventAppendRequest {
+        source_component: DiagnosticEventSourceComponent::Retention,
+        source_instance_id: Some("retention-local".to_string()),
+        occurred_at_ms: 10,
+        workflow_run_id: None,
+        workflow_id: None,
+        workflow_version_id: None,
+        workflow_semantic_version: None,
+        node_id: None,
+        node_type: None,
+        node_version: None,
+        runtime_id: None,
+        runtime_version: None,
+        model_id: None,
+        model_version: None,
+        client_id: None,
+        client_session_id: None,
+        bucket_id: None,
+        scheduler_policy_id: None,
+        retention_policy_id: Some("retention_standard".to_string()),
+        privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+        retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+        payload_ref: None,
+        payload: DiagnosticEventPayload::RetentionPolicyChanged(RetentionPolicyChangedPayload {
+            policy_id: "retention_standard".to_string(),
+            reason: "x".repeat(MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES + 1),
+        }),
+    };
+
+    let result = ledger.append_diagnostic_event(request);
+    assert!(matches!(
+        result,
+        Err(DiagnosticsLedgerError::EventPayloadTooLarge { max })
+            if max == MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES
+    ));
+}
+
+#[test]
+fn projection_state_tracks_incremental_event_cursors() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    let event = ledger
+        .append_diagnostic_event(sample_scheduler_event("workflow_run_alpha"))
+        .expect("diagnostic event appends");
+
+    let current = ledger
+        .upsert_projection_state(ProjectionStateUpdate {
+            projection_name: "scheduler_timeline".to_string(),
+            projection_version: 1,
+            last_applied_event_seq: event.event_seq,
+            status: ProjectionStatus::Current,
+            rebuilt_at_ms: Some(20),
+        })
+        .expect("projection state stores");
+    assert_eq!(current.projection_name, "scheduler_timeline");
+    assert_eq!(current.last_applied_event_seq, event.event_seq);
+    assert_eq!(current.status, ProjectionStatus::Current);
+
+    let loaded = ledger
+        .projection_state("scheduler_timeline")
+        .expect("projection state query succeeds")
+        .expect("projection state exists");
+    assert_eq!(loaded, current);
+
+    let needs_rebuild = ledger
+        .upsert_projection_state(ProjectionStateUpdate {
+            projection_name: "scheduler_timeline".to_string(),
+            projection_version: 2,
+            last_applied_event_seq: 0,
+            status: ProjectionStatus::NeedsRebuild,
+            rebuilt_at_ms: None,
+        })
+        .expect("projection state updates");
+    assert_eq!(needs_rebuild.projection_version, 2);
+    assert_eq!(needs_rebuild.last_applied_event_seq, 0);
+    assert_eq!(needs_rebuild.status, ProjectionStatus::NeedsRebuild);
+}
+
+#[test]
 fn existing_v5_schema_adds_usage_lineage_contract_indexes() {
     let temp = tempfile::NamedTempFile::new().expect("temp file");
     let path = temp.path().to_path_buf();
@@ -475,6 +644,35 @@ fn existing_v5_schema_adds_usage_lineage_contract_indexes() {
 
     assert!(has_version_index);
     assert!(has_digest_index);
+}
+
+#[test]
+fn existing_v6_schema_adds_diagnostic_event_ledger_tables() {
+    let conn = Connection::open_in_memory().expect("connection opens");
+    conn.execute_batch(
+        "CREATE TABLE ledger_schema_migrations (
+            version INTEGER PRIMARY KEY,
+            applied_at_ms INTEGER NOT NULL,
+            checksum TEXT NOT NULL
+        );
+        INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
+        VALUES (6, 0, 'pantograph-diagnostics-ledger-v6');",
+    )
+    .expect("v6 schema marker is installed");
+
+    let mut ledger = SqliteDiagnosticsLedger::from_connection(conn).expect("ledger migrates");
+    let event = ledger
+        .append_diagnostic_event(sample_scheduler_event("workflow_run_alpha"))
+        .expect("diagnostic event appends after migration");
+    ledger
+        .upsert_projection_state(ProjectionStateUpdate {
+            projection_name: "scheduler_timeline".to_string(),
+            projection_version: 1,
+            last_applied_event_seq: event.event_seq,
+            status: ProjectionStatus::Current,
+            rebuilt_at_ms: None,
+        })
+        .expect("projection state stores after migration");
 }
 
 #[test]
@@ -641,6 +839,42 @@ fn sample_run_summary(
         event_count: 1,
         last_error: None,
         recorded_at_ms: started_at_ms,
+    }
+}
+
+fn sample_scheduler_event(workflow_run_id: &str) -> DiagnosticEventAppendRequest {
+    DiagnosticEventAppendRequest {
+        source_component: DiagnosticEventSourceComponent::Scheduler,
+        source_instance_id: Some("scheduler-local".to_string()),
+        occurred_at_ms: 1_000,
+        workflow_run_id: Some(WorkflowRunId::try_from(workflow_run_id.to_string()).unwrap()),
+        workflow_id: Some(WorkflowId::try_from("workflow_alpha".to_string()).unwrap()),
+        workflow_version_id: Some(WorkflowVersionId::try_from("wfver_alpha".to_string()).unwrap()),
+        workflow_semantic_version: Some("1.0.0".to_string()),
+        node_id: None,
+        node_type: None,
+        node_version: None,
+        runtime_id: None,
+        runtime_version: None,
+        model_id: None,
+        model_version: None,
+        client_id: Some(ClientId::try_from("client_alpha".to_string()).unwrap()),
+        client_session_id: Some(ClientSessionId::try_from("session_alpha".to_string()).unwrap()),
+        bucket_id: Some(BucketId::try_from("bucket_alpha".to_string()).unwrap()),
+        scheduler_policy_id: Some("scheduler_default".to_string()),
+        retention_policy_id: None,
+        privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+        retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+        payload_ref: None,
+        payload: DiagnosticEventPayload::SchedulerEstimateProduced(
+            SchedulerEstimateProducedPayload {
+                estimate_version: "estimate-v1".to_string(),
+                confidence: "medium".to_string(),
+                estimated_queue_wait_ms: Some(1_500),
+                estimated_duration_ms: Some(2_500),
+                reasons: vec!["model already loaded".to_string()],
+            },
+        ),
     }
 }
 

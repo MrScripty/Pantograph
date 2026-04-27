@@ -5,9 +5,14 @@ use pantograph_runtime_attribution::{
 };
 use rusqlite::{params, Connection, Row};
 
+mod event_sqlite;
 mod run_summary_sqlite;
 mod timing_sqlite;
 
+use crate::event::{
+    DiagnosticEventAppendRequest, DiagnosticEventRecord, ProjectionStateRecord,
+    ProjectionStateUpdate,
+};
 use crate::records::{
     DiagnosticsProjection, DiagnosticsQuery, DiagnosticsRetentionPolicy, ExecutionGuaranteeLevel,
     LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement, OutputModality,
@@ -303,6 +308,35 @@ impl DiagnosticsLedgerRepository for SqliteDiagnosticsLedger {
             retention_class: command.retention_class,
             prune_completed_before_ms: command.prune_completed_before_ms,
         })
+    }
+
+    fn append_diagnostic_event(
+        &mut self,
+        request: DiagnosticEventAppendRequest,
+    ) -> Result<DiagnosticEventRecord, DiagnosticsLedgerError> {
+        event_sqlite::append_diagnostic_event(self, request)
+    }
+
+    fn diagnostic_events_after(
+        &self,
+        last_event_seq: i64,
+        limit: u32,
+    ) -> Result<Vec<DiagnosticEventRecord>, DiagnosticsLedgerError> {
+        event_sqlite::diagnostic_events_after(self, last_event_seq, limit)
+    }
+
+    fn projection_state(
+        &self,
+        projection_name: &str,
+    ) -> Result<Option<ProjectionStateRecord>, DiagnosticsLedgerError> {
+        event_sqlite::projection_state(self, projection_name)
+    }
+
+    fn upsert_projection_state(
+        &mut self,
+        update: ProjectionStateUpdate,
+    ) -> Result<ProjectionStateRecord, DiagnosticsLedgerError> {
+        event_sqlite::upsert_projection_state(self, update)
     }
 
     fn record_timing_observation(

@@ -1,7 +1,8 @@
 # crates/pantograph-diagnostics-ledger/src
 
 Durable diagnostics ledger contracts and SQLite-backed persistence for
-workflow runtime usage, timing observations, and workflow run summaries.
+workflow runtime usage, timing observations, typed diagnostic events,
+projection cursors, and workflow run summaries.
 
 ## Purpose
 
@@ -15,6 +16,7 @@ writing ad hoc SQLite tables or keeping history in frontend memory.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `lib.rs` | Crate facade and public exports for diagnostics records, repositories, timing expectations, and SQLite storage. |
+| `event.rs` | Typed diagnostic event envelope, payload families, source validation, retention/privacy classes, and projection cursor records. |
 | `records.rs` | Model/license usage event records, query contracts, retention policy, lineage, and projection DTOs. |
 | `timing.rs` | Workflow timing observation, timing expectation, and workflow run-summary contracts. |
 | `repository.rs` | Host-facing diagnostics ledger repository trait. |
@@ -38,15 +40,21 @@ state, the GUI loses previous workflow timing and runtime history after restart.
 - Query contracts must remain deterministic so diagnostics views can compare
   current runs against prior observations.
 - Retention/pruning must be caller-driven and auditable.
+- Diagnostic events must use allowlisted typed payloads; raw arbitrary JSON is
+  not accepted at the repository boundary.
+- Materialized projections are rebuildable, but normal read paths advance from
+  stored `projection_state` cursors instead of replaying the full ledger.
 
 ## Decision
 
 Keep durable diagnostics contracts in this crate and expose
 `SqliteDiagnosticsLedger` as the concrete persistence owner. Workflow timing
 history and run summaries use `workflow_run_id` for one submitted execution and
-`workflow_id` for cross-run comparisons. Runtime and workflow services may
-write observations and summaries, but they do not own the schema or query
-semantics.
+`workflow_id` for cross-run comparisons. Typed diagnostic events add a shared
+append-only audit boundary for scheduler, run, I/O, Library, runtime, and
+retention facts. Runtime and workflow services may write observations,
+summaries, and typed events through repository methods, but they do not own the
+schema or query semantics.
 
 ## Alternatives Rejected
 
@@ -64,6 +72,10 @@ semantics.
   and run summaries.
 - `workflow_id` is the stable workflow grouping key for comparable timing
   history.
+- `diagnostic_events.event_seq` is the durable monotonic cursor for projection
+  application.
+- `projection_state` records the projection version and last applied event
+  sequence so incremental projection drains can resume after restart.
 - Schema migrations are forward-only and covered by repository tests.
 - Query results must not require frontend-side identity repair or workflow-name
   side channels.
@@ -75,6 +87,8 @@ semantics.
 - Run-summary records need to include additional scheduler/runtime lifecycle
   phases beyond the current status and timing facts.
 - Timing comparison policy needs configurable percentile or window selection.
+- Projection rebuild APIs are added for migration, repair, or projection
+  version changes.
 
 ## Dependencies
 

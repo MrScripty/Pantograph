@@ -4,6 +4,7 @@
 //! runtime trace diagnostics.
 
 mod error;
+mod event;
 mod records;
 mod repository;
 mod schema;
@@ -12,6 +13,15 @@ mod timing;
 mod util;
 
 pub use error::DiagnosticsLedgerError;
+pub use event::{
+    DiagnosticEventAppendRequest, DiagnosticEventKind, DiagnosticEventPayload,
+    DiagnosticEventPrivacyClass, DiagnosticEventRecord, DiagnosticEventRetentionClass,
+    DiagnosticEventSourceComponent, IoArtifactObservedPayload, LibraryAssetAccessedPayload,
+    ProjectionStateRecord, ProjectionStateUpdate, ProjectionStatus, RetentionPolicyChangedPayload,
+    RunSnapshotAcceptedPayload, RuntimeCapabilityObservedPayload, SchedulerEstimateProducedPayload,
+    SchedulerQueuePlacementPayload, DIAGNOSTIC_EVENT_SCHEMA_VERSION,
+    MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES,
+};
 pub use records::{
     DiagnosticsProjection, DiagnosticsQuery, DiagnosticsRetentionPolicy, ExecutionGuaranteeLevel,
     LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement,

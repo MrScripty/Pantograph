@@ -4,8 +4,8 @@ use crate::records::{RetentionClass, DEFAULT_STANDARD_RETENTION_DAYS};
 use crate::util::now_ms;
 use crate::DiagnosticsLedgerError;
 
-pub(crate) const SCHEMA_VERSION: i64 = 6;
-const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v6";
+pub(crate) const SCHEMA_VERSION: i64 = 7;
+const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v7";
 
 pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {
     tx.execute_batch(
@@ -121,6 +121,7 @@ pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedger
     )?;
     apply_timing_schema(tx)?;
     apply_workflow_run_summary_schema(tx)?;
+    apply_event_ledger_schema(tx)?;
     tx.execute(
         "INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
          VALUES (?1, ?2, ?3)",
@@ -187,6 +188,9 @@ pub(crate) fn migrate_schema(
             [],
         )?;
     }
+    if found < 7 {
+        apply_event_ledger_schema(&tx)?;
+    }
     if found < SCHEMA_VERSION {
         tx.execute(
             "INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
@@ -195,6 +199,69 @@ pub(crate) fn migrate_schema(
         )?;
     }
     tx.commit()?;
+    Ok(())
+}
+
+fn apply_event_ledger_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {
+    tx.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS diagnostic_events (
+            event_seq INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id TEXT NOT NULL UNIQUE,
+            event_kind TEXT NOT NULL,
+            schema_version INTEGER NOT NULL,
+            source_component TEXT NOT NULL,
+            source_instance_id TEXT,
+            occurred_at_ms INTEGER NOT NULL,
+            recorded_at_ms INTEGER NOT NULL,
+            workflow_run_id TEXT,
+            workflow_id TEXT,
+            workflow_version_id TEXT,
+            workflow_semantic_version TEXT,
+            node_id TEXT,
+            node_type TEXT,
+            node_version TEXT,
+            runtime_id TEXT,
+            runtime_version TEXT,
+            model_id TEXT,
+            model_version TEXT,
+            client_id TEXT,
+            client_session_id TEXT,
+            bucket_id TEXT,
+            scheduler_policy_id TEXT,
+            retention_policy_id TEXT,
+            privacy_class TEXT NOT NULL,
+            event_retention_class TEXT NOT NULL,
+            payload_hash TEXT NOT NULL,
+            payload_size_bytes INTEGER NOT NULL,
+            payload_ref TEXT,
+            payload_json TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_diagnostic_events_seq_kind
+            ON diagnostic_events(event_seq, event_kind);
+        CREATE INDEX IF NOT EXISTS idx_diagnostic_events_kind_seq
+            ON diagnostic_events(event_kind, event_seq);
+        CREATE INDEX IF NOT EXISTS idx_diagnostic_events_run_seq
+            ON diagnostic_events(workflow_run_id, event_seq);
+        CREATE INDEX IF NOT EXISTS idx_diagnostic_events_workflow_version_seq
+            ON diagnostic_events(workflow_version_id, event_seq);
+        CREATE INDEX IF NOT EXISTS idx_diagnostic_events_node_seq
+            ON diagnostic_events(node_id, event_seq);
+        CREATE INDEX IF NOT EXISTS idx_diagnostic_events_model_seq
+            ON diagnostic_events(model_id, event_seq);
+        CREATE INDEX IF NOT EXISTS idx_diagnostic_events_runtime_seq
+            ON diagnostic_events(runtime_id, event_seq);
+
+        CREATE TABLE IF NOT EXISTS projection_state (
+            projection_name TEXT PRIMARY KEY,
+            projection_version INTEGER NOT NULL,
+            last_applied_event_seq INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            rebuilt_at_ms INTEGER,
+            updated_at_ms INTEGER NOT NULL
+        );
+        "#,
+    )?;
     Ok(())
 }
 

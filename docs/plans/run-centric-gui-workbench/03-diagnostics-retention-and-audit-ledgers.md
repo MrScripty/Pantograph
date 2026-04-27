@@ -4,8 +4,11 @@
 
 In progress. Stage `01` has started the version-aware diagnostics filter
 cutover by adding workflow-version and node contract version/digest filters to
-the existing model/license usage diagnostics path. Full typed event ledger,
-retention, I/O, and Library/Pumas audit work is still not started.
+the existing model/license usage diagnostics path. Stage `03` has started the
+typed event ledger bootstrap in `pantograph-diagnostics-ledger` with validated
+event contracts, append-only SQLite storage, bounded payloads, monotonic
+`event_seq`, and `projection_state` cursor persistence. Retention, I/O,
+Library/Pumas emitters, and materialized projection tables remain pending.
 
 ## Objective
 
@@ -144,19 +147,19 @@ before implementation.
 
 **Tasks:**
 
-- [ ] Decide whether the typed diagnostic event ledger lives in
+- [x] Decide whether the typed diagnostic event ledger lives in
   `pantograph-diagnostics-ledger` or a new shared diagnostics-event crate.
   This decision applies to all event families; do not approve per-family
   sibling repositories.
-- [ ] Define event envelope fields, event id behavior, timestamps, source
+- [x] Define event envelope fields, event id behavior, timestamps, source
   ownership, correlation identifiers, privacy classes, retention classes,
   payload hashes, embedded payload size limits, payload references, and
   monotonic `event_seq`.
-- [ ] Define initial event families: `scheduler.*`, `run.*`, `node.*`,
+- [x] Define initial event families: `scheduler.*`, `run.*`, `node.*`,
   `io.*`, `library.*`, `runtime.*`, and `retention.*`.
-- [ ] Define typed payload structs and schema versions for first-pass event
+- [x] Define typed payload structs and schema versions for first-pass event
   kinds.
-- [ ] Define event builders and validation errors. Direct raw event writes
+- [x] Define event builders and validation errors. Direct raw event writes
   should be test/migration-only.
 - [ ] Define I/O artifact metadata contract.
 - [ ] Define retention policy/version and artifact retention-state contract.
@@ -164,9 +167,9 @@ before implementation.
 - [ ] Define centralized validators for artifact payload references,
   Library/Pumas resource identifiers, external references, and any filesystem
   paths accepted by download/delete/access operations.
-- [ ] Define ledger indexes, projection tables, and migration strategy for
+- [x] Define ledger indexes, projection tables, and migration strategy for
   version-aware diagnostics.
-- [ ] Define `projection_state` with projection name, projection version,
+- [x] Define `projection_state` with projection name, projection version,
   last applied event sequence, status, and rebuild timestamp.
 - [ ] Define hot, warm, and cold projection classes and which component owns
   synchronous, asynchronous, lazy, and explicit rebuild application.
@@ -189,7 +192,13 @@ before implementation.
   workspace/cache roots.
 - README or ADR updates record ownership decisions.
 
-**Status:** Not started.
+**Status:** In progress. `pantograph-diagnostics-ledger` is the accepted
+storage owner. First-pass scheduler/run/I/O/library/runtime/retention event
+contracts, validation errors, source allowlists, payload hashes, embedded
+payload limits, SQLite `diagnostic_events`, and `projection_state` have been
+implemented. Artifact-reference validators, detailed I/O retention contracts,
+Pumas path/resource validators, and hot/warm projection ownership details are
+still pending.
 
 ### Milestone 2: Ledger Persistence And Incremental Projections
 
@@ -199,11 +208,11 @@ repair, migration, projection-version changes, and tests.
 
 **Tasks:**
 
-- [ ] Implement append-only event persistence.
-- [ ] Assign each event a monotonic durable `event_seq` and index event
+- [x] Implement append-only event persistence.
+- [x] Assign each event a monotonic durable `event_seq` and index event
   queries by `event_seq`, `event_kind`, `workflow_run_id`, version ids, node
   ids, model/runtime ids, and status fields needed by projections.
-- [ ] Implement `projection_state` persistence and cursor updates for every
+- [x] Implement `projection_state` persistence and cursor updates for every
   first-pass projection.
 - [ ] Implement hot projection updates for run summary, run detail/current
   status, scheduler timeline, and active-run I/O artifact metadata.
@@ -241,8 +250,9 @@ repair, migration, projection-version changes, and tests.
 
 **Status:** In progress. Existing model/license usage projections now carry
 workflow-version fields and can filter by node contract version/digest. Typed
-event append, projection cursors, incremental materialized read models, and
-explicit rebuild work remain pending.
+event append and projection cursor persistence are implemented. Incremental
+materialized read models, hot/warm projection drains, additional filters, and
+explicit rebuild commands remain pending.
 
 ### Milestone 3: I/O Artifact Metadata And Retention
 

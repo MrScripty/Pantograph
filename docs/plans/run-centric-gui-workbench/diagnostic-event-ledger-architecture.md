@@ -2,9 +2,27 @@
 
 ## Status
 
-Accepted planning direction. Not implemented.
+Accepted planning direction. Bootstrap implementation started in
+`pantograph-diagnostics-ledger`.
 
 Last updated: 2026-04-27.
+
+## Implementation Progress
+
+- `pantograph-diagnostics-ledger` owns the typed event contract, SQLite event
+  storage, and projection cursor metadata.
+- Initial implemented event families are `scheduler.estimate_produced`,
+  `scheduler.queue_placement`, `run.snapshot_accepted`,
+  `io.artifact_observed`, `library.asset_accessed`,
+  `runtime.capability_observed`, and `retention.policy_changed`.
+- SQLite schema version `7` adds `diagnostic_events` and `projection_state`.
+- Event append assigns durable monotonic `event_seq`, hashes bounded typed
+  payload JSON, stores payload references separately, and rejects disallowed
+  source components or missing required correlation fields.
+- `projection_state` persists projection version, status, rebuild timestamp,
+  and `last_applied_event_seq` for incremental read-model drains.
+- Hot/warm projection tables, rebuild commands, and feature emitters remain
+  plan work.
 
 ## Purpose
 

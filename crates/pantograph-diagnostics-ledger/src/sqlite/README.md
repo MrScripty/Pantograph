@@ -7,6 +7,8 @@ ledger.
 ## Contents
 | File | Description |
 | ---- | ----------- |
+| `event_sqlite.rs` | Typed diagnostic event append/query persistence and projection cursor storage. |
+| `run_summary_sqlite.rs` | Workflow run-summary upsert and query persistence for restart-visible run lists. |
 | `timing_sqlite.rs` | Workflow timing observation persistence, expectation lookup, and timing retention pruning. |
 
 ## Invariants
@@ -18,10 +20,16 @@ ledger.
   later diagnostics include richer optional facts.
 - Runtime-refined lookups fall back to stable workflow/graph/node history when
   the refined bucket has too little history for an expectation.
+- Diagnostic event writes assign one SQLite-owned monotonic `event_seq` and
+  store bounded typed payload JSON plus payload hashes/references.
+- Diagnostic event cursor queries require bounded page sizes and non-negative
+  cursors.
+- `projection_state` is the durable resume point for incremental materialized
+  projections; full rebuilds should update the same cursor/version contract.
 
 ## Dependencies
-**Internal:** parent `sqlite.rs`, diagnostics ledger timing contracts, and the
-schema-owned `workflow_timing_observations` table.
+**Internal:** parent `sqlite.rs`, diagnostics ledger event/timing/run-summary
+contracts, and schema-owned diagnostics tables.
 
 **External:** `rusqlite` only.
 
@@ -30,6 +38,6 @@ This directory is not a public API. Public callers use
 `DiagnosticsLedgerRepository` on `SqliteDiagnosticsLedger`.
 
 ## Structured Producer Contract
-Callers submit validated `WorkflowTimingObservation` values. This module stores
-the durable facts and projects `WorkflowTimingExpectation` without inventing
-frontend-owned timing state.
+Callers submit validated typed diagnostic events, `WorkflowTimingObservation`
+values, and workflow run summaries. These modules store durable facts and
+project query responses without inventing frontend-owned diagnostics state.
