@@ -337,7 +337,7 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         )
         .expect("diagnostic events")
     };
-    assert_eq!(diagnostic_events.len(), 8);
+    assert_eq!(diagnostic_events.len(), 9);
     let event = diagnostic_events
         .iter()
         .find(|event| {
@@ -532,6 +532,43 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
     assert!(io_events.iter().all(|event| event
         .payload_json
         .contains("\"retention_state\":\"metadata_only\"")));
+
+    let library_event = diagnostic_events
+        .iter()
+        .find(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::LibraryAssetAccessed
+        })
+        .expect("library asset access event");
+    assert_eq!(
+        library_event.source_component,
+        pantograph_diagnostics_ledger::DiagnosticEventSourceComponent::Library
+    );
+    assert_eq!(
+        library_event.workflow_run_id.as_ref().map(|id| id.as_str()),
+        Some(response.workflow_run_id.as_str())
+    );
+    assert_eq!(library_event.model_id.as_deref(), Some("model-a"));
+    assert!(library_event
+        .payload_json
+        .contains("\"asset_id\":\"pumas://models/model-a\""));
+    assert!(library_event
+        .payload_json
+        .contains("\"operation\":\"run_usage\""));
+
+    let library_usage = service
+        .workflow_library_usage_query(WorkflowLibraryUsageQueryRequest {
+            asset_id: Some("pumas://models/model-a".to_string()),
+            workflow_id: None,
+            workflow_version_id: None,
+            after_event_seq: None,
+            limit: Some(10),
+            projection_batch_size: Some(10),
+        })
+        .expect("library usage query");
+    assert_eq!(library_usage.assets.len(), 1);
+    assert_eq!(library_usage.assets[0].asset_id, "pumas://models/model-a");
+    assert_eq!(library_usage.assets[0].run_access_count, 1);
 }
 
 #[tokio::test]

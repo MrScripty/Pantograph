@@ -359,6 +359,10 @@ Scheduler, and Diagnostics pages.
 - [ ] Wrap or instrument Pumas model search/download/delete/access paths.
 - [ ] Emit typed `library.*` events for asset access by run, session, bucket,
   client, or GUI actor where available.
+  - Workflow-session run snapshots now emit `library.asset_accessed` events
+    for model assets used by the run, carrying run, workflow version,
+    client/session/bucket, scheduler policy, retention policy, model id, and
+    model revision/hash where available.
 - [ ] Emit typed cache hit/miss and network byte observations where available.
 - [x] Add Library usage projections: used by active run, used by N runs, last
   accessed, total access count, linked workflow/node versions.
@@ -378,7 +382,13 @@ Scheduler, and Diagnostics pages.
 - Tests cover Pumas/Library resource validation for search/download/delete and
   prove rejected operations do not emit misleading usage audit events.
 
-**Status:** Not started.
+**Status:** In progress. The first production Library audit emitter records
+model asset run usage from workflow-session run snapshots as typed
+`library.asset_accessed` events. The existing warm Library usage projection can
+then report run-linked usage counts and last-access facts for
+`pumas://models/<model_id>` assets. Pumas search/download/delete wrappers,
+cache hit/miss facts, network byte observations, GUI actor audit, and rejected
+operation tests remain pending.
 
 ## Ownership And Lifecycle Note
 
@@ -434,6 +444,9 @@ implicitly on page load.
 - 2026-04-27: Added first-pass workflow input/output metadata events for
   successful workflow-session runs. The events are metadata-only and do not
   embed raw workflow values.
+- 2026-04-27: Added first-pass Library run-usage audit events for model assets
+  used by workflow-session runs. These events feed the existing warm
+  Library usage projection.
 
 ### Deviations
 
@@ -470,6 +483,9 @@ implicitly on page load.
 - 2026-04-27: `cargo test -p pantograph-workflow-service
   workflow_execution_session_run_records_snapshot_before_execution --lib`
   passed.
+- 2026-04-27: `cargo test -p pantograph-workflow-service
+  workflow_execution_session_run_records_snapshot_before_execution --lib`
+  passed after adding Library run-usage event assertions.
 
 ### Traceability Links
 

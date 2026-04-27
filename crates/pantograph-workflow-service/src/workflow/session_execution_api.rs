@@ -3,10 +3,10 @@ use std::time::Duration;
 use pantograph_diagnostics_ledger::{
     DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
     DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
-    IoArtifactObservedPayload, IoArtifactRetentionState, RunSnapshotAcceptedPayload,
-    RunSnapshotNodeVersionPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
-    SchedulerEstimateProducedPayload, SchedulerQueuePlacementPayload, SchedulerRunAdmittedPayload,
-    SchedulerRunDelayedPayload,
+    IoArtifactObservedPayload, IoArtifactRetentionState, LibraryAssetAccessedPayload,
+    RunSnapshotAcceptedPayload, RunSnapshotNodeVersionPayload, RunStartedPayload,
+    RunTerminalPayload, RunTerminalStatus, SchedulerEstimateProducedPayload,
+    SchedulerQueuePlacementPayload, SchedulerRunAdmittedPayload, SchedulerRunDelayedPayload,
 };
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, WorkflowId, WorkflowRunAttributionResolveRequest,
@@ -25,13 +25,13 @@ use super::validation::{
     validate_workflow_semantic_version,
 };
 use super::{
-    AttributionRepository, WorkflowExecutionSessionAttributedCreateRequest,
-    WorkflowExecutionSessionAttributionContext, WorkflowExecutionSessionCreateRequest,
-    WorkflowExecutionSessionCreateResponse, WorkflowExecutionSessionQueueItem,
-    WorkflowExecutionSessionRetentionHint, WorkflowExecutionSessionRunRequest,
-    WorkflowExecutionSessionSummary, WorkflowExecutionSessionUnloadReason, WorkflowHost,
-    WorkflowPortBinding, WorkflowRunRequest, WorkflowRunResponse, WorkflowSchedulerDecisionReason,
-    WorkflowService, WorkflowServiceError,
+    AttributionRepository, WorkflowCapabilityModel,
+    WorkflowExecutionSessionAttributedCreateRequest, WorkflowExecutionSessionAttributionContext,
+    WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionCreateResponse,
+    WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionRetentionHint,
+    WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionSummary,
+    WorkflowExecutionSessionUnloadReason, WorkflowHost, WorkflowPortBinding, WorkflowRunRequest,
+    WorkflowRunResponse, WorkflowSchedulerDecisionReason, WorkflowService, WorkflowServiceError,
 };
 
 const WORKFLOW_SESSION_SCHEDULER_POLICY: &str = "priority_then_fifo";
@@ -452,6 +452,7 @@ impl WorkflowService {
             .map_err(WorkflowServiceError::from)?;
         drop(store);
         self.record_run_snapshot_accepted_event_if_configured(&snapshot, &graph)?;
+        self.record_library_model_access_events_if_configured(&snapshot, &capabilities.models)?;
         Ok(Some(snapshot))
     }
 
@@ -516,6 +517,62 @@ impl WorkflowService {
         )
         .map(|_| ())
         .map_err(WorkflowServiceError::from)
+    }
+
+    fn record_library_model_access_events_if_configured(
+        &self,
+        snapshot: &WorkflowRunSnapshotRecord,
+        models: &[WorkflowCapabilityModel],
+    ) -> Result<(), WorkflowServiceError> {
+        let Some(ledger) = self.diagnostics_ledger.as_ref() else {
+            return Ok(());
+        };
+        if models.is_empty() {
+            return Ok(());
+        }
+
+        let mut ledger = ledger.lock().map_err(|_| {
+            WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
+        })?;
+        for model in models {
+            DiagnosticsLedgerRepository::append_diagnostic_event(
+                &mut *ledger,
+                DiagnosticEventAppendRequest {
+                    source_component: DiagnosticEventSourceComponent::Library,
+                    source_instance_id: Some("workflow-run-library-audit".to_string()),
+                    occurred_at_ms: snapshot.created_at_ms,
+                    workflow_run_id: Some(snapshot.workflow_run_id.clone()),
+                    workflow_id: Some(snapshot.workflow_id.clone()),
+                    workflow_version_id: Some(snapshot.workflow_version_id.clone()),
+                    workflow_semantic_version: Some(snapshot.workflow_semantic_version.clone()),
+                    node_id: single_model_node_id(model),
+                    node_type: None,
+                    node_version: None,
+                    runtime_id: None,
+                    runtime_version: None,
+                    model_id: Some(model.model_id.clone()),
+                    model_version: model.model_revision_or_hash.clone(),
+                    client_id: snapshot.client_id.clone(),
+                    client_session_id: snapshot.client_session_id.clone(),
+                    bucket_id: snapshot.bucket_id.clone(),
+                    scheduler_policy_id: Some(snapshot.scheduler_policy.clone()),
+                    retention_policy_id: Some(snapshot.retention_policy.clone()),
+                    privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+                    retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+                    payload_ref: None,
+                    payload: DiagnosticEventPayload::LibraryAssetAccessed(
+                        LibraryAssetAccessedPayload {
+                            asset_id: pumas_model_asset_id(&model.model_id),
+                            operation: "run_usage".to_string(),
+                            cache_status: None,
+                            network_bytes: None,
+                        },
+                    ),
+                },
+            )
+            .map_err(WorkflowServiceError::from)?;
+        }
+        Ok(())
     }
 
     fn record_scheduler_estimate_event_if_configured(
@@ -1098,6 +1155,14 @@ fn workflow_io_artifact_id(
     let hash =
         blake3::hash(format!("{workflow_run_id}:{artifact_role}:{node_id}:{port_id}").as_bytes());
     format!("workflow-io-{hash}")
+}
+
+fn pumas_model_asset_id(model_id: &str) -> String {
+    format!("pumas://models/{model_id}")
+}
+
+fn single_model_node_id(model: &WorkflowCapabilityModel) -> Option<String> {
+    (model.node_ids.len() == 1).then(|| model.node_ids[0].clone())
 }
 
 fn workflow_execution_session_kind_label(kind: &WorkflowExecutionSessionKind) -> &'static str {

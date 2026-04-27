@@ -56,6 +56,14 @@ the ledger and projects workflow-facing summaries, event rows, retention
 metadata, and pruned-usage context. It does not own ledger persistence
 semantics.
 
+Workflow-service may emit typed Library audit events when it has authoritative
+run snapshot context. First-pass model asset usage is recorded as
+`library.asset_accessed` with `run_usage` operation and `pumas://models/<id>`
+asset ids, linked to workflow run, workflow version, client/session/bucket,
+scheduler policy, retention policy, and model id/version metadata. This does
+not replace Pumas-owned search/download/delete audit paths, which remain
+separate typed Library event producers.
+
 GUI adapters and host bindings consume backend-owned projections only. They do
 not reconstruct model/license semantics, retention behavior, guarantee levels,
 or ledger storage policy.
