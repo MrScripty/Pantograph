@@ -24,6 +24,7 @@ fn admission_input_marks_loaded_runtime_reuse_as_incompatible_when_override_dive
         .create_session(
             "wf-1".to_string(),
             Some("interactive".to_string()),
+            None,
             vec!["llama_cpp".to_string()],
             vec!["model-a".to_string()],
             true,
@@ -68,6 +69,7 @@ fn admission_input_marks_loaded_runtime_reuse_as_compatible_without_override_div
         .create_session(
             "wf-1".to_string(),
             Some("interactive".to_string()),
+            None,
             vec!["llama_cpp".to_string()],
             vec!["model-a".to_string()],
             true,

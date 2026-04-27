@@ -8,7 +8,8 @@ use pantograph_diagnostics_ledger::{
     SchedulerQueuePlacementPayload, SchedulerRunDelayedPayload,
 };
 use pantograph_runtime_attribution::{
-    WorkflowId, WorkflowRunId, WorkflowRunSnapshotRecord, WorkflowRunSnapshotRequest,
+    BucketId, ClientId, ClientSessionId, WorkflowId, WorkflowRunAttributionResolveRequest,
+    WorkflowRunId, WorkflowRunSnapshotRecord, WorkflowRunSnapshotRequest,
 };
 
 use crate::graph::{
@@ -23,7 +24,8 @@ use super::validation::{
     validate_workflow_semantic_version,
 };
 use super::{
-    AttributionRepository, WorkflowExecutionSessionCreateRequest,
+    AttributionRepository, WorkflowExecutionSessionAttributedCreateRequest,
+    WorkflowExecutionSessionAttributionContext, WorkflowExecutionSessionCreateRequest,
     WorkflowExecutionSessionCreateResponse, WorkflowExecutionSessionQueueItem,
     WorkflowExecutionSessionRetentionHint, WorkflowExecutionSessionRunRequest,
     WorkflowExecutionSessionSummary, WorkflowExecutionSessionUnloadReason, WorkflowHost,
@@ -36,32 +38,86 @@ const WORKFLOW_SESSION_RETENTION_KEEP_ALIVE: &str = "keep_alive";
 const WORKFLOW_SESSION_RETENTION_EPHEMERAL: &str = "ephemeral";
 
 impl WorkflowService {
+    fn resolve_execution_session_attribution(
+        &self,
+        request: super::WorkflowExecutionSessionAttributionRequest,
+    ) -> Result<WorkflowExecutionSessionAttributionContext, WorkflowServiceError> {
+        let client_session_id = ClientSessionId::try_from(request.client_session_id)?;
+        let store = self.attribution_store_guard()?;
+        let context = store.resolve_workflow_run_attribution_context(
+            WorkflowRunAttributionResolveRequest {
+                credential: request.credential,
+                client_session_id,
+                bucket_selection: request.bucket_selection,
+            },
+        )?;
+        Ok(WorkflowExecutionSessionAttributionContext {
+            client_id: context.client_id.as_str().to_string(),
+            client_session_id: context.client_session_id.as_str().to_string(),
+            bucket_id: context.bucket_id.as_str().to_string(),
+        })
+    }
+
     pub async fn create_workflow_execution_session<H: WorkflowHost>(
         &self,
         host: &H,
         request: WorkflowExecutionSessionCreateRequest,
     ) -> Result<WorkflowExecutionSessionCreateResponse, WorkflowServiceError> {
-        validate_workflow_id(&request.workflow_id)?;
-        host.validate_workflow(&request.workflow_id).await?;
+        self.create_workflow_execution_session_internal(
+            host,
+            request.workflow_id,
+            request.usage_profile,
+            request.keep_alive,
+            None,
+        )
+        .await
+    }
+
+    pub async fn create_attributed_workflow_execution_session<H: WorkflowHost>(
+        &self,
+        host: &H,
+        request: WorkflowExecutionSessionAttributedCreateRequest,
+    ) -> Result<WorkflowExecutionSessionCreateResponse, WorkflowServiceError> {
+        let attribution = self.resolve_execution_session_attribution(request.attribution)?;
+        self.create_workflow_execution_session_internal(
+            host,
+            request.workflow_id,
+            request.usage_profile,
+            request.keep_alive,
+            Some(attribution),
+        )
+        .await
+    }
+
+    async fn create_workflow_execution_session_internal<H: WorkflowHost>(
+        &self,
+        host: &H,
+        workflow_id: String,
+        usage_profile: Option<String>,
+        keep_alive: bool,
+        attribution: Option<WorkflowExecutionSessionAttributionContext>,
+    ) -> Result<WorkflowExecutionSessionCreateResponse, WorkflowServiceError> {
+        validate_workflow_id(&workflow_id)?;
+        host.validate_workflow(&workflow_id).await?;
 
         let session_id = {
             let mut store = self.session_store_guard()?;
             store.create_session(
-                request.workflow_id.clone(),
-                request
-                    .usage_profile
+                workflow_id.clone(),
+                usage_profile
                     .clone()
                     .map(|v| v.trim().to_string())
                     .filter(|v| !v.is_empty()),
+                attribution.clone(),
                 Vec::new(),
                 Vec::new(),
-                request.keep_alive,
+                keep_alive,
             )?
         };
 
-        if request.keep_alive {
+        if keep_alive {
             if let Err(error) = self
-                .ensure_keep_alive_session_runtime_ready(host, &session_id, &request.workflow_id)
+                .ensure_keep_alive_session_runtime_ready(host, &session_id, &workflow_id)
                 .await
             {
                 if let Ok(mut rollback_store) = self.session_store.lock() {
@@ -73,6 +129,7 @@ impl WorkflowService {
 
         Ok(WorkflowExecutionSessionCreateResponse {
             session_id,
+            attribution,
             runtime_capabilities: host.runtime_capabilities().await?,
         })
     }
@@ -320,6 +377,9 @@ impl WorkflowService {
                 .clone(),
             workflow_semantic_version: version.semantic_version,
             workflow_execution_fingerprint: version.execution_fingerprint,
+            client_id: session_attribution_client_id(session)?,
+            client_session_id: session_attribution_client_session_id(session)?,
+            bucket_id: session_attribution_bucket_id(session)?,
             workflow_execution_session_id: session.session_id.clone(),
             workflow_execution_session_kind: workflow_execution_session_kind_label(
                 &session.session_kind,
@@ -416,9 +476,9 @@ impl WorkflowService {
                 runtime_version: None,
                 model_id: None,
                 model_version: None,
-                client_id: None,
-                client_session_id: None,
-                bucket_id: None,
+                client_id: snapshot.client_id.clone(),
+                client_session_id: snapshot.client_session_id.clone(),
+                bucket_id: snapshot.bucket_id.clone(),
                 scheduler_policy_id: Some(snapshot.scheduler_policy.clone()),
                 retention_policy_id: Some(snapshot.retention_policy.clone()),
                 privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
@@ -487,9 +547,9 @@ impl WorkflowService {
                 runtime_version: None,
                 model_id: None,
                 model_version: None,
-                client_id: None,
-                client_session_id: None,
-                bucket_id: None,
+                client_id: event_client_id(session, snapshot)?,
+                client_session_id: event_client_session_id(session, snapshot)?,
+                bucket_id: event_bucket_id(session, snapshot)?,
                 scheduler_policy_id: Some(WORKFLOW_SESSION_SCHEDULER_POLICY.to_string()),
                 retention_policy_id: snapshot.map(|snapshot| snapshot.retention_policy.clone()),
                 privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
@@ -549,9 +609,9 @@ impl WorkflowService {
                 runtime_version: None,
                 model_id: None,
                 model_version: None,
-                client_id: None,
-                client_session_id: None,
-                bucket_id: None,
+                client_id: event_client_id(session, snapshot)?,
+                client_session_id: event_client_session_id(session, snapshot)?,
+                bucket_id: event_bucket_id(session, snapshot)?,
                 scheduler_policy_id: Some(WORKFLOW_SESSION_SCHEDULER_POLICY.to_string()),
                 retention_policy_id: snapshot.map(|snapshot| snapshot.retention_policy.clone()),
                 privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
@@ -613,9 +673,9 @@ impl WorkflowService {
                 runtime_version: None,
                 model_id: None,
                 model_version: None,
-                client_id: None,
-                client_session_id: None,
-                bucket_id: None,
+                client_id: event_client_id(session, snapshot)?,
+                client_session_id: event_client_session_id(session, snapshot)?,
+                bucket_id: event_bucket_id(session, snapshot)?,
                 scheduler_policy_id: Some(WORKFLOW_SESSION_SCHEDULER_POLICY.to_string()),
                 retention_policy_id: snapshot.map(|snapshot| snapshot.retention_policy.clone()),
                 privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
@@ -672,9 +732,9 @@ impl WorkflowService {
                 runtime_version: None,
                 model_id: None,
                 model_version: None,
-                client_id: None,
-                client_session_id: None,
-                bucket_id: None,
+                client_id: event_client_id(session, snapshot)?,
+                client_session_id: event_client_session_id(session, snapshot)?,
+                bucket_id: event_bucket_id(session, snapshot)?,
                 scheduler_policy_id: Some(WORKFLOW_SESSION_SCHEDULER_POLICY.to_string()),
                 retention_policy_id: snapshot.map(|snapshot| snapshot.retention_policy.clone()),
                 privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
@@ -740,9 +800,9 @@ impl WorkflowService {
                 runtime_version: None,
                 model_id: None,
                 model_version: None,
-                client_id: None,
-                client_session_id: None,
-                bucket_id: None,
+                client_id: event_client_id(session, snapshot)?,
+                client_session_id: event_client_session_id(session, snapshot)?,
+                bucket_id: event_bucket_id(session, snapshot)?,
                 scheduler_policy_id: Some(WORKFLOW_SESSION_SCHEDULER_POLICY.to_string()),
                 retention_policy_id: snapshot.map(|snapshot| snapshot.retention_policy.clone()),
                 privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
@@ -790,6 +850,69 @@ fn workflow_id_for_scheduler_event(
         None => {
             WorkflowId::try_from(session.workflow_id.clone()).map_err(WorkflowServiceError::from)
         }
+    }
+}
+
+fn session_attribution_client_id(
+    session: &WorkflowExecutionSessionSummary,
+) -> Result<Option<ClientId>, WorkflowServiceError> {
+    session
+        .attribution
+        .as_ref()
+        .map(|context| ClientId::try_from(context.client_id.clone()))
+        .transpose()
+        .map_err(WorkflowServiceError::from)
+}
+
+fn session_attribution_client_session_id(
+    session: &WorkflowExecutionSessionSummary,
+) -> Result<Option<ClientSessionId>, WorkflowServiceError> {
+    session
+        .attribution
+        .as_ref()
+        .map(|context| ClientSessionId::try_from(context.client_session_id.clone()))
+        .transpose()
+        .map_err(WorkflowServiceError::from)
+}
+
+fn session_attribution_bucket_id(
+    session: &WorkflowExecutionSessionSummary,
+) -> Result<Option<BucketId>, WorkflowServiceError> {
+    session
+        .attribution
+        .as_ref()
+        .map(|context| BucketId::try_from(context.bucket_id.clone()))
+        .transpose()
+        .map_err(WorkflowServiceError::from)
+}
+
+fn event_client_id(
+    session: &WorkflowExecutionSessionSummary,
+    snapshot: Option<&WorkflowRunSnapshotRecord>,
+) -> Result<Option<ClientId>, WorkflowServiceError> {
+    match snapshot.and_then(|snapshot| snapshot.client_id.clone()) {
+        Some(client_id) => Ok(Some(client_id)),
+        None => session_attribution_client_id(session),
+    }
+}
+
+fn event_client_session_id(
+    session: &WorkflowExecutionSessionSummary,
+    snapshot: Option<&WorkflowRunSnapshotRecord>,
+) -> Result<Option<ClientSessionId>, WorkflowServiceError> {
+    match snapshot.and_then(|snapshot| snapshot.client_session_id.clone()) {
+        Some(client_session_id) => Ok(Some(client_session_id)),
+        None => session_attribution_client_session_id(session),
+    }
+}
+
+fn event_bucket_id(
+    session: &WorkflowExecutionSessionSummary,
+    snapshot: Option<&WorkflowRunSnapshotRecord>,
+) -> Result<Option<BucketId>, WorkflowServiceError> {
+    match snapshot.and_then(|snapshot| snapshot.bucket_id.clone()) {
+        Some(bucket_id) => Ok(Some(bucket_id)),
+        None => session_attribution_bucket_id(session),
     }
 }
 

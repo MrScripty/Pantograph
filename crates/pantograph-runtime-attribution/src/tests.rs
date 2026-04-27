@@ -7,8 +7,9 @@ use crate::{
     BucketSelection, ClientRegistrationRequest, ClientRegistrationResponse,
     ClientSessionLifecycleState, ClientSessionOpenRequest, ClientSessionResumeRequest,
     CredentialProofRequest, CredentialSecret, SqliteAttributionStore, WorkflowId,
-    WorkflowPresentationRevisionResolveRequest, WorkflowRunId, WorkflowRunSnapshotRequest,
-    WorkflowRunStartRequest, WorkflowVersionResolveRequest,
+    WorkflowPresentationRevisionResolveRequest, WorkflowRunAttributionResolveRequest,
+    WorkflowRunId, WorkflowRunSnapshotRequest, WorkflowRunStartRequest,
+    WorkflowVersionResolveRequest,
 };
 
 fn register(store: &mut SqliteAttributionStore) -> ClientRegistrationResponse {
@@ -379,6 +380,9 @@ fn workflow_run_snapshot_records_immutable_version_and_queue_context() {
                 .clone(),
             workflow_semantic_version: version.semantic_version.clone(),
             workflow_execution_fingerprint: version.execution_fingerprint.clone(),
+            client_id: None,
+            client_session_id: None,
+            bucket_id: None,
             workflow_execution_session_id: "session-1".to_string(),
             workflow_execution_session_kind: "workflow".to_string(),
             usage_profile: Some("interactive".to_string()),
@@ -437,6 +441,31 @@ fn workflow_run_snapshot_records_immutable_version_and_queue_context() {
 }
 
 #[test]
+fn workflow_run_attribution_context_resolves_valid_session_and_bucket() {
+    let mut store = SqliteAttributionStore::open_in_memory().expect("store");
+    let registered = register(&mut store);
+    let opened = store
+        .open_session(ClientSessionOpenRequest {
+            credential: registered.credential_proof_request(),
+            takeover: false,
+            reason: Some("launch".to_string()),
+        })
+        .expect("open session");
+
+    let context = store
+        .resolve_workflow_run_attribution_context(WorkflowRunAttributionResolveRequest {
+            credential: registered.credential_proof_request(),
+            client_session_id: opened.session.client_session_id.clone(),
+            bucket_selection: BucketSelection::Default,
+        })
+        .expect("resolve attribution context");
+
+    assert_eq!(context.client_id, registered.client.client_id);
+    assert_eq!(context.client_session_id, opened.session.client_session_id);
+    assert_eq!(context.bucket_id, opened.default_bucket.bucket_id);
+}
+
+#[test]
 fn workflow_run_snapshot_rejects_mismatched_version_facts() {
     let mut store = SqliteAttributionStore::open_in_memory().expect("store");
     let version = store
@@ -461,6 +490,9 @@ fn workflow_run_snapshot_rejects_mismatched_version_facts() {
                 .workflow_presentation_revision_id,
             workflow_semantic_version: "1.0.0".to_string(),
             workflow_execution_fingerprint: "workflow-exec-blake3:def".to_string(),
+            client_id: None,
+            client_session_id: None,
+            bucket_id: None,
             workflow_execution_session_id: "session-1".to_string(),
             workflow_execution_session_kind: "workflow".to_string(),
             usage_profile: None,
@@ -516,6 +548,9 @@ fn workflow_run_snapshot_rejects_mismatched_presentation_revision() {
                 .workflow_presentation_revision_id,
             workflow_semantic_version: version.semantic_version,
             workflow_execution_fingerprint: version.execution_fingerprint,
+            client_id: None,
+            client_session_id: None,
+            bucket_id: None,
             workflow_execution_session_id: "session-1".to_string(),
             workflow_execution_session_kind: "workflow".to_string(),
             usage_profile: None,

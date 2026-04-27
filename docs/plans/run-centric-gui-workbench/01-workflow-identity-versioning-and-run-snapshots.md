@@ -212,10 +212,10 @@ workflow version and run context.
 
 - [x] Update run submission path to resolve or create workflow version before
   queue insertion.
-- [ ] Attach run snapshot fields for model/runtime choices, graph settings,
+- [x] Attach run snapshot fields for model/runtime choices, graph settings,
   scheduler policy, retention policy, session, bucket, and immutable input
   references.
-- [ ] Make run snapshot id, workflow version id, node version set, client,
+- [x] Make run snapshot id, workflow version id, node version set, client,
   session, bucket, and policy ids available to typed diagnostic event builders.
 - [ ] Make update-before-execution behavior explicit: cancel and resubmit.
 - [ ] Preserve scoped client cancellation rules from existing attribution work.
@@ -238,8 +238,12 @@ typed `run.snapshot_accepted` diagnostic event when a diagnostics ledger is
 configured, carrying the snapshot id, workflow version id, semantic version,
 presentation revision id, scheduler policy id, and retention policy id.
 That event now also carries a bounded node-version set with node id, node type,
-contract version, and behavior digest for each executable node. Remaining work
-is to add client/bucket correlation to the queued workflow-service path.
+contract version, and behavior digest for each executable node. Attributed
+workflow execution sessions now validate caller credential, client session, and
+bucket through the attribution store; queued run snapshots and typed
+`scheduler.*`/`run.*` events inherit the validated client, session, and bucket
+ids. Remaining work is to make cancel/resubmit behavior and scoped cancellation
+rules explicit in the public control APIs.
 
 ### Milestone 4: Diagnostics And Graph Consumers
 
@@ -378,20 +382,28 @@ records for the same execution fingerprint.
   `node_versions` from executable topology before scheduler admission so
   event consumers can audit node ids, node types, contract versions, and
   behavior digests without reading mutable graph state.
+- 2026-04-27: Added attributed workflow execution session creation. The
+  workflow service validates credential, client-session, and bucket ownership
+  through `pantograph-runtime-attribution`, stores the resulting attribution
+  context on the execution session, persists it into immutable run snapshots,
+  and carries it into typed scheduler/run diagnostic events.
 
 ### Deviations
 
-- The first run-snapshot storage contract captures the queue/session fields
-  available today. Client and bucket fields still need to be filled during
-  queue cutover.
+- Scheduler-owned queued runs still use the workflow-service queue id as the
+  canonical run id. The existing attribution `start_workflow_run` path remains
+  a separate direct-start record path because it marks runs as running and
+  generates its own id; a future queue-reservation command is needed before
+  `workflow_runs` can be the single record for queued and running states.
 - Workflow-version registry ownership is implemented in the attribution store
   without a standalone ADR. The choice is documented here and in crate READMEs
   because the registry must share the future run snapshot transaction boundary.
 
 ### Follow-Ups
 
-- Fill remaining run snapshot fields for client/bucket attribution and event
-  correlation.
+- Define a queue-reservation attribution command if Stage `02` control work
+  needs `workflow_runs` rows for queued/future runs in addition to immutable
+  run snapshots.
 - Replace legacy graph-fingerprint timing facets with typed event-ledger
   projections in Stage `03`.
 
@@ -490,6 +502,16 @@ records for the same execution fingerprint.
 - 2026-04-27: `cargo test -p pantograph-diagnostics-ledger` and
   `cargo test -p pantograph-workflow-service` passed for the same node
   contract diagnostics filter slice.
+- 2026-04-27: `cargo test -p pantograph-runtime-attribution -p
+  pantograph-workflow-service --lib` passed after adding attributed execution
+  session creation, client/session/bucket fields on run snapshots, and typed
+  event correlation.
+- 2026-04-27: `cargo check -p pantograph-frontend-http-adapter -p
+  pantograph_rustler -p pantograph-uniffi -p pantograph-embedded-runtime -p
+  pantograph-workflow-service` and `cargo test -p pantograph-workflow-service`
+  passed after updating downstream session-summary fixtures.
+- 2026-04-27: `cargo fmt --all -- --check` and `git diff --check` passed for
+  the attributed execution-session slice.
 
 ### Traceability Links
 

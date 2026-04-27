@@ -14,7 +14,7 @@ use crate::sqlite_rows::{
 };
 use crate::util::{credential_digest, now_ms};
 use crate::{
-    AttributionError, AttributionRepository, BucketCreateRequest, BucketDeleteRequest,
+    AttributionError, AttributionRepository, BucketCreateRequest, BucketDeleteRequest, BucketId,
     BucketRecord, BucketSelection, ClientCredential, ClientCredentialId, ClientCredentialStatus,
     ClientId, ClientRegistrationRequest, ClientRegistrationResponse,
     ClientSessionDisconnectRequest, ClientSessionExpireRequest, ClientSessionId,
@@ -22,9 +22,10 @@ use crate::{
     ClientSessionRecord, ClientSessionResumeRequest, ClientStatus, CredentialProofRequest,
     CredentialSecret, DefaultBucketAssignment, SessionLifecycleRecord,
     WorkflowPresentationRevisionRecord, WorkflowPresentationRevisionResolveRequest,
-    WorkflowRunRecord, WorkflowRunSnapshotRecord, WorkflowRunSnapshotRequest,
-    WorkflowRunStartRequest, WorkflowRunStatus, WorkflowRunVersionProjection,
-    WorkflowVersionRecord, WorkflowVersionResolveRequest,
+    WorkflowRunAttributionContext, WorkflowRunAttributionResolveRequest, WorkflowRunRecord,
+    WorkflowRunSnapshotRecord, WorkflowRunSnapshotRequest, WorkflowRunStartRequest,
+    WorkflowRunStatus, WorkflowRunVersionProjection, WorkflowVersionRecord,
+    WorkflowVersionResolveRequest,
 };
 
 const MAX_SEMANTIC_VERSION_LEN: usize = 64;
@@ -123,6 +124,41 @@ impl SqliteAttributionStore {
             workflow_version,
             presentation_revision,
         }))
+    }
+
+    pub fn resolve_workflow_run_attribution_context(
+        &self,
+        request: WorkflowRunAttributionResolveRequest,
+    ) -> Result<WorkflowRunAttributionContext, AttributionError> {
+        let credential = self.verify_credential(&request.credential)?;
+        let session = fetch_session(&self.conn, &request.client_session_id)?;
+        if session.client_id != credential.client_id {
+            return Err(AttributionError::SessionClientMismatch);
+        }
+        if !session.latest_lifecycle_state.is_active() {
+            return Err(AttributionError::SessionNotActive {
+                state: session.latest_lifecycle_state,
+            });
+        }
+
+        let bucket = match request.bucket_selection {
+            BucketSelection::Default => {
+                default_bucket_for_session(&self.conn, &session.client_session_id)?
+            }
+            BucketSelection::Explicit(bucket_id) => fetch_bucket(&self.conn, &bucket_id)?,
+        };
+        if bucket.client_id != session.client_id {
+            return Err(AttributionError::BucketClientMismatch);
+        }
+        if bucket.deleted_at_ms.is_some() {
+            return Err(AttributionError::NotFound { entity: "bucket" });
+        }
+
+        Ok(WorkflowRunAttributionContext {
+            client_id: session.client_id,
+            client_session_id: session.client_session_id,
+            bucket_id: bucket.bucket_id,
+        })
     }
 }
 
@@ -738,12 +774,13 @@ impl AttributionRepository for SqliteAttributionStore {
             "INSERT INTO workflow_run_snapshots
                 (workflow_run_snapshot_id, workflow_run_id, workflow_id, workflow_version_id,
                  workflow_presentation_revision_id, workflow_semantic_version,
-                 workflow_execution_fingerprint, workflow_execution_session_id,
+                 workflow_execution_fingerprint, client_id, client_session_id, bucket_id,
+                 workflow_execution_session_id,
                  workflow_execution_session_kind, usage_profile, keep_alive, retention_policy,
                  scheduler_policy, priority, timeout_ms, inputs_json, output_targets_json,
                  override_selection_json, graph_settings_json, runtime_requirements_json,
                  capability_models_json, runtime_capabilities_json, created_at_ms)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26)",
             params![
                 workflow_run_snapshot_id.as_str(),
                 request.workflow_run_id.as_str(),
@@ -752,6 +789,12 @@ impl AttributionRepository for SqliteAttributionStore {
                 request.workflow_presentation_revision_id.as_str(),
                 workflow_semantic_version.as_str(),
                 workflow_execution_fingerprint.as_str(),
+                request.client_id.as_ref().map(ClientId::as_str),
+                request
+                    .client_session_id
+                    .as_ref()
+                    .map(ClientSessionId::as_str),
+                request.bucket_id.as_ref().map(BucketId::as_str),
                 workflow_execution_session_id.as_str(),
                 workflow_execution_session_kind.as_str(),
                 usage_profile.as_deref(),
@@ -780,6 +823,9 @@ impl AttributionRepository for SqliteAttributionStore {
             workflow_presentation_revision_id: request.workflow_presentation_revision_id,
             workflow_semantic_version,
             workflow_execution_fingerprint,
+            client_id: request.client_id,
+            client_session_id: request.client_session_id,
+            bucket_id: request.bucket_id,
             workflow_execution_session_id,
             workflow_execution_session_kind,
             usage_profile,
@@ -935,7 +981,8 @@ fn workflow_run_snapshot_by_run_id(
     let mut stmt = conn.prepare(
         "SELECT workflow_run_snapshot_id, workflow_run_id, workflow_id, workflow_version_id,
                 workflow_presentation_revision_id, workflow_semantic_version,
-                workflow_execution_fingerprint, workflow_execution_session_id,
+                workflow_execution_fingerprint, client_id, client_session_id, bucket_id,
+                workflow_execution_session_id,
                 workflow_execution_session_kind, usage_profile, keep_alive, retention_policy,
                 scheduler_policy, priority, timeout_ms, inputs_json, output_targets_json,
                 override_selection_json, graph_settings_json, runtime_requirements_json,
@@ -956,7 +1003,7 @@ fn workflow_run_snapshot_from_row(
     row: &rusqlite::Row<'_>,
 ) -> rusqlite::Result<WorkflowRunSnapshotRecord> {
     let timeout_ms = row
-        .get::<_, Option<i64>>(14)?
+        .get::<_, Option<i64>>(17)?
         .map(|value| u64::try_from(value).unwrap_or(u64::MAX));
     Ok(WorkflowRunSnapshotRecord {
         workflow_run_snapshot_id: row
@@ -972,22 +1019,37 @@ fn workflow_run_snapshot_from_row(
             .and_then(parse_workflow_presentation_revision_id)?,
         workflow_semantic_version: row.get(5)?,
         workflow_execution_fingerprint: row.get(6)?,
-        workflow_execution_session_id: row.get(7)?,
-        workflow_execution_session_kind: row.get(8)?,
-        usage_profile: row.get(9)?,
-        keep_alive: row.get(10)?,
-        retention_policy: row.get(11)?,
-        scheduler_policy: row.get(12)?,
-        priority: row.get(13)?,
+        client_id: row
+            .get::<_, Option<String>>(7)?
+            .map(ClientId::try_from)
+            .transpose()
+            .map_err(crate::sqlite_rows::sqlite_conversion_error)?,
+        client_session_id: row
+            .get::<_, Option<String>>(8)?
+            .map(ClientSessionId::try_from)
+            .transpose()
+            .map_err(crate::sqlite_rows::sqlite_conversion_error)?,
+        bucket_id: row
+            .get::<_, Option<String>>(9)?
+            .map(BucketId::try_from)
+            .transpose()
+            .map_err(crate::sqlite_rows::sqlite_conversion_error)?,
+        workflow_execution_session_id: row.get(10)?,
+        workflow_execution_session_kind: row.get(11)?,
+        usage_profile: row.get(12)?,
+        keep_alive: row.get(13)?,
+        retention_policy: row.get(14)?,
+        scheduler_policy: row.get(15)?,
+        priority: row.get(16)?,
         timeout_ms,
-        inputs_json: row.get(15)?,
-        output_targets_json: row.get(16)?,
-        override_selection_json: row.get(17)?,
-        graph_settings_json: row.get(18)?,
-        runtime_requirements_json: row.get(19)?,
-        capability_models_json: row.get(20)?,
-        runtime_capabilities_json: row.get(21)?,
-        created_at_ms: row.get(22)?,
+        inputs_json: row.get(18)?,
+        output_targets_json: row.get(19)?,
+        override_selection_json: row.get(20)?,
+        graph_settings_json: row.get(21)?,
+        runtime_requirements_json: row.get(22)?,
+        capability_models_json: row.get(23)?,
+        runtime_capabilities_json: row.get(24)?,
+        created_at_ms: row.get(25)?,
     })
 }
 

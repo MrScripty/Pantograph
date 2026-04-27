@@ -494,6 +494,112 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
 }
 
 #[tokio::test]
+async fn attributed_workflow_execution_session_carries_client_bucket_into_run_events() {
+    let host = MockWorkflowHost::new(8, 1024);
+    let service = WorkflowService::with_max_sessions(2)
+        .with_attribution_store(SqliteAttributionStore::open_in_memory().expect("store"))
+        .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"));
+    let registered = service
+        .register_attribution_client(ClientRegistrationRequest {
+            display_name: Some("local gui".to_string()),
+            metadata_json: None,
+        })
+        .expect("register client");
+    let opened = service
+        .open_client_session(ClientSessionOpenRequest {
+            credential: registered.credential_proof_request(),
+            takeover: false,
+            reason: Some("launch".to_string()),
+        })
+        .expect("open client session");
+
+    let created = service
+        .create_attributed_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionAttributedCreateRequest {
+                workflow_id: "wf-attributed".to_string(),
+                usage_profile: Some("developer".to_string()),
+                keep_alive: false,
+                attribution: WorkflowExecutionSessionAttributionRequest {
+                    credential: registered.credential_proof_request(),
+                    client_session_id: opened.session.client_session_id.as_str().to_string(),
+                    bucket_selection: BucketSelection::Default,
+                },
+            },
+        )
+        .await
+        .expect("create attributed session");
+
+    assert_eq!(
+        created
+            .attribution
+            .as_ref()
+            .map(|context| context.client_id.as_str()),
+        Some(registered.client.client_id.as_str())
+    );
+    assert_eq!(
+        created
+            .attribution
+            .as_ref()
+            .map(|context| context.bucket_id.as_str()),
+        Some(opened.default_bucket.bucket_id.as_str())
+    );
+
+    let response = service
+        .run_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionRunRequest {
+                session_id: created.session_id.clone(),
+                workflow_semantic_version: "1.2.3".to_string(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("attributed"),
+                }],
+                output_targets: Some(vec![WorkflowOutputTarget {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                }]),
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+            },
+        )
+        .await
+        .expect("run attributed session");
+
+    let snapshot = service
+        .workflow_run_snapshot(&response.workflow_run_id)
+        .expect("query snapshot")
+        .expect("snapshot");
+    assert_eq!(
+        snapshot.client_id,
+        Some(registered.client.client_id.clone())
+    );
+    assert_eq!(
+        snapshot.client_session_id,
+        Some(opened.session.client_session_id.clone())
+    );
+    assert_eq!(snapshot.bucket_id, Some(opened.default_bucket.bucket_id));
+
+    let diagnostic_events = {
+        let ledger = service
+            .diagnostics_ledger_guard()
+            .expect("diagnostics ledger");
+        pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::diagnostic_events_after(
+            &*ledger, 0, 10,
+        )
+        .expect("diagnostic events")
+    };
+    assert!(diagnostic_events
+        .iter()
+        .all(|event| event.client_id.as_ref() == Some(&registered.client.client_id)));
+    assert!(diagnostic_events
+        .iter()
+        .all(|event| event.client_session_id.as_ref() == Some(&opened.session.client_session_id)));
+}
+
+#[tokio::test]
 async fn keep_alive_session_loads_runtime_with_keep_alive_retention_hint() {
     let retention_hints = Arc::new(Mutex::new(Vec::new()));
     let host = RecordingRuntimeHost::new(retention_hints.clone());

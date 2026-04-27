@@ -33,6 +33,9 @@ verification, bucket lineage, or one-active-session enforcement.
   revision, execution fingerprint, queue/session context, input references,
   output targets, override selection, graph settings, and model/runtime
   capability facts that existed when the run was submitted.
+- Workflow-run attribution contexts validate credential, client session, and
+  bucket ownership before queued workflow-service snapshots attach client,
+  session, and bucket ids.
 - This crate must not depend on GUI, binding, adapter, or runtime execution
   crates.
 
@@ -56,7 +59,8 @@ paths.
 ## Invariants
 - Every active client session has exactly one default bucket assignment.
 - At most one active session exists per client.
-- Every workflow run points to one client, one client session, and one bucket.
+- Every attributed workflow run points to one client, one client session, and
+  one bucket.
 - Each `(workflow_id, semantic_version)` maps to exactly one execution
   fingerprint, and each `(workflow_id, execution_fingerprint)` maps to exactly
   one semantic version.
@@ -74,7 +78,10 @@ paths.
 - Bindings require generated DTOs for attribution records.
 
 ## Dependencies
-**Internal:** None.
+**Internal:** None. Reason: attribution must stay dependency-light and usable
+from workflow-service, diagnostics, and adapters without creating a reverse
+runtime dependency. Revisit trigger: another internal crate becomes the shared
+owner for credential, session, and bucket validation.
 
 **External:** `rusqlite` for local durable persistence, `blake3` for digesting
 high-entropy bearer credentials, `uuid` for backend-generated ids and
@@ -86,6 +93,10 @@ and `thiserror` for typed errors.
 - `docs/adr/ADR-013-workflow-version-registry-and-run-snapshots.md`
 
 ## Usage Examples
+Reason: examples show optional fields as `None` because callers should pass
+only explicitly known metadata into attribution records. Revisit trigger:
+generated bindings replace these hand-written Rust examples.
+
 ```rust
 use pantograph_runtime_attribution::{
     ClientRegistrationRequest, ClientSessionOpenRequest, SqliteAttributionStore,
@@ -114,10 +125,14 @@ assert_eq!(opened.session.client_id, registered.client.client_id);
 - Resolve workflow presentation revisions only after the referenced workflow
   execution version exists, and treat fingerprint/payload disagreement as a
   hard contract conflict.
-- Use returned `WorkflowRunRecord` values as the trusted execution attribution.
+- Use returned `WorkflowRunRecord` values as the trusted execution attribution
+  for directly started runs.
+- Use `WorkflowRunAttributionContext` values as the trusted client/session/
+  bucket lineage for scheduler-owned queued runs that create immutable
+  snapshots before admission.
 
 ## Structured Producer Contract
-- SQLite schema version `6` is the current breaking-cutover schema version.
+- SQLite schema version `7` is the current breaking-cutover schema version.
 - Persisted credential rows contain credential id, client id, salt bytes,
   digest bytes, status, timestamps, and no raw secret.
 - Persisted workflow-version rows contain workflow id, semantic version,
@@ -130,6 +145,9 @@ assert_eq!(opened.session.client_id, registered.client.client_id);
 - Persisted workflow-run snapshot rows are immutable inserts keyed by
   workflow-run id and must agree with the referenced workflow-version and
   workflow-presentation revision rows.
+- Persisted workflow-run snapshot rows may carry validated client, client
+  session, and bucket ids when the workflow-service session was created with
+  attribution context.
 - Persisted workflow-run snapshot context JSON captures graph settings,
   runtime requirements, capability model inventory, and runtime capabilities as
   bounded JSON payloads for later typed projections.

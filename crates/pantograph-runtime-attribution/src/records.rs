@@ -304,6 +304,9 @@ pub struct WorkflowRunSnapshotRecord {
     pub workflow_presentation_revision_id: WorkflowPresentationRevisionId,
     pub workflow_semantic_version: String,
     pub workflow_execution_fingerprint: String,
+    pub client_id: Option<ClientId>,
+    pub client_session_id: Option<ClientSessionId>,
+    pub bucket_id: Option<BucketId>,
     pub workflow_execution_session_id: String,
     pub workflow_execution_session_kind: String,
     pub usage_profile: Option<String>,
@@ -335,6 +338,13 @@ pub struct WorkflowRunAttribution {
     pub client_session_id: ClientSessionId,
     pub bucket_id: BucketId,
     pub workflow_run_id: WorkflowRunId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkflowRunAttributionContext {
+    pub client_id: ClientId,
+    pub client_session_id: ClientSessionId,
+    pub bucket_id: BucketId,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -403,6 +413,13 @@ pub struct WorkflowRunStartRequest {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkflowRunAttributionResolveRequest {
+    pub credential: CredentialProofRequest,
+    pub client_session_id: ClientSessionId,
+    pub bucket_selection: BucketSelection,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkflowVersionResolveRequest {
     pub workflow_id: WorkflowId,
     pub semantic_version: String,
@@ -426,6 +443,9 @@ pub struct WorkflowRunSnapshotRequest {
     pub workflow_presentation_revision_id: WorkflowPresentationRevisionId,
     pub workflow_semantic_version: String,
     pub workflow_execution_fingerprint: String,
+    pub client_id: Option<ClientId>,
+    pub client_session_id: Option<ClientSessionId>,
+    pub bucket_id: Option<BucketId>,
     pub workflow_execution_session_id: String,
     pub workflow_execution_session_kind: String,
     pub usage_profile: Option<String>,

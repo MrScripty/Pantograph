@@ -5,12 +5,12 @@ mod store_admission;
 
 pub(crate) use contracts::scheduler_snapshot_workflow_run_id;
 pub use contracts::{
-    WorkflowExecutionSessionInspectionRequest, WorkflowExecutionSessionInspectionResponse,
-    WorkflowExecutionSessionKeepAliveRequest, WorkflowExecutionSessionKeepAliveResponse,
-    WorkflowExecutionSessionQueueCancelRequest, WorkflowExecutionSessionQueueCancelResponse,
-    WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionQueueItemStatus,
-    WorkflowExecutionSessionQueueListRequest, WorkflowExecutionSessionQueueListResponse,
-    WorkflowExecutionSessionQueueReprioritizeRequest,
+    WorkflowExecutionSessionAttributionContext, WorkflowExecutionSessionInspectionRequest,
+    WorkflowExecutionSessionInspectionResponse, WorkflowExecutionSessionKeepAliveRequest,
+    WorkflowExecutionSessionKeepAliveResponse, WorkflowExecutionSessionQueueCancelRequest,
+    WorkflowExecutionSessionQueueCancelResponse, WorkflowExecutionSessionQueueItem,
+    WorkflowExecutionSessionQueueItemStatus, WorkflowExecutionSessionQueueListRequest,
+    WorkflowExecutionSessionQueueListResponse, WorkflowExecutionSessionQueueReprioritizeRequest,
     WorkflowExecutionSessionQueueReprioritizeResponse, WorkflowExecutionSessionRetentionHint,
     WorkflowExecutionSessionRuntimeSelectionTarget, WorkflowExecutionSessionRuntimeUnloadCandidate,
     WorkflowExecutionSessionStaleCleanupRequest, WorkflowExecutionSessionStaleCleanupResponse,

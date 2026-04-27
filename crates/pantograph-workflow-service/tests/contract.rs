@@ -499,6 +499,7 @@ fn workflow_scheduler_snapshot_response_contract_snapshot() {
             workflow_id: "wf-1".to_string(),
             session_kind: WorkflowExecutionSessionKind::Workflow,
             usage_profile: Some("interactive".to_string()),
+            attribution: None,
             keep_alive: true,
             state: WorkflowExecutionSessionState::Running,
             queued_runs: 1,

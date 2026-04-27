@@ -72,6 +72,7 @@ fn workflow_trace_store_resets_attempt_state_when_run_restarts_after_failure() {
                 workflow_id: "wf-1".to_string(),
                 session_kind: crate::graph::WorkflowExecutionSessionKind::Workflow,
                 usage_profile: None,
+                attribution: None,
                 keep_alive: false,
                 state: crate::workflow::WorkflowExecutionSessionState::Running,
                 queued_runs: 0,

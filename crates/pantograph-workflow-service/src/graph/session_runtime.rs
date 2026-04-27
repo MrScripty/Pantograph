@@ -51,6 +51,7 @@ impl GraphEditSessionRuntime {
             workflow_id: workflow_id.unwrap_or(session_id).to_string(),
             session_kind: WorkflowExecutionSessionKind::Edit,
             usage_profile: None,
+            attribution: None,
             keep_alive: false,
             state: if self.active_workflow_run_id.is_some() {
                 WorkflowExecutionSessionState::Running

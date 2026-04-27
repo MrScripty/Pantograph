@@ -67,9 +67,9 @@ pub use pantograph_runtime_attribution::{
     ClientSessionOpenResponse, ClientSessionRecord, ClientSessionResumeRequest,
     CredentialProofRequest, CredentialSecret, SqliteAttributionStore,
     WorkflowPresentationRevisionRecord, WorkflowPresentationRevisionResolveRequest,
-    WorkflowRunAttribution, WorkflowRunRecord, WorkflowRunSnapshotRecord,
-    WorkflowRunSnapshotRequest, WorkflowRunVersionProjection, WorkflowVersionRecord,
-    WorkflowVersionResolveRequest,
+    WorkflowRunAttribution, WorkflowRunAttributionContext, WorkflowRunAttributionResolveRequest,
+    WorkflowRunRecord, WorkflowRunSnapshotRecord, WorkflowRunSnapshotRequest,
+    WorkflowRunVersionProjection, WorkflowVersionRecord, WorkflowVersionResolveRequest,
 };
 
 #[cfg(test)]
@@ -79,12 +79,13 @@ use crate::scheduler::unix_timestamp_ms;
 
 pub(crate) use crate::scheduler::scheduler_snapshot_workflow_run_id;
 pub use crate::scheduler::{
-    select_runtime_unload_candidate_by_affinity, WorkflowExecutionSessionInspectionRequest,
-    WorkflowExecutionSessionInspectionResponse, WorkflowExecutionSessionKeepAliveRequest,
-    WorkflowExecutionSessionKeepAliveResponse, WorkflowExecutionSessionQueueCancelRequest,
-    WorkflowExecutionSessionQueueCancelResponse, WorkflowExecutionSessionQueueItem,
-    WorkflowExecutionSessionQueueItemStatus, WorkflowExecutionSessionQueueListRequest,
-    WorkflowExecutionSessionQueueListResponse, WorkflowExecutionSessionQueueReprioritizeRequest,
+    select_runtime_unload_candidate_by_affinity, WorkflowExecutionSessionAttributionContext,
+    WorkflowExecutionSessionInspectionRequest, WorkflowExecutionSessionInspectionResponse,
+    WorkflowExecutionSessionKeepAliveRequest, WorkflowExecutionSessionKeepAliveResponse,
+    WorkflowExecutionSessionQueueCancelRequest, WorkflowExecutionSessionQueueCancelResponse,
+    WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionQueueItemStatus,
+    WorkflowExecutionSessionQueueListRequest, WorkflowExecutionSessionQueueListResponse,
+    WorkflowExecutionSessionQueueReprioritizeRequest,
     WorkflowExecutionSessionQueueReprioritizeResponse, WorkflowExecutionSessionRetentionHint,
     WorkflowExecutionSessionRuntimeSelectionTarget, WorkflowExecutionSessionRuntimeUnloadCandidate,
     WorkflowExecutionSessionStaleCleanupRequest, WorkflowExecutionSessionStaleCleanupResponse,

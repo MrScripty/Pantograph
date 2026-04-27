@@ -77,10 +77,21 @@ pub struct WorkflowExecutionSessionSummary {
     pub session_kind: WorkflowExecutionSessionKind,
     #[serde(default)]
     pub usage_profile: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attribution: Option<WorkflowExecutionSessionAttributionContext>,
     pub keep_alive: bool,
     pub state: WorkflowExecutionSessionState,
     pub queued_runs: usize,
     pub run_count: u64,
+}
+
+/// Validated client/session/bucket context attached to a workflow execution session.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowExecutionSessionAttributionContext {
+    pub client_id: String,
+    pub client_session_id: String,
+    pub bucket_id: String,
 }
 
 /// Session status request.

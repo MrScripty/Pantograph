@@ -9,8 +9,9 @@ use crate::workflow::{
 };
 
 use super::{
-    WorkflowExecutionSessionRuntimeUnloadCandidate, WorkflowExecutionSessionState,
-    WorkflowExecutionSessionSummary, WorkflowSchedulerDecisionReason,
+    WorkflowExecutionSessionAttributionContext, WorkflowExecutionSessionRuntimeUnloadCandidate,
+    WorkflowExecutionSessionState, WorkflowExecutionSessionSummary,
+    WorkflowSchedulerDecisionReason,
 };
 
 pub(crate) const WORKFLOW_SESSION_QUEUE_POLL_MS: u64 = 10;
@@ -60,6 +61,7 @@ pub(crate) struct WorkflowExecutionSessionPreflightCache {
 pub(crate) struct WorkflowExecutionSessionRecord {
     pub(crate) workflow_id: String,
     pub(crate) usage_profile: Option<String>,
+    pub(crate) attribution: Option<WorkflowExecutionSessionAttributionContext>,
     pub(crate) required_backends: Vec<String>,
     pub(crate) required_models: Vec<String>,
     pub(crate) keep_alive: bool,
@@ -143,6 +145,7 @@ impl WorkflowExecutionSessionStore {
         &mut self,
         workflow_id: String,
         usage_profile: Option<String>,
+        attribution: Option<WorkflowExecutionSessionAttributionContext>,
         required_backends: Vec<String>,
         required_models: Vec<String>,
         keep_alive: bool,
@@ -160,6 +163,7 @@ impl WorkflowExecutionSessionStore {
         let state = WorkflowExecutionSessionRecord {
             workflow_id,
             usage_profile,
+            attribution,
             required_backends: normalize_affinity_values(required_backends),
             required_models: normalize_affinity_values(required_models),
             keep_alive,
@@ -271,6 +275,7 @@ impl WorkflowExecutionSessionStore {
             workflow_id: state.workflow_id.clone(),
             session_kind: WorkflowExecutionSessionKind::Workflow,
             usage_profile: state.usage_profile.clone(),
+            attribution: state.attribution.clone(),
             keep_alive: state.keep_alive,
             state: session_state_from_record(state),
             queued_runs: state.queue.len(),

@@ -36,6 +36,15 @@ context such as graph settings, runtime requirements, capability model
 inventory, runtime capabilities, inputs, output targets, override selection,
 scheduler policy, retention policy, and execution-session facts.
 
+Attributed workflow execution sessions resolve a validated client/session/
+bucket context through `pantograph-runtime-attribution` before queue
+submission. The workflow-service queue owns the submitted run id, so the
+validated attribution context is copied into the immutable run snapshot and
+typed scheduler/run diagnostic events. The existing attribution
+`start_workflow_run` command remains a direct-start path because it generates
+its own run id and marks the run as running, which is not suitable for queued
+or future scheduler states.
+
 The backend does not infer semantic-version intent. If semantic version and
 fingerprint mappings disagree, the request is rejected.
 
@@ -54,9 +63,9 @@ fingerprint mappings disagree, the request is rejected.
 - Schema changes are breaking during the no-legacy cutover.
 - Queue submission must resolve version and presentation records before
   scheduler admission, which adds storage work to the submission path.
-- Client/bucket attribution still needs a workflow-service submission boundary
-  before queued GUI/API runs can carry the same actor facts as lower-level
-  attribution-started runs.
+- A future attribution queue-reservation command is still needed if
+  `workflow_runs` rows must represent queued/future runs instead of relying on
+  immutable run snapshots plus typed diagnostic events.
 
 ### Neutral
 - Legacy `graph_fingerprint` fields may remain as cache/timing facets while
@@ -76,6 +85,8 @@ fingerprint mappings disagree, the request is rejected.
 - Presentation revisions must reference an existing workflow version.
 - Run snapshots must reject workflow-version or presentation-revision facts
   that do not match the referenced workflow id/version.
+- Run snapshots must only carry client/session/bucket ids that came from a
+  validated attribution context, not caller-authored plain ids.
 - Queued runs must be changed by cancel-and-resubmit, not by mutating a queued
   snapshot.
 

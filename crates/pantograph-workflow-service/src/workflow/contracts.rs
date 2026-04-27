@@ -3,12 +3,13 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use pantograph_diagnostics_ledger::DiagnosticsLedgerError;
-use pantograph_runtime_attribution::AttributionError;
+use pantograph_runtime_attribution::{AttributionError, BucketSelection, CredentialProofRequest};
 
 use crate::graph::{
     WorkflowExecutableTopology, WorkflowGraph, WorkflowGraphRunSettings,
     WorkflowPresentationMetadata,
 };
+use crate::scheduler::WorkflowExecutionSessionAttributionContext;
 use crate::technical_fit::{WorkflowTechnicalFitDecision, WorkflowTechnicalFitOverride};
 
 /// Node/port value binding used for workflow inputs and outputs.
@@ -488,11 +489,35 @@ pub struct WorkflowExecutionSessionCreateRequest {
     pub keep_alive: bool,
 }
 
+/// Verified client attribution supplied when creating an execution session.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowExecutionSessionAttributionRequest {
+    pub credential: CredentialProofRequest,
+    pub client_session_id: String,
+    pub bucket_selection: BucketSelection,
+}
+
+/// Session creation request that binds future queued runs to a client session
+/// and bucket after backend credential validation.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowExecutionSessionAttributedCreateRequest {
+    pub workflow_id: String,
+    #[serde(default)]
+    pub usage_profile: Option<String>,
+    #[serde(default)]
+    pub keep_alive: bool,
+    pub attribution: WorkflowExecutionSessionAttributionRequest,
+}
+
 /// Session creation response.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowExecutionSessionCreateResponse {
     pub session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attribution: Option<WorkflowExecutionSessionAttributionContext>,
     #[serde(default)]
     pub runtime_capabilities: Vec<WorkflowRuntimeCapability>,
 }

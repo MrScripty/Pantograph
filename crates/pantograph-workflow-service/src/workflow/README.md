@@ -102,6 +102,10 @@ runtime readiness, session-runtime workflows, and the root facade test module.
   and, when attribution storage is configured, records the immutable workflow
   version/run snapshot and emits a `run.snapshot_accepted` event with the node
   behavior-version set before handing the run to scheduler admission.
+- Attributed session creation validates the caller credential, client session,
+  and bucket through `pantograph-runtime-attribution`; queued run snapshots and
+  scheduler/run diagnostic events inherit those validated ids instead of
+  trusting caller-authored client fields.
 - Session lifecycle APIs keep cleanup, keep-alive, and close-session behavior
   together so runtime unload side effects remain visible in one helper.
 - Session queue inspection and scheduler snapshot APIs stay behind the public

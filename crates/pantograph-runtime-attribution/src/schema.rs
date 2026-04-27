@@ -3,7 +3,7 @@ use rusqlite::{params, Connection, OptionalExtension, Transaction};
 
 use crate::AttributionError;
 
-pub(crate) const SCHEMA_VERSION: i64 = 6;
+pub(crate) const SCHEMA_VERSION: i64 = 7;
 
 pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), AttributionError> {
     tx.execute_batch(
@@ -129,6 +129,9 @@ pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), AttributionError>
             workflow_presentation_revision_id TEXT NOT NULL REFERENCES workflow_presentation_revisions(workflow_presentation_revision_id),
             workflow_semantic_version TEXT NOT NULL,
             workflow_execution_fingerprint TEXT NOT NULL,
+            client_id TEXT REFERENCES clients(client_id),
+            client_session_id TEXT REFERENCES client_sessions(client_session_id),
+            bucket_id TEXT REFERENCES buckets(bucket_id),
             workflow_execution_session_id TEXT NOT NULL,
             workflow_execution_session_kind TEXT NOT NULL,
             usage_profile TEXT,
@@ -150,6 +153,12 @@ pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), AttributionError>
             ON workflow_run_snapshots(workflow_version_id, created_at_ms);
         CREATE INDEX idx_workflow_run_snapshots_presentation_revision
             ON workflow_run_snapshots(workflow_presentation_revision_id, created_at_ms);
+        CREATE INDEX idx_workflow_run_snapshots_client
+            ON workflow_run_snapshots(client_id, created_at_ms);
+        CREATE INDEX idx_workflow_run_snapshots_session
+            ON workflow_run_snapshots(client_session_id, created_at_ms);
+        CREATE INDEX idx_workflow_run_snapshots_bucket
+            ON workflow_run_snapshots(bucket_id, created_at_ms);
         "#,
     )?;
     tx.execute(

@@ -25,9 +25,10 @@ pub use records::{
     ClientSessionRecord, ClientSessionResumeRequest, ClientStatus, CredentialProofRequest,
     CredentialSecret, DefaultBucketAssignment, SessionLifecycleRecord,
     WorkflowPresentationRevisionRecord, WorkflowPresentationRevisionResolveRequest,
-    WorkflowRunAttribution, WorkflowRunRecord, WorkflowRunSnapshotRecord,
-    WorkflowRunSnapshotRequest, WorkflowRunStartRequest, WorkflowRunStatus,
-    WorkflowRunVersionProjection, WorkflowVersionRecord, WorkflowVersionResolveRequest,
+    WorkflowRunAttribution, WorkflowRunAttributionContext, WorkflowRunAttributionResolveRequest,
+    WorkflowRunRecord, WorkflowRunSnapshotRecord, WorkflowRunSnapshotRequest,
+    WorkflowRunStartRequest, WorkflowRunStatus, WorkflowRunVersionProjection,
+    WorkflowVersionRecord, WorkflowVersionResolveRequest,
 };
 pub use repository::AttributionRepository;
 pub use sqlite::SqliteAttributionStore;
