@@ -3,7 +3,7 @@ use std::time::Duration;
 use pantograph_diagnostics_ledger::{
     DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
     DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
-    RunSnapshotAcceptedPayload, SchedulerQueuePlacementPayload,
+    RunSnapshotAcceptedPayload, SchedulerEstimateProducedPayload, SchedulerQueuePlacementPayload,
 };
 use pantograph_runtime_attribution::{
     WorkflowId, WorkflowRunId, WorkflowRunSnapshotRecord, WorkflowRunSnapshotRequest,
@@ -12,7 +12,7 @@ use pantograph_runtime_attribution::{
 use crate::graph::{
     workflow_graph_run_settings, workflow_graph_run_settings_json, WorkflowExecutionSessionKind,
 };
-use crate::scheduler::WORKFLOW_SESSION_QUEUE_POLL_MS;
+use crate::scheduler::{unix_timestamp_ms, WORKFLOW_SESSION_QUEUE_POLL_MS};
 use crate::technical_fit::WorkflowTechnicalFitOverride;
 
 use super::validation::{
@@ -114,12 +114,22 @@ impl WorkflowService {
                     ))
                 })?
         };
-        if let Err(error) = self.record_scheduler_queue_placement_event_if_configured(
-            &session,
-            run_snapshot.as_ref(),
-            &queued_item,
-            &request,
-        ) {
+        if let Err(error) = self
+            .record_scheduler_estimate_event_if_configured(
+                &session,
+                run_snapshot.as_ref(),
+                &queued_item,
+                &request,
+            )
+            .and_then(|_| {
+                self.record_scheduler_queue_placement_event_if_configured(
+                    &session,
+                    run_snapshot.as_ref(),
+                    &queued_item,
+                    &request,
+                )
+            })
+        {
             if let Ok(mut store) = self.session_store.lock() {
                 let _ = store.cancel_queue_item(&session_id, &workflow_run_id);
             }
@@ -376,6 +386,75 @@ impl WorkflowService {
         .map_err(WorkflowServiceError::from)
     }
 
+    fn record_scheduler_estimate_event_if_configured(
+        &self,
+        session: &WorkflowExecutionSessionSummary,
+        snapshot: Option<&WorkflowRunSnapshotRecord>,
+        queued_item: &WorkflowExecutionSessionQueueItem,
+        request: &WorkflowExecutionSessionRunRequest,
+    ) -> Result<(), WorkflowServiceError> {
+        let Some(ledger) = self.diagnostics_ledger.as_ref() else {
+            return Ok(());
+        };
+        let queue_position = queue_position_u32(queued_item)?;
+        let workflow_run_id = WorkflowRunId::try_from(queued_item.workflow_run_id.clone())?;
+        let workflow_id = workflow_id_for_scheduler_event(session, snapshot)?;
+        let reason = if queue_position == 0 {
+            "next admission candidate pending runtime readiness".to_string()
+        } else {
+            format!("{queue_position} run(s) ahead in session queue")
+        };
+
+        let mut ledger = ledger.lock().map_err(|_| {
+            WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
+        })?;
+        DiagnosticsLedgerRepository::append_diagnostic_event(
+            &mut *ledger,
+            DiagnosticEventAppendRequest {
+                source_component: DiagnosticEventSourceComponent::Scheduler,
+                source_instance_id: Some("workflow-session-scheduler".to_string()),
+                occurred_at_ms: queued_item
+                    .enqueued_at_ms
+                    .map(|value| value as i64)
+                    .unwrap_or_else(|| unix_timestamp_ms() as i64),
+                workflow_run_id: Some(workflow_run_id),
+                workflow_id: Some(workflow_id),
+                workflow_version_id: snapshot.map(|snapshot| snapshot.workflow_version_id.clone()),
+                workflow_semantic_version: Some(
+                    snapshot
+                        .map(|snapshot| snapshot.workflow_semantic_version.clone())
+                        .unwrap_or_else(|| request.workflow_semantic_version.clone()),
+                ),
+                node_id: None,
+                node_type: None,
+                node_version: None,
+                runtime_id: None,
+                runtime_version: None,
+                model_id: None,
+                model_version: None,
+                client_id: None,
+                client_session_id: None,
+                bucket_id: None,
+                scheduler_policy_id: Some(WORKFLOW_SESSION_SCHEDULER_POLICY.to_string()),
+                retention_policy_id: snapshot.map(|snapshot| snapshot.retention_policy.clone()),
+                privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+                retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+                payload_ref: None,
+                payload: DiagnosticEventPayload::SchedulerEstimateProduced(
+                    SchedulerEstimateProducedPayload {
+                        estimate_version: "session-scheduler-v1".to_string(),
+                        confidence: "low".to_string(),
+                        estimated_queue_wait_ms: None,
+                        estimated_duration_ms: None,
+                        reasons: vec![reason],
+                    },
+                ),
+            },
+        )
+        .map(|_| ())
+        .map_err(WorkflowServiceError::from)
+    }
+
     fn record_scheduler_queue_placement_event_if_configured(
         &self,
         session: &WorkflowExecutionSessionSummary,
@@ -386,27 +465,9 @@ impl WorkflowService {
         let Some(ledger) = self.diagnostics_ledger.as_ref() else {
             return Ok(());
         };
+        let queue_position = queue_position_u32(queued_item)?;
         let workflow_run_id = WorkflowRunId::try_from(queued_item.workflow_run_id.clone())?;
-        let workflow_id = match snapshot {
-            Some(snapshot) => snapshot.workflow_id.clone(),
-            None => WorkflowId::try_from(session.workflow_id.clone())?,
-        };
-        let queue_position = queued_item
-            .queue_position
-            .ok_or_else(|| {
-                WorkflowServiceError::Internal(format!(
-                    "queued run '{}' missing queue position",
-                    queued_item.workflow_run_id
-                ))
-            })
-            .and_then(|position| {
-                u32::try_from(position).map_err(|_| {
-                    WorkflowServiceError::Internal(format!(
-                        "queue position '{}' exceeds scheduler event limit",
-                        position
-                    ))
-                })
-            })?;
+        let workflow_id = workflow_id_for_scheduler_event(session, snapshot)?;
         let occurred_at_ms = queued_item.enqueued_at_ms.unwrap_or_default() as i64;
 
         let mut ledger = ledger.lock().map_err(|_| {
@@ -452,6 +513,39 @@ impl WorkflowService {
         )
         .map(|_| ())
         .map_err(WorkflowServiceError::from)
+    }
+}
+
+fn queue_position_u32(
+    queued_item: &WorkflowExecutionSessionQueueItem,
+) -> Result<u32, WorkflowServiceError> {
+    queued_item
+        .queue_position
+        .ok_or_else(|| {
+            WorkflowServiceError::Internal(format!(
+                "queued run '{}' missing queue position",
+                queued_item.workflow_run_id
+            ))
+        })
+        .and_then(|position| {
+            u32::try_from(position).map_err(|_| {
+                WorkflowServiceError::Internal(format!(
+                    "queue position '{}' exceeds scheduler event limit",
+                    position
+                ))
+            })
+        })
+}
+
+fn workflow_id_for_scheduler_event(
+    session: &WorkflowExecutionSessionSummary,
+    snapshot: Option<&WorkflowRunSnapshotRecord>,
+) -> Result<WorkflowId, WorkflowServiceError> {
+    match snapshot {
+        Some(snapshot) => Ok(snapshot.workflow_id.clone()),
+        None => {
+            WorkflowId::try_from(session.workflow_id.clone()).map_err(WorkflowServiceError::from)
+        }
     }
 }
 

@@ -143,10 +143,11 @@ logs or inferred in the frontend.
 - README or ADR updates record storage/ownership decisions.
 
 **Status:** In progress. The shared typed diagnostic event ledger is available
-in `pantograph-diagnostics-ledger`, and the workflow-session scheduler emits a
-first durable `scheduler.queue_placement` event after queue insertion when a
-diagnostics ledger is configured. Estimate DTOs, cache/model state contracts,
-admin/client action vocabulary, and hot projection ownership remain pending.
+in `pantograph-diagnostics-ledger`, and the workflow-session scheduler emits
+durable `scheduler.estimate_produced` and `scheduler.queue_placement` events
+after queue insertion when a diagnostics ledger is configured. Estimate DTOs,
+cache/model state contracts, admin/client action vocabulary, and hot
+projection ownership remain pending.
 
 ### Milestone 2: Estimate Production
 
@@ -168,7 +169,10 @@ admin/client action vocabulary, and hot projection ownership remain pending.
 - Tests cover estimate updates after queue/model/cache state changes.
 - Tests cover sparse-data estimates returning explicit low-confidence state.
 
-**Status:** Not started.
+**Status:** In progress. Queue insertion now records a low-confidence
+submission-time scheduler estimate for the queued run. Rich estimate inputs
+from model metadata, runtime state, local node capacity, diagnostics history,
+cache/model state changes, and missing-asset analysis remain pending.
 
 ### Milestone 3: Scheduler Event Emission And Persistence
 
@@ -207,9 +211,9 @@ scheduler activity.
 - Tests prove Scheduler page projection queries read materialized hot
   projections and do not full-replay all scheduler events.
 
-**Status:** In progress. Queue placement is now persisted through the typed
-event ledger for queued workflow-session runs. Other scheduler events,
-estimate persistence, action/override events, model load/unload events,
+**Status:** In progress. Estimate-produced and queue-placement events are now
+persisted through the typed event ledger for queued workflow-session runs.
+Other scheduler events, action/override events, model load/unload events,
 admission events, and scheduler timeline projections remain pending.
 
 ### Milestone 4: Queue Authority And Admin Controls

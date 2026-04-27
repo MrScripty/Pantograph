@@ -309,7 +309,7 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         )
         .expect("diagnostic events")
     };
-    assert_eq!(diagnostic_events.len(), 2);
+    assert_eq!(diagnostic_events.len(), 3);
     let event = diagnostic_events
         .iter()
         .find(|event| {
@@ -343,6 +343,36 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         .payload_json
         .contains(snapshot.workflow_run_snapshot_id.as_str()));
 
+    let estimate_event = diagnostic_events
+        .iter()
+        .find(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerEstimateProduced
+        })
+        .expect("scheduler estimate event");
+    assert_eq!(
+        estimate_event.source_component,
+        pantograph_diagnostics_ledger::DiagnosticEventSourceComponent::Scheduler
+    );
+    assert!(estimate_event.event_seq > event.event_seq);
+    assert_eq!(
+        estimate_event
+            .workflow_run_id
+            .as_ref()
+            .map(|id| id.as_str()),
+        Some(response.workflow_run_id.as_str())
+    );
+    assert_eq!(
+        estimate_event.scheduler_policy_id.as_deref(),
+        Some("priority_then_fifo")
+    );
+    assert!(estimate_event
+        .payload_json
+        .contains("\"estimate_version\":\"session-scheduler-v1\""));
+    assert!(estimate_event
+        .payload_json
+        .contains("\"confidence\":\"low\""));
+
     let queue_event = diagnostic_events
         .iter()
         .find(|event| {
@@ -362,6 +392,7 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         queue_event.workflow_version_id.as_ref(),
         Some(&snapshot.workflow_version_id)
     );
+    assert!(queue_event.event_seq > estimate_event.event_seq);
     assert_eq!(
         queue_event.scheduler_policy_id.as_deref(),
         Some("priority_then_fifo")
