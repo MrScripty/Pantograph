@@ -23,7 +23,9 @@ later plan stages fill in richer page bodies.
 | `libraryUsagePresenters.test.ts` | Unit coverage for Library page presentation labels and active-run matching. |
 | `runGraphPresenters.ts` | Pure run graph summary, topology table, and SVG snapshot layout presenters. |
 | `runGraphPresenters.test.ts` | Unit coverage for run graph version/topology presentation without editor-store state. |
-| `NetworkPage.svelte` | Local-only system and scheduler status page backed by the local network status API. |
+| `NetworkPage.svelte` | Local-first node capability, scheduler load, disk, network-interface, degradation, and peer status page. |
+| `networkPagePresenters.ts` | Pure Network page byte, transport, degraded metric, scheduler load, and local capability presenters. |
+| `networkPagePresenters.test.ts` | Unit coverage for Network page metric labels and degraded platform states. |
 | `NodeLabPage.svelte` | Reserved Node Editor page for future node authoring workflows. |
 
 ## Problem
@@ -46,6 +48,7 @@ grow separate navigation and selection models.
   or Library mutations.
 - Historic run graph rendering must use immutable run graph projections and
   must not mutate the current editor store.
+- Network pages must distinguish unavailable platform metrics from zero values.
 - Existing graph and diagnostics surfaces must remain usable while ownership
   moves into the workbench shell.
 - Toolbar navigation must use semantic buttons with accessible names.
@@ -79,6 +82,8 @@ triggered by workflow events rather than polling.
 - Diagnostics timeline rows render typed scheduler projection summaries and
   payload availability only; detailed payload parsing belongs in backend
   projections or future typed presenters.
+- Network local-node summaries must render only API-reported local facts and
+  peer records. They must not synthesize future Iroh state.
 - Workbench pages must not consume raw diagnostic ledger events.
 - Reserved pages must not invent backend state; they should display only data
   available through typed services or explicit unavailable states.
@@ -145,5 +150,7 @@ triggered by workflow events rather than polling.
 - Diagnostics fact rows render `RunDetailProjectionRecord` fields, and
   timeline rows render `SchedulerTimelineProjectionRecord` summaries.
 - Network status cards are derived from `WorkflowLocalNetworkStatusQueryResponse`.
+- Network disk and interface rows render reported local metrics and show
+  unavailable states when platform probes do not provide rows.
 - Reserved page unavailable states are not persisted and do not imply backend
   capability flags.

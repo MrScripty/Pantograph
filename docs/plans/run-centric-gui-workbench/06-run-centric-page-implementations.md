@@ -295,13 +295,14 @@ authoring page.
 
 **Tasks:**
 
-- [ ] Show local instance identity, CPU/memory/GPU/disk where available,
-  runtimes, models, current load, active runs, queued work, cache state,
-  capability summary, and scheduler/system events.
-- [ ] Structure Network data so future peer nodes can appear without a page
+- [x] Show local instance identity, CPU/memory/GPU/disk where available,
+  current load, active runs, queued work, and capability summary.
+- [ ] Show runtimes, models, cache state, and scheduler/system events when the
+  local status API exposes those facts.
+- [x] Structure Network data so future peer nodes can appear without a page
   rewrite.
 - [ ] Highlight active-run relevant local node/runtime/model state.
-- [ ] Reserve peer pairing/trust state in the data and page model so future
+- [x] Reserve peer pairing/trust state in the data and page model so future
   Iroh work can add discovered peers, codes/keys, and verification state
   without a page rewrite.
 - [x] Add Node Editor page with clear future/experimental state and no false
@@ -314,11 +315,14 @@ authoring page.
   values.
 - Tests cover Node Editor disabled/future state.
 
-**Status:** Partially complete from Stage `05`. The Network page displays local
-identity, transport state, CPU, memory, and scheduler load through
-`workflowService.queryLocalNetworkStatus`, and the Node Editor page has a
-truthful unavailable state. Peer pairing, active-run runtime/model highlights,
-cache state, and detailed degraded-metric tests remain open.
+**Status:** Partially complete. The Network page displays local identity,
+transport state, CPU, memory, GPU availability/degradation, disks, network
+interfaces, scheduler load/capacity, selected-run context, and future-ready peer
+records through `workflowService.queryLocalNetworkStatus`. The page now treats
+unavailable probes as explicit degraded/unavailable states instead of fake zero
+values. Runtime/model/cache highlights for the selected run remain open because
+the local status API does not yet expose run-keyed residency or cache facts.
+The Node Editor page has a truthful unavailable state.
 
 ## Ownership And Lifecycle Note
 
@@ -368,6 +372,12 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
 - Added `src/components/workbench/diagnosticsPagePresenters.ts` and tests for
   run status classes, duration labels, projection freshness labels, run fact
   rows, typed timeline labels, and payload availability labels.
+- Expanded `src/components/workbench/NetworkPage.svelte` to render local
+  capabilities, degradation warnings, disks, network interfaces, scheduler
+  load/capacity, selected-run context, and future-ready peer records.
+- Added `src/components/workbench/networkPagePresenters.ts` and tests for byte
+  labels, transport labels, degraded CPU/GPU states, scheduler load labels, and
+  local capability rows.
 
 ### Deviations
 
@@ -385,6 +395,9 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
 - The first run diagnostics page renders scheduler timeline summary/detail
   fields and payload availability only. It does not parse `payload_json` because
   richer decision facets should be promoted into typed projection fields.
+- Network selected-run context is visible but not yet linked to runtime/model
+  residency because `WorkflowLocalNetworkStatusQueryResponse` does not expose
+  run-keyed resource placement or cache facts.
 
 ### Follow-Ups
 
@@ -400,6 +413,8 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
 - Add typed diagnostics facet projections for scheduler estimates, selected and
   rejected runtime/device choices, model load/unload decisions, graph settings,
   and mixed-version comparison filters.
+- Add local status fields for runtime/model/cache residency and run-keyed
+  scheduler placement before adding active-run Network highlights.
 
 ### Verification Summary
 
@@ -410,6 +425,8 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
 - `node --experimental-strip-types --test src/components/workbench/runGraphPresenters.test.ts`
   passed.
 - `node --experimental-strip-types --test src/components/workbench/diagnosticsPagePresenters.test.ts`
+  passed.
+- `node --experimental-strip-types --test src/components/workbench/networkPagePresenters.test.ts`
   passed.
 - `npm run test:frontend` passed.
 - `npm run typecheck` passed.
