@@ -197,6 +197,9 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
   through typed ledger events and are materialized into the current artifact
   projection row. Query responses also include retention-state summary counts
   from the same materialized projection.
+- Run-list query responses include comparison facets from backend
+  `run_list_projection` rows for workflow version, status, scheduler policy,
+  and retention policy.
 - Diagnostics: usage diagnostics accept workflow-version and node contract
   version/digest filters so historic comparisons can avoid mixing different
   executable node behavior.

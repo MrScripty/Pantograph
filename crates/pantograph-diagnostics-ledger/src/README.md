@@ -90,6 +90,9 @@ semantics.
 - `run_list_projection` and `run_detail_projection` expose stable scheduler
   estimate and queue-placement facts as typed columns. Payload JSON remains
   audit detail, not the normal GUI data path for those facts.
+- Run-list facet queries group materialized run-list rows by workflow version,
+  status, scheduler policy, and retention policy. They must not derive
+  mixed-version warnings from raw ledger events or client-side page samples.
 - `io_artifact_projection` is read directly by I/O Inspector page/API
   consumers after an explicit incremental drain; normal artifact gallery reads
   do not replay raw event rows or load artifact bodies.

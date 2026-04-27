@@ -13,7 +13,7 @@ use crate::{
     NodeExecutionProjectionStatus, NodeExecutionStatusPayload, NodeStatusProjectionQuery,
     OutputMeasurementUnavailableReason, OutputModality, ProjectionStateUpdate, ProjectionStatus,
     PruneTimingObservationsCommand, PruneUsageEventsCommand, RetentionArtifactStateChangedPayload,
-    RetentionClass, RetentionPolicyChangedPayload, RunDetailProjectionQuery,
+    RetentionClass, RetentionPolicyChangedPayload, RunDetailProjectionQuery, RunListFacetKind,
     RunListProjectionQuery, RunListProjectionStatus, RunSnapshotAcceptedPayload, RunStartedPayload,
     RunTerminalPayload, RunTerminalStatus, SchedulerEstimateProducedPayload,
     SchedulerQueuePlacementPayload, SchedulerTimelineProjectionQuery, SqliteDiagnosticsLedger,
@@ -885,6 +885,51 @@ fn run_list_projection_drains_lifecycle_events_incrementally() {
         })
         .expect("run list retention filter loads");
     assert_eq!(retained.len(), 1);
+
+    let mut second_snapshot = sample_run_snapshot_event("workflow_run_beta");
+    second_snapshot.workflow_version_id =
+        Some(WorkflowVersionId::try_from("wfver_beta".to_string()).unwrap());
+    second_snapshot.workflow_semantic_version = Some("2.0.0".to_string());
+    ledger
+        .append_diagnostic_event(second_snapshot)
+        .expect("second run snapshot event appends");
+    let mut second_terminal = sample_run_terminal_event("workflow_run_beta");
+    second_terminal.workflow_version_id =
+        Some(WorkflowVersionId::try_from("wfver_beta".to_string()).unwrap());
+    second_terminal.workflow_semantic_version = Some("2.0.0".to_string());
+    second_terminal.payload = DiagnosticEventPayload::RunTerminal(RunTerminalPayload {
+        status: RunTerminalStatus::Failed,
+        duration_ms: Some(90),
+        error: Some("runtime failed".to_string()),
+    });
+    ledger
+        .append_diagnostic_event(second_terminal)
+        .expect("second run terminal event appends");
+    ledger
+        .drain_run_list_projection(10)
+        .expect("run list projection drains second run");
+
+    let facets = ledger
+        .query_run_list_facets(RunListProjectionQuery {
+            workflow_id: Some(WorkflowId::try_from("workflow_alpha".to_string()).unwrap()),
+            ..RunListProjectionQuery::default()
+        })
+        .expect("run list facets load");
+    assert!(facets.iter().any(|facet| {
+        facet.facet_kind == RunListFacetKind::WorkflowVersion
+            && facet.facet_value == "1.0.0"
+            && facet.run_count == 1
+    }));
+    assert!(facets.iter().any(|facet| {
+        facet.facet_kind == RunListFacetKind::WorkflowVersion
+            && facet.facet_value == "2.0.0"
+            && facet.run_count == 1
+    }));
+    assert!(facets.iter().any(|facet| {
+        facet.facet_kind == RunListFacetKind::Status
+            && facet.facet_value == "failed"
+            && facet.run_count == 1
+    }));
 }
 
 #[test]

@@ -12,14 +12,15 @@ use crate::event::{
     LibraryUsageProjectionQuery, LibraryUsageProjectionRecord, NodeExecutionProjectionStatus,
     NodeStatusProjectionQuery, NodeStatusProjectionRecord, ProjectionStateRecord,
     ProjectionStateUpdate, ProjectionStatus, RetentionArtifactStateChangedPayload,
-    RunDetailProjectionQuery, RunDetailProjectionRecord, RunListProjectionQuery,
-    RunListProjectionRecord, RunListProjectionStatus, SchedulerTimelineProjectionQuery,
-    SchedulerTimelineProjectionRecord, DIAGNOSTIC_EVENT_SCHEMA_VERSION,
-    IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION, LIBRARY_USAGE_PROJECTION_NAME,
-    LIBRARY_USAGE_PROJECTION_VERSION, MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES,
-    NODE_STATUS_PROJECTION_NAME, NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME,
-    RUN_DETAIL_PROJECTION_VERSION, RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION,
-    SCHEDULER_TIMELINE_PROJECTION_NAME, SCHEDULER_TIMELINE_PROJECTION_VERSION,
+    RunDetailProjectionQuery, RunDetailProjectionRecord, RunListFacetKind, RunListFacetRecord,
+    RunListProjectionQuery, RunListProjectionRecord, RunListProjectionStatus,
+    SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
+    DIAGNOSTIC_EVENT_SCHEMA_VERSION, IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION,
+    LIBRARY_USAGE_PROJECTION_NAME, LIBRARY_USAGE_PROJECTION_VERSION,
+    MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, NODE_STATUS_PROJECTION_NAME,
+    NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION,
+    RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
+    SCHEDULER_TIMELINE_PROJECTION_VERSION,
 };
 use crate::records::MAX_PAGE_SIZE;
 use crate::util::now_ms;
@@ -472,6 +473,89 @@ pub(super) fn query_run_list_projection(
     )?;
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(DiagnosticsLedgerError::from)
+}
+
+pub(super) fn query_run_list_facets(
+    ledger: &SqliteDiagnosticsLedger,
+    query: RunListProjectionQuery,
+) -> Result<Vec<RunListFacetRecord>, DiagnosticsLedgerError> {
+    query.validate(MAX_PAGE_SIZE)?;
+    let mut facets = Vec::new();
+    query_run_list_facet(
+        ledger,
+        &query,
+        RunListFacetKind::WorkflowVersion,
+        "COALESCE(workflow_semantic_version, workflow_version_id, 'Unversioned')",
+        &mut facets,
+    )?;
+    query_run_list_facet(
+        ledger,
+        &query,
+        RunListFacetKind::Status,
+        "status",
+        &mut facets,
+    )?;
+    query_run_list_facet(
+        ledger,
+        &query,
+        RunListFacetKind::SchedulerPolicy,
+        "COALESCE(scheduler_policy_id, 'Unassigned')",
+        &mut facets,
+    )?;
+    query_run_list_facet(
+        ledger,
+        &query,
+        RunListFacetKind::RetentionPolicy,
+        "COALESCE(retention_policy_id, 'Unassigned')",
+        &mut facets,
+    )?;
+    Ok(facets)
+}
+
+fn query_run_list_facet(
+    ledger: &SqliteDiagnosticsLedger,
+    query: &RunListProjectionQuery,
+    facet_kind: RunListFacetKind,
+    expression: &'static str,
+    facets: &mut Vec<RunListFacetRecord>,
+) -> Result<(), DiagnosticsLedgerError> {
+    let sql = format!(
+        "SELECT {expression}, COUNT(*)
+         FROM run_list_projection
+         WHERE (?1 IS NULL OR workflow_id = ?1)
+           AND (?2 IS NULL OR workflow_version_id = ?2)
+           AND (?3 IS NULL OR workflow_semantic_version = ?3)
+           AND (?4 IS NULL OR status = ?4)
+           AND (?5 IS NULL OR scheduler_policy_id = ?5)
+           AND (?6 IS NULL OR retention_policy_id = ?6)
+         GROUP BY {expression}
+         ORDER BY COUNT(*) DESC, {expression}"
+    );
+    let mut stmt = ledger.conn.prepare(&sql)?;
+    let rows = stmt.query_map(
+        params![
+            query.workflow_id.as_ref().map(|id| id.as_str()),
+            query
+                .workflow_version_id
+                .as_ref()
+                .map(|workflow_version_id| workflow_version_id.as_str()),
+            query.workflow_semantic_version.as_deref(),
+            query.status.map(|status| status.as_db()),
+            query.scheduler_policy_id.as_deref(),
+            query.retention_policy_id.as_deref(),
+        ],
+        |row| {
+            Ok(RunListFacetRecord {
+                facet_kind,
+                facet_value: row.get(0)?,
+                run_count: row
+                    .get::<_, i64>(1)
+                    .map(|value| u64::try_from(value).unwrap_or(u64::MAX))?,
+            })
+        },
+    )?;
+    facets.extend(rows.collect::<Result<Vec<_>, _>>()?);
+    Ok(())
 }
 
 pub(super) fn drain_run_detail_projection(

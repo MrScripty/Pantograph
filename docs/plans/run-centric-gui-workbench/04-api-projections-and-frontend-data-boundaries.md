@@ -241,6 +241,10 @@ including payload-reference removal after expiration or deletion. The same API
 response now includes retention-state summary counts from the materialized
 artifact projection so pages can show retention completeness without issuing
 raw ledger scans.
+`workflow_run_list_query` now returns backend-owned comparison facets for
+workflow version, status, scheduler policy, and retention policy from the
+run-list projection. Diagnostics pages use those scoped facets for
+mixed-version warnings instead of rebuilding counts from global page state.
 `workflow_projection_rebuild`
 provides the first explicit admin maintenance boundary for hot projection
 repair and projection-version rebuild scenarios. `workflow_run_graph_query`

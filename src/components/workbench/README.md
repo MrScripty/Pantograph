@@ -90,7 +90,9 @@ triggered by workflow events rather than polling.
   payload availability only; detailed payload parsing belongs in backend
   projections or future typed presenters.
 - Diagnostics comparison facets are derived from selected-run detail and
-  run-list projections. They must not parse diagnostic event payloads.
+  run-list projections, preferring backend-owned run-list facet counts when
+  present. They must not parse diagnostic event payloads or depend on sampled
+  page rows for comparison totals.
 - Network local-node summaries must render only API-reported local facts and
   peer records. They must not synthesize future Iroh state.
 - Workbench pages must not consume raw diagnostic ledger events.

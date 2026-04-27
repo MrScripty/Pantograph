@@ -3,6 +3,8 @@ import type {
   DiagnosticEventSourceComponent,
   ProjectionStateRecord,
   RunDetailProjectionRecord,
+  RunListFacetKind,
+  RunListFacetRecord,
   RunListProjectionRecord,
   SchedulerTimelineProjectionRecord,
 } from '../../services/diagnostics/types';
@@ -143,20 +145,31 @@ export function buildDiagnosticsFactRows(run: RunDetailProjectionRecord): Diagno
 export function buildDiagnosticsFacetSummary(
   activeRun: RunDetailProjectionRecord,
   runs: RunListProjectionRecord[],
+  backendFacets: RunListFacetRecord[] = [],
 ): DiagnosticsFacetSummary {
   const workflowRuns = runs.filter((run) => run.workflow_id === activeRun.workflow_id);
   const activeRunIsProjected = workflowRuns.some((run) => run.workflow_run_id === activeRun.workflow_run_id);
   const scopedRuns = activeRunIsProjected ? workflowRuns : [activeRun, ...workflowRuns];
   const total = scopedRuns.length;
   const rows = [
-    buildDiagnosticsFacetRow('Workflow Version', workflowVersionLabel(activeRun), scopedRuns, workflowVersionLabel, total),
-    buildDiagnosticsFacetRow('Status', activeRun.status, scopedRuns, (run) => run.status, total),
+    buildDiagnosticsFacetRow(
+      'Workflow Version',
+      workflowVersionLabel(activeRun),
+      scopedRuns,
+      workflowVersionLabel,
+      total,
+      backendFacets,
+      'workflow_version',
+    ),
+    buildDiagnosticsFacetRow('Status', activeRun.status, scopedRuns, (run) => run.status, total, backendFacets, 'status'),
     buildDiagnosticsFacetRow(
       'Scheduler Policy',
       optionalFacetLabel(activeRun.scheduler_policy_id),
       scopedRuns,
       (run) => optionalFacetLabel(run.scheduler_policy_id),
       total,
+      backendFacets,
+      'scheduler_policy',
     ),
     buildDiagnosticsFacetRow(
       'Retention Policy',
@@ -164,6 +177,8 @@ export function buildDiagnosticsFacetSummary(
       scopedRuns,
       (run) => optionalFacetLabel(run.retention_policy_id),
       total,
+      backendFacets,
+      'retention_policy',
     ),
     buildDiagnosticsFacetRow(
       'Client',
@@ -188,10 +203,12 @@ export function buildDiagnosticsFacetSummary(
     ),
   ];
 
-  const workflowVersions = new Set(scopedRuns.map(workflowVersionLabel));
+  const backendWorkflowVersions = backendFacets.filter((facet) => facet.facet_kind === 'workflow_version');
+  const workflowVersionCount =
+    backendWorkflowVersions.length > 0 ? backendWorkflowVersions.length : new Set(scopedRuns.map(workflowVersionLabel)).size;
   const mixedVersionWarning =
-    workflowVersions.size > 1
-      ? `${activeRun.workflow_id} has ${workflowVersions.size} workflow versions in the current run-list projection.`
+    workflowVersionCount > 1
+      ? `${activeRun.workflow_id} has ${workflowVersionCount} workflow versions in the current run-list projection.`
       : null;
 
   return { rows, mixedVersionWarning };
@@ -203,7 +220,21 @@ function buildDiagnosticsFacetRow<T extends RunListProjectionRecord>(
   runs: T[],
   readValue: (run: T) => string,
   total: number,
+  backendFacets: RunListFacetRecord[] = [],
+  facetKind?: RunListFacetKind,
 ): DiagnosticsFacetRow {
+  if (facetKind) {
+    const matchingFacets = backendFacets.filter((facet) => facet.facet_kind === facetKind);
+    const backendTotal = matchingFacets.reduce((sum, facet) => sum + facet.run_count, 0);
+    if (backendTotal > 0) {
+      return {
+        label,
+        value,
+        count: matchingFacets.find((facet) => facet.facet_value === value)?.run_count ?? 0,
+        total: backendTotal,
+      };
+    }
+  }
   return {
     label,
     value,

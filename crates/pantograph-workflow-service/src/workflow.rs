@@ -57,8 +57,9 @@ pub(crate) use self::validation::validate_workflow_id;
 pub use pantograph_diagnostics_ledger::{
     IoArtifactProjectionRecord, IoArtifactRetentionState, IoArtifactRetentionSummaryRecord,
     LibraryUsageProjectionRecord, ProjectionStateRecord, RunDetailProjectionRecord,
-    RunListProjectionRecord, RunListProjectionStatus, SchedulerTimelineProjectionRecord,
-    SqliteDiagnosticsLedger, WorkflowTimingExpectation, WorkflowTimingExpectationComparison,
+    RunListFacetRecord, RunListProjectionRecord, RunListProjectionStatus,
+    SchedulerTimelineProjectionRecord, SqliteDiagnosticsLedger, WorkflowTimingExpectation,
+    WorkflowTimingExpectationComparison,
 };
 pub use pantograph_runtime_attribution::{
     AttributionRepository, BucketCreateRequest, BucketDeleteRequest, BucketRecord, BucketSelection,

@@ -139,6 +139,9 @@ for storage and query semantics.
 - Diagnostics projection re-exports include typed I/O artifact retention state
   and retention summary records so adapter callers can preserve serialized
   service contracts without depending on private ledger modules.
+- Diagnostics projection re-exports include run-list facet records so adapter
+  callers can consume backend-owned comparison counts without depending on
+  private ledger modules or sampled frontend pages.
 
 ## Revisit Triggers
 - Public workflow DTOs need versioning rather than additive migration.

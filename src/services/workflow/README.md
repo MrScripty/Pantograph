@@ -184,3 +184,6 @@ const preview = await workflowService.previewNodeInsertOnEdge(
 - Mock projection responses must track backend projection versions so page
   logic exercises the same rebuild/freshness contracts in mock and native
   modes.
+- `WorkflowRunListQueryResponse.facets` is a backend-owned comparison summary.
+  Native and mock paths must preserve the field so workbench pages do not infer
+  workflow-version or policy counts from partial client-side pages.

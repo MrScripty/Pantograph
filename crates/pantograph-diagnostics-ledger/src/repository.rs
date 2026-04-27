@@ -6,7 +6,7 @@ use crate::{
     NodeStatusProjectionQuery, NodeStatusProjectionRecord, ProjectionStateRecord,
     ProjectionStateUpdate, PruneTimingObservationsCommand, PruneTimingObservationsResult,
     PruneUsageEventsCommand, PruneUsageEventsResult, RunDetailProjectionQuery,
-    RunDetailProjectionRecord, RunListProjectionQuery, RunListProjectionRecord,
+    RunDetailProjectionRecord, RunListFacetRecord, RunListProjectionQuery, RunListProjectionRecord,
     SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
     UpdateRetentionPolicyCommand, WorkflowRunSummaryProjection, WorkflowRunSummaryQuery,
     WorkflowRunSummaryRecord, WorkflowTimingExpectation, WorkflowTimingExpectationQuery,
@@ -76,6 +76,11 @@ pub trait DiagnosticsLedgerRepository {
         &self,
         query: RunListProjectionQuery,
     ) -> Result<Vec<RunListProjectionRecord>, DiagnosticsLedgerError>;
+
+    fn query_run_list_facets(
+        &self,
+        query: RunListProjectionQuery,
+    ) -> Result<Vec<RunListFacetRecord>, DiagnosticsLedgerError>;
 
     fn drain_run_detail_projection(
         &mut self,

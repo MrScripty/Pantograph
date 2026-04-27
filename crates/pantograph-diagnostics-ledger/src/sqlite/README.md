@@ -62,6 +62,9 @@ helpers own restart-visible workflow run summaries.
   not `diagnostic_events`.
 - Run detail drains apply only events after the stored projection cursor and
   update one row per workflow run for selected-run page/query reads.
+- Run-list facet reads group `run_list_projection` rows and must not replay
+  `diagnostic_events` or depend on client-side page limits for comparison
+  counts.
 - I/O artifact drains apply artifact observation and retention state-change
   events after the stored projection cursor and write the latest bounded
   metadata/reference row per `workflow_run_id` and `artifact_id`.

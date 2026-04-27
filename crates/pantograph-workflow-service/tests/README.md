@@ -47,6 +47,8 @@ by external adapters.
   when those fields are observable through serialized service contracts.
 - I/O artifact contract snapshots must include retention summary counts because
   the GUI depends on those counts for retention-completeness display.
+- Run-list contract snapshots must include backend-owned facet records when
+  those records are observable through serialized service contracts.
 
 ## Revisit Triggers
 - Contract snapshots become large enough to justify fixture files.

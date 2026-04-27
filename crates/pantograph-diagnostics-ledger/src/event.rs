@@ -860,6 +860,22 @@ pub struct RunListProjectionRecord {
     pub last_updated_at_ms: i64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RunListFacetKind {
+    WorkflowVersion,
+    Status,
+    SchedulerPolicy,
+    RetentionPolicy,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RunListFacetRecord {
+    pub facet_kind: RunListFacetKind,
+    pub facet_value: String,
+    pub run_count: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RunDetailProjectionQuery {
     pub workflow_run_id: WorkflowRunId,

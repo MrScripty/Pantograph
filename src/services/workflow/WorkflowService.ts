@@ -358,6 +358,7 @@ export class WorkflowService extends WorkflowGraphMutationService {
     if (USE_WORKFLOW_MOCKS) {
       return {
         runs: [],
+        facets: [],
         projection_state: {
           projection_name: 'run_list',
           projection_version: 1,

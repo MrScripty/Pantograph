@@ -168,7 +168,7 @@ and privileged queue action controls remain open.
 - [ ] Add filters for workflow/node/model/runtime versions, scheduler policy,
   graph settings, session/bucket/client, status, date, and retention
   completeness where data exists.
-- [ ] Display mixed-version warnings/facets.
+- [x] Display mixed-version warnings/facets.
 - [ ] Preserve comparison-ready labels/facets for future run, workflow-version,
   runtime-version, model-version, device, and input-profile comparisons.
 - [x] Render diagnostics projections built from typed event ledger data without
@@ -188,10 +188,11 @@ facts, status, timing, terminal error, projection freshness, and scheduler
 timeline summaries without parsing raw ledger rows or event-family payloads in
 the component. It also uses the run-list projection to render selected-run
 comparison facets, active facet counts across the current workflow's recent
-runs, and mixed workflow-version warnings. Richer aggregate filters, node/model
-and runtime version facets, graph-setting filters, retention-completeness
-facets, and richer scheduler decision facets remain open pending additional
-typed projection fields.
+runs, and mixed workflow-version warnings. Those counts now prefer backend
+run-list facet summaries scoped to the selected workflow. Richer aggregate
+filters, node/model and runtime version facets, graph-setting filters,
+retention-completeness facets, and richer scheduler decision facets remain open
+pending additional typed projection fields.
 
 ### Milestone 3: Graph Page
 

@@ -67,6 +67,9 @@ projection without inventing fallback run identities or workflow display names.
 - I/O artifact responses carry `retention_summary` counts derived from backend
   projections. Consumers should display those counts instead of rebuilding
   completeness summaries from raw ledger events.
+- Run-list responses carry backend-owned `facets` derived from materialized
+  projections. Consumers should use those counts for mixed-version and policy
+  summaries instead of rebuilding them from raw ledger events or sampled pages.
 
 ## Revisit Triggers
 - Diagnostics needs durable persistence or export/replay support.

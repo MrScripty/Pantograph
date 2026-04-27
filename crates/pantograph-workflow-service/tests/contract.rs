@@ -4,7 +4,8 @@ use pantograph_diagnostics_ledger::{
     IoArtifactProjectionRecord, IoArtifactRetentionState, IoArtifactRetentionSummaryRecord,
     LibraryUsageProjectionRecord, NodeExecutionProjectionStatus, NodeStatusProjectionRecord,
     ProjectionStateRecord, ProjectionStatus, RetentionClass, RunDetailProjectionRecord,
-    RunListProjectionRecord, RunListProjectionStatus, SchedulerTimelineProjectionRecord,
+    RunListFacetKind, RunListFacetRecord, RunListProjectionRecord, RunListProjectionStatus,
+    SchedulerTimelineProjectionRecord,
 };
 use pantograph_workflow_service::graph::WorkflowExecutionSessionKind;
 use pantograph_workflow_service::{
@@ -659,6 +660,18 @@ fn workflow_run_list_query_contract_snapshot() {
             last_event_seq: 15,
             last_updated_at_ms: 1100,
         }],
+        facets: vec![
+            RunListFacetRecord {
+                facet_kind: RunListFacetKind::WorkflowVersion,
+                facet_value: "1.2.3".to_string(),
+                run_count: 1,
+            },
+            RunListFacetRecord {
+                facet_kind: RunListFacetKind::Status,
+                facet_value: "completed".to_string(),
+                run_count: 1,
+            },
+        ],
         projection_state: ProjectionStateRecord {
             projection_name: "run_list".to_string(),
             projection_version: 1,
@@ -706,6 +719,15 @@ fn workflow_run_list_query_contract_snapshot() {
             "scheduler_reason": "queued behind one run",
             "last_event_seq": 15,
             "last_updated_at_ms": 1100
+        }],
+        "facets": [{
+            "facet_kind": "workflow_version",
+            "facet_value": "1.2.3",
+            "run_count": 1
+        }, {
+            "facet_kind": "status",
+            "facet_value": "completed",
+            "run_count": 1
         }],
         "projection_state": {
             "projection_name": "run_list",

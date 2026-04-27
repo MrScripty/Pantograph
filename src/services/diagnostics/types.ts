@@ -343,6 +343,18 @@ export interface RunListProjectionRecord {
   last_updated_at_ms: number;
 }
 
+export type RunListFacetKind =
+  | 'workflow_version'
+  | 'status'
+  | 'scheduler_policy'
+  | 'retention_policy';
+
+export interface RunListFacetRecord {
+  facet_kind: RunListFacetKind;
+  facet_value: string;
+  run_count: number;
+}
+
 export interface RunDetailProjectionRecord extends RunListProjectionRecord {
   client_id?: string | null;
   client_session_id?: string | null;
@@ -441,6 +453,7 @@ export interface WorkflowRunListQueryRequest {
 
 export interface WorkflowRunListQueryResponse {
   runs: RunListProjectionRecord[];
+  facets: RunListFacetRecord[];
   projection_state: ProjectionStateRecord;
 }
 

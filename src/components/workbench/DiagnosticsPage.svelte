@@ -3,6 +3,7 @@
   import type {
     ProjectionStateRecord,
     RunDetailProjectionRecord,
+    RunListFacetRecord,
     RunListProjectionRecord,
     SchedulerTimelineProjectionRecord,
   } from '../../services/diagnostics/types';
@@ -22,6 +23,7 @@
 
   let runDetail = $state<RunDetailProjectionRecord | null>(null);
   let runList = $state<RunListProjectionRecord[]>([]);
+  let runListFacets = $state<RunListFacetRecord[]>([]);
   let timelineEvents = $state<SchedulerTimelineProjectionRecord[]>([]);
   let runDetailProjectionState = $state<ProjectionStateRecord | null>(null);
   let runListProjectionState = $state<ProjectionStateRecord | null>(null);
@@ -31,7 +33,7 @@
   let requestSerial = 0;
 
   let factRows = $derived(runDetail ? buildDiagnosticsFactRows(runDetail) : []);
-  let facetSummary = $derived(runDetail ? buildDiagnosticsFacetSummary(runDetail, runList) : null);
+  let facetSummary = $derived(runDetail ? buildDiagnosticsFacetSummary(runDetail, runList, runListFacets) : null);
 
   function activeRunId(): string | null {
     return $activeWorkflowRun?.workflow_run_id ?? null;
@@ -44,6 +46,7 @@
     if (!runId) {
       runDetail = null;
       runList = [];
+      runListFacets = [];
       timelineEvents = [];
       runDetailProjectionState = null;
       runListProjectionState = null;
@@ -54,9 +57,8 @@
 
     loading = true;
     try {
-      const [runResponse, runListResponse, timelineResponse] = await Promise.all([
+      const [runResponse, timelineResponse] = await Promise.all([
         workflowService.queryRunDetail({ workflow_run_id: runId }),
-        workflowService.queryRunList({ limit: 250 }),
         workflowService.querySchedulerTimeline({
           workflow_run_id: runId,
           limit: 250,
@@ -65,10 +67,18 @@
       if (currentRequest !== requestSerial) {
         return;
       }
-      runDetail = runResponse.run ?? null;
+      const selectedRun = runResponse.run ?? null;
+      const runListResponse = selectedRun
+        ? await workflowService.queryRunList({ workflow_id: selectedRun.workflow_id, limit: 250 })
+        : null;
+      if (currentRequest !== requestSerial) {
+        return;
+      }
+      runDetail = selectedRun;
       runDetailProjectionState = runResponse.projection_state;
-      runList = runListResponse.runs;
-      runListProjectionState = runListResponse.projection_state;
+      runList = runListResponse?.runs ?? [];
+      runListFacets = runListResponse?.facets ?? [];
+      runListProjectionState = runListResponse?.projection_state ?? null;
       timelineEvents = timelineResponse.events;
       timelineProjectionState = timelineResponse.projection_state;
     } catch (refreshError) {
@@ -78,6 +88,7 @@
       error = refreshError instanceof Error ? refreshError.message : String(refreshError);
       runDetail = null;
       runList = [];
+      runListFacets = [];
       timelineEvents = [];
     } finally {
       if (currentRequest === requestSerial) {

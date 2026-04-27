@@ -60,7 +60,7 @@ Use `workflow/tests/` for behavior-specific child modules under the parent
   duplicating host mocks and scheduler setup.
 - Extracted tests preserve their original public facade paths and assertions.
 - Diagnostics projection tests must verify typed projection fields rather than
-  inferring retention or scheduler facts from raw payload JSON.
+  inferring retention, scheduler, or run-list facet facts from raw payload JSON.
 - New behavior families should be added here only when they are cohesive enough
   to reduce `workflow/tests.rs` without hiding shared test setup.
 

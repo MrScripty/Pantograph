@@ -7,7 +7,7 @@ use pantograph_diagnostics_ledger::{
     LibraryUsageProjectionRecord, ModelLicenseUsageEvent, NodeExecutionProjectionStatus,
     NodeStatusProjectionQuery, NodeStatusProjectionRecord, ProjectionStateRecord, RetentionClass,
     RetentionPolicyChangedPayload, RunDetailProjectionQuery, RunDetailProjectionRecord,
-    RunListProjectionQuery, RunListProjectionRecord, RunListProjectionStatus,
+    RunListFacetRecord, RunListProjectionQuery, RunListProjectionRecord, RunListProjectionStatus,
     SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
     UpdateRetentionPolicyCommand,
 };
@@ -128,6 +128,7 @@ pub struct WorkflowRunListQueryRequest {
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowRunListQueryResponse {
     pub runs: Vec<RunListProjectionRecord>,
+    pub facets: Vec<RunListFacetRecord>,
     pub projection_state: ProjectionStateRecord,
 }
 
@@ -328,6 +329,7 @@ impl WorkflowService {
             ));
         }
         let query = request.into_run_list_query()?;
+        let facet_query = query.clone();
         let mut ledger = self.diagnostics_ledger_guard()?;
         let projection_state = ledger
             .drain_run_list_projection(projection_batch_size)
@@ -335,9 +337,13 @@ impl WorkflowService {
         let runs = ledger
             .query_run_list_projection(query)
             .map_err(WorkflowServiceError::from)?;
+        let facets = ledger
+            .query_run_list_facets(facet_query)
+            .map_err(WorkflowServiceError::from)?;
 
         Ok(WorkflowRunListQueryResponse {
             runs,
+            facets,
             projection_state,
         })
     }

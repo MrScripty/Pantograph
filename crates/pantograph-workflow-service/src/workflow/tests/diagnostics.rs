@@ -4,8 +4,8 @@ use pantograph_diagnostics_ledger::{
     ExecutionGuaranteeLevel, IoArtifactObservedPayload, IoArtifactRetentionState,
     LibraryAssetAccessedPayload, LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent,
     ModelOutputMeasurement, NodeExecutionProjectionStatus, NodeExecutionStatusPayload,
-    OutputModality, RetentionClass, RunSnapshotAcceptedPayload, RunStartedPayload,
-    RunTerminalPayload, RunTerminalStatus, SchedulerEstimateProducedPayload,
+    OutputModality, RetentionClass, RunListFacetKind, RunSnapshotAcceptedPayload,
+    RunStartedPayload, RunTerminalPayload, RunTerminalStatus, SchedulerEstimateProducedPayload,
     SchedulerQueuePlacementPayload, UsageEventStatus, UsageLineage,
 };
 use pantograph_runtime_attribution::{
@@ -198,6 +198,11 @@ fn workflow_run_list_query_drains_and_reads_projection() {
     assert_eq!(response.runs[0].duration_ms, Some(15));
     assert_eq!(response.runs[0].scheduler_queue_position, Some(0));
     assert_eq!(response.runs[0].scheduler_priority, Some(7));
+    assert!(response.facets.iter().any(|facet| {
+        facet.facet_kind == RunListFacetKind::WorkflowVersion
+            && facet.facet_value == "1.0.0"
+            && facet.run_count == 1
+    }));
     assert_eq!(response.projection_state.last_applied_event_seq, 4);
 
     let retention_response = service

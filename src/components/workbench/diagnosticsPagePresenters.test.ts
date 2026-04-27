@@ -154,6 +154,23 @@ test('buildDiagnosticsFacetSummary includes the active run when the run list is 
   assert.equal(summary.rows.find((row) => row.label === 'Workflow Version')?.total, 2);
 });
 
+test('buildDiagnosticsFacetSummary prefers backend projection facets when provided', () => {
+  const activeRun = createRunDetail();
+  const summary = buildDiagnosticsFacetSummary(activeRun, [activeRun], [
+    { facet_kind: 'workflow_version', facet_value: '1.2.3', run_count: 12 },
+    { facet_kind: 'workflow_version', facet_value: '2.0.0', run_count: 3 },
+    { facet_kind: 'status', facet_value: 'completed', run_count: 10 },
+    { facet_kind: 'status', facet_value: 'failed', run_count: 5 },
+    { facet_kind: 'scheduler_policy', facet_value: 'policy-a', run_count: 15 },
+    { facet_kind: 'retention_policy', facet_value: 'retention-a', run_count: 15 },
+  ]);
+
+  assert.equal(summary.rows.find((row) => row.label === 'Workflow Version')?.count, 12);
+  assert.equal(summary.rows.find((row) => row.label === 'Workflow Version')?.total, 15);
+  assert.equal(summary.rows.find((row) => row.label === 'Status')?.total, 15);
+  assert.match(summary.mixedVersionWarning ?? '', /2 workflow versions/);
+});
+
 test('timeline label helpers format typed projection enums and payload presence', () => {
   assert.equal(formatDiagnosticEventKind('scheduler_queue_placement'), 'Scheduler Queue Placement');
   assert.equal(formatDiagnosticSourceComponent('node_execution'), 'Node Execution');

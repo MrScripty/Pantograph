@@ -14,8 +14,9 @@ use crate::event::{
     IoArtifactProjectionRecord, IoArtifactRetentionSummaryQuery, IoArtifactRetentionSummaryRecord,
     LibraryUsageProjectionQuery, LibraryUsageProjectionRecord, NodeStatusProjectionQuery,
     NodeStatusProjectionRecord, ProjectionStateRecord, ProjectionStateUpdate,
-    RunDetailProjectionQuery, RunDetailProjectionRecord, RunListProjectionQuery,
-    RunListProjectionRecord, SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
+    RunDetailProjectionQuery, RunDetailProjectionRecord, RunListFacetRecord,
+    RunListProjectionQuery, RunListProjectionRecord, SchedulerTimelineProjectionQuery,
+    SchedulerTimelineProjectionRecord,
 };
 use crate::records::{
     DiagnosticsProjection, DiagnosticsQuery, DiagnosticsRetentionPolicy, ExecutionGuaranteeLevel,
@@ -409,6 +410,13 @@ impl DiagnosticsLedgerRepository for SqliteDiagnosticsLedger {
         query: RunListProjectionQuery,
     ) -> Result<Vec<RunListProjectionRecord>, DiagnosticsLedgerError> {
         event_sqlite::query_run_list_projection(self, query)
+    }
+
+    fn query_run_list_facets(
+        &self,
+        query: RunListProjectionQuery,
+    ) -> Result<Vec<RunListFacetRecord>, DiagnosticsLedgerError> {
+        event_sqlite::query_run_list_facets(self, query)
     }
 
     fn drain_run_detail_projection(

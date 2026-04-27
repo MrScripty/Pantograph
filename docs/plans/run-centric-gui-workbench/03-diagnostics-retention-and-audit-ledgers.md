@@ -241,7 +241,7 @@ repair, migration, projection-version changes, and tests.
 - [x] Add model/runtime/version and scheduler policy filters where not already
   present.
 - [x] Add retention-completeness filter/projection.
-- [ ] Add query outputs that report mixed-version counts or facets.
+- [x] Add query outputs that report mixed-version counts or facets.
 - [ ] Preserve comparison-ready facets for workflow version, node version,
   model/runtime version, device/network node, scheduler policy, graph settings,
   and input profile where available.
@@ -284,7 +284,9 @@ Projection filters now cover workflow version, scheduler policy,
 runtime/model ids, media type, retention policy/state, and artifact role where
 those facts exist in the read model. Retention completeness is now queryable as
 state/count summaries over the I/O artifact projection for the same run and
-artifact-scope filters.
+artifact-scope filters. Run-list responses now include backend projection
+facets for workflow version, run status, scheduler policy, and retention
+policy so mixed-version diagnostics do not depend on a client-paged sample.
 The first warm projection, `library_usage_projection`, now aggregates
 Library/Pumas asset access counts, distinct run counts, network bytes, last
 access facts, and workflow-version run links. Remaining warm drains and
