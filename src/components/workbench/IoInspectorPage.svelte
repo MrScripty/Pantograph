@@ -9,6 +9,7 @@
   import { workflowService } from '../../services/workflow/WorkflowService';
   import { activeWorkflowRun } from '../../stores/workbenchStore';
   import {
+    buildIoArtifactNodeGroups,
     formatIoArtifactAvailabilityLabel,
     formatIoArtifactBytes,
     formatIoArtifactMediaLabel,
@@ -31,6 +32,7 @@
   let artifactRequestSerial = 0;
   let workflowInputArtifacts = $derived(artifacts.filter(isWorkflowInputArtifact));
   let workflowOutputArtifacts = $derived(artifacts.filter(isWorkflowOutputArtifact));
+  let nodeGroups = $derived(buildIoArtifactNodeGroups(artifacts));
 
   function activeRunId(): string | null {
     return $activeWorkflowRun?.workflow_run_id ?? null;
@@ -229,6 +231,49 @@
             {/if}
           </section>
         </div>
+
+        <section class="border-b border-neutral-900 px-4 py-4">
+          <div class="flex items-center justify-between gap-3">
+            <h2 class="text-sm font-semibold text-neutral-100">Node I/O</h2>
+            <span class="rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-300">
+              {nodeGroups.length}
+            </span>
+          </div>
+
+          {#if nodeGroups.length === 0}
+            <div class="mt-3 text-sm text-neutral-500">No retained node-level artifact metadata</div>
+          {:else}
+            <div class="mt-3 grid gap-2 xl:grid-cols-2 2xl:grid-cols-3">
+              {#each nodeGroups.slice(0, 9) as group (group.node_id)}
+                <article class="rounded border border-neutral-800 bg-neutral-900/50 px-3 py-2">
+                  <div class="truncate font-mono text-xs text-neutral-100" title={group.node_id}>
+                    {group.node_id}
+                  </div>
+                  <div class="mt-1 truncate text-xs text-neutral-500" title={group.node_type ?? ''}>
+                    {group.node_type ?? 'Unknown node type'}
+                  </div>
+                  <dl class="mt-3 grid grid-cols-3 gap-2 text-xs">
+                    <div>
+                      <dt class="text-neutral-500">Inputs</dt>
+                      <dd class="mt-0.5 text-neutral-200">{group.input_count}</dd>
+                    </div>
+                    <div>
+                      <dt class="text-neutral-500">Outputs</dt>
+                      <dd class="mt-0.5 text-neutral-200">{group.output_count}</dd>
+                    </div>
+                    <div>
+                      <dt class="text-neutral-500">Total</dt>
+                      <dd class="mt-0.5 text-neutral-200">{group.artifact_count}</dd>
+                    </div>
+                  </dl>
+                </article>
+              {/each}
+            </div>
+            {#if nodeGroups.length > 9}
+              <div class="mt-3 text-xs text-neutral-500">+{nodeGroups.length - 9} more nodes</div>
+            {/if}
+          {/if}
+        </section>
 
         <div class="grid gap-3 p-4 xl:grid-cols-2 2xl:grid-cols-3">
           {#each artifacts as artifact (artifact.event_id)}

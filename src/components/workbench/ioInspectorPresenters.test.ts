@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  buildIoArtifactNodeGroups,
   classifyIoArtifactMedia,
   formatIoArtifactAvailabilityLabel,
   formatIoArtifactBytes,
@@ -45,6 +46,55 @@ test('workflow artifact role helpers identify workflow boundaries', () => {
   assert.equal(formatIoArtifactRoleLabel('workflow_output'), 'Workflow output');
   assert.equal(formatIoArtifactRoleLabel('custom_role'), 'custom_role');
   assert.equal(formatIoArtifactRoleLabel(''), 'Unclassified');
+});
+
+test('buildIoArtifactNodeGroups groups node artifacts by latest event', () => {
+  assert.deepEqual(
+    buildIoArtifactNodeGroups([
+      {
+        node_id: 'node-a',
+        node_type: 'text',
+        artifact_role: 'node_input',
+        event_seq: 2,
+      },
+      {
+        node_id: 'node-b',
+        node_type: 'image',
+        artifact_role: 'node_output',
+        event_seq: 4,
+      },
+      {
+        node_id: 'node-a',
+        node_type: null,
+        artifact_role: 'node_output',
+        event_seq: 3,
+      },
+      {
+        node_id: null,
+        node_type: null,
+        artifact_role: 'workflow_output',
+        event_seq: 5,
+      },
+    ]),
+    [
+      {
+        node_id: 'node-b',
+        node_type: 'image',
+        input_count: 0,
+        output_count: 1,
+        artifact_count: 1,
+        latest_event_seq: 4,
+      },
+      {
+        node_id: 'node-a',
+        node_type: 'text',
+        input_count: 1,
+        output_count: 1,
+        artifact_count: 2,
+        latest_event_seq: 3,
+      },
+    ],
+  );
 });
 
 test('formatIoArtifactBytes renders compact sizes', () => {

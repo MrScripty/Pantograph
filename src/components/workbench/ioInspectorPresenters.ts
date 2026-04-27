@@ -17,6 +17,15 @@ export type IoArtifactPayloadAvailability =
   | 'referenced'
   | 'metadata_only';
 
+export interface IoArtifactNodeGroup {
+  node_id: string;
+  node_type?: string | null;
+  input_count: number;
+  output_count: number;
+  artifact_count: number;
+  latest_event_seq: number;
+}
+
 export function isWorkflowInputArtifact(
   artifact: Pick<IoArtifactProjectionRecord, 'artifact_role'>,
 ): boolean {
@@ -42,6 +51,40 @@ export function formatIoArtifactRoleLabel(role: string | null | undefined): stri
     default:
       return role && role.trim().length > 0 ? role : 'Unclassified';
   }
+}
+
+export function buildIoArtifactNodeGroups(
+  artifacts: Pick<IoArtifactProjectionRecord, 'node_id' | 'node_type' | 'artifact_role' | 'event_seq'>[],
+): IoArtifactNodeGroup[] {
+  const groups = new Map<string, IoArtifactNodeGroup>();
+  for (const artifact of artifacts) {
+    if (!artifact.node_id) {
+      continue;
+    }
+
+    const group = groups.get(artifact.node_id) ?? {
+      node_id: artifact.node_id,
+      node_type: artifact.node_type,
+      input_count: 0,
+      output_count: 0,
+      artifact_count: 0,
+      latest_event_seq: artifact.event_seq,
+    };
+    group.artifact_count += 1;
+    group.latest_event_seq = Math.max(group.latest_event_seq, artifact.event_seq);
+    if (artifact.artifact_role === 'node_input') {
+      group.input_count += 1;
+    }
+    if (artifact.artifact_role === 'node_output') {
+      group.output_count += 1;
+    }
+    if (!group.node_type && artifact.node_type) {
+      group.node_type = artifact.node_type;
+    }
+    groups.set(artifact.node_id, group);
+  }
+
+  return [...groups.values()].sort((left, right) => right.latest_event_seq - left.latest_event_seq);
 }
 
 export function classifyIoArtifactMedia(mediaType: string | null | undefined): IoArtifactMediaFamily {
