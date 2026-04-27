@@ -20,7 +20,7 @@ stay reviewable as more tests are split.
 | `session_admission.rs` | Runtime capacity and runtime admission wait tests for queued session runs. |
 | `session_capacity.rs` | Loaded runtime rebalance tests for host-selected unloads, affinity preservation, and shared resource reuse. |
 | `session_capacity_limits.rs` | Session and loaded runtime capacity limit/error tests, including release after close and pinned loaded-runtime capacity details. |
-| `session_execution.rs` | Workflow session create/run/close, run-option propagation, and runtime retention-hint tests. |
+| `session_execution.rs` | Workflow session create/run/close, run-option propagation, runtime retention-hint tests, and immutable run snapshot event coverage. |
 | `session_queue.rs` | Session queue item metadata, admission outcome, warm reuse, queue-position, and starvation protection tests. |
 | `session_runtime_preflight.rs` | Session runtime preflight cache invalidation and keep-alive preflight failure tests. |
 | `session_runtime_state.rs` | Session runtime loaded-state invalidation tests. |
@@ -73,6 +73,9 @@ Use `workflow/tests/` for behavior-specific child modules under the parent
 - Session admission tests with diagnostics enabled must verify durable
   scheduler delay events for runtime admission waits without depending on raw
   scheduler-store internals.
+- Session execution tests with attribution and diagnostics enabled must verify
+  `run.snapshot_accepted` events carry the immutable workflow version and node
+  behavior-version set before scheduler admission.
 - New behavior families should be added here only when they are cohesive enough
   to reduce `workflow/tests.rs` without hiding shared test setup.
 

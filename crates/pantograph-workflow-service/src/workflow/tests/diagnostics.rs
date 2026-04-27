@@ -5,9 +5,9 @@ use pantograph_diagnostics_ledger::{
     LibraryAssetAccessedPayload, LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent,
     ModelOutputMeasurement, NodeExecutionProjectionStatus, NodeExecutionStatusPayload,
     OutputModality, ProjectionStatus, RetentionArtifactStateChangedPayload, RetentionClass,
-    RunListFacetKind, RunSnapshotAcceptedPayload, RunStartedPayload, RunTerminalPayload,
-    RunTerminalStatus, SchedulerEstimateProducedPayload, SchedulerQueuePlacementPayload,
-    UsageEventStatus, UsageLineage,
+    RunListFacetKind, RunSnapshotAcceptedPayload, RunSnapshotNodeVersionPayload, RunStartedPayload,
+    RunTerminalPayload, RunTerminalStatus, SchedulerEstimateProducedPayload,
+    SchedulerQueuePlacementPayload, UsageEventStatus, UsageLineage,
 };
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, UsageEventId, WorkflowId, WorkflowRunId, WorkflowVersionId,
@@ -831,6 +831,12 @@ fn sample_run_snapshot_event() -> DiagnosticEventAppendRequest {
         payload: DiagnosticEventPayload::RunSnapshotAccepted(RunSnapshotAcceptedPayload {
             workflow_run_snapshot_id: "runsnap-a".to_string(),
             workflow_presentation_revision_id: "wfpres-a".to_string(),
+            node_versions: vec![RunSnapshotNodeVersionPayload {
+                node_id: "node-a".to_string(),
+                node_type: "text-output".to_string(),
+                contract_version: "1.0.0".to_string(),
+                behavior_digest: "digest-a".to_string(),
+            }],
         }),
     }
 }

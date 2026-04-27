@@ -3,15 +3,17 @@ use std::time::Duration;
 use pantograph_diagnostics_ledger::{
     DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
     DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
-    RunSnapshotAcceptedPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
-    SchedulerEstimateProducedPayload, SchedulerQueuePlacementPayload, SchedulerRunDelayedPayload,
+    RunSnapshotAcceptedPayload, RunSnapshotNodeVersionPayload, RunStartedPayload,
+    RunTerminalPayload, RunTerminalStatus, SchedulerEstimateProducedPayload,
+    SchedulerQueuePlacementPayload, SchedulerRunDelayedPayload,
 };
 use pantograph_runtime_attribution::{
     WorkflowId, WorkflowRunId, WorkflowRunSnapshotRecord, WorkflowRunSnapshotRequest,
 };
 
 use crate::graph::{
-    workflow_graph_run_settings, workflow_graph_run_settings_json, WorkflowExecutionSessionKind,
+    workflow_executable_topology, workflow_graph_run_settings, workflow_graph_run_settings_json,
+    WorkflowExecutionSessionKind, WorkflowGraph,
 };
 use crate::scheduler::{unix_timestamp_ms, WORKFLOW_SESSION_QUEUE_POLL_MS};
 use crate::technical_fit::WorkflowTechnicalFitOverride;
@@ -372,17 +374,28 @@ impl WorkflowService {
             .create_workflow_run_snapshot(snapshot)
             .map_err(WorkflowServiceError::from)?;
         drop(store);
-        self.record_run_snapshot_accepted_event_if_configured(&snapshot)?;
+        self.record_run_snapshot_accepted_event_if_configured(&snapshot, &graph)?;
         Ok(Some(snapshot))
     }
 
     fn record_run_snapshot_accepted_event_if_configured(
         &self,
         snapshot: &WorkflowRunSnapshotRecord,
+        graph: &WorkflowGraph,
     ) -> Result<(), WorkflowServiceError> {
         let Some(ledger) = self.diagnostics_ledger.as_ref() else {
             return Ok(());
         };
+        let node_versions = workflow_executable_topology(graph)?
+            .nodes
+            .into_iter()
+            .map(|node| RunSnapshotNodeVersionPayload {
+                node_id: node.node_id,
+                node_type: node.node_type,
+                contract_version: node.contract_version,
+                behavior_digest: node.behavior_digest,
+            })
+            .collect();
         let mut ledger = ledger.lock().map_err(|_| {
             WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
         })?;
@@ -420,6 +433,7 @@ impl WorkflowService {
                         .workflow_presentation_revision_id
                         .as_str()
                         .to_string(),
+                    node_versions,
                 }),
             },
         )

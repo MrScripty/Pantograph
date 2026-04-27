@@ -14,20 +14,20 @@ use crate::{
     OutputMeasurementUnavailableReason, OutputModality, ProjectionStateUpdate, ProjectionStatus,
     PruneTimingObservationsCommand, PruneUsageEventsCommand, RetentionArtifactStateChangedPayload,
     RetentionClass, RetentionPolicyChangedPayload, RunDetailProjectionQuery, RunListFacetKind,
-    RunListProjectionQuery, RunListProjectionStatus, RunSnapshotAcceptedPayload, RunStartedPayload,
-    RunTerminalPayload, RunTerminalStatus, SchedulerEstimateProducedPayload,
-    SchedulerModelLifecycleChangedPayload, SchedulerModelLifecycleTransition,
-    SchedulerQueuePlacementPayload, SchedulerRunDelayedPayload, SchedulerTimelineProjectionQuery,
-    SqliteDiagnosticsLedger, UpdateRetentionPolicyCommand, UsageEventStatus, UsageLineage,
-    WorkflowRunSummaryQuery, WorkflowRunSummaryRecord, WorkflowRunSummaryStatus,
-    WorkflowTimingExpectation, WorkflowTimingExpectationComparison, WorkflowTimingExpectationQuery,
-    WorkflowTimingObservation, WorkflowTimingObservationScope, WorkflowTimingObservationStatus,
-    DEFAULT_STANDARD_RETENTION_DAYS, IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION,
-    LIBRARY_USAGE_PROJECTION_NAME, LIBRARY_USAGE_PROJECTION_VERSION,
-    MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, NODE_STATUS_PROJECTION_NAME,
-    NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION,
-    RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
-    SCHEDULER_TIMELINE_PROJECTION_VERSION,
+    RunListProjectionQuery, RunListProjectionStatus, RunSnapshotAcceptedPayload,
+    RunSnapshotNodeVersionPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
+    SchedulerEstimateProducedPayload, SchedulerModelLifecycleChangedPayload,
+    SchedulerModelLifecycleTransition, SchedulerQueuePlacementPayload, SchedulerRunDelayedPayload,
+    SchedulerTimelineProjectionQuery, SqliteDiagnosticsLedger, UpdateRetentionPolicyCommand,
+    UsageEventStatus, UsageLineage, WorkflowRunSummaryQuery, WorkflowRunSummaryRecord,
+    WorkflowRunSummaryStatus, WorkflowTimingExpectation, WorkflowTimingExpectationComparison,
+    WorkflowTimingExpectationQuery, WorkflowTimingObservation, WorkflowTimingObservationScope,
+    WorkflowTimingObservationStatus, DEFAULT_STANDARD_RETENTION_DAYS, IO_ARTIFACT_PROJECTION_NAME,
+    IO_ARTIFACT_PROJECTION_VERSION, LIBRARY_USAGE_PROJECTION_NAME,
+    LIBRARY_USAGE_PROJECTION_VERSION, MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES,
+    NODE_STATUS_PROJECTION_NAME, NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME,
+    RUN_DETAIL_PROJECTION_VERSION, RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION,
+    SCHEDULER_TIMELINE_PROJECTION_NAME, SCHEDULER_TIMELINE_PROJECTION_VERSION,
 };
 
 #[test]
@@ -2275,6 +2275,12 @@ fn sample_run_snapshot_event(workflow_run_id: &str) -> DiagnosticEventAppendRequ
         payload: DiagnosticEventPayload::RunSnapshotAccepted(RunSnapshotAcceptedPayload {
             workflow_run_snapshot_id: "runsnap_alpha".to_string(),
             workflow_presentation_revision_id: "wfpres_alpha".to_string(),
+            node_versions: vec![RunSnapshotNodeVersionPayload {
+                node_id: "node_alpha".to_string(),
+                node_type: "text-output".to_string(),
+                contract_version: "1.0.0".to_string(),
+                behavior_digest: "digest-alpha".to_string(),
+            }],
         }),
     }
 }

@@ -421,6 +421,16 @@ impl RunTerminalPayload {
 pub struct RunSnapshotAcceptedPayload {
     pub workflow_run_snapshot_id: String,
     pub workflow_presentation_revision_id: String,
+    pub node_versions: Vec<RunSnapshotNodeVersionPayload>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct RunSnapshotNodeVersionPayload {
+    pub node_id: String,
+    pub node_type: String,
+    pub contract_version: String,
+    pub behavior_digest: String,
 }
 
 impl RunSnapshotAcceptedPayload {
@@ -434,7 +444,20 @@ impl RunSnapshotAcceptedPayload {
             "workflow_presentation_revision_id",
             &self.workflow_presentation_revision_id,
             MAX_ID_LEN,
-        )
+        )?;
+        for node_version in &self.node_versions {
+            node_version.validate()?;
+        }
+        Ok(())
+    }
+}
+
+impl RunSnapshotNodeVersionPayload {
+    fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        validate_required_text("node_id", &self.node_id, MAX_ID_LEN)?;
+        validate_required_text("node_type", &self.node_type, MAX_ID_LEN)?;
+        validate_required_text("contract_version", &self.contract_version, MAX_ID_LEN)?;
+        validate_required_text("behavior_digest", &self.behavior_digest, MAX_ID_LEN)
     }
 }
 

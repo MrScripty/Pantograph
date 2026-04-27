@@ -90,6 +90,11 @@ semantics.
 - Scheduler timeline events include typed delay and model lifecycle facts when
   those events are emitted. Delay state may also update the run-list status and
   scheduler reason through projection drains.
+- `run.snapshot_accepted` events carry bounded immutable snapshot metadata,
+  including `workflow_run_snapshot_id`, `workflow_presentation_revision_id`,
+  and `node_versions` entries with node id, node type, contract version, and
+  behavior digest. Consumers audit the node-version set from those event
+  fields instead of consulting mutable graph state.
 - `run_detail_projection` is read directly by selected-run page/API consumers
   after an explicit incremental drain; normal detail reads do not replay raw
   event rows.
@@ -174,8 +179,8 @@ let history = ledger.query_workflow_run_summaries(&WorkflowRunSummaryQuery {
 
 - Stable fields: `workflow_id`, `workflow_run_id`, timing status, timing
   durations, usage-event identity, model identity, workflow-version fields,
-  and lineage node contract version/digest facts are machine-consumed by
-  diagnostics projections.
+  run snapshot node-version payloads, and lineage node contract
+  version/digest facts are machine-consumed by diagnostics projections.
 - Legacy fields: timing `graph_fingerprint` remains a compatibility facet for
   existing timing expectation history only. New diagnostics grouping must use
   workflow-version and node behavior-version correlation from immutable run

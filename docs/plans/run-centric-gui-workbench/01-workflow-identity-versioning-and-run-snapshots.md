@@ -237,8 +237,9 @@ targets, and override selection. The queued workflow-service path now emits a
 typed `run.snapshot_accepted` diagnostic event when a diagnostics ledger is
 configured, carrying the snapshot id, workflow version id, semantic version,
 presentation revision id, scheduler policy id, and retention policy id.
-Remaining work is to add client/bucket correlation and node-version-set
-correlation to the queued workflow-service path.
+That event now also carries a bounded node-version set with node id, node type,
+contract version, and behavior digest for each executable node. Remaining work
+is to add client/bucket correlation to the queued workflow-service path.
 
 ### Milestone 4: Diagnostics And Graph Consumers
 
@@ -372,20 +373,25 @@ records for the same execution fingerprint.
   `docs/adr/ADR-013-workflow-version-registry-and-run-snapshots.md` to freeze
   workflow-version registry, presentation-revision, and immutable run-snapshot
   ownership.
+- 2026-04-27: Added node behavior-version facts to typed
+  `run.snapshot_accepted` event payloads. The workflow service now derives
+  `node_versions` from executable topology before scheduler admission so
+  event consumers can audit node ids, node types, contract versions, and
+  behavior digests without reading mutable graph state.
 
 ### Deviations
 
 - The first run-snapshot storage contract captures the queue/session fields
-  available today. Full model/runtime, graph-settings, client, and bucket
-  fields still need to be filled during queue cutover.
+  available today. Client and bucket fields still need to be filled during
+  queue cutover.
 - Workflow-version registry ownership is implemented in the attribution store
   without a standalone ADR. The choice is documented here and in crate READMEs
   because the registry must share the future run snapshot transaction boundary.
 
 ### Follow-Ups
 
-- Fill remaining run snapshot fields for client/bucket attribution and
-  event-builder correlation.
+- Fill remaining run snapshot fields for client/bucket attribution and event
+  correlation.
 - Replace legacy graph-fingerprint timing facets with typed event-ledger
   projections in Stage `03`.
 

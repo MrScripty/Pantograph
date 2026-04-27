@@ -100,7 +100,8 @@ runtime readiness, session-runtime workflows, and the root facade test module.
   and run finalization in one helper behind the public facade.
 - Session run submission generates the backend workflow run id before enqueue
   and, when attribution storage is configured, records the immutable workflow
-  version/run snapshot before handing the run to scheduler admission.
+  version/run snapshot and emits a `run.snapshot_accepted` event with the node
+  behavior-version set before handing the run to scheduler admission.
 - Session lifecycle APIs keep cleanup, keep-alive, and close-session behavior
   together so runtime unload side effects remain visible in one helper.
 - Session queue inspection and scheduler snapshot APIs stay behind the public
@@ -179,6 +180,10 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
 - Snapshotting: queued run snapshots also capture backend-derived graph
   settings, runtime requirements, capability model inventory, and runtime
   capabilities before scheduler admission.
+- Snapshotting: `run.snapshot_accepted` diagnostic events include
+  `node_versions` entries with node id, node type, contract version, and
+  behavior digest so event consumers can audit the node-version set without
+  reading the current graph.
 - Presentation revisions: display metadata is resolved through the attribution
   facade after workflow-version resolution; callers must keep the returned
   presentation revision id separate from workflow-version ids in diagnostics

@@ -370,6 +370,24 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
     assert!(event
         .payload_json
         .contains(snapshot.workflow_run_snapshot_id.as_str()));
+    let snapshot_payload: serde_json::Value =
+        serde_json::from_str(&event.payload_json).expect("snapshot payload json");
+    assert_eq!(
+        snapshot_payload["node_versions"].as_array().unwrap().len(),
+        2
+    );
+    assert_eq!(
+        snapshot_payload["node_versions"][0]["contract_version"]
+            .as_str()
+            .is_some_and(|value| !value.is_empty()),
+        true
+    );
+    assert_eq!(
+        snapshot_payload["node_versions"][0]["behavior_digest"]
+            .as_str()
+            .is_some_and(|value| !value.is_empty()),
+        true
+    );
 
     let estimate_event = diagnostic_events
         .iter()
