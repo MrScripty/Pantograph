@@ -471,7 +471,7 @@ export interface DiagnosticsRetentionPolicy {
   explanation: string;
 }
 
-export interface WorkflowRetentionPolicyQueryRequest {}
+export type WorkflowRetentionPolicyQueryRequest = Record<string, never>;
 
 export interface WorkflowRetentionPolicyQueryResponse {
   retention_policy: DiagnosticsRetentionPolicy;

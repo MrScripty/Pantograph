@@ -88,7 +88,7 @@
           <div class="rounded border border-amber-900 bg-amber-950/30 p-4">
             <h2 class="text-sm font-semibold text-amber-100">Degraded Metrics</h2>
             <ul class="mt-2 space-y-1 text-sm text-amber-200">
-              {#each localNode.degradation_warnings as warning}
+              {#each localNode.degradation_warnings as warning (warning)}
                 <li>{warning}</li>
               {/each}
             </ul>

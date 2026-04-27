@@ -356,6 +356,10 @@ Before launching workers, create a dedicated implementation-wave plan with:
   and historic graph/editor separation.
 - Updated diagnostics ledger README files required by the decision traceability
   gate.
+- Ran full frontend lint during Stage `07`; it found unkeyed Svelte each blocks
+  in new workbench controls and an empty diagnostics service request interface.
+  The lint findings were fixed by adding stable each keys and replacing the
+  empty request interface with an explicit empty-record type.
 
 ### Deviations
 
@@ -363,6 +367,8 @@ Before launching workers, create a dedicated implementation-wave plan with:
   frontend source changes without a committed ADR update, and because two
   diagnostics-ledger README sections did not satisfy the documentation
   standards checker. This was resolved by ADR-014 and targeted README cleanup.
+- Initial `npm run lint:full` failed on frontend lint issues introduced during
+  Stage `06`; those findings were resolved before continuing.
 
 ### Follow-Ups
 
@@ -382,6 +388,13 @@ Before launching workers, create a dedicated implementation-wave plan with:
   issues before ADR-014 and README cleanup.
 - `npm run traceability` passed after committing ADR-014 and the diagnostics
   ledger README cleanup.
+- `npm run lint:full` passed after fixing the Stage `06` lint findings.
+- `npm run typecheck` passed.
+- `npm run test:frontend` passed.
+- `npm run build` passed.
+- `cargo test -p pantograph-diagnostics-ledger` passed.
+- `cargo test -p pantograph-workflow-service` passed.
+- `git diff --check` passed.
 
 ### Traceability Links
 

@@ -198,7 +198,7 @@
         bind:value={statusFilter}
         class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
       >
-        {#each SCHEDULER_STATUS_FILTERS as status}
+        {#each SCHEDULER_STATUS_FILTERS as status (status)}
           <option value={status}>{status}</option>
         {/each}
       </select>
@@ -212,7 +212,7 @@
         bind:value={sortKey}
         class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
       >
-        {#each SCHEDULER_SORT_OPTIONS as option}
+        {#each SCHEDULER_SORT_OPTIONS as option (option.value)}
           <option value={option.value}>{option.label}</option>
         {/each}
       </select>
