@@ -6,7 +6,10 @@ import {
   formatIoArtifactAvailabilityLabel,
   formatIoArtifactBytes,
   formatIoArtifactMediaLabel,
+  formatIoArtifactRoleLabel,
   formatProjectionFreshness,
+  isWorkflowInputArtifact,
+  isWorkflowOutputArtifact,
 } from './ioInspectorPresenters.ts';
 
 test('classifyIoArtifactMedia groups common artifact media types', () => {
@@ -31,6 +34,17 @@ test('formatIoArtifactAvailabilityLabel distinguishes referenced and metadata-on
   assert.equal(formatIoArtifactAvailabilityLabel({ payload_ref: 'artifact://run/output' }), 'Payload referenced');
   assert.equal(formatIoArtifactAvailabilityLabel({ payload_ref: '' }), 'Metadata only');
   assert.equal(formatIoArtifactAvailabilityLabel({ payload_ref: null }), 'Metadata only');
+});
+
+test('workflow artifact role helpers identify workflow boundaries', () => {
+  assert.equal(isWorkflowInputArtifact({ artifact_role: 'workflow_input' }), true);
+  assert.equal(isWorkflowInputArtifact({ artifact_role: 'node_input' }), false);
+  assert.equal(isWorkflowOutputArtifact({ artifact_role: 'workflow_output' }), true);
+  assert.equal(isWorkflowOutputArtifact({ artifact_role: 'node_output' }), false);
+  assert.equal(formatIoArtifactRoleLabel('workflow_input'), 'Workflow input');
+  assert.equal(formatIoArtifactRoleLabel('workflow_output'), 'Workflow output');
+  assert.equal(formatIoArtifactRoleLabel('custom_role'), 'custom_role');
+  assert.equal(formatIoArtifactRoleLabel(''), 'Unclassified');
 });
 
 test('formatIoArtifactBytes renders compact sizes', () => {

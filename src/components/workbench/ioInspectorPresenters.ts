@@ -17,6 +17,33 @@ export type IoArtifactPayloadAvailability =
   | 'referenced'
   | 'metadata_only';
 
+export function isWorkflowInputArtifact(
+  artifact: Pick<IoArtifactProjectionRecord, 'artifact_role'>,
+): boolean {
+  return artifact.artifact_role === 'workflow_input';
+}
+
+export function isWorkflowOutputArtifact(
+  artifact: Pick<IoArtifactProjectionRecord, 'artifact_role'>,
+): boolean {
+  return artifact.artifact_role === 'workflow_output';
+}
+
+export function formatIoArtifactRoleLabel(role: string | null | undefined): string {
+  switch (role) {
+    case 'workflow_input':
+      return 'Workflow input';
+    case 'workflow_output':
+      return 'Workflow output';
+    case 'node_input':
+      return 'Node input';
+    case 'node_output':
+      return 'Node output';
+    default:
+      return role && role.trim().length > 0 ? role : 'Unclassified';
+  }
+}
+
 export function classifyIoArtifactMedia(mediaType: string | null | undefined): IoArtifactMediaFamily {
   if (!mediaType) {
     return 'unknown';

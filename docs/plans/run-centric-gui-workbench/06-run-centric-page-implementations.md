@@ -225,7 +225,7 @@ rendering.
 
 **Tasks:**
 
-- [ ] Add workflow inputs and outputs sections.
+- [x] Add workflow inputs and outputs sections.
 - [ ] Add node-centric input/output view.
 - [x] Add artifact-centric gallery view.
 - [x] Add no-active-run retained artifact browsing where backend projections
@@ -256,9 +256,10 @@ rendering.
 payload-reference availability from metadata-only rows, displays projection
 freshness, browses retained artifacts across runs when no run is active, and
 exposes the global retention policy read/update command without optimistic
-local mutation. Workflow I/O grouping, node-centric views, rich media previews,
-detailed payload retention state, and cleanup/storage controls remain open
-pending richer backend projections.
+local mutation. Workflow input/output sections now group retained metadata by
+artifact role. Node-centric views, rich media previews, detailed payload
+retention state, and cleanup/storage controls remain open pending richer
+backend projections.
 
 ### Milestone 5: Library Page
 
@@ -355,6 +356,9 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
 - Extended the I/O artifact projection query contract so `workflow_run_id` is
   an optional filter, allowing the I/O Inspector to browse retained artifact
   metadata across runs when no run is selected.
+- Added workflow input and workflow output summary sections in the I/O
+  Inspector, derived from typed artifact roles in the retained artifact
+  projection.
 - Added global retention policy read/update controls using
   `workflowService.queryRetentionPolicy` and
   `workflowService.updateRetentionPolicy` with no optimistic mutation.

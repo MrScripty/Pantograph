@@ -12,7 +12,10 @@
     formatIoArtifactAvailabilityLabel,
     formatIoArtifactBytes,
     formatIoArtifactMediaLabel,
+    formatIoArtifactRoleLabel,
     formatProjectionFreshness,
+    isWorkflowInputArtifact,
+    isWorkflowOutputArtifact,
   } from './ioInspectorPresenters';
 
   let artifacts = $state<IoArtifactProjectionRecord[]>([]);
@@ -26,6 +29,8 @@
   let artifactError = $state<string | null>(null);
   let retentionError = $state<string | null>(null);
   let artifactRequestSerial = 0;
+  let workflowInputArtifacts = $derived(artifacts.filter(isWorkflowInputArtifact));
+  let workflowOutputArtifacts = $derived(artifacts.filter(isWorkflowOutputArtifact));
 
   function activeRunId(): string | null {
     return $activeWorkflowRun?.workflow_run_id ?? null;
@@ -165,6 +170,66 @@
           {/if}
         </div>
       {:else}
+        <div class="grid gap-3 border-b border-neutral-900 p-4 lg:grid-cols-2">
+          <section class="rounded border border-neutral-800 bg-neutral-900/50 p-4">
+            <div class="flex items-center justify-between gap-3">
+              <h2 class="text-sm font-semibold text-neutral-100">Workflow Inputs</h2>
+              <span class="rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-300">
+                {workflowInputArtifacts.length}
+              </span>
+            </div>
+
+            {#if workflowInputArtifacts.length === 0}
+              <div class="mt-3 text-sm text-neutral-500">No retained workflow input metadata</div>
+            {:else}
+              <div class="mt-3 space-y-2">
+                {#each workflowInputArtifacts.slice(0, 5) as artifact (artifact.event_id)}
+                  <div class="min-w-0 rounded border border-neutral-800 bg-neutral-950/60 px-3 py-2">
+                    <div class="truncate font-mono text-xs text-neutral-100" title={artifact.artifact_id}>
+                      {artifact.artifact_id}
+                    </div>
+                    <div class="mt-1 text-xs text-neutral-500">
+                      {formatIoArtifactMediaLabel(artifact.media_type)} · {formatIoArtifactBytes(artifact.size_bytes)}
+                    </div>
+                  </div>
+                {/each}
+                {#if workflowInputArtifacts.length > 5}
+                  <div class="text-xs text-neutral-500">+{workflowInputArtifacts.length - 5} more</div>
+                {/if}
+              </div>
+            {/if}
+          </section>
+
+          <section class="rounded border border-neutral-800 bg-neutral-900/50 p-4">
+            <div class="flex items-center justify-between gap-3">
+              <h2 class="text-sm font-semibold text-neutral-100">Workflow Outputs</h2>
+              <span class="rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-300">
+                {workflowOutputArtifacts.length}
+              </span>
+            </div>
+
+            {#if workflowOutputArtifacts.length === 0}
+              <div class="mt-3 text-sm text-neutral-500">No retained workflow output metadata</div>
+            {:else}
+              <div class="mt-3 space-y-2">
+                {#each workflowOutputArtifacts.slice(0, 5) as artifact (artifact.event_id)}
+                  <div class="min-w-0 rounded border border-neutral-800 bg-neutral-950/60 px-3 py-2">
+                    <div class="truncate font-mono text-xs text-neutral-100" title={artifact.artifact_id}>
+                      {artifact.artifact_id}
+                    </div>
+                    <div class="mt-1 text-xs text-neutral-500">
+                      {formatIoArtifactMediaLabel(artifact.media_type)} · {formatIoArtifactBytes(artifact.size_bytes)}
+                    </div>
+                  </div>
+                {/each}
+                {#if workflowOutputArtifacts.length > 5}
+                  <div class="text-xs text-neutral-500">+{workflowOutputArtifacts.length - 5} more</div>
+                {/if}
+              </div>
+            {/if}
+          </section>
+        </div>
+
         <div class="grid gap-3 p-4 xl:grid-cols-2 2xl:grid-cols-3">
           {#each artifacts as artifact (artifact.event_id)}
             <article class="rounded border border-neutral-800 bg-neutral-900/60 p-4">
@@ -174,7 +239,7 @@
                     {artifact.artifact_id}
                   </div>
                   <div class="mt-1 text-xs text-neutral-500">
-                    {artifact.artifact_role} · {formatIoArtifactMediaLabel(artifact.media_type)}
+                    {formatIoArtifactRoleLabel(artifact.artifact_role)} · {formatIoArtifactMediaLabel(artifact.media_type)}
                   </div>
                 </div>
                 <span class="shrink-0 rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-300">
