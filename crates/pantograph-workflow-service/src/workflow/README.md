@@ -11,7 +11,7 @@ public exports out of the service crate.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `attribution_api.rs` | Client/session/bucket facade methods plus workflow-version resolution against the durable attribution store. |
+| `attribution_api.rs` | Client/session/bucket facade methods plus workflow-version and presentation-revision resolution against the durable attribution store. |
 | `contracts.rs` | Public workflow request/response/error DTO definitions re-exported by the parent facade. |
 | `graph_api.rs` | Graph edit-session, mutation, connection, persistence, and runtime snapshot facade methods. |
 | `host.rs` | Host trait defaults and scheduler diagnostics provider contracts re-exported by the parent facade. |
@@ -111,6 +111,10 @@ runtime readiness, session-runtime workflows, and the root facade test module.
 - Workflow version resolution validates `WorkflowIdentity`, computes
   `WorkflowExecutableTopology`, and persists semantic-version/fingerprint
   agreement through the attribution store.
+- Workflow presentation revision resolution validates `WorkflowIdentity`,
+  computes `WorkflowPresentationMetadata`, and persists display-metadata
+  fingerprint agreement through the attribution store without changing workflow
+  execution identity.
 
 ## Revisit Triggers
 - Runtime preflight becomes a public reusable crate-level policy.
@@ -169,6 +173,10 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
 - Snapshotting: queued workflow execution sessions require an explicit
   `workflow_semantic_version` and use it when resolving the immutable workflow
   version snapshot.
+- Presentation revisions: display metadata is resolved through the attribution
+  facade after workflow-version resolution; callers must keep the returned
+  presentation revision id separate from workflow-version ids in diagnostics
+  queries.
 - Diagnostics: usage diagnostics accept workflow-version and node contract
   version/digest filters so historic comparisons can avoid mixing different
   executable node behavior.

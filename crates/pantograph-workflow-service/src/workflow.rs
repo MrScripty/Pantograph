@@ -52,9 +52,11 @@ pub use pantograph_runtime_attribution::{
     AttributionRepository, BucketCreateRequest, BucketDeleteRequest, BucketRecord, BucketSelection,
     ClientRegistrationRequest, ClientRegistrationResponse, ClientSessionOpenRequest,
     ClientSessionOpenResponse, ClientSessionRecord, ClientSessionResumeRequest,
-    CredentialProofRequest, CredentialSecret, SqliteAttributionStore, WorkflowRunAttribution,
-    WorkflowRunRecord, WorkflowRunSnapshotRecord, WorkflowRunSnapshotRequest,
-    WorkflowRunVersionProjection, WorkflowVersionRecord, WorkflowVersionResolveRequest,
+    CredentialProofRequest, CredentialSecret, SqliteAttributionStore,
+    WorkflowPresentationRevisionRecord, WorkflowPresentationRevisionResolveRequest,
+    WorkflowRunAttribution, WorkflowRunRecord, WorkflowRunSnapshotRecord,
+    WorkflowRunSnapshotRequest, WorkflowRunVersionProjection, WorkflowVersionRecord,
+    WorkflowVersionResolveRequest,
 };
 
 #[cfg(test)]

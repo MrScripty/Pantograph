@@ -66,6 +66,7 @@ attribution_id!(WorkflowRunId, "run_");
 attribution_id!(WorkflowRunSnapshotId, "runsnap_");
 attribution_id!(WorkflowId, "workflow_");
 attribution_id!(WorkflowVersionId, "wfver_");
+attribution_id!(WorkflowPresentationRevisionId, "wfpres_");
 attribution_id!(UsageEventId, "usage_");
 
 pub(crate) fn validate_id(field: &'static str, value: String) -> Result<String, AttributionError> {

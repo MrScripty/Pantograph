@@ -20,15 +20,18 @@ use crate::{
     ClientSessionDisconnectRequest, ClientSessionExpireRequest, ClientSessionId,
     ClientSessionLifecycleState, ClientSessionOpenRequest, ClientSessionOpenResponse,
     ClientSessionRecord, ClientSessionResumeRequest, ClientStatus, CredentialProofRequest,
-    CredentialSecret, DefaultBucketAssignment, SessionLifecycleRecord, WorkflowRunRecord,
-    WorkflowRunSnapshotRecord, WorkflowRunSnapshotRequest, WorkflowRunStartRequest,
-    WorkflowRunStatus, WorkflowRunVersionProjection, WorkflowVersionRecord,
-    WorkflowVersionResolveRequest,
+    CredentialSecret, DefaultBucketAssignment, SessionLifecycleRecord,
+    WorkflowPresentationRevisionRecord, WorkflowPresentationRevisionResolveRequest,
+    WorkflowRunRecord, WorkflowRunSnapshotRecord, WorkflowRunSnapshotRequest,
+    WorkflowRunStartRequest, WorkflowRunStatus, WorkflowRunVersionProjection,
+    WorkflowVersionRecord, WorkflowVersionResolveRequest,
 };
 
 const MAX_SEMANTIC_VERSION_LEN: usize = 64;
 const MAX_EXECUTION_FINGERPRINT_LEN: usize = 256;
+const MAX_PRESENTATION_FINGERPRINT_LEN: usize = 256;
 const MAX_EXECUTABLE_TOPOLOGY_JSON_LEN: usize = 262_144;
+const MAX_PRESENTATION_METADATA_JSON_LEN: usize = 262_144;
 const MAX_WORKFLOW_EXECUTION_SESSION_ID_LEN: usize = 128;
 const MAX_RUN_SNAPSHOT_JSON_LEN: usize = 262_144;
 
@@ -566,6 +569,73 @@ impl AttributionRepository for SqliteAttributionStore {
         })
     }
 
+    fn resolve_workflow_presentation_revision(
+        &mut self,
+        request: WorkflowPresentationRevisionResolveRequest,
+    ) -> Result<WorkflowPresentationRevisionRecord, AttributionError> {
+        let presentation_fingerprint = validate_required_boundary_text(
+            "presentation_fingerprint",
+            request.presentation_fingerprint,
+            MAX_PRESENTATION_FINGERPRINT_LEN,
+        )?;
+        let presentation_metadata_json =
+            validate_presentation_metadata_json(request.presentation_metadata_json)?;
+
+        let tx = self.conn.transaction()?;
+        let version = workflow_version_by_id(&tx, &request.workflow_version_id)?.ok_or(
+            AttributionError::NotFound {
+                entity: "workflow_version",
+            },
+        )?;
+        if version.workflow_id != request.workflow_id {
+            return Err(AttributionError::NotFound {
+                entity: "workflow_version",
+            });
+        }
+
+        let existing = workflow_presentation_revision_by_fingerprint(
+            &tx,
+            &request.workflow_version_id,
+            &presentation_fingerprint,
+        )?;
+        if let Some(record) = existing {
+            if record.presentation_metadata_json != presentation_metadata_json {
+                return Err(AttributionError::WorkflowPresentationRevisionConflict {
+                    workflow_id: request.workflow_id,
+                    presentation_fingerprint,
+                });
+            }
+            return Ok(record);
+        }
+
+        let now = now_ms();
+        let workflow_presentation_revision_id = crate::WorkflowPresentationRevisionId::generate();
+        tx.execute(
+            "INSERT INTO workflow_presentation_revisions
+                (workflow_presentation_revision_id, workflow_id, workflow_version_id,
+                 presentation_fingerprint, presentation_metadata_json, created_at_ms)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                workflow_presentation_revision_id.as_str(),
+                request.workflow_id.as_str(),
+                request.workflow_version_id.as_str(),
+                presentation_fingerprint.as_str(),
+                presentation_metadata_json.as_str(),
+                now
+            ],
+        )?;
+        tx.commit()?;
+
+        Ok(WorkflowPresentationRevisionRecord {
+            workflow_presentation_revision_id,
+            workflow_id: request.workflow_id,
+            workflow_version_id: request.workflow_version_id,
+            presentation_fingerprint,
+            presentation_metadata_json,
+            created_at_ms: now,
+        })
+    }
+
     fn create_workflow_run_snapshot(
         &mut self,
         request: WorkflowRunSnapshotRequest,
@@ -684,6 +754,43 @@ impl AttributionRepository for SqliteAttributionStore {
             created_at_ms: now,
         })
     }
+}
+
+fn workflow_presentation_revision_by_fingerprint(
+    conn: &rusqlite::Connection,
+    workflow_version_id: &crate::WorkflowVersionId,
+    presentation_fingerprint: &str,
+) -> Result<Option<WorkflowPresentationRevisionRecord>, AttributionError> {
+    let mut stmt = conn.prepare(
+        "SELECT workflow_presentation_revision_id, workflow_id, workflow_version_id,
+                presentation_fingerprint, presentation_metadata_json, created_at_ms
+         FROM workflow_presentation_revisions
+         WHERE workflow_version_id = ?1 AND presentation_fingerprint = ?2",
+    )?;
+    let record = stmt
+        .query_row(
+            params![workflow_version_id.as_str(), presentation_fingerprint],
+            workflow_presentation_revision_from_row,
+        )
+        .optional()?;
+    Ok(record)
+}
+
+fn workflow_presentation_revision_from_row(
+    row: &rusqlite::Row<'_>,
+) -> rusqlite::Result<WorkflowPresentationRevisionRecord> {
+    Ok(WorkflowPresentationRevisionRecord {
+        workflow_presentation_revision_id: row
+            .get::<_, String>(0)
+            .and_then(parse_workflow_presentation_revision_id)?,
+        workflow_id: row.get::<_, String>(1).and_then(parse_workflow_id)?,
+        workflow_version_id: row
+            .get::<_, String>(2)
+            .and_then(parse_workflow_version_id)?,
+        presentation_fingerprint: row.get(3)?,
+        presentation_metadata_json: row.get(4)?,
+        created_at_ms: row.get(5)?,
+    })
 }
 
 fn workflow_version_by_semantic_version(
@@ -818,6 +925,13 @@ fn parse_workflow_run_snapshot_id(value: String) -> rusqlite::Result<crate::Work
         .map_err(crate::sqlite_rows::sqlite_conversion_error)
 }
 
+fn parse_workflow_presentation_revision_id(
+    value: String,
+) -> rusqlite::Result<crate::WorkflowPresentationRevisionId> {
+    crate::WorkflowPresentationRevisionId::try_from(value)
+        .map_err(crate::sqlite_rows::sqlite_conversion_error)
+}
+
 fn parse_workflow_run_id(value: String) -> rusqlite::Result<crate::WorkflowRunId> {
     crate::WorkflowRunId::try_from(value).map_err(crate::sqlite_rows::sqlite_conversion_error)
 }
@@ -853,6 +967,14 @@ fn validate_executable_topology_json(value: String) -> Result<String, Attributio
         "executable_topology_json",
         value,
         MAX_EXECUTABLE_TOPOLOGY_JSON_LEN,
+    )
+}
+
+fn validate_presentation_metadata_json(value: String) -> Result<String, AttributionError> {
+    validate_json_text_with_limit(
+        "presentation_metadata_json",
+        value,
+        MAX_PRESENTATION_METADATA_JSON_LEN,
     )
 }
 

@@ -18,6 +18,7 @@ and persistence abstractions so adapters do not implement graph business logic.
 | `canonicalization_tests.rs` | Canonicalization migration and inference-overlay regression tests. |
 | `effective_definition.rs` | Resolves backend-owned effective node contracts and projects them into graph DTOs before validation or candidate lookup. |
 | `executable_topology.rs` | Canonical executable-topology projection and BLAKE3 workflow execution fingerprint calculation for workflow versioning. |
+| `presentation_revision.rs` | Canonical display-metadata projection and BLAKE3 presentation fingerprint calculation for historic graph presentation revisions. |
 | `validation.rs` | Shared connection compatibility helpers used by graph-edit flows. |
 | `connection_intent.rs` | Canonical candidate-discovery and revision-aware connection/insert validation. |
 | `connection_insert.rs` | Internal node-insert, edge-insert preview, and edge-bridge helpers used by `connection_intent.rs` while preserving the public graph-edit facade. |
@@ -120,6 +121,10 @@ for existing graph-edit callers.
   sorted node ids, node types, node behavior versions, and sorted port
   connections. Node positions, node data, edge ids, derived graph caches, and
   other display metadata are excluded.
+- Workflow presentation fingerprints are computed from display metadata only:
+  sorted node positions and edge display ids/endpoints. They are persisted as a
+  separate attribution record so historic graph viewers can restore layout
+  without changing execution-version diagnostics grouping.
 - Workflow save/delete file stems are not sanitized from arbitrary names; they
   must already be valid workflow identities so diagnostics and future workflow
   versions can use the same stable id.
@@ -180,6 +185,9 @@ let response = service
 - `WorkflowExecutableTopology` is the contract used for execution
   fingerprinting; callers must not use `WorkflowGraph.compute_fingerprint()` as
   workflow-version identity.
+- `WorkflowPresentationMetadata` is the contract used for presentation
+  fingerprinting; consumers must not use it as execution identity or
+  diagnostics grouping input.
 - `WorkflowGraphMetadata.id` is derived from the persisted filename stem when listed from a store.
 - `node.data.definition.inputs` and `node.data.definition.outputs` are additive
   per-node overlays resolved into `EffectiveNodeContract` during connection

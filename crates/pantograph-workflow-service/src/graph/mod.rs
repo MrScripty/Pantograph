@@ -8,6 +8,7 @@ mod memory_impact;
 mod persistence;
 #[cfg(test)]
 mod persistence_tests;
+mod presentation_revision;
 mod registry;
 mod session;
 mod session_contract;
@@ -20,7 +21,7 @@ mod types;
 mod validation;
 
 pub use canonicalization::{
-    WorkflowGraphCanonicalizationResult, canonicalize_workflow_graph_with_migrations,
+    canonicalize_workflow_graph_with_migrations, WorkflowGraphCanonicalizationResult,
 };
 pub use connection_intent::{
     commit_connection, connection_candidates, insert_node_and_connect, insert_node_on_edge,
@@ -29,9 +30,9 @@ pub use connection_intent::{
 };
 pub use contract_validation::validate_workflow_graph_contract;
 pub use executable_topology::{
-    WorkflowExecutableTopology, WorkflowExecutableTopologyEdge, WorkflowExecutableTopologyNode,
     workflow_executable_topology, workflow_executable_topology_with_node_versions,
     workflow_execution_fingerprint, workflow_execution_fingerprint_for_topology,
+    WorkflowExecutableTopology, WorkflowExecutableTopologyEdge, WorkflowExecutableTopologyNode,
 };
 pub use memory_impact::graph_memory_impact_from_node_engine_graph_change;
 pub use persistence::{
@@ -39,7 +40,12 @@ pub use persistence::{
     WorkflowGraphListResponse, WorkflowGraphLoadRequest, WorkflowGraphSaveRequest,
     WorkflowGraphSaveResponse, WorkflowGraphStore,
 };
-pub use registry::{NodeRegistry, validate_workflow_connection};
+pub use presentation_revision::{
+    workflow_presentation_fingerprint, workflow_presentation_fingerprint_for_metadata,
+    workflow_presentation_metadata, workflow_presentation_metadata_json, WorkflowPresentationEdge,
+    WorkflowPresentationMetadata, WorkflowPresentationNode,
+};
+pub use registry::{validate_workflow_connection, NodeRegistry};
 pub use session::GraphSessionStore;
 pub use session_contract::{WorkflowGraphEditSessionGraphResponse, WorkflowGraphSessionStateView};
 pub use session_graph::{convert_graph_from_node_engine, convert_graph_to_node_engine};

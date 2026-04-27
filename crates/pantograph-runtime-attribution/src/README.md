@@ -2,10 +2,10 @@
 
 ## Purpose
 This directory owns Pantograph's durable attribution domain for clients,
-credentials, client sessions, buckets, workflow versions, and workflow runs.
-Runtime execution, diagnostics, adapters, bindings, and nodes consume
-validated attribution facts from this crate instead of trusting caller-supplied
-ids.
+credentials, client sessions, buckets, workflow versions, workflow
+presentation revisions, and workflow runs. Runtime execution, diagnostics,
+adapters, bindings, and nodes consume validated attribution facts from this
+crate instead of trusting caller-supplied ids.
 
 ## Contents
 | File/Folder | Description |
@@ -27,6 +27,8 @@ verification, bucket lineage, or one-active-session enforcement.
 - Workflow-run attribution must exist before runtime scheduling begins.
 - Workflow-version records are resolved before immutable queue/run snapshot
   creation and enforce strict semantic-version/fingerprint agreement.
+- Workflow-presentation revisions are resolved against an existing workflow
+  version and track display metadata without changing diagnostics grouping.
 - Workflow-run snapshots capture the immutable workflow version, execution
   fingerprint, queue/session context, input references, output targets, and
   override selection that existed when the run was submitted.
@@ -57,6 +59,10 @@ paths.
 - Each `(workflow_id, semantic_version)` maps to exactly one execution
   fingerprint, and each `(workflow_id, execution_fingerprint)` maps to exactly
   one semantic version.
+- Each `(workflow_version_id, presentation_fingerprint)` maps to exactly one
+  presentation metadata payload.
+- Presentation revisions never replace workflow execution versions as
+  diagnostics grouping keys.
 - Explicit bucket selection must stay inside the session client's namespace.
 - Credential verification compares digest-only persistent state.
 
@@ -106,15 +112,22 @@ assert_eq!(opened.session.client_id, registered.client.client_id);
 - Treat `CredentialSecret` as response-only material. It redacts `Debug` output
   and must not be copied into diagnostics records.
 - Use store commands for lifecycle transitions; do not mutate records directly.
+- Resolve workflow presentation revisions only after the referenced workflow
+  execution version exists, and treat fingerprint/payload disagreement as a
+  hard contract conflict.
 - Use returned `WorkflowRunRecord` values as the trusted execution attribution.
 
 ## Structured Producer Contract
-- SQLite schema version `2` is the current breaking-cutover schema version.
+- SQLite schema version `4` is the current breaking-cutover schema version.
 - Persisted credential rows contain credential id, client id, salt bytes,
   digest bytes, status, timestamps, and no raw secret.
 - Persisted workflow-version rows contain workflow id, semantic version,
   execution fingerprint, canonical executable topology JSON, and creation
   timestamp.
+- Persisted workflow-presentation revision rows contain workflow id, workflow
+  version id, presentation fingerprint, canonical presentation metadata JSON,
+  and creation timestamp. They are deduplicated by workflow version and
+  presentation fingerprint.
 - Persisted workflow-run snapshot rows are immutable inserts keyed by
   workflow-run id and must agree with the referenced workflow-version row.
 - Lifecycle history is append-only through `session_lifecycle_records`.

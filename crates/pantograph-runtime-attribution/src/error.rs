@@ -53,6 +53,11 @@ pub enum AttributionError {
         workflow_id: WorkflowId,
         execution_fingerprint: String,
     },
+    #[error("workflow presentation fingerprint already points at different display metadata")]
+    WorkflowPresentationRevisionConflict {
+        workflow_id: WorkflowId,
+        presentation_fingerprint: String,
+    },
     #[error("record was not found")]
     NotFound { entity: &'static str },
     #[error("unsupported attribution schema version {found}")]

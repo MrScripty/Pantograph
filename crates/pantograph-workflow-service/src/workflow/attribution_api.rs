@@ -1,13 +1,16 @@
 use pantograph_runtime_attribution::{
     BucketCreateRequest, BucketDeleteRequest, BucketRecord, ClientRegistrationRequest,
     ClientRegistrationResponse, ClientSessionOpenRequest, ClientSessionOpenResponse,
-    ClientSessionRecord, ClientSessionResumeRequest, WorkflowId, WorkflowRunId,
-    WorkflowRunSnapshotRecord, WorkflowRunVersionProjection, WorkflowVersionRecord,
-    WorkflowVersionResolveRequest,
+    ClientSessionRecord, ClientSessionResumeRequest, WorkflowId,
+    WorkflowPresentationRevisionRecord, WorkflowPresentationRevisionResolveRequest, WorkflowRunId,
+    WorkflowRunSnapshotRecord, WorkflowRunVersionProjection, WorkflowVersionId,
+    WorkflowVersionRecord, WorkflowVersionResolveRequest,
 };
 
 use crate::graph::{
-    workflow_executable_topology, workflow_execution_fingerprint_for_topology, WorkflowGraph,
+    workflow_executable_topology, workflow_execution_fingerprint_for_topology,
+    workflow_presentation_fingerprint_for_metadata, workflow_presentation_metadata,
+    workflow_presentation_metadata_json, WorkflowGraph,
 };
 
 use super::{validate_workflow_id, AttributionRepository, WorkflowService, WorkflowServiceError};
@@ -86,6 +89,28 @@ impl WorkflowService {
         let mut store = self.attribution_store_guard()?;
         store
             .resolve_workflow_version(request)
+            .map_err(WorkflowServiceError::from)
+    }
+
+    pub fn resolve_workflow_graph_presentation_revision(
+        &self,
+        workflow_id: &str,
+        workflow_version_id: &str,
+        graph: &WorkflowGraph,
+    ) -> Result<WorkflowPresentationRevisionRecord, WorkflowServiceError> {
+        validate_workflow_id(workflow_id)?;
+        let metadata = workflow_presentation_metadata(graph);
+        let presentation_fingerprint = workflow_presentation_fingerprint_for_metadata(&metadata)?;
+        let presentation_metadata_json = workflow_presentation_metadata_json(&metadata)?;
+        let request = WorkflowPresentationRevisionResolveRequest {
+            workflow_id: WorkflowId::try_from(workflow_id.to_string())?,
+            workflow_version_id: WorkflowVersionId::try_from(workflow_version_id.to_string())?,
+            presentation_fingerprint,
+            presentation_metadata_json,
+        };
+        let mut store = self.attribution_store_guard()?;
+        store
+            .resolve_workflow_presentation_revision(request)
             .map_err(WorkflowServiceError::from)
     }
 

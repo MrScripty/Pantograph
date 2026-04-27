@@ -2,9 +2,12 @@
 
 ## Status
 
-In progress. First identity-validation slice implemented. Workflow identity
-grammar and saved-graph boundary validation now exist before broader
-workflow-version registry work.
+In progress. Workflow identity, executable topology, workflow-version
+registry, immutable snapshot foundations, diagnostics version filters, and
+presentation-revision storage/API foundations are implemented. Remaining work
+centers on linking queued run snapshots to presentation revisions, expanding
+full audit context fields, and quarantining older graph-fingerprint grouping
+assumptions.
 
 ## Objective
 
@@ -149,7 +152,7 @@ large patch. Before coding, split it into waves with explicit write sets:
 - [ ] Decide whether to add a new ADR for workflow version registry ownership.
 - [x] Define workflow identity validation rules and error categories.
 - [x] Define canonical executable topology inputs and exclusions.
-- [ ] Define presentation revision contract and its relationship to execution
+- [x] Define presentation revision contract and its relationship to execution
   versions.
 - [ ] Define run snapshot fields and breaking cutover cleanup strategy.
 - [ ] Define run snapshot and workflow/node version fields that event payload
@@ -166,9 +169,10 @@ large patch. Before coding, split it into waves with explicit write sets:
 **Status:** In progress. Workflow identity grammar has a first implementation
 in `pantograph-workflow-service`, and node behavior version facts are now
 available from `pantograph-node-contracts`. Canonical executable topology
-projection is implemented, and workflow-version registry ownership now sits in
-the durable attribution store. Remaining Milestone 1 snapshot and presentation
-revision decisions are still open.
+projection is implemented, workflow-version registry ownership now sits in the
+durable attribution store, and presentation revisions are defined as display
+metadata records that never drive diagnostics identity. Remaining Milestone 1
+snapshot field and cutover decisions are still open.
 
 ### Milestone 2: Workflow Version Registry
 
@@ -181,7 +185,7 @@ version, execution fingerprint, and presentation revision lookup.
 - [x] Store or project workflow versions under stable workflow identity.
 - [x] Reuse an existing workflow version when identity and fingerprint match.
 - [x] Reject same semantic version with different fingerprint.
-- [ ] Track presentation revisions separately from execution versions.
+- [x] Track presentation revisions separately from execution versions.
 - [ ] Replace old active diagnostics grouping keys with workflow execution
   version ids.
 
@@ -193,8 +197,10 @@ version, execution fingerprint, and presentation revision lookup.
 - Unit tests cover semantic version conflict rejection.
 
 **Status:** In progress. Durable attribution storage now owns
-workflow-version records and strict semantic-version/fingerprint conflict
-checks; diagnostics and presentation revision cutover remain open.
+workflow-version records, strict semantic-version/fingerprint conflict checks,
+and workflow-presentation revision records keyed by workflow version plus
+presentation fingerprint. Diagnostics graph-fingerprint quarantine remains
+open.
 
 ### Milestone 3: Run Submission And Immutability
 
@@ -332,6 +338,15 @@ records for the same execution fingerprint.
 - 2026-04-27: Added diagnostics usage-query filters for node contract
   version and node contract digest, backed by SQLite lineage indexes and
   exposed through the workflow-service diagnostics facade.
+- 2026-04-27: Added durable workflow-presentation revision storage to
+  `pantograph-runtime-attribution` and a `WorkflowService`
+  `resolve_workflow_graph_presentation_revision` facade. Presentation
+  revisions are keyed by workflow version plus backend-computed display
+  fingerprint and reject fingerprint/payload disagreement.
+- 2026-04-27: Added `WorkflowPresentationMetadata` in
+  `pantograph-workflow-service`. Presentation fingerprints include sorted node
+  positions and edge display ids/endpoints while excluding node data,
+  executable topology payloads, and derived graph caches.
 
 ### Deviations
 
@@ -344,8 +359,10 @@ records for the same execution fingerprint.
 
 ### Follow-Ups
 
-- Define presentation revision storage and API fields.
-- Define run snapshot schema and queue submission transaction wiring.
+- Link queued run snapshots to resolved presentation revision ids.
+- Fill remaining run snapshot fields for model/runtime facts, client/bucket
+  attribution, and event-builder correlation.
+- Quarantine or remove old graph-fingerprint-only diagnostics grouping.
 
 ### Verification Summary
 
@@ -358,6 +375,13 @@ records for the same execution fingerprint.
 - 2026-04-27: `cargo test -p pantograph-workflow-service --lib
   persistence_tests` passed.
 - 2026-04-27: `cargo test -p pantograph-workflow-service` passed.
+- 2026-04-27: `cargo test -p pantograph-runtime-attribution` passed after
+  adding workflow-presentation revision storage.
+- 2026-04-27: `cargo test -p pantograph-workflow-service workflow_version`
+  passed after adding workflow-service presentation revision resolution.
+- 2026-04-27: `rustfmt --edition 2021 --config skip_children=true --check`
+  passed for the touched attribution and workflow-service Rust files.
+- 2026-04-27: `git diff --check` passed for the presentation revision slice.
 - 2026-04-27: `cargo test -p pantograph-node-contracts` passed.
 - 2026-04-27: `cargo test -p workflow-nodes` passed.
 - 2026-04-27: `cargo test -p pantograph-workflow-service canonicalization`

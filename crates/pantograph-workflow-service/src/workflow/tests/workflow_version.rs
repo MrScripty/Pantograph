@@ -63,3 +63,68 @@ fn resolve_workflow_graph_version_rejects_semantic_version_conflict() {
         matches!(err, WorkflowServiceError::InvalidRequest(message) if message.contains("semantic version"))
     );
 }
+
+#[test]
+fn resolve_workflow_graph_presentation_revision_tracks_display_metadata_separately() {
+    let service = WorkflowService::with_ephemeral_attribution_store().expect("service");
+    let version = service
+        .resolve_workflow_graph_version("workflow-versioned", "1.0.0", &graph())
+        .expect("version");
+    let first = service
+        .resolve_workflow_graph_presentation_revision(
+            "workflow-versioned",
+            version.workflow_version_id.as_str(),
+            &graph(),
+        )
+        .expect("first presentation revision");
+
+    let mut display_changed = graph();
+    display_changed.nodes[0].position = Position { x: 50.0, y: 0.0 };
+    let second = service
+        .resolve_workflow_graph_presentation_revision(
+            "workflow-versioned",
+            version.workflow_version_id.as_str(),
+            &display_changed,
+        )
+        .expect("second presentation revision");
+
+    assert_ne!(
+        first.workflow_presentation_revision_id,
+        second.workflow_presentation_revision_id
+    );
+    assert_eq!(first.workflow_version_id, version.workflow_version_id);
+    assert_eq!(second.workflow_version_id, version.workflow_version_id);
+    assert!(first
+        .presentation_fingerprint
+        .starts_with("workflow-presentation-blake3:"));
+}
+
+#[test]
+fn resolve_workflow_graph_presentation_revision_ignores_node_data_changes() {
+    let service = WorkflowService::with_ephemeral_attribution_store().expect("service");
+    let version = service
+        .resolve_workflow_graph_version("workflow-versioned", "1.0.0", &graph())
+        .expect("version");
+    let first = service
+        .resolve_workflow_graph_presentation_revision(
+            "workflow-versioned",
+            version.workflow_version_id.as_str(),
+            &graph(),
+        )
+        .expect("first presentation revision");
+
+    let mut data_changed = graph();
+    data_changed.nodes[0].data = serde_json::json!({"value": "changed"});
+    let second = service
+        .resolve_workflow_graph_presentation_revision(
+            "workflow-versioned",
+            version.workflow_version_id.as_str(),
+            &data_changed,
+        )
+        .expect("reused presentation revision");
+
+    assert_eq!(
+        first.workflow_presentation_revision_id,
+        second.workflow_presentation_revision_id
+    );
+}

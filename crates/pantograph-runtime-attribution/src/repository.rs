@@ -2,9 +2,10 @@ use crate::{
     AttributionError, BucketCreateRequest, BucketDeleteRequest, BucketRecord, ClientCredential,
     ClientRegistrationRequest, ClientRegistrationResponse, ClientSessionDisconnectRequest,
     ClientSessionExpireRequest, ClientSessionOpenRequest, ClientSessionOpenResponse,
-    ClientSessionRecord, ClientSessionResumeRequest, CredentialProofRequest, WorkflowRunRecord,
-    WorkflowRunSnapshotRecord, WorkflowRunSnapshotRequest, WorkflowRunStartRequest,
-    WorkflowVersionRecord, WorkflowVersionResolveRequest,
+    ClientSessionRecord, ClientSessionResumeRequest, CredentialProofRequest,
+    WorkflowPresentationRevisionRecord, WorkflowPresentationRevisionResolveRequest,
+    WorkflowRunRecord, WorkflowRunSnapshotRecord, WorkflowRunSnapshotRequest,
+    WorkflowRunStartRequest, WorkflowVersionRecord, WorkflowVersionResolveRequest,
 };
 
 pub trait AttributionRepository {
@@ -57,6 +58,11 @@ pub trait AttributionRepository {
         &mut self,
         request: WorkflowVersionResolveRequest,
     ) -> Result<WorkflowVersionRecord, AttributionError>;
+
+    fn resolve_workflow_presentation_revision(
+        &mut self,
+        request: WorkflowPresentationRevisionResolveRequest,
+    ) -> Result<WorkflowPresentationRevisionRecord, AttributionError>;
 
     fn create_workflow_run_snapshot(
         &mut self,

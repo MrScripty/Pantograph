@@ -6,8 +6,9 @@ use crate::{
     AttributionError, AttributionRepository, BucketCreateRequest, BucketDeleteRequest, BucketId,
     BucketSelection, ClientRegistrationRequest, ClientRegistrationResponse,
     ClientSessionLifecycleState, ClientSessionOpenRequest, ClientSessionResumeRequest,
-    CredentialProofRequest, CredentialSecret, SqliteAttributionStore, WorkflowId, WorkflowRunId,
-    WorkflowRunSnapshotRequest, WorkflowRunStartRequest, WorkflowVersionResolveRequest,
+    CredentialProofRequest, CredentialSecret, SqliteAttributionStore, WorkflowId,
+    WorkflowPresentationRevisionResolveRequest, WorkflowRunId, WorkflowRunSnapshotRequest,
+    WorkflowRunStartRequest, WorkflowVersionResolveRequest,
 };
 
 fn register(store: &mut SqliteAttributionStore) -> ClientRegistrationResponse {
@@ -234,6 +235,84 @@ fn workflow_version_resolution_rejects_invalid_semantic_versions() {
     assert!(matches!(
         err,
         AttributionError::InvalidWorkflowSemanticVersion { .. }
+    ));
+}
+
+#[test]
+fn workflow_presentation_revision_resolution_reuses_same_display_metadata() {
+    let mut store = SqliteAttributionStore::open_in_memory().expect("store");
+    let version = store
+        .resolve_workflow_version(workflow_version_request(
+            "1.0.0",
+            "workflow-exec-blake3:abc",
+        ))
+        .expect("resolve version");
+    let presentation_json = serde_json::json!({
+        "schema_version": 1,
+        "nodes": [{"node_id": "node-a", "position": {"x": 0.0, "y": 1.0}}],
+        "edges": []
+    })
+    .to_string();
+
+    let first = store
+        .resolve_workflow_presentation_revision(WorkflowPresentationRevisionResolveRequest {
+            workflow_id: workflow_id(),
+            workflow_version_id: version.workflow_version_id.clone(),
+            presentation_fingerprint: "workflow-presentation-blake3:abc".to_string(),
+            presentation_metadata_json: presentation_json.clone(),
+        })
+        .expect("resolve presentation revision");
+    let second = store
+        .resolve_workflow_presentation_revision(WorkflowPresentationRevisionResolveRequest {
+            workflow_id: workflow_id(),
+            workflow_version_id: version.workflow_version_id.clone(),
+            presentation_fingerprint: "workflow-presentation-blake3:abc".to_string(),
+            presentation_metadata_json: presentation_json,
+        })
+        .expect("reuse presentation revision");
+
+    assert_eq!(
+        first.workflow_presentation_revision_id,
+        second.workflow_presentation_revision_id
+    );
+    assert_eq!(first.workflow_version_id, version.workflow_version_id);
+    assert_eq!(
+        first.presentation_fingerprint,
+        "workflow-presentation-blake3:abc"
+    );
+}
+
+#[test]
+fn workflow_presentation_revision_rejects_fingerprint_metadata_conflict() {
+    let mut store = SqliteAttributionStore::open_in_memory().expect("store");
+    let version = store
+        .resolve_workflow_version(workflow_version_request(
+            "1.0.0",
+            "workflow-exec-blake3:abc",
+        ))
+        .expect("resolve version");
+    store
+        .resolve_workflow_presentation_revision(WorkflowPresentationRevisionResolveRequest {
+            workflow_id: workflow_id(),
+            workflow_version_id: version.workflow_version_id.clone(),
+            presentation_fingerprint: "workflow-presentation-blake3:abc".to_string(),
+            presentation_metadata_json: serde_json::json!({"schema_version": 1}).to_string(),
+        })
+        .expect("resolve presentation revision");
+
+    let err = store
+        .resolve_workflow_presentation_revision(WorkflowPresentationRevisionResolveRequest {
+            workflow_id: workflow_id(),
+            workflow_version_id: version.workflow_version_id,
+            presentation_fingerprint: "workflow-presentation-blake3:abc".to_string(),
+            presentation_metadata_json: serde_json::json!({"schema_version": 1, "changed": true})
+                .to_string(),
+        })
+        .expect_err("fingerprint metadata conflict");
+
+    assert!(matches!(
+        err,
+        AttributionError::WorkflowPresentationRevisionConflict { .. }
     ));
 }
 

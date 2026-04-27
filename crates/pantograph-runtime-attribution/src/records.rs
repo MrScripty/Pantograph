@@ -4,8 +4,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use uuid::Uuid;
 
 use crate::{
-    BucketId, ClientCredentialId, ClientId, ClientSessionId, WorkflowId, WorkflowRunId,
-    WorkflowRunSnapshotId, WorkflowVersionId,
+    BucketId, ClientCredentialId, ClientId, ClientSessionId, WorkflowId,
+    WorkflowPresentationRevisionId, WorkflowRunId, WorkflowRunSnapshotId, WorkflowVersionId,
 };
 
 const MAX_CREDENTIAL_SECRET_LEN: usize = 256;
@@ -286,6 +286,16 @@ pub struct WorkflowVersionRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkflowPresentationRevisionRecord {
+    pub workflow_presentation_revision_id: WorkflowPresentationRevisionId,
+    pub workflow_id: WorkflowId,
+    pub workflow_version_id: WorkflowVersionId,
+    pub presentation_fingerprint: String,
+    pub presentation_metadata_json: String,
+    pub created_at_ms: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkflowRunSnapshotRecord {
     pub workflow_run_snapshot_id: WorkflowRunSnapshotId,
     pub workflow_run_id: WorkflowRunId,
@@ -392,6 +402,14 @@ pub struct WorkflowVersionResolveRequest {
     pub semantic_version: String,
     pub execution_fingerprint: String,
     pub executable_topology_json: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkflowPresentationRevisionResolveRequest {
+    pub workflow_id: WorkflowId,
+    pub workflow_version_id: WorkflowVersionId,
+    pub presentation_fingerprint: String,
+    pub presentation_metadata_json: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
