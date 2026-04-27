@@ -4,8 +4,8 @@ use crate::records::{RetentionClass, DEFAULT_STANDARD_RETENTION_DAYS};
 use crate::util::now_ms;
 use crate::DiagnosticsLedgerError;
 
-pub(crate) const SCHEMA_VERSION: i64 = 7;
-const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v7";
+pub(crate) const SCHEMA_VERSION: i64 = 8;
+const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v8";
 
 pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {
     tx.execute_batch(
@@ -191,6 +191,9 @@ pub(crate) fn migrate_schema(
     if found < 7 {
         apply_event_ledger_schema(&tx)?;
     }
+    if found < 8 {
+        apply_scheduler_timeline_projection_schema(&tx)?;
+    }
     if found < SCHEMA_VERSION {
         tx.execute(
             "INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
@@ -260,6 +263,40 @@ fn apply_event_ledger_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedg
             rebuilt_at_ms INTEGER,
             updated_at_ms INTEGER NOT NULL
         );
+        "#,
+    )?;
+    apply_scheduler_timeline_projection_schema(tx)?;
+    Ok(())
+}
+
+fn apply_scheduler_timeline_projection_schema(
+    tx: &Transaction<'_>,
+) -> Result<(), DiagnosticsLedgerError> {
+    tx.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS scheduler_timeline_projection (
+            event_seq INTEGER PRIMARY KEY,
+            event_id TEXT NOT NULL UNIQUE,
+            event_kind TEXT NOT NULL,
+            source_component TEXT NOT NULL,
+            occurred_at_ms INTEGER NOT NULL,
+            recorded_at_ms INTEGER NOT NULL,
+            workflow_run_id TEXT NOT NULL,
+            workflow_id TEXT NOT NULL,
+            workflow_version_id TEXT,
+            workflow_semantic_version TEXT,
+            scheduler_policy_id TEXT,
+            retention_policy_id TEXT,
+            summary TEXT NOT NULL,
+            detail TEXT,
+            payload_json TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_scheduler_timeline_run_seq
+            ON scheduler_timeline_projection(workflow_run_id, event_seq);
+        CREATE INDEX IF NOT EXISTS idx_scheduler_timeline_workflow_seq
+            ON scheduler_timeline_projection(workflow_id, event_seq);
+        CREATE INDEX IF NOT EXISTS idx_scheduler_timeline_policy_seq
+            ON scheduler_timeline_projection(scheduler_policy_id, event_seq);
         "#,
     )?;
     Ok(())

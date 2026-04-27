@@ -11,7 +11,7 @@ mod timing_sqlite;
 
 use crate::event::{
     DiagnosticEventAppendRequest, DiagnosticEventRecord, ProjectionStateRecord,
-    ProjectionStateUpdate,
+    ProjectionStateUpdate, SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
 };
 use crate::records::{
     DiagnosticsProjection, DiagnosticsQuery, DiagnosticsRetentionPolicy, ExecutionGuaranteeLevel,
@@ -337,6 +337,20 @@ impl DiagnosticsLedgerRepository for SqliteDiagnosticsLedger {
         update: ProjectionStateUpdate,
     ) -> Result<ProjectionStateRecord, DiagnosticsLedgerError> {
         event_sqlite::upsert_projection_state(self, update)
+    }
+
+    fn drain_scheduler_timeline_projection(
+        &mut self,
+        limit: u32,
+    ) -> Result<ProjectionStateRecord, DiagnosticsLedgerError> {
+        event_sqlite::drain_scheduler_timeline_projection(self, limit)
+    }
+
+    fn query_scheduler_timeline_projection(
+        &self,
+        query: SchedulerTimelineProjectionQuery,
+    ) -> Result<Vec<SchedulerTimelineProjectionRecord>, DiagnosticsLedgerError> {
+        event_sqlite::query_scheduler_timeline_projection(self, query)
     }
 
     fn record_timing_observation(

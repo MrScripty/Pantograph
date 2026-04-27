@@ -19,8 +19,10 @@ pub use event::{
     DiagnosticEventSourceComponent, IoArtifactObservedPayload, LibraryAssetAccessedPayload,
     ProjectionStateRecord, ProjectionStateUpdate, ProjectionStatus, RetentionPolicyChangedPayload,
     RunSnapshotAcceptedPayload, RuntimeCapabilityObservedPayload, SchedulerEstimateProducedPayload,
-    SchedulerQueuePlacementPayload, DIAGNOSTIC_EVENT_SCHEMA_VERSION,
-    MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES,
+    SchedulerQueuePlacementPayload, SchedulerTimelineProjectionQuery,
+    SchedulerTimelineProjectionRecord, DIAGNOSTIC_EVENT_SCHEMA_VERSION,
+    MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, SCHEDULER_TIMELINE_PROJECTION_NAME,
+    SCHEDULER_TIMELINE_PROJECTION_VERSION,
 };
 pub use records::{
     DiagnosticsProjection, DiagnosticsQuery, DiagnosticsRetentionPolicy, ExecutionGuaranteeLevel,

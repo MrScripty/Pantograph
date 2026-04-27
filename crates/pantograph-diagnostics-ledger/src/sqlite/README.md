@@ -7,7 +7,7 @@ ledger.
 ## Contents
 | File | Description |
 | ---- | ----------- |
-| `event_sqlite.rs` | Typed diagnostic event append/query persistence and projection cursor storage. |
+| `event_sqlite.rs` | Typed diagnostic event append/query persistence, scheduler timeline projection, and projection cursor storage. |
 | `run_summary_sqlite.rs` | Workflow run-summary upsert and query persistence for restart-visible run lists. |
 | `timing_sqlite.rs` | Workflow timing observation persistence, expectation lookup, and timing retention pruning. |
 
@@ -26,6 +26,10 @@ ledger.
   cursors.
 - `projection_state` is the durable resume point for incremental materialized
   projections; full rebuilds should update the same cursor/version contract.
+- Scheduler timeline drains apply only events after the stored projection
+  cursor and write idempotent rows keyed by `event_seq`.
+- Scheduler timeline page/query reads use `scheduler_timeline_projection`,
+  not `diagnostic_events`.
 
 ## Dependencies
 **Internal:** parent `sqlite.rs`, diagnostics ledger event/timing/run-summary

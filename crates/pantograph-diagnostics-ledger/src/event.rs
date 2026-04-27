@@ -8,6 +8,8 @@ use crate::DiagnosticsLedgerError;
 
 pub const DIAGNOSTIC_EVENT_SCHEMA_VERSION: i64 = 1;
 pub const MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES: usize = 8_192;
+pub const SCHEDULER_TIMELINE_PROJECTION_NAME: &str = "scheduler_timeline";
+pub const SCHEDULER_TIMELINE_PROJECTION_VERSION: i64 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -471,6 +473,61 @@ impl ProjectionStateUpdate {
         }
         Ok(())
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SchedulerTimelineProjectionQuery {
+    pub workflow_run_id: Option<WorkflowRunId>,
+    pub workflow_id: Option<WorkflowId>,
+    pub after_event_seq: Option<i64>,
+    pub limit: u32,
+}
+
+impl Default for SchedulerTimelineProjectionQuery {
+    fn default() -> Self {
+        Self {
+            workflow_run_id: None,
+            workflow_id: None,
+            after_event_seq: None,
+            limit: 100,
+        }
+    }
+}
+
+impl SchedulerTimelineProjectionQuery {
+    pub fn validate(&self, max_limit: u32) -> Result<(), DiagnosticsLedgerError> {
+        if self.limit > max_limit {
+            return Err(DiagnosticsLedgerError::QueryLimitExceeded {
+                requested: self.limit,
+                max: max_limit,
+            });
+        }
+        if self.after_event_seq.unwrap_or(0) < 0 {
+            return Err(DiagnosticsLedgerError::InvalidField {
+                field: "after_event_seq",
+            });
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SchedulerTimelineProjectionRecord {
+    pub event_seq: i64,
+    pub event_id: String,
+    pub event_kind: DiagnosticEventKind,
+    pub source_component: DiagnosticEventSourceComponent,
+    pub occurred_at_ms: i64,
+    pub recorded_at_ms: i64,
+    pub workflow_run_id: WorkflowRunId,
+    pub workflow_id: WorkflowId,
+    pub workflow_version_id: Option<WorkflowVersionId>,
+    pub workflow_semantic_version: Option<String>,
+    pub scheduler_policy_id: Option<String>,
+    pub retention_policy_id: Option<String>,
+    pub summary: String,
+    pub detail: Option<String>,
+    pub payload_json: String,
 }
 
 fn validate_text_list(

@@ -3,6 +3,7 @@ use crate::{
     DiagnosticsProjection, DiagnosticsQuery, DiagnosticsRetentionPolicy, ModelLicenseUsageEvent,
     ProjectionStateRecord, ProjectionStateUpdate, PruneTimingObservationsCommand,
     PruneTimingObservationsResult, PruneUsageEventsCommand, PruneUsageEventsResult,
+    SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
     WorkflowRunSummaryProjection, WorkflowRunSummaryQuery, WorkflowRunSummaryRecord,
     WorkflowTimingExpectation, WorkflowTimingExpectationQuery, WorkflowTimingObservation,
 };
@@ -45,6 +46,16 @@ pub trait DiagnosticsLedgerRepository {
         &mut self,
         update: ProjectionStateUpdate,
     ) -> Result<ProjectionStateRecord, DiagnosticsLedgerError>;
+
+    fn drain_scheduler_timeline_projection(
+        &mut self,
+        limit: u32,
+    ) -> Result<ProjectionStateRecord, DiagnosticsLedgerError>;
+
+    fn query_scheduler_timeline_projection(
+        &self,
+        query: SchedulerTimelineProjectionQuery,
+    ) -> Result<Vec<SchedulerTimelineProjectionRecord>, DiagnosticsLedgerError>;
 
     fn record_timing_observation(
         &mut self,

@@ -52,9 +52,10 @@ Keep durable diagnostics contracts in this crate and expose
 history and run summaries use `workflow_run_id` for one submitted execution and
 `workflow_id` for cross-run comparisons. Typed diagnostic events add a shared
 append-only audit boundary for scheduler, run, I/O, Library, runtime, and
-retention facts. Runtime and workflow services may write observations,
-summaries, and typed events through repository methods, but they do not own the
-schema or query semantics.
+retention facts. The scheduler timeline projection is a durable materialized
+read model advanced from the event ledger by cursor. Runtime and workflow
+services may write observations, summaries, and typed events through repository
+methods, but they do not own the schema or query semantics.
 
 ## Alternatives Rejected
 
@@ -76,6 +77,8 @@ schema or query semantics.
   application.
 - `projection_state` records the projection version and last applied event
   sequence so incremental projection drains can resume after restart.
+- `scheduler_timeline_projection` is read directly by page/API consumers after
+  an explicit incremental drain; normal reads do not replay raw event rows.
 - Schema migrations are forward-only and covered by repository tests.
 - Query results must not require frontend-side identity repair or workflow-name
   side channels.
@@ -150,7 +153,8 @@ let history = ledger.query_workflow_run_summaries(&WorkflowRunSummaryQuery {
 - Enums and labels: timing statuses, run-summary statuses, and usage statuses
   are persisted semantic labels.
 - Ordering: timing and run-summary queries return most-recent compatible
-  records first unless a narrower query defines otherwise.
+  records first unless a narrower query defines otherwise. Scheduler timeline
+  projection queries return event-sequence order for replayable page timelines.
 - Compatibility: old incompatible identity records may be ignored when a plan
   intentionally changes the schema contract.
 - Regeneration/migration: schema version bumps must include migration tests and

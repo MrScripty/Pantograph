@@ -26,8 +26,12 @@ Last updated: 2026-04-27.
 - The workflow-session scheduler emits `scheduler.estimate_produced` and
   `scheduler.queue_placement` after queue insertion when a diagnostics ledger
   is configured.
-- Hot/warm projection tables, rebuild commands, and remaining feature emitters
-  remain plan work.
+- SQLite schema version `8` adds `scheduler_timeline_projection`, and the
+  diagnostics ledger can drain `run.snapshot_accepted`,
+  `scheduler.estimate_produced`, and `scheduler.queue_placement` events into
+  that materialized hot projection by `projection_state` cursor.
+- Warm projection tables, rebuild commands, page-facing API wiring, and
+  remaining feature emitters remain plan work.
 
 ## Purpose
 

@@ -202,7 +202,8 @@ contracts, validation errors, source allowlists, payload hashes, embedded
 payload limits, SQLite `diagnostic_events`, and `projection_state` have been
 implemented. Artifact-reference validators, detailed I/O retention contracts,
 Pumas path/resource validators, and hot/warm projection ownership details are
-still pending.
+partially pending; scheduler timeline projection ownership is implemented as
+the first hot projection.
 
 ### Milestone 2: Ledger Persistence And Incremental Projections
 
@@ -254,9 +255,13 @@ repair, migration, projection-version changes, and tests.
 
 **Status:** In progress. Existing model/license usage projections now carry
 workflow-version fields and can filter by node contract version/digest. Typed
-event append and projection cursor persistence are implemented. Incremental
-materialized read models, hot/warm projection drains, additional filters, and
-explicit rebuild commands remain pending.
+event append and projection cursor persistence are implemented. The first
+incremental hot read model, `scheduler_timeline_projection`, now drains
+`run.snapshot_accepted`, `scheduler.estimate_produced`, and
+`scheduler.queue_placement` events by cursor into materialized rows for page/API
+queries. Run detail/current status, active-run I/O artifact metadata, warm
+projection drains, additional filters, and explicit rebuild commands remain
+pending.
 
 ### Milestone 3: I/O Artifact Metadata And Retention
 

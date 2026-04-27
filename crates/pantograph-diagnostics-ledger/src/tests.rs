@@ -10,12 +10,14 @@ use crate::{
     LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement,
     OutputMeasurementUnavailableReason, OutputModality, ProjectionStateUpdate, ProjectionStatus,
     PruneTimingObservationsCommand, PruneUsageEventsCommand, RetentionClass,
-    RetentionPolicyChangedPayload, SchedulerEstimateProducedPayload, SqliteDiagnosticsLedger,
+    RetentionPolicyChangedPayload, RunSnapshotAcceptedPayload, SchedulerEstimateProducedPayload,
+    SchedulerQueuePlacementPayload, SchedulerTimelineProjectionQuery, SqliteDiagnosticsLedger,
     UsageEventStatus, UsageLineage, WorkflowRunSummaryQuery, WorkflowRunSummaryRecord,
     WorkflowRunSummaryStatus, WorkflowTimingExpectation, WorkflowTimingExpectationComparison,
     WorkflowTimingExpectationQuery, WorkflowTimingObservation, WorkflowTimingObservationScope,
     WorkflowTimingObservationStatus, DEFAULT_STANDARD_RETENTION_DAYS,
-    MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES,
+    MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, SCHEDULER_TIMELINE_PROJECTION_NAME,
+    SCHEDULER_TIMELINE_PROJECTION_VERSION,
 };
 
 #[test]
@@ -608,6 +610,107 @@ fn projection_state_tracks_incremental_event_cursors() {
 }
 
 #[test]
+fn scheduler_timeline_projection_drains_events_incrementally() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    let snapshot_event = ledger
+        .append_diagnostic_event(sample_run_snapshot_event("workflow_run_alpha"))
+        .expect("run snapshot event appends");
+    let estimate_event = ledger
+        .append_diagnostic_event(sample_scheduler_event("workflow_run_alpha"))
+        .expect("scheduler estimate event appends");
+    let queue_event = ledger
+        .append_diagnostic_event(sample_scheduler_queue_event("workflow_run_alpha", 0))
+        .expect("scheduler queue event appends");
+
+    let state = ledger
+        .drain_scheduler_timeline_projection(10)
+        .expect("scheduler timeline projection drains");
+    assert_eq!(state.projection_name, SCHEDULER_TIMELINE_PROJECTION_NAME);
+    assert_eq!(
+        state.projection_version,
+        SCHEDULER_TIMELINE_PROJECTION_VERSION
+    );
+    assert_eq!(state.last_applied_event_seq, queue_event.event_seq);
+    assert_eq!(state.status, ProjectionStatus::Current);
+
+    let records = ledger
+        .query_scheduler_timeline_projection(SchedulerTimelineProjectionQuery {
+            workflow_run_id: Some(
+                WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+            ),
+            ..SchedulerTimelineProjectionQuery::default()
+        })
+        .expect("scheduler timeline projection loads");
+    assert_eq!(records.len(), 3);
+    assert_eq!(records[0].event_seq, snapshot_event.event_seq);
+    assert_eq!(records[0].summary, "run snapshot accepted");
+    assert_eq!(records[1].event_seq, estimate_event.event_seq);
+    assert_eq!(records[1].summary, "scheduler estimate produced");
+    assert_eq!(records[1].detail.as_deref(), Some("model already loaded"));
+    assert_eq!(records[2].event_seq, queue_event.event_seq);
+    assert_eq!(records[2].summary, "queued at position 0");
+    assert_eq!(records[2].detail.as_deref(), Some("priority 7"));
+
+    let after_first = ledger
+        .query_scheduler_timeline_projection(SchedulerTimelineProjectionQuery {
+            after_event_seq: Some(snapshot_event.event_seq),
+            ..SchedulerTimelineProjectionQuery::default()
+        })
+        .expect("scheduler timeline projection cursor query loads");
+    assert_eq!(after_first.len(), 2);
+
+    let no_new_state = ledger
+        .drain_scheduler_timeline_projection(10)
+        .expect("scheduler timeline projection drains idempotently");
+    assert_eq!(no_new_state.last_applied_event_seq, queue_event.event_seq);
+    let records_after_duplicate_drain = ledger
+        .query_scheduler_timeline_projection(SchedulerTimelineProjectionQuery::default())
+        .expect("scheduler timeline projection loads after duplicate drain");
+    assert_eq!(records_after_duplicate_drain.len(), 3);
+
+    let later_event = ledger
+        .append_diagnostic_event(sample_scheduler_queue_event("workflow_run_alpha", 1))
+        .expect("later scheduler queue event appends");
+    let later_state = ledger
+        .drain_scheduler_timeline_projection(10)
+        .expect("scheduler timeline projection drains later event");
+    assert_eq!(later_state.last_applied_event_seq, later_event.event_seq);
+    let records_after_later_event = ledger
+        .query_scheduler_timeline_projection(SchedulerTimelineProjectionQuery::default())
+        .expect("scheduler timeline projection loads after later event");
+    assert_eq!(records_after_later_event.len(), 4);
+}
+
+#[test]
+fn scheduler_timeline_projection_query_rejects_unbounded_requests() {
+    let ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+
+    let oversized = ledger.query_scheduler_timeline_projection(SchedulerTimelineProjectionQuery {
+        limit: 501,
+        ..SchedulerTimelineProjectionQuery::default()
+    });
+    assert!(matches!(
+        oversized,
+        Err(DiagnosticsLedgerError::QueryLimitExceeded {
+            requested: 501,
+            max: 500
+        })
+    ));
+
+    let negative_cursor =
+        ledger.query_scheduler_timeline_projection(SchedulerTimelineProjectionQuery {
+            after_event_seq: Some(-1),
+            ..SchedulerTimelineProjectionQuery::default()
+        });
+    assert!(matches!(
+        negative_cursor,
+        Err(DiagnosticsLedgerError::InvalidField {
+            field: "after_event_seq"
+        })
+    ));
+}
+
+#[test]
 fn existing_v5_schema_adds_usage_lineage_contract_indexes() {
     let temp = tempfile::NamedTempFile::new().expect("temp file");
     let path = temp.path().to_path_buf();
@@ -676,6 +779,32 @@ fn existing_v6_schema_adds_diagnostic_event_ledger_tables() {
 }
 
 #[test]
+fn existing_v7_schema_adds_scheduler_timeline_projection_table() {
+    let temp = tempfile::NamedTempFile::new().expect("temp file");
+    let path = temp.path().to_path_buf();
+    {
+        let conn = Connection::open(&path).expect("connection opens");
+        conn.execute_batch(
+            "CREATE TABLE ledger_schema_migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at_ms INTEGER NOT NULL,
+                checksum TEXT NOT NULL
+            );
+            INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
+            VALUES (7, 0, 'pantograph-diagnostics-ledger-v7');",
+        )
+        .expect("v7 schema marker is installed");
+    }
+    {
+        let _ledger = SqliteDiagnosticsLedger::open(&path).expect("ledger migrates");
+    }
+    let conn = Connection::open(&path).expect("connection reopens");
+
+    assert!(sqlite_table_exists(&conn, "scheduler_timeline_projection"));
+    assert!(sqlite_index_exists(&conn, "idx_scheduler_timeline_run_seq"));
+}
+
+#[test]
 fn unsupported_schema_version_is_rejected() {
     let conn = Connection::open_in_memory().expect("connection opens");
     conn.execute_batch(
@@ -706,6 +835,17 @@ fn sqlite_index_exists(conn: &Connection, index_name: &str) -> bool {
         |row| row.get::<_, bool>(0),
     )
     .expect("index lookup succeeds")
+}
+
+fn sqlite_table_exists(conn: &Connection, table_name: &str) -> bool {
+    conn.query_row(
+        "SELECT EXISTS(
+            SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1
+        )",
+        [table_name],
+        |row| row.get::<_, bool>(0),
+    )
+    .expect("table lookup succeeds")
 }
 
 #[test]
@@ -875,6 +1015,72 @@ fn sample_scheduler_event(workflow_run_id: &str) -> DiagnosticEventAppendRequest
                 reasons: vec!["model already loaded".to_string()],
             },
         ),
+    }
+}
+
+fn sample_scheduler_queue_event(
+    workflow_run_id: &str,
+    queue_position: u32,
+) -> DiagnosticEventAppendRequest {
+    DiagnosticEventAppendRequest {
+        source_component: DiagnosticEventSourceComponent::Scheduler,
+        source_instance_id: Some("scheduler-local".to_string()),
+        occurred_at_ms: 1_010 + i64::from(queue_position),
+        workflow_run_id: Some(WorkflowRunId::try_from(workflow_run_id.to_string()).unwrap()),
+        workflow_id: Some(WorkflowId::try_from("workflow_alpha".to_string()).unwrap()),
+        workflow_version_id: Some(WorkflowVersionId::try_from("wfver_alpha".to_string()).unwrap()),
+        workflow_semantic_version: Some("1.0.0".to_string()),
+        node_id: None,
+        node_type: None,
+        node_version: None,
+        runtime_id: None,
+        runtime_version: None,
+        model_id: None,
+        model_version: None,
+        client_id: Some(ClientId::try_from("client_alpha".to_string()).unwrap()),
+        client_session_id: Some(ClientSessionId::try_from("session_alpha".to_string()).unwrap()),
+        bucket_id: Some(BucketId::try_from("bucket_alpha".to_string()).unwrap()),
+        scheduler_policy_id: Some("scheduler_default".to_string()),
+        retention_policy_id: None,
+        privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+        retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+        payload_ref: None,
+        payload: DiagnosticEventPayload::SchedulerQueuePlacement(SchedulerQueuePlacementPayload {
+            queue_position,
+            priority: 7,
+            scheduler_policy_id: "scheduler_default".to_string(),
+        }),
+    }
+}
+
+fn sample_run_snapshot_event(workflow_run_id: &str) -> DiagnosticEventAppendRequest {
+    DiagnosticEventAppendRequest {
+        source_component: DiagnosticEventSourceComponent::WorkflowService,
+        source_instance_id: Some("workflow-service".to_string()),
+        occurred_at_ms: 990,
+        workflow_run_id: Some(WorkflowRunId::try_from(workflow_run_id.to_string()).unwrap()),
+        workflow_id: Some(WorkflowId::try_from("workflow_alpha".to_string()).unwrap()),
+        workflow_version_id: Some(WorkflowVersionId::try_from("wfver_alpha".to_string()).unwrap()),
+        workflow_semantic_version: Some("1.0.0".to_string()),
+        node_id: None,
+        node_type: None,
+        node_version: None,
+        runtime_id: None,
+        runtime_version: None,
+        model_id: None,
+        model_version: None,
+        client_id: Some(ClientId::try_from("client_alpha".to_string()).unwrap()),
+        client_session_id: Some(ClientSessionId::try_from("session_alpha".to_string()).unwrap()),
+        bucket_id: Some(BucketId::try_from("bucket_alpha".to_string()).unwrap()),
+        scheduler_policy_id: Some("scheduler_default".to_string()),
+        retention_policy_id: Some("retention_default".to_string()),
+        privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+        retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+        payload_ref: None,
+        payload: DiagnosticEventPayload::RunSnapshotAccepted(RunSnapshotAcceptedPayload {
+            workflow_run_snapshot_id: "runsnap_alpha".to_string(),
+            workflow_presentation_revision_id: "wfpres_alpha".to_string(),
+        }),
     }
 }
 
