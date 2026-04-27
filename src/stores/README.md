@@ -13,6 +13,7 @@ components observe the same graph state.
 | `workflowStore.ts` | Thin compatibility layer that re-exports workflow store instances and actions for app components. |
 | `diagnosticsStore.ts` | Single app-level owner for diagnostics subscriptions, trace snapshots, and diagnostics panel state. |
 | `diagnosticsProjection.ts` | Pure helper module that normalizes diagnostics projections and builds immutable UI snapshots without subscribing to workflow events itself. |
+| `workbenchStore.ts` | Transient workbench navigation and active-run context shared by Scheduler, Diagnostics, Graph, I/O Inspector, Library, Network, and Node Lab pages. |
 | `graphSessionStore.ts` | Tracks the active graph/session identity at the app layer. |
 | `viewStore.ts` | App navigation and zoom wrappers built around the package view stores. |
 | `architectureStore.ts` | Converts architecture data into workflow-like graph structures for the shared canvas. |
@@ -51,7 +52,10 @@ projection-normalization step so additive fields like backend-owned
 `currentSessionState` can be preserved across mixed producer paths without
 pushing merge policy into Svelte components. Diagnostics relevance decisions
 come from the backend projection context; this store only drops snapshots marked
-irrelevant by that context.
+irrelevant by that context. `workbenchStore.ts` owns the frontend-only page
+selection and active-run context used by the run-centric shell. That state is
+deliberately transient: it coordinates pages during the current GUI session, but
+does not persist active-run selection or become a backend source of run truth.
 
 ## Alternatives Rejected
 - Keep separate app-only and package-only workflow stores.
@@ -76,6 +80,10 @@ irrelevant by that context.
   adapters.
 - Expected edit-session scheduler misses must degrade to synthetic scheduler
   state here instead of surfacing as persistent user-facing errors.
+- Workbench page selection and active-run context are frontend navigation state
+  only. Components must fetch run details, timelines, I/O metadata, and Library
+  usage through backend projection services rather than enriching the selected
+  active-run context with durable data.
 
 ## Revisit Triggers
 - The legacy store facade is no longer imported anywhere.
@@ -143,6 +151,8 @@ diagnosticsSnapshot.subscribe(({ selectedRun }) => {
   local/default graph construction or loaded graphs that lack derived metadata.
 - Diagnostics snapshots are in-memory, session-scoped views over workflow
   events; they are not durable artifacts in v1.
+- Workbench active-run context is in-memory GUI state and may be `null` at
+  startup even when runs exist in scheduler projections.
 - `currentSessionState` is an additive backend-owned inspection snapshot and
   may be absent from event-driven projections even when a direct diagnostics
   fetch has already populated it.

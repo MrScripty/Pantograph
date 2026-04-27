@@ -2,7 +2,9 @@
 
 ## Status
 
-Draft plan. Not implemented.
+In progress. Milestone 1 has a frontend workbench-state contract for page ids,
+navigation order, and transient active-run context. The app shell and page
+bodies are not yet migrated.
 
 ## Objective
 
@@ -100,9 +102,9 @@ The shell must change before page implementations can feel coherent.
 
 **Tasks:**
 
-- [ ] Define page ids and navigation order.
-- [ ] Add transient active-run store and selected page store.
-- [ ] Define active-run top-bar summary model.
+- [x] Define page ids and navigation order.
+- [x] Add transient active-run store and selected page store.
+- [x] Define active-run top-bar summary model.
 - [ ] Define no-active-run behavior per page.
 - [ ] Decide whether drawing-to-Svelte becomes a workbench page/tool or is
   retired.
@@ -113,7 +115,10 @@ The shell must change before page implementations can feel coherent.
   current session only.
 - Typecheck passes for shell contracts.
 
-**Status:** Not started.
+**Status:** In progress. `src/stores/workbenchStore.ts` defines the page ids,
+navigation order, selected page store, and active-run summary context used by
+later shell work. No-active-run page behavior and legacy surface placement are
+still open.
 
 ### Milestone 2: App Shell Refactor
 
@@ -202,7 +207,12 @@ shell must not consume or interpret raw diagnostic ledger events.
 
 ### Completed
 
-- None. Draft plan only.
+- Added `src/stores/workbenchStore.ts` as the transient frontend owner for
+  selected workbench page and active workflow run context.
+- Added store tests covering reserved page order, page normalization,
+  page-switch persistence of the current active run, and explicit active-run
+  clearing.
+- Documented the workbench store boundary in `src/stores/README.md`.
 
 ### Deviations
 
@@ -213,10 +223,17 @@ shell must not consume or interpret raw diagnostic ledger events.
 - Decide final name for Node Lab before implementation.
 - Decide whether drawing-to-Svelte becomes a page, a Library/Node Lab tool, or
   is retired.
+- Define each page's no-active-run empty state before wiring page shells.
+- Refactor `src/App.svelte` to consume the workbench store and retire the
+  current canvas/workflow mode switch.
 
 ### Verification Summary
 
-- Not run. Draft plan only.
+- `node --experimental-strip-types --test src/stores/workbenchStore.test.ts`
+  passed.
+- `npm run test:frontend` passed.
+- `npm run typecheck` passed.
+- `git diff --check` passed for the staged slice.
 
 ### Traceability Links
 
