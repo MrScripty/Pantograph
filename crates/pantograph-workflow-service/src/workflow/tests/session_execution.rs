@@ -337,7 +337,7 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         )
         .expect("diagnostic events")
     };
-    assert_eq!(diagnostic_events.len(), 6);
+    assert_eq!(diagnostic_events.len(), 8);
     let event = diagnostic_events
         .iter()
         .find(|event| {
@@ -513,6 +513,25 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         .payload_json
         .contains("\"status\":\"completed\""));
     assert!(terminal_event.payload_json.contains("\"duration_ms\":"));
+
+    let io_events = diagnostic_events
+        .iter()
+        .filter(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::IoArtifactObserved
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(io_events.len(), 2);
+    assert!(io_events[0].event_seq > terminal_event.event_seq);
+    assert!(io_events.iter().any(|event| event
+        .payload_json
+        .contains("\"artifact_role\":\"workflow_input\"")));
+    assert!(io_events.iter().any(|event| event
+        .payload_json
+        .contains("\"artifact_role\":\"workflow_output\"")));
+    assert!(io_events.iter().all(|event| event
+        .payload_json
+        .contains("\"retention_state\":\"metadata_only\"")));
 }
 
 #[tokio::test]

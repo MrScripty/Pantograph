@@ -31,6 +31,11 @@ can be rebuilt for migration, repair, corruption recovery, or projection-version
 changes. Normal Scheduler, Diagnostics, I/O, Library, and page-load reads use
 stored projections and incremental cursor advancement.
 
+I/O artifact ledger events store bounded metadata and payload references, not
+raw workflow values. First-pass workflow input/output observations may record
+role, node id, media type, size, content hash, retention state, and retention
+reason while leaving value bodies outside the diagnostic event ledger.
+
 Historic workflow graph viewing uses the run graph projection and renders it in
 an isolated read-only surface. Historic graphs are not applied to the current
 editable graph store.

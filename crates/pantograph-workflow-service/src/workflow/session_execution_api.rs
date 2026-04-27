@@ -3,9 +3,10 @@ use std::time::Duration;
 use pantograph_diagnostics_ledger::{
     DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
     DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
-    RunSnapshotAcceptedPayload, RunSnapshotNodeVersionPayload, RunStartedPayload,
-    RunTerminalPayload, RunTerminalStatus, SchedulerEstimateProducedPayload,
-    SchedulerQueuePlacementPayload, SchedulerRunAdmittedPayload, SchedulerRunDelayedPayload,
+    IoArtifactObservedPayload, IoArtifactRetentionState, RunSnapshotAcceptedPayload,
+    RunSnapshotNodeVersionPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
+    SchedulerEstimateProducedPayload, SchedulerQueuePlacementPayload, SchedulerRunAdmittedPayload,
+    SchedulerRunDelayedPayload,
 };
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, WorkflowId, WorkflowRunAttributionResolveRequest,
@@ -29,8 +30,8 @@ use super::{
     WorkflowExecutionSessionCreateResponse, WorkflowExecutionSessionQueueItem,
     WorkflowExecutionSessionRetentionHint, WorkflowExecutionSessionRunRequest,
     WorkflowExecutionSessionSummary, WorkflowExecutionSessionUnloadReason, WorkflowHost,
-    WorkflowRunRequest, WorkflowRunResponse, WorkflowSchedulerDecisionReason, WorkflowService,
-    WorkflowServiceError,
+    WorkflowPortBinding, WorkflowRunRequest, WorkflowRunResponse, WorkflowSchedulerDecisionReason,
+    WorkflowService, WorkflowServiceError,
 };
 
 const WORKFLOW_SESSION_SCHEDULER_POLICY: &str = "priority_then_fifo";
@@ -263,6 +264,7 @@ impl WorkflowService {
         )?;
         self.record_run_started_event_if_configured(&session, run_snapshot.as_ref(), &queued_run)?;
         let queued_workflow_semantic_version = queued_run.queued.workflow_semantic_version.clone();
+        let queued_workflow_inputs = queued_run.queued.inputs.clone();
 
         let preflight_cache = match self
             .ensure_session_runtime_preflight(
@@ -333,6 +335,16 @@ impl WorkflowService {
             Some(&queued_workflow_semantic_version),
             &run_result,
         )?;
+        if let Ok(response) = run_result.as_ref() {
+            self.record_workflow_io_artifact_events_if_configured(
+                &session,
+                run_snapshot.as_ref(),
+                &workflow_run_id,
+                &queued_workflow_semantic_version,
+                &queued_workflow_inputs,
+                &response.outputs,
+            )?;
+        }
         if finish_state.unload_runtime {
             host.unload_session_runtime(
                 &session_id,
@@ -817,6 +829,91 @@ impl WorkflowService {
         .map_err(WorkflowServiceError::from)
     }
 
+    fn record_workflow_io_artifact_events_if_configured(
+        &self,
+        session: &WorkflowExecutionSessionSummary,
+        snapshot: Option<&WorkflowRunSnapshotRecord>,
+        workflow_run_id: &str,
+        workflow_semantic_version: &str,
+        inputs: &[WorkflowPortBinding],
+        outputs: &[WorkflowPortBinding],
+    ) -> Result<(), WorkflowServiceError> {
+        let Some(ledger) = self.diagnostics_ledger.as_ref() else {
+            return Ok(());
+        };
+        let workflow_run_id = WorkflowRunId::try_from(workflow_run_id.to_string())?;
+        let workflow_id = workflow_id_for_scheduler_event(session, snapshot)?;
+        let occurred_at_ms = unix_timestamp_ms() as i64;
+        let mut ledger = ledger.lock().map_err(|_| {
+            WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
+        })?;
+
+        for (role, binding) in inputs
+            .iter()
+            .map(|binding| ("workflow_input", binding))
+            .chain(outputs.iter().map(|binding| ("workflow_output", binding)))
+        {
+            let value_json = serde_json::to_vec(&binding.value).map_err(|error| {
+                WorkflowServiceError::CapabilityViolation(format!(
+                    "failed to encode workflow {role} metadata: {error}"
+                ))
+            })?;
+            DiagnosticsLedgerRepository::append_diagnostic_event(
+                &mut *ledger,
+                DiagnosticEventAppendRequest {
+                    source_component: DiagnosticEventSourceComponent::WorkflowService,
+                    source_instance_id: Some("workflow-service".to_string()),
+                    occurred_at_ms,
+                    workflow_run_id: Some(workflow_run_id.clone()),
+                    workflow_id: Some(workflow_id.clone()),
+                    workflow_version_id: snapshot
+                        .map(|snapshot| snapshot.workflow_version_id.clone()),
+                    workflow_semantic_version: Some(
+                        snapshot
+                            .map(|snapshot| snapshot.workflow_semantic_version.clone())
+                            .unwrap_or_else(|| workflow_semantic_version.to_string()),
+                    ),
+                    node_id: Some(binding.node_id.clone()),
+                    node_type: None,
+                    node_version: None,
+                    runtime_id: None,
+                    runtime_version: None,
+                    model_id: None,
+                    model_version: None,
+                    client_id: event_client_id(session, snapshot)?,
+                    client_session_id: event_client_session_id(session, snapshot)?,
+                    bucket_id: event_bucket_id(session, snapshot)?,
+                    scheduler_policy_id: Some(WORKFLOW_SESSION_SCHEDULER_POLICY.to_string()),
+                    retention_policy_id: snapshot.map(|snapshot| snapshot.retention_policy.clone()),
+                    privacy_class: DiagnosticEventPrivacyClass::UserMetadata,
+                    retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+                    payload_ref: None,
+                    payload: DiagnosticEventPayload::IoArtifactObserved(
+                        IoArtifactObservedPayload {
+                            artifact_id: workflow_io_artifact_id(
+                                workflow_run_id.as_str(),
+                                role,
+                                &binding.node_id,
+                                &binding.port_id,
+                            ),
+                            artifact_role: role.to_string(),
+                            media_type: Some("application/json".to_string()),
+                            size_bytes: Some(value_json.len() as u64),
+                            content_hash: Some(format!("blake3:{}", blake3::hash(&value_json))),
+                            retention_state: Some(IoArtifactRetentionState::MetadataOnly),
+                            retention_reason: Some(
+                                "workflow value body is not retained in the I/O artifact ledger"
+                                    .to_string(),
+                            ),
+                        },
+                    ),
+                },
+            )
+            .map_err(WorkflowServiceError::from)?;
+        }
+        Ok(())
+    }
+
     fn record_run_terminal_event_if_configured(
         &self,
         session: &WorkflowExecutionSessionSummary,
@@ -990,6 +1087,17 @@ fn encode_workflow_run_snapshot_json<T: serde::Serialize>(
             "failed to encode workflow run snapshot {label}: {error}"
         ))
     })
+}
+
+fn workflow_io_artifact_id(
+    workflow_run_id: &str,
+    artifact_role: &str,
+    node_id: &str,
+    port_id: &str,
+) -> String {
+    let hash =
+        blake3::hash(format!("{workflow_run_id}:{artifact_role}:{node_id}:{port_id}").as_bytes());
+    format!("workflow-io-{hash}")
 }
 
 fn workflow_execution_session_kind_label(kind: &WorkflowExecutionSessionKind) -> &'static str {

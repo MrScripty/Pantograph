@@ -300,6 +300,9 @@ availability.
 **Tasks:**
 
 - [ ] Record workflow inputs/outputs and node input/output metadata.
+  - Workflow-session execution now records first-pass workflow input and
+    output metadata as `io.artifact_observed` events after successful runs.
+    Node-to-node intermediate I/O remains pending.
 - [ ] Store artifact type, size, content hash where available, producer node,
   consumer node, run id, timestamps, and payload reference.
   - First-pass projection stores artifact role, media type, size, content
@@ -338,7 +341,11 @@ availability.
 versioned ledger record exposed through backend/API DTOs. Updates increment
 `policy_version`, and `retention.policy_changed` events include the new
 version and retention duration so later cleanup and audit views can tie
-retroactive behavior to a concrete policy revision. First-pass setting groups,
+retroactive behavior to a concrete policy revision. Successful workflow-session
+runs now emit metadata-only `io.artifact_observed` events for workflow inputs
+and outputs, including artifact role, node id, media type, JSON byte size,
+content hash, retention state, and retention reason without storing raw values
+in the ledger. Node-to-node intermediate I/O, first-pass setting groups,
 retroactive cleanup, actor context, and artifact-specific cleanup events remain
 pending.
 
@@ -424,6 +431,9 @@ implicitly on page load.
 - 2026-04-27: Added versioning to the standard global retention policy. Policy
   updates now increment `policy_version`, and `retention.policy_changed` events
   carry policy version plus retention duration.
+- 2026-04-27: Added first-pass workflow input/output metadata events for
+  successful workflow-session runs. The events are metadata-only and do not
+  embed raw workflow values.
 
 ### Deviations
 
@@ -457,6 +467,9 @@ implicitly on page load.
 - 2026-04-27: `cargo test -p pantograph-diagnostics-ledger retention_policy
   --lib` and `cargo test -p pantograph-workflow-service
   workflow_retention_policy --lib` passed.
+- 2026-04-27: `cargo test -p pantograph-workflow-service
+  workflow_execution_session_run_records_snapshot_before_execution --lib`
+  passed.
 
 ### Traceability Links
 
