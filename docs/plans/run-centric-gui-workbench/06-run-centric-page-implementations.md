@@ -384,6 +384,9 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
 - Added global retention policy read/update controls using
   `workflowService.queryRetentionPolicy` and
   `workflowService.updateRetentionPolicy` with no optimistic mutation.
+- Added an I/O Inspector cleanup action backed by
+  `workflowService.applyRetentionCleanup`; the page displays the backend
+  expired-artifact count and refreshes artifact metadata from projections.
 - Added `src/components/workbench/ioInspectorPresenters.ts` and tests for media
   labels, payload-reference availability labels, byte labels, and projection
   freshness labels.

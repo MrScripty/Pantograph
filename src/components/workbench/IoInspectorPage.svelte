@@ -10,6 +10,7 @@
     RefreshCw,
     Save,
     Table2,
+    Trash2,
     Video,
   } from 'lucide-svelte';
   import type {
@@ -43,8 +44,10 @@
   let loadingArtifacts = $state(false);
   let loadingRetention = $state(false);
   let savingRetention = $state(false);
+  let applyingRetentionCleanup = $state(false);
   let artifactError = $state<string | null>(null);
   let retentionError = $state<string | null>(null);
+  let retentionCleanupMessage = $state<string | null>(null);
   let artifactRequestSerial = 0;
   let workflowInputArtifacts = $derived(artifacts.filter(isWorkflowInputArtifact));
   let workflowOutputArtifacts = $derived(artifacts.filter(isWorkflowOutputArtifact));
@@ -135,6 +138,24 @@
       retentionError = formatWorkflowCommandError(error);
     } finally {
       savingRetention = false;
+    }
+  }
+
+  async function applyRetentionCleanup(): Promise<void> {
+    applyingRetentionCleanup = true;
+    retentionError = null;
+    retentionCleanupMessage = null;
+    try {
+      const response = await workflowService.applyRetentionCleanup({
+        limit: 250,
+        reason: 'gui_io_inspector_cleanup_apply',
+      });
+      retentionCleanupMessage = `${response.cleanup.expired_artifact_count} artifacts expired`;
+      await refreshArtifacts();
+    } catch (error) {
+      retentionError = formatWorkflowCommandError(error);
+    } finally {
+      applyingRetentionCleanup = false;
     }
   }
 
@@ -418,6 +439,11 @@
         {#if retentionError}
           <div class="rounded border border-red-900 bg-red-950/50 px-3 py-2 text-sm text-red-200">{retentionError}</div>
         {/if}
+        {#if retentionCleanupMessage}
+          <div class="rounded border border-emerald-900 bg-emerald-950/40 px-3 py-2 text-sm text-emerald-200">
+            {retentionCleanupMessage}
+          </div>
+        {/if}
 
         <div>
           <label for="io-retention-days" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
@@ -451,6 +477,18 @@
         >
           <Save size={14} aria-hidden="true" />
           {savingRetention ? 'Saving' : 'Save Policy'}
+        </button>
+
+        <button
+          type="button"
+          class="inline-flex w-full items-center justify-center gap-2 rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-200 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+          onclick={() => {
+            void applyRetentionCleanup();
+          }}
+          disabled={applyingRetentionCleanup || loadingRetention}
+        >
+          <Trash2 size={14} aria-hidden="true" />
+          {applyingRetentionCleanup ? 'Applying Cleanup' : 'Apply Cleanup'}
         </button>
       </form>
     </aside>

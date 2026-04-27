@@ -165,6 +165,9 @@ transient UI state without becoming backend scheduler policy.
   update displayed state only from the backend response. The page may show a
   saving state, but it must not apply the requested policy as if it were
   accepted before the backend responds.
+- Retention cleanup actions call `workflowService.applyRetentionCleanup`, show
+  the backend cleanup count, and refresh artifact metadata from projections
+  instead of removing artifact cards locally.
 - `LibraryPage.svelte` reads usage and audit summaries through
   `workflowService.queryLibraryUsage`.
 
