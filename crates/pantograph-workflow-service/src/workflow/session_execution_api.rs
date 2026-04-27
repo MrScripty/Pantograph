@@ -4,8 +4,8 @@ use pantograph_diagnostics_ledger::{
     DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
     DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
     IoArtifactObservedPayload, IoArtifactRetentionState, LibraryAssetAccessedPayload,
-    RunSnapshotAcceptedPayload, RunSnapshotNodeVersionPayload, RunStartedPayload,
-    RunTerminalPayload, RunTerminalStatus, SchedulerEstimateProducedPayload,
+    LibraryAssetOperation, RunSnapshotAcceptedPayload, RunSnapshotNodeVersionPayload,
+    RunStartedPayload, RunTerminalPayload, RunTerminalStatus, SchedulerEstimateProducedPayload,
     SchedulerQueuePlacementPayload, SchedulerRunAdmittedPayload, SchedulerRunDelayedPayload,
 };
 use pantograph_runtime_attribution::{
@@ -563,7 +563,7 @@ impl WorkflowService {
                     payload: DiagnosticEventPayload::LibraryAssetAccessed(
                         LibraryAssetAccessedPayload {
                             asset_id: pumas_model_asset_id(&model.model_id),
-                            operation: "run_usage".to_string(),
+                            operation: LibraryAssetOperation::RunUsage,
                             cache_status: None,
                             network_bytes: None,
                         },

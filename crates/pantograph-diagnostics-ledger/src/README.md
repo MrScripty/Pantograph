@@ -42,6 +42,8 @@ state, the GUI loses previous workflow timing and runtime history after restart.
 - Retention/pruning must be caller-driven and auditable.
 - Diagnostic events must use allowlisted typed payloads; raw arbitrary JSON is
   not accepted at the repository boundary.
+- Library audit events must use typed operation and cache-status enums; callers
+  must not submit arbitrary operation labels through payload strings.
 - Materialized projections are rebuildable, but normal read paths advance from
   stored `projection_state` cursors instead of replaying the full ledger.
 

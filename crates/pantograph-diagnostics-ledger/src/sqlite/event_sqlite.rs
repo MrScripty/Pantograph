@@ -2111,8 +2111,8 @@ fn apply_library_usage_projection_event(
             run_access_increment,
             payload.network_bytes.unwrap_or(0) as i64,
             event.occurred_at_ms,
-            payload.operation.as_str(),
-            payload.cache_status.as_deref(),
+            payload.operation.as_db(),
+            payload.cache_status.as_ref().map(|status| status.as_db()),
             event.workflow_run_id.as_ref().map(|id| id.as_str()),
             event.workflow_id.as_ref().map(|id| id.as_str()),
             event

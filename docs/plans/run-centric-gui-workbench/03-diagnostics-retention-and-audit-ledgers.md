@@ -167,7 +167,7 @@ before implementation.
   should be test/migration-only.
 - [ ] Define I/O artifact metadata contract.
 - [ ] Define retention policy/version and artifact retention-state contract.
-- [ ] Define Pumas/Library audit event contract.
+- [x] Define Pumas/Library audit event contract.
 - [x] Define centralized validators for artifact payload references,
   Library/Pumas resource identifiers, external references, and any filesystem
   paths accepted by download/delete/access operations.
@@ -203,7 +203,10 @@ payload limits, SQLite `diagnostic_events`, `projection_state`, and safe
 payload-reference scheme validation have been implemented. Detailed I/O
 retention contracts, Pumas download/delete path validators, and hot/warm
 projection ownership details are partially pending; scheduler timeline
-projection ownership is implemented as the first hot projection.
+projection ownership is implemented as the first hot projection. The
+Library/Pumas audit payload now uses typed operation and cache-status enums so
+future search/download/delete/access producers can extend coverage without
+opening the ledger to arbitrary action strings.
 
 ### Milestone 2: Ledger Persistence And Incremental Projections
 
@@ -447,6 +450,9 @@ implicitly on page load.
 - 2026-04-27: Added first-pass Library run-usage audit events for model assets
   used by workflow-session runs. These events feed the existing warm
   Library usage projection.
+- 2026-04-27: Tightened the Library/Pumas audit event contract by replacing
+  free-form `operation` and `cache_status` payload strings with typed enums
+  while preserving the canonical serialized labels used by projections.
 
 ### Deviations
 
@@ -486,6 +492,13 @@ implicitly on page load.
 - 2026-04-27: `cargo test -p pantograph-workflow-service
   workflow_execution_session_run_records_snapshot_before_execution --lib`
   passed after adding Library run-usage event assertions.
+- 2026-04-27: `cargo test -p pantograph-diagnostics-ledger
+  library_usage_projection_drains_asset_events_incrementally --lib` passed
+  after tightening Library audit payload typing.
+- 2026-04-27: `cargo test -p pantograph-workflow-service
+  workflow_library_usage_query_drains_and_reads_projection --lib` passed after
+  updating workflow-service diagnostics tests to use typed Library audit
+  operation/cache-status values.
 
 ### Traceability Links
 

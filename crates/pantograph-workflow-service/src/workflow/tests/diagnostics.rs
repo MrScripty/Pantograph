@@ -2,10 +2,11 @@ use pantograph_diagnostics_ledger::{
     DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
     DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
     ExecutionGuaranteeLevel, IoArtifactObservedPayload, IoArtifactRetentionState,
-    LibraryAssetAccessedPayload, LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent,
-    ModelOutputMeasurement, NodeExecutionProjectionStatus, NodeExecutionStatusPayload,
-    OutputModality, ProjectionStatus, RetentionArtifactStateChangedPayload, RetentionClass,
-    RunListFacetKind, RunSnapshotAcceptedPayload, RunSnapshotNodeVersionPayload, RunStartedPayload,
+    LibraryAssetAccessedPayload, LibraryAssetCacheStatus, LibraryAssetOperation, LicenseSnapshot,
+    ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement, NodeExecutionProjectionStatus,
+    NodeExecutionStatusPayload, OutputModality, ProjectionStatus,
+    RetentionArtifactStateChangedPayload, RetentionClass, RunListFacetKind,
+    RunSnapshotAcceptedPayload, RunSnapshotNodeVersionPayload, RunStartedPayload,
     RunTerminalPayload, RunTerminalStatus, SchedulerEstimateProducedPayload,
     SchedulerQueuePlacementPayload, UsageEventStatus, UsageLineage,
 };
@@ -1124,8 +1125,8 @@ fn sample_library_asset_access_event(
         payload_ref: None,
         payload: DiagnosticEventPayload::LibraryAssetAccessed(LibraryAssetAccessedPayload {
             asset_id: asset_id.to_string(),
-            operation: "download".to_string(),
-            cache_status: Some("miss".to_string()),
+            operation: LibraryAssetOperation::Download,
+            cache_status: Some(LibraryAssetCacheStatus::Miss),
             network_bytes: Some(network_bytes),
         }),
     }

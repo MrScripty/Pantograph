@@ -557,18 +557,60 @@ impl IoArtifactObservedPayload {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub enum LibraryAssetOperation {
+    Access,
+    Delete,
+    Download,
+    Import,
+    RunUsage,
+    Search,
+}
+
+impl LibraryAssetOperation {
+    pub(crate) fn as_db(&self) -> &'static str {
+        match self {
+            Self::Access => "access",
+            Self::Delete => "delete",
+            Self::Download => "download",
+            Self::Import => "import",
+            Self::RunUsage => "run_usage",
+            Self::Search => "search",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LibraryAssetCacheStatus {
+    Hit,
+    Miss,
+    NotApplicable,
+    Unknown,
+}
+
+impl LibraryAssetCacheStatus {
+    pub(crate) fn as_db(&self) -> &'static str {
+        match self {
+            Self::Hit => "hit",
+            Self::Miss => "miss",
+            Self::NotApplicable => "not_applicable",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub struct LibraryAssetAccessedPayload {
     pub asset_id: String,
-    pub operation: String,
-    pub cache_status: Option<String>,
+    pub operation: LibraryAssetOperation,
+    pub cache_status: Option<LibraryAssetCacheStatus>,
     pub network_bytes: Option<u64>,
 }
 
 impl LibraryAssetAccessedPayload {
     fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
-        validate_library_resource_id("asset_id", &self.asset_id)?;
-        validate_required_text("operation", &self.operation, MAX_ID_LEN)?;
-        validate_optional_text("cache_status", self.cache_status.as_deref(), MAX_ID_LEN)
+        validate_library_resource_id("asset_id", &self.asset_id)
     }
 }
 

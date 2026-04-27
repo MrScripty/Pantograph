@@ -52,6 +52,9 @@ helpers own restart-visible workflow run summaries.
   the refined bucket has too little history for an expectation.
 - Diagnostic event writes assign one SQLite-owned monotonic `event_seq` and
   store bounded typed payload JSON plus payload hashes/references.
+- Library asset events persist canonical operation/cache labels derived from
+  enums, preserving flexible Library/Pumas audit coverage without accepting
+  unvalidated action names.
 - Diagnostic event cursor queries require bounded page sizes and non-negative
   cursors.
 - `projection_state` is the durable resume point for incremental materialized
