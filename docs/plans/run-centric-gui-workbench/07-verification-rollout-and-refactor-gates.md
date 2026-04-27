@@ -2,10 +2,9 @@
 
 ## Status
 
-In progress. Stage-start gate and first Stage `05`/`06` source-audit pass have
-been run for the workbench shell and run-centric page implementation slices.
-The traceability gate currently fails on broader documentation gaps that need a
-dedicated cleanup slice before this stage can be closed.
+In progress. Stage-start gate, first Stage `05`/`06` source-audit pass, and
+decision traceability cleanup have been run for the workbench shell and
+run-centric page implementation slices.
 
 ## Objective
 
@@ -351,32 +350,25 @@ Before launching workers, create a dedicated implementation-wave plan with:
   Workbench page data comes through the typed workflow service methods for run
   list/detail, scheduler timeline, run graph, I/O artifacts, Library usage, and
   local Network status.
+- Added `docs/adr/ADR-014-run-centric-workbench-projection-boundary.md` to
+  capture the Scheduler-first workbench, transient active-run context,
+  projection-only page consumption, materialized projection cursor boundary,
+  and historic graph/editor separation.
+- Updated diagnostics ledger README files required by the decision traceability
+  gate.
 
 ### Deviations
 
-- `npm run traceability` was run and failed. The failures are broader
-  repository documentation traceability gaps, not a localized workbench page
-  regression. They should be fixed in a dedicated documentation cleanup slice
-  because the affected directories span Tauri workflow commands, workflow
-  service crates/tests/scheduler code, diagnostics ledger SQLite docs,
-  frontend services, config, and root `src`.
+- Initial `npm run traceability` failed because the branch had broad backend and
+  frontend source changes without a committed ADR update, and because two
+  diagnostics-ledger README sections did not satisfy the documentation
+  standards checker. This was resolved by ADR-014 and targeted README cleanup.
 
 ### Follow-Ups
 
 - Convert any broad stage into implementation-wave specs before using parallel
   workers.
 - Add concrete command outputs during implementation.
-- Add/update README or ADR traceability for the directories reported by
-  `npm run traceability`: `src-tauri/src/workflow`,
-  `crates/pantograph-workflow-service`,
-  `crates/pantograph-workflow-service/tests`,
-  `crates/pantograph-workflow-service/src/workflow/tests`, `src`,
-  `crates/pantograph-workflow-service/src/scheduler`, `src/services/workflow`,
-  `src/config`, `src-tauri/src`, `crates/pantograph-workflow-service/src`, and
-  `src/services/diagnostics`.
-- Bring `crates/pantograph-diagnostics-ledger/src/README.md` and
-  `crates/pantograph-diagnostics-ledger/src/sqlite/README.md` into compliance
-  with the documentation standards sections required by the traceability gate.
 
 ### Verification Summary
 
@@ -386,8 +378,10 @@ Before launching workers, create a dedicated implementation-wave plan with:
   `viewMode` store or canvas/workflow root toggle remains in `src`.
 - Projection consumption audit passed for workbench pages: pages call typed
   projection services and do not query raw diagnostic ledger rows.
-- `npm run traceability` failed with 13 documentation traceability issues; see
-  Follow-Ups for the affected directories/files.
+- Initial `npm run traceability` failed with 13 documentation traceability
+  issues before ADR-014 and README cleanup.
+- `npm run traceability` passed after committing ADR-014 and the diagnostics
+  ledger README cleanup.
 
 ### Traceability Links
 
