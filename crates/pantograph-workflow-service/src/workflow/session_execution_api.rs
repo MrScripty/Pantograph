@@ -1,5 +1,10 @@
 use std::time::Duration;
 
+use pantograph_diagnostics_ledger::{
+    DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
+    DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
+    RunSnapshotAcceptedPayload,
+};
 use pantograph_runtime_attribution::{WorkflowRunId, WorkflowRunSnapshotRequest};
 
 use crate::graph::{
@@ -287,10 +292,63 @@ impl WorkflowService {
             )?,
         };
         let mut store = self.attribution_store_guard()?;
-        store
+        let snapshot = store
             .create_workflow_run_snapshot(snapshot)
             .map_err(WorkflowServiceError::from)?;
+        drop(store);
+        self.record_run_snapshot_accepted_event_if_configured(&snapshot)?;
         Ok(())
+    }
+
+    fn record_run_snapshot_accepted_event_if_configured(
+        &self,
+        snapshot: &pantograph_runtime_attribution::WorkflowRunSnapshotRecord,
+    ) -> Result<(), WorkflowServiceError> {
+        let Some(ledger) = self.diagnostics_ledger.as_ref() else {
+            return Ok(());
+        };
+        let mut ledger = ledger.lock().map_err(|_| {
+            WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
+        })?;
+        DiagnosticsLedgerRepository::append_diagnostic_event(
+            &mut *ledger,
+            DiagnosticEventAppendRequest {
+                source_component: DiagnosticEventSourceComponent::WorkflowService,
+                source_instance_id: Some("workflow-service".to_string()),
+                occurred_at_ms: snapshot.created_at_ms,
+                workflow_run_id: Some(snapshot.workflow_run_id.clone()),
+                workflow_id: Some(snapshot.workflow_id.clone()),
+                workflow_version_id: Some(snapshot.workflow_version_id.clone()),
+                workflow_semantic_version: Some(snapshot.workflow_semantic_version.clone()),
+                node_id: None,
+                node_type: None,
+                node_version: None,
+                runtime_id: None,
+                runtime_version: None,
+                model_id: None,
+                model_version: None,
+                client_id: None,
+                client_session_id: None,
+                bucket_id: None,
+                scheduler_policy_id: Some(snapshot.scheduler_policy.clone()),
+                retention_policy_id: Some(snapshot.retention_policy.clone()),
+                privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+                retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+                payload_ref: None,
+                payload: DiagnosticEventPayload::RunSnapshotAccepted(RunSnapshotAcceptedPayload {
+                    workflow_run_snapshot_id: snapshot
+                        .workflow_run_snapshot_id
+                        .as_str()
+                        .to_string(),
+                    workflow_presentation_revision_id: snapshot
+                        .workflow_presentation_revision_id
+                        .as_str()
+                        .to_string(),
+                }),
+            },
+        )
+        .map(|_| ())
+        .map_err(WorkflowServiceError::from)
     }
 }
 

@@ -498,7 +498,10 @@ impl From<DiagnosticsLedgerError> for WorkflowServiceError {
             | DiagnosticsLedgerError::FieldTooLong { .. }
             | DiagnosticsLedgerError::InvalidField { .. }
             | DiagnosticsLedgerError::InvalidTimeRange
-            | DiagnosticsLedgerError::QueryLimitExceeded { .. } => {
+            | DiagnosticsLedgerError::QueryLimitExceeded { .. }
+            | DiagnosticsLedgerError::UnsupportedEventKind { .. }
+            | DiagnosticsLedgerError::InvalidEventSource { .. }
+            | DiagnosticsLedgerError::EventPayloadTooLarge { .. } => {
                 Self::InvalidRequest(error.to_string())
             }
             DiagnosticsLedgerError::UnsupportedSchemaVersion { .. }

@@ -233,9 +233,12 @@ Public run contracts now require the caller to provide
 `workflow_semantic_version`. Snapshots capture graph settings, runtime
 requirements, capability model inventory, runtime capabilities, scheduler
 policy, retention policy, session context, immutable input references, output
-targets, and override selection. Remaining work is to add client/bucket
-correlation to the queued workflow-service path and expose event-builder
-correlation fields.
+targets, and override selection. The queued workflow-service path now emits a
+typed `run.snapshot_accepted` diagnostic event when a diagnostics ledger is
+configured, carrying the snapshot id, workflow version id, semantic version,
+presentation revision id, scheduler policy id, and retention policy id.
+Remaining work is to add client/bucket correlation and node-version-set
+correlation to the queued workflow-service path.
 
 ### Milestone 4: Diagnostics And Graph Consumers
 

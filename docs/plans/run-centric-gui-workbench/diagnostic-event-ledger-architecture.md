@@ -21,8 +21,10 @@ Last updated: 2026-04-27.
   source components or missing required correlation fields.
 - `projection_state` persists projection version, status, rebuild timestamp,
   and `last_applied_event_seq` for incremental read-model drains.
-- Hot/warm projection tables, rebuild commands, and feature emitters remain
-  plan work.
+- The workflow-service queued run snapshot path emits
+  `run.snapshot_accepted` when a diagnostics ledger is configured.
+- Hot/warm projection tables, rebuild commands, and remaining feature emitters
+  remain plan work.
 
 ## Purpose
 

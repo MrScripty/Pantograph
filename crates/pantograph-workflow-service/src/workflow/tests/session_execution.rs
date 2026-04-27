@@ -201,7 +201,8 @@ async fn workflow_execution_session_repeated_runs_create_distinct_backend_run_id
 async fn workflow_execution_session_run_records_snapshot_before_execution() {
     let host = MockWorkflowHost::new(8, 1024);
     let service = WorkflowService::with_max_sessions(2)
-        .with_attribution_store(SqliteAttributionStore::open_in_memory().expect("store"));
+        .with_attribution_store(SqliteAttributionStore::open_in_memory().expect("store"))
+        .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"));
 
     let created = service
         .create_workflow_execution_session(
@@ -298,6 +299,43 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         .workflow_version
         .executable_topology_json
         .contains("text-input-1"));
+
+    let diagnostic_events = {
+        let ledger = service
+            .diagnostics_ledger_guard()
+            .expect("diagnostics ledger");
+        pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::diagnostic_events_after(
+            &*ledger, 0, 10,
+        )
+        .expect("diagnostic events")
+    };
+    assert_eq!(diagnostic_events.len(), 1);
+    let event = &diagnostic_events[0];
+    assert_eq!(
+        event.event_kind,
+        pantograph_diagnostics_ledger::DiagnosticEventKind::RunSnapshotAccepted
+    );
+    assert_eq!(
+        event.source_component,
+        pantograph_diagnostics_ledger::DiagnosticEventSourceComponent::WorkflowService
+    );
+    assert_eq!(
+        event.workflow_run_id.as_ref().map(|id| id.as_str()),
+        Some(response.workflow_run_id.as_str())
+    );
+    assert_eq!(
+        event.workflow_version_id.as_ref(),
+        Some(&snapshot.workflow_version_id)
+    );
+    assert_eq!(event.workflow_semantic_version.as_deref(), Some("1.2.3"));
+    assert_eq!(
+        event.scheduler_policy_id.as_deref(),
+        Some("priority_then_fifo")
+    );
+    assert_eq!(event.retention_policy_id.as_deref(), Some("ephemeral"));
+    assert!(event
+        .payload_json
+        .contains(snapshot.workflow_run_snapshot_id.as_str()));
 }
 
 #[tokio::test]

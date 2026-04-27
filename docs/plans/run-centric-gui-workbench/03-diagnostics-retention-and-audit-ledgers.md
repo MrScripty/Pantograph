@@ -7,8 +7,10 @@ cutover by adding workflow-version and node contract version/digest filters to
 the existing model/license usage diagnostics path. Stage `03` has started the
 typed event ledger bootstrap in `pantograph-diagnostics-ledger` with validated
 event contracts, append-only SQLite storage, bounded payloads, monotonic
-`event_seq`, and `projection_state` cursor persistence. Retention, I/O,
-Library/Pumas emitters, and materialized projection tables remain pending.
+`event_seq`, and `projection_state` cursor persistence. The workflow-service
+run snapshot path now emits the first typed `run.snapshot_accepted` event when
+a diagnostics ledger is configured. Retention, I/O, Library/Pumas emitters, and
+materialized projection tables remain pending.
 
 ## Objective
 
