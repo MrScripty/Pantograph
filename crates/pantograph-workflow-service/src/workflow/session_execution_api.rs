@@ -3,9 +3,11 @@ use std::time::Duration;
 use pantograph_diagnostics_ledger::{
     DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
     DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
-    RunSnapshotAcceptedPayload,
+    RunSnapshotAcceptedPayload, SchedulerQueuePlacementPayload,
 };
-use pantograph_runtime_attribution::{WorkflowRunId, WorkflowRunSnapshotRequest};
+use pantograph_runtime_attribution::{
+    WorkflowId, WorkflowRunId, WorkflowRunSnapshotRecord, WorkflowRunSnapshotRequest,
+};
 
 use crate::graph::{
     workflow_graph_run_settings, workflow_graph_run_settings_json, WorkflowExecutionSessionKind,
@@ -19,10 +21,11 @@ use super::validation::{
 };
 use super::{
     AttributionRepository, WorkflowExecutionSessionCreateRequest,
-    WorkflowExecutionSessionCreateResponse, WorkflowExecutionSessionRetentionHint,
-    WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionSummary,
-    WorkflowExecutionSessionUnloadReason, WorkflowHost, WorkflowRunRequest, WorkflowRunResponse,
-    WorkflowSchedulerDecisionReason, WorkflowService, WorkflowServiceError,
+    WorkflowExecutionSessionCreateResponse, WorkflowExecutionSessionQueueItem,
+    WorkflowExecutionSessionRetentionHint, WorkflowExecutionSessionRunRequest,
+    WorkflowExecutionSessionSummary, WorkflowExecutionSessionUnloadReason, WorkflowHost,
+    WorkflowRunRequest, WorkflowRunResponse, WorkflowSchedulerDecisionReason, WorkflowService,
+    WorkflowServiceError,
 };
 
 const WORKFLOW_SESSION_SCHEDULER_POLICY: &str = "priority_then_fifo";
@@ -94,12 +97,34 @@ impl WorkflowService {
             store.session_summary(&session_id)?
         };
         let workflow_run_id = WorkflowRunId::generate().to_string();
-        self.create_queued_run_snapshot_if_configured(host, &session, &workflow_run_id, &request)
+        let run_snapshot = self
+            .create_queued_run_snapshot_if_configured(host, &session, &workflow_run_id, &request)
             .await?;
-        {
+        let queued_item = {
             let mut store = self.session_store_guard()?;
-            store.enqueue_run_with_id(&session_id, &request, workflow_run_id.clone())?
+            store.enqueue_run_with_id(&session_id, &request, workflow_run_id.clone())?;
+            store
+                .list_queue(&session_id)?
+                .into_iter()
+                .find(|item| item.workflow_run_id == workflow_run_id)
+                .ok_or_else(|| {
+                    WorkflowServiceError::Internal(format!(
+                        "queued run '{}' missing from session '{}' after enqueue",
+                        workflow_run_id, session_id
+                    ))
+                })?
         };
+        if let Err(error) = self.record_scheduler_queue_placement_event_if_configured(
+            &session,
+            run_snapshot.as_ref(),
+            &queued_item,
+            &request,
+        ) {
+            if let Ok(mut store) = self.session_store.lock() {
+                let _ = store.cancel_queue_item(&session_id, &workflow_run_id);
+            }
+            return Err(error);
+        }
 
         let queued_run = loop {
             let session_ready_to_load = {
@@ -211,9 +236,9 @@ impl WorkflowService {
         session: &WorkflowExecutionSessionSummary,
         workflow_run_id: &str,
         request: &WorkflowExecutionSessionRunRequest,
-    ) -> Result<(), WorkflowServiceError> {
+    ) -> Result<Option<WorkflowRunSnapshotRecord>, WorkflowServiceError> {
         if self.attribution_store.is_none() {
-            return Ok(());
+            return Ok(None);
         }
 
         let graph = host.workflow_graph(&session.workflow_id).await?;
@@ -297,12 +322,12 @@ impl WorkflowService {
             .map_err(WorkflowServiceError::from)?;
         drop(store);
         self.record_run_snapshot_accepted_event_if_configured(&snapshot)?;
-        Ok(())
+        Ok(Some(snapshot))
     }
 
     fn record_run_snapshot_accepted_event_if_configured(
         &self,
-        snapshot: &pantograph_runtime_attribution::WorkflowRunSnapshotRecord,
+        snapshot: &WorkflowRunSnapshotRecord,
     ) -> Result<(), WorkflowServiceError> {
         let Some(ledger) = self.diagnostics_ledger.as_ref() else {
             return Ok(());
@@ -345,6 +370,84 @@ impl WorkflowService {
                         .as_str()
                         .to_string(),
                 }),
+            },
+        )
+        .map(|_| ())
+        .map_err(WorkflowServiceError::from)
+    }
+
+    fn record_scheduler_queue_placement_event_if_configured(
+        &self,
+        session: &WorkflowExecutionSessionSummary,
+        snapshot: Option<&WorkflowRunSnapshotRecord>,
+        queued_item: &WorkflowExecutionSessionQueueItem,
+        request: &WorkflowExecutionSessionRunRequest,
+    ) -> Result<(), WorkflowServiceError> {
+        let Some(ledger) = self.diagnostics_ledger.as_ref() else {
+            return Ok(());
+        };
+        let workflow_run_id = WorkflowRunId::try_from(queued_item.workflow_run_id.clone())?;
+        let workflow_id = match snapshot {
+            Some(snapshot) => snapshot.workflow_id.clone(),
+            None => WorkflowId::try_from(session.workflow_id.clone())?,
+        };
+        let queue_position = queued_item
+            .queue_position
+            .ok_or_else(|| {
+                WorkflowServiceError::Internal(format!(
+                    "queued run '{}' missing queue position",
+                    queued_item.workflow_run_id
+                ))
+            })
+            .and_then(|position| {
+                u32::try_from(position).map_err(|_| {
+                    WorkflowServiceError::Internal(format!(
+                        "queue position '{}' exceeds scheduler event limit",
+                        position
+                    ))
+                })
+            })?;
+        let occurred_at_ms = queued_item.enqueued_at_ms.unwrap_or_default() as i64;
+
+        let mut ledger = ledger.lock().map_err(|_| {
+            WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
+        })?;
+        DiagnosticsLedgerRepository::append_diagnostic_event(
+            &mut *ledger,
+            DiagnosticEventAppendRequest {
+                source_component: DiagnosticEventSourceComponent::Scheduler,
+                source_instance_id: Some("workflow-session-scheduler".to_string()),
+                occurred_at_ms,
+                workflow_run_id: Some(workflow_run_id),
+                workflow_id: Some(workflow_id),
+                workflow_version_id: snapshot.map(|snapshot| snapshot.workflow_version_id.clone()),
+                workflow_semantic_version: Some(
+                    snapshot
+                        .map(|snapshot| snapshot.workflow_semantic_version.clone())
+                        .unwrap_or_else(|| request.workflow_semantic_version.clone()),
+                ),
+                node_id: None,
+                node_type: None,
+                node_version: None,
+                runtime_id: None,
+                runtime_version: None,
+                model_id: None,
+                model_version: None,
+                client_id: None,
+                client_session_id: None,
+                bucket_id: None,
+                scheduler_policy_id: Some(WORKFLOW_SESSION_SCHEDULER_POLICY.to_string()),
+                retention_policy_id: snapshot.map(|snapshot| snapshot.retention_policy.clone()),
+                privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+                retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+                payload_ref: None,
+                payload: DiagnosticEventPayload::SchedulerQueuePlacement(
+                    SchedulerQueuePlacementPayload {
+                        queue_position,
+                        priority: queued_item.priority,
+                        scheduler_policy_id: WORKFLOW_SESSION_SCHEDULER_POLICY.to_string(),
+                    },
+                ),
             },
         )
         .map(|_| ())

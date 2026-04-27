@@ -125,7 +125,7 @@ logs or inferred in the frontend.
   components, privacy classes, retention classes, and validation rules.
 - [ ] Define model/cache state enum used by estimates and events.
 - [ ] Define client action versus admin override event vocabulary.
-- [ ] Confirm the shared typed diagnostic event ledger bootstrap is available
+- [x] Confirm the shared typed diagnostic event ledger bootstrap is available
   before durable scheduler event persistence. If it is not available, execute
   that bootstrap before Milestone 3.
 - [ ] Define lock-boundary rules for estimate calculation and event
@@ -142,7 +142,11 @@ logs or inferred in the frontend.
   over transport.
 - README or ADR updates record storage/ownership decisions.
 
-**Status:** Not started.
+**Status:** In progress. The shared typed diagnostic event ledger is available
+in `pantograph-diagnostics-ledger`, and the workflow-session scheduler emits a
+first durable `scheduler.queue_placement` event after queue insertion when a
+diagnostics ledger is configured. Estimate DTOs, cache/model state contracts,
+admin/client action vocabulary, and hot projection ownership remain pending.
 
 ### Milestone 2: Estimate Production
 
@@ -203,7 +207,10 @@ scheduler activity.
 - Tests prove Scheduler page projection queries read materialized hot
   projections and do not full-replay all scheduler events.
 
-**Status:** Not started.
+**Status:** In progress. Queue placement is now persisted through the typed
+event ledger for queued workflow-session runs. Other scheduler events,
+estimate persistence, action/override events, model load/unload events,
+admission events, and scheduler timeline projections remain pending.
 
 ### Milestone 4: Queue Authority And Admin Controls
 

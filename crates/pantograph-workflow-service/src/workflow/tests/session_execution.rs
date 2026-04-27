@@ -309,8 +309,14 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         )
         .expect("diagnostic events")
     };
-    assert_eq!(diagnostic_events.len(), 1);
-    let event = &diagnostic_events[0];
+    assert_eq!(diagnostic_events.len(), 2);
+    let event = diagnostic_events
+        .iter()
+        .find(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::RunSnapshotAccepted
+        })
+        .expect("run snapshot accepted event");
     assert_eq!(
         event.event_kind,
         pantograph_diagnostics_ledger::DiagnosticEventKind::RunSnapshotAccepted
@@ -336,6 +342,36 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
     assert!(event
         .payload_json
         .contains(snapshot.workflow_run_snapshot_id.as_str()));
+
+    let queue_event = diagnostic_events
+        .iter()
+        .find(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerQueuePlacement
+        })
+        .expect("scheduler queue placement event");
+    assert_eq!(
+        queue_event.source_component,
+        pantograph_diagnostics_ledger::DiagnosticEventSourceComponent::Scheduler
+    );
+    assert_eq!(
+        queue_event.workflow_run_id.as_ref().map(|id| id.as_str()),
+        Some(response.workflow_run_id.as_str())
+    );
+    assert_eq!(
+        queue_event.workflow_version_id.as_ref(),
+        Some(&snapshot.workflow_version_id)
+    );
+    assert_eq!(
+        queue_event.scheduler_policy_id.as_deref(),
+        Some("priority_then_fifo")
+    );
+    assert_eq!(
+        queue_event.retention_policy_id.as_deref(),
+        Some("ephemeral")
+    );
+    assert!(queue_event.payload_json.contains("\"queue_position\":0"));
+    assert!(queue_event.payload_json.contains("\"priority\":7"));
 }
 
 #[tokio::test]

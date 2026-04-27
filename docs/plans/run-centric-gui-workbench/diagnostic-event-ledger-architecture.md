@@ -23,6 +23,8 @@ Last updated: 2026-04-27.
   and `last_applied_event_seq` for incremental read-model drains.
 - The workflow-service queued run snapshot path emits
   `run.snapshot_accepted` when a diagnostics ledger is configured.
+- The workflow-session scheduler emits `scheduler.queue_placement` after
+  queue insertion when a diagnostics ledger is configured.
 - Hot/warm projection tables, rebuild commands, and remaining feature emitters
   remain plan work.
 
