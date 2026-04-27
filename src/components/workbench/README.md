@@ -9,14 +9,14 @@ later plan stages fill in richer page bodies.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `WorkbenchShell.svelte` | Top-level workbench frame, toolbar navigation, active-run summary, and page outlet. |
-| `SchedulerPage.svelte` | Dense run-list view backed by the run-list projection service, active-run selection store, local table controls, and selected-run scheduler timeline projection. |
-| `schedulerPagePresenters.ts` | Pure Scheduler page status, duration, timestamp, filtering, sorting, projection freshness, and timeline presenters. |
+| `SchedulerPage.svelte` | Dense run-list view backed by the run-list projection service, active-run selection store, local table controls, policy-field filters, and selected-run scheduler timeline projection. |
+| `schedulerPagePresenters.ts` | Pure Scheduler page status, duration, timestamp, policy filter, sorting, projection freshness, and timeline presenters. |
 | `schedulerPagePresenters.test.ts` | Unit coverage for Scheduler table labels, status classes, filters, sorts, projection freshness, and timeline labels. |
 | `GraphPage.svelte` | Workbench page that switches between the active run's immutable graph snapshot and the current editable workflow graph. |
 | `RunGraphSnapshot.svelte` | Read-only run graph renderer backed by `workflowService.queryRunGraph`; it does not load historic graphs into the editor store. |
-| `DiagnosticsPage.svelte` | Projection-backed selected-run diagnostics page with run detail facts and scheduler timeline records. |
-| `diagnosticsPagePresenters.ts` | Pure diagnostics page status, duration, projection freshness, fact, and timeline label presenters. |
-| `diagnosticsPagePresenters.test.ts` | Unit coverage for diagnostics page labels and payload availability presentation. |
+| `DiagnosticsPage.svelte` | Projection-backed selected-run diagnostics page with run detail facts, comparison facets, mixed-version warnings, and scheduler timeline records. |
+| `diagnosticsPagePresenters.ts` | Pure diagnostics page status, duration, projection freshness, fact, comparison facet, and timeline label presenters. |
+| `diagnosticsPagePresenters.test.ts` | Unit coverage for diagnostics page labels, comparison facets, and payload availability presentation. |
 | `IoInspectorPage.svelte` | Projection-backed I/O artifact browser and global retention policy form. |
 | `ioInspectorPresenters.ts` | Pure I/O media, payload availability, byte-size, and projection freshness presenters. |
 | `ioInspectorPresenters.test.ts` | Unit coverage for I/O Inspector presentation labels. |
@@ -74,8 +74,9 @@ triggered by workflow events rather than polling.
 - `WorkbenchShell.svelte` owns page routing, not page bodies.
 - Scheduler row selection may set active-run context, but durable run data must
   still be fetched from projection services by each page.
-- Scheduler table search, status filter, and sort controls operate only on the
-  materialized run-list projection returned by the backend.
+- Scheduler table search, status filter, policy-field filters, and sort
+  controls operate only on the materialized run-list projection returned by the
+  backend.
 - Scheduler timeline rows come from `workflowService.querySchedulerTimeline`.
   Components render typed summary/detail fields and payload availability only.
 - I/O artifact rendering must distinguish metadata-only rows from rows with
@@ -88,6 +89,8 @@ triggered by workflow events rather than polling.
 - Diagnostics timeline rows render typed scheduler projection summaries and
   payload availability only; detailed payload parsing belongs in backend
   projections or future typed presenters.
+- Diagnostics comparison facets are derived from selected-run detail and
+  run-list projections. They must not parse diagnostic event payloads.
 - Network local-node summaries must render only API-reported local facts and
   peer records. They must not synthesize future Iroh state.
 - Workbench pages must not consume raw diagnostic ledger events.
@@ -147,8 +150,9 @@ triggered by workflow events rather than polling.
   `workbenchStore.ts`.
 - Scheduler table rows are `RunListProjectionRecord` values returned by
   `workflowService.queryRunList`.
-- Scheduler table controls are frontend presentation filters and must not
-  imply backend scheduler priority or queue mutations.
+- Scheduler table controls are frontend presentation filters and must not imply
+  backend scheduler priority or queue mutations. Scheduler and retention policy
+  filters use typed `RunListProjectionRecord` fields.
 - Scheduler timeline rows are `SchedulerTimelineProjectionRecord` values and
   must not be rebuilt or interpreted from raw ledger rows in the frontend.
 - I/O artifact cards render `IoArtifactProjectionRecord` metadata and may show
@@ -158,7 +162,8 @@ triggered by workflow events rather than polling.
 - Run graph snapshot rows render `WorkflowRunGraphProjection` topology,
   presentation revision, graph settings, and execution fingerprint fields.
 - Diagnostics fact rows render `RunDetailProjectionRecord` fields, and
-  timeline rows render `SchedulerTimelineProjectionRecord` summaries.
+  comparison facets use `RunListProjectionRecord` fields. Timeline rows render
+  `SchedulerTimelineProjectionRecord` summaries.
 - Network status cards are derived from `WorkflowLocalNetworkStatusQueryResponse`.
 - Network disk and interface rows render reported local metrics and show
   unavailable states when platform probes do not provide rows.
