@@ -190,9 +190,9 @@ and immutable run snapshots explicit before new GUI pages rely on them.
 
 **Tasks:**
 
-- [ ] Execute Stage `01`.
-- [ ] Decide whether workflow versioning needs a new ADR before code changes.
-- [ ] Record the breaking identity/version cutover and cleanup/regeneration
+- [x] Execute the first Stage `01` implementation slices.
+- [x] Decide whether workflow versioning needs a new ADR before code changes.
+- [x] Record the breaking identity/version cutover and cleanup/regeneration
   strategy for existing workflow/run data.
 
 **Verification:**
@@ -200,7 +200,10 @@ and immutable run snapshots explicit before new GUI pages rely on them.
 - Stage `01` verification passes.
 - Existing workflow-service and diagnostics tests pass for touched packages.
 
-**Status:** Not started.
+**Status:** In progress. Workflow identity validation, executable-topology
+versioning, presentation revisions, and immutable run snapshot attribution have
+landed, with remaining run snapshot fields and final cleanup tracked in
+Stage `01`.
 
 ### Milestone 2: Scheduler Observability And Control
 
@@ -209,8 +212,8 @@ observability, and scoped queue actions.
 
 **Tasks:**
 
-- [ ] Execute Stage `02`.
-- [ ] Preserve scheduler-only execution ownership.
+- [x] Execute the first Stage `02` implementation slices.
+- [x] Preserve scheduler-only execution ownership.
 - [ ] Record model load/unload and delay reasons as queryable scheduler facts.
 
 **Verification:**
@@ -218,7 +221,9 @@ observability, and scoped queue actions.
 - Scheduler policy/store tests cover estimates, delay reasons, event emission,
   and scoped queue actions.
 
-**Status:** Not started.
+**Status:** In progress. Scheduler estimate and queue-placement events now flow
+through the typed ledger and projections; richer runtime/model load events and
+control actions remain open.
 
 ### Milestone 3: Diagnostics, Retention, And Audit Storage
 
@@ -227,11 +232,11 @@ retention state, and Pumas/Library audit records.
 
 **Tasks:**
 
-- [ ] Execute Stage `03`.
-- [ ] Follow `diagnostic-event-ledger-architecture.md` for event envelope,
+- [x] Execute the first Stage `03` implementation slices.
+- [x] Follow `diagnostic-event-ledger-architecture.md` for event envelope,
   typed payloads, validation, retention, projection cursors, incremental
   materialized projection ownership, and explicit rebuild behavior.
-- [ ] Ensure metadata survives payload cleanup.
+- [x] Ensure metadata survives payload cleanup.
 - [ ] Make global retention policy retroactive and auditable.
 
 **Verification:**
@@ -239,7 +244,10 @@ retention state, and Pumas/Library audit records.
 - Diagnostics ledger migration and repository tests pass.
 - Replay/recovery tests prove retained metadata remains after cleanup.
 
-**Status:** Not started.
+**Status:** In progress. The typed event ledger, monotonic `event_seq`,
+projection state cursors, run/scheduler/I/O/Library projections, and explicit
+projection rebuild path are implemented. Retention cleanup and broader
+Pumas/Library audit instrumentation remain open.
 
 ### Milestone 4: API Projection Freeze
 
@@ -248,8 +256,8 @@ and local network facts to the GUI through stable projections.
 
 **Tasks:**
 
-- [ ] Execute Stage `04`.
-- [ ] Update module READMEs for host-facing API contracts.
+- [x] Execute the first Stage `04` implementation slices.
+- [x] Update module READMEs for host-facing API contracts.
 - [ ] Add cross-layer acceptance coverage for at least one run list and run
   detail path.
 
@@ -258,7 +266,10 @@ and local network facts to the GUI through stable projections.
 - API projection unit/integration tests pass.
 - Frontend typecheck passes for generated or hand-authored DTO consumers.
 
-**Status:** Not started.
+**Status:** In progress. Backend projection DTOs and frontend service
+boundaries exist for run list/detail, scheduler timeline, run graph,
+I/O artifacts, Library usage, retention policy, and local Network status.
+Additional cross-layer acceptance coverage and generated parity remain open.
 
 ### Milestone 5: App Shell And Page Migration
 
@@ -267,9 +278,9 @@ Scheduler-first workbench and active-run navigation.
 
 **Tasks:**
 
-- [ ] Execute Stage `05`.
-- [ ] Execute Stage `06`.
-- [ ] Relocate or intentionally retire existing graph/drawing surfaces under
+- [x] Execute Stage `05`.
+- [x] Execute the first Stage `06` implementation slices.
+- [x] Relocate or intentionally retire existing graph/drawing surfaces under
   the workbench shell.
 
 **Verification:**
@@ -277,7 +288,11 @@ Scheduler-first workbench and active-run navigation.
 - Frontend lint, typecheck, and focused UI tests pass.
 - Accessibility checks cover toolbar navigation and active-run context.
 
-**Status:** Not started.
+**Status:** In progress. The Scheduler-first shell is active, Scheduler opens
+by default, selected-run context drives page content, and the Graph, Diagnostics,
+I/O Inspector, Library, Network, and Node Editor pages have first production
+surfaces. Remaining Stage `06` work is mostly richer backend projection fields,
+media payload renderers, Pumas actions, and queue/admin controls.
 
 ### Milestone 6: Standards Review And Rollout
 
@@ -286,8 +301,8 @@ and documentation standards.
 
 **Tasks:**
 
-- [ ] Execute Stage `07`.
-- [ ] Update ADRs and READMEs for accepted ownership boundaries.
+- [x] Execute the first Stage `07` verification slices.
+- [x] Update ADRs and READMEs for accepted ownership boundaries.
 - [ ] Decide whether additional implementation-wave plans are needed.
 
 **Verification:**
@@ -295,7 +310,9 @@ and documentation standards.
 - Required package/frontend/backend test suites pass or skipped checks are
   explicitly recorded with reasons.
 
-**Status:** Not started.
+**Status:** In progress. ADR-014 captures the workbench projection boundary,
+source-audit gates have been run for the shell/page slices, and the current
+verification summaries are recorded in Stage `06` and Stage `07`.
 
 ## Public Facade Preservation Note
 
