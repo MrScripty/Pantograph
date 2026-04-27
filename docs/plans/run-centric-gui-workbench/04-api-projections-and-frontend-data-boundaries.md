@@ -304,7 +304,7 @@ implementation depends on it.
 - [ ] Add an acceptance path for selected run detail with workflow version and
   scheduler estimate.
 - [x] Add fixture data for expired-retention artifact behavior.
-- [ ] Add fixture data for no-active-run retained artifact browsing where
+- [x] Add fixture data for no-active-run retained artifact browsing where
   supported.
 - [ ] Add an acceptance path proving a typed event reaches a backend projection
   and then a frontend service without exposing raw ledger storage details.

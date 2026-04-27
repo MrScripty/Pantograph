@@ -441,6 +441,53 @@ fn workflow_io_artifact_query_exposes_expired_retention_state() {
 }
 
 #[test]
+fn workflow_io_artifact_query_supports_no_active_run_browsing() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_io_artifact_event(
+            "node-a",
+            "workflow_output",
+            "artifact-a",
+        ))
+        .expect("first io artifact event");
+    let mut second_artifact = sample_io_artifact_event("node-b", "workflow_output", "artifact-b");
+    second_artifact.workflow_run_id = Some(WorkflowRunId::try_from("run-b".to_string()).unwrap());
+    second_artifact.workflow_id = Some(WorkflowId::try_from("workflow-b".to_string()).unwrap());
+    ledger
+        .append_diagnostic_event(second_artifact)
+        .expect("second io artifact event");
+    let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+
+    let response = service
+        .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
+            workflow_run_id: None,
+            node_id: None,
+            artifact_role: Some("workflow_output".to_string()),
+            media_type: None,
+            retention_state: Some(IoArtifactRetentionState::Retained),
+            retention_policy_id: None,
+            runtime_id: None,
+            model_id: None,
+            after_event_seq: None,
+            limit: Some(10),
+            projection_batch_size: Some(10),
+        })
+        .expect("global retained io artifact query");
+
+    assert_eq!(response.artifacts.len(), 2);
+    assert!(response
+        .artifacts
+        .iter()
+        .any(|artifact| artifact.workflow_run_id.as_str() == "run-a"));
+    assert!(response
+        .artifacts
+        .iter()
+        .any(|artifact| artifact.workflow_run_id.as_str() == "run-b"));
+    assert_eq!(response.retention_summary.len(), 1);
+    assert_eq!(response.retention_summary[0].artifact_count, 2);
+}
+
+#[test]
 fn workflow_io_artifact_query_validates_bounds() {
     let service = WorkflowService::with_ephemeral_diagnostics_ledger().expect("service");
 
