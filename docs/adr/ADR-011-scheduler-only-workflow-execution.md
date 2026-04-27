@@ -30,6 +30,12 @@ No compatibility facade is provided for direct workflow execution. The private
 and may only be called after queue admission from
 `run_workflow_execution_session`.
 
+Scheduler-owned queue controls, including cancellation and reprioritization,
+must emit typed scheduler diagnostic events when diagnostics are configured.
+Those events record control facts, actor scope, and the queue state observed
+before the mutation, while terminal execution truth remains owned by `run.*`
+lifecycle events.
+
 Binding and frontend contracts must expose scheduler-backed session execution,
 not raw graph or direct workflow-run helpers. Host/runtime traits may still own
 low-level execution mechanics, but those mechanics are implementation surfaces,
@@ -44,6 +50,8 @@ not public caller entrypoints.
   binding, or Rust API callers.
 - The graph editor and language bindings converge on the same stable execution
   contract.
+- Scheduler queue controls become auditable without allowing callers to author
+  raw diagnostics facts.
 
 ### Negative
 - Existing direct-run consumers must migrate to session create/run/close calls.
@@ -60,3 +68,5 @@ not public caller entrypoints.
   reintroduces public direct execution APIs.
 - `scripts/check-uniffi-embedded-runtime-surface.sh` rejects the removed UniFFI
   `workflow_run` method in generated metadata.
+- Scheduler control APIs must route durable audit facts through typed
+  diagnostic event payloads owned by the backend scheduler boundary.

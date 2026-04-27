@@ -1,13 +1,22 @@
 use crate::scheduler::scheduler_snapshot_workflow_run_id;
 
+use pantograph_diagnostics_ledger::{
+    DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
+    DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
+    SchedulerQueueControlAction, SchedulerQueueControlActorScope, SchedulerQueueControlOutcome,
+    SchedulerQueueControlPayload,
+};
+use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId, WorkflowRunSnapshotRecord};
+
 use super::{
     WorkflowExecutionSessionInspectionRequest, WorkflowExecutionSessionInspectionResponse,
     WorkflowExecutionSessionQueueCancelRequest, WorkflowExecutionSessionQueueCancelResponse,
-    WorkflowExecutionSessionQueueListRequest, WorkflowExecutionSessionQueueListResponse,
-    WorkflowExecutionSessionQueueReprioritizeRequest,
+    WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionQueueListRequest,
+    WorkflowExecutionSessionQueueListResponse, WorkflowExecutionSessionQueueReprioritizeRequest,
     WorkflowExecutionSessionQueueReprioritizeResponse, WorkflowExecutionSessionStatusRequest,
-    WorkflowExecutionSessionStatusResponse, WorkflowHost, WorkflowSchedulerSnapshotRequest,
-    WorkflowSchedulerSnapshotResponse, WorkflowService, WorkflowServiceError,
+    WorkflowExecutionSessionStatusResponse, WorkflowExecutionSessionSummary, WorkflowHost,
+    WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse, WorkflowService,
+    WorkflowServiceError,
 };
 
 impl WorkflowService {
@@ -150,8 +159,24 @@ impl WorkflowService {
             ));
         }
 
-        let mut store = self.session_store_guard()?;
-        store.cancel_queue_item(session_id, workflow_run_id)?;
+        let (session, cancelled_item) = {
+            let mut store = self.session_store_guard()?;
+            let session = store.session_summary(session_id)?;
+            let cancelled_item = store
+                .list_queue(session_id)?
+                .into_iter()
+                .find(|item| item.workflow_run_id == workflow_run_id);
+            store.cancel_queue_item(session_id, workflow_run_id)?;
+            (session, cancelled_item)
+        };
+        self.record_scheduler_queue_control_event_if_configured(
+            &session,
+            workflow_run_id,
+            cancelled_item.as_ref(),
+            SchedulerQueueControlAction::Cancel,
+            None,
+            Some("queue item cancelled".to_string()),
+        )?;
         Ok(WorkflowExecutionSessionQueueCancelResponse { ok: true })
     }
 
@@ -171,8 +196,123 @@ impl WorkflowService {
                 "workflow_run_id must be non-empty".to_string(),
             ));
         }
-        let mut store = self.session_store_guard()?;
-        store.reprioritize_queue_item(session_id, workflow_run_id, request.priority)?;
+        let (session, previous_item) = {
+            let mut store = self.session_store_guard()?;
+            let session = store.session_summary(session_id)?;
+            let previous_item = store
+                .list_queue(session_id)?
+                .into_iter()
+                .find(|item| item.workflow_run_id == workflow_run_id);
+            store.reprioritize_queue_item(session_id, workflow_run_id, request.priority)?;
+            (session, previous_item)
+        };
+        self.record_scheduler_queue_control_event_if_configured(
+            &session,
+            workflow_run_id,
+            previous_item.as_ref(),
+            SchedulerQueueControlAction::Reprioritize,
+            Some(request.priority),
+            Some("queue item reprioritized".to_string()),
+        )?;
         Ok(WorkflowExecutionSessionQueueReprioritizeResponse { ok: true })
+    }
+
+    fn record_scheduler_queue_control_event_if_configured(
+        &self,
+        session: &WorkflowExecutionSessionSummary,
+        workflow_run_id: &str,
+        previous_item: Option<&WorkflowExecutionSessionQueueItem>,
+        action: SchedulerQueueControlAction,
+        new_priority: Option<i32>,
+        reason: Option<String>,
+    ) -> Result<(), WorkflowServiceError> {
+        let Some(ledger) = self.diagnostics_ledger.as_ref() else {
+            return Ok(());
+        };
+        let workflow_run_id = WorkflowRunId::try_from(workflow_run_id.to_string())?;
+        let workflow_id = WorkflowId::try_from(session.workflow_id.clone())?;
+        let snapshot = self.workflow_run_snapshot_if_configured(&workflow_run_id)?;
+        let previous_queue_position = previous_item
+            .and_then(|item| item.queue_position)
+            .map(|position| {
+                u32::try_from(position).map_err(|_| {
+                    WorkflowServiceError::Internal(format!(
+                        "queue position '{}' exceeds scheduler event limit",
+                        position
+                    ))
+                })
+            })
+            .transpose()?;
+
+        let mut ledger = ledger.lock().map_err(|_| {
+            WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
+        })?;
+        DiagnosticsLedgerRepository::append_diagnostic_event(
+            &mut *ledger,
+            DiagnosticEventAppendRequest {
+                source_component: DiagnosticEventSourceComponent::Scheduler,
+                source_instance_id: Some("workflow-session-scheduler".to_string()),
+                occurred_at_ms: crate::scheduler::unix_timestamp_ms() as i64,
+                workflow_run_id: Some(workflow_run_id),
+                workflow_id: Some(workflow_id),
+                workflow_version_id: snapshot
+                    .as_ref()
+                    .map(|snapshot| snapshot.workflow_version_id.clone()),
+                workflow_semantic_version: snapshot
+                    .as_ref()
+                    .map(|snapshot| snapshot.workflow_semantic_version.clone()),
+                node_id: None,
+                node_type: None,
+                node_version: None,
+                runtime_id: None,
+                runtime_version: None,
+                model_id: None,
+                model_version: None,
+                client_id: snapshot
+                    .as_ref()
+                    .and_then(|snapshot| snapshot.client_id.clone()),
+                client_session_id: snapshot
+                    .as_ref()
+                    .and_then(|snapshot| snapshot.client_session_id.clone()),
+                bucket_id: snapshot
+                    .as_ref()
+                    .and_then(|snapshot| snapshot.bucket_id.clone()),
+                scheduler_policy_id: snapshot
+                    .as_ref()
+                    .map(|snapshot| snapshot.scheduler_policy.clone()),
+                retention_policy_id: snapshot
+                    .as_ref()
+                    .map(|snapshot| snapshot.retention_policy.clone()),
+                privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+                retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+                payload_ref: None,
+                payload: DiagnosticEventPayload::SchedulerQueueControl(
+                    SchedulerQueueControlPayload {
+                        action,
+                        outcome: SchedulerQueueControlOutcome::Accepted,
+                        actor_scope: SchedulerQueueControlActorScope::BackendControlApi,
+                        previous_queue_position,
+                        previous_priority: previous_item.map(|item| item.priority),
+                        new_priority,
+                        reason,
+                    },
+                ),
+            },
+        )
+        .map(|_| ())
+        .map_err(WorkflowServiceError::from)
+    }
+
+    fn workflow_run_snapshot_if_configured(
+        &self,
+        workflow_run_id: &WorkflowRunId,
+    ) -> Result<Option<WorkflowRunSnapshotRecord>, WorkflowServiceError> {
+        if self.attribution_store.is_none() {
+            return Ok(None);
+        }
+        let store = self.attribution_store_guard()?;
+        store
+            .workflow_run_snapshot(workflow_run_id)
+            .map_err(WorkflowServiceError::from)
     }
 }

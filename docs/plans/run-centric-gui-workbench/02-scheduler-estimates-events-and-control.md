@@ -228,10 +228,14 @@ The first scheduler timeline projection now drains those scheduler events plus
 `run.snapshot_accepted` into materialized timeline rows by event cursor.
 Scheduler delay and model lifecycle events now have validated ledger payloads
 and materialized timeline summaries. Workflow-session runtime admission waits
-now emit one durable `scheduler.run_delayed` event per wait. Production
-emitters for model load/unload are not wired yet. Other scheduler events,
-action/override events, admission events, and frontend page wiring remain
-pending; workflow-service now has a query boundary for the materialized
+now emit one durable `scheduler.run_delayed` event per wait. Queue
+cancel/reprioritize controls now emit typed `scheduler.queue_control` events
+with accepted outcome, actor scope, previous queue position, previous priority,
+new priority where applicable, and a bounded reason. Run-list, run-detail, and
+scheduler timeline projections now materialize those queue-control events.
+Production emitters for model load/unload are not wired yet. Broader
+client/admin action vocabulary, admission events, and frontend page wiring
+remain pending; workflow-service now has a query boundary for the materialized
 scheduler timeline.
 
 ### Milestone 4: Queue Authority And Admin Controls
@@ -257,7 +261,14 @@ Pantograph GUI privileged actions.
 - Tests prove scheduler can deny or normalize requested priorities based on
   policy.
 
-**Status:** Not started.
+**Status:** In progress. The existing backend queue cancel and reprioritize
+APIs still enforce session ownership through session id plus run id matching,
+and they now record accepted queue-control facts in the typed diagnostics
+ledger when diagnostics are configured. These events currently use the
+`backend_control_api` actor scope because this slice does not introduce the
+future client/admin privilege split. Push-to-front, clone/resubmit, privileged
+cross-session admin controls, denial events, and policy-normalized priority
+evidence remain pending.
 
 ## Ownership And Lifecycle Note
 
@@ -281,22 +292,34 @@ duplicate, unvalidated, or contradictory event streams.
 
 ### Completed
 
-- None. Draft plan only.
+- Confirmed the shared typed diagnostic event ledger is available for
+  scheduler event persistence.
+- Added durable `scheduler.estimate_produced`,
+  `scheduler.queue_placement`, `scheduler.run_delayed`, and
+  `scheduler.queue_control` event paths for workflow-session scheduling
+  behavior implemented so far.
+- Added materialized projection coverage for scheduler estimates,
+  placements, delays, queue controls, and run lifecycle visibility required by
+  current Scheduler page query boundaries.
 
 ### Deviations
 
-- None.
+- Queue-control events currently represent accepted backend control API
+  actions. The future client/admin authority split still needs explicit actor
+  scopes and denial/normalization outcomes.
 
 ### Follow-Ups
 
-- Confirm the shared typed diagnostic event ledger bootstrap lands before
-  durable scheduler event persistence.
 - Decide whether estimate quality should be enum-only or include numeric
   confidence.
+- Add production model load/unload emitters and admission/reservation events.
+- Add explicit client/admin action vocabulary, denial outcomes, and authority
+  tests for cross-session controls.
 
 ### Verification Summary
 
-- Not run. Draft plan only.
+- `cargo test -p pantograph-diagnostics-ledger`
+- `cargo test -p pantograph-workflow-service`
 
 ### Traceability Links
 
