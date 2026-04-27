@@ -148,10 +148,11 @@ into a second source of truth.
 renders a dense projection-backed run table, first-class queued/future rows
 where present in the run-list projection, selected-run actions, active-run
 updates, projection freshness, search, status filtering, stable local sort
-options, a selected-run timeline panel, timeline projection freshness, and
-timeline summary/detail rows without raw event parsing. Queue position,
-priority, estimates, progress, model/runtime summaries, delay reason, retention
-summaries, and privileged queue action controls remain open.
+options, scheduler policy IDs, retention policy IDs, a selected-run timeline
+panel, timeline projection freshness, and timeline summary/detail rows without
+raw event parsing. Queue position, priority, estimates, progress,
+model/runtime summaries, delay reason, richer retention summaries, and
+privileged queue action controls remain open.
 
 ### Milestone 2: Diagnostics Page
 
@@ -401,6 +402,8 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
   the materialized run-list projection.
 - Added `src/components/workbench/schedulerPagePresenters.ts` and tests for
   Scheduler timestamp/duration labels, status classes, filtering, and sorting.
+- Added Scheduler table columns for the typed scheduler policy and retention
+  policy IDs already available on `RunListProjectionRecord`.
 - Added a Scheduler selected-run timeline panel backed by
   `workflowService.querySchedulerTimeline`, including projection freshness and
   typed summary/detail rendering without raw payload parsing.
@@ -426,9 +429,10 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
   residency because `WorkflowLocalNetworkStatusQueryResponse` does not expose
   run-keyed resource placement or cache facts.
 - Scheduler timeline rows currently show typed event labels, summary/detail
-  text, and payload availability only. Queue position, priority, estimate, and
-  delay-reason columns need typed projection fields before being shown as dense
-  table columns.
+  text, and payload availability only. The run table shows scheduler and
+  retention policy IDs, but queue position, priority, estimate, delay reason,
+  and detailed retention summary columns need typed projection fields before
+  being shown as dense table columns.
 
 ### Follow-Ups
 

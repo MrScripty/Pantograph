@@ -97,6 +97,14 @@ export function formatSchedulerProjectionFreshness(state: ProjectionStateRecord 
   }
 }
 
+export function formatSchedulerPolicyLabel(value: string | null | undefined): string {
+  return value && value.trim().length > 0 ? value : 'Unassigned';
+}
+
+export function formatSchedulerRetentionLabel(value: string | null | undefined): string {
+  return value && value.trim().length > 0 ? value : 'Unassigned';
+}
+
 export function formatSchedulerTimelineKind(
   event: Pick<SchedulerTimelineProjectionRecord, 'event_kind'>,
 ): string {

@@ -15,6 +15,8 @@
   import {
     filterAndSortSchedulerRuns,
     formatSchedulerProjectionFreshness,
+    formatSchedulerPolicyLabel,
+    formatSchedulerRetentionLabel,
     formatSchedulerTimelineKind,
     formatSchedulerTimelineSource,
     formatSchedulerDuration,
@@ -221,13 +223,15 @@
 
   <div class="grid min-h-0 flex-1 grid-cols-1 overflow-hidden xl:grid-cols-[minmax(0,1fr)_24rem]">
     <div class="min-h-0 overflow-auto">
-      <table class="w-full min-w-[78rem] border-collapse text-left text-sm">
+      <table class="w-full min-w-[92rem] border-collapse text-left text-sm">
         <thead class="sticky top-0 z-10 bg-neutral-950 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
           <tr class="border-b border-neutral-800">
             <th class="px-4 py-3 font-medium">Run</th>
             <th class="px-3 py-3 font-medium">Workflow</th>
             <th class="px-3 py-3 font-medium">Version</th>
             <th class="px-3 py-3 font-medium">Status</th>
+            <th class="px-3 py-3 font-medium">Scheduler Policy</th>
+            <th class="px-3 py-3 font-medium">Retention</th>
             <th class="px-3 py-3 font-medium">Queued</th>
             <th class="px-3 py-3 font-medium">Started</th>
             <th class="px-3 py-3 font-medium">Duration</th>
@@ -238,15 +242,15 @@
         <tbody class="divide-y divide-neutral-900">
           {#if loading}
             <tr>
-              <td colspan="9" class="px-4 py-8 text-center text-neutral-500">Loading runs</td>
+              <td colspan="11" class="px-4 py-8 text-center text-neutral-500">Loading runs</td>
             </tr>
           {:else if runs.length === 0}
             <tr>
-              <td colspan="9" class="px-4 py-8 text-center text-neutral-500">No workflow runs recorded</td>
+              <td colspan="11" class="px-4 py-8 text-center text-neutral-500">No workflow runs recorded</td>
             </tr>
           {:else if displayedRuns.length === 0}
             <tr>
-              <td colspan="9" class="px-4 py-8 text-center text-neutral-500">No matching workflow runs</td>
+              <td colspan="11" class="px-4 py-8 text-center text-neutral-500">No matching workflow runs</td>
             </tr>
           {:else}
             {#each displayedRuns as run (run.workflow_run_id)}
@@ -275,6 +279,12 @@
                   <span class={`inline-flex rounded border px-2 py-0.5 text-xs ${schedulerStatusClass(run.status)}`}>
                     {run.status}
                   </span>
+                </td>
+                <td class="max-w-[10rem] truncate px-3 py-2 text-xs text-neutral-400" title={formatSchedulerPolicyLabel(run.scheduler_policy_id)}>
+                  {formatSchedulerPolicyLabel(run.scheduler_policy_id)}
+                </td>
+                <td class="max-w-[10rem] truncate px-3 py-2 text-xs text-neutral-400" title={formatSchedulerRetentionLabel(run.retention_policy_id)}>
+                  {formatSchedulerRetentionLabel(run.retention_policy_id)}
                 </td>
                 <td class="px-3 py-2 text-xs text-neutral-400">{formatSchedulerTimestamp(run.enqueued_at_ms ?? run.accepted_at_ms)}</td>
                 <td class="px-3 py-2 text-xs text-neutral-400">{formatSchedulerTimestamp(run.started_at_ms)}</td>

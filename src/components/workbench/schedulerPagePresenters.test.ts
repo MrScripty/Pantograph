@@ -4,7 +4,9 @@ import assert from 'node:assert/strict';
 import type { RunListProjectionRecord } from '../../services/diagnostics/types.ts';
 import {
   filterAndSortSchedulerRuns,
+  formatSchedulerPolicyLabel,
   formatSchedulerProjectionFreshness,
+  formatSchedulerRetentionLabel,
   formatSchedulerTimelineKind,
   formatSchedulerTimelineSource,
   formatSchedulerDuration,
@@ -47,6 +49,15 @@ test('schedulerStatusClass maps run statuses to stable classes', () => {
   assert.match(schedulerStatusClass('queued'), /amber/);
   assert.match(schedulerStatusClass('failed'), /red/);
   assert.match(schedulerStatusClass('cancelled'), /neutral/);
+});
+
+test('scheduler policy presenters keep missing dense table facts explicit', () => {
+  assert.equal(formatSchedulerPolicyLabel('policy-high'), 'policy-high');
+  assert.equal(formatSchedulerPolicyLabel(''), 'Unassigned');
+  assert.equal(formatSchedulerPolicyLabel('   '), 'Unassigned');
+  assert.equal(formatSchedulerPolicyLabel(null), 'Unassigned');
+  assert.equal(formatSchedulerRetentionLabel('retention-short'), 'retention-short');
+  assert.equal(formatSchedulerRetentionLabel(undefined), 'Unassigned');
 });
 
 test('filterAndSortSchedulerRuns filters by status and search text', () => {
