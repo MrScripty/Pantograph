@@ -27,6 +27,8 @@ import type {
   WorkflowSessionHandle,
   WorkflowSchedulerSnapshotResponse,
   WorkflowEditSessionRunResponse,
+  WorkflowRunGraphQueryRequest,
+  WorkflowRunGraphQueryResponse,
   WorkflowMetadata,
   WorkflowSessionQueueListResponse,
   WorkflowSessionStatusResponse,
@@ -354,6 +356,20 @@ export class WorkflowService extends WorkflowGraphMutationService {
     }
 
     return invoke<WorkflowRunDetailQueryResponse>('workflow_run_detail_query', {
+      request,
+    });
+  }
+
+  async queryRunGraph(
+    request: WorkflowRunGraphQueryRequest,
+  ): Promise<WorkflowRunGraphQueryResponse> {
+    if (USE_WORKFLOW_MOCKS) {
+      return {
+        run_graph: null,
+      };
+    }
+
+    return invoke<WorkflowRunGraphQueryResponse>('workflow_run_graph_query', {
       request,
     });
   }

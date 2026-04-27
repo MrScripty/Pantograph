@@ -174,6 +174,80 @@ export interface WorkflowGraph {
   derived_graph?: WorkflowDerivedGraph;
 }
 
+export interface WorkflowRunGraphQueryRequest {
+  workflow_run_id: string;
+}
+
+export interface WorkflowRunGraphQueryResponse {
+  run_graph?: WorkflowRunGraphProjection | null;
+}
+
+export interface WorkflowRunGraphProjection {
+  workflow_run_id: string;
+  workflow_id: string;
+  workflow_version_id: string;
+  workflow_presentation_revision_id: string;
+  workflow_semantic_version: string;
+  workflow_execution_fingerprint: string;
+  snapshot_created_at_ms: number;
+  workflow_version_created_at_ms: number;
+  presentation_revision_created_at_ms: number;
+  graph: WorkflowGraph;
+  executable_topology: WorkflowExecutableTopology;
+  presentation_metadata: WorkflowPresentationMetadata;
+  graph_settings: WorkflowGraphRunSettings;
+}
+
+export interface WorkflowExecutableTopology {
+  schema_version: number;
+  nodes: WorkflowExecutableTopologyNode[];
+  edges: WorkflowExecutableTopologyEdge[];
+}
+
+export interface WorkflowExecutableTopologyNode {
+  node_id: string;
+  node_type: string;
+  contract_version: string;
+  behavior_digest: string;
+}
+
+export interface WorkflowExecutableTopologyEdge {
+  source_node_id: string;
+  source_port_id: string;
+  target_node_id: string;
+  target_port_id: string;
+}
+
+export interface WorkflowPresentationMetadata {
+  schema_version: number;
+  nodes: WorkflowPresentationNode[];
+  edges: WorkflowPresentationEdge[];
+}
+
+export interface WorkflowPresentationNode {
+  node_id: string;
+  position: { x: number; y: number };
+}
+
+export interface WorkflowPresentationEdge {
+  edge_id: string;
+  source_node_id: string;
+  source_port_id: string;
+  target_node_id: string;
+  target_port_id: string;
+}
+
+export interface WorkflowGraphRunSettings {
+  schema_version: number;
+  nodes: WorkflowGraphRunSettingsNode[];
+}
+
+export interface WorkflowGraphRunSettingsNode {
+  node_id: string;
+  node_type: string;
+  data: unknown;
+}
+
 export interface WorkflowDerivedGraph {
   schema_version: number;
   graph_fingerprint: string;

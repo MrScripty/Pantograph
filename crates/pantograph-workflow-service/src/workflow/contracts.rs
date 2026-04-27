@@ -5,6 +5,10 @@ use std::sync::Arc;
 use pantograph_diagnostics_ledger::DiagnosticsLedgerError;
 use pantograph_runtime_attribution::AttributionError;
 
+use crate::graph::{
+    WorkflowExecutableTopology, WorkflowGraph, WorkflowGraphRunSettings,
+    WorkflowPresentationMetadata,
+};
 use crate::technical_fit::{WorkflowTechnicalFitDecision, WorkflowTechnicalFitOverride};
 
 /// Node/port value binding used for workflow inputs and outputs.
@@ -226,6 +230,42 @@ pub struct WorkflowIoResponse {
     pub inputs: Vec<WorkflowIoNode>,
     #[serde(default)]
     pub outputs: Vec<WorkflowIoNode>,
+}
+
+/// Request a historic workflow graph using the immutable run snapshot.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
+pub struct WorkflowRunGraphQueryRequest {
+    pub workflow_run_id: String,
+}
+
+/// Response for historic run graph lookup.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowRunGraphQueryResponse {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_graph: Option<WorkflowRunGraphProjection>,
+}
+
+/// Historic workflow graph reconstructed from versioned execution,
+/// presentation, and per-run settings records.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowRunGraphProjection {
+    pub workflow_run_id: String,
+    pub workflow_id: String,
+    pub workflow_version_id: String,
+    pub workflow_presentation_revision_id: String,
+    pub workflow_semantic_version: String,
+    pub workflow_execution_fingerprint: String,
+    pub snapshot_created_at_ms: i64,
+    pub workflow_version_created_at_ms: i64,
+    pub presentation_revision_created_at_ms: i64,
+    pub graph: WorkflowGraph,
+    pub executable_topology: WorkflowExecutableTopology,
+    pub presentation_metadata: WorkflowPresentationMetadata,
+    pub graph_settings: WorkflowGraphRunSettings,
 }
 
 /// Workflow preflight request for request-shape and runtime-readiness validation.

@@ -300,6 +300,34 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         .executable_topology_json
         .contains("text-input-1"));
 
+    let run_graph = service
+        .workflow_run_graph_query(WorkflowRunGraphQueryRequest {
+            workflow_run_id: response.workflow_run_id.clone(),
+        })
+        .expect("query run graph")
+        .run_graph
+        .expect("run graph");
+    assert_eq!(run_graph.workflow_run_id, response.workflow_run_id);
+    assert_eq!(run_graph.workflow_id, "wf-snapshot");
+    assert_eq!(run_graph.workflow_semantic_version, "1.2.3");
+    assert_eq!(
+        run_graph.workflow_version_id,
+        snapshot.workflow_version_id.as_str()
+    );
+    assert_eq!(
+        run_graph.workflow_presentation_revision_id,
+        snapshot.workflow_presentation_revision_id.as_str()
+    );
+    assert_eq!(run_graph.graph.nodes.len(), 2);
+    assert_eq!(run_graph.graph.edges.len(), 1);
+    assert_eq!(run_graph.graph.nodes[0].id, "text-input-1");
+    assert_eq!(run_graph.graph.nodes[0].node_type, "text-input");
+    assert_eq!(run_graph.graph.nodes[0].position.x, 0.0);
+    assert_eq!(run_graph.graph.edges[0].id, "edge");
+    assert!(!run_graph.executable_topology.nodes[0]
+        .contract_version
+        .is_empty());
+
     let diagnostic_events = {
         let ledger = service
             .diagnostics_ledger_guard()

@@ -1,4 +1,10 @@
 use super::*;
+use crate::{
+    GraphEdge, GraphNode, Position, WorkflowExecutableTopology, WorkflowExecutableTopologyEdge,
+    WorkflowExecutableTopologyNode, WorkflowGraph, WorkflowGraphRunSettings,
+    WorkflowGraphRunSettingsNode, WorkflowPresentationEdge, WorkflowPresentationMetadata,
+    WorkflowPresentationNode,
+};
 
 #[test]
 fn request_roundtrip_uses_snake_case() {
@@ -106,6 +112,96 @@ fn workflow_io_roundtrip_uses_snake_case() {
     assert_eq!(
         parsed.outputs[0].ports[0].data_type.as_deref(),
         Some("string")
+    );
+}
+
+#[test]
+fn workflow_run_graph_query_roundtrip_uses_snake_case() {
+    let response = WorkflowRunGraphQueryResponse {
+        run_graph: Some(WorkflowRunGraphProjection {
+            workflow_run_id: "run-1".to_string(),
+            workflow_id: "workflow-a".to_string(),
+            workflow_version_id: "wfver-1".to_string(),
+            workflow_presentation_revision_id: "wfpres-1".to_string(),
+            workflow_semantic_version: "1.2.3".to_string(),
+            workflow_execution_fingerprint: "workflow-exec-blake3:abc".to_string(),
+            snapshot_created_at_ms: 10,
+            workflow_version_created_at_ms: 11,
+            presentation_revision_created_at_ms: 12,
+            graph: WorkflowGraph {
+                nodes: vec![GraphNode {
+                    id: "node-1".to_string(),
+                    node_type: "text-input".to_string(),
+                    position: Position { x: 1.0, y: 2.0 },
+                    data: serde_json::json!({"value": "hello"}),
+                }],
+                edges: vec![GraphEdge {
+                    id: "edge-1".to_string(),
+                    source: "node-1".to_string(),
+                    source_handle: "text".to_string(),
+                    target: "node-2".to_string(),
+                    target_handle: "text".to_string(),
+                }],
+                derived_graph: None,
+            },
+            executable_topology: WorkflowExecutableTopology {
+                schema_version: 1,
+                nodes: vec![WorkflowExecutableTopologyNode {
+                    node_id: "node-1".to_string(),
+                    node_type: "text-input".to_string(),
+                    contract_version: "0.1.0".to_string(),
+                    behavior_digest: "digest".to_string(),
+                }],
+                edges: vec![WorkflowExecutableTopologyEdge {
+                    source_node_id: "node-1".to_string(),
+                    source_port_id: "text".to_string(),
+                    target_node_id: "node-2".to_string(),
+                    target_port_id: "text".to_string(),
+                }],
+            },
+            presentation_metadata: WorkflowPresentationMetadata {
+                schema_version: 1,
+                nodes: vec![WorkflowPresentationNode {
+                    node_id: "node-1".to_string(),
+                    position: Position { x: 1.0, y: 2.0 },
+                }],
+                edges: vec![WorkflowPresentationEdge {
+                    edge_id: "edge-1".to_string(),
+                    source_node_id: "node-1".to_string(),
+                    source_port_id: "text".to_string(),
+                    target_node_id: "node-2".to_string(),
+                    target_port_id: "text".to_string(),
+                }],
+            },
+            graph_settings: WorkflowGraphRunSettings {
+                schema_version: 1,
+                nodes: vec![WorkflowGraphRunSettingsNode {
+                    node_id: "node-1".to_string(),
+                    node_type: "text-input".to_string(),
+                    data: serde_json::json!({"value": "hello"}),
+                }],
+            },
+        }),
+    };
+
+    let json = serde_json::to_value(&response).expect("serialize run graph response");
+    let run_graph = &json["run_graph"];
+    assert_eq!(run_graph["workflow_run_id"], "run-1");
+    assert_eq!(run_graph["workflow_version_id"], "wfver-1");
+    assert_eq!(run_graph["graph"]["nodes"][0]["node_type"], "text-input");
+    assert_eq!(
+        run_graph["executable_topology"]["nodes"][0]["contract_version"],
+        "0.1.0"
+    );
+
+    let parsed: WorkflowRunGraphQueryResponse =
+        serde_json::from_value(json).expect("parse run graph response");
+    assert_eq!(
+        parsed
+            .run_graph
+            .expect("run graph")
+            .workflow_semantic_version,
+        "1.2.3"
     );
 }
 

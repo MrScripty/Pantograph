@@ -98,6 +98,7 @@ pub use workflow::{
     WorkflowProjectionRebuildRequest, WorkflowProjectionRebuildResponse,
     WorkflowRetentionPolicyQueryRequest, WorkflowRetentionPolicyQueryResponse,
     WorkflowRunAttribution, WorkflowRunDetailQueryRequest, WorkflowRunDetailQueryResponse,
+    WorkflowRunGraphProjection, WorkflowRunGraphQueryRequest, WorkflowRunGraphQueryResponse,
     WorkflowRunHandle, WorkflowRunListQueryRequest, WorkflowRunListQueryResponse,
     WorkflowRunOptions, WorkflowRunRecord, WorkflowRunRequest, WorkflowRunResponse,
     WorkflowRunSnapshotRecord, WorkflowRunSnapshotRequest, WorkflowRunVersionProjection,

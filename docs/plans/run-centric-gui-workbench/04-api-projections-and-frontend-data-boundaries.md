@@ -162,7 +162,7 @@ policy into adapters.
 - [x] Add backend queries for run list.
 - [x] Add backend queries for run detail.
 - [x] Add scheduler estimate and event queries.
-- [ ] Add workflow-version graph lookup by run id.
+- [x] Add workflow-version graph lookup by run id.
 - [ ] Add I/O metadata and retention policy queries/commands.
   - I/O artifact metadata query is implemented. Retention policy
     query is implemented. Retention policy commands remain pending.
@@ -209,7 +209,10 @@ policy query is exposed for GUI retention settings/inspectors. Retention policy
 commands, Network/system-node, and broader command boundaries remain pending.
 `workflow_projection_rebuild`
 provides the first explicit admin maintenance boundary for hot projection
-repair and projection-version rebuild scenarios.
+repair and projection-version rebuild scenarios. `workflow_run_graph_query`
+now reconstructs historic run graphs from immutable run snapshot, executable
+topology, graph settings, and presentation revision records instead of reading
+current graph files.
 
 ### Milestone 3: Frontend Services And Stores
 
@@ -225,6 +228,8 @@ projections while owning only transient UI state.
   TypeScript DTOs.
 - [x] Add the initial selected-run detail projection service method and
   TypeScript DTOs.
+- [x] Add the initial historic run graph query service method and TypeScript
+  DTOs.
 - [x] Add the initial I/O artifact projection service method and TypeScript
   DTOs.
 - [ ] Add active-run store as transient UI state.
@@ -291,7 +296,11 @@ event consumer for normal page state.
 
 ### Completed
 
-- None. Draft plan only.
+- Backend projection boundaries implemented so far: run list, run detail,
+  scheduler timeline, I/O artifact metadata, Library/Pumas usage, retention
+  policy query, projection rebuild, and historic run graph lookup by run id.
+- Frontend service/type boundaries implemented so far for those projection
+  reads and the historic run graph lookup.
 
 ### Deviations
 
@@ -304,7 +313,8 @@ event consumer for normal page state.
 
 ### Verification Summary
 
-- Not run. Draft plan only.
+- Focused Rust workflow-service tests and frontend typecheck are run with each
+  committed implementation slice.
 
 ### Traceability Links
 

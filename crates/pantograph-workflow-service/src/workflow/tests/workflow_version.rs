@@ -128,3 +128,16 @@ fn resolve_workflow_graph_presentation_revision_ignores_node_data_changes() {
         second.workflow_presentation_revision_id
     );
 }
+
+#[test]
+fn workflow_run_graph_query_returns_none_for_unknown_run() {
+    let service = WorkflowService::with_ephemeral_attribution_store().expect("service");
+
+    let response = service
+        .workflow_run_graph_query(WorkflowRunGraphQueryRequest {
+            workflow_run_id: "run_missing".to_string(),
+        })
+        .expect("query graph");
+
+    assert_eq!(response.run_graph, None);
+}
