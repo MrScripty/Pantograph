@@ -301,6 +301,7 @@ pub struct WorkflowRunSnapshotRecord {
     pub workflow_run_id: WorkflowRunId,
     pub workflow_id: WorkflowId,
     pub workflow_version_id: WorkflowVersionId,
+    pub workflow_presentation_revision_id: WorkflowPresentationRevisionId,
     pub workflow_semantic_version: String,
     pub workflow_execution_fingerprint: String,
     pub workflow_execution_session_id: String,
@@ -321,6 +322,7 @@ pub struct WorkflowRunSnapshotRecord {
 pub struct WorkflowRunVersionProjection {
     pub snapshot: WorkflowRunSnapshotRecord,
     pub workflow_version: WorkflowVersionRecord,
+    pub presentation_revision: WorkflowPresentationRevisionRecord,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -417,6 +419,7 @@ pub struct WorkflowRunSnapshotRequest {
     pub workflow_run_id: WorkflowRunId,
     pub workflow_id: WorkflowId,
     pub workflow_version_id: WorkflowVersionId,
+    pub workflow_presentation_revision_id: WorkflowPresentationRevisionId,
     pub workflow_semantic_version: String,
     pub workflow_execution_fingerprint: String,
     pub workflow_execution_session_id: String,

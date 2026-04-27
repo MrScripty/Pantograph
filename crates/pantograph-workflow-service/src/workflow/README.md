@@ -172,7 +172,7 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
   the same error codes as the parent facade.
 - Snapshotting: queued workflow execution sessions require an explicit
   `workflow_semantic_version` and use it when resolving the immutable workflow
-  version snapshot.
+  version and presentation revision snapshot.
 - Presentation revisions: display metadata is resolved through the attribution
   facade after workflow-version resolution; callers must keep the returned
   presentation revision id separate from workflow-version ids in diagnostics

@@ -111,9 +111,17 @@ impl SqliteAttributionStore {
             .ok_or(AttributionError::NotFound {
             entity: "workflow_version",
         })?;
+        let presentation_revision = workflow_presentation_revision_by_id(
+            &self.conn,
+            &snapshot.workflow_presentation_revision_id,
+        )?
+        .ok_or(AttributionError::NotFound {
+            entity: "workflow_presentation_revision",
+        })?;
         Ok(Some(WorkflowRunVersionProjection {
             snapshot,
             workflow_version,
+            presentation_revision,
         }))
     }
 }
@@ -698,23 +706,37 @@ impl AttributionRepository for SqliteAttributionStore {
                 execution_fingerprint: workflow_execution_fingerprint,
             });
         }
+        let presentation_revision =
+            workflow_presentation_revision_by_id(&tx, &request.workflow_presentation_revision_id)?
+                .ok_or(AttributionError::NotFound {
+                    entity: "workflow_presentation_revision",
+                })?;
+        if presentation_revision.workflow_id != request.workflow_id
+            || presentation_revision.workflow_version_id != request.workflow_version_id
+        {
+            return Err(AttributionError::WorkflowPresentationRevisionConflict {
+                workflow_id: request.workflow_id,
+                presentation_fingerprint: presentation_revision.presentation_fingerprint,
+            });
+        }
 
         let now = now_ms();
         let workflow_run_snapshot_id = crate::WorkflowRunSnapshotId::generate();
         tx.execute(
             "INSERT INTO workflow_run_snapshots
                 (workflow_run_snapshot_id, workflow_run_id, workflow_id, workflow_version_id,
-                 workflow_semantic_version, workflow_execution_fingerprint,
-                 workflow_execution_session_id, workflow_execution_session_kind,
-                 usage_profile, keep_alive, retention_policy, scheduler_policy,
-                 priority, timeout_ms, inputs_json, output_targets_json,
+                 workflow_presentation_revision_id, workflow_semantic_version,
+                 workflow_execution_fingerprint, workflow_execution_session_id,
+                 workflow_execution_session_kind, usage_profile, keep_alive, retention_policy,
+                 scheduler_policy, priority, timeout_ms, inputs_json, output_targets_json,
                  override_selection_json, created_at_ms)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
             params![
                 workflow_run_snapshot_id.as_str(),
                 request.workflow_run_id.as_str(),
                 request.workflow_id.as_str(),
                 request.workflow_version_id.as_str(),
+                request.workflow_presentation_revision_id.as_str(),
                 workflow_semantic_version.as_str(),
                 workflow_execution_fingerprint.as_str(),
                 workflow_execution_session_id.as_str(),
@@ -738,6 +760,7 @@ impl AttributionRepository for SqliteAttributionStore {
             workflow_run_id: request.workflow_run_id,
             workflow_id: request.workflow_id,
             workflow_version_id: request.workflow_version_id,
+            workflow_presentation_revision_id: request.workflow_presentation_revision_id,
             workflow_semantic_version,
             workflow_execution_fingerprint,
             workflow_execution_session_id,
@@ -770,6 +793,25 @@ fn workflow_presentation_revision_by_fingerprint(
     let record = stmt
         .query_row(
             params![workflow_version_id.as_str(), presentation_fingerprint],
+            workflow_presentation_revision_from_row,
+        )
+        .optional()?;
+    Ok(record)
+}
+
+fn workflow_presentation_revision_by_id(
+    conn: &rusqlite::Connection,
+    workflow_presentation_revision_id: &crate::WorkflowPresentationRevisionId,
+) -> Result<Option<WorkflowPresentationRevisionRecord>, AttributionError> {
+    let mut stmt = conn.prepare(
+        "SELECT workflow_presentation_revision_id, workflow_id, workflow_version_id,
+                presentation_fingerprint, presentation_metadata_json, created_at_ms
+         FROM workflow_presentation_revisions
+         WHERE workflow_presentation_revision_id = ?1",
+    )?;
+    let record = stmt
+        .query_row(
+            params![workflow_presentation_revision_id.as_str()],
             workflow_presentation_revision_from_row,
         )
         .optional()?;
@@ -871,10 +913,10 @@ fn workflow_run_snapshot_by_run_id(
 ) -> Result<Option<WorkflowRunSnapshotRecord>, AttributionError> {
     let mut stmt = conn.prepare(
         "SELECT workflow_run_snapshot_id, workflow_run_id, workflow_id, workflow_version_id,
-                workflow_semantic_version, workflow_execution_fingerprint,
-                workflow_execution_session_id, workflow_execution_session_kind,
-                usage_profile, keep_alive, retention_policy, scheduler_policy,
-                priority, timeout_ms, inputs_json, output_targets_json,
+                workflow_presentation_revision_id, workflow_semantic_version,
+                workflow_execution_fingerprint, workflow_execution_session_id,
+                workflow_execution_session_kind, usage_profile, keep_alive, retention_policy,
+                scheduler_policy, priority, timeout_ms, inputs_json, output_targets_json,
                 override_selection_json, created_at_ms
          FROM workflow_run_snapshots
          WHERE workflow_run_id = ?1",
@@ -892,7 +934,7 @@ fn workflow_run_snapshot_from_row(
     row: &rusqlite::Row<'_>,
 ) -> rusqlite::Result<WorkflowRunSnapshotRecord> {
     let timeout_ms = row
-        .get::<_, Option<i64>>(13)?
+        .get::<_, Option<i64>>(14)?
         .map(|value| u64::try_from(value).unwrap_or(u64::MAX));
     Ok(WorkflowRunSnapshotRecord {
         workflow_run_snapshot_id: row
@@ -903,20 +945,23 @@ fn workflow_run_snapshot_from_row(
         workflow_version_id: row
             .get::<_, String>(3)
             .and_then(parse_workflow_version_id)?,
-        workflow_semantic_version: row.get(4)?,
-        workflow_execution_fingerprint: row.get(5)?,
-        workflow_execution_session_id: row.get(6)?,
-        workflow_execution_session_kind: row.get(7)?,
-        usage_profile: row.get(8)?,
-        keep_alive: row.get(9)?,
-        retention_policy: row.get(10)?,
-        scheduler_policy: row.get(11)?,
-        priority: row.get(12)?,
+        workflow_presentation_revision_id: row
+            .get::<_, String>(4)
+            .and_then(parse_workflow_presentation_revision_id)?,
+        workflow_semantic_version: row.get(5)?,
+        workflow_execution_fingerprint: row.get(6)?,
+        workflow_execution_session_id: row.get(7)?,
+        workflow_execution_session_kind: row.get(8)?,
+        usage_profile: row.get(9)?,
+        keep_alive: row.get(10)?,
+        retention_policy: row.get(11)?,
+        scheduler_policy: row.get(12)?,
+        priority: row.get(13)?,
         timeout_ms,
-        inputs_json: row.get(14)?,
-        output_targets_json: row.get(15)?,
-        override_selection_json: row.get(16)?,
-        created_at_ms: row.get(17)?,
+        inputs_json: row.get(15)?,
+        output_targets_json: row.get(16)?,
+        override_selection_json: row.get(17)?,
+        created_at_ms: row.get(18)?,
     })
 }
 

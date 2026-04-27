@@ -41,6 +41,23 @@ fn workflow_version_request(
     }
 }
 
+fn presentation_revision_request(
+    workflow_version_id: crate::WorkflowVersionId,
+    presentation_fingerprint: &str,
+) -> WorkflowPresentationRevisionResolveRequest {
+    WorkflowPresentationRevisionResolveRequest {
+        workflow_id: workflow_id(),
+        workflow_version_id,
+        presentation_fingerprint: presentation_fingerprint.to_string(),
+        presentation_metadata_json: serde_json::json!({
+            "schema_version": 1,
+            "nodes": [],
+            "edges": []
+        })
+        .to_string(),
+    }
+}
+
 #[test]
 fn registered_client_opens_and_resumes_session_with_default_bucket() {
     let mut store = SqliteAttributionStore::open_in_memory().expect("store");
@@ -325,6 +342,12 @@ fn workflow_run_snapshot_records_immutable_version_and_queue_context() {
             "workflow-exec-blake3:abc",
         ))
         .expect("resolve version");
+    let presentation_revision = store
+        .resolve_workflow_presentation_revision(presentation_revision_request(
+            version.workflow_version_id.clone(),
+            "workflow-presentation-blake3:abc",
+        ))
+        .expect("resolve presentation revision");
     let run_id = WorkflowRunId::generate();
 
     let snapshot = store
@@ -332,6 +355,9 @@ fn workflow_run_snapshot_records_immutable_version_and_queue_context() {
             workflow_run_id: run_id.clone(),
             workflow_id: workflow_id(),
             workflow_version_id: version.workflow_version_id.clone(),
+            workflow_presentation_revision_id: presentation_revision
+                .workflow_presentation_revision_id
+                .clone(),
             workflow_semantic_version: version.semantic_version.clone(),
             workflow_execution_fingerprint: version.execution_fingerprint.clone(),
             workflow_execution_session_id: "session-1".to_string(),
@@ -350,6 +376,10 @@ fn workflow_run_snapshot_records_immutable_version_and_queue_context() {
 
     assert_eq!(snapshot.workflow_run_id, run_id);
     assert_eq!(snapshot.workflow_version_id, version.workflow_version_id);
+    assert_eq!(
+        snapshot.workflow_presentation_revision_id,
+        presentation_revision.workflow_presentation_revision_id
+    );
     assert_eq!(snapshot.workflow_execution_session_kind, "workflow");
     assert_eq!(snapshot.usage_profile.as_deref(), Some("interactive"));
     assert!(snapshot.keep_alive);
@@ -368,6 +398,12 @@ fn workflow_run_snapshot_records_immutable_version_and_queue_context() {
         version.workflow_version_id
     );
     assert_eq!(
+        projection
+            .presentation_revision
+            .workflow_presentation_revision_id,
+        presentation_revision.workflow_presentation_revision_id
+    );
+    assert_eq!(
         projection.workflow_version.executable_topology_json,
         version.executable_topology_json
     );
@@ -382,12 +418,20 @@ fn workflow_run_snapshot_rejects_mismatched_version_facts() {
             "workflow-exec-blake3:abc",
         ))
         .expect("resolve version");
+    let presentation_revision = store
+        .resolve_workflow_presentation_revision(presentation_revision_request(
+            version.workflow_version_id.clone(),
+            "workflow-presentation-blake3:abc",
+        ))
+        .expect("resolve presentation revision");
 
     let err = store
         .create_workflow_run_snapshot(WorkflowRunSnapshotRequest {
             workflow_run_id: WorkflowRunId::generate(),
             workflow_id: workflow_id(),
             workflow_version_id: version.workflow_version_id,
+            workflow_presentation_revision_id: presentation_revision
+                .workflow_presentation_revision_id,
             workflow_semantic_version: "1.0.0".to_string(),
             workflow_execution_fingerprint: "workflow-exec-blake3:def".to_string(),
             workflow_execution_session_id: "session-1".to_string(),
@@ -407,6 +451,57 @@ fn workflow_run_snapshot_rejects_mismatched_version_facts() {
     assert!(matches!(
         err,
         AttributionError::WorkflowFingerprintVersionConflict { .. }
+    ));
+}
+
+#[test]
+fn workflow_run_snapshot_rejects_mismatched_presentation_revision() {
+    let mut store = SqliteAttributionStore::open_in_memory().expect("store");
+    let version = store
+        .resolve_workflow_version(workflow_version_request(
+            "1.0.0",
+            "workflow-exec-blake3:abc",
+        ))
+        .expect("resolve version");
+    let other_version = store
+        .resolve_workflow_version(workflow_version_request(
+            "1.0.1",
+            "workflow-exec-blake3:def",
+        ))
+        .expect("resolve other version");
+    let other_presentation_revision = store
+        .resolve_workflow_presentation_revision(presentation_revision_request(
+            other_version.workflow_version_id,
+            "workflow-presentation-blake3:def",
+        ))
+        .expect("resolve presentation revision");
+
+    let err = store
+        .create_workflow_run_snapshot(WorkflowRunSnapshotRequest {
+            workflow_run_id: WorkflowRunId::generate(),
+            workflow_id: workflow_id(),
+            workflow_version_id: version.workflow_version_id.clone(),
+            workflow_presentation_revision_id: other_presentation_revision
+                .workflow_presentation_revision_id,
+            workflow_semantic_version: version.semantic_version,
+            workflow_execution_fingerprint: version.execution_fingerprint,
+            workflow_execution_session_id: "session-1".to_string(),
+            workflow_execution_session_kind: "workflow".to_string(),
+            usage_profile: None,
+            keep_alive: false,
+            retention_policy: "ephemeral".to_string(),
+            scheduler_policy: "priority_then_fifo".to_string(),
+            priority: 0,
+            timeout_ms: None,
+            inputs_json: "[]".to_string(),
+            output_targets_json: None,
+            override_selection_json: None,
+        })
+        .expect_err("mismatched presentation revision");
+
+    assert!(matches!(
+        err,
+        AttributionError::WorkflowPresentationRevisionConflict { .. }
     ));
 }
 

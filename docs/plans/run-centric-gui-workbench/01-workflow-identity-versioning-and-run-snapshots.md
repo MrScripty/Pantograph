@@ -5,9 +5,8 @@
 In progress. Workflow identity, executable topology, workflow-version
 registry, immutable snapshot foundations, diagnostics version filters, and
 presentation-revision storage/API foundations are implemented. Remaining work
-centers on linking queued run snapshots to presentation revisions, expanding
-full audit context fields, and quarantining older graph-fingerprint grouping
-assumptions.
+centers on expanding full audit context fields and quarantining older
+graph-fingerprint grouping assumptions.
 
 ## Objective
 
@@ -347,6 +346,10 @@ records for the same execution fingerprint.
   `pantograph-workflow-service`. Presentation fingerprints include sorted node
   positions and edge display ids/endpoints while excluding node data,
   executable topology payloads, and derived graph caches.
+- 2026-04-27: Linked immutable workflow-run snapshots to resolved workflow
+  presentation revisions. Run-version projections now include both execution
+  version records and the presentation revision record used at queue
+  submission time.
 
 ### Deviations
 
@@ -359,7 +362,6 @@ records for the same execution fingerprint.
 
 ### Follow-Ups
 
-- Link queued run snapshots to resolved presentation revision ids.
 - Fill remaining run snapshot fields for model/runtime facts, client/bucket
   attribution, and event-builder correlation.
 - Quarantine or remove old graph-fingerprint-only diagnostics grouping.
@@ -382,6 +384,15 @@ records for the same execution fingerprint.
 - 2026-04-27: `rustfmt --edition 2021 --config skip_children=true --check`
   passed for the touched attribution and workflow-service Rust files.
 - 2026-04-27: `git diff --check` passed for the presentation revision slice.
+- 2026-04-27: `cargo test -p pantograph-runtime-attribution` passed after
+  linking workflow-run snapshots to presentation revisions.
+- 2026-04-27: `cargo test -p pantograph-workflow-service
+  workflow_execution_session_run_records_snapshot_before_execution` passed
+  after queue submission began snapshotting presentation revision ids.
+- 2026-04-27: `rustfmt --edition 2021 --config skip_children=true --check`
+  passed for the touched run snapshot and session submission Rust files.
+- 2026-04-27: `git diff --check` passed for the run snapshot presentation
+  revision link slice.
 - 2026-04-27: `cargo test -p pantograph-node-contracts` passed.
 - 2026-04-27: `cargo test -p workflow-nodes` passed.
 - 2026-04-27: `cargo test -p pantograph-workflow-service canonicalization`

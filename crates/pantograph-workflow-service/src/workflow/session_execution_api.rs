@@ -215,6 +215,11 @@ impl WorkflowService {
             &request.workflow_semantic_version,
             &graph,
         )?;
+        let presentation_revision = self.resolve_workflow_graph_presentation_revision(
+            &session.workflow_id,
+            version.workflow_version_id.as_str(),
+            &graph,
+        )?;
         let override_selection = request
             .override_selection
             .as_ref()
@@ -223,6 +228,9 @@ impl WorkflowService {
             workflow_run_id: WorkflowRunId::try_from(workflow_run_id.to_string())?,
             workflow_id: version.workflow_id.clone(),
             workflow_version_id: version.workflow_version_id.clone(),
+            workflow_presentation_revision_id: presentation_revision
+                .workflow_presentation_revision_id
+                .clone(),
             workflow_semantic_version: version.semantic_version,
             workflow_execution_fingerprint: version.execution_fingerprint,
             workflow_execution_session_id: session.session_id.clone(),

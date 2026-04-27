@@ -251,6 +251,10 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
     assert_eq!(snapshot.retention_policy, "ephemeral");
     assert_eq!(snapshot.scheduler_policy, "priority_then_fifo");
     assert_eq!(snapshot.workflow_semantic_version, "1.2.3");
+    assert!(snapshot
+        .workflow_presentation_revision_id
+        .as_str()
+        .starts_with("wfpres_"));
     assert_eq!(snapshot.priority, 7);
     assert_eq!(snapshot.timeout_ms, Some(5000));
     assert!(snapshot
@@ -271,9 +275,19 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         snapshot.workflow_version_id
     );
     assert_eq!(
+        version_projection
+            .presentation_revision
+            .workflow_presentation_revision_id,
+        snapshot.workflow_presentation_revision_id
+    );
+    assert_eq!(
         version_projection.workflow_version.semantic_version,
         "1.2.3"
     );
+    assert!(version_projection
+        .presentation_revision
+        .presentation_metadata_json
+        .contains("text-input-1"));
     assert!(version_projection
         .workflow_version
         .executable_topology_json
