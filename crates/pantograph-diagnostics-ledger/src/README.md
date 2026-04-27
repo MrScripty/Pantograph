@@ -46,6 +46,8 @@ state, the GUI loses previous workflow timing and runtime history after restart.
   submit arbitrary role labels for workflow or node artifacts.
 - Library audit events must use typed operation and cache-status enums; callers
   must not submit arbitrary operation labels through payload strings.
+- Retention policy change events must include typed actor scope so GUI admin
+  and maintenance actions remain distinguishable without parsing source labels.
 - Materialized projections are rebuildable, but normal read paths advance from
   stored `projection_state` cursors instead of replaying the full ledger.
 

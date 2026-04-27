@@ -14,8 +14,8 @@ use crate::{
     NodeExecutionStatusPayload, NodeStatusProjectionQuery, OutputMeasurementUnavailableReason,
     OutputModality, ProjectionStateUpdate, ProjectionStatus, PruneTimingObservationsCommand,
     PruneUsageEventsCommand, RetentionArtifactStateChangedPayload, RetentionClass,
-    RetentionPolicyChangedPayload, RunDetailProjectionQuery, RunListFacetKind,
-    RunListProjectionQuery, RunListProjectionStatus, RunSnapshotAcceptedPayload,
+    RetentionPolicyActorScope, RetentionPolicyChangedPayload, RunDetailProjectionQuery,
+    RunListFacetKind, RunListProjectionQuery, RunListProjectionStatus, RunSnapshotAcceptedPayload,
     RunSnapshotNodeVersionPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
     SchedulerEstimateProducedPayload, SchedulerModelLifecycleChangedPayload,
     SchedulerModelLifecycleTransition, SchedulerQueuePlacementPayload, SchedulerRunAdmittedPayload,
@@ -579,6 +579,7 @@ fn diagnostic_event_ledger_rejects_oversized_payloads() {
             policy_id: "retention_standard".to_string(),
             policy_version: 1,
             retention_days: DEFAULT_STANDARD_RETENTION_DAYS,
+            actor_scope: RetentionPolicyActorScope::Maintenance,
             reason: "x".repeat(MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES + 1),
         }),
     };

@@ -635,10 +635,18 @@ impl LibraryAssetAccessedPayload {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub enum RetentionPolicyActorScope {
+    GuiAdmin,
+    Maintenance,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub struct RetentionPolicyChangedPayload {
     pub policy_id: String,
     pub policy_version: u32,
     pub retention_days: u32,
+    pub actor_scope: RetentionPolicyActorScope,
     pub reason: String,
 }
 

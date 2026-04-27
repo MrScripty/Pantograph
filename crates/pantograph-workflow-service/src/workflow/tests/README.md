@@ -75,6 +75,8 @@ Use `workflow/tests/` for behavior-specific child modules under the parent
 - Diagnostics and session-execution tests that emit Library audit facts must
   use diagnostics-ledger typed operation/cache-status values, not arbitrary
   payload strings.
+- Retention policy update tests must assert the typed actor scope on
+  `retention.policy_changed` events so policy mutations remain auditable.
 - Session admission tests with diagnostics enabled must verify durable
   scheduler delay events for runtime admission waits without depending on raw
   scheduler-store internals.

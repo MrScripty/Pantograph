@@ -329,7 +329,7 @@ availability.
 - [ ] Emit typed `retention.*` events with policy version, timestamp, actor,
   affected artifact, and reason.
   - Policy update events now include policy id, policy version, retention
-    days, timestamp, and reason. Actor context and artifact-specific cleanup
+    days, timestamp, typed actor scope, and reason. Artifact-specific cleanup
     events remain pending.
 - [x] Update affected hot/warm projections through event cursors rather than
   direct page-time artifact ledger scans.
@@ -458,6 +458,8 @@ implicitly on page load.
 - 2026-04-27: Tightened the I/O artifact metadata contract by replacing
   free-form artifact role payload strings with typed `IoArtifactRole` values
   that project to canonical role labels for query filters.
+- 2026-04-27: Added typed actor scope to `retention.policy_changed` payloads
+  and marked GUI retention policy updates as `gui_admin` actions.
 
 ### Deviations
 
@@ -510,6 +512,9 @@ implicitly on page load.
 - 2026-04-27: `cargo test -p pantograph-workflow-service
   workflow_io_artifact_query_drains_and_reads_projection --lib` passed after
   updating workflow-service diagnostics tests to use typed I/O artifact roles.
+- 2026-04-27: `cargo test -p pantograph-workflow-service
+  workflow_retention_policy_update_changes_policy_and_records_event --lib`
+  passed after adding typed retention actor-scope assertions.
 
 ### Traceability Links
 

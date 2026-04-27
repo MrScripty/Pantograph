@@ -6,9 +6,9 @@ use pantograph_diagnostics_ledger::{
     IoArtifactRetentionSummaryQuery, IoArtifactRetentionSummaryRecord, LibraryUsageProjectionQuery,
     LibraryUsageProjectionRecord, ModelLicenseUsageEvent, NodeExecutionProjectionStatus,
     NodeStatusProjectionQuery, NodeStatusProjectionRecord, ProjectionStateRecord, RetentionClass,
-    RetentionPolicyChangedPayload, RunDetailProjectionQuery, RunDetailProjectionRecord,
-    RunListFacetRecord, RunListProjectionQuery, RunListProjectionRecord, RunListProjectionStatus,
-    SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
+    RetentionPolicyActorScope, RetentionPolicyChangedPayload, RunDetailProjectionQuery,
+    RunDetailProjectionRecord, RunListFacetRecord, RunListProjectionQuery, RunListProjectionRecord,
+    RunListProjectionStatus, SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
     UpdateRetentionPolicyCommand,
 };
 use serde::{Deserialize, Serialize};
@@ -530,6 +530,7 @@ impl WorkflowService {
                         policy_id: retention_policy.policy_id.clone(),
                         policy_version: retention_policy.policy_version,
                         retention_days: retention_policy.retention_days,
+                        actor_scope: RetentionPolicyActorScope::GuiAdmin,
                         reason: request.reason,
                     },
                 ),

@@ -807,6 +807,9 @@ fn workflow_retention_policy_update_changes_policy_and_records_event() {
     );
     assert!(events[0].payload_json.contains("\"policy_version\":2"));
     assert!(events[0].payload_json.contains("\"retention_days\":120"));
+    assert!(events[0]
+        .payload_json
+        .contains("\"actor_scope\":\"gui_admin\""));
 }
 
 fn sample_run_snapshot_event() -> DiagnosticEventAppendRequest {
