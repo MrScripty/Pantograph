@@ -2,7 +2,9 @@
 
 ## Status
 
-Draft plan. Not implemented.
+In progress. First identity-validation slice implemented. Workflow identity
+grammar and saved-graph boundary validation now exist before broader
+workflow-version registry work.
 
 ## Objective
 
@@ -145,7 +147,7 @@ large patch. Before coding, split it into waves with explicit write sets:
 **Tasks:**
 
 - [ ] Decide whether to add a new ADR for workflow version registry ownership.
-- [ ] Define workflow identity validation rules and error categories.
+- [x] Define workflow identity validation rules and error categories.
 - [ ] Define canonical executable topology inputs and exclusions.
 - [ ] Define presentation revision contract and its relationship to execution
   versions.
@@ -161,7 +163,9 @@ large patch. Before coding, split it into waves with explicit write sets:
   variants.
 - Documentation links back to the requirements file and this stage.
 
-**Status:** Not started.
+**Status:** In progress. Workflow identity grammar has a first implementation
+in `pantograph-workflow-service`; remaining Milestone 1 contract decisions are
+still open.
 
 ### Milestone 2: Workflow Version Registry
 
@@ -270,20 +274,38 @@ records for the same execution fingerprint.
 
 ### Completed
 
-- None. Draft plan only.
+- 2026-04-27: Stage-start gate completed for the first Stage `01` slice.
+  Dirty files existed outside the write set (`.pantograph/` workflow output,
+  diagnostics SQLite, and `assets/` files), but no dirty source/test/config
+  files overlapped the selected workflow-service identity slice.
+- 2026-04-27: Added `WorkflowIdentity` grammar in
+  `pantograph-workflow-service`, routed `validate_workflow_id` through it, and
+  changed filesystem workflow save/load/list/delete boundaries to reject or
+  skip incompatible workflow file stems instead of silently sanitizing names.
 
 ### Deviations
 
-- None.
+- Full workflow-version registry and run-snapshot storage are intentionally not
+  part of this first slice. This keeps the initial cutover limited to identity
+  validation before topology/node-version fingerprint contracts are added.
 
 ### Follow-Ups
 
-- Confirm exact workflow identity grammar before implementation.
 - Decide whether workflow version ownership needs an ADR.
+- Define canonical executable topology inputs and exclusions.
+- Define workflow-version registry storage owner before schema work.
 
 ### Verification Summary
 
-- Not run. Draft plan only.
+- 2026-04-27: Initial combined test command
+  `cargo test -p pantograph-workflow-service identity persistence_tests --lib`
+  was malformed because Cargo accepts one test filter before `--`; reran the
+  filters separately.
+- 2026-04-27: `cargo test -p pantograph-workflow-service --lib identity`
+  passed.
+- 2026-04-27: `cargo test -p pantograph-workflow-service --lib
+  persistence_tests` passed.
+- 2026-04-27: `cargo test -p pantograph-workflow-service` passed.
 
 ### Traceability Links
 

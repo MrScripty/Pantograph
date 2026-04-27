@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 
 use super::{
-    WorkflowInputTarget, WorkflowIoResponse, WorkflowOutputTarget, WorkflowPortBinding,
-    WorkflowServiceError,
+    WorkflowIdentity, WorkflowInputTarget, WorkflowIoResponse, WorkflowOutputTarget,
+    WorkflowPortBinding, WorkflowServiceError,
 };
 
 pub(super) fn validate_timeout_ms(timeout_ms: Option<u64>) -> Result<(), WorkflowServiceError> {
@@ -15,12 +15,9 @@ pub(super) fn validate_timeout_ms(timeout_ms: Option<u64>) -> Result<(), Workflo
 }
 
 pub(crate) fn validate_workflow_id(workflow_id: &str) -> Result<(), WorkflowServiceError> {
-    if workflow_id.trim().is_empty() {
-        return Err(WorkflowServiceError::InvalidRequest(
-            "workflow_id must be non-empty".to_string(),
-        ));
-    }
-    Ok(())
+    WorkflowIdentity::parse(workflow_id)
+        .map(|_| ())
+        .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))
 }
 
 pub(super) fn validate_bindings(

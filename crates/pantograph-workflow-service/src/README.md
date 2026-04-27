@@ -80,6 +80,10 @@ keep-alive preflight failure coverage now lives in
 invalidation coverage now lives in `workflow/tests/session_runtime_state.rs`.
 Session stale cleanup, inspection, and stale cleanup worker coverage now lives in
 `workflow/tests/session_stale_cleanup.rs`.
+Validated workflow identity grammar now lives in `workflow/identity.rs` and is
+used by workflow service validation plus saved graph persistence boundaries, so
+Stage 01 versioning work has one stable id contract instead of filesystem
+sanitization.
 Session creation and queued session run methods now live behind the facade in
 the workflow session execution API helper.
 Session status, queue inspection, scheduler snapshot, cancellation, and
@@ -102,6 +106,9 @@ for storage and query semantics.
 ## Invariants
 - Workflow execution/session identity is owned here and exposed through public
   DTOs.
+- Workflow identity validation is centralized through `WorkflowIdentity`; saved
+  workflow names, execution requests, capabilities, I/O, preflight, and future
+  version records must not use independent identity grammars.
 - Edit-session graph mutations, including collapsed node group create,
   ungroup, and port-mapping changes, return backend-owned snapshots that
   adapters render directly.

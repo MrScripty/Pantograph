@@ -14,6 +14,7 @@ public exports out of the service crate.
 | `contracts.rs` | Public workflow request/response/error DTO definitions re-exported by the parent facade. |
 | `graph_api.rs` | Graph edit-session, mutation, connection, persistence, and runtime snapshot facade methods. |
 | `host.rs` | Host trait defaults and scheduler diagnostics provider contracts re-exported by the parent facade. |
+| `identity.rs` | Validated workflow identity value object and grammar used by workflow submission and saved graph boundaries. |
 | `io_contract.rs` | Workflow input/output surface derivation and host-response validation helpers. |
 | `preflight_api.rs` | Workflow capability, I/O discovery, and preflight facade methods. |
 | `runtime_preflight.rs` | Runtime requirement matching, issue formatting, and preflight warning collection. |
@@ -86,6 +87,9 @@ runtime readiness, session-runtime workflows, and the root facade test module.
 - Public workflow-run request DTOs must not accept caller-authored `run_id`
   fields. The backend scheduler creates `workflow_run_id` exactly once for a
   submitted run, and response DTOs expose that id as `workflow_run_id`.
+- Workflow ids accepted at service or saved-graph boundaries must parse through
+  `WorkflowIdentity`; callers receive explicit invalid-request errors instead
+  of filesystem name sanitization or whitespace-only acceptance.
 - Workflow run handles use the same constructor for explicit and default
   creation so cancellation state starts from one backend-owned shape.
 - Session execution APIs keep queue admission, runtime preflight, runtime load,

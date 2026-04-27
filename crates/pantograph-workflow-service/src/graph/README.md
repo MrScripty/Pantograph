@@ -37,7 +37,9 @@ business-logic owners.
 
 ## Constraints
 - Graph-edit contracts must remain transport-agnostic.
-- Persisted workflow files must stay compatible with existing `.pantograph/workflows` JSON.
+- Persisted workflow files use the validated `WorkflowIdentity` grammar for
+  file stems. Existing workflow files with incompatible names are rejected or
+  skipped during the no-legacy Stage 01 cutover.
 - Mutation rejection must be structured for expected incompatibility cases.
 - Edit-session state must serialize mutations per session without global blocking.
 - Active execution metadata, queue projection, and run counters for graph edit
@@ -113,6 +115,9 @@ for existing graph-edit callers.
   `session.rs` remains focused on production session orchestration.
 - Connection candidate lookup never mutates session state.
 - Persisted derived graph metadata is advisory and must be recomputed when stale.
+- Workflow save/delete file stems are not sanitized from arbitrary names; they
+  must already be valid workflow identities so diagnostics and future workflow
+  versions can use the same stable id.
 - Filesystem workflow load path validation is tested at `FileSystemWorkflowGraphStore`;
   transport adapters must not keep parallel path-boundary implementations.
 - Dynamic `node.data.definition` overlays may add or override ports for a

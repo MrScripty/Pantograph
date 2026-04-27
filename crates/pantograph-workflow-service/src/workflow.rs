@@ -20,6 +20,7 @@ mod contracts;
 mod diagnostics_api;
 mod graph_api;
 mod host;
+mod identity;
 mod io_contract;
 mod preflight_api;
 mod runtime_preflight;
@@ -39,6 +40,7 @@ pub use self::diagnostics_api::{
 pub use self::host::{
     WorkflowHost, WorkflowSchedulerDiagnosticsProvider, WorkflowSchedulerRuntimeDiagnosticsRequest,
 };
+pub use self::identity::{WorkflowIdentity, WorkflowIdentityError};
 pub(crate) use self::runtime_preflight::runtime_issue_for_capability;
 pub use self::runtime_preflight::{evaluate_runtime_preflight, format_runtime_not_ready_message};
 pub(crate) use self::validation::validate_workflow_id;

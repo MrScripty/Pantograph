@@ -105,11 +105,61 @@ fn load_workflow_accepts_file_inside_project_root() {
 }
 
 #[test]
+fn load_workflow_rejects_invalid_workflow_identity_file_stem() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let store = FileSystemWorkflowGraphStore::new(temp.path());
+    let workflow = WorkflowFile::new(
+        "Invalid Name".to_string(),
+        WorkflowGraph {
+            nodes: Vec::new(),
+            edges: Vec::new(),
+            derived_graph: None,
+        },
+    );
+    write_workflow(temp.path(), "Invalid Name.json", &workflow);
+
+    let err = store
+        .load_workflow(".pantograph/workflows/Invalid Name.json".to_string())
+        .expect_err("invalid workflow identity stem should fail");
+
+    assert!(matches!(err, WorkflowServiceError::InvalidRequest(_)));
+}
+
+#[test]
+fn list_workflows_skips_invalid_workflow_identity_file_stems() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let store = FileSystemWorkflowGraphStore::new(temp.path());
+    let valid = WorkflowFile::new(
+        "valid-workflow".to_string(),
+        WorkflowGraph {
+            nodes: Vec::new(),
+            edges: Vec::new(),
+            derived_graph: None,
+        },
+    );
+    let invalid = WorkflowFile::new(
+        "Invalid Name".to_string(),
+        WorkflowGraph {
+            nodes: Vec::new(),
+            edges: Vec::new(),
+            derived_graph: None,
+        },
+    );
+    write_workflow(temp.path(), "valid-workflow.json", &valid);
+    write_workflow(temp.path(), "Invalid Name.json", &invalid);
+
+    let workflows = store.list_workflows().expect("list workflows");
+
+    assert_eq!(workflows.len(), 1);
+    assert_eq!(workflows[0].id.as_deref(), Some("valid-workflow"));
+}
+
+#[test]
 fn load_workflow_refreshes_missing_derived_graph_for_diagnostics_history() {
     let temp = tempfile::tempdir().expect("tempdir");
     let store = FileSystemWorkflowGraphStore::new(temp.path());
     let workflow = WorkflowFile::new(
-        "No Fingerprint".to_string(),
+        "no-fingerprint".to_string(),
         WorkflowGraph {
             nodes: vec![GraphNode {
                 id: "input".to_string(),
@@ -121,17 +171,19 @@ fn load_workflow_refreshes_missing_derived_graph_for_diagnostics_history() {
             derived_graph: None,
         },
     );
-    write_workflow(temp.path(), "No Fingerprint.json", &workflow);
+    write_workflow(temp.path(), "no-fingerprint.json", &workflow);
 
     let loaded = store
-        .load_workflow(".pantograph/workflows/No Fingerprint.json".to_string())
+        .load_workflow(".pantograph/workflows/no-fingerprint.json".to_string())
         .expect("load workflow");
 
-    assert!(loaded
-        .graph
-        .derived_graph
-        .as_ref()
-        .is_some_and(|derived| !derived.graph_fingerprint.is_empty()));
+    assert!(
+        loaded
+            .graph
+            .derived_graph
+            .as_ref()
+            .is_some_and(|derived| !derived.graph_fingerprint.is_empty())
+    );
 }
 
 #[test]
@@ -141,7 +193,7 @@ fn save_workflow_strips_puma_lib_derived_data_with_model_identity() {
 
     let path = store
         .save_workflow(
-            "Tiny SD Turbo".to_string(),
+            "tiny-sd-turbo".to_string(),
             puma_lib_graph(sample_puma_lib_data()),
         )
         .expect("save workflow");
@@ -176,7 +228,7 @@ fn save_workflow_preserves_puma_lib_model_path_without_model_identity() {
     data.as_object_mut().expect("object").remove("model_id");
 
     let path = store
-        .save_workflow("Path Only".to_string(), puma_lib_graph(data))
+        .save_workflow("path-only".to_string(), puma_lib_graph(data))
         .expect("save workflow");
     let saved = fs::read_to_string(path).expect("read saved workflow");
     let workflow: WorkflowFile = serde_json::from_str(&saved).expect("parse saved workflow");
@@ -193,7 +245,24 @@ fn save_workflow_preserves_puma_lib_model_path_without_model_identity() {
 }
 
 #[test]
-fn delete_workflow_removes_sanitized_workflow_file() {
+fn save_workflow_rejects_invalid_workflow_identity() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let store = FileSystemWorkflowGraphStore::new(temp.path());
+    let graph = WorkflowGraph {
+        nodes: Vec::new(),
+        edges: Vec::new(),
+        derived_graph: None,
+    };
+
+    let err = store
+        .save_workflow("Unsafe/Name".to_string(), graph)
+        .expect_err("invalid workflow identity should fail");
+
+    assert!(matches!(err, WorkflowServiceError::InvalidRequest(_)));
+}
+
+#[test]
+fn delete_workflow_removes_valid_workflow_identity_file() {
     let temp = tempfile::tempdir().expect("tempdir");
     let store = FileSystemWorkflowGraphStore::new(temp.path());
     let graph = WorkflowGraph {
@@ -203,13 +272,13 @@ fn delete_workflow_removes_sanitized_workflow_file() {
     };
 
     let path = store
-        .save_workflow("Unsafe/Name".to_string(), graph)
+        .save_workflow("safe-name".to_string(), graph)
         .expect("save workflow");
 
     assert!(Path::new(&path).exists());
 
     store
-        .delete_workflow("Unsafe/Name".to_string())
+        .delete_workflow("safe-name".to_string())
         .expect("delete workflow");
 
     assert!(!Path::new(&path).exists());
@@ -257,11 +326,11 @@ fn load_workflow_preserves_legacy_puma_lib_model_path_without_model_identity() {
     let store = FileSystemWorkflowGraphStore::new(temp.path());
     let mut data = sample_puma_lib_data();
     data.as_object_mut().expect("object").remove("model_id");
-    let workflow = WorkflowFile::new("Legacy Path".to_string(), puma_lib_graph(data));
-    write_workflow(temp.path(), "Legacy Path.json", &workflow);
+    let workflow = WorkflowFile::new("legacy-path".to_string(), puma_lib_graph(data));
+    write_workflow(temp.path(), "legacy-path.json", &workflow);
 
     let loaded = store
-        .load_workflow(".pantograph/workflows/Legacy Path.json".to_string())
+        .load_workflow(".pantograph/workflows/legacy-path.json".to_string())
         .expect("load workflow");
     let data = loaded.graph.nodes[0]
         .data

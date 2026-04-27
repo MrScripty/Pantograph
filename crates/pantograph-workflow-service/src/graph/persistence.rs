@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use node_engine::resolve_path_within_root;
 
-use crate::workflow::WorkflowServiceError;
+use crate::workflow::{WorkflowIdentity, WorkflowServiceError};
 
 use super::types::{WorkflowFile, WorkflowGraph, WorkflowGraphMetadata};
 
@@ -143,26 +143,10 @@ fn resolve_runtime_project_root() -> Option<PathBuf> {
         .find_map(|seed| find_project_root_from(&seed))
 }
 
-fn sanitized_workflow_file_stem(name: &str) -> Result<String, WorkflowServiceError> {
-    let safe_name: String = name
-        .trim()
-        .chars()
-        .map(|c| {
-            if c.is_alphanumeric() || c == '-' || c == '_' || c == ' ' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect();
-
-    if safe_name.is_empty() {
-        return Err(WorkflowServiceError::InvalidRequest(
-            "Workflow name cannot be empty".to_string(),
-        ));
-    }
-
-    Ok(safe_name)
+fn workflow_identity_file_stem(name: &str) -> Result<String, WorkflowServiceError> {
+    WorkflowIdentity::parse(name)
+        .map(WorkflowIdentity::into_string)
+        .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))
 }
 
 impl WorkflowGraphStore for FileSystemWorkflowGraphStore {
@@ -176,7 +160,7 @@ impl WorkflowGraphStore for FileSystemWorkflowGraphStore {
         sanitize_workflow_graph_persistence_state(&mut graph);
         graph.refresh_derived_graph();
 
-        let safe_name = sanitized_workflow_file_stem(&name)?;
+        let safe_name = workflow_identity_file_stem(&name)?;
         let file_path = workflows_dir.join(format!("{}.json", safe_name));
 
         let workflow_file = if file_path.exists() {
@@ -219,6 +203,8 @@ impl WorkflowGraphStore for FileSystemWorkflowGraphStore {
             WorkflowServiceError::Internal(format!("Failed to parse workflow file: {}", e))
         })?;
         if let Some(stem) = full_path.file_stem().and_then(|s| s.to_str()) {
+            WorkflowIdentity::parse(stem)
+                .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
             workflow.metadata.id = Some(stem.to_string());
         }
         sanitize_workflow_graph_persistence_state(&mut workflow.graph);
@@ -246,6 +232,9 @@ impl WorkflowGraphStore for FileSystemWorkflowGraphStore {
                     continue;
                 };
                 if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                    if WorkflowIdentity::parse(stem).is_err() {
+                        continue;
+                    }
                     workflow.metadata.id = Some(stem.to_string());
                 }
                 workflows.push(workflow.metadata);
@@ -258,7 +247,7 @@ impl WorkflowGraphStore for FileSystemWorkflowGraphStore {
 
     fn delete_workflow(&self, name: String) -> Result<(), WorkflowServiceError> {
         let workflows_dir = self.workflows_dir()?;
-        let safe_name = sanitized_workflow_file_stem(&name)?;
+        let safe_name = workflow_identity_file_stem(&name)?;
         let file_path = workflows_dir.join(format!("{}.json", safe_name));
 
         if !file_path.exists() {
