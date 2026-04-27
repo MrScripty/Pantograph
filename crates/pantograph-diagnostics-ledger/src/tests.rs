@@ -902,6 +902,10 @@ fn io_artifact_projection_drains_artifact_events_incrementally() {
             workflow_run_id: WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
             node_id: None,
             artifact_role: None,
+            media_type: None,
+            retention_policy_id: None,
+            runtime_id: None,
+            model_id: None,
             after_event_seq: None,
             limit: 10,
         })
@@ -923,6 +927,10 @@ fn io_artifact_projection_drains_artifact_events_incrementally() {
             workflow_run_id: WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
             node_id: Some("node_image".to_string()),
             artifact_role: None,
+            media_type: Some("image/png".to_string()),
+            retention_policy_id: Some("retention_default".to_string()),
+            runtime_id: Some("runtime_alpha".to_string()),
+            model_id: None,
             after_event_seq: Some(input_event.event_seq),
             limit: 10,
         })
@@ -939,6 +947,10 @@ fn io_artifact_projection_drains_artifact_events_incrementally() {
             workflow_run_id: WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
             node_id: None,
             artifact_role: None,
+            media_type: None,
+            retention_policy_id: None,
+            runtime_id: None,
+            model_id: None,
             after_event_seq: None,
             limit: 10,
         })

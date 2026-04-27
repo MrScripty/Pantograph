@@ -542,6 +542,7 @@ fn workflow_scheduler_timeline_query_contract_snapshot() {
     let request = WorkflowSchedulerTimelineQueryRequest {
         workflow_run_id: Some("run-1".to_string()),
         workflow_id: Some("wf-1".to_string()),
+        scheduler_policy_id: Some("session_fifo_v1".to_string()),
         after_event_seq: Some(10),
         limit: Some(25),
         projection_batch_size: Some(100),
@@ -578,6 +579,7 @@ fn workflow_scheduler_timeline_query_contract_snapshot() {
     let expected_request = serde_json::json!({
         "workflow_run_id": "run-1",
         "workflow_id": "wf-1",
+        "scheduler_policy_id": "session_fifo_v1",
         "after_event_seq": 10,
         "limit": 25,
         "projection_batch_size": 100
@@ -713,6 +715,10 @@ fn workflow_io_artifact_query_contract_snapshot() {
         workflow_run_id: "run-1".to_string(),
         node_id: Some("node-1".to_string()),
         artifact_role: Some("node_output".to_string()),
+        media_type: Some("image/png".to_string()),
+        retention_policy_id: Some("standard-local-v1".to_string()),
+        runtime_id: Some("runtime-1".to_string()),
+        model_id: Some("model-1".to_string()),
         after_event_seq: Some(20),
         limit: Some(25),
         projection_batch_size: Some(100),
@@ -757,6 +763,10 @@ fn workflow_io_artifact_query_contract_snapshot() {
         "workflow_run_id": "run-1",
         "node_id": "node-1",
         "artifact_role": "node_output",
+        "media_type": "image/png",
+        "retention_policy_id": "standard-local-v1",
+        "runtime_id": "runtime-1",
+        "model_id": "model-1",
         "after_event_seq": 20,
         "limit": 25,
         "projection_batch_size": 100

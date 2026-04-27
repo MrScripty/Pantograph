@@ -536,6 +536,7 @@ impl ProjectionStateUpdate {
 pub struct SchedulerTimelineProjectionQuery {
     pub workflow_run_id: Option<WorkflowRunId>,
     pub workflow_id: Option<WorkflowId>,
+    pub scheduler_policy_id: Option<String>,
     pub after_event_seq: Option<i64>,
     pub limit: u32,
 }
@@ -545,6 +546,7 @@ impl Default for SchedulerTimelineProjectionQuery {
         Self {
             workflow_run_id: None,
             workflow_id: None,
+            scheduler_policy_id: None,
             after_event_seq: None,
             limit: 100,
         }
@@ -564,7 +566,11 @@ impl SchedulerTimelineProjectionQuery {
                 field: "after_event_seq",
             });
         }
-        Ok(())
+        validate_optional_text(
+            "scheduler_policy_id",
+            self.scheduler_policy_id.as_deref(),
+            MAX_ID_LEN,
+        )
     }
 }
 
@@ -628,7 +634,10 @@ impl RunListProjectionStatus {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RunListProjectionQuery {
     pub workflow_id: Option<WorkflowId>,
+    pub workflow_version_id: Option<WorkflowVersionId>,
+    pub workflow_semantic_version: Option<String>,
     pub status: Option<RunListProjectionStatus>,
+    pub scheduler_policy_id: Option<String>,
     pub after_event_seq: Option<i64>,
     pub limit: u32,
 }
@@ -637,7 +646,10 @@ impl Default for RunListProjectionQuery {
     fn default() -> Self {
         Self {
             workflow_id: None,
+            workflow_version_id: None,
+            workflow_semantic_version: None,
             status: None,
+            scheduler_policy_id: None,
             after_event_seq: None,
             limit: 100,
         }
@@ -657,7 +669,16 @@ impl RunListProjectionQuery {
                 field: "after_event_seq",
             });
         }
-        Ok(())
+        validate_optional_text(
+            "workflow_semantic_version",
+            self.workflow_semantic_version.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "scheduler_policy_id",
+            self.scheduler_policy_id.as_deref(),
+            MAX_ID_LEN,
+        )
     }
 }
 
@@ -718,6 +739,10 @@ pub struct IoArtifactProjectionQuery {
     pub workflow_run_id: WorkflowRunId,
     pub node_id: Option<String>,
     pub artifact_role: Option<String>,
+    pub media_type: Option<String>,
+    pub retention_policy_id: Option<String>,
+    pub runtime_id: Option<String>,
+    pub model_id: Option<String>,
     pub after_event_seq: Option<i64>,
     pub limit: u32,
 }
@@ -736,7 +761,15 @@ impl IoArtifactProjectionQuery {
             });
         }
         validate_optional_text("node_id", self.node_id.as_deref(), MAX_ID_LEN)?;
-        validate_optional_text("artifact_role", self.artifact_role.as_deref(), MAX_ID_LEN)
+        validate_optional_text("artifact_role", self.artifact_role.as_deref(), MAX_ID_LEN)?;
+        validate_optional_text("media_type", self.media_type.as_deref(), MAX_ID_LEN)?;
+        validate_optional_text(
+            "retention_policy_id",
+            self.retention_policy_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text("runtime_id", self.runtime_id.as_deref(), MAX_ID_LEN)?;
+        validate_optional_text("model_id", self.model_id.as_deref(), MAX_ID_LEN)
     }
 }
 

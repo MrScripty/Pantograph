@@ -77,6 +77,8 @@ pub struct WorkflowSchedulerTimelineQueryRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workflow_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scheduler_policy_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub after_event_seq: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
@@ -97,7 +99,13 @@ pub struct WorkflowRunListQueryRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workflow_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_version_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_semantic_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<RunListProjectionStatus>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scheduler_policy_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub after_event_seq: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -137,6 +145,14 @@ pub struct WorkflowIoArtifactQueryRequest {
     pub node_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub artifact_role: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub media_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retention_policy_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub after_event_seq: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -316,6 +332,7 @@ impl WorkflowSchedulerTimelineQueryRequest {
         Ok(SchedulerTimelineProjectionQuery {
             workflow_run_id: parse_optional_id("workflow_run_id", self.workflow_run_id)?,
             workflow_id: parse_optional_id("workflow_id", self.workflow_id)?,
+            scheduler_policy_id: self.scheduler_policy_id,
             after_event_seq: self.after_event_seq,
             limit: self
                 .limit
@@ -329,7 +346,13 @@ impl WorkflowRunListQueryRequest {
     fn into_run_list_query(self) -> Result<RunListProjectionQuery, WorkflowServiceError> {
         Ok(RunListProjectionQuery {
             workflow_id: parse_optional_id("workflow_id", self.workflow_id)?,
+            workflow_version_id: parse_optional_id(
+                "workflow_version_id",
+                self.workflow_version_id,
+            )?,
+            workflow_semantic_version: self.workflow_semantic_version,
             status: self.status,
+            scheduler_policy_id: self.scheduler_policy_id,
             after_event_seq: self.after_event_seq,
             limit: self
                 .limit
@@ -353,6 +376,10 @@ impl WorkflowIoArtifactQueryRequest {
             workflow_run_id: parse_id("workflow_run_id", self.workflow_run_id)?,
             node_id: self.node_id,
             artifact_role: self.artifact_role,
+            media_type: self.media_type,
+            retention_policy_id: self.retention_policy_id,
+            runtime_id: self.runtime_id,
+            model_id: self.model_id,
             after_event_seq: self.after_event_seq,
             limit: self.limit.unwrap_or(100).max(1),
         };

@@ -331,14 +331,16 @@ pub(super) fn query_scheduler_timeline_projection(
          FROM scheduler_timeline_projection
          WHERE (?1 IS NULL OR workflow_run_id = ?1)
            AND (?2 IS NULL OR workflow_id = ?2)
-           AND event_seq > ?3
+           AND (?3 IS NULL OR scheduler_policy_id = ?3)
+           AND event_seq > ?4
          ORDER BY event_seq
-         LIMIT ?4",
+         LIMIT ?5",
     )?;
     let rows = stmt.query_map(
         params![
             query.workflow_run_id.as_ref().map(|id| id.as_str()),
             query.workflow_id.as_ref().map(|id| id.as_str()),
+            query.scheduler_policy_id.as_deref(),
             query.after_event_seq.unwrap_or(0),
             query.limit,
         ],
@@ -436,15 +438,24 @@ pub(super) fn query_run_list_projection(
                 retention_policy_id, last_event_seq, last_updated_at_ms
          FROM run_list_projection
          WHERE (?1 IS NULL OR workflow_id = ?1)
-           AND (?2 IS NULL OR status = ?2)
-           AND last_event_seq > ?3
+           AND (?2 IS NULL OR workflow_version_id = ?2)
+           AND (?3 IS NULL OR workflow_semantic_version = ?3)
+           AND (?4 IS NULL OR status = ?4)
+           AND (?5 IS NULL OR scheduler_policy_id = ?5)
+           AND last_event_seq > ?6
          ORDER BY last_updated_at_ms DESC, last_event_seq DESC
-         LIMIT ?4",
+         LIMIT ?7",
     )?;
     let rows = stmt.query_map(
         params![
             query.workflow_id.as_ref().map(|id| id.as_str()),
+            query
+                .workflow_version_id
+                .as_ref()
+                .map(|workflow_version_id| workflow_version_id.as_str()),
+            query.workflow_semantic_version.as_deref(),
             query.status.map(|status| status.as_db()),
+            query.scheduler_policy_id.as_deref(),
             query.after_event_seq.unwrap_or(0),
             query.limit,
         ],
@@ -653,15 +664,23 @@ pub(super) fn query_io_artifact_projection(
          WHERE workflow_run_id = ?1
            AND (?2 IS NULL OR node_id = ?2)
            AND (?3 IS NULL OR artifact_role = ?3)
-           AND event_seq > ?4
+           AND (?4 IS NULL OR media_type = ?4)
+           AND (?5 IS NULL OR retention_policy_id = ?5)
+           AND (?6 IS NULL OR runtime_id = ?6)
+           AND (?7 IS NULL OR model_id = ?7)
+           AND event_seq > ?8
          ORDER BY event_seq
-         LIMIT ?5",
+         LIMIT ?9",
     )?;
     let rows = stmt.query_map(
         params![
             query.workflow_run_id.as_str(),
             query.node_id.as_deref(),
             query.artifact_role.as_deref(),
+            query.media_type.as_deref(),
+            query.retention_policy_id.as_deref(),
+            query.runtime_id.as_deref(),
+            query.model_id.as_deref(),
             query.after_event_seq.unwrap_or(0),
             query.limit,
         ],

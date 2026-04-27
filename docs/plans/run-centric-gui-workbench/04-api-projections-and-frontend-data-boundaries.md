@@ -200,9 +200,11 @@ scheduler-page run lists. The Tauri app now configures the shared
 projection queries with frontend service/type boundaries. `workflow_run_detail_query`
 now exposes selected-run detail over durable `run_detail_projection` rows with
 projection freshness state. `workflow_io_artifact_query` now exposes bounded
-artifact metadata/reference rows for I/O Inspector reads. Retention policy,
-Library/Pumas, Network/system-node, admin maintenance, and broader command
-boundaries remain pending.
+artifact metadata/reference rows for I/O Inspector reads. Projection query
+DTOs now expose backend-owned filters for workflow version, scheduler policy,
+runtime/model ids, media type, retention policy, node id, and artifact role
+where those fields exist. Retention policy, Library/Pumas, Network/system-node,
+admin maintenance, and broader command boundaries remain pending.
 
 ### Milestone 3: Frontend Services And Stores
 

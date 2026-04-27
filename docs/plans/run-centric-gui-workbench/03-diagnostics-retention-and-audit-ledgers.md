@@ -234,7 +234,7 @@ repair, migration, projection-version changes, and tests.
 - [ ] Add compact terminal run summary rows for completed/failed/cancelled runs
   so normal historic run-list and run-detail reads do not replay timelines.
 - [x] Add workflow execution version and node version fields to projections.
-- [ ] Add model/runtime/version and scheduler policy filters where not already
+- [x] Add model/runtime/version and scheduler policy filters where not already
   present.
 - [ ] Add retention-completeness filter/projection.
 - [ ] Add query outputs that report mixed-version counts or facets.
@@ -272,8 +272,11 @@ selected run's lifecycle payloads, snapshot identity, client/session/bucket
 identity, current status, terminal summary, and timeline event count for
 selected-run pages. `io_artifact_projection` now materializes bounded artifact
 metadata and payload references from `io.artifact_observed` events by run,
-node, role, and event cursor for I/O Inspector reads. Warm projection drains,
-additional filters, and explicit rebuild commands remain pending.
+node, role, and event cursor for I/O Inspector reads. Projection filters now
+cover workflow version, scheduler policy, runtime/model ids, media type,
+retention policy, and artifact role where those facts exist in the read model.
+Warm projection drains, mixed-version facet outputs, and explicit rebuild
+commands remain pending.
 
 ### Milestone 3: I/O Artifact Metadata And Retention
 

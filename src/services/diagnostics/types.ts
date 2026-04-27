@@ -377,7 +377,10 @@ export interface IoArtifactProjectionRecord {
 
 export interface WorkflowRunListQueryRequest {
   workflow_id?: string | null;
+  workflow_version_id?: string | null;
+  workflow_semantic_version?: string | null;
   status?: RunListProjectionStatus | null;
+  scheduler_policy_id?: string | null;
   after_event_seq?: number | null;
   limit?: number | null;
   projection_batch_size?: number | null;
@@ -402,6 +405,10 @@ export interface WorkflowIoArtifactQueryRequest {
   workflow_run_id: string;
   node_id?: string | null;
   artifact_role?: string | null;
+  media_type?: string | null;
+  retention_policy_id?: string | null;
+  runtime_id?: string | null;
+  model_id?: string | null;
   after_event_seq?: number | null;
   limit?: number | null;
   projection_batch_size?: number | null;
@@ -415,6 +422,7 @@ export interface WorkflowIoArtifactQueryResponse {
 export interface WorkflowSchedulerTimelineQueryRequest {
   workflow_run_id?: string | null;
   workflow_id?: string | null;
+  scheduler_policy_id?: string | null;
   after_event_seq?: number | null;
   limit?: number | null;
   projection_batch_size?: number | null;
