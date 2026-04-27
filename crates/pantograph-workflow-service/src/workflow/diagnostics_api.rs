@@ -20,6 +20,10 @@ pub struct WorkflowDiagnosticsUsageQueryRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workflow_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_version_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_semantic_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub node_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_id: Option<String>,
@@ -91,6 +95,11 @@ impl WorkflowDiagnosticsUsageQueryRequest {
             bucket_id: parse_optional_id("bucket_id", self.bucket_id)?,
             workflow_run_id: parse_optional_id("workflow_run_id", self.workflow_run_id)?,
             workflow_id: parse_optional_id("workflow_id", self.workflow_id)?,
+            workflow_version_id: parse_optional_id(
+                "workflow_version_id",
+                self.workflow_version_id,
+            )?,
+            workflow_semantic_version: self.workflow_semantic_version,
             node_id: self.node_id,
             model_id: self.model_id,
             license_value: self.license_value,

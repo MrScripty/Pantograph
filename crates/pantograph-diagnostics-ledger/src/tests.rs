@@ -1,5 +1,5 @@
 use pantograph_runtime_attribution::{
-    BucketId, ClientId, ClientSessionId, UsageEventId, WorkflowId, WorkflowRunId,
+    BucketId, ClientId, ClientSessionId, UsageEventId, WorkflowId, WorkflowRunId, WorkflowVersionId,
 };
 use rusqlite::Connection;
 
@@ -32,6 +32,17 @@ fn record_and_query_usage_event_preserves_snapshot_and_measurement() {
 
     assert_eq!(projection.events, vec![event]);
     assert!(projection.may_have_pruned_usage);
+
+    let version_projection = ledger
+        .query_usage_events(DiagnosticsQuery {
+            workflow_version_id: Some(
+                WorkflowVersionId::try_from("wfver_alpha".to_string()).unwrap(),
+            ),
+            workflow_semantic_version: Some("1.0.0".to_string()),
+            ..DiagnosticsQuery::default()
+        })
+        .expect("version query succeeds");
+    assert_eq!(version_projection.events.len(), 1);
 }
 
 #[test]
@@ -566,6 +577,11 @@ fn sample_event(
         bucket_id: BucketId::try_from("bucket_alpha".to_string()).unwrap(),
         workflow_run_id: WorkflowRunId::try_from("run_alpha".to_string()).unwrap(),
         workflow_id: WorkflowId::try_from("workflow_alpha".to_string()).unwrap(),
+        workflow_version_id: Some(
+            pantograph_runtime_attribution::WorkflowVersionId::try_from("wfver_alpha".to_string())
+                .unwrap(),
+        ),
+        workflow_semantic_version: Some("1.0.0".to_string()),
         model: ModelIdentity {
             model_id: model_id.to_string(),
             model_revision: Some("rev-1".to_string()),

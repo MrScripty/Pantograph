@@ -93,6 +93,8 @@ impl ModelExecutionCapability {
             bucket_id: context.attribution().bucket_id.clone(),
             workflow_run_id: context.attribution().workflow_run_id.clone(),
             workflow_id: context.workflow_id().clone(),
+            workflow_version_id: None,
+            workflow_semantic_version: None,
             model: submission.model,
             lineage: usage_lineage(context, submission.output_port_ids),
             license_snapshot: submission.license_snapshot,

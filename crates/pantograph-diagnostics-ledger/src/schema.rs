@@ -4,8 +4,8 @@ use crate::records::{RetentionClass, DEFAULT_STANDARD_RETENTION_DAYS};
 use crate::util::now_ms;
 use crate::DiagnosticsLedgerError;
 
-pub(crate) const SCHEMA_VERSION: i64 = 4;
-const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v4";
+pub(crate) const SCHEMA_VERSION: i64 = 5;
+const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v5";
 
 pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {
     tx.execute_batch(
@@ -23,6 +23,8 @@ pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedger
             bucket_id TEXT NOT NULL,
             workflow_run_id TEXT NOT NULL,
             workflow_id TEXT NOT NULL,
+            workflow_version_id TEXT,
+            workflow_semantic_version TEXT,
             node_id TEXT NOT NULL,
             node_type TEXT NOT NULL,
             model_id TEXT NOT NULL,
@@ -46,6 +48,8 @@ pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedger
             ON model_license_usage_events(bucket_id, started_at_ms);
         CREATE INDEX idx_usage_events_workflow_time
             ON model_license_usage_events(workflow_id, started_at_ms);
+        CREATE INDEX idx_usage_events_workflow_version_time
+            ON model_license_usage_events(workflow_version_id, started_at_ms);
         CREATE INDEX idx_usage_events_run_node
             ON model_license_usage_events(workflow_run_id, node_id);
         CREATE INDEX idx_usage_events_model_time
@@ -152,6 +156,21 @@ pub(crate) fn migrate_schema(
     if found < 4 {
         apply_workflow_run_summary_schema(&tx)?;
     }
+    if found < 5 && table_exists(&tx, "model_license_usage_events")? {
+        tx.execute(
+            "ALTER TABLE model_license_usage_events ADD COLUMN workflow_version_id TEXT",
+            [],
+        )?;
+        tx.execute(
+            "ALTER TABLE model_license_usage_events ADD COLUMN workflow_semantic_version TEXT",
+            [],
+        )?;
+        tx.execute(
+            "CREATE INDEX IF NOT EXISTS idx_usage_events_workflow_version_time
+                ON model_license_usage_events(workflow_version_id, started_at_ms)",
+            [],
+        )?;
+    }
     if found < SCHEMA_VERSION {
         tx.execute(
             "INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
@@ -161,6 +180,17 @@ pub(crate) fn migrate_schema(
     }
     tx.commit()?;
     Ok(())
+}
+
+fn table_exists(tx: &Transaction<'_>, table_name: &str) -> Result<bool, DiagnosticsLedgerError> {
+    let exists = tx.query_row(
+        "SELECT EXISTS(
+            SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1
+        )",
+        params![table_name],
+        |row| row.get::<_, bool>(0),
+    )?;
+    Ok(exists)
 }
 
 fn apply_timing_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {

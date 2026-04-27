@@ -320,6 +320,9 @@ records for the same execution fingerprint.
 - 2026-04-27: Expanded workflow-run snapshots with session kind, usage
   profile, keep-alive state, retention policy, and scheduler policy facts
   currently owned by the session scheduler.
+- 2026-04-27: Added typed optional workflow-version id and semantic-version
+  correlation fields to the diagnostics usage ledger, plus workflow-service
+  query filters for those fields. Node version filters remain pending.
 
 ### Deviations
 
@@ -373,6 +376,14 @@ records for the same execution fingerprint.
   adding scheduler/session context fields to workflow-run snapshots.
 - 2026-04-27: `cargo test -p pantograph-workflow-service` passed after
   projecting scheduler/session context into queued run snapshots.
+- 2026-04-27: `cargo test -p pantograph-diagnostics-ledger` passed after
+  adding workflow-version correlation fields and filters to usage diagnostics.
+- 2026-04-27: `cargo test -p pantograph-workflow-service diagnostics` passed
+  after exposing workflow-version diagnostics query filters through the
+  workflow-service facade.
+- 2026-04-27: `cargo check -p pantograph-embedded-runtime` passed after
+  preserving embedded runtime usage-event construction with optional workflow
+  version fields.
 
 ### Traceability Links
 

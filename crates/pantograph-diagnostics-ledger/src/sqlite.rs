@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use pantograph_runtime_attribution::{
-    BucketId, ClientId, ClientSessionId, UsageEventId, WorkflowId, WorkflowRunId,
+    BucketId, ClientId, ClientSessionId, UsageEventId, WorkflowId, WorkflowRunId, WorkflowVersionId,
 };
 use rusqlite::{params, Connection, Row};
 
@@ -76,12 +76,13 @@ impl DiagnosticsLedgerRepository for SqliteDiagnosticsLedger {
         tx.execute(
             "INSERT INTO model_license_usage_events
                 (usage_event_id, client_id, client_session_id, bucket_id, workflow_run_id,
-                 workflow_id, node_id, node_type, model_id, model_revision, model_hash,
-                 model_modality, runtime_backend, guarantee_level, status, started_at_ms,
-                 completed_at_ms, retention_class, schema_version, correlation_id)
+                 workflow_id, workflow_version_id, workflow_semantic_version, node_id,
+                 node_type, model_id, model_revision, model_hash, model_modality,
+                 runtime_backend, guarantee_level, status, started_at_ms, completed_at_ms,
+                 retention_class, schema_version, correlation_id)
              VALUES
                 (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15,
-                 ?16, ?17, ?18, ?19, ?20)",
+                 ?16, ?17, ?18, ?19, ?20, ?21, ?22)",
             params![
                 event.usage_event_id.as_str(),
                 event.client_id.as_str(),
@@ -89,6 +90,11 @@ impl DiagnosticsLedgerRepository for SqliteDiagnosticsLedger {
                 event.bucket_id.as_str(),
                 event.workflow_run_id.as_str(),
                 event.workflow_id.as_str(),
+                event
+                    .workflow_version_id
+                    .as_ref()
+                    .map(|workflow_version_id| workflow_version_id.as_str()),
+                event.workflow_semantic_version.as_deref(),
                 event.lineage.node_id.as_str(),
                 event.lineage.node_type.as_str(),
                 event.model.model_id.as_str(),
@@ -218,6 +224,11 @@ impl DiagnosticsLedgerRepository for SqliteDiagnosticsLedger {
             query.bucket_id.as_ref().map(BucketId::as_str),
             query.workflow_run_id.as_ref().map(WorkflowRunId::as_str),
             query.workflow_id.as_ref().map(WorkflowId::as_str),
+            query
+                .workflow_version_id
+                .as_ref()
+                .map(|workflow_version_id| workflow_version_id.as_str()),
+            query.workflow_semantic_version,
             query.node_id,
             query.model_id,
             query.license_value,
@@ -345,7 +356,8 @@ impl SqliteDiagnosticsLedger {
 const QUERY_EVENTS_SQL: &str = r#"
 SELECT
     e.usage_event_id, e.client_id, e.client_session_id, e.bucket_id,
-    e.workflow_run_id, e.workflow_id, e.node_id, e.node_type, e.model_id,
+    e.workflow_run_id, e.workflow_id, e.workflow_version_id,
+    e.workflow_semantic_version, e.node_id, e.node_type, e.model_id,
     e.model_revision, e.model_hash, e.model_modality, e.runtime_backend,
     e.guarantee_level, e.status, e.started_at_ms, e.completed_at_ms,
     e.retention_class, e.correlation_id,
@@ -367,14 +379,16 @@ WHERE (?1 IS NULL OR e.client_id = ?1)
   AND (?3 IS NULL OR e.bucket_id = ?3)
   AND (?4 IS NULL OR e.workflow_run_id = ?4)
   AND (?5 IS NULL OR e.workflow_id = ?5)
-  AND (?6 IS NULL OR e.node_id = ?6)
-  AND (?7 IS NULL OR e.model_id = ?7)
-  AND (?8 IS NULL OR l.license_value = ?8)
-  AND (?9 IS NULL OR e.guarantee_level = ?9)
-  AND (?10 IS NULL OR e.started_at_ms >= ?10)
-  AND (?11 IS NULL OR e.started_at_ms < ?11)
+  AND (?6 IS NULL OR e.workflow_version_id = ?6)
+  AND (?7 IS NULL OR e.workflow_semantic_version = ?7)
+  AND (?8 IS NULL OR e.node_id = ?8)
+  AND (?9 IS NULL OR e.model_id = ?9)
+  AND (?10 IS NULL OR l.license_value = ?10)
+  AND (?11 IS NULL OR e.guarantee_level = ?11)
+  AND (?12 IS NULL OR e.started_at_ms >= ?12)
+  AND (?13 IS NULL OR e.started_at_ms < ?13)
 ORDER BY e.started_at_ms DESC, e.usage_event_id DESC
-LIMIT ?12 OFFSET ?13
+LIMIT ?14 OFFSET ?15
 "#;
 
 fn event_from_row(row: &Row<'_>) -> Result<ModelLicenseUsageEvent, DiagnosticsLedgerError> {
@@ -402,13 +416,20 @@ fn event_from_row(row: &Row<'_>) -> Result<ModelLicenseUsageEvent, DiagnosticsLe
             field: "workflow_id",
         }
     })?;
-    let node_id: String = row.get(6)?;
-    let node_type: String = row.get(7)?;
-    let model_id: String = row.get(8)?;
-    let guarantee_level = ExecutionGuaranteeLevel::from_db(&row.get::<_, String>(13)?)?;
-    let status = UsageEventStatus::from_db(&row.get::<_, String>(14)?)?;
-    let retention_class = RetentionClass::from_db(&row.get::<_, String>(17)?)?;
-    let modality = OutputModality::from_db(&row.get::<_, String>(23)?)?;
+    let workflow_version_id = row
+        .get::<_, Option<String>>(6)?
+        .map(WorkflowVersionId::try_from)
+        .transpose()
+        .map_err(|_| DiagnosticsLedgerError::InvalidField {
+            field: "workflow_version_id",
+        })?;
+    let node_id: String = row.get(8)?;
+    let node_type: String = row.get(9)?;
+    let model_id: String = row.get(10)?;
+    let guarantee_level = ExecutionGuaranteeLevel::from_db(&row.get::<_, String>(15)?)?;
+    let status = UsageEventStatus::from_db(&row.get::<_, String>(16)?)?;
+    let retention_class = RetentionClass::from_db(&row.get::<_, String>(19)?)?;
+    let modality = OutputModality::from_db(&row.get::<_, String>(25)?)?;
 
     Ok(ModelLicenseUsageEvent {
         usage_event_id,
@@ -417,55 +438,57 @@ fn event_from_row(row: &Row<'_>) -> Result<ModelLicenseUsageEvent, DiagnosticsLe
         bucket_id,
         workflow_run_id,
         workflow_id,
+        workflow_version_id,
+        workflow_semantic_version: row.get(7)?,
         model: ModelIdentity {
             model_id,
-            model_revision: row.get(9)?,
-            model_hash: row.get(10)?,
-            model_modality: row.get(11)?,
-            runtime_backend: row.get(12)?,
+            model_revision: row.get(11)?,
+            model_hash: row.get(12)?,
+            model_modality: row.get(13)?,
+            runtime_backend: row.get(14)?,
         },
         lineage: UsageLineage {
             node_id,
             node_type,
-            port_ids: serde_json::from_str(&row.get::<_, String>(42)?)?,
-            composed_parent_chain: serde_json::from_str(&row.get::<_, String>(43)?)?,
-            effective_contract_version: row.get(44)?,
-            effective_contract_digest: row.get(45)?,
-            metadata_json: row.get(46)?,
+            port_ids: serde_json::from_str(&row.get::<_, String>(44)?)?,
+            composed_parent_chain: serde_json::from_str(&row.get::<_, String>(45)?)?,
+            effective_contract_version: row.get(46)?,
+            effective_contract_digest: row.get(47)?,
+            metadata_json: row.get(48)?,
         },
         license_snapshot: LicenseSnapshot {
-            license_value: row.get(19)?,
-            source_metadata_json: row.get(20)?,
-            model_metadata_snapshot_json: row.get(21)?,
-            unavailable_reason: row.get(22)?,
+            license_value: row.get(21)?,
+            source_metadata_json: row.get(22)?,
+            model_metadata_snapshot_json: row.get(23)?,
+            unavailable_reason: row.get(24)?,
         },
         output_measurement: ModelOutputMeasurement {
             modality,
-            item_count: row.get::<_, Option<i64>>(24)?.map(|value| value as u64),
-            character_count: row.get::<_, Option<i64>>(25)?.map(|value| value as u64),
-            byte_size: row.get::<_, Option<i64>>(26)?.map(|value| value as u64),
-            token_count: row.get::<_, Option<i64>>(27)?.map(|value| value as u64),
-            width: row.get::<_, Option<i64>>(28)?.map(|value| value as u64),
-            height: row.get::<_, Option<i64>>(29)?.map(|value| value as u64),
-            pixel_count: row.get::<_, Option<i64>>(30)?.map(|value| value as u64),
-            duration_ms: row.get::<_, Option<i64>>(31)?.map(|value| value as u64),
-            sample_rate_hz: row.get::<_, Option<i64>>(32)?.map(|value| value as u64),
-            channels: row.get::<_, Option<i64>>(33)?.map(|value| value as u64),
-            frame_count: row.get::<_, Option<i64>>(34)?.map(|value| value as u64),
-            vector_count: row.get::<_, Option<i64>>(35)?.map(|value| value as u64),
-            dimensions: row.get::<_, Option<i64>>(36)?.map(|value| value as u64),
-            numeric_representation: row.get(37)?,
-            top_level_shape: row.get(38)?,
-            schema_id: row.get(39)?,
-            schema_digest: row.get(40)?,
-            unavailable_reasons: serde_json::from_str(&row.get::<_, String>(41)?)?,
+            item_count: row.get::<_, Option<i64>>(26)?.map(|value| value as u64),
+            character_count: row.get::<_, Option<i64>>(27)?.map(|value| value as u64),
+            byte_size: row.get::<_, Option<i64>>(28)?.map(|value| value as u64),
+            token_count: row.get::<_, Option<i64>>(29)?.map(|value| value as u64),
+            width: row.get::<_, Option<i64>>(30)?.map(|value| value as u64),
+            height: row.get::<_, Option<i64>>(31)?.map(|value| value as u64),
+            pixel_count: row.get::<_, Option<i64>>(32)?.map(|value| value as u64),
+            duration_ms: row.get::<_, Option<i64>>(33)?.map(|value| value as u64),
+            sample_rate_hz: row.get::<_, Option<i64>>(34)?.map(|value| value as u64),
+            channels: row.get::<_, Option<i64>>(35)?.map(|value| value as u64),
+            frame_count: row.get::<_, Option<i64>>(36)?.map(|value| value as u64),
+            vector_count: row.get::<_, Option<i64>>(37)?.map(|value| value as u64),
+            dimensions: row.get::<_, Option<i64>>(38)?.map(|value| value as u64),
+            numeric_representation: row.get(39)?,
+            top_level_shape: row.get(40)?,
+            schema_id: row.get(41)?,
+            schema_digest: row.get(42)?,
+            unavailable_reasons: serde_json::from_str(&row.get::<_, String>(43)?)?,
         },
         guarantee_level,
         status,
         retention_class,
-        started_at_ms: row.get(15)?,
-        completed_at_ms: row.get(16)?,
-        correlation_id: row.get(18)?,
+        started_at_ms: row.get(17)?,
+        completed_at_ms: row.get(18)?,
+        correlation_id: row.get(20)?,
     })
 }
 

@@ -1,5 +1,5 @@
 use pantograph_runtime_attribution::{
-    BucketId, ClientId, ClientSessionId, UsageEventId, WorkflowId, WorkflowRunId,
+    BucketId, ClientId, ClientSessionId, UsageEventId, WorkflowId, WorkflowRunId, WorkflowVersionId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -199,6 +199,8 @@ pub struct ModelLicenseUsageEvent {
     pub bucket_id: BucketId,
     pub workflow_run_id: WorkflowRunId,
     pub workflow_id: WorkflowId,
+    pub workflow_version_id: Option<WorkflowVersionId>,
+    pub workflow_semantic_version: Option<String>,
     pub model: ModelIdentity,
     pub lineage: UsageLineage,
     pub license_snapshot: LicenseSnapshot,
@@ -258,6 +260,8 @@ pub struct DiagnosticsQuery {
     pub bucket_id: Option<BucketId>,
     pub workflow_run_id: Option<WorkflowRunId>,
     pub workflow_id: Option<WorkflowId>,
+    pub workflow_version_id: Option<WorkflowVersionId>,
+    pub workflow_semantic_version: Option<String>,
     pub node_id: Option<String>,
     pub model_id: Option<String>,
     pub license_value: Option<String>,
@@ -276,6 +280,8 @@ impl Default for DiagnosticsQuery {
             bucket_id: None,
             workflow_run_id: None,
             workflow_id: None,
+            workflow_version_id: None,
+            workflow_semantic_version: None,
             node_id: None,
             model_id: None,
             license_value: None,
@@ -304,6 +310,11 @@ impl DiagnosticsQuery {
         }
         validate_optional_text("node_id", self.node_id.as_deref(), MAX_ID_LEN)?;
         validate_optional_text("model_id", self.model_id.as_deref(), MAX_ID_LEN)?;
+        validate_optional_text(
+            "workflow_semantic_version",
+            self.workflow_semantic_version.as_deref(),
+            MAX_ID_LEN,
+        )?;
         Ok(())
     }
 }

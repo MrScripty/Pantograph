@@ -4,7 +4,7 @@ use pantograph_diagnostics_ledger::{
     UsageEventStatus, UsageLineage,
 };
 use pantograph_runtime_attribution::{
-    BucketId, ClientId, ClientSessionId, UsageEventId, WorkflowId, WorkflowRunId,
+    BucketId, ClientId, ClientSessionId, UsageEventId, WorkflowId, WorkflowRunId, WorkflowVersionId,
 };
 
 use super::*;
@@ -38,6 +38,16 @@ fn workflow_diagnostics_usage_query_delegates_to_ledger_and_summarizes_events() 
     assert_eq!(response.summaries[0].event_count, 2);
     assert_eq!(response.page_size, 10);
     assert_eq!(response.retention_policy.retention_days, 365);
+
+    let by_version = service
+        .workflow_diagnostics_usage_query(WorkflowDiagnosticsUsageQueryRequest {
+            workflow_version_id: Some("wfver-a".to_string()),
+            workflow_semantic_version: Some("1.0.0".to_string()),
+            page_size: Some(10),
+            ..WorkflowDiagnosticsUsageQueryRequest::default()
+        })
+        .expect("diagnostics version query");
+    assert_eq!(by_version.events.len(), 3);
 }
 
 #[test]
@@ -77,6 +87,8 @@ fn sample_event(
         bucket_id: BucketId::try_from("bucket-a".to_string()).unwrap(),
         workflow_run_id: WorkflowRunId::try_from("run-a".to_string()).unwrap(),
         workflow_id: WorkflowId::try_from("workflow-a".to_string()).unwrap(),
+        workflow_version_id: Some(WorkflowVersionId::try_from("wfver-a".to_string()).unwrap()),
+        workflow_semantic_version: Some("1.0.0".to_string()),
         model: ModelIdentity {
             model_id: model_id.to_string(),
             model_revision: Some("rev-1".to_string()),
