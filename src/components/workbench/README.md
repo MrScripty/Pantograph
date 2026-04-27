@@ -9,9 +9,9 @@ later plan stages fill in richer page bodies.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `WorkbenchShell.svelte` | Top-level workbench frame, toolbar navigation, active-run summary, and page outlet. |
-| `SchedulerPage.svelte` | Dense run-list view backed by the run-list projection service, active-run selection store, and local table controls. |
-| `schedulerPagePresenters.ts` | Pure Scheduler page status, duration, timestamp, filtering, and sorting presenters. |
-| `schedulerPagePresenters.test.ts` | Unit coverage for Scheduler table labels, status classes, filters, and sorts. |
+| `SchedulerPage.svelte` | Dense run-list view backed by the run-list projection service, active-run selection store, local table controls, and selected-run scheduler timeline projection. |
+| `schedulerPagePresenters.ts` | Pure Scheduler page status, duration, timestamp, filtering, sorting, projection freshness, and timeline presenters. |
+| `schedulerPagePresenters.test.ts` | Unit coverage for Scheduler table labels, status classes, filters, sorts, projection freshness, and timeline labels. |
 | `GraphPage.svelte` | Workbench page that switches between the active run's immutable graph snapshot and the current editable workflow graph. |
 | `RunGraphSnapshot.svelte` | Read-only run graph renderer backed by `workflowService.queryRunGraph`; it does not load historic graphs into the editor store. |
 | `DiagnosticsPage.svelte` | Projection-backed selected-run diagnostics page with run detail facts and scheduler timeline records. |
@@ -76,6 +76,8 @@ triggered by workflow events rather than polling.
   still be fetched from projection services by each page.
 - Scheduler table search, status filter, and sort controls operate only on the
   materialized run-list projection returned by the backend.
+- Scheduler timeline rows come from `workflowService.querySchedulerTimeline`.
+  Components render typed summary/detail fields and payload availability only.
 - I/O artifact rendering must distinguish metadata-only rows from rows with
   payload references without treating missing payload references as failures.
 - Library active-run highlighting must use explicit projection facts, not
@@ -147,6 +149,8 @@ triggered by workflow events rather than polling.
   `workflowService.queryRunList`.
 - Scheduler table controls are frontend presentation filters and must not
   imply backend scheduler priority or queue mutations.
+- Scheduler timeline rows are `SchedulerTimelineProjectionRecord` values and
+  must not be rebuilt or interpreted from raw ledger rows in the frontend.
 - I/O artifact cards render `IoArtifactProjectionRecord` metadata and may show
   `payload_ref` availability, but do not dereference payload bodies.
 - Library usage rows render `LibraryUsageProjectionRecord` summaries and may

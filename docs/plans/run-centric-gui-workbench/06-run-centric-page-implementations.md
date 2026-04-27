@@ -131,10 +131,10 @@ into a second source of truth.
 - [x] Add sorting/filtering/search scaffolding.
 - [ ] Add selected-run action surface with client-safe and GUI-admin actions
   gated by projection authority.
-- [ ] Add scheduler event drawer or selected-run timeline entry point.
-- [ ] Render scheduler timeline projection; do not parse raw scheduler event
+- [x] Add scheduler event drawer or selected-run timeline entry point.
+- [x] Render scheduler timeline projection; do not parse raw scheduler event
   payloads in the component.
-- [ ] Render projection freshness/catching-up state if the scheduler timeline
+- [x] Render projection freshness/catching-up state if the scheduler timeline
   or related warm summaries are behind the latest event cursor.
 
 **Verification:**
@@ -147,10 +147,11 @@ into a second source of truth.
 **Status:** Partially complete from Stage `05`. The current Scheduler page
 renders a dense projection-backed run table, first-class queued/future rows
 where present in the run-list projection, selected-run actions, active-run
-updates, projection freshness, search, status filtering, and stable local sort
-options. Scheduler timeline drawer, queue position, priority, estimates,
-progress, model/runtime summaries, delay reason, and retention summaries remain
-open.
+updates, projection freshness, search, status filtering, stable local sort
+options, a selected-run timeline panel, timeline projection freshness, and
+timeline summary/detail rows without raw event parsing. Queue position,
+priority, estimates, progress, model/runtime summaries, delay reason, retention
+summaries, and privileged queue action controls remain open.
 
 ### Milestone 2: Diagnostics Page
 
@@ -383,6 +384,9 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
   the materialized run-list projection.
 - Added `src/components/workbench/schedulerPagePresenters.ts` and tests for
   Scheduler timestamp/duration labels, status classes, filtering, and sorting.
+- Added a Scheduler selected-run timeline panel backed by
+  `workflowService.querySchedulerTimeline`, including projection freshness and
+  typed summary/detail rendering without raw payload parsing.
 
 ### Deviations
 
@@ -403,6 +407,10 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
 - Network selected-run context is visible but not yet linked to runtime/model
   residency because `WorkflowLocalNetworkStatusQueryResponse` does not expose
   run-keyed resource placement or cache facts.
+- Scheduler timeline rows currently show typed event labels, summary/detail
+  text, and payload availability only. Queue position, priority, estimate, and
+  delay-reason columns need typed projection fields before being shown as dense
+  table columns.
 
 ### Follow-Ups
 

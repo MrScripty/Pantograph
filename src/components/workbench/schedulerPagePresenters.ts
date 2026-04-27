@@ -1,6 +1,8 @@
 import type {
+  ProjectionStateRecord,
   RunListProjectionRecord,
   RunListProjectionStatus,
+  SchedulerTimelineProjectionRecord,
 } from '../../services/diagnostics/types';
 
 export type SchedulerStatusFilter = 'all' | RunListProjectionStatus;
@@ -76,6 +78,51 @@ export function schedulerStatusClass(status: RunListProjectionRecord['status']):
     case 'cancelled':
       return 'border-neutral-700 bg-neutral-900 text-neutral-300';
   }
+}
+
+export function formatSchedulerProjectionFreshness(state: ProjectionStateRecord | null): string {
+  if (!state) {
+    return 'Projection unavailable';
+  }
+  const cursor = `seq ${state.last_applied_event_seq}`;
+  switch (state.status) {
+    case 'current':
+      return `Current at ${cursor}`;
+    case 'rebuilding':
+      return `Rebuilding at ${cursor}`;
+    case 'needs_rebuild':
+      return `Needs rebuild at ${cursor}`;
+    case 'failed':
+      return `Failed at ${cursor}`;
+  }
+}
+
+export function formatSchedulerTimelineKind(
+  event: Pick<SchedulerTimelineProjectionRecord, 'event_kind'>,
+): string {
+  return event.event_kind
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+export function formatSchedulerTimelineSource(
+  event: Pick<SchedulerTimelineProjectionRecord, 'source_component'>,
+): string {
+  return event.source_component
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+export function schedulerTimelinePayloadLabel(
+  event: Pick<SchedulerTimelineProjectionRecord, 'payload_json'>,
+): string {
+  const payload = event.payload_json.trim();
+  if (payload.length > 0 && payload !== '{}' && payload !== 'null') {
+    return 'Payload captured';
+  }
+  return 'Metadata only';
 }
 
 export function filterAndSortSchedulerRuns(

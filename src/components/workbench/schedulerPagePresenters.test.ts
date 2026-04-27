@@ -4,8 +4,12 @@ import assert from 'node:assert/strict';
 import type { RunListProjectionRecord } from '../../services/diagnostics/types.ts';
 import {
   filterAndSortSchedulerRuns,
+  formatSchedulerProjectionFreshness,
+  formatSchedulerTimelineKind,
+  formatSchedulerTimelineSource,
   formatSchedulerDuration,
   formatSchedulerTimestamp,
+  schedulerTimelinePayloadLabel,
   schedulerStatusClass,
 } from './schedulerPagePresenters.ts';
 
@@ -84,4 +88,32 @@ test('filterAndSortSchedulerRuns sorts by operational fields', () => {
     }).map((item) => item.workflow_run_id),
     ['run-b', 'run-a', 'run-c'],
   );
+});
+
+test('scheduler timeline presenters expose typed projection facts', () => {
+  assert.equal(
+    formatSchedulerProjectionFreshness({
+      projection_name: 'scheduler_timeline',
+      projection_version: 1,
+      last_applied_event_seq: 12,
+      status: 'current',
+      rebuilt_at_ms: null,
+      updated_at_ms: 20,
+    }),
+    'Current at seq 12',
+  );
+  assert.equal(
+    formatSchedulerTimelineKind({
+      event_kind: 'scheduler_queue_placement',
+    }),
+    'Scheduler Queue Placement',
+  );
+  assert.equal(
+    formatSchedulerTimelineSource({
+      source_component: 'workflow_service',
+    }),
+    'Workflow Service',
+  );
+  assert.equal(schedulerTimelinePayloadLabel({ payload_json: '{}' }), 'Metadata only');
+  assert.equal(schedulerTimelinePayloadLabel({ payload_json: '{"queue":"default"}' }), 'Payload captured');
 });
