@@ -1,10 +1,10 @@
 use async_trait::async_trait;
 use pantograph_diagnostics_ledger::{
     DiagnosticEventKind, DiagnosticEventSourceComponent, DiagnosticsRetentionPolicy,
-    IoArtifactProjectionRecord, IoArtifactRetentionState, LibraryUsageProjectionRecord,
-    NodeExecutionProjectionStatus, NodeStatusProjectionRecord, ProjectionStateRecord,
-    ProjectionStatus, RetentionClass, RunDetailProjectionRecord, RunListProjectionRecord,
-    RunListProjectionStatus, SchedulerTimelineProjectionRecord,
+    IoArtifactProjectionRecord, IoArtifactRetentionState, IoArtifactRetentionSummaryRecord,
+    LibraryUsageProjectionRecord, NodeExecutionProjectionStatus, NodeStatusProjectionRecord,
+    ProjectionStateRecord, ProjectionStatus, RetentionClass, RunDetailProjectionRecord,
+    RunListProjectionRecord, RunListProjectionStatus, SchedulerTimelineProjectionRecord,
 };
 use pantograph_workflow_service::graph::WorkflowExecutionSessionKind;
 use pantograph_workflow_service::{
@@ -865,6 +865,10 @@ fn workflow_io_artifact_query_contract_snapshot() {
             retention_reason: None,
             retention_policy_id: Some("standard-local-v1".to_string()),
         }],
+        retention_summary: vec![IoArtifactRetentionSummaryRecord {
+            retention_state: IoArtifactRetentionState::Retained,
+            artifact_count: 1,
+        }],
         projection_state: ProjectionStateRecord {
             projection_name: "io_artifact".to_string(),
             projection_version: 3,
@@ -918,6 +922,10 @@ fn workflow_io_artifact_query_contract_snapshot() {
             "retention_state": "retained",
             "retention_reason": null,
             "retention_policy_id": "standard-local-v1"
+        }],
+        "retention_summary": [{
+            "retention_state": "retained",
+            "artifact_count": 1
         }],
         "projection_state": {
             "projection_name": "io_artifact",

@@ -393,6 +393,11 @@ export type IoArtifactRetentionState =
   | 'expired'
   | 'deleted';
 
+export interface IoArtifactRetentionSummaryRecord {
+  retention_state: IoArtifactRetentionState;
+  artifact_count: number;
+}
+
 export type NodeExecutionProjectionStatus =
   | 'queued'
   | 'running'
@@ -465,6 +470,7 @@ export interface WorkflowIoArtifactQueryRequest {
 
 export interface WorkflowIoArtifactQueryResponse {
   artifacts: IoArtifactProjectionRecord[];
+  retention_summary: IoArtifactRetentionSummaryRecord[];
   projection_state: ProjectionStateRecord;
 }
 

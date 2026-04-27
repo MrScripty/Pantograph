@@ -15,6 +15,7 @@
   import type {
     DiagnosticsRetentionPolicy,
     IoArtifactProjectionRecord,
+    IoArtifactRetentionSummaryRecord,
     ProjectionStateRecord,
   } from '../../services/diagnostics/types';
   import { workflowService } from '../../services/workflow/WorkflowService';
@@ -33,6 +34,7 @@
   } from './ioInspectorPresenters';
 
   let artifacts = $state<IoArtifactProjectionRecord[]>([]);
+  let retentionSummary = $state<IoArtifactRetentionSummaryRecord[]>([]);
   let projectionState = $state<ProjectionStateRecord | null>(null);
   let retentionPolicy = $state<DiagnosticsRetentionPolicy | null>(null);
   let retentionDays = $state('365');
@@ -46,6 +48,9 @@
   let workflowInputArtifacts = $derived(artifacts.filter(isWorkflowInputArtifact));
   let workflowOutputArtifacts = $derived(artifacts.filter(isWorkflowOutputArtifact));
   let nodeGroups = $derived(buildIoArtifactNodeGroups(artifacts));
+  let summarizedArtifactCount = $derived(
+    retentionSummary.reduce((total, item) => total + item.artifact_count, 0),
+  );
 
   function activeRunId(): string | null {
     return $activeWorkflowRun?.workflow_run_id ?? null;
@@ -75,6 +80,7 @@
         return;
       }
       artifacts = response.artifacts;
+      retentionSummary = response.retention_summary;
       projectionState = response.projection_state;
     } catch (error) {
       if (requestSerial !== artifactRequestSerial) {
@@ -169,6 +175,17 @@
       <div class="border-b border-neutral-900 px-4 py-3 text-xs text-neutral-500">
         {formatProjectionFreshness(projectionState)}
       </div>
+      {#if retentionSummary.length > 0}
+        <div class="flex flex-wrap items-center gap-2 border-b border-neutral-900 px-4 py-3 text-xs">
+          <span class="text-neutral-500">{summarizedArtifactCount} artifacts</span>
+          {#each retentionSummary as item (item.retention_state)}
+            <span class="inline-flex items-center gap-2 rounded border border-neutral-800 bg-neutral-950 px-2 py-1 text-neutral-300">
+              <span>{formatIoArtifactRetentionStateLabel(item.retention_state)}</span>
+              <span class="font-mono text-neutral-500">{item.artifact_count}</span>
+            </span>
+          {/each}
+        </div>
+      {/if}
 
       {#if artifactError}
         <div class="border-b border-red-900 bg-red-950/50 px-4 py-2 text-sm text-red-200">{artifactError}</div>

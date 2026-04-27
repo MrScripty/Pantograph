@@ -237,7 +237,10 @@ the typed event ledger.
 `retention_reason` fields so I/O pages do not infer retention from
 `payload_ref`. The I/O projection now treats retention changes as audited
 ledger events and materializes the latest current state per run artifact,
-including payload-reference removal after expiration or deletion.
+including payload-reference removal after expiration or deletion. The same API
+response now includes retention-state summary counts from the materialized
+artifact projection so pages can show retention completeness without issuing
+raw ledger scans.
 `workflow_projection_rebuild`
 provides the first explicit admin maintenance boundary for hot projection
 repair and projection-version rebuild scenarios. `workflow_run_graph_query`

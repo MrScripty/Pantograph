@@ -99,6 +99,9 @@ semantics.
 - `io_artifact_projection.retention_state` is a typed retention summary.
   Consumers must not infer expired, deleted, external, truncated, or too-large
   payload states from `payload_ref` alone.
+- I/O retention completeness queries group the materialized artifact projection
+  by typed retention state. They must not scan raw ledger events during normal
+  page reads.
 - Schema migrations are forward-only and covered by repository tests.
 - Query results must not require frontend-side identity repair or workflow-name
   side channels.

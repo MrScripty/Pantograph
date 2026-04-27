@@ -29,7 +29,7 @@ stay reviewable as more tests are split.
 | `workflow_io.rs` | Workflow I/O discovery and validation tests for bindable input/output nodes and port contracts. |
 | `workflow_preflight.rs` | Workflow preflight facade tests for required inputs, target validation, technical-fit decisions, and override normalization. |
 | `workflow_run.rs` | Private scheduler run implementation tests for host outputs, timeout cancellation, runtime readiness, input validation, and output-target enforcement. |
-| parent `diagnostics` module | Diagnostics facade tests for projection query boundaries, including I/O artifact retention state. |
+| parent `diagnostics` module | Diagnostics facade tests for projection query boundaries, including I/O artifact retention state and retention summary counts. |
 
 ## Problem
 `workflow/tests.rs` remains too large to review efficiently. Moving every test

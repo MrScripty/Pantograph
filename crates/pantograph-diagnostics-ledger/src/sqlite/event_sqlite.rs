@@ -8,18 +8,18 @@ use crate::event::{
     DiagnosticEventAppendRequest, DiagnosticEventKind, DiagnosticEventPayload,
     DiagnosticEventPrivacyClass, DiagnosticEventRecord, DiagnosticEventRetentionClass,
     DiagnosticEventSourceComponent, IoArtifactProjectionQuery, IoArtifactProjectionRecord,
-    IoArtifactRetentionState, LibraryUsageProjectionQuery, LibraryUsageProjectionRecord,
-    NodeExecutionProjectionStatus, NodeStatusProjectionQuery, NodeStatusProjectionRecord,
-    ProjectionStateRecord, ProjectionStateUpdate, ProjectionStatus,
-    RetentionArtifactStateChangedPayload, RunDetailProjectionQuery, RunDetailProjectionRecord,
-    RunListProjectionQuery, RunListProjectionRecord, RunListProjectionStatus,
-    SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
-    DIAGNOSTIC_EVENT_SCHEMA_VERSION, IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION,
-    LIBRARY_USAGE_PROJECTION_NAME, LIBRARY_USAGE_PROJECTION_VERSION,
-    MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, NODE_STATUS_PROJECTION_NAME,
-    NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION,
-    RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
-    SCHEDULER_TIMELINE_PROJECTION_VERSION,
+    IoArtifactRetentionState, IoArtifactRetentionSummaryQuery, IoArtifactRetentionSummaryRecord,
+    LibraryUsageProjectionQuery, LibraryUsageProjectionRecord, NodeExecutionProjectionStatus,
+    NodeStatusProjectionQuery, NodeStatusProjectionRecord, ProjectionStateRecord,
+    ProjectionStateUpdate, ProjectionStatus, RetentionArtifactStateChangedPayload,
+    RunDetailProjectionQuery, RunDetailProjectionRecord, RunListProjectionQuery,
+    RunListProjectionRecord, RunListProjectionStatus, SchedulerTimelineProjectionQuery,
+    SchedulerTimelineProjectionRecord, DIAGNOSTIC_EVENT_SCHEMA_VERSION,
+    IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION, LIBRARY_USAGE_PROJECTION_NAME,
+    LIBRARY_USAGE_PROJECTION_VERSION, MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES,
+    NODE_STATUS_PROJECTION_NAME, NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME,
+    RUN_DETAIL_PROJECTION_VERSION, RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION,
+    SCHEDULER_TIMELINE_PROJECTION_NAME, SCHEDULER_TIMELINE_PROJECTION_VERSION,
 };
 use crate::records::MAX_PAGE_SIZE;
 use crate::util::now_ms;
@@ -697,6 +697,40 @@ pub(super) fn query_io_artifact_projection(
             query.limit,
         ],
         io_artifact_projection_from_row,
+    )?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(DiagnosticsLedgerError::from)
+}
+
+pub(super) fn query_io_artifact_retention_summary(
+    ledger: &SqliteDiagnosticsLedger,
+    query: IoArtifactRetentionSummaryQuery,
+) -> Result<Vec<IoArtifactRetentionSummaryRecord>, DiagnosticsLedgerError> {
+    query.validate()?;
+    let mut stmt = ledger.conn.prepare(
+        "SELECT retention_state, COUNT(*)
+         FROM io_artifact_projection
+         WHERE (?1 IS NULL OR workflow_run_id = ?1)
+           AND (?2 IS NULL OR node_id = ?2)
+           AND (?3 IS NULL OR artifact_role = ?3)
+           AND (?4 IS NULL OR media_type = ?4)
+           AND (?5 IS NULL OR retention_policy_id = ?5)
+           AND (?6 IS NULL OR runtime_id = ?6)
+           AND (?7 IS NULL OR model_id = ?7)
+         GROUP BY retention_state
+         ORDER BY retention_state",
+    )?;
+    let rows = stmt.query_map(
+        params![
+            query.workflow_run_id.as_ref().map(|id| id.as_str()),
+            query.node_id.as_deref(),
+            query.artifact_role.as_deref(),
+            query.media_type.as_deref(),
+            query.retention_policy_id.as_deref(),
+            query.runtime_id.as_deref(),
+            query.model_id.as_deref(),
+        ],
+        io_artifact_retention_summary_from_row,
     )?;
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(DiagnosticsLedgerError::from)
@@ -2133,6 +2167,19 @@ fn io_artifact_projection_from_row(row: &Row<'_>) -> rusqlite::Result<IoArtifact
         })?,
         retention_reason: row.get(22)?,
         retention_policy_id: row.get(23)?,
+    })
+}
+
+fn io_artifact_retention_summary_from_row(
+    row: &Row<'_>,
+) -> rusqlite::Result<IoArtifactRetentionSummaryRecord> {
+    Ok(IoArtifactRetentionSummaryRecord {
+        retention_state: row.get::<_, String>(0).and_then(|value| {
+            IoArtifactRetentionState::from_db(&value).map_err(sqlite_conversion_error)
+        })?,
+        artifact_count: row
+            .get::<_, i64>(1)
+            .map(|value| u64::try_from(value).unwrap_or(u64::MAX))?,
     })
 }
 

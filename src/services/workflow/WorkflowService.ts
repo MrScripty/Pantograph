@@ -416,6 +416,7 @@ export class WorkflowService extends WorkflowGraphMutationService {
     if (USE_WORKFLOW_MOCKS) {
       return {
         artifacts: [],
+        retention_summary: [],
         projection_state: {
           projection_name: 'io_artifact',
           projection_version: 3,

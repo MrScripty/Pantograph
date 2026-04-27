@@ -240,7 +240,7 @@ repair, migration, projection-version changes, and tests.
 - [x] Add workflow execution version and node version fields to projections.
 - [x] Add model/runtime/version and scheduler policy filters where not already
   present.
-- [ ] Add retention-completeness filter/projection.
+- [x] Add retention-completeness filter/projection.
 - [ ] Add query outputs that report mixed-version counts or facets.
 - [ ] Preserve comparison-ready facets for workflow version, node version,
   model/runtime version, device/network node, scheduler policy, graph settings,
@@ -282,7 +282,9 @@ expiration, deletion, externalization, and truncation decisions remain audited
 in the ledger while the gallery reads one current row per run artifact.
 Projection filters now cover workflow version, scheduler policy,
 runtime/model ids, media type, retention policy/state, and artifact role where
-those facts exist in the read model.
+those facts exist in the read model. Retention completeness is now queryable as
+state/count summaries over the I/O artifact projection for the same run and
+artifact-scope filters.
 The first warm projection, `library_usage_projection`, now aggregates
 Library/Pumas asset access counts, distinct run counts, network bytes, last
 access facts, and workflow-version run links. Remaining warm drains and

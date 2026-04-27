@@ -118,8 +118,8 @@ pub use workflow::{
     WorkflowServiceError, WorkflowVersionRecord, WorkflowVersionResolveRequest,
 };
 pub use workflow::{
-    IoArtifactProjectionRecord, IoArtifactRetentionState, LibraryUsageProjectionRecord,
-    ProjectionStateRecord, RunDetailProjectionRecord, RunListProjectionRecord,
-    RunListProjectionStatus, SchedulerTimelineProjectionRecord, SqliteDiagnosticsLedger,
-    WorkflowTimingExpectation, WorkflowTimingExpectationComparison,
+    IoArtifactProjectionRecord, IoArtifactRetentionState, IoArtifactRetentionSummaryRecord,
+    LibraryUsageProjectionRecord, ProjectionStateRecord, RunDetailProjectionRecord,
+    RunListProjectionRecord, RunListProjectionStatus, SchedulerTimelineProjectionRecord,
+    SqliteDiagnosticsLedger, WorkflowTimingExpectation, WorkflowTimingExpectationComparison,
 };

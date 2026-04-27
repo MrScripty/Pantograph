@@ -941,6 +941,38 @@ impl IoArtifactProjectionQuery {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IoArtifactRetentionSummaryQuery {
+    pub workflow_run_id: Option<WorkflowRunId>,
+    pub node_id: Option<String>,
+    pub artifact_role: Option<String>,
+    pub media_type: Option<String>,
+    pub retention_policy_id: Option<String>,
+    pub runtime_id: Option<String>,
+    pub model_id: Option<String>,
+}
+
+impl IoArtifactRetentionSummaryQuery {
+    pub fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        validate_optional_text("node_id", self.node_id.as_deref(), MAX_ID_LEN)?;
+        validate_optional_text("artifact_role", self.artifact_role.as_deref(), MAX_ID_LEN)?;
+        validate_optional_text("media_type", self.media_type.as_deref(), MAX_ID_LEN)?;
+        validate_optional_text(
+            "retention_policy_id",
+            self.retention_policy_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text("runtime_id", self.runtime_id.as_deref(), MAX_ID_LEN)?;
+        validate_optional_text("model_id", self.model_id.as_deref(), MAX_ID_LEN)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IoArtifactRetentionSummaryRecord {
+    pub retention_state: IoArtifactRetentionState,
+    pub artifact_count: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IoArtifactProjectionRecord {
     pub event_seq: i64,
     pub event_id: String,

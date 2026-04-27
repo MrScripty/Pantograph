@@ -467,6 +467,8 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
   retained, expired, deleted, external, truncated, and too-large payloads.
   First-pass typed `retention_state` and `retention_reason` fields are now
   exposed on I/O artifact projections and rendered by the I/O Inspector.
+  Projection-backed retention summary counts are also displayed for the current
+  run or global artifact scope.
 - Add payload-body media previews after typed payload body access is exposed
   through a service.
 - Add typed Pumas/Library mutation service methods before adding Library action

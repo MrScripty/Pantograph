@@ -354,6 +354,12 @@ fn workflow_io_artifact_query_drains_and_reads_projection() {
         response.artifacts[0].payload_ref.as_deref(),
         Some("artifact://artifact-b")
     );
+    assert_eq!(response.retention_summary.len(), 1);
+    assert_eq!(
+        response.retention_summary[0].retention_state,
+        IoArtifactRetentionState::Retained
+    );
+    assert_eq!(response.retention_summary[0].artifact_count, 1);
     assert_eq!(response.projection_state.last_applied_event_seq, 2);
 
     let global_response = service
@@ -372,6 +378,7 @@ fn workflow_io_artifact_query_drains_and_reads_projection() {
         })
         .expect("global io artifact query");
     assert_eq!(global_response.artifacts.len(), 2);
+    assert_eq!(global_response.retention_summary[0].artifact_count, 2);
 }
 
 #[test]

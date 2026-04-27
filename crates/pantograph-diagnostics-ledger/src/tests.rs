@@ -8,24 +8,25 @@ use crate::{
     DiagnosticEventPrivacyClass, DiagnosticEventRetentionClass, DiagnosticEventSourceComponent,
     DiagnosticsLedgerError, DiagnosticsLedgerRepository, DiagnosticsQuery, ExecutionGuaranteeLevel,
     IoArtifactObservedPayload, IoArtifactProjectionQuery, IoArtifactRetentionState,
-    LibraryAssetAccessedPayload, LibraryUsageProjectionQuery, LicenseSnapshot, ModelIdentity,
-    ModelLicenseUsageEvent, ModelOutputMeasurement, NodeExecutionProjectionStatus,
-    NodeExecutionStatusPayload, NodeStatusProjectionQuery, OutputMeasurementUnavailableReason,
-    OutputModality, ProjectionStateUpdate, ProjectionStatus, PruneTimingObservationsCommand,
-    PruneUsageEventsCommand, RetentionArtifactStateChangedPayload, RetentionClass,
-    RetentionPolicyChangedPayload, RunDetailProjectionQuery, RunListProjectionQuery,
-    RunListProjectionStatus, RunSnapshotAcceptedPayload, RunStartedPayload, RunTerminalPayload,
-    RunTerminalStatus, SchedulerEstimateProducedPayload, SchedulerQueuePlacementPayload,
-    SchedulerTimelineProjectionQuery, SqliteDiagnosticsLedger, UpdateRetentionPolicyCommand,
-    UsageEventStatus, UsageLineage, WorkflowRunSummaryQuery, WorkflowRunSummaryRecord,
-    WorkflowRunSummaryStatus, WorkflowTimingExpectation, WorkflowTimingExpectationComparison,
-    WorkflowTimingExpectationQuery, WorkflowTimingObservation, WorkflowTimingObservationScope,
-    WorkflowTimingObservationStatus, DEFAULT_STANDARD_RETENTION_DAYS, IO_ARTIFACT_PROJECTION_NAME,
-    IO_ARTIFACT_PROJECTION_VERSION, LIBRARY_USAGE_PROJECTION_NAME,
-    LIBRARY_USAGE_PROJECTION_VERSION, MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES,
-    NODE_STATUS_PROJECTION_NAME, NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME,
-    RUN_DETAIL_PROJECTION_VERSION, RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION,
-    SCHEDULER_TIMELINE_PROJECTION_NAME, SCHEDULER_TIMELINE_PROJECTION_VERSION,
+    IoArtifactRetentionSummaryQuery, LibraryAssetAccessedPayload, LibraryUsageProjectionQuery,
+    LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement,
+    NodeExecutionProjectionStatus, NodeExecutionStatusPayload, NodeStatusProjectionQuery,
+    OutputMeasurementUnavailableReason, OutputModality, ProjectionStateUpdate, ProjectionStatus,
+    PruneTimingObservationsCommand, PruneUsageEventsCommand, RetentionArtifactStateChangedPayload,
+    RetentionClass, RetentionPolicyChangedPayload, RunDetailProjectionQuery,
+    RunListProjectionQuery, RunListProjectionStatus, RunSnapshotAcceptedPayload, RunStartedPayload,
+    RunTerminalPayload, RunTerminalStatus, SchedulerEstimateProducedPayload,
+    SchedulerQueuePlacementPayload, SchedulerTimelineProjectionQuery, SqliteDiagnosticsLedger,
+    UpdateRetentionPolicyCommand, UsageEventStatus, UsageLineage, WorkflowRunSummaryQuery,
+    WorkflowRunSummaryRecord, WorkflowRunSummaryStatus, WorkflowTimingExpectation,
+    WorkflowTimingExpectationComparison, WorkflowTimingExpectationQuery, WorkflowTimingObservation,
+    WorkflowTimingObservationScope, WorkflowTimingObservationStatus,
+    DEFAULT_STANDARD_RETENTION_DAYS, IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION,
+    LIBRARY_USAGE_PROJECTION_NAME, LIBRARY_USAGE_PROJECTION_VERSION,
+    MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, NODE_STATUS_PROJECTION_NAME,
+    NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION,
+    RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
+    SCHEDULER_TIMELINE_PROJECTION_VERSION,
 };
 
 #[test]
@@ -1150,6 +1151,26 @@ fn io_artifact_projection_applies_retention_state_changes() {
         records[0].retention_reason.as_deref(),
         Some("global retention window elapsed")
     );
+
+    let retention_summary = ledger
+        .query_io_artifact_retention_summary(IoArtifactRetentionSummaryQuery {
+            workflow_run_id: Some(
+                WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+            ),
+            node_id: None,
+            artifact_role: None,
+            media_type: None,
+            retention_policy_id: Some("retention_default".to_string()),
+            runtime_id: None,
+            model_id: None,
+        })
+        .expect("io artifact retention summary loads");
+    assert_eq!(retention_summary.len(), 1);
+    assert_eq!(
+        retention_summary[0].retention_state,
+        IoArtifactRetentionState::Expired
+    );
+    assert_eq!(retention_summary[0].artifact_count, 1);
 
     ledger
         .rebuild_projection(IO_ARTIFACT_PROJECTION_NAME, 1)

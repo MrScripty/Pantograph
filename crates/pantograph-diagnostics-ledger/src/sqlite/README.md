@@ -68,6 +68,8 @@ helpers own restart-visible workflow run summaries.
 - I/O artifact drains persist typed retention-state columns so page/API
   consumers can distinguish retained, metadata-only, external, truncated,
   too-large, expired, and deleted payload states without parsing event payloads.
+- I/O retention summary reads group `io_artifact_projection` rows and must not
+  replay `diagnostic_events` for normal retention-completeness display.
 
 ## Revisit Triggers
 - Diagnostics storage moves away from local SQLite.

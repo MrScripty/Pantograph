@@ -144,7 +144,8 @@ triggered by workflow events rather than polling.
   `workflowService.queryIoArtifacts` and global retention state through
   `workflowService.queryRetentionPolicy`. Artifact retention labels come from
   `IoArtifactProjectionRecord.retention_state`, not from `payload_ref`
-  inference.
+  inference. Retention completeness counts come from the response
+  `retention_summary`, not from raw ledger events.
 - Retention policy saves call `workflowService.updateRetentionPolicy` and
   update displayed state only from the backend response.
 - `LibraryPage.svelte` reads usage and audit summaries through

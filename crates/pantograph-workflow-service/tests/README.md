@@ -45,6 +45,8 @@ by external adapters.
   logic under test.
 - Public diagnostics projection snapshots must include typed retention fields
   when those fields are observable through serialized service contracts.
+- I/O artifact contract snapshots must include retention summary counts because
+  the GUI depends on those counts for retention-completeness display.
 
 ## Revisit Triggers
 - Contract snapshots become large enough to justify fixture files.

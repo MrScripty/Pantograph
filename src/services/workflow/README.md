@@ -179,7 +179,8 @@ const preview = await workflowService.previewNodeInsertOnEdge(
 - `WorkflowIoArtifactQueryResponse` carries backend-authored
   `retention_state` values. Mock and native responses must preserve that field
   shape so I/O Inspector callers can render retention state without guessing
-  from `payload_ref`.
+  from `payload_ref`. The same response carries `retention_summary` counts
+  derived from backend projections.
 - Mock projection responses must track backend projection versions so page
   logic exercises the same rebuild/freshness contracts in mock and native
   modes.

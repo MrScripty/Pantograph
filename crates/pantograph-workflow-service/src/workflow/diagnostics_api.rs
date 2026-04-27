@@ -3,11 +3,12 @@ use pantograph_diagnostics_ledger::{
     DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
     DiagnosticsQuery, DiagnosticsRetentionPolicy, ExecutionGuaranteeLevel,
     IoArtifactProjectionQuery, IoArtifactProjectionRecord, IoArtifactRetentionState,
-    LibraryUsageProjectionQuery, LibraryUsageProjectionRecord, ModelLicenseUsageEvent,
-    NodeExecutionProjectionStatus, NodeStatusProjectionQuery, NodeStatusProjectionRecord,
-    ProjectionStateRecord, RetentionClass, RetentionPolicyChangedPayload, RunDetailProjectionQuery,
-    RunDetailProjectionRecord, RunListProjectionQuery, RunListProjectionRecord,
-    RunListProjectionStatus, SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
+    IoArtifactRetentionSummaryQuery, IoArtifactRetentionSummaryRecord, LibraryUsageProjectionQuery,
+    LibraryUsageProjectionRecord, ModelLicenseUsageEvent, NodeExecutionProjectionStatus,
+    NodeStatusProjectionQuery, NodeStatusProjectionRecord, ProjectionStateRecord, RetentionClass,
+    RetentionPolicyChangedPayload, RunDetailProjectionQuery, RunDetailProjectionRecord,
+    RunListProjectionQuery, RunListProjectionRecord, RunListProjectionStatus,
+    SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
     UpdateRetentionPolicyCommand,
 };
 use serde::{Deserialize, Serialize};
@@ -177,6 +178,7 @@ pub struct WorkflowIoArtifactQueryRequest {
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowIoArtifactQueryResponse {
     pub artifacts: Vec<IoArtifactProjectionRecord>,
+    pub retention_summary: Vec<IoArtifactRetentionSummaryRecord>,
     pub projection_state: ProjectionStateRecord,
 }
 
@@ -376,6 +378,7 @@ impl WorkflowService {
             ));
         }
         let query = request.into_io_artifact_query()?;
+        let summary_query = io_artifact_retention_summary_query(&query);
         let mut ledger = self.diagnostics_ledger_guard()?;
         let projection_state = ledger
             .drain_io_artifact_projection(projection_batch_size)
@@ -383,9 +386,13 @@ impl WorkflowService {
         let artifacts = ledger
             .query_io_artifact_projection(query)
             .map_err(WorkflowServiceError::from)?;
+        let retention_summary = ledger
+            .query_io_artifact_retention_summary(summary_query)
+            .map_err(WorkflowServiceError::from)?;
 
         Ok(WorkflowIoArtifactQueryResponse {
             artifacts,
+            retention_summary,
             projection_state,
         })
     }
@@ -619,6 +626,20 @@ impl WorkflowIoArtifactQueryRequest {
         };
         query.validate(500).map_err(WorkflowServiceError::from)?;
         Ok(query)
+    }
+}
+
+fn io_artifact_retention_summary_query(
+    query: &IoArtifactProjectionQuery,
+) -> IoArtifactRetentionSummaryQuery {
+    IoArtifactRetentionSummaryQuery {
+        workflow_run_id: query.workflow_run_id.clone(),
+        node_id: query.node_id.clone(),
+        artifact_role: query.artifact_role.clone(),
+        media_type: query.media_type.clone(),
+        retention_policy_id: query.retention_policy_id.clone(),
+        runtime_id: query.runtime_id.clone(),
+        model_id: query.model_id.clone(),
     }
 }
 
