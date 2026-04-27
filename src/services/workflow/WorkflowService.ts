@@ -32,7 +32,11 @@ import type {
   WorkflowLocalNetworkStatusQueryRequest,
   WorkflowLocalNetworkStatusQueryResponse,
   WorkflowMetadata,
+  WorkflowSessionQueueCancelRequest,
+  WorkflowSessionQueueCancelResponse,
   WorkflowSessionQueueListResponse,
+  WorkflowSessionQueueReprioritizeRequest,
+  WorkflowSessionQueueReprioritizeResponse,
   WorkflowSessionStatusResponse,
 } from './types.ts';
 import {
@@ -238,7 +242,7 @@ export class WorkflowService extends WorkflowGraphMutationService {
       };
     }
 
-    return invoke<WorkflowSessionStatusResponse>('workflow_get_session_status', {
+    return invoke<WorkflowSessionStatusResponse>('workflow_get_execution_session_status', {
       request: {
         session_id: id,
       } satisfies WorkflowSessionStatusRequest,
@@ -258,11 +262,37 @@ export class WorkflowService extends WorkflowGraphMutationService {
       };
     }
 
-    return invoke<WorkflowSessionQueueListResponse>('workflow_list_session_queue', {
+    return invoke<WorkflowSessionQueueListResponse>('workflow_list_execution_session_queue', {
       request: {
         session_id: id,
       } satisfies WorkflowSessionQueueListRequest,
     });
+  }
+
+  async cancelSessionQueueItem(
+    request: WorkflowSessionQueueCancelRequest,
+  ): Promise<WorkflowSessionQueueCancelResponse> {
+    if (USE_WORKFLOW_MOCKS) {
+      return { ok: true };
+    }
+
+    return invoke<WorkflowSessionQueueCancelResponse>(
+      'workflow_cancel_execution_session_queue_item',
+      { request },
+    );
+  }
+
+  async reprioritizeSessionQueueItem(
+    request: WorkflowSessionQueueReprioritizeRequest,
+  ): Promise<WorkflowSessionQueueReprioritizeResponse> {
+    if (USE_WORKFLOW_MOCKS) {
+      return { ok: true };
+    }
+
+    return invoke<WorkflowSessionQueueReprioritizeResponse>(
+      'workflow_reprioritize_execution_session_queue_item',
+      { request },
+    );
   }
 
   async getSchedulerSnapshot(sessionId?: string): Promise<WorkflowSchedulerSnapshotResponse | null> {

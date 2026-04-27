@@ -182,7 +182,7 @@ policy into adapters.
   where Stage `03` exposes them.
 - [x] Add local Network/system-node status query.
 - [ ] Add immutable run submission and cancel/resubmit command boundaries.
-- [ ] Add scoped client queue action command boundaries.
+- [x] Add scoped client queue action command boundaries.
 - [ ] Add privileged/admin command boundaries for GUI-only actions.
 - [ ] Remove or rename old projection APIs that would expose stale
   graph-fingerprint or current-graph semantics for historic runs.
@@ -215,7 +215,9 @@ Library/Pumas usage aggregates with projection freshness state. Retention
 policy query is exposed for GUI retention settings/inspectors. Local Network
 status query is exposed with local-only CPU/memory/disk/network-interface
 facts, scheduler load, future peer DTO placeholders, and explicit degraded GPU
-state. Retention policy commands and broader command boundaries remain pending.
+state. Frontend queue cancel/reprioritize methods now call the backend-owned
+execution-session queue commands, and stale frontend session command names were
+corrected. Retention policy commands and broader command boundaries remain pending.
 `workflow_projection_rebuild`
 provides the first explicit admin maintenance boundary for hot projection
 repair and projection-version rebuild scenarios. `workflow_run_graph_query`
@@ -242,6 +244,8 @@ projections while owning only transient UI state.
 - [x] Add the initial I/O artifact projection service method and TypeScript
   DTOs.
 - [x] Add the initial local Network status service method and TypeScript DTOs.
+- [x] Add frontend methods and DTOs for scoped queue cancel/reprioritize
+  actions.
 - [ ] Add active-run store as transient UI state.
 - [ ] Add focused stores for run list filters/sort/column state.
 - [ ] Preserve backend error categories through presenters.

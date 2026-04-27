@@ -454,6 +454,25 @@ export interface WorkflowSessionQueueListResponse {
   items: WorkflowSessionQueueItem[];
 }
 
+export interface WorkflowSessionQueueCancelRequest {
+  session_id: string;
+  workflow_run_id: string;
+}
+
+export interface WorkflowSessionQueueCancelResponse {
+  ok: boolean;
+}
+
+export interface WorkflowSessionQueueReprioritizeRequest {
+  session_id: string;
+  workflow_run_id: string;
+  priority: number;
+}
+
+export interface WorkflowSessionQueueReprioritizeResponse {
+  ok: boolean;
+}
+
 export interface WorkflowSchedulerSnapshotResponse {
   workflow_id?: string | null;
   session_id: string;
