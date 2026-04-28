@@ -400,6 +400,7 @@ pub fn run_app() -> AppStartupResult<()> {
             crate::workflow::commands::workflow_reprioritize_execution_session_queue_item,
             crate::workflow::commands::workflow_admin_reprioritize_queue_item,
             crate::workflow::commands::workflow_push_execution_session_queue_item_to_front,
+            crate::workflow::commands::workflow_admin_push_queue_item_to_front,
             crate::workflow::commands::workflow_set_execution_session_keep_alive,
             // Node-engine workflow session commands
             crate::workflow::workflow_execution_tauri_commands::create_workflow_execution_session,

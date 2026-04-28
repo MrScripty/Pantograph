@@ -482,6 +482,16 @@ export interface WorkflowAdminQueueReprioritizeResponse {
   session_id: string;
 }
 
+export interface WorkflowAdminQueuePushFrontRequest {
+  workflow_run_id: string;
+}
+
+export interface WorkflowAdminQueuePushFrontResponse {
+  ok: boolean;
+  session_id: string;
+  priority: number;
+}
+
 export interface WorkflowSessionQueuePushFrontRequest {
   session_id: string;
   workflow_run_id: string;

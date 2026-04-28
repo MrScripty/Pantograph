@@ -403,6 +403,42 @@ async fn workflow_admin_queue_cancel_finds_session_and_records_gui_scope() {
     );
     assert_eq!(reprioritized_items[0].priority, 7);
 
+    let admin_push_id = {
+        let mut store = service
+            .session_store
+            .lock()
+            .expect("session store lock poisoned");
+        store
+            .enqueue_run(
+                &first.session_id,
+                &WorkflowExecutionSessionRunRequest {
+                    session_id: first.session_id.clone(),
+                    priority: Some(2),
+                    ..request.clone()
+                },
+            )
+            .expect("enqueue admin-push run")
+    };
+    let push_response = service
+        .workflow_admin_push_queue_item_to_front(WorkflowAdminQueuePushFrontRequest {
+            workflow_run_id: admin_push_id.clone(),
+        })
+        .await
+        .expect("admin push queue item to front");
+    assert_eq!(push_response.session_id, first.session_id);
+    assert_eq!(push_response.priority, 8);
+    let pushed_items = {
+        let store = service
+            .session_store
+            .lock()
+            .expect("session store lock poisoned");
+        store
+            .list_queue(&first.session_id)
+            .expect("first queue should remain accessible")
+    };
+    assert_eq!(pushed_items[0].workflow_run_id, admin_push_id);
+    assert_eq!(pushed_items[0].priority, 8);
+
     let diagnostic_events = {
         let ledger = service
             .diagnostics_ledger_guard()
@@ -419,7 +455,7 @@ async fn workflow_admin_queue_cancel_finds_session_and_records_gui_scope() {
                 == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerQueueControl
         })
         .collect::<Vec<_>>();
-    assert_eq!(queue_control_events.len(), 2);
+    assert_eq!(queue_control_events.len(), 3);
     assert_eq!(
         queue_control_events[0]
             .workflow_run_id
@@ -455,6 +491,25 @@ async fn workflow_admin_queue_cancel_finds_session_and_records_gui_scope() {
     assert!(queue_control_events[1]
         .payload_json
         .contains("admin reprioritized queue item"));
+    assert_eq!(
+        queue_control_events[2]
+            .workflow_run_id
+            .as_ref()
+            .map(|id| id.as_str()),
+        Some(admin_push_id.as_str())
+    );
+    assert!(queue_control_events[2]
+        .payload_json
+        .contains("\"actor_scope\":\"gui_admin\""));
+    assert!(queue_control_events[2]
+        .payload_json
+        .contains("\"action\":\"push_to_front\""));
+    assert!(queue_control_events[2]
+        .payload_json
+        .contains("\"new_priority\":8"));
+    assert!(queue_control_events[2]
+        .payload_json
+        .contains("admin pushed queue item to front"));
 }
 
 #[tokio::test]

@@ -105,8 +105,8 @@ improvements and backend-owned grouping DTOs over local adapter exceptions.
   managers when the workflow service owns the active session state.
 - Workflow execution-session and GUI-admin queue commands must be registered as
   transport entrypoints only; priority calculation, priority override,
-  push-front behavior, session lookup, and audit outcomes stay in the workflow
-  service.
+  session-scoped/admin push-front behavior, session lookup, and audit outcomes
+  stay in the workflow service.
 - Workflow projection query commands, including scheduler estimate reads, must
   stay transport-thin and return workflow-service DTOs without local payload
   parsing.

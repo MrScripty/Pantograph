@@ -14,6 +14,8 @@ import type {
 import type {
   WorkflowAdminQueueCancelRequest,
   WorkflowAdminQueueCancelResponse,
+  WorkflowAdminQueuePushFrontRequest,
+  WorkflowAdminQueuePushFrontResponse,
   WorkflowAdminQueueReprioritizeRequest,
   WorkflowAdminQueueReprioritizeResponse,
   WorkflowSessionQueueCancelRequest,
@@ -62,6 +64,19 @@ export class WorkflowCommandService extends WorkflowProjectionService {
 
     return invokeWorkflowCommand<WorkflowAdminQueueReprioritizeResponse>(
       'workflow_admin_reprioritize_queue_item',
+      { request },
+    );
+  }
+
+  async adminPushQueueItemToFront(
+    request: WorkflowAdminQueuePushFrontRequest,
+  ): Promise<WorkflowAdminQueuePushFrontResponse> {
+    if (USE_WORKFLOW_MOCKS) {
+      return { ok: true, session_id: 'mock-session', priority: 1 };
+    }
+
+    return invokeWorkflowCommand<WorkflowAdminQueuePushFrontResponse>(
+      'workflow_admin_push_queue_item_to_front',
       { request },
     );
   }

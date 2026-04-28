@@ -327,6 +327,22 @@ pub struct WorkflowAdminQueueReprioritizeResponse {
     pub session_id: String,
 }
 
+/// Privileged GUI-admin queue push-front request.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowAdminQueuePushFrontRequest {
+    pub workflow_run_id: String,
+}
+
+/// Privileged GUI-admin queue push-front response.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowAdminQueuePushFrontResponse {
+    pub ok: bool,
+    pub session_id: String,
+    pub priority: i32,
+}
+
 /// Session queue push-front request.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]

@@ -10,6 +10,7 @@ use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId, WorkflowRunSnaps
 
 use super::{
     WorkflowAdminQueueCancelRequest, WorkflowAdminQueueCancelResponse,
+    WorkflowAdminQueuePushFrontRequest, WorkflowAdminQueuePushFrontResponse,
     WorkflowAdminQueueReprioritizeRequest, WorkflowAdminQueueReprioritizeResponse,
     WorkflowExecutionSessionInspectionRequest, WorkflowExecutionSessionInspectionResponse,
     WorkflowExecutionSessionQueueCancelRequest, WorkflowExecutionSessionQueueCancelResponse,
@@ -424,6 +425,63 @@ impl WorkflowService {
                     SchedulerQueueControlAction::PushToFront,
                     SchedulerQueueControlOutcome::Denied,
                     SchedulerQueueControlActorScope::ClientSession,
+                    None,
+                    Some(reason),
+                )?;
+                Err(error)
+            }
+        }
+    }
+
+    pub async fn workflow_admin_push_queue_item_to_front(
+        &self,
+        request: WorkflowAdminQueuePushFrontRequest,
+    ) -> Result<WorkflowAdminQueuePushFrontResponse, WorkflowServiceError> {
+        let workflow_run_id = request.workflow_run_id.trim();
+        if workflow_run_id.is_empty() {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "workflow_run_id must be non-empty".to_string(),
+            ));
+        }
+
+        let (session, previous_item, push_result) = {
+            let mut store = self.session_store_guard()?;
+            let session_id = store.session_id_for_queue_item(workflow_run_id)?;
+            let session = store.session_summary(&session_id)?;
+            let previous_item = store
+                .list_queue(&session_id)?
+                .into_iter()
+                .find(|item| item.workflow_run_id == workflow_run_id);
+            let push_result = store.push_queue_item_to_front(&session_id, workflow_run_id);
+            (session, previous_item, push_result)
+        };
+        match push_result {
+            Ok(priority) => {
+                self.record_scheduler_queue_control_event_if_configured(
+                    &session,
+                    workflow_run_id,
+                    previous_item.as_ref(),
+                    SchedulerQueueControlAction::PushToFront,
+                    SchedulerQueueControlOutcome::Accepted,
+                    SchedulerQueueControlActorScope::GuiAdmin,
+                    Some(priority),
+                    Some("admin pushed queue item to front".to_string()),
+                )?;
+                Ok(WorkflowAdminQueuePushFrontResponse {
+                    ok: true,
+                    session_id: session.session_id,
+                    priority,
+                })
+            }
+            Err(error) => {
+                let reason = queue_control_denial_reason(&error);
+                self.record_scheduler_queue_control_event_if_configured(
+                    &session,
+                    workflow_run_id,
+                    previous_item.as_ref(),
+                    SchedulerQueueControlAction::PushToFront,
+                    SchedulerQueueControlOutcome::Denied,
+                    SchedulerQueueControlActorScope::GuiAdmin,
                     None,
                     Some(reason),
                 )?;

@@ -267,7 +267,7 @@ const preview = await workflowService.previewNodeInsertOnEdge(
   rejections.
 - `updateRetentionPolicy`, `cancelSessionQueueItem`,
   `adminCancelQueueItem`, `adminReprioritizeQueueItem`,
-  `reprioritizeSessionQueueItem`, and `pushSessionQueueItemToFront` resolve
-  only with backend response DTOs.
+  `adminPushQueueItemToFront`, `reprioritizeSessionQueueItem`, and
+  `pushSessionQueueItemToFront` resolve only with backend response DTOs.
   Callers refresh projections or apply the returned backend policy; they do not
   optimistically mutate queue rows or retention facts.

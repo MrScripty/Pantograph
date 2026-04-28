@@ -5,6 +5,7 @@
 
 use pantograph_workflow_service::{
     WorkflowAdminQueueCancelRequest, WorkflowAdminQueueCancelResponse,
+    WorkflowAdminQueuePushFrontRequest, WorkflowAdminQueuePushFrontResponse,
     WorkflowAdminQueueReprioritizeRequest, WorkflowAdminQueueReprioritizeResponse,
     WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse,
     WorkflowExecutionSessionCloseRequest, WorkflowExecutionSessionCloseResponse,
@@ -384,6 +385,16 @@ pub async fn workflow_push_execution_session_queue_item_to_front(
 ) -> Result<WorkflowExecutionSessionQueuePushFrontResponse, String> {
     workflow_service
         .workflow_push_execution_session_queue_item_to_front(request)
+        .await
+        .map_err(workflow_error_json)
+}
+
+pub async fn workflow_admin_push_queue_item_to_front(
+    request: WorkflowAdminQueuePushFrontRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowAdminQueuePushFrontResponse, String> {
+    workflow_service
+        .workflow_admin_push_queue_item_to_front(request)
         .await
         .map_err(workflow_error_json)
 }

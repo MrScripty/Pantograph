@@ -253,8 +253,9 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
   queue-control events when diagnostics are configured. Accepted and denied
   outcomes must be recorded after the scheduler store makes the authority
   decision. Session-scoped commands emit `client_session` actor scope. The
-  GUI-admin queued-run cancel and priority override boundaries resolve the
-  owning session through the scheduler store and emit `gui_admin` actor scope.
+  GUI-admin queued-run cancel, priority override, and push-front boundaries
+  resolve the owning session through the scheduler store and emit `gui_admin`
+  actor scope.
 - Workflow-session execution emits typed scheduler delay events for runtime
   admission waits when diagnostics ledger storage is configured. The event is
   recorded outside scheduler-store locks and is projected into run status,
