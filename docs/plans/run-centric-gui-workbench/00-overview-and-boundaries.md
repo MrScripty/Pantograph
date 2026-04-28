@@ -226,8 +226,9 @@ through the typed ledger and projections. Delay and model lifecycle events now
 have validated typed contracts and scheduler timeline projection support.
 Runtime admission waits now emit a durable scheduler delay event. Workflow
 session runtime admission now emits required-model load requested/completed or
-failed events from preflight facts; unload emitters and control actions remain
-open.
+failed events from preflight facts, and ephemeral session teardown emits
+required-model unload scheduled/started/completed or failed events. Capacity
+rebalance unload emitters and control actions remain open.
 
 ### Milestone 3: Diagnostics, Retention, And Audit Storage
 

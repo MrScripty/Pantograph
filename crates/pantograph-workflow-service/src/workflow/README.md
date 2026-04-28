@@ -136,9 +136,10 @@ session-runtime workflows, and the root facade test module.
   helper that owns load-state transitions.
 - Session runtime loaded state is updated only after host load/unload calls
   succeed or return a service error.
-- Workflow-session runtime admission emits scheduler model lifecycle events for
-  required models through the diagnostics ledger when configured. These events
-  use preflight/cache model and backend facts instead of raw host internals.
+- Workflow-session runtime admission and ephemeral teardown emit scheduler
+  model lifecycle events for required models through the diagnostics ledger
+  when configured. These events use preflight/cache model and backend facts
+  instead of raw host internals.
 - Workflow version resolution validates `WorkflowIdentity`, computes
   `WorkflowExecutableTopology`, and persists semantic-version/fingerprint
   agreement through the attribution store.

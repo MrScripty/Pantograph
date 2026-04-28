@@ -406,6 +406,7 @@ pub enum SchedulerModelLifecycleTransition {
     UnloadCancelled,
     UnloadStarted,
     UnloadCompleted,
+    UnloadFailed,
 }
 
 impl SchedulerModelLifecycleTransition {
@@ -419,6 +420,7 @@ impl SchedulerModelLifecycleTransition {
             Self::UnloadCancelled => "model unload cancelled",
             Self::UnloadStarted => "model unload started",
             Self::UnloadCompleted => "model unload completed",
+            Self::UnloadFailed => "model unload failed",
         }
     }
 }

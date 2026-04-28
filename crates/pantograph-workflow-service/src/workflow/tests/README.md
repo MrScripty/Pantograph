@@ -96,7 +96,7 @@ Use `workflow/tests/` for behavior-specific child modules under the parent
   behavior-version set before scheduler admission.
 - Session execution tests with diagnostics enabled must verify scheduler model
   lifecycle events for runtime admission required-model loads before terminal
-  run events.
+  run events and ephemeral required-model unloads after I/O artifact events.
 - New behavior families should be added here only when they are cohesive enough
   to reduce `workflow/tests.rs` without hiding shared test setup.
 

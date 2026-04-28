@@ -306,6 +306,8 @@ impl WorkflowService {
                 return terminal_result;
             }
         };
+        let required_backends = preflight_cache.required_backends.clone();
+        let required_models = preflight_cache.required_models.clone();
 
         let runtime_load_started_at_ms = unix_timestamp_ms();
         self.record_scheduler_model_lifecycle_events_if_configured(
@@ -314,8 +316,8 @@ impl WorkflowService {
                 snapshot: run_snapshot.as_ref(),
                 workflow_run_id: &workflow_run_id,
                 workflow_semantic_version: &queued_workflow_semantic_version,
-                required_backends: &preflight_cache.required_backends,
-                required_models: &preflight_cache.required_models,
+                required_backends: &required_backends,
+                required_models: &required_models,
                 transition: SchedulerModelLifecycleTransition::LoadRequested,
                 reason: Some("runtime admission requested required models"),
                 duration_ms: None,
@@ -332,8 +334,8 @@ impl WorkflowService {
                     snapshot: run_snapshot.as_ref(),
                     workflow_run_id: &workflow_run_id,
                     workflow_semantic_version: &queued_workflow_semantic_version,
-                    required_backends: &preflight_cache.required_backends,
-                    required_models: &preflight_cache.required_models,
+                    required_backends: &required_backends,
+                    required_models: &required_models,
                     transition: SchedulerModelLifecycleTransition::LoadCompleted,
                     reason: Some("runtime admission loaded required models"),
                     duration_ms: Some(runtime_load_duration_ms),
@@ -348,8 +350,8 @@ impl WorkflowService {
                         snapshot: run_snapshot.as_ref(),
                         workflow_run_id: &workflow_run_id,
                         workflow_semantic_version: &queued_workflow_semantic_version,
-                        required_backends: &preflight_cache.required_backends,
-                        required_models: &preflight_cache.required_models,
+                        required_backends: &required_backends,
+                        required_models: &required_models,
                         transition: SchedulerModelLifecycleTransition::LoadFailed,
                         reason: Some("runtime admission failed to load required models"),
                         duration_ms: Some(runtime_load_duration_ms),
@@ -412,12 +414,78 @@ impl WorkflowService {
             )?;
         }
         if finish_state.unload_runtime {
-            host.unload_session_runtime(
-                &session_id,
-                &finish_state.workflow_id,
-                WorkflowExecutionSessionUnloadReason::KeepAliveDisabled,
-            )
-            .await?;
+            self.record_scheduler_model_lifecycle_events_if_configured(
+                SchedulerModelLifecycleEventRequest {
+                    session: &session,
+                    snapshot: run_snapshot.as_ref(),
+                    workflow_run_id: &workflow_run_id,
+                    workflow_semantic_version: &queued_workflow_semantic_version,
+                    required_backends: &required_backends,
+                    required_models: &required_models,
+                    transition: SchedulerModelLifecycleTransition::UnloadScheduled,
+                    reason: Some("keep-alive disabled after run completion"),
+                    duration_ms: None,
+                    error: None,
+                },
+            )?;
+            let runtime_unload_started_at_ms = unix_timestamp_ms();
+            self.record_scheduler_model_lifecycle_events_if_configured(
+                SchedulerModelLifecycleEventRequest {
+                    session: &session,
+                    snapshot: run_snapshot.as_ref(),
+                    workflow_run_id: &workflow_run_id,
+                    workflow_semantic_version: &queued_workflow_semantic_version,
+                    required_backends: &required_backends,
+                    required_models: &required_models,
+                    transition: SchedulerModelLifecycleTransition::UnloadStarted,
+                    reason: Some("keep-alive disabled after run completion"),
+                    duration_ms: None,
+                    error: None,
+                },
+            )?;
+            let runtime_unload_result = host
+                .unload_session_runtime(
+                    &session_id,
+                    &finish_state.workflow_id,
+                    WorkflowExecutionSessionUnloadReason::KeepAliveDisabled,
+                )
+                .await;
+            let runtime_unload_duration_ms =
+                unix_timestamp_ms().saturating_sub(runtime_unload_started_at_ms);
+            match &runtime_unload_result {
+                Ok(()) => self.record_scheduler_model_lifecycle_events_if_configured(
+                    SchedulerModelLifecycleEventRequest {
+                        session: &session,
+                        snapshot: run_snapshot.as_ref(),
+                        workflow_run_id: &workflow_run_id,
+                        workflow_semantic_version: &queued_workflow_semantic_version,
+                        required_backends: &required_backends,
+                        required_models: &required_models,
+                        transition: SchedulerModelLifecycleTransition::UnloadCompleted,
+                        reason: Some("keep-alive disabled after run completion"),
+                        duration_ms: Some(runtime_unload_duration_ms),
+                        error: None,
+                    },
+                )?,
+                Err(error) => {
+                    let error_text = error.to_string();
+                    self.record_scheduler_model_lifecycle_events_if_configured(
+                        SchedulerModelLifecycleEventRequest {
+                            session: &session,
+                            snapshot: run_snapshot.as_ref(),
+                            workflow_run_id: &workflow_run_id,
+                            workflow_semantic_version: &queued_workflow_semantic_version,
+                            required_backends: &required_backends,
+                            required_models: &required_models,
+                            transition: SchedulerModelLifecycleTransition::UnloadFailed,
+                            reason: Some("keep-alive disabled after run completion"),
+                            duration_ms: Some(runtime_unload_duration_ms),
+                            error: Some(error_text.as_str()),
+                        },
+                    )?
+                }
+            }
+            runtime_unload_result?;
         }
 
         run_result

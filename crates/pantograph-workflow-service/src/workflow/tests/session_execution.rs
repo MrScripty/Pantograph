@@ -337,7 +337,7 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         )
         .expect("diagnostic events")
     };
-    assert_eq!(diagnostic_events.len(), 11);
+    assert_eq!(diagnostic_events.len(), 14);
     let event = diagnostic_events
         .iter()
         .find(|event| {
@@ -498,7 +498,7 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
                 == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerModelLifecycleChanged
         })
         .collect::<Vec<_>>();
-    assert_eq!(model_lifecycle_events.len(), 2);
+    assert_eq!(model_lifecycle_events.len(), 5);
     assert!(model_lifecycle_events
         .iter()
         .all(|event| event.source_component
@@ -576,6 +576,29 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
     assert!(io_events.iter().all(|event| event
         .payload_json
         .contains("\"retention_state\":\"metadata_only\"")));
+    let last_io_event_seq = io_events
+        .iter()
+        .map(|event| event.event_seq)
+        .max()
+        .expect("last io event");
+    assert!(model_lifecycle_events[2].event_seq > last_io_event_seq);
+    assert!(model_lifecycle_events[2]
+        .payload_json
+        .contains("\"transition\":\"unload_scheduled\""));
+    assert!(model_lifecycle_events[2]
+        .payload_json
+        .contains("\"reason\":\"keep-alive disabled after run completion\""));
+    assert!(model_lifecycle_events[3].event_seq > model_lifecycle_events[2].event_seq);
+    assert!(model_lifecycle_events[3]
+        .payload_json
+        .contains("\"transition\":\"unload_started\""));
+    assert!(model_lifecycle_events[4].event_seq > model_lifecycle_events[3].event_seq);
+    assert!(model_lifecycle_events[4]
+        .payload_json
+        .contains("\"transition\":\"unload_completed\""));
+    assert!(model_lifecycle_events[4]
+        .payload_json
+        .contains("\"duration_ms\":"));
 
     let library_event = diagnostic_events
         .iter()

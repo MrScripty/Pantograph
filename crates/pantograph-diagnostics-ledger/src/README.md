@@ -99,6 +99,9 @@ semantics.
 - Scheduler timeline events include typed delay and model lifecycle facts when
   those events are emitted. Delay state may also update the run-list status and
   scheduler reason through projection drains.
+- Scheduler model lifecycle transitions include load failure and unload failure
+  states so runtime admission and teardown errors can remain typed audit facts
+  instead of free-form timeline text.
 - `run.snapshot_accepted` events carry bounded immutable snapshot metadata,
   including `workflow_run_snapshot_id`, `workflow_presentation_revision_id`,
   and `node_versions` entries with node id, node type, contract version, and
