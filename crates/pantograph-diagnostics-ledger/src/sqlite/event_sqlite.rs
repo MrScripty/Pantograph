@@ -14,13 +14,14 @@ use crate::event::{
     ProjectionStateUpdate, ProjectionStatus, RetentionArtifactStateChangedPayload,
     RunDetailProjectionQuery, RunDetailProjectionRecord, RunListFacetKind, RunListFacetRecord,
     RunListProjectionQuery, RunListProjectionRecord, RunListProjectionStatus,
-    SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
-    DIAGNOSTIC_EVENT_SCHEMA_VERSION, IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION,
-    LIBRARY_USAGE_PROJECTION_NAME, LIBRARY_USAGE_PROJECTION_VERSION,
-    MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, NODE_STATUS_PROJECTION_NAME,
-    NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION,
-    RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
-    SCHEDULER_TIMELINE_PROJECTION_VERSION,
+    SchedulerQueueControlAction, SchedulerQueueControlActorScope, SchedulerQueueControlOutcome,
+    SchedulerQueueControlPayload, SchedulerTimelineProjectionQuery,
+    SchedulerTimelineProjectionRecord, DIAGNOSTIC_EVENT_SCHEMA_VERSION,
+    IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION, LIBRARY_USAGE_PROJECTION_NAME,
+    LIBRARY_USAGE_PROJECTION_VERSION, MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES,
+    NODE_STATUS_PROJECTION_NAME, NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME,
+    RUN_DETAIL_PROJECTION_VERSION, RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION,
+    SCHEDULER_TIMELINE_PROJECTION_NAME, SCHEDULER_TIMELINE_PROJECTION_VERSION,
 };
 use crate::records::MAX_PAGE_SIZE;
 use crate::util::now_ms;
@@ -1418,31 +1419,12 @@ fn scheduler_timeline_record_from_event(
             Some(format!("priority {}", payload.priority)),
         ),
         DiagnosticEventPayload::SchedulerQueueControl(payload) => {
-            let summary =
-                format!("queue {:?} {:?}", payload.action, payload.outcome).to_lowercase();
-            let detail = match (
-                payload.previous_queue_position,
-                payload.previous_priority,
-                payload.new_priority,
-                payload.reason.as_deref(),
-            ) {
-                (Some(position), Some(previous), Some(new), Some(reason)) => Some(format!(
-                    "position {position}; priority {previous} -> {new}; {reason}"
-                )),
-                (Some(position), Some(previous), Some(new), None) => {
-                    Some(format!("position {position}; priority {previous} -> {new}"))
-                }
-                (Some(position), Some(previous), None, Some(reason)) => Some(format!(
-                    "position {position}; priority {previous}; {reason}"
-                )),
-                (Some(position), Some(previous), None, None) => {
-                    Some(format!("position {position}; priority {previous}"))
-                }
-                (_, _, Some(new), Some(reason)) => Some(format!("priority {new}; {reason}")),
-                (_, _, Some(new), None) => Some(format!("priority {new}")),
-                (_, _, None, Some(reason)) => Some(reason.to_string()),
-                (_, _, None, None) => None,
-            };
+            let summary = format!(
+                "queue {} {}",
+                queue_control_action_label(payload.action),
+                queue_control_outcome_label(payload.outcome)
+            );
+            let detail = scheduler_queue_control_detail(&payload);
             (summary, detail)
         }
         DiagnosticEventPayload::SchedulerRunDelayed(payload) => {
@@ -1549,6 +1531,46 @@ fn scheduler_timeline_record_from_event(
         detail,
         payload_json: event.payload_json.clone(),
     }))
+}
+
+fn queue_control_action_label(action: SchedulerQueueControlAction) -> &'static str {
+    match action {
+        SchedulerQueueControlAction::Cancel => "cancel",
+        SchedulerQueueControlAction::PushToFront => "push to front",
+        SchedulerQueueControlAction::Reprioritize => "reprioritize",
+    }
+}
+
+fn queue_control_outcome_label(outcome: SchedulerQueueControlOutcome) -> &'static str {
+    match outcome {
+        SchedulerQueueControlOutcome::Accepted => "accepted",
+        SchedulerQueueControlOutcome::Denied => "denied",
+    }
+}
+
+fn queue_control_actor_scope_label(scope: SchedulerQueueControlActorScope) -> &'static str {
+    match scope {
+        SchedulerQueueControlActorScope::BackendControlApi => "backend control API",
+        SchedulerQueueControlActorScope::ClientSession => "client session",
+        SchedulerQueueControlActorScope::GuiAdmin => "GUI admin",
+    }
+}
+
+fn scheduler_queue_control_detail(payload: &SchedulerQueueControlPayload) -> Option<String> {
+    let mut parts = vec![queue_control_actor_scope_label(payload.actor_scope).to_string()];
+    if let Some(position) = payload.previous_queue_position {
+        parts.push(format!("position {position}"));
+    }
+    match (payload.previous_priority, payload.new_priority) {
+        (Some(previous), Some(new)) => parts.push(format!("priority {previous} -> {new}")),
+        (Some(previous), None) => parts.push(format!("priority {previous}")),
+        (None, Some(new)) => parts.push(format!("priority {new}")),
+        (None, None) => {}
+    }
+    if let Some(reason) = payload.reason.as_deref() {
+        parts.push(reason.to_string());
+    }
+    (!parts.is_empty()).then(|| parts.join("; "))
 }
 
 fn io_artifact_projection_record_from_event(

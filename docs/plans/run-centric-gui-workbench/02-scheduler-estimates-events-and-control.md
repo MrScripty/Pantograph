@@ -322,12 +322,16 @@ duplicate, unvalidated, or contradictory event streams.
 - Added materialized projection coverage for scheduler estimates,
   placements, delays, admissions, queue controls, and run lifecycle visibility
   required by current Scheduler page query boundaries.
+- Tightened scheduler timeline projection labels for queue-control events so
+  page/API consumers receive explicit typed action, outcome, actor-scope,
+  position, and priority summaries instead of enum debug formatting.
 
 ### Deviations
 
-- Queue-control events currently represent backend control API actions. The
-  future client/admin authority split still needs explicit actor scopes and
-  priority-normalization outcomes.
+- Queue-control events cover current session-owned and GUI-admin queued-run
+  actions. Cross-session reorder, running-run cancellation, pause/resume,
+  forced estimate recomputation, and forced reschedule remain future authority
+  vocabulary.
 
 ### Follow-Ups
 

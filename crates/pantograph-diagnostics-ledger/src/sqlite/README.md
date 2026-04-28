@@ -69,6 +69,9 @@ helpers own restart-visible workflow run summaries.
 - Scheduler delay and model lifecycle events are typed ledger events and become
   timeline rows through the same incremental projection cursor. Delay events
   may also update run-list/run-detail scheduler status and reason fields.
+- Scheduler queue-control timeline rows format typed action, outcome,
+  actor-scope, position, and priority fields explicitly. Projection code must
+  not rely on enum debug strings for page/API labels.
 - Run detail drains apply only events after the stored projection cursor and
   update one row per workflow run for selected-run page/query reads.
 - Run-list facet reads group `run_list_projection` rows and must not replay
