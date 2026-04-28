@@ -9,8 +9,8 @@ later plan stages fill in richer page bodies.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `WorkbenchShell.svelte` | Top-level workbench frame, toolbar navigation, active-run summary, and page outlet. |
-| `SchedulerPage.svelte` | Dense run-list view backed by the run-list projection service, active-run selection store, local table controls, policy/scope/date filters, scope columns, typed queue/estimate columns, backend-gated queue actions, and selected-run scheduler timeline projection. |
-| `schedulerPagePresenters.ts` | Pure Scheduler page status, duration, timestamp, scope/date, queue-control gating, queue/estimate, filter, sorting, projection freshness, and timeline presenters. |
+| `SchedulerPage.svelte` | Dense run-list view backed by the run-list projection service, active-run selection store, local table controls, future/scheduled/queued status filters, policy/scope/date filters, scope columns, typed queue/estimate columns, backend-gated queue actions, and selected-run scheduler timeline projection. |
+| `schedulerPagePresenters.ts` | Pure Scheduler page status, duration, timestamp, future/scheduled status, scope/date, queue-control gating, queue/estimate, filter, sorting, projection freshness, and timeline presenters. |
 | `schedulerPagePresenters.test.ts` | Unit coverage for Scheduler table labels, status classes, filters, sorts, projection freshness, and timeline labels. |
 | `GraphPage.svelte` | Workbench page that switches between the active run's immutable graph snapshot and the current editable workflow graph. |
 | `RunGraphSnapshot.svelte` | Read-only run graph renderer backed by `workflowService.queryRunGraph`; it does not load historic graphs into the editor store. |
@@ -99,9 +99,10 @@ transient UI state without becoming backend scheduler policy.
   buttons are gated by backend run status and call run-id admin command
   boundaries. Both paths must refresh projections after confirmed backend
   responses.
-- Scheduler status presentation includes delayed rows from the run-list
-  projection. Components must treat delayed as backend-authored state rather
-  than inferring it from scheduler reason text.
+- Scheduler future, scheduled, queued, delayed, running, and terminal status
+  presentation comes from the run-list projection. Components must treat those
+  statuses as backend-authored state rather than inferring them from scheduler
+  reason text.
 - I/O artifact rendering must distinguish metadata-only rows from rows with
   payload references without treating missing payload references as failures.
 - I/O Inspector node grouping and endpoint filters must use producer and

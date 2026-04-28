@@ -44,13 +44,13 @@ test('normalizeSchedulerRunFilters rejects unknown enum values', () => {
 test('withSchedulerRunFilters applies partial updates without losing existing fields', () => {
   const next = withSchedulerRunFilters(DEFAULT_SCHEDULER_RUN_FILTERS, {
     search: 'workflow-a',
-    status: 'delayed',
+    status: 'scheduled',
     client: 'client-a',
   });
 
   assert.deepEqual(next, {
     search: 'workflow-a',
-    status: 'delayed',
+    status: 'scheduled',
     schedulerPolicy: 'all',
     retentionPolicy: 'all',
     client: 'client-a',

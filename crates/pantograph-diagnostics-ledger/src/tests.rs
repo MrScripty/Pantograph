@@ -34,6 +34,28 @@ use crate::{
 };
 
 #[test]
+fn run_list_projection_status_accepts_future_and_scheduled_contract_values() {
+    assert_eq!(RunListProjectionStatus::Future.as_db(), "future");
+    assert_eq!(RunListProjectionStatus::Scheduled.as_db(), "scheduled");
+    assert_eq!(
+        RunListProjectionStatus::from_db("future").expect("future status parses"),
+        RunListProjectionStatus::Future,
+    );
+    assert_eq!(
+        RunListProjectionStatus::from_db("scheduled").expect("scheduled status parses"),
+        RunListProjectionStatus::Scheduled,
+    );
+    assert_eq!(
+        serde_json::to_value(RunListProjectionStatus::Future).expect("serialize future"),
+        serde_json::json!("future"),
+    );
+    assert_eq!(
+        serde_json::to_value(RunListProjectionStatus::Scheduled).expect("serialize scheduled"),
+        serde_json::json!("scheduled"),
+    );
+}
+
+#[test]
 fn record_and_query_usage_event_preserves_snapshot_and_measurement() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     let event = sample_event("usage_alpha", "model-a", 10, 20);

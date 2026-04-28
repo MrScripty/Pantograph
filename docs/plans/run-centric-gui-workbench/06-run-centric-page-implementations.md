@@ -147,13 +147,13 @@ into a second source of truth.
 - Accessibility tests cover table controls and actions.
 
 **Status:** Partially complete from Stage `05`. The current Scheduler page
-renders a dense projection-backed run table, first-class queued/future rows
-where present in the run-list projection, selected-run actions, active-run
-updates, projection freshness, search, status filtering, stable local sort
-options, scheduler policy IDs, retention policy IDs, scheduler-policy and
+renders a dense projection-backed run table, typed future/scheduled/queued row
+presentation where present in the run-list projection, selected-run actions,
+active-run updates, projection freshness, search, status filtering, stable
+local sort options, scheduler policy IDs, retention policy IDs, scheduler-policy and
 retention-policy filters, client/session/bucket scope columns and filters,
-accepted-date filters, workflow execution-session projection facts for future
-queue controls, typed queue position, priority, estimate, and scheduler-reason
+accepted-date filters, workflow execution-session projection facts for queued
+controls, typed queue position, priority, estimate, and scheduler-reason
 columns, delayed status presentation, backend-supported session cancel/front
 actions, GUI-admin cancel/front/priority actions for queued selected runs, a
 selected-run timeline panel, timeline projection freshness, and timeline

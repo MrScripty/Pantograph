@@ -62,6 +62,8 @@ function run(overrides: Partial<RunListProjectionRecord>): RunListProjectionReco
 
 test('scheduler timestamp and duration presenters keep pending states visible', () => {
   assert.equal(formatSchedulerTimestamp(null), 'Unscheduled');
+  assert.equal(formatSchedulerDuration(null, 'future'), 'Pending');
+  assert.equal(formatSchedulerDuration(null, 'scheduled'), 'Pending');
   assert.equal(formatSchedulerDuration(null, 'queued'), 'Pending');
   assert.equal(formatSchedulerDuration(null, 'delayed'), 'Pending');
   assert.equal(formatSchedulerDuration(null, 'running'), 'Running');
@@ -72,6 +74,8 @@ test('scheduler timestamp and duration presenters keep pending states visible', 
 test('schedulerStatusClass maps run statuses to stable classes', () => {
   assert.match(schedulerStatusClass('completed'), /emerald/);
   assert.match(schedulerStatusClass('running'), /cyan/);
+  assert.match(schedulerStatusClass('future'), /amber/);
+  assert.match(schedulerStatusClass('scheduled'), /amber/);
   assert.match(schedulerStatusClass('queued'), /amber/);
   assert.match(schedulerStatusClass('delayed'), /orange/);
   assert.match(schedulerStatusClass('failed'), /red/);

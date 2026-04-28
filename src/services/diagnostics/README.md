@@ -168,6 +168,7 @@ service.recordWorkflowEvent({
 - Scheduler state is backend-owned. GUI runs must be submitted through the
   scheduler so queued/running rows and runtime traces share the same
   `workflow_run_id`.
-- Scheduler projection DTOs include delayed run status and typed scheduler
-  timeline event labels for delay/model lifecycle audit rows. Consumers must
-  render those fields from projection DTOs instead of parsing payload JSON.
+- Scheduler projection DTOs include accepted, future, scheduled, queued,
+  delayed, running, and terminal run statuses plus typed scheduler timeline
+  event labels for delay/model lifecycle audit rows. Consumers must render
+  those fields from projection DTOs instead of parsing payload JSON.

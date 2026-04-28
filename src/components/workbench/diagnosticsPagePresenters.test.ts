@@ -75,6 +75,8 @@ function createRunListPeer(overrides: Partial<RunListProjectionRecord>): RunList
 
 test('formatDiagnosticsDuration exposes pending and running states', () => {
   assert.equal(formatDiagnosticsDuration(null, 'running'), 'Running');
+  assert.equal(formatDiagnosticsDuration(null, 'future'), 'Pending');
+  assert.equal(formatDiagnosticsDuration(null, 'scheduled'), 'Pending');
   assert.equal(formatDiagnosticsDuration(null, 'queued'), 'Pending');
   assert.equal(formatDiagnosticsDuration(null, 'delayed'), 'Pending');
   assert.equal(formatDiagnosticsDuration(500, 'completed'), '500 ms');
@@ -99,6 +101,8 @@ test('formatDiagnosticsProjectionFreshness keeps projection cursor visible', () 
 test('diagnosticsStatusClass maps operational statuses to stable classes', () => {
   assert.match(diagnosticsStatusClass('completed'), /emerald/);
   assert.match(diagnosticsStatusClass('running'), /cyan/);
+  assert.match(diagnosticsStatusClass('future'), /amber/);
+  assert.match(diagnosticsStatusClass('scheduled'), /amber/);
   assert.match(diagnosticsStatusClass('queued'), /amber/);
   assert.match(diagnosticsStatusClass('failed'), /red/);
   assert.match(diagnosticsStatusClass('cancelled'), /neutral/);

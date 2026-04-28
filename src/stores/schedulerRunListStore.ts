@@ -49,6 +49,8 @@ export interface SchedulerRunColumnState {
 export const SCHEDULER_STATUS_FILTERS: SchedulerStatusFilter[] = [
   'all',
   'accepted',
+  'future',
+  'scheduled',
   'queued',
   'delayed',
   'running',

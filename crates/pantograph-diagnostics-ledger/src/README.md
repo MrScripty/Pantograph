@@ -68,7 +68,8 @@ endpoints directly; callers should not scan projection pages client-side to
 answer node-produced or node-consumed artifact questions.
 Stable scheduler estimate and queue-placement facts are promoted into typed
 projection columns; consumers do not parse payload JSON for queue position,
-priority, estimate confidence, estimated wait/duration, or scheduler reason.
+priority, estimate confidence, estimated wait/duration, scheduler reason, or
+future/scheduled run status presentation.
 Runtime and workflow services may write observations, summaries, and typed
 events through repository methods, but they do not own the schema or query
 semantics.

@@ -60,10 +60,11 @@ does not persist active-run selection or become a backend source of run truth.
 `schedulerRunListStore.ts` owns dense Scheduler table filter, sort, and
 column-visibility state so the page does not duplicate run-list UI state in
 component-local variables while backend projection services remain the only
-source of run data. Scope and accepted-date filters stay in the same transient
-store boundary as status and policy filters. The workbench Diagnostics page now
-queries projection services directly, so `diagnosticsStore.ts` is not started
-from `App.svelte` during the normal shell lifecycle.
+source of run data. Future, scheduled, queued, delayed, running, terminal,
+scope, and accepted-date filters stay in the same transient store boundary as
+policy filters. The workbench Diagnostics page now queries projection services
+directly, so `diagnosticsStore.ts` is not started from `App.svelte` during the
+normal shell lifecycle.
 
 ## Alternatives Rejected
 - Keep separate app-only and package-only workflow stores.

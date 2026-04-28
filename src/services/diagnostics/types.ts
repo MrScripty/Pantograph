@@ -317,6 +317,8 @@ export interface SchedulerTimelineProjectionRecord {
 
 export type RunListProjectionStatus =
   | 'accepted'
+  | 'future'
+  | 'scheduled'
   | 'queued'
   | 'delayed'
   | 'running'

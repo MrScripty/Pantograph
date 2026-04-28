@@ -21,7 +21,13 @@ export function formatSchedulerDuration(
     if (status === 'running') {
       return 'Running';
     }
-    if (status === 'queued' || status === 'accepted' || status === 'delayed') {
+    if (
+      status === 'future' ||
+      status === 'scheduled' ||
+      status === 'queued' ||
+      status === 'accepted' ||
+      status === 'delayed'
+    ) {
       return 'Pending';
     }
     return 'Unavailable';
@@ -74,6 +80,8 @@ export function schedulerStatusClass(status: RunListProjectionRecord['status']):
       return 'border-cyan-700 bg-cyan-950/60 text-cyan-200';
     case 'queued':
     case 'accepted':
+    case 'future':
+    case 'scheduled':
       return 'border-amber-700 bg-amber-950/60 text-amber-200';
     case 'delayed':
       return 'border-orange-700 bg-orange-950/60 text-orange-200';

@@ -1031,6 +1031,8 @@ pub struct SchedulerTimelineProjectionRecord {
 #[serde(rename_all = "snake_case")]
 pub enum RunListProjectionStatus {
     Accepted,
+    Future,
+    Scheduled,
     Queued,
     Delayed,
     Running,
@@ -1043,6 +1045,8 @@ impl RunListProjectionStatus {
     pub(crate) fn as_db(self) -> &'static str {
         match self {
             Self::Accepted => "accepted",
+            Self::Future => "future",
+            Self::Scheduled => "scheduled",
             Self::Queued => "queued",
             Self::Delayed => "delayed",
             Self::Running => "running",
@@ -1055,6 +1059,8 @@ impl RunListProjectionStatus {
     pub(crate) fn from_db(value: &str) -> Result<Self, DiagnosticsLedgerError> {
         match value {
             "accepted" => Ok(Self::Accepted),
+            "future" => Ok(Self::Future),
+            "scheduled" => Ok(Self::Scheduled),
             "queued" => Ok(Self::Queued),
             "delayed" => Ok(Self::Delayed),
             "running" => Ok(Self::Running),
