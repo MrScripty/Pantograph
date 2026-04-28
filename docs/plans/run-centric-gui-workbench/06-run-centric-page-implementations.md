@@ -156,8 +156,9 @@ accepted-date filters, workflow execution-session projection facts for queued
 controls, typed queue position, priority, estimate, and scheduler-reason
 columns, delayed status presentation, backend-supported session cancel/front
 actions, GUI-admin cancel/front/priority actions for queued selected runs, a
-selected-run timeline panel, timeline projection freshness, and timeline
-summary/detail rows without raw event parsing. Progress, model/runtime
+selected-run timeline panel, timeline projection freshness, typed timeline
+kind/source filters, and timeline summary/detail rows without raw event
+parsing. Progress, model/runtime
 summaries, richer delay categories, richer retention summaries, running-run
 admin cancellation, and cross-session reorder/pause controls remain open.
 Assigned status, policy, scope, and accepted-date filters now also narrow the

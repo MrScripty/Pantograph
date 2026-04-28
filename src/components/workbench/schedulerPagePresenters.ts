@@ -191,6 +191,29 @@ export function schedulerTimelinePayloadLabel(
   return 'Metadata only';
 }
 
+export function schedulerTimelineKindFilterOptions(
+  events: Pick<SchedulerTimelineProjectionRecord, 'event_kind'>[],
+): SchedulerTimelineProjectionRecord['event_kind'][] {
+  return uniqueSortedOptions(events.map((event) => event.event_kind)) as SchedulerTimelineProjectionRecord['event_kind'][];
+}
+
+export function schedulerTimelineSourceFilterOptions(
+  events: Pick<SchedulerTimelineProjectionRecord, 'source_component'>[],
+): SchedulerTimelineProjectionRecord['source_component'][] {
+  return uniqueSortedOptions(events.map((event) => event.source_component)) as SchedulerTimelineProjectionRecord['source_component'][];
+}
+
+export function filterSchedulerTimelineEvents(
+  events: SchedulerTimelineProjectionRecord[],
+  filters: { eventKind: string; sourceComponent: string },
+): SchedulerTimelineProjectionRecord[] {
+  return events.filter(
+    (event) =>
+      (filters.eventKind === 'all' || event.event_kind === filters.eventKind) &&
+      (filters.sourceComponent === 'all' || event.source_component === filters.sourceComponent),
+  );
+}
+
 export function filterAndSortSchedulerRuns(
   runs: RunListProjectionRecord[],
   filters: SchedulerRunFilters,

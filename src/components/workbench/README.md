@@ -9,8 +9,8 @@ later plan stages fill in richer page bodies.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `WorkbenchShell.svelte` | Top-level workbench frame, toolbar navigation, active-run summary, and page outlet. |
-| `SchedulerPage.svelte` | Dense run-list view backed by the run-list projection service, active-run selection store, local table controls, future/scheduled/queued status filters, policy/scope/date filters, scope columns, typed queue/estimate columns, backend-gated queue actions, and selected-run scheduler timeline projection. |
-| `schedulerPagePresenters.ts` | Pure Scheduler page status, duration, timestamp, future/scheduled status, scope/date, queue-control gating, queue/estimate, filter, sorting, projection freshness, and timeline presenters. |
+| `SchedulerPage.svelte` | Dense run-list view backed by the run-list projection service, active-run selection store, local table controls, future/scheduled/queued status filters, policy/scope/date filters, scope columns, typed queue/estimate columns, backend-gated queue actions, and selected-run scheduler timeline projection with typed kind/source filters. |
+| `schedulerPagePresenters.ts` | Pure Scheduler page status, duration, timestamp, future/scheduled status, scope/date, queue-control gating, queue/estimate, filter, sorting, projection freshness, and typed timeline filter presenters. |
 | `schedulerPagePresenters.test.ts` | Unit coverage for Scheduler table labels, status classes, filters, sorts, projection freshness, and timeline labels. |
 | `GraphPage.svelte` | Workbench page that switches between the active run's immutable graph snapshot and the current editable workflow graph. |
 | `RunGraphSnapshot.svelte` | Read-only run graph renderer backed by `workflowService.queryRunGraph`; it does not load historic graphs into the editor store. |
@@ -91,6 +91,8 @@ transient UI state without becoming backend scheduler policy.
   component-local durable state.
 - Scheduler timeline rows come from `workflowService.querySchedulerTimeline`.
   Components render typed summary/detail fields and payload availability only.
+  Timeline filtering uses typed event kind and source fields from the
+  projection, not payload JSON.
 - Scheduler client, session, bucket, and workflow execution-session facts come
   from run-list projection fields. Components must not recover those scope
   facts from raw events.

@@ -1,9 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import type { RunListProjectionRecord } from '../../services/diagnostics/types.ts';
+import type {
+  RunListProjectionRecord,
+  SchedulerTimelineProjectionRecord,
+} from '../../services/diagnostics/types.ts';
 import {
   buildSchedulerRunListQuery,
+  filterSchedulerTimelineEvents,
   filterAndSortSchedulerRuns,
   formatSchedulerAcceptedDateLabel,
   formatSchedulerPolicyLabel,
@@ -27,6 +31,8 @@ import {
   schedulerRetentionFilterOptions,
   schedulerRunSupportsQueueControls,
   schedulerTimelinePayloadLabel,
+  schedulerTimelineKindFilterOptions,
+  schedulerTimelineSourceFilterOptions,
   schedulerStatusClass,
 } from './schedulerPagePresenters.ts';
 
@@ -56,6 +62,29 @@ function run(overrides: Partial<RunListProjectionRecord>): RunListProjectionReco
     scheduler_reason: null,
     last_event_seq: 1,
     last_updated_at_ms: 10,
+    ...overrides,
+  };
+}
+
+function timelineEvent(
+  overrides: Partial<SchedulerTimelineProjectionRecord>,
+): SchedulerTimelineProjectionRecord {
+  return {
+    event_seq: 1,
+    event_id: 'event-a',
+    event_kind: 'scheduler_queue_placement',
+    source_component: 'scheduler',
+    occurred_at_ms: 1,
+    recorded_at_ms: 2,
+    workflow_run_id: 'run-a',
+    workflow_id: 'workflow-a',
+    workflow_version_id: 'wfver-a',
+    workflow_semantic_version: '1.0.0',
+    scheduler_policy_id: 'policy-a',
+    retention_policy_id: 'retention-a',
+    summary: 'queued',
+    detail: null,
+    payload_json: '{}',
     ...overrides,
   };
 }
@@ -298,6 +327,32 @@ test('scheduler timeline presenters expose typed projection facts', () => {
   );
   assert.equal(schedulerTimelinePayloadLabel({ payload_json: '{}' }), 'Metadata only');
   assert.equal(schedulerTimelinePayloadLabel({ payload_json: '{"queue":"default"}' }), 'Payload captured');
+});
+
+test('scheduler timeline filters use typed event kind and source fields', () => {
+  const events = [
+    timelineEvent({ event_id: 'event-queue', event_kind: 'scheduler_queue_placement', source_component: 'scheduler' }),
+    timelineEvent({ event_id: 'event-model', event_kind: 'scheduler_model_lifecycle_changed', source_component: 'workflow_service' }),
+    timelineEvent({ event_id: 'event-started', event_kind: 'run_started', source_component: 'runtime' }),
+  ];
+
+  assert.deepEqual(schedulerTimelineKindFilterOptions(events), [
+    'run_started',
+    'scheduler_model_lifecycle_changed',
+    'scheduler_queue_placement',
+  ]);
+  assert.deepEqual(schedulerTimelineSourceFilterOptions(events), [
+    'runtime',
+    'scheduler',
+    'workflow_service',
+  ]);
+  assert.deepEqual(
+    filterSchedulerTimelineEvents(events, {
+      eventKind: 'scheduler_model_lifecycle_changed',
+      sourceComponent: 'workflow_service',
+    }).map((event) => event.event_id),
+    ['event-model'],
+  );
 });
 
 test('buildSchedulerRunListQuery sends backend-supported filters only', () => {

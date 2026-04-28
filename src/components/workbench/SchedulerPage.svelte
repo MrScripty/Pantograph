@@ -22,6 +22,7 @@
   } from '../../stores/schedulerRunListStore';
   import {
     buildSchedulerRunListQuery,
+    filterSchedulerTimelineEvents,
     filterAndSortSchedulerRuns,
     formatSchedulerProjectionFreshness,
     formatSchedulerPolicyLabel,
@@ -45,6 +46,8 @@
     schedulerRunSupportsAdminQueueControls,
     schedulerRunSupportsQueueControls,
     schedulerTimelinePayloadLabel,
+    schedulerTimelineKindFilterOptions,
+    schedulerTimelineSourceFilterOptions,
   } from './schedulerPagePresenters';
   import { formatWorkflowCommandError } from './workflowErrorPresenters';
 
@@ -60,6 +63,8 @@
   let actionError = $state<string | null>(null);
   let actionMessage = $state<string | null>(null);
   let adminPriorityInput = $state('0');
+  let timelineKindFilter = $state('all');
+  let timelineSourceFilter = $state('all');
   let adminPriorityRunId = '';
   let timelineRequestSerial = 0;
   let activeTimelineRunId = $state<string | null>(null);
@@ -68,6 +73,14 @@
   let eventUnsubscribe: (() => void) | null = null;
   let activeRunFilterKey = '';
   let displayedRuns = $derived(filterAndSortSchedulerRuns(runs, $schedulerRunFilters));
+  let displayedTimelineEvents = $derived(
+    filterSchedulerTimelineEvents(timelineEvents, {
+      eventKind: timelineKindFilter,
+      sourceComponent: timelineSourceFilter,
+    }),
+  );
+  let timelineKindOptions = $derived(schedulerTimelineKindFilterOptions(timelineEvents));
+  let timelineSourceOptions = $derived(schedulerTimelineSourceFilterOptions(timelineEvents));
   let schedulerPolicyOptions = $derived(schedulerPolicyFilterOptions(runs));
   let retentionPolicyOptions = $derived(schedulerRetentionFilterOptions(runs));
   let clientOptions = $derived(schedulerClientFilterOptions(runs));
@@ -657,6 +670,43 @@
       {/if}
 
       <div class="border-b border-neutral-900 px-4 py-3">
+        <div class="mb-3 grid grid-cols-2 gap-2">
+          <label class="min-w-0 text-[11px] uppercase tracking-[0.18em] text-neutral-600">
+            Kind
+            <select
+              aria-label="Scheduler timeline kind filter"
+              class="mt-1 w-full rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs normal-case tracking-normal text-neutral-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+              value={timelineKindFilter}
+              onchange={(event) => {
+                timelineKindFilter = eventValue(event);
+              }}
+              disabled={timelineEvents.length === 0}
+            >
+              <option value="all">All</option>
+              {#each timelineKindOptions as eventKind (eventKind)}
+                <option value={eventKind}>{formatSchedulerTimelineKind({ event_kind: eventKind })}</option>
+              {/each}
+            </select>
+          </label>
+          <label class="min-w-0 text-[11px] uppercase tracking-[0.18em] text-neutral-600">
+            Source
+            <select
+              aria-label="Scheduler timeline source filter"
+              class="mt-1 w-full rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs normal-case tracking-normal text-neutral-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+              value={timelineSourceFilter}
+              onchange={(event) => {
+                timelineSourceFilter = eventValue(event);
+              }}
+              disabled={timelineEvents.length === 0}
+            >
+              <option value="all">All</option>
+              {#each timelineSourceOptions as sourceComponent (sourceComponent)}
+                <option value={sourceComponent}>{formatSchedulerTimelineSource({ source_component: sourceComponent })}</option>
+              {/each}
+            </select>
+          </label>
+        </div>
+
         <div class="flex flex-wrap items-center gap-2">
           <button
             type="button"
@@ -745,9 +795,11 @@
         <div class="px-4 py-8 text-sm text-neutral-500">Loading timeline</div>
       {:else if timelineEvents.length === 0}
         <div class="px-4 py-8 text-sm text-neutral-500">No scheduler timeline events projected</div>
+      {:else if displayedTimelineEvents.length === 0}
+        <div class="px-4 py-8 text-sm text-neutral-500">No matching scheduler timeline events</div>
       {:else}
         <div class="divide-y divide-neutral-900">
-          {#each timelineEvents as event (event.event_id)}
+          {#each displayedTimelineEvents as event (event.event_id)}
             <article class="px-4 py-3">
               <div class="flex items-center justify-between gap-3">
                 <div class="font-mono text-[11px] text-neutral-500">seq {event.event_seq}</div>
