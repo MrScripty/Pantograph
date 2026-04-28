@@ -367,7 +367,9 @@ values. The local status API now reports local active/queued run id lists, and
 the page uses those backend facts to show whether the selected run is running
 or queued locally. Runtime/model/cache highlights for the selected run remain
 open because the local status API does not yet expose run-keyed residency or
-cache facts.
+cache facts. The page also reads the selected run's scheduler timeline
+projection so local scheduler/system activity can be inspected without raw
+ledger access.
 The Node Editor page has a truthful unavailable state.
 
 ## Ownership And Lifecycle Note
@@ -494,9 +496,9 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
   fields and payload availability only. It does not parse `payload_json` because
   richer decision facets should be promoted into typed projection fields.
 - Network selected-run context now shows backend-reported local running/queued
-  placement, but it is not yet linked to runtime/model residency because
-  `WorkflowLocalNetworkStatusQueryResponse` does not expose run-keyed resource
-  or cache facts.
+  placement and scheduler timeline events, but it is not yet linked to
+  runtime/model residency because `WorkflowLocalNetworkStatusQueryResponse`
+  does not expose run-keyed resource or cache facts.
 - Scheduler timeline rows currently show typed event labels, summary/detail
   text, and payload availability only. The run table shows scheduler and
   retention policy IDs, queue position, priority, estimate, and scheduler

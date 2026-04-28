@@ -1,6 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { RefreshCw } from 'lucide-svelte';
+  import type {
+    ProjectionStateRecord,
+    SchedulerTimelineProjectionRecord,
+  } from '../../services/diagnostics/types';
   import type { WorkflowLocalNetworkStatusQueryResponse } from '../../services/workflow/types';
   import { workflowService } from '../../services/workflow/WorkflowService';
   import { activeWorkflowRun } from '../../stores/workbenchStore';
@@ -14,13 +18,29 @@
     formatSessionLoad,
     formatTransportState,
   } from './networkPagePresenters';
+  import {
+    formatSchedulerProjectionFreshness,
+    formatSchedulerTimelineKind,
+    formatSchedulerTimelineSource,
+    formatSchedulerTimestamp,
+    schedulerTimelinePayloadLabel,
+  } from './schedulerPagePresenters';
   import { formatWorkflowCommandError } from './workflowErrorPresenters';
 
   let status = $state<WorkflowLocalNetworkStatusQueryResponse | null>(null);
+  let timelineEvents = $state<SchedulerTimelineProjectionRecord[]>([]);
+  let timelineProjectionState = $state<ProjectionStateRecord | null>(null);
   let loading = $state(false);
+  let timelineLoading = $state(false);
   let error = $state<string | null>(null);
+  let timelineError = $state<string | null>(null);
   let localNode = $derived(status?.local_node ?? null);
   let factRows = $derived(localNode ? buildNetworkFactRows(localNode) : []);
+  let timelineRequestSerial = 0;
+
+  function activeRunId(): string | null {
+    return $activeWorkflowRun?.workflow_run_id ?? null;
+  }
 
   async function refreshStatus(): Promise<void> {
     loading = true;
@@ -37,8 +57,52 @@
     }
   }
 
+  async function refreshTimeline(runId = activeRunId()): Promise<void> {
+    const requestSerial = ++timelineRequestSerial;
+    timelineError = null;
+
+    if (!runId) {
+      timelineEvents = [];
+      timelineProjectionState = null;
+      timelineLoading = false;
+      return;
+    }
+
+    timelineLoading = true;
+    try {
+      const response = await workflowService.querySchedulerTimeline({
+        workflow_run_id: runId,
+        limit: 24,
+      });
+      if (requestSerial !== timelineRequestSerial) {
+        return;
+      }
+      timelineEvents = response.events;
+      timelineProjectionState = response.projection_state;
+    } catch (refreshError) {
+      if (requestSerial !== timelineRequestSerial) {
+        return;
+      }
+      timelineError = formatWorkflowCommandError(refreshError);
+      timelineEvents = [];
+      timelineProjectionState = null;
+    } finally {
+      if (requestSerial === timelineRequestSerial) {
+        timelineLoading = false;
+      }
+    }
+  }
+
+  async function refreshNetworkPage(): Promise<void> {
+    await Promise.all([refreshStatus(), refreshTimeline()]);
+  }
+
   onMount(() => {
     void refreshStatus();
+  });
+
+  $effect(() => {
+    void refreshTimeline(activeRunId());
   });
 </script>
 
@@ -53,10 +117,10 @@
     <button
       type="button"
       class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
-      onclick={() => refreshStatus()}
-      disabled={loading}
+      onclick={() => refreshNetworkPage()}
+      disabled={loading || timelineLoading}
     >
-      <RefreshCw size={14} aria-hidden="true" class={loading ? 'animate-spin' : ''} />
+      <RefreshCw size={14} aria-hidden="true" class={loading || timelineLoading ? 'animate-spin' : ''} />
       Refresh
     </button>
   </div>
@@ -211,6 +275,50 @@
                       {/each}
                     </tbody>
                   </table>
+                </div>
+              {/if}
+            </section>
+
+            <section class="rounded border border-neutral-800 bg-neutral-900/50">
+              <div class="flex items-start justify-between gap-3 border-b border-neutral-800 px-4 py-3">
+                <div class="min-w-0">
+                  <h2 class="text-sm font-semibold text-neutral-100">Selected Run Events</h2>
+                  <div class="mt-1 truncate text-xs text-neutral-500">
+                    {formatSchedulerProjectionFreshness(timelineProjectionState)}
+                  </div>
+                </div>
+                {#if timelineLoading}
+                  <RefreshCw size={12} aria-hidden="true" class="mt-1 shrink-0 animate-spin text-neutral-500" />
+                {/if}
+              </div>
+              {#if timelineError}
+                <div class="border-b border-red-900 bg-red-950/50 px-4 py-2 text-sm text-red-200">{timelineError}</div>
+              {/if}
+              {#if !$activeWorkflowRun}
+                <div class="px-4 py-6 text-sm text-neutral-500">No active run selected</div>
+              {:else if timelineLoading && timelineEvents.length === 0}
+                <div class="px-4 py-6 text-sm text-neutral-500">Loading selected-run events</div>
+              {:else if timelineEvents.length === 0}
+                <div class="px-4 py-6 text-sm text-neutral-500">No selected-run scheduler events projected</div>
+              {:else}
+                <div class="divide-y divide-neutral-900">
+                  {#each timelineEvents as event (event.event_id)}
+                    <div class="px-4 py-3">
+                      <div class="flex flex-wrap items-center gap-2">
+                        <span class="text-sm font-medium text-neutral-100">{formatSchedulerTimelineKind(event)}</span>
+                        <span class="rounded border border-neutral-800 px-1.5 py-0.5 text-[11px] text-neutral-500">
+                          {schedulerTimelinePayloadLabel(event)}
+                        </span>
+                      </div>
+                      <div class="mt-1 text-xs text-neutral-500">
+                        {formatSchedulerTimelineSource(event)} · {formatSchedulerTimestamp(event.occurred_at_ms)}
+                      </div>
+                      <div class="mt-1 text-xs text-neutral-300">{event.summary}</div>
+                      {#if event.detail}
+                        <div class="mt-1 text-xs text-neutral-500">{event.detail}</div>
+                      {/if}
+                    </div>
+                  {/each}
                 </div>
               {/if}
             </section>
