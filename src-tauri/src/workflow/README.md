@@ -112,6 +112,9 @@ state inputs for internal orchestration. Tauri command entrypoints retain their
 framework-injected state signatures for registration compatibility, with scoped
 lint expectations documenting that boundary exception instead of propagating
 long positional argument lists through runtime helpers.
+Execution-session queue cancel, reprioritize, and push-front commands stay
+thin transport wrappers over `pantograph-workflow-service`; Tauri registers the
+commands but does not compute queue priority, authority, or audit outcomes.
 The legacy Tauri-local node registry mirror has also been removed; definition
 commands now use the service-owned registry directly.
 The legacy Tauri-local execution manager has been removed; undo/redo and

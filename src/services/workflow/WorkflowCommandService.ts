@@ -14,6 +14,8 @@ import type {
 import type {
   WorkflowSessionQueueCancelRequest,
   WorkflowSessionQueueCancelResponse,
+  WorkflowSessionQueuePushFrontRequest,
+  WorkflowSessionQueuePushFrontResponse,
   WorkflowSessionQueueReprioritizeRequest,
   WorkflowSessionQueueReprioritizeResponse,
 } from './types.ts';
@@ -44,6 +46,19 @@ export class WorkflowCommandService extends WorkflowProjectionService {
 
     return invokeWorkflowCommand<WorkflowSessionQueueReprioritizeResponse>(
       'workflow_reprioritize_execution_session_queue_item',
+      { request },
+    );
+  }
+
+  async pushSessionQueueItemToFront(
+    request: WorkflowSessionQueuePushFrontRequest,
+  ): Promise<WorkflowSessionQueuePushFrontResponse> {
+    if (USE_WORKFLOW_MOCKS) {
+      return { ok: true, priority: 1 };
+    }
+
+    return invokeWorkflowCommand<WorkflowSessionQueuePushFrontResponse>(
+      'workflow_push_execution_session_queue_item_to_front',
       { request },
     );
   }

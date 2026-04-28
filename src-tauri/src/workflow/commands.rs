@@ -389,6 +389,18 @@ pub async fn workflow_reprioritize_execution_session_queue_item(
 }
 
 #[command]
+pub async fn workflow_push_execution_session_queue_item_to_front(
+    request: pantograph_workflow_service::WorkflowExecutionSessionQueuePushFrontRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<pantograph_workflow_service::WorkflowExecutionSessionQueuePushFrontResponse, String> {
+    super::headless_workflow_commands::workflow_push_execution_session_queue_item_to_front(
+        request,
+        workflow_service,
+    )
+    .await
+}
+
+#[command]
 pub async fn workflow_set_execution_session_keep_alive(
     request: pantograph_workflow_service::WorkflowExecutionSessionKeepAliveRequest,
     app: AppHandle,

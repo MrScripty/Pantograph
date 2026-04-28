@@ -115,6 +115,10 @@ capability and execution facts, and this crate may emit reservation lifecycle
 signals into that registry when a host injects one. Registry ownership still
 belongs to a higher Pantograph application-layer coordinator rather than to this
 embedded-runtime crate.
+Workflow-service facade methods exposed by this crate, including
+execution-session queue cancel, reprioritize, and push-front, must remain
+delegating methods; scheduler authority and diagnostics events stay in
+`pantograph-workflow-service`.
 
 ## Alternatives Rejected
 - Resolve executable paths directly from `ModelRecord.metadata`.

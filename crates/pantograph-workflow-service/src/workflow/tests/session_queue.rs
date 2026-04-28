@@ -169,6 +169,43 @@ async fn workflow_execution_session_queue_control_records_typed_events() {
         .await
         .expect("reprioritize queue item");
 
+    let (push_blocker_id, push_id) = {
+        let mut store = service
+            .session_store
+            .lock()
+            .expect("session store lock poisoned");
+        let push_blocker_id = store
+            .enqueue_run(&created.session_id, &request)
+            .expect("enqueue push blocker run");
+        let push_id = store
+            .enqueue_run(&created.session_id, &request)
+            .expect("enqueue push run");
+        (push_blocker_id, push_id)
+    };
+    let push_response = service
+        .workflow_push_execution_session_queue_item_to_front(
+            WorkflowExecutionSessionQueuePushFrontRequest {
+                session_id: created.session_id.clone(),
+                workflow_run_id: push_id.clone(),
+            },
+        )
+        .await
+        .expect("push queue item to front");
+    assert_eq!(push_response.priority, 10);
+    let pushed_items = {
+        let store = service
+            .session_store
+            .lock()
+            .expect("session store lock poisoned");
+        store
+            .list_queue(&created.session_id)
+            .expect("list pushed queue")
+    };
+    assert_eq!(pushed_items[0].workflow_run_id, push_id);
+    assert!(pushed_items
+        .iter()
+        .any(|item| item.workflow_run_id == push_blocker_id));
+
     service
         .workflow_cancel_execution_session_queue_item(WorkflowExecutionSessionQueueCancelRequest {
             session_id: created.session_id.clone(),
@@ -203,7 +240,7 @@ async fn workflow_execution_session_queue_control_records_typed_events() {
                 == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerQueueControl
         })
         .collect::<Vec<_>>();
-    assert_eq!(queue_control_events.len(), 4);
+    assert_eq!(queue_control_events.len(), 5);
     assert_eq!(
         queue_control_events[0]
             .workflow_run_id
@@ -228,18 +265,27 @@ async fn workflow_execution_session_queue_control_records_typed_events() {
         .contains("\"new_priority\":9"));
     assert!(queue_control_events[2]
         .payload_json
-        .contains("\"action\":\"cancel\""));
+        .contains("\"action\":\"push_to_front\""));
     assert!(queue_control_events[2]
         .payload_json
-        .contains("\"outcome\":\"denied\""));
-    assert!(queue_control_events[2].payload_json.contains("not found"));
+        .contains("\"outcome\":\"accepted\""));
+    assert!(queue_control_events[2]
+        .payload_json
+        .contains("\"new_priority\":10"));
     assert!(queue_control_events[3]
+        .payload_json
+        .contains("\"action\":\"cancel\""));
+    assert!(queue_control_events[3]
+        .payload_json
+        .contains("\"outcome\":\"denied\""));
+    assert!(queue_control_events[3].payload_json.contains("not found"));
+    assert!(queue_control_events[4]
         .payload_json
         .contains("\"action\":\"reprioritize\""));
-    assert!(queue_control_events[3]
+    assert!(queue_control_events[4]
         .payload_json
         .contains("\"outcome\":\"denied\""));
-    assert!(queue_control_events[3]
+    assert!(queue_control_events[4]
         .payload_json
         .contains("\"new_priority\":3"));
 }

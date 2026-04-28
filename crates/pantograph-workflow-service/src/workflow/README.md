@@ -21,7 +21,7 @@ public exports out of the service crate.
 | `runtime_preflight.rs` | Runtime requirement matching, issue formatting, and preflight warning collection. |
 | `session_execution_api.rs` | Workflow session creation and queued session run orchestration facade methods. |
 | `session_lifecycle_api.rs` | Workflow stale cleanup, stale cleanup worker, keep-alive, and close-session facade methods. |
-| `session_queue_api.rs` | Workflow session status, queue inspection, scheduler snapshot, cancel, and reprioritize facade methods. |
+| `session_queue_api.rs` | Workflow session status, queue inspection, scheduler snapshot, cancel, reprioritize, and push-front facade methods. |
 | `session_runtime.rs` | Session runtime preflight cache checks, runtime-capability fingerprinting, runtime loaded-state invalidation, runtime loading, unload-candidate selection, and affinity refresh helpers. |
 | `service_config.rs` | Workflow service construction, capacity-limit configuration, diagnostics-provider setup, and session-store guard helpers. |
 | `tests/` | Behavior-focused workflow facade test modules split from the legacy monolithic test module. |
@@ -236,9 +236,10 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
 - Run-list query responses include comparison facets from backend
   `run_list_projection` rows for workflow version, status, scheduler policy,
   and retention policy.
-- Queue cancel and reprioritize commands emit typed scheduler queue-control
-  events when diagnostics are configured. Accepted and denied outcomes must be
-  recorded after the scheduler store makes the authority decision.
+- Queue cancel, reprioritize, and push-front commands emit typed scheduler
+  queue-control events when diagnostics are configured. Accepted and denied
+  outcomes must be recorded after the scheduler store makes the authority
+  decision.
 - Workflow-session execution emits typed scheduler delay events for runtime
   admission waits when diagnostics ledger storage is configured. The event is
   recorded outside scheduler-store locks and is projected into run status,

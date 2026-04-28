@@ -103,6 +103,9 @@ improvements and backend-owned grouping DTOs over local adapter exceptions.
   validates auditable repository identifiers and transports the typed response.
 - Desktop composition must not register parallel workflow execution-state
   managers when the workflow service owns the active session state.
+- Workflow execution-session queue commands must be registered as transport
+  entrypoints only; priority calculation, push-front behavior, and audit
+  outcomes stay in the workflow service.
 - Mechanical lint fixes must not change command payload shape, runtime
   ownership, or backend error categories.
 

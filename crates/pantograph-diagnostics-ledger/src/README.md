@@ -99,8 +99,9 @@ semantics.
 - Scheduler timeline events include typed delay and model lifecycle facts when
   those events are emitted. Delay state may also update the run-list status and
   scheduler reason through projection drains.
-- Scheduler queue-control events use typed accepted/denied outcomes so refused
-  queue mutations remain auditable without parsing service error text.
+- Scheduler queue-control events use typed cancel, reprioritize, and
+  push-front actions plus typed accepted/denied outcomes so refused queue
+  mutations remain auditable without parsing service error text.
 - Scheduler model lifecycle transitions include load failure and unload failure
   states so runtime admission and teardown errors can remain typed audit facts
   instead of free-form timeline text.

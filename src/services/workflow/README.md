@@ -258,7 +258,8 @@ const preview = await workflowService.previewNodeInsertOnEdge(
   `WorkflowServiceError.code`. Non-envelope IPC or setup failures are
   classified as `transport_error` so they are not confused with backend policy
   rejections.
-- `updateRetentionPolicy`, `cancelSessionQueueItem`, and
-  `reprioritizeSessionQueueItem` resolve only with backend response DTOs.
+- `updateRetentionPolicy`, `cancelSessionQueueItem`,
+  `reprioritizeSessionQueueItem`, and `pushSessionQueueItemToFront` resolve
+  only with backend response DTOs.
   Callers refresh projections or apply the returned backend policy; they do not
   optimistically mutate queue rows or retention facts.

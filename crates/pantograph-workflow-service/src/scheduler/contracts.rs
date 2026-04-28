@@ -296,6 +296,22 @@ pub struct WorkflowExecutionSessionQueueCancelResponse {
     pub ok: bool,
 }
 
+/// Session queue push-front request.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowExecutionSessionQueuePushFrontRequest {
+    pub session_id: String,
+    pub workflow_run_id: String,
+}
+
+/// Session queue push-front response.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowExecutionSessionQueuePushFrontResponse {
+    pub ok: bool,
+    pub priority: i32,
+}
+
 /// Session queue reprioritization request.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]

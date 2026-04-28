@@ -94,7 +94,8 @@ transient UI state without becoming backend scheduler policy.
   facts from raw events.
 - Scheduler queue action buttons must be gated by projected workflow
   execution-session ids and backend run status. They must call workflow-service
-  queue commands and refresh projections after confirmed backend responses.
+  queue cancel or push-front commands and refresh projections after confirmed
+  backend responses.
 - Scheduler status presentation includes delayed rows from the run-list
   projection. Components must treat delayed as backend-authored state rather
   than inferring it from scheduler reason text.

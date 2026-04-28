@@ -8,6 +8,7 @@ import type {
 } from '../diagnostics/types.ts';
 import type {
   WorkflowSessionQueueCancelResponse,
+  WorkflowSessionQueuePushFrontResponse,
   WorkflowSessionQueueReprioritizeResponse,
 } from './types.ts';
 
@@ -62,16 +63,21 @@ test('updateRetentionPolicy returns backend policy state without client-side opt
   }
 });
 
-test('queue cancel and reprioritize methods return backend command results exactly', async () => {
+test('queue control methods return backend command results exactly', async () => {
   installWindowMock();
   const calls: Array<{ cmd: string; args: unknown }> = [];
   const cancelResponse: WorkflowSessionQueueCancelResponse = { ok: true };
   const reprioritizeResponse: WorkflowSessionQueueReprioritizeResponse = { ok: true };
+  const pushFrontResponse: WorkflowSessionQueuePushFrontResponse = { ok: true, priority: 11 };
   mockIPC((cmd, args) => {
     calls.push({ cmd, args });
-    return cmd === 'workflow_cancel_execution_session_queue_item'
-      ? cancelResponse
-      : reprioritizeResponse;
+    if (cmd === 'workflow_cancel_execution_session_queue_item') {
+      return cancelResponse;
+    }
+    if (cmd === 'workflow_reprioritize_execution_session_queue_item') {
+      return reprioritizeResponse;
+    }
+    return pushFrontResponse;
   });
 
   try {
@@ -85,9 +91,14 @@ test('queue cancel and reprioritize methods return backend command results exact
       workflow_run_id: 'run-b',
       priority: 10,
     });
+    const pushFront = await service.pushSessionQueueItemToFront({
+      session_id: 'session-a',
+      workflow_run_id: 'run-c',
+    });
 
     assert.deepEqual(cancel, cancelResponse);
     assert.deepEqual(reprioritize, reprioritizeResponse);
+    assert.deepEqual(pushFront, pushFrontResponse);
     assert.deepEqual(calls, [
       {
         cmd: 'workflow_cancel_execution_session_queue_item',
@@ -105,6 +116,15 @@ test('queue cancel and reprioritize methods return backend command results exact
             session_id: 'session-a',
             workflow_run_id: 'run-b',
             priority: 10,
+          },
+        },
+      },
+      {
+        cmd: 'workflow_push_execution_session_queue_item_to_front',
+        args: {
+          request: {
+            session_id: 'session-a',
+            workflow_run_id: 'run-c',
           },
         },
       },

@@ -12,7 +12,9 @@ use super::{
     WorkflowExecutionSessionInspectionRequest, WorkflowExecutionSessionInspectionResponse,
     WorkflowExecutionSessionQueueCancelRequest, WorkflowExecutionSessionQueueCancelResponse,
     WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionQueueListRequest,
-    WorkflowExecutionSessionQueueListResponse, WorkflowExecutionSessionQueueReprioritizeRequest,
+    WorkflowExecutionSessionQueueListResponse, WorkflowExecutionSessionQueuePushFrontRequest,
+    WorkflowExecutionSessionQueuePushFrontResponse,
+    WorkflowExecutionSessionQueueReprioritizeRequest,
     WorkflowExecutionSessionQueueReprioritizeResponse, WorkflowExecutionSessionStatusRequest,
     WorkflowExecutionSessionStatusResponse, WorkflowExecutionSessionSummary, WorkflowHost,
     WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse, WorkflowService,
@@ -254,6 +256,61 @@ impl WorkflowService {
         }
     }
 
+    pub async fn workflow_push_execution_session_queue_item_to_front(
+        &self,
+        request: WorkflowExecutionSessionQueuePushFrontRequest,
+    ) -> Result<WorkflowExecutionSessionQueuePushFrontResponse, WorkflowServiceError> {
+        let session_id = request.session_id.trim();
+        if session_id.is_empty() {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "session_id must be non-empty".to_string(),
+            ));
+        }
+        let workflow_run_id = request.workflow_run_id.trim();
+        if workflow_run_id.is_empty() {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "workflow_run_id must be non-empty".to_string(),
+            ));
+        }
+        let (session, previous_item, push_result) = {
+            let mut store = self.session_store_guard()?;
+            let session = store.session_summary(session_id)?;
+            let previous_item = store
+                .list_queue(session_id)?
+                .into_iter()
+                .find(|item| item.workflow_run_id == workflow_run_id);
+            let push_result = store.push_queue_item_to_front(session_id, workflow_run_id);
+            (session, previous_item, push_result)
+        };
+        match push_result {
+            Ok(priority) => {
+                self.record_scheduler_queue_control_event_if_configured(
+                    &session,
+                    workflow_run_id,
+                    previous_item.as_ref(),
+                    SchedulerQueueControlAction::PushToFront,
+                    SchedulerQueueControlOutcome::Accepted,
+                    Some(priority),
+                    Some("queue item pushed to front".to_string()),
+                )?;
+                Ok(WorkflowExecutionSessionQueuePushFrontResponse { ok: true, priority })
+            }
+            Err(error) => {
+                let reason = queue_control_denial_reason(&error);
+                self.record_scheduler_queue_control_event_if_configured(
+                    &session,
+                    workflow_run_id,
+                    previous_item.as_ref(),
+                    SchedulerQueueControlAction::PushToFront,
+                    SchedulerQueueControlOutcome::Denied,
+                    None,
+                    Some(reason),
+                )?;
+                Err(error)
+            }
+        }
+    }
+
     fn record_scheduler_queue_control_event_if_configured(
         &self,
         session: &WorkflowExecutionSessionSummary,
@@ -360,6 +417,11 @@ fn queue_control_denial_reason(error: &WorkflowServiceError) -> String {
         WorkflowServiceError::QueueItemNotFound(_) => "queue item not found".to_string(),
         WorkflowServiceError::InvalidRequest(message) if message.contains("currently running") => {
             "queue item currently running".to_string()
+        }
+        WorkflowServiceError::InvalidRequest(message)
+            if message.contains("priority ceiling reached") =>
+        {
+            "queue priority ceiling reached".to_string()
         }
         _ => "queue control denied".to_string(),
     }

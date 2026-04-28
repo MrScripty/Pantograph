@@ -9,6 +9,7 @@ use pantograph_workflow_service::{
     WorkflowErrorCode, WorkflowErrorEnvelope, WorkflowExecutionSessionCloseRequest,
     WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionKeepAliveRequest,
     WorkflowExecutionSessionQueueCancelRequest, WorkflowExecutionSessionQueueListRequest,
+    WorkflowExecutionSessionQueuePushFrontRequest,
     WorkflowExecutionSessionQueueReprioritizeRequest, WorkflowExecutionSessionRunRequest,
     WorkflowExecutionSessionStatusRequest, WorkflowGraphAddEdgeRequest,
     WorkflowGraphAddNodeRequest, WorkflowGraphConnectRequest, WorkflowGraphEditSessionCloseRequest,
@@ -290,6 +291,20 @@ impl FfiPantographRuntime {
         let response = self
             .runtime
             .workflow_reprioritize_execution_session_queue_item(request)
+            .await
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Push a queued workflow execution-session item to the front and return WorkflowExecutionSessionQueuePushFrontResponse JSON.
+    pub async fn workflow_push_session_queue_item_to_front(
+        &self,
+        request_json: String,
+    ) -> Result<String, FfiError> {
+        let request: WorkflowExecutionSessionQueuePushFrontRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .workflow_push_execution_session_queue_item_to_front(request)
             .await
             .map_err(map_workflow_service_error)?;
         serialize_response(&response)

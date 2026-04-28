@@ -10,6 +10,7 @@ use pantograph_workflow_service::{
     WorkflowExecutionSessionKeepAliveRequest, WorkflowExecutionSessionKeepAliveResponse,
     WorkflowExecutionSessionQueueCancelRequest, WorkflowExecutionSessionQueueCancelResponse,
     WorkflowExecutionSessionQueueListRequest, WorkflowExecutionSessionQueueListResponse,
+    WorkflowExecutionSessionQueuePushFrontRequest, WorkflowExecutionSessionQueuePushFrontResponse,
     WorkflowExecutionSessionQueueReprioritizeRequest,
     WorkflowExecutionSessionQueueReprioritizeResponse, WorkflowExecutionSessionRunRequest,
     WorkflowExecutionSessionStaleCleanupRequest, WorkflowExecutionSessionStaleCleanupResponse,
@@ -341,6 +342,16 @@ pub async fn workflow_reprioritize_execution_session_queue_item(
 ) -> Result<WorkflowExecutionSessionQueueReprioritizeResponse, String> {
     workflow_service
         .workflow_reprioritize_execution_session_queue_item(request)
+        .await
+        .map_err(workflow_error_json)
+}
+
+pub async fn workflow_push_execution_session_queue_item_to_front(
+    request: WorkflowExecutionSessionQueuePushFrontRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowExecutionSessionQueuePushFrontResponse, String> {
+    workflow_service
+        .workflow_push_execution_session_queue_item_to_front(request)
         .await
         .map_err(workflow_error_json)
 }

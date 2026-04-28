@@ -220,12 +220,13 @@ Library/Pumas usage aggregates with projection freshness state. Retention
 policy query is exposed for GUI retention settings/inspectors. Local Network
 status query is exposed with local-only CPU/memory/disk/network-interface
 facts, scheduler load, future peer DTO placeholders, and explicit degraded GPU
-state. Frontend queue cancel/reprioritize methods now call the backend-owned
-execution-session queue commands, and stale frontend session command names were
-corrected. Retention policy updates now use a backend command that changes the
-global standard policy and records a typed `retention.policy_changed` audit
-event. Run-list and run-detail projection DTOs now expose typed scheduler queue
-position, priority, estimate confidence, estimated queue wait, estimated
+state. Frontend queue cancel/reprioritize/push-front methods now call the
+backend-owned execution-session queue commands, and stale frontend session
+command names were corrected. Retention policy updates now use a backend
+command that changes the global standard policy and records a typed
+`retention.policy_changed` audit event. Run-list and run-detail projection DTOs
+now expose typed scheduler queue position, priority, estimate confidence,
+estimated queue wait, estimated
 duration, and scheduler reason fields rather than requiring consumers to parse
 estimate or queue-placement payload JSON for those facts. Broader command
 boundaries remain pending.
@@ -293,8 +294,8 @@ projections while owning only transient UI state.
   DTOs.
 - [x] Add frontend retention policy update method and TypeScript DTOs.
 - [x] Add the initial local Network status service method and TypeScript DTOs.
-- [x] Add frontend methods and DTOs for scoped queue cancel/reprioritize
-  actions.
+- [x] Add frontend methods and DTOs for scoped queue cancel/reprioritize/
+  push-front actions.
 - [x] Add active-run store as transient UI state.
 - [x] Add focused stores for run list filters/sort/column state.
 - [x] Preserve backend error categories through presenters.

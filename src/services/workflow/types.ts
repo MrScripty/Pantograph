@@ -463,6 +463,16 @@ export interface WorkflowSessionQueueCancelResponse {
   ok: boolean;
 }
 
+export interface WorkflowSessionQueuePushFrontRequest {
+  session_id: string;
+  workflow_run_id: string;
+}
+
+export interface WorkflowSessionQueuePushFrontResponse {
+  ok: boolean;
+  priority: number;
+}
+
 export interface WorkflowSessionQueueReprioritizeRequest {
   session_id: string;
   workflow_run_id: string;

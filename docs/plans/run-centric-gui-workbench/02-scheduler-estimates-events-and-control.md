@@ -229,10 +229,11 @@ The first scheduler timeline projection now drains those scheduler events plus
 Scheduler delay and model lifecycle events now have validated ledger payloads
 and materialized timeline summaries. Workflow-session runtime admission waits
 now emit one durable `scheduler.run_delayed` event per wait. Queue
-cancel/reprioritize controls now emit typed `scheduler.queue_control` events
-with accepted outcome, actor scope, previous queue position, previous priority,
-new priority where applicable, and a bounded reason. Run-list, run-detail, and
-scheduler timeline projections now materialize those queue-control events.
+cancel/reprioritize/push-front controls now emit typed
+`scheduler.queue_control` events with accepted outcome, actor scope, previous
+queue position, previous priority, new priority where applicable, and a bounded
+reason. Run-list, run-detail, and scheduler timeline projections now
+materialize those queue-control events.
 Queue admission now emits a typed `scheduler.run_admitted` event before
 `run.started`, so scheduler admission decisions are auditable without making
 `run.*` lifecycle events carry scheduler control semantics. Workflow-session
@@ -269,16 +270,18 @@ Pantograph GUI privileged actions.
 - Tests prove scheduler can deny or normalize requested priorities based on
   policy.
 
-**Status:** In progress. The existing backend queue cancel and reprioritize
-APIs still enforce session ownership through session id plus run id matching,
-and they now record accepted and denied queue-control facts in the typed
-diagnostics ledger when diagnostics are configured. The Scheduler page now
-gates its first cancel/front controls on projected workflow execution-session
-ids before calling those backend commands. These events currently use the
-`backend_control_api` actor scope because this slice does not introduce the
-future client/admin privilege split. Clone/resubmit, privileged cross-session
-admin controls, richer actor scopes, and policy-normalized priority evidence
-remain pending.
+**Status:** In progress. The existing backend queue cancel, reprioritize, and
+push-front APIs still enforce session ownership through session id plus run id
+matching, and they now record accepted and denied queue-control facts in the
+typed diagnostics ledger when diagnostics are configured. The Scheduler page
+now gates its first cancel/front controls on projected workflow
+execution-session ids before calling those backend commands. Push-front is a
+scheduler-owned operation that computes the next priority from the current
+session queue and denies the request if the priority ceiling prevents a real
+move. These events currently use the `backend_control_api` actor scope because
+this slice does not introduce the future client/admin privilege split.
+Clone/resubmit, privileged cross-session admin controls, and richer actor
+scopes remain pending.
 
 ## Ownership And Lifecycle Note
 

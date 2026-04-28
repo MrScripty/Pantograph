@@ -54,6 +54,8 @@ and error projection, while workflow semantics stay in
   module wiring.
 - Request/response JSON contracts remain backend-owned by
   `pantograph-workflow-service`.
+- Direct execution-session queue methods, including push-front, must delegate
+  to `pantograph-embedded-runtime` and preserve backend JSON response shapes.
 - Workflow run response JSON exposes `workflow_run_id`; binding-facing request
   JSON must not provide caller-authored run ids or workflow-name diagnostics
   fields.

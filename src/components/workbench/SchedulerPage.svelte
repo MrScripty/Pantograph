@@ -193,12 +193,11 @@
     actionError = null;
     actionMessage = null;
     try {
-      await workflowService.reprioritizeSessionQueueItem({
+      await workflowService.pushSessionQueueItemToFront({
         session_id: run.workflow_execution_session_id as string,
         workflow_run_id: run.workflow_run_id,
-        priority: 2_147_483_647,
       });
-      actionMessage = 'Priority override accepted by scheduler';
+      actionMessage = 'Push-front accepted by scheduler';
       await refreshRuns();
       await refreshTimeline(run.workflow_run_id);
     } catch (actionFailure) {

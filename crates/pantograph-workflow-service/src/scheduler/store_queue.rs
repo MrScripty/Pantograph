@@ -402,6 +402,66 @@ impl WorkflowExecutionSessionStore {
         Ok(())
     }
 
+    pub(crate) fn push_queue_item_to_front(
+        &mut self,
+        session_id: &str,
+        queue_id: &str,
+    ) -> Result<i32, WorkflowServiceError> {
+        let tick = self.next_tick();
+        let state = self.active.get_mut(session_id).ok_or_else(|| {
+            WorkflowServiceError::SessionNotFound(format!("session '{}' not found", session_id))
+        })?;
+
+        if state
+            .active_run
+            .as_ref()
+            .map(|active| active.workflow_run_id.as_str())
+            == Some(queue_id)
+        {
+            return Err(WorkflowServiceError::InvalidRequest(format!(
+                "queue item '{}' is currently running",
+                queue_id
+            )));
+        }
+
+        let Some(item_index) = state
+            .queue
+            .iter()
+            .position(|item| item.workflow_run_id == queue_id)
+        else {
+            return Err(WorkflowServiceError::QueueItemNotFound(format!(
+                "queue item '{}' not found in session '{}'",
+                queue_id, session_id
+            )));
+        };
+
+        let max_priority = state
+            .queue
+            .iter()
+            .map(|item| item.priority)
+            .max()
+            .unwrap_or(0);
+        if item_index == 0 {
+            Self::mark_session_access(state, tick);
+            return Ok(state.queue[item_index].priority);
+        }
+        let Some(priority) = max_priority.checked_add(1) else {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "queue priority ceiling reached".to_string(),
+            ));
+        };
+
+        let mut queued = state.queue.remove(item_index);
+        queued.priority = priority;
+        state.queue.insert(0, queued);
+        for item in state.queue.iter_mut().skip(1).take(item_index) {
+            item.starvation_bypass_count = item.starvation_bypass_count.saturating_add(1);
+        }
+        PriorityThenFifoSchedulerPolicy.refresh_queue(&mut state.queue);
+        Self::mark_session_access(state, tick);
+        Ok(priority)
+    }
+
     pub(super) fn admission_input_from_state(
         state: &WorkflowExecutionSessionRecord,
     ) -> WorkflowExecutionSessionAdmissionInput {

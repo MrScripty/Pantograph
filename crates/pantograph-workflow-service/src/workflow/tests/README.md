@@ -95,8 +95,8 @@ Use `workflow/tests/` for behavior-specific child modules under the parent
   capacity-rebalance unload events carry the selected candidate's model/runtime
   facts without depending on raw scheduler-store internals.
 - Session queue tests with diagnostics enabled must verify accepted and denied
-  queue-control events after the scheduler store decides whether a cancel or
-  reprioritize request is allowed.
+  queue-control events after the scheduler store decides whether a cancel,
+  reprioritize, or push-front request is allowed.
 - Session execution tests with attribution and diagnostics enabled must verify
   `run.snapshot_accepted` events carry the immutable workflow version and node
   behavior-version set before scheduler admission.

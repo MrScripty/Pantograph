@@ -8,7 +8,9 @@ use pantograph_workflow_service::{
     WorkflowExecutionSessionInspectionResponse, WorkflowExecutionSessionKeepAliveRequest,
     WorkflowExecutionSessionKeepAliveResponse, WorkflowExecutionSessionQueueCancelRequest,
     WorkflowExecutionSessionQueueCancelResponse, WorkflowExecutionSessionQueueListRequest,
-    WorkflowExecutionSessionQueueListResponse, WorkflowExecutionSessionQueueReprioritizeRequest,
+    WorkflowExecutionSessionQueueListResponse, WorkflowExecutionSessionQueuePushFrontRequest,
+    WorkflowExecutionSessionQueuePushFrontResponse,
+    WorkflowExecutionSessionQueueReprioritizeRequest,
     WorkflowExecutionSessionQueueReprioritizeResponse, WorkflowExecutionSessionRunRequest,
     WorkflowExecutionSessionStaleCleanupRequest, WorkflowExecutionSessionStaleCleanupResponse,
     WorkflowExecutionSessionStatusRequest, WorkflowExecutionSessionStatusResponse,
@@ -160,6 +162,15 @@ impl EmbeddedRuntime {
     ) -> Result<WorkflowExecutionSessionQueueReprioritizeResponse, WorkflowServiceError> {
         self.workflow_service
             .workflow_reprioritize_execution_session_queue_item(request)
+            .await
+    }
+
+    pub async fn workflow_push_execution_session_queue_item_to_front(
+        &self,
+        request: WorkflowExecutionSessionQueuePushFrontRequest,
+    ) -> Result<WorkflowExecutionSessionQueuePushFrontResponse, WorkflowServiceError> {
+        self.workflow_service
+            .workflow_push_execution_session_queue_item_to_front(request)
             .await
     }
 

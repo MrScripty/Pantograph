@@ -14,7 +14,7 @@ by `WorkflowService` so adapters do not become queue-policy owners.
 | `policy.rs` | Explicit scheduler ordering policy objects, internal admission-input/decision models, and stable decision vocabulary for queue placement and admission. |
 | `policy_tests.rs` | Scheduler priority, FIFO, starvation-protection, warm-reuse bypass, runtime-capacity, and admission-wait tests extracted from the production policy module. |
 | `store.rs` | In-memory scheduler session records, runtime-load state, runtime-unload candidate selection inputs, and stale-cleanup candidate logic. |
-| `store_queue.rs` | Queue listing, enqueue/cancel/reprioritize, admission-input construction, queued-run admission, and active-run finish transitions. |
+| `store_queue.rs` | Queue listing, enqueue/cancel/reprioritize/push-front, admission-input construction, queued-run admission, and active-run finish transitions. |
 | `store_admission.rs` | Scheduler store admission ETA projection helper used by queue diagnostics. |
 | `store_diagnostics.rs` | Scheduler snapshot diagnostics and runtime-diagnostics request projection helpers extracted from the store. |
 | `store_tests.rs` | Scheduler store admission-input and warm-session compatibility tests extracted from the production store module. |
@@ -30,7 +30,7 @@ future fairness, affinity, and diagnostics policy.
   transport-framework dependencies.
 - Public workflow-service contracts remain facade-first and additive.
 - Queue/session state needs one mutable owner so cancellation, reprioritizing,
-  cleanup, and runtime-load transitions do not split across modules.
+  push-front, cleanup, and runtime-load transitions do not split across modules.
 - Edit-session scheduler snapshots stay outside this directory; they may consume
   the same DTOs, but graph-edit lifecycle remains owned by `graph/`.
 
