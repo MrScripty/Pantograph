@@ -254,15 +254,24 @@ async fn workflow_execution_session_capacity_rebalance_preserves_shared_model_id
         .contains("\"transition\":\"unload_scheduled\""));
     assert!(capacity_rebalance_events[0]
         .payload_json
+        .contains("\"cache_state\":\"unload_requested\""));
+    assert!(capacity_rebalance_events[0]
+        .payload_json
         .contains("\"reason\":\"capacity rebalance selected loaded session\""));
     assert!(capacity_rebalance_events[1].event_seq > capacity_rebalance_events[0].event_seq);
     assert!(capacity_rebalance_events[1]
         .payload_json
         .contains("\"transition\":\"unload_started\""));
+    assert!(capacity_rebalance_events[1]
+        .payload_json
+        .contains("\"cache_state\":\"unload_requested\""));
     assert!(capacity_rebalance_events[2].event_seq > capacity_rebalance_events[1].event_seq);
     assert!(capacity_rebalance_events[2]
         .payload_json
         .contains("\"transition\":\"unload_completed\""));
+    assert!(capacity_rebalance_events[2]
+        .payload_json
+        .contains("\"cache_state\":\"unloaded\""));
 }
 
 #[tokio::test]

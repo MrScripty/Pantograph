@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft plan. Not implemented.
+In progress.
 
 ## Objective
 
@@ -123,7 +123,7 @@ logs or inferred in the frontend.
 - [x] Define `SchedulerEvent` event types as a typed diagnostic event family
   with allowlisted event kinds, schema versions, payload structs, source
   components, privacy classes, retention classes, and validation rules.
-- [ ] Define model/cache state enum used by estimates and events.
+- [x] Define model/cache state enum used by estimates and events.
 - [x] Define client action versus admin override event vocabulary.
 - [x] Confirm the shared typed diagnostic event ledger bootstrap is available
   before durable scheduler event persistence. If it is not available, execute
@@ -154,9 +154,11 @@ priority, estimate confidence, estimated queue wait, estimated duration, and
 scheduler reason fields from those events. The typed scheduler event family
 also has validated delay and model lifecycle payload contracts, including a
 model lifecycle transition enum, and the timeline projection can materialize
-those rows when emitted. Model/cache state vocabulary, lock-boundary
-documentation, broader scheduler authority vocabulary, and non-queued-run
-control paths remain pending.
+those rows when emitted. Scheduler estimates and model lifecycle events now
+carry a typed model/cache state vocabulary for unknown, not-required, cache
+hit/miss, load requested, loaded, unload requested, unloaded, and failed
+states. Lock-boundary documentation, broader scheduler authority vocabulary,
+and non-queued-run control paths remain pending.
 
 ### Milestone 2: Estimate Production
 
@@ -230,7 +232,8 @@ persisted through the typed event ledger for queued workflow-session runs.
 The first scheduler timeline projection now drains those scheduler events plus
 `run.snapshot_accepted` into materialized timeline rows by event cursor.
 Scheduler delay and model lifecycle events now have validated ledger payloads
-and materialized timeline summaries. Workflow-session runtime admission waits
+and materialized timeline summaries, including typed model/cache state details
+where emitters know them. Workflow-session runtime admission waits
 now emit one durable `scheduler.run_delayed` event per wait. Queue
 cancel/reprioritize/push-front controls now emit typed
 `scheduler.queue_control` events with accepted outcome, actor scope, previous
@@ -325,6 +328,8 @@ duplicate, unvalidated, or contradictory event streams.
 - Added materialized projection coverage for scheduler estimates,
   placements, delays, admissions, queue controls, and run lifecycle visibility
   required by current Scheduler page query boundaries.
+- Added a typed scheduler model/cache state enum to estimate and model
+  lifecycle payloads and timeline projection details.
 - Tightened scheduler timeline projection labels for queue-control events so
   page/API consumers receive explicit typed action, outcome, actor-scope,
   position, and priority summaries instead of enum debug formatting.

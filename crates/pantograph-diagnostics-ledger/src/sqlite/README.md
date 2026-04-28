@@ -69,6 +69,10 @@ helpers own restart-visible workflow run summaries.
 - Scheduler delay and model lifecycle events are typed ledger events and become
   timeline rows through the same incremental projection cursor. Delay events
   may also update run-list/run-detail scheduler status and reason fields.
+- Scheduler estimate and model lifecycle timeline rows include typed
+  model/cache state details when event payloads provide them. Projection code
+  must keep those typed states as bounded labels instead of replaying raw
+  payloads during page reads.
 - Scheduler queue-control timeline rows format typed action, outcome,
   actor-scope, position, and priority fields explicitly. Projection code must
   not rely on enum debug strings for page/API labels.

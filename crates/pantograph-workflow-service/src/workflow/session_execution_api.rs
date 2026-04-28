@@ -6,9 +6,9 @@ use pantograph_diagnostics_ledger::{
     IoArtifactObservedPayload, IoArtifactRetentionState, IoArtifactRole,
     LibraryAssetAccessedPayload, LibraryAssetOperation, RunSnapshotAcceptedPayload,
     RunSnapshotNodeVersionPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
-    SchedulerEstimateProducedPayload, SchedulerModelLifecycleChangedPayload,
-    SchedulerModelLifecycleTransition, SchedulerQueuePlacementPayload, SchedulerRunAdmittedPayload,
-    SchedulerRunDelayedPayload,
+    SchedulerEstimateProducedPayload, SchedulerModelCacheState,
+    SchedulerModelLifecycleChangedPayload, SchedulerModelLifecycleTransition,
+    SchedulerQueuePlacementPayload, SchedulerRunAdmittedPayload, SchedulerRunDelayedPayload,
 };
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, WorkflowId, WorkflowRunAttributionResolveRequest,
@@ -782,6 +782,7 @@ impl WorkflowService {
                         confidence: "low".to_string(),
                         estimated_queue_wait_ms: None,
                         estimated_duration_ms: None,
+                        model_cache_state: Some(SchedulerModelCacheState::Unknown),
                         reasons: vec![reason],
                     },
                 ),
@@ -1029,6 +1030,9 @@ impl WorkflowService {
                     payload: DiagnosticEventPayload::SchedulerModelLifecycleChanged(
                         SchedulerModelLifecycleChangedPayload {
                             transition: request.transition,
+                            cache_state: Some(SchedulerModelCacheState::for_lifecycle_transition(
+                                request.transition,
+                            )),
                             reason: request.reason.map(str::to_string),
                             duration_ms: request.duration_ms,
                             error: request.error.map(str::to_string),

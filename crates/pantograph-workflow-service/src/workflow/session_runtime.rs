@@ -1,7 +1,8 @@
 use pantograph_diagnostics_ledger::{
     DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
     DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
-    SchedulerModelLifecycleChangedPayload, SchedulerModelLifecycleTransition,
+    SchedulerModelCacheState, SchedulerModelLifecycleChangedPayload,
+    SchedulerModelLifecycleTransition,
 };
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, WorkflowId, WorkflowRunId, WorkflowRunSnapshotRecord,
@@ -300,6 +301,9 @@ impl WorkflowService {
                     payload: DiagnosticEventPayload::SchedulerModelLifecycleChanged(
                         SchedulerModelLifecycleChangedPayload {
                             transition: request.transition,
+                            cache_state: Some(SchedulerModelCacheState::for_lifecycle_transition(
+                                request.transition,
+                            )),
                             reason: Some(request.reason.to_string()),
                             duration_ms: request.duration_ms,
                             error: request.error.map(str::to_string),

@@ -27,7 +27,7 @@ pub use event::{
     RunDetailProjectionRecord, RunListFacetKind, RunListFacetRecord, RunListProjectionQuery,
     RunListProjectionRecord, RunListProjectionStatus, RunSnapshotAcceptedPayload,
     RunSnapshotNodeVersionPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
-    RuntimeCapabilityObservedPayload, SchedulerEstimateProducedPayload,
+    RuntimeCapabilityObservedPayload, SchedulerEstimateProducedPayload, SchedulerModelCacheState,
     SchedulerModelLifecycleChangedPayload, SchedulerModelLifecycleTransition,
     SchedulerQueueControlAction, SchedulerQueueControlActorScope, SchedulerQueueControlOutcome,
     SchedulerQueueControlPayload, SchedulerQueuePlacementPayload, SchedulerRunAdmittedPayload,

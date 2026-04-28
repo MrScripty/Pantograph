@@ -1407,10 +1407,15 @@ fn scheduler_timeline_record_from_event(
     let payload: DiagnosticEventPayload = serde_json::from_str(&event.payload_json)?;
     let (summary, detail) = match payload {
         DiagnosticEventPayload::SchedulerEstimateProduced(payload) => {
-            let detail = if payload.reasons.is_empty() {
+            let mut details = Vec::new();
+            if let Some(cache_state) = payload.model_cache_state {
+                details.push(cache_state.summary().to_string());
+            }
+            details.extend(payload.reasons);
+            let detail = if details.is_empty() {
                 None
             } else {
-                Some(payload.reasons.join("; "))
+                Some(details.join("; "))
             };
             ("scheduler estimate produced".to_string(), detail)
         }
@@ -1449,25 +1454,49 @@ fn scheduler_timeline_record_from_event(
         }
         DiagnosticEventPayload::SchedulerModelLifecycleChanged(payload) => {
             let summary = payload.summary().to_string();
+            let cache_state = payload.cache_state.map(|state| state.summary());
             let detail = match (
                 payload.duration_ms,
+                cache_state,
                 payload.reason.as_deref(),
                 payload.error.as_deref(),
             ) {
-                (Some(duration_ms), Some(reason), Some(error)) => {
+                (Some(duration_ms), Some(cache_state), Some(reason), Some(error)) => Some(format!(
+                    "{duration_ms} ms; {cache_state}; {reason}; {error}"
+                )),
+                (Some(duration_ms), Some(cache_state), Some(reason), None) => {
+                    Some(format!("{duration_ms} ms; {cache_state}; {reason}"))
+                }
+                (Some(duration_ms), Some(cache_state), None, Some(error)) => {
+                    Some(format!("{duration_ms} ms; {cache_state}; {error}"))
+                }
+                (Some(duration_ms), Some(cache_state), None, None) => {
+                    Some(format!("{duration_ms} ms; {cache_state}"))
+                }
+                (Some(duration_ms), None, Some(reason), Some(error)) => {
                     Some(format!("{duration_ms} ms; {reason}; {error}"))
                 }
-                (Some(duration_ms), Some(reason), None) => {
+                (Some(duration_ms), None, Some(reason), None) => {
                     Some(format!("{duration_ms} ms; {reason}"))
                 }
-                (Some(duration_ms), None, Some(error)) => {
+                (Some(duration_ms), None, None, Some(error)) => {
                     Some(format!("{duration_ms} ms; {error}"))
                 }
-                (Some(duration_ms), None, None) => Some(format!("{duration_ms} ms")),
-                (None, Some(reason), Some(error)) => Some(format!("{reason}; {error}")),
-                (None, Some(reason), None) => Some(reason.to_string()),
-                (None, None, Some(error)) => Some(error.to_string()),
-                (None, None, None) => None,
+                (Some(duration_ms), None, None, None) => Some(format!("{duration_ms} ms")),
+                (None, Some(cache_state), Some(reason), Some(error)) => {
+                    Some(format!("{cache_state}; {reason}; {error}"))
+                }
+                (None, Some(cache_state), Some(reason), None) => {
+                    Some(format!("{cache_state}; {reason}"))
+                }
+                (None, Some(cache_state), None, Some(error)) => {
+                    Some(format!("{cache_state}; {error}"))
+                }
+                (None, Some(cache_state), None, None) => Some(cache_state.to_string()),
+                (None, None, Some(reason), Some(error)) => Some(format!("{reason}; {error}")),
+                (None, None, Some(reason), None) => Some(reason.to_string()),
+                (None, None, None, Some(error)) => Some(error.to_string()),
+                (None, None, None, None) => None,
             };
             (summary, detail)
         }

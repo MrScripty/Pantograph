@@ -118,6 +118,8 @@ Use `workflow/tests/` for behavior-specific child modules under the parent
 - Session execution tests with diagnostics enabled must verify scheduler model
   lifecycle events for runtime admission required-model loads before terminal
   run events and ephemeral required-model unloads after I/O artifact events.
+  They must also assert typed scheduler model/cache state labels on estimate
+  and lifecycle payloads.
 - Local Network status tests must verify selected-run placement through
   backend-provided active/queued workflow run id fields and typed run-placement
   records instead of deriving placement or runtime posture from queue counts or

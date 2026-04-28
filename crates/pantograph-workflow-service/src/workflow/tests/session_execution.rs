@@ -418,6 +418,9 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
     assert!(estimate_event
         .payload_json
         .contains("\"confidence\":\"low\""));
+    assert!(estimate_event
+        .payload_json
+        .contains("\"model_cache_state\":\"unknown\""));
 
     let queue_event = diagnostic_events
         .iter()
@@ -523,11 +526,17 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         .contains("\"transition\":\"load_requested\""));
     assert!(model_lifecycle_events[0]
         .payload_json
+        .contains("\"cache_state\":\"load_requested\""));
+    assert!(model_lifecycle_events[0]
+        .payload_json
         .contains("\"reason\":\"runtime admission requested required models\""));
     assert!(model_lifecycle_events[1].event_seq > model_lifecycle_events[0].event_seq);
     assert!(model_lifecycle_events[1]
         .payload_json
         .contains("\"transition\":\"load_completed\""));
+    assert!(model_lifecycle_events[1]
+        .payload_json
+        .contains("\"cache_state\":\"loaded\""));
     assert!(model_lifecycle_events[1]
         .payload_json
         .contains("\"reason\":\"runtime admission loaded required models\""));
@@ -587,15 +596,24 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         .contains("\"transition\":\"unload_scheduled\""));
     assert!(model_lifecycle_events[2]
         .payload_json
+        .contains("\"cache_state\":\"unload_requested\""));
+    assert!(model_lifecycle_events[2]
+        .payload_json
         .contains("\"reason\":\"keep-alive disabled after run completion\""));
     assert!(model_lifecycle_events[3].event_seq > model_lifecycle_events[2].event_seq);
     assert!(model_lifecycle_events[3]
         .payload_json
         .contains("\"transition\":\"unload_started\""));
+    assert!(model_lifecycle_events[3]
+        .payload_json
+        .contains("\"cache_state\":\"unload_requested\""));
     assert!(model_lifecycle_events[4].event_seq > model_lifecycle_events[3].event_seq);
     assert!(model_lifecycle_events[4]
         .payload_json
         .contains("\"transition\":\"unload_completed\""));
+    assert!(model_lifecycle_events[4]
+        .payload_json
+        .contains("\"cache_state\":\"unloaded\""));
     assert!(model_lifecycle_events[4]
         .payload_json
         .contains("\"duration_ms\":"));

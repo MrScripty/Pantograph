@@ -297,6 +297,8 @@ pub struct SchedulerEstimateProducedPayload {
     pub estimated_queue_wait_ms: Option<u64>,
     pub estimated_duration_ms: Option<u64>,
     #[serde(default)]
+    pub model_cache_state: Option<SchedulerModelCacheState>,
+    #[serde(default)]
     pub reasons: Vec<String>,
 }
 
@@ -429,10 +431,56 @@ impl SchedulerModelLifecycleTransition {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SchedulerModelCacheState {
+    Unknown,
+    NotRequired,
+    CacheHit,
+    CacheMiss,
+    LoadRequested,
+    Loaded,
+    UnloadRequested,
+    Unloaded,
+    Failed,
+}
+
+impl SchedulerModelCacheState {
+    pub fn for_lifecycle_transition(transition: SchedulerModelLifecycleTransition) -> Self {
+        match transition {
+            SchedulerModelLifecycleTransition::LoadRequested
+            | SchedulerModelLifecycleTransition::LoadStarted => Self::LoadRequested,
+            SchedulerModelLifecycleTransition::LoadCompleted => Self::Loaded,
+            SchedulerModelLifecycleTransition::LoadFailed => Self::Failed,
+            SchedulerModelLifecycleTransition::UnloadScheduled
+            | SchedulerModelLifecycleTransition::UnloadCancelled
+            | SchedulerModelLifecycleTransition::UnloadStarted => Self::UnloadRequested,
+            SchedulerModelLifecycleTransition::UnloadCompleted => Self::Unloaded,
+            SchedulerModelLifecycleTransition::UnloadFailed => Self::Failed,
+        }
+    }
+
+    pub(crate) fn summary(self) -> &'static str {
+        match self {
+            Self::Unknown => "cache state unknown",
+            Self::NotRequired => "model not required",
+            Self::CacheHit => "model cache hit",
+            Self::CacheMiss => "model cache miss",
+            Self::LoadRequested => "model load requested",
+            Self::Loaded => "model loaded",
+            Self::UnloadRequested => "model unload requested",
+            Self::Unloaded => "model unloaded",
+            Self::Failed => "model cache failed",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct SchedulerModelLifecycleChangedPayload {
     pub transition: SchedulerModelLifecycleTransition,
+    #[serde(default)]
+    pub cache_state: Option<SchedulerModelCacheState>,
     pub reason: Option<String>,
     pub duration_ms: Option<u64>,
     pub error: Option<String>,

@@ -105,6 +105,10 @@ semantics.
 - Scheduler timeline events include typed delay and model lifecycle facts when
   those events are emitted. Delay state may also update the run-list status and
   scheduler reason through projection drains.
+- Scheduler estimate and model lifecycle events carry typed model/cache state
+  where known. Timeline projection details may include that state, but callers
+  should still treat estimate facts and observed lifecycle facts as separate
+  rows.
 - Scheduler queue-control events use typed cancel, reprioritize, and
   push-front actions plus typed accepted/denied outcomes so refused queue
   mutations remain auditable without parsing service error text. Session-owned

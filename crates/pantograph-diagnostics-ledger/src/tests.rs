@@ -18,20 +18,21 @@ use crate::{
     RetentionPolicyActorScope, RetentionPolicyChangedPayload, RunDetailProjectionQuery,
     RunListFacetKind, RunListProjectionQuery, RunListProjectionStatus, RunSnapshotAcceptedPayload,
     RunSnapshotNodeVersionPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
-    SchedulerEstimateProducedPayload, SchedulerModelLifecycleChangedPayload,
-    SchedulerModelLifecycleTransition, SchedulerQueueControlAction,
-    SchedulerQueueControlActorScope, SchedulerQueueControlOutcome, SchedulerQueueControlPayload,
-    SchedulerQueuePlacementPayload, SchedulerRunAdmittedPayload, SchedulerRunDelayedPayload,
-    SchedulerTimelineProjectionQuery, SqliteDiagnosticsLedger, UpdateRetentionPolicyCommand,
-    UsageEventStatus, UsageLineage, WorkflowRunSummaryQuery, WorkflowRunSummaryRecord,
-    WorkflowRunSummaryStatus, WorkflowTimingExpectation, WorkflowTimingExpectationComparison,
-    WorkflowTimingExpectationQuery, WorkflowTimingObservation, WorkflowTimingObservationScope,
-    WorkflowTimingObservationStatus, DEFAULT_STANDARD_RETENTION_DAYS, IO_ARTIFACT_PROJECTION_NAME,
-    IO_ARTIFACT_PROJECTION_VERSION, LIBRARY_USAGE_PROJECTION_NAME,
-    LIBRARY_USAGE_PROJECTION_VERSION, MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, MILLIS_PER_DAY,
-    NODE_STATUS_PROJECTION_NAME, NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME,
-    RUN_DETAIL_PROJECTION_VERSION, RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION,
-    SCHEDULER_TIMELINE_PROJECTION_NAME, SCHEDULER_TIMELINE_PROJECTION_VERSION,
+    SchedulerEstimateProducedPayload, SchedulerModelCacheState,
+    SchedulerModelLifecycleChangedPayload, SchedulerModelLifecycleTransition,
+    SchedulerQueueControlAction, SchedulerQueueControlActorScope, SchedulerQueueControlOutcome,
+    SchedulerQueueControlPayload, SchedulerQueuePlacementPayload, SchedulerRunAdmittedPayload,
+    SchedulerRunDelayedPayload, SchedulerTimelineProjectionQuery, SqliteDiagnosticsLedger,
+    UpdateRetentionPolicyCommand, UsageEventStatus, UsageLineage, WorkflowRunSummaryQuery,
+    WorkflowRunSummaryRecord, WorkflowRunSummaryStatus, WorkflowTimingExpectation,
+    WorkflowTimingExpectationComparison, WorkflowTimingExpectationQuery, WorkflowTimingObservation,
+    WorkflowTimingObservationScope, WorkflowTimingObservationStatus,
+    DEFAULT_STANDARD_RETENTION_DAYS, IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION,
+    LIBRARY_USAGE_PROJECTION_NAME, LIBRARY_USAGE_PROJECTION_VERSION,
+    MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, MILLIS_PER_DAY, NODE_STATUS_PROJECTION_NAME,
+    NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION,
+    RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
+    SCHEDULER_TIMELINE_PROJECTION_VERSION,
 };
 
 #[test]
@@ -792,7 +793,10 @@ fn scheduler_timeline_projection_drains_events_incrementally() {
     assert_eq!(records[0].summary, "run snapshot accepted");
     assert_eq!(records[1].event_seq, estimate_event.event_seq);
     assert_eq!(records[1].summary, "scheduler estimate produced");
-    assert_eq!(records[1].detail.as_deref(), Some("model already loaded"));
+    assert_eq!(
+        records[1].detail.as_deref(),
+        Some("model cache hit; model already loaded")
+    );
     assert_eq!(records[2].event_seq, queue_event.event_seq);
     assert_eq!(records[2].summary, "queued at position 0");
     assert_eq!(records[2].detail.as_deref(), Some("priority 7"));
@@ -812,7 +816,7 @@ fn scheduler_timeline_projection_drains_events_incrementally() {
     assert_eq!(records[5].summary, "model load requested");
     assert_eq!(
         records[5].detail.as_deref(),
-        Some("cache miss before queued run")
+        Some("model cache miss; cache miss before queued run")
     );
     assert_eq!(records[6].event_seq, admitted_event.event_seq);
     assert_eq!(records[6].summary, "run admitted");
@@ -2586,6 +2590,7 @@ fn sample_scheduler_event(workflow_run_id: &str) -> DiagnosticEventAppendRequest
                 confidence: "medium".to_string(),
                 estimated_queue_wait_ms: Some(1_500),
                 estimated_duration_ms: Some(2_500),
+                model_cache_state: Some(SchedulerModelCacheState::CacheHit),
                 reasons: vec!["model already loaded".to_string()],
             },
         ),
@@ -2722,6 +2727,7 @@ fn sample_scheduler_model_lifecycle_event(workflow_run_id: &str) -> DiagnosticEv
         payload: DiagnosticEventPayload::SchedulerModelLifecycleChanged(
             SchedulerModelLifecycleChangedPayload {
                 transition: SchedulerModelLifecycleTransition::LoadRequested,
+                cache_state: Some(SchedulerModelCacheState::CacheMiss),
                 reason: Some("cache miss before queued run".to_string()),
                 duration_ms: None,
                 error: None,
