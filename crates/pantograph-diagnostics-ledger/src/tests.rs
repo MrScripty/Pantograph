@@ -814,7 +814,9 @@ fn scheduler_timeline_projection_drains_events_incrementally() {
     assert_eq!(records[3].summary, "queue push to front accepted");
     assert_eq!(
         records[3].detail.as_deref(),
-        Some("GUI admin; position 0; priority 7 -> 8; admin pushed queue item to front")
+        Some(
+            "GUI admin; effective session session_alpha; position 0; priority 7 -> 8; admin pushed queue item to front"
+        )
     );
     assert_eq!(records[4].event_seq, delay_event.event_seq);
     assert_eq!(records[4].summary, "run delayed");
@@ -2678,6 +2680,8 @@ fn sample_scheduler_queue_control_event(workflow_run_id: &str) -> DiagnosticEven
             action: SchedulerQueueControlAction::PushToFront,
             outcome: SchedulerQueueControlOutcome::Accepted,
             actor_scope: SchedulerQueueControlActorScope::GuiAdmin,
+            requested_session_id: None,
+            effective_session_id: Some("session_alpha".to_string()),
             previous_queue_position: Some(0),
             previous_priority: Some(7),
             new_priority: Some(8),

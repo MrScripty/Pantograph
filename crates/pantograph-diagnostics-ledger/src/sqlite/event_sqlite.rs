@@ -1625,6 +1625,12 @@ fn queue_control_actor_scope_label(scope: SchedulerQueueControlActorScope) -> &'
 
 fn scheduler_queue_control_detail(payload: &SchedulerQueueControlPayload) -> Option<String> {
     let mut parts = vec![queue_control_actor_scope_label(payload.actor_scope).to_string()];
+    if let Some(session_id) = payload.requested_session_id.as_deref() {
+        parts.push(format!("requested session {session_id}"));
+    }
+    if let Some(session_id) = payload.effective_session_id.as_deref() {
+        parts.push(format!("effective session {session_id}"));
+    }
     if let Some(position) = payload.previous_queue_position {
         parts.push(format!("position {position}"));
     }

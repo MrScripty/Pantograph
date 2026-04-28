@@ -113,8 +113,9 @@ Use `workflow/tests/` for behavior-specific child modules under the parent
   queue-control events after the scheduler store decides whether a cancel,
   reprioritize, push-front, GUI-admin queued-run cancel, or GUI-admin priority
   override/push-front request is allowed, including the typed `client_session`
-  actor scope for session-owned controls and `gui_admin` for GUI-only admin
-  controls.
+  actor scope plus requested/effective session authority context for
+  session-owned controls and `gui_admin` with effective session context for
+  GUI-only admin controls.
 - Session queue tests with diagnostics enabled must verify accepted
   reprioritize and push-front actions also record refreshed scheduler estimate
   events for the updated queued run.

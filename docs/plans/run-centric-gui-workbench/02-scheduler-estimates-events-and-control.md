@@ -283,7 +283,7 @@ Pantograph GUI privileged actions.
 - [ ] Add privileged admin actions for GUI: cancel any run, reorder across
   sessions, pause/resume queues or buckets, override priority, force estimate
   recomputation, force reschedule where supported.
-- [ ] Record authority context in typed scheduler events.
+- [x] Record authority context in typed scheduler events.
 - [ ] Ensure scheduler remains final authority after an action request.
 
 **Verification:**
@@ -304,10 +304,11 @@ session queue and denies the request if the priority ceiling prevents a real
 move. Query-own-estimate now has a workflow-service and frontend projection
 method that returns estimate-shaped hot projection facts for a run without raw
 ledger access. Session-owned queue-control events now use the `client_session`
-actor scope. The first GUI-admin queue boundaries can cancel, reprioritize, or
-push a queued run to the front by run id across sessions, leave the scheduler
-store as the authority, and emit `gui_admin` queue-control events for
-accepted/correlated denied decisions. Clone/resubmit, running-run
+actor scope and include requested/effective session authority context. The
+first GUI-admin queue boundaries can cancel, reprioritize, or push a queued run
+to the front by run id across sessions, leave the scheduler store as the
+authority, and emit `gui_admin` queue-control events with effective session
+context for accepted/correlated denied decisions. Clone/resubmit, running-run
 cancellation, privileged cross-session reorder, pause/resume, and other
 admin-scope event emitters remain pending.
 
@@ -358,6 +359,9 @@ duplicate, unvalidated, or contradictory event streams.
   id list so blocking facts are not represented only as free-form reasons.
 - Added scheduler estimate refreshes after accepted reprioritize and
   push-front queue controls.
+- Added requested/effective session authority context to typed queue-control
+  events so client-session and GUI-admin actions can be audited without
+  frontend inference.
 - Tightened scheduler timeline projection labels for queue-control events so
   page/API consumers receive explicit typed action, outcome, actor-scope,
   position, and priority summaries instead of enum debug formatting.

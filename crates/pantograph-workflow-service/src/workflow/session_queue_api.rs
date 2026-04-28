@@ -614,6 +614,14 @@ impl WorkflowService {
                         action,
                         outcome,
                         actor_scope,
+                        requested_session_id: match actor_scope {
+                            SchedulerQueueControlActorScope::ClientSession => {
+                                Some(session.session_id.clone())
+                            }
+                            SchedulerQueueControlActorScope::BackendControlApi
+                            | SchedulerQueueControlActorScope::GuiAdmin => None,
+                        },
+                        effective_session_id: Some(session.session_id.clone()),
                         previous_queue_position,
                         previous_priority: previous_item.map(|item| item.priority),
                         new_priority,

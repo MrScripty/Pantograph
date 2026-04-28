@@ -392,6 +392,10 @@ pub struct SchedulerQueueControlPayload {
     pub action: SchedulerQueueControlAction,
     pub outcome: SchedulerQueueControlOutcome,
     pub actor_scope: SchedulerQueueControlActorScope,
+    #[serde(default)]
+    pub requested_session_id: Option<String>,
+    #[serde(default)]
+    pub effective_session_id: Option<String>,
     pub previous_queue_position: Option<u32>,
     pub previous_priority: Option<i32>,
     pub new_priority: Option<i32>,
@@ -400,6 +404,16 @@ pub struct SchedulerQueueControlPayload {
 
 impl SchedulerQueueControlPayload {
     fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        validate_optional_text(
+            "requested_session_id",
+            self.requested_session_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "effective_session_id",
+            self.effective_session_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
         validate_optional_text("queue_control_reason", self.reason.as_deref(), MAX_ID_LEN)
     }
 }

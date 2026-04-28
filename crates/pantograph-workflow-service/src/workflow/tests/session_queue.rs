@@ -265,6 +265,14 @@ async fn workflow_execution_session_queue_control_records_typed_events() {
     assert!(queue_control_events[0]
         .payload_json
         .contains("\"actor_scope\":\"client_session\""));
+    assert!(queue_control_events[0].payload_json.contains(&format!(
+        "\"requested_session_id\":\"{}\"",
+        created.session_id
+    )));
+    assert!(queue_control_events[0].payload_json.contains(&format!(
+        "\"effective_session_id\":\"{}\"",
+        created.session_id
+    )));
     assert!(queue_control_events[1]
         .payload_json
         .contains("\"action\":\"reprioritize\""));
@@ -502,6 +510,13 @@ async fn workflow_admin_queue_cancel_finds_session_and_records_gui_scope() {
     assert!(queue_control_events[0]
         .payload_json
         .contains("\"actor_scope\":\"gui_admin\""));
+    assert!(queue_control_events[0]
+        .payload_json
+        .contains("\"requested_session_id\":null"));
+    assert!(queue_control_events[0].payload_json.contains(&format!(
+        "\"effective_session_id\":\"{}\"",
+        second.session_id
+    )));
     assert!(queue_control_events[0]
         .payload_json
         .contains("\"outcome\":\"accepted\""));

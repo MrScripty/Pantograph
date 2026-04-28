@@ -84,8 +84,9 @@ helpers own restart-visible workflow run summaries.
   and missing asset ids, while the payload remains the source of typed estimate
   facts for API consumers.
 - Scheduler queue-control timeline rows format typed action, outcome,
-  actor-scope, position, and priority fields explicitly. Projection code must
-  not rely on enum debug strings for page/API labels.
+  actor-scope, requested/effective session authority context, position, and
+  priority fields explicitly. Projection code must not rely on enum debug
+  strings for page/API labels.
 - Run detail drains apply only events after the stored projection cursor and
   update one row per workflow run for selected-run page/query reads.
 - Run-list facet reads group `run_list_projection` rows and must not replay
