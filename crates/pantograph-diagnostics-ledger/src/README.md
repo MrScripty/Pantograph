@@ -105,8 +105,9 @@ semantics.
   after an explicit incremental drain; normal detail reads do not replay raw
   event rows.
 - `run_list_projection` and `run_detail_projection` expose stable scheduler
-  estimate and queue-placement facts as typed columns. Payload JSON remains
-  audit detail, not the normal GUI data path for those facts.
+  estimate and queue-placement facts as typed columns. Run-list rows also
+  expose client, client-session, and bucket scope identifiers. Payload JSON
+  remains audit detail, not the normal GUI data path for those facts.
 - Run-list facet queries group materialized run-list rows by workflow version,
   status, scheduler policy, and retention policy. They must not derive
   mixed-version warnings from raw ledger events or client-side page samples.

@@ -33,6 +33,9 @@ test('queryRunList preserves backend projection rows and facets', async () => {
         duration_ms: null,
         scheduler_policy_id: 'priority_then_fifo',
         retention_policy_id: 'ephemeral',
+        client_id: 'client-a',
+        client_session_id: 'session-a',
+        bucket_id: 'bucket-a',
         scheduler_queue_position: 0,
         scheduler_priority: 7,
         estimate_confidence: 'low',
@@ -49,7 +52,7 @@ test('queryRunList preserves backend projection rows and facets', async () => {
     ],
     projection_state: {
       projection_name: 'run_list',
-      projection_version: 1,
+      projection_version: 2,
       last_applied_event_seq: 5,
       status: 'current',
       rebuilt_at_ms: null,

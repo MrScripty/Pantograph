@@ -9,8 +9,8 @@ later plan stages fill in richer page bodies.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `WorkbenchShell.svelte` | Top-level workbench frame, toolbar navigation, active-run summary, and page outlet. |
-| `SchedulerPage.svelte` | Dense run-list view backed by the run-list projection service, active-run selection store, local table controls, policy-field filters, typed queue/estimate columns, and selected-run scheduler timeline projection. |
-| `schedulerPagePresenters.ts` | Pure Scheduler page status, duration, timestamp, queue/estimate, policy filter, sorting, projection freshness, and timeline presenters. |
+| `SchedulerPage.svelte` | Dense run-list view backed by the run-list projection service, active-run selection store, local table controls, policy-field filters, scope columns, typed queue/estimate columns, and selected-run scheduler timeline projection. |
+| `schedulerPagePresenters.ts` | Pure Scheduler page status, duration, timestamp, scope, queue/estimate, policy filter, sorting, projection freshness, and timeline presenters. |
 | `schedulerPagePresenters.test.ts` | Unit coverage for Scheduler table labels, status classes, filters, sorts, projection freshness, and timeline labels. |
 | `GraphPage.svelte` | Workbench page that switches between the active run's immutable graph snapshot and the current editable workflow graph. |
 | `RunGraphSnapshot.svelte` | Read-only run graph renderer backed by `workflowService.queryRunGraph`; it does not load historic graphs into the editor store. |
@@ -88,6 +88,8 @@ transient UI state without becoming backend scheduler policy.
   component-local durable state.
 - Scheduler timeline rows come from `workflowService.querySchedulerTimeline`.
   Components render typed summary/detail fields and payload availability only.
+- Scheduler client, session, and bucket columns come from run-list projection
+  fields. Components must not recover those scope facts from raw events.
 - Scheduler status presentation includes delayed rows from the run-list
   projection. Components must treat delayed as backend-authored state rather
   than inferring it from scheduler reason text.

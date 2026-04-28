@@ -11,7 +11,7 @@ pub const MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES: usize = 8_192;
 pub const SCHEDULER_TIMELINE_PROJECTION_NAME: &str = "scheduler_timeline";
 pub const SCHEDULER_TIMELINE_PROJECTION_VERSION: i64 = 1;
 pub const RUN_LIST_PROJECTION_NAME: &str = "run_list";
-pub const RUN_LIST_PROJECTION_VERSION: i64 = 1;
+pub const RUN_LIST_PROJECTION_VERSION: i64 = 2;
 pub const RUN_DETAIL_PROJECTION_NAME: &str = "run_detail";
 pub const RUN_DETAIL_PROJECTION_VERSION: i64 = 1;
 pub const IO_ARTIFACT_PROJECTION_NAME: &str = "io_artifact";
@@ -1099,6 +1099,9 @@ pub struct RunListProjectionRecord {
     pub duration_ms: Option<u64>,
     pub scheduler_policy_id: Option<String>,
     pub retention_policy_id: Option<String>,
+    pub client_id: Option<ClientId>,
+    pub client_session_id: Option<ClientSessionId>,
+    pub bucket_id: Option<BucketId>,
     pub scheduler_queue_position: Option<u32>,
     pub scheduler_priority: Option<i32>,
     pub estimate_confidence: Option<String>,

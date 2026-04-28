@@ -124,7 +124,7 @@ into a second source of truth.
 
 - [ ] Render future, scheduled, queued, delayed, running, completed, failed,
   cancelled, and historic runs.
-- [ ] Add columns for status, run id, workflow/version, scheduled time, queue
+- [x] Add columns for status, run id, workflow/version, scheduled time, queue
   position, priority, session/bucket, estimate, actual timing, progress,
   runtime/node, models, retention summary, delay reason, and error summary as
   data exists.
@@ -149,9 +149,9 @@ renders a dense projection-backed run table, first-class queued/future rows
 where present in the run-list projection, selected-run actions, active-run
 updates, projection freshness, search, status filtering, stable local sort
 options, scheduler policy IDs, retention policy IDs, scheduler-policy and
-retention-policy filters, typed queue position, priority, estimate, and
-scheduler-reason columns, delayed status presentation, a selected-run timeline
-panel, timeline projection
+retention-policy filters, client/session/bucket scope columns, typed queue
+position, priority, estimate, and scheduler-reason columns, delayed status
+presentation, a selected-run timeline panel, timeline projection
 freshness, and timeline summary/detail rows without raw event parsing. Progress,
 model/runtime summaries, richer delay categories, richer retention summaries,
 and privileged queue action controls remain open.

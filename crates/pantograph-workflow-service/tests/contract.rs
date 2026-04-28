@@ -655,6 +655,9 @@ fn workflow_run_list_query_contract_snapshot() {
             duration_ms: Some(80),
             scheduler_policy_id: Some("session_fifo_v1".to_string()),
             retention_policy_id: Some("standard-local-v1".to_string()),
+            client_id: Some("client-1".to_string().try_into().expect("client id")),
+            client_session_id: Some("session-1".to_string().try_into().expect("session id")),
+            bucket_id: Some("bucket-1".to_string().try_into().expect("bucket id")),
             scheduler_queue_position: Some(1),
             scheduler_priority: Some(5),
             estimate_confidence: Some("low".to_string()),
@@ -678,7 +681,7 @@ fn workflow_run_list_query_contract_snapshot() {
         ],
         projection_state: ProjectionStateRecord {
             projection_name: "run_list".to_string(),
-            projection_version: 1,
+            projection_version: 2,
             last_applied_event_seq: 15,
             status: ProjectionStatus::Current,
             rebuilt_at_ms: None,
@@ -715,6 +718,9 @@ fn workflow_run_list_query_contract_snapshot() {
             "duration_ms": 80,
             "scheduler_policy_id": "session_fifo_v1",
             "retention_policy_id": "standard-local-v1",
+            "client_id": "client-1",
+            "client_session_id": "session-1",
+            "bucket_id": "bucket-1",
             "scheduler_queue_position": 1,
             "scheduler_priority": 5,
             "estimate_confidence": "low",
@@ -735,7 +741,7 @@ fn workflow_run_list_query_contract_snapshot() {
         }],
         "projection_state": {
             "projection_name": "run_list",
-            "projection_version": 1,
+            "projection_version": 2,
             "last_applied_event_seq": 15,
             "status": "current",
             "rebuilt_at_ms": null,
@@ -1060,7 +1066,7 @@ fn workflow_projection_rebuild_contract_snapshot() {
     let response = WorkflowProjectionRebuildResponse {
         projection_state: ProjectionStateRecord {
             projection_name: "run_list".to_string(),
-            projection_version: 1,
+            projection_version: 2,
             last_applied_event_seq: 42,
             status: ProjectionStatus::Current,
             rebuilt_at_ms: None,
@@ -1079,7 +1085,7 @@ fn workflow_projection_rebuild_contract_snapshot() {
     let expected_response = serde_json::json!({
         "projection_state": {
             "projection_name": "run_list",
-            "projection_version": 1,
+            "projection_version": 2,
             "last_applied_event_seq": 42,
             "status": "current",
             "rebuilt_at_ms": null,

@@ -198,6 +198,21 @@ fn workflow_run_list_query_drains_and_reads_projection() {
     assert_eq!(response.runs[0].workflow_run_id.as_str(), "run-a");
     assert_eq!(response.runs[0].status, RunListProjectionStatus::Completed);
     assert_eq!(response.runs[0].duration_ms, Some(15));
+    assert_eq!(
+        response.runs[0].client_id.as_ref().map(|id| id.as_str()),
+        Some("client-a")
+    );
+    assert_eq!(
+        response.runs[0]
+            .client_session_id
+            .as_ref()
+            .map(|id| id.as_str()),
+        Some("session-a")
+    );
+    assert_eq!(
+        response.runs[0].bucket_id.as_ref().map(|id| id.as_str()),
+        Some("bucket-a")
+    );
     assert_eq!(response.runs[0].scheduler_queue_position, Some(0));
     assert_eq!(response.runs[0].scheduler_priority, Some(7));
     assert!(response.facets.iter().any(|facet| {

@@ -940,6 +940,18 @@ fn run_list_projection_drains_lifecycle_events_incrementally() {
         record.retention_policy_id.as_deref(),
         Some("retention_default")
     );
+    assert_eq!(
+        record.client_id.as_ref().map(|id| id.as_str()),
+        Some("client_alpha")
+    );
+    assert_eq!(
+        record.client_session_id.as_ref().map(|id| id.as_str()),
+        Some("session_alpha")
+    );
+    assert_eq!(
+        record.bucket_id.as_ref().map(|id| id.as_str()),
+        Some("bucket_alpha")
+    );
     assert_eq!(record.scheduler_queue_position, Some(0));
     assert_eq!(record.scheduler_priority, Some(7));
     assert_eq!(
@@ -1948,6 +1960,56 @@ fn existing_v15_schema_adds_retention_policy_version() {
         )
         .expect("policy version loads");
     assert_eq!(policy_version, 1);
+}
+
+#[test]
+fn existing_v16_schema_adds_run_list_scope_columns() {
+    let temp = tempfile::NamedTempFile::new().expect("temp file");
+    let path = temp.path().to_path_buf();
+    {
+        let conn = Connection::open(&path).expect("connection opens");
+        conn.execute_batch(
+            "CREATE TABLE ledger_schema_migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at_ms INTEGER NOT NULL,
+                checksum TEXT NOT NULL
+            );
+            INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
+            VALUES (16, 0, 'pantograph-diagnostics-ledger-v16');
+            CREATE TABLE run_list_projection (
+                workflow_run_id TEXT PRIMARY KEY,
+                workflow_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                last_event_seq INTEGER NOT NULL,
+                last_updated_at_ms INTEGER NOT NULL
+            );",
+        )
+        .expect("v16 schema marker and old run-list projection are installed");
+    }
+    {
+        let _ledger = SqliteDiagnosticsLedger::open(&path).expect("ledger migrates");
+    }
+    let conn = Connection::open(&path).expect("connection reopens");
+
+    assert!(sqlite_column_exists(
+        &conn,
+        "run_list_projection",
+        "client_id"
+    ));
+    assert!(sqlite_column_exists(
+        &conn,
+        "run_list_projection",
+        "client_session_id"
+    ));
+    assert!(sqlite_column_exists(
+        &conn,
+        "run_list_projection",
+        "bucket_id"
+    ));
+    assert!(sqlite_index_exists(
+        &conn,
+        "idx_run_list_projection_client_session_updated"
+    ));
 }
 
 #[test]

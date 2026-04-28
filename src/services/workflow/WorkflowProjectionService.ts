@@ -44,7 +44,7 @@ export class WorkflowProjectionService extends WorkflowGraphMutationService {
         facets: [],
         projection_state: {
           projection_name: 'run_list',
-          projection_version: 1,
+          projection_version: 2,
           last_applied_event_seq: 0,
           status: 'current',
           rebuilt_at_ms: null,

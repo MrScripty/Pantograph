@@ -445,7 +445,8 @@ pub(super) fn query_run_list_projection(
         "SELECT workflow_run_id, workflow_id, workflow_version_id,
                 workflow_semantic_version, status, accepted_at_ms, enqueued_at_ms,
                 started_at_ms, completed_at_ms, duration_ms, scheduler_policy_id,
-                retention_policy_id, scheduler_queue_position, scheduler_priority,
+                retention_policy_id, client_id, client_session_id, bucket_id,
+                scheduler_queue_position, scheduler_priority,
                 estimate_confidence, estimated_queue_wait_ms, estimated_duration_ms,
                 scheduler_reason, last_event_seq, last_updated_at_ms
          FROM run_list_projection
@@ -1775,12 +1776,13 @@ fn apply_run_list_projection_event(
         "INSERT INTO run_list_projection
             (workflow_run_id, workflow_id, workflow_version_id, workflow_semantic_version,
              status, accepted_at_ms, enqueued_at_ms, started_at_ms, completed_at_ms,
-             duration_ms, scheduler_policy_id, retention_policy_id,
+             duration_ms, scheduler_policy_id, retention_policy_id, client_id,
+             client_session_id, bucket_id,
              scheduler_queue_position, scheduler_priority, estimate_confidence,
              estimated_queue_wait_ms, estimated_duration_ms, scheduler_reason,
              last_event_seq, last_updated_at_ms)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,
-             ?15, ?16, ?17, ?18, ?19, ?20)
+             ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23)
          ON CONFLICT(workflow_run_id) DO UPDATE SET
             workflow_id = excluded.workflow_id,
             workflow_version_id = COALESCE(excluded.workflow_version_id, workflow_version_id),
@@ -1793,6 +1795,9 @@ fn apply_run_list_projection_event(
             duration_ms = COALESCE(excluded.duration_ms, duration_ms),
             scheduler_policy_id = COALESCE(excluded.scheduler_policy_id, scheduler_policy_id),
             retention_policy_id = COALESCE(excluded.retention_policy_id, retention_policy_id),
+            client_id = COALESCE(excluded.client_id, client_id),
+            client_session_id = COALESCE(excluded.client_session_id, client_session_id),
+            bucket_id = COALESCE(excluded.bucket_id, bucket_id),
             scheduler_queue_position = COALESCE(excluded.scheduler_queue_position, scheduler_queue_position),
             scheduler_priority = COALESCE(excluded.scheduler_priority, scheduler_priority),
             estimate_confidence = COALESCE(excluded.estimate_confidence, estimate_confidence),
@@ -1817,6 +1822,9 @@ fn apply_run_list_projection_event(
             duration_ms,
             event.scheduler_policy_id.as_deref(),
             event.retention_policy_id.as_deref(),
+            event.client_id.as_ref().map(|id| id.as_str()),
+            event.client_session_id.as_ref().map(|id| id.as_str()),
+            event.bucket_id.as_ref().map(|id| id.as_str()),
             scheduler_facts.queue_position.map(i64::from),
             scheduler_facts.priority.map(i64::from),
             scheduler_facts.estimate_confidence.as_deref(),
@@ -2312,14 +2320,29 @@ fn run_list_projection_from_row(row: &Row<'_>) -> rusqlite::Result<RunListProjec
             .map(|value| u64::try_from(value).unwrap_or(u64::MAX)),
         scheduler_policy_id: row.get(10)?,
         retention_policy_id: row.get(11)?,
-        scheduler_queue_position: row.get::<_, Option<i64>>(12)?.map(i64_to_u32_saturating),
-        scheduler_priority: row.get::<_, Option<i64>>(13)?.map(i64_to_i32_saturating),
-        estimate_confidence: row.get(14)?,
-        estimated_queue_wait_ms: row.get::<_, Option<i64>>(15)?.map(i64_to_u64_saturating),
-        estimated_duration_ms: row.get::<_, Option<i64>>(16)?.map(i64_to_u64_saturating),
-        scheduler_reason: row.get(17)?,
-        last_event_seq: row.get(18)?,
-        last_updated_at_ms: row.get(19)?,
+        client_id: row
+            .get::<_, Option<String>>(12)?
+            .map(ClientId::try_from)
+            .transpose()
+            .map_err(sqlite_conversion_error)?,
+        client_session_id: row
+            .get::<_, Option<String>>(13)?
+            .map(ClientSessionId::try_from)
+            .transpose()
+            .map_err(sqlite_conversion_error)?,
+        bucket_id: row
+            .get::<_, Option<String>>(14)?
+            .map(BucketId::try_from)
+            .transpose()
+            .map_err(sqlite_conversion_error)?,
+        scheduler_queue_position: row.get::<_, Option<i64>>(15)?.map(i64_to_u32_saturating),
+        scheduler_priority: row.get::<_, Option<i64>>(16)?.map(i64_to_i32_saturating),
+        estimate_confidence: row.get(17)?,
+        estimated_queue_wait_ms: row.get::<_, Option<i64>>(18)?.map(i64_to_u64_saturating),
+        estimated_duration_ms: row.get::<_, Option<i64>>(19)?.map(i64_to_u64_saturating),
+        scheduler_reason: row.get(20)?,
+        last_event_seq: row.get(21)?,
+        last_updated_at_ms: row.get(22)?,
     })
 }
 

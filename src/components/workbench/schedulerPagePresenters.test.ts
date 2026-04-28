@@ -11,6 +11,7 @@ import {
   formatSchedulerEstimateLabel,
   formatSchedulerReasonLabel,
   formatSchedulerRetentionLabel,
+  formatSchedulerScopeLabel,
   formatSchedulerTimelineKind,
   formatSchedulerTimelineSource,
   formatSchedulerDuration,
@@ -35,6 +36,9 @@ function run(overrides: Partial<RunListProjectionRecord>): RunListProjectionReco
     duration_ms: null,
     scheduler_policy_id: 'policy-a',
     retention_policy_id: 'retention-a',
+    client_id: 'client-a',
+    client_session_id: 'session-a',
+    bucket_id: 'bucket-a',
     scheduler_queue_position: null,
     scheduler_priority: null,
     estimate_confidence: null,
@@ -72,6 +76,8 @@ test('scheduler policy presenters keep missing dense table facts explicit', () =
   assert.equal(formatSchedulerPolicyLabel(null), 'Unassigned');
   assert.equal(formatSchedulerRetentionLabel('retention-short'), 'retention-short');
   assert.equal(formatSchedulerRetentionLabel(undefined), 'Unassigned');
+  assert.equal(formatSchedulerScopeLabel('session-a'), 'session-a');
+  assert.equal(formatSchedulerScopeLabel(''), 'Unassigned');
 });
 
 test('scheduler queue and estimate presenters keep unavailable facts explicit', () => {
@@ -111,6 +117,24 @@ test('filterAndSortSchedulerRuns filters by status and search text', () => {
   });
 
   assert.deepEqual(filtered.map((item) => item.workflow_run_id), ['run-a']);
+});
+
+test('filterAndSortSchedulerRuns searches client scope facts', () => {
+  const runs = [
+    run({ workflow_run_id: 'run-a', client_session_id: 'session-alpha', bucket_id: 'bucket-main' }),
+    run({ workflow_run_id: 'run-b', client_session_id: 'session-beta', bucket_id: 'bucket-side' }),
+  ];
+
+  assert.deepEqual(
+    filterAndSortSchedulerRuns(runs, {
+      search: 'bucket-side',
+      status: 'all',
+      schedulerPolicy: 'all',
+      retentionPolicy: 'all',
+      sort: 'workflow_asc',
+    }).map((item) => item.workflow_run_id),
+    ['run-b'],
+  );
 });
 
 test('filterAndSortSchedulerRuns sorts by operational fields', () => {

@@ -337,6 +337,9 @@ export interface RunListProjectionRecord {
   duration_ms?: number | null;
   scheduler_policy_id?: string | null;
   retention_policy_id?: string | null;
+  client_id?: string | null;
+  client_session_id?: string | null;
+  bucket_id?: string | null;
   scheduler_queue_position?: number | null;
   scheduler_priority?: number | null;
   estimate_confidence?: string | null;

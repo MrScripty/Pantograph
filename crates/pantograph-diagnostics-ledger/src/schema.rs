@@ -4,8 +4,8 @@ use crate::records::{RetentionClass, DEFAULT_STANDARD_RETENTION_DAYS};
 use crate::util::now_ms;
 use crate::DiagnosticsLedgerError;
 
-pub(crate) const SCHEMA_VERSION: i64 = 16;
-const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v16";
+pub(crate) const SCHEMA_VERSION: i64 = 17;
+const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v17";
 
 pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {
     tx.execute_batch(
@@ -220,6 +220,9 @@ pub(crate) fn migrate_schema(
     if found < 16 {
         apply_retention_policy_version_migration(&tx)?;
     }
+    if found < 17 {
+        apply_run_list_scope_projection_migration(&tx)?;
+    }
     if found < SCHEMA_VERSION {
         tx.execute(
             "INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
@@ -390,6 +393,9 @@ fn apply_run_list_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagnost
             duration_ms INTEGER,
             scheduler_policy_id TEXT,
             retention_policy_id TEXT,
+            client_id TEXT,
+            client_session_id TEXT,
+            bucket_id TEXT,
             scheduler_queue_position INTEGER,
             scheduler_priority INTEGER,
             estimate_confidence TEXT,
@@ -409,6 +415,10 @@ fn apply_run_list_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagnost
             ON run_list_projection(retention_policy_id, last_updated_at_ms DESC);
         CREATE INDEX IF NOT EXISTS idx_run_list_projection_status_queue
             ON run_list_projection(status, scheduler_queue_position);
+        CREATE INDEX IF NOT EXISTS idx_run_list_projection_client_session_updated
+            ON run_list_projection(client_session_id, last_updated_at_ms DESC);
+        CREATE INDEX IF NOT EXISTS idx_run_list_projection_bucket_updated
+            ON run_list_projection(bucket_id, last_updated_at_ms DESC);
         "#,
     )?;
     Ok(())
@@ -524,6 +534,43 @@ fn apply_scheduler_run_projection_fact_migration(
         )?;
     }
 
+    Ok(())
+}
+
+fn apply_run_list_scope_projection_migration(
+    tx: &Transaction<'_>,
+) -> Result<(), DiagnosticsLedgerError> {
+    if !table_exists(tx, "run_list_projection")? {
+        return Ok(());
+    }
+    if !column_exists(tx, "run_list_projection", "client_id")? {
+        tx.execute(
+            "ALTER TABLE run_list_projection ADD COLUMN client_id TEXT",
+            [],
+        )?;
+    }
+    if !column_exists(tx, "run_list_projection", "client_session_id")? {
+        tx.execute(
+            "ALTER TABLE run_list_projection ADD COLUMN client_session_id TEXT",
+            [],
+        )?;
+    }
+    if !column_exists(tx, "run_list_projection", "bucket_id")? {
+        tx.execute(
+            "ALTER TABLE run_list_projection ADD COLUMN bucket_id TEXT",
+            [],
+        )?;
+    }
+    tx.execute(
+        "CREATE INDEX IF NOT EXISTS idx_run_list_projection_client_session_updated
+            ON run_list_projection(client_session_id, last_updated_at_ms DESC)",
+        [],
+    )?;
+    tx.execute(
+        "CREATE INDEX IF NOT EXISTS idx_run_list_projection_bucket_updated
+            ON run_list_projection(bucket_id, last_updated_at_ms DESC)",
+        [],
+    )?;
     Ok(())
 }
 

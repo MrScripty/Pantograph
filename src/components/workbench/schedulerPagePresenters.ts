@@ -108,6 +108,10 @@ export function formatSchedulerRetentionLabel(value: string | null | undefined):
   return value && value.trim().length > 0 ? value : 'Unassigned';
 }
 
+export function formatSchedulerScopeLabel(value: string | null | undefined): string {
+  return value && value.trim().length > 0 ? value : 'Unassigned';
+}
+
 export function schedulerPolicyFilterOptions(runs: RunListProjectionRecord[]): string[] {
   return uniqueSortedOptions(runs.map((run) => formatSchedulerPolicyLabel(run.scheduler_policy_id)));
 }
@@ -187,6 +191,9 @@ function schedulerRunMatchesSearch(run: RunListProjectionRecord, search: string)
     run.workflow_semantic_version,
     run.scheduler_policy_id,
     run.retention_policy_id,
+    run.client_id,
+    run.client_session_id,
+    run.bucket_id,
     run.status,
   ].some((value) => value?.toLowerCase().includes(search));
 }
