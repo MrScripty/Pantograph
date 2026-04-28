@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use uuid::Uuid;
 
+use pantograph_diagnostics_ledger::SchedulerModelCacheState;
+
 use crate::graph::WorkflowExecutionSessionKind;
 use crate::technical_fit::WorkflowTechnicalFitOverride;
 use crate::workflow::{
@@ -105,6 +107,14 @@ pub(crate) fn unix_timestamp_ms() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)
         .unwrap_or(0)
+}
+
+fn model_cache_state_for_requirements(required_models: &[String]) -> SchedulerModelCacheState {
+    if required_models.is_empty() {
+        SchedulerModelCacheState::NotRequired
+    } else {
+        SchedulerModelCacheState::Unknown
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -241,6 +251,9 @@ impl WorkflowExecutionSessionStore {
                             workflow_id: state.workflow_id.clone(),
                             state: WorkflowLocalRunPlacementState::Running,
                             runtime_loaded: state.runtime_loaded,
+                            model_cache_state: model_cache_state_for_requirements(
+                                &state.required_models,
+                            ),
                             required_backends: state.required_backends.clone(),
                             required_models: state.required_models.clone(),
                         });
@@ -251,6 +264,9 @@ impl WorkflowExecutionSessionStore {
                         workflow_id: state.workflow_id.clone(),
                         state: WorkflowLocalRunPlacementState::Queued,
                         runtime_loaded: state.runtime_loaded,
+                        model_cache_state: model_cache_state_for_requirements(
+                            &state.required_models,
+                        ),
                         required_backends: state.required_backends.clone(),
                         required_models: state.required_models.clone(),
                     }

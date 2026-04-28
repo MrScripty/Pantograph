@@ -228,10 +228,13 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
 - Local Network status: `workflow_local_network_status_query` reports
   local-only system and scheduler-load facts through a provider abstraction.
   Scheduler-load facts include active and queued workflow run ids for local
-  selected-run placement display, but they do not claim model/cache residency.
+  selected-run placement display. They include typed scheduler model-cache
+  posture for not-required/unknown state, but they do not claim concrete
+  model/cache residency.
   Run-placement records include the owning workflow execution session, run
-  state, runtime-loaded posture, and required backend/model facts so the GUI can
-  show selected-run requirements without querying raw scheduler internals.
+  state, runtime-loaded posture, model-cache posture, and required
+  backend/model facts so the GUI can show selected-run requirements without
+  querying raw scheduler internals.
   Future peer records must extend the peer DTOs instead of changing local-node
   semantics.
 - Retention policy updates: `workflow_retention_policy_update` changes the

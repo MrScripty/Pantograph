@@ -84,8 +84,8 @@ Local Network scheduler-load DTOs include backend-provided active and queued
 workflow run id arrays so the Network page can show selected-run placement
 without inferring scheduler truth from counts or selected-run context.
 They also preserve typed run-placement records with workflow execution-session
-id, runtime-loaded posture, and required backend/model facts for selected-run
-Network panels.
+id, runtime-loaded posture, scheduler model-cache posture, and required
+backend/model facts for selected-run Network panels.
 Queue and retention command methods live in `WorkflowCommandService.ts` so
 their backend-owned no-optimistic-update contract can be tested without
 importing the full graph event runtime required by `WorkflowService.ts`.
@@ -148,8 +148,8 @@ preserve the backend download/audit response.
 - Library usage request coverage includes active-run `workflow_run_id`
   filtering so frontend services preserve the backend projection contract.
 - Local Network request coverage includes active/queued run ids and
-  run-placement facts so frontend services preserve the backend scheduler-load
-  contract.
+  run-placement facts, including scheduler model-cache posture, so frontend
+  services preserve the backend scheduler-load contract.
 - Retention cleanup requests must use `workflow_retention_cleanup_apply` and
   preserve the backend cleanup result exactly.
 - Mock-mode payload shapes must remain compatible enough for callers to compile

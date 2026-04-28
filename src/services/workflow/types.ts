@@ -324,6 +324,16 @@ export interface WorkflowLocalGpuMetrics {
 }
 
 export type WorkflowLocalRunPlacementState = 'running' | 'queued';
+export type WorkflowSchedulerModelCacheState =
+  | 'unknown'
+  | 'not_required'
+  | 'cache_hit'
+  | 'cache_miss'
+  | 'load_requested'
+  | 'loaded'
+  | 'unload_requested'
+  | 'unloaded'
+  | 'failed';
 
 export interface WorkflowLocalRunPlacementRecord {
   workflow_run_id: string;
@@ -331,6 +341,7 @@ export interface WorkflowLocalRunPlacementRecord {
   workflow_id: string;
   state: WorkflowLocalRunPlacementState;
   runtime_loaded: boolean;
+  model_cache_state: WorkflowSchedulerModelCacheState;
   required_backends: string[];
   required_models: string[];
 }

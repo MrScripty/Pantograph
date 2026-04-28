@@ -64,6 +64,10 @@ async fn local_network_status_reports_local_node_and_scheduler_load() {
     assert_eq!(placement.workflow_id, "wf-local-network");
     assert_eq!(placement.state, WorkflowLocalRunPlacementState::Queued);
     assert!(placement.runtime_loaded);
+    assert_eq!(
+        placement.model_cache_state,
+        SchedulerModelCacheState::Unknown
+    );
     assert!(response
         .local_node
         .scheduler_load

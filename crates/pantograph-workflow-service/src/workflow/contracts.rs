@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use pantograph_diagnostics_ledger::DiagnosticsLedgerError;
+use pantograph_diagnostics_ledger::{DiagnosticsLedgerError, SchedulerModelCacheState};
 use pantograph_runtime_attribution::{AttributionError, BucketSelection, CredentialProofRequest};
 
 use crate::graph::{
@@ -407,6 +407,7 @@ pub struct WorkflowLocalRunPlacementRecord {
     pub workflow_id: String,
     pub state: WorkflowLocalRunPlacementState,
     pub runtime_loaded: bool,
+    pub model_cache_state: SchedulerModelCacheState,
     #[serde(default)]
     pub required_backends: Vec<String>,
     #[serde(default)]

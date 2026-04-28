@@ -104,6 +104,10 @@ trigger backend-owned artifact expiration without touching ledger internals.
 Library asset access audit recording now lives behind the diagnostics API
 helper and is re-exported by the crate facade so adapters can record typed
 Pumas/Library operations without appending raw diagnostic ledger events.
+Local Network status now carries scheduler-owned run placement plus typed
+model-cache posture through workflow-service DTOs so adapters can render
+selected-run Network facts without reconstructing scheduler or diagnostics
+payload state.
 
 ## Alternatives Rejected
 - Keep workflow behavior in Tauri commands: rejected because native bindings

@@ -15,6 +15,7 @@ import {
   formatSchedulerLoad,
   findSelectedRunPlacement,
   formatSelectedRunRequirementList,
+  formatSelectedRunModelCacheState,
   formatSelectedRunResourceCacheStatus,
   formatSelectedRunNodeStatus,
   formatSelectedRunLocalState,
@@ -82,6 +83,7 @@ function createNode(): WorkflowLocalNetworkNodeStatus {
           workflow_id: 'workflow-a',
           state: 'running',
           runtime_loaded: true,
+          model_cache_state: 'unknown',
           required_backends: ['python'],
           required_models: ['model-a'],
         },
@@ -91,6 +93,7 @@ function createNode(): WorkflowLocalNetworkNodeStatus {
           workflow_id: 'workflow-a',
           state: 'queued',
           runtime_loaded: false,
+          model_cache_state: 'not_required',
           required_backends: [],
           required_models: [],
         },
@@ -155,6 +158,11 @@ test('network load presenters expose scheduler capacity', () => {
   assert.equal(formatSelectedRunRuntimePosture(placement), 'Runtime session loaded');
   assert.equal(formatSelectedRunRuntimePosture(findSelectedRunPlacement(node, 'run-queued')), 'Runtime session not loaded');
   assert.equal(formatSelectedRunRuntimePosture(null), 'Unavailable');
+  assert.equal(formatSelectedRunModelCacheState(placement?.model_cache_state ?? 'unknown'), 'Cache state unknown');
+  assert.equal(
+    formatSelectedRunModelCacheState(findSelectedRunPlacement(node, 'run-queued')?.model_cache_state ?? 'unknown'),
+    'Model not required',
+  );
   assert.equal(formatSelectedRunPlacementState(placement), 'Running locally');
   assert.equal(formatSelectedRunPlacementState(findSelectedRunPlacement(node, 'run-queued')), 'Queued locally');
   assert.equal(formatSelectedRunPlacementState(null), 'Unavailable');
@@ -185,6 +193,7 @@ test('buildSelectedRunPlacementRows exposes selected-run local relevance facts',
   assert.equal(rows.find((row) => row.label === 'Session')?.value, 'session-active');
   assert.equal(rows.find((row) => row.label === 'Workflow')?.value, 'workflow-a');
   assert.equal(rows.find((row) => row.label === 'Runtime')?.value, 'Runtime session loaded');
+  assert.equal(rows.find((row) => row.label === 'Model Cache')?.value, 'Cache state unknown');
   assert.equal(rows.find((row) => row.label === 'Backends')?.value, 'python');
   assert.equal(rows.find((row) => row.label === 'Models')?.value, 'model-a');
   assert.equal(buildSelectedRunPlacementRows(null).find((row) => row.label === 'State')?.value, 'Not scheduled locally');

@@ -101,8 +101,9 @@ needs to be the long-term home for scheduler contracts or queue mutation logic.
   facts for the Network page. They expose placement only and must not be used
   to imply model, runtime, or cache residency.
 - Local run-placement records may include session runtime posture and required
-  backend/model facts from scheduler state. They remain scheduler observations,
-  not proof that a model is loaded in a runtime cache.
+  backend/model facts from scheduler state. They also include typed scheduler
+  model-cache posture for known not-required or unknown states. They remain
+  scheduler observations, not proof that a model is loaded in a runtime cache.
 - Queue insertion should move the constructed queued-run record directly into
   the store so scheduler state transitions do not accumulate redundant
   rebinding or hidden policy steps.

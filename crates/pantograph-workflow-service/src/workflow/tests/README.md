@@ -128,6 +128,9 @@ Use `workflow/tests/` for behavior-specific child modules under the parent
 - Session queue tests with diagnostics enabled must verify accepted
   reprioritize and push-front actions also record refreshed scheduler estimate
   events for the updated queued run.
+- Local Network tests must assert selected-run placement records preserve typed
+  scheduler model-cache posture so the GUI does not infer cache state from
+  required model lists or raw scheduler payloads.
 - Session execution tests with attribution and diagnostics enabled must verify
   `run.snapshot_accepted` events carry the immutable workflow version and node
   behavior-version set before scheduler admission.

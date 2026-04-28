@@ -6,6 +6,7 @@ import type {
 import type {
   WorkflowLocalNetworkNodeStatus,
   WorkflowLocalRunPlacementRecord,
+  WorkflowSchedulerModelCacheState,
   WorkflowNetworkTransportState,
 } from '../../services/workflow/types';
 import {
@@ -179,6 +180,7 @@ export function buildSelectedRunPlacementRows(
       { label: 'Session', value: 'Unavailable', mono: true },
       { label: 'Workflow', value: 'Unavailable', mono: true },
       { label: 'Runtime', value: 'Unavailable' },
+      { label: 'Model Cache', value: 'Unavailable' },
       { label: 'Backends', value: 'No backend requirements' },
       { label: 'Models', value: 'No model requirements' },
     ];
@@ -188,6 +190,7 @@ export function buildSelectedRunPlacementRows(
     { label: 'Session', value: placement.workflow_execution_session_id, mono: true },
     { label: 'Workflow', value: placement.workflow_id, mono: true },
     { label: 'Runtime', value: formatSelectedRunRuntimePosture(placement) },
+    { label: 'Model Cache', value: formatSelectedRunModelCacheState(placement.model_cache_state) },
     {
       label: 'Backends',
       value: formatSelectedRunRequirementList(placement.required_backends, 'No backend requirements'),
@@ -197,6 +200,29 @@ export function buildSelectedRunPlacementRows(
       value: formatSelectedRunRequirementList(placement.required_models, 'No model requirements'),
     },
   ];
+}
+
+export function formatSelectedRunModelCacheState(state: WorkflowSchedulerModelCacheState): string {
+  switch (state) {
+    case 'unknown':
+      return 'Cache state unknown';
+    case 'not_required':
+      return 'Model not required';
+    case 'cache_hit':
+      return 'Model cache hit';
+    case 'cache_miss':
+      return 'Model cache miss';
+    case 'load_requested':
+      return 'Model load requested';
+    case 'loaded':
+      return 'Model loaded';
+    case 'unload_requested':
+      return 'Model unload requested';
+    case 'unloaded':
+      return 'Model unloaded';
+    case 'failed':
+      return 'Model cache failed';
+  }
 }
 
 export function buildSelectedRunResourceRows(

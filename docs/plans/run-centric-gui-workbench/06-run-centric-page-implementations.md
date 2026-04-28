@@ -369,8 +369,9 @@ authoring page.
   local status API exposes those facts. Selected-run Library resources and last
   cache observations are now displayed from the Library usage projection.
   Selected-run node/runtime/model execution labels are displayed from the
-  node-status projection. Local cache residency remains pending local-status
-  support.
+  node-status projection. Selected-run placement records now expose a typed
+  scheduler model-cache state for not-required/unknown cache posture. Concrete
+  local cache residency remains pending local-status support.
 - [x] Structure Network data so future peer nodes can appear without a page
   rewrite.
 - [x] Highlight active-run relevant local node/runtime/model state where typed
@@ -399,11 +400,14 @@ or queued locally. It also reports run-placement records with workflow
 execution-session id, workflow id, local state, runtime-loaded posture, and
 required backend/model facts.
 Runtime/model cache highlights for the selected run remain open because the
-local status API still does not expose run-keyed cache residency facts. The
-page displays selected-run Library resources and last cache observations from
-`workflowService.queryLibraryUsage`, keeping those rows as audit facts rather
-than local residency claims. The page also displays selected-run node status,
-runtime id/version, and model id/version labels from
+local status API still does not expose run-keyed cache residency facts. It now
+does expose typed scheduler model-cache posture on selected-run placement rows,
+so the page can show whether model cache is not required or still unknown
+without claiming residency. The page displays selected-run Library resources
+and last cache observations from `workflowService.queryLibraryUsage`, keeping
+those rows as audit facts rather than local residency claims. The page also
+displays selected-run node status, runtime id/version, and model id/version
+labels from
 `workflowService.queryNodeStatus`, keeping those rows as execution projection
 facts rather than cache-residency claims. The page also reads the selected
 run's scheduler timeline projection so local scheduler/system activity can be
@@ -548,6 +552,10 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
 - Added Network selected-run execution and resource status highlighting from
   typed node-status and Library usage projection fields without inferring
   local cache residency.
+- Added typed scheduler model-cache state to local Network selected-run
+  placement records and presenter rows, allowing the page to distinguish
+  not-required and unknown model-cache posture without parsing scheduler
+  payloads or claiming local cache residency.
 
 ### Deviations
 
@@ -569,9 +577,10 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
   richer decision facets should be promoted into typed projection fields.
 - Network selected-run context now shows backend-reported local running/queued
   placement, scheduler timeline events, runtime-loaded session posture, and
-  required backend/model facts, but it is not yet linked to model cache
-  residency because `WorkflowLocalNetworkStatusQueryResponse` does not expose
-  run-keyed cache facts.
+  required backend/model facts plus typed scheduler model-cache posture, but it
+  is not yet linked to concrete model cache residency because
+  `WorkflowLocalNetworkStatusQueryResponse` does not expose run-keyed residency
+  facts.
 - Scheduler timeline rows currently show typed event labels, summary/detail
   text, and payload availability only. The run table shows scheduler and
   retention policy IDs, queue position, priority, estimate, and scheduler

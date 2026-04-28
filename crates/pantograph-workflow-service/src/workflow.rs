@@ -62,8 +62,8 @@ pub use pantograph_diagnostics_ledger::{
     IoArtifactProjectionRecord, IoArtifactRetentionState, IoArtifactRetentionSummaryRecord,
     LibraryAssetCacheStatus, LibraryAssetOperation, LibraryUsageProjectionRecord,
     ProjectionStateRecord, RunDetailProjectionRecord, RunListFacetRecord, RunListProjectionRecord,
-    RunListProjectionStatus, SchedulerTimelineProjectionRecord, SqliteDiagnosticsLedger,
-    WorkflowTimingExpectation, WorkflowTimingExpectationComparison,
+    RunListProjectionStatus, SchedulerModelCacheState, SchedulerTimelineProjectionRecord,
+    SqliteDiagnosticsLedger, WorkflowTimingExpectation, WorkflowTimingExpectationComparison,
 };
 pub use pantograph_runtime_attribution::{
     AttributionRepository, BucketCreateRequest, BucketDeleteRequest, BucketRecord, BucketSelection,
