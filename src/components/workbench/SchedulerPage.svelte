@@ -34,6 +34,10 @@
     formatSchedulerQueuePosition,
     formatSchedulerReasonLabel,
     schedulerStatusClass,
+    schedulerAcceptedDateFilterOptions,
+    schedulerBucketFilterOptions,
+    schedulerClientFilterOptions,
+    schedulerClientSessionFilterOptions,
     schedulerPolicyFilterOptions,
     schedulerRetentionFilterOptions,
     formatSchedulerScopeLabel,
@@ -61,6 +65,10 @@
   let displayedRuns = $derived(filterAndSortSchedulerRuns(runs, $schedulerRunFilters));
   let schedulerPolicyOptions = $derived(schedulerPolicyFilterOptions(runs));
   let retentionPolicyOptions = $derived(schedulerRetentionFilterOptions(runs));
+  let clientOptions = $derived(schedulerClientFilterOptions(runs));
+  let clientSessionOptions = $derived(schedulerClientSessionFilterOptions(runs));
+  let bucketOptions = $derived(schedulerBucketFilterOptions(runs));
+  let acceptedDateOptions = $derived(schedulerAcceptedDateFilterOptions(runs));
   let selectedRunRecord = $derived(
     runs.find((run) => run.workflow_run_id === $activeWorkflowRun?.workflow_run_id) ?? null,
   );
@@ -243,8 +251,8 @@
     <div class="border-b border-red-900 bg-red-950/50 px-4 py-2 text-sm text-red-200">{error}</div>
   {/if}
 
-  <div class="grid shrink-0 gap-3 border-b border-neutral-900 px-4 py-3 md:grid-cols-[minmax(12rem,1fr)_12rem_12rem] xl:grid-cols-[minmax(12rem,1fr)_12rem_12rem_12rem_12rem]">
-    <div>
+  <div class="grid shrink-0 gap-3 border-b border-neutral-900 px-4 py-3 md:grid-cols-3 xl:grid-cols-6 2xl:grid-cols-[minmax(12rem,1.5fr)_repeat(8,minmax(8rem,1fr))]">
+    <div class="md:col-span-3 xl:col-span-2 2xl:col-span-1">
       <label for="scheduler-run-search" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
         Search
       </label>
@@ -316,6 +324,70 @@
         <option value="all">all</option>
         {#each retentionPolicyOptions as retention (retention)}
           <option value={retention}>{retention}</option>
+        {/each}
+      </select>
+    </div>
+    <div>
+      <label for="scheduler-client-filter" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
+        Client
+      </label>
+      <select
+        id="scheduler-client-filter"
+        value={$schedulerRunFilters.client}
+        onchange={(event) => setSchedulerRunFilters({ client: eventValue(event) })}
+        class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
+      >
+        <option value="all">all</option>
+        {#each clientOptions as client (client)}
+          <option value={client}>{client}</option>
+        {/each}
+      </select>
+    </div>
+    <div>
+      <label for="scheduler-session-filter" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
+        Session
+      </label>
+      <select
+        id="scheduler-session-filter"
+        value={$schedulerRunFilters.clientSession}
+        onchange={(event) => setSchedulerRunFilters({ clientSession: eventValue(event) })}
+        class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
+      >
+        <option value="all">all</option>
+        {#each clientSessionOptions as clientSession (clientSession)}
+          <option value={clientSession}>{clientSession}</option>
+        {/each}
+      </select>
+    </div>
+    <div>
+      <label for="scheduler-bucket-filter" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
+        Bucket
+      </label>
+      <select
+        id="scheduler-bucket-filter"
+        value={$schedulerRunFilters.bucket}
+        onchange={(event) => setSchedulerRunFilters({ bucket: eventValue(event) })}
+        class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
+      >
+        <option value="all">all</option>
+        {#each bucketOptions as bucket (bucket)}
+          <option value={bucket}>{bucket}</option>
+        {/each}
+      </select>
+    </div>
+    <div>
+      <label for="scheduler-accepted-filter" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
+        Accepted
+      </label>
+      <select
+        id="scheduler-accepted-filter"
+        value={$schedulerRunFilters.acceptedDate}
+        onchange={(event) => setSchedulerRunFilters({ acceptedDate: eventValue(event) })}
+        class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
+      >
+        <option value="all">all</option>
+        {#each acceptedDateOptions as acceptedDate (acceptedDate)}
+          <option value={acceptedDate}>{acceptedDate}</option>
         {/each}
       </select>
     </div>

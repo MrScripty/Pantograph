@@ -15,6 +15,10 @@ export interface SchedulerRunFilters {
   status: SchedulerStatusFilter;
   schedulerPolicy: string;
   retentionPolicy: string;
+  client: string;
+  clientSession: string;
+  bucket: string;
+  acceptedDate: string;
   sort: SchedulerSortKey;
 }
 
@@ -66,6 +70,10 @@ export const DEFAULT_SCHEDULER_RUN_FILTERS: SchedulerRunFilters = {
   status: 'all',
   schedulerPolicy: 'all',
   retentionPolicy: 'all',
+  client: 'all',
+  clientSession: 'all',
+  bucket: 'all',
+  acceptedDate: 'all',
   sort: 'last_updated_desc',
 };
 
@@ -106,6 +114,10 @@ export function normalizeSchedulerRunFilters(
     status: isSchedulerStatusFilter(filters?.status) ? filters.status : 'all',
     schedulerPolicy: normalizeOption(filters?.schedulerPolicy),
     retentionPolicy: normalizeOption(filters?.retentionPolicy),
+    client: normalizeOption(filters?.client),
+    clientSession: normalizeOption(filters?.clientSession),
+    bucket: normalizeOption(filters?.bucket),
+    acceptedDate: normalizeOption(filters?.acceptedDate),
     sort: isSchedulerSortKey(filters?.sort) ? filters.sort : 'last_updated_desc',
   };
 }

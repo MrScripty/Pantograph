@@ -60,7 +60,8 @@ does not persist active-run selection or become a backend source of run truth.
 `schedulerRunListStore.ts` owns dense Scheduler table filter, sort, and
 column-visibility state so the page does not duplicate run-list UI state in
 component-local variables while backend projection services remain the only
-source of run data.
+source of run data. Scope and accepted-date filters stay in the same transient
+store boundary as status and policy filters.
 
 ## Alternatives Rejected
 - Keep separate app-only and package-only workflow stores.
@@ -92,6 +93,9 @@ source of run data.
 - Scheduler run-list filters, sort order, and column visibility are transient
   UI preferences. They must not mutate backend queue state or be treated as
   scheduler policy.
+- Scheduler scope and accepted-date filters are presentation filters over
+  backend projection fields. They must not become client authority checks or
+  durable scheduler policy.
 
 ## Revisit Triggers
 - The legacy store facade is no longer imported anywhere.
@@ -161,7 +165,8 @@ diagnosticsSnapshot.subscribe(({ selectedRun }) => {
   events; they are not durable artifacts in v1.
 - Workbench active-run context is in-memory GUI state and may be `null` at
   startup even when runs exist in scheduler projections.
-- Scheduler run-list filter state is in-memory GUI state. It may be reset
+- Scheduler run-list filter state is in-memory GUI state, including status,
+  policy, scope, accepted-date, search, and sort controls. It may be reset
   without changing queued runs, selected active run, or backend projections.
 - `currentSessionState` is an additive backend-owned inspection snapshot and
   may be absent from event-driven projections even when a direct diagnostics

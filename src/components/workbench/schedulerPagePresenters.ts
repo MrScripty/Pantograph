@@ -127,6 +127,29 @@ export function schedulerRetentionFilterOptions(runs: RunListProjectionRecord[])
   return uniqueSortedOptions(runs.map((run) => formatSchedulerRetentionLabel(run.retention_policy_id)));
 }
 
+export function schedulerClientFilterOptions(runs: RunListProjectionRecord[]): string[] {
+  return uniqueSortedOptions(runs.map((run) => formatSchedulerScopeLabel(run.client_id)));
+}
+
+export function schedulerClientSessionFilterOptions(runs: RunListProjectionRecord[]): string[] {
+  return uniqueSortedOptions(runs.map((run) => formatSchedulerScopeLabel(run.client_session_id)));
+}
+
+export function schedulerBucketFilterOptions(runs: RunListProjectionRecord[]): string[] {
+  return uniqueSortedOptions(runs.map((run) => formatSchedulerScopeLabel(run.bucket_id)));
+}
+
+export function schedulerAcceptedDateFilterOptions(runs: RunListProjectionRecord[]): string[] {
+  return uniqueSortedOptions(runs.map((run) => formatSchedulerAcceptedDateLabel(run.accepted_at_ms)));
+}
+
+export function formatSchedulerAcceptedDateLabel(value: number | null | undefined): string {
+  if (!value) {
+    return 'Unassigned';
+  }
+  return new Date(value).toISOString().slice(0, 10);
+}
+
 export function formatSchedulerTimelineKind(
   event: Pick<SchedulerTimelineProjectionRecord, 'event_kind'>,
 ): string {
@@ -171,6 +194,26 @@ export function filterAndSortSchedulerRuns(
       (run) =>
         filters.retentionPolicy === 'all' ||
         formatSchedulerRetentionLabel(run.retention_policy_id) === filters.retentionPolicy,
+    )
+    .filter(
+      (run) =>
+        filters.client === 'all' ||
+        formatSchedulerScopeLabel(run.client_id) === filters.client,
+    )
+    .filter(
+      (run) =>
+        filters.clientSession === 'all' ||
+        formatSchedulerScopeLabel(run.client_session_id) === filters.clientSession,
+    )
+    .filter(
+      (run) =>
+        filters.bucket === 'all' ||
+        formatSchedulerScopeLabel(run.bucket_id) === filters.bucket,
+    )
+    .filter(
+      (run) =>
+        filters.acceptedDate === 'all' ||
+        formatSchedulerAcceptedDateLabel(run.accepted_at_ms) === filters.acceptedDate,
     )
     .filter((run) => search.length === 0 || schedulerRunMatchesSearch(run, search));
   return [...filtered].sort((left, right) => compareSchedulerRuns(left, right, filters.sort));

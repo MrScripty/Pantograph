@@ -150,11 +150,11 @@ renders a dense projection-backed run table, first-class queued/future rows
 where present in the run-list projection, selected-run actions, active-run
 updates, projection freshness, search, status filtering, stable local sort
 options, scheduler policy IDs, retention policy IDs, scheduler-policy and
-retention-policy filters, client/session/bucket scope columns, workflow
-execution-session projection facts for future queue controls, typed queue
-position, priority, estimate, and scheduler-reason columns, delayed status
-presentation, backend-supported cancel/front actions for queued selected runs,
-a selected-run timeline panel, timeline projection
+retention-policy filters, client/session/bucket scope columns and filters,
+accepted-date filters, workflow execution-session projection facts for future
+queue controls, typed queue position, priority, estimate, and scheduler-reason
+columns, delayed status presentation, backend-supported cancel/front actions
+for queued selected runs, a selected-run timeline panel, timeline projection
 freshness, and timeline summary/detail rows without raw event parsing. Progress,
 model/runtime summaries, richer delay categories, richer retention summaries,
 and privileged queue action controls remain open.
@@ -446,6 +446,8 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
   policy IDs already available on `RunListProjectionRecord`.
 - Added Scheduler table filters for the typed scheduler policy and retention
   policy row fields without parsing scheduler event payloads.
+- Added Scheduler table filters for client, client session, bucket, and
+  accepted date using typed run-list projection fields.
 - Added Scheduler table columns for typed queue position, priority, estimate,
   and scheduler reason fields promoted into run-list projections.
 - Added a Scheduler selected-run timeline panel backed by

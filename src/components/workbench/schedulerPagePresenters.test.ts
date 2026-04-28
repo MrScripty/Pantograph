@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import type { RunListProjectionRecord } from '../../services/diagnostics/types.ts';
 import {
   filterAndSortSchedulerRuns,
+  formatSchedulerAcceptedDateLabel,
   formatSchedulerPolicyLabel,
   formatSchedulerPriority,
   formatSchedulerQueuePosition,
@@ -16,6 +17,10 @@ import {
   formatSchedulerTimelineSource,
   formatSchedulerDuration,
   formatSchedulerTimestamp,
+  schedulerAcceptedDateFilterOptions,
+  schedulerBucketFilterOptions,
+  schedulerClientFilterOptions,
+  schedulerClientSessionFilterOptions,
   schedulerPolicyFilterOptions,
   schedulerRetentionFilterOptions,
   schedulerRunSupportsQueueControls,
@@ -80,6 +85,8 @@ test('scheduler policy presenters keep missing dense table facts explicit', () =
   assert.equal(formatSchedulerRetentionLabel(undefined), 'Unassigned');
   assert.equal(formatSchedulerScopeLabel('session-a'), 'session-a');
   assert.equal(formatSchedulerScopeLabel(''), 'Unassigned');
+  assert.equal(formatSchedulerAcceptedDateLabel(86_400_000), '1970-01-02');
+  assert.equal(formatSchedulerAcceptedDateLabel(null), 'Unassigned');
 });
 
 test('scheduler queue and estimate presenters keep unavailable facts explicit', () => {
@@ -118,7 +125,7 @@ test('scheduler queue controls require queued run execution-session facts', () =
 test('filterAndSortSchedulerRuns filters by status and search text', () => {
   const runs = [
     run({ workflow_run_id: 'run-a', workflow_id: 'caption', status: 'queued' }),
-    run({ workflow_run_id: 'run-b', workflow_id: 'render', status: 'completed' }),
+    run({ workflow_run_id: 'run-b', workflow_id: 'render', status: 'completed', client_id: 'client-b' }),
     run({ workflow_run_id: 'run-c', workflow_id: 'caption', status: 'failed' }),
   ];
 
@@ -127,6 +134,10 @@ test('filterAndSortSchedulerRuns filters by status and search text', () => {
     status: 'queued',
     schedulerPolicy: 'all',
     retentionPolicy: 'all',
+    client: 'all',
+    clientSession: 'all',
+    bucket: 'all',
+    acceptedDate: 'all',
     sort: 'workflow_asc',
   });
 
@@ -150,6 +161,10 @@ test('filterAndSortSchedulerRuns searches client scope facts', () => {
       status: 'all',
       schedulerPolicy: 'all',
       retentionPolicy: 'all',
+      client: 'all',
+      clientSession: 'all',
+      bucket: 'all',
+      acceptedDate: 'all',
       sort: 'workflow_asc',
     }).map((item) => item.workflow_run_id),
     ['run-b'],
@@ -169,6 +184,10 @@ test('filterAndSortSchedulerRuns sorts by operational fields', () => {
       status: 'all',
       schedulerPolicy: 'all',
       retentionPolicy: 'all',
+      client: 'all',
+      clientSession: 'all',
+      bucket: 'all',
+      acceptedDate: 'all',
       sort: 'last_updated_desc',
     }).map((item) => item.workflow_run_id),
     ['run-b', 'run-c', 'run-a'],
@@ -179,6 +198,10 @@ test('filterAndSortSchedulerRuns sorts by operational fields', () => {
       status: 'all',
       schedulerPolicy: 'all',
       retentionPolicy: 'all',
+      client: 'all',
+      clientSession: 'all',
+      bucket: 'all',
+      acceptedDate: 'all',
       sort: 'duration_desc',
     }).map((item) => item.workflow_run_id),
     ['run-b', 'run-a', 'run-c'],
@@ -191,27 +214,44 @@ test('scheduler policy filters use explicit projection labels', () => {
       workflow_run_id: 'run-a',
       scheduler_policy_id: 'policy-b',
       retention_policy_id: 'retention-a',
+      accepted_at_ms: 86_400_000,
     }),
     run({
       workflow_run_id: 'run-b',
       scheduler_policy_id: 'policy-a',
       retention_policy_id: null,
+      client_id: 'client-b',
+      client_session_id: 'session-b',
+      bucket_id: 'bucket-b',
+      accepted_at_ms: 172_800_000,
     }),
     run({
       workflow_run_id: 'run-c',
       scheduler_policy_id: '',
       retention_policy_id: 'retention-b',
+      client_id: null,
+      client_session_id: null,
+      bucket_id: null,
+      accepted_at_ms: null,
     }),
   ];
 
   assert.deepEqual(schedulerPolicyFilterOptions(runs), ['Unassigned', 'policy-a', 'policy-b']);
   assert.deepEqual(schedulerRetentionFilterOptions(runs), ['Unassigned', 'retention-a', 'retention-b']);
+  assert.deepEqual(schedulerClientFilterOptions(runs), ['Unassigned', 'client-a', 'client-b']);
+  assert.deepEqual(schedulerClientSessionFilterOptions(runs), ['Unassigned', 'session-a', 'session-b']);
+  assert.deepEqual(schedulerBucketFilterOptions(runs), ['Unassigned', 'bucket-a', 'bucket-b']);
+  assert.deepEqual(schedulerAcceptedDateFilterOptions(runs), ['Unassigned', '1970-01-02', '1970-01-03']);
   assert.deepEqual(
     filterAndSortSchedulerRuns(runs, {
       search: '',
       status: 'all',
       schedulerPolicy: 'policy-a',
       retentionPolicy: 'Unassigned',
+      client: 'client-b',
+      clientSession: 'session-b',
+      bucket: 'bucket-b',
+      acceptedDate: '1970-01-03',
       sort: 'workflow_asc',
     }).map((item) => item.workflow_run_id),
     ['run-b'],

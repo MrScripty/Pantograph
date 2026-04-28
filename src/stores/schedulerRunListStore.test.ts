@@ -32,6 +32,10 @@ test('normalizeSchedulerRunFilters rejects unknown enum values', () => {
       status: 'all',
       schedulerPolicy: 'all',
       retentionPolicy: 'ephemeral',
+      client: 'all',
+      clientSession: 'all',
+      bucket: 'all',
+      acceptedDate: 'all',
       sort: 'last_updated_desc',
     },
   );
@@ -41,6 +45,7 @@ test('withSchedulerRunFilters applies partial updates without losing existing fi
   const next = withSchedulerRunFilters(DEFAULT_SCHEDULER_RUN_FILTERS, {
     search: 'workflow-a',
     status: 'delayed',
+    client: 'client-a',
   });
 
   assert.deepEqual(next, {
@@ -48,6 +53,10 @@ test('withSchedulerRunFilters applies partial updates without losing existing fi
     status: 'delayed',
     schedulerPolicy: 'all',
     retentionPolicy: 'all',
+    client: 'client-a',
+    clientSession: 'all',
+    bucket: 'all',
+    acceptedDate: 'all',
     sort: 'last_updated_desc',
   });
 });
