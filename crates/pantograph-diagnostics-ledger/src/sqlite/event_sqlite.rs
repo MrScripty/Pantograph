@@ -448,7 +448,8 @@ pub(super) fn query_run_list_projection(
         "SELECT workflow_run_id, workflow_id, workflow_version_id,
                 workflow_semantic_version, status, accepted_at_ms, enqueued_at_ms,
                 started_at_ms, completed_at_ms, duration_ms, scheduler_policy_id,
-                retention_policy_id, client_id, client_session_id, bucket_id,
+                retention_policy_id, selected_runtime_id, selected_device_id,
+                selected_network_node_id, client_id, client_session_id, bucket_id,
                 workflow_execution_session_id,
                 scheduler_queue_position, scheduler_priority,
                 estimate_confidence, estimated_queue_wait_ms, estimated_duration_ms,
@@ -460,14 +461,17 @@ pub(super) fn query_run_list_projection(
            AND (?4 IS NULL OR status = ?4)
            AND (?5 IS NULL OR scheduler_policy_id = ?5)
            AND (?6 IS NULL OR retention_policy_id = ?6)
-           AND (?7 IS NULL OR client_id = ?7)
-           AND (?8 IS NULL OR client_session_id = ?8)
-           AND (?9 IS NULL OR bucket_id = ?9)
-           AND (?10 IS NULL OR accepted_at_ms >= ?10)
-           AND (?11 IS NULL OR accepted_at_ms <= ?11)
-           AND last_event_seq > ?12
+           AND (?7 IS NULL OR selected_runtime_id = ?7)
+           AND (?8 IS NULL OR selected_device_id = ?8)
+           AND (?9 IS NULL OR selected_network_node_id = ?9)
+           AND (?10 IS NULL OR client_id = ?10)
+           AND (?11 IS NULL OR client_session_id = ?11)
+           AND (?12 IS NULL OR bucket_id = ?12)
+           AND (?13 IS NULL OR accepted_at_ms >= ?13)
+           AND (?14 IS NULL OR accepted_at_ms <= ?14)
+           AND last_event_seq > ?15
          ORDER BY last_updated_at_ms DESC, last_event_seq DESC
-         LIMIT ?13",
+         LIMIT ?16",
     )?;
     let rows = stmt.query_map(
         params![
@@ -480,6 +484,9 @@ pub(super) fn query_run_list_projection(
             query.status.map(|status| status.as_db()),
             query.scheduler_policy_id.as_deref(),
             query.retention_policy_id.as_deref(),
+            query.selected_runtime_id.as_deref(),
+            query.selected_device_id.as_deref(),
+            query.selected_network_node_id.as_deref(),
             query.client_id.as_ref().map(|id| id.as_str()),
             query.client_session_id.as_ref().map(|id| id.as_str()),
             query.bucket_id.as_ref().map(|id| id.as_str()),
@@ -528,6 +535,27 @@ pub(super) fn query_run_list_facets(
         "COALESCE(retention_policy_id, 'Unassigned')",
         &mut facets,
     )?;
+    query_run_list_facet(
+        ledger,
+        &query,
+        RunListFacetKind::SelectedRuntime,
+        "COALESCE(selected_runtime_id, 'Unassigned')",
+        &mut facets,
+    )?;
+    query_run_list_facet(
+        ledger,
+        &query,
+        RunListFacetKind::SelectedDevice,
+        "COALESCE(selected_device_id, 'Unassigned')",
+        &mut facets,
+    )?;
+    query_run_list_facet(
+        ledger,
+        &query,
+        RunListFacetKind::SelectedNetworkNode,
+        "COALESCE(selected_network_node_id, 'Unassigned')",
+        &mut facets,
+    )?;
     Ok(facets)
 }
 
@@ -547,11 +575,14 @@ fn query_run_list_facet(
            AND (?4 IS NULL OR status = ?4)
            AND (?5 IS NULL OR scheduler_policy_id = ?5)
            AND (?6 IS NULL OR retention_policy_id = ?6)
-           AND (?7 IS NULL OR client_id = ?7)
-           AND (?8 IS NULL OR client_session_id = ?8)
-           AND (?9 IS NULL OR bucket_id = ?9)
-           AND (?10 IS NULL OR accepted_at_ms >= ?10)
-           AND (?11 IS NULL OR accepted_at_ms <= ?11)
+           AND (?7 IS NULL OR selected_runtime_id = ?7)
+           AND (?8 IS NULL OR selected_device_id = ?8)
+           AND (?9 IS NULL OR selected_network_node_id = ?9)
+           AND (?10 IS NULL OR client_id = ?10)
+           AND (?11 IS NULL OR client_session_id = ?11)
+           AND (?12 IS NULL OR bucket_id = ?12)
+           AND (?13 IS NULL OR accepted_at_ms >= ?13)
+           AND (?14 IS NULL OR accepted_at_ms <= ?14)
          GROUP BY {expression}
          ORDER BY COUNT(*) DESC, {expression}"
     );
@@ -567,6 +598,9 @@ fn query_run_list_facet(
             query.status.map(|status| status.as_db()),
             query.scheduler_policy_id.as_deref(),
             query.retention_policy_id.as_deref(),
+            query.selected_runtime_id.as_deref(),
+            query.selected_device_id.as_deref(),
+            query.selected_network_node_id.as_deref(),
             query.client_id.as_ref().map(|id| id.as_str()),
             query.client_session_id.as_ref().map(|id| id.as_str()),
             query.bucket_id.as_ref().map(|id| id.as_str()),
@@ -674,7 +708,8 @@ pub(super) fn query_run_detail_projection(
         "SELECT workflow_run_id, workflow_id, workflow_version_id,
                 workflow_semantic_version, status, accepted_at_ms, enqueued_at_ms,
                 started_at_ms, completed_at_ms, duration_ms, scheduler_policy_id,
-                retention_policy_id, client_id, client_session_id, bucket_id,
+                retention_policy_id, selected_runtime_id, selected_device_id,
+                selected_network_node_id, client_id, client_session_id, bucket_id,
                 workflow_run_snapshot_id, workflow_execution_session_id,
                 workflow_presentation_revision_id, latest_estimate_json,
                 latest_queue_placement_json, started_payload_json, terminal_payload_json,
@@ -1952,11 +1987,12 @@ fn apply_run_list_projection_event(
              status, accepted_at_ms, enqueued_at_ms, started_at_ms, completed_at_ms,
              duration_ms, scheduler_policy_id, retention_policy_id, client_id,
              client_session_id, bucket_id, workflow_execution_session_id,
+             selected_runtime_id, selected_device_id, selected_network_node_id,
              scheduler_queue_position, scheduler_priority, estimate_confidence,
              estimated_queue_wait_ms, estimated_duration_ms, scheduler_reason,
              last_event_seq, last_updated_at_ms)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,
-             ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24)
+             ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27)
          ON CONFLICT(workflow_run_id) DO UPDATE SET
             workflow_id = excluded.workflow_id,
             workflow_version_id = COALESCE(excluded.workflow_version_id, workflow_version_id),
@@ -1973,6 +2009,9 @@ fn apply_run_list_projection_event(
             client_session_id = COALESCE(excluded.client_session_id, client_session_id),
             bucket_id = COALESCE(excluded.bucket_id, bucket_id),
             workflow_execution_session_id = COALESCE(excluded.workflow_execution_session_id, workflow_execution_session_id),
+            selected_runtime_id = COALESCE(excluded.selected_runtime_id, selected_runtime_id),
+            selected_device_id = COALESCE(excluded.selected_device_id, selected_device_id),
+            selected_network_node_id = COALESCE(excluded.selected_network_node_id, selected_network_node_id),
             scheduler_queue_position = COALESCE(excluded.scheduler_queue_position, scheduler_queue_position),
             scheduler_priority = COALESCE(excluded.scheduler_priority, scheduler_priority),
             estimate_confidence = COALESCE(excluded.estimate_confidence, estimate_confidence),
@@ -2001,6 +2040,9 @@ fn apply_run_list_projection_event(
             event.client_session_id.as_ref().map(|id| id.as_str()),
             event.bucket_id.as_ref().map(|id| id.as_str()),
             workflow_execution_session_id,
+            scheduler_facts.selected_runtime_id.as_deref(),
+            scheduler_facts.selected_device_id.as_deref(),
+            scheduler_facts.selected_network_node_id.as_deref(),
             scheduler_facts.queue_position.map(i64::from),
             scheduler_facts.priority.map(i64::from),
             scheduler_facts.estimate_confidence.as_deref(),
@@ -2021,6 +2063,9 @@ struct SchedulerProjectionFacts {
     estimated_queue_wait_ms: Option<u64>,
     estimated_duration_ms: Option<u64>,
     reason: Option<String>,
+    selected_runtime_id: Option<String>,
+    selected_device_id: Option<String>,
+    selected_network_node_id: Option<String>,
 }
 
 fn scheduler_projection_facts(payload: &DiagnosticEventPayload) -> SchedulerProjectionFacts {
@@ -2032,6 +2077,9 @@ fn scheduler_projection_facts(payload: &DiagnosticEventPayload) -> SchedulerProj
             estimated_queue_wait_ms: payload.estimated_queue_wait_ms,
             estimated_duration_ms: payload.estimated_duration_ms,
             reason: payload.reasons.first().cloned(),
+            selected_runtime_id: None,
+            selected_device_id: None,
+            selected_network_node_id: None,
         },
         DiagnosticEventPayload::SchedulerQueuePlacement(payload) => SchedulerProjectionFacts {
             queue_position: Some(payload.queue_position),
@@ -2040,6 +2088,9 @@ fn scheduler_projection_facts(payload: &DiagnosticEventPayload) -> SchedulerProj
             estimated_queue_wait_ms: None,
             estimated_duration_ms: None,
             reason: None,
+            selected_runtime_id: None,
+            selected_device_id: None,
+            selected_network_node_id: None,
         },
         DiagnosticEventPayload::SchedulerQueueControl(payload) => SchedulerProjectionFacts {
             queue_position: payload.previous_queue_position,
@@ -2048,6 +2099,9 @@ fn scheduler_projection_facts(payload: &DiagnosticEventPayload) -> SchedulerProj
             estimated_queue_wait_ms: None,
             estimated_duration_ms: None,
             reason: payload.reason.clone(),
+            selected_runtime_id: None,
+            selected_device_id: None,
+            selected_network_node_id: None,
         },
         DiagnosticEventPayload::SchedulerRunDelayed(payload) => SchedulerProjectionFacts {
             queue_position: None,
@@ -2056,6 +2110,9 @@ fn scheduler_projection_facts(payload: &DiagnosticEventPayload) -> SchedulerProj
             estimated_queue_wait_ms: None,
             estimated_duration_ms: None,
             reason: Some(payload.reason.clone()),
+            selected_runtime_id: None,
+            selected_device_id: None,
+            selected_network_node_id: None,
         },
         DiagnosticEventPayload::SchedulerModelLifecycleChanged(payload) => {
             SchedulerProjectionFacts {
@@ -2065,6 +2122,9 @@ fn scheduler_projection_facts(payload: &DiagnosticEventPayload) -> SchedulerProj
                 estimated_queue_wait_ms: None,
                 estimated_duration_ms: None,
                 reason: payload.reason.clone(),
+                selected_runtime_id: None,
+                selected_device_id: None,
+                selected_network_node_id: None,
             }
         }
         DiagnosticEventPayload::SchedulerRunAdmitted(payload) => SchedulerProjectionFacts {
@@ -2074,6 +2134,9 @@ fn scheduler_projection_facts(payload: &DiagnosticEventPayload) -> SchedulerProj
             estimated_queue_wait_ms: None,
             estimated_duration_ms: None,
             reason: Some(payload.decision_reason.clone()),
+            selected_runtime_id: payload.selected_runtime_id.clone(),
+            selected_device_id: payload.selected_device_id.clone(),
+            selected_network_node_id: payload.selected_network_node_id.clone(),
         },
         DiagnosticEventPayload::RunStarted(payload) => SchedulerProjectionFacts {
             queue_position: None,
@@ -2082,6 +2145,9 @@ fn scheduler_projection_facts(payload: &DiagnosticEventPayload) -> SchedulerProj
             estimated_queue_wait_ms: None,
             estimated_duration_ms: None,
             reason: payload.scheduler_decision_reason.clone(),
+            selected_runtime_id: None,
+            selected_device_id: None,
+            selected_network_node_id: None,
         },
         _ => SchedulerProjectionFacts {
             queue_position: None,
@@ -2090,6 +2156,9 @@ fn scheduler_projection_facts(payload: &DiagnosticEventPayload) -> SchedulerProj
             estimated_queue_wait_ms: None,
             estimated_duration_ms: None,
             reason: None,
+            selected_runtime_id: None,
+            selected_device_id: None,
+            selected_network_node_id: None,
         },
     }
 }
@@ -2176,11 +2245,12 @@ fn apply_run_detail_projection_event(
              latest_queue_placement_json, started_payload_json, terminal_payload_json,
              terminal_error, scheduler_queue_position, scheduler_priority,
              estimate_confidence, estimated_queue_wait_ms, estimated_duration_ms,
-             scheduler_reason, timeline_event_count, last_event_seq, last_updated_at_ms)
+             scheduler_reason, selected_runtime_id, selected_device_id,
+             selected_network_node_id, timeline_event_count, last_event_seq, last_updated_at_ms)
          VALUES
             (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15,
              ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28,
-             ?29, ?30, ?31, ?32)
+             ?29, ?30, ?31, ?32, ?33, ?34, ?35)
          ON CONFLICT(workflow_run_id) DO UPDATE SET
             workflow_id = excluded.workflow_id,
             workflow_version_id = COALESCE(excluded.workflow_version_id, workflow_version_id),
@@ -2210,6 +2280,9 @@ fn apply_run_detail_projection_event(
             estimated_queue_wait_ms = COALESCE(excluded.estimated_queue_wait_ms, estimated_queue_wait_ms),
             estimated_duration_ms = COALESCE(excluded.estimated_duration_ms, estimated_duration_ms),
             scheduler_reason = COALESCE(excluded.scheduler_reason, scheduler_reason),
+            selected_runtime_id = COALESCE(excluded.selected_runtime_id, selected_runtime_id),
+            selected_device_id = COALESCE(excluded.selected_device_id, selected_device_id),
+            selected_network_node_id = COALESCE(excluded.selected_network_node_id, selected_network_node_id),
             timeline_event_count = timeline_event_count + 1,
             last_event_seq = excluded.last_event_seq,
             last_updated_at_ms = excluded.last_updated_at_ms",
@@ -2249,6 +2322,9 @@ fn apply_run_detail_projection_event(
             scheduler_facts.estimated_queue_wait_ms.map(|value| value as i64),
             scheduler_facts.estimated_duration_ms.map(|value| value as i64),
             scheduler_facts.reason.as_deref(),
+            scheduler_facts.selected_runtime_id.as_deref(),
+            scheduler_facts.selected_device_id.as_deref(),
+            scheduler_facts.selected_network_node_id.as_deref(),
             1_i64,
             event.event_seq,
             event.occurred_at_ms,
@@ -2509,30 +2585,33 @@ fn run_list_projection_from_row(row: &Row<'_>) -> rusqlite::Result<RunListProjec
             .map(|value| u64::try_from(value).unwrap_or(u64::MAX)),
         scheduler_policy_id: row.get(10)?,
         retention_policy_id: row.get(11)?,
+        selected_runtime_id: row.get(12)?,
+        selected_device_id: row.get(13)?,
+        selected_network_node_id: row.get(14)?,
         client_id: row
-            .get::<_, Option<String>>(12)?
+            .get::<_, Option<String>>(15)?
             .map(ClientId::try_from)
             .transpose()
             .map_err(sqlite_conversion_error)?,
         client_session_id: row
-            .get::<_, Option<String>>(13)?
+            .get::<_, Option<String>>(16)?
             .map(ClientSessionId::try_from)
             .transpose()
             .map_err(sqlite_conversion_error)?,
         bucket_id: row
-            .get::<_, Option<String>>(14)?
+            .get::<_, Option<String>>(17)?
             .map(BucketId::try_from)
             .transpose()
             .map_err(sqlite_conversion_error)?,
-        workflow_execution_session_id: row.get(15)?,
-        scheduler_queue_position: row.get::<_, Option<i64>>(16)?.map(i64_to_u32_saturating),
-        scheduler_priority: row.get::<_, Option<i64>>(17)?.map(i64_to_i32_saturating),
-        estimate_confidence: row.get(18)?,
-        estimated_queue_wait_ms: row.get::<_, Option<i64>>(19)?.map(i64_to_u64_saturating),
-        estimated_duration_ms: row.get::<_, Option<i64>>(20)?.map(i64_to_u64_saturating),
-        scheduler_reason: row.get(21)?,
-        last_event_seq: row.get(22)?,
-        last_updated_at_ms: row.get(23)?,
+        workflow_execution_session_id: row.get(18)?,
+        scheduler_queue_position: row.get::<_, Option<i64>>(19)?.map(i64_to_u32_saturating),
+        scheduler_priority: row.get::<_, Option<i64>>(20)?.map(i64_to_i32_saturating),
+        estimate_confidence: row.get(21)?,
+        estimated_queue_wait_ms: row.get::<_, Option<i64>>(22)?.map(i64_to_u64_saturating),
+        estimated_duration_ms: row.get::<_, Option<i64>>(23)?.map(i64_to_u64_saturating),
+        scheduler_reason: row.get(24)?,
+        last_event_seq: row.get(25)?,
+        last_updated_at_ms: row.get(26)?,
     })
 }
 
@@ -2562,40 +2641,43 @@ fn run_detail_projection_from_row(row: &Row<'_>) -> rusqlite::Result<RunDetailPr
             .map(|value| u64::try_from(value).unwrap_or(u64::MAX)),
         scheduler_policy_id: row.get(10)?,
         retention_policy_id: row.get(11)?,
+        selected_runtime_id: row.get(12)?,
+        selected_device_id: row.get(13)?,
+        selected_network_node_id: row.get(14)?,
         client_id: row
-            .get::<_, Option<String>>(12)?
+            .get::<_, Option<String>>(15)?
             .map(ClientId::try_from)
             .transpose()
             .map_err(sqlite_conversion_error)?,
         client_session_id: row
-            .get::<_, Option<String>>(13)?
+            .get::<_, Option<String>>(16)?
             .map(ClientSessionId::try_from)
             .transpose()
             .map_err(sqlite_conversion_error)?,
         bucket_id: row
-            .get::<_, Option<String>>(14)?
+            .get::<_, Option<String>>(17)?
             .map(BucketId::try_from)
             .transpose()
             .map_err(sqlite_conversion_error)?,
-        workflow_run_snapshot_id: row.get(15)?,
-        workflow_execution_session_id: row.get(16)?,
-        workflow_presentation_revision_id: row.get(17)?,
-        latest_estimate_json: row.get(18)?,
-        latest_queue_placement_json: row.get(19)?,
-        started_payload_json: row.get(20)?,
-        terminal_payload_json: row.get(21)?,
-        terminal_error: row.get(22)?,
-        scheduler_queue_position: row.get::<_, Option<i64>>(23)?.map(i64_to_u32_saturating),
-        scheduler_priority: row.get::<_, Option<i64>>(24)?.map(i64_to_i32_saturating),
-        estimate_confidence: row.get(25)?,
-        estimated_queue_wait_ms: row.get::<_, Option<i64>>(26)?.map(i64_to_u64_saturating),
-        estimated_duration_ms: row.get::<_, Option<i64>>(27)?.map(i64_to_u64_saturating),
-        scheduler_reason: row.get(28)?,
+        workflow_run_snapshot_id: row.get(18)?,
+        workflow_execution_session_id: row.get(19)?,
+        workflow_presentation_revision_id: row.get(20)?,
+        latest_estimate_json: row.get(21)?,
+        latest_queue_placement_json: row.get(22)?,
+        started_payload_json: row.get(23)?,
+        terminal_payload_json: row.get(24)?,
+        terminal_error: row.get(25)?,
+        scheduler_queue_position: row.get::<_, Option<i64>>(26)?.map(i64_to_u32_saturating),
+        scheduler_priority: row.get::<_, Option<i64>>(27)?.map(i64_to_i32_saturating),
+        estimate_confidence: row.get(28)?,
+        estimated_queue_wait_ms: row.get::<_, Option<i64>>(29)?.map(i64_to_u64_saturating),
+        estimated_duration_ms: row.get::<_, Option<i64>>(30)?.map(i64_to_u64_saturating),
+        scheduler_reason: row.get(31)?,
         timeline_event_count: row
-            .get::<_, i64>(29)
+            .get::<_, i64>(32)
             .map(|value| u64::try_from(value).unwrap_or(u64::MAX))?,
-        last_event_seq: row.get(30)?,
-        last_updated_at_ms: row.get(31)?,
+        last_event_seq: row.get(33)?,
+        last_updated_at_ms: row.get(34)?,
     })
 }
 

@@ -42,6 +42,9 @@ shape is accepted by GUI service consumers.
 
 ## Invariants
 - Fixtures must contain serialized public API shapes, not private ledger rows.
+- Run projection fixtures must keep scheduler-selected runtime, device, and
+  network-node fields alongside scope fields so Rust and TypeScript tests catch
+  placement-facet contract drift.
 - Rust tests must deserialize fixtures into public DTOs before asserting
   frontend compatibility.
 - TypeScript tests must use fixtures through the workflow service boundary,

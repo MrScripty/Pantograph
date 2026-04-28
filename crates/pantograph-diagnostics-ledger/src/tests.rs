@@ -1005,6 +1005,9 @@ fn run_list_projection_drains_lifecycle_events_incrementally() {
         record.retention_policy_id.as_deref(),
         Some("retention_default")
     );
+    assert_eq!(record.selected_runtime_id.as_deref(), Some("llama_cpp"));
+    assert_eq!(record.selected_device_id, None);
+    assert_eq!(record.selected_network_node_id, None);
     assert_eq!(
         record.client_id.as_ref().map(|id| id.as_str()),
         Some("client_alpha")
@@ -1043,6 +1046,18 @@ fn run_list_projection_drains_lifecycle_events_incrementally() {
         })
         .expect("run list retention filter loads");
     assert_eq!(retained.len(), 1);
+
+    let runtime_scoped = ledger
+        .query_run_list_projection(RunListProjectionQuery {
+            selected_runtime_id: Some("llama_cpp".to_string()),
+            ..RunListProjectionQuery::default()
+        })
+        .expect("run list runtime filter loads");
+    assert_eq!(runtime_scoped.len(), 1);
+    assert_eq!(
+        runtime_scoped[0].workflow_run_id.as_str(),
+        "workflow_run_alpha"
+    );
 
     let mut second_snapshot = sample_run_snapshot_event("workflow_run_beta");
     second_snapshot.occurred_at_ms = 1_050;
@@ -1146,6 +1161,11 @@ fn run_list_projection_drains_lifecycle_events_incrementally() {
             && facet.facet_value == "failed"
             && facet.run_count == 1
     }));
+    assert!(facets.iter().any(|facet| {
+        facet.facet_kind == RunListFacetKind::SelectedRuntime
+            && facet.facet_value == "llama_cpp"
+            && facet.run_count == 1
+    }));
 }
 
 #[test]
@@ -1228,6 +1248,9 @@ fn run_detail_projection_drains_lifecycle_events_incrementally() {
         record.scheduler_reason.as_deref(),
         Some("warm_session_reused")
     );
+    assert_eq!(record.selected_runtime_id.as_deref(), Some("llama_cpp"));
+    assert_eq!(record.selected_device_id, None);
+    assert_eq!(record.selected_network_node_id, None);
     assert_eq!(record.timeline_event_count, 6);
     assert_eq!(record.last_event_seq, terminal_event.event_seq);
 
@@ -2291,6 +2314,66 @@ fn existing_v18_schema_adds_io_artifact_endpoint_columns() {
     assert!(sqlite_index_exists(
         &conn,
         "idx_io_artifact_projection_consumer_seq"
+    ));
+}
+
+#[test]
+fn existing_v19_schema_adds_scheduler_resource_projection_columns() {
+    let temp = tempfile::NamedTempFile::new().expect("temp file");
+    let path = temp.path().to_path_buf();
+    {
+        let conn = Connection::open(&path).expect("connection opens");
+        conn.execute_batch(
+            "CREATE TABLE ledger_schema_migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at_ms INTEGER NOT NULL,
+                checksum TEXT NOT NULL
+            );
+            INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
+            VALUES (19, 0, 'pantograph-diagnostics-ledger-v19');
+            CREATE TABLE run_list_projection (
+                workflow_run_id TEXT PRIMARY KEY,
+                workflow_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                last_event_seq INTEGER NOT NULL,
+                last_updated_at_ms INTEGER NOT NULL
+            );
+            CREATE TABLE run_detail_projection (
+                workflow_run_id TEXT PRIMARY KEY,
+                last_updated_at_ms INTEGER NOT NULL
+            );",
+        )
+        .expect("v19 schema marker and old run projections are installed");
+    }
+    {
+        let _ledger = SqliteDiagnosticsLedger::open(&path).expect("ledger migrates");
+    }
+    let conn = Connection::open(&path).expect("connection reopens");
+
+    for table in ["run_list_projection", "run_detail_projection"] {
+        for column in [
+            "selected_runtime_id",
+            "selected_device_id",
+            "selected_network_node_id",
+        ] {
+            assert!(sqlite_column_exists(&conn, table, column));
+        }
+    }
+    assert!(sqlite_index_exists(
+        &conn,
+        "idx_run_list_projection_runtime_updated"
+    ));
+    assert!(sqlite_index_exists(
+        &conn,
+        "idx_run_list_projection_device_updated"
+    ));
+    assert!(sqlite_index_exists(
+        &conn,
+        "idx_run_list_projection_network_node_updated"
+    ));
+    assert!(sqlite_index_exists(
+        &conn,
+        "idx_run_detail_projection_runtime_updated"
     ));
 }
 

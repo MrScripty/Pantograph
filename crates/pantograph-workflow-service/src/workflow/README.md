@@ -261,7 +261,8 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
   retention-summary queries instead of filtering response pages locally.
 - Run-list query responses include comparison facets from backend
   `run_list_projection` rows for workflow version, status, scheduler policy,
-  and retention policy.
+  retention policy, selected runtime, selected device, and selected network
+  node.
 - Scheduler estimate queries expose the selected run's hot run-detail
   projection estimate fields without making frontend callers parse full run
   detail or raw ledger payload rows.

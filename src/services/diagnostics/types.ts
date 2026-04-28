@@ -75,6 +75,9 @@ export interface RunListProjectionRecord {
   duration_ms?: number | null;
   scheduler_policy_id?: string | null;
   retention_policy_id?: string | null;
+  selected_runtime_id?: string | null;
+  selected_device_id?: string | null;
+  selected_network_node_id?: string | null;
   client_id?: string | null;
   client_session_id?: string | null;
   bucket_id?: string | null;
@@ -93,7 +96,10 @@ export type RunListFacetKind =
   | 'workflow_version'
   | 'status'
   | 'scheduler_policy'
-  | 'retention_policy';
+  | 'retention_policy'
+  | 'selected_runtime'
+  | 'selected_device'
+  | 'selected_network_node';
 
 export interface RunListFacetRecord {
   facet_kind: RunListFacetKind;
@@ -196,6 +202,9 @@ export interface WorkflowRunListQueryRequest {
   status?: RunListProjectionStatus | null;
   scheduler_policy_id?: string | null;
   retention_policy_id?: string | null;
+  selected_runtime_id?: string | null;
+  selected_device_id?: string | null;
+  selected_network_node_id?: string | null;
   client_id?: string | null;
   client_session_id?: string | null;
   bucket_id?: string | null;

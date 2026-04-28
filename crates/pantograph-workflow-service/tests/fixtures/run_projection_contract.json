@@ -14,6 +14,9 @@
         "duration_ms": 80,
         "scheduler_policy_id": "session_fifo_v1",
         "retention_policy_id": "standard-local-v1",
+        "selected_runtime_id": "llama_cpp",
+        "selected_device_id": "local-gpu-0",
+        "selected_network_node_id": "local-node",
         "client_id": "client-1",
         "client_session_id": "session-1",
         "bucket_id": "bucket-1",
@@ -38,11 +41,16 @@
         "facet_kind": "status",
         "facet_value": "completed",
         "run_count": 1
+      },
+      {
+        "facet_kind": "selected_runtime",
+        "facet_value": "llama_cpp",
+        "run_count": 1
       }
     ],
     "projection_state": {
       "projection_name": "run_list",
-      "projection_version": 3,
+      "projection_version": 4,
       "last_applied_event_seq": 15,
       "status": "current",
       "rebuilt_at_ms": null,
@@ -63,6 +71,9 @@
       "duration_ms": 80,
       "scheduler_policy_id": "session_fifo_v1",
       "retention_policy_id": "standard-local-v1",
+      "selected_runtime_id": "llama_cpp",
+      "selected_device_id": "local-gpu-0",
+      "selected_network_node_id": "local-node",
       "client_id": "client-1",
       "client_session_id": "session-1",
       "bucket_id": "bucket-1",
@@ -86,7 +97,7 @@
     },
     "projection_state": {
       "projection_name": "run_detail",
-      "projection_version": 2,
+      "projection_version": 3,
       "last_applied_event_seq": 15,
       "status": "current",
       "rebuilt_at_ms": null,

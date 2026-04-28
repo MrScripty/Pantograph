@@ -254,11 +254,22 @@ repair, migration, projection-version changes, and tests.
 - [x] Add workflow execution version and node version fields to projections.
 - [x] Add model/runtime/version and scheduler policy filters where not already
   present.
+  - Run-list and run-detail projections now materialize scheduler-selected
+    runtime/device/network-node facts from typed admission events. Run-list
+    queries can filter by those placement facts, and run-list facets report
+    selected runtime, selected device, and selected network node without raw
+    ledger replay.
 - [x] Add retention-completeness filter/projection.
 - [x] Add query outputs that report mixed-version counts or facets.
 - [ ] Preserve comparison-ready facets for workflow version, node version,
   model/runtime version, device/network node, scheduler policy, graph settings,
   and input profile where available.
+  - Run-list facets now cover workflow version, status, scheduler policy,
+    retention policy, selected runtime, selected device, and selected network
+    node from materialized rows. Node-version, model/runtime-version,
+    graph-settings, and input-profile comparison facets remain pending where
+    those facts are not yet represented as one projection row per comparable
+    value.
 
 **Verification:**
 
@@ -300,7 +311,8 @@ client/session/bucket scope, and accepted-at ranges where those facts exist in
 the read model. Retention completeness is now queryable as state/count
 summaries over the I/O artifact projection for the same run and artifact-scope
 filters. Run-list responses now include backend projection facets for workflow
-version, run status, scheduler policy, and retention policy so mixed-version
+version, run status, scheduler policy, retention policy, selected runtime,
+selected device, and selected network node so mixed-version and placement
 diagnostics do not depend on a client-paged sample.
 The first warm projection, `library_usage_projection`, now aggregates
 Library/Pumas asset access counts, distinct run counts, network bytes, last

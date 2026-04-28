@@ -99,12 +99,14 @@ helpers own restart-visible workflow run summaries.
 - Run-list facet reads group `run_list_projection` rows and must not replay
   `diagnostic_events` or depend on client-side page limits for comparison
   counts.
-- Run-list rows persist client, client-session, bucket, and workflow
-  execution-session scope fields from typed lifecycle events so Scheduler pages
-  can display ownership and future queue-control context without querying raw
+- Run-list rows persist scheduler-selected runtime, device, network-node,
+  client, client-session, bucket, and workflow execution-session scope fields
+  from typed lifecycle events so Scheduler and Diagnostics pages can display
+  ownership, placement, and future queue-control context without querying raw
   events.
-- Run-list projection queries apply client, client-session, bucket, and
-  accepted-at range filters in SQLite before paging rows or computing facets.
+- Run-list projection queries apply selected-runtime, selected-device,
+  selected-network-node, client, client-session, bucket, and accepted-at range
+  filters in SQLite before paging rows or computing facets.
 - I/O artifact drains apply artifact observation and retention state-change
   events after the stored projection cursor and write the latest bounded
   metadata/reference row per `workflow_run_id` and `artifact_id`.

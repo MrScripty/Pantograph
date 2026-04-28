@@ -4,8 +4,8 @@ use crate::records::{RetentionClass, DEFAULT_STANDARD_RETENTION_DAYS};
 use crate::util::now_ms;
 use crate::DiagnosticsLedgerError;
 
-pub(crate) const SCHEMA_VERSION: i64 = 19;
-const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v19";
+pub(crate) const SCHEMA_VERSION: i64 = 20;
+const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v20";
 
 pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {
     tx.execute_batch(
@@ -229,6 +229,9 @@ pub(crate) fn migrate_schema(
     if found < 19 {
         apply_io_artifact_endpoint_migration(&tx)?;
     }
+    if found < 20 {
+        apply_scheduler_resource_projection_migration(&tx, found)?;
+    }
     if found < SCHEMA_VERSION {
         tx.execute(
             "INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
@@ -399,6 +402,9 @@ fn apply_run_list_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagnost
             duration_ms INTEGER,
             scheduler_policy_id TEXT,
             retention_policy_id TEXT,
+            selected_runtime_id TEXT,
+            selected_device_id TEXT,
+            selected_network_node_id TEXT,
             client_id TEXT,
             client_session_id TEXT,
             bucket_id TEXT,
@@ -420,6 +426,12 @@ fn apply_run_list_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagnost
             ON run_list_projection(status, last_updated_at_ms DESC);
         CREATE INDEX IF NOT EXISTS idx_run_list_projection_retention_updated
             ON run_list_projection(retention_policy_id, last_updated_at_ms DESC);
+        CREATE INDEX IF NOT EXISTS idx_run_list_projection_runtime_updated
+            ON run_list_projection(selected_runtime_id, last_updated_at_ms DESC);
+        CREATE INDEX IF NOT EXISTS idx_run_list_projection_device_updated
+            ON run_list_projection(selected_device_id, last_updated_at_ms DESC);
+        CREATE INDEX IF NOT EXISTS idx_run_list_projection_network_node_updated
+            ON run_list_projection(selected_network_node_id, last_updated_at_ms DESC);
         CREATE INDEX IF NOT EXISTS idx_run_list_projection_accepted_updated
             ON run_list_projection(accepted_at_ms DESC, last_updated_at_ms DESC);
         CREATE INDEX IF NOT EXISTS idx_run_list_projection_status_queue
@@ -451,6 +463,9 @@ fn apply_run_detail_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagno
             duration_ms INTEGER,
             scheduler_policy_id TEXT,
             retention_policy_id TEXT,
+            selected_runtime_id TEXT,
+            selected_device_id TEXT,
+            selected_network_node_id TEXT,
             client_id TEXT,
             client_session_id TEXT,
             bucket_id TEXT,
@@ -478,8 +493,79 @@ fn apply_run_detail_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagno
             ON run_detail_projection(workflow_version_id, last_updated_at_ms DESC);
         CREATE INDEX IF NOT EXISTS idx_run_detail_projection_status_updated
             ON run_detail_projection(status, last_updated_at_ms DESC);
+        CREATE INDEX IF NOT EXISTS idx_run_detail_projection_runtime_updated
+            ON run_detail_projection(selected_runtime_id, last_updated_at_ms DESC);
         "#,
     )?;
+    Ok(())
+}
+
+fn apply_scheduler_resource_projection_migration(
+    tx: &Transaction<'_>,
+    found: i64,
+) -> Result<(), DiagnosticsLedgerError> {
+    if found >= 9 && table_exists(tx, "run_list_projection")? {
+        if !column_exists(tx, "run_list_projection", "selected_runtime_id")? {
+            tx.execute(
+                "ALTER TABLE run_list_projection ADD COLUMN selected_runtime_id TEXT",
+                [],
+            )?;
+        }
+        if !column_exists(tx, "run_list_projection", "selected_device_id")? {
+            tx.execute(
+                "ALTER TABLE run_list_projection ADD COLUMN selected_device_id TEXT",
+                [],
+            )?;
+        }
+        if !column_exists(tx, "run_list_projection", "selected_network_node_id")? {
+            tx.execute(
+                "ALTER TABLE run_list_projection ADD COLUMN selected_network_node_id TEXT",
+                [],
+            )?;
+        }
+        tx.execute(
+            "CREATE INDEX IF NOT EXISTS idx_run_list_projection_runtime_updated
+                ON run_list_projection(selected_runtime_id, last_updated_at_ms DESC)",
+            [],
+        )?;
+        tx.execute(
+            "CREATE INDEX IF NOT EXISTS idx_run_list_projection_device_updated
+                ON run_list_projection(selected_device_id, last_updated_at_ms DESC)",
+            [],
+        )?;
+        tx.execute(
+            "CREATE INDEX IF NOT EXISTS idx_run_list_projection_network_node_updated
+                ON run_list_projection(selected_network_node_id, last_updated_at_ms DESC)",
+            [],
+        )?;
+    }
+
+    if found >= 10 && table_exists(tx, "run_detail_projection")? {
+        if !column_exists(tx, "run_detail_projection", "selected_runtime_id")? {
+            tx.execute(
+                "ALTER TABLE run_detail_projection ADD COLUMN selected_runtime_id TEXT",
+                [],
+            )?;
+        }
+        if !column_exists(tx, "run_detail_projection", "selected_device_id")? {
+            tx.execute(
+                "ALTER TABLE run_detail_projection ADD COLUMN selected_device_id TEXT",
+                [],
+            )?;
+        }
+        if !column_exists(tx, "run_detail_projection", "selected_network_node_id")? {
+            tx.execute(
+                "ALTER TABLE run_detail_projection ADD COLUMN selected_network_node_id TEXT",
+                [],
+            )?;
+        }
+        tx.execute(
+            "CREATE INDEX IF NOT EXISTS idx_run_detail_projection_runtime_updated
+                ON run_detail_projection(selected_runtime_id, last_updated_at_ms DESC)",
+            [],
+        )?;
+    }
+
     Ok(())
 }
 
