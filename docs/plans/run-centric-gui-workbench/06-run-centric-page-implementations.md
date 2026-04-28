@@ -171,7 +171,9 @@ and privileged queue action controls remain open.
   result where the current scheduler timeline projection summarizes them.
 - [ ] Add filters for workflow/node/model/runtime versions, scheduler policy,
   graph settings, session/bucket/client, status, date, and retention
-  completeness where data exists.
+  completeness where data exists. Status, scheduler policy, retention policy,
+  client, client-session, and bucket comparison filters are wired from current
+  run-list projection fields.
 - [x] Display mixed-version warnings/facets.
 - [ ] Preserve comparison-ready labels/facets for future run, workflow-version,
   runtime-version, model-version, device, and input-profile comparisons.
@@ -194,10 +196,13 @@ ledger rows or event-family payloads in the component. It also uses the
 run-list projection to render selected-run
 comparison facets, active facet counts across the current workflow's recent
 runs, and mixed workflow-version warnings. Those counts now prefer backend
-run-list facet summaries scoped to the selected workflow. Richer aggregate
-filters, node/model and runtime version facets, graph-setting filters,
-retention-completeness facets, and richer scheduler decision facets remain open
-pending additional typed projection fields.
+run-list facet summaries scoped to the selected workflow when no local
+comparison filters are active. The page can filter comparison peers by status,
+scheduler policy, retention policy, client, client session, and bucket using
+typed run-list projection fields; node/model and runtime version facets,
+graph-setting filters, retention-completeness facets, date filters, and richer
+scheduler decision facets remain open pending additional typed projection
+fields.
 
 ### Milestone 3: Graph Page
 
@@ -423,6 +428,10 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
   run status classes, duration labels, projection freshness labels, run fact
   rows, comparison-ready run-list facet counts, mixed-version warnings, typed
   timeline labels, and payload availability labels.
+- Added Diagnostics comparison filters for status, scheduler policy, retention
+  policy, client, client session, and bucket using run-list projection fields;
+  filtered comparisons stay centered on the selected run and avoid backend
+  aggregate facet totals while local filters are active.
 - Expanded `src/components/workbench/NetworkPage.svelte` to render local
   capabilities, degradation warnings, disks, network interfaces, scheduler
   load/capacity, selected-run context, and future-ready peer records.
@@ -488,7 +497,8 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
   can drive graph runtime-status overlays.
 - Add typed diagnostics facet projections for scheduler estimates, selected and
   rejected runtime/device choices, model load/unload decisions, graph settings,
-  and mixed-version comparison filters.
+  node/model/runtime versions, date ranges, retention completeness, and
+  selected/rejected runtime-device comparisons.
 - Add local status fields for runtime/model/cache residency and run-keyed
   scheduler placement before adding active-run Network highlights.
 

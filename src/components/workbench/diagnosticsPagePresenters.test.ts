@@ -1,15 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import type { RunDetailProjectionRecord } from '../../services/diagnostics/types.ts';
+import type { RunDetailProjectionRecord, RunListProjectionRecord } from '../../services/diagnostics/types.ts';
 import {
+  DEFAULT_DIAGNOSTICS_COMPARISON_FILTERS,
   buildDiagnosticsFacetSummary,
   buildDiagnosticsFactRows,
+  buildDiagnosticsComparisonFilterOptions,
   diagnosticsStatusClass,
+  filterDiagnosticsComparisonRuns,
   formatDiagnosticEventKind,
   formatDiagnosticSourceComponent,
   formatDiagnosticsDuration,
   formatDiagnosticsProjectionFreshness,
+  hasActiveDiagnosticsComparisonFilters,
   hasTimelinePayload,
 } from './diagnosticsPagePresenters.ts';
 
@@ -47,6 +51,24 @@ function createRunDetail(): RunDetailProjectionRecord {
     terminal_payload_json: null,
     terminal_error: null,
     timeline_event_count: 4,
+  };
+}
+
+function createRunListPeer(overrides: Partial<RunListProjectionRecord>): RunListProjectionRecord {
+  return {
+    workflow_run_id: 'run-peer',
+    workflow_id: 'workflow-a',
+    workflow_version_id: 'wfver-1',
+    workflow_semantic_version: '1.2.3',
+    status: 'completed',
+    scheduler_policy_id: 'policy-a',
+    retention_policy_id: 'retention-a',
+    client_id: 'client-a',
+    client_session_id: 'session-a',
+    bucket_id: 'bucket-a',
+    last_event_seq: 10,
+    last_updated_at_ms: 20,
+    ...overrides,
   };
 }
 
@@ -172,6 +194,60 @@ test('buildDiagnosticsFacetSummary prefers backend projection facets when provid
   assert.equal(summary.rows.find((row) => row.label === 'Workflow Version')?.total, 15);
   assert.equal(summary.rows.find((row) => row.label === 'Status')?.total, 15);
   assert.match(summary.mixedVersionWarning ?? '', /2 workflow versions/);
+});
+
+test('diagnostics comparison filters expose available projection values', () => {
+  const activeRun = createRunDetail();
+  const options = buildDiagnosticsComparisonFilterOptions(activeRun, [
+    activeRun,
+    createRunListPeer({ workflow_run_id: 'run-2', status: 'completed', scheduler_policy_id: 'policy-b' }),
+    createRunListPeer({
+      workflow_run_id: 'run-3',
+      bucket_id: null,
+      client_id: null,
+      client_session_id: null,
+      retention_policy_id: null,
+    }),
+    createRunListPeer({ workflow_run_id: 'run-4', workflow_id: 'workflow-b', status: 'failed' }),
+  ]);
+
+  assert.deepEqual(options.statuses, ['completed', 'running']);
+  assert.deepEqual(options.schedulerPolicies, ['policy-a', 'policy-b']);
+  assert.deepEqual(options.retentionPolicies, ['retention-a', 'Unassigned']);
+  assert.deepEqual(options.clients, ['client-a', 'Unassigned']);
+  assert.deepEqual(options.clientSessions, ['session-a', 'Unassigned']);
+  assert.deepEqual(options.buckets, ['bucket-a', 'Unassigned']);
+});
+
+test('diagnostics comparison filters keep selected run and filter peer rows', () => {
+  const activeRun = createRunDetail();
+  const filteredRuns = filterDiagnosticsComparisonRuns(
+    activeRun,
+    [
+      activeRun,
+      createRunListPeer({ workflow_run_id: 'run-2', status: 'completed', scheduler_policy_id: 'policy-b' }),
+      createRunListPeer({ workflow_run_id: 'run-3', status: 'failed', scheduler_policy_id: 'policy-b' }),
+      createRunListPeer({ workflow_run_id: 'run-4', workflow_id: 'workflow-b', status: 'completed' }),
+    ],
+    {
+      ...DEFAULT_DIAGNOSTICS_COMPARISON_FILTERS,
+      status: 'completed',
+      schedulerPolicy: 'policy-b',
+    },
+  );
+
+  assert.deepEqual(
+    filteredRuns.map((run) => run.workflow_run_id),
+    ['run-1', 'run-2'],
+  );
+  assert.equal(hasActiveDiagnosticsComparisonFilters(DEFAULT_DIAGNOSTICS_COMPARISON_FILTERS), false);
+  assert.equal(
+    hasActiveDiagnosticsComparisonFilters({
+      ...DEFAULT_DIAGNOSTICS_COMPARISON_FILTERS,
+      status: 'completed',
+    }),
+    true,
+  );
 });
 
 test('timeline label helpers format typed projection enums and payload presence', () => {

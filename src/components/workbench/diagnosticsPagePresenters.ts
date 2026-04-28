@@ -27,6 +27,44 @@ export interface DiagnosticsFacetSummary {
   mixedVersionWarning: string | null;
 }
 
+export interface DiagnosticsComparisonFilters {
+  status: string;
+  schedulerPolicy: string;
+  retentionPolicy: string;
+  client: string;
+  clientSession: string;
+  bucket: string;
+}
+
+export interface DiagnosticsComparisonFilterOptions {
+  statuses: string[];
+  schedulerPolicies: string[];
+  retentionPolicies: string[];
+  clients: string[];
+  clientSessions: string[];
+  buckets: string[];
+}
+
+export const DIAGNOSTICS_FILTER_ALL = 'all';
+
+export const DEFAULT_DIAGNOSTICS_COMPARISON_FILTERS: DiagnosticsComparisonFilters = {
+  status: DIAGNOSTICS_FILTER_ALL,
+  schedulerPolicy: DIAGNOSTICS_FILTER_ALL,
+  retentionPolicy: DIAGNOSTICS_FILTER_ALL,
+  client: DIAGNOSTICS_FILTER_ALL,
+  clientSession: DIAGNOSTICS_FILTER_ALL,
+  bucket: DIAGNOSTICS_FILTER_ALL,
+};
+
+export const EMPTY_DIAGNOSTICS_COMPARISON_FILTER_OPTIONS: DiagnosticsComparisonFilterOptions = {
+  statuses: [],
+  schedulerPolicies: [],
+  retentionPolicies: [],
+  clients: [],
+  clientSessions: [],
+  buckets: [],
+};
+
 export function formatDiagnosticsTimestamp(value: number | null | undefined): string {
   if (!value) {
     return 'Unavailable';
@@ -154,9 +192,7 @@ export function buildDiagnosticsFacetSummary(
   runs: RunListProjectionRecord[],
   backendFacets: RunListFacetRecord[] = [],
 ): DiagnosticsFacetSummary {
-  const workflowRuns = runs.filter((run) => run.workflow_id === activeRun.workflow_id);
-  const activeRunIsProjected = workflowRuns.some((run) => run.workflow_run_id === activeRun.workflow_run_id);
-  const scopedRuns = activeRunIsProjected ? workflowRuns : [activeRun, ...workflowRuns];
+  const scopedRuns = ensureActiveRunInScope(activeRun, runs);
   const total = scopedRuns.length;
   const rows = [
     buildDiagnosticsFacetRow(
@@ -221,6 +257,37 @@ export function buildDiagnosticsFacetSummary(
   return { rows, mixedVersionWarning };
 }
 
+export function buildDiagnosticsComparisonFilterOptions(
+  activeRun: RunDetailProjectionRecord,
+  runs: RunListProjectionRecord[],
+): DiagnosticsComparisonFilterOptions {
+  const scopedRuns = ensureActiveRunInScope(activeRun, runs);
+  return {
+    statuses: uniqueSorted(scopedRuns.map((run) => run.status)),
+    schedulerPolicies: uniqueSorted(scopedRuns.map((run) => optionalFacetLabel(run.scheduler_policy_id))),
+    retentionPolicies: uniqueSorted(scopedRuns.map((run) => optionalFacetLabel(run.retention_policy_id))),
+    clients: uniqueSorted(scopedRuns.map((run) => optionalFacetLabel(run.client_id))),
+    clientSessions: uniqueSorted(scopedRuns.map((run) => optionalFacetLabel(run.client_session_id))),
+    buckets: uniqueSorted(scopedRuns.map((run) => optionalFacetLabel(run.bucket_id))),
+  };
+}
+
+export function filterDiagnosticsComparisonRuns(
+  activeRun: RunDetailProjectionRecord,
+  runs: RunListProjectionRecord[],
+  filters: DiagnosticsComparisonFilters,
+): RunListProjectionRecord[] {
+  const peerRuns = runs.filter(
+    (run) => run.workflow_id === activeRun.workflow_id && run.workflow_run_id !== activeRun.workflow_run_id,
+  );
+  const matchingPeers = peerRuns.filter((run) => diagnosticsRunMatchesFilters(run, filters));
+  return [activeRun, ...matchingPeers];
+}
+
+export function hasActiveDiagnosticsComparisonFilters(filters: DiagnosticsComparisonFilters): boolean {
+  return Object.values(filters).some((value) => value !== DIAGNOSTICS_FILTER_ALL);
+}
+
 function buildDiagnosticsFacetRow<T extends RunListProjectionRecord>(
   label: string,
   value: string,
@@ -248,6 +315,37 @@ function buildDiagnosticsFacetRow<T extends RunListProjectionRecord>(
     count: runs.filter((run) => readValue(run) === value).length,
     total,
   };
+}
+
+function ensureActiveRunInScope(
+  activeRun: RunDetailProjectionRecord,
+  runs: RunListProjectionRecord[],
+): RunListProjectionRecord[] {
+  const workflowRuns = runs.filter((run) => run.workflow_id === activeRun.workflow_id);
+  const activeRunIsProjected = workflowRuns.some((run) => run.workflow_run_id === activeRun.workflow_run_id);
+  return activeRunIsProjected ? workflowRuns : [activeRun, ...workflowRuns];
+}
+
+function diagnosticsRunMatchesFilters(
+  run: RunListProjectionRecord,
+  filters: DiagnosticsComparisonFilters,
+): boolean {
+  return (
+    filterMatches(run.status, filters.status) &&
+    filterMatches(optionalFacetLabel(run.scheduler_policy_id), filters.schedulerPolicy) &&
+    filterMatches(optionalFacetLabel(run.retention_policy_id), filters.retentionPolicy) &&
+    filterMatches(optionalFacetLabel(run.client_id), filters.client) &&
+    filterMatches(optionalFacetLabel(run.client_session_id), filters.clientSession) &&
+    filterMatches(optionalFacetLabel(run.bucket_id), filters.bucket)
+  );
+}
+
+function filterMatches(value: string, filter: string): boolean {
+  return filter === DIAGNOSTICS_FILTER_ALL || value === filter;
+}
+
+function uniqueSorted(values: string[]): string[] {
+  return [...new Set(values)].sort((left, right) => left.localeCompare(right));
 }
 
 function workflowVersionLabel(run: RunListProjectionRecord): string {

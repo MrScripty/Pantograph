@@ -9,15 +9,22 @@
   } from '../../services/diagnostics/types';
   import { workflowService } from '../../services/workflow/WorkflowService';
   import { activeWorkflowRun } from '../../stores/workbenchStore';
+  import type { DiagnosticsComparisonFilters } from './diagnosticsPagePresenters';
   import {
+    DEFAULT_DIAGNOSTICS_COMPARISON_FILTERS,
+    DIAGNOSTICS_FILTER_ALL,
+    EMPTY_DIAGNOSTICS_COMPARISON_FILTER_OPTIONS,
     buildDiagnosticsFacetSummary,
     buildDiagnosticsFactRows,
+    buildDiagnosticsComparisonFilterOptions,
     diagnosticsStatusClass,
+    filterDiagnosticsComparisonRuns,
     formatDiagnosticEventKind,
     formatDiagnosticSourceComponent,
     formatDiagnosticsDuration,
     formatDiagnosticsProjectionFreshness,
     formatDiagnosticsTimestamp,
+    hasActiveDiagnosticsComparisonFilters,
     hasTimelinePayload,
   } from './diagnosticsPagePresenters';
   import { formatWorkflowCommandError } from './workflowErrorPresenters';
@@ -31,10 +38,28 @@
   let timelineProjectionState = $state<ProjectionStateRecord | null>(null);
   let loading = $state(false);
   let error = $state<string | null>(null);
+  let comparisonFilters = $state<DiagnosticsComparisonFilters>({
+    ...DEFAULT_DIAGNOSTICS_COMPARISON_FILTERS,
+  });
   let requestSerial = 0;
 
   let factRows = $derived(runDetail ? buildDiagnosticsFactRows(runDetail) : []);
-  let facetSummary = $derived(runDetail ? buildDiagnosticsFacetSummary(runDetail, runList, runListFacets) : null);
+  let comparisonFilterOptions = $derived(
+    runDetail ? buildDiagnosticsComparisonFilterOptions(runDetail, runList) : EMPTY_DIAGNOSTICS_COMPARISON_FILTER_OPTIONS,
+  );
+  let filteredComparisonRuns = $derived(
+    runDetail ? filterDiagnosticsComparisonRuns(runDetail, runList, comparisonFilters) : [],
+  );
+  let hasComparisonFilters = $derived(hasActiveDiagnosticsComparisonFilters(comparisonFilters));
+  let facetSummary = $derived(
+    runDetail
+      ? buildDiagnosticsFacetSummary(
+          runDetail,
+          filteredComparisonRuns,
+          hasComparisonFilters ? [] : runListFacets,
+        )
+      : null,
+  );
 
   function activeRunId(): string | null {
     return $activeWorkflowRun?.workflow_run_id ?? null;
@@ -96,6 +121,17 @@
         loading = false;
       }
     }
+  }
+
+  function updateComparisonFilter(field: keyof DiagnosticsComparisonFilters, value: string): void {
+    comparisonFilters = {
+      ...comparisonFilters,
+      [field]: value,
+    };
+  }
+
+  function selectValue(event: Event): string {
+    return (event.currentTarget as HTMLSelectElement).value;
   }
 
   $effect(() => {
@@ -217,6 +253,92 @@
 
           <section class="rounded border border-neutral-800 bg-neutral-900/50 p-4">
             <h2 class="text-sm font-semibold text-neutral-100">Comparison Facets</h2>
+            <div class="mt-4 grid grid-cols-2 gap-2">
+              <label class="min-w-0 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
+                Status
+                <select
+                  aria-label="Diagnostics status filter"
+                  class="mt-1 w-full rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs normal-case tracking-normal text-neutral-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+                  value={comparisonFilters.status}
+                  onchange={(event) => updateComparisonFilter('status', selectValue(event))}
+                >
+                  <option value={DIAGNOSTICS_FILTER_ALL}>All</option>
+                  {#each comparisonFilterOptions.statuses as status (status)}
+                    <option value={status}>{status}</option>
+                  {/each}
+                </select>
+              </label>
+              <label class="min-w-0 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
+                Scheduler
+                <select
+                  aria-label="Diagnostics scheduler policy filter"
+                  class="mt-1 w-full rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs normal-case tracking-normal text-neutral-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+                  value={comparisonFilters.schedulerPolicy}
+                  onchange={(event) => updateComparisonFilter('schedulerPolicy', selectValue(event))}
+                >
+                  <option value={DIAGNOSTICS_FILTER_ALL}>All</option>
+                  {#each comparisonFilterOptions.schedulerPolicies as schedulerPolicy (schedulerPolicy)}
+                    <option value={schedulerPolicy}>{schedulerPolicy}</option>
+                  {/each}
+                </select>
+              </label>
+              <label class="min-w-0 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
+                Retention
+                <select
+                  aria-label="Diagnostics retention policy filter"
+                  class="mt-1 w-full rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs normal-case tracking-normal text-neutral-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+                  value={comparisonFilters.retentionPolicy}
+                  onchange={(event) => updateComparisonFilter('retentionPolicy', selectValue(event))}
+                >
+                  <option value={DIAGNOSTICS_FILTER_ALL}>All</option>
+                  {#each comparisonFilterOptions.retentionPolicies as retentionPolicy (retentionPolicy)}
+                    <option value={retentionPolicy}>{retentionPolicy}</option>
+                  {/each}
+                </select>
+              </label>
+              <label class="min-w-0 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
+                Client
+                <select
+                  aria-label="Diagnostics client filter"
+                  class="mt-1 w-full rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs normal-case tracking-normal text-neutral-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+                  value={comparisonFilters.client}
+                  onchange={(event) => updateComparisonFilter('client', selectValue(event))}
+                >
+                  <option value={DIAGNOSTICS_FILTER_ALL}>All</option>
+                  {#each comparisonFilterOptions.clients as client (client)}
+                    <option value={client}>{client}</option>
+                  {/each}
+                </select>
+              </label>
+              <label class="min-w-0 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
+                Session
+                <select
+                  aria-label="Diagnostics client session filter"
+                  class="mt-1 w-full rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs normal-case tracking-normal text-neutral-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+                  value={comparisonFilters.clientSession}
+                  onchange={(event) => updateComparisonFilter('clientSession', selectValue(event))}
+                >
+                  <option value={DIAGNOSTICS_FILTER_ALL}>All</option>
+                  {#each comparisonFilterOptions.clientSessions as clientSession (clientSession)}
+                    <option value={clientSession}>{clientSession}</option>
+                  {/each}
+                </select>
+              </label>
+              <label class="min-w-0 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
+                Bucket
+                <select
+                  aria-label="Diagnostics bucket filter"
+                  class="mt-1 w-full rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs normal-case tracking-normal text-neutral-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+                  value={comparisonFilters.bucket}
+                  onchange={(event) => updateComparisonFilter('bucket', selectValue(event))}
+                >
+                  <option value={DIAGNOSTICS_FILTER_ALL}>All</option>
+                  {#each comparisonFilterOptions.buckets as bucket (bucket)}
+                    <option value={bucket}>{bucket}</option>
+                  {/each}
+                </select>
+              </label>
+            </div>
             {#if facetSummary?.mixedVersionWarning}
               <div class="mt-3 rounded border border-amber-900 bg-amber-950/40 px-3 py-2 text-xs text-amber-100">
                 {facetSummary.mixedVersionWarning}

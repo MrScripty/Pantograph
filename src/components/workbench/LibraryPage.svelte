@@ -201,7 +201,7 @@
       </div>
       {#if hfSearchResults.length > 0}
         <div class="flex min-h-8 gap-2 overflow-x-auto">
-          {#each hfSearchResults.slice(0, 8) as model}
+          {#each hfSearchResults.slice(0, 8) as model (model.id)}
             <span class="shrink-0 rounded border border-neutral-800 px-2 py-1 font-mono text-[11px] text-neutral-300">
               {modelLabel(model)}
             </span>

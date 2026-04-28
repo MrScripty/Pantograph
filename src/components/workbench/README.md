@@ -14,9 +14,9 @@ later plan stages fill in richer page bodies.
 | `schedulerPagePresenters.test.ts` | Unit coverage for Scheduler table labels, status classes, filters, sorts, projection freshness, and timeline labels. |
 | `GraphPage.svelte` | Workbench page that switches between the active run's immutable graph snapshot and the current editable workflow graph. |
 | `RunGraphSnapshot.svelte` | Read-only run graph renderer backed by `workflowService.queryRunGraph`; it does not load historic graphs into the editor store. |
-| `DiagnosticsPage.svelte` | Projection-backed selected-run diagnostics page with run detail facts, comparison facets, mixed-version warnings, and scheduler timeline records. |
-| `diagnosticsPagePresenters.ts` | Pure diagnostics page status, duration, projection freshness, run authority fact, comparison facet, and timeline label presenters. |
-| `diagnosticsPagePresenters.test.ts` | Unit coverage for diagnostics page labels, comparison facets, and payload availability presentation. |
+| `DiagnosticsPage.svelte` | Projection-backed selected-run diagnostics page with run detail facts, filtered comparison facets, mixed-version warnings, and scheduler timeline records. |
+| `diagnosticsPagePresenters.ts` | Pure diagnostics page status, duration, projection freshness, run authority fact, comparison filter/facet, and timeline label presenters. |
+| `diagnosticsPagePresenters.test.ts` | Unit coverage for diagnostics page labels, comparison filters/facets, and payload availability presentation. |
 | `IoInspectorPage.svelte` | Projection-backed I/O artifact browser and global retention policy form. |
 | `ioInspectorPresenters.ts` | Pure I/O media, payload availability, byte-size, and projection freshness presenters. |
 | `ioInspectorPresenters.test.ts` | Unit coverage for I/O Inspector presentation labels. |
@@ -160,8 +160,9 @@ transient UI state without becoming backend scheduler policy.
   selected-run node status through `workflowService.queryNodeStatus` for
   runtime-status overlays. It never applies that graph to the editor store.
 - `DiagnosticsPage.svelte` reads selected-run facts through
-  `workflowService.queryRunDetail` and scheduler history through
-  `workflowService.querySchedulerTimeline`.
+  `workflowService.queryRunDetail`, scheduler history through
+  `workflowService.querySchedulerTimeline`, and comparison peers through
+  `workflowService.queryRunList`.
 - `IoInspectorPage.svelte` reads artifact metadata through
   `workflowService.queryIoArtifacts` and global retention state through
   `workflowService.queryRetentionPolicy`. Artifact retention labels come from
@@ -201,9 +202,9 @@ transient UI state without becoming backend scheduler policy.
   must not dereference payload bodies or inspect raw ledger rows. Node status
   overlays render `NodeStatusProjectionRecord` rows, not raw diagnostic events.
 - Diagnostics fact rows render `RunDetailProjectionRecord` fields, and
-  comparison facets use `RunListProjectionRecord` fields. Scheduler estimate
-  and queue facts are read from typed projection fields. Timeline rows render
-  `SchedulerTimelineProjectionRecord` summaries.
+  comparison filters/facets use `RunListProjectionRecord` fields. Scheduler
+  estimate and queue facts are read from typed projection fields. Timeline rows
+  render `SchedulerTimelineProjectionRecord` summaries.
 - Network status cards are derived from `WorkflowLocalNetworkStatusQueryResponse`.
 - Network disk and interface rows render reported local metrics and show
   unavailable states when platform probes do not provide rows.
