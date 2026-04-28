@@ -166,6 +166,16 @@ fn workflow_scheduler_timeline_query_validates_bounds() {
         oversized_projection_batch,
         Err(WorkflowServiceError::InvalidRequest(_))
     ));
+
+    let invalid_accepted_range = service.workflow_run_list_query(WorkflowRunListQueryRequest {
+        accepted_at_from_ms: Some(20),
+        accepted_at_to_ms: Some(10),
+        ..WorkflowRunListQueryRequest::default()
+    });
+    assert!(matches!(
+        invalid_accepted_range,
+        Err(WorkflowServiceError::InvalidRequest(_))
+    ));
 }
 
 #[test]
@@ -236,6 +246,21 @@ fn workflow_run_list_query_drains_and_reads_projection() {
         .expect("run list retention query");
     assert_eq!(retention_response.runs.len(), 1);
     assert_eq!(retention_response.runs[0].workflow_run_id.as_str(), "run-a");
+
+    let scoped_response = service
+        .workflow_run_list_query(WorkflowRunListQueryRequest {
+            client_id: Some("client-a".to_string()),
+            client_session_id: Some("session-a".to_string()),
+            bucket_id: Some("bucket-a".to_string()),
+            accepted_at_from_ms: Some(1),
+            accepted_at_to_ms: Some(20),
+            limit: Some(10),
+            projection_batch_size: Some(10),
+            ..WorkflowRunListQueryRequest::default()
+        })
+        .expect("run list scope query");
+    assert_eq!(scoped_response.runs.len(), 1);
+    assert_eq!(scoped_response.runs[0].workflow_run_id.as_str(), "run-a");
 }
 
 #[test]

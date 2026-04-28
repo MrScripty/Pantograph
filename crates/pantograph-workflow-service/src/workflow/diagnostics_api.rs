@@ -119,6 +119,16 @@ pub struct WorkflowRunListQueryRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retention_policy_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_session_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bucket_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accepted_at_from_ms: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accepted_at_to_ms: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub after_event_seq: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
@@ -721,6 +731,11 @@ impl WorkflowRunListQueryRequest {
             status: self.status,
             scheduler_policy_id: self.scheduler_policy_id,
             retention_policy_id: self.retention_policy_id,
+            client_id: parse_optional_id("client_id", self.client_id)?,
+            client_session_id: parse_optional_id("client_session_id", self.client_session_id)?,
+            bucket_id: parse_optional_id("bucket_id", self.bucket_id)?,
+            accepted_at_from_ms: self.accepted_at_from_ms,
+            accepted_at_to_ms: self.accepted_at_to_ms,
             after_event_seq: self.after_event_seq,
             limit: self
                 .limit

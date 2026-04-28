@@ -78,6 +78,8 @@ helpers own restart-visible workflow run summaries.
   execution-session scope fields from typed lifecycle events so Scheduler pages
   can display ownership and future queue-control context without querying raw
   events.
+- Run-list projection queries apply client, client-session, bucket, and
+  accepted-at range filters in SQLite before paging rows or computing facets.
 - I/O artifact drains apply artifact observation and retention state-change
   events after the stored projection cursor and write the latest bounded
   metadata/reference row per `workflow_run_id` and `artifact_id`.

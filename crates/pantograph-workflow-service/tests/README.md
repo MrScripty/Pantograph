@@ -55,6 +55,9 @@ by external adapters.
 - Run-list contract snapshots must include client, client-session, bucket, and
   workflow execution-session scope fields when those fields are observable
   through serialized service contracts.
+- Run-list query contract snapshots must include client, client-session,
+  bucket, and accepted-at range filters when those filters are observable
+  through serialized service contracts.
 - Library usage query contract snapshots must include active-run
   `workflow_run_id` filters because the GUI highlights assets used by the
   selected run through the public diagnostics API.

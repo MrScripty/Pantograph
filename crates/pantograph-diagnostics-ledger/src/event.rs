@@ -1041,6 +1041,11 @@ pub struct RunListProjectionQuery {
     pub status: Option<RunListProjectionStatus>,
     pub scheduler_policy_id: Option<String>,
     pub retention_policy_id: Option<String>,
+    pub client_id: Option<ClientId>,
+    pub client_session_id: Option<ClientSessionId>,
+    pub bucket_id: Option<BucketId>,
+    pub accepted_at_from_ms: Option<i64>,
+    pub accepted_at_to_ms: Option<i64>,
     pub after_event_seq: Option<i64>,
     pub limit: u32,
 }
@@ -1054,6 +1059,11 @@ impl Default for RunListProjectionQuery {
             status: None,
             scheduler_policy_id: None,
             retention_policy_id: None,
+            client_id: None,
+            client_session_id: None,
+            bucket_id: None,
+            accepted_at_from_ms: None,
+            accepted_at_to_ms: None,
             after_event_seq: None,
             limit: 100,
         }
@@ -1072,6 +1082,23 @@ impl RunListProjectionQuery {
             return Err(DiagnosticsLedgerError::InvalidField {
                 field: "after_event_seq",
             });
+        }
+        if self.accepted_at_from_ms.unwrap_or(0) < 0 {
+            return Err(DiagnosticsLedgerError::InvalidField {
+                field: "accepted_at_from_ms",
+            });
+        }
+        if self.accepted_at_to_ms.unwrap_or(0) < 0 {
+            return Err(DiagnosticsLedgerError::InvalidField {
+                field: "accepted_at_to_ms",
+            });
+        }
+        if let (Some(from_ms), Some(to_ms)) = (self.accepted_at_from_ms, self.accepted_at_to_ms) {
+            if from_ms > to_ms {
+                return Err(DiagnosticsLedgerError::InvalidField {
+                    field: "accepted_at_range",
+                });
+            }
         }
         validate_optional_text(
             "workflow_semantic_version",

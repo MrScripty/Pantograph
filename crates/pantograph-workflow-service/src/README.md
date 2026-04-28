@@ -148,6 +148,9 @@ Pumas/Library operations without appending raw diagnostic ledger events.
 - Diagnostics projection re-exports include run-list facet records so adapter
   callers can consume backend-owned comparison counts without depending on
   private ledger modules or sampled frontend pages.
+- Run-list query request DTOs preserve client, client-session, bucket, and
+  accepted-at range filters so adapter callers can narrow projection reads
+  without raw ledger access.
 - Retention cleanup request/response DTOs are public workflow-service
   contracts and must preserve backend cleanup counts rather than client-side
   artifact deletion state.

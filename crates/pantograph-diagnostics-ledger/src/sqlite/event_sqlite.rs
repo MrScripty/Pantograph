@@ -457,9 +457,14 @@ pub(super) fn query_run_list_projection(
            AND (?4 IS NULL OR status = ?4)
            AND (?5 IS NULL OR scheduler_policy_id = ?5)
            AND (?6 IS NULL OR retention_policy_id = ?6)
-           AND last_event_seq > ?7
+           AND (?7 IS NULL OR client_id = ?7)
+           AND (?8 IS NULL OR client_session_id = ?8)
+           AND (?9 IS NULL OR bucket_id = ?9)
+           AND (?10 IS NULL OR accepted_at_ms >= ?10)
+           AND (?11 IS NULL OR accepted_at_ms <= ?11)
+           AND last_event_seq > ?12
          ORDER BY last_updated_at_ms DESC, last_event_seq DESC
-         LIMIT ?8",
+         LIMIT ?13",
     )?;
     let rows = stmt.query_map(
         params![
@@ -472,6 +477,11 @@ pub(super) fn query_run_list_projection(
             query.status.map(|status| status.as_db()),
             query.scheduler_policy_id.as_deref(),
             query.retention_policy_id.as_deref(),
+            query.client_id.as_ref().map(|id| id.as_str()),
+            query.client_session_id.as_ref().map(|id| id.as_str()),
+            query.bucket_id.as_ref().map(|id| id.as_str()),
+            query.accepted_at_from_ms,
+            query.accepted_at_to_ms,
             query.after_event_seq.unwrap_or(0),
             query.limit,
         ],
@@ -534,6 +544,11 @@ fn query_run_list_facet(
            AND (?4 IS NULL OR status = ?4)
            AND (?5 IS NULL OR scheduler_policy_id = ?5)
            AND (?6 IS NULL OR retention_policy_id = ?6)
+           AND (?7 IS NULL OR client_id = ?7)
+           AND (?8 IS NULL OR client_session_id = ?8)
+           AND (?9 IS NULL OR bucket_id = ?9)
+           AND (?10 IS NULL OR accepted_at_ms >= ?10)
+           AND (?11 IS NULL OR accepted_at_ms <= ?11)
          GROUP BY {expression}
          ORDER BY COUNT(*) DESC, {expression}"
     );
@@ -549,6 +564,11 @@ fn query_run_list_facet(
             query.status.map(|status| status.as_db()),
             query.scheduler_policy_id.as_deref(),
             query.retention_policy_id.as_deref(),
+            query.client_id.as_ref().map(|id| id.as_str()),
+            query.client_session_id.as_ref().map(|id| id.as_str()),
+            query.bucket_id.as_ref().map(|id| id.as_str()),
+            query.accepted_at_from_ms,
+            query.accepted_at_to_ms,
         ],
         |row| {
             Ok(RunListFacetRecord {

@@ -107,8 +107,9 @@ semantics.
 - `run_list_projection` and `run_detail_projection` expose stable scheduler
   estimate and queue-placement facts as typed columns. Run-list rows also
   expose client, client-session, bucket, and workflow execution-session
-  identifiers. Payload JSON remains audit detail, not the normal GUI data path
-  for those facts.
+  identifiers. Run-list queries can filter by those scope fields and
+  accepted-at ranges. Payload JSON remains audit detail, not the normal GUI
+  data path for those facts.
 - Run-list facet queries group materialized run-list rows by workflow version,
   status, scheduler policy, and retention policy. They must not derive
   mixed-version warnings from raw ledger events or client-side page samples.

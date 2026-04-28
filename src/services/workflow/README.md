@@ -129,6 +129,8 @@ preserve the backend download/audit response.
 - Scheduler timeline, run-list, selected-run, and Library usage projection
   invoke helpers stay in `WorkflowProjectionService.ts`; `WorkflowService`
   must not reimplement those methods separately.
+- Run-list request coverage includes scope and accepted-at range filters so
+  frontend services preserve the backend projection contract.
 - Library usage request coverage includes active-run `workflow_run_id`
   filtering so frontend services preserve the backend projection contract.
 - Retention cleanup requests must use `workflow_retention_cleanup_apply` and

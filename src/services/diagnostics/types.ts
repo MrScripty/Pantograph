@@ -454,6 +454,11 @@ export interface WorkflowRunListQueryRequest {
   status?: RunListProjectionStatus | null;
   scheduler_policy_id?: string | null;
   retention_policy_id?: string | null;
+  client_id?: string | null;
+  client_session_id?: string | null;
+  bucket_id?: string | null;
+  accepted_at_from_ms?: number | null;
+  accepted_at_to_ms?: number | null;
   after_event_seq?: number | null;
   limit?: number | null;
   projection_batch_size?: number | null;

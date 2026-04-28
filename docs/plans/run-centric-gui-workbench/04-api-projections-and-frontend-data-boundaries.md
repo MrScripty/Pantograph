@@ -211,9 +211,10 @@ now exposes selected-run detail over durable `run_detail_projection` rows with
 projection freshness state. `workflow_io_artifact_query` now exposes bounded
 artifact metadata/reference rows for I/O Inspector reads. Projection query
 DTOs now expose backend-owned filters for workflow version, scheduler policy,
-runtime/model ids, media type, retention policy, node id, and artifact role
-where those fields exist. The run-list projection now supports server-side
-retention-policy filtering in addition to returning the retention policy on
+runtime/model ids, media type, retention policy, node id, artifact role,
+client, client session, bucket, and accepted-at time ranges where those fields
+exist. The run-list projection now supports server-side retention-policy,
+scope, and accepted-time filtering in addition to returning those fields on
 each run row. `workflow_library_usage_query` now exposes warm
 Library/Pumas usage aggregates with projection freshness state. Retention
 policy query is exposed for GUI retention settings/inspectors. Local Network
@@ -350,14 +351,16 @@ implementation depends on it.
 **Status:** In progress. Run-list, selected-run detail, and typed scheduler
 timeline event acceptance now cover the frontend service boundary with Tauri
 mock IPC. Run-list projection DTOs now include client, client-session, bucket,
-and workflow execution-session scope fields so Scheduler pages do not recover
-authority or queue-control context from raw events. Backend fixture coverage for typed event projection, retained
-artifact browsing, expired I/O artifact state, and warm Library usage
-catching-up state is also in place. Frontend error-envelope coverage now proves
-projection service calls preserve backend error categories through typed
-service errors and shared workbench presenters. Queue and retention command
-coverage proves frontend service consumers receive backend-owned command DTOs
-without optimistic replacement.
+workflow execution-session scope fields, and server-side filters for client,
+client-session, bucket, and accepted-at ranges so Scheduler and Diagnostics
+pages do not recover authority or time-scope context from raw events. Backend
+fixture coverage for typed event projection, retained artifact browsing,
+expired I/O artifact state, and warm Library usage catching-up state is also in
+place. Frontend error-envelope coverage now proves projection service calls
+preserve backend error categories through typed service errors and shared
+workbench presenters. Queue and retention command coverage proves frontend
+service consumers receive backend-owned command DTOs without optimistic
+replacement.
 
 ## Ownership And Lifecycle Note
 

@@ -85,6 +85,9 @@ session-runtime workflows, and the root facade test module.
 - Workflow Library usage queries accept `workflow_run_id` filters for
   active-run Library views and delegate that filtering to diagnostics-ledger
   projections.
+- Workflow run-list projection queries accept client, client-session, bucket,
+  and accepted-at range filters and delegate that filtering to
+  diagnostics-ledger projections.
 - Workflow retention cleanup applies through a typed diagnostics facade command
   that delegates to the ledger cleanup policy and returns backend cleanup
   counts without client-side artifact mutation.

@@ -417,6 +417,8 @@ fn apply_run_list_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagnost
             ON run_list_projection(status, last_updated_at_ms DESC);
         CREATE INDEX IF NOT EXISTS idx_run_list_projection_retention_updated
             ON run_list_projection(retention_policy_id, last_updated_at_ms DESC);
+        CREATE INDEX IF NOT EXISTS idx_run_list_projection_accepted_updated
+            ON run_list_projection(accepted_at_ms DESC, last_updated_at_ms DESC);
         CREATE INDEX IF NOT EXISTS idx_run_list_projection_status_queue
             ON run_list_projection(status, scheduler_queue_position);
         CREATE INDEX IF NOT EXISTS idx_run_list_projection_client_session_updated

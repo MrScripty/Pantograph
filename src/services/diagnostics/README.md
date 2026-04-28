@@ -74,6 +74,9 @@ projection without inventing fallback run identities or workflow display names.
   workflow execution-session scope fields. Consumers must render or act on
   those fields from projection rows instead of inferring queue authority from
   run ids or raw ledger events.
+- Run-list query DTOs include optional client, client-session, bucket, and
+  accepted-at range filters so frontend callers can narrow projection reads
+  without raw ledger access.
 - Library usage query DTOs include optional `workflow_run_id` filters so
   frontend consumers can request selected-run asset usage without reconstructing
   active-run Library state from raw ledger events.

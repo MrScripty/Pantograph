@@ -980,9 +980,14 @@ fn run_list_projection_drains_lifecycle_events_incrementally() {
     assert_eq!(retained.len(), 1);
 
     let mut second_snapshot = sample_run_snapshot_event("workflow_run_beta");
+    second_snapshot.occurred_at_ms = 1_050;
     second_snapshot.workflow_version_id =
         Some(WorkflowVersionId::try_from("wfver_beta".to_string()).unwrap());
     second_snapshot.workflow_semantic_version = Some("2.0.0".to_string());
+    second_snapshot.client_id = Some(ClientId::try_from("client_beta".to_string()).unwrap());
+    second_snapshot.client_session_id =
+        Some(ClientSessionId::try_from("session_beta".to_string()).unwrap());
+    second_snapshot.bucket_id = Some(BucketId::try_from("bucket_beta".to_string()).unwrap());
     ledger
         .append_diagnostic_event(second_snapshot)
         .expect("second run snapshot event appends");
@@ -990,6 +995,10 @@ fn run_list_projection_drains_lifecycle_events_incrementally() {
     second_terminal.workflow_version_id =
         Some(WorkflowVersionId::try_from("wfver_beta".to_string()).unwrap());
     second_terminal.workflow_semantic_version = Some("2.0.0".to_string());
+    second_terminal.client_id = Some(ClientId::try_from("client_beta".to_string()).unwrap());
+    second_terminal.client_session_id =
+        Some(ClientSessionId::try_from("session_beta".to_string()).unwrap());
+    second_terminal.bucket_id = Some(BucketId::try_from("bucket_beta".to_string()).unwrap());
     second_terminal.payload = DiagnosticEventPayload::RunTerminal(RunTerminalPayload {
         status: RunTerminalStatus::Failed,
         duration_ms: Some(90),
@@ -1001,6 +1010,55 @@ fn run_list_projection_drains_lifecycle_events_incrementally() {
     ledger
         .drain_run_list_projection(10)
         .expect("run list projection drains second run");
+
+    let client_scoped = ledger
+        .query_run_list_projection(RunListProjectionQuery {
+            client_id: Some(ClientId::try_from("client_alpha".to_string()).unwrap()),
+            ..RunListProjectionQuery::default()
+        })
+        .expect("run list client filter loads");
+    assert_eq!(client_scoped.len(), 1);
+    assert_eq!(
+        client_scoped[0].workflow_run_id.as_str(),
+        "workflow_run_alpha"
+    );
+
+    let session_scoped = ledger
+        .query_run_list_projection(RunListProjectionQuery {
+            client_session_id: Some(ClientSessionId::try_from("session_beta".to_string()).unwrap()),
+            ..RunListProjectionQuery::default()
+        })
+        .expect("run list session filter loads");
+    assert_eq!(session_scoped.len(), 1);
+    assert_eq!(
+        session_scoped[0].workflow_run_id.as_str(),
+        "workflow_run_beta"
+    );
+
+    let bucket_scoped = ledger
+        .query_run_list_projection(RunListProjectionQuery {
+            bucket_id: Some(BucketId::try_from("bucket_beta".to_string()).unwrap()),
+            ..RunListProjectionQuery::default()
+        })
+        .expect("run list bucket filter loads");
+    assert_eq!(bucket_scoped.len(), 1);
+    assert_eq!(
+        bucket_scoped[0].workflow_run_id.as_str(),
+        "workflow_run_beta"
+    );
+
+    let accepted_window = ledger
+        .query_run_list_projection(RunListProjectionQuery {
+            accepted_at_from_ms: Some(1_020),
+            accepted_at_to_ms: Some(1_080),
+            ..RunListProjectionQuery::default()
+        })
+        .expect("run list accepted-time filter loads");
+    assert_eq!(accepted_window.len(), 1);
+    assert_eq!(
+        accepted_window[0].workflow_run_id.as_str(),
+        "workflow_run_beta"
+    );
 
     let facets = ledger
         .query_run_list_facets(RunListProjectionQuery {

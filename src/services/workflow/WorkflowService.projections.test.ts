@@ -69,6 +69,11 @@ test('queryRunList preserves backend projection rows and facets', async () => {
     const service = new WorkflowProjectionService();
     const result = await service.queryRunList({
       workflow_id: 'workflow-a',
+      client_id: 'client-a',
+      client_session_id: 'session-a',
+      bucket_id: 'bucket-a',
+      accepted_at_from_ms: 1,
+      accepted_at_to_ms: 100,
       limit: 25,
     });
 
@@ -78,6 +83,11 @@ test('queryRunList preserves backend projection rows and facets', async () => {
     assert.deepEqual(calls[0].args, {
       request: {
         workflow_id: 'workflow-a',
+        client_id: 'client-a',
+        client_session_id: 'session-a',
+        bucket_id: 'bucket-a',
+        accepted_at_from_ms: 1,
+        accepted_at_to_ms: 100,
         limit: 25,
       },
     });

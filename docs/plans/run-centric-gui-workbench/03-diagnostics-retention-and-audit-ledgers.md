@@ -286,12 +286,13 @@ typed `retention.artifact_state_changed` events incrementally so cleanup,
 expiration, deletion, externalization, and truncation decisions remain audited
 in the ledger while the gallery reads one current row per run artifact.
 Projection filters now cover workflow version, scheduler policy,
-runtime/model ids, media type, retention policy/state, and artifact role where
-those facts exist in the read model. Retention completeness is now queryable as
-state/count summaries over the I/O artifact projection for the same run and
-artifact-scope filters. Run-list responses now include backend projection
-facets for workflow version, run status, scheduler policy, and retention
-policy so mixed-version diagnostics do not depend on a client-paged sample.
+runtime/model ids, media type, retention policy/state, artifact role,
+client/session/bucket scope, and accepted-at ranges where those facts exist in
+the read model. Retention completeness is now queryable as state/count
+summaries over the I/O artifact projection for the same run and artifact-scope
+filters. Run-list responses now include backend projection facets for workflow
+version, run status, scheduler policy, and retention policy so mixed-version
+diagnostics do not depend on a client-paged sample.
 The first warm projection, `library_usage_projection`, now aggregates
 Library/Pumas asset access counts, distinct run counts, network bytes, last
 access facts, and workflow-version run links. Remaining warm drains and
