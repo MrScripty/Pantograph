@@ -285,9 +285,10 @@ local mutation. Workflow input/output sections now group retained metadata by
 artifact role, and the node I/O section groups retained node artifacts by
 producer node with input/output counts. Artifact cards now include media-family
 renderer surfaces for text, image, audio, video, table, JSON, file, and unknown
-metadata states without dereferencing payload bodies. Detailed payload retention
-state and cleanup/storage controls remain open pending richer backend
-projections.
+metadata states without dereferencing payload bodies. Artifact cards also
+render projection-provided retention reason, payload reference, runtime id, and
+model id fields when present. Cleanup/storage controls remain open pending
+richer backend projections.
 
 ### Milestone 5: Library Page
 
@@ -403,6 +404,8 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
 - Added `src/components/workbench/ioInspectorPresenters.ts` and tests for media
   labels, payload-reference availability labels, byte labels, and projection
   freshness labels.
+- Added I/O artifact detail rows for retention reason, payload reference,
+  runtime id, and model id using projection fields only.
 - Added `src/components/workbench/LibraryPage.svelte` with projection-backed
   Library usage/audit rendering from `workflowService.queryLibraryUsage`.
 - Added `src/components/workbench/libraryUsagePresenters.ts` and tests for

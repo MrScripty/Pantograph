@@ -17,8 +17,8 @@ later plan stages fill in richer page bodies.
 | `DiagnosticsPage.svelte` | Projection-backed selected-run diagnostics page with run detail facts, date-aware filtered comparison facets, mixed-version warnings, and scheduler timeline records. |
 | `diagnosticsPagePresenters.ts` | Pure diagnostics page status, duration, projection freshness, run authority fact, comparison date/filter/facet, and timeline label presenters. |
 | `diagnosticsPagePresenters.test.ts` | Unit coverage for diagnostics page labels, comparison filters/facets, and payload availability presentation. |
-| `IoInspectorPage.svelte` | Projection-backed I/O artifact browser and global retention policy form. |
-| `ioInspectorPresenters.ts` | Pure I/O media, payload availability, byte-size, and projection freshness presenters. |
+| `IoInspectorPage.svelte` | Projection-backed I/O artifact browser, retention detail surface, and global retention policy form. |
+| `ioInspectorPresenters.ts` | Pure I/O media, payload availability, retention detail, byte-size, and projection freshness presenters. |
 | `ioInspectorPresenters.test.ts` | Unit coverage for I/O Inspector presentation labels. |
 | `LibraryPage.svelte` | Projection-backed Library usage and audit table with active-run highlighting and audited Pumas search/download/delete actions. |
 | `libraryUsagePresenters.ts` | Pure Library category, active-run match, network byte, and projection freshness presenters. |
@@ -198,8 +198,8 @@ transient UI state without becoming backend scheduler policy.
 - Scheduler timeline rows are `SchedulerTimelineProjectionRecord` values and
   must not be rebuilt or interpreted from raw ledger rows in the frontend.
 - I/O artifact cards render `IoArtifactProjectionRecord` metadata and may show
-  typed retention-state and `payload_ref` availability, but do not dereference
-  payload bodies.
+  typed retention-state, retention reason, runtime/model ids, and `payload_ref`
+  availability, but do not dereference payload bodies.
 - Library usage rows render `LibraryUsageProjectionRecord` summaries and may
   highlight only rows whose `last_workflow_run_id` equals the active run.
 - Run graph snapshot rows render `WorkflowRunGraphProjection` topology,

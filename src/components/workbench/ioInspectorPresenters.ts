@@ -220,6 +220,10 @@ export function formatIoArtifactRetentionStateLabel(
   }
 }
 
+export function formatIoArtifactDetailValue(value: string | null | undefined): string {
+  return value && value.trim().length > 0 ? value : 'Unavailable';
+}
+
 export function formatIoArtifactBytes(bytes: number | null | undefined): string {
   if (bytes === null || bytes === undefined) {
     return 'Size unknown';

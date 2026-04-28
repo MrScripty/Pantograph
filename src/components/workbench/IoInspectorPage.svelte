@@ -26,6 +26,7 @@
     buildIoArtifactRendererSummary,
     formatIoArtifactAvailabilityLabel,
     formatIoArtifactBytes,
+    formatIoArtifactDetailValue,
     formatIoArtifactMediaLabel,
     formatIoArtifactRetentionStateLabel,
     formatIoArtifactRoleLabel,
@@ -395,12 +396,36 @@
                 <div>
                   <dt class="text-neutral-500">Policy</dt>
                   <dd class="mt-0.5 truncate text-neutral-200" title={artifact.retention_policy_id ?? ''}>
-                    {artifact.retention_policy_id ?? 'Unassigned'}
+                    {formatIoArtifactDetailValue(artifact.retention_policy_id)}
                   </dd>
                 </div>
                 <div>
                   <dt class="text-neutral-500">Observed</dt>
                   <dd class="mt-0.5 text-neutral-200">{formatTimestamp(artifact.occurred_at_ms)}</dd>
+                </div>
+                <div>
+                  <dt class="text-neutral-500">Runtime</dt>
+                  <dd class="mt-0.5 truncate text-neutral-200" title={artifact.runtime_id ?? ''}>
+                    {formatIoArtifactDetailValue(artifact.runtime_id)}
+                  </dd>
+                </div>
+                <div>
+                  <dt class="text-neutral-500">Model</dt>
+                  <dd class="mt-0.5 truncate text-neutral-200" title={artifact.model_id ?? ''}>
+                    {formatIoArtifactDetailValue(artifact.model_id)}
+                  </dd>
+                </div>
+                <div class="col-span-2">
+                  <dt class="text-neutral-500">Retention Reason</dt>
+                  <dd class="mt-0.5 truncate text-neutral-200" title={artifact.retention_reason ?? ''}>
+                    {formatIoArtifactDetailValue(artifact.retention_reason)}
+                  </dd>
+                </div>
+                <div class="col-span-2">
+                  <dt class="text-neutral-500">Payload Ref</dt>
+                  <dd class="mt-0.5 truncate font-mono text-neutral-200" title={artifact.payload_ref ?? ''}>
+                    {formatIoArtifactDetailValue(artifact.payload_ref)}
+                  </dd>
                 </div>
               </dl>
 

@@ -7,6 +7,7 @@ import {
   classifyIoArtifactMedia,
   formatIoArtifactAvailabilityLabel,
   formatIoArtifactBytes,
+  formatIoArtifactDetailValue,
   formatIoArtifactMediaLabel,
   formatIoArtifactRetentionStateLabel,
   formatIoArtifactRoleLabel,
@@ -159,6 +160,12 @@ test('formatIoArtifactBytes renders compact sizes', () => {
   assert.equal(formatIoArtifactBytes(999), '999 B');
   assert.equal(formatIoArtifactBytes(2_048), '2.0 KiB');
   assert.equal(formatIoArtifactBytes(2_097_152), '2.0 MiB');
+});
+
+test('formatIoArtifactDetailValue keeps missing projection details explicit', () => {
+  assert.equal(formatIoArtifactDetailValue('runtime-a'), 'runtime-a');
+  assert.equal(formatIoArtifactDetailValue(''), 'Unavailable');
+  assert.equal(formatIoArtifactDetailValue(null), 'Unavailable');
 });
 
 test('formatProjectionFreshness keeps projection status visible', () => {
