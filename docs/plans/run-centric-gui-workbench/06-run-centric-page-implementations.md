@@ -158,6 +158,9 @@ for queued selected runs, a selected-run timeline panel, timeline projection
 freshness, and timeline summary/detail rows without raw event parsing. Progress,
 model/runtime summaries, richer delay categories, richer retention summaries,
 and privileged queue action controls remain open.
+Assigned status, policy, scope, and accepted-date filters now also narrow the
+backend run-list projection query where supported; search, sort, and
+`Unassigned` label handling remain local presentation filters.
 
 ### Milestone 2: Diagnostics Page
 
@@ -448,6 +451,9 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
   policy row fields without parsing scheduler event payloads.
 - Added Scheduler table filters for client, client session, bucket, and
   accepted date using typed run-list projection fields.
+- Wired assigned Scheduler status, policy, scope, and accepted-date filters
+  into `workflowService.queryRunList` request fields while preserving local
+  search, sort, and `Unassigned` filtering.
 - Added Scheduler table columns for typed queue position, priority, estimate,
   and scheduler reason fields promoted into run-list projections.
 - Added a Scheduler selected-run timeline panel backed by

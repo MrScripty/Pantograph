@@ -21,6 +21,7 @@
     type SchedulerStatusFilter,
   } from '../../stores/schedulerRunListStore';
   import {
+    buildSchedulerRunListQuery,
     filterAndSortSchedulerRuns,
     formatSchedulerProjectionFreshness,
     formatSchedulerPolicyLabel,
@@ -62,6 +63,7 @@
   let refreshInFlight = false;
   let refreshAgain = false;
   let eventUnsubscribe: (() => void) | null = null;
+  let activeRunFilterKey = '';
   let displayedRuns = $derived(filterAndSortSchedulerRuns(runs, $schedulerRunFilters));
   let schedulerPolicyOptions = $derived(schedulerPolicyFilterOptions(runs));
   let retentionPolicyOptions = $derived(schedulerRetentionFilterOptions(runs));
@@ -92,7 +94,9 @@
     loading = runs.length === 0;
     error = null;
     try {
-      const response = await workflowService.queryRunList({ limit: 250 });
+      const response = await workflowService.queryRunList(
+        buildSchedulerRunListQuery($schedulerRunFilters, 250),
+      );
       runs = response.runs;
       projectionUpdatedAtMs = response.projection_state.updated_at_ms;
     } catch (refreshError) {
@@ -205,7 +209,6 @@
   }
 
   onMount(() => {
-    void refreshRuns();
     eventUnsubscribe = workflowService.subscribeEvents(() => {
       void refreshRuns();
       void refreshTimeline();
@@ -225,6 +228,16 @@
 
     activeTimelineRunId = runId;
     void refreshTimeline(runId);
+  });
+
+  $effect(() => {
+    const filterKey = JSON.stringify($schedulerRunFilters);
+    if (filterKey === activeRunFilterKey) {
+      return;
+    }
+
+    activeRunFilterKey = filterKey;
+    void refreshRuns();
   });
 </script>
 

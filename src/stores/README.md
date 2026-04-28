@@ -94,8 +94,9 @@ store boundary as status and policy filters.
   UI preferences. They must not mutate backend queue state or be treated as
   scheduler policy.
 - Scheduler scope and accepted-date filters are presentation filters over
-  backend projection fields. They must not become client authority checks or
-  durable scheduler policy.
+  backend projection fields. Assigned values may narrow backend projection
+  queries, but they must not become client authority checks or durable
+  scheduler policy.
 
 ## Revisit Triggers
 - The legacy store facade is no longer imported anywhere.

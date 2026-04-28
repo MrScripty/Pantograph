@@ -1,6 +1,7 @@
 import type {
   ProjectionStateRecord,
   RunListProjectionRecord,
+  WorkflowRunListQueryRequest,
   SchedulerTimelineProjectionRecord,
 } from '../../services/diagnostics/types';
 import type { SchedulerRunFilters, SchedulerSortKey } from '../../stores/schedulerRunListStore';
@@ -219,6 +220,37 @@ export function filterAndSortSchedulerRuns(
   return [...filtered].sort((left, right) => compareSchedulerRuns(left, right, filters.sort));
 }
 
+export function buildSchedulerRunListQuery(
+  filters: SchedulerRunFilters,
+  limit: number,
+): WorkflowRunListQueryRequest {
+  const request: WorkflowRunListQueryRequest = { limit };
+  if (filters.status !== 'all') {
+    request.status = filters.status;
+  }
+  if (isAssignedFilterValue(filters.schedulerPolicy)) {
+    request.scheduler_policy_id = filters.schedulerPolicy;
+  }
+  if (isAssignedFilterValue(filters.retentionPolicy)) {
+    request.retention_policy_id = filters.retentionPolicy;
+  }
+  if (isAssignedFilterValue(filters.client)) {
+    request.client_id = filters.client;
+  }
+  if (isAssignedFilterValue(filters.clientSession)) {
+    request.client_session_id = filters.clientSession;
+  }
+  if (isAssignedFilterValue(filters.bucket)) {
+    request.bucket_id = filters.bucket;
+  }
+  const acceptedRange = schedulerAcceptedDateRange(filters.acceptedDate);
+  if (acceptedRange) {
+    request.accepted_at_from_ms = acceptedRange.fromMs;
+    request.accepted_at_to_ms = acceptedRange.toMs;
+  }
+  return request;
+}
+
 function uniqueSortedOptions(values: string[]): string[] {
   return [...new Set(values)].sort(compareFilterOptions);
 }
@@ -231,6 +263,24 @@ function compareFilterOptions(left: string, right: string): number {
     return 1;
   }
   return compareStrings(left, right);
+}
+
+function isAssignedFilterValue(value: string): boolean {
+  return value !== 'all' && value !== 'Unassigned';
+}
+
+function schedulerAcceptedDateRange(value: string): { fromMs: number; toMs: number } | null {
+  if (!isAssignedFilterValue(value)) {
+    return null;
+  }
+  const fromMs = Date.parse(`${value}T00:00:00.000Z`);
+  if (!Number.isFinite(fromMs)) {
+    return null;
+  }
+  return {
+    fromMs,
+    toMs: fromMs + 86_400_000 - 1,
+  };
 }
 
 function schedulerRunMatchesSearch(run: RunListProjectionRecord, search: string): boolean {

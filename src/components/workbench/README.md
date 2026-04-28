@@ -151,7 +151,10 @@ transient UI state without becoming backend scheduler policy.
 - App root mounts `WorkbenchShell.svelte` once per GUI runtime.
 - Page selection is controlled through `workbenchStore.ts` actions.
 - Scheduler refreshes the typed run-list projection on mount and workflow
-  events; callers should not add independent polling loops around it.
+  events. Supported status, assigned policy, assigned scope, and accepted-date
+  filters are sent to the backend run-list query; search, sort, and
+  `Unassigned` labels stay local presentation filters. Callers should not add
+  independent polling loops around it.
 - Active-run selection contains identity and summary fields only. Consumers must
   query detail, timeline, graph, I/O, or Library projections for durable data.
 - `GraphPage.svelte` reads historic workflow versions through
@@ -188,8 +191,10 @@ transient UI state without becoming backend scheduler policy.
 - Scheduler table controls are frontend presentation filters and must not imply
   backend scheduler priority or queue mutations. Scheduler policy, retention
   policy, scope, and accepted-date filters use typed `RunListProjectionRecord`
-  fields. Queue position, priority, estimate, and scheduler reason columns also
-  render typed projection fields, not scheduler payload JSON.
+  fields, and assigned filter values may also narrow the backend projection
+  query before local presentation filtering. Queue position, priority,
+  estimate, and scheduler reason columns also render typed projection fields,
+  not scheduler payload JSON.
 - Scheduler timeline rows are `SchedulerTimelineProjectionRecord` values and
   must not be rebuilt or interpreted from raw ledger rows in the frontend.
 - I/O artifact cards render `IoArtifactProjectionRecord` metadata and may show

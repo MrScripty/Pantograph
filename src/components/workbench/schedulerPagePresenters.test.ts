@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import type { RunListProjectionRecord } from '../../services/diagnostics/types.ts';
 import {
+  buildSchedulerRunListQuery,
   filterAndSortSchedulerRuns,
   formatSchedulerAcceptedDateLabel,
   formatSchedulerPolicyLabel,
@@ -284,4 +285,51 @@ test('scheduler timeline presenters expose typed projection facts', () => {
   );
   assert.equal(schedulerTimelinePayloadLabel({ payload_json: '{}' }), 'Metadata only');
   assert.equal(schedulerTimelinePayloadLabel({ payload_json: '{"queue":"default"}' }), 'Payload captured');
+});
+
+test('buildSchedulerRunListQuery sends backend-supported filters only', () => {
+  assert.deepEqual(
+    buildSchedulerRunListQuery(
+      {
+        search: 'caption',
+        status: 'queued',
+        schedulerPolicy: 'policy-a',
+        retentionPolicy: 'retention-a',
+        client: 'client-a',
+        clientSession: 'session-a',
+        bucket: 'bucket-a',
+        acceptedDate: '1970-01-02',
+        sort: 'workflow_asc',
+      },
+      250,
+    ),
+    {
+      limit: 250,
+      status: 'queued',
+      scheduler_policy_id: 'policy-a',
+      retention_policy_id: 'retention-a',
+      client_id: 'client-a',
+      client_session_id: 'session-a',
+      bucket_id: 'bucket-a',
+      accepted_at_from_ms: 86_400_000,
+      accepted_at_to_ms: 172_799_999,
+    },
+  );
+  assert.deepEqual(
+    buildSchedulerRunListQuery(
+      {
+        search: 'caption',
+        status: 'all',
+        schedulerPolicy: 'Unassigned',
+        retentionPolicy: 'all',
+        client: 'Unassigned',
+        clientSession: 'all',
+        bucket: 'all',
+        acceptedDate: 'all',
+        sort: 'workflow_asc',
+      },
+      50,
+    ),
+    { limit: 50 },
+  );
 });
