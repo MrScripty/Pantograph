@@ -1,6 +1,7 @@
 <script lang="ts">
   import { RefreshCw } from 'lucide-svelte';
   import type {
+    IoArtifactRetentionSummaryRecord,
     ProjectionStateRecord,
     RunDetailProjectionRecord,
     RunListFacetRecord,
@@ -16,6 +17,7 @@
     EMPTY_DIAGNOSTICS_COMPARISON_FILTER_OPTIONS,
     buildDiagnosticsFacetSummary,
     buildDiagnosticsFactRows,
+    buildDiagnosticsRetentionSummaryRows,
     buildDiagnosticsComparisonFilterOptions,
     diagnosticsStatusClass,
     filterDiagnosticsComparisonRuns,
@@ -33,9 +35,11 @@
   let runDetail = $state<RunDetailProjectionRecord | null>(null);
   let runList = $state<RunListProjectionRecord[]>([]);
   let runListFacets = $state<RunListFacetRecord[]>([]);
+  let retentionSummary = $state<IoArtifactRetentionSummaryRecord[]>([]);
   let timelineEvents = $state<SchedulerTimelineProjectionRecord[]>([]);
   let runDetailProjectionState = $state<ProjectionStateRecord | null>(null);
   let runListProjectionState = $state<ProjectionStateRecord | null>(null);
+  let ioProjectionState = $state<ProjectionStateRecord | null>(null);
   let timelineProjectionState = $state<ProjectionStateRecord | null>(null);
   let loading = $state(false);
   let error = $state<string | null>(null);
@@ -45,6 +49,7 @@
   let requestSerial = 0;
 
   let factRows = $derived(runDetail ? buildDiagnosticsFactRows(runDetail) : []);
+  let retentionSummaryRows = $derived(buildDiagnosticsRetentionSummaryRows(retentionSummary));
   let comparisonFilterOptions = $derived(
     runDetail ? buildDiagnosticsComparisonFilterOptions(runDetail, runList) : EMPTY_DIAGNOSTICS_COMPARISON_FILTER_OPTIONS,
   );
@@ -74,9 +79,11 @@
       runDetail = null;
       runList = [];
       runListFacets = [];
+      retentionSummary = [];
       timelineEvents = [];
       runDetailProjectionState = null;
       runListProjectionState = null;
+      ioProjectionState = null;
       timelineProjectionState = null;
       loading = false;
       return;
@@ -95,17 +102,22 @@
         return;
       }
       const selectedRun = runResponse.run ?? null;
-      const runListResponse = selectedRun
-        ? await workflowService.queryRunList({ workflow_id: selectedRun.workflow_id, limit: 250 })
+      const runListAndIoResponse = selectedRun
+        ? await Promise.all([
+            workflowService.queryRunList({ workflow_id: selectedRun.workflow_id, limit: 250 }),
+            workflowService.queryIoArtifacts({ workflow_run_id: selectedRun.workflow_run_id, limit: 1 }),
+          ])
         : null;
       if (currentRequest !== requestSerial) {
         return;
       }
       runDetail = selectedRun;
       runDetailProjectionState = runResponse.projection_state;
-      runList = runListResponse?.runs ?? [];
-      runListFacets = runListResponse?.facets ?? [];
-      runListProjectionState = runListResponse?.projection_state ?? null;
+      runList = runListAndIoResponse?.[0].runs ?? [];
+      runListFacets = runListAndIoResponse?.[0].facets ?? [];
+      runListProjectionState = runListAndIoResponse?.[0].projection_state ?? null;
+      retentionSummary = runListAndIoResponse?.[1].retention_summary ?? [];
+      ioProjectionState = runListAndIoResponse?.[1].projection_state ?? null;
       timelineEvents = timelineResponse.events;
       timelineProjectionState = timelineResponse.projection_state;
     } catch (refreshError) {
@@ -116,7 +128,12 @@
       runDetail = null;
       runList = [];
       runListFacets = [];
+      retentionSummary = [];
       timelineEvents = [];
+      runDetailProjectionState = null;
+      runListProjectionState = null;
+      ioProjectionState = null;
+      timelineProjectionState = null;
     } finally {
       if (currentRequest === requestSerial) {
         loading = false;
@@ -232,6 +249,10 @@
                 <dt class="text-neutral-500">Run List</dt>
                 <dd class="mt-1 text-neutral-200">{formatDiagnosticsProjectionFreshness(runListProjectionState)}</dd>
               </div>
+              <div>
+                <dt class="text-neutral-500">I/O Retention</dt>
+                <dd class="mt-1 text-neutral-200">{formatDiagnosticsProjectionFreshness(ioProjectionState)}</dd>
+              </div>
             </dl>
           </section>
 
@@ -250,6 +271,22 @@
                 </div>
               {/each}
             </dl>
+          </section>
+
+          <section class="rounded border border-neutral-800 bg-neutral-900/50 p-4">
+            <h2 class="text-sm font-semibold text-neutral-100">Retention Completeness</h2>
+            {#if retentionSummaryRows.length === 0}
+              <div class="mt-4 text-xs text-neutral-500">No retained artifact summary</div>
+            {:else}
+              <dl class="mt-4 space-y-3 text-xs">
+                {#each retentionSummaryRows as row (row.label)}
+                  <div class="flex items-center justify-between gap-3">
+                    <dt class="min-w-0 truncate text-neutral-500">{row.label}</dt>
+                    <dd class="shrink-0 font-mono text-neutral-200">{row.count}</dd>
+                  </div>
+                {/each}
+              </dl>
+            {/if}
           </section>
 
           <section class="rounded border border-neutral-800 bg-neutral-900/50 p-4">

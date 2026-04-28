@@ -1,6 +1,8 @@
 import type {
   DiagnosticEventKind,
   DiagnosticEventSourceComponent,
+  IoArtifactRetentionState,
+  IoArtifactRetentionSummaryRecord,
   ProjectionStateRecord,
   RunDetailProjectionRecord,
   RunListFacetKind,
@@ -25,6 +27,11 @@ export interface DiagnosticsFacetRow {
 export interface DiagnosticsFacetSummary {
   rows: DiagnosticsFacetRow[];
   mixedVersionWarning: string | null;
+}
+
+export interface DiagnosticsRetentionSummaryRow {
+  label: string;
+  count: number;
 }
 
 export interface DiagnosticsComparisonFilters {
@@ -298,6 +305,36 @@ export function buildDiagnosticsFacetSummary(
       : null;
 
   return { rows, mixedVersionWarning };
+}
+
+export function buildDiagnosticsRetentionSummaryRows(
+  summary: IoArtifactRetentionSummaryRecord[],
+): DiagnosticsRetentionSummaryRow[] {
+  return summary
+    .map((item) => ({
+      label: formatDiagnosticsRetentionStateLabel(item.retention_state),
+      count: item.artifact_count,
+    }))
+    .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label));
+}
+
+export function formatDiagnosticsRetentionStateLabel(retentionState: IoArtifactRetentionState): string {
+  switch (retentionState) {
+    case 'retained':
+      return 'Payload retained';
+    case 'metadata_only':
+      return 'Metadata retained only';
+    case 'external':
+      return 'External reference';
+    case 'truncated':
+      return 'Payload truncated';
+    case 'too_large':
+      return 'Too large to retain';
+    case 'expired':
+      return 'Payload expired';
+    case 'deleted':
+      return 'Payload deleted';
+  }
 }
 
 export function buildDiagnosticsComparisonFilterOptions(

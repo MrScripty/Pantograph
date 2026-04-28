@@ -180,7 +180,8 @@ backend run-list projection query where supported; search, sort, and
   completeness where data exists. Workflow-version, status, scheduler policy,
   retention policy, client, client-session, bucket, accepted-date, and accepted
   date-range comparison filters are wired from current run-list projection
-  fields.
+  fields. Selected-run retention-completeness counts are rendered from the
+  typed I/O artifact projection summary.
 - [x] Display mixed-version warnings/facets.
 - [ ] Preserve comparison-ready labels/facets for future run, workflow-version,
   runtime-version, model-version, device, and input-profile comparisons.
@@ -208,8 +209,10 @@ comparison filters are active. The page can filter comparison peers by workflow
 version, status, scheduler policy, retention policy, client, client session,
 bucket, accepted date, and accepted date range using typed run-list projection
 fields; node/model and runtime version facets, graph-setting filters,
-retention-completeness facets, and richer scheduler decision facets remain open
-pending additional typed projection fields.
+and richer scheduler decision facets remain open pending additional typed
+projection fields. Retention completeness for the selected run is displayed
+from `workflowService.queryIoArtifacts` response `retention_summary` counts and
+I/O projection freshness, avoiding raw ledger replay in the page.
 
 ### Milestone 3: Graph Page
 
@@ -457,6 +460,9 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
   policy, client, client session, bucket, and accepted date using run-list
   projection fields; filtered comparisons stay centered on the selected run and
   avoid backend aggregate facet totals while local filters are active.
+- Added selected-run Diagnostics retention completeness from the I/O artifact
+  projection `retention_summary` and projection freshness, preserving the
+  typed read-model boundary.
 - Expanded `src/components/workbench/NetworkPage.svelte` to render local
   capabilities, degradation warnings, disks, network interfaces, scheduler
   load/capacity, selected-run context, and future-ready peer records.

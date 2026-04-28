@@ -1,11 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import type { RunDetailProjectionRecord, RunListProjectionRecord } from '../../services/diagnostics/types.ts';
+import type {
+  IoArtifactRetentionSummaryRecord,
+  RunDetailProjectionRecord,
+  RunListProjectionRecord,
+} from '../../services/diagnostics/types.ts';
 import {
   DEFAULT_DIAGNOSTICS_COMPARISON_FILTERS,
   buildDiagnosticsFacetSummary,
   buildDiagnosticsFactRows,
+  buildDiagnosticsRetentionSummaryRows,
   buildDiagnosticsComparisonFilterOptions,
   diagnosticsStatusClass,
   filterDiagnosticsComparisonRuns,
@@ -203,6 +208,22 @@ test('buildDiagnosticsFacetSummary prefers backend projection facets when provid
   assert.equal(summary.rows.find((row) => row.label === 'Workflow Version')?.total, 15);
   assert.equal(summary.rows.find((row) => row.label === 'Status')?.total, 15);
   assert.match(summary.mixedVersionWarning ?? '', /2 workflow versions/);
+});
+
+test('buildDiagnosticsRetentionSummaryRows formats typed projection counts', () => {
+  const rows = buildDiagnosticsRetentionSummaryRows([
+    { retention_state: 'expired', artifact_count: 2 },
+    { retention_state: 'retained', artifact_count: 5 },
+    { retention_state: 'metadata_only', artifact_count: 5 },
+    { retention_state: 'too_large', artifact_count: 1 },
+  ] satisfies IoArtifactRetentionSummaryRecord[]);
+
+  assert.deepEqual(rows, [
+    { label: 'Metadata retained only', count: 5 },
+    { label: 'Payload retained', count: 5 },
+    { label: 'Payload expired', count: 2 },
+    { label: 'Too large to retain', count: 1 },
+  ]);
 });
 
 test('diagnostics comparison filters expose available projection values', () => {

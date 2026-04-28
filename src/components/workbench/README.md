@@ -183,7 +183,9 @@ transient UI state without becoming backend scheduler policy.
   `workflowService.querySchedulerTimeline`, and comparison peers through
   `workflowService.queryRunList`. Comparison filters use projected workflow
   version, status, policy, scope, bucket, accepted-date, and accepted-date
-  range fields.
+  range fields. Selected-run retention completeness uses
+  `workflowService.queryIoArtifacts` response `retention_summary` counts and
+  I/O projection freshness, not raw ledger events.
 - `IoInspectorPage.svelte` reads artifact metadata through
   `workflowService.queryIoArtifacts` and global retention state through
   `workflowService.queryRetentionPolicy`. Artifact retention labels come from
