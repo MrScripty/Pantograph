@@ -423,6 +423,9 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         .contains("\"model_cache_state\":\"unknown\""));
     assert!(estimate_event
         .payload_json
+        .contains("\"candidate_runtime_ids\":[\"llama_cpp\"]"));
+    assert!(estimate_event
+        .payload_json
         .contains("requires backend(s): llama_cpp"));
     assert!(estimate_event
         .payload_json
@@ -433,6 +436,9 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
     assert!(estimate_event
         .payload_json
         .contains("estimated peak memory: 1024 MB VRAM, 2048 MB RAM"));
+    assert!(estimate_event
+        .payload_json
+        .contains("candidate runtime(s): llama_cpp"));
 
     let queue_event = diagnostic_events
         .iter()

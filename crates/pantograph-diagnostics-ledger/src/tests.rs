@@ -803,7 +803,7 @@ fn scheduler_timeline_projection_drains_events_incrementally() {
     assert_eq!(records[1].summary, "scheduler estimate produced");
     assert_eq!(
         records[1].detail.as_deref(),
-        Some("model cache hit; model already loaded")
+        Some("model cache hit; candidate runtime(s): llama_cpp; model already loaded")
     );
     assert_eq!(records[2].event_seq, queue_event.event_seq);
     assert_eq!(records[2].summary, "queued at position 0");
@@ -2602,6 +2602,9 @@ fn sample_scheduler_event(workflow_run_id: &str) -> DiagnosticEventAppendRequest
                 estimated_queue_wait_ms: Some(1_500),
                 estimated_duration_ms: Some(2_500),
                 model_cache_state: Some(SchedulerModelCacheState::CacheHit),
+                candidate_runtime_ids: vec!["llama_cpp".to_string()],
+                candidate_device_ids: Vec::new(),
+                candidate_network_node_ids: Vec::new(),
                 reasons: vec!["model already loaded".to_string()],
             },
         ),

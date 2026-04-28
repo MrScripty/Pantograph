@@ -77,6 +77,9 @@ helpers own restart-visible workflow run summaries.
   model/cache state details when event payloads provide them. Projection code
   must keep those typed states as bounded labels instead of replaying raw
   payloads during page reads.
+- Scheduler estimate timeline details may include typed candidate runtime ids
+  from the estimate payload. Device and network-node candidate fields stay
+  typed payload fields even when first-pass producers leave them empty.
 - Scheduler queue-control timeline rows format typed action, outcome,
   actor-scope, position, and priority fields explicitly. Projection code must
   not rely on enum debug strings for page/API labels.

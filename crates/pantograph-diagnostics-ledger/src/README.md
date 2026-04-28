@@ -112,6 +112,9 @@ semantics.
   where known. Timeline projection details may include that state, but callers
   should still treat estimate facts and observed lifecycle facts as separate
   rows.
+- Scheduler estimate events may carry typed candidate runtime, device, and
+  network-node id lists. Producers should leave unknown candidate classes empty
+  instead of encoding them into free-form reason text only.
 - Scheduler queue-control events use typed cancel, reprioritize, and
   push-front actions plus typed accepted/denied outcomes so refused queue
   mutations remain auditable without parsing service error text. Session-owned

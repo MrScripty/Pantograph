@@ -34,8 +34,8 @@ use super::{
     WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionRetentionHint,
     WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionSummary,
     WorkflowExecutionSessionUnloadReason, WorkflowHost, WorkflowPortBinding, WorkflowRunRequest,
-    WorkflowRunResponse, WorkflowRuntimeRequirements, WorkflowSchedulerDecisionReason,
-    WorkflowService, WorkflowServiceError,
+    WorkflowRunResponse, WorkflowRuntimeCapability, WorkflowRuntimeRequirements,
+    WorkflowSchedulerDecisionReason, WorkflowService, WorkflowServiceError,
 };
 
 const WORKFLOW_SESSION_SCHEDULER_POLICY: &str = "priority_then_fifo";
@@ -780,6 +780,9 @@ impl WorkflowService {
                         estimated_queue_wait_ms: None,
                         estimated_duration_ms: None,
                         model_cache_state: Some(estimate.model_cache_state),
+                        candidate_runtime_ids: estimate.candidate_runtime_ids,
+                        candidate_device_ids: Vec::new(),
+                        candidate_network_node_ids: Vec::new(),
                         reasons: estimate.reasons,
                     },
                 ),
@@ -1396,6 +1399,7 @@ fn single_model_node_id(model: &WorkflowCapabilityModel) -> Option<String> {
 struct SchedulerEstimateContext {
     confidence: String,
     model_cache_state: SchedulerModelCacheState,
+    candidate_runtime_ids: Vec<String>,
     reasons: Vec<String>,
 }
 
@@ -1412,6 +1416,7 @@ fn scheduler_estimate_context_from_snapshot(
         return Ok(SchedulerEstimateContext {
             confidence: "low".to_string(),
             model_cache_state: SchedulerModelCacheState::Unknown,
+            candidate_runtime_ids: Vec::new(),
             reasons,
         });
     };
@@ -1423,6 +1428,20 @@ fn scheduler_estimate_context_from_snapshot(
             ))
         })?;
     append_scheduler_estimate_runtime_reasons(&mut reasons, &runtime_requirements);
+    let runtime_capabilities: Vec<WorkflowRuntimeCapability> =
+        serde_json::from_str(&snapshot.runtime_capabilities_json).map_err(|error| {
+            WorkflowServiceError::Internal(format!(
+                "failed to decode workflow run snapshot runtime capabilities: {error}"
+            ))
+        })?;
+    let candidate_runtime_ids =
+        scheduler_candidate_runtime_ids(&runtime_requirements, &runtime_capabilities);
+    if !candidate_runtime_ids.is_empty() {
+        reasons.push(format!(
+            "candidate runtime(s): {}",
+            candidate_runtime_ids.join(", ")
+        ));
+    }
     let confidence = match runtime_requirements.estimation_confidence.trim() {
         "" | "unknown" => "low".to_string(),
         value => value.to_string(),
@@ -1436,6 +1455,7 @@ fn scheduler_estimate_context_from_snapshot(
     Ok(SchedulerEstimateContext {
         confidence,
         model_cache_state,
+        candidate_runtime_ids,
         reasons,
     })
 }
@@ -1475,6 +1495,33 @@ fn append_scheduler_estimate_runtime_reasons(
             memory_estimates.join(", ")
         ));
     }
+}
+
+fn scheduler_candidate_runtime_ids(
+    runtime_requirements: &WorkflowRuntimeRequirements,
+    runtime_capabilities: &[WorkflowRuntimeCapability],
+) -> Vec<String> {
+    let mut candidate_runtime_ids = runtime_capabilities
+        .iter()
+        .filter(|capability| capability.available && capability.configured)
+        .filter(|capability| {
+            runtime_requirements.required_backends.is_empty()
+                || runtime_requirements
+                    .required_backends
+                    .iter()
+                    .any(|required| {
+                        capability.runtime_id == *required
+                            || capability
+                                .backend_keys
+                                .iter()
+                                .any(|backend_key| backend_key == required)
+                    })
+        })
+        .map(|capability| capability.runtime_id.clone())
+        .collect::<Vec<_>>();
+    candidate_runtime_ids.sort();
+    candidate_runtime_ids.dedup();
+    candidate_runtime_ids
 }
 
 fn workflow_execution_session_kind_label(kind: &WorkflowExecutionSessionKind) -> &'static str {

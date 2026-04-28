@@ -1412,6 +1412,12 @@ fn scheduler_timeline_record_from_event(
             if let Some(cache_state) = payload.model_cache_state {
                 details.push(cache_state.summary().to_string());
             }
+            if !payload.candidate_runtime_ids.is_empty() {
+                details.push(format!(
+                    "candidate runtime(s): {}",
+                    payload.candidate_runtime_ids.join(", ")
+                ));
+            }
             details.extend(payload.reasons);
             let detail = if details.is_empty() {
                 None
