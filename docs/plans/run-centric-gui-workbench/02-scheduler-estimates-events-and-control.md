@@ -284,7 +284,7 @@ Pantograph GUI privileged actions.
   sessions, pause/resume queues or buckets, override priority, force estimate
   recomputation, force reschedule where supported.
 - [x] Record authority context in typed scheduler events.
-- [ ] Ensure scheduler remains final authority after an action request.
+- [x] Ensure scheduler remains final authority after an action request.
 
 **Verification:**
 
@@ -310,7 +310,9 @@ to the front by run id across sessions, leave the scheduler store as the
 authority, and emit `gui_admin` queue-control events with effective session
 context for accepted/correlated denied decisions. Clone/resubmit, running-run
 cancellation, privileged cross-session reorder, pause/resume, and other
-admin-scope event emitters remain pending.
+admin-scope event emitters remain pending. Current queue-control tests now
+cover the scheduler-owned priority-ceiling denial path so action requests are
+audited only after the store accepts, rejects, or normalizes the mutation.
 
 ## Ownership And Lifecycle Note
 
@@ -362,6 +364,8 @@ duplicate, unvalidated, or contradictory event streams.
 - Added requested/effective session authority context to typed queue-control
   events so client-session and GUI-admin actions can be audited without
   frontend inference.
+- Added priority-ceiling denial coverage for push-front controls, proving the
+  scheduler store remains the final authority after a queue action request.
 - Tightened scheduler timeline projection labels for queue-control events so
   page/API consumers receive explicit typed action, outcome, actor-scope,
   position, and priority summaries instead of enum debug formatting.

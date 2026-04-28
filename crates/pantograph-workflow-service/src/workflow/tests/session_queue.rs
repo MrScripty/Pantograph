@@ -578,6 +578,118 @@ async fn workflow_admin_queue_cancel_finds_session_and_records_gui_scope() {
 }
 
 #[tokio::test]
+async fn workflow_execution_session_push_front_denies_priority_ceiling_after_scheduler_decision() {
+    let host = MockWorkflowHost::new(8, 1024);
+    let service = WorkflowService::new()
+        .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"));
+    let created = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "wf-1".to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create workflow execution session");
+
+    let high_priority_request = WorkflowExecutionSessionRunRequest {
+        session_id: created.session_id.clone(),
+        workflow_semantic_version: "0.1.0".to_string(),
+        inputs: Vec::new(),
+        output_targets: None,
+        override_selection: None,
+        timeout_ms: None,
+        priority: Some(i32::MAX),
+    };
+    let low_priority_request = WorkflowExecutionSessionRunRequest {
+        priority: Some(0),
+        ..high_priority_request.clone()
+    };
+
+    let (ceiling_id, push_id) = {
+        let mut store = service
+            .session_store
+            .lock()
+            .expect("session store lock poisoned");
+        let ceiling_id = store
+            .enqueue_run(&created.session_id, &high_priority_request)
+            .expect("enqueue ceiling run");
+        let push_id = store
+            .enqueue_run(&created.session_id, &low_priority_request)
+            .expect("enqueue low priority run");
+        (ceiling_id, push_id)
+    };
+
+    service
+        .workflow_push_execution_session_queue_item_to_front(
+            WorkflowExecutionSessionQueuePushFrontRequest {
+                session_id: created.session_id.clone(),
+                workflow_run_id: push_id.clone(),
+            },
+        )
+        .await
+        .expect_err("priority ceiling should deny push-front");
+
+    let queue_items = {
+        let store = service
+            .session_store
+            .lock()
+            .expect("session store lock poisoned");
+        store
+            .list_queue(&created.session_id)
+            .expect("list queue after denied push-front")
+    };
+    assert_eq!(queue_items[0].workflow_run_id, ceiling_id);
+    assert_eq!(queue_items[1].workflow_run_id, push_id);
+    assert_eq!(queue_items[0].priority, i32::MAX);
+    assert_eq!(queue_items[1].priority, 0);
+
+    let diagnostic_events = {
+        let ledger = service
+            .diagnostics_ledger_guard()
+            .expect("diagnostics ledger");
+        pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::diagnostic_events_after(
+            &*ledger, 0, 10,
+        )
+        .expect("diagnostic events")
+    };
+    let queue_control_events = diagnostic_events
+        .iter()
+        .filter(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerQueueControl
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(queue_control_events.len(), 1);
+    assert_eq!(
+        queue_control_events[0]
+            .workflow_run_id
+            .as_ref()
+            .map(|id| id.as_str()),
+        Some(push_id.as_str())
+    );
+    assert!(queue_control_events[0]
+        .payload_json
+        .contains("\"action\":\"push_to_front\""));
+    assert!(queue_control_events[0]
+        .payload_json
+        .contains("\"outcome\":\"denied\""));
+    assert!(queue_control_events[0]
+        .payload_json
+        .contains("queue priority ceiling reached"));
+    assert!(queue_control_events[0].payload_json.contains(&format!(
+        "\"requested_session_id\":\"{}\"",
+        created.session_id
+    )));
+    assert!(queue_control_events[0].payload_json.contains(&format!(
+        "\"effective_session_id\":\"{}\"",
+        created.session_id
+    )));
+}
+
+#[tokio::test]
 async fn workflow_execution_session_queue_marks_loaded_compatible_admission_as_warm_reuse() {
     let host = MockWorkflowHost::new(8, 1024);
     let service = WorkflowService::new();

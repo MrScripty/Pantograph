@@ -116,6 +116,9 @@ Use `workflow/tests/` for behavior-specific child modules under the parent
   actor scope plus requested/effective session authority context for
   session-owned controls and `gui_admin` with effective session context for
   GUI-only admin controls.
+- Session queue tests must cover policy-owned denial paths such as the
+  push-front priority ceiling so public commands cannot bypass scheduler
+  authority or mutate queue order after the store rejects an action.
 - Session queue tests with diagnostics enabled must verify accepted
   reprioritize and push-front actions also record refreshed scheduler estimate
   events for the updated queued run.
