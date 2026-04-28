@@ -35,6 +35,9 @@ test('normalizeSchedulerRunFilters rejects unknown enum values', () => {
       client: 'all',
       clientSession: 'all',
       bucket: 'all',
+      selectedRuntime: 'all',
+      selectedDevice: 'all',
+      selectedNetworkNode: 'all',
       acceptedDate: 'all',
       sort: 'last_updated_desc',
     },
@@ -46,6 +49,7 @@ test('withSchedulerRunFilters applies partial updates without losing existing fi
     search: 'workflow-a',
     status: 'scheduled',
     client: 'client-a',
+    selectedRuntime: 'runtime-a',
   });
 
   assert.deepEqual(next, {
@@ -56,6 +60,9 @@ test('withSchedulerRunFilters applies partial updates without losing existing fi
     client: 'client-a',
     clientSession: 'all',
     bucket: 'all',
+    selectedRuntime: 'runtime-a',
+    selectedDevice: 'all',
+    selectedNetworkNode: 'all',
     acceptedDate: 'all',
     sort: 'last_updated_desc',
   });

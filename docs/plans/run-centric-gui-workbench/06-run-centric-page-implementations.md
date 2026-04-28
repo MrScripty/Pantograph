@@ -152,17 +152,17 @@ presentation where present in the run-list projection, selected-run actions,
 active-run updates, projection freshness, search, status filtering, stable
 local sort options, scheduler policy IDs, retention policy IDs, scheduler-policy and
 retention-policy filters, client/session/bucket scope columns and filters,
-accepted-date filters, workflow execution-session projection facts for queued
-controls, typed queue position, priority, estimate, and scheduler-reason
-columns, delayed status presentation, backend-supported session cancel/front
-actions, GUI-admin cancel/front/priority actions for queued selected runs, a
-selected-run timeline panel, timeline projection freshness, typed timeline
-kind/source filters, and timeline summary/detail rows without raw event
-parsing. Progress, model/runtime
+accepted-date filters, selected runtime/device/network-node placement columns
+and filters, workflow execution-session projection facts for queued controls,
+typed queue position, priority, estimate, and scheduler-reason columns, delayed
+status presentation, backend-supported session cancel/front actions, GUI-admin
+cancel/front/priority actions for queued selected runs, a selected-run timeline
+panel, timeline projection freshness, typed timeline kind/source filters, and
+timeline summary/detail rows without raw event parsing. Progress, model/runtime
 summaries, richer delay categories, richer retention summaries, running-run
 admin cancellation, and cross-session reorder/pause controls remain open.
-Assigned status, policy, scope, and accepted-date filters now also narrow the
-backend run-list projection query where supported; search, sort, and
+Assigned status, policy, scope, placement, and accepted-date filters now also
+narrow the backend run-list projection query where supported; search, sort, and
 `Unassigned` label handling remain local presentation filters.
 
 ### Milestone 2: Diagnostics Page
@@ -510,6 +510,10 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
 - Wired assigned Scheduler status, policy, scope, and accepted-date filters
   into `workflowService.queryRunList` request fields while preserving local
   search, sort, and `Unassigned` filtering.
+- Added Scheduler table filters and dense columns for selected runtime,
+  selected device, and selected network-node placement facts from typed
+  run-list projection fields, and wired assigned placement filters into the
+  backend run-list query.
 - Added Scheduler table columns for typed queue position, priority, estimate,
   and scheduler reason fields promoted into run-list projections.
 - Added a Scheduler selected-run timeline panel backed by

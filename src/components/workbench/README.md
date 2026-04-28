@@ -9,8 +9,8 @@ later plan stages fill in richer page bodies.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `WorkbenchShell.svelte` | Top-level workbench frame, toolbar navigation, active-run summary, and page outlet. |
-| `SchedulerPage.svelte` | Dense run-list view backed by the run-list projection service, active-run selection store, local table controls, future/scheduled/queued status filters, policy/scope/date filters, scope columns, typed queue/estimate columns, backend-gated queue actions, and selected-run scheduler timeline projection with typed kind/source filters. |
-| `schedulerPagePresenters.ts` | Pure Scheduler page status labels/classes, duration, timestamp, future/scheduled status, scope/date, queue-control gating, queue/estimate, filter, sorting, projection freshness, and typed timeline filter presenters. |
+| `SchedulerPage.svelte` | Dense run-list view backed by the run-list projection service, active-run selection store, local table controls, future/scheduled/queued status filters, policy/scope/placement/date filters, scope and placement columns, typed queue/estimate columns, backend-gated queue actions, and selected-run scheduler timeline projection with typed kind/source filters. |
+| `schedulerPagePresenters.ts` | Pure Scheduler page status labels/classes, duration, timestamp, future/scheduled status, scope/placement/date, queue-control gating, queue/estimate, filter, sorting, projection freshness, and typed timeline filter presenters. |
 | `schedulerPagePresenters.test.ts` | Unit coverage for Scheduler table labels, status classes, filters, sorts, projection freshness, and timeline labels. |
 | `GraphPage.svelte` | Workbench page that switches between the active run's immutable graph snapshot and the current editable workflow graph. |
 | `RunGraphSnapshot.svelte` | Read-only run graph renderer backed by `workflowService.queryRunGraph`; it does not load historic graphs into the editor store. |
@@ -84,9 +84,9 @@ transient UI state without becoming backend scheduler policy.
 - Scheduler row selection may set active-run context, but durable run data must
   still be fetched from projection services by each page.
 - Scheduler table search, status filter, policy-field filters, scope filters,
-  accepted-date filter, sort controls, and column visibility operate only on
-  the materialized run-list projection returned by the backend. The control
-  state is owned by
+  placement filters, accepted-date filter, sort controls, and column visibility
+  operate only on the materialized run-list projection returned by the backend.
+  The control state is owned by
   `schedulerRunListStore.ts`, not by the backend scheduler and not by
   component-local durable state.
 - Scheduler timeline rows come from `workflowService.querySchedulerTimeline`.
@@ -96,6 +96,9 @@ transient UI state without becoming backend scheduler policy.
 - Scheduler client, session, bucket, and workflow execution-session facts come
   from run-list projection fields. Components must not recover those scope
   facts from raw events.
+- Scheduler selected runtime, selected device, and selected network-node facts
+  come from run-list projection fields. Components must not recover those
+  placement facts from scheduler payload JSON.
 - Scheduler session-scoped queue action buttons must be gated by projected
   workflow execution-session ids and backend run status. GUI-admin queue action
   buttons are gated by backend run status and call run-id admin command

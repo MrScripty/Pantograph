@@ -31,6 +31,7 @@
     formatSchedulerTimelineSource,
     formatSchedulerDuration,
     formatSchedulerEstimateLabel,
+    formatSchedulerPlacementLabel,
     formatSchedulerTimestamp,
     formatSchedulerPriority,
     formatSchedulerQueuePosition,
@@ -43,6 +44,9 @@
     schedulerClientSessionFilterOptions,
     schedulerPolicyFilterOptions,
     schedulerRetentionFilterOptions,
+    schedulerSelectedDeviceFilterOptions,
+    schedulerSelectedNetworkNodeFilterOptions,
+    schedulerSelectedRuntimeFilterOptions,
     formatSchedulerScopeLabel,
     schedulerRunSupportsAdminQueueControls,
     schedulerRunSupportsQueueControls,
@@ -87,6 +91,9 @@
   let clientOptions = $derived(schedulerClientFilterOptions(runs));
   let clientSessionOptions = $derived(schedulerClientSessionFilterOptions(runs));
   let bucketOptions = $derived(schedulerBucketFilterOptions(runs));
+  let selectedRuntimeOptions = $derived(schedulerSelectedRuntimeFilterOptions(runs));
+  let selectedDeviceOptions = $derived(schedulerSelectedDeviceFilterOptions(runs));
+  let selectedNetworkNodeOptions = $derived(schedulerSelectedNetworkNodeFilterOptions(runs));
   let acceptedDateOptions = $derived(schedulerAcceptedDateFilterOptions(runs));
   let selectedRunRecord = $derived(
     runs.find((run) => run.workflow_run_id === $activeWorkflowRun?.workflow_run_id) ?? null,
@@ -364,7 +371,7 @@
     <div class="border-b border-red-900 bg-red-950/50 px-4 py-2 text-sm text-red-200">{error}</div>
   {/if}
 
-  <div class="grid shrink-0 gap-3 border-b border-neutral-900 px-4 py-3 md:grid-cols-3 xl:grid-cols-6 2xl:grid-cols-[minmax(12rem,1.5fr)_repeat(8,minmax(8rem,1fr))]">
+  <div class="grid shrink-0 gap-3 border-b border-neutral-900 px-4 py-3 md:grid-cols-3 xl:grid-cols-6 2xl:grid-cols-[minmax(12rem,1.5fr)_repeat(11,minmax(8rem,1fr))]">
     <div class="md:col-span-3 xl:col-span-2 2xl:col-span-1">
       <label for="scheduler-run-search" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
         Search
@@ -489,6 +496,54 @@
       </select>
     </div>
     <div>
+      <label for="scheduler-runtime-filter" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
+        Runtime
+      </label>
+      <select
+        id="scheduler-runtime-filter"
+        value={$schedulerRunFilters.selectedRuntime}
+        onchange={(event) => setSchedulerRunFilters({ selectedRuntime: eventValue(event) })}
+        class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
+      >
+        <option value="all">all</option>
+        {#each selectedRuntimeOptions as selectedRuntime (selectedRuntime)}
+          <option value={selectedRuntime}>{selectedRuntime}</option>
+        {/each}
+      </select>
+    </div>
+    <div>
+      <label for="scheduler-device-filter" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
+        Device
+      </label>
+      <select
+        id="scheduler-device-filter"
+        value={$schedulerRunFilters.selectedDevice}
+        onchange={(event) => setSchedulerRunFilters({ selectedDevice: eventValue(event) })}
+        class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
+      >
+        <option value="all">all</option>
+        {#each selectedDeviceOptions as selectedDevice (selectedDevice)}
+          <option value={selectedDevice}>{selectedDevice}</option>
+        {/each}
+      </select>
+    </div>
+    <div>
+      <label for="scheduler-network-node-filter" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
+        Network Node
+      </label>
+      <select
+        id="scheduler-network-node-filter"
+        value={$schedulerRunFilters.selectedNetworkNode}
+        onchange={(event) => setSchedulerRunFilters({ selectedNetworkNode: eventValue(event) })}
+        class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
+      >
+        <option value="all">all</option>
+        {#each selectedNetworkNodeOptions as selectedNetworkNode (selectedNetworkNode)}
+          <option value={selectedNetworkNode}>{selectedNetworkNode}</option>
+        {/each}
+      </select>
+    </div>
+    <div>
       <label for="scheduler-accepted-filter" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
         Accepted
       </label>
@@ -508,7 +563,7 @@
 
   <div class="grid min-h-0 flex-1 grid-cols-1 overflow-hidden xl:grid-cols-[minmax(0,1fr)_24rem]">
     <div class="min-h-0 overflow-auto">
-      <table class="w-full min-w-[146rem] border-collapse text-left text-sm">
+      <table class="w-full min-w-[172rem] border-collapse text-left text-sm">
         <thead class="sticky top-0 z-10 bg-neutral-950 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
           <tr class="border-b border-neutral-800">
             <th class="px-4 py-3 font-medium">Run</th>
@@ -520,6 +575,9 @@
             <th class="px-3 py-3 font-medium">Client</th>
             <th class="px-3 py-3 font-medium">Session</th>
             <th class="px-3 py-3 font-medium">Bucket</th>
+            <th class="px-3 py-3 font-medium">Runtime</th>
+            <th class="px-3 py-3 font-medium">Device</th>
+            <th class="px-3 py-3 font-medium">Network Node</th>
             <th class="px-3 py-3 font-medium">Queue</th>
             <th class="px-3 py-3 font-medium">Priority</th>
             <th class="px-3 py-3 font-medium">Estimate</th>
@@ -534,15 +592,15 @@
         <tbody class="divide-y divide-neutral-900">
           {#if loading}
             <tr>
-              <td colspan="18" class="px-4 py-8 text-center text-neutral-500">Loading runs</td>
+              <td colspan="21" class="px-4 py-8 text-center text-neutral-500">Loading runs</td>
             </tr>
           {:else if runs.length === 0}
             <tr>
-              <td colspan="18" class="px-4 py-8 text-center text-neutral-500">No workflow runs recorded</td>
+              <td colspan="21" class="px-4 py-8 text-center text-neutral-500">No workflow runs recorded</td>
             </tr>
           {:else if displayedRuns.length === 0}
             <tr>
-              <td colspan="18" class="px-4 py-8 text-center text-neutral-500">No matching workflow runs</td>
+              <td colspan="21" class="px-4 py-8 text-center text-neutral-500">No matching workflow runs</td>
             </tr>
           {:else}
             {#each displayedRuns as run (run.workflow_run_id)}
@@ -586,6 +644,15 @@
                 </td>
                 <td class="max-w-[10rem] truncate px-3 py-2 font-mono text-xs text-neutral-400" title={formatSchedulerScopeLabel(run.bucket_id)}>
                   {formatSchedulerScopeLabel(run.bucket_id)}
+                </td>
+                <td class="max-w-[10rem] truncate px-3 py-2 font-mono text-xs text-neutral-400" title={formatSchedulerPlacementLabel(run.selected_runtime_id)}>
+                  {formatSchedulerPlacementLabel(run.selected_runtime_id)}
+                </td>
+                <td class="max-w-[10rem] truncate px-3 py-2 font-mono text-xs text-neutral-400" title={formatSchedulerPlacementLabel(run.selected_device_id)}>
+                  {formatSchedulerPlacementLabel(run.selected_device_id)}
+                </td>
+                <td class="max-w-[12rem] truncate px-3 py-2 font-mono text-xs text-neutral-400" title={formatSchedulerPlacementLabel(run.selected_network_node_id)}>
+                  {formatSchedulerPlacementLabel(run.selected_network_node_id)}
                 </td>
                 <td class="px-3 py-2 text-xs text-neutral-400">{formatSchedulerQueuePosition(run.scheduler_queue_position)}</td>
                 <td class="px-3 py-2 text-xs text-neutral-400">{formatSchedulerPriority(run.scheduler_priority)}</td>

@@ -10,6 +10,7 @@ import {
   filterSchedulerTimelineEvents,
   filterAndSortSchedulerRuns,
   formatSchedulerAcceptedDateLabel,
+  formatSchedulerPlacementLabel,
   formatSchedulerPolicyLabel,
   formatSchedulerPriority,
   formatSchedulerQueuePosition,
@@ -31,6 +32,9 @@ import {
   schedulerPolicyFilterOptions,
   schedulerRetentionFilterOptions,
   schedulerRunSupportsQueueControls,
+  schedulerSelectedDeviceFilterOptions,
+  schedulerSelectedNetworkNodeFilterOptions,
+  schedulerSelectedRuntimeFilterOptions,
   schedulerTimelinePayloadLabel,
   schedulerTimelineKindFilterOptions,
   schedulerTimelineSourceFilterOptions,
@@ -55,6 +59,9 @@ function run(overrides: Partial<RunListProjectionRecord>): RunListProjectionReco
     client_session_id: 'session-a',
     bucket_id: 'bucket-a',
     workflow_execution_session_id: 'exec-session-a',
+    selected_runtime_id: 'runtime-a',
+    selected_device_id: 'device-a',
+    selected_network_node_id: 'network-node-a',
     scheduler_queue_position: null,
     scheduler_priority: null,
     estimate_confidence: null,
@@ -124,6 +131,8 @@ test('scheduler policy presenters keep missing dense table facts explicit', () =
   assert.equal(formatSchedulerRetentionLabel(undefined), 'Unassigned');
   assert.equal(formatSchedulerScopeLabel('session-a'), 'session-a');
   assert.equal(formatSchedulerScopeLabel(''), 'Unassigned');
+  assert.equal(formatSchedulerPlacementLabel('runtime-a'), 'runtime-a');
+  assert.equal(formatSchedulerPlacementLabel(''), 'Unassigned');
   assert.equal(formatSchedulerAcceptedDateLabel(86_400_000), '1970-01-02');
   assert.equal(formatSchedulerAcceptedDateLabel(null), 'Unassigned');
 });
@@ -184,6 +193,9 @@ test('filterAndSortSchedulerRuns filters by status and search text', () => {
     client: 'all',
     clientSession: 'all',
     bucket: 'all',
+    selectedRuntime: 'all',
+    selectedDevice: 'all',
+    selectedNetworkNode: 'all',
     acceptedDate: 'all',
     sort: 'workflow_asc',
   });
@@ -211,6 +223,9 @@ test('filterAndSortSchedulerRuns searches client scope facts', () => {
       client: 'all',
       clientSession: 'all',
       bucket: 'all',
+      selectedRuntime: 'all',
+      selectedDevice: 'all',
+      selectedNetworkNode: 'all',
       acceptedDate: 'all',
       sort: 'workflow_asc',
     }).map((item) => item.workflow_run_id),
@@ -234,6 +249,9 @@ test('filterAndSortSchedulerRuns sorts by operational fields', () => {
       client: 'all',
       clientSession: 'all',
       bucket: 'all',
+      selectedRuntime: 'all',
+      selectedDevice: 'all',
+      selectedNetworkNode: 'all',
       acceptedDate: 'all',
       sort: 'last_updated_desc',
     }).map((item) => item.workflow_run_id),
@@ -248,6 +266,9 @@ test('filterAndSortSchedulerRuns sorts by operational fields', () => {
       client: 'all',
       clientSession: 'all',
       bucket: 'all',
+      selectedRuntime: 'all',
+      selectedDevice: 'all',
+      selectedNetworkNode: 'all',
       acceptedDate: 'all',
       sort: 'duration_desc',
     }).map((item) => item.workflow_run_id),
@@ -270,6 +291,9 @@ test('scheduler policy filters use explicit projection labels', () => {
       client_id: 'client-b',
       client_session_id: 'session-b',
       bucket_id: 'bucket-b',
+      selected_runtime_id: 'runtime-b',
+      selected_device_id: 'device-b',
+      selected_network_node_id: 'network-node-b',
       accepted_at_ms: 172_800_000,
     }),
     run({
@@ -279,6 +303,9 @@ test('scheduler policy filters use explicit projection labels', () => {
       client_id: null,
       client_session_id: null,
       bucket_id: null,
+      selected_runtime_id: null,
+      selected_device_id: null,
+      selected_network_node_id: null,
       accepted_at_ms: null,
     }),
   ];
@@ -288,6 +315,13 @@ test('scheduler policy filters use explicit projection labels', () => {
   assert.deepEqual(schedulerClientFilterOptions(runs), ['Unassigned', 'client-a', 'client-b']);
   assert.deepEqual(schedulerClientSessionFilterOptions(runs), ['Unassigned', 'session-a', 'session-b']);
   assert.deepEqual(schedulerBucketFilterOptions(runs), ['Unassigned', 'bucket-a', 'bucket-b']);
+  assert.deepEqual(schedulerSelectedRuntimeFilterOptions(runs), ['Unassigned', 'runtime-a', 'runtime-b']);
+  assert.deepEqual(schedulerSelectedDeviceFilterOptions(runs), ['Unassigned', 'device-a', 'device-b']);
+  assert.deepEqual(schedulerSelectedNetworkNodeFilterOptions(runs), [
+    'Unassigned',
+    'network-node-a',
+    'network-node-b',
+  ]);
   assert.deepEqual(schedulerAcceptedDateFilterOptions(runs), ['Unassigned', '1970-01-02', '1970-01-03']);
   assert.deepEqual(
     filterAndSortSchedulerRuns(runs, {
@@ -298,6 +332,9 @@ test('scheduler policy filters use explicit projection labels', () => {
       client: 'client-b',
       clientSession: 'session-b',
       bucket: 'bucket-b',
+      selectedRuntime: 'runtime-b',
+      selectedDevice: 'device-b',
+      selectedNetworkNode: 'network-node-b',
       acceptedDate: '1970-01-03',
       sort: 'workflow_asc',
     }).map((item) => item.workflow_run_id),
@@ -370,6 +407,9 @@ test('buildSchedulerRunListQuery sends backend-supported filters only', () => {
         client: 'client-a',
         clientSession: 'session-a',
         bucket: 'bucket-a',
+        selectedRuntime: 'runtime-a',
+        selectedDevice: 'device-a',
+        selectedNetworkNode: 'network-node-a',
         acceptedDate: '1970-01-02',
         sort: 'workflow_asc',
       },
@@ -383,6 +423,9 @@ test('buildSchedulerRunListQuery sends backend-supported filters only', () => {
       client_id: 'client-a',
       client_session_id: 'session-a',
       bucket_id: 'bucket-a',
+      selected_runtime_id: 'runtime-a',
+      selected_device_id: 'device-a',
+      selected_network_node_id: 'network-node-a',
       accepted_at_from_ms: 86_400_000,
       accepted_at_to_ms: 172_799_999,
     },
@@ -397,6 +440,9 @@ test('buildSchedulerRunListQuery sends backend-supported filters only', () => {
         client: 'Unassigned',
         clientSession: 'all',
         bucket: 'all',
+        selectedRuntime: 'Unassigned',
+        selectedDevice: 'all',
+        selectedNetworkNode: 'all',
         acceptedDate: 'all',
         sort: 'workflow_asc',
       },

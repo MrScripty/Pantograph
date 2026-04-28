@@ -51,8 +51,8 @@ persist active-run selection or become a backend source of run truth.
 column-visibility state so the page does not duplicate run-list UI state in
 component-local variables while backend projection services remain the only
 source of run data. Future, scheduled, queued, delayed, running, terminal,
-scope, and accepted-date filters stay in the same transient store boundary as
-policy filters.
+scope, placement, and accepted-date filters stay in the same transient store
+boundary as policy filters.
 
 ## Alternatives Rejected
 - Keep separate app-only and package-only workflow stores.
@@ -77,10 +77,10 @@ policy filters.
 - Scheduler run-list filters, sort order, and column visibility are transient
   UI preferences. They must not mutate backend queue state or be treated as
   scheduler policy.
-- Scheduler scope and accepted-date filters are presentation filters over
-  backend projection fields. Assigned values may narrow backend projection
-  queries, but they must not become client authority checks or durable scheduler
-  policy.
+- Scheduler scope, placement, and accepted-date filters are presentation
+  filters over backend projection fields. Assigned values may narrow backend
+  projection queries, but they must not become client authority checks or
+  durable scheduler policy.
 
 ## Revisit Triggers
 - The legacy store facade is no longer imported anywhere.
@@ -136,5 +136,6 @@ clearConnectionIntent();
 - Workbench active-run context is in-memory GUI state and may be `null` at
   startup even when runs exist in scheduler projections.
 - Scheduler run-list filter state is in-memory GUI state, including status,
-  policy, scope, accepted-date, search, and sort controls. It may be reset
-  without changing queued runs, selected active run, or backend projections.
+  policy, scope, placement, accepted-date, search, and sort controls. It may be
+  reset without changing queued runs, selected active run, or backend
+  projections.

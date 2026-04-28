@@ -73,6 +73,9 @@ Run-list projection DTOs preserve backend-provided client, client-session,
 bucket, and workflow execution-session scope fields so Scheduler pages can
 render authority context and future queue-control targets without querying
 selected-run details or raw diagnostic events.
+Run-list projection DTOs also preserve scheduler-selected runtime, device, and
+network-node placement fields and filters so Scheduler and Diagnostics pages
+can consume placement facts without parsing scheduler payload JSON.
 Workflow command invoke paths that back workbench projections and queue,
 retention, Network, and runtime-status reads use `invokeWorkflowCommand`, which
 normalizes Tauri's JSON error strings into typed `WorkflowServiceError`
@@ -137,6 +140,9 @@ preserve the backend download/audit response.
   methods separately.
 - Run-list request coverage includes scope and accepted-at range filters so
   frontend services preserve the backend projection contract.
+- Run-list request coverage includes selected runtime, selected device, and
+  selected network-node filters so frontend services preserve the placement
+  projection contract.
 - Run-list and run-detail service-boundary tests must keep consuming the shared
   Rust contract fixture for cross-layer DTO acceptance.
 - Library usage request coverage includes active-run `workflow_run_id`

@@ -144,6 +144,10 @@ export function formatSchedulerScopeLabel(value: string | null | undefined): str
   return value && value.trim().length > 0 ? value : 'Unassigned';
 }
 
+export function formatSchedulerPlacementLabel(value: string | null | undefined): string {
+  return value && value.trim().length > 0 ? value : 'Unassigned';
+}
+
 export function schedulerRunSupportsQueueControls(run: RunListProjectionRecord | null | undefined): boolean {
   if (!run?.workflow_execution_session_id) {
     return false;
@@ -173,6 +177,18 @@ export function schedulerClientSessionFilterOptions(runs: RunListProjectionRecor
 
 export function schedulerBucketFilterOptions(runs: RunListProjectionRecord[]): string[] {
   return uniqueSortedOptions(runs.map((run) => formatSchedulerScopeLabel(run.bucket_id)));
+}
+
+export function schedulerSelectedRuntimeFilterOptions(runs: RunListProjectionRecord[]): string[] {
+  return uniqueSortedOptions(runs.map((run) => formatSchedulerPlacementLabel(run.selected_runtime_id)));
+}
+
+export function schedulerSelectedDeviceFilterOptions(runs: RunListProjectionRecord[]): string[] {
+  return uniqueSortedOptions(runs.map((run) => formatSchedulerPlacementLabel(run.selected_device_id)));
+}
+
+export function schedulerSelectedNetworkNodeFilterOptions(runs: RunListProjectionRecord[]): string[] {
+  return uniqueSortedOptions(runs.map((run) => formatSchedulerPlacementLabel(run.selected_network_node_id)));
 }
 
 export function schedulerAcceptedDateFilterOptions(runs: RunListProjectionRecord[]): string[] {
@@ -271,6 +287,21 @@ export function filterAndSortSchedulerRuns(
     )
     .filter(
       (run) =>
+        filters.selectedRuntime === 'all' ||
+        formatSchedulerPlacementLabel(run.selected_runtime_id) === filters.selectedRuntime,
+    )
+    .filter(
+      (run) =>
+        filters.selectedDevice === 'all' ||
+        formatSchedulerPlacementLabel(run.selected_device_id) === filters.selectedDevice,
+    )
+    .filter(
+      (run) =>
+        filters.selectedNetworkNode === 'all' ||
+        formatSchedulerPlacementLabel(run.selected_network_node_id) === filters.selectedNetworkNode,
+    )
+    .filter(
+      (run) =>
         filters.acceptedDate === 'all' ||
         formatSchedulerAcceptedDateLabel(run.accepted_at_ms) === filters.acceptedDate,
     )
@@ -300,6 +331,15 @@ export function buildSchedulerRunListQuery(
   }
   if (isAssignedFilterValue(filters.bucket)) {
     request.bucket_id = filters.bucket;
+  }
+  if (isAssignedFilterValue(filters.selectedRuntime)) {
+    request.selected_runtime_id = filters.selectedRuntime;
+  }
+  if (isAssignedFilterValue(filters.selectedDevice)) {
+    request.selected_device_id = filters.selectedDevice;
+  }
+  if (isAssignedFilterValue(filters.selectedNetworkNode)) {
+    request.selected_network_node_id = filters.selectedNetworkNode;
   }
   const acceptedRange = schedulerAcceptedDateRange(filters.acceptedDate);
   if (acceptedRange) {
@@ -353,6 +393,9 @@ function schedulerRunMatchesSearch(run: RunListProjectionRecord, search: string)
     run.client_session_id,
     run.bucket_id,
     run.workflow_execution_session_id,
+    run.selected_runtime_id,
+    run.selected_device_id,
+    run.selected_network_node_id,
     run.status,
   ].some((value) => value?.toLowerCase().includes(search));
 }

@@ -18,6 +18,9 @@ export interface SchedulerRunFilters {
   client: string;
   clientSession: string;
   bucket: string;
+  selectedRuntime: string;
+  selectedDevice: string;
+  selectedNetworkNode: string;
   acceptedDate: string;
   sort: SchedulerSortKey;
 }
@@ -37,6 +40,9 @@ export const SCHEDULER_RUN_COLUMN_IDS = [
   'scheduler_reason',
   'policy',
   'retention',
+  'selected_runtime',
+  'selected_device',
+  'selected_network_node',
   'updated',
 ] as const;
 
@@ -75,6 +81,9 @@ export const DEFAULT_SCHEDULER_RUN_FILTERS: SchedulerRunFilters = {
   client: 'all',
   clientSession: 'all',
   bucket: 'all',
+  selectedRuntime: 'all',
+  selectedDevice: 'all',
+  selectedNetworkNode: 'all',
   acceptedDate: 'all',
   sort: 'last_updated_desc',
 };
@@ -119,6 +128,9 @@ export function normalizeSchedulerRunFilters(
     client: normalizeOption(filters?.client),
     clientSession: normalizeOption(filters?.clientSession),
     bucket: normalizeOption(filters?.bucket),
+    selectedRuntime: normalizeOption(filters?.selectedRuntime),
+    selectedDevice: normalizeOption(filters?.selectedDevice),
+    selectedNetworkNode: normalizeOption(filters?.selectedNetworkNode),
     acceptedDate: normalizeOption(filters?.acceptedDate),
     sort: isSchedulerSortKey(filters?.sort) ? filters.sort : 'last_updated_desc',
   };
