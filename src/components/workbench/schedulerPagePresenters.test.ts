@@ -22,6 +22,7 @@ import {
   schedulerBucketFilterOptions,
   schedulerClientFilterOptions,
   schedulerClientSessionFilterOptions,
+  schedulerRunSupportsAdminQueueControls,
   schedulerPolicyFilterOptions,
   schedulerRetentionFilterOptions,
   schedulerRunSupportsQueueControls,
@@ -121,6 +122,14 @@ test('scheduler queue controls require queued run execution-session facts', () =
     ),
     false,
   );
+  assert.equal(
+    schedulerRunSupportsAdminQueueControls(
+      run({ status: 'queued', workflow_execution_session_id: null }),
+    ),
+    true,
+  );
+  assert.equal(schedulerRunSupportsAdminQueueControls(run({ status: 'delayed' })), true);
+  assert.equal(schedulerRunSupportsAdminQueueControls(run({ status: 'running' })), false);
 });
 
 test('filterAndSortSchedulerRuns filters by status and search text', () => {

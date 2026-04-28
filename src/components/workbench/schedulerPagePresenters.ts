@@ -120,6 +120,10 @@ export function schedulerRunSupportsQueueControls(run: RunListProjectionRecord |
   return run.status === 'queued' || run.status === 'delayed';
 }
 
+export function schedulerRunSupportsAdminQueueControls(run: RunListProjectionRecord | null | undefined): boolean {
+  return run?.status === 'queued' || run?.status === 'delayed';
+}
+
 export function schedulerPolicyFilterOptions(runs: RunListProjectionRecord[]): string[] {
   return uniqueSortedOptions(runs.map((run) => formatSchedulerPolicyLabel(run.scheduler_policy_id)));
 }

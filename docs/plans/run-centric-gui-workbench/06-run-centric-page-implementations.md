@@ -153,11 +153,12 @@ options, scheduler policy IDs, retention policy IDs, scheduler-policy and
 retention-policy filters, client/session/bucket scope columns and filters,
 accepted-date filters, workflow execution-session projection facts for future
 queue controls, typed queue position, priority, estimate, and scheduler-reason
-columns, delayed status presentation, backend-supported cancel/front actions
-for queued selected runs, a selected-run timeline panel, timeline projection
-freshness, and timeline summary/detail rows without raw event parsing. Progress,
-model/runtime summaries, richer delay categories, richer retention summaries,
-and privileged queue action controls remain open.
+columns, delayed status presentation, backend-supported session cancel/front
+actions, GUI-admin cancel/front/priority actions for queued selected runs, a
+selected-run timeline panel, timeline projection freshness, and timeline
+summary/detail rows without raw event parsing. Progress, model/runtime
+summaries, richer delay categories, richer retention summaries, running-run
+admin cancellation, and cross-session reorder/pause controls remain open.
 Assigned status, policy, scope, and accepted-date filters now also narrow the
 backend run-list projection query where supported; search, sort, and
 `Unassigned` label handling remain local presentation filters.

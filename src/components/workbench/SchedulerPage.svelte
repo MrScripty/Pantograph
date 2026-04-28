@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { ChevronsUp, RefreshCw, XCircle } from 'lucide-svelte';
+  import { ChevronsUp, RefreshCw, ShieldAlert, SlidersHorizontal, XCircle } from 'lucide-svelte';
   import type {
     ProjectionStateRecord,
     RunListProjectionRecord,
@@ -42,6 +42,7 @@
     schedulerPolicyFilterOptions,
     schedulerRetentionFilterOptions,
     formatSchedulerScopeLabel,
+    schedulerRunSupportsAdminQueueControls,
     schedulerRunSupportsQueueControls,
     schedulerTimelinePayloadLabel,
   } from './schedulerPagePresenters';
@@ -58,6 +59,8 @@
   let actionBusy = $state<string | null>(null);
   let actionError = $state<string | null>(null);
   let actionMessage = $state<string | null>(null);
+  let adminPriorityInput = $state('0');
+  let adminPriorityRunId = '';
   let timelineRequestSerial = 0;
   let activeTimelineRunId = $state<string | null>(null);
   let refreshInFlight = false;
@@ -75,6 +78,7 @@
     runs.find((run) => run.workflow_run_id === $activeWorkflowRun?.workflow_run_id) ?? null,
   );
   let selectedRunHasQueueControls = $derived(schedulerRunSupportsQueueControls(selectedRunRecord));
+  let selectedRunHasAdminQueueControls = $derived(schedulerRunSupportsAdminQueueControls(selectedRunRecord));
 
   function activeRunId(): string | null {
     return $activeWorkflowRun?.workflow_run_id ?? null;
@@ -207,6 +211,79 @@
     }
   }
 
+  async function adminCancelSelectedRun(): Promise<void> {
+    const run = selectedRunRecord;
+    if (!schedulerRunSupportsAdminQueueControls(run)) {
+      return;
+    }
+    actionBusy = 'admin-cancel';
+    actionError = null;
+    actionMessage = null;
+    try {
+      await workflowService.adminCancelQueueItem({
+        workflow_run_id: run.workflow_run_id,
+      });
+      actionMessage = 'Admin cancel accepted by scheduler';
+      await refreshRuns();
+      await refreshTimeline(run.workflow_run_id);
+    } catch (actionFailure) {
+      actionError = formatWorkflowCommandError(actionFailure);
+    } finally {
+      actionBusy = null;
+    }
+  }
+
+  async function adminPushSelectedRunToFront(): Promise<void> {
+    const run = selectedRunRecord;
+    if (!schedulerRunSupportsAdminQueueControls(run)) {
+      return;
+    }
+    actionBusy = 'admin-front';
+    actionError = null;
+    actionMessage = null;
+    try {
+      await workflowService.adminPushQueueItemToFront({
+        workflow_run_id: run.workflow_run_id,
+      });
+      actionMessage = 'Admin push-front accepted by scheduler';
+      await refreshRuns();
+      await refreshTimeline(run.workflow_run_id);
+    } catch (actionFailure) {
+      actionError = formatWorkflowCommandError(actionFailure);
+    } finally {
+      actionBusy = null;
+    }
+  }
+
+  async function adminReprioritizeSelectedRun(): Promise<void> {
+    const run = selectedRunRecord;
+    if (!schedulerRunSupportsAdminQueueControls(run)) {
+      return;
+    }
+    const priority = Number(adminPriorityInput);
+    if (!Number.isInteger(priority)) {
+      actionError = 'Priority must be an integer';
+      actionMessage = null;
+      return;
+    }
+    actionBusy = 'admin-priority';
+    actionError = null;
+    actionMessage = null;
+    try {
+      await workflowService.adminReprioritizeQueueItem({
+        workflow_run_id: run.workflow_run_id,
+        priority,
+      });
+      actionMessage = 'Admin priority accepted by scheduler';
+      await refreshRuns();
+      await refreshTimeline(run.workflow_run_id);
+    } catch (actionFailure) {
+      actionError = formatWorkflowCommandError(actionFailure);
+    } finally {
+      actionBusy = null;
+    }
+  }
+
   onMount(() => {
     eventUnsubscribe = workflowService.subscribeEvents(() => {
       void refreshRuns();
@@ -237,6 +314,16 @@
 
     activeRunFilterKey = filterKey;
     void refreshRuns();
+  });
+
+  $effect(() => {
+    const run = selectedRunRecord;
+    const runId = run?.workflow_run_id ?? '';
+    if (runId === adminPriorityRunId) {
+      return;
+    }
+    adminPriorityRunId = runId;
+    adminPriorityInput = String(run?.scheduler_priority ?? 0);
   });
 </script>
 
@@ -591,6 +678,54 @@
             <ChevronsUp size={12} aria-hidden="true" />
             Front
           </button>
+        </div>
+        <div class="mt-3 border-t border-neutral-900 pt-3">
+          <div class="mb-2 text-[11px] uppercase tracking-[0.18em] text-neutral-600">GUI Admin</div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              title="Admin cancel selected queued run by run id"
+              class="inline-flex items-center gap-2 rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 transition-colors hover:border-red-500 hover:text-red-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-400 disabled:opacity-50"
+              onclick={() => void adminCancelSelectedRun()}
+              disabled={!selectedRunHasAdminQueueControls || actionBusy !== null}
+            >
+              <ShieldAlert size={12} aria-hidden="true" />
+              Cancel
+            </button>
+            <button
+              type="button"
+              title="Admin push selected queued run to the front by run id"
+              class="inline-flex items-center gap-2 rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 transition-colors hover:border-cyan-500 hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+              onclick={() => void adminPushSelectedRunToFront()}
+              disabled={!selectedRunHasAdminQueueControls || actionBusy !== null}
+            >
+              <ChevronsUp size={12} aria-hidden="true" />
+              Front
+            </button>
+            <label class="inline-flex items-center gap-2 text-xs text-neutral-500">
+              Priority
+              <input
+                type="number"
+                step="1"
+                value={adminPriorityInput}
+                oninput={(event) => {
+                  adminPriorityInput = eventValue(event);
+                }}
+                class="h-7 w-20 rounded border border-neutral-700 bg-neutral-900 px-2 text-xs text-neutral-100 focus:border-cyan-500 focus:outline-none disabled:opacity-50"
+                disabled={!selectedRunHasAdminQueueControls || actionBusy !== null}
+              />
+            </label>
+            <button
+              type="button"
+              title="Admin set selected queued run priority by run id"
+              class="inline-flex items-center gap-2 rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 transition-colors hover:border-cyan-500 hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+              onclick={() => void adminReprioritizeSelectedRun()}
+              disabled={!selectedRunHasAdminQueueControls || actionBusy !== null}
+            >
+              <SlidersHorizontal size={12} aria-hidden="true" />
+              Set
+            </button>
+          </div>
         </div>
         {#if actionMessage || actionError}
           <div

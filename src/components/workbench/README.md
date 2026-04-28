@@ -92,10 +92,11 @@ transient UI state without becoming backend scheduler policy.
 - Scheduler client, session, bucket, and workflow execution-session facts come
   from run-list projection fields. Components must not recover those scope
   facts from raw events.
-- Scheduler queue action buttons must be gated by projected workflow
-  execution-session ids and backend run status. They must call workflow-service
-  queue cancel or push-front commands and refresh projections after confirmed
-  backend responses.
+- Scheduler session-scoped queue action buttons must be gated by projected
+  workflow execution-session ids and backend run status. GUI-admin queue action
+  buttons are gated by backend run status and call run-id admin command
+  boundaries. Both paths must refresh projections after confirmed backend
+  responses.
 - Scheduler status presentation includes delayed rows from the run-list
   projection. Components must treat delayed as backend-authored state rather
   than inferring it from scheduler reason text.
