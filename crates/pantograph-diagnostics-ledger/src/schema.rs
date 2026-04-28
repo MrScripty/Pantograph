@@ -4,8 +4,8 @@ use crate::records::{RetentionClass, DEFAULT_STANDARD_RETENTION_DAYS};
 use crate::util::now_ms;
 use crate::DiagnosticsLedgerError;
 
-pub(crate) const SCHEMA_VERSION: i64 = 20;
-const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v20";
+pub(crate) const SCHEMA_VERSION: i64 = 21;
+const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v21";
 
 pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {
     tx.execute_batch(
@@ -232,6 +232,9 @@ pub(crate) fn migrate_schema(
     if found < 20 {
         apply_scheduler_resource_projection_migration(&tx, found)?;
     }
+    if found < 21 {
+        apply_scheduler_model_cache_projection_migration(&tx)?;
+    }
     if found < SCHEMA_VERSION {
         tx.execute(
             "INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
@@ -414,6 +417,7 @@ fn apply_run_list_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagnost
             estimate_confidence TEXT,
             estimated_queue_wait_ms INTEGER,
             estimated_duration_ms INTEGER,
+            model_cache_state TEXT,
             scheduler_reason TEXT,
             last_event_seq INTEGER NOT NULL,
             last_updated_at_ms INTEGER NOT NULL
@@ -482,6 +486,7 @@ fn apply_run_detail_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagno
             estimate_confidence TEXT,
             estimated_queue_wait_ms INTEGER,
             estimated_duration_ms INTEGER,
+            model_cache_state TEXT,
             scheduler_reason TEXT,
             timeline_event_count INTEGER NOT NULL,
             last_event_seq INTEGER NOT NULL,
@@ -566,6 +571,28 @@ fn apply_scheduler_resource_projection_migration(
         )?;
     }
 
+    Ok(())
+}
+
+fn apply_scheduler_model_cache_projection_migration(
+    tx: &Transaction<'_>,
+) -> Result<(), DiagnosticsLedgerError> {
+    if table_exists(tx, "run_list_projection")?
+        && !column_exists(tx, "run_list_projection", "model_cache_state")?
+    {
+        tx.execute(
+            "ALTER TABLE run_list_projection ADD COLUMN model_cache_state TEXT",
+            [],
+        )?;
+    }
+    if table_exists(tx, "run_detail_projection")?
+        && !column_exists(tx, "run_detail_projection", "model_cache_state")?
+    {
+        tx.execute(
+            "ALTER TABLE run_detail_projection ADD COLUMN model_cache_state TEXT",
+            [],
+        )?;
+    }
     Ok(())
 }
 

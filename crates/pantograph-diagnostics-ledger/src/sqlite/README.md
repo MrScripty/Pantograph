@@ -104,6 +104,9 @@ helpers own restart-visible workflow run summaries.
   from typed lifecycle events so Scheduler and Diagnostics pages can display
   ownership, placement, and future queue-control context without querying raw
   events.
+- Run-list and run-detail rows persist typed scheduler model-cache posture from
+  scheduler estimate and model lifecycle events so page/API consumers do not
+  parse estimate payload JSON to display cache state.
 - Run-list projection queries apply selected-runtime, selected-device,
   selected-network-node, client, client-session, bucket, and accepted-at range
   filters in SQLite before paging rows or computing facets.

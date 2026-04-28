@@ -9,13 +9,13 @@ later plan stages fill in richer page bodies.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `WorkbenchShell.svelte` | Top-level workbench frame, toolbar navigation, active-run summary, and page outlet. |
-| `SchedulerPage.svelte` | Dense run-list view backed by the run-list projection service, active-run selection store, local table controls, future/scheduled/queued status filters, policy/scope/placement/date filters, scope and placement columns, typed queue/estimate columns, selected-run estimate and retention projection panels, backend-gated queue actions including session priority controls, and selected-run scheduler timeline projection with typed kind/source filters. |
-| `schedulerPagePresenters.ts` | Pure Scheduler page status labels/classes, duration, timestamp, future/scheduled status, scope/placement/date, queue-control gating, selected-run estimate and retention rows, queue/estimate, filter, sorting, projection freshness, and typed timeline filter presenters. |
+| `SchedulerPage.svelte` | Dense run-list view backed by the run-list projection service, active-run selection store, local table controls, future/scheduled/queued status filters, policy/scope/placement/date filters, scope and placement columns, typed queue/estimate/cache columns, selected-run estimate and retention projection panels, backend-gated queue actions including session priority controls, and selected-run scheduler timeline projection with typed kind/source filters. |
+| `schedulerPagePresenters.ts` | Pure Scheduler page status labels/classes, duration, timestamp, future/scheduled status, scope/placement/date, queue-control gating, selected-run estimate/cache and retention rows, queue/estimate, filter, sorting, projection freshness, and typed timeline filter presenters. |
 | `schedulerPagePresenters.test.ts` | Unit coverage for Scheduler table labels, status classes, filters, sorts, projection freshness, and timeline labels. |
 | `GraphPage.svelte` | Workbench page that switches between the active run's immutable graph snapshot and the current editable workflow graph. |
 | `RunGraphSnapshot.svelte` | Read-only run graph renderer backed by `workflowService.queryRunGraph`; it does not load historic graphs into the editor store. |
-| `DiagnosticsPage.svelte` | Projection-backed selected-run diagnostics page with run detail facts, workflow-version/date-range/placement filtered comparison facets, mixed-version warnings, and scheduler timeline records. |
-| `diagnosticsPagePresenters.ts` | Pure diagnostics page status labels/classes, duration, projection freshness, run authority/placement facts, workflow-version/date-range/filter/facet, and timeline label presenters. |
+| `DiagnosticsPage.svelte` | Projection-backed selected-run diagnostics page with run detail facts, workflow-version/date-range/placement filtered comparison facets, typed model-cache posture, mixed-version warnings, and scheduler timeline records. |
+| `diagnosticsPagePresenters.ts` | Pure diagnostics page status labels/classes, duration, projection freshness, run authority/placement/model-cache facts, workflow-version/date-range/filter/facet, and timeline label presenters. |
 | `diagnosticsPagePresenters.test.ts` | Unit coverage for diagnostics page labels, comparison filters/facets, and payload availability presentation. |
 | `IoInspectorPage.svelte` | Projection-backed I/O artifact browser, retention detail surface, cleanup status surface, and global retention policy form. |
 | `ioInspectorPresenters.ts` | Pure I/O media, payload availability, retention policy/cleanup detail, byte-size, and projection freshness presenters. |
@@ -98,6 +98,9 @@ transient UI state without becoming backend scheduler policy.
 - Scheduler selected-run estimate facts come from
   `workflowService.querySchedulerEstimate` and presenter-built rows. Components
   must not parse `latest_estimate_json` for Scheduler page display.
+- Scheduler and Diagnostics model-cache posture comes from typed run and
+  estimate projection fields. Components must not parse scheduler estimate
+  payload JSON to derive cache state.
 - Scheduler selected-run retention counts come from
   `workflowService.queryIoArtifacts` retention summaries and presenter-built
   rows. Components must not dereference payload bodies or replay ledger rows for

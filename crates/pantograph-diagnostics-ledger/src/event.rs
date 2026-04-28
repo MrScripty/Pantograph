@@ -11,9 +11,9 @@ pub const MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES: usize = 8_192;
 pub const SCHEDULER_TIMELINE_PROJECTION_NAME: &str = "scheduler_timeline";
 pub const SCHEDULER_TIMELINE_PROJECTION_VERSION: i64 = 3;
 pub const RUN_LIST_PROJECTION_NAME: &str = "run_list";
-pub const RUN_LIST_PROJECTION_VERSION: i64 = 4;
+pub const RUN_LIST_PROJECTION_VERSION: i64 = 5;
 pub const RUN_DETAIL_PROJECTION_NAME: &str = "run_detail";
-pub const RUN_DETAIL_PROJECTION_VERSION: i64 = 3;
+pub const RUN_DETAIL_PROJECTION_VERSION: i64 = 4;
 pub const IO_ARTIFACT_PROJECTION_NAME: &str = "io_artifact";
 pub const IO_ARTIFACT_PROJECTION_VERSION: i64 = 4;
 pub const LIBRARY_USAGE_PROJECTION_NAME: &str = "library_usage";
@@ -634,6 +634,20 @@ impl SchedulerModelCacheState {
             Self::UnloadRequested => "model unload requested",
             Self::Unloaded => "model unloaded",
             Self::Failed => "model cache failed",
+        }
+    }
+
+    pub(crate) fn as_db(self) -> &'static str {
+        match self {
+            Self::Unknown => "unknown",
+            Self::NotRequired => "not_required",
+            Self::CacheHit => "cache_hit",
+            Self::CacheMiss => "cache_miss",
+            Self::LoadRequested => "load_requested",
+            Self::Loaded => "loaded",
+            Self::UnloadRequested => "unload_requested",
+            Self::Unloaded => "unloaded",
+            Self::Failed => "failed",
         }
     }
 }
@@ -1417,6 +1431,7 @@ pub struct RunListProjectionRecord {
     pub estimate_confidence: Option<String>,
     pub estimated_queue_wait_ms: Option<u64>,
     pub estimated_duration_ms: Option<u64>,
+    pub model_cache_state: Option<SchedulerModelCacheState>,
     pub scheduler_reason: Option<String>,
     pub last_event_seq: i64,
     pub last_updated_at_ms: i64,
@@ -1479,6 +1494,7 @@ pub struct RunDetailProjectionRecord {
     pub estimate_confidence: Option<String>,
     pub estimated_queue_wait_ms: Option<u64>,
     pub estimated_duration_ms: Option<u64>,
+    pub model_cache_state: Option<SchedulerModelCacheState>,
     pub scheduler_reason: Option<String>,
     pub timeline_event_count: u64,
     pub last_event_seq: i64,

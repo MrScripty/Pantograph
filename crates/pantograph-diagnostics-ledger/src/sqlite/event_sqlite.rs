@@ -14,8 +14,8 @@ use crate::event::{
     ProjectionStateUpdate, ProjectionStatus, RetentionArtifactStateChangedPayload,
     RunDetailProjectionQuery, RunDetailProjectionRecord, RunListFacetKind, RunListFacetRecord,
     RunListProjectionQuery, RunListProjectionRecord, RunListProjectionStatus,
-    SchedulerQueueControlAction, SchedulerQueueControlActorScope, SchedulerQueueControlOutcome,
-    SchedulerQueueControlPayload, SchedulerTimelineProjectionQuery,
+    SchedulerModelCacheState, SchedulerQueueControlAction, SchedulerQueueControlActorScope,
+    SchedulerQueueControlOutcome, SchedulerQueueControlPayload, SchedulerTimelineProjectionQuery,
     SchedulerTimelineProjectionRecord, DIAGNOSTIC_EVENT_SCHEMA_VERSION,
     IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION, LIBRARY_USAGE_PROJECTION_NAME,
     LIBRARY_USAGE_PROJECTION_VERSION, MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES,
@@ -453,7 +453,7 @@ pub(super) fn query_run_list_projection(
                 workflow_execution_session_id,
                 scheduler_queue_position, scheduler_priority,
                 estimate_confidence, estimated_queue_wait_ms, estimated_duration_ms,
-                scheduler_reason, last_event_seq, last_updated_at_ms
+                model_cache_state, scheduler_reason, last_event_seq, last_updated_at_ms
          FROM run_list_projection
          WHERE (?1 IS NULL OR workflow_id = ?1)
            AND (?2 IS NULL OR workflow_version_id = ?2)
@@ -715,7 +715,7 @@ pub(super) fn query_run_detail_projection(
                 latest_queue_placement_json, started_payload_json, terminal_payload_json,
                 terminal_error, scheduler_queue_position, scheduler_priority,
                 estimate_confidence, estimated_queue_wait_ms, estimated_duration_ms,
-                scheduler_reason, timeline_event_count, last_event_seq,
+                model_cache_state, scheduler_reason, timeline_event_count, last_event_seq,
                 last_updated_at_ms
          FROM run_detail_projection
          WHERE workflow_run_id = ?1",
@@ -1989,10 +1989,12 @@ fn apply_run_list_projection_event(
              client_session_id, bucket_id, workflow_execution_session_id,
              selected_runtime_id, selected_device_id, selected_network_node_id,
              scheduler_queue_position, scheduler_priority, estimate_confidence,
-             estimated_queue_wait_ms, estimated_duration_ms, scheduler_reason,
+             estimated_queue_wait_ms, estimated_duration_ms, model_cache_state,
+             scheduler_reason,
              last_event_seq, last_updated_at_ms)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,
-             ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27)
+             ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27,
+             ?28)
          ON CONFLICT(workflow_run_id) DO UPDATE SET
             workflow_id = excluded.workflow_id,
             workflow_version_id = COALESCE(excluded.workflow_version_id, workflow_version_id),
@@ -2017,6 +2019,7 @@ fn apply_run_list_projection_event(
             estimate_confidence = COALESCE(excluded.estimate_confidence, estimate_confidence),
             estimated_queue_wait_ms = COALESCE(excluded.estimated_queue_wait_ms, estimated_queue_wait_ms),
             estimated_duration_ms = COALESCE(excluded.estimated_duration_ms, estimated_duration_ms),
+            model_cache_state = COALESCE(excluded.model_cache_state, model_cache_state),
             scheduler_reason = COALESCE(excluded.scheduler_reason, scheduler_reason),
             last_event_seq = excluded.last_event_seq,
             last_updated_at_ms = excluded.last_updated_at_ms",
@@ -2048,6 +2051,7 @@ fn apply_run_list_projection_event(
             scheduler_facts.estimate_confidence.as_deref(),
             scheduler_facts.estimated_queue_wait_ms.map(|value| value as i64),
             scheduler_facts.estimated_duration_ms.map(|value| value as i64),
+            scheduler_facts.model_cache_state.map(|state| state.as_db()),
             scheduler_facts.reason.as_deref(),
             event.event_seq,
             event.occurred_at_ms,
@@ -2062,6 +2066,7 @@ struct SchedulerProjectionFacts {
     estimate_confidence: Option<String>,
     estimated_queue_wait_ms: Option<u64>,
     estimated_duration_ms: Option<u64>,
+    model_cache_state: Option<SchedulerModelCacheState>,
     reason: Option<String>,
     selected_runtime_id: Option<String>,
     selected_device_id: Option<String>,
@@ -2076,6 +2081,7 @@ fn scheduler_projection_facts(payload: &DiagnosticEventPayload) -> SchedulerProj
             estimate_confidence: Some(payload.confidence.clone()),
             estimated_queue_wait_ms: payload.estimated_queue_wait_ms,
             estimated_duration_ms: payload.estimated_duration_ms,
+            model_cache_state: payload.model_cache_state,
             reason: payload.reasons.first().cloned(),
             selected_runtime_id: None,
             selected_device_id: None,
@@ -2087,6 +2093,7 @@ fn scheduler_projection_facts(payload: &DiagnosticEventPayload) -> SchedulerProj
             estimate_confidence: None,
             estimated_queue_wait_ms: None,
             estimated_duration_ms: None,
+            model_cache_state: None,
             reason: None,
             selected_runtime_id: None,
             selected_device_id: None,
@@ -2098,6 +2105,7 @@ fn scheduler_projection_facts(payload: &DiagnosticEventPayload) -> SchedulerProj
             estimate_confidence: None,
             estimated_queue_wait_ms: None,
             estimated_duration_ms: None,
+            model_cache_state: None,
             reason: payload.reason.clone(),
             selected_runtime_id: None,
             selected_device_id: None,
@@ -2109,6 +2117,7 @@ fn scheduler_projection_facts(payload: &DiagnosticEventPayload) -> SchedulerProj
             estimate_confidence: None,
             estimated_queue_wait_ms: None,
             estimated_duration_ms: None,
+            model_cache_state: None,
             reason: Some(payload.reason.clone()),
             selected_runtime_id: None,
             selected_device_id: None,
@@ -2121,6 +2130,7 @@ fn scheduler_projection_facts(payload: &DiagnosticEventPayload) -> SchedulerProj
                 estimate_confidence: None,
                 estimated_queue_wait_ms: None,
                 estimated_duration_ms: None,
+                model_cache_state: payload.cache_state,
                 reason: payload.reason.clone(),
                 selected_runtime_id: None,
                 selected_device_id: None,
@@ -2133,6 +2143,7 @@ fn scheduler_projection_facts(payload: &DiagnosticEventPayload) -> SchedulerProj
             estimate_confidence: None,
             estimated_queue_wait_ms: None,
             estimated_duration_ms: None,
+            model_cache_state: None,
             reason: Some(payload.decision_reason.clone()),
             selected_runtime_id: payload.selected_runtime_id.clone(),
             selected_device_id: payload.selected_device_id.clone(),
@@ -2144,6 +2155,7 @@ fn scheduler_projection_facts(payload: &DiagnosticEventPayload) -> SchedulerProj
             estimate_confidence: None,
             estimated_queue_wait_ms: None,
             estimated_duration_ms: None,
+            model_cache_state: None,
             reason: payload.scheduler_decision_reason.clone(),
             selected_runtime_id: None,
             selected_device_id: None,
@@ -2155,6 +2167,7 @@ fn scheduler_projection_facts(payload: &DiagnosticEventPayload) -> SchedulerProj
             estimate_confidence: None,
             estimated_queue_wait_ms: None,
             estimated_duration_ms: None,
+            model_cache_state: None,
             reason: None,
             selected_runtime_id: None,
             selected_device_id: None,
@@ -2245,12 +2258,12 @@ fn apply_run_detail_projection_event(
              latest_queue_placement_json, started_payload_json, terminal_payload_json,
              terminal_error, scheduler_queue_position, scheduler_priority,
              estimate_confidence, estimated_queue_wait_ms, estimated_duration_ms,
-             scheduler_reason, selected_runtime_id, selected_device_id,
+             model_cache_state, scheduler_reason, selected_runtime_id, selected_device_id,
              selected_network_node_id, timeline_event_count, last_event_seq, last_updated_at_ms)
          VALUES
             (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15,
              ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28,
-             ?29, ?30, ?31, ?32, ?33, ?34, ?35)
+             ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36)
          ON CONFLICT(workflow_run_id) DO UPDATE SET
             workflow_id = excluded.workflow_id,
             workflow_version_id = COALESCE(excluded.workflow_version_id, workflow_version_id),
@@ -2279,6 +2292,7 @@ fn apply_run_detail_projection_event(
             estimate_confidence = COALESCE(excluded.estimate_confidence, estimate_confidence),
             estimated_queue_wait_ms = COALESCE(excluded.estimated_queue_wait_ms, estimated_queue_wait_ms),
             estimated_duration_ms = COALESCE(excluded.estimated_duration_ms, estimated_duration_ms),
+            model_cache_state = COALESCE(excluded.model_cache_state, model_cache_state),
             scheduler_reason = COALESCE(excluded.scheduler_reason, scheduler_reason),
             selected_runtime_id = COALESCE(excluded.selected_runtime_id, selected_runtime_id),
             selected_device_id = COALESCE(excluded.selected_device_id, selected_device_id),
@@ -2321,6 +2335,7 @@ fn apply_run_detail_projection_event(
             scheduler_facts.estimate_confidence.as_deref(),
             scheduler_facts.estimated_queue_wait_ms.map(|value| value as i64),
             scheduler_facts.estimated_duration_ms.map(|value| value as i64),
+            scheduler_facts.model_cache_state.map(|state| state.as_db()),
             scheduler_facts.reason.as_deref(),
             scheduler_facts.selected_runtime_id.as_deref(),
             scheduler_facts.selected_device_id.as_deref(),
@@ -2609,9 +2624,13 @@ fn run_list_projection_from_row(row: &Row<'_>) -> rusqlite::Result<RunListProjec
         estimate_confidence: row.get(21)?,
         estimated_queue_wait_ms: row.get::<_, Option<i64>>(22)?.map(i64_to_u64_saturating),
         estimated_duration_ms: row.get::<_, Option<i64>>(23)?.map(i64_to_u64_saturating),
-        scheduler_reason: row.get(24)?,
-        last_event_seq: row.get(25)?,
-        last_updated_at_ms: row.get(26)?,
+        model_cache_state: row
+            .get::<_, Option<String>>(24)?
+            .map(parse_scheduler_model_cache_state)
+            .transpose()?,
+        scheduler_reason: row.get(25)?,
+        last_event_seq: row.get(26)?,
+        last_updated_at_ms: row.get(27)?,
     })
 }
 
@@ -2672,12 +2691,16 @@ fn run_detail_projection_from_row(row: &Row<'_>) -> rusqlite::Result<RunDetailPr
         estimate_confidence: row.get(28)?,
         estimated_queue_wait_ms: row.get::<_, Option<i64>>(29)?.map(i64_to_u64_saturating),
         estimated_duration_ms: row.get::<_, Option<i64>>(30)?.map(i64_to_u64_saturating),
-        scheduler_reason: row.get(31)?,
+        model_cache_state: row
+            .get::<_, Option<String>>(31)?
+            .map(parse_scheduler_model_cache_state)
+            .transpose()?,
+        scheduler_reason: row.get(32)?,
         timeline_event_count: row
-            .get::<_, i64>(32)
+            .get::<_, i64>(33)
             .map(|value| u64::try_from(value).unwrap_or(u64::MAX))?,
-        last_event_seq: row.get(33)?,
-        last_updated_at_ms: row.get(34)?,
+        last_event_seq: row.get(34)?,
+        last_updated_at_ms: row.get(35)?,
     })
 }
 
@@ -2687,6 +2710,25 @@ fn i64_to_u32_saturating(value: i64) -> u32 {
 
 fn i64_to_i32_saturating(value: i64) -> i32 {
     i32::try_from(value).unwrap_or(if value < 0 { i32::MIN } else { i32::MAX })
+}
+
+fn parse_scheduler_model_cache_state(value: String) -> rusqlite::Result<SchedulerModelCacheState> {
+    match value.as_str() {
+        "unknown" => Ok(SchedulerModelCacheState::Unknown),
+        "not_required" => Ok(SchedulerModelCacheState::NotRequired),
+        "cache_hit" => Ok(SchedulerModelCacheState::CacheHit),
+        "cache_miss" => Ok(SchedulerModelCacheState::CacheMiss),
+        "load_requested" => Ok(SchedulerModelCacheState::LoadRequested),
+        "loaded" => Ok(SchedulerModelCacheState::Loaded),
+        "unload_requested" => Ok(SchedulerModelCacheState::UnloadRequested),
+        "unloaded" => Ok(SchedulerModelCacheState::Unloaded),
+        "failed" => Ok(SchedulerModelCacheState::Failed),
+        _ => Err(sqlite_conversion_error(
+            DiagnosticsLedgerError::InvalidField {
+                field: "model_cache_state",
+            },
+        )),
+    }
 }
 
 fn i64_to_u64_saturating(value: i64) -> u64 {

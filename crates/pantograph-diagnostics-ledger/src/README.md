@@ -146,11 +146,12 @@ semantics.
   after an explicit incremental drain; normal detail reads do not replay raw
   event rows.
 - `run_list_projection` and `run_detail_projection` expose stable scheduler
-  estimate, queue-placement, selected runtime, selected device, and selected
-  network-node facts as typed columns. Run-list rows also expose client,
-  client-session, bucket, and workflow execution-session identifiers. Run-list
-  queries can filter by those scope fields and accepted-at ranges. Payload JSON
-  remains audit detail, not the normal GUI data path for those facts.
+  estimate, queue-placement, scheduler model-cache posture, selected runtime,
+  selected device, and selected network-node facts as typed columns. Run-list
+  rows also expose client, client-session, bucket, and workflow
+  execution-session identifiers. Run-list queries can filter by those scope
+  fields and accepted-at ranges. Payload JSON remains audit detail, not the
+  normal GUI data path for those facts.
 - `io_artifact_projection` exposes artifact producer and consumer node/port
   fields separately from the event node id so I/O browsing can distinguish
   workflow inputs, workflow outputs, and future node-to-node artifacts without

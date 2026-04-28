@@ -6,7 +6,7 @@ use pantograph_diagnostics_ledger::{
     LibraryUsageProjectionRecord, NodeExecutionProjectionStatus, NodeStatusProjectionRecord,
     ProjectionStateRecord, ProjectionStatus, RetentionClass, RunDetailProjectionRecord,
     RunListFacetKind, RunListFacetRecord, RunListProjectionRecord, RunListProjectionStatus,
-    SchedulerTimelineProjectionRecord,
+    SchedulerModelCacheState, SchedulerTimelineProjectionRecord,
 };
 use pantograph_workflow_service::graph::WorkflowExecutionSessionKind;
 use pantograph_workflow_service::{
@@ -678,6 +678,7 @@ fn workflow_run_list_query_contract_snapshot() {
             estimate_confidence: Some("low".to_string()),
             estimated_queue_wait_ms: Some(250),
             estimated_duration_ms: Some(1000),
+            model_cache_state: Some(SchedulerModelCacheState::CacheHit),
             scheduler_reason: Some("queued behind one run".to_string()),
             last_event_seq: 15,
             last_updated_at_ms: 1100,
@@ -701,7 +702,7 @@ fn workflow_run_list_query_contract_snapshot() {
         ],
         projection_state: ProjectionStateRecord {
             projection_name: "run_list".to_string(),
-            projection_version: 4,
+            projection_version: 5,
             last_applied_event_seq: 15,
             status: ProjectionStatus::Current,
             rebuilt_at_ms: None,
@@ -758,6 +759,7 @@ fn workflow_run_list_query_contract_snapshot() {
             "estimate_confidence": "low",
             "estimated_queue_wait_ms": 250,
             "estimated_duration_ms": 1000,
+            "model_cache_state": "cache_hit",
             "scheduler_reason": "queued behind one run",
             "last_event_seq": 15,
             "last_updated_at_ms": 1100
@@ -777,7 +779,7 @@ fn workflow_run_list_query_contract_snapshot() {
         }],
         "projection_state": {
             "projection_name": "run_list",
-            "projection_version": 4,
+            "projection_version": 5,
             "last_applied_event_seq": 15,
             "status": "current",
             "rebuilt_at_ms": null,
@@ -826,6 +828,7 @@ fn workflow_run_detail_query_contract_snapshot() {
             estimate_confidence: Some("low".to_string()),
             estimated_queue_wait_ms: Some(250),
             estimated_duration_ms: Some(1000),
+            model_cache_state: Some(SchedulerModelCacheState::CacheHit),
             scheduler_reason: Some("queued behind one run".to_string()),
             timeline_event_count: 5,
             last_event_seq: 15,
@@ -833,7 +836,7 @@ fn workflow_run_detail_query_contract_snapshot() {
         }),
         projection_state: ProjectionStateRecord {
             projection_name: "run_detail".to_string(),
-            projection_version: 3,
+            projection_version: 4,
             last_applied_event_seq: 15,
             status: ProjectionStatus::Current,
             rebuilt_at_ms: None,
@@ -882,6 +885,7 @@ fn workflow_run_detail_query_contract_snapshot() {
             "estimate_confidence": "low",
             "estimated_queue_wait_ms": 250,
             "estimated_duration_ms": 1000,
+            "model_cache_state": "cache_hit",
             "scheduler_reason": "queued behind one run",
             "timeline_event_count": 5,
             "last_event_seq": 15,
@@ -889,7 +893,7 @@ fn workflow_run_detail_query_contract_snapshot() {
         },
         "projection_state": {
             "projection_name": "run_detail",
-            "projection_version": 3,
+            "projection_version": 4,
             "last_applied_event_seq": 15,
             "status": "current",
             "rebuilt_at_ms": null,

@@ -10,8 +10,8 @@ use pantograph_diagnostics_ledger::{
     NodeStatusProjectionQuery, NodeStatusProjectionRecord, ProjectionStateRecord, RetentionClass,
     RetentionPolicyActorScope, RetentionPolicyChangedPayload, RunDetailProjectionQuery,
     RunDetailProjectionRecord, RunListFacetRecord, RunListProjectionQuery, RunListProjectionRecord,
-    RunListProjectionStatus, SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
-    UpdateRetentionPolicyCommand,
+    RunListProjectionStatus, SchedulerModelCacheState, SchedulerTimelineProjectionQuery,
+    SchedulerTimelineProjectionRecord, UpdateRetentionPolicyCommand,
 };
 use serde::{Deserialize, Serialize};
 
@@ -201,6 +201,8 @@ pub struct WorkflowSchedulerEstimateRecord {
     pub estimated_queue_wait_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub estimated_duration_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_cache_state: Option<SchedulerModelCacheState>,
     pub last_event_seq: i64,
     pub last_updated_at_ms: i64,
 }
@@ -852,6 +854,7 @@ impl From<RunDetailProjectionRecord> for WorkflowSchedulerEstimateRecord {
             estimate_confidence: run.estimate_confidence,
             estimated_queue_wait_ms: run.estimated_queue_wait_ms,
             estimated_duration_ms: run.estimated_duration_ms,
+            model_cache_state: run.model_cache_state,
             last_event_seq: run.last_event_seq,
             last_updated_at_ms: run.last_updated_at_ms,
         }

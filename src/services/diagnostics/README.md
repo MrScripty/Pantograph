@@ -62,6 +62,9 @@ panel because no active TypeScript boundary consumes them.
   network-node fields when the backend has placement facts. Consumers should
   use those typed fields and facets for placement comparison instead of parsing
   scheduler payload JSON.
+- Run-list, run-detail, and scheduler-estimate DTOs carry typed scheduler
+  model-cache posture when the backend has cache facts. Consumers should use
+  those typed fields instead of parsing estimate payload JSON.
 - Scheduler estimate query DTOs expose a narrow estimate-shaped projection for
   selected runs so callers do not mine full run-detail payloads for scheduler
   estimate facts.

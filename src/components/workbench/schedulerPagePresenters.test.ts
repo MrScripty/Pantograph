@@ -15,6 +15,7 @@ import {
   formatSchedulerAcceptedDateLabel,
   formatSchedulerEstimateDuration,
   formatSchedulerPlacementLabel,
+  formatSchedulerModelCacheState,
   formatSchedulerPolicyLabel,
   formatSchedulerPriority,
   formatSchedulerQueuePosition,
@@ -72,6 +73,7 @@ function run(overrides: Partial<RunListProjectionRecord>): RunListProjectionReco
     estimate_confidence: null,
     estimated_queue_wait_ms: null,
     estimated_duration_ms: null,
+    model_cache_state: null,
     scheduler_reason: null,
     last_event_seq: 1,
     last_updated_at_ms: 10,
@@ -171,6 +173,7 @@ test('buildSchedulerEstimateRows exposes selected-run estimate projection facts'
     { label: 'Confidence', value: 'Unavailable' },
     { label: 'Queue Wait', value: 'Unavailable' },
     { label: 'Run Duration', value: 'Unavailable' },
+    { label: 'Model Cache', value: 'Unavailable' },
     { label: 'Policy', value: 'Unassigned', mono: true },
     { label: 'Updated', value: 'Unavailable' },
   ]);
@@ -185,6 +188,7 @@ test('buildSchedulerEstimateRows exposes selected-run estimate projection facts'
     estimate_confidence: 'medium',
     estimated_queue_wait_ms: 1_500,
     estimated_duration_ms: 2_500,
+    model_cache_state: 'cache_hit',
     last_event_seq: 7,
     last_updated_at_ms: 86_400_000,
   });
@@ -192,8 +196,11 @@ test('buildSchedulerEstimateRows exposes selected-run estimate projection facts'
   assert.equal(rows.find((row) => row.label === 'Confidence')?.value, 'medium');
   assert.equal(rows.find((row) => row.label === 'Queue Wait')?.value, '1.5 s');
   assert.equal(rows.find((row) => row.label === 'Run Duration')?.value, '2.5 s');
+  assert.equal(rows.find((row) => row.label === 'Model Cache')?.value, 'Model cache hit');
   assert.equal(rows.find((row) => row.label === 'Policy')?.value, 'policy-a');
   assert.equal(rows.find((row) => row.label === 'Updated')?.value, new Date(86_400_000).toLocaleString());
+  assert.equal(formatSchedulerModelCacheState('cache_miss'), 'Model cache miss');
+  assert.equal(formatSchedulerModelCacheState(null), 'Unavailable');
 });
 
 test('buildSchedulerRetentionSummaryRows formats typed retention projection counts', () => {

@@ -65,6 +65,9 @@ by external adapters.
 - Run-list and run-detail contract snapshots must include scheduler-selected
   runtime, device, and network-node fields when those fields are observable
   through serialized service contracts.
+- Run-list and run-detail contract snapshots must include typed scheduler
+  model-cache posture when that field is observable through serialized service
+  contracts.
 - Run-list query contract snapshots must include client, client-session,
   bucket, and accepted-at range filters when those filters are observable
   through serialized service contracts.

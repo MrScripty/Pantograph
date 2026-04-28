@@ -87,6 +87,7 @@ export interface RunListProjectionRecord {
   estimate_confidence?: string | null;
   estimated_queue_wait_ms?: number | null;
   estimated_duration_ms?: number | null;
+  model_cache_state?: SchedulerModelCacheState | null;
   scheduler_reason?: string | null;
   last_event_seq: number;
   last_updated_at_ms: number;
@@ -246,9 +247,21 @@ export interface WorkflowSchedulerEstimateRecord {
   estimate_confidence?: string | null;
   estimated_queue_wait_ms?: number | null;
   estimated_duration_ms?: number | null;
+  model_cache_state?: SchedulerModelCacheState | null;
   last_event_seq: number;
   last_updated_at_ms: number;
 }
+
+export type SchedulerModelCacheState =
+  | 'unknown'
+  | 'not_required'
+  | 'cache_hit'
+  | 'cache_miss'
+  | 'load_requested'
+  | 'loaded'
+  | 'unload_requested'
+  | 'unloaded'
+  | 'failed';
 
 export interface WorkflowSchedulerEstimateQueryResponse {
   estimate?: WorkflowSchedulerEstimateRecord | null;

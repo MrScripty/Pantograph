@@ -131,7 +131,7 @@ pub use workflow::{
 pub use workflow::{
     IoArtifactProjectionRecord, IoArtifactRetentionState, IoArtifactRetentionSummaryRecord,
     LibraryUsageProjectionRecord, ProjectionStateRecord, RunDetailProjectionRecord,
-    RunListFacetRecord, RunListProjectionRecord, RunListProjectionStatus,
+    RunListFacetRecord, RunListProjectionRecord, RunListProjectionStatus, SchedulerModelCacheState,
     SchedulerTimelineProjectionRecord, SqliteDiagnosticsLedger, WorkflowTimingExpectation,
     WorkflowTimingExpectationComparison,
 };

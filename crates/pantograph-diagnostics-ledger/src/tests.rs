@@ -903,6 +903,9 @@ fn run_list_projection_records_scheduler_delay_status_and_reason() {
         .append_diagnostic_event(sample_run_snapshot_event("workflow_run_alpha"))
         .expect("run snapshot event appends");
     ledger
+        .append_diagnostic_event(sample_scheduler_event("workflow_run_alpha"))
+        .expect("scheduler estimate event appends");
+    ledger
         .append_diagnostic_event(sample_scheduler_queue_event("workflow_run_alpha", 0))
         .expect("scheduler queue event appends");
     let delay_event = ledger
@@ -963,6 +966,9 @@ fn run_list_projection_drains_lifecycle_events_incrementally() {
     ledger
         .append_diagnostic_event(sample_run_snapshot_event("workflow_run_alpha"))
         .expect("run snapshot event appends");
+    ledger
+        .append_diagnostic_event(sample_scheduler_event("workflow_run_alpha"))
+        .expect("scheduler estimate event appends");
     ledger
         .append_diagnostic_event(sample_scheduler_queue_event("workflow_run_alpha", 0))
         .expect("scheduler queue event appends");
@@ -1026,6 +1032,10 @@ fn run_list_projection_drains_lifecycle_events_incrementally() {
     );
     assert_eq!(record.scheduler_queue_position, Some(0));
     assert_eq!(record.scheduler_priority, Some(7));
+    assert_eq!(
+        record.model_cache_state,
+        Some(SchedulerModelCacheState::CacheHit)
+    );
     assert_eq!(
         record.scheduler_reason.as_deref(),
         Some("warm_session_reused")
@@ -1244,6 +1254,10 @@ fn run_detail_projection_drains_lifecycle_events_incrementally() {
     assert_eq!(record.estimate_confidence.as_deref(), Some("medium"));
     assert_eq!(record.estimated_queue_wait_ms, Some(1_500));
     assert_eq!(record.estimated_duration_ms, Some(2_500));
+    assert_eq!(
+        record.model_cache_state,
+        Some(SchedulerModelCacheState::CacheHit)
+    );
     assert_eq!(
         record.scheduler_reason.as_deref(),
         Some("warm_session_reused")
@@ -2374,6 +2388,54 @@ fn existing_v19_schema_adds_scheduler_resource_projection_columns() {
     assert!(sqlite_index_exists(
         &conn,
         "idx_run_detail_projection_runtime_updated"
+    ));
+}
+
+#[test]
+fn existing_v20_schema_adds_scheduler_model_cache_projection_columns() {
+    let temp = tempfile::NamedTempFile::new().expect("temp file");
+    let path = temp.path().to_path_buf();
+    {
+        let conn = Connection::open(&path).expect("connection opens");
+        conn.execute_batch(
+            "CREATE TABLE ledger_schema_migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at_ms INTEGER NOT NULL,
+                checksum TEXT NOT NULL
+            );
+            INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
+            VALUES (20, 0, 'pantograph-diagnostics-ledger-v20');
+            CREATE TABLE run_list_projection (
+                workflow_run_id TEXT PRIMARY KEY,
+                workflow_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                last_event_seq INTEGER NOT NULL,
+                last_updated_at_ms INTEGER NOT NULL
+            );
+            CREATE TABLE run_detail_projection (
+                workflow_run_id TEXT PRIMARY KEY,
+                workflow_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                last_event_seq INTEGER NOT NULL,
+                last_updated_at_ms INTEGER NOT NULL
+            );",
+        )
+        .expect("v20 schema marker and old run projections are installed");
+    }
+    {
+        let _ledger = SqliteDiagnosticsLedger::open(&path).expect("ledger migrates");
+    }
+    let conn = Connection::open(&path).expect("connection reopens");
+
+    assert!(sqlite_column_exists(
+        &conn,
+        "run_list_projection",
+        "model_cache_state"
+    ));
+    assert!(sqlite_column_exists(
+        &conn,
+        "run_detail_projection",
+        "model_cache_state"
     ));
 }
 

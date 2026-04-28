@@ -293,10 +293,37 @@ export function buildDiagnosticsFactRows(run: RunDetailProjectionRecord): Diagno
           : formatDiagnosticsDuration(run.estimated_duration_ms, run.status),
       mono: false,
     },
+    { label: 'Model Cache', value: formatDiagnosticsModelCacheState(run.model_cache_state), mono: false },
     { label: 'Scheduler Reason', value: run.scheduler_reason ?? 'Unavailable', mono: false },
     { label: 'Timeline Events', value: String(run.timeline_event_count), mono: false },
     { label: 'Last Event Seq', value: String(run.last_event_seq), mono: false },
   ];
+}
+
+export function formatDiagnosticsModelCacheState(state: RunDetailProjectionRecord['model_cache_state']): string {
+  switch (state) {
+    case 'unknown':
+      return 'Cache state unknown';
+    case 'not_required':
+      return 'Model not required';
+    case 'cache_hit':
+      return 'Model cache hit';
+    case 'cache_miss':
+      return 'Model cache miss';
+    case 'load_requested':
+      return 'Model load requested';
+    case 'loaded':
+      return 'Model loaded';
+    case 'unload_requested':
+      return 'Model unload requested';
+    case 'unloaded':
+      return 'Model unloaded';
+    case 'failed':
+      return 'Model cache failed';
+    case null:
+    case undefined:
+      return 'Unavailable';
+  }
 }
 
 export function buildDiagnosticsFacetSummary(

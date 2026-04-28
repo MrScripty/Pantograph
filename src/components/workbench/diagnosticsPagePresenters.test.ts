@@ -22,6 +22,7 @@ import {
   formatDiagnosticEventKind,
   formatDiagnosticSourceComponent,
   formatDiagnosticsDuration,
+  formatDiagnosticsModelCacheState,
   formatDiagnosticsProjectionFreshness,
   formatDiagnosticsStatusLabel,
   hasActiveDiagnosticsComparisonFilters,
@@ -50,6 +51,7 @@ function createRunDetail(): RunDetailProjectionRecord {
     estimate_confidence: 'low',
     estimated_queue_wait_ms: 1_500,
     estimated_duration_ms: 2_500,
+    model_cache_state: 'cache_hit',
     scheduler_reason: 'warm_session_reused',
     last_event_seq: 9,
     last_updated_at_ms: 10,
@@ -163,8 +165,11 @@ test('buildDiagnosticsFactRows uses projection fields without ledger parsing', (
   assert.equal(rows.find((row) => row.label === 'Selected Device')?.value, 'device-a');
   assert.equal(rows.find((row) => row.label === 'Selected Network Node')?.value, 'network-a');
   assert.equal(rows.find((row) => row.label === 'Estimated Queue Wait')?.value, '1.5 s');
+  assert.equal(rows.find((row) => row.label === 'Model Cache')?.value, 'Model cache hit');
   assert.equal(rows.find((row) => row.label === 'Scheduler Reason')?.value, 'warm_session_reused');
   assert.equal(rows.find((row) => row.label === 'Timeline Events')?.value, '4');
+  assert.equal(formatDiagnosticsModelCacheState('cache_miss'), 'Model cache miss');
+  assert.equal(formatDiagnosticsModelCacheState(null), 'Unavailable');
 });
 
 test('buildDiagnosticsFacetSummary exposes comparison-ready run-list facets', () => {

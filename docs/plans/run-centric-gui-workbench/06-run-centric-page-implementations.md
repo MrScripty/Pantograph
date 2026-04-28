@@ -162,7 +162,9 @@ estimate panel backed by `workflowService.querySchedulerEstimate`, a
 selected-run retention summary backed by `workflowService.queryIoArtifacts`
 retention-summary counts, a selected-run timeline panel, timeline projection
 freshness, typed timeline kind/source filters, and timeline summary/detail rows
-without raw event parsing. Progress, model/runtime summaries, richer delay
+without raw event parsing. The run table and selected-run estimate panel now
+display typed scheduler model-cache posture from hot run/estimate projections
+without parsing `latest_estimate_json`. Progress, model/runtime summaries, richer delay
 categories, richer retention breakdowns, running-run admin cancellation, and
 cross-session reorder/pause controls remain open.
 Assigned status, policy, scope, placement, and accepted-date filters now also
@@ -229,6 +231,8 @@ typed projection fields.
 Retention completeness for the selected run is displayed from
 `workflowService.queryIoArtifacts` response `retention_summary` counts and I/O
 projection freshness, avoiding raw ledger replay in the page.
+Run detail facts now also include typed scheduler model-cache posture promoted
+from hot run projections, avoiding raw estimate-payload parsing in Diagnostics.
 
 ### Milestone 3: Graph Page
 
@@ -535,8 +539,8 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
   execution-session id and queued/delayed run status.
 - Added Scheduler selected-run estimate projection panel backed by
   `workflowService.querySchedulerEstimate`, showing confidence, queue wait,
-  run duration, policy, update time, and projection freshness without parsing
-  raw scheduler event payloads.
+  run duration, scheduler model-cache posture, policy, update time, and
+  projection freshness without parsing raw scheduler event payloads.
 - Added Scheduler selected-run retention summary panel backed by
   `workflowService.queryIoArtifacts` retention-summary counts and projection
   freshness, without dereferencing artifact payloads or replaying ledger rows.
@@ -556,6 +560,9 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
   placement records and presenter rows, allowing the page to distinguish
   not-required and unknown model-cache posture without parsing scheduler
   payloads or claiming local cache residency.
+- Promoted scheduler model-cache posture into run-list, run-detail, and
+  scheduler-estimate projection DTOs, then rendered it in Scheduler and
+  Diagnostics pages through presenters instead of parsing raw estimate payloads.
 
 ### Deviations
 

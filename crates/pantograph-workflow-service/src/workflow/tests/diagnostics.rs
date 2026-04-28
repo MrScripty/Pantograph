@@ -370,6 +370,10 @@ fn workflow_scheduler_estimate_query_returns_estimate_projection() {
     assert_eq!(estimate.estimate_confidence.as_deref(), Some("low"));
     assert_eq!(estimate.estimated_queue_wait_ms, None);
     assert_eq!(estimate.estimated_duration_ms, None);
+    assert_eq!(
+        estimate.model_cache_state,
+        Some(SchedulerModelCacheState::Unknown)
+    );
     assert_eq!(response.projection_state.last_applied_event_seq, 2);
 }
 

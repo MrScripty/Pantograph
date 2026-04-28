@@ -35,6 +35,7 @@
     formatSchedulerTimelineSource,
     formatSchedulerDuration,
     formatSchedulerEstimateLabel,
+    formatSchedulerModelCacheState,
     formatSchedulerPlacementLabel,
     formatSchedulerTimestamp,
     formatSchedulerPriority,
@@ -716,6 +717,7 @@
             <th class="px-3 py-3 font-medium">Queue</th>
             <th class="px-3 py-3 font-medium">Priority</th>
             <th class="px-3 py-3 font-medium">Estimate</th>
+            <th class="px-3 py-3 font-medium">Cache</th>
             <th class="px-3 py-3 font-medium">Reason</th>
             <th class="px-3 py-3 font-medium">Queued</th>
             <th class="px-3 py-3 font-medium">Started</th>
@@ -727,15 +729,15 @@
         <tbody class="divide-y divide-neutral-900">
           {#if loading}
             <tr>
-              <td colspan="21" class="px-4 py-8 text-center text-neutral-500">Loading runs</td>
+              <td colspan="22" class="px-4 py-8 text-center text-neutral-500">Loading runs</td>
             </tr>
           {:else if runs.length === 0}
             <tr>
-              <td colspan="21" class="px-4 py-8 text-center text-neutral-500">No workflow runs recorded</td>
+              <td colspan="22" class="px-4 py-8 text-center text-neutral-500">No workflow runs recorded</td>
             </tr>
           {:else if displayedRuns.length === 0}
             <tr>
-              <td colspan="21" class="px-4 py-8 text-center text-neutral-500">No matching workflow runs</td>
+              <td colspan="22" class="px-4 py-8 text-center text-neutral-500">No matching workflow runs</td>
             </tr>
           {:else}
             {#each displayedRuns as run (run.workflow_run_id)}
@@ -793,6 +795,9 @@
                 <td class="px-3 py-2 text-xs text-neutral-400">{formatSchedulerPriority(run.scheduler_priority)}</td>
                 <td class="max-w-[16rem] truncate px-3 py-2 text-xs text-neutral-400" title={formatSchedulerEstimateLabel(run)}>
                   {formatSchedulerEstimateLabel(run)}
+                </td>
+                <td class="max-w-[12rem] truncate px-3 py-2 text-xs text-neutral-400" title={formatSchedulerModelCacheState(run.model_cache_state)}>
+                  {formatSchedulerModelCacheState(run.model_cache_state)}
                 </td>
                 <td class="max-w-[16rem] truncate px-3 py-2 text-xs text-neutral-400" title={formatSchedulerReasonLabel(run.scheduler_reason)}>
                   {formatSchedulerReasonLabel(run.scheduler_reason)}

@@ -45,6 +45,8 @@ shape is accepted by GUI service consumers.
 - Run projection fixtures must keep scheduler-selected runtime, device, and
   network-node fields alongside scope fields so Rust and TypeScript tests catch
   placement-facet contract drift.
+- Run projection fixtures must keep scheduler model-cache posture alongside
+  estimate fields so Rust and TypeScript tests catch cache-state DTO drift.
 - Rust tests must deserialize fixtures into public DTOs before asserting
   frontend compatibility.
 - TypeScript tests must use fixtures through the workflow service boundary,

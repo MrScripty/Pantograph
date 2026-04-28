@@ -267,8 +267,9 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
   retention policy, selected runtime, selected device, and selected network
   node.
 - Scheduler estimate queries expose the selected run's hot run-detail
-  projection estimate fields without making frontend callers parse full run
-  detail or raw ledger payload rows.
+  projection estimate fields, including typed scheduler model-cache posture,
+  without making frontend callers parse full run detail or raw ledger payload
+  rows.
 - Queue cancel, reprioritize, and push-front commands emit typed scheduler
   queue-control events when diagnostics are configured. Accepted and denied
   outcomes must be recorded after the scheduler store makes the authority

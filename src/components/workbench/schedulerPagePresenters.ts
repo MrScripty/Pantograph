@@ -71,6 +71,34 @@ export function formatSchedulerEstimateLabel(run: RunListProjectionRecord): stri
   return `${parts.join(' / ')}${confidence}`;
 }
 
+export function formatSchedulerModelCacheState(
+  state: RunListProjectionRecord['model_cache_state'] | WorkflowSchedulerEstimateRecord['model_cache_state'],
+): string {
+  switch (state) {
+    case 'unknown':
+      return 'Cache state unknown';
+    case 'not_required':
+      return 'Model not required';
+    case 'cache_hit':
+      return 'Model cache hit';
+    case 'cache_miss':
+      return 'Model cache miss';
+    case 'load_requested':
+      return 'Model load requested';
+    case 'loaded':
+      return 'Model loaded';
+    case 'unload_requested':
+      return 'Model unload requested';
+    case 'unloaded':
+      return 'Model unloaded';
+    case 'failed':
+      return 'Model cache failed';
+    case null:
+    case undefined:
+      return 'Unavailable';
+  }
+}
+
 export interface SchedulerEstimateFactRow {
   label: string;
   value: string;
@@ -87,17 +115,19 @@ export function buildSchedulerEstimateRows(
 ): SchedulerEstimateFactRow[] {
   if (!estimate) {
     return [
-      { label: 'Confidence', value: 'Unavailable' },
-      { label: 'Queue Wait', value: 'Unavailable' },
-      { label: 'Run Duration', value: 'Unavailable' },
-      { label: 'Policy', value: 'Unassigned', mono: true },
-      { label: 'Updated', value: 'Unavailable' },
+    { label: 'Confidence', value: 'Unavailable' },
+    { label: 'Queue Wait', value: 'Unavailable' },
+    { label: 'Run Duration', value: 'Unavailable' },
+    { label: 'Model Cache', value: 'Unavailable' },
+    { label: 'Policy', value: 'Unassigned', mono: true },
+    { label: 'Updated', value: 'Unavailable' },
     ];
   }
   return [
     { label: 'Confidence', value: estimate.estimate_confidence ?? 'Unavailable' },
     { label: 'Queue Wait', value: formatSchedulerEstimateDuration(estimate.estimated_queue_wait_ms) },
     { label: 'Run Duration', value: formatSchedulerEstimateDuration(estimate.estimated_duration_ms) },
+    { label: 'Model Cache', value: formatSchedulerModelCacheState(estimate.model_cache_state) },
     { label: 'Policy', value: formatSchedulerPolicyLabel(estimate.scheduler_policy_id), mono: true },
     { label: 'Updated', value: formatSchedulerTimestamp(estimate.last_updated_at_ms) },
   ];

@@ -233,7 +233,9 @@ runtime/model ids, media type, retention policy, node id, artifact role,
 client, client session, bucket, and accepted-at time ranges where those fields
 exist. The run-list projection now supports server-side retention-policy,
 scope, and accepted-time filtering in addition to returning those fields on
-each run row. `workflow_library_usage_query` now exposes warm
+each run row. Run-list, run-detail, and scheduler-estimate projections now
+expose typed scheduler model-cache posture as a normal DTO field so GUI pages
+do not parse raw estimate payloads for cache state. `workflow_library_usage_query` now exposes warm
 Library/Pumas usage aggregates with projection freshness state. Retention
 policy query is exposed for GUI retention settings/inspectors. Local Network
 status query is exposed with local-only CPU/memory/disk/network-interface
@@ -281,7 +283,8 @@ Frontend workflow projection tests now use Tauri mock IPC to prove
 native `{ request }` envelope. The tests preserve backend-authored typed
 scheduler timeline events, bounded payload JSON, run-list facets, delayed
 status, workflow version, scheduler estimate fields, queue-placement fields,
-and projection freshness state for GUI consumers.
+typed scheduler model-cache posture, and projection freshness state for GUI
+consumers.
 `workflow_library_usage_query` now reports `rebuilding` projection status when
 a bounded warm-projection batch applies only part of the pending Library usage
 event cursor. Frontend projection tests preserve that warm catching-up state

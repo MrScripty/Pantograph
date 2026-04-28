@@ -26,6 +26,7 @@
         "estimate_confidence": "low",
         "estimated_queue_wait_ms": 250,
         "estimated_duration_ms": 1000,
+        "model_cache_state": "cache_hit",
         "scheduler_reason": "queued behind one run",
         "last_event_seq": 15,
         "last_updated_at_ms": 1100
@@ -50,7 +51,7 @@
     ],
     "projection_state": {
       "projection_name": "run_list",
-      "projection_version": 4,
+      "projection_version": 5,
       "last_applied_event_seq": 15,
       "status": "current",
       "rebuilt_at_ms": null,
@@ -90,6 +91,7 @@
       "estimate_confidence": "low",
       "estimated_queue_wait_ms": 250,
       "estimated_duration_ms": 1000,
+      "model_cache_state": "cache_hit",
       "scheduler_reason": "queued behind one run",
       "timeline_event_count": 5,
       "last_event_seq": 15,
@@ -97,7 +99,7 @@
     },
     "projection_state": {
       "projection_name": "run_detail",
-      "projection_version": 3,
+      "projection_version": 4,
       "last_applied_event_seq": 15,
       "status": "current",
       "rebuilt_at_ms": null,
