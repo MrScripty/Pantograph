@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Activity, CircleHelp, Loader2, Play } from 'lucide-svelte';
+  import { CircleHelp, Loader2, Play } from 'lucide-svelte';
   import {
     isDirty,
     isExecuting,
@@ -24,13 +24,8 @@
   import { applyWorkflowToolbarEvent } from './workflowToolbarEvents.ts';
   import { get } from 'svelte/store';
   import WorkflowPersistenceControls from './WorkflowPersistenceControls.svelte';
-  import { diagnosticsSnapshot, toggleDiagnosticsPanel } from '../stores/diagnosticsStore';
-  import { formatDiagnosticsDuration, getDiagnosticsStatusClasses } from './diagnostics/presenters';
 
   let workflowError = $state<string | null>(null);
-  let selectedDiagnosticsRun = $derived($diagnosticsSnapshot.selectedRun);
-  let diagnosticsPanelOpen = $derived($diagnosticsSnapshot.state.panelOpen);
-  let { showDiagnosticsToggle = true }: { showDiagnosticsToggle?: boolean } = $props();
 
   // Store unsubscribe function at module scope so event handler can access it
   let currentUnsubscribe: (() => void) | null = null;
@@ -159,29 +154,6 @@
     </div>
 
     <div class="flex items-center gap-2">
-      {#if showDiagnosticsToggle}
-        <button type="button"
-          class="px-3 py-1.5 text-sm bg-neutral-800 border border-neutral-600 rounded text-neutral-200 transition-colors hover:bg-neutral-700"
-          class:border-cyan-700={diagnosticsPanelOpen}
-          class:text-cyan-200={diagnosticsPanelOpen}
-          onclick={toggleDiagnosticsPanel}
-          title="Toggle workflow diagnostics panel"
-        >
-          <Activity size={14} aria-hidden="true" class="inline-block align-[-2px] mr-1" />
-          Diagnostics
-        </button>
-      {/if}
-
-      {#if showDiagnosticsToggle && selectedDiagnosticsRun}
-        <div class="hidden xl:flex items-center gap-2 rounded border border-neutral-800 bg-neutral-950/70 px-3 py-1.5 text-xs text-neutral-400">
-          <span class={`inline-flex rounded-full border px-2 py-0.5 font-medium ${getDiagnosticsStatusClasses(selectedDiagnosticsRun.status)}`}>
-            {selectedDiagnosticsRun.status}
-          </span>
-          <span>{selectedDiagnosticsRun.eventCount} events</span>
-          <span>{formatDiagnosticsDuration(selectedDiagnosticsRun.durationMs)}</span>
-        </div>
-      {/if}
-
       <button type="button"
         class="px-4 py-1.5 text-sm rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         class:bg-green-600={!$isExecuting}

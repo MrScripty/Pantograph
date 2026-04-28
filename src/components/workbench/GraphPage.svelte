@@ -211,7 +211,7 @@
   {/if}
 
   {#if !$activeWorkflowRun || mode === 'editor'}
-    <WorkflowToolbar showDiagnosticsToggle={false} />
+    <WorkflowToolbar />
     {#if $activeWorkflowRun}
       <div class="border-b border-neutral-800 bg-neutral-900/60 px-4 py-2 text-xs text-neutral-400">
         Editing the current workflow. Selected run remains

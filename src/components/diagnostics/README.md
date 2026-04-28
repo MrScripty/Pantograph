@@ -1,14 +1,15 @@
 # src/components/diagnostics
 
 ## Purpose
-This directory contains Pantograph's workflow diagnostics view. It renders
-retained diagnostics snapshots from `src/stores/diagnosticsStore.ts` without
-owning event subscriptions, runtime state machines, or workflow service logic.
+This directory contains Pantograph's legacy workflow diagnostics panel. It
+renders retained diagnostics snapshots from `src/stores/diagnosticsStore.ts`
+without owning event subscriptions, runtime state machines, or workflow service
+logic.
 
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `DiagnosticsPanel.svelte` | Shell component that renders the retained run list and all diagnostics tabs as either an embedded workbench page or a collapsible panel. |
+| `DiagnosticsPanel.svelte` | Legacy shell component that renders the retained run list and all diagnostics tabs for collapsible or standalone diagnostics experiments. |
 | `DiagnosticsOverview.svelte` | Overview tab with run-level summary cards and node detail panels. |
 | `DiagnosticsNodeDetail.svelte` | Focused selected-node inspector that renders lifecycle, duration expectation, optional reported progress, messages, and errors. |
 | `DiagnosticsTimingExpectation.svelte` | Small reusable duration-expectation badge used by overview and timeline views. |
@@ -21,14 +22,16 @@ owning event subscriptions, runtime state machines, or workflow service logic.
 | `presenters.ts` | Presentation helpers for durations, timestamps, status badges, overview counts, graph-memory summaries, and workflow-session inspection labels. |
 
 ## Problem
-Pantograph needs a developer-facing diagnostics surface inside the workflow GUI,
-but the panel should remain a renderer over diagnostics snapshots rather than a
-second owner of workflow transport state.
+Pantograph previously needed a developer-facing diagnostics panel inside the
+workflow GUI, but the active workbench now uses
+`src/components/workbench/DiagnosticsPage.svelte` and typed projection service
+queries. The legacy panel remains documented so future cleanup or reuse does
+not accidentally restart a duplicate diagnostics pipeline.
 
 ## Constraints
 - Components in this directory must consume diagnostics snapshots declaratively.
-- The panel must support an embedded workbench page while preserving the
-  collapsible rendering path for graph-adjacent diagnostics controls.
+- The panel must not be started from the normal app shell while the workbench
+  Diagnostics page owns the active diagnostics surface.
 - Scheduler, runtime, and graph tabs should render workflow-service-backed or
   diagnostics-store-backed state instead of inventing component-local shadow
   models.
@@ -42,22 +45,22 @@ second owner of workflow transport state.
   they must not infer or repair those facts locally.
 
 ## Decision
-Render the diagnostics surface as a page-compatible diagnostics shell.
+Keep the legacy diagnostics surface as a renderer over diagnostics snapshots
+until it is either removed or reused under a new explicit tool surface.
 `DiagnosticsPanel.svelte` owns panel composition and delegates each active tab
-to focused child components. The `embedded` prop lets the workbench Diagnostics
-page render the same surface at full height without making the component own
-application routing. Formatting logic stays in `presenters.ts` so Svelte files
-mostly express layout and interaction. Duration expectation rendering is shared
-through `DiagnosticsTimingExpectation.svelte` so the overview and timeline
-views do not reinterpret backend timing fields independently.
+to focused child components. Formatting logic stays in `presenters.ts` so
+Svelte files mostly express layout and interaction. Duration expectation
+rendering is shared through `DiagnosticsTimingExpectation.svelte` so the
+overview and timeline views do not reinterpret backend timing fields
+independently.
 When no retained run is selected, `DiagnosticsWorkflowHistory.svelte` renders
 the backend-projected timing history for the opened workflow graph so previous
 diagnostics remain visible before a new run starts.
 
 ## Alternatives Rejected
-- Keep diagnostics only as a graph bottom panel.
-  Rejected because the run-centric workbench requires Diagnostics to be a
-  top-level page sharing active-run context with Scheduler and other pages.
+- Keep active diagnostics only as a graph bottom panel.
+  Rejected because the run-centric workbench uses a top-level Diagnostics page
+  sharing active-run context with Scheduler and other pages.
 - Put event normalization directly into these components.
   Rejected because trace ownership belongs to the diagnostics service/store
   boundary.
@@ -88,11 +91,11 @@ diagnostics remain visible before a new run starts.
   splitting.
 - Runtime and scheduler traces become dense enough to require specialized
   visualizations beyond the current table and card layouts.
+- The legacy diagnostics panel is deleted after all useful presenters are
+  migrated to projection-backed pages.
 
 ## Dependencies
-**Internal:** `src/stores/diagnosticsStore.ts`,
-`src/services/diagnostics`, `src/components/WorkflowToolbar.svelte`,
-`src/components/workbench/DiagnosticsPage.svelte`.
+**Internal:** `src/stores/diagnosticsStore.ts`, `src/services/diagnostics`.
 **External:** Svelte 5 and Tailwind utility classes already used by the app.
 
 ## Related ADRs
@@ -103,12 +106,15 @@ diagnostics remain visible before a new run starts.
 
 ## Usage Examples
 ```svelte
-<DiagnosticsPanel embedded={true} />
+<DiagnosticsPanel />
 ```
 
 ## API Consumer Contract
-- `DiagnosticsPanel.svelte` assumes the app has already started the diagnostics
-  store lifecycle.
+- `DiagnosticsPanel.svelte` assumes a caller has explicitly started the
+  diagnostics store lifecycle for a legacy or experimental surface.
+- New workbench diagnostics features should use
+  `src/components/workbench/DiagnosticsPage.svelte` and typed workflow service
+  projections instead of this panel.
 - Child components receive already-selected diagnostics run/node props and emit
   selection changes back through callbacks or the store facade.
 - Presentation helpers in `presenters.ts` should stay pure so they remain easy

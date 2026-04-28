@@ -11,7 +11,7 @@ components observe the same graph state.
 | ----------- | ----------- |
 | `storeInstances.ts` | Creates the shared backend, registry, and package-derived store singletons used across the app. |
 | `workflowStore.ts` | Thin compatibility layer that re-exports workflow store instances and actions for app components. |
-| `diagnosticsStore.ts` | Single app-level owner for diagnostics subscriptions, trace snapshots, and diagnostics panel state. |
+| `diagnosticsStore.ts` | Legacy diagnostics-panel owner for subscriptions, trace snapshots, and panel state. |
 | `diagnosticsProjection.ts` | Pure helper module that normalizes diagnostics projections and builds immutable UI snapshots without subscribing to workflow events itself. |
 | `workbenchStore.ts` | Transient workbench navigation and active-run context shared by Scheduler, Diagnostics, Graph, I/O Inspector, Library, Network, and Node Editor pages. |
 | `schedulerRunListStore.ts` | Transient Scheduler run-table filter, sort, and column-visibility state shared by the Scheduler page and presenter tests. |
@@ -23,8 +23,8 @@ components observe the same graph state.
 Pantograph has older app components that import global stores directly, but the
 reusable graph package expects per-instance stores provided through context. The
 app needs one place where those models meet so connection-intent state,
-graph revisions, execution overlays, and diagnostics subscriptions do not
-split.
+graph revisions and execution overlays do not split while legacy diagnostics
+surfaces remain available for cleanup or reuse.
 
 ## Constraints
 - Legacy imports from `workflowStore.ts` must keep working during migration.
@@ -32,8 +32,8 @@ split.
   instances.
 - Graph revision metadata and connection-intent state must stay synchronized
   regardless of whether the caller uses package context or legacy re-exports.
-- Diagnostics subscriptions and retained trace history need one owner so
-  workflow debugging state does not duplicate across components.
+- Workbench diagnostics pages consume backend projections directly; legacy
+  diagnostics subscriptions must not be started globally from the app shell.
 
 ## Decision
 Create package store singletons once in `storeInstances.ts`, then re-export the
@@ -61,7 +61,9 @@ does not persist active-run selection or become a backend source of run truth.
 column-visibility state so the page does not duplicate run-list UI state in
 component-local variables while backend projection services remain the only
 source of run data. Scope and accepted-date filters stay in the same transient
-store boundary as status and policy filters.
+store boundary as status and policy filters. The workbench Diagnostics page now
+queries projection services directly, so `diagnosticsStore.ts` is not started
+from `App.svelte` during the normal shell lifecycle.
 
 ## Alternatives Rejected
 - Keep separate app-only and package-only workflow stores.
@@ -75,12 +77,12 @@ store boundary as status and policy filters.
 - Store singletons must be created once per app runtime.
 - Connection-intent state exported here must reflect the same object seen by
   package components through context.
-- `diagnosticsStore.ts` owns diagnostics subscriptions and retained trace
-  history for the app runtime; components must not create parallel diagnostics
-  listeners lightly.
-- Workflow-service refreshes for runtime capabilities and session queue state
-  should be triggered from this store boundary, not from diagnostics
-  components.
+- `diagnosticsStore.ts` is a legacy diagnostics-panel boundary. Components must
+  not start it as a second diagnostics pipeline when projection-backed
+  workbench pages already cover the active use case.
+- Workflow-service refreshes for run detail, scheduler timelines, runtime
+  capabilities, and session queue state should be owned by projection-backed
+  page/service boundaries rather than by global diagnostics polling.
 - Projection merge policy for additive diagnostics fields belongs in the pure
   helper module at this boundary rather than in view code or workflow-service
   adapters.
@@ -126,15 +128,6 @@ connectionIntent.subscribe((intent) => {
 clearConnectionIntent();
 ```
 
-```ts
-import { diagnosticsSnapshot, startDiagnosticsStore } from '../stores/diagnosticsStore';
-
-startDiagnosticsStore();
-diagnosticsSnapshot.subscribe(({ selectedRun }) => {
-  console.log(selectedRun?.status ?? 'no-run-selected');
-});
-```
-
 ## API Consumer Contract (Host-Facing Modules)
 - App components should import from `workflowStore.ts` when they need the legacy
   global store facade.
@@ -142,14 +135,13 @@ diagnosticsSnapshot.subscribe(({ selectedRun }) => {
   only when app components still need direct access.
 - The re-export surface is compatibility-oriented; breaking removals should wait
   until app callers have migrated.
-- Diagnostics consumers should read `diagnosticsSnapshot` and use exported
-  commands for selection or visibility changes instead of mutating trace data
-  directly.
-- Runtime and scheduler diagnostics are refreshed here in response to workflow
-  id, session id, and execution lifecycle changes rather than by polling loops.
-- Workflow-event-driven scheduler fallback and backend-sourced scheduler
-  snapshots share this store boundary; components should not attempt to
-  distinguish the producer path themselves.
+- Legacy diagnostics-panel consumers should read `diagnosticsSnapshot` and use
+  exported commands for selection or visibility changes instead of mutating
+  trace data directly.
+- Workbench diagnostics consumers should prefer typed projection service calls
+  over this legacy store boundary.
+- Runtime and scheduler diagnostics are no longer globally refreshed from the
+  app shell through this store.
 - `diagnosticsStore.ts` must treat `WorkflowDiagnosticsProjection.context` as
   the owner of diagnostics snapshot relevance and execution attribution.
 

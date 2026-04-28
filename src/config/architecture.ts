@@ -22,6 +22,13 @@ export const PANTOGRAPH_ARCHITECTURE: ArchitectureGraph = {
       description: 'Scheduler-first workbench shell with top-level pages and transient active-run context'
     },
     {
+      id: 'component:DiagnosticsPage',
+      category: 'component',
+      label: 'DiagnosticsPage',
+      filePath: 'src/components/workbench/DiagnosticsPage.svelte',
+      description: 'Projection-backed selected-run diagnostics workbench page'
+    },
+    {
       id: 'component:Canvas',
       category: 'component',
       label: 'Canvas',
@@ -47,7 +54,7 @@ export const PANTOGRAPH_ARCHITECTURE: ArchitectureGraph = {
       category: 'component',
       label: 'DiagnosticsPanel',
       filePath: 'src/components/diagnostics/DiagnosticsPanel.svelte',
-      description: 'Workflow diagnostics view with run selection and tabs'
+      description: 'Legacy diagnostics panel retained for cleanup or future reuse outside the workbench shell'
     },
     {
       id: 'component:NodePalette',
@@ -360,7 +367,7 @@ export const PANTOGRAPH_ARCHITECTURE: ArchitectureGraph = {
     { id: 'c9a', source: 'component:WorkbenchShell', target: 'component:WorkflowGraph', connectionType: 'import' },
     { id: 'c9b', source: 'component:WorkbenchShell', target: 'component:WorkflowToolbar', connectionType: 'import' },
     { id: 'c9c', source: 'component:WorkbenchShell', target: 'component:NodePalette', connectionType: 'import' },
-    { id: 'c9d', source: 'component:WorkbenchShell', target: 'component:DiagnosticsPanel', connectionType: 'import' },
+    { id: 'c9d', source: 'component:WorkbenchShell', target: 'component:DiagnosticsPage', connectionType: 'import' },
 
     // ==================== Component → Store subscriptions ====================
     { id: 'c10', source: 'component:WorkbenchShell', target: 'store:workbenchStore', connectionType: 'subscription' },
@@ -371,7 +378,6 @@ export const PANTOGRAPH_ARCHITECTURE: ArchitectureGraph = {
     { id: 'c16', source: 'component:ChunkPreview', target: 'store:chunkPreviewStore', connectionType: 'subscription' },
     { id: 'c17', source: 'component:WorkflowToolbar', target: 'store:workflowStore', connectionType: 'subscription' },
     { id: 'c18', source: 'component:NodePalette', target: 'store:workflowStore', connectionType: 'subscription' },
-    { id: 'c18a', source: 'component:WorkflowToolbar', target: 'store:diagnosticsStore', connectionType: 'subscription' },
     { id: 'c18b', source: 'component:DiagnosticsPanel', target: 'store:diagnosticsStore', connectionType: 'subscription' },
 
     // ==================== Component → Service imports ====================

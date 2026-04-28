@@ -58,6 +58,8 @@ grow separate navigation and selection models.
 - Network pages must distinguish unavailable platform metrics from zero values.
 - Existing graph and diagnostics surfaces must remain usable while ownership
   moves into the workbench shell.
+- The workbench Diagnostics page owns the active diagnostics surface. Graph page
+  toolbars must not expose the legacy diagnostics panel lifecycle.
 - Toolbar navigation must use semantic buttons with accessible names.
 
 ## Decision
@@ -167,7 +169,9 @@ transient UI state without becoming backend scheduler policy.
   `RunGraphSnapshot.svelte`. It reads selected-run artifact metadata through
   `workflowService.queryIoArtifacts` for node output-availability overlays and
   selected-run node status through `workflowService.queryNodeStatus` for
-  runtime-status overlays. It never applies that graph to the editor store.
+  runtime-status overlays. It never applies that graph to the editor store, and
+  its editor toolbar stays focused on workflow persistence/execution rather
+  than reopening legacy diagnostics panel controls.
 - `DiagnosticsPage.svelte` reads selected-run facts through
   `workflowService.queryRunDetail`, scheduler history through
   `workflowService.querySchedulerTimeline`, and comparison peers through

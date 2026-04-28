@@ -9,7 +9,6 @@
   import { undoStore } from './stores/undoStore';
   import { loadLastGraph } from './stores/graphSessionStore';
   import { linkModeActive, cancelLinkMode } from './stores/linkStore';
-  import { startDiagnosticsStore, stopDiagnosticsStore } from './stores/diagnosticsStore';
 
   // Set up the @pantograph/svelte-graph context so package components
   // (GenericNode, ReconnectableEdge, etc.) can access stores via useGraphContext().
@@ -46,7 +45,6 @@
 
   onMount(() => {
     Logger.log('APP_MOUNTED', { version: '1.0.0-alpha' });
-    startDiagnosticsStore();
 
     // Load previously generated components from disk
     loadWorkspace().then((count) => {
@@ -107,7 +105,6 @@
     window.addEventListener('keydown', handleKeyDown);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
-      stopDiagnosticsStore();
     };
   });
 </script>

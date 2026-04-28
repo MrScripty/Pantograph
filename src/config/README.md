@@ -69,6 +69,9 @@ import { PANTOGRAPH_ARCHITECTURE } from './architecture';
 - Ordering: arrays should remain deterministic for stable rendering.
 - Compatibility: views may depend on config ids across releases.
 - Regeneration/migration: update consumers and tests with config shape changes.
+  Architecture edges should describe active app-shell ownership; retired
+  components may remain listed only when they are labeled as legacy or pending
+  cleanup.
 
 ## Testing
 ```bash

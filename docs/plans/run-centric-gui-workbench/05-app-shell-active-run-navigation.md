@@ -69,7 +69,7 @@ The shell must change before page implementations can feel coherent.
 
 - Stage `04` frontend services and active-run DTOs.
 - Existing `src/App.svelte`, `WorkflowGraph.svelte`,
-  `DiagnosticsPanel.svelte`, drawing feature modules,
+  `DiagnosticsPage.svelte`, drawing feature modules,
   and design-system components.
 
 ### Risks
@@ -182,8 +182,8 @@ surfaces.
 - [x] Move drawing-to-Svelte surface under an explicit workbench page/tool if
   it remains in the app, otherwise retire it.
 - [x] Move existing workflow graph view into Graph page shell.
-- [x] Move existing diagnostics panel into Diagnostics page shell or embed it
-  as an interim page body.
+- [x] Move diagnostics ownership into the projection-backed Diagnostics page
+  and retire legacy panel startup from the active shell lifecycle.
 - [x] Update README documentation for new frontend shell ownership.
 
 **Verification:**
@@ -193,9 +193,10 @@ surfaces.
 - README updates satisfy documentation standards for changed directories.
 
 **Status:** Complete for root-shell ownership. The old drawing-to-Svelte
-startup surface is retired from app-root navigation; its implementation files
-remain for separate cleanup or future reuse under a standards-compliant tool
-surface.
+startup surface is retired from app-root navigation, and the app no longer
+starts the legacy diagnostics panel store during root mount. The retired
+drawing implementation files and legacy diagnostics panel files remain for
+separate cleanup or future reuse under standards-compliant tool surfaces.
 
 ## Ownership And Lifecycle Note
 
@@ -228,8 +229,10 @@ shell must not consume or interpret raw diagnostic ledger events.
   Node Editor workbench page wrappers.
 - Wired Scheduler run-list projection rows to the active-run store and page
   handoff actions.
-- Embedded the existing workflow graph and diagnostics panel under workbench
-  page ownership.
+- Mounted the existing workflow graph under the Graph page and moved
+  diagnostics rendering to the projection-backed Diagnostics page.
+- Removed the root diagnostics-store startup hook and graph-toolbar diagnostics
+  panel toggle so diagnostics are no longer a duplicate shell lifecycle.
 - Removed `src/stores/viewModeStore.ts` and the root canvas/workflow mode
   shortcut path from `src/App.svelte`.
 - Updated source READMEs and architecture metadata for workbench ownership.

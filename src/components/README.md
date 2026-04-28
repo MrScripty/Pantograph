@@ -35,9 +35,9 @@ architecture views on top of the shared editor.
 | `NodePalette.svelte` | App palette for inserting workflow nodes into the active graph. |
 | `NodeGroupEditor.svelte` | App wrapper for group editing and exposed-port management. |
 | `NavigationBreadcrumb.svelte` | Breadcrumb UI for group/orchestration navigation. |
-| `WorkflowToolbar.svelte` | Toolbar actions for workflow graph editing. |
+| `WorkflowToolbar.svelte` | Toolbar actions for workflow graph persistence and execution. |
 | `workbench/` | Scheduler-first app shell, page wrappers, and active-run workbench views. |
-| `diagnostics/` | Workflow diagnostics panel, tab views, and presentation helpers for retained execution traces. |
+| `diagnostics/` | Legacy workflow diagnostics panel, tab views, and presentation helpers retained outside the active workbench shell. |
 | `nodes/` | Pantograph-specific node renderers and the shared app node shell. |
 | `runtime-manager/` | Mounted Settings runtime-manager cards and panel for backend-owned redistributable inspection and version policy. |
 | `server-status/` | Focused presentation subcomponents used by the `ServerStatus.svelte` Settings shell. |
@@ -55,8 +55,8 @@ as the package graph so GUI behavior and backend validation stay aligned.
   is incremental.
 - Built-in node UI must stay aligned with backend-owned node contracts and
   starter workflow templates.
-- Diagnostics rendering should be owned by the workbench Diagnostics page while
-  remaining available to graph execution controls through explicit props only.
+- Diagnostics rendering should be owned by the workbench Diagnostics page. Graph
+  execution controls should not subscribe to diagnostics state.
 - Settings-side runtime management must remain a presentation surface over the
   backend-owned managed-runtime contract rather than introducing GUI-owned
   runtime policy.
@@ -88,21 +88,19 @@ graph snapshots so node placement and later graph syncs do not silently wipe
 selection state. While a palette drag is active, the app graph also treats the
 cursor as the only edge-insert hit point and previews replacement of an
 existing workflow edge only after backend validation confirms the dragged node
-type can bridge both endpoints. The workflow workspace now also includes a
-bottom diagnostics panel that renders retained execution traces from the
-diagnostics store without moving transport or event-normalization logic into
-Svelte components. Settings-side server/runtime status rendering is now also
-split into focused `server-status/` and `runtime-manager/` subdirectories so
-the mounted shell can expose the dedicated version-aware runtime-manager view
-without continuing to grow one large component file.
+type can bridge both endpoints. Settings-side server/runtime status rendering
+is now also split into focused `server-status/` and `runtime-manager/`
+subdirectories so the mounted shell can expose the dedicated version-aware
+runtime-manager view without continuing to grow one large component file.
 Toolbar execution-event handling now delegates execution-id claiming and stale
 event filtering to the shared package workflow execution projector so the app
 toolbar does not maintain a second local relevance gate.
 The root app shell now lives in `workbench/`, which gives Scheduler,
 Diagnostics, Graph, I/O Inspector, Library, Network, and Node Editor a shared
-navigation surface and selected-run context. Existing graph and diagnostics
-components are mounted through page wrappers instead of being selected by the
-old root canvas/workflow mode switch.
+navigation surface and selected-run context. The graph is mounted through a page
+wrapper instead of being selected by the old root canvas/workflow mode switch,
+and diagnostics rendering now comes from the projection-backed workbench
+Diagnostics page instead of the legacy diagnostics panel lifecycle.
 The app workflow graph delegates orchestration boundary overlay rendering to
 `WorkflowContainerBoundary.svelte` and boundary math to
 `workflowContainerBoundary.ts`, while the parent keeps viewport tracking,
