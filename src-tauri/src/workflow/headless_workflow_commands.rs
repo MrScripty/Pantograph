@@ -4,13 +4,14 @@
 //! Pantograph embedded runtime.
 
 use pantograph_workflow_service::{
-    WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse,
-    WorkflowExecutionSessionCloseRequest, WorkflowExecutionSessionCloseResponse,
-    WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionCreateResponse,
-    WorkflowExecutionSessionKeepAliveRequest, WorkflowExecutionSessionKeepAliveResponse,
-    WorkflowExecutionSessionQueueCancelRequest, WorkflowExecutionSessionQueueCancelResponse,
-    WorkflowExecutionSessionQueueListRequest, WorkflowExecutionSessionQueueListResponse,
-    WorkflowExecutionSessionQueuePushFrontRequest, WorkflowExecutionSessionQueuePushFrontResponse,
+    WorkflowAdminQueueCancelRequest, WorkflowAdminQueueCancelResponse, WorkflowCapabilitiesRequest,
+    WorkflowCapabilitiesResponse, WorkflowExecutionSessionCloseRequest,
+    WorkflowExecutionSessionCloseResponse, WorkflowExecutionSessionCreateRequest,
+    WorkflowExecutionSessionCreateResponse, WorkflowExecutionSessionKeepAliveRequest,
+    WorkflowExecutionSessionKeepAliveResponse, WorkflowExecutionSessionQueueCancelRequest,
+    WorkflowExecutionSessionQueueCancelResponse, WorkflowExecutionSessionQueueListRequest,
+    WorkflowExecutionSessionQueueListResponse, WorkflowExecutionSessionQueuePushFrontRequest,
+    WorkflowExecutionSessionQueuePushFrontResponse,
     WorkflowExecutionSessionQueueReprioritizeRequest,
     WorkflowExecutionSessionQueueReprioritizeResponse, WorkflowExecutionSessionRunRequest,
     WorkflowExecutionSessionStaleCleanupRequest, WorkflowExecutionSessionStaleCleanupResponse,
@@ -342,6 +343,16 @@ pub async fn workflow_cancel_execution_session_queue_item(
 ) -> Result<WorkflowExecutionSessionQueueCancelResponse, String> {
     workflow_service
         .workflow_cancel_execution_session_queue_item(request)
+        .await
+        .map_err(workflow_error_json)
+}
+
+pub async fn workflow_admin_cancel_queue_item(
+    request: WorkflowAdminQueueCancelRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowAdminQueueCancelResponse, String> {
+    workflow_service
+        .workflow_admin_cancel_queue_item(request)
         .await
         .map_err(workflow_error_json)
 }

@@ -385,6 +385,15 @@ pub async fn workflow_cancel_execution_session_queue_item(
 }
 
 #[command]
+pub async fn workflow_admin_cancel_queue_item(
+    request: pantograph_workflow_service::WorkflowAdminQueueCancelRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<pantograph_workflow_service::WorkflowAdminQueueCancelResponse, String> {
+    super::headless_workflow_commands::workflow_admin_cancel_queue_item(request, workflow_service)
+        .await
+}
+
+#[command]
 pub async fn workflow_reprioritize_execution_session_queue_item(
     request: pantograph_workflow_service::WorkflowExecutionSessionQueueReprioritizeRequest,
     workflow_service: State<'_, SharedWorkflowService>,

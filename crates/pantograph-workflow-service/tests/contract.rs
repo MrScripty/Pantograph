@@ -10,7 +10,8 @@ use pantograph_diagnostics_ledger::{
 };
 use pantograph_workflow_service::graph::WorkflowExecutionSessionKind;
 use pantograph_workflow_service::{
-    WorkflowCapabilitiesRequest, WorkflowCapabilityModel, WorkflowExecutionSessionCreateRequest,
+    WorkflowAdminQueueCancelRequest, WorkflowAdminQueueCancelResponse, WorkflowCapabilitiesRequest,
+    WorkflowCapabilityModel, WorkflowExecutionSessionCreateRequest,
     WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionQueueItemStatus,
     WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionState,
     WorkflowExecutionSessionSummary, WorkflowHost, WorkflowHostCapabilities,
@@ -1232,6 +1233,30 @@ fn workflow_library_asset_access_record_contract_snapshot() {
         serde_json::to_value(response).expect("serialize library asset access response");
     let expected_response = serde_json::json!({
         "event_seq": 42
+    });
+    assert_eq!(response_value, expected_response);
+}
+
+#[test]
+fn workflow_admin_queue_cancel_contract_snapshot() {
+    let request = WorkflowAdminQueueCancelRequest {
+        workflow_run_id: "run-admin-1".to_string(),
+    };
+    let response = WorkflowAdminQueueCancelResponse {
+        ok: true,
+        session_id: "session-1".to_string(),
+    };
+
+    let request_value = serde_json::to_value(request).expect("serialize admin cancel request");
+    let expected_request = serde_json::json!({
+        "workflow_run_id": "run-admin-1"
+    });
+    assert_eq!(request_value, expected_request);
+
+    let response_value = serde_json::to_value(response).expect("serialize admin cancel response");
+    let expected_response = serde_json::json!({
+        "ok": true,
+        "session_id": "session-1"
     });
     assert_eq!(response_value, expected_response);
 }

@@ -7,6 +7,7 @@ import type {
   WorkflowRetentionPolicyUpdateResponse,
 } from '../diagnostics/types.ts';
 import type {
+  WorkflowAdminQueueCancelResponse,
   WorkflowSessionQueueCancelResponse,
   WorkflowSessionQueuePushFrontResponse,
   WorkflowSessionQueueReprioritizeResponse,
@@ -67,12 +68,19 @@ test('queue control methods return backend command results exactly', async () =>
   installWindowMock();
   const calls: Array<{ cmd: string; args: unknown }> = [];
   const cancelResponse: WorkflowSessionQueueCancelResponse = { ok: true };
+  const adminCancelResponse: WorkflowAdminQueueCancelResponse = {
+    ok: true,
+    session_id: 'session-b',
+  };
   const reprioritizeResponse: WorkflowSessionQueueReprioritizeResponse = { ok: true };
   const pushFrontResponse: WorkflowSessionQueuePushFrontResponse = { ok: true, priority: 11 };
   mockIPC((cmd, args) => {
     calls.push({ cmd, args });
     if (cmd === 'workflow_cancel_execution_session_queue_item') {
       return cancelResponse;
+    }
+    if (cmd === 'workflow_admin_cancel_queue_item') {
+      return adminCancelResponse;
     }
     if (cmd === 'workflow_reprioritize_execution_session_queue_item') {
       return reprioritizeResponse;
@@ -86,6 +94,9 @@ test('queue control methods return backend command results exactly', async () =>
       session_id: 'session-a',
       workflow_run_id: 'run-a',
     });
+    const adminCancel = await service.adminCancelQueueItem({
+      workflow_run_id: 'run-admin',
+    });
     const reprioritize = await service.reprioritizeSessionQueueItem({
       session_id: 'session-a',
       workflow_run_id: 'run-b',
@@ -97,6 +108,7 @@ test('queue control methods return backend command results exactly', async () =>
     });
 
     assert.deepEqual(cancel, cancelResponse);
+    assert.deepEqual(adminCancel, adminCancelResponse);
     assert.deepEqual(reprioritize, reprioritizeResponse);
     assert.deepEqual(pushFront, pushFrontResponse);
     assert.deepEqual(calls, [
@@ -106,6 +118,14 @@ test('queue control methods return backend command results exactly', async () =>
           request: {
             session_id: 'session-a',
             workflow_run_id: 'run-a',
+          },
+        },
+      },
+      {
+        cmd: 'workflow_admin_cancel_queue_item',
+        args: {
+          request: {
+            workflow_run_id: 'run-admin',
           },
         },
       },

@@ -294,6 +294,112 @@ async fn workflow_execution_session_queue_control_records_typed_events() {
 }
 
 #[tokio::test]
+async fn workflow_admin_queue_cancel_finds_session_and_records_gui_scope() {
+    let host = MockWorkflowHost::new(8, 1024);
+    let service = WorkflowService::new()
+        .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"));
+    let first = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "wf-1".to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create first session");
+    let second = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "wf-2".to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create second session");
+    let request = WorkflowExecutionSessionRunRequest {
+        session_id: second.session_id.clone(),
+        workflow_semantic_version: "0.1.0".to_string(),
+        inputs: Vec::new(),
+        output_targets: None,
+        override_selection: None,
+        timeout_ms: None,
+        priority: Some(2),
+    };
+
+    let admin_cancel_id = {
+        let mut store = service
+            .session_store
+            .lock()
+            .expect("session store lock poisoned");
+        store
+            .enqueue_run(&second.session_id, &request)
+            .expect("enqueue admin-cancel run")
+    };
+    let response = service
+        .workflow_admin_cancel_queue_item(WorkflowAdminQueueCancelRequest {
+            workflow_run_id: admin_cancel_id.clone(),
+        })
+        .await
+        .expect("admin cancel queue item");
+    assert_eq!(response.session_id, second.session_id);
+
+    let (first_items, second_items) = {
+        let store = service
+            .session_store
+            .lock()
+            .expect("session store lock poisoned");
+        (
+            store
+                .list_queue(&first.session_id)
+                .expect("first queue should remain accessible"),
+            store
+                .list_queue(&second.session_id)
+                .expect("second queue should remain accessible"),
+        )
+    };
+    assert!(first_items.is_empty());
+    assert!(second_items.is_empty());
+
+    let diagnostic_events = {
+        let ledger = service
+            .diagnostics_ledger_guard()
+            .expect("diagnostics ledger");
+        pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::diagnostic_events_after(
+            &*ledger, 0, 10,
+        )
+        .expect("diagnostic events")
+    };
+    let queue_control_events = diagnostic_events
+        .iter()
+        .filter(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerQueueControl
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(queue_control_events.len(), 1);
+    assert_eq!(
+        queue_control_events[0]
+            .workflow_run_id
+            .as_ref()
+            .map(|id| id.as_str()),
+        Some(admin_cancel_id.as_str())
+    );
+    assert!(queue_control_events[0]
+        .payload_json
+        .contains("\"actor_scope\":\"gui_admin\""));
+    assert!(queue_control_events[0]
+        .payload_json
+        .contains("\"outcome\":\"accepted\""));
+    assert!(queue_control_events[0]
+        .payload_json
+        .contains("admin cancelled queue item"));
+}
+
+#[tokio::test]
 async fn workflow_execution_session_queue_marks_loaded_compatible_admission_as_warm_reuse() {
     let host = MockWorkflowHost::new(8, 1024);
     let service = WorkflowService::new();

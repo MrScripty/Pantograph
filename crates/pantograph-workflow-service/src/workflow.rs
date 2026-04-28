@@ -83,7 +83,8 @@ use crate::scheduler::unix_timestamp_ms;
 
 pub(crate) use crate::scheduler::scheduler_snapshot_workflow_run_id;
 pub use crate::scheduler::{
-    select_runtime_unload_candidate_by_affinity, WorkflowExecutionSessionAttributionContext,
+    select_runtime_unload_candidate_by_affinity, WorkflowAdminQueueCancelRequest,
+    WorkflowAdminQueueCancelResponse, WorkflowExecutionSessionAttributionContext,
     WorkflowExecutionSessionInspectionRequest, WorkflowExecutionSessionInspectionResponse,
     WorkflowExecutionSessionKeepAliveRequest, WorkflowExecutionSessionKeepAliveResponse,
     WorkflowExecutionSessionQueueCancelRequest, WorkflowExecutionSessionQueueCancelResponse,

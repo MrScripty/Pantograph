@@ -9,6 +9,7 @@ use pantograph_diagnostics_ledger::{
 use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId, WorkflowRunSnapshotRecord};
 
 use super::{
+    WorkflowAdminQueueCancelRequest, WorkflowAdminQueueCancelResponse,
     WorkflowExecutionSessionInspectionRequest, WorkflowExecutionSessionInspectionResponse,
     WorkflowExecutionSessionQueueCancelRequest, WorkflowExecutionSessionQueueCancelResponse,
     WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionQueueListRequest,
@@ -179,6 +180,7 @@ impl WorkflowService {
                     cancelled_item.as_ref(),
                     SchedulerQueueControlAction::Cancel,
                     SchedulerQueueControlOutcome::Accepted,
+                    SchedulerQueueControlActorScope::ClientSession,
                     None,
                     Some("queue item cancelled".to_string()),
                 )?;
@@ -192,6 +194,63 @@ impl WorkflowService {
                     cancelled_item.as_ref(),
                     SchedulerQueueControlAction::Cancel,
                     SchedulerQueueControlOutcome::Denied,
+                    SchedulerQueueControlActorScope::ClientSession,
+                    None,
+                    Some(reason),
+                )?;
+                Err(error)
+            }
+        }
+    }
+
+    pub async fn workflow_admin_cancel_queue_item(
+        &self,
+        request: WorkflowAdminQueueCancelRequest,
+    ) -> Result<WorkflowAdminQueueCancelResponse, WorkflowServiceError> {
+        let workflow_run_id = request.workflow_run_id.trim();
+        if workflow_run_id.is_empty() {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "workflow_run_id must be non-empty".to_string(),
+            ));
+        }
+
+        let (session, previous_item, cancel_result) = {
+            let mut store = self.session_store_guard()?;
+            let session_id = store.session_id_for_queue_item(workflow_run_id)?;
+            let session = store.session_summary(&session_id)?;
+            let previous_item = store
+                .list_queue(&session_id)?
+                .into_iter()
+                .find(|item| item.workflow_run_id == workflow_run_id);
+            let cancel_result = store.cancel_queue_item(&session_id, workflow_run_id);
+            (session, previous_item, cancel_result)
+        };
+        match cancel_result {
+            Ok(()) => {
+                self.record_scheduler_queue_control_event_if_configured(
+                    &session,
+                    workflow_run_id,
+                    previous_item.as_ref(),
+                    SchedulerQueueControlAction::Cancel,
+                    SchedulerQueueControlOutcome::Accepted,
+                    SchedulerQueueControlActorScope::GuiAdmin,
+                    None,
+                    Some("admin cancelled queue item".to_string()),
+                )?;
+                Ok(WorkflowAdminQueueCancelResponse {
+                    ok: true,
+                    session_id: session.session_id,
+                })
+            }
+            Err(error) => {
+                let reason = queue_control_denial_reason(&error);
+                self.record_scheduler_queue_control_event_if_configured(
+                    &session,
+                    workflow_run_id,
+                    previous_item.as_ref(),
+                    SchedulerQueueControlAction::Cancel,
+                    SchedulerQueueControlOutcome::Denied,
+                    SchedulerQueueControlActorScope::GuiAdmin,
                     None,
                     Some(reason),
                 )?;
@@ -235,6 +294,7 @@ impl WorkflowService {
                     previous_item.as_ref(),
                     SchedulerQueueControlAction::Reprioritize,
                     SchedulerQueueControlOutcome::Accepted,
+                    SchedulerQueueControlActorScope::ClientSession,
                     Some(request.priority),
                     Some("queue item reprioritized".to_string()),
                 )?;
@@ -248,6 +308,7 @@ impl WorkflowService {
                     previous_item.as_ref(),
                     SchedulerQueueControlAction::Reprioritize,
                     SchedulerQueueControlOutcome::Denied,
+                    SchedulerQueueControlActorScope::ClientSession,
                     Some(request.priority),
                     Some(reason),
                 )?;
@@ -290,6 +351,7 @@ impl WorkflowService {
                     previous_item.as_ref(),
                     SchedulerQueueControlAction::PushToFront,
                     SchedulerQueueControlOutcome::Accepted,
+                    SchedulerQueueControlActorScope::ClientSession,
                     Some(priority),
                     Some("queue item pushed to front".to_string()),
                 )?;
@@ -303,6 +365,7 @@ impl WorkflowService {
                     previous_item.as_ref(),
                     SchedulerQueueControlAction::PushToFront,
                     SchedulerQueueControlOutcome::Denied,
+                    SchedulerQueueControlActorScope::ClientSession,
                     None,
                     Some(reason),
                 )?;
@@ -318,6 +381,7 @@ impl WorkflowService {
         previous_item: Option<&WorkflowExecutionSessionQueueItem>,
         action: SchedulerQueueControlAction,
         outcome: SchedulerQueueControlOutcome,
+        actor_scope: SchedulerQueueControlActorScope,
         new_priority: Option<i32>,
         reason: Option<String>,
     ) -> Result<(), WorkflowServiceError> {
@@ -385,7 +449,7 @@ impl WorkflowService {
                     SchedulerQueueControlPayload {
                         action,
                         outcome,
-                        actor_scope: SchedulerQueueControlActorScope::ClientSession,
+                        actor_scope,
                         previous_queue_position,
                         previous_priority: previous_item.map(|item| item.priority),
                         new_priority,

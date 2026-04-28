@@ -12,6 +12,8 @@ import type {
   WorkflowRetentionPolicyUpdateResponse,
 } from '../diagnostics/types.ts';
 import type {
+  WorkflowAdminQueueCancelRequest,
+  WorkflowAdminQueueCancelResponse,
   WorkflowSessionQueueCancelRequest,
   WorkflowSessionQueueCancelResponse,
   WorkflowSessionQueuePushFrontRequest,
@@ -35,6 +37,18 @@ export class WorkflowCommandService extends WorkflowProjectionService {
       'workflow_cancel_execution_session_queue_item',
       { request },
     );
+  }
+
+  async adminCancelQueueItem(
+    request: WorkflowAdminQueueCancelRequest,
+  ): Promise<WorkflowAdminQueueCancelResponse> {
+    if (USE_WORKFLOW_MOCKS) {
+      return { ok: true, session_id: 'mock-session' };
+    }
+
+    return invokeWorkflowCommand<WorkflowAdminQueueCancelResponse>('workflow_admin_cancel_queue_item', {
+      request,
+    });
   }
 
   async reprioritizeSessionQueueItem(

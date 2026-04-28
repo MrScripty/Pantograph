@@ -463,6 +463,15 @@ export interface WorkflowSessionQueueCancelResponse {
   ok: boolean;
 }
 
+export interface WorkflowAdminQueueCancelRequest {
+  workflow_run_id: string;
+}
+
+export interface WorkflowAdminQueueCancelResponse {
+  ok: boolean;
+  session_id: string;
+}
+
 export interface WorkflowSessionQueuePushFrontRequest {
   session_id: string;
   workflow_run_id: string;

@@ -40,7 +40,9 @@ Create a focused `scheduler/` boundary inside `pantograph-workflow-service`.
 owns in-memory session state that `WorkflowService` delegates to.
 `store_queue.rs` owns queue/run mutation and canonical admission-input
 construction so run-id ownership and queue policy do not keep growing the
-general session store.
+general session store. It also owns the run-id-to-session lookup used by
+GUI-admin queued-run cancellation so privileged transport callers do not scan
+or reinterpret scheduler internals.
 `policy.rs` makes the current priority/FIFO queue behavior explicit and now
 also owns the first starvation-protection promotion rule plus the first
 runtime-affinity unload-ranking rule instead of leaving that behavior as ad hoc
@@ -109,6 +111,9 @@ needs to be the long-term home for scheduler contracts or queue mutation logic.
 - Scheduler queue mutation, admission-input construction, and active-run finish
   transitions stay in `store_queue.rs` so canonical `workflow_run_id`
   lifecycle ownership is isolated from runtime-load and stale-cleanup state.
+- Cross-session queue lookup for GUI-admin controls must stay inside the
+  scheduler store boundary; adapters may request a privileged action but must
+  not search or mutate session queues directly.
 - Scheduler snapshot diagnostics and runtime-diagnostics request shaping stay
   in `store_diagnostics.rs` so read-side scheduler projection does not keep
   `store.rs` above the large-file threshold.

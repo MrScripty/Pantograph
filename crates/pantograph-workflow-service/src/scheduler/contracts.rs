@@ -296,6 +296,21 @@ pub struct WorkflowExecutionSessionQueueCancelResponse {
     pub ok: bool,
 }
 
+/// Privileged GUI-admin queue cancellation request.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowAdminQueueCancelRequest {
+    pub workflow_run_id: String,
+}
+
+/// Privileged GUI-admin queue cancellation response.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowAdminQueueCancelResponse {
+    pub ok: bool,
+    pub session_id: String,
+}
+
 /// Session queue push-front request.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]

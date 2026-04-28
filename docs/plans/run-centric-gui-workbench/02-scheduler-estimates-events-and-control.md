@@ -282,9 +282,11 @@ session queue and denies the request if the priority ceiling prevents a real
 move. Query-own-estimate now has a workflow-service and frontend projection
 method that returns estimate-shaped hot projection facts for a run without raw
 ledger access. Session-owned queue-control events now use the `client_session`
-actor scope. The event contract reserves `gui_admin` for future privileged
-cross-session controls. Clone/resubmit, privileged cross-session admin
-controls, and admin-scope event emitters remain pending.
+actor scope. The first GUI-admin queue boundary can cancel a queued run by run
+id across sessions, leaves the scheduler store as the authority, and emits
+`gui_admin` queue-control events for accepted/correlated denied decisions.
+Clone/resubmit, running-run cancellation, privileged cross-session reorder,
+pause/resume, and other admin-scope event emitters remain pending.
 
 ## Ownership And Lifecycle Note
 

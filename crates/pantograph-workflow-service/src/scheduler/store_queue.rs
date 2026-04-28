@@ -348,6 +348,31 @@ impl WorkflowExecutionSessionStore {
         Ok(())
     }
 
+    pub(crate) fn session_id_for_queue_item(
+        &self,
+        queue_id: &str,
+    ) -> Result<String, WorkflowServiceError> {
+        self.active
+            .iter()
+            .find_map(|(session_id, state)| {
+                let active_match = state
+                    .active_run
+                    .as_ref()
+                    .is_some_and(|active| active.workflow_run_id == queue_id);
+                let pending_match = state
+                    .queue
+                    .iter()
+                    .any(|queued| queued.workflow_run_id == queue_id);
+                (active_match || pending_match).then(|| session_id.clone())
+            })
+            .ok_or_else(|| {
+                WorkflowServiceError::QueueItemNotFound(format!(
+                    "queue item '{}' not found in any session",
+                    queue_id
+                ))
+            })
+    }
+
     pub(crate) fn reprioritize_queue_item(
         &mut self,
         session_id: &str,

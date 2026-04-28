@@ -186,6 +186,10 @@ policy into adapters.
 - [ ] Add immutable run submission and cancel/resubmit command boundaries.
 - [x] Add scoped client queue action command boundaries.
 - [ ] Add privileged/admin command boundaries for GUI-only actions.
+  - First-pass GUI-admin queued-run cancel is exposed through workflow-service,
+    Tauri, and frontend command DTOs. Cross-session reorder, running-run
+    cancellation, pause/resume, override priority, forced estimate
+    recomputation, and forced reschedule remain pending.
 - [ ] Remove or rename old projection APIs that would expose stale
   graph-fingerprint or current-graph semantics for historic runs.
 
@@ -222,7 +226,10 @@ status query is exposed with local-only CPU/memory/disk/network-interface
 facts, scheduler load, future peer DTO placeholders, and explicit degraded GPU
 state. Frontend queue cancel/reprioritize/push-front methods now call the
 backend-owned execution-session queue commands, and stale frontend session
-command names were corrected. Retention policy updates now use a backend
+command names were corrected. `workflow_admin_cancel_queue_item` now exposes
+the first GUI-only admin queue command for cancelling a queued run by run id
+across sessions while preserving scheduler-owned decisions and typed
+`gui_admin` audit events. Retention policy updates now use a backend
 command that changes the global standard policy and records a typed
 `retention.policy_changed` audit event. Run-list and run-detail projection DTOs
 now expose typed scheduler queue position, priority, estimate confidence,
