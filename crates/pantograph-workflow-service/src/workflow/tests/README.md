@@ -132,6 +132,9 @@ Use `workflow/tests/` for behavior-specific child modules under the parent
 - Session execution tests with diagnostics enabled must verify admission events
   include selected runtime and reserved model facts from scheduler/dequeued-run
   state instead of current graph reads.
+- Session execution tests with diagnostics enabled must verify local
+  runtime-slot reservation created/released events bracket started/terminal
+  execution visibility without replacing `run.*` lifecycle facts.
 - Session execution tests with diagnostics enabled must verify scheduler model
   lifecycle events for runtime admission required-model loads before terminal
   run events and ephemeral required-model unloads after I/O artifact events.

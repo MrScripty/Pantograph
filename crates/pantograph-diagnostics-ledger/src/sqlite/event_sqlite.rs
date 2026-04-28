@@ -272,6 +272,7 @@ pub(super) fn drain_scheduler_timeline_projection(
                     'scheduler.run_delayed',
                     'scheduler.model_lifecycle_changed',
                     'scheduler.run_admitted',
+                    'scheduler.reservation_changed',
                     'run.started',
                     'run.terminal',
                     'run.snapshot_accepted',
@@ -1547,6 +1548,28 @@ fn scheduler_timeline_record_from_event(
             }
             let detail = (!details.is_empty()).then(|| details.join("; "));
             ("run admitted".to_string(), detail)
+        }
+        DiagnosticEventPayload::SchedulerReservationChanged(payload) => {
+            let mut details = vec![payload.reservation_id.clone()];
+            if let Some(runtime_id) = payload.selected_runtime_id.as_deref() {
+                details.push(format!("selected runtime {runtime_id}"));
+            }
+            if let Some(device_id) = payload.selected_device_id.as_deref() {
+                details.push(format!("selected device {device_id}"));
+            }
+            if let Some(network_node_id) = payload.selected_network_node_id.as_deref() {
+                details.push(format!("selected network node {network_node_id}"));
+            }
+            if !payload.reserved_model_ids.is_empty() {
+                details.push(format!(
+                    "reserved model(s): {}",
+                    payload.reserved_model_ids.join(", ")
+                ));
+            }
+            if let Some(reason) = payload.reason.as_deref() {
+                details.push(reason.to_string());
+            }
+            (payload.summary(), Some(details.join("; ")))
         }
         DiagnosticEventPayload::RunStarted(payload) => {
             let detail = match (

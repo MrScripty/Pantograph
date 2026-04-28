@@ -258,7 +258,9 @@ Queue admission now emits a typed `scheduler.run_admitted` event before
 `run.*` lifecycle events carry scheduler control semantics. Admission events
 now carry selected runtime and reserved model facts from dequeued scheduler
 state; selected device/network-node fields remain typed but empty until those
-schedulers exist. Workflow-session runtime admission now emits production
+schedulers exist. Local runtime-slot reservation created/released events are
+now emitted when the scheduler admits a queued run and when `finish_run`
+clears active scheduler state. Workflow-session runtime admission now emits production
 `scheduler.model_lifecycle_changed`
 events for required-model load requested/completed/failed transitions using
 preflight required model/backend facts, and ephemeral session teardown emits
@@ -372,6 +374,8 @@ duplicate, unvalidated, or contradictory event streams.
 - Added selected runtime and reserved model facts to admission events from
   dequeued scheduler state; selected device/network-node admission fields
   remain empty until those schedulers are implemented.
+- Added local runtime-slot reservation created/released events tied to
+  scheduler admission and active-run release.
 - Tightened scheduler timeline projection labels for queue-control events so
   page/API consumers receive explicit typed action, outcome, actor-scope,
   position, and priority summaries instead of enum debug formatting.

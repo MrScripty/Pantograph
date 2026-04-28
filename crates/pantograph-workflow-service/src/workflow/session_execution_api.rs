@@ -8,7 +8,9 @@ use pantograph_diagnostics_ledger::{
     RunSnapshotNodeVersionPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
     SchedulerEstimateBlockingCondition, SchedulerEstimateProducedPayload, SchedulerModelCacheState,
     SchedulerModelLifecycleChangedPayload, SchedulerModelLifecycleTransition,
-    SchedulerQueuePlacementPayload, SchedulerRunAdmittedPayload, SchedulerRunDelayedPayload,
+    SchedulerQueuePlacementPayload, SchedulerReservationChangedPayload,
+    SchedulerReservationResourceKind, SchedulerReservationTransition, SchedulerRunAdmittedPayload,
+    SchedulerRunDelayedPayload,
 };
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, WorkflowId, WorkflowRunAttributionResolveRequest,
@@ -53,6 +55,11 @@ struct SchedulerModelLifecycleEventRequest<'a> {
     reason: Option<&'a str>,
     duration_ms: Option<u64>,
     error: Option<&'a str>,
+}
+
+struct SchedulerReservationContext {
+    selected_runtime_id: Option<String>,
+    reserved_model_ids: Vec<String>,
 }
 
 impl WorkflowService {
@@ -279,6 +286,20 @@ impl WorkflowService {
             run_snapshot.as_ref(),
             &queued_run,
         )?;
+        let reservation_context = scheduler_reservation_context(
+            run_snapshot.as_ref(),
+            &queued_run.required_backends,
+            &queued_run.required_models,
+        )?;
+        self.record_scheduler_reservation_event_if_configured(
+            &session,
+            run_snapshot.as_ref(),
+            &workflow_run_id,
+            &queued_run.queued.workflow_semantic_version,
+            &reservation_context,
+            SchedulerReservationTransition::Created,
+            Some("local runtime slot admitted"),
+        )?;
         self.record_run_started_event_if_configured(&session, run_snapshot.as_ref(), &queued_run)?;
         let queued_workflow_semantic_version = queued_run.queued.workflow_semantic_version.clone();
         let queued_workflow_inputs = queued_run.queued.inputs.clone();
@@ -304,6 +325,15 @@ impl WorkflowService {
                     &workflow_run_id,
                     Some(&queued_workflow_semantic_version),
                     &terminal_result,
+                )?;
+                self.record_scheduler_reservation_event_if_configured(
+                    &session,
+                    run_snapshot.as_ref(),
+                    &workflow_run_id,
+                    &queued_workflow_semantic_version,
+                    &reservation_context,
+                    SchedulerReservationTransition::Released,
+                    Some("runtime preflight failed after admission"),
                 )?;
                 return terminal_result;
             }
@@ -385,6 +415,15 @@ impl WorkflowService {
                 Some(&queued_workflow_semantic_version),
                 &terminal_result,
             )?;
+            self.record_scheduler_reservation_event_if_configured(
+                &session,
+                run_snapshot.as_ref(),
+                &workflow_run_id,
+                &queued_workflow_semantic_version,
+                &reservation_context,
+                SchedulerReservationTransition::Released,
+                Some("runtime load failed after admission"),
+            )?;
             return terminal_result;
         }
 
@@ -415,6 +454,15 @@ impl WorkflowService {
             &workflow_run_id,
             Some(&queued_workflow_semantic_version),
             &run_result,
+        )?;
+        self.record_scheduler_reservation_event_if_configured(
+            &session,
+            run_snapshot.as_ref(),
+            &workflow_run_id,
+            &queued_workflow_semantic_version,
+            &reservation_context,
+            SchedulerReservationTransition::Released,
+            Some("workflow run finished"),
         )?;
         if let Ok(response) = run_result.as_ref() {
             self.record_workflow_io_artifact_events_if_configured(
@@ -1060,18 +1108,11 @@ impl WorkflowService {
         let queue_wait_ms = queued_run
             .dequeued_at_ms
             .checked_sub(queued_run.enqueued_at_ms);
-        let snapshot_runtime_requirements = snapshot
-            .map(workflow_run_snapshot_runtime_requirements)
-            .transpose()?;
-        let selected_runtime_id = snapshot_runtime_requirements
-            .as_ref()
-            .and_then(|requirements| requirements.required_backends.first().cloned())
-            .or_else(|| queued_run.required_backends.first().cloned());
-        let reserved_model_ids = snapshot_runtime_requirements
-            .as_ref()
-            .map(|requirements| requirements.required_models.clone())
-            .filter(|models| !models.is_empty())
-            .unwrap_or_else(|| queued_run.required_models.clone());
+        let reservation_context = scheduler_reservation_context(
+            snapshot,
+            &queued_run.required_backends,
+            &queued_run.required_models,
+        )?;
 
         let mut ledger = ledger.lock().map_err(|_| {
             WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
@@ -1093,7 +1134,7 @@ impl WorkflowService {
                 node_id: None,
                 node_type: None,
                 node_version: None,
-                runtime_id: selected_runtime_id.clone(),
+                runtime_id: reservation_context.selected_runtime_id.clone(),
                 runtime_version: None,
                 model_id: None,
                 model_version: None,
@@ -1109,10 +1150,76 @@ impl WorkflowService {
                     SchedulerRunAdmittedPayload {
                         queue_wait_ms,
                         decision_reason: queued_run.scheduler_decision_reason.as_str().to_string(),
-                        selected_runtime_id,
+                        selected_runtime_id: reservation_context.selected_runtime_id,
                         selected_device_id: None,
                         selected_network_node_id: None,
-                        reserved_model_ids,
+                        reserved_model_ids: reservation_context.reserved_model_ids,
+                    },
+                ),
+            },
+        )
+        .map(|_| ())
+        .map_err(WorkflowServiceError::from)
+    }
+
+    fn record_scheduler_reservation_event_if_configured(
+        &self,
+        session: &WorkflowExecutionSessionSummary,
+        snapshot: Option<&WorkflowRunSnapshotRecord>,
+        workflow_run_id: &str,
+        workflow_semantic_version: &str,
+        reservation_context: &SchedulerReservationContext,
+        transition: SchedulerReservationTransition,
+        reason: Option<&str>,
+    ) -> Result<(), WorkflowServiceError> {
+        let Some(ledger) = self.diagnostics_ledger.as_ref() else {
+            return Ok(());
+        };
+        let workflow_run_id = WorkflowRunId::try_from(workflow_run_id.to_string())?;
+        let workflow_id = workflow_id_for_scheduler_event(session, snapshot)?;
+
+        let mut ledger = ledger.lock().map_err(|_| {
+            WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
+        })?;
+        DiagnosticsLedgerRepository::append_diagnostic_event(
+            &mut *ledger,
+            DiagnosticEventAppendRequest {
+                source_component: DiagnosticEventSourceComponent::Scheduler,
+                source_instance_id: Some("workflow-session-scheduler".to_string()),
+                occurred_at_ms: unix_timestamp_ms() as i64,
+                workflow_run_id: Some(workflow_run_id.clone()),
+                workflow_id: Some(workflow_id),
+                workflow_version_id: snapshot.map(|snapshot| snapshot.workflow_version_id.clone()),
+                workflow_semantic_version: Some(
+                    snapshot
+                        .map(|snapshot| snapshot.workflow_semantic_version.clone())
+                        .unwrap_or_else(|| workflow_semantic_version.to_string()),
+                ),
+                node_id: None,
+                node_type: None,
+                node_version: None,
+                runtime_id: reservation_context.selected_runtime_id.clone(),
+                runtime_version: None,
+                model_id: None,
+                model_version: None,
+                client_id: event_client_id(session, snapshot)?,
+                client_session_id: event_client_session_id(session, snapshot)?,
+                bucket_id: event_bucket_id(session, snapshot)?,
+                scheduler_policy_id: Some(WORKFLOW_SESSION_SCHEDULER_POLICY.to_string()),
+                retention_policy_id: snapshot.map(|snapshot| snapshot.retention_policy.clone()),
+                privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+                retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+                payload_ref: None,
+                payload: DiagnosticEventPayload::SchedulerReservationChanged(
+                    SchedulerReservationChangedPayload {
+                        transition,
+                        reservation_id: scheduler_runtime_slot_reservation_id(&workflow_run_id),
+                        resource_kind: SchedulerReservationResourceKind::RuntimeSlot,
+                        selected_runtime_id: reservation_context.selected_runtime_id.clone(),
+                        selected_device_id: None,
+                        selected_network_node_id: None,
+                        reserved_model_ids: reservation_context.reserved_model_ids.clone(),
+                        reason: reason.map(str::to_string),
                     },
                 ),
             },
@@ -1514,6 +1621,34 @@ fn workflow_run_snapshot_runtime_requirements(
             "failed to decode workflow run snapshot runtime requirements: {error}"
         ))
     })
+}
+
+fn scheduler_reservation_context(
+    snapshot: Option<&WorkflowRunSnapshotRecord>,
+    required_backends: &[String],
+    required_models: &[String],
+) -> Result<SchedulerReservationContext, WorkflowServiceError> {
+    let snapshot_runtime_requirements = snapshot
+        .map(workflow_run_snapshot_runtime_requirements)
+        .transpose()?;
+    let selected_runtime_id = snapshot_runtime_requirements
+        .as_ref()
+        .and_then(|requirements| requirements.required_backends.first().cloned())
+        .or_else(|| required_backends.first().cloned());
+    let reserved_model_ids = snapshot_runtime_requirements
+        .as_ref()
+        .map(|requirements| requirements.required_models.clone())
+        .filter(|models| !models.is_empty())
+        .unwrap_or_else(|| required_models.to_vec());
+
+    Ok(SchedulerReservationContext {
+        selected_runtime_id,
+        reserved_model_ids,
+    })
+}
+
+fn scheduler_runtime_slot_reservation_id(workflow_run_id: &WorkflowRunId) -> String {
+    format!("reservation_{}", workflow_run_id.as_str())
 }
 
 fn append_scheduler_estimate_runtime_reasons(

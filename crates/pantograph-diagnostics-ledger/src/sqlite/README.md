@@ -91,6 +91,9 @@ helpers own restart-visible workflow run summaries.
   node, and reserved model details when admission payloads provide those typed
   fields. Projection code must keep those as bounded labels and not inspect
   runtime internals during page reads.
+- Scheduler reservation timeline rows include local runtime-slot reservation
+  creation/release details from typed payloads. Projection code must keep them
+  separate from `run.*` lifecycle and model lifecycle rows.
 - Run detail drains apply only events after the stored projection cursor and
   update one row per workflow run for selected-run page/query reads.
 - Run-list facet reads group `run_list_projection` rows and must not replay

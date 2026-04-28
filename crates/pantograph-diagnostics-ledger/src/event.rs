@@ -9,7 +9,7 @@ use crate::DiagnosticsLedgerError;
 pub const DIAGNOSTIC_EVENT_SCHEMA_VERSION: i64 = 1;
 pub const MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES: usize = 8_192;
 pub const SCHEDULER_TIMELINE_PROJECTION_NAME: &str = "scheduler_timeline";
-pub const SCHEDULER_TIMELINE_PROJECTION_VERSION: i64 = 2;
+pub const SCHEDULER_TIMELINE_PROJECTION_VERSION: i64 = 3;
 pub const RUN_LIST_PROJECTION_NAME: &str = "run_list";
 pub const RUN_LIST_PROJECTION_VERSION: i64 = 3;
 pub const RUN_DETAIL_PROJECTION_NAME: &str = "run_detail";
@@ -30,6 +30,7 @@ pub enum DiagnosticEventKind {
     SchedulerRunDelayed,
     SchedulerModelLifecycleChanged,
     SchedulerRunAdmitted,
+    SchedulerReservationChanged,
     RunStarted,
     RunTerminal,
     RunSnapshotAccepted,
@@ -50,6 +51,7 @@ impl DiagnosticEventKind {
             Self::SchedulerRunDelayed => "scheduler.run_delayed",
             Self::SchedulerModelLifecycleChanged => "scheduler.model_lifecycle_changed",
             Self::SchedulerRunAdmitted => "scheduler.run_admitted",
+            Self::SchedulerReservationChanged => "scheduler.reservation_changed",
             Self::RunStarted => "run.started",
             Self::RunTerminal => "run.terminal",
             Self::RunSnapshotAccepted => "run.snapshot_accepted",
@@ -70,6 +72,7 @@ impl DiagnosticEventKind {
             "scheduler.run_delayed" => Ok(Self::SchedulerRunDelayed),
             "scheduler.model_lifecycle_changed" => Ok(Self::SchedulerModelLifecycleChanged),
             "scheduler.run_admitted" => Ok(Self::SchedulerRunAdmitted),
+            "scheduler.reservation_changed" => Ok(Self::SchedulerReservationChanged),
             "run.started" => Ok(Self::RunStarted),
             "run.terminal" => Ok(Self::RunTerminal),
             "run.snapshot_accepted" => Ok(Self::RunSnapshotAccepted),
@@ -232,6 +235,7 @@ pub enum DiagnosticEventPayload {
     SchedulerRunDelayed(SchedulerRunDelayedPayload),
     SchedulerModelLifecycleChanged(SchedulerModelLifecycleChangedPayload),
     SchedulerRunAdmitted(SchedulerRunAdmittedPayload),
+    SchedulerReservationChanged(SchedulerReservationChangedPayload),
     RunStarted(RunStartedPayload),
     RunTerminal(RunTerminalPayload),
     RunSnapshotAccepted(RunSnapshotAcceptedPayload),
@@ -254,6 +258,9 @@ impl DiagnosticEventPayload {
                 DiagnosticEventKind::SchedulerModelLifecycleChanged
             }
             Self::SchedulerRunAdmitted(_) => DiagnosticEventKind::SchedulerRunAdmitted,
+            Self::SchedulerReservationChanged(_) => {
+                DiagnosticEventKind::SchedulerReservationChanged
+            }
             Self::RunStarted(_) => DiagnosticEventKind::RunStarted,
             Self::RunTerminal(_) => DiagnosticEventKind::RunTerminal,
             Self::RunSnapshotAccepted(_) => DiagnosticEventKind::RunSnapshotAccepted,
@@ -276,6 +283,7 @@ impl DiagnosticEventPayload {
             Self::SchedulerRunDelayed(payload) => payload.validate(),
             Self::SchedulerModelLifecycleChanged(payload) => payload.validate(),
             Self::SchedulerRunAdmitted(payload) => payload.validate(),
+            Self::SchedulerReservationChanged(payload) => payload.validate(),
             Self::RunStarted(payload) => payload.validate(),
             Self::RunTerminal(payload) => payload.validate(),
             Self::RunSnapshotAccepted(payload) => payload.validate(),
@@ -475,6 +483,84 @@ impl SchedulerRunAdmittedPayload {
             MAX_ID_LEN,
         )?;
         validate_text_list("reserved_model_ids", &self.reserved_model_ids)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SchedulerReservationTransition {
+    Created,
+    Released,
+}
+
+impl SchedulerReservationTransition {
+    fn summary(self) -> &'static str {
+        match self {
+            Self::Created => "reservation created",
+            Self::Released => "reservation released",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SchedulerReservationResourceKind {
+    RuntimeSlot,
+}
+
+impl SchedulerReservationResourceKind {
+    fn summary(self) -> &'static str {
+        match self {
+            Self::RuntimeSlot => "runtime slot",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SchedulerReservationChangedPayload {
+    pub transition: SchedulerReservationTransition,
+    pub reservation_id: String,
+    pub resource_kind: SchedulerReservationResourceKind,
+    #[serde(default)]
+    pub selected_runtime_id: Option<String>,
+    #[serde(default)]
+    pub selected_device_id: Option<String>,
+    #[serde(default)]
+    pub selected_network_node_id: Option<String>,
+    #[serde(default)]
+    pub reserved_model_ids: Vec<String>,
+    pub reason: Option<String>,
+}
+
+impl SchedulerReservationChangedPayload {
+    fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        validate_required_text("reservation_id", &self.reservation_id, MAX_ID_LEN)?;
+        validate_optional_text(
+            "selected_runtime_id",
+            self.selected_runtime_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "selected_device_id",
+            self.selected_device_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "selected_network_node_id",
+            self.selected_network_node_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_text_list("reserved_model_ids", &self.reserved_model_ids)?;
+        validate_optional_text("reservation_reason", self.reason.as_deref(), MAX_ID_LEN)
+    }
+
+    pub(crate) fn summary(&self) -> String {
+        format!(
+            "{} {}",
+            self.resource_kind.summary(),
+            self.transition.summary()
+        )
     }
 }
 
@@ -1704,6 +1790,7 @@ fn validate_event_scope(
         | DiagnosticEventKind::SchedulerRunDelayed
         | DiagnosticEventKind::SchedulerModelLifecycleChanged
         | DiagnosticEventKind::SchedulerRunAdmitted
+        | DiagnosticEventKind::SchedulerReservationChanged
         | DiagnosticEventKind::RunStarted
         | DiagnosticEventKind::RunTerminal
         | DiagnosticEventKind::RunSnapshotAccepted
@@ -1768,6 +1855,7 @@ fn validate_event_source(
         | DiagnosticEventKind::SchedulerRunDelayed
         | DiagnosticEventKind::SchedulerModelLifecycleChanged
         | DiagnosticEventKind::SchedulerRunAdmitted
+        | DiagnosticEventKind::SchedulerReservationChanged
         | DiagnosticEventKind::RunStarted => {
             matches!(source_component, DiagnosticEventSourceComponent::Scheduler)
         }

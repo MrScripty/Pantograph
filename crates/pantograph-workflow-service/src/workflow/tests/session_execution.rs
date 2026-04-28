@@ -337,7 +337,7 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         )
         .expect("diagnostic events")
     };
-    assert_eq!(diagnostic_events.len(), 14);
+    assert_eq!(diagnostic_events.len(), 16);
     let event = diagnostic_events
         .iter()
         .find(|event| {
@@ -506,6 +506,38 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         .payload_json
         .contains("\"reserved_model_ids\":[\"model-a\"]"));
 
+    let reservation_events = diagnostic_events
+        .iter()
+        .filter(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerReservationChanged
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(reservation_events.len(), 2);
+    assert!(reservation_events.iter().all(|event| event.source_component
+        == pantograph_diagnostics_ledger::DiagnosticEventSourceComponent::Scheduler));
+    assert!(reservation_events.iter().all(|event| event
+        .workflow_run_id
+        .as_ref()
+        .map(|id| id.as_str())
+        == Some(response.workflow_run_id.as_str())));
+    assert!(reservation_events
+        .iter()
+        .all(|event| event.runtime_id.as_deref() == Some("llama_cpp")));
+    assert!(reservation_events.iter().all(|event| event
+        .payload_json
+        .contains("\"resource_kind\":\"runtime_slot\"")));
+    assert!(reservation_events.iter().all(|event| event
+        .payload_json
+        .contains("\"reserved_model_ids\":[\"model-a\"]")));
+    assert!(reservation_events[0].event_seq > admitted_event.event_seq);
+    assert!(reservation_events[0]
+        .payload_json
+        .contains("\"transition\":\"created\""));
+    assert!(reservation_events[0]
+        .payload_json
+        .contains("\"reason\":\"local runtime slot admitted\""));
+
     let started_event = diagnostic_events
         .iter()
         .find(|event| {
@@ -520,7 +552,7 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         started_event.workflow_run_id.as_ref().map(|id| id.as_str()),
         Some(response.workflow_run_id.as_str())
     );
-    assert!(started_event.event_seq > admitted_event.event_seq);
+    assert!(started_event.event_seq > reservation_events[0].event_seq);
     assert!(started_event
         .payload_json
         .contains("\"scheduler_decision_reason\":"));
@@ -597,6 +629,13 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         .payload_json
         .contains("\"status\":\"completed\""));
     assert!(terminal_event.payload_json.contains("\"duration_ms\":"));
+    assert!(reservation_events[1].event_seq > terminal_event.event_seq);
+    assert!(reservation_events[1]
+        .payload_json
+        .contains("\"transition\":\"released\""));
+    assert!(reservation_events[1]
+        .payload_json
+        .contains("\"reason\":\"workflow run finished\""));
 
     let io_events = diagnostic_events
         .iter()
@@ -606,7 +645,7 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         })
         .collect::<Vec<_>>();
     assert_eq!(io_events.len(), 2);
-    assert!(io_events[0].event_seq > terminal_event.event_seq);
+    assert!(io_events[0].event_seq > reservation_events[1].event_seq);
     assert!(io_events.iter().any(|event| event
         .payload_json
         .contains("\"artifact_role\":\"workflow_input\"")));

@@ -133,6 +133,10 @@ semantics.
   and reserved model ids as typed bounded fields. Timeline projection details
   may display those selections, but admission remains a scheduler decision
   event instead of a runtime execution lifecycle event.
+- Scheduler reservation events record local runtime-slot reservation creation
+  and release with a typed transition, resource kind, reservation id, selected
+  runtime, and reserved model ids. They describe scheduler-held capacity, not
+  runtime execution lifecycle.
 - `run.snapshot_accepted` events carry bounded immutable snapshot metadata,
   including `workflow_run_snapshot_id`, `workflow_presentation_revision_id`,
   and `node_versions` entries with node id, node type, contract version, and
