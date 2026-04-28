@@ -5,6 +5,7 @@ import { WorkflowProjectionService } from './WorkflowProjectionService.ts';
 import { WorkflowServiceError } from './workflowServiceErrors.ts';
 import type {
   WorkflowLibraryUsageQueryResponse,
+  WorkflowIoArtifactQueryResponse,
   WorkflowRunDetailQueryResponse,
   WorkflowRunListQueryResponse,
   WorkflowSchedulerEstimateQueryResponse,
@@ -366,6 +367,94 @@ test('queryLibraryUsage preserves warm projection catching-up state', async () =
     assert.equal(result.projection_state.status, 'rebuilding');
     assert.equal(result.projection_state.last_applied_event_seq, 9);
     assert.equal(result.assets[0].last_event_seq, 9);
+  } finally {
+    clearMocks();
+  }
+});
+
+test('queryIoArtifacts preserves endpoint filters and retention summaries', async () => {
+  installWindowMock();
+  const calls: Array<{ cmd: string; args: unknown }> = [];
+  const response: WorkflowIoArtifactQueryResponse = {
+    artifacts: [
+      {
+        event_seq: 13,
+        event_id: 'event-io-a',
+        occurred_at_ms: 300,
+        recorded_at_ms: 301,
+        workflow_run_id: 'run-a',
+        workflow_id: 'workflow-a',
+        workflow_version_id: 'wfver-a',
+        workflow_semantic_version: '1.2.3',
+        node_id: 'node-a',
+        node_type: 'image',
+        node_version: '1.0.0',
+        runtime_id: 'runtime-a',
+        runtime_version: '0.1.0',
+        model_id: 'model-a',
+        model_version: null,
+        artifact_id: 'artifact-a',
+        artifact_role: 'node_output',
+        producer_node_id: 'node-a',
+        producer_port_id: 'out',
+        consumer_node_id: null,
+        consumer_port_id: null,
+        media_type: 'image/png',
+        size_bytes: 128,
+        content_hash: 'blake3:test',
+        payload_ref: 'artifact://artifact-a',
+        retention_state: 'retained',
+        retention_reason: null,
+        retention_policy_id: 'standard-local-v1',
+      },
+    ],
+    retention_summary: [
+      {
+        retention_state: 'retained',
+        artifact_count: 1,
+      },
+    ],
+    projection_state: {
+      projection_name: 'io_artifact',
+      projection_version: 4,
+      last_applied_event_seq: 13,
+      status: 'current',
+      rebuilt_at_ms: null,
+      updated_at_ms: 305,
+    },
+  };
+  mockIPC((cmd, args) => {
+    calls.push({ cmd, args });
+    return response;
+  });
+
+  try {
+    const service = new WorkflowProjectionService();
+    const result = await service.queryIoArtifacts({
+      workflow_run_id: 'run-a',
+      producer_node_id: 'node-a',
+      consumer_node_id: null,
+      retention_state: 'retained',
+      limit: 25,
+    });
+
+    assert.deepEqual(result, response);
+    assert.deepEqual(calls, [
+      {
+        cmd: 'workflow_io_artifact_query',
+        args: {
+          request: {
+            workflow_run_id: 'run-a',
+            producer_node_id: 'node-a',
+            consumer_node_id: null,
+            retention_state: 'retained',
+            limit: 25,
+          },
+        },
+      },
+    ]);
+    assert.equal(result.artifacts[0].producer_node_id, 'node-a');
+    assert.equal(result.retention_summary[0].artifact_count, 1);
   } finally {
     clearMocks();
   }

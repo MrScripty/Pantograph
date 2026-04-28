@@ -1,6 +1,8 @@
 import type {
   WorkflowLibraryUsageQueryRequest,
   WorkflowLibraryUsageQueryResponse,
+  WorkflowIoArtifactQueryRequest,
+  WorkflowIoArtifactQueryResponse,
   WorkflowRunDetailQueryRequest,
   WorkflowRunDetailQueryResponse,
   WorkflowRunListQueryRequest,
@@ -122,6 +124,29 @@ export class WorkflowProjectionService extends WorkflowGraphMutationService {
     }
 
     return invokeWorkflowCommand<WorkflowLibraryUsageQueryResponse>('workflow_library_usage_query', {
+      request,
+    });
+  }
+
+  async queryIoArtifacts(
+    request: WorkflowIoArtifactQueryRequest,
+  ): Promise<WorkflowIoArtifactQueryResponse> {
+    if (USE_WORKFLOW_MOCKS) {
+      return {
+        artifacts: [],
+        retention_summary: [],
+        projection_state: {
+          projection_name: 'io_artifact',
+          projection_version: 4,
+          last_applied_event_seq: 0,
+          status: 'current',
+          rebuilt_at_ms: null,
+          updated_at_ms: Date.now(),
+        },
+      };
+    }
+
+    return invokeWorkflowCommand<WorkflowIoArtifactQueryResponse>('workflow_io_artifact_query', {
       request,
     });
   }

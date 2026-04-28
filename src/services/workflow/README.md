@@ -66,10 +66,11 @@ Connection-intent invoke wiring now lives in
 `workflowConnectionActions.ts` so `WorkflowService.ts` stays focused on
 session ownership, mock branching, and legacy app-facing method shapes.
 Projection invoke wiring now lives in `WorkflowProjectionService.ts` so the
-scheduler timeline, run-list, selected-run, and warm Library usage read paths
-can be tested without loading the graph package runtime. `WorkflowService`
-inherits that boundary so existing GUI callers keep the same method names while
-projection DTO tests stay focused on Tauri request/response contracts.
+scheduler timeline, run-list, selected-run, I/O artifact, and warm Library
+usage read paths can be tested without loading the graph package runtime.
+`WorkflowService` inherits that boundary so existing GUI callers keep the same
+method names while projection DTO tests stay focused on Tauri request/response
+contracts.
 Run-list projection DTOs preserve backend-provided client, client-session,
 bucket, and workflow execution-session scope fields so Scheduler pages can
 render authority context and future queue-control targets without querying
@@ -256,9 +257,10 @@ const preview = await workflowService.previewNodeInsertOnEdge(
   Native and mock paths must preserve the field so workbench pages do not infer
   workflow-version or policy counts from partial client-side pages.
 - `WorkflowProjectionService` forwards `workflow_scheduler_timeline_query`,
-  `workflow_run_list_query`, `workflow_run_detail_query`, and
-  `workflow_library_usage_query` requests under a `{ request }` envelope and
-  preserves backend DTO fields exactly for projection consumers.
+  `workflow_run_list_query`, `workflow_run_detail_query`,
+  `workflow_io_artifact_query`, and `workflow_library_usage_query` requests
+  under a `{ request }` envelope and preserves backend DTO fields exactly for
+  projection consumers.
 - Workbench-facing workflow commands preserve backend error categories through
   `WorkflowServiceError.code`. Non-envelope IPC or setup failures are
   classified as `transport_error` so they are not confused with backend policy

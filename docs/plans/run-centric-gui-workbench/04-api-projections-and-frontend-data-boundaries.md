@@ -313,8 +313,8 @@ projections while owning only transient UI state.
 **Status:** Complete. Projection invoke wiring is now split into
 `WorkflowProjectionService`, with `WorkflowService` inheriting that boundary
 for existing GUI callers. The adapter covers scheduler timeline, run-list,
-selected-run, and warm Library usage reads. Workbench-facing workflow command
-paths now normalize backend JSON error envelopes into typed
+selected-run, I/O artifact, and warm Library usage reads. Workbench-facing
+workflow command paths now normalize backend JSON error envelopes into typed
 `WorkflowServiceError` values, and workbench pages format failures through a
 shared presenter so categories such as `invalid_request`, `scheduler_busy`, and
 `queue_item_not_found` are not collapsed into generic strings. Broader
@@ -358,12 +358,12 @@ workflow execution-session scope fields, and server-side filters for client,
 client-session, bucket, and accepted-at ranges so Scheduler and Diagnostics
 pages do not recover authority or time-scope context from raw events. Backend
 fixture coverage for typed event projection, retained artifact browsing,
-expired I/O artifact state, and warm Library usage catching-up state is also in
-place. Frontend error-envelope coverage now proves projection service calls
-preserve backend error categories through typed service errors and shared
-workbench presenters. Queue and retention command coverage proves frontend
-service consumers receive backend-owned command DTOs without optimistic
-replacement.
+expired I/O artifact state, I/O artifact endpoint filters, and warm Library
+usage catching-up state is also in place. Frontend error-envelope coverage now
+proves projection service calls preserve backend error categories through typed
+service errors and shared workbench presenters. Queue and retention command
+coverage proves frontend service consumers receive backend-owned command DTOs
+without optimistic replacement.
 
 ## Ownership And Lifecycle Note
 
