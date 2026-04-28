@@ -5,7 +5,8 @@ use uuid::Uuid;
 use crate::graph::WorkflowExecutionSessionKind;
 use crate::technical_fit::WorkflowTechnicalFitOverride;
 use crate::workflow::{
-    WorkflowOutputTarget, WorkflowPortBinding, WorkflowRuntimeIssue, WorkflowServiceError,
+    WorkflowLocalRunPlacementRecord, WorkflowLocalRunPlacementState, WorkflowOutputTarget,
+    WorkflowPortBinding, WorkflowRuntimeIssue, WorkflowServiceError,
 };
 
 use super::{
@@ -220,6 +221,38 @@ impl WorkflowExecutionSessionStore {
                     .queue
                     .iter()
                     .map(|queued| queued.workflow_run_id.clone())
+            })
+            .collect()
+    }
+
+    pub(crate) fn run_placements(&self) -> Vec<WorkflowLocalRunPlacementRecord> {
+        self.active
+            .iter()
+            .flat_map(|(session_id, state)| {
+                let running =
+                    state
+                        .active_run
+                        .as_ref()
+                        .map(|active_run| WorkflowLocalRunPlacementRecord {
+                            workflow_run_id: active_run.workflow_run_id.clone(),
+                            workflow_execution_session_id: session_id.clone(),
+                            workflow_id: state.workflow_id.clone(),
+                            state: WorkflowLocalRunPlacementState::Running,
+                            runtime_loaded: state.runtime_loaded,
+                            required_backends: state.required_backends.clone(),
+                            required_models: state.required_models.clone(),
+                        });
+                running.into_iter().chain(state.queue.iter().map(|queued| {
+                    WorkflowLocalRunPlacementRecord {
+                        workflow_run_id: queued.workflow_run_id.clone(),
+                        workflow_execution_session_id: session_id.clone(),
+                        workflow_id: state.workflow_id.clone(),
+                        state: WorkflowLocalRunPlacementState::Queued,
+                        runtime_loaded: state.runtime_loaded,
+                        required_backends: state.required_backends.clone(),
+                        required_models: state.required_models.clone(),
+                    }
+                }))
             })
             .collect()
     }

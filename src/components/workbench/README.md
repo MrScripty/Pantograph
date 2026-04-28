@@ -224,6 +224,9 @@ transient UI state without becoming backend scheduler policy.
 - Network selected-run placement uses backend-provided local active/queued run
   id lists from scheduler-load facts. It must not infer runtime/model/cache
   residency from selected-run context alone.
+- Network selected-run placement details render backend-provided run-placement
+  records for session id, runtime-loaded posture, and required backend/model
+  facts. These are scheduler facts, not cache-residency claims.
 - Network selected-run events use `workflowService.querySchedulerTimeline` and
   render typed scheduler projection summaries. The page must not read raw
   diagnostic ledger rows to explain local scheduler activity.

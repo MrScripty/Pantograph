@@ -323,6 +323,18 @@ export interface WorkflowLocalGpuMetrics {
   reason?: string | null;
 }
 
+export type WorkflowLocalRunPlacementState = 'running' | 'queued';
+
+export interface WorkflowLocalRunPlacementRecord {
+  workflow_run_id: string;
+  workflow_execution_session_id: string;
+  workflow_id: string;
+  state: WorkflowLocalRunPlacementState;
+  runtime_loaded: boolean;
+  required_backends: string[];
+  required_models: string[];
+}
+
 export interface WorkflowLocalSchedulerLoad {
   max_sessions: number;
   active_session_count: number;
@@ -332,6 +344,7 @@ export interface WorkflowLocalSchedulerLoad {
   queued_run_count: number;
   active_workflow_run_ids: string[];
   queued_workflow_run_ids: string[];
+  run_placements: WorkflowLocalRunPlacementRecord[];
 }
 
 export interface WorkflowDerivedGraph {

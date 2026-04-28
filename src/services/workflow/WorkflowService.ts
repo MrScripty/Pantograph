@@ -384,6 +384,7 @@ export class WorkflowService extends WorkflowCommandService {
             queued_run_count: 0,
             active_workflow_run_ids: [],
             queued_workflow_run_ids: [],
+            run_placements: [],
           },
           degradation_warnings: ['GPU metrics are not available in mock workflow service'],
         },

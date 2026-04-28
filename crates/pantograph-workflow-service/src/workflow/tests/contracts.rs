@@ -252,6 +252,15 @@ fn workflow_local_network_status_roundtrip_uses_snake_case() {
                 queued_run_count: 3,
                 active_workflow_run_ids: vec!["run-active".to_string()],
                 queued_workflow_run_ids: vec!["run-queued".to_string()],
+                run_placements: vec![WorkflowLocalRunPlacementRecord {
+                    workflow_run_id: "run-active".to_string(),
+                    workflow_execution_session_id: "session-a".to_string(),
+                    workflow_id: "workflow-a".to_string(),
+                    state: WorkflowLocalRunPlacementState::Running,
+                    runtime_loaded: true,
+                    required_backends: vec!["python".to_string()],
+                    required_models: vec!["model-a".to_string()],
+                }],
             },
             degradation_warnings: vec!["not implemented".to_string()],
         },
@@ -273,6 +282,14 @@ fn workflow_local_network_status_roundtrip_uses_snake_case() {
     assert_eq!(
         json["local_node"]["scheduler_load"]["queued_workflow_run_ids"][0],
         "run-queued"
+    );
+    assert_eq!(
+        json["local_node"]["scheduler_load"]["run_placements"][0]["state"],
+        "running"
+    );
+    assert_eq!(
+        json["local_node"]["scheduler_load"]["run_placements"][0]["required_models"][0],
+        "model-a"
     );
     assert_eq!(
         json["local_node"]["system"]["network_interfaces"][0]["total_received_bytes"],

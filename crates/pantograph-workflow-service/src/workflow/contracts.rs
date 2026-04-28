@@ -394,6 +394,27 @@ pub struct WorkflowLocalGpuMetrics {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+pub enum WorkflowLocalRunPlacementState {
+    Running,
+    Queued,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowLocalRunPlacementRecord {
+    pub workflow_run_id: String,
+    pub workflow_execution_session_id: String,
+    pub workflow_id: String,
+    pub state: WorkflowLocalRunPlacementState,
+    pub runtime_loaded: bool,
+    #[serde(default)]
+    pub required_backends: Vec<String>,
+    #[serde(default)]
+    pub required_models: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub struct WorkflowLocalSchedulerLoad {
     pub max_sessions: usize,
     pub active_session_count: usize,
@@ -405,6 +426,8 @@ pub struct WorkflowLocalSchedulerLoad {
     pub active_workflow_run_ids: Vec<String>,
     #[serde(default)]
     pub queued_workflow_run_ids: Vec<String>,
+    #[serde(default)]
+    pub run_placements: Vec<WorkflowLocalRunPlacementRecord>,
 }
 
 /// Workflow preflight request for request-shape and runtime-readiness validation.

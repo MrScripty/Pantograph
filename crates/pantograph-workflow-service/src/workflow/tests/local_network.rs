@@ -55,8 +55,15 @@ async fn local_network_status_reports_local_node_and_scheduler_load() {
     assert_eq!(response.local_node.scheduler_load.queued_run_count, 1);
     assert_eq!(
         response.local_node.scheduler_load.queued_workflow_run_ids,
-        vec![queued_run_id]
+        vec![queued_run_id.clone()]
     );
+    assert_eq!(response.local_node.scheduler_load.run_placements.len(), 1);
+    let placement = &response.local_node.scheduler_load.run_placements[0];
+    assert_eq!(placement.workflow_run_id, queued_run_id);
+    assert_eq!(placement.workflow_execution_session_id, created.session_id);
+    assert_eq!(placement.workflow_id, "wf-local-network");
+    assert_eq!(placement.state, WorkflowLocalRunPlacementState::Queued);
+    assert!(placement.runtime_loaded);
     assert!(response
         .local_node
         .scheduler_load

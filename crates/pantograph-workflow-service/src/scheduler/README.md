@@ -100,6 +100,9 @@ needs to be the long-term home for scheduler contracts or queue mutation logic.
 - Scheduler store active/queued workflow-run id accessors are local scheduler
   facts for the Network page. They expose placement only and must not be used
   to imply model, runtime, or cache residency.
+- Local run-placement records may include session runtime posture and required
+  backend/model facts from scheduler state. They remain scheduler observations,
+  not proof that a model is loaded in a runtime cache.
 - Queue insertion should move the constructed queued-run record directly into
   the store so scheduler state transitions do not accumulate redundant
   rebinding or hidden policy steps.

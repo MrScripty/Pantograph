@@ -119,8 +119,9 @@ Use `workflow/tests/` for behavior-specific child modules under the parent
   lifecycle events for runtime admission required-model loads before terminal
   run events and ephemeral required-model unloads after I/O artifact events.
 - Local Network status tests must verify selected-run placement through
-  backend-provided active/queued workflow run id fields instead of deriving
-  placement from queue counts or selected-run context.
+  backend-provided active/queued workflow run id fields and typed run-placement
+  records instead of deriving placement or runtime posture from queue counts or
+  selected-run context.
 - New behavior families should be added here only when they are cohesive enough
   to reduce `workflow/tests.rs` without hiding shared test setup.
 

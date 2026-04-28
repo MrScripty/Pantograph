@@ -1,5 +1,6 @@
 import type {
   WorkflowLocalNetworkNodeStatus,
+  WorkflowLocalRunPlacementRecord,
   WorkflowNetworkTransportState,
 } from '../../services/workflow/types';
 
@@ -74,6 +75,13 @@ export function formatSelectedRunLocalState(
   if (!workflowRunId) {
     return 'No selected run';
   }
+  const placement = findSelectedRunPlacement(node, workflowRunId);
+  if (placement?.state === 'running') {
+    return 'Running locally';
+  }
+  if (placement?.state === 'queued') {
+    return 'Queued locally';
+  }
   if (node.scheduler_load.active_workflow_run_ids.includes(workflowRunId)) {
     return 'Running locally';
   }
@@ -81,6 +89,27 @@ export function formatSelectedRunLocalState(
     return 'Queued locally';
   }
   return 'Not scheduled locally';
+}
+
+export function findSelectedRunPlacement(
+  node: WorkflowLocalNetworkNodeStatus,
+  workflowRunId: string | null | undefined,
+): WorkflowLocalRunPlacementRecord | null {
+  if (!workflowRunId) {
+    return null;
+  }
+  return node.scheduler_load.run_placements.find((placement) => placement.workflow_run_id === workflowRunId) ?? null;
+}
+
+export function formatSelectedRunRuntimePosture(placement: WorkflowLocalRunPlacementRecord | null): string {
+  if (!placement) {
+    return 'Unavailable';
+  }
+  return placement.runtime_loaded ? 'Runtime session loaded' : 'Runtime session not loaded';
+}
+
+export function formatSelectedRunRequirementList(values: string[], emptyLabel: string): string {
+  return values.length > 0 ? values.join(', ') : emptyLabel;
 }
 
 export function buildNetworkFactRows(node: WorkflowLocalNetworkNodeStatus): NetworkFactRow[] {

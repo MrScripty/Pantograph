@@ -77,6 +77,7 @@ impl WorkflowService {
                 queued_run_count: store.queued_run_count(),
                 active_workflow_run_ids: store.active_workflow_run_ids(),
                 queued_workflow_run_ids: store.queued_workflow_run_ids(),
+                run_placements: store.run_placements(),
             }
         };
         let display_name = system

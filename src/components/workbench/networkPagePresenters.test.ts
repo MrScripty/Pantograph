@@ -8,7 +8,10 @@ import {
   formatGpuAvailability,
   formatNetworkBytes,
   formatSchedulerLoad,
+  findSelectedRunPlacement,
+  formatSelectedRunRequirementList,
   formatSelectedRunLocalState,
+  formatSelectedRunRuntimePosture,
   formatSessionLoad,
   formatTransportState,
 } from './networkPagePresenters.ts';
@@ -62,6 +65,26 @@ function createNode(): WorkflowLocalNetworkNodeStatus {
       queued_run_count: 3,
       active_workflow_run_ids: ['run-active'],
       queued_workflow_run_ids: ['run-queued'],
+      run_placements: [
+        {
+          workflow_run_id: 'run-active',
+          workflow_execution_session_id: 'session-active',
+          workflow_id: 'workflow-a',
+          state: 'running',
+          runtime_loaded: true,
+          required_backends: ['python'],
+          required_models: ['model-a'],
+        },
+        {
+          workflow_run_id: 'run-queued',
+          workflow_execution_session_id: 'session-queued',
+          workflow_id: 'workflow-a',
+          state: 'queued',
+          runtime_loaded: false,
+          required_backends: [],
+          required_models: [],
+        },
+      ],
     },
     degradation_warnings: ['GPU probe unavailable'],
   };
@@ -92,6 +115,14 @@ test('network load presenters expose scheduler capacity', () => {
   assert.equal(formatSelectedRunLocalState(node, 'run-queued'), 'Queued locally');
   assert.equal(formatSelectedRunLocalState(node, 'run-missing'), 'Not scheduled locally');
   assert.equal(formatSelectedRunLocalState(node, null), 'No selected run');
+
+  const placement = findSelectedRunPlacement(node, 'run-active');
+  assert.equal(placement?.workflow_execution_session_id, 'session-active');
+  assert.equal(formatSelectedRunRuntimePosture(placement), 'Runtime session loaded');
+  assert.equal(formatSelectedRunRuntimePosture(findSelectedRunPlacement(node, 'run-queued')), 'Runtime session not loaded');
+  assert.equal(formatSelectedRunRuntimePosture(null), 'Unavailable');
+  assert.equal(formatSelectedRunRequirementList(placement?.required_backends ?? [], 'No backends'), 'python');
+  assert.equal(formatSelectedRunRequirementList([], 'No models'), 'No models');
 });
 
 test('buildNetworkFactRows summarizes local node capabilities', () => {
