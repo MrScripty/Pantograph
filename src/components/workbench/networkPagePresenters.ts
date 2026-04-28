@@ -1,8 +1,13 @@
+import type { LibraryUsageProjectionRecord } from '../../services/diagnostics/types';
 import type {
   WorkflowLocalNetworkNodeStatus,
   WorkflowLocalRunPlacementRecord,
   WorkflowNetworkTransportState,
 } from '../../services/workflow/types';
+import {
+  formatLibraryAssetCategory,
+  formatLibraryBytes,
+} from './libraryUsagePresenters.ts';
 
 export interface NetworkFactRow {
   label: string;
@@ -11,6 +16,14 @@ export interface NetworkFactRow {
 }
 
 export type NetworkSelectedRunPlacementRow = NetworkFactRow;
+
+export interface NetworkSelectedRunResourceRow {
+  assetId: string;
+  category: string;
+  cacheStatus: string;
+  networkBytes: string;
+  accessCount: string;
+}
 
 export function formatNetworkBytes(bytes: number | null | undefined): string {
   if (bytes === null || bytes === undefined) {
@@ -154,6 +167,28 @@ export function buildSelectedRunPlacementRows(
       value: formatSelectedRunRequirementList(placement.required_models, 'No model requirements'),
     },
   ];
+}
+
+export function buildSelectedRunResourceRows(
+  assets: LibraryUsageProjectionRecord[],
+): NetworkSelectedRunResourceRow[] {
+  return assets.map((asset) => ({
+    assetId: asset.asset_id,
+    category: formatLibraryAssetCategory(asset.asset_id),
+    cacheStatus: formatSelectedRunResourceCacheStatus(asset.last_cache_status),
+    networkBytes: formatLibraryBytes(asset.total_network_bytes),
+    accessCount: String(asset.run_access_count),
+  }));
+}
+
+export function formatSelectedRunResourceCacheStatus(value: string | null | undefined): string {
+  if (!value || value.trim().length === 0) {
+    return 'Cache status unavailable';
+  }
+  return value
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
 }
 
 export function buildNetworkFactRows(node: WorkflowLocalNetworkNodeStatus): NetworkFactRow[] {

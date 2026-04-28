@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { RefreshCw } from 'lucide-svelte';
   import type {
+    LibraryUsageProjectionRecord,
     ProjectionStateRecord,
     SchedulerTimelineProjectionRecord,
   } from '../../services/diagnostics/types';
@@ -11,6 +12,7 @@
   import {
     buildNetworkFactRows,
     buildSelectedRunPlacementRows,
+    buildSelectedRunResourceRows,
     formatCpuUsage,
     formatNetworkBytes,
     formatNetworkTimestamp,
@@ -20,6 +22,7 @@
     formatSessionLoad,
     formatTransportState,
   } from './networkPagePresenters';
+  import { formatLibraryProjectionFreshness } from './libraryUsagePresenters';
   import {
     formatSchedulerProjectionFreshness,
     formatSchedulerTimelineKind,
@@ -30,11 +33,15 @@
   import { formatWorkflowCommandError } from './workflowErrorPresenters';
 
   let status = $state<WorkflowLocalNetworkStatusQueryResponse | null>(null);
+  let selectedRunResources = $state<LibraryUsageProjectionRecord[]>([]);
+  let selectedRunResourceProjectionState = $state<ProjectionStateRecord | null>(null);
   let timelineEvents = $state<SchedulerTimelineProjectionRecord[]>([]);
   let timelineProjectionState = $state<ProjectionStateRecord | null>(null);
   let loading = $state(false);
+  let resourceLoading = $state(false);
   let timelineLoading = $state(false);
   let error = $state<string | null>(null);
+  let resourceError = $state<string | null>(null);
   let timelineError = $state<string | null>(null);
   let localNode = $derived(status?.local_node ?? null);
   let factRows = $derived(localNode ? buildNetworkFactRows(localNode) : []);
@@ -42,6 +49,8 @@
     localNode ? findSelectedRunPlacement(localNode, $activeWorkflowRun?.workflow_run_id) : null,
   );
   let selectedRunPlacementRows = $derived(buildSelectedRunPlacementRows(selectedRunPlacement));
+  let selectedRunResourceRows = $derived(buildSelectedRunResourceRows(selectedRunResources));
+  let resourceRequestSerial = 0;
   let timelineRequestSerial = 0;
 
   function activeRunId(): string | null {
@@ -99,8 +108,44 @@
     }
   }
 
+  async function refreshSelectedRunResources(runId = activeRunId()): Promise<void> {
+    const requestSerial = ++resourceRequestSerial;
+    resourceError = null;
+
+    if (!runId) {
+      selectedRunResources = [];
+      selectedRunResourceProjectionState = null;
+      resourceLoading = false;
+      return;
+    }
+
+    resourceLoading = true;
+    try {
+      const response = await workflowService.queryLibraryUsage({
+        workflow_run_id: runId,
+        limit: 24,
+      });
+      if (requestSerial !== resourceRequestSerial) {
+        return;
+      }
+      selectedRunResources = response.assets;
+      selectedRunResourceProjectionState = response.projection_state;
+    } catch (refreshError) {
+      if (requestSerial !== resourceRequestSerial) {
+        return;
+      }
+      resourceError = formatWorkflowCommandError(refreshError);
+      selectedRunResources = [];
+      selectedRunResourceProjectionState = null;
+    } finally {
+      if (requestSerial === resourceRequestSerial) {
+        resourceLoading = false;
+      }
+    }
+  }
+
   async function refreshNetworkPage(): Promise<void> {
-    await Promise.all([refreshStatus(), refreshTimeline()]);
+    await Promise.all([refreshStatus(), refreshTimeline(), refreshSelectedRunResources()]);
   }
 
   onMount(() => {
@@ -108,7 +153,9 @@
   });
 
   $effect(() => {
-    void refreshTimeline(activeRunId());
+    const runId = activeRunId();
+    void refreshTimeline(runId);
+    void refreshSelectedRunResources(runId);
   });
 </script>
 
@@ -124,9 +171,9 @@
       type="button"
       class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
       onclick={() => refreshNetworkPage()}
-      disabled={loading || timelineLoading}
+      disabled={loading || timelineLoading || resourceLoading}
     >
-      <RefreshCw size={14} aria-hidden="true" class={loading || timelineLoading ? 'animate-spin' : ''} />
+      <RefreshCw size={14} aria-hidden="true" class={loading || timelineLoading || resourceLoading ? 'animate-spin' : ''} />
       Refresh
     </button>
   </div>
@@ -235,6 +282,57 @@
                     </div>
                   {/each}
                 </dl>
+              </section>
+
+              <section class="rounded border border-neutral-800 bg-neutral-900/50">
+                <div class="flex items-start justify-between gap-3 border-b border-neutral-800 px-4 py-3">
+                  <div class="min-w-0">
+                    <h2 class="text-sm font-semibold text-neutral-100">Selected Run Resources</h2>
+                    <div class="mt-1 truncate text-xs text-neutral-500">
+                      {formatLibraryProjectionFreshness(selectedRunResourceProjectionState)}
+                    </div>
+                  </div>
+                  {#if resourceLoading}
+                    <RefreshCw size={12} aria-hidden="true" class="mt-1 shrink-0 animate-spin text-neutral-500" />
+                  {/if}
+                </div>
+                {#if resourceError}
+                  <div class="border-b border-red-900 bg-red-950/50 px-4 py-2 text-sm text-red-200">{resourceError}</div>
+                {/if}
+                {#if resourceLoading && selectedRunResourceRows.length === 0}
+                  <div class="px-4 py-6 text-sm text-neutral-500">Loading selected-run resources</div>
+                {:else if selectedRunResourceRows.length === 0}
+                  <div class="px-4 py-6 text-sm text-neutral-500">No selected-run Library usage projected</div>
+                {:else}
+                  <div class="overflow-auto">
+                    <table class="w-full min-w-[42rem] text-left text-sm">
+                      <thead class="bg-neutral-950 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
+                        <tr class="border-b border-neutral-800">
+                          <th class="px-4 py-3 font-medium">Asset</th>
+                          <th class="px-3 py-3 font-medium">Category</th>
+                          <th class="px-3 py-3 font-medium">Cache</th>
+                          <th class="px-3 py-3 font-medium">Network</th>
+                          <th class="px-4 py-3 font-medium">Run Access</th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-neutral-900">
+                        {#each selectedRunResourceRows as resource (resource.assetId)}
+                          <tr>
+                            <td class="max-w-[20rem] px-4 py-2">
+                              <div class="truncate font-mono text-xs text-neutral-200" title={resource.assetId}>
+                                {resource.assetId}
+                              </div>
+                            </td>
+                            <td class="px-3 py-2 text-neutral-400">{resource.category}</td>
+                            <td class="px-3 py-2 text-neutral-400">{resource.cacheStatus}</td>
+                            <td class="px-3 py-2 text-neutral-400">{resource.networkBytes}</td>
+                            <td class="px-4 py-2 font-mono text-xs text-neutral-300">{resource.accessCount}</td>
+                          </tr>
+                        {/each}
+                      </tbody>
+                    </table>
+                  </div>
+                {/if}
               </section>
             {/if}
 

@@ -25,8 +25,8 @@ later plan stages fill in richer page bodies.
 | `libraryUsagePresenters.test.ts` | Unit coverage for Library page presentation labels and active-run matching. |
 | `runGraphPresenters.ts` | Pure run graph summary, topology table, and SVG snapshot layout presenters. |
 | `runGraphPresenters.test.ts` | Unit coverage for run graph version/topology presentation without editor-store state. |
-| `NetworkPage.svelte` | Local-first node capability, scheduler load, selected-run placement and scheduler events, disk, network-interface, degradation, and peer status page. |
-| `networkPagePresenters.ts` | Pure Network page byte, transport, degraded metric, scheduler load, selected-run placement, and local capability presenters. |
+| `NetworkPage.svelte` | Local-first node capability, scheduler load, selected-run placement, selected-run Library resources, scheduler events, disk, network-interface, degradation, and peer status page. |
+| `networkPagePresenters.ts` | Pure Network page byte, transport, degraded metric, scheduler load, selected-run placement/resource, and local capability presenters. |
 | `networkPagePresenters.test.ts` | Unit coverage for Network page metric labels and degraded platform states. |
 | `workflowErrorPresenters.ts` | Shared workbench formatter for typed workflow service errors so backend categories remain visible in page messages. |
 | `workflowErrorPresenters.test.ts` | Unit coverage for backend error-envelope and transport-error formatting. |
@@ -241,6 +241,9 @@ transient UI state without becoming backend scheduler policy.
 - Network selected-run placement details render backend-provided run-placement
   records for session id, runtime-loaded posture, and required backend/model
   facts. These are scheduler facts, not cache-residency claims.
+- Network selected-run resources render active-run Library usage projection
+  rows and last cache observations. They are audit facts, not local
+  cache-residency claims.
 - Network selected-run events use `workflowService.querySchedulerTimeline` and
   render typed scheduler projection summaries. The page must not read raw
   diagnostic ledger rows to explain local scheduler activity.

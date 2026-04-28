@@ -347,7 +347,9 @@ authoring page.
 - [x] Show local instance identity, CPU/memory/GPU/disk where available,
   current load, active runs, queued work, and capability summary.
 - [ ] Show runtimes, models, cache state, and scheduler/system events when the
-  local status API exposes those facts.
+  local status API exposes those facts. Selected-run Library resources and last
+  cache observations are now displayed from the Library usage projection;
+  local cache residency remains pending local-status support.
 - [x] Structure Network data so future peer nodes can appear without a page
   rewrite.
 - [ ] Highlight active-run relevant local node/runtime/model state.
@@ -376,8 +378,11 @@ execution-session id, workflow id, local state, runtime-loaded posture, and
 required backend/model facts.
 Runtime/model cache highlights for the selected run remain open because the
 local status API still does not expose run-keyed cache residency facts. The
-page also reads the selected run's scheduler timeline projection so local
-scheduler/system activity can be inspected without raw ledger access.
+page displays selected-run Library resources and last cache observations from
+`workflowService.queryLibraryUsage`, keeping those rows as audit facts rather
+than local residency claims. The page also reads the selected run's scheduler
+timeline projection so local scheduler/system activity can be inspected without
+raw ledger access.
 The Node Editor page has a truthful unavailable state.
 
 ## Ownership And Lifecycle Note
@@ -487,6 +492,10 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
 - Added a Scheduler selected-run timeline panel backed by
   `workflowService.querySchedulerTimeline`, including projection freshness and
   typed summary/detail rendering without raw payload parsing.
+- Added Network selected-run resource rows backed by
+  `workflowService.queryLibraryUsage`, showing active-run Library assets and
+  last cache observations as projection facts without claiming local cache
+  residency.
 
 ### Deviations
 

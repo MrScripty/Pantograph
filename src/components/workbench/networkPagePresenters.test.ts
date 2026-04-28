@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import type { WorkflowLocalNetworkNodeStatus } from '../../services/workflow/types.ts';
 import {
   buildNetworkFactRows,
+  buildSelectedRunResourceRows,
   buildSelectedRunPlacementRows,
   formatCpuUsage,
   formatGpuAvailability,
@@ -11,6 +12,7 @@ import {
   formatSchedulerLoad,
   findSelectedRunPlacement,
   formatSelectedRunRequirementList,
+  formatSelectedRunResourceCacheStatus,
   formatSelectedRunLocalState,
   formatSelectedRunPlacementState,
   formatSelectedRunRuntimePosture,
@@ -141,6 +143,33 @@ test('buildSelectedRunPlacementRows exposes selected-run local relevance facts',
   assert.equal(rows.find((row) => row.label === 'Backends')?.value, 'python');
   assert.equal(rows.find((row) => row.label === 'Models')?.value, 'model-a');
   assert.equal(buildSelectedRunPlacementRows(null).find((row) => row.label === 'State')?.value, 'Not scheduled locally');
+});
+
+test('buildSelectedRunResourceRows exposes selected-run Library usage facts', () => {
+  const rows = buildSelectedRunResourceRows([
+    {
+      asset_id: 'model:llama',
+      total_access_count: 4,
+      run_access_count: 2,
+      total_network_bytes: 2_048,
+      last_accessed_at_ms: 1,
+      last_operation: 'read',
+      last_cache_status: 'cache_hit',
+      last_event_seq: 10,
+      last_updated_at_ms: 11,
+    },
+  ]);
+
+  assert.deepEqual(rows, [
+    {
+      assetId: 'model:llama',
+      category: 'Model',
+      cacheStatus: 'Cache Hit',
+      networkBytes: '2.0 KiB',
+      accessCount: '2',
+    },
+  ]);
+  assert.equal(formatSelectedRunResourceCacheStatus(null), 'Cache status unavailable');
 });
 
 test('buildNetworkFactRows summarizes local node capabilities', () => {
