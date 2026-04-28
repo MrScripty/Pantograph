@@ -1,18 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import type { NodeStatusProjectionRecord } from '../../services/diagnostics/types.ts';
 import type { WorkflowLocalNetworkNodeStatus } from '../../services/workflow/types.ts';
 import {
   buildNetworkFactRows,
+  buildSelectedRunExecutionRows,
   buildSelectedRunResourceRows,
   buildSelectedRunPlacementRows,
   formatCpuUsage,
   formatGpuAvailability,
   formatNetworkBytes,
+  formatNetworkProjectionFreshness,
   formatSchedulerLoad,
   findSelectedRunPlacement,
   formatSelectedRunRequirementList,
   formatSelectedRunResourceCacheStatus,
+  formatSelectedRunNodeStatus,
   formatSelectedRunLocalState,
   formatSelectedRunPlacementState,
   formatSelectedRunRuntimePosture,
@@ -94,6 +98,30 @@ function createNode(): WorkflowLocalNetworkNodeStatus {
   };
 }
 
+function createNodeStatus(overrides: Partial<NodeStatusProjectionRecord>): NodeStatusProjectionRecord {
+  return {
+    workflow_run_id: 'run-active',
+    workflow_id: 'workflow-a',
+    workflow_version_id: 'wfver-a',
+    workflow_semantic_version: '1.0.0',
+    node_id: 'node-a',
+    node_type: 'image.generate',
+    node_version: '1.0.0',
+    runtime_id: 'runtime-a',
+    runtime_version: '2.0.0',
+    model_id: 'model-a',
+    model_version: '3.0.0',
+    status: 'running',
+    started_at_ms: 1,
+    completed_at_ms: null,
+    duration_ms: null,
+    error: null,
+    last_event_seq: 9,
+    last_updated_at_ms: 10,
+    ...overrides,
+  };
+}
+
 test('network byte presenter keeps compact storage and traffic labels', () => {
   assert.equal(formatNetworkBytes(null), 'Unavailable');
   assert.equal(formatNetworkBytes(512), '512 B');
@@ -132,6 +160,21 @@ test('network load presenters expose scheduler capacity', () => {
   assert.equal(formatSelectedRunRequirementList([], 'No models'), 'No models');
 });
 
+test('formatNetworkProjectionFreshness keeps selected-run projection cursor visible', () => {
+  assert.equal(formatNetworkProjectionFreshness(null), 'Projection unavailable');
+  assert.equal(
+    formatNetworkProjectionFreshness({
+      projection_name: 'node_status',
+      projection_version: 1,
+      last_applied_event_seq: 42,
+      status: 'rebuilding',
+      rebuilt_at_ms: null,
+      updated_at_ms: 5,
+    }),
+    'Rebuilding at seq 42',
+  );
+});
+
 test('buildSelectedRunPlacementRows exposes selected-run local relevance facts', () => {
   const placement = findSelectedRunPlacement(createNode(), 'run-active');
   const rows = buildSelectedRunPlacementRows(placement);
@@ -143,6 +186,36 @@ test('buildSelectedRunPlacementRows exposes selected-run local relevance facts',
   assert.equal(rows.find((row) => row.label === 'Backends')?.value, 'python');
   assert.equal(rows.find((row) => row.label === 'Models')?.value, 'model-a');
   assert.equal(buildSelectedRunPlacementRows(null).find((row) => row.label === 'State')?.value, 'Not scheduled locally');
+});
+
+test('buildSelectedRunExecutionRows exposes selected-run node runtime and model facts', () => {
+  const rows = buildSelectedRunExecutionRows([
+    createNodeStatus({ node_id: 'node-a', status: 'running' }),
+    createNodeStatus({
+      node_id: 'node-b',
+      status: 'waiting',
+      runtime_id: null,
+      runtime_version: null,
+      model_id: '',
+      model_version: null,
+    }),
+  ]);
+
+  assert.deepEqual(rows, [
+    {
+      nodeId: 'node-a',
+      status: 'Running',
+      runtime: 'runtime-a@2.0.0',
+      model: 'model-a@3.0.0',
+    },
+    {
+      nodeId: 'node-b',
+      status: 'Waiting',
+      runtime: 'Runtime unavailable',
+      model: 'Model unavailable',
+    },
+  ]);
+  assert.equal(formatSelectedRunNodeStatus('cancelled'), 'Cancelled');
 });
 
 test('buildSelectedRunResourceRows exposes selected-run Library usage facts', () => {

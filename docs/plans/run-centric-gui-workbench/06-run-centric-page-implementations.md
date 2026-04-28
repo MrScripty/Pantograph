@@ -350,8 +350,10 @@ authoring page.
   current load, active runs, queued work, and capability summary.
 - [ ] Show runtimes, models, cache state, and scheduler/system events when the
   local status API exposes those facts. Selected-run Library resources and last
-  cache observations are now displayed from the Library usage projection;
-  local cache residency remains pending local-status support.
+  cache observations are now displayed from the Library usage projection.
+  Selected-run node/runtime/model execution labels are displayed from the
+  node-status projection. Local cache residency remains pending local-status
+  support.
 - [x] Structure Network data so future peer nodes can appear without a page
   rewrite.
 - [ ] Highlight active-run relevant local node/runtime/model state.
@@ -382,9 +384,12 @@ Runtime/model cache highlights for the selected run remain open because the
 local status API still does not expose run-keyed cache residency facts. The
 page displays selected-run Library resources and last cache observations from
 `workflowService.queryLibraryUsage`, keeping those rows as audit facts rather
-than local residency claims. The page also reads the selected run's scheduler
-timeline projection so local scheduler/system activity can be inspected without
-raw ledger access.
+than local residency claims. The page also displays selected-run node status,
+runtime id/version, and model id/version labels from
+`workflowService.queryNodeStatus`, keeping those rows as execution projection
+facts rather than cache-residency claims. The page also reads the selected
+run's scheduler timeline projection so local scheduler/system activity can be
+inspected without raw ledger access.
 The Node Editor page has a truthful unavailable state.
 
 ## Ownership And Lifecycle Note

@@ -25,8 +25,8 @@ later plan stages fill in richer page bodies.
 | `libraryUsagePresenters.test.ts` | Unit coverage for Library page presentation labels and active-run matching. |
 | `runGraphPresenters.ts` | Pure run graph summary, topology table, and SVG snapshot layout presenters. |
 | `runGraphPresenters.test.ts` | Unit coverage for run graph version/topology presentation without editor-store state. |
-| `NetworkPage.svelte` | Local-first node capability, scheduler load, selected-run placement, selected-run Library resources, scheduler events, disk, network-interface, degradation, and peer status page. |
-| `networkPagePresenters.ts` | Pure Network page byte, transport, degraded metric, scheduler load, selected-run placement/resource, and local capability presenters. |
+| `NetworkPage.svelte` | Local-first node capability, scheduler load, selected-run placement, selected-run execution state, selected-run Library resources, scheduler events, disk, network-interface, degradation, and peer status page. |
+| `networkPagePresenters.ts` | Pure Network page byte, transport, degraded metric, scheduler load, selected-run placement/execution/resource, projection freshness, and local capability presenters. |
 | `networkPagePresenters.test.ts` | Unit coverage for Network page metric labels and degraded platform states. |
 | `workflowErrorPresenters.ts` | Shared workbench formatter for typed workflow service errors so backend categories remain visible in page messages. |
 | `workflowErrorPresenters.test.ts` | Unit coverage for backend error-envelope and transport-error formatting. |
@@ -127,6 +127,8 @@ transient UI state without becoming backend scheduler policy.
 - Network selected-run placement rows must come from local status placement
   records. Components must not infer runtime/model state from workflow ids or
   scheduler event payloads.
+- Network selected-run execution rows must come from node-status projections.
+  They are execution facts, not local cache-residency facts.
 - Workbench pages must not consume raw diagnostic ledger events.
 - Reserved pages must not invent backend state; they should display only data
   available through typed services or explicit unavailable states.
@@ -247,6 +249,9 @@ transient UI state without becoming backend scheduler policy.
 - Network selected-run resources render active-run Library usage projection
   rows and last cache observations. They are audit facts, not local
   cache-residency claims.
+- Network selected-run execution rows render `NodeStatusProjectionRecord`
+  fields for node status, runtime id/version, and model id/version. They are
+  not cache-residency claims.
 - Network selected-run events use `workflowService.querySchedulerTimeline` and
   render typed scheduler projection summaries. The page must not read raw
   diagnostic ledger rows to explain local scheduler activity.

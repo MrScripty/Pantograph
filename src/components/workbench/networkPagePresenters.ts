@@ -1,4 +1,8 @@
-import type { LibraryUsageProjectionRecord } from '../../services/diagnostics/types';
+import type {
+  LibraryUsageProjectionRecord,
+  NodeStatusProjectionRecord,
+  ProjectionStateRecord,
+} from '../../services/diagnostics/types';
 import type {
   WorkflowLocalNetworkNodeStatus,
   WorkflowLocalRunPlacementRecord,
@@ -25,6 +29,13 @@ export interface NetworkSelectedRunResourceRow {
   accessCount: string;
 }
 
+export interface NetworkSelectedRunExecutionRow {
+  nodeId: string;
+  status: string;
+  runtime: string;
+  model: string;
+}
+
 export function formatNetworkBytes(bytes: number | null | undefined): string {
   if (bytes === null || bytes === undefined) {
     return 'Unavailable';
@@ -43,6 +54,23 @@ export function formatNetworkBytes(bytes: number | null | undefined): string {
 
 export function formatNetworkTimestamp(value: number): string {
   return new Date(value).toLocaleString();
+}
+
+export function formatNetworkProjectionFreshness(state: ProjectionStateRecord | null): string {
+  if (!state) {
+    return 'Projection unavailable';
+  }
+  const cursor = `seq ${state.last_applied_event_seq}`;
+  switch (state.status) {
+    case 'current':
+      return `Current at ${cursor}`;
+    case 'rebuilding':
+      return `Rebuilding at ${cursor}`;
+    case 'needs_rebuild':
+      return `Needs rebuild at ${cursor}`;
+    case 'failed':
+      return `Failed at ${cursor}`;
+  }
 }
 
 export function formatTransportState(state: WorkflowNetworkTransportState): string {
@@ -181,10 +209,28 @@ export function buildSelectedRunResourceRows(
   }));
 }
 
+export function buildSelectedRunExecutionRows(
+  nodes: NodeStatusProjectionRecord[],
+): NetworkSelectedRunExecutionRow[] {
+  return nodes.map((node) => ({
+    nodeId: node.node_id,
+    status: formatSelectedRunNodeStatus(node.status),
+    runtime: formatSelectedRunVersionedLabel(node.runtime_id, node.runtime_version, 'Runtime unavailable'),
+    model: formatSelectedRunVersionedLabel(node.model_id, node.model_version, 'Model unavailable'),
+  }));
+}
+
 export function formatSelectedRunResourceCacheStatus(value: string | null | undefined): string {
   if (!value || value.trim().length === 0) {
     return 'Cache status unavailable';
   }
+  return value
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+export function formatSelectedRunNodeStatus(value: NodeStatusProjectionRecord['status']): string {
   return value
     .split('_')
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
@@ -207,6 +253,17 @@ export function buildNetworkFactRows(node: WorkflowLocalNetworkNodeStatus): Netw
     { label: 'Disks', value: String(node.system.disks.length) },
     { label: 'Network Interfaces', value: String(node.system.network_interfaces.length) },
   ];
+}
+
+function formatSelectedRunVersionedLabel(
+  id: string | null | undefined,
+  version: string | null | undefined,
+  fallback: string,
+): string {
+  if (!id || id.trim().length === 0) {
+    return fallback;
+  }
+  return version && version.trim().length > 0 ? `${id}@${version}` : id;
 }
 
 function formatOsLabel(node: WorkflowLocalNetworkNodeStatus): string {

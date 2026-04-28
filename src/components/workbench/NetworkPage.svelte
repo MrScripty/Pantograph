@@ -3,6 +3,7 @@
   import { RefreshCw } from 'lucide-svelte';
   import type {
     LibraryUsageProjectionRecord,
+    NodeStatusProjectionRecord,
     ProjectionStateRecord,
     SchedulerTimelineProjectionRecord,
   } from '../../services/diagnostics/types';
@@ -11,10 +12,12 @@
   import { activeWorkflowRun } from '../../stores/workbenchStore';
   import {
     buildNetworkFactRows,
+    buildSelectedRunExecutionRows,
     buildSelectedRunPlacementRows,
     buildSelectedRunResourceRows,
     formatCpuUsage,
     formatNetworkBytes,
+    formatNetworkProjectionFreshness,
     formatNetworkTimestamp,
     formatSchedulerLoad,
     findSelectedRunPlacement,
@@ -35,13 +38,17 @@
   let status = $state<WorkflowLocalNetworkStatusQueryResponse | null>(null);
   let selectedRunResources = $state<LibraryUsageProjectionRecord[]>([]);
   let selectedRunResourceProjectionState = $state<ProjectionStateRecord | null>(null);
+  let selectedRunNodeStatuses = $state<NodeStatusProjectionRecord[]>([]);
+  let selectedRunNodeStatusProjectionState = $state<ProjectionStateRecord | null>(null);
   let timelineEvents = $state<SchedulerTimelineProjectionRecord[]>([]);
   let timelineProjectionState = $state<ProjectionStateRecord | null>(null);
   let loading = $state(false);
   let resourceLoading = $state(false);
+  let nodeStatusLoading = $state(false);
   let timelineLoading = $state(false);
   let error = $state<string | null>(null);
   let resourceError = $state<string | null>(null);
+  let nodeStatusError = $state<string | null>(null);
   let timelineError = $state<string | null>(null);
   let localNode = $derived(status?.local_node ?? null);
   let factRows = $derived(localNode ? buildNetworkFactRows(localNode) : []);
@@ -50,7 +57,9 @@
   );
   let selectedRunPlacementRows = $derived(buildSelectedRunPlacementRows(selectedRunPlacement));
   let selectedRunResourceRows = $derived(buildSelectedRunResourceRows(selectedRunResources));
+  let selectedRunExecutionRows = $derived(buildSelectedRunExecutionRows(selectedRunNodeStatuses));
   let resourceRequestSerial = 0;
+  let nodeStatusRequestSerial = 0;
   let timelineRequestSerial = 0;
 
   function activeRunId(): string | null {
@@ -144,8 +153,49 @@
     }
   }
 
+  async function refreshSelectedRunNodeStatuses(runId = activeRunId()): Promise<void> {
+    const requestSerial = ++nodeStatusRequestSerial;
+    nodeStatusError = null;
+
+    if (!runId) {
+      selectedRunNodeStatuses = [];
+      selectedRunNodeStatusProjectionState = null;
+      nodeStatusLoading = false;
+      return;
+    }
+
+    nodeStatusLoading = true;
+    try {
+      const response = await workflowService.queryNodeStatus({
+        workflow_run_id: runId,
+        limit: 48,
+      });
+      if (requestSerial !== nodeStatusRequestSerial) {
+        return;
+      }
+      selectedRunNodeStatuses = response.nodes;
+      selectedRunNodeStatusProjectionState = response.projection_state;
+    } catch (refreshError) {
+      if (requestSerial !== nodeStatusRequestSerial) {
+        return;
+      }
+      nodeStatusError = formatWorkflowCommandError(refreshError);
+      selectedRunNodeStatuses = [];
+      selectedRunNodeStatusProjectionState = null;
+    } finally {
+      if (requestSerial === nodeStatusRequestSerial) {
+        nodeStatusLoading = false;
+      }
+    }
+  }
+
   async function refreshNetworkPage(): Promise<void> {
-    await Promise.all([refreshStatus(), refreshTimeline(), refreshSelectedRunResources()]);
+    await Promise.all([
+      refreshStatus(),
+      refreshTimeline(),
+      refreshSelectedRunResources(),
+      refreshSelectedRunNodeStatuses(),
+    ]);
   }
 
   onMount(() => {
@@ -156,6 +206,7 @@
     const runId = activeRunId();
     void refreshTimeline(runId);
     void refreshSelectedRunResources(runId);
+    void refreshSelectedRunNodeStatuses(runId);
   });
 </script>
 
@@ -171,9 +222,13 @@
       type="button"
       class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
       onclick={() => refreshNetworkPage()}
-      disabled={loading || timelineLoading || resourceLoading}
+      disabled={loading || timelineLoading || resourceLoading || nodeStatusLoading}
     >
-      <RefreshCw size={14} aria-hidden="true" class={loading || timelineLoading || resourceLoading ? 'animate-spin' : ''} />
+      <RefreshCw
+        size={14}
+        aria-hidden="true"
+        class={loading || timelineLoading || resourceLoading || nodeStatusLoading ? 'animate-spin' : ''}
+      />
       Refresh
     </button>
   </div>
@@ -282,6 +337,57 @@
                     </div>
                   {/each}
                 </dl>
+              </section>
+
+              <section class="rounded border border-neutral-800 bg-neutral-900/50">
+                <div class="flex items-start justify-between gap-3 border-b border-neutral-800 px-4 py-3">
+                  <div class="min-w-0">
+                    <h2 class="text-sm font-semibold text-neutral-100">Selected Run Execution</h2>
+                    <div class="mt-1 truncate text-xs text-neutral-500">
+                      {formatNetworkProjectionFreshness(selectedRunNodeStatusProjectionState)}
+                    </div>
+                  </div>
+                  {#if nodeStatusLoading}
+                    <RefreshCw size={12} aria-hidden="true" class="mt-1 shrink-0 animate-spin text-neutral-500" />
+                  {/if}
+                </div>
+                {#if nodeStatusError}
+                  <div class="border-b border-red-900 bg-red-950/50 px-4 py-2 text-sm text-red-200">{nodeStatusError}</div>
+                {/if}
+                {#if nodeStatusLoading && selectedRunExecutionRows.length === 0}
+                  <div class="px-4 py-6 text-sm text-neutral-500">Loading selected-run execution state</div>
+                {:else if selectedRunExecutionRows.length === 0}
+                  <div class="px-4 py-6 text-sm text-neutral-500">No selected-run node status projected</div>
+                {:else}
+                  <div class="overflow-auto">
+                    <table class="w-full min-w-[42rem] text-left text-sm">
+                      <thead class="bg-neutral-950 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
+                        <tr class="border-b border-neutral-800">
+                          <th class="px-4 py-3 font-medium">Node</th>
+                          <th class="px-3 py-3 font-medium">Status</th>
+                          <th class="px-3 py-3 font-medium">Runtime</th>
+                          <th class="px-4 py-3 font-medium">Model</th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-neutral-900">
+                        {#each selectedRunExecutionRows as row (row.nodeId)}
+                          <tr>
+                            <td class="max-w-[18rem] px-4 py-2">
+                              <div class="truncate font-mono text-xs text-neutral-200" title={row.nodeId}>{row.nodeId}</div>
+                            </td>
+                            <td class="px-3 py-2 text-neutral-400">{row.status}</td>
+                            <td class="max-w-[18rem] px-3 py-2">
+                              <div class="truncate text-neutral-400" title={row.runtime}>{row.runtime}</div>
+                            </td>
+                            <td class="max-w-[18rem] px-4 py-2">
+                              <div class="truncate text-neutral-400" title={row.model}>{row.model}</div>
+                            </td>
+                          </tr>
+                        {/each}
+                      </tbody>
+                    </table>
+                  </div>
+                {/if}
               </section>
 
               <section class="rounded border border-neutral-800 bg-neutral-900/50">
