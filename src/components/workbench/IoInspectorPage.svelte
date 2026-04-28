@@ -18,6 +18,7 @@
     IoArtifactProjectionRecord,
     IoArtifactRetentionSummaryRecord,
     ProjectionStateRecord,
+    WorkflowRetentionCleanupResult,
     WorkflowIoArtifactQueryRequest,
   } from '../../services/diagnostics/types';
   import { workflowService } from '../../services/workflow/WorkflowService';
@@ -25,6 +26,8 @@
   import {
     buildIoArtifactNodeGroups,
     buildIoArtifactRendererSummary,
+    buildRetentionCleanupDetailRows,
+    buildRetentionPolicyDetailRows,
     formatIoArtifactAvailabilityLabel,
     formatIoArtifactBytes,
     formatIoArtifactDetailValue,
@@ -42,6 +45,7 @@
   let retentionSummary = $state<IoArtifactRetentionSummaryRecord[]>([]);
   let projectionState = $state<ProjectionStateRecord | null>(null);
   let retentionPolicy = $state<DiagnosticsRetentionPolicy | null>(null);
+  let retentionCleanup = $state<WorkflowRetentionCleanupResult | null>(null);
   let retentionDays = $state('365');
   let retentionExplanation = $state('');
   let loadingArtifacts = $state(false);
@@ -57,6 +61,8 @@
   let workflowInputArtifacts = $derived(artifacts.filter(isWorkflowInputArtifact));
   let workflowOutputArtifacts = $derived(artifacts.filter(isWorkflowOutputArtifact));
   let nodeGroups = $derived(buildIoArtifactNodeGroups(artifacts));
+  let retentionPolicyRows = $derived(buildRetentionPolicyDetailRows(retentionPolicy));
+  let retentionCleanupRows = $derived(buildRetentionCleanupDetailRows(retentionCleanup));
   let summarizedArtifactCount = $derived(
     retentionSummary.reduce((total, item) => total + item.artifact_count, 0),
   );
@@ -150,6 +156,8 @@
         explanation,
         reason: 'gui_io_inspector_policy_update',
       });
+      retentionCleanup = null;
+      retentionCleanupMessage = null;
       applyRetentionPolicy(response.retention_policy);
       await refreshArtifacts();
     } catch (error) {
@@ -168,6 +176,7 @@
         limit: 250,
         reason: 'gui_io_inspector_cleanup_apply',
       });
+      retentionCleanup = response.cleanup;
       retentionCleanupMessage = `${response.cleanup.expired_artifact_count} artifacts expired`;
       await refreshArtifacts();
     } catch (error) {
@@ -563,6 +572,22 @@
           </div>
         {/if}
 
+        {#if retentionPolicyRows.length > 0}
+          <section class="rounded border border-neutral-800 bg-neutral-900/50 p-3">
+            <h3 class="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">Current Policy</h3>
+            <dl class="mt-3 space-y-2 text-xs">
+              {#each retentionPolicyRows as row (row.label)}
+                <div>
+                  <dt class="text-neutral-500">{row.label}</dt>
+                  <dd class={`mt-0.5 truncate text-neutral-200 ${row.mono ? 'font-mono' : ''}`} title={row.value}>
+                    {row.value}
+                  </dd>
+                </div>
+              {/each}
+            </dl>
+          </section>
+        {/if}
+
         <div>
           <label for="io-retention-days" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
             Days
@@ -608,6 +633,22 @@
           <Trash2 size={14} aria-hidden="true" />
           {applyingRetentionCleanup ? 'Applying Cleanup' : 'Apply Cleanup'}
         </button>
+
+        {#if retentionCleanupRows.length > 0}
+          <section class="rounded border border-neutral-800 bg-neutral-900/50 p-3">
+            <h3 class="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">Last Cleanup</h3>
+            <dl class="mt-3 space-y-2 text-xs">
+              {#each retentionCleanupRows as row (row.label)}
+                <div>
+                  <dt class="text-neutral-500">{row.label}</dt>
+                  <dd class={`mt-0.5 truncate text-neutral-200 ${row.mono ? 'font-mono' : ''}`} title={row.value}>
+                    {row.value}
+                  </dd>
+                </div>
+              {/each}
+            </dl>
+          </section>
+        {/if}
       </form>
     </aside>
   </div>

@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 import {
   buildIoArtifactNodeGroups,
   buildIoArtifactRendererSummary,
+  buildRetentionCleanupDetailRows,
+  buildRetentionPolicyDetailRows,
   classifyIoArtifactMedia,
   formatIoArtifactAvailabilityLabel,
   formatIoArtifactBytes,
@@ -226,4 +228,40 @@ test('formatProjectionFreshness keeps projection status visible', () => {
     }),
     'Rebuilding at seq 42',
   );
+});
+
+test('retention policy detail rows expose backend policy state', () => {
+  const rows = buildRetentionPolicyDetailRows({
+    policy_id: 'standard-local-v1',
+    policy_version: 3,
+    retention_class: 'standard',
+    retention_days: 30,
+    applied_at_ms: 86_400_000,
+    explanation: 'short local history',
+  });
+
+  assert.equal(rows.find((row) => row.label === 'Policy')?.value, 'standard-local-v1');
+  assert.equal(rows.find((row) => row.label === 'Version')?.value, '3');
+  assert.equal(rows.find((row) => row.label === 'Class')?.value, 'standard');
+  assert.equal(rows.find((row) => row.label === 'Days')?.value, '30');
+  assert.match(rows.find((row) => row.label === 'Applied')?.value ?? '', /1970/);
+  assert.deepEqual(buildRetentionPolicyDetailRows(null), []);
+});
+
+test('retention cleanup detail rows expose backend cleanup status', () => {
+  const rows = buildRetentionCleanupDetailRows({
+    policy_id: 'standard-local-v1',
+    policy_version: 4,
+    retention_class: 'standard',
+    cutoff_occurred_before_ms: 172_800_000,
+    expired_artifact_count: 12,
+    last_event_seq: 44,
+  });
+
+  assert.equal(rows.find((row) => row.label === 'Policy')?.value, 'standard-local-v1');
+  assert.equal(rows.find((row) => row.label === 'Version')?.value, '4');
+  assert.match(rows.find((row) => row.label === 'Cutoff')?.value ?? '', /1970/);
+  assert.equal(rows.find((row) => row.label === 'Expired')?.value, '12');
+  assert.equal(rows.find((row) => row.label === 'Last Event Seq')?.value, '44');
+  assert.deepEqual(buildRetentionCleanupDetailRows(null), []);
 });

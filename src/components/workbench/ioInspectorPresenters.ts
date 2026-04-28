@@ -1,7 +1,9 @@
 import type {
+  DiagnosticsRetentionPolicy,
   IoArtifactProjectionRecord,
   IoArtifactRetentionState,
   ProjectionStateRecord,
+  WorkflowRetentionCleanupResult,
 } from '../../services/diagnostics/types';
 
 export type IoArtifactMediaFamily =
@@ -31,6 +33,12 @@ export interface IoArtifactRendererSummary {
   family: IoArtifactMediaFamily;
   title: string;
   detail: string;
+}
+
+export interface IoRetentionDetailRow {
+  label: string;
+  value: string;
+  mono: boolean;
 }
 
 type IoArtifactNodeGroupSource = Pick<
@@ -298,4 +306,49 @@ export function formatProjectionFreshness(state: ProjectionStateRecord | null): 
     case 'failed':
       return `Failed at ${cursor}`;
   }
+}
+
+export function buildRetentionPolicyDetailRows(
+  policy: DiagnosticsRetentionPolicy | null,
+): IoRetentionDetailRow[] {
+  if (!policy) {
+    return [];
+  }
+  return [
+    { label: 'Policy', value: policy.policy_id, mono: true },
+    { label: 'Version', value: String(policy.policy_version), mono: false },
+    { label: 'Class', value: policy.retention_class, mono: true },
+    { label: 'Days', value: String(policy.retention_days), mono: false },
+    { label: 'Applied', value: formatIoRetentionTimestamp(policy.applied_at_ms), mono: false },
+  ];
+}
+
+export function buildRetentionCleanupDetailRows(
+  cleanup: WorkflowRetentionCleanupResult | null,
+): IoRetentionDetailRow[] {
+  if (!cleanup) {
+    return [];
+  }
+  return [
+    { label: 'Policy', value: cleanup.policy_id, mono: true },
+    { label: 'Version', value: String(cleanup.policy_version), mono: false },
+    { label: 'Class', value: cleanup.retention_class, mono: true },
+    { label: 'Cutoff', value: formatIoRetentionTimestamp(cleanup.cutoff_occurred_before_ms), mono: false },
+    { label: 'Expired', value: String(cleanup.expired_artifact_count), mono: false },
+    {
+      label: 'Last Event Seq',
+      value:
+        cleanup.last_event_seq === null || cleanup.last_event_seq === undefined
+          ? 'Unavailable'
+          : String(cleanup.last_event_seq),
+      mono: false,
+    },
+  ];
+}
+
+export function formatIoRetentionTimestamp(value: number | null | undefined): string {
+  if (!value) {
+    return 'Unavailable';
+  }
+  return new Date(value).toLocaleString();
 }

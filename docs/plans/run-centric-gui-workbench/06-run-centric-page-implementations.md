@@ -294,9 +294,10 @@ audio, video, table, JSON, file, and unknown metadata states without
 dereferencing payload bodies. Artifact cards also render projection-provided
 producer/consumer endpoints, retention reason, payload reference, runtime id,
 and model id fields when present. The page exposes the backend retention
-cleanup command, reports the backend cleanup count, and refreshes projection
-metadata after cleanup. Finer-grained retention setting groups and physical
-payload-store status controls remain open pending richer backend projections.
+cleanup command, reports the backend cleanup count and cleanup detail rows, and
+refreshes projection metadata after cleanup. Finer-grained retention setting
+groups and physical payload-store status controls remain open pending richer
+backend projections.
 
 ### Milestone 5: Library Page
 
