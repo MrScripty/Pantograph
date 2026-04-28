@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { WorkflowProjectionService } from './WorkflowProjectionService.ts';
 import { WorkflowServiceError } from './workflowServiceErrors.ts';
+import type { WorkflowLocalNetworkStatusQueryResponse } from './types.ts';
 import type {
   WorkflowLibraryUsageQueryResponse,
   WorkflowIoArtifactQueryResponse,
@@ -517,6 +518,91 @@ test('queryIoArtifacts preserves endpoint filters and retention summaries', asyn
     ]);
     assert.equal(result.artifacts[0].producer_node_id, 'node-a');
     assert.equal(result.retention_summary[0].artifact_count, 1);
+  } finally {
+    clearMocks();
+  }
+});
+
+test('queryLocalNetworkStatus preserves scheduler load and run placement facts', async () => {
+  installWindowMock();
+  const calls: Array<{ cmd: string; args: unknown }> = [];
+  const response: WorkflowLocalNetworkStatusQueryResponse = {
+    local_node: {
+      node_id: 'local-node',
+      display_name: 'Local Pantograph',
+      captured_at_ms: 1_000,
+      transport_state: 'local_only',
+      system: {
+        hostname: 'host-a',
+        os_name: 'Linux',
+        os_version: '6',
+        kernel_version: '6.1',
+        cpu: {
+          logical_core_count: 8,
+          average_usage_percent: null,
+        },
+        memory: {
+          total_bytes: 16_000,
+          used_bytes: 8_000,
+          available_bytes: 8_000,
+        },
+        disks: [],
+        network_interfaces: [],
+        gpu: {
+          available: false,
+          reason: 'GPU probe unavailable',
+        },
+      },
+      scheduler_load: {
+        max_sessions: 4,
+        active_session_count: 1,
+        max_loaded_sessions: 2,
+        loaded_session_count: 1,
+        active_run_count: 1,
+        queued_run_count: 1,
+        active_workflow_run_ids: ['run-active'],
+        queued_workflow_run_ids: ['run-queued'],
+        run_placements: [
+          {
+            workflow_run_id: 'run-queued',
+            workflow_execution_session_id: 'exec-session-a',
+            workflow_id: 'workflow-a',
+            state: 'queued',
+            runtime_loaded: false,
+            required_backends: ['python'],
+            required_models: ['model-a'],
+          },
+        ],
+      },
+      degradation_warnings: ['GPU probe unavailable'],
+    },
+    peer_nodes: [],
+  };
+  mockIPC((cmd, args) => {
+    calls.push({ cmd, args });
+    return response;
+  });
+
+  try {
+    const service = new WorkflowProjectionService();
+    const result = await service.queryLocalNetworkStatus({
+      include_disks: true,
+      include_network_interfaces: false,
+    });
+
+    assert.deepEqual(result, response);
+    assert.deepEqual(calls, [
+      {
+        cmd: 'workflow_local_network_status_query',
+        args: {
+          request: {
+            include_disks: true,
+            include_network_interfaces: false,
+          },
+        },
+      },
+    ]);
+    assert.equal(result.local_node.scheduler_load.run_placements[0].required_models[0], 'model-a');
   } finally {
     clearMocks();
   }

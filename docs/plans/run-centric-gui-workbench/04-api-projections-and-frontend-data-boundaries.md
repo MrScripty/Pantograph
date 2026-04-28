@@ -276,6 +276,10 @@ a bounded warm-projection batch applies only part of the pending Library usage
 event cursor. Frontend projection tests preserve that warm catching-up state
 through Tauri mock IPC so Library pages can display freshness without reading
 raw ledger rows.
+Frontend workflow projection tests now also preserve local Network
+scheduler-load active/queued run ids and run-placement facts through Tauri mock
+IPC so Network pages do not infer scheduler placement from counts or active-run
+context.
 `workbenchStore.ts` owns transient active-run selection and
 `schedulerRunListStore.ts` now owns Scheduler table filters, sort order, and
 column visibility, so the Scheduler page consumes backend projections without
