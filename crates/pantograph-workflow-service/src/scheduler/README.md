@@ -106,6 +106,10 @@ needs to be the long-term home for scheduler contracts or queue mutation logic.
 - Queue insertion should move the constructed queued-run record directly into
   the store so scheduler state transitions do not accumulate redundant
   rebinding or hidden policy steps.
+- Scheduler store methods must not write durable diagnostics or call runtime
+  hosts while holding mutable store state. Store mutations return or expose
+  immutable decision facts; workflow-service emitters append typed diagnostics
+  events after scheduler/session guards have been released.
 - Scheduler priority, FIFO, starvation-protection, warm-reuse bypass,
   runtime-capacity, and admission-wait tests stay in `policy_tests.rs` so
   `policy.rs` remains focused on production queue and admission decisions.

@@ -128,7 +128,7 @@ logs or inferred in the frontend.
 - [x] Confirm the shared typed diagnostic event ledger bootstrap is available
   before durable scheduler event persistence. If it is not available, execute
   that bootstrap before Milestone 3.
-- [ ] Define lock-boundary rules for estimate calculation and event
+- [x] Define lock-boundary rules for estimate calculation and event
   persistence so scheduler/session locks are not held during durable writes.
 - [x] Define the ownership split between `run.*` lifecycle events and
   `scheduler.*` decision/control events.
@@ -158,7 +158,10 @@ those rows when emitted. Scheduler estimates and model lifecycle events now
 carry a typed model/cache state vocabulary for unknown, not-required, cache
 hit/miss, load requested, loaded, unload requested, unloaded, and failed
 states. Lock-boundary documentation, broader scheduler authority vocabulary,
-and non-queued-run control paths remain pending.
+and non-queued-run control paths remain pending. Scheduler/session store locks
+now have an explicit rule: collect immutable decision facts while the store is
+locked, release that guard, then emit durable diagnostics events or call host
+runtime boundaries.
 
 ### Milestone 2: Estimate Production
 
@@ -330,6 +333,9 @@ duplicate, unvalidated, or contradictory event streams.
   required by current Scheduler page query boundaries.
 - Added a typed scheduler model/cache state enum to estimate and model
   lifecycle payloads and timeline projection details.
+- Recorded the scheduler diagnostics lock-boundary rule: queue/admission
+  mutations capture immutable event inputs while locked, and durable ledger
+  writes run only after scheduler/session guards have been released.
 - Tightened scheduler timeline projection labels for queue-control events so
   page/API consumers receive explicit typed action, outcome, actor-scope,
   position, and priority summaries instead of enum debug formatting.

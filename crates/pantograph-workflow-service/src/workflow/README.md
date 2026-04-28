@@ -100,6 +100,10 @@ session-runtime workflows, and the root facade test module.
 - Workflow capability discovery tests live with the workflow-capabilities
   behavior slice.
 - Host calls occur outside session-store locks.
+- Durable diagnostics ledger writes for scheduler estimates, queue controls,
+  admission, delay, and model lifecycle events occur outside session-store
+  locks. Scheduler/session mutations should return or copy the immutable facts
+  needed for event payloads before dropping the store guard.
 - Generic workflow run execution owns timeout cancellation, output validation,
   and runtime-not-ready checks behind private scheduler/session handoff.
 - Public workflow-run request DTOs must not accept caller-authored `run_id`
