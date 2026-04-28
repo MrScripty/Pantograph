@@ -204,6 +204,8 @@ test('diagnostics comparison filters expose available projection values', () => 
     createRunListPeer({ workflow_run_id: 'run-2', status: 'completed', scheduler_policy_id: 'policy-b' }),
     createRunListPeer({
       workflow_run_id: 'run-3',
+      workflow_version_id: 'wfver-2',
+      workflow_semantic_version: '2.0.0',
       bucket_id: null,
       client_id: null,
       client_session_id: null,
@@ -213,6 +215,7 @@ test('diagnostics comparison filters expose available projection values', () => 
     createRunListPeer({ workflow_run_id: 'run-4', workflow_id: 'workflow-b', status: 'failed' }),
   ]);
 
+  assert.deepEqual(options.workflowVersions, ['1.2.3', '2.0.0']);
   assert.deepEqual(options.statuses, ['completed', 'running']);
   assert.deepEqual(options.schedulerPolicies, ['policy-a', 'policy-b']);
   assert.deepEqual(options.retentionPolicies, ['retention-a', 'Unassigned']);
@@ -229,11 +232,18 @@ test('diagnostics comparison filters keep selected run and filter peer rows', ()
     [
       activeRun,
       createRunListPeer({ workflow_run_id: 'run-2', status: 'completed', scheduler_policy_id: 'policy-b' }),
-      createRunListPeer({ workflow_run_id: 'run-3', status: 'failed', scheduler_policy_id: 'policy-b' }),
+      createRunListPeer({
+        workflow_run_id: 'run-3',
+        workflow_version_id: 'wfver-2',
+        workflow_semantic_version: '2.0.0',
+        status: 'completed',
+        scheduler_policy_id: 'policy-b',
+      }),
       createRunListPeer({ workflow_run_id: 'run-4', workflow_id: 'workflow-b', status: 'completed' }),
     ],
     {
       ...DEFAULT_DIAGNOSTICS_COMPARISON_FILTERS,
+      workflowVersion: '1.2.3',
       status: 'completed',
       schedulerPolicy: 'policy-b',
       acceptedDate: '1970-01-02',

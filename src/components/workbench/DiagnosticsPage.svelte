@@ -255,6 +255,20 @@
             <h2 class="text-sm font-semibold text-neutral-100">Comparison Facets</h2>
             <div class="mt-4 grid grid-cols-2 gap-2">
               <label class="min-w-0 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
+                Version
+                <select
+                  aria-label="Diagnostics workflow version filter"
+                  class="mt-1 w-full rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs normal-case tracking-normal text-neutral-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+                  value={comparisonFilters.workflowVersion}
+                  onchange={(event) => updateComparisonFilter('workflowVersion', selectValue(event))}
+                >
+                  <option value={DIAGNOSTICS_FILTER_ALL}>All</option>
+                  {#each comparisonFilterOptions.workflowVersions as workflowVersion (workflowVersion)}
+                    <option value={workflowVersion}>{workflowVersion}</option>
+                  {/each}
+                </select>
+              </label>
+              <label class="min-w-0 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
                 Status
                 <select
                   aria-label="Diagnostics status filter"

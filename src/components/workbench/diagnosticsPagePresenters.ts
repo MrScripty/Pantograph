@@ -28,6 +28,7 @@ export interface DiagnosticsFacetSummary {
 }
 
 export interface DiagnosticsComparisonFilters {
+  workflowVersion: string;
   status: string;
   schedulerPolicy: string;
   retentionPolicy: string;
@@ -38,6 +39,7 @@ export interface DiagnosticsComparisonFilters {
 }
 
 export interface DiagnosticsComparisonFilterOptions {
+  workflowVersions: string[];
   statuses: string[];
   schedulerPolicies: string[];
   retentionPolicies: string[];
@@ -50,6 +52,7 @@ export interface DiagnosticsComparisonFilterOptions {
 export const DIAGNOSTICS_FILTER_ALL = 'all';
 
 export const DEFAULT_DIAGNOSTICS_COMPARISON_FILTERS: DiagnosticsComparisonFilters = {
+  workflowVersion: DIAGNOSTICS_FILTER_ALL,
   status: DIAGNOSTICS_FILTER_ALL,
   schedulerPolicy: DIAGNOSTICS_FILTER_ALL,
   retentionPolicy: DIAGNOSTICS_FILTER_ALL,
@@ -60,6 +63,7 @@ export const DEFAULT_DIAGNOSTICS_COMPARISON_FILTERS: DiagnosticsComparisonFilter
 };
 
 export const EMPTY_DIAGNOSTICS_COMPARISON_FILTER_OPTIONS: DiagnosticsComparisonFilterOptions = {
+  workflowVersions: [],
   statuses: [],
   schedulerPolicies: [],
   retentionPolicies: [],
@@ -267,6 +271,7 @@ export function buildDiagnosticsComparisonFilterOptions(
 ): DiagnosticsComparisonFilterOptions {
   const scopedRuns = ensureActiveRunInScope(activeRun, runs);
   return {
+    workflowVersions: uniqueSorted(scopedRuns.map(workflowVersionLabel)),
     statuses: uniqueSorted(scopedRuns.map((run) => run.status)),
     schedulerPolicies: uniqueSorted(scopedRuns.map((run) => optionalFacetLabel(run.scheduler_policy_id))),
     retentionPolicies: uniqueSorted(scopedRuns.map((run) => optionalFacetLabel(run.retention_policy_id))),
@@ -336,6 +341,7 @@ function diagnosticsRunMatchesFilters(
   filters: DiagnosticsComparisonFilters,
 ): boolean {
   return (
+    filterMatches(workflowVersionLabel(run), filters.workflowVersion) &&
     filterMatches(run.status, filters.status) &&
     filterMatches(optionalFacetLabel(run.scheduler_policy_id), filters.schedulerPolicy) &&
     filterMatches(optionalFacetLabel(run.retention_policy_id), filters.retentionPolicy) &&
