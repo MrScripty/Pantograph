@@ -6,7 +6,7 @@ use pantograph_diagnostics_ledger::{
     IoArtifactObservedPayload, IoArtifactRetentionState, IoArtifactRole,
     LibraryAssetAccessedPayload, LibraryAssetOperation, RunSnapshotAcceptedPayload,
     RunSnapshotNodeVersionPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
-    SchedulerEstimateProducedPayload, SchedulerModelCacheState,
+    SchedulerEstimateBlockingCondition, SchedulerEstimateProducedPayload, SchedulerModelCacheState,
     SchedulerModelLifecycleChangedPayload, SchedulerModelLifecycleTransition,
     SchedulerQueuePlacementPayload, SchedulerRunAdmittedPayload, SchedulerRunDelayedPayload,
 };
@@ -780,6 +780,8 @@ impl WorkflowService {
                         estimated_queue_wait_ms: None,
                         estimated_duration_ms: None,
                         model_cache_state: Some(estimate.model_cache_state),
+                        blocking_conditions: estimate.blocking_conditions,
+                        missing_asset_ids: Vec::new(),
                         candidate_runtime_ids: estimate.candidate_runtime_ids,
                         candidate_device_ids: Vec::new(),
                         candidate_network_node_ids: Vec::new(),
@@ -1399,6 +1401,7 @@ fn single_model_node_id(model: &WorkflowCapabilityModel) -> Option<String> {
 struct SchedulerEstimateContext {
     confidence: String,
     model_cache_state: SchedulerModelCacheState,
+    blocking_conditions: Vec<SchedulerEstimateBlockingCondition>,
     candidate_runtime_ids: Vec<String>,
     reasons: Vec<String>,
 }
@@ -1412,10 +1415,16 @@ fn scheduler_estimate_context_from_snapshot(
     } else {
         format!("{queue_position} run(s) ahead in session queue")
     }];
+    let mut blocking_conditions = if queue_position == 0 {
+        vec![SchedulerEstimateBlockingCondition::RuntimeAdmissionPending]
+    } else {
+        vec![SchedulerEstimateBlockingCondition::QueueBacklog]
+    };
     let Some(snapshot) = snapshot else {
         return Ok(SchedulerEstimateContext {
             confidence: "low".to_string(),
             model_cache_state: SchedulerModelCacheState::Unknown,
+            blocking_conditions,
             candidate_runtime_ids: Vec::new(),
             reasons,
         });
@@ -1441,6 +1450,12 @@ fn scheduler_estimate_context_from_snapshot(
             "candidate runtime(s): {}",
             candidate_runtime_ids.join(", ")
         ));
+    } else if !runtime_requirements.required_backends.is_empty() {
+        blocking_conditions.push(SchedulerEstimateBlockingCondition::RuntimeUnavailable);
+        reasons.push(format!(
+            "no compatible candidate runtime for backend(s): {}",
+            runtime_requirements.required_backends.join(", ")
+        ));
     }
     let confidence = match runtime_requirements.estimation_confidence.trim() {
         "" | "unknown" => "low".to_string(),
@@ -1449,12 +1464,14 @@ fn scheduler_estimate_context_from_snapshot(
     let model_cache_state = if runtime_requirements.required_models.is_empty() {
         SchedulerModelCacheState::NotRequired
     } else {
+        blocking_conditions.push(SchedulerEstimateBlockingCondition::ModelCacheUnknown);
         SchedulerModelCacheState::Unknown
     };
 
     Ok(SchedulerEstimateContext {
         confidence,
         model_cache_state,
+        blocking_conditions,
         candidate_runtime_ids,
         reasons,
     })

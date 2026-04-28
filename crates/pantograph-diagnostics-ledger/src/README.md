@@ -115,6 +115,9 @@ semantics.
 - Scheduler estimate events may carry typed candidate runtime, device, and
   network-node id lists. Producers should leave unknown candidate classes empty
   instead of encoding them into free-form reason text only.
+- Scheduler estimate events carry typed blocking conditions and missing asset
+  ids separately from human-readable reasons so future scheduler policy can add
+  richer blocking analysis without replacing the event family.
 - Scheduler queue-control events use typed cancel, reprioritize, and
   push-front actions plus typed accepted/denied outcomes so refused queue
   mutations remain auditable without parsing service error text. Session-owned

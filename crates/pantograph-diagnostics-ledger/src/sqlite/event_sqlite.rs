@@ -1412,6 +1412,23 @@ fn scheduler_timeline_record_from_event(
             if let Some(cache_state) = payload.model_cache_state {
                 details.push(cache_state.summary().to_string());
             }
+            if !payload.blocking_conditions.is_empty() {
+                details.push(format!(
+                    "blocking: {}",
+                    payload
+                        .blocking_conditions
+                        .into_iter()
+                        .map(|condition| condition.summary())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
+            }
+            if !payload.missing_asset_ids.is_empty() {
+                details.push(format!(
+                    "missing asset(s): {}",
+                    payload.missing_asset_ids.join(", ")
+                ));
+            }
             if !payload.candidate_runtime_ids.is_empty() {
                 details.push(format!(
                     "candidate runtime(s): {}",

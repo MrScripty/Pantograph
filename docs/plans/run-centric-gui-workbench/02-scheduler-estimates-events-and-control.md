@@ -189,14 +189,17 @@ facts are queryable from hot run-list/run-detail projections. The estimate now
 uses immutable run-snapshot runtime requirements for first-pass confidence,
 required backend/model/extension reasons, and estimated peak RAM/VRAM context
 where the snapshot provides them. It also records typed candidate runtime ids
-from immutable runtime capabilities when available. Typed delay events can now
-record a concrete delay reason and delayed-until timestamp into
-run-list/run-detail status and scheduler timeline projections when a scheduler
-emitter produces them, and workflow-session runtime admission waits now emit
-the first production delay event. Rich estimate inputs from Library model
-metadata, runtime state, local node capacity, diagnostics history, cache/model
-state changes, candidate device/network-node selection, and missing-asset
-analysis remain pending.
+from immutable runtime capabilities when available, plus typed blocking
+conditions for runtime admission, queue backlog, missing candidate runtime, and
+unknown model cache state. Missing asset ids remain an empty typed list until
+Library metadata can make that fact concrete. Typed delay events can now record
+a concrete delay reason and delayed-until timestamp into run-list/run-detail
+status and scheduler timeline projections when a scheduler emitter produces
+them, and workflow-session runtime admission waits now emit the first
+production delay event. Rich estimate inputs from Library model metadata,
+runtime state, local node capacity, diagnostics history, cache/model state
+changes, candidate device/network-node selection, and missing-asset analysis
+remain pending.
 
 ### Milestone 3: Scheduler Event Emission And Persistence
 
@@ -349,6 +352,8 @@ duplicate, unvalidated, or contradictory event streams.
   context when available.
 - Added typed candidate runtime ids to submission-time scheduler estimate
   payloads when immutable runtime capabilities identify compatible runtimes.
+- Added typed scheduler estimate blocking conditions and a typed missing-asset
+  id list so blocking facts are not represented only as free-form reasons.
 - Tightened scheduler timeline projection labels for queue-control events so
   page/API consumers receive explicit typed action, outcome, actor-scope,
   position, and priority summaries instead of enum debug formatting.

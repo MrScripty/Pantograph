@@ -80,6 +80,9 @@ helpers own restart-visible workflow run summaries.
 - Scheduler estimate timeline details may include typed candidate runtime ids
   from the estimate payload. Device and network-node candidate fields stay
   typed payload fields even when first-pass producers leave them empty.
+- Scheduler estimate timeline details may include typed blocking conditions
+  and missing asset ids, while the payload remains the source of typed estimate
+  facts for API consumers.
 - Scheduler queue-control timeline rows format typed action, outcome,
   actor-scope, position, and priority fields explicitly. Projection code must
   not rely on enum debug strings for page/API labels.

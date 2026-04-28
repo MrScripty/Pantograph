@@ -421,6 +421,12 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
     assert!(estimate_event
         .payload_json
         .contains("\"model_cache_state\":\"unknown\""));
+    assert!(estimate_event.payload_json.contains(
+        "\"blocking_conditions\":[\"runtime_admission_pending\",\"model_cache_unknown\"]"
+    ));
+    assert!(estimate_event
+        .payload_json
+        .contains("\"missing_asset_ids\":[]"));
     assert!(estimate_event
         .payload_json
         .contains("\"candidate_runtime_ids\":[\"llama_cpp\"]"));

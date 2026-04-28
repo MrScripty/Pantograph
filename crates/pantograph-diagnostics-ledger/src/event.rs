@@ -299,6 +299,10 @@ pub struct SchedulerEstimateProducedPayload {
     #[serde(default)]
     pub model_cache_state: Option<SchedulerModelCacheState>,
     #[serde(default)]
+    pub blocking_conditions: Vec<SchedulerEstimateBlockingCondition>,
+    #[serde(default)]
+    pub missing_asset_ids: Vec<String>,
+    #[serde(default)]
     pub candidate_runtime_ids: Vec<String>,
     #[serde(default)]
     pub candidate_device_ids: Vec<String>,
@@ -312,6 +316,7 @@ impl SchedulerEstimateProducedPayload {
     fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
         validate_required_text("estimate_version", &self.estimate_version, MAX_ID_LEN)?;
         validate_required_text("confidence", &self.confidence, MAX_ID_LEN)?;
+        validate_text_list("missing_asset_ids", &self.missing_asset_ids)?;
         validate_text_list("candidate_runtime_ids", &self.candidate_runtime_ids)?;
         validate_text_list("candidate_device_ids", &self.candidate_device_ids)?;
         validate_text_list(
@@ -319,6 +324,28 @@ impl SchedulerEstimateProducedPayload {
             &self.candidate_network_node_ids,
         )?;
         validate_text_list("reasons", &self.reasons)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SchedulerEstimateBlockingCondition {
+    RuntimeAdmissionPending,
+    QueueBacklog,
+    RuntimeUnavailable,
+    ModelCacheUnknown,
+    MissingAsset,
+}
+
+impl SchedulerEstimateBlockingCondition {
+    pub(crate) fn summary(self) -> &'static str {
+        match self {
+            Self::RuntimeAdmissionPending => "runtime admission pending",
+            Self::QueueBacklog => "queue backlog",
+            Self::RuntimeUnavailable => "runtime unavailable",
+            Self::ModelCacheUnknown => "model cache unknown",
+            Self::MissingAsset => "missing asset",
+        }
     }
 }
 

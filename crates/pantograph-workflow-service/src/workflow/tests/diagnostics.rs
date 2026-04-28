@@ -7,8 +7,9 @@ use pantograph_diagnostics_ledger::{
     NodeExecutionStatusPayload, OutputModality, ProjectionStatus,
     RetentionArtifactStateChangedPayload, RetentionClass, RetentionPolicyActorScope,
     RunListFacetKind, RunSnapshotAcceptedPayload, RunSnapshotNodeVersionPayload, RunStartedPayload,
-    RunTerminalPayload, RunTerminalStatus, SchedulerEstimateProducedPayload,
-    SchedulerModelCacheState, SchedulerQueuePlacementPayload, UsageEventStatus, UsageLineage,
+    RunTerminalPayload, RunTerminalStatus, SchedulerEstimateBlockingCondition,
+    SchedulerEstimateProducedPayload, SchedulerModelCacheState, SchedulerQueuePlacementPayload,
+    UsageEventStatus, UsageLineage,
 };
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, UsageEventId, WorkflowId, WorkflowRunId, WorkflowVersionId,
@@ -1209,6 +1210,10 @@ fn sample_scheduler_estimate_event() -> DiagnosticEventAppendRequest {
                 estimated_queue_wait_ms: None,
                 estimated_duration_ms: None,
                 model_cache_state: Some(SchedulerModelCacheState::Unknown),
+                blocking_conditions: vec![
+                    SchedulerEstimateBlockingCondition::RuntimeAdmissionPending,
+                ],
+                missing_asset_ids: Vec::new(),
                 candidate_runtime_ids: Vec::new(),
                 candidate_device_ids: Vec::new(),
                 candidate_network_node_ids: Vec::new(),
