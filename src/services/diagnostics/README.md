@@ -70,9 +70,10 @@ projection without inventing fallback run identities or workflow display names.
 - Run-list responses carry backend-owned `facets` derived from materialized
   projections. Consumers should use those counts for mixed-version and policy
   summaries instead of rebuilding them from raw ledger events or sampled pages.
-- Run-list DTOs carry backend-owned client, client-session, and bucket scope
-  fields. Consumers must render those fields from projection rows instead of
-  inferring queue authority from run ids or raw ledger events.
+- Run-list DTOs carry backend-owned client, client-session, bucket, and
+  workflow execution-session scope fields. Consumers must render or act on
+  those fields from projection rows instead of inferring queue authority from
+  run ids or raw ledger events.
 - Library usage query DTOs include optional `workflow_run_id` filters so
   frontend consumers can request selected-run asset usage without reconstructing
   active-run Library state from raw ledger events.

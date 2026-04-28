@@ -149,7 +149,8 @@ renders a dense projection-backed run table, first-class queued/future rows
 where present in the run-list projection, selected-run actions, active-run
 updates, projection freshness, search, status filtering, stable local sort
 options, scheduler policy IDs, retention policy IDs, scheduler-policy and
-retention-policy filters, client/session/bucket scope columns, typed queue
+retention-policy filters, client/session/bucket scope columns, workflow
+execution-session projection facts for future queue controls, typed queue
 position, priority, estimate, and scheduler-reason columns, delayed status
 presentation, a selected-run timeline panel, timeline projection
 freshness, and timeline summary/detail rows without raw event parsing. Progress,

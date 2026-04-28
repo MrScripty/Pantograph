@@ -446,6 +446,7 @@ pub(super) fn query_run_list_projection(
                 workflow_semantic_version, status, accepted_at_ms, enqueued_at_ms,
                 started_at_ms, completed_at_ms, duration_ms, scheduler_policy_id,
                 retention_policy_id, client_id, client_session_id, bucket_id,
+                workflow_execution_session_id,
                 scheduler_queue_position, scheduler_priority,
                 estimate_confidence, estimated_queue_wait_ms, estimated_duration_ms,
                 scheduler_reason, last_event_seq, last_updated_at_ms
@@ -651,12 +652,13 @@ pub(super) fn query_run_detail_projection(
                 workflow_semantic_version, status, accepted_at_ms, enqueued_at_ms,
                 started_at_ms, completed_at_ms, duration_ms, scheduler_policy_id,
                 retention_policy_id, client_id, client_session_id, bucket_id,
-                workflow_run_snapshot_id, workflow_presentation_revision_id,
-                latest_estimate_json, latest_queue_placement_json, started_payload_json,
-                terminal_payload_json, terminal_error, scheduler_queue_position,
-                scheduler_priority, estimate_confidence, estimated_queue_wait_ms,
-                estimated_duration_ms, scheduler_reason, timeline_event_count,
-                last_event_seq, last_updated_at_ms
+                workflow_run_snapshot_id, workflow_execution_session_id,
+                workflow_presentation_revision_id, latest_estimate_json,
+                latest_queue_placement_json, started_payload_json, terminal_payload_json,
+                terminal_error, scheduler_queue_position, scheduler_priority,
+                estimate_confidence, estimated_queue_wait_ms, estimated_duration_ms,
+                scheduler_reason, timeline_event_count, last_event_seq,
+                last_updated_at_ms
          FROM run_detail_projection
          WHERE workflow_run_id = ?1",
     )?;
@@ -1771,18 +1773,24 @@ fn apply_run_list_projection_event(
         _ => (None, None),
     };
     let scheduler_facts = scheduler_projection_facts(&payload);
+    let workflow_execution_session_id = match &payload {
+        DiagnosticEventPayload::RunSnapshotAccepted(payload) => {
+            Some(payload.workflow_execution_session_id.as_str())
+        }
+        _ => None,
+    };
 
     tx.execute(
         "INSERT INTO run_list_projection
             (workflow_run_id, workflow_id, workflow_version_id, workflow_semantic_version,
              status, accepted_at_ms, enqueued_at_ms, started_at_ms, completed_at_ms,
              duration_ms, scheduler_policy_id, retention_policy_id, client_id,
-             client_session_id, bucket_id,
+             client_session_id, bucket_id, workflow_execution_session_id,
              scheduler_queue_position, scheduler_priority, estimate_confidence,
              estimated_queue_wait_ms, estimated_duration_ms, scheduler_reason,
              last_event_seq, last_updated_at_ms)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,
-             ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23)
+             ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24)
          ON CONFLICT(workflow_run_id) DO UPDATE SET
             workflow_id = excluded.workflow_id,
             workflow_version_id = COALESCE(excluded.workflow_version_id, workflow_version_id),
@@ -1798,6 +1806,7 @@ fn apply_run_list_projection_event(
             client_id = COALESCE(excluded.client_id, client_id),
             client_session_id = COALESCE(excluded.client_session_id, client_session_id),
             bucket_id = COALESCE(excluded.bucket_id, bucket_id),
+            workflow_execution_session_id = COALESCE(excluded.workflow_execution_session_id, workflow_execution_session_id),
             scheduler_queue_position = COALESCE(excluded.scheduler_queue_position, scheduler_queue_position),
             scheduler_priority = COALESCE(excluded.scheduler_priority, scheduler_priority),
             estimate_confidence = COALESCE(excluded.estimate_confidence, estimate_confidence),
@@ -1825,6 +1834,7 @@ fn apply_run_list_projection_event(
             event.client_id.as_ref().map(|id| id.as_str()),
             event.client_session_id.as_ref().map(|id| id.as_str()),
             event.bucket_id.as_ref().map(|id| id.as_str()),
+            workflow_execution_session_id,
             scheduler_facts.queue_position.map(i64::from),
             scheduler_facts.priority.map(i64::from),
             scheduler_facts.estimate_confidence.as_deref(),
@@ -1964,12 +1974,17 @@ fn apply_run_detail_projection_event(
         ),
         _ => (None, None, None),
     };
-    let (workflow_run_snapshot_id, workflow_presentation_revision_id) = match &payload {
+    let (
+        workflow_run_snapshot_id,
+        workflow_execution_session_id,
+        workflow_presentation_revision_id,
+    ) = match &payload {
         DiagnosticEventPayload::RunSnapshotAccepted(payload) => (
             Some(payload.workflow_run_snapshot_id.as_str()),
+            Some(payload.workflow_execution_session_id.as_str()),
             Some(payload.workflow_presentation_revision_id.as_str()),
         ),
-        _ => (None, None),
+        _ => (None, None, None),
     };
     let latest_estimate_json = matches!(
         &payload,
@@ -1991,7 +2006,7 @@ fn apply_run_detail_projection_event(
              status, accepted_at_ms, enqueued_at_ms, started_at_ms, completed_at_ms,
              duration_ms, scheduler_policy_id, retention_policy_id, client_id,
              client_session_id, bucket_id, workflow_run_snapshot_id,
-             workflow_presentation_revision_id, latest_estimate_json,
+             workflow_execution_session_id, workflow_presentation_revision_id, latest_estimate_json,
              latest_queue_placement_json, started_payload_json, terminal_payload_json,
              terminal_error, scheduler_queue_position, scheduler_priority,
              estimate_confidence, estimated_queue_wait_ms, estimated_duration_ms,
@@ -1999,7 +2014,7 @@ fn apply_run_detail_projection_event(
          VALUES
             (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15,
              ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28,
-             ?29, ?30, ?31)
+             ?29, ?30, ?31, ?32)
          ON CONFLICT(workflow_run_id) DO UPDATE SET
             workflow_id = excluded.workflow_id,
             workflow_version_id = COALESCE(excluded.workflow_version_id, workflow_version_id),
@@ -2016,6 +2031,7 @@ fn apply_run_detail_projection_event(
             client_session_id = COALESCE(excluded.client_session_id, client_session_id),
             bucket_id = COALESCE(excluded.bucket_id, bucket_id),
             workflow_run_snapshot_id = COALESCE(excluded.workflow_run_snapshot_id, workflow_run_snapshot_id),
+            workflow_execution_session_id = COALESCE(excluded.workflow_execution_session_id, workflow_execution_session_id),
             workflow_presentation_revision_id = COALESCE(excluded.workflow_presentation_revision_id, workflow_presentation_revision_id),
             latest_estimate_json = COALESCE(excluded.latest_estimate_json, latest_estimate_json),
             latest_queue_placement_json = COALESCE(excluded.latest_queue_placement_json, latest_queue_placement_json),
@@ -2054,6 +2070,7 @@ fn apply_run_detail_projection_event(
                 .map(|client_session_id| client_session_id.as_str()),
             event.bucket_id.as_ref().map(|bucket_id| bucket_id.as_str()),
             workflow_run_snapshot_id,
+            workflow_execution_session_id,
             workflow_presentation_revision_id,
             latest_estimate_json,
             latest_queue_placement_json,
@@ -2335,14 +2352,15 @@ fn run_list_projection_from_row(row: &Row<'_>) -> rusqlite::Result<RunListProjec
             .map(BucketId::try_from)
             .transpose()
             .map_err(sqlite_conversion_error)?,
-        scheduler_queue_position: row.get::<_, Option<i64>>(15)?.map(i64_to_u32_saturating),
-        scheduler_priority: row.get::<_, Option<i64>>(16)?.map(i64_to_i32_saturating),
-        estimate_confidence: row.get(17)?,
-        estimated_queue_wait_ms: row.get::<_, Option<i64>>(18)?.map(i64_to_u64_saturating),
-        estimated_duration_ms: row.get::<_, Option<i64>>(19)?.map(i64_to_u64_saturating),
-        scheduler_reason: row.get(20)?,
-        last_event_seq: row.get(21)?,
-        last_updated_at_ms: row.get(22)?,
+        workflow_execution_session_id: row.get(15)?,
+        scheduler_queue_position: row.get::<_, Option<i64>>(16)?.map(i64_to_u32_saturating),
+        scheduler_priority: row.get::<_, Option<i64>>(17)?.map(i64_to_i32_saturating),
+        estimate_confidence: row.get(18)?,
+        estimated_queue_wait_ms: row.get::<_, Option<i64>>(19)?.map(i64_to_u64_saturating),
+        estimated_duration_ms: row.get::<_, Option<i64>>(20)?.map(i64_to_u64_saturating),
+        scheduler_reason: row.get(21)?,
+        last_event_seq: row.get(22)?,
+        last_updated_at_ms: row.get(23)?,
     })
 }
 
@@ -2388,23 +2406,24 @@ fn run_detail_projection_from_row(row: &Row<'_>) -> rusqlite::Result<RunDetailPr
             .transpose()
             .map_err(sqlite_conversion_error)?,
         workflow_run_snapshot_id: row.get(15)?,
-        workflow_presentation_revision_id: row.get(16)?,
-        latest_estimate_json: row.get(17)?,
-        latest_queue_placement_json: row.get(18)?,
-        started_payload_json: row.get(19)?,
-        terminal_payload_json: row.get(20)?,
-        terminal_error: row.get(21)?,
-        scheduler_queue_position: row.get::<_, Option<i64>>(22)?.map(i64_to_u32_saturating),
-        scheduler_priority: row.get::<_, Option<i64>>(23)?.map(i64_to_i32_saturating),
-        estimate_confidence: row.get(24)?,
-        estimated_queue_wait_ms: row.get::<_, Option<i64>>(25)?.map(i64_to_u64_saturating),
-        estimated_duration_ms: row.get::<_, Option<i64>>(26)?.map(i64_to_u64_saturating),
-        scheduler_reason: row.get(27)?,
+        workflow_execution_session_id: row.get(16)?,
+        workflow_presentation_revision_id: row.get(17)?,
+        latest_estimate_json: row.get(18)?,
+        latest_queue_placement_json: row.get(19)?,
+        started_payload_json: row.get(20)?,
+        terminal_payload_json: row.get(21)?,
+        terminal_error: row.get(22)?,
+        scheduler_queue_position: row.get::<_, Option<i64>>(23)?.map(i64_to_u32_saturating),
+        scheduler_priority: row.get::<_, Option<i64>>(24)?.map(i64_to_i32_saturating),
+        estimate_confidence: row.get(25)?,
+        estimated_queue_wait_ms: row.get::<_, Option<i64>>(26)?.map(i64_to_u64_saturating),
+        estimated_duration_ms: row.get::<_, Option<i64>>(27)?.map(i64_to_u64_saturating),
+        scheduler_reason: row.get(28)?,
         timeline_event_count: row
-            .get::<_, i64>(28)
+            .get::<_, i64>(29)
             .map(|value| u64::try_from(value).unwrap_or(u64::MAX))?,
-        last_event_seq: row.get(29)?,
-        last_updated_at_ms: row.get(30)?,
+        last_event_seq: row.get(30)?,
+        last_updated_at_ms: row.get(31)?,
     })
 }
 

@@ -349,9 +349,9 @@ implementation depends on it.
 
 **Status:** In progress. Run-list, selected-run detail, and typed scheduler
 timeline event acceptance now cover the frontend service boundary with Tauri
-mock IPC. Run-list projection DTOs now include client, client-session, and
-bucket scope fields so Scheduler pages do not recover authority context from
-raw events. Backend fixture coverage for typed event projection, retained
+mock IPC. Run-list projection DTOs now include client, client-session, bucket,
+and workflow execution-session scope fields so Scheduler pages do not recover
+authority or queue-control context from raw events. Backend fixture coverage for typed event projection, retained
 artifact browsing, expired I/O artifact state, and warm Library usage
 catching-up state is also in place. Frontend error-envelope coverage now proves
 projection service calls preserve backend error categories through typed

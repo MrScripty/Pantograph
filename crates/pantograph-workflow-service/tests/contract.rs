@@ -658,6 +658,7 @@ fn workflow_run_list_query_contract_snapshot() {
             client_id: Some("client-1".to_string().try_into().expect("client id")),
             client_session_id: Some("session-1".to_string().try_into().expect("session id")),
             bucket_id: Some("bucket-1".to_string().try_into().expect("bucket id")),
+            workflow_execution_session_id: Some("exec-session-1".to_string()),
             scheduler_queue_position: Some(1),
             scheduler_priority: Some(5),
             estimate_confidence: Some("low".to_string()),
@@ -681,7 +682,7 @@ fn workflow_run_list_query_contract_snapshot() {
         ],
         projection_state: ProjectionStateRecord {
             projection_name: "run_list".to_string(),
-            projection_version: 2,
+            projection_version: 3,
             last_applied_event_seq: 15,
             status: ProjectionStatus::Current,
             rebuilt_at_ms: None,
@@ -721,6 +722,7 @@ fn workflow_run_list_query_contract_snapshot() {
             "client_id": "client-1",
             "client_session_id": "session-1",
             "bucket_id": "bucket-1",
+            "workflow_execution_session_id": "exec-session-1",
             "scheduler_queue_position": 1,
             "scheduler_priority": 5,
             "estimate_confidence": "low",
@@ -741,7 +743,7 @@ fn workflow_run_list_query_contract_snapshot() {
         }],
         "projection_state": {
             "projection_name": "run_list",
-            "projection_version": 2,
+            "projection_version": 3,
             "last_applied_event_seq": 15,
             "status": "current",
             "rebuilt_at_ms": null,
@@ -775,6 +777,7 @@ fn workflow_run_detail_query_contract_snapshot() {
             client_session_id: Some("session-1".to_string().try_into().expect("session id")),
             bucket_id: Some("bucket-1".to_string().try_into().expect("bucket id")),
             workflow_run_snapshot_id: Some("snapshot-1".to_string()),
+            workflow_execution_session_id: Some("exec-session-1".to_string()),
             workflow_presentation_revision_id: Some("presentation-1".to_string()),
             latest_estimate_json: Some(r#"{"confidence":"low"}"#.to_string()),
             latest_queue_placement_json: Some(r#"{"queue_position":1}"#.to_string()),
@@ -793,7 +796,7 @@ fn workflow_run_detail_query_contract_snapshot() {
         }),
         projection_state: ProjectionStateRecord {
             projection_name: "run_detail".to_string(),
-            projection_version: 1,
+            projection_version: 2,
             last_applied_event_seq: 15,
             status: ProjectionStatus::Current,
             rebuilt_at_ms: None,
@@ -827,6 +830,7 @@ fn workflow_run_detail_query_contract_snapshot() {
             "client_session_id": "session-1",
             "bucket_id": "bucket-1",
             "workflow_run_snapshot_id": "snapshot-1",
+            "workflow_execution_session_id": "exec-session-1",
             "workflow_presentation_revision_id": "presentation-1",
             "latest_estimate_json": "{\"confidence\":\"low\"}",
             "latest_queue_placement_json": "{\"queue_position\":1}",
@@ -845,7 +849,7 @@ fn workflow_run_detail_query_contract_snapshot() {
         },
         "projection_state": {
             "projection_name": "run_detail",
-            "projection_version": 1,
+            "projection_version": 2,
             "last_applied_event_seq": 15,
             "status": "current",
             "rebuilt_at_ms": null,
@@ -1066,7 +1070,7 @@ fn workflow_projection_rebuild_contract_snapshot() {
     let response = WorkflowProjectionRebuildResponse {
         projection_state: ProjectionStateRecord {
             projection_name: "run_list".to_string(),
-            projection_version: 2,
+            projection_version: 3,
             last_applied_event_seq: 42,
             status: ProjectionStatus::Current,
             rebuilt_at_ms: None,
@@ -1085,7 +1089,7 @@ fn workflow_projection_rebuild_contract_snapshot() {
     let expected_response = serde_json::json!({
         "projection_state": {
             "projection_name": "run_list",
-            "projection_version": 2,
+            "projection_version": 3,
             "last_applied_event_seq": 42,
             "status": "current",
             "rebuilt_at_ms": null,

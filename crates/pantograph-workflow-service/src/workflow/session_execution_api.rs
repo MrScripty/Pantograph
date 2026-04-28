@@ -512,6 +512,7 @@ impl WorkflowService {
                         .workflow_presentation_revision_id
                         .as_str()
                         .to_string(),
+                    workflow_execution_session_id: snapshot.workflow_execution_session_id.clone(),
                     node_versions,
                 }),
             },

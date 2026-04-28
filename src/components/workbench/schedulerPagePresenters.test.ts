@@ -39,6 +39,7 @@ function run(overrides: Partial<RunListProjectionRecord>): RunListProjectionReco
     client_id: 'client-a',
     client_session_id: 'session-a',
     bucket_id: 'bucket-a',
+    workflow_execution_session_id: 'exec-session-a',
     scheduler_queue_position: null,
     scheduler_priority: null,
     estimate_confidence: null,
@@ -122,7 +123,12 @@ test('filterAndSortSchedulerRuns filters by status and search text', () => {
 test('filterAndSortSchedulerRuns searches client scope facts', () => {
   const runs = [
     run({ workflow_run_id: 'run-a', client_session_id: 'session-alpha', bucket_id: 'bucket-main' }),
-    run({ workflow_run_id: 'run-b', client_session_id: 'session-beta', bucket_id: 'bucket-side' }),
+    run({
+      workflow_run_id: 'run-b',
+      client_session_id: 'session-beta',
+      bucket_id: 'bucket-side',
+      workflow_execution_session_id: 'exec-side',
+    }),
   ];
 
   assert.deepEqual(

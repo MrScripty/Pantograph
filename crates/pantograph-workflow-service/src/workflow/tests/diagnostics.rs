@@ -213,6 +213,10 @@ fn workflow_run_list_query_drains_and_reads_projection() {
         response.runs[0].bucket_id.as_ref().map(|id| id.as_str()),
         Some("bucket-a")
     );
+    assert_eq!(
+        response.runs[0].workflow_execution_session_id.as_deref(),
+        Some("exec-session-a")
+    );
     assert_eq!(response.runs[0].scheduler_queue_position, Some(0));
     assert_eq!(response.runs[0].scheduler_priority, Some(7));
     assert!(response.facets.iter().any(|facet| {
@@ -290,6 +294,10 @@ fn workflow_run_detail_query_drains_and_reads_projection() {
     assert_eq!(run.status, RunListProjectionStatus::Completed);
     assert_eq!(run.duration_ms, Some(15));
     assert_eq!(run.workflow_run_snapshot_id.as_deref(), Some("runsnap-a"));
+    assert_eq!(
+        run.workflow_execution_session_id.as_deref(),
+        Some("exec-session-a")
+    );
     assert_eq!(
         run.workflow_presentation_revision_id.as_deref(),
         Some("wfpres-a")
@@ -966,6 +974,7 @@ fn sample_run_snapshot_event() -> DiagnosticEventAppendRequest {
         payload: DiagnosticEventPayload::RunSnapshotAccepted(RunSnapshotAcceptedPayload {
             workflow_run_snapshot_id: "runsnap-a".to_string(),
             workflow_presentation_revision_id: "wfpres-a".to_string(),
+            workflow_execution_session_id: "exec-session-a".to_string(),
             node_versions: vec![RunSnapshotNodeVersionPayload {
                 node_id: "node-a".to_string(),
                 node_type: "text-output".to_string(),

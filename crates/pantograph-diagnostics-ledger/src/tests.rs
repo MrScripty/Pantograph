@@ -952,6 +952,10 @@ fn run_list_projection_drains_lifecycle_events_incrementally() {
         record.bucket_id.as_ref().map(|id| id.as_str()),
         Some("bucket_alpha")
     );
+    assert_eq!(
+        record.workflow_execution_session_id.as_deref(),
+        Some("exec_session_alpha")
+    );
     assert_eq!(record.scheduler_queue_position, Some(0));
     assert_eq!(record.scheduler_priority, Some(7));
     assert_eq!(
@@ -1079,6 +1083,10 @@ fn run_detail_projection_drains_lifecycle_events_incrementally() {
     assert_eq!(
         record.workflow_run_snapshot_id.as_deref(),
         Some("runsnap_alpha")
+    );
+    assert_eq!(
+        record.workflow_execution_session_id.as_deref(),
+        Some("exec_session_alpha")
     );
     assert_eq!(
         record.workflow_presentation_revision_id.as_deref(),
@@ -2006,9 +2014,66 @@ fn existing_v16_schema_adds_run_list_scope_columns() {
         "run_list_projection",
         "bucket_id"
     ));
+    assert!(sqlite_column_exists(
+        &conn,
+        "run_list_projection",
+        "workflow_execution_session_id"
+    ));
     assert!(sqlite_index_exists(
         &conn,
         "idx_run_list_projection_client_session_updated"
+    ));
+    assert!(sqlite_index_exists(
+        &conn,
+        "idx_run_list_projection_execution_session_updated"
+    ));
+}
+
+#[test]
+fn existing_v17_schema_adds_workflow_execution_session_projection_columns() {
+    let temp = tempfile::NamedTempFile::new().expect("temp file");
+    let path = temp.path().to_path_buf();
+    {
+        let conn = Connection::open(&path).expect("connection opens");
+        conn.execute_batch(
+            "CREATE TABLE ledger_schema_migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at_ms INTEGER NOT NULL,
+                checksum TEXT NOT NULL
+            );
+            INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
+            VALUES (17, 0, 'pantograph-diagnostics-ledger-v17');
+            CREATE TABLE run_list_projection (
+                workflow_run_id TEXT PRIMARY KEY,
+                workflow_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                last_event_seq INTEGER NOT NULL,
+                last_updated_at_ms INTEGER NOT NULL
+            );
+            CREATE TABLE run_detail_projection (
+                workflow_run_id TEXT PRIMARY KEY
+            );",
+        )
+        .expect("v17 schema marker and old run projections are installed");
+    }
+    {
+        let _ledger = SqliteDiagnosticsLedger::open(&path).expect("ledger migrates");
+    }
+    let conn = Connection::open(&path).expect("connection reopens");
+
+    assert!(sqlite_column_exists(
+        &conn,
+        "run_list_projection",
+        "workflow_execution_session_id"
+    ));
+    assert!(sqlite_column_exists(
+        &conn,
+        "run_detail_projection",
+        "workflow_execution_session_id"
+    ));
+    assert!(sqlite_index_exists(
+        &conn,
+        "idx_run_list_projection_execution_session_updated"
     ));
 }
 
@@ -2560,6 +2625,7 @@ fn sample_run_snapshot_event(workflow_run_id: &str) -> DiagnosticEventAppendRequ
         payload: DiagnosticEventPayload::RunSnapshotAccepted(RunSnapshotAcceptedPayload {
             workflow_run_snapshot_id: "runsnap_alpha".to_string(),
             workflow_presentation_revision_id: "wfpres_alpha".to_string(),
+            workflow_execution_session_id: "exec_session_alpha".to_string(),
             node_versions: vec![RunSnapshotNodeVersionPayload {
                 node_id: "node_alpha".to_string(),
                 node_type: "text-output".to_string(),

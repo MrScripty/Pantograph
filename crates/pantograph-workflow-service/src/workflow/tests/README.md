@@ -61,8 +61,9 @@ Use `workflow/tests/` for behavior-specific child modules under the parent
 - Extracted tests preserve their original public facade paths and assertions.
 - Diagnostics projection tests must verify typed projection fields rather than
   inferring retention, scheduler, or run-list facet facts from raw payload JSON.
-- Diagnostics projection tests must verify run-list client/session/bucket
-  scope facts through public query responses instead of raw event inspection.
+- Diagnostics projection tests must verify run-list client/session/bucket and
+  workflow execution-session scope facts through public query responses instead
+  of raw event inspection.
 - I/O artifact query tests must include expired-retention fixture data so
   service callers prove retention state, payload-reference removal, and
   retention summary counts through the public API.

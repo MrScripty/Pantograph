@@ -194,6 +194,7 @@ function schedulerRunMatchesSearch(run: RunListProjectionRecord, search: string)
     run.client_id,
     run.client_session_id,
     run.bucket_id,
+    run.workflow_execution_session_id,
     run.status,
   ].some((value) => value?.toLowerCase().includes(search));
 }

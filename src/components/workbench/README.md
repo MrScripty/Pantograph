@@ -88,8 +88,9 @@ transient UI state without becoming backend scheduler policy.
   component-local durable state.
 - Scheduler timeline rows come from `workflowService.querySchedulerTimeline`.
   Components render typed summary/detail fields and payload availability only.
-- Scheduler client, session, and bucket columns come from run-list projection
-  fields. Components must not recover those scope facts from raw events.
+- Scheduler client, session, bucket, and workflow execution-session facts come
+  from run-list projection fields. Components must not recover those scope
+  facts from raw events.
 - Scheduler status presentation includes delayed rows from the run-list
   projection. Components must treat delayed as backend-authored state rather
   than inferring it from scheduler reason text.

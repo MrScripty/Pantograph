@@ -36,6 +36,7 @@ test('queryRunList preserves backend projection rows and facets', async () => {
         client_id: 'client-a',
         client_session_id: 'session-a',
         bucket_id: 'bucket-a',
+        workflow_execution_session_id: 'exec-session-a',
         scheduler_queue_position: 0,
         scheduler_priority: 7,
         estimate_confidence: 'low',
@@ -52,7 +53,7 @@ test('queryRunList preserves backend projection rows and facets', async () => {
     ],
     projection_state: {
       projection_name: 'run_list',
-      projection_version: 2,
+      projection_version: 3,
       last_applied_event_seq: 5,
       status: 'current',
       rebuilt_at_ms: null,
@@ -128,6 +129,7 @@ test('queryRunDetail preserves selected-run workflow version and estimate fields
       client_id: 'client-a',
       client_session_id: 'session-a',
       bucket_id: 'bucket-a',
+      workflow_execution_session_id: 'exec-session-a',
       workflow_run_snapshot_id: 'snapshot-a',
       workflow_presentation_revision_id: 'presentation-a',
       latest_estimate_json: '{"confidence":"low"}',
@@ -147,7 +149,7 @@ test('queryRunDetail preserves selected-run workflow version and estimate fields
     },
     projection_state: {
       projection_name: 'run_detail',
-      projection_version: 1,
+      projection_version: 2,
       last_applied_event_seq: 6,
       status: 'current',
       rebuilt_at_ms: null,

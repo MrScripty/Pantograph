@@ -70,9 +70,10 @@ scheduler timeline, run-list, selected-run, and warm Library usage read paths
 can be tested without loading the graph package runtime. `WorkflowService`
 inherits that boundary so existing GUI callers keep the same method names while
 projection DTO tests stay focused on Tauri request/response contracts.
-Run-list projection DTOs preserve backend-provided client, client-session, and
-bucket scope fields so Scheduler pages can render authority context without
-querying selected-run details or raw diagnostic events.
+Run-list projection DTOs preserve backend-provided client, client-session,
+bucket, and workflow execution-session scope fields so Scheduler pages can
+render authority context and future queue-control targets without querying
+selected-run details or raw diagnostic events.
 Workflow command invoke paths that back workbench projections and queue,
 retention, Network, and runtime-status reads use `invokeWorkflowCommand`, which
 normalizes Tauri's JSON error strings into typed `WorkflowServiceError`

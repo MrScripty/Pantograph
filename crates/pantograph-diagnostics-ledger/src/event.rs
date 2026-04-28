@@ -11,9 +11,9 @@ pub const MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES: usize = 8_192;
 pub const SCHEDULER_TIMELINE_PROJECTION_NAME: &str = "scheduler_timeline";
 pub const SCHEDULER_TIMELINE_PROJECTION_VERSION: i64 = 1;
 pub const RUN_LIST_PROJECTION_NAME: &str = "run_list";
-pub const RUN_LIST_PROJECTION_VERSION: i64 = 2;
+pub const RUN_LIST_PROJECTION_VERSION: i64 = 3;
 pub const RUN_DETAIL_PROJECTION_NAME: &str = "run_detail";
-pub const RUN_DETAIL_PROJECTION_VERSION: i64 = 1;
+pub const RUN_DETAIL_PROJECTION_VERSION: i64 = 2;
 pub const IO_ARTIFACT_PROJECTION_NAME: &str = "io_artifact";
 pub const IO_ARTIFACT_PROJECTION_VERSION: i64 = 3;
 pub const LIBRARY_USAGE_PROJECTION_NAME: &str = "library_usage";
@@ -487,6 +487,7 @@ impl RunTerminalPayload {
 pub struct RunSnapshotAcceptedPayload {
     pub workflow_run_snapshot_id: String,
     pub workflow_presentation_revision_id: String,
+    pub workflow_execution_session_id: String,
     pub node_versions: Vec<RunSnapshotNodeVersionPayload>,
 }
 
@@ -509,6 +510,11 @@ impl RunSnapshotAcceptedPayload {
         validate_required_text(
             "workflow_presentation_revision_id",
             &self.workflow_presentation_revision_id,
+            MAX_ID_LEN,
+        )?;
+        validate_required_text(
+            "workflow_execution_session_id",
+            &self.workflow_execution_session_id,
             MAX_ID_LEN,
         )?;
         for node_version in &self.node_versions {
@@ -1102,6 +1108,7 @@ pub struct RunListProjectionRecord {
     pub client_id: Option<ClientId>,
     pub client_session_id: Option<ClientSessionId>,
     pub bucket_id: Option<BucketId>,
+    pub workflow_execution_session_id: Option<String>,
     pub scheduler_queue_position: Option<u32>,
     pub scheduler_priority: Option<i32>,
     pub estimate_confidence: Option<String>,
@@ -1151,6 +1158,7 @@ pub struct RunDetailProjectionRecord {
     pub client_session_id: Option<ClientSessionId>,
     pub bucket_id: Option<BucketId>,
     pub workflow_run_snapshot_id: Option<String>,
+    pub workflow_execution_session_id: Option<String>,
     pub workflow_presentation_revision_id: Option<String>,
     pub latest_estimate_json: Option<String>,
     pub latest_queue_placement_json: Option<String>,

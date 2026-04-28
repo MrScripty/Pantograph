@@ -111,7 +111,8 @@ session-runtime workflows, and the root facade test module.
 - Session run submission generates the backend workflow run id before enqueue
   and, when attribution storage is configured, records the immutable workflow
   version/run snapshot and emits a `run.snapshot_accepted` event with the node
-  behavior-version set before handing the run to scheduler admission.
+  behavior-version set and workflow execution-session id before handing the
+  run to scheduler admission.
 - Session run I/O artifact events use diagnostics-ledger typed artifact roles
   for workflow inputs and outputs. Workflow-service should pass role enums to
   the ledger and use string labels only for deterministic artifact ids.

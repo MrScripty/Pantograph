@@ -340,6 +340,7 @@ export interface RunListProjectionRecord {
   client_id?: string | null;
   client_session_id?: string | null;
   bucket_id?: string | null;
+  workflow_execution_session_id?: string | null;
   scheduler_queue_position?: number | null;
   scheduler_priority?: number | null;
   estimate_confidence?: string | null;
