@@ -34,6 +34,7 @@ export interface DiagnosticsComparisonFilters {
   client: string;
   clientSession: string;
   bucket: string;
+  acceptedDate: string;
 }
 
 export interface DiagnosticsComparisonFilterOptions {
@@ -43,6 +44,7 @@ export interface DiagnosticsComparisonFilterOptions {
   clients: string[];
   clientSessions: string[];
   buckets: string[];
+  acceptedDates: string[];
 }
 
 export const DIAGNOSTICS_FILTER_ALL = 'all';
@@ -54,6 +56,7 @@ export const DEFAULT_DIAGNOSTICS_COMPARISON_FILTERS: DiagnosticsComparisonFilter
   client: DIAGNOSTICS_FILTER_ALL,
   clientSession: DIAGNOSTICS_FILTER_ALL,
   bucket: DIAGNOSTICS_FILTER_ALL,
+  acceptedDate: DIAGNOSTICS_FILTER_ALL,
 };
 
 export const EMPTY_DIAGNOSTICS_COMPARISON_FILTER_OPTIONS: DiagnosticsComparisonFilterOptions = {
@@ -63,6 +66,7 @@ export const EMPTY_DIAGNOSTICS_COMPARISON_FILTER_OPTIONS: DiagnosticsComparisonF
   clients: [],
   clientSessions: [],
   buckets: [],
+  acceptedDates: [],
 };
 
 export function formatDiagnosticsTimestamp(value: number | null | undefined): string {
@@ -269,6 +273,7 @@ export function buildDiagnosticsComparisonFilterOptions(
     clients: uniqueSorted(scopedRuns.map((run) => optionalFacetLabel(run.client_id))),
     clientSessions: uniqueSorted(scopedRuns.map((run) => optionalFacetLabel(run.client_session_id))),
     buckets: uniqueSorted(scopedRuns.map((run) => optionalFacetLabel(run.bucket_id))),
+    acceptedDates: uniqueSorted(scopedRuns.map((run) => acceptedDateLabel(run.accepted_at_ms))),
   };
 }
 
@@ -336,7 +341,8 @@ function diagnosticsRunMatchesFilters(
     filterMatches(optionalFacetLabel(run.retention_policy_id), filters.retentionPolicy) &&
     filterMatches(optionalFacetLabel(run.client_id), filters.client) &&
     filterMatches(optionalFacetLabel(run.client_session_id), filters.clientSession) &&
-    filterMatches(optionalFacetLabel(run.bucket_id), filters.bucket)
+    filterMatches(optionalFacetLabel(run.bucket_id), filters.bucket) &&
+    filterMatches(acceptedDateLabel(run.accepted_at_ms), filters.acceptedDate)
   );
 }
 
@@ -354,6 +360,13 @@ function workflowVersionLabel(run: RunListProjectionRecord): string {
 
 function optionalFacetLabel(value: string | null | undefined): string {
   return value && value.trim().length > 0 ? value : 'Unassigned';
+}
+
+function acceptedDateLabel(value: number | null | undefined): string {
+  if (!value) {
+    return 'Unassigned';
+  }
+  return new Date(value).toISOString().slice(0, 10);
 }
 
 export function formatDiagnosticEventKind(kind: DiagnosticEventKind): string {

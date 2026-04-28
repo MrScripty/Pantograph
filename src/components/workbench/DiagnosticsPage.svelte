@@ -338,6 +338,20 @@
                   {/each}
                 </select>
               </label>
+              <label class="min-w-0 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
+                Accepted
+                <select
+                  aria-label="Diagnostics accepted date filter"
+                  class="mt-1 w-full rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs normal-case tracking-normal text-neutral-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+                  value={comparisonFilters.acceptedDate}
+                  onchange={(event) => updateComparisonFilter('acceptedDate', selectValue(event))}
+                >
+                  <option value={DIAGNOSTICS_FILTER_ALL}>All</option>
+                  {#each comparisonFilterOptions.acceptedDates as acceptedDate (acceptedDate)}
+                    <option value={acceptedDate}>{acceptedDate}</option>
+                  {/each}
+                </select>
+              </label>
             </div>
             {#if facetSummary?.mixedVersionWarning}
               <div class="mt-3 rounded border border-amber-900 bg-amber-950/40 px-3 py-2 text-xs text-amber-100">

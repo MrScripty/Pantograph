@@ -63,6 +63,7 @@ function createRunListPeer(overrides: Partial<RunListProjectionRecord>): RunList
     status: 'completed',
     scheduler_policy_id: 'policy-a',
     retention_policy_id: 'retention-a',
+    accepted_at_ms: 86_400_000,
     client_id: 'client-a',
     client_session_id: 'session-a',
     bucket_id: 'bucket-a',
@@ -207,6 +208,7 @@ test('diagnostics comparison filters expose available projection values', () => 
       client_id: null,
       client_session_id: null,
       retention_policy_id: null,
+      accepted_at_ms: null,
     }),
     createRunListPeer({ workflow_run_id: 'run-4', workflow_id: 'workflow-b', status: 'failed' }),
   ]);
@@ -217,6 +219,7 @@ test('diagnostics comparison filters expose available projection values', () => 
   assert.deepEqual(options.clients, ['client-a', 'Unassigned']);
   assert.deepEqual(options.clientSessions, ['session-a', 'Unassigned']);
   assert.deepEqual(options.buckets, ['bucket-a', 'Unassigned']);
+  assert.deepEqual(options.acceptedDates, ['1970-01-01', '1970-01-02', 'Unassigned']);
 });
 
 test('diagnostics comparison filters keep selected run and filter peer rows', () => {
@@ -233,6 +236,7 @@ test('diagnostics comparison filters keep selected run and filter peer rows', ()
       ...DEFAULT_DIAGNOSTICS_COMPARISON_FILTERS,
       status: 'completed',
       schedulerPolicy: 'policy-b',
+      acceptedDate: '1970-01-02',
     },
   );
 
