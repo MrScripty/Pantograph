@@ -80,6 +80,9 @@ importing the full graph event runtime required by `WorkflowService.ts`.
 Retention cleanup is a backend-owned command that returns cleanup counts and
 projection-derived state; frontend services forward the request and do not
 remove artifact cards optimistically.
+Pumas model deletion is exposed as a backend-owned audited command; frontend
+services forward the model id and preserve the backend delete/audit response
+without inventing local Library state.
 
 ## Alternatives Rejected
 - Remove `WorkflowService` and switch every app caller to `TauriWorkflowBackend`
@@ -136,6 +139,9 @@ remove artifact cards optimistically.
 - Queue and retention command methods must return backend-authored command
   responses exactly. Frontend code may show pending state while waiting, but it
   must not synthesize replacement queue state or retention policy facts.
+- Pumas model delete commands must return backend-authored delete/audit
+  responses exactly. Frontend code may refresh Library projections afterward,
+  but it must not synthesize audit event ids or local deletion state.
 
 ## Revisit Triggers
 - The app graph and all remaining callers migrate to package backends directly.

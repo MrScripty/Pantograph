@@ -593,6 +593,12 @@ export interface WorkflowRetentionCleanupResponse {
   cleanup: WorkflowRetentionCleanupResult;
 }
 
+export interface PumasModelDeleteAuditResponse {
+  success: boolean;
+  error?: string | null;
+  auditEventSeq?: number | null;
+}
+
 export interface WorkflowSchedulerTimelineQueryRequest {
   workflow_run_id?: string | null;
   workflow_id?: string | null;

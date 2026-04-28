@@ -92,6 +92,9 @@ improvements and backend-owned grouping DTOs over local adapter exceptions.
 - Retention cleanup command registration must delegate artifact expiration and
   audit-event emission to the workflow service; Tauri only transports the
   typed request/response.
+- Pumas model delete command registration must delegate deletion to Pumas and
+  audit-event emission to the workflow service; Tauri validates auditable
+  identifiers and transports the typed response.
 - Desktop composition must not register parallel workflow execution-state
   managers when the workflow service owns the active session state.
 - Mechanical lint fixes must not change command payload shape, runtime

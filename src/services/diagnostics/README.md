@@ -76,6 +76,9 @@ projection without inventing fallback run identities or workflow display names.
 - Retention cleanup DTOs mirror the backend cleanup command/result shape so GUI
   controls can display expired-artifact counts without mutating local
   diagnostics state optimistically.
+- Pumas model delete audit DTOs mirror the backend command response so GUI
+  controls can display delete/audit outcomes without synthesizing local event
+  ids or Library state.
 
 ## Revisit Triggers
 - Diagnostics needs durable persistence or export/replay support.

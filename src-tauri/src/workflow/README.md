@@ -54,7 +54,9 @@ while still handling desktop runtime execution concerns.
 - Pumas/Library audit emission from command handlers must stay transport-thin
   and delegate to `pantograph-workflow-service`; successful Puma-Lib option
   queries may record collection access/search after the underlying provider
-  returns, but handlers must not append raw diagnostic ledger events.
+  returns, and successful model delete commands may record delete events after
+  Pumas confirms deletion, but handlers must not append raw diagnostic ledger
+  events.
 - Tauri execution-handle lifecycle and undo/redo projection must stay thin
   wrappers around backend-owned `node-engine` behavior rather than becoming a
   second owner of workflow-session policy.
@@ -274,6 +276,8 @@ let snapshot = workflow_service
 - Puma-Lib option queries record successful model collection access/search
   through the workflow-service Library asset audit API and do not emit audit
   events for failed provider calls.
+- Pumas model delete commands validate auditable model ids before calling Pumas,
+  then record typed delete audit events only after successful cascade deletion.
 
 ## Structured Producer Contract
 - `ConnectionCandidatesResponse` always includes `graph_revision`,

@@ -369,7 +369,10 @@ Scheduler, and Diagnostics pages.
   - Existing Puma-Lib model option queries now record successful collection
     access/search operations through a workflow-service audit boundary instead
     of writing raw ledger events from Tauri/frontend code. Download/delete
-    wrappers remain pending.
+    Download wrappers remain pending.
+  - Pumas model cascade delete is now exposed through a Tauri command that
+    validates the model id before deletion and records a typed delete audit
+    event only after the Pumas delete succeeds.
 - [ ] Emit typed `library.*` events for asset access by run, session, bucket,
   client, or GUI actor where available.
   - Workflow-session run snapshots now emit `library.asset_accessed` events
@@ -379,6 +382,9 @@ Scheduler, and Diagnostics pages.
   - Puma-Lib option queries now emit GUI-side `library.asset_accessed` events
     for `pumas://models` with source instance `puma-lib-port-options` after the
     underlying Pumas query succeeds.
+  - Pumas model delete emits `library.asset_accessed` delete events for
+    `pumas://models/<model_id>` with source instance `pumas-model-delete` after
+    successful deletion.
 - [ ] Emit typed cache hit/miss and network byte observations where available.
 - [x] Add Library usage projections: used by active run, used by N runs, last
   accessed, total access count, linked workflow/node versions.
@@ -408,9 +414,10 @@ then report run-linked usage counts and last-access facts for
 `pumas://models/<model_id>` assets. Puma-Lib model option access/search now
 records successful GUI/library collection operations through
 `workflow_library_asset_access_record`, giving the GUI a typed audit boundary
-without exposing raw event appends. Pumas download/delete wrappers, cache
-hit/miss facts, network byte observations, and rejected operation tests remain
-pending.
+without exposing raw event appends. Pumas cascade delete now validates auditable
+model ids before deletion and records a typed delete event after success. Pumas
+download wrappers, cache hit/miss facts, network byte observations, and broader
+rejected operation tests remain pending.
 
 ## Ownership And Lifecycle Note
 
@@ -489,6 +496,9 @@ implicitly on page load.
 - 2026-04-27: Added a workflow-service Library asset audit boundary and wired
   Puma-Lib model option queries to record successful `pumas://models`
   access/search events after the underlying Pumas query succeeds.
+- 2026-04-27: Added a Pumas model delete Tauri command that validates auditable
+  model ids, delegates deletion to Pumas, and records a typed Library delete
+  event only after the delete succeeds.
 
 ### Deviations
 
@@ -563,6 +573,12 @@ implicitly on page load.
   boundary and Puma-Lib port-option instrumentation.
 - 2026-04-27: `cargo test -p pantograph-workflow-service` passed for the same
   Library asset audit boundary changes.
+- 2026-04-27: `cargo test -p pantograph validate_pumas_model_id_for_audit`,
+  `cargo check -p pantograph`,
+  `node --experimental-strip-types --test
+  src/services/workflow/WorkflowService.commands.test.ts`, and
+  `npm run typecheck` passed after adding the audited Pumas model delete
+  command and frontend service wrapper.
 
 ### Traceability Links
 

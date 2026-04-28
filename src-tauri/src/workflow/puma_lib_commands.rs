@@ -1,15 +1,33 @@
 use pantograph_runtime_identity::canonical_engine_backend_key;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
+use std::sync::Arc;
 use tauri::State;
 
-use super::commands::{SharedExtensions, SharedNodeRegistry};
+use super::commands::{SharedExtensions, SharedNodeRegistry, SharedWorkflowService};
 use super::model_dependencies::SharedModelDependencyResolver;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PumaLibNodeHydrationResponse {
     pub node_data: Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PumaModelDeleteAuditResponse {
+    pub success: bool,
+    pub error: Option<String>,
+    pub audit_event_seq: Option<i64>,
+}
+
+async fn require_pumas_api(
+    extensions: &State<'_, SharedExtensions>,
+) -> Result<Arc<pumas_library::PumasApi>, String> {
+    let ext = extensions.read().await;
+    ext.get::<Arc<pumas_library::PumasApi>>(node_engine::extension_keys::PUMAS_API)
+        .cloned()
+        .ok_or_else(|| "Pumas API not available in executor extensions".to_string())
 }
 
 pub async fn hydrate_puma_lib_node(
@@ -43,6 +61,52 @@ pub async fn hydrate_puma_lib_node(
     }
 
     Ok(PumaLibNodeHydrationResponse { node_data })
+}
+
+pub async fn delete_pumas_model_with_audit(
+    extensions: State<'_, SharedExtensions>,
+    workflow_service: State<'_, SharedWorkflowService>,
+    model_id: String,
+) -> Result<PumaModelDeleteAuditResponse, String> {
+    let model_id = validate_pumas_model_id_for_audit(&model_id)?;
+    let api = require_pumas_api(&extensions).await?;
+    let delete_result = api
+        .delete_model_with_cascade(model_id)
+        .await
+        .map_err(|error| error.to_string())?;
+
+    let audit_event_seq = if delete_result.success {
+        record_pumas_model_delete_audit(&workflow_service, model_id)
+    } else {
+        None
+    };
+
+    Ok(PumaModelDeleteAuditResponse {
+        success: delete_result.success,
+        error: delete_result.error,
+        audit_event_seq,
+    })
+}
+
+fn record_pumas_model_delete_audit(
+    workflow_service: &SharedWorkflowService,
+    model_id: &str,
+) -> Option<i64> {
+    match workflow_service.workflow_library_asset_access_record(
+        pantograph_workflow_service::WorkflowLibraryAssetAccessRecordRequest {
+            asset_id: format!("pumas://models/{model_id}"),
+            operation: pantograph_workflow_service::LibraryAssetOperation::Delete,
+            cache_status: Some(pantograph_workflow_service::LibraryAssetCacheStatus::NotApplicable),
+            network_bytes: None,
+            source_instance_id: Some("pumas-model-delete".to_string()),
+        },
+    ) {
+        Ok(response) => response.event_seq,
+        Err(error) => {
+            log::warn!("Failed to record Pumas model delete audit event: {error}");
+            None
+        }
+    }
 }
 
 async fn find_matching_model_option(
@@ -224,6 +288,31 @@ fn clean_optional(value: Option<String>) -> Option<String> {
             Some(trimmed.to_string())
         }
     })
+}
+
+fn validate_pumas_model_id_for_audit(model_id: &str) -> Result<&str, String> {
+    let trimmed = model_id.trim();
+    if trimmed.is_empty() {
+        return Err("model_id is required".to_string());
+    }
+    if trimmed != model_id || trimmed.chars().any(char::is_whitespace) {
+        return Err(
+            "model_id must not contain leading, trailing, or embedded whitespace".to_string(),
+        );
+    }
+    if trimmed.len() + "pumas://models/".len() > 128 {
+        return Err("model_id is too long for Pumas audit identifiers".to_string());
+    }
+    if trimmed.starts_with('/') || trimmed.contains('\\') {
+        return Err("model_id must be a relative Pumas model identifier".to_string());
+    }
+    if trimmed
+        .split('/')
+        .any(|segment| segment.is_empty() || segment == "." || segment == "..")
+    {
+        return Err("model_id contains an invalid path segment".to_string());
+    }
+    Ok(trimmed)
 }
 
 fn option_value_string(option: &node_engine::PortOption) -> Option<&str> {
@@ -417,5 +506,30 @@ mod tests {
             bindings,
             vec!["binding-a".to_string(), "binding-b".to_string()]
         );
+    }
+
+    #[test]
+    fn validate_pumas_model_id_for_audit_accepts_hf_style_ids() {
+        assert_eq!(
+            validate_pumas_model_id_for_audit("org/model-name").expect("valid model id"),
+            "org/model-name"
+        );
+    }
+
+    #[test]
+    fn validate_pumas_model_id_for_audit_rejects_unsafe_ids() {
+        for value in [
+            "",
+            " model",
+            "model id",
+            "/absolute",
+            "org//model",
+            "org/../model",
+        ] {
+            assert!(
+                validate_pumas_model_id_for_audit(value).is_err(),
+                "{value:?} should be rejected"
+            );
+        }
     }
 }

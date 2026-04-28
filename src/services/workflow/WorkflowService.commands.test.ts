@@ -155,3 +155,34 @@ test('applyRetentionCleanup returns backend cleanup result without optimistic mu
     clearMocks();
   }
 });
+
+test('deletePumasModelWithAudit returns backend delete audit result exactly', async () => {
+  installWindowMock();
+  const calls: Array<{ cmd: string; args: unknown }> = [];
+  const response = {
+    success: true,
+    error: null,
+    auditEventSeq: 77,
+  };
+  mockIPC((cmd, args) => {
+    calls.push({ cmd, args });
+    return response;
+  });
+
+  try {
+    const service = new WorkflowCommandService();
+    const result = await service.deletePumasModelWithAudit('org/model-a');
+
+    assert.deepEqual(result, response);
+    assert.deepEqual(calls, [
+      {
+        cmd: 'delete_pumas_model_with_audit',
+        args: {
+          modelId: 'org/model-a',
+        },
+      },
+    ]);
+  } finally {
+    clearMocks();
+  }
+});

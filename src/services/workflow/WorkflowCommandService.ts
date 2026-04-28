@@ -1,4 +1,5 @@
 import type {
+  PumasModelDeleteAuditResponse,
   WorkflowRetentionPolicyQueryRequest,
   WorkflowRetentionPolicyQueryResponse,
   WorkflowRetentionCleanupRequest,
@@ -103,6 +104,20 @@ export class WorkflowCommandService extends WorkflowProjectionService {
 
     return invokeWorkflowCommand<WorkflowRetentionCleanupResponse>('workflow_retention_cleanup_apply', {
       request,
+    });
+  }
+
+  async deletePumasModelWithAudit(modelId: string): Promise<PumasModelDeleteAuditResponse> {
+    if (USE_WORKFLOW_MOCKS) {
+      return {
+        success: true,
+        error: null,
+        auditEventSeq: null,
+      };
+    }
+
+    return invokeWorkflowCommand<PumasModelDeleteAuditResponse>('delete_pumas_model_with_audit', {
+      modelId,
     });
   }
 }

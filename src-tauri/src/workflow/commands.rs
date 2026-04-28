@@ -542,6 +542,16 @@ pub async fn hydrate_puma_lib_node(
 }
 
 #[command]
+pub async fn delete_pumas_model_with_audit(
+    extensions: State<'_, SharedExtensions>,
+    workflow_service: State<'_, SharedWorkflowService>,
+    model_id: String,
+) -> Result<super::puma_lib_commands::PumaModelDeleteAuditResponse, String> {
+    super::puma_lib_commands::delete_pumas_model_with_audit(extensions, workflow_service, model_id)
+        .await
+}
+
+#[command]
 pub async fn run_dependency_environment_action(
     resolver: State<'_, super::model_dependencies::SharedModelDependencyResolver>,
     request: super::dependency_environment_commands::DependencyEnvironmentActionRequest,
