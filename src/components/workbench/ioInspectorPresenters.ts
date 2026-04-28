@@ -33,6 +33,16 @@ export interface IoArtifactRendererSummary {
   detail: string;
 }
 
+type IoArtifactNodeGroupSource = Pick<
+  IoArtifactProjectionRecord,
+  | 'node_id'
+  | 'node_type'
+  | 'producer_node_id'
+  | 'consumer_node_id'
+  | 'artifact_role'
+  | 'event_seq'
+>;
+
 export function isWorkflowInputArtifact(
   artifact: Pick<IoArtifactProjectionRecord, 'artifact_role'>,
 ): boolean {
@@ -60,38 +70,60 @@ export function formatIoArtifactRoleLabel(role: string | null | undefined): stri
   }
 }
 
-export function buildIoArtifactNodeGroups(
-  artifacts: Pick<IoArtifactProjectionRecord, 'node_id' | 'node_type' | 'artifact_role' | 'event_seq'>[],
-): IoArtifactNodeGroup[] {
+export function buildIoArtifactNodeGroups(artifacts: IoArtifactNodeGroupSource[]): IoArtifactNodeGroup[] {
   const groups = new Map<string, IoArtifactNodeGroup>();
-  for (const artifact of artifacts) {
-    if (!artifact.node_id) {
-      continue;
-    }
-
-    const group = groups.get(artifact.node_id) ?? {
-      node_id: artifact.node_id,
-      node_type: artifact.node_type,
+  const ensureGroup = (nodeId: string, artifact: IoArtifactNodeGroupSource): IoArtifactNodeGroup => {
+    const group = groups.get(nodeId) ?? {
+      node_id: nodeId,
+      node_type: nodeId === artifact.node_id ? artifact.node_type : null,
       input_count: 0,
       output_count: 0,
       artifact_count: 0,
       latest_event_seq: artifact.event_seq,
     };
-    group.artifact_count += 1;
     group.latest_event_seq = Math.max(group.latest_event_seq, artifact.event_seq);
-    if (artifact.artifact_role === 'node_input') {
-      group.input_count += 1;
-    }
-    if (artifact.artifact_role === 'node_output') {
-      group.output_count += 1;
-    }
-    if (!group.node_type && artifact.node_type) {
+    if (!group.node_type && nodeId === artifact.node_id && artifact.node_type) {
       group.node_type = artifact.node_type;
     }
-    groups.set(artifact.node_id, group);
+    groups.set(nodeId, group);
+    return group;
+  };
+
+  for (const artifact of artifacts) {
+    const countedGroups = new Set<string>();
+    if (artifact.consumer_node_id) {
+      const group = ensureGroup(artifact.consumer_node_id, artifact);
+      group.input_count += 1;
+      if (!countedGroups.has(group.node_id)) {
+        group.artifact_count += 1;
+        countedGroups.add(group.node_id);
+      }
+    }
+
+    if (artifact.producer_node_id) {
+      const group = ensureGroup(artifact.producer_node_id, artifact);
+      group.output_count += 1;
+      if (!countedGroups.has(group.node_id)) {
+        group.artifact_count += 1;
+        countedGroups.add(group.node_id);
+      }
+    }
+
+    if (!artifact.consumer_node_id && !artifact.producer_node_id && artifact.node_id) {
+      const group = ensureGroup(artifact.node_id, artifact);
+      group.artifact_count += 1;
+      if (artifact.artifact_role === 'node_input') {
+        group.input_count += 1;
+      }
+      if (artifact.artifact_role === 'node_output') {
+        group.output_count += 1;
+      }
+    }
   }
 
-  return [...groups.values()].sort((left, right) => right.latest_event_seq - left.latest_event_seq);
+  return [...groups.values()].sort(
+    (left, right) => right.latest_event_seq - left.latest_event_seq || left.node_id.localeCompare(right.node_id),
+  );
 }
 
 export function classifyIoArtifactMedia(mediaType: string | null | undefined): IoArtifactMediaFamily {
@@ -222,6 +254,17 @@ export function formatIoArtifactRetentionStateLabel(
 
 export function formatIoArtifactDetailValue(value: string | null | undefined): string {
   return value && value.trim().length > 0 ? value : 'Unavailable';
+}
+
+export function formatIoArtifactEndpointValue(
+  nodeId: string | null | undefined,
+  portId: string | null | undefined,
+): string {
+  const nodeLabel = formatIoArtifactDetailValue(nodeId);
+  if (nodeLabel === 'Unavailable') {
+    return nodeLabel;
+  }
+  return portId && portId.trim().length > 0 ? `${nodeLabel}:${portId}` : nodeLabel;
 }
 
 export function formatIoArtifactBytes(bytes: number | null | undefined): string {

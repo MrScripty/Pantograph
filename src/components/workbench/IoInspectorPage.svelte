@@ -18,6 +18,7 @@
     IoArtifactProjectionRecord,
     IoArtifactRetentionSummaryRecord,
     ProjectionStateRecord,
+    WorkflowIoArtifactQueryRequest,
   } from '../../services/diagnostics/types';
   import { workflowService } from '../../services/workflow/WorkflowService';
   import { activeWorkflowRun } from '../../stores/workbenchStore';
@@ -27,6 +28,7 @@
     formatIoArtifactAvailabilityLabel,
     formatIoArtifactBytes,
     formatIoArtifactDetailValue,
+    formatIoArtifactEndpointValue,
     formatIoArtifactMediaLabel,
     formatIoArtifactRetentionStateLabel,
     formatIoArtifactRoleLabel,
@@ -49,6 +51,8 @@
   let artifactError = $state<string | null>(null);
   let retentionError = $state<string | null>(null);
   let retentionCleanupMessage = $state<string | null>(null);
+  let endpointFilterMode = $state<'all' | 'producer' | 'consumer'>('all');
+  let endpointNodeFilter = $state('');
   let artifactRequestSerial = 0;
   let workflowInputArtifacts = $derived(artifacts.filter(isWorkflowInputArtifact));
   let workflowOutputArtifacts = $derived(artifacts.filter(isWorkflowOutputArtifact));
@@ -71,16 +75,29 @@
     retentionExplanation = policy.explanation;
   }
 
-  async function refreshArtifacts(runId = activeRunId()): Promise<void> {
+  async function refreshArtifacts(
+    runId = activeRunId(),
+    filterMode = endpointFilterMode,
+    filterNodeValue = endpointNodeFilter.trim(),
+  ): Promise<void> {
     const requestSerial = ++artifactRequestSerial;
     artifactError = null;
 
     loadingArtifacts = true;
     try {
-      const response = await workflowService.queryIoArtifacts({
+      const request: WorkflowIoArtifactQueryRequest = {
         workflow_run_id: runId ?? null,
         limit: 250,
-      });
+      };
+      const filterNodeId = filterNodeValue.trim();
+      if (filterNodeId.length > 0 && filterMode === 'producer') {
+        request.producer_node_id = filterNodeId;
+      }
+      if (filterNodeId.length > 0 && filterMode === 'consumer') {
+        request.consumer_node_id = filterNodeId;
+      }
+
+      const response = await workflowService.queryIoArtifacts(request);
       if (requestSerial !== artifactRequestSerial) {
         return;
       }
@@ -162,7 +179,9 @@
 
   $effect(() => {
     const runId = activeRunId();
-    void refreshArtifacts(runId);
+    const filterMode = endpointFilterMode;
+    const filterNodeValue = endpointNodeFilter.trim();
+    void refreshArtifacts(runId, filterMode, filterNodeValue);
   });
 
   onMount(() => {
@@ -197,6 +216,62 @@
     <div class="min-h-0 overflow-auto">
       <div class="border-b border-neutral-900 px-4 py-3 text-xs text-neutral-500">
         {formatProjectionFreshness(projectionState)}
+      </div>
+      <div class="flex flex-wrap items-end gap-3 border-b border-neutral-900 px-4 py-3">
+        <div>
+          <div class="mb-2 text-xs uppercase tracking-[0.18em] text-neutral-500">Endpoint</div>
+          <div class="inline-flex overflow-hidden rounded border border-neutral-800">
+            <button
+              type="button"
+              aria-pressed={endpointFilterMode === 'all'}
+              class="px-3 py-1.5 text-xs text-neutral-300 transition-colors hover:bg-neutral-900 hover:text-neutral-100"
+              class:bg-cyan-950={endpointFilterMode === 'all'}
+              class:text-cyan-100={endpointFilterMode === 'all'}
+              onclick={() => {
+                endpointFilterMode = 'all';
+              }}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              aria-pressed={endpointFilterMode === 'producer'}
+              class="border-l border-neutral-800 px-3 py-1.5 text-xs text-neutral-300 transition-colors hover:bg-neutral-900 hover:text-neutral-100"
+              class:bg-cyan-950={endpointFilterMode === 'producer'}
+              class:text-cyan-100={endpointFilterMode === 'producer'}
+              onclick={() => {
+                endpointFilterMode = 'producer';
+              }}
+            >
+              Produced
+            </button>
+            <button
+              type="button"
+              aria-pressed={endpointFilterMode === 'consumer'}
+              class="border-l border-neutral-800 px-3 py-1.5 text-xs text-neutral-300 transition-colors hover:bg-neutral-900 hover:text-neutral-100"
+              class:bg-cyan-950={endpointFilterMode === 'consumer'}
+              class:text-cyan-100={endpointFilterMode === 'consumer'}
+              onclick={() => {
+                endpointFilterMode = 'consumer';
+              }}
+            >
+              Consumed
+            </button>
+          </div>
+        </div>
+        <div class="min-w-[14rem] flex-1">
+          <label for="io-endpoint-node-filter" class="mb-2 block text-xs uppercase tracking-[0.18em] text-neutral-500">
+            Node id
+          </label>
+          <input
+            id="io-endpoint-node-filter"
+            type="text"
+            bind:value={endpointNodeFilter}
+            disabled={endpointFilterMode === 'all'}
+            placeholder="node-id"
+            class="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 font-mono text-xs text-neutral-100 placeholder:text-neutral-600 focus:border-cyan-500 focus:outline-none disabled:opacity-50"
+          />
+        </div>
       </div>
       {#if retentionSummary.length > 0}
         <div class="flex flex-wrap items-center gap-2 border-b border-neutral-900 px-4 py-3 text-xs">
@@ -376,9 +451,27 @@
                   <dd class="mt-0.5 text-neutral-200">{formatIoArtifactBytes(artifact.size_bytes)}</dd>
                 </div>
                 <div>
-                  <dt class="text-neutral-500">Node</dt>
+                  <dt class="text-neutral-500">Producer</dt>
+                  <dd
+                    class="mt-0.5 truncate text-neutral-200"
+                    title={formatIoArtifactEndpointValue(artifact.producer_node_id, artifact.producer_port_id)}
+                  >
+                    {formatIoArtifactEndpointValue(artifact.producer_node_id, artifact.producer_port_id)}
+                  </dd>
+                </div>
+                <div>
+                  <dt class="text-neutral-500">Consumer</dt>
+                  <dd
+                    class="mt-0.5 truncate text-neutral-200"
+                    title={formatIoArtifactEndpointValue(artifact.consumer_node_id, artifact.consumer_port_id)}
+                  >
+                    {formatIoArtifactEndpointValue(artifact.consumer_node_id, artifact.consumer_port_id)}
+                  </dd>
+                </div>
+                <div>
+                  <dt class="text-neutral-500">Event Node</dt>
                   <dd class="mt-0.5 truncate text-neutral-200" title={artifact.node_id ?? ''}>
-                    {artifact.node_id ?? 'Workflow'}
+                    {formatIoArtifactDetailValue(artifact.node_id)}
                   </dd>
                 </div>
                 <div>

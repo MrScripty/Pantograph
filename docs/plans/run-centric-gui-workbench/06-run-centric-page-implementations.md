@@ -283,11 +283,14 @@ freshness, browses retained artifacts across runs when no run is active, and
 exposes the global retention policy read/update command without optimistic
 local mutation. Workflow input/output sections now group retained metadata by
 artifact role, and the node I/O section groups retained node artifacts by
-producer node with input/output counts. Artifact cards now include media-family
-renderer surfaces for text, image, audio, video, table, JSON, file, and unknown
-metadata states without dereferencing payload bodies. Artifact cards also
-render projection-provided retention reason, payload reference, runtime id, and
-model id fields when present. Cleanup/storage controls remain open pending
+projection producer/consumer endpoint fields with input/output counts. The
+page can send producer-node or consumer-node filters through
+`workflowService.queryIoArtifacts` instead of filtering broader pages locally.
+Artifact cards now include media-family renderer surfaces for text, image,
+audio, video, table, JSON, file, and unknown metadata states without
+dereferencing payload bodies. Artifact cards also render projection-provided
+producer/consumer endpoints, retention reason, payload reference, runtime id,
+and model id fields when present. Cleanup/storage controls remain open pending
 richer backend projections.
 
 ### Milestone 5: Library Page
@@ -516,7 +519,7 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
 ### Verification Summary
 
 - `node --experimental-strip-types --test src/components/workbench/ioInspectorPresenters.test.ts`
-  passed.
+  passed, including endpoint grouping and endpoint label coverage.
 - `node --experimental-strip-types --test src/components/workbench/libraryUsagePresenters.test.ts`
   passed.
 - `node --experimental-strip-types --test src/components/workbench/runGraphPresenters.test.ts`

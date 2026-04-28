@@ -8,6 +8,7 @@ import {
   formatIoArtifactAvailabilityLabel,
   formatIoArtifactBytes,
   formatIoArtifactDetailValue,
+  formatIoArtifactEndpointValue,
   formatIoArtifactMediaLabel,
   formatIoArtifactRetentionStateLabel,
   formatIoArtifactRoleLabel,
@@ -42,8 +43,8 @@ test('buildIoArtifactRendererSummary maps media families to renderer states', ()
       retention_state: 'retained',
     }),
     {
-    family: 'image',
-    title: 'Image preview',
+      family: 'image',
+      title: 'Image preview',
       detail: 'Payload retained',
     },
   );
@@ -54,9 +55,9 @@ test('buildIoArtifactRendererSummary maps media families to renderer states', ()
       retention_state: 'metadata_only',
     }),
     {
-    family: 'json',
-    title: 'JSON',
-    detail: 'Metadata retained only',
+      family: 'json',
+      title: 'JSON',
+      detail: 'Metadata retained only',
     },
   );
   assert.deepEqual(buildIoArtifactRendererSummary({ media_type: undefined, payload_ref: '' }), {
@@ -112,24 +113,32 @@ test('buildIoArtifactNodeGroups groups node artifacts by latest event', () => {
       {
         node_id: 'node-a',
         node_type: 'text',
+        producer_node_id: null,
+        consumer_node_id: 'node-a',
         artifact_role: 'node_input',
         event_seq: 2,
       },
       {
         node_id: 'node-b',
         node_type: 'image',
+        producer_node_id: 'node-b',
+        consumer_node_id: null,
         artifact_role: 'node_output',
         event_seq: 4,
       },
       {
         node_id: 'node-a',
         node_type: null,
+        producer_node_id: 'node-a',
+        consumer_node_id: null,
         artifact_role: 'node_output',
         event_seq: 3,
       },
       {
         node_id: null,
         node_type: null,
+        producer_node_id: null,
+        consumer_node_id: null,
         artifact_role: 'workflow_output',
         event_seq: 5,
       },
@@ -155,6 +164,39 @@ test('buildIoArtifactNodeGroups groups node artifacts by latest event', () => {
   );
 });
 
+test('buildIoArtifactNodeGroups uses endpoint fields before event node ids', () => {
+  assert.deepEqual(
+    buildIoArtifactNodeGroups([
+      {
+        node_id: 'edge-observer',
+        node_type: 'bridge',
+        producer_node_id: 'producer-node',
+        consumer_node_id: 'consumer-node',
+        artifact_role: 'node_output',
+        event_seq: 7,
+      },
+    ]),
+    [
+      {
+        node_id: 'consumer-node',
+        node_type: null,
+        input_count: 1,
+        output_count: 0,
+        artifact_count: 1,
+        latest_event_seq: 7,
+      },
+      {
+        node_id: 'producer-node',
+        node_type: null,
+        input_count: 0,
+        output_count: 1,
+        artifact_count: 1,
+        latest_event_seq: 7,
+      },
+    ],
+  );
+});
+
 test('formatIoArtifactBytes renders compact sizes', () => {
   assert.equal(formatIoArtifactBytes(null), 'Size unknown');
   assert.equal(formatIoArtifactBytes(999), '999 B');
@@ -166,6 +208,9 @@ test('formatIoArtifactDetailValue keeps missing projection details explicit', ()
   assert.equal(formatIoArtifactDetailValue('runtime-a'), 'runtime-a');
   assert.equal(formatIoArtifactDetailValue(''), 'Unavailable');
   assert.equal(formatIoArtifactDetailValue(null), 'Unavailable');
+  assert.equal(formatIoArtifactEndpointValue('node-a', 'out'), 'node-a:out');
+  assert.equal(formatIoArtifactEndpointValue('node-a', null), 'node-a');
+  assert.equal(formatIoArtifactEndpointValue(null, 'out'), 'Unavailable');
 });
 
 test('formatProjectionFreshness keeps projection status visible', () => {
