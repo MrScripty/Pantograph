@@ -159,25 +159,43 @@ impl WorkflowService {
             ));
         }
 
-        let (session, cancelled_item) = {
+        let (session, cancelled_item, cancel_result) = {
             let mut store = self.session_store_guard()?;
             let session = store.session_summary(session_id)?;
             let cancelled_item = store
                 .list_queue(session_id)?
                 .into_iter()
                 .find(|item| item.workflow_run_id == workflow_run_id);
-            store.cancel_queue_item(session_id, workflow_run_id)?;
-            (session, cancelled_item)
+            let cancel_result = store.cancel_queue_item(session_id, workflow_run_id);
+            (session, cancelled_item, cancel_result)
         };
-        self.record_scheduler_queue_control_event_if_configured(
-            &session,
-            workflow_run_id,
-            cancelled_item.as_ref(),
-            SchedulerQueueControlAction::Cancel,
-            None,
-            Some("queue item cancelled".to_string()),
-        )?;
-        Ok(WorkflowExecutionSessionQueueCancelResponse { ok: true })
+        match cancel_result {
+            Ok(()) => {
+                self.record_scheduler_queue_control_event_if_configured(
+                    &session,
+                    workflow_run_id,
+                    cancelled_item.as_ref(),
+                    SchedulerQueueControlAction::Cancel,
+                    SchedulerQueueControlOutcome::Accepted,
+                    None,
+                    Some("queue item cancelled".to_string()),
+                )?;
+                Ok(WorkflowExecutionSessionQueueCancelResponse { ok: true })
+            }
+            Err(error) => {
+                let reason = queue_control_denial_reason(&error);
+                self.record_scheduler_queue_control_event_if_configured(
+                    &session,
+                    workflow_run_id,
+                    cancelled_item.as_ref(),
+                    SchedulerQueueControlAction::Cancel,
+                    SchedulerQueueControlOutcome::Denied,
+                    None,
+                    Some(reason),
+                )?;
+                Err(error)
+            }
+        }
     }
 
     pub async fn workflow_reprioritize_execution_session_queue_item(
@@ -196,25 +214,44 @@ impl WorkflowService {
                 "workflow_run_id must be non-empty".to_string(),
             ));
         }
-        let (session, previous_item) = {
+        let (session, previous_item, reprioritize_result) = {
             let mut store = self.session_store_guard()?;
             let session = store.session_summary(session_id)?;
             let previous_item = store
                 .list_queue(session_id)?
                 .into_iter()
                 .find(|item| item.workflow_run_id == workflow_run_id);
-            store.reprioritize_queue_item(session_id, workflow_run_id, request.priority)?;
-            (session, previous_item)
+            let reprioritize_result =
+                store.reprioritize_queue_item(session_id, workflow_run_id, request.priority);
+            (session, previous_item, reprioritize_result)
         };
-        self.record_scheduler_queue_control_event_if_configured(
-            &session,
-            workflow_run_id,
-            previous_item.as_ref(),
-            SchedulerQueueControlAction::Reprioritize,
-            Some(request.priority),
-            Some("queue item reprioritized".to_string()),
-        )?;
-        Ok(WorkflowExecutionSessionQueueReprioritizeResponse { ok: true })
+        match reprioritize_result {
+            Ok(()) => {
+                self.record_scheduler_queue_control_event_if_configured(
+                    &session,
+                    workflow_run_id,
+                    previous_item.as_ref(),
+                    SchedulerQueueControlAction::Reprioritize,
+                    SchedulerQueueControlOutcome::Accepted,
+                    Some(request.priority),
+                    Some("queue item reprioritized".to_string()),
+                )?;
+                Ok(WorkflowExecutionSessionQueueReprioritizeResponse { ok: true })
+            }
+            Err(error) => {
+                let reason = queue_control_denial_reason(&error);
+                self.record_scheduler_queue_control_event_if_configured(
+                    &session,
+                    workflow_run_id,
+                    previous_item.as_ref(),
+                    SchedulerQueueControlAction::Reprioritize,
+                    SchedulerQueueControlOutcome::Denied,
+                    Some(request.priority),
+                    Some(reason),
+                )?;
+                Err(error)
+            }
+        }
     }
 
     fn record_scheduler_queue_control_event_if_configured(
@@ -223,6 +260,7 @@ impl WorkflowService {
         workflow_run_id: &str,
         previous_item: Option<&WorkflowExecutionSessionQueueItem>,
         action: SchedulerQueueControlAction,
+        outcome: SchedulerQueueControlOutcome,
         new_priority: Option<i32>,
         reason: Option<String>,
     ) -> Result<(), WorkflowServiceError> {
@@ -289,7 +327,7 @@ impl WorkflowService {
                 payload: DiagnosticEventPayload::SchedulerQueueControl(
                     SchedulerQueueControlPayload {
                         action,
-                        outcome: SchedulerQueueControlOutcome::Accepted,
+                        outcome,
                         actor_scope: SchedulerQueueControlActorScope::BackendControlApi,
                         previous_queue_position,
                         previous_priority: previous_item.map(|item| item.priority),
@@ -314,5 +352,15 @@ impl WorkflowService {
         store
             .workflow_run_snapshot(workflow_run_id)
             .map_err(WorkflowServiceError::from)
+    }
+}
+
+fn queue_control_denial_reason(error: &WorkflowServiceError) -> String {
+    match error {
+        WorkflowServiceError::QueueItemNotFound(_) => "queue item not found".to_string(),
+        WorkflowServiceError::InvalidRequest(message) if message.contains("currently running") => {
+            "queue item currently running".to_string()
+        }
+        _ => "queue control denied".to_string(),
     }
 }

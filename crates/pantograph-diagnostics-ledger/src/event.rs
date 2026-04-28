@@ -333,6 +333,7 @@ pub enum SchedulerQueueControlAction {
 #[serde(rename_all = "snake_case")]
 pub enum SchedulerQueueControlOutcome {
     Accepted,
+    Denied,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

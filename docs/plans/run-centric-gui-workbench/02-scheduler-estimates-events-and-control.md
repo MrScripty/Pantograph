@@ -270,14 +270,14 @@ Pantograph GUI privileged actions.
 
 **Status:** In progress. The existing backend queue cancel and reprioritize
 APIs still enforce session ownership through session id plus run id matching,
-and they now record accepted queue-control facts in the typed diagnostics
-ledger when diagnostics are configured. The Scheduler page now gates its first
-cancel/front controls on projected workflow execution-session ids before
-calling those backend commands. These events currently use the
+and they now record accepted and denied queue-control facts in the typed
+diagnostics ledger when diagnostics are configured. The Scheduler page now
+gates its first cancel/front controls on projected workflow execution-session
+ids before calling those backend commands. These events currently use the
 `backend_control_api` actor scope because this slice does not introduce the
 future client/admin privilege split. Clone/resubmit, privileged cross-session
-admin controls, denial events, and policy-normalized priority evidence remain
-pending.
+admin controls, richer actor scopes, and policy-normalized priority evidence
+remain pending.
 
 ## Ownership And Lifecycle Note
 
@@ -315,9 +315,9 @@ duplicate, unvalidated, or contradictory event streams.
 
 ### Deviations
 
-- Queue-control events currently represent accepted backend control API
-  actions. The future client/admin authority split still needs explicit actor
-  scopes and denial/normalization outcomes.
+- Queue-control events currently represent backend control API actions. The
+  future client/admin authority split still needs explicit actor scopes and
+  priority-normalization outcomes.
 
 ### Follow-Ups
 

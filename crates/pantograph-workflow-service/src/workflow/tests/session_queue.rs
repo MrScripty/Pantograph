@@ -169,6 +169,24 @@ async fn workflow_execution_session_queue_control_records_typed_events() {
         .await
         .expect("reprioritize queue item");
 
+    service
+        .workflow_cancel_execution_session_queue_item(WorkflowExecutionSessionQueueCancelRequest {
+            session_id: created.session_id.clone(),
+            workflow_run_id: cancel_id.clone(),
+        })
+        .await
+        .expect_err("already cancelled queue item should be denied");
+    service
+        .workflow_reprioritize_execution_session_queue_item(
+            WorkflowExecutionSessionQueueReprioritizeRequest {
+                session_id: created.session_id.clone(),
+                workflow_run_id: "run_missing_queue_item".to_string(),
+                priority: 3,
+            },
+        )
+        .await
+        .expect_err("missing queue item reprioritize should be denied");
+
     let diagnostic_events = {
         let ledger = service
             .diagnostics_ledger_guard()
@@ -185,7 +203,7 @@ async fn workflow_execution_session_queue_control_records_typed_events() {
                 == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerQueueControl
         })
         .collect::<Vec<_>>();
-    assert_eq!(queue_control_events.len(), 2);
+    assert_eq!(queue_control_events.len(), 4);
     assert_eq!(
         queue_control_events[0]
             .workflow_run_id
@@ -204,7 +222,26 @@ async fn workflow_execution_session_queue_control_records_typed_events() {
         .contains("\"action\":\"reprioritize\""));
     assert!(queue_control_events[1]
         .payload_json
+        .contains("\"outcome\":\"accepted\""));
+    assert!(queue_control_events[1]
+        .payload_json
         .contains("\"new_priority\":9"));
+    assert!(queue_control_events[2]
+        .payload_json
+        .contains("\"action\":\"cancel\""));
+    assert!(queue_control_events[2]
+        .payload_json
+        .contains("\"outcome\":\"denied\""));
+    assert!(queue_control_events[2].payload_json.contains("not found"));
+    assert!(queue_control_events[3]
+        .payload_json
+        .contains("\"action\":\"reprioritize\""));
+    assert!(queue_control_events[3]
+        .payload_json
+        .contains("\"outcome\":\"denied\""));
+    assert!(queue_control_events[3]
+        .payload_json
+        .contains("\"new_priority\":3"));
 }
 
 #[tokio::test]

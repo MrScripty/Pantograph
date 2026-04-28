@@ -236,6 +236,9 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
 - Run-list query responses include comparison facets from backend
   `run_list_projection` rows for workflow version, status, scheduler policy,
   and retention policy.
+- Queue cancel and reprioritize commands emit typed scheduler queue-control
+  events when diagnostics are configured. Accepted and denied outcomes must be
+  recorded after the scheduler store makes the authority decision.
 - Workflow-session execution emits typed scheduler delay events for runtime
   admission waits when diagnostics ledger storage is configured. The event is
   recorded outside scheduler-store locks and is projected into run status,
