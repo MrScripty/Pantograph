@@ -30,7 +30,9 @@ later plan stages fill in richer page bodies.
 | `networkPagePresenters.test.ts` | Unit coverage for Network page metric labels and degraded platform states. |
 | `workflowErrorPresenters.ts` | Shared workbench formatter for typed workflow service errors so backend categories remain visible in page messages. |
 | `workflowErrorPresenters.test.ts` | Unit coverage for backend error-envelope and transport-error formatting. |
-| `NodeLabPage.svelte` | Reserved Node Editor page for future node authoring workflows. |
+| `NodeLabPage.svelte` | Reserved Node Editor page with a presenter-backed unavailable state and no authoring controls. |
+| `nodeLabPresenters.ts` | Pure Node Editor unavailable-state rows and message presenter. |
+| `nodeLabPresenters.test.ts` | Unit coverage for Node Editor disabled-state presentation. |
 
 ## Problem
 The previous app root presented mutually exclusive canvas and workflow modes.
@@ -281,4 +283,6 @@ transient UI state without becoming backend scheduler policy.
   must refresh projections or use returned DTOs instead of editing queue rows
   or retention facts optimistically.
 - Reserved page unavailable states are not persisted and do not imply backend
-  capability flags.
+  capability flags. Node Editor disabled-state copy and rows come from
+  `nodeLabPresenters.ts` so the unavailable surface stays testable without
+  exposing authoring controls.

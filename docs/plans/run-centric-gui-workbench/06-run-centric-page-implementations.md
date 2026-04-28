@@ -411,7 +411,8 @@ inspected without raw ledger access.
 Selected-run node statuses and Library cache-observation rows now use typed
 presenter classes so active-run execution/resource state is visibly scannable
 without claiming unreported local cache residency.
-The Node Editor page has a truthful unavailable state.
+The Node Editor page has a truthful unavailable state backed by
+`nodeLabPresenters.ts` and presenter tests, with no authoring controls exposed.
 
 ## Ownership And Lifecycle Note
 
@@ -436,6 +437,9 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
 - Stage `05` added the Scheduler-first shell, dense Scheduler run table,
   active-run row selection, Graph and Diagnostics page wrappers, local Network
   status cards, and Node Editor unavailable state.
+- Added `src/components/workbench/nodeLabPresenters.ts` and tests for the Node
+  Editor disabled-state rows and message so the reserved page remains explicit
+  without false authoring affordances.
 - Added `src/components/workbench/IoInspectorPage.svelte` with active-run
   artifact metadata browsing from `workflowService.queryIoArtifacts`.
 - Extended the I/O artifact projection query contract so `workflow_run_id` is
