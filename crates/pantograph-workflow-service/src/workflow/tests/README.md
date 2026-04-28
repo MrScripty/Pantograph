@@ -97,6 +97,9 @@ Use `workflow/tests/` for behavior-specific child modules under the parent
 - I/O artifact query tests must verify producer and consumer node filters at
   the public service boundary so selected-node browsing is not implemented by
   caller-side scans.
+- Session execution diagnostics tests must verify workflow I/O artifact events
+  carry node type from the immutable run snapshot rather than current graph
+  state.
 - Diagnostics tests must verify scheduler estimate queries return narrow
   estimate-shaped hot projection DTOs without requiring callers to parse raw
   scheduler estimate payloads or full run-detail responses.

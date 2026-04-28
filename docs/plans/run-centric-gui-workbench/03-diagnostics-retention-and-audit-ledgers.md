@@ -316,15 +316,17 @@ availability.
 
 - [ ] Record workflow inputs/outputs and node input/output metadata.
   - Workflow-session execution now records first-pass workflow input and
-    output metadata as `io.artifact_observed` events after successful runs.
-    Node-to-node intermediate I/O remains pending.
+    output metadata as `io.artifact_observed` events after successful runs,
+    including node type resolved from the immutable run snapshot. Node-to-node
+    intermediate I/O remains pending.
 - [ ] Store artifact type, size, content hash where available, producer node,
   consumer node, run id, timestamps, and payload reference.
   - First-pass projection stores artifact role, media type, size, content
     hash, event node identity, producer/consumer node and port endpoints, run
-    id, timestamps, payload reference, typed retention state, and retention
-    reason. Future node-to-node emitters still need to populate those endpoint
-    fields for intermediate I/O.
+    id, timestamps, payload reference, typed retention state, retention reason,
+    and workflow I/O event node type from the immutable run snapshot. Future
+    node-to-node emitters still need to populate those endpoint fields for
+    intermediate I/O.
 - [x] Emit typed artifact events for observation, retention state changes,
   truncation, externalization, expiration, and deletion.
 - [x] Add global retention policy record and policy version.

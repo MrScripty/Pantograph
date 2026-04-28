@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
 use pantograph_diagnostics_ledger::{
     DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
@@ -17,7 +17,7 @@ use pantograph_runtime_attribution::{
 
 use crate::graph::{
     workflow_executable_topology, workflow_graph_run_settings, workflow_graph_run_settings_json,
-    WorkflowExecutionSessionKind, WorkflowGraph,
+    WorkflowExecutionSessionKind, WorkflowGraph, WorkflowGraphRunSettings,
 };
 use crate::scheduler::{unix_timestamp_ms, WORKFLOW_SESSION_QUEUE_POLL_MS};
 use crate::technical_fit::WorkflowTechnicalFitOverride;
@@ -1120,6 +1120,7 @@ impl WorkflowService {
         let workflow_run_id = WorkflowRunId::try_from(workflow_run_id.to_string())?;
         let workflow_id = workflow_id_for_scheduler_event(session, snapshot)?;
         let occurred_at_ms = unix_timestamp_ms() as i64;
+        let node_types = workflow_run_node_types(snapshot)?;
         let mut ledger = ledger.lock().map_err(|_| {
             WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
         })?;
@@ -1154,7 +1155,7 @@ impl WorkflowService {
                             .unwrap_or_else(|| workflow_semantic_version.to_string()),
                     ),
                     node_id: Some(binding.node_id.clone()),
-                    node_type: None,
+                    node_type: node_types.get(&binding.node_id).cloned(),
                     node_version: None,
                     runtime_id: None,
                     runtime_version: None,
@@ -1386,6 +1387,25 @@ fn workflow_io_artifact_id(
     let hash =
         blake3::hash(format!("{workflow_run_id}:{artifact_role}:{node_id}:{port_id}").as_bytes());
     format!("workflow-io-{hash}")
+}
+
+fn workflow_run_node_types(
+    snapshot: Option<&WorkflowRunSnapshotRecord>,
+) -> Result<HashMap<String, String>, WorkflowServiceError> {
+    let Some(snapshot) = snapshot else {
+        return Ok(HashMap::new());
+    };
+    let graph_settings: WorkflowGraphRunSettings =
+        serde_json::from_str(&snapshot.graph_settings_json).map_err(|error| {
+            WorkflowServiceError::Internal(format!(
+                "failed to decode workflow run snapshot graph settings: {error}"
+            ))
+        })?;
+    Ok(graph_settings
+        .nodes
+        .into_iter()
+        .map(|node| (node.node_id, node.node_type))
+        .collect())
 }
 
 fn pumas_model_asset_id(model_id: &str) -> String {

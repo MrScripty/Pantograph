@@ -606,6 +606,9 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
     assert!(io_events.iter().any(|event| event
         .payload_json
         .contains("\"artifact_role\":\"workflow_output\"")));
+    assert!(io_events
+        .iter()
+        .all(|event| event.node_type.as_deref() == Some("text-output")));
     assert!(io_events.iter().all(|event| event
         .payload_json
         .contains("\"retention_state\":\"metadata_only\"")));
