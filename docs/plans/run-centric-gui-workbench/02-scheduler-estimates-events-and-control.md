@@ -199,7 +199,7 @@ scheduler activity.
 - [ ] Emit model load requested/started/completed/failed and unload
   scheduled/cancelled/started/completed events.
 - [ ] Emit retry/fallback events.
-- [ ] Emit client queue action and admin override events.
+- [x] Emit client queue action and admin override events.
 - [ ] Join or reference `run.*` lifecycle events in scheduler projections
   without duplicating terminal execution lifecycle facts as scheduler events.
 - [ ] Persist typed scheduler events through the event ledger owner.
