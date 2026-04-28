@@ -197,7 +197,7 @@ impl WorkflowService {
                 &session,
                 run_snapshot.as_ref(),
                 &queued_item,
-                &request,
+                Some(&request.workflow_semantic_version),
             )
             .and_then(|_| {
                 self.record_scheduler_queue_placement_event_if_configured(
@@ -723,12 +723,12 @@ impl WorkflowService {
         Ok(())
     }
 
-    fn record_scheduler_estimate_event_if_configured(
+    pub(super) fn record_scheduler_estimate_event_if_configured(
         &self,
         session: &WorkflowExecutionSessionSummary,
         snapshot: Option<&WorkflowRunSnapshotRecord>,
         queued_item: &WorkflowExecutionSessionQueueItem,
-        request: &WorkflowExecutionSessionRunRequest,
+        workflow_semantic_version: Option<&str>,
     ) -> Result<(), WorkflowServiceError> {
         let Some(ledger) = self.diagnostics_ledger.as_ref() else {
             return Ok(());
@@ -753,11 +753,9 @@ impl WorkflowService {
                 workflow_run_id: Some(workflow_run_id),
                 workflow_id: Some(workflow_id),
                 workflow_version_id: snapshot.map(|snapshot| snapshot.workflow_version_id.clone()),
-                workflow_semantic_version: Some(
-                    snapshot
-                        .map(|snapshot| snapshot.workflow_semantic_version.clone())
-                        .unwrap_or_else(|| request.workflow_semantic_version.clone()),
-                ),
+                workflow_semantic_version: snapshot
+                    .map(|snapshot| snapshot.workflow_semantic_version.clone())
+                    .or_else(|| workflow_semantic_version.map(str::to_string)),
                 node_id: None,
                 node_type: None,
                 node_version: None,

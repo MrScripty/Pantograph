@@ -240,7 +240,15 @@ async fn workflow_execution_session_queue_control_records_typed_events() {
                 == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerQueueControl
         })
         .collect::<Vec<_>>();
+    let estimate_events = diagnostic_events
+        .iter()
+        .filter(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerEstimateProduced
+        })
+        .collect::<Vec<_>>();
     assert_eq!(queue_control_events.len(), 5);
+    assert_eq!(estimate_events.len(), 2);
     assert_eq!(
         queue_control_events[0]
             .workflow_run_id
@@ -291,6 +299,26 @@ async fn workflow_execution_session_queue_control_records_typed_events() {
     assert!(queue_control_events[4]
         .payload_json
         .contains("\"new_priority\":3"));
+    assert_eq!(
+        estimate_events[0]
+            .workflow_run_id
+            .as_ref()
+            .map(|id| id.as_str()),
+        Some(reprioritize_id.as_str())
+    );
+    assert!(estimate_events[0]
+        .payload_json
+        .contains("\"blocking_conditions\":[\"runtime_admission_pending\"]"));
+    assert_eq!(
+        estimate_events[1]
+            .workflow_run_id
+            .as_ref()
+            .map(|id| id.as_str()),
+        Some(push_id.as_str())
+    );
+    assert!(estimate_events[1]
+        .payload_json
+        .contains("\"blocking_conditions\":[\"runtime_admission_pending\"]"));
 }
 
 #[tokio::test]
@@ -455,7 +483,15 @@ async fn workflow_admin_queue_cancel_finds_session_and_records_gui_scope() {
                 == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerQueueControl
         })
         .collect::<Vec<_>>();
+    let estimate_events = diagnostic_events
+        .iter()
+        .filter(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerEstimateProduced
+        })
+        .collect::<Vec<_>>();
     assert_eq!(queue_control_events.len(), 3);
+    assert_eq!(estimate_events.len(), 2);
     assert_eq!(
         queue_control_events[0]
             .workflow_run_id
@@ -510,6 +546,20 @@ async fn workflow_admin_queue_cancel_finds_session_and_records_gui_scope() {
     assert!(queue_control_events[2]
         .payload_json
         .contains("admin pushed queue item to front"));
+    assert_eq!(
+        estimate_events[0]
+            .workflow_run_id
+            .as_ref()
+            .map(|id| id.as_str()),
+        Some(admin_reprioritize_id.as_str())
+    );
+    assert_eq!(
+        estimate_events[1]
+            .workflow_run_id
+            .as_ref()
+            .map(|id| id.as_str()),
+        Some(admin_push_id.as_str())
+    );
 }
 
 #[tokio::test]

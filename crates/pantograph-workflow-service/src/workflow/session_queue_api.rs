@@ -277,7 +277,7 @@ impl WorkflowService {
                 "workflow_run_id must be non-empty".to_string(),
             ));
         }
-        let (session, previous_item, reprioritize_result) = {
+        let (session, previous_item, updated_item, reprioritize_result) = {
             let mut store = self.session_store_guard()?;
             let session = store.session_summary(session_id)?;
             let previous_item = store
@@ -286,7 +286,15 @@ impl WorkflowService {
                 .find(|item| item.workflow_run_id == workflow_run_id);
             let reprioritize_result =
                 store.reprioritize_queue_item(session_id, workflow_run_id, request.priority);
-            (session, previous_item, reprioritize_result)
+            let updated_item = if reprioritize_result.is_ok() {
+                store
+                    .list_queue(session_id)?
+                    .into_iter()
+                    .find(|item| item.workflow_run_id == workflow_run_id)
+            } else {
+                None
+            };
+            (session, previous_item, updated_item, reprioritize_result)
         };
         match reprioritize_result {
             Ok(()) => {
@@ -299,6 +307,10 @@ impl WorkflowService {
                     SchedulerQueueControlActorScope::ClientSession,
                     Some(request.priority),
                     Some("queue item reprioritized".to_string()),
+                )?;
+                self.record_scheduler_estimate_update_for_queue_item_if_configured(
+                    &session,
+                    updated_item.as_ref(),
                 )?;
                 Ok(WorkflowExecutionSessionQueueReprioritizeResponse { ok: true })
             }
@@ -330,7 +342,7 @@ impl WorkflowService {
             ));
         }
 
-        let (session, previous_item, reprioritize_result) = {
+        let (session, previous_item, updated_item, reprioritize_result) = {
             let mut store = self.session_store_guard()?;
             let session_id = store.session_id_for_queue_item(workflow_run_id)?;
             let session = store.session_summary(&session_id)?;
@@ -340,7 +352,15 @@ impl WorkflowService {
                 .find(|item| item.workflow_run_id == workflow_run_id);
             let reprioritize_result =
                 store.reprioritize_queue_item(&session_id, workflow_run_id, request.priority);
-            (session, previous_item, reprioritize_result)
+            let updated_item = if reprioritize_result.is_ok() {
+                store
+                    .list_queue(&session_id)?
+                    .into_iter()
+                    .find(|item| item.workflow_run_id == workflow_run_id)
+            } else {
+                None
+            };
+            (session, previous_item, updated_item, reprioritize_result)
         };
         match reprioritize_result {
             Ok(()) => {
@@ -353,6 +373,10 @@ impl WorkflowService {
                     SchedulerQueueControlActorScope::GuiAdmin,
                     Some(request.priority),
                     Some("admin reprioritized queue item".to_string()),
+                )?;
+                self.record_scheduler_estimate_update_for_queue_item_if_configured(
+                    &session,
+                    updated_item.as_ref(),
                 )?;
                 Ok(WorkflowAdminQueueReprioritizeResponse {
                     ok: true,
@@ -392,7 +416,7 @@ impl WorkflowService {
                 "workflow_run_id must be non-empty".to_string(),
             ));
         }
-        let (session, previous_item, push_result) = {
+        let (session, previous_item, updated_item, push_result) = {
             let mut store = self.session_store_guard()?;
             let session = store.session_summary(session_id)?;
             let previous_item = store
@@ -400,7 +424,15 @@ impl WorkflowService {
                 .into_iter()
                 .find(|item| item.workflow_run_id == workflow_run_id);
             let push_result = store.push_queue_item_to_front(session_id, workflow_run_id);
-            (session, previous_item, push_result)
+            let updated_item = if push_result.is_ok() {
+                store
+                    .list_queue(session_id)?
+                    .into_iter()
+                    .find(|item| item.workflow_run_id == workflow_run_id)
+            } else {
+                None
+            };
+            (session, previous_item, updated_item, push_result)
         };
         match push_result {
             Ok(priority) => {
@@ -413,6 +445,10 @@ impl WorkflowService {
                     SchedulerQueueControlActorScope::ClientSession,
                     Some(priority),
                     Some("queue item pushed to front".to_string()),
+                )?;
+                self.record_scheduler_estimate_update_for_queue_item_if_configured(
+                    &session,
+                    updated_item.as_ref(),
                 )?;
                 Ok(WorkflowExecutionSessionQueuePushFrontResponse { ok: true, priority })
             }
@@ -444,7 +480,7 @@ impl WorkflowService {
             ));
         }
 
-        let (session, previous_item, push_result) = {
+        let (session, previous_item, updated_item, push_result) = {
             let mut store = self.session_store_guard()?;
             let session_id = store.session_id_for_queue_item(workflow_run_id)?;
             let session = store.session_summary(&session_id)?;
@@ -453,7 +489,15 @@ impl WorkflowService {
                 .into_iter()
                 .find(|item| item.workflow_run_id == workflow_run_id);
             let push_result = store.push_queue_item_to_front(&session_id, workflow_run_id);
-            (session, previous_item, push_result)
+            let updated_item = if push_result.is_ok() {
+                store
+                    .list_queue(&session_id)?
+                    .into_iter()
+                    .find(|item| item.workflow_run_id == workflow_run_id)
+            } else {
+                None
+            };
+            (session, previous_item, updated_item, push_result)
         };
         match push_result {
             Ok(priority) => {
@@ -466,6 +510,10 @@ impl WorkflowService {
                     SchedulerQueueControlActorScope::GuiAdmin,
                     Some(priority),
                     Some("admin pushed queue item to front".to_string()),
+                )?;
+                self.record_scheduler_estimate_update_for_queue_item_if_configured(
+                    &session,
+                    updated_item.as_ref(),
                 )?;
                 Ok(WorkflowAdminQueuePushFrontResponse {
                     ok: true,
@@ -576,6 +624,26 @@ impl WorkflowService {
         )
         .map(|_| ())
         .map_err(WorkflowServiceError::from)
+    }
+
+    fn record_scheduler_estimate_update_for_queue_item_if_configured(
+        &self,
+        session: &WorkflowExecutionSessionSummary,
+        updated_item: Option<&WorkflowExecutionSessionQueueItem>,
+    ) -> Result<(), WorkflowServiceError> {
+        let Some(updated_item) = updated_item else {
+            return Ok(());
+        };
+        let workflow_run_id = WorkflowRunId::try_from(updated_item.workflow_run_id.clone())?;
+        let snapshot = self.workflow_run_snapshot_if_configured(&workflow_run_id)?;
+        self.record_scheduler_estimate_event_if_configured(
+            session,
+            snapshot.as_ref(),
+            updated_item,
+            snapshot
+                .as_ref()
+                .map(|snapshot| snapshot.workflow_semantic_version.as_str()),
+        )
     }
 
     fn workflow_run_snapshot_if_configured(

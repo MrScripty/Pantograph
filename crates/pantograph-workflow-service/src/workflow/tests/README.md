@@ -112,6 +112,9 @@ Use `workflow/tests/` for behavior-specific child modules under the parent
   override/push-front request is allowed, including the typed `client_session`
   actor scope for session-owned controls and `gui_admin` for GUI-only admin
   controls.
+- Session queue tests with diagnostics enabled must verify accepted
+  reprioritize and push-front actions also record refreshed scheduler estimate
+  events for the updated queued run.
 - Session execution tests with attribution and diagnostics enabled must verify
   `run.snapshot_accepted` events carry the immutable workflow version and node
   behavior-version set before scheduler admission.

@@ -196,10 +196,12 @@ Library metadata can make that fact concrete. Typed delay events can now record
 a concrete delay reason and delayed-until timestamp into run-list/run-detail
 status and scheduler timeline projections when a scheduler emitter produces
 them, and workflow-session runtime admission waits now emit the first
-production delay event. Rich estimate inputs from Library model metadata,
-runtime state, local node capacity, diagnostics history, cache/model state
-changes, candidate device/network-node selection, and missing-asset analysis
-remain pending.
+production delay event. Accepted reprioritize and push-front queue controls now
+emit a fresh scheduler estimate for the updated queued run so queue-position
+blocking conditions can be refreshed after user/admin action. Rich estimate
+inputs from Library model metadata, runtime state, local node capacity,
+diagnostics history, cache/model state changes, candidate device/network-node
+selection, and missing-asset analysis remain pending.
 
 ### Milestone 3: Scheduler Event Emission And Persistence
 
@@ -354,6 +356,8 @@ duplicate, unvalidated, or contradictory event streams.
   payloads when immutable runtime capabilities identify compatible runtimes.
 - Added typed scheduler estimate blocking conditions and a typed missing-asset
   id list so blocking facts are not represented only as free-form reasons.
+- Added scheduler estimate refreshes after accepted reprioritize and
+  push-front queue controls.
 - Tightened scheduler timeline projection labels for queue-control events so
   page/API consumers receive explicit typed action, outcome, actor-scope,
   position, and priority summaries instead of enum debug formatting.

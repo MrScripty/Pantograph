@@ -269,6 +269,9 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
   GUI-admin queued-run cancel, priority override, and push-front boundaries
   resolve the owning session through the scheduler store and emit `gui_admin`
   actor scope.
+- Accepted reprioritize and push-front queue commands emit a fresh scheduler
+  estimate for the updated queued run after the scheduler store has applied the
+  mutation. Queue cancellation does not emit an estimate for the removed run.
 - Workflow-session execution emits typed scheduler delay events for runtime
   admission waits when diagnostics ledger storage is configured. The event is
   recorded outside scheduler-store locks and is projected into run status,
