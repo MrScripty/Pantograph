@@ -366,6 +366,26 @@
                   {/each}
                 </select>
               </label>
+              <label class="min-w-0 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
+                From
+                <input
+                  aria-label="Diagnostics accepted from date"
+                  type="date"
+                  class="mt-1 w-full rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs normal-case tracking-normal text-neutral-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+                  value={comparisonFilters.acceptedFromDate}
+                  onchange={(event) => updateComparisonFilter('acceptedFromDate', selectValue(event))}
+                />
+              </label>
+              <label class="min-w-0 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
+                To
+                <input
+                  aria-label="Diagnostics accepted to date"
+                  type="date"
+                  class="mt-1 w-full rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs normal-case tracking-normal text-neutral-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+                  value={comparisonFilters.acceptedToDate}
+                  onchange={(event) => updateComparisonFilter('acceptedToDate', selectValue(event))}
+                />
+              </label>
             </div>
             {#if facetSummary?.mixedVersionWarning}
               <div class="mt-3 rounded border border-amber-900 bg-amber-950/40 px-3 py-2 text-xs text-amber-100">

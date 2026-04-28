@@ -264,6 +264,36 @@ test('diagnostics comparison filters keep selected run and filter peer rows', ()
   );
 });
 
+test('diagnostics comparison filters support accepted date ranges', () => {
+  const activeRun = createRunDetail();
+  const filteredRuns = filterDiagnosticsComparisonRuns(
+    activeRun,
+    [
+      activeRun,
+      createRunListPeer({ workflow_run_id: 'run-2', accepted_at_ms: Date.parse('2026-04-01T12:00:00.000Z') }),
+      createRunListPeer({ workflow_run_id: 'run-3', accepted_at_ms: Date.parse('2026-04-10T12:00:00.000Z') }),
+      createRunListPeer({ workflow_run_id: 'run-4', accepted_at_ms: null }),
+    ],
+    {
+      ...DEFAULT_DIAGNOSTICS_COMPARISON_FILTERS,
+      acceptedFromDate: '2026-04-01',
+      acceptedToDate: '2026-04-05',
+    },
+  );
+
+  assert.deepEqual(
+    filteredRuns.map((run) => run.workflow_run_id),
+    ['run-1', 'run-2'],
+  );
+  assert.equal(
+    hasActiveDiagnosticsComparisonFilters({
+      ...DEFAULT_DIAGNOSTICS_COMPARISON_FILTERS,
+      acceptedFromDate: '2026-04-01',
+    }),
+    true,
+  );
+});
+
 test('timeline label helpers format typed projection enums and payload presence', () => {
   assert.equal(formatDiagnosticEventKind('scheduler_queue_placement'), 'Scheduler Queue Placement');
   assert.equal(formatDiagnosticSourceComponent('node_execution'), 'Node Execution');

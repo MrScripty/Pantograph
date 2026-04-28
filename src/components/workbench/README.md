@@ -14,8 +14,8 @@ later plan stages fill in richer page bodies.
 | `schedulerPagePresenters.test.ts` | Unit coverage for Scheduler table labels, status classes, filters, sorts, projection freshness, and timeline labels. |
 | `GraphPage.svelte` | Workbench page that switches between the active run's immutable graph snapshot and the current editable workflow graph. |
 | `RunGraphSnapshot.svelte` | Read-only run graph renderer backed by `workflowService.queryRunGraph`; it does not load historic graphs into the editor store. |
-| `DiagnosticsPage.svelte` | Projection-backed selected-run diagnostics page with run detail facts, workflow-version/date-aware filtered comparison facets, mixed-version warnings, and scheduler timeline records. |
-| `diagnosticsPagePresenters.ts` | Pure diagnostics page status, duration, projection freshness, run authority fact, workflow-version/date/filter/facet, and timeline label presenters. |
+| `DiagnosticsPage.svelte` | Projection-backed selected-run diagnostics page with run detail facts, workflow-version/date-range filtered comparison facets, mixed-version warnings, and scheduler timeline records. |
+| `diagnosticsPagePresenters.ts` | Pure diagnostics page status, duration, projection freshness, run authority fact, workflow-version/date-range/filter/facet, and timeline label presenters. |
 | `diagnosticsPagePresenters.test.ts` | Unit coverage for diagnostics page labels, comparison filters/facets, and payload availability presentation. |
 | `IoInspectorPage.svelte` | Projection-backed I/O artifact browser, retention detail surface, and global retention policy form. |
 | `ioInspectorPresenters.ts` | Pure I/O media, payload availability, retention detail, byte-size, and projection freshness presenters. |
@@ -176,7 +176,8 @@ transient UI state without becoming backend scheduler policy.
   `workflowService.queryRunDetail`, scheduler history through
   `workflowService.querySchedulerTimeline`, and comparison peers through
   `workflowService.queryRunList`. Comparison filters use projected workflow
-  version, status, policy, scope, bucket, and accepted-date fields.
+  version, status, policy, scope, bucket, accepted-date, and accepted-date
+  range fields.
 - `IoInspectorPage.svelte` reads artifact metadata through
   `workflowService.queryIoArtifacts` and global retention state through
   `workflowService.queryRetentionPolicy`. Artifact retention labels come from

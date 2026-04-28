@@ -36,6 +36,8 @@ export interface DiagnosticsComparisonFilters {
   clientSession: string;
   bucket: string;
   acceptedDate: string;
+  acceptedFromDate: string;
+  acceptedToDate: string;
 }
 
 export interface DiagnosticsComparisonFilterOptions {
@@ -60,6 +62,8 @@ export const DEFAULT_DIAGNOSTICS_COMPARISON_FILTERS: DiagnosticsComparisonFilter
   clientSession: DIAGNOSTICS_FILTER_ALL,
   bucket: DIAGNOSTICS_FILTER_ALL,
   acceptedDate: DIAGNOSTICS_FILTER_ALL,
+  acceptedFromDate: '',
+  acceptedToDate: '',
 };
 
 export const EMPTY_DIAGNOSTICS_COMPARISON_FILTER_OPTIONS: DiagnosticsComparisonFilterOptions = {
@@ -295,7 +299,18 @@ export function filterDiagnosticsComparisonRuns(
 }
 
 export function hasActiveDiagnosticsComparisonFilters(filters: DiagnosticsComparisonFilters): boolean {
-  return Object.values(filters).some((value) => value !== DIAGNOSTICS_FILTER_ALL);
+  return (
+    filters.workflowVersion !== DIAGNOSTICS_FILTER_ALL ||
+    filters.status !== DIAGNOSTICS_FILTER_ALL ||
+    filters.schedulerPolicy !== DIAGNOSTICS_FILTER_ALL ||
+    filters.retentionPolicy !== DIAGNOSTICS_FILTER_ALL ||
+    filters.client !== DIAGNOSTICS_FILTER_ALL ||
+    filters.clientSession !== DIAGNOSTICS_FILTER_ALL ||
+    filters.bucket !== DIAGNOSTICS_FILTER_ALL ||
+    filters.acceptedDate !== DIAGNOSTICS_FILTER_ALL ||
+    filters.acceptedFromDate.trim().length > 0 ||
+    filters.acceptedToDate.trim().length > 0
+  );
 }
 
 function buildDiagnosticsFacetRow<T extends RunListProjectionRecord>(
@@ -348,7 +363,8 @@ function diagnosticsRunMatchesFilters(
     filterMatches(optionalFacetLabel(run.client_id), filters.client) &&
     filterMatches(optionalFacetLabel(run.client_session_id), filters.clientSession) &&
     filterMatches(optionalFacetLabel(run.bucket_id), filters.bucket) &&
-    filterMatches(acceptedDateLabel(run.accepted_at_ms), filters.acceptedDate)
+    filterMatches(acceptedDateLabel(run.accepted_at_ms), filters.acceptedDate) &&
+    acceptedDateRangeMatches(run.accepted_at_ms, filters.acceptedFromDate, filters.acceptedToDate)
   );
 }
 
@@ -373,6 +389,40 @@ function acceptedDateLabel(value: number | null | undefined): string {
     return 'Unassigned';
   }
   return new Date(value).toISOString().slice(0, 10);
+}
+
+function acceptedDateRangeMatches(
+  value: number | null | undefined,
+  fromDate: string,
+  toDate: string,
+): boolean {
+  const fromMs = dateInputStartMs(fromDate);
+  const toMs = dateInputEndMs(toDate);
+  if (fromMs === null && toMs === null) {
+    return true;
+  }
+  if (!value) {
+    return false;
+  }
+  return (fromMs === null || value >= fromMs) && (toMs === null || value <= toMs);
+}
+
+function dateInputStartMs(value: string): number | null {
+  const normalized = value.trim();
+  if (normalized.length === 0) {
+    return null;
+  }
+  const parsed = Date.parse(`${normalized}T00:00:00.000Z`);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function dateInputEndMs(value: string): number | null {
+  const normalized = value.trim();
+  if (normalized.length === 0) {
+    return null;
+  }
+  const parsed = Date.parse(`${normalized}T23:59:59.999Z`);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 export function formatDiagnosticEventKind(kind: DiagnosticEventKind): string {

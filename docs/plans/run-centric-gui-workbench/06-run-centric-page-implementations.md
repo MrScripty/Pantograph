@@ -177,8 +177,9 @@ backend run-list projection query where supported; search, sort, and
 - [ ] Add filters for workflow/node/model/runtime versions, scheduler policy,
   graph settings, session/bucket/client, status, date, and retention
   completeness where data exists. Workflow-version, status, scheduler policy,
-  retention policy, client, client-session, bucket, and accepted-date
-  comparison filters are wired from current run-list projection fields.
+  retention policy, client, client-session, bucket, accepted-date, and accepted
+  date-range comparison filters are wired from current run-list projection
+  fields.
 - [x] Display mixed-version warnings/facets.
 - [ ] Preserve comparison-ready labels/facets for future run, workflow-version,
   runtime-version, model-version, device, and input-profile comparisons.
@@ -204,9 +205,9 @@ runs, and mixed workflow-version warnings. Those counts now prefer backend
 run-list facet summaries scoped to the selected workflow when no local
 comparison filters are active. The page can filter comparison peers by workflow
 version, status, scheduler policy, retention policy, client, client session,
-bucket, and accepted date using typed run-list projection fields; node/model
-and runtime version facets, graph-setting filters, retention-completeness
-facets, date range controls, and richer scheduler decision facets remain open
+bucket, accepted date, and accepted date range using typed run-list projection
+fields; node/model and runtime version facets, graph-setting filters,
+retention-completeness facets, and richer scheduler decision facets remain open
 pending additional typed projection fields.
 
 ### Milestone 3: Graph Page
