@@ -252,7 +252,8 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
 - Queue cancel, reprioritize, and push-front commands emit typed scheduler
   queue-control events when diagnostics are configured. Accepted and denied
   outcomes must be recorded after the scheduler store makes the authority
-  decision.
+  decision. These session-scoped commands emit `client_session` actor scope;
+  future cross-session GUI/admin commands must use a distinct admin scope.
 - Workflow-session execution emits typed scheduler delay events for runtime
   admission waits when diagnostics ledger storage is configured. The event is
   recorded outside scheduler-store locks and is projected into run status,

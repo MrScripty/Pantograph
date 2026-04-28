@@ -341,6 +341,8 @@ pub enum SchedulerQueueControlOutcome {
 #[serde(rename_all = "snake_case")]
 pub enum SchedulerQueueControlActorScope {
     BackendControlApi,
+    ClientSession,
+    GuiAdmin,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

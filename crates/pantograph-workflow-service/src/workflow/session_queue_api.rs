@@ -385,7 +385,7 @@ impl WorkflowService {
                     SchedulerQueueControlPayload {
                         action,
                         outcome,
-                        actor_scope: SchedulerQueueControlActorScope::BackendControlApi,
+                        actor_scope: SchedulerQueueControlActorScope::ClientSession,
                         previous_queue_position,
                         previous_priority: previous_item.map(|item| item.priority),
                         new_priority,

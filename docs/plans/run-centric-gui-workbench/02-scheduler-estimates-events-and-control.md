@@ -281,10 +281,10 @@ scheduler-owned operation that computes the next priority from the current
 session queue and denies the request if the priority ceiling prevents a real
 move. Query-own-estimate now has a workflow-service and frontend projection
 method that returns estimate-shaped hot projection facts for a run without raw
-ledger access. Queue-control events currently use the `backend_control_api`
-actor scope because this slice does not introduce the future client/admin
-privilege split. Clone/resubmit, privileged cross-session admin controls, and
-richer actor scopes remain pending.
+ledger access. Session-owned queue-control events now use the `client_session`
+actor scope. The event contract reserves `gui_admin` for future privileged
+cross-session controls. Clone/resubmit, privileged cross-session admin
+controls, and admin-scope event emitters remain pending.
 
 ## Ownership And Lifecycle Note
 

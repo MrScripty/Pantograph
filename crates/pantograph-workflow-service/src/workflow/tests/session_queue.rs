@@ -254,6 +254,9 @@ async fn workflow_execution_session_queue_control_records_typed_events() {
     assert!(queue_control_events[0]
         .payload_json
         .contains("\"outcome\":\"accepted\""));
+    assert!(queue_control_events[0]
+        .payload_json
+        .contains("\"actor_scope\":\"client_session\""));
     assert!(queue_control_events[1]
         .payload_json
         .contains("\"action\":\"reprioritize\""));

@@ -106,7 +106,9 @@ semantics.
   scheduler reason through projection drains.
 - Scheduler queue-control events use typed cancel, reprioritize, and
   push-front actions plus typed accepted/denied outcomes so refused queue
-  mutations remain auditable without parsing service error text.
+  mutations remain auditable without parsing service error text. Session-owned
+  queue controls use `client_session` actor scope; `gui_admin` is reserved for
+  future privileged cross-session controls.
 - Scheduler model lifecycle transitions include load failure and unload failure
   states so runtime admission and teardown errors can remain typed audit facts
   instead of free-form timeline text.
