@@ -123,7 +123,7 @@ into a second source of truth.
 
 **Tasks:**
 
-- [ ] Render future, scheduled, queued, delayed, running, completed, failed,
+- [x] Render future, scheduled, queued, delayed, running, completed, failed,
   cancelled, and historic runs.
 - [x] Add columns for status, run id, workflow/version, scheduled time, queue
   position, priority, session/bucket, estimate, actual timing, progress,
@@ -480,6 +480,9 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
   Scheduler timestamp/duration labels, status classes, filtering, and sorting.
 - Added Scheduler table columns for the typed scheduler policy and retention
   policy IDs already available on `RunListProjectionRecord`.
+- Marked Scheduler all-status rendering complete because run-list status
+  presenters and filters now accept future, scheduled, queued, delayed,
+  running, completed, failed, cancelled, and historic terminal statuses.
 - Added Scheduler table filters for the typed scheduler policy and retention
   policy row fields without parsing scheduler event payloads.
 - Added Scheduler table filters for client, client session, bucket, and
