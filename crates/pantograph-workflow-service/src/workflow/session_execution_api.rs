@@ -34,7 +34,8 @@ use super::{
     WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionRetentionHint,
     WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionSummary,
     WorkflowExecutionSessionUnloadReason, WorkflowHost, WorkflowPortBinding, WorkflowRunRequest,
-    WorkflowRunResponse, WorkflowSchedulerDecisionReason, WorkflowService, WorkflowServiceError,
+    WorkflowRunResponse, WorkflowRuntimeRequirements, WorkflowSchedulerDecisionReason,
+    WorkflowService, WorkflowServiceError,
 };
 
 const WORKFLOW_SESSION_SCHEDULER_POLICY: &str = "priority_then_fifo";
@@ -735,11 +736,7 @@ impl WorkflowService {
         let queue_position = queue_position_u32(queued_item)?;
         let workflow_run_id = WorkflowRunId::try_from(queued_item.workflow_run_id.clone())?;
         let workflow_id = workflow_id_for_scheduler_event(session, snapshot)?;
-        let reason = if queue_position == 0 {
-            "next admission candidate pending runtime readiness".to_string()
-        } else {
-            format!("{queue_position} run(s) ahead in session queue")
-        };
+        let estimate = scheduler_estimate_context_from_snapshot(queue_position, snapshot)?;
 
         let mut ledger = ledger.lock().map_err(|_| {
             WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
@@ -779,11 +776,11 @@ impl WorkflowService {
                 payload: DiagnosticEventPayload::SchedulerEstimateProduced(
                     SchedulerEstimateProducedPayload {
                         estimate_version: "session-scheduler-v1".to_string(),
-                        confidence: "low".to_string(),
+                        confidence: estimate.confidence,
                         estimated_queue_wait_ms: None,
                         estimated_duration_ms: None,
-                        model_cache_state: Some(SchedulerModelCacheState::Unknown),
-                        reasons: vec![reason],
+                        model_cache_state: Some(estimate.model_cache_state),
+                        reasons: estimate.reasons,
                     },
                 ),
             },
@@ -1394,6 +1391,90 @@ fn pumas_model_asset_id(model_id: &str) -> String {
 
 fn single_model_node_id(model: &WorkflowCapabilityModel) -> Option<String> {
     (model.node_ids.len() == 1).then(|| model.node_ids[0].clone())
+}
+
+struct SchedulerEstimateContext {
+    confidence: String,
+    model_cache_state: SchedulerModelCacheState,
+    reasons: Vec<String>,
+}
+
+fn scheduler_estimate_context_from_snapshot(
+    queue_position: u32,
+    snapshot: Option<&WorkflowRunSnapshotRecord>,
+) -> Result<SchedulerEstimateContext, WorkflowServiceError> {
+    let mut reasons = vec![if queue_position == 0 {
+        "next admission candidate pending runtime readiness".to_string()
+    } else {
+        format!("{queue_position} run(s) ahead in session queue")
+    }];
+    let Some(snapshot) = snapshot else {
+        return Ok(SchedulerEstimateContext {
+            confidence: "low".to_string(),
+            model_cache_state: SchedulerModelCacheState::Unknown,
+            reasons,
+        });
+    };
+
+    let runtime_requirements: WorkflowRuntimeRequirements =
+        serde_json::from_str(&snapshot.runtime_requirements_json).map_err(|error| {
+            WorkflowServiceError::Internal(format!(
+                "failed to decode workflow run snapshot runtime requirements: {error}"
+            ))
+        })?;
+    append_scheduler_estimate_runtime_reasons(&mut reasons, &runtime_requirements);
+    let confidence = match runtime_requirements.estimation_confidence.trim() {
+        "" | "unknown" => "low".to_string(),
+        value => value.to_string(),
+    };
+    let model_cache_state = if runtime_requirements.required_models.is_empty() {
+        SchedulerModelCacheState::NotRequired
+    } else {
+        SchedulerModelCacheState::Unknown
+    };
+
+    Ok(SchedulerEstimateContext {
+        confidence,
+        model_cache_state,
+        reasons,
+    })
+}
+
+fn append_scheduler_estimate_runtime_reasons(
+    reasons: &mut Vec<String>,
+    runtime_requirements: &WorkflowRuntimeRequirements,
+) {
+    if !runtime_requirements.required_backends.is_empty() {
+        reasons.push(format!(
+            "requires backend(s): {}",
+            runtime_requirements.required_backends.join(", ")
+        ));
+    }
+    if !runtime_requirements.required_models.is_empty() {
+        reasons.push(format!(
+            "requires model(s): {}",
+            runtime_requirements.required_models.join(", ")
+        ));
+    }
+    if !runtime_requirements.required_extensions.is_empty() {
+        reasons.push(format!(
+            "requires extension(s): {}",
+            runtime_requirements.required_extensions.join(", ")
+        ));
+    }
+    let mut memory_estimates = Vec::new();
+    if let Some(peak_vram_mb) = runtime_requirements.estimated_peak_vram_mb {
+        memory_estimates.push(format!("{peak_vram_mb} MB VRAM"));
+    }
+    if let Some(peak_ram_mb) = runtime_requirements.estimated_peak_ram_mb {
+        memory_estimates.push(format!("{peak_ram_mb} MB RAM"));
+    }
+    if !memory_estimates.is_empty() {
+        reasons.push(format!(
+            "estimated peak memory: {}",
+            memory_estimates.join(", ")
+        ));
+    }
 }
 
 fn workflow_execution_session_kind_label(kind: &WorkflowExecutionSessionKind) -> &'static str {

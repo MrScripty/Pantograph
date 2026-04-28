@@ -277,6 +277,11 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
   estimate and model lifecycle events when diagnostics ledger storage is
   configured. Submission estimates start as `unknown`; required-model load,
   unload, and failure transitions map to explicit scheduler cache states.
+- Workflow-session scheduler estimates use immutable run-snapshot runtime
+  requirements for first-pass confidence, required backend/model/extension
+  reasons, and estimated peak RAM/VRAM context. Future scheduler metadata may
+  refine those estimates, but submission estimates must not read mutable graph
+  files after the snapshot is created.
 - Diagnostics: usage diagnostics accept workflow-version and node contract
   version/digest filters so historic comparisons can avoid mixing different
   executable node behavior.

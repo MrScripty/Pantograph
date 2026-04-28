@@ -417,10 +417,22 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         .contains("\"estimate_version\":\"session-scheduler-v1\""));
     assert!(estimate_event
         .payload_json
-        .contains("\"confidence\":\"low\""));
+        .contains("\"confidence\":\"estimated\""));
     assert!(estimate_event
         .payload_json
         .contains("\"model_cache_state\":\"unknown\""));
+    assert!(estimate_event
+        .payload_json
+        .contains("requires backend(s): llama_cpp"));
+    assert!(estimate_event
+        .payload_json
+        .contains("requires model(s): model-a"));
+    assert!(estimate_event
+        .payload_json
+        .contains("requires extension(s): inference_gateway"));
+    assert!(estimate_event
+        .payload_json
+        .contains("estimated peak memory: 1024 MB VRAM, 2048 MB RAM"));
 
     let queue_event = diagnostic_events
         .iter()

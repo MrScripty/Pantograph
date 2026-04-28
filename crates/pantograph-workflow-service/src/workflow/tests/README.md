@@ -115,6 +115,9 @@ Use `workflow/tests/` for behavior-specific child modules under the parent
 - Session execution tests with attribution and diagnostics enabled must verify
   `run.snapshot_accepted` events carry the immutable workflow version and node
   behavior-version set before scheduler admission.
+- Session execution tests with diagnostics enabled must verify scheduler
+  estimate events include first-pass immutable run-snapshot runtime requirement
+  reasons instead of deriving estimate text from mutable graph state.
 - Session execution tests with diagnostics enabled must verify scheduler model
   lifecycle events for runtime admission required-model loads before terminal
   run events and ephemeral required-model unloads after I/O artifact events.

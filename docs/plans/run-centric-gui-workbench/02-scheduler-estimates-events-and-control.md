@@ -185,13 +185,16 @@ runtime boundaries.
 
 **Status:** In progress. Queue insertion now records a low-confidence
 submission-time scheduler estimate for the queued run, and the stable estimate
-facts are queryable from hot run-list/run-detail projections. Typed delay
-events can now record a concrete delay reason and delayed-until timestamp into
-run-list/run-detail status and scheduler timeline projections when a scheduler
-emitter produces them, and workflow-session runtime admission waits now emit
-the first production delay event. Rich estimate inputs from model metadata,
-runtime state, local node capacity, diagnostics history, cache/model state
-changes, and missing-asset analysis remain pending.
+facts are queryable from hot run-list/run-detail projections. The estimate now
+uses immutable run-snapshot runtime requirements for first-pass confidence,
+required backend/model/extension reasons, and estimated peak RAM/VRAM context
+where the snapshot provides them. Typed delay events can now record a concrete
+delay reason and delayed-until timestamp into run-list/run-detail status and
+scheduler timeline projections when a scheduler emitter produces them, and
+workflow-session runtime admission waits now emit the first production delay
+event. Rich estimate inputs from Library model metadata, runtime state, local
+node capacity, diagnostics history, cache/model state changes, candidate
+device/network-node selection, and missing-asset analysis remain pending.
 
 ### Milestone 3: Scheduler Event Emission And Persistence
 
@@ -339,6 +342,9 @@ duplicate, unvalidated, or contradictory event streams.
 - Recorded the scheduler diagnostics lock-boundary rule: queue/admission
   mutations capture immutable event inputs while locked, and durable ledger
   writes run only after scheduler/session guards have been released.
+- Expanded submission-time estimates to include immutable run-snapshot runtime
+  requirements, including required backend/model/extension and peak memory
+  context when available.
 - Tightened scheduler timeline projection labels for queue-control events so
   page/API consumers receive explicit typed action, outcome, actor-scope,
   position, and priority summaries instead of enum debug formatting.
