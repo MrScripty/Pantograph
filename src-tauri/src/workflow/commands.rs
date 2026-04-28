@@ -572,6 +572,16 @@ pub async fn search_hf_models_with_audit(
 }
 
 #[command]
+pub async fn start_hf_download_with_audit(
+    extensions: State<'_, SharedExtensions>,
+    workflow_service: State<'_, SharedWorkflowService>,
+    request: pumas_library::model_library::DownloadRequest,
+) -> Result<super::puma_lib_commands::PumaHfDownloadStartAuditResponse, String> {
+    super::puma_lib_commands::start_hf_download_with_audit(extensions, workflow_service, request)
+        .await
+}
+
+#[command]
 pub async fn run_dependency_environment_action(
     resolver: State<'_, super::model_dependencies::SharedModelDependencyResolver>,
     request: super::dependency_environment_commands::DependencyEnvironmentActionRequest,

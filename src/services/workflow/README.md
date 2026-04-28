@@ -86,6 +86,9 @@ without inventing local Library state.
 Pumas HuggingFace search is exposed as a backend-owned audited command;
 frontend services forward query bounds and preserve backend model/audit
 responses without synthesizing Library usage facts.
+Pumas HuggingFace download startup is exposed as a backend-owned audited
+command; frontend services forward the structured Pumas download request and
+preserve the backend download/audit response.
 
 ## Alternatives Rejected
 - Remove `WorkflowService` and switch every app caller to `TauriWorkflowBackend`
@@ -148,6 +151,9 @@ responses without synthesizing Library usage facts.
 - Pumas HuggingFace search commands must return backend-authored model lists and
   audit event ids exactly. Frontend code may display the result, but it must not
   turn searches into Library usage rows locally.
+- Pumas HuggingFace download-start commands must return backend-authored
+  download ids and audit event ids exactly. Frontend code may display progress
+  from Pumas, but it must not synthesize download audit facts locally.
 
 ## Revisit Triggers
 - The app graph and all remaining callers migrate to package backends directly.

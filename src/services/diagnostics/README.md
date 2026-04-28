@@ -82,6 +82,9 @@ projection without inventing fallback run identities or workflow display names.
 - Pumas HuggingFace search audit DTOs mirror the backend command response so
   GUI controls can display search results and audit outcomes without
   synthesizing Library usage facts.
+- Pumas HuggingFace download-start audit DTOs mirror the backend command
+  response so GUI controls can display download ids and audit outcomes without
+  synthesizing Library audit facts.
 
 ## Revisit Triggers
 - Diagnostics needs durable persistence or export/replay support.

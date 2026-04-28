@@ -431,6 +431,7 @@ pub fn run_app() -> AppStartupResult<()> {
             crate::workflow::commands::hydrate_puma_lib_node,
             crate::workflow::commands::delete_pumas_model_with_audit,
             crate::workflow::commands::search_hf_models_with_audit,
+            crate::workflow::commands::start_hf_download_with_audit,
             crate::workflow::commands::run_dependency_environment_action,
             crate::workflow::commands::resolve_model_dependency_requirements,
             crate::workflow::commands::check_model_dependencies,

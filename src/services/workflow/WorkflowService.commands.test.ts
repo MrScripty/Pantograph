@@ -224,3 +224,40 @@ test('searchHfModelsWithAudit forwards bounded search parameters and preserves r
     clearMocks();
   }
 });
+
+test('startHfDownloadWithAudit forwards download request and preserves result', async () => {
+  installWindowMock();
+  const calls: Array<{ cmd: string; args: unknown }> = [];
+  const response = {
+    downloadId: 'download-1',
+    auditEventSeq: 89,
+  };
+  const request = {
+    repo_id: 'org/model-a',
+    family: 'diffusion',
+    official_name: 'Model A',
+    model_type: 'diffusion',
+    quant: null,
+  };
+  mockIPC((cmd, args) => {
+    calls.push({ cmd, args });
+    return response;
+  });
+
+  try {
+    const service = new WorkflowCommandService();
+    const result = await service.startHfDownloadWithAudit(request);
+
+    assert.deepEqual(result, response);
+    assert.deepEqual(calls, [
+      {
+        cmd: 'start_hf_download_with_audit',
+        args: {
+          request,
+        },
+      },
+    ]);
+  } finally {
+    clearMocks();
+  }
+});

@@ -56,8 +56,9 @@ while still handling desktop runtime execution concerns.
   queries may record collection access/search after the underlying provider
   returns, and successful model delete commands may record delete events after
   Pumas confirms deletion. HuggingFace search commands may record search events
-  after Pumas returns bounded results, but handlers must not append raw
-  diagnostic ledger events.
+  after Pumas returns bounded results, and download-start commands may record
+  download events after Pumas returns a download id, but handlers must not
+  append raw diagnostic ledger events.
 - Tauri execution-handle lifecycle and undo/redo projection must stay thin
   wrappers around backend-owned `node-engine` behavior rather than becoming a
   second owner of workflow-session policy.
@@ -282,6 +283,9 @@ let snapshot = workflow_service
 - Pumas HuggingFace search commands validate query and limit bounds before
   calling Pumas, then record typed search audit events only after successful
   search responses.
+- Pumas HuggingFace download-start commands validate auditable repo ids before
+  calling Pumas, then record typed download audit events only after Pumas
+  returns a download id.
 
 ## Structured Producer Contract
 - `ConnectionCandidatesResponse` always includes `graph_revision`,

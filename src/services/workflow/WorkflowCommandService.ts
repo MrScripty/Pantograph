@@ -1,4 +1,6 @@
 import type {
+  PumasHfDownloadRequest,
+  PumasHfDownloadStartAuditResponse,
   PumasHfModelSearchAuditRequest,
   PumasHfModelSearchAuditResponse,
   PumasModelDeleteAuditResponse,
@@ -138,6 +140,21 @@ export class WorkflowCommandService extends WorkflowProjectionService {
       kind: request.kind,
       limit: request.limit,
       hydrateLimit: request.hydrateLimit,
+    });
+  }
+
+  async startHfDownloadWithAudit(
+    request: PumasHfDownloadRequest,
+  ): Promise<PumasHfDownloadStartAuditResponse> {
+    if (USE_WORKFLOW_MOCKS) {
+      return {
+        downloadId: 'mock-download',
+        auditEventSeq: null,
+      };
+    }
+
+    return invokeWorkflowCommand<PumasHfDownloadStartAuditResponse>('start_hf_download_with_audit', {
+      request,
     });
   }
 }

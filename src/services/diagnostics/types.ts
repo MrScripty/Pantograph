@@ -611,6 +611,28 @@ export interface PumasHfModelSearchAuditResponse {
   auditEventSeq?: number | null;
 }
 
+export interface PumasHfDownloadRequest {
+  repo_id: string;
+  family: string;
+  official_name: string;
+  model_type?: string | null;
+  quant?: string | null;
+  filename?: string | null;
+  filenames?: string[] | null;
+  pipeline_tag?: string | null;
+  bundle_format?: unknown;
+  pipeline_class?: string | null;
+  release_date?: string | null;
+  download_url?: string | null;
+  model_card_json?: string | null;
+  license_status?: string | null;
+}
+
+export interface PumasHfDownloadStartAuditResponse {
+  downloadId: string;
+  auditEventSeq?: number | null;
+}
+
 export interface WorkflowSchedulerTimelineQueryRequest {
   workflow_run_id?: string | null;
   workflow_id?: string | null;

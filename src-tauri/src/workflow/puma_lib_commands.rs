@@ -28,6 +28,13 @@ pub struct PumaHfModelSearchAuditResponse {
     pub audit_event_seq: Option<i64>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PumaHfDownloadStartAuditResponse {
+    pub download_id: String,
+    pub audit_event_seq: Option<i64>,
+}
+
 async fn require_pumas_api(
     extensions: &State<'_, SharedExtensions>,
 ) -> Result<Arc<pumas_library::PumasApi>, String> {
@@ -120,6 +127,25 @@ pub async fn search_hf_models_with_audit(
     })
 }
 
+pub async fn start_hf_download_with_audit(
+    extensions: State<'_, SharedExtensions>,
+    workflow_service: State<'_, SharedWorkflowService>,
+    request: pumas_library::model_library::DownloadRequest,
+) -> Result<PumaHfDownloadStartAuditResponse, String> {
+    validate_hf_repo_id_for_audit(&request.repo_id)?;
+    let api = require_pumas_api(&extensions).await?;
+    let download_id = api
+        .start_hf_download(&request)
+        .await
+        .map_err(|error| error.to_string())?;
+    let audit_event_seq = record_hf_model_download_audit(&workflow_service, &request.repo_id);
+
+    Ok(PumaHfDownloadStartAuditResponse {
+        download_id,
+        audit_event_seq,
+    })
+}
+
 fn record_pumas_model_delete_audit(
     workflow_service: &SharedWorkflowService,
     model_id: &str,
@@ -136,6 +162,27 @@ fn record_pumas_model_delete_audit(
         Ok(response) => response.event_seq,
         Err(error) => {
             log::warn!("Failed to record Pumas model delete audit event: {error}");
+            None
+        }
+    }
+}
+
+fn record_hf_model_download_audit(
+    workflow_service: &SharedWorkflowService,
+    repo_id: &str,
+) -> Option<i64> {
+    match workflow_service.workflow_library_asset_access_record(
+        pantograph_workflow_service::WorkflowLibraryAssetAccessRecordRequest {
+            asset_id: format!("hf://models/{repo_id}"),
+            operation: pantograph_workflow_service::LibraryAssetOperation::Download,
+            cache_status: Some(pantograph_workflow_service::LibraryAssetCacheStatus::Unknown),
+            network_bytes: None,
+            source_instance_id: Some("pumas-hf-download".to_string()),
+        },
+    ) {
+        Ok(response) => response.event_seq,
+        Err(error) => {
+            log::warn!("Failed to record Pumas HuggingFace download audit event: {error}");
             None
         }
     }
@@ -397,6 +444,31 @@ fn validate_hf_search_limit(limit: usize) -> Result<usize, String> {
     Ok(limit)
 }
 
+fn validate_hf_repo_id_for_audit(repo_id: &str) -> Result<&str, String> {
+    let trimmed = repo_id.trim();
+    if trimmed.is_empty() {
+        return Err("repo_id is required".to_string());
+    }
+    if trimmed != repo_id || trimmed.chars().any(char::is_whitespace) {
+        return Err(
+            "repo_id must not contain leading, trailing, or embedded whitespace".to_string(),
+        );
+    }
+    if trimmed.len() + "hf://models/".len() > 128 {
+        return Err("repo_id is too long for HuggingFace audit identifiers".to_string());
+    }
+    if trimmed.starts_with('/') || trimmed.contains('\\') {
+        return Err("repo_id must be a relative HuggingFace repository identifier".to_string());
+    }
+    if trimmed
+        .split('/')
+        .any(|segment| segment.is_empty() || segment == "." || segment == "..")
+    {
+        return Err("repo_id contains an invalid path segment".to_string());
+    }
+    Ok(trimmed)
+}
+
 fn option_value_string(option: &node_engine::PortOption) -> Option<&str> {
     option.value.as_str()
 }
@@ -641,5 +713,30 @@ mod tests {
         assert_eq!(validate_hf_search_limit(100).expect("maximum"), 100);
         assert!(validate_hf_search_limit(0).is_err());
         assert!(validate_hf_search_limit(101).is_err());
+    }
+
+    #[test]
+    fn validate_hf_repo_id_for_audit_accepts_hf_style_ids() {
+        assert_eq!(
+            validate_hf_repo_id_for_audit("org/model-name").expect("valid repo id"),
+            "org/model-name"
+        );
+    }
+
+    #[test]
+    fn validate_hf_repo_id_for_audit_rejects_unsafe_ids() {
+        for value in [
+            "",
+            " repo",
+            "repo id",
+            "/absolute",
+            "org//model",
+            "org/../model",
+        ] {
+            assert!(
+                validate_hf_repo_id_for_audit(value).is_err(),
+                "{value:?} should be rejected"
+            );
+        }
     }
 }

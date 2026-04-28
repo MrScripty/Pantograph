@@ -372,10 +372,12 @@ Scheduler, and Diagnostics pages.
   - Pumas HuggingFace search is now exposed through a Tauri command that
     validates query and limit bounds before search and records a typed search
     audit event only after Pumas returns successfully.
+  - Pumas HuggingFace download start is now exposed through a Tauri command
+    that validates the repo id before download startup and records a typed
+    download audit event only after Pumas returns a download id.
   - Pumas model cascade delete is now exposed through a Tauri command that
     validates the model id before deletion and records a typed delete audit
     event only after the Pumas delete succeeds.
-  - Download wrappers remain pending.
 - [ ] Emit typed `library.*` events for asset access by run, session, bucket,
   client, or GUI actor where available.
   - Workflow-session run snapshots now emit `library.asset_accessed` events
@@ -388,6 +390,9 @@ Scheduler, and Diagnostics pages.
   - Pumas HuggingFace search emits `library.asset_accessed` search events for
     `hf://models` with source instance `pumas-hf-search` after successful
     search responses.
+  - Pumas HuggingFace download start emits `library.asset_accessed` download
+    events for `hf://models/<repo_id>` with source instance
+    `pumas-hf-download` after successful download starts.
   - Pumas model delete emits `library.asset_accessed` delete events for
     `pumas://models/<model_id>` with source instance `pumas-model-delete` after
     successful deletion.
@@ -423,9 +428,10 @@ records successful GUI/library collection operations through
 without exposing raw event appends. Pumas cascade delete now validates auditable
 model ids before deletion and records a typed delete event after success. Pumas
 HuggingFace search now validates query/limit bounds and records a typed search
-event after successful Pumas responses. Pumas download wrappers, cache hit/miss
-facts, network byte observations, and broader rejected operation tests remain
-pending.
+event after successful Pumas responses. Pumas HuggingFace download start now
+validates auditable repo ids and records a typed download event after Pumas
+returns a download id. Cache hit/miss facts, network byte observations, and
+broader rejected operation tests remain pending.
 
 ## Ownership And Lifecycle Note
 
@@ -510,6 +516,9 @@ implicitly on page load.
 - 2026-04-27: Added a Pumas HuggingFace search Tauri command that validates
   query bounds, delegates search to Pumas, and records a typed Library search
   event only after the search succeeds.
+- 2026-04-27: Added a Pumas HuggingFace download-start Tauri command that
+  validates auditable repo ids, delegates download startup to Pumas, and records
+  a typed Library download event only after Pumas returns a download id.
 
 ### Deviations
 
@@ -596,6 +605,12 @@ implicitly on page load.
   src/services/workflow/WorkflowService.commands.test.ts`, and
   `npm run typecheck` passed after adding the audited Pumas HuggingFace search
   command and frontend service wrapper.
+- 2026-04-27: `cargo test -p pantograph validate_hf_repo_id_for_audit`,
+  `cargo check -p pantograph`,
+  `node --experimental-strip-types --test
+  src/services/workflow/WorkflowService.commands.test.ts`, and
+  `npm run typecheck` passed after adding the audited Pumas HuggingFace
+  download-start command and frontend service wrapper.
 
 ### Traceability Links
 
