@@ -333,11 +333,11 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
             .diagnostics_ledger_guard()
             .expect("diagnostics ledger");
         pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::diagnostic_events_after(
-            &*ledger, 0, 10,
+            &*ledger, 0, 20,
         )
         .expect("diagnostic events")
     };
-    assert_eq!(diagnostic_events.len(), 9);
+    assert_eq!(diagnostic_events.len(), 11);
     let event = diagnostic_events
         .iter()
         .find(|event| {
@@ -491,6 +491,50 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
         .payload_json
         .contains("\"scheduler_decision_reason\":"));
 
+    let model_lifecycle_events = diagnostic_events
+        .iter()
+        .filter(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerModelLifecycleChanged
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(model_lifecycle_events.len(), 2);
+    assert!(model_lifecycle_events
+        .iter()
+        .all(|event| event.source_component
+            == pantograph_diagnostics_ledger::DiagnosticEventSourceComponent::Scheduler));
+    assert!(model_lifecycle_events.iter().all(|event| event
+        .workflow_run_id
+        .as_ref()
+        .map(|id| id.as_str())
+        == Some(response.workflow_run_id.as_str())));
+    assert!(model_lifecycle_events
+        .iter()
+        .all(|event| event.workflow_version_id.as_ref() == Some(&snapshot.workflow_version_id)));
+    assert!(model_lifecycle_events
+        .iter()
+        .all(|event| event.model_id.as_deref() == Some("model-a")));
+    assert!(model_lifecycle_events
+        .iter()
+        .all(|event| event.runtime_id.as_deref() == Some("llama_cpp")));
+    assert!(model_lifecycle_events[0].event_seq > started_event.event_seq);
+    assert!(model_lifecycle_events[0]
+        .payload_json
+        .contains("\"transition\":\"load_requested\""));
+    assert!(model_lifecycle_events[0]
+        .payload_json
+        .contains("\"reason\":\"runtime admission requested required models\""));
+    assert!(model_lifecycle_events[1].event_seq > model_lifecycle_events[0].event_seq);
+    assert!(model_lifecycle_events[1]
+        .payload_json
+        .contains("\"transition\":\"load_completed\""));
+    assert!(model_lifecycle_events[1]
+        .payload_json
+        .contains("\"reason\":\"runtime admission loaded required models\""));
+    assert!(model_lifecycle_events[1]
+        .payload_json
+        .contains("\"duration_ms\":"));
+
     let terminal_event = diagnostic_events
         .iter()
         .find(|event| {
@@ -508,7 +552,7 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
             .map(|id| id.as_str()),
         Some(response.workflow_run_id.as_str())
     );
-    assert!(terminal_event.event_seq > started_event.event_seq);
+    assert!(terminal_event.event_seq > model_lifecycle_events[1].event_seq);
     assert!(terminal_event
         .payload_json
         .contains("\"status\":\"completed\""));

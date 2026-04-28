@@ -235,10 +235,13 @@ new priority where applicable, and a bounded reason. Run-list, run-detail, and
 scheduler timeline projections now materialize those queue-control events.
 Queue admission now emits a typed `scheduler.run_admitted` event before
 `run.started`, so scheduler admission decisions are auditable without making
-`run.*` lifecycle events carry scheduler control semantics. Production emitters
-for model load/unload are not wired yet. Broader client/admin action
-vocabulary and frontend page wiring remain pending; workflow-service now has a
-query boundary for the materialized scheduler timeline.
+`run.*` lifecycle events carry scheduler control semantics. Workflow-session
+runtime admission now emits production `scheduler.model_lifecycle_changed`
+events for required-model load requested/completed/failed transitions using
+preflight required model/backend facts. Model unload emitters, broader
+client/admin action vocabulary, and frontend page wiring remain pending;
+workflow-service now has a query boundary for the materialized scheduler
+timeline.
 
 ### Milestone 4: Queue Authority And Admin Controls
 

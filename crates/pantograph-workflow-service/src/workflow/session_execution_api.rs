@@ -6,7 +6,8 @@ use pantograph_diagnostics_ledger::{
     IoArtifactObservedPayload, IoArtifactRetentionState, IoArtifactRole,
     LibraryAssetAccessedPayload, LibraryAssetOperation, RunSnapshotAcceptedPayload,
     RunSnapshotNodeVersionPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
-    SchedulerEstimateProducedPayload, SchedulerQueuePlacementPayload, SchedulerRunAdmittedPayload,
+    SchedulerEstimateProducedPayload, SchedulerModelLifecycleChangedPayload,
+    SchedulerModelLifecycleTransition, SchedulerQueuePlacementPayload, SchedulerRunAdmittedPayload,
     SchedulerRunDelayedPayload,
 };
 use pantograph_runtime_attribution::{
@@ -38,6 +39,19 @@ use super::{
 const WORKFLOW_SESSION_SCHEDULER_POLICY: &str = "priority_then_fifo";
 const WORKFLOW_SESSION_RETENTION_KEEP_ALIVE: &str = "keep_alive";
 const WORKFLOW_SESSION_RETENTION_EPHEMERAL: &str = "ephemeral";
+
+struct SchedulerModelLifecycleEventRequest<'a> {
+    session: &'a WorkflowExecutionSessionSummary,
+    snapshot: Option<&'a WorkflowRunSnapshotRecord>,
+    workflow_run_id: &'a str,
+    workflow_semantic_version: &'a str,
+    required_backends: &'a [String],
+    required_models: &'a [String],
+    transition: SchedulerModelLifecycleTransition,
+    reason: Option<&'a str>,
+    duration_ms: Option<u64>,
+    error: Option<&'a str>,
+}
 
 impl WorkflowService {
     fn resolve_execution_session_attribution(
@@ -293,7 +307,58 @@ impl WorkflowService {
             }
         };
 
-        if let Err(error) = self.ensure_session_runtime_loaded(host, &session_id).await {
+        let runtime_load_started_at_ms = unix_timestamp_ms();
+        self.record_scheduler_model_lifecycle_events_if_configured(
+            SchedulerModelLifecycleEventRequest {
+                session: &session,
+                snapshot: run_snapshot.as_ref(),
+                workflow_run_id: &workflow_run_id,
+                workflow_semantic_version: &queued_workflow_semantic_version,
+                required_backends: &preflight_cache.required_backends,
+                required_models: &preflight_cache.required_models,
+                transition: SchedulerModelLifecycleTransition::LoadRequested,
+                reason: Some("runtime admission requested required models"),
+                duration_ms: None,
+                error: None,
+            },
+        )?;
+        let runtime_load_result = self.ensure_session_runtime_loaded(host, &session_id).await;
+        let runtime_load_duration_ms =
+            unix_timestamp_ms().saturating_sub(runtime_load_started_at_ms);
+        match &runtime_load_result {
+            Ok(()) => self.record_scheduler_model_lifecycle_events_if_configured(
+                SchedulerModelLifecycleEventRequest {
+                    session: &session,
+                    snapshot: run_snapshot.as_ref(),
+                    workflow_run_id: &workflow_run_id,
+                    workflow_semantic_version: &queued_workflow_semantic_version,
+                    required_backends: &preflight_cache.required_backends,
+                    required_models: &preflight_cache.required_models,
+                    transition: SchedulerModelLifecycleTransition::LoadCompleted,
+                    reason: Some("runtime admission loaded required models"),
+                    duration_ms: Some(runtime_load_duration_ms),
+                    error: None,
+                },
+            )?,
+            Err(error) => {
+                let error_text = error.to_string();
+                self.record_scheduler_model_lifecycle_events_if_configured(
+                    SchedulerModelLifecycleEventRequest {
+                        session: &session,
+                        snapshot: run_snapshot.as_ref(),
+                        workflow_run_id: &workflow_run_id,
+                        workflow_semantic_version: &queued_workflow_semantic_version,
+                        required_backends: &preflight_cache.required_backends,
+                        required_models: &preflight_cache.required_models,
+                        transition: SchedulerModelLifecycleTransition::LoadFailed,
+                        reason: Some("runtime admission failed to load required models"),
+                        duration_ms: Some(runtime_load_duration_ms),
+                        error: Some(error_text.as_str()),
+                    },
+                )?
+            }
+        }
+        if let Err(error) = runtime_load_result {
             if let Ok(mut store) = self.session_store.lock() {
                 let _ = store.finish_run(&session_id, &workflow_run_id);
             }
@@ -826,6 +891,74 @@ impl WorkflowService {
         )
         .map(|_| ())
         .map_err(WorkflowServiceError::from)
+    }
+
+    fn record_scheduler_model_lifecycle_events_if_configured(
+        &self,
+        request: SchedulerModelLifecycleEventRequest<'_>,
+    ) -> Result<(), WorkflowServiceError> {
+        let Some(ledger) = self.diagnostics_ledger.as_ref() else {
+            return Ok(());
+        };
+        if request.required_models.is_empty() {
+            return Ok(());
+        }
+        let workflow_run_id = WorkflowRunId::try_from(request.workflow_run_id.to_string())?;
+        let workflow_id = workflow_id_for_scheduler_event(request.session, request.snapshot)?;
+        let occurred_at_ms = unix_timestamp_ms() as i64;
+        let runtime_id = request.required_backends.first().cloned();
+
+        let mut ledger = ledger.lock().map_err(|_| {
+            WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
+        })?;
+        for model_id in request.required_models {
+            DiagnosticsLedgerRepository::append_diagnostic_event(
+                &mut *ledger,
+                DiagnosticEventAppendRequest {
+                    source_component: DiagnosticEventSourceComponent::Scheduler,
+                    source_instance_id: Some("workflow-session-scheduler".to_string()),
+                    occurred_at_ms,
+                    workflow_run_id: Some(workflow_run_id.clone()),
+                    workflow_id: Some(workflow_id.clone()),
+                    workflow_version_id: request
+                        .snapshot
+                        .map(|snapshot| snapshot.workflow_version_id.clone()),
+                    workflow_semantic_version: Some(
+                        request
+                            .snapshot
+                            .map(|snapshot| snapshot.workflow_semantic_version.clone())
+                            .unwrap_or_else(|| request.workflow_semantic_version.to_string()),
+                    ),
+                    node_id: None,
+                    node_type: None,
+                    node_version: None,
+                    runtime_id: runtime_id.clone(),
+                    runtime_version: None,
+                    model_id: Some(model_id.clone()),
+                    model_version: None,
+                    client_id: event_client_id(request.session, request.snapshot)?,
+                    client_session_id: event_client_session_id(request.session, request.snapshot)?,
+                    bucket_id: event_bucket_id(request.session, request.snapshot)?,
+                    scheduler_policy_id: Some(WORKFLOW_SESSION_SCHEDULER_POLICY.to_string()),
+                    retention_policy_id: request
+                        .snapshot
+                        .map(|snapshot| snapshot.retention_policy.clone()),
+                    privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+                    retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+                    payload_ref: None,
+                    payload: DiagnosticEventPayload::SchedulerModelLifecycleChanged(
+                        SchedulerModelLifecycleChangedPayload {
+                            transition: request.transition,
+                            reason: request.reason.map(str::to_string),
+                            duration_ms: request.duration_ms,
+                            error: request.error.map(str::to_string),
+                        },
+                    ),
+                },
+            )
+            .map_err(WorkflowServiceError::from)?;
+        }
+        Ok(())
     }
 
     fn record_scheduler_run_admitted_event_if_configured(
