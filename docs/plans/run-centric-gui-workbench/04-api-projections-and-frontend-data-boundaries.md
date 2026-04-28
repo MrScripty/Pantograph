@@ -116,26 +116,24 @@ transport calls.
 
 **Tasks:**
 
-- [ ] Inventory existing workflow, diagnostics, runtime, and frontend adapter
+- [x] Inventory existing workflow, diagnostics, runtime, and frontend adapter
   APIs.
-- [ ] Define run list/detail DTOs.
-- [ ] Define scheduler estimate/event DTOs.
-- [ ] Define which DTOs are direct authoritative-state projections and which
+- [x] Define run list/detail DTOs.
+- [x] Define scheduler estimate/event DTOs.
+- [x] Define which DTOs are direct authoritative-state projections and which
   are rebuilt from typed diagnostic ledger events.
-- [ ] Define which ledger-derived DTOs are hot, warm, or cold projections and
+- [x] Define which ledger-derived DTOs are hot, warm, or cold projections and
   how projection freshness/catching-up/degraded states appear in API responses.
 - [x] Define graph-version DTOs for historic run view.
-- [ ] Define I/O artifact and retention DTOs.
-  - First-pass I/O artifact DTOs cover bounded metadata and payload
-    references. Retention-state DTOs remain pending with retention policy work.
-- [ ] Define Library usage/Pumas audit DTOs.
+- [x] Define I/O artifact and retention DTOs.
+- [x] Define Library usage/Pumas audit DTOs.
 - [x] Define local Network node DTOs.
 - [x] Define future peer pairing/trust DTO placeholders for Network so Iroh
   can extend the model without replacing the page contract.
-- [ ] Define explicit error taxonomy.
+- [x] Define explicit error taxonomy.
 - [x] Define local Network/system metrics behind a platform abstraction with
   degraded-state DTOs for unavailable or unauthorized metrics.
-- [ ] Choose the DTO parity mechanism before page work begins: generated
+- [x] Choose the DTO parity mechanism before page work begins: generated
   bindings/schema checks, or paired Rust serialization tests plus TypeScript
   normalization/fixture tests for every projection.
   - Current acceptance uses paired Rust public-DTO deserialization and
