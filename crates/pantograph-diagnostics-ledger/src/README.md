@@ -156,6 +156,12 @@ semantics.
   cutoff, append typed `retention.artifact_state_changed` audit events, and
   leave artifact metadata queryable after payload references expire. Cleanup
   commands must pass typed actor scope into those audit events.
+- The active global retention policy exposes first-pass typed setting groups
+  for final outputs, workflow inputs, intermediate node I/O, failed-run data,
+  maximum artifact size, total storage, media behavior, compression behavior,
+  and cleanup trigger. These settings are currently derived from the standard
+  retention window unless a future policy-version migration persists finer
+  granularity.
 - Library usage projection queries may filter by `workflow_run_id` through the
   materialized run-link table so active-run Library pages do not scan raw
   `library.asset_accessed` events.

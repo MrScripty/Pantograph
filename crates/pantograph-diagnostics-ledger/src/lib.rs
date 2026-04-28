@@ -41,8 +41,10 @@ pub use event::{
 };
 pub use records::{
     ApplyArtifactRetentionPolicyCommand, ApplyArtifactRetentionPolicyResult, DiagnosticsProjection,
-    DiagnosticsQuery, DiagnosticsRetentionPolicy, ExecutionGuaranteeLevel, LicenseSnapshot,
-    ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement,
+    DiagnosticsQuery, DiagnosticsRetentionCleanupTrigger, DiagnosticsRetentionCompressionBehavior,
+    DiagnosticsRetentionMediaBehavior, DiagnosticsRetentionPayloadMode, DiagnosticsRetentionPolicy,
+    DiagnosticsRetentionPolicySettings, DiagnosticsRetentionScopePolicy, ExecutionGuaranteeLevel,
+    LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement,
     OutputMeasurementUnavailableReason, OutputModality, PruneUsageEventsCommand,
     PruneUsageEventsResult, RetentionClass, UpdateRetentionPolicyCommand, UsageEventStatus,
     UsageLineage, DEFAULT_STANDARD_RETENTION_DAYS, MAX_RETENTION_DAYS, MILLIS_PER_DAY,

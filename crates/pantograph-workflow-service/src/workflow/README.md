@@ -233,6 +233,10 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
 - Retention policy updates: `workflow_retention_policy_update` changes the
   global standard diagnostics retention policy and records a typed
   `retention.policy_changed` audit event with `gui_admin` actor scope.
+  Retention policy query responses include first-pass typed setting groups
+  derived from the active standard policy for final outputs, workflow inputs,
+  intermediate node I/O, failed-run data, size/storage limits, media behavior,
+  compression behavior, and cleanup trigger.
 - Retention cleanup: `workflow_retention_cleanup_apply` records typed
   `retention.artifact_state_changed` audit events with `gui_admin` actor scope
   before expired payload references disappear from the projection.

@@ -272,12 +272,14 @@ impl DiagnosticsLedgerRepository for SqliteDiagnosticsLedger {
              WHERE retention_class = ?1",
             params![RetentionClass::Standard.as_db()],
             |row| {
+                let retention_days = row.get::<_, i64>(3)? as u32;
                 Ok(DiagnosticsRetentionPolicy {
                     policy_id: row.get(0)?,
                     policy_version: row.get::<_, i64>(1)? as u32,
                     retention_class: RetentionClass::from_db(&row.get::<_, String>(2)?)
                         .map_err(to_sql_error)?,
-                    retention_days: row.get::<_, i64>(3)? as u32,
+                    retention_days,
+                    settings: crate::records::DiagnosticsRetentionPolicySettings::standard(retention_days),
                     applied_at_ms: row.get(4)?,
                     explanation: row.get(5)?,
                 })
@@ -313,12 +315,14 @@ impl DiagnosticsLedgerRepository for SqliteDiagnosticsLedger {
              WHERE retention_class = ?1",
             params![command.retention_class.as_db()],
             |row| {
+                let retention_days = row.get::<_, i64>(3)? as u32;
                 Ok(DiagnosticsRetentionPolicy {
                     policy_id: row.get(0)?,
                     policy_version: row.get::<_, i64>(1)? as u32,
                     retention_class: RetentionClass::from_db(&row.get::<_, String>(2)?)
                         .map_err(to_sql_error)?,
-                    retention_days: row.get::<_, i64>(3)? as u32,
+                    retention_days,
+                    settings: crate::records::DiagnosticsRetentionPolicySettings::standard(retention_days),
                     applied_at_ms: row.get(4)?,
                     explanation: row.get(5)?,
                 })

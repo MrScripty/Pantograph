@@ -274,7 +274,7 @@ rendering.
   where available, video placeholder/player where available, tables, JSON,
   files, and unknown/raw fallback.
 - [x] Show retention state and cleanup/policy details for each item.
-- [ ] Surface global retention settings for final outputs, workflow inputs,
+- [x] Surface global retention settings for final outputs, workflow inputs,
   intermediate node I/O, failed-run data, maximum artifact size, maximum total
   storage, media behavior, compression/archive behavior, and cleanup
   trigger/status where Stage `04` exposes them.
@@ -303,9 +303,12 @@ dereferencing payload bodies. Artifact cards also render projection-provided
 producer/consumer endpoints, retention reason, payload reference, runtime id,
 and model id fields when present. The page exposes the backend retention
 cleanup command, reports the backend cleanup count and cleanup detail rows, and
-refreshes projection metadata after cleanup. Finer-grained retention setting
-groups and physical payload-store status controls remain open pending richer
-backend projections.
+refreshes projection metadata after cleanup. The retention policy panel now
+renders backend-provided first-pass setting groups for final outputs, workflow
+inputs, intermediate node I/O, failed-run data, nullable size/storage limits,
+media behavior, compression behavior, and cleanup trigger. Persisted
+fine-grained per-group controls and physical payload-store status controls
+remain open pending richer backend projections.
 
 ### Milestone 5: Library Page
 

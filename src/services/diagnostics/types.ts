@@ -326,12 +326,34 @@ export interface WorkflowLibraryUsageQueryResponse {
 }
 
 export type DiagnosticsRetentionClass = 'standard';
+export type DiagnosticsRetentionPayloadMode = 'retain_payload_reference' | 'metadata_only';
+export type DiagnosticsRetentionMediaBehavior = 'metadata_and_reference_only';
+export type DiagnosticsRetentionCompressionBehavior = 'not_configured';
+export type DiagnosticsRetentionCleanupTrigger = 'manual_or_maintenance';
+
+export interface DiagnosticsRetentionScopePolicy {
+  retention_days: number;
+  payload_mode: DiagnosticsRetentionPayloadMode;
+}
+
+export interface DiagnosticsRetentionPolicySettings {
+  final_outputs: DiagnosticsRetentionScopePolicy;
+  workflow_inputs: DiagnosticsRetentionScopePolicy;
+  intermediate_node_io: DiagnosticsRetentionScopePolicy;
+  failed_run_data: DiagnosticsRetentionScopePolicy;
+  max_artifact_bytes?: number | null;
+  max_total_storage_bytes?: number | null;
+  media_behavior: DiagnosticsRetentionMediaBehavior;
+  compression_behavior: DiagnosticsRetentionCompressionBehavior;
+  cleanup_trigger: DiagnosticsRetentionCleanupTrigger;
+}
 
 export interface DiagnosticsRetentionPolicy {
   policy_id: string;
   policy_version: number;
   retention_class: DiagnosticsRetentionClass;
   retention_days: number;
+  settings: DiagnosticsRetentionPolicySettings;
   applied_at_ms: number;
   explanation: string;
 }

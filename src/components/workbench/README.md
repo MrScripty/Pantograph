@@ -195,7 +195,9 @@ transient UI state without becoming backend scheduler policy.
   `workflowService.queryRetentionPolicy`. Artifact retention labels come from
   `IoArtifactProjectionRecord.retention_state`, not from `payload_ref`
   inference. Retention completeness counts come from the response
-  `retention_summary`, not from raw ledger events.
+  `retention_summary`, not from raw ledger events. Retention policy setting
+  rows render backend-provided policy settings rather than hardcoded page
+  categories.
 - Retention policy saves call `workflowService.updateRetentionPolicy` and
   update displayed state only from the backend response. The page may show a
   saving state, but it must not apply the requested policy as if it were

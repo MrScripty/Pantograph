@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { WorkflowCommandService } from './WorkflowCommandService.ts';
 import type {
+  DiagnosticsRetentionPolicySettings,
   WorkflowRetentionCleanupResponse,
   WorkflowRetentionPolicyUpdateResponse,
 } from '../diagnostics/types.ts';
@@ -20,6 +21,24 @@ function installWindowMock(): void {
   target.window = globalThis;
 }
 
+function standardRetentionSettings(retentionDays: number): DiagnosticsRetentionPolicySettings {
+  const scope = {
+    retention_days: retentionDays,
+    payload_mode: 'retain_payload_reference' as const,
+  };
+  return {
+    final_outputs: scope,
+    workflow_inputs: scope,
+    intermediate_node_io: scope,
+    failed_run_data: scope,
+    max_artifact_bytes: null,
+    max_total_storage_bytes: null,
+    media_behavior: 'metadata_and_reference_only',
+    compression_behavior: 'not_configured',
+    cleanup_trigger: 'manual_or_maintenance',
+  };
+}
+
 test('updateRetentionPolicy returns backend policy state without client-side optimistic replacement', async () => {
   installWindowMock();
   const calls: Array<{ cmd: string; args: unknown }> = [];
@@ -29,6 +48,7 @@ test('updateRetentionPolicy returns backend policy state without client-side opt
       policy_version: 2,
       retention_class: 'standard',
       retention_days: 14,
+      settings: standardRetentionSettings(14),
       applied_at_ms: 123,
       explanation: 'backend normalized policy',
     },

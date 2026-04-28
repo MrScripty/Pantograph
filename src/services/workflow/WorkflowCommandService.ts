@@ -1,4 +1,5 @@
 import type {
+  DiagnosticsRetentionPolicy,
   PumasHfDownloadRequest,
   PumasHfDownloadStartAuditResponse,
   PumasHfModelSearchAuditRequest,
@@ -117,6 +118,7 @@ export class WorkflowCommandService extends WorkflowProjectionService {
           policy_version: 1,
           retention_class: 'standard',
           retention_days: 365,
+          settings: standardRetentionPolicySettings(365),
           applied_at_ms: Date.now(),
           explanation: 'Default local model/license usage retention policy',
         },
@@ -138,6 +140,7 @@ export class WorkflowCommandService extends WorkflowProjectionService {
           policy_version: 2,
           retention_class: 'standard',
           retention_days: request.retention_days,
+          settings: standardRetentionPolicySettings(request.retention_days),
           applied_at_ms: Date.now(),
           explanation: request.explanation,
         },
@@ -216,4 +219,22 @@ export class WorkflowCommandService extends WorkflowProjectionService {
       request,
     });
   }
+}
+
+function standardRetentionPolicySettings(retentionDays: number): DiagnosticsRetentionPolicy['settings'] {
+  const scope = {
+    retention_days: retentionDays,
+    payload_mode: 'retain_payload_reference' as const,
+  };
+  return {
+    final_outputs: scope,
+    workflow_inputs: scope,
+    intermediate_node_io: scope,
+    failed_run_data: scope,
+    max_artifact_bytes: null,
+    max_total_storage_bytes: null,
+    media_behavior: 'metadata_and_reference_only',
+    compression_behavior: 'not_configured',
+    cleanup_trigger: 'manual_or_maintenance',
+  };
 }

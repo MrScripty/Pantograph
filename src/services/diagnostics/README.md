@@ -64,6 +64,9 @@ panel because no active TypeScript boundary consumes them.
 - Library usage query DTOs include optional `workflow_run_id` filters so
   frontend consumers can request selected-run asset usage without
   reconstructing active-run Library state from raw ledger events.
+- Retention policy DTOs include first-pass typed setting groups for I/O
+  retention scopes and storage/media/cleanup behavior. Frontend controls render
+  those backend fields instead of inventing local policy categories.
 - Retention and Pumas command DTOs mirror backend command/result shapes so GUI
   controls can display outcomes without optimistic local audit mutation.
 

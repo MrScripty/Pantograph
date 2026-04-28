@@ -331,10 +331,14 @@ availability.
   - Existing standard local retention policy is now exposed as a first-class
     backend/API query. The policy now carries a durable `policy_version` that
     starts at `1` and increments on each update.
-- [ ] Define first-pass global retention settings for final outputs, workflow
+- [x] Define first-pass global retention settings for final outputs, workflow
   inputs, intermediate node I/O, failed-run data, maximum artifact size,
   maximum total storage, media behavior, compression/archive behavior, and
   cleanup trigger/status.
+  - The active standard global policy now exposes typed first-pass settings
+    for these groups. The settings are derived from the policy's retention
+    window and nullable size/storage limits until a later policy-version
+    migration persists finer-grained policy values.
 - [x] Add retroactive cleanup command that updates metadata before deleting or
   expiring payloads.
 - [x] Emit typed `retention.*` events with policy version, timestamp, actor,
@@ -365,8 +369,9 @@ and outputs, including artifact role, node id, media type, JSON byte size,
 content hash, retention state, and retention reason without storing raw values
 in the ledger. A first-pass retroactive cleanup command now expires retained
 artifact projection rows older than the active global policy cutoff while
-leaving metadata queryable. Node-to-node intermediate I/O, first-pass setting
-groups, and physical payload-store deletion remain pending.
+leaving metadata queryable. Node-to-node intermediate I/O, persisted
+fine-grained setting values, and physical payload-store deletion remain
+pending.
 
 ### Milestone 4: Library And Pumas Audit
 

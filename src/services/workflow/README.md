@@ -277,3 +277,6 @@ const preview = await workflowService.previewNodeInsertOnEdge(
   `pushSessionQueueItemToFront` resolve only with backend response DTOs.
   Callers refresh projections or apply the returned backend policy; they do not
   optimistically mutate queue rows or retention facts.
+- Mock retention policy responses include the same first-pass settings groups
+  as native responses so policy panels exercise one DTO shape in mock and
+  native modes.

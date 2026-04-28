@@ -75,6 +75,10 @@ by external adapters.
   cancel/push-front, run-id-plus-priority override, and backend-authored
   session id responses because Tauri/frontend adapters must not derive the
   owning session themselves.
+- Retention policy contract snapshots must preserve first-pass settings groups
+  for retention scopes, size/storage limits, media behavior, compression
+  behavior, and cleanup trigger so GUI policy panels do not invent local
+  policy categories.
 - Shared fixture snapshots must be deserialized by Rust public DTOs and
   consumed by frontend service tests in the same contract slice so drift is
   detected on both sides.

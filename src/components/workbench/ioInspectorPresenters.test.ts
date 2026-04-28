@@ -6,6 +6,7 @@ import {
   buildIoArtifactRendererSummary,
   buildRetentionCleanupDetailRows,
   buildRetentionPolicyDetailRows,
+  buildRetentionPolicySettingRows,
   classifyIoArtifactMedia,
   formatIoArtifactAvailabilityLabel,
   formatIoArtifactBytes,
@@ -231,14 +232,26 @@ test('formatProjectionFreshness keeps projection status visible', () => {
 });
 
 test('retention policy detail rows expose backend policy state', () => {
-  const rows = buildRetentionPolicyDetailRows({
+  const policy = {
     policy_id: 'standard-local-v1',
     policy_version: 3,
     retention_class: 'standard',
     retention_days: 30,
+    settings: {
+      final_outputs: { retention_days: 30, payload_mode: 'retain_payload_reference' },
+      workflow_inputs: { retention_days: 30, payload_mode: 'retain_payload_reference' },
+      intermediate_node_io: { retention_days: 14, payload_mode: 'metadata_only' },
+      failed_run_data: { retention_days: 7, payload_mode: 'metadata_only' },
+      max_artifact_bytes: null,
+      max_total_storage_bytes: 1_073_741_824,
+      media_behavior: 'metadata_and_reference_only',
+      compression_behavior: 'not_configured',
+      cleanup_trigger: 'manual_or_maintenance',
+    },
     applied_at_ms: 86_400_000,
     explanation: 'short local history',
-  });
+  } as const;
+  const rows = buildRetentionPolicyDetailRows(policy);
 
   assert.equal(rows.find((row) => row.label === 'Policy')?.value, 'standard-local-v1');
   assert.equal(rows.find((row) => row.label === 'Version')?.value, '3');
@@ -246,6 +259,36 @@ test('retention policy detail rows expose backend policy state', () => {
   assert.equal(rows.find((row) => row.label === 'Days')?.value, '30');
   assert.match(rows.find((row) => row.label === 'Applied')?.value ?? '', /1970/);
   assert.deepEqual(buildRetentionPolicyDetailRows(null), []);
+});
+
+test('retention policy setting rows expose first-pass global setting groups', () => {
+  const rows = buildRetentionPolicySettingRows({
+    policy_id: 'standard-local-v1',
+    policy_version: 3,
+    retention_class: 'standard',
+    retention_days: 30,
+    settings: {
+      final_outputs: { retention_days: 30, payload_mode: 'retain_payload_reference' },
+      workflow_inputs: { retention_days: 30, payload_mode: 'retain_payload_reference' },
+      intermediate_node_io: { retention_days: 14, payload_mode: 'metadata_only' },
+      failed_run_data: { retention_days: 7, payload_mode: 'metadata_only' },
+      max_artifact_bytes: null,
+      max_total_storage_bytes: 1_073_741_824,
+      media_behavior: 'metadata_and_reference_only',
+      compression_behavior: 'not_configured',
+      cleanup_trigger: 'manual_or_maintenance',
+    },
+    applied_at_ms: 86_400_000,
+    explanation: 'short local history',
+  });
+
+  assert.equal(rows.find((row) => row.label === 'Final Outputs')?.value, '30 days, Retain Payload Reference');
+  assert.equal(rows.find((row) => row.label === 'Intermediate Node I/O')?.value, '14 days, Metadata Only');
+  assert.equal(rows.find((row) => row.label === 'Maximum Artifact Size')?.value, 'Size unknown');
+  assert.equal(rows.find((row) => row.label === 'Maximum Total Storage')?.value, '1.0 GiB');
+  assert.equal(rows.find((row) => row.label === 'Media Behavior')?.value, 'Metadata And Reference Only');
+  assert.equal(rows.find((row) => row.label === 'Cleanup Trigger')?.value, 'Manual Or Maintenance');
+  assert.deepEqual(buildRetentionPolicySettingRows(null), []);
 });
 
 test('retention cleanup detail rows expose backend cleanup status', () => {

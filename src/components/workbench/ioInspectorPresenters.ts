@@ -323,6 +323,62 @@ export function buildRetentionPolicyDetailRows(
   ];
 }
 
+export function buildRetentionPolicySettingRows(
+  policy: DiagnosticsRetentionPolicy | null,
+): IoRetentionDetailRow[] {
+  if (!policy) {
+    return [];
+  }
+  const settings = policy.settings;
+  return [
+    {
+      label: 'Final Outputs',
+      value: formatRetentionScopePolicy(settings.final_outputs),
+      mono: false,
+    },
+    {
+      label: 'Workflow Inputs',
+      value: formatRetentionScopePolicy(settings.workflow_inputs),
+      mono: false,
+    },
+    {
+      label: 'Intermediate Node I/O',
+      value: formatRetentionScopePolicy(settings.intermediate_node_io),
+      mono: false,
+    },
+    {
+      label: 'Failed Run Data',
+      value: formatRetentionScopePolicy(settings.failed_run_data),
+      mono: false,
+    },
+    {
+      label: 'Maximum Artifact Size',
+      value: formatIoArtifactBytes(settings.max_artifact_bytes),
+      mono: false,
+    },
+    {
+      label: 'Maximum Total Storage',
+      value: formatIoArtifactBytes(settings.max_total_storage_bytes),
+      mono: false,
+    },
+    {
+      label: 'Media Behavior',
+      value: formatRetentionEnumLabel(settings.media_behavior),
+      mono: false,
+    },
+    {
+      label: 'Compression',
+      value: formatRetentionEnumLabel(settings.compression_behavior),
+      mono: false,
+    },
+    {
+      label: 'Cleanup Trigger',
+      value: formatRetentionEnumLabel(settings.cleanup_trigger),
+      mono: false,
+    },
+  ];
+}
+
 export function buildRetentionCleanupDetailRows(
   cleanup: WorkflowRetentionCleanupResult | null,
 ): IoRetentionDetailRow[] {
@@ -344,6 +400,19 @@ export function buildRetentionCleanupDetailRows(
       mono: false,
     },
   ];
+}
+
+function formatRetentionScopePolicy(
+  policy: DiagnosticsRetentionPolicy['settings']['final_outputs'],
+): string {
+  return `${policy.retention_days} days, ${formatRetentionEnumLabel(policy.payload_mode)}`;
+}
+
+function formatRetentionEnumLabel(value: string): string {
+  return value
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
 }
 
 export function formatIoRetentionTimestamp(value: number | null | undefined): string {

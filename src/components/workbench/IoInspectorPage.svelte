@@ -28,6 +28,7 @@
     buildIoArtifactRendererSummary,
     buildRetentionCleanupDetailRows,
     buildRetentionPolicyDetailRows,
+    buildRetentionPolicySettingRows,
     formatIoArtifactAvailabilityLabel,
     formatIoArtifactBytes,
     formatIoArtifactDetailValue,
@@ -62,6 +63,7 @@
   let workflowOutputArtifacts = $derived(artifacts.filter(isWorkflowOutputArtifact));
   let nodeGroups = $derived(buildIoArtifactNodeGroups(artifacts));
   let retentionPolicyRows = $derived(buildRetentionPolicyDetailRows(retentionPolicy));
+  let retentionPolicySettingRows = $derived(buildRetentionPolicySettingRows(retentionPolicy));
   let retentionCleanupRows = $derived(buildRetentionCleanupDetailRows(retentionCleanup));
   let summarizedArtifactCount = $derived(
     retentionSummary.reduce((total, item) => total + item.artifact_count, 0),
@@ -577,6 +579,22 @@
             <h3 class="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">Current Policy</h3>
             <dl class="mt-3 space-y-2 text-xs">
               {#each retentionPolicyRows as row (row.label)}
+                <div>
+                  <dt class="text-neutral-500">{row.label}</dt>
+                  <dd class={`mt-0.5 truncate text-neutral-200 ${row.mono ? 'font-mono' : ''}`} title={row.value}>
+                    {row.value}
+                  </dd>
+                </div>
+              {/each}
+            </dl>
+          </section>
+        {/if}
+
+        {#if retentionPolicySettingRows.length > 0}
+          <section class="rounded border border-neutral-800 bg-neutral-900/50 p-3">
+            <h3 class="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">Retention Settings</h3>
+            <dl class="mt-3 space-y-2 text-xs">
+              {#each retentionPolicySettingRows as row (row.label)}
                 <div>
                   <dt class="text-neutral-500">{row.label}</dt>
                   <dd class={`mt-0.5 truncate text-neutral-200 ${row.mono ? 'font-mono' : ''}`} title={row.value}>

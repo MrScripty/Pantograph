@@ -254,8 +254,73 @@ pub struct DiagnosticsRetentionPolicy {
     pub policy_version: u32,
     pub retention_class: RetentionClass,
     pub retention_days: u32,
+    pub settings: DiagnosticsRetentionPolicySettings,
     pub applied_at_ms: i64,
     pub explanation: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DiagnosticsRetentionPolicySettings {
+    pub final_outputs: DiagnosticsRetentionScopePolicy,
+    pub workflow_inputs: DiagnosticsRetentionScopePolicy,
+    pub intermediate_node_io: DiagnosticsRetentionScopePolicy,
+    pub failed_run_data: DiagnosticsRetentionScopePolicy,
+    pub max_artifact_bytes: Option<u64>,
+    pub max_total_storage_bytes: Option<u64>,
+    pub media_behavior: DiagnosticsRetentionMediaBehavior,
+    pub compression_behavior: DiagnosticsRetentionCompressionBehavior,
+    pub cleanup_trigger: DiagnosticsRetentionCleanupTrigger,
+}
+
+impl DiagnosticsRetentionPolicySettings {
+    pub fn standard(retention_days: u32) -> Self {
+        let retained = DiagnosticsRetentionScopePolicy {
+            retention_days,
+            payload_mode: DiagnosticsRetentionPayloadMode::RetainPayloadReference,
+        };
+        Self {
+            final_outputs: retained.clone(),
+            workflow_inputs: retained.clone(),
+            intermediate_node_io: retained.clone(),
+            failed_run_data: retained,
+            max_artifact_bytes: None,
+            max_total_storage_bytes: None,
+            media_behavior: DiagnosticsRetentionMediaBehavior::MetadataAndReferenceOnly,
+            compression_behavior: DiagnosticsRetentionCompressionBehavior::NotConfigured,
+            cleanup_trigger: DiagnosticsRetentionCleanupTrigger::ManualOrMaintenance,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DiagnosticsRetentionScopePolicy {
+    pub retention_days: u32,
+    pub payload_mode: DiagnosticsRetentionPayloadMode,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DiagnosticsRetentionPayloadMode {
+    RetainPayloadReference,
+    MetadataOnly,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DiagnosticsRetentionMediaBehavior {
+    MetadataAndReferenceOnly,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DiagnosticsRetentionCompressionBehavior {
+    NotConfigured,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DiagnosticsRetentionCleanupTrigger {
+    ManualOrMaintenance,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

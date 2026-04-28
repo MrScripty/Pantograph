@@ -1358,6 +1358,9 @@ fn workflow_retention_policy_query_contract_snapshot() {
             policy_version: 1,
             retention_class: RetentionClass::Standard,
             retention_days: 365,
+            settings: pantograph_diagnostics_ledger::DiagnosticsRetentionPolicySettings::standard(
+                365,
+            ),
             applied_at_ms: 1500,
             explanation: "Default local model/license usage retention policy".to_string(),
         },
@@ -1374,6 +1377,29 @@ fn workflow_retention_policy_query_contract_snapshot() {
             "policy_version": 1,
             "retention_class": "standard",
             "retention_days": 365,
+            "settings": {
+                "final_outputs": {
+                    "retention_days": 365,
+                    "payload_mode": "retain_payload_reference"
+                },
+                "workflow_inputs": {
+                    "retention_days": 365,
+                    "payload_mode": "retain_payload_reference"
+                },
+                "intermediate_node_io": {
+                    "retention_days": 365,
+                    "payload_mode": "retain_payload_reference"
+                },
+                "failed_run_data": {
+                    "retention_days": 365,
+                    "payload_mode": "retain_payload_reference"
+                },
+                "max_artifact_bytes": null,
+                "max_total_storage_bytes": null,
+                "media_behavior": "metadata_and_reference_only",
+                "compression_behavior": "not_configured",
+                "cleanup_trigger": "manual_or_maintenance"
+            },
             "applied_at_ms": 1500,
             "explanation": "Default local model/license usage retention policy"
         }
