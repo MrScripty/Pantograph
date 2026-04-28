@@ -373,7 +373,8 @@ authoring page.
   support.
 - [x] Structure Network data so future peer nodes can appear without a page
   rewrite.
-- [ ] Highlight active-run relevant local node/runtime/model state.
+- [x] Highlight active-run relevant local node/runtime/model state where typed
+  placement, node-status, and Library usage projections expose those facts.
 - [x] Reserve peer pairing/trust state in the data and page model so future
   Iroh work can add discovered peers, codes/keys, and verification state
   without a page rewrite.
@@ -407,6 +408,9 @@ runtime id/version, and model id/version labels from
 facts rather than cache-residency claims. The page also reads the selected
 run's scheduler timeline projection so local scheduler/system activity can be
 inspected without raw ledger access.
+Selected-run node statuses and Library cache-observation rows now use typed
+presenter classes so active-run execution/resource state is visibly scannable
+without claiming unreported local cache residency.
 The Node Editor page has a truthful unavailable state.
 
 ## Ownership And Lifecycle Note
@@ -537,6 +541,9 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
   `workflowService.queryLibraryUsage`, showing active-run Library assets and
   last cache observations as projection facts without claiming local cache
   residency.
+- Added Network selected-run execution and resource status highlighting from
+  typed node-status and Library usage projection fields without inferring
+  local cache residency.
 
 ### Deviations
 

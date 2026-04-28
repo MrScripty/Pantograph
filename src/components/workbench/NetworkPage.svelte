@@ -375,7 +375,11 @@
                             <td class="max-w-[18rem] px-4 py-2">
                               <div class="truncate font-mono text-xs text-neutral-200" title={row.nodeId}>{row.nodeId}</div>
                             </td>
-                            <td class="px-3 py-2 text-neutral-400">{row.status}</td>
+                            <td class="px-3 py-2">
+                              <span class={`inline-flex rounded border px-2 py-0.5 text-xs ${row.statusClass}`}>
+                                {row.status}
+                              </span>
+                            </td>
                             <td class="max-w-[18rem] px-3 py-2">
                               <div class="truncate text-neutral-400" title={row.runtime}>{row.runtime}</div>
                             </td>
@@ -430,7 +434,11 @@
                               </div>
                             </td>
                             <td class="px-3 py-2 text-neutral-400">{resource.category}</td>
-                            <td class="px-3 py-2 text-neutral-400">{resource.cacheStatus}</td>
+                            <td class="px-3 py-2">
+                              <span class={`inline-flex rounded border px-2 py-0.5 text-xs ${resource.cacheClass}`}>
+                                {resource.cacheStatus}
+                              </span>
+                            </td>
                             <td class="px-3 py-2 text-neutral-400">{resource.networkBytes}</td>
                             <td class="px-4 py-2 font-mono text-xs text-neutral-300">{resource.accessCount}</td>
                           </tr>

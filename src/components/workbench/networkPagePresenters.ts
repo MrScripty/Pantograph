@@ -25,6 +25,7 @@ export interface NetworkSelectedRunResourceRow {
   assetId: string;
   category: string;
   cacheStatus: string;
+  cacheClass: string;
   networkBytes: string;
   accessCount: string;
 }
@@ -32,6 +33,7 @@ export interface NetworkSelectedRunResourceRow {
 export interface NetworkSelectedRunExecutionRow {
   nodeId: string;
   status: string;
+  statusClass: string;
   runtime: string;
   model: string;
 }
@@ -204,6 +206,7 @@ export function buildSelectedRunResourceRows(
     assetId: asset.asset_id,
     category: formatLibraryAssetCategory(asset.asset_id),
     cacheStatus: formatSelectedRunResourceCacheStatus(asset.last_cache_status),
+    cacheClass: selectedRunResourceCacheClass(asset.last_cache_status),
     networkBytes: formatLibraryBytes(asset.total_network_bytes),
     accessCount: String(asset.run_access_count),
   }));
@@ -215,9 +218,23 @@ export function buildSelectedRunExecutionRows(
   return nodes.map((node) => ({
     nodeId: node.node_id,
     status: formatSelectedRunNodeStatus(node.status),
+    statusClass: selectedRunNodeStatusClass(node.status),
     runtime: formatSelectedRunVersionedLabel(node.runtime_id, node.runtime_version, 'Runtime unavailable'),
     model: formatSelectedRunVersionedLabel(node.model_id, node.model_version, 'Model unavailable'),
   }));
+}
+
+export function selectedRunResourceCacheClass(value: string | null | undefined): string {
+  if (value === 'cache_hit' || value === 'loaded') {
+    return 'border-emerald-800 bg-emerald-950/50 text-emerald-200';
+  }
+  if (value === 'cache_miss' || value === 'load_requested') {
+    return 'border-amber-800 bg-amber-950/50 text-amber-200';
+  }
+  if (value === 'failed') {
+    return 'border-red-800 bg-red-950/50 text-red-200';
+  }
+  return 'border-neutral-800 bg-neutral-950 text-neutral-400';
 }
 
 export function formatSelectedRunResourceCacheStatus(value: string | null | undefined): string {
@@ -235,6 +252,23 @@ export function formatSelectedRunNodeStatus(value: NodeStatusProjectionRecord['s
     .split('_')
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ');
+}
+
+export function selectedRunNodeStatusClass(value: NodeStatusProjectionRecord['status']): string {
+  switch (value) {
+    case 'queued':
+      return 'border-amber-800 bg-amber-950/50 text-amber-200';
+    case 'completed':
+      return 'border-emerald-800 bg-emerald-950/50 text-emerald-200';
+    case 'running':
+      return 'border-cyan-800 bg-cyan-950/50 text-cyan-200';
+    case 'waiting':
+      return 'border-amber-800 bg-amber-950/50 text-amber-200';
+    case 'failed':
+      return 'border-red-800 bg-red-950/50 text-red-200';
+    case 'cancelled':
+      return 'border-neutral-700 bg-neutral-900 text-neutral-300';
+  }
 }
 
 export function buildNetworkFactRows(node: WorkflowLocalNetworkNodeStatus): NetworkFactRow[] {

@@ -20,6 +20,8 @@ import {
   formatSelectedRunLocalState,
   formatSelectedRunPlacementState,
   formatSelectedRunRuntimePosture,
+  selectedRunNodeStatusClass,
+  selectedRunResourceCacheClass,
   formatSessionLoad,
   formatTransportState,
 } from './networkPagePresenters.ts';
@@ -205,17 +207,21 @@ test('buildSelectedRunExecutionRows exposes selected-run node runtime and model 
     {
       nodeId: 'node-a',
       status: 'Running',
+      statusClass: 'border-cyan-800 bg-cyan-950/50 text-cyan-200',
       runtime: 'runtime-a@2.0.0',
       model: 'model-a@3.0.0',
     },
     {
       nodeId: 'node-b',
       status: 'Waiting',
+      statusClass: 'border-amber-800 bg-amber-950/50 text-amber-200',
       runtime: 'Runtime unavailable',
       model: 'Model unavailable',
     },
   ]);
   assert.equal(formatSelectedRunNodeStatus('cancelled'), 'Cancelled');
+  assert.match(selectedRunNodeStatusClass('completed'), /emerald/);
+  assert.match(selectedRunNodeStatusClass('failed'), /red/);
 });
 
 test('buildSelectedRunResourceRows exposes selected-run Library usage facts', () => {
@@ -238,11 +244,15 @@ test('buildSelectedRunResourceRows exposes selected-run Library usage facts', ()
       assetId: 'model:llama',
       category: 'Model',
       cacheStatus: 'Cache Hit',
+      cacheClass: 'border-emerald-800 bg-emerald-950/50 text-emerald-200',
       networkBytes: '2.0 KiB',
       accessCount: '2',
     },
   ]);
   assert.equal(formatSelectedRunResourceCacheStatus(null), 'Cache status unavailable');
+  assert.match(selectedRunResourceCacheClass('cache_miss'), /amber/);
+  assert.match(selectedRunResourceCacheClass('failed'), /red/);
+  assert.match(selectedRunResourceCacheClass(null), /neutral/);
 });
 
 test('buildNetworkFactRows summarizes local node capabilities', () => {
