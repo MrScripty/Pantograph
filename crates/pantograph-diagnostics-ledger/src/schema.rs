@@ -549,9 +549,7 @@ fn apply_scheduler_run_projection_fact_migration(
 fn apply_run_list_scope_projection_migration(
     tx: &Transaction<'_>,
 ) -> Result<(), DiagnosticsLedgerError> {
-    if !table_exists(tx, "run_list_projection")? {
-        return Ok(());
-    }
+    ensure_run_list_projection_schema_compatible(tx)?;
     if !column_exists(tx, "run_list_projection", "client_id")? {
         tx.execute(
             "ALTER TABLE run_list_projection ADD COLUMN client_id TEXT",
@@ -586,6 +584,8 @@ fn apply_run_list_scope_projection_migration(
 fn apply_workflow_execution_session_projection_migration(
     tx: &Transaction<'_>,
 ) -> Result<(), DiagnosticsLedgerError> {
+    ensure_run_list_projection_schema_compatible(tx)?;
+    ensure_run_detail_projection_schema_compatible(tx)?;
     if table_exists(tx, "run_list_projection")? {
         if !column_exists(tx, "run_list_projection", "workflow_execution_session_id")? {
             tx.execute(
@@ -608,6 +608,75 @@ fn apply_workflow_execution_session_projection_migration(
                 ADD COLUMN workflow_execution_session_id TEXT",
             [],
         )?;
+    }
+    Ok(())
+}
+
+fn ensure_run_list_projection_schema_compatible(
+    tx: &Transaction<'_>,
+) -> Result<(), DiagnosticsLedgerError> {
+    ensure_rebuildable_projection_schema_compatible(
+        tx,
+        "run_list_projection",
+        "run_list",
+        &["workflow_id", "last_event_seq", "last_updated_at_ms"],
+        apply_run_list_projection_schema,
+    )
+}
+
+fn ensure_run_detail_projection_schema_compatible(
+    tx: &Transaction<'_>,
+) -> Result<(), DiagnosticsLedgerError> {
+    ensure_rebuildable_projection_schema_compatible(
+        tx,
+        "run_detail_projection",
+        "run_detail",
+        &[
+            "workflow_id",
+            "status",
+            "last_event_seq",
+            "last_updated_at_ms",
+        ],
+        apply_run_detail_projection_schema,
+    )
+}
+
+fn ensure_rebuildable_projection_schema_compatible(
+    tx: &Transaction<'_>,
+    table_name: &str,
+    projection_name: &str,
+    required_columns: &[&str],
+    apply_schema: fn(&Transaction<'_>) -> Result<(), DiagnosticsLedgerError>,
+) -> Result<(), DiagnosticsLedgerError> {
+    if !table_exists(tx, table_name)? {
+        apply_schema(tx)?;
+        return Ok(());
+    }
+
+    let missing_required_column = required_columns
+        .iter()
+        .map(|column_name| column_exists(tx, table_name, column_name))
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .any(|exists| !exists);
+    if missing_required_column {
+        let drop_table_sql = match table_name {
+            "run_list_projection" => "DROP TABLE run_list_projection",
+            "run_detail_projection" => "DROP TABLE run_detail_projection",
+            _ => {
+                return Err(DiagnosticsLedgerError::InvalidField {
+                    field: "table_name",
+                })
+            }
+        };
+        tx.execute(drop_table_sql, [])?;
+        if table_exists(tx, "projection_state")? {
+            tx.execute(
+                "DELETE FROM projection_state WHERE projection_name = ?1",
+                params![projection_name],
+            )?;
+        }
+        apply_schema(tx)?;
     }
     Ok(())
 }

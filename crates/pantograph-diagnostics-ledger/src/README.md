@@ -88,6 +88,9 @@ semantics.
   application.
 - `projection_state` records the projection version and last applied event
   sequence so incremental projection drains can resume after restart.
+- Schema migrations may recreate incompatible rebuildable projection tables and
+  clear their projection cursor so the next drain repopulates them from the
+  ledger instead of preserving stale materialized rows.
 - Warm projection drains may return `rebuilding` with a persisted
   `last_applied_event_seq` when a bounded batch intentionally leaves later
   matching events for a subsequent drain.
