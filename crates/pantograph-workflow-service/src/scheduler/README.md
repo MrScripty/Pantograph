@@ -122,6 +122,10 @@ needs to be the long-term home for scheduler contracts or queue mutation logic.
 - Scheduler queue mutation, admission-input construction, and active-run finish
   transitions stay in `store_queue.rs` so canonical `workflow_run_id`
   lifecycle ownership is isolated from runtime-load and stale-cleanup state.
+- Dequeued-run records carry the scheduler session's required backend/model
+  facts at admission time so workflow-service diagnostics can emit selected
+  runtime and reserved model audit fields without rereading mutable graph
+  files.
 - Cross-session queue lookup for GUI-admin controls must stay inside the
   scheduler store boundary; adapters may request a privileged action but must
   not search or mutate session queues directly.

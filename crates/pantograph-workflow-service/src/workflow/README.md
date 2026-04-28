@@ -280,6 +280,10 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
   admission waits when diagnostics ledger storage is configured. The event is
   recorded outside scheduler-store locks and is projected into run status,
   scheduler reason, and timeline rows by the diagnostics ledger.
+- Workflow-session admission emits selected runtime and reserved model facts
+  from the dequeued scheduler state into `scheduler.run_admitted` events. It
+  must not reread current graph files or runtime internals to populate those
+  audit fields.
 - Workflow-session execution emits typed scheduler model/cache state on
   estimate and model lifecycle events when diagnostics ledger storage is
   configured. Submission estimates start as `unknown`; required-model load,

@@ -1060,6 +1060,18 @@ impl WorkflowService {
         let queue_wait_ms = queued_run
             .dequeued_at_ms
             .checked_sub(queued_run.enqueued_at_ms);
+        let snapshot_runtime_requirements = snapshot
+            .map(workflow_run_snapshot_runtime_requirements)
+            .transpose()?;
+        let selected_runtime_id = snapshot_runtime_requirements
+            .as_ref()
+            .and_then(|requirements| requirements.required_backends.first().cloned())
+            .or_else(|| queued_run.required_backends.first().cloned());
+        let reserved_model_ids = snapshot_runtime_requirements
+            .as_ref()
+            .map(|requirements| requirements.required_models.clone())
+            .filter(|models| !models.is_empty())
+            .unwrap_or_else(|| queued_run.required_models.clone());
 
         let mut ledger = ledger.lock().map_err(|_| {
             WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
@@ -1081,7 +1093,7 @@ impl WorkflowService {
                 node_id: None,
                 node_type: None,
                 node_version: None,
-                runtime_id: None,
+                runtime_id: selected_runtime_id.clone(),
                 runtime_version: None,
                 model_id: None,
                 model_version: None,
@@ -1097,6 +1109,10 @@ impl WorkflowService {
                     SchedulerRunAdmittedPayload {
                         queue_wait_ms,
                         decision_reason: queued_run.scheduler_decision_reason.as_str().to_string(),
+                        selected_runtime_id,
+                        selected_device_id: None,
+                        selected_network_node_id: None,
+                        reserved_model_ids,
                     },
                 ),
             },
@@ -1448,12 +1464,7 @@ fn scheduler_estimate_context_from_snapshot(
         });
     };
 
-    let runtime_requirements: WorkflowRuntimeRequirements =
-        serde_json::from_str(&snapshot.runtime_requirements_json).map_err(|error| {
-            WorkflowServiceError::Internal(format!(
-                "failed to decode workflow run snapshot runtime requirements: {error}"
-            ))
-        })?;
+    let runtime_requirements = workflow_run_snapshot_runtime_requirements(snapshot)?;
     append_scheduler_estimate_runtime_reasons(&mut reasons, &runtime_requirements);
     let runtime_capabilities: Vec<WorkflowRuntimeCapability> =
         serde_json::from_str(&snapshot.runtime_capabilities_json).map_err(|error| {
@@ -1492,6 +1503,16 @@ fn scheduler_estimate_context_from_snapshot(
         blocking_conditions,
         candidate_runtime_ids,
         reasons,
+    })
+}
+
+fn workflow_run_snapshot_runtime_requirements(
+    snapshot: &WorkflowRunSnapshotRecord,
+) -> Result<WorkflowRuntimeRequirements, WorkflowServiceError> {
+    serde_json::from_str(&snapshot.runtime_requirements_json).map_err(|error| {
+        WorkflowServiceError::Internal(format!(
+            "failed to decode workflow run snapshot runtime requirements: {error}"
+        ))
     })
 }
 

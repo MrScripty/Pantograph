@@ -129,6 +129,10 @@ semantics.
 - Scheduler model lifecycle transitions include load failure and unload failure
   states so runtime admission and teardown errors can remain typed audit facts
   instead of free-form timeline text.
+- Scheduler admission events may carry selected runtime, device/network-node,
+  and reserved model ids as typed bounded fields. Timeline projection details
+  may display those selections, but admission remains a scheduler decision
+  event instead of a runtime execution lifecycle event.
 - `run.snapshot_accepted` events carry bounded immutable snapshot metadata,
   including `workflow_run_snapshot_id`, `workflow_presentation_revision_id`,
   and `node_versions` entries with node id, node type, contract version, and

@@ -129,6 +129,9 @@ Use `workflow/tests/` for behavior-specific child modules under the parent
   estimate events include first-pass immutable run-snapshot runtime requirement
   reasons, typed blocking conditions, and typed candidate runtime ids instead
   of deriving estimate text from mutable graph state.
+- Session execution tests with diagnostics enabled must verify admission events
+  include selected runtime and reserved model facts from scheduler/dequeued-run
+  state instead of current graph reads.
 - Session execution tests with diagnostics enabled must verify scheduler model
   lifecycle events for runtime admission required-model loads before terminal
   run events and ephemeral required-model unloads after I/O artifact events.

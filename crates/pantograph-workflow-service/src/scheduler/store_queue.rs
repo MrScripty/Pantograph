@@ -272,9 +272,11 @@ impl WorkflowExecutionSessionStore {
         Ok(Some(WorkflowExecutionSessionDequeuedRun {
             workflow_id: state.workflow_id.clone(),
             enqueued_at_ms: queued.enqueued_at_ms,
-            queued,
             dequeued_at_ms,
             scheduler_decision_reason,
+            required_backends: state.required_backends.clone(),
+            required_models: state.required_models.clone(),
+            queued,
         }))
     }
 

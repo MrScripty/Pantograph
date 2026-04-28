@@ -9,7 +9,7 @@ use crate::DiagnosticsLedgerError;
 pub const DIAGNOSTIC_EVENT_SCHEMA_VERSION: i64 = 1;
 pub const MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES: usize = 8_192;
 pub const SCHEDULER_TIMELINE_PROJECTION_NAME: &str = "scheduler_timeline";
-pub const SCHEDULER_TIMELINE_PROJECTION_VERSION: i64 = 1;
+pub const SCHEDULER_TIMELINE_PROJECTION_VERSION: i64 = 2;
 pub const RUN_LIST_PROJECTION_NAME: &str = "run_list";
 pub const RUN_LIST_PROJECTION_VERSION: i64 = 3;
 pub const RUN_DETAIL_PROJECTION_NAME: &str = "run_detail";
@@ -442,6 +442,14 @@ impl SchedulerRunDelayedPayload {
 pub struct SchedulerRunAdmittedPayload {
     pub queue_wait_ms: Option<u64>,
     pub decision_reason: String,
+    #[serde(default)]
+    pub selected_runtime_id: Option<String>,
+    #[serde(default)]
+    pub selected_device_id: Option<String>,
+    #[serde(default)]
+    pub selected_network_node_id: Option<String>,
+    #[serde(default)]
+    pub reserved_model_ids: Vec<String>,
 }
 
 impl SchedulerRunAdmittedPayload {
@@ -450,7 +458,23 @@ impl SchedulerRunAdmittedPayload {
             "admission_decision_reason",
             &self.decision_reason,
             MAX_ID_LEN,
-        )
+        )?;
+        validate_optional_text(
+            "selected_runtime_id",
+            self.selected_runtime_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "selected_device_id",
+            self.selected_device_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "selected_network_node_id",
+            self.selected_network_node_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_text_list("reserved_model_ids", &self.reserved_model_ids)
     }
 }
 

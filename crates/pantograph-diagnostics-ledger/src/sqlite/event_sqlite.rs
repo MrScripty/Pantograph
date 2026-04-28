@@ -1525,13 +1525,27 @@ fn scheduler_timeline_record_from_event(
             (summary, detail)
         }
         DiagnosticEventPayload::SchedulerRunAdmitted(payload) => {
-            let detail = match payload.queue_wait_ms {
-                Some(queue_wait_ms) => Some(format!(
-                    "queue wait {queue_wait_ms} ms; {}",
-                    payload.decision_reason
-                )),
-                None => Some(payload.decision_reason),
-            };
+            let mut details = Vec::new();
+            if let Some(queue_wait_ms) = payload.queue_wait_ms {
+                details.push(format!("queue wait {queue_wait_ms} ms"));
+            }
+            details.push(payload.decision_reason);
+            if let Some(runtime_id) = payload.selected_runtime_id.as_deref() {
+                details.push(format!("selected runtime {runtime_id}"));
+            }
+            if let Some(device_id) = payload.selected_device_id.as_deref() {
+                details.push(format!("selected device {device_id}"));
+            }
+            if let Some(network_node_id) = payload.selected_network_node_id.as_deref() {
+                details.push(format!("selected network node {network_node_id}"));
+            }
+            if !payload.reserved_model_ids.is_empty() {
+                details.push(format!(
+                    "reserved model(s): {}",
+                    payload.reserved_model_ids.join(", ")
+                ));
+            }
+            let detail = (!details.is_empty()).then(|| details.join("; "));
             ("run admitted".to_string(), detail)
         }
         DiagnosticEventPayload::RunStarted(payload) => {

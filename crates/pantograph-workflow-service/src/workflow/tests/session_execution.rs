@@ -495,9 +495,16 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
             .map(|id| id.as_str()),
         Some(response.workflow_run_id.as_str())
     );
+    assert_eq!(admitted_event.runtime_id.as_deref(), Some("llama_cpp"));
     assert!(admitted_event.event_seq > queue_event.event_seq);
     assert!(admitted_event.payload_json.contains("\"decision_reason\":"));
     assert!(admitted_event.payload_json.contains("\"queue_wait_ms\":"));
+    assert!(admitted_event
+        .payload_json
+        .contains("\"selected_runtime_id\":\"llama_cpp\""));
+    assert!(admitted_event
+        .payload_json
+        .contains("\"reserved_model_ids\":[\"model-a\"]"));
 
     let started_event = diagnostic_events
         .iter()

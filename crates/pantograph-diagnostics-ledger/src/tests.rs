@@ -834,7 +834,9 @@ fn scheduler_timeline_projection_drains_events_incrementally() {
     assert_eq!(records[6].summary, "run admitted");
     assert_eq!(
         records[6].detail.as_deref(),
-        Some("queue wait 10 ms; warm_session_reused")
+        Some(
+            "queue wait 10 ms; warm_session_reused; selected runtime llama_cpp; reserved model(s): model-alpha"
+        )
     );
     assert_eq!(records[7].event_seq, started_event.event_seq);
     assert_eq!(records[7].summary, "run started");
@@ -2785,6 +2787,10 @@ fn sample_scheduler_admission_event(workflow_run_id: &str) -> DiagnosticEventApp
         payload: DiagnosticEventPayload::SchedulerRunAdmitted(SchedulerRunAdmittedPayload {
             queue_wait_ms: Some(10),
             decision_reason: "warm_session_reused".to_string(),
+            selected_runtime_id: Some("llama_cpp".to_string()),
+            selected_device_id: None,
+            selected_network_node_id: None,
+            reserved_model_ids: vec!["model-alpha".to_string()],
         }),
     }
 }

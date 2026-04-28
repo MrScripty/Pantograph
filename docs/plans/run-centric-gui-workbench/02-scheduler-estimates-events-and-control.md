@@ -255,8 +255,11 @@ reason. Run-list, run-detail, and scheduler timeline projections now
 materialize those queue-control events.
 Queue admission now emits a typed `scheduler.run_admitted` event before
 `run.started`, so scheduler admission decisions are auditable without making
-`run.*` lifecycle events carry scheduler control semantics. Workflow-session
-runtime admission now emits production `scheduler.model_lifecycle_changed`
+`run.*` lifecycle events carry scheduler control semantics. Admission events
+now carry selected runtime and reserved model facts from dequeued scheduler
+state; selected device/network-node fields remain typed but empty until those
+schedulers exist. Workflow-session runtime admission now emits production
+`scheduler.model_lifecycle_changed`
 events for required-model load requested/completed/failed transitions using
 preflight required model/backend facts, and ephemeral session teardown emits
 required-model unload scheduled/started/completed/failed transitions from the
@@ -366,6 +369,9 @@ duplicate, unvalidated, or contradictory event streams.
   frontend inference.
 - Added priority-ceiling denial coverage for push-front controls, proving the
   scheduler store remains the final authority after a queue action request.
+- Added selected runtime and reserved model facts to admission events from
+  dequeued scheduler state; selected device/network-node admission fields
+  remain empty until those schedulers are implemented.
 - Tightened scheduler timeline projection labels for queue-control events so
   page/API consumers receive explicit typed action, outcome, actor-scope,
   position, and priority summaries instead of enum debug formatting.
@@ -381,8 +387,8 @@ duplicate, unvalidated, or contradictory event streams.
 
 - Decide whether estimate quality should be enum-only or include numeric
   confidence.
-- Add admission/reservation events and any remaining non-run-triggered runtime
-  lifecycle emitters.
+- Add reservation events, selected device/network-node producers, and any
+  remaining non-run-triggered runtime lifecycle emitters.
 - Add explicit client/admin action vocabulary, denial outcomes, and authority
   tests for cross-session controls.
 

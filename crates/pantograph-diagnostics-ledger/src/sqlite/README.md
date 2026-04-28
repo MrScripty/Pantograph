@@ -87,6 +87,10 @@ helpers own restart-visible workflow run summaries.
   actor-scope, requested/effective session authority context, position, and
   priority fields explicitly. Projection code must not rely on enum debug
   strings for page/API labels.
+- Scheduler admission timeline rows include selected runtime, device/network
+  node, and reserved model details when admission payloads provide those typed
+  fields. Projection code must keep those as bounded labels and not inspect
+  runtime internals during page reads.
 - Run detail drains apply only events after the stored projection cursor and
   update one row per workflow run for selected-run page/query reads.
 - Run-list facet reads group `run_list_projection` rows and must not replay
