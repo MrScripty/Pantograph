@@ -240,8 +240,12 @@ repair, migration, projection-version changes, and tests.
 - [x] Implement explicit full-rebuild commands for migration, corruption
   repair, projection-version changes, and tests. Ordinary startup and page
   load must not call these commands.
-- [ ] Add compact terminal run summary rows for completed/failed/cancelled runs
+- [x] Add compact terminal run summary rows for completed/failed/cancelled runs
   so normal historic run-list and run-detail reads do not replay timelines.
+  - Run-list and run-detail projections now materialize terminal status,
+    completion time, duration, and terminal error directly from
+    `run.terminal` events. Normal historic list/detail reads use those
+    materialized rows instead of replaying the scheduler timeline.
 - [x] Add workflow execution version and node version fields to projections.
 - [x] Add model/runtime/version and scheduler policy filters where not already
   present.
