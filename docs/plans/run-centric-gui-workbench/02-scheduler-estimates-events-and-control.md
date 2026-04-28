@@ -269,11 +269,13 @@ same immutable run facts. Run-triggered capacity rebalance now emits unload
 scheduled/started/completed/failed transitions for the selected candidate's
 required models. Scheduler timeline projection now references `run.*`
 lifecycle events and `node.execution_status` rows as timeline visibility
-without duplicating those lifecycle facts as scheduler event truth. Broader
-client/admin action vocabulary and frontend page wiring remain pending.
-Workflow-service now has a query boundary for the
-materialized scheduler timeline and a narrow scheduler estimate query boundary
-backed by the hot run-detail projection.
+without duplicating those lifecycle facts as scheduler event truth. The
+Scheduler page now consumes the selected-run scheduler estimate projection and
+timeline projection directly from workflow-service query boundaries. Broader
+client/admin action vocabulary remains pending.
+Workflow-service now has a query boundary for the materialized scheduler
+timeline and a narrow scheduler estimate query boundary backed by the hot
+run-detail projection.
 
 ### Milestone 4: Queue Authority And Admin Controls
 
@@ -303,13 +305,15 @@ push-front APIs still enforce session ownership through session id plus run id
 matching, and they now record accepted and denied queue-control facts in the
 typed diagnostics ledger when diagnostics are configured. The Scheduler page
 now gates its first cancel/front controls on projected workflow
-execution-session ids before calling those backend commands. Push-front is a
-scheduler-owned operation that computes the next priority from the current
-session queue and denies the request if the priority ceiling prevents a real
-move. Query-own-estimate now has a workflow-service and frontend projection
-method that returns estimate-shaped hot projection facts for a run without raw
-ledger access. Session-owned queue-control events now use the `client_session`
-actor scope and include requested/effective session authority context. The
+execution-session ids before calling those backend commands. It also exposes
+the backend session-scoped reprioritize command for queued/delayed selected
+runs. Push-front is a scheduler-owned operation that computes the next priority
+from the current session queue and denies the request if the priority ceiling
+prevents a real move. Query-own-estimate now has a workflow-service and
+frontend projection method that returns estimate-shaped hot projection facts
+for a run without raw ledger access. Session-owned queue-control events now use
+the `client_session` actor scope and include requested/effective session
+authority context. The
 first GUI-admin queue boundaries can cancel, reprioritize, or push a queued run
 to the front by run id across sessions, leave the scheduler store as the
 authority, and emit `gui_admin` queue-control events with effective session

@@ -5,6 +5,7 @@
     ProjectionStateRecord,
     RunListProjectionRecord,
     SchedulerTimelineProjectionRecord,
+    WorkflowSchedulerEstimateRecord,
   } from '../../services/diagnostics/types';
   import { workflowService } from '../../services/workflow/WorkflowService';
   import {
@@ -21,6 +22,7 @@
     type SchedulerStatusFilter,
   } from '../../stores/schedulerRunListStore';
   import {
+    buildSchedulerEstimateRows,
     buildSchedulerRunListQuery,
     filterSchedulerTimelineEvents,
     filterAndSortSchedulerRuns,
@@ -62,8 +64,12 @@
   let projectionUpdatedAtMs = $state<number | null>(null);
   let timelineEvents = $state<SchedulerTimelineProjectionRecord[]>([]);
   let timelineProjectionState = $state<ProjectionStateRecord | null>(null);
+  let selectedRunEstimate = $state<WorkflowSchedulerEstimateRecord | null>(null);
+  let estimateProjectionState = $state<ProjectionStateRecord | null>(null);
   let timelineLoading = $state(false);
+  let estimateLoading = $state(false);
   let timelineError = $state<string | null>(null);
+  let estimateError = $state<string | null>(null);
   let actionBusy = $state<string | null>(null);
   let actionError = $state<string | null>(null);
   let actionMessage = $state<string | null>(null);
@@ -73,6 +79,7 @@
   let timelineSourceFilter = $state('all');
   let adminPriorityRunId = '';
   let timelineRequestSerial = 0;
+  let estimateRequestSerial = 0;
   let activeTimelineRunId = $state<string | null>(null);
   let refreshInFlight = false;
   let refreshAgain = false;
@@ -85,6 +92,7 @@
       sourceComponent: timelineSourceFilter,
     }),
   );
+  let selectedRunEstimateRows = $derived(buildSchedulerEstimateRows(selectedRunEstimate));
   let timelineKindOptions = $derived(schedulerTimelineKindFilterOptions(timelineEvents));
   let timelineSourceOptions = $derived(schedulerTimelineSourceFilterOptions(timelineEvents));
   let schedulerPolicyOptions = $derived(schedulerPolicyFilterOptions(runs));
@@ -172,6 +180,41 @@
     }
   }
 
+  async function refreshEstimate(runId = activeRunId()): Promise<void> {
+    const requestSerial = ++estimateRequestSerial;
+    estimateError = null;
+
+    if (!runId) {
+      selectedRunEstimate = null;
+      estimateProjectionState = null;
+      estimateLoading = false;
+      return;
+    }
+
+    estimateLoading = true;
+    try {
+      const response = await workflowService.querySchedulerEstimate({
+        workflow_run_id: runId,
+      });
+      if (requestSerial !== estimateRequestSerial) {
+        return;
+      }
+      selectedRunEstimate = response.estimate ?? null;
+      estimateProjectionState = response.projection_state;
+    } catch (refreshError) {
+      if (requestSerial !== estimateRequestSerial) {
+        return;
+      }
+      estimateError = formatWorkflowCommandError(refreshError);
+      selectedRunEstimate = null;
+      estimateProjectionState = null;
+    } finally {
+      if (requestSerial === estimateRequestSerial) {
+        estimateLoading = false;
+      }
+    }
+  }
+
   function selectRun(run: RunListProjectionRecord): void {
     selectActiveWorkflowRun({
       workflow_run_id: run.workflow_run_id,
@@ -202,6 +245,7 @@
       });
       actionMessage = 'Cancel accepted by scheduler';
       await refreshRuns();
+      await refreshEstimate(run.workflow_run_id);
       await refreshTimeline(run.workflow_run_id);
     } catch (actionFailure) {
       actionError = formatWorkflowCommandError(actionFailure);
@@ -225,6 +269,7 @@
       });
       actionMessage = 'Push-front accepted by scheduler';
       await refreshRuns();
+      await refreshEstimate(run.workflow_run_id);
       await refreshTimeline(run.workflow_run_id);
     } catch (actionFailure) {
       actionError = formatWorkflowCommandError(actionFailure);
@@ -255,6 +300,7 @@
       });
       actionMessage = 'Priority accepted by scheduler';
       await refreshRuns();
+      await refreshEstimate(run.workflow_run_id);
       await refreshTimeline(run.workflow_run_id);
     } catch (actionFailure) {
       actionError = formatWorkflowCommandError(actionFailure);
@@ -277,6 +323,7 @@
       });
       actionMessage = 'Admin cancel accepted by scheduler';
       await refreshRuns();
+      await refreshEstimate(run.workflow_run_id);
       await refreshTimeline(run.workflow_run_id);
     } catch (actionFailure) {
       actionError = formatWorkflowCommandError(actionFailure);
@@ -299,6 +346,7 @@
       });
       actionMessage = 'Admin push-front accepted by scheduler';
       await refreshRuns();
+      await refreshEstimate(run.workflow_run_id);
       await refreshTimeline(run.workflow_run_id);
     } catch (actionFailure) {
       actionError = formatWorkflowCommandError(actionFailure);
@@ -328,6 +376,7 @@
       });
       actionMessage = 'Admin priority accepted by scheduler';
       await refreshRuns();
+      await refreshEstimate(run.workflow_run_id);
       await refreshTimeline(run.workflow_run_id);
     } catch (actionFailure) {
       actionError = formatWorkflowCommandError(actionFailure);
@@ -340,6 +389,7 @@
     eventUnsubscribe = workflowService.subscribeEvents(() => {
       void refreshRuns();
       void refreshTimeline();
+      void refreshEstimate();
     });
 
     return () => {
@@ -356,6 +406,7 @@
 
     activeTimelineRunId = runId;
     void refreshTimeline(runId);
+    void refreshEstimate(runId);
   });
 
   $effect(() => {
@@ -753,10 +804,13 @@
           <button
             type="button"
             class="inline-flex items-center gap-2 rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
-            onclick={() => refreshTimeline()}
-            disabled={timelineLoading || !$activeWorkflowRun}
+            onclick={() => {
+              void refreshEstimate();
+              void refreshTimeline();
+            }}
+            disabled={timelineLoading || estimateLoading || !$activeWorkflowRun}
           >
-            <RefreshCw size={12} aria-hidden="true" class={timelineLoading ? 'animate-spin' : ''} />
+            <RefreshCw size={12} aria-hidden="true" class={timelineLoading || estimateLoading ? 'animate-spin' : ''} />
             Refresh
           </button>
         </div>
@@ -768,6 +822,39 @@
       {#if timelineError}
         <div class="border-b border-red-900 bg-red-950/50 px-4 py-2 text-sm text-red-200">{timelineError}</div>
       {/if}
+
+      <div class="border-b border-neutral-900 px-4 py-3">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <h3 class="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">Estimate</h3>
+            <div class="mt-1 text-xs text-neutral-500">
+              {formatSchedulerProjectionFreshness(estimateProjectionState)}
+            </div>
+          </div>
+          {#if estimateLoading}
+            <RefreshCw size={12} aria-hidden="true" class="mt-1 shrink-0 animate-spin text-neutral-500" />
+          {/if}
+        </div>
+        {#if estimateError}
+          <div class="mt-2 truncate text-xs text-red-200" title={estimateError}>{estimateError}</div>
+        {:else if !$activeWorkflowRun}
+          <div class="mt-3 text-xs text-neutral-500">No active run selected</div>
+        {:else}
+          <dl class="mt-3 grid grid-cols-2 gap-3 text-xs">
+            {#each selectedRunEstimateRows as row (row.label)}
+              <div class="min-w-0">
+                <dt class="text-neutral-600">{row.label}</dt>
+                <dd
+                  class={`mt-1 truncate text-neutral-300 ${row.mono ? 'font-mono' : ''}`}
+                  title={row.value}
+                >
+                  {row.value}
+                </dd>
+              </div>
+            {/each}
+          </dl>
+        {/if}
+      </div>
 
       <div class="border-b border-neutral-900 px-4 py-3">
         <div class="mb-3 grid grid-cols-2 gap-2">

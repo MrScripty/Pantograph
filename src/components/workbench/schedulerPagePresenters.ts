@@ -1,6 +1,7 @@
 import type {
   ProjectionStateRecord,
   RunListProjectionRecord,
+  WorkflowSchedulerEstimateRecord,
   WorkflowRunListQueryRequest,
   SchedulerTimelineProjectionRecord,
 } from '../../services/diagnostics/types';
@@ -66,6 +67,43 @@ export function formatSchedulerEstimateLabel(run: RunListProjectionRecord): stri
   }
   const confidence = run.estimate_confidence ? ` (${run.estimate_confidence})` : '';
   return `${parts.join(' / ')}${confidence}`;
+}
+
+export interface SchedulerEstimateFactRow {
+  label: string;
+  value: string;
+  mono?: boolean;
+}
+
+export function buildSchedulerEstimateRows(
+  estimate: WorkflowSchedulerEstimateRecord | null | undefined,
+): SchedulerEstimateFactRow[] {
+  if (!estimate) {
+    return [
+      { label: 'Confidence', value: 'Unavailable' },
+      { label: 'Queue Wait', value: 'Unavailable' },
+      { label: 'Run Duration', value: 'Unavailable' },
+      { label: 'Policy', value: 'Unassigned', mono: true },
+      { label: 'Updated', value: 'Unavailable' },
+    ];
+  }
+  return [
+    { label: 'Confidence', value: estimate.estimate_confidence ?? 'Unavailable' },
+    { label: 'Queue Wait', value: formatSchedulerEstimateDuration(estimate.estimated_queue_wait_ms) },
+    { label: 'Run Duration', value: formatSchedulerEstimateDuration(estimate.estimated_duration_ms) },
+    { label: 'Policy', value: formatSchedulerPolicyLabel(estimate.scheduler_policy_id), mono: true },
+    { label: 'Updated', value: formatSchedulerTimestamp(estimate.last_updated_at_ms) },
+  ];
+}
+
+export function formatSchedulerEstimateDuration(value: number | null | undefined): string {
+  if (value === null || value === undefined) {
+    return 'Unavailable';
+  }
+  if (value < 1_000) {
+    return `${Math.round(value)} ms`;
+  }
+  return `${(value / 1_000).toFixed(1)} s`;
 }
 
 export function formatSchedulerReasonLabel(value: string | null | undefined): string {

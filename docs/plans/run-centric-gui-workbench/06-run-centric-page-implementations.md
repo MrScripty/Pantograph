@@ -158,11 +158,12 @@ and filters, workflow execution-session projection facts for queued controls,
 typed queue position, priority, estimate, and scheduler-reason columns, delayed
 status presentation, backend-supported session cancel/front/priority actions,
 GUI-admin cancel/front/priority actions for queued selected runs, a selected-run
-timeline panel, timeline projection freshness, typed timeline kind/source
-filters, and timeline summary/detail rows without raw event parsing. Progress,
-model/runtime summaries, richer delay categories, richer retention summaries,
-running-run admin cancellation, and cross-session reorder/pause controls remain
-open.
+estimate panel backed by `workflowService.querySchedulerEstimate`, a
+selected-run timeline panel, timeline projection freshness, typed timeline
+kind/source filters, and timeline summary/detail rows without raw event
+parsing. Progress, model/runtime summaries, richer delay categories, richer
+retention summaries, running-run admin cancellation, and cross-session
+reorder/pause controls remain open.
 Assigned status, policy, scope, placement, and accepted-date filters now also
 narrow the backend run-list projection query where supported; search, sort, and
 `Unassigned` label handling remain local presentation filters.
@@ -519,6 +520,10 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
 - Added Scheduler selected-run session priority control backed by
   `workflowService.reprioritizeSessionQueueItem`, gated by projected workflow
   execution-session id and queued/delayed run status.
+- Added Scheduler selected-run estimate projection panel backed by
+  `workflowService.querySchedulerEstimate`, showing confidence, queue wait,
+  run duration, policy, update time, and projection freshness without parsing
+  raw scheduler event payloads.
 - Added Scheduler table columns for typed queue position, priority, estimate,
   and scheduler reason fields promoted into run-list projections.
 - Added a Scheduler selected-run timeline panel backed by

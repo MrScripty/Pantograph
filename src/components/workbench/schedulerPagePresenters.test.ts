@@ -6,10 +6,12 @@ import type {
   SchedulerTimelineProjectionRecord,
 } from '../../services/diagnostics/types.ts';
 import {
+  buildSchedulerEstimateRows,
   buildSchedulerRunListQuery,
   filterSchedulerTimelineEvents,
   filterAndSortSchedulerRuns,
   formatSchedulerAcceptedDateLabel,
+  formatSchedulerEstimateDuration,
   formatSchedulerPlacementLabel,
   formatSchedulerPolicyLabel,
   formatSchedulerPriority,
@@ -154,8 +156,41 @@ test('scheduler queue and estimate presenters keep unavailable facts explicit', 
   );
   assert.equal(formatSchedulerEstimateLabel(run({ estimate_confidence: 'low' })), 'low confidence');
   assert.equal(formatSchedulerEstimateLabel(run({})), 'Unavailable');
+  assert.equal(formatSchedulerEstimateDuration(null), 'Unavailable');
+  assert.equal(formatSchedulerEstimateDuration(750), '750 ms');
+  assert.equal(formatSchedulerEstimateDuration(1_500), '1.5 s');
   assert.equal(formatSchedulerReasonLabel('warm_session_reused'), 'warm_session_reused');
   assert.equal(formatSchedulerReasonLabel(''), 'Unavailable');
+});
+
+test('buildSchedulerEstimateRows exposes selected-run estimate projection facts', () => {
+  assert.deepEqual(buildSchedulerEstimateRows(null), [
+    { label: 'Confidence', value: 'Unavailable' },
+    { label: 'Queue Wait', value: 'Unavailable' },
+    { label: 'Run Duration', value: 'Unavailable' },
+    { label: 'Policy', value: 'Unassigned', mono: true },
+    { label: 'Updated', value: 'Unavailable' },
+  ]);
+
+  const rows = buildSchedulerEstimateRows({
+    workflow_run_id: 'run-a',
+    workflow_id: 'workflow-a',
+    workflow_version_id: 'wfver-a',
+    workflow_semantic_version: '1.0.0',
+    scheduler_policy_id: 'policy-a',
+    latest_estimate_json: '{}',
+    estimate_confidence: 'medium',
+    estimated_queue_wait_ms: 1_500,
+    estimated_duration_ms: 2_500,
+    last_event_seq: 7,
+    last_updated_at_ms: 86_400_000,
+  });
+
+  assert.equal(rows.find((row) => row.label === 'Confidence')?.value, 'medium');
+  assert.equal(rows.find((row) => row.label === 'Queue Wait')?.value, '1.5 s');
+  assert.equal(rows.find((row) => row.label === 'Run Duration')?.value, '2.5 s');
+  assert.equal(rows.find((row) => row.label === 'Policy')?.value, 'policy-a');
+  assert.equal(rows.find((row) => row.label === 'Updated')?.value, new Date(86_400_000).toLocaleString());
 });
 
 test('scheduler queue controls require queued run execution-session facts', () => {
