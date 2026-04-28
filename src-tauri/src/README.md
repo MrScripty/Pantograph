@@ -95,6 +95,9 @@ improvements and backend-owned grouping DTOs over local adapter exceptions.
 - Pumas model delete command registration must delegate deletion to Pumas and
   audit-event emission to the workflow service; Tauri validates auditable
   identifiers and transports the typed response.
+- Pumas HuggingFace search command registration must delegate search to Pumas
+  and audit-event emission to the workflow service; Tauri validates query
+  bounds and transports the typed response.
 - Desktop composition must not register parallel workflow execution-state
   managers when the workflow service owns the active session state.
 - Mechanical lint fixes must not change command payload shape, runtime

@@ -552,6 +552,26 @@ pub async fn delete_pumas_model_with_audit(
 }
 
 #[command]
+pub async fn search_hf_models_with_audit(
+    extensions: State<'_, SharedExtensions>,
+    workflow_service: State<'_, SharedWorkflowService>,
+    query: String,
+    kind: Option<String>,
+    limit: Option<usize>,
+    hydrate_limit: Option<usize>,
+) -> Result<super::puma_lib_commands::PumaHfModelSearchAuditResponse, String> {
+    super::puma_lib_commands::search_hf_models_with_audit(
+        extensions,
+        workflow_service,
+        query,
+        kind,
+        limit,
+        hydrate_limit,
+    )
+    .await
+}
+
+#[command]
 pub async fn run_dependency_environment_action(
     resolver: State<'_, super::model_dependencies::SharedModelDependencyResolver>,
     request: super::dependency_environment_commands::DependencyEnvironmentActionRequest,

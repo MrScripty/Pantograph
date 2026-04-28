@@ -79,6 +79,9 @@ projection without inventing fallback run identities or workflow display names.
 - Pumas model delete audit DTOs mirror the backend command response so GUI
   controls can display delete/audit outcomes without synthesizing local event
   ids or Library state.
+- Pumas HuggingFace search audit DTOs mirror the backend command response so
+  GUI controls can display search results and audit outcomes without
+  synthesizing Library usage facts.
 
 ## Revisit Triggers
 - Diagnostics needs durable persistence or export/replay support.

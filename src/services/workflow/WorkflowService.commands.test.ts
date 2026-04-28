@@ -186,3 +186,41 @@ test('deletePumasModelWithAudit returns backend delete audit result exactly', as
     clearMocks();
   }
 });
+
+test('searchHfModelsWithAudit forwards bounded search parameters and preserves result', async () => {
+  installWindowMock();
+  const calls: Array<{ cmd: string; args: unknown }> = [];
+  const response = {
+    models: [{ id: 'org/model-a' }],
+    auditEventSeq: 88,
+  };
+  mockIPC((cmd, args) => {
+    calls.push({ cmd, args });
+    return response;
+  });
+
+  try {
+    const service = new WorkflowCommandService();
+    const result = await service.searchHfModelsWithAudit({
+      query: 'diffusion',
+      kind: 'text-to-image',
+      limit: 25,
+      hydrateLimit: 5,
+    });
+
+    assert.deepEqual(result, response);
+    assert.deepEqual(calls, [
+      {
+        cmd: 'search_hf_models_with_audit',
+        args: {
+          query: 'diffusion',
+          kind: 'text-to-image',
+          limit: 25,
+          hydrateLimit: 5,
+        },
+      },
+    ]);
+  } finally {
+    clearMocks();
+  }
+});

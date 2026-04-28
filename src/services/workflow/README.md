@@ -83,6 +83,9 @@ remove artifact cards optimistically.
 Pumas model deletion is exposed as a backend-owned audited command; frontend
 services forward the model id and preserve the backend delete/audit response
 without inventing local Library state.
+Pumas HuggingFace search is exposed as a backend-owned audited command;
+frontend services forward query bounds and preserve backend model/audit
+responses without synthesizing Library usage facts.
 
 ## Alternatives Rejected
 - Remove `WorkflowService` and switch every app caller to `TauriWorkflowBackend`
@@ -142,6 +145,9 @@ without inventing local Library state.
 - Pumas model delete commands must return backend-authored delete/audit
   responses exactly. Frontend code may refresh Library projections afterward,
   but it must not synthesize audit event ids or local deletion state.
+- Pumas HuggingFace search commands must return backend-authored model lists and
+  audit event ids exactly. Frontend code may display the result, but it must not
+  turn searches into Library usage rows locally.
 
 ## Revisit Triggers
 - The app graph and all remaining callers migrate to package backends directly.

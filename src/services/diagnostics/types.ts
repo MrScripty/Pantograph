@@ -599,6 +599,18 @@ export interface PumasModelDeleteAuditResponse {
   auditEventSeq?: number | null;
 }
 
+export interface PumasHfModelSearchAuditRequest {
+  query: string;
+  kind?: string | null;
+  limit?: number | null;
+  hydrateLimit?: number | null;
+}
+
+export interface PumasHfModelSearchAuditResponse {
+  models: unknown[];
+  auditEventSeq?: number | null;
+}
+
 export interface WorkflowSchedulerTimelineQueryRequest {
   workflow_run_id?: string | null;
   workflow_id?: string | null;

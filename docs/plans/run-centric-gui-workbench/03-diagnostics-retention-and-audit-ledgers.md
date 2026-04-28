@@ -368,11 +368,14 @@ Scheduler, and Diagnostics pages.
 - [ ] Wrap or instrument Pumas model search/download/delete/access paths.
   - Existing Puma-Lib model option queries now record successful collection
     access/search operations through a workflow-service audit boundary instead
-    of writing raw ledger events from Tauri/frontend code. Download/delete
-    Download wrappers remain pending.
+    of writing raw ledger events from Tauri/frontend code.
+  - Pumas HuggingFace search is now exposed through a Tauri command that
+    validates query and limit bounds before search and records a typed search
+    audit event only after Pumas returns successfully.
   - Pumas model cascade delete is now exposed through a Tauri command that
     validates the model id before deletion and records a typed delete audit
     event only after the Pumas delete succeeds.
+  - Download wrappers remain pending.
 - [ ] Emit typed `library.*` events for asset access by run, session, bucket,
   client, or GUI actor where available.
   - Workflow-session run snapshots now emit `library.asset_accessed` events
@@ -382,6 +385,9 @@ Scheduler, and Diagnostics pages.
   - Puma-Lib option queries now emit GUI-side `library.asset_accessed` events
     for `pumas://models` with source instance `puma-lib-port-options` after the
     underlying Pumas query succeeds.
+  - Pumas HuggingFace search emits `library.asset_accessed` search events for
+    `hf://models` with source instance `pumas-hf-search` after successful
+    search responses.
   - Pumas model delete emits `library.asset_accessed` delete events for
     `pumas://models/<model_id>` with source instance `pumas-model-delete` after
     successful deletion.
@@ -416,8 +422,10 @@ records successful GUI/library collection operations through
 `workflow_library_asset_access_record`, giving the GUI a typed audit boundary
 without exposing raw event appends. Pumas cascade delete now validates auditable
 model ids before deletion and records a typed delete event after success. Pumas
-download wrappers, cache hit/miss facts, network byte observations, and broader
-rejected operation tests remain pending.
+HuggingFace search now validates query/limit bounds and records a typed search
+event after successful Pumas responses. Pumas download wrappers, cache hit/miss
+facts, network byte observations, and broader rejected operation tests remain
+pending.
 
 ## Ownership And Lifecycle Note
 
@@ -499,6 +507,9 @@ implicitly on page load.
 - 2026-04-27: Added a Pumas model delete Tauri command that validates auditable
   model ids, delegates deletion to Pumas, and records a typed Library delete
   event only after the delete succeeds.
+- 2026-04-27: Added a Pumas HuggingFace search Tauri command that validates
+  query bounds, delegates search to Pumas, and records a typed Library search
+  event only after the search succeeds.
 
 ### Deviations
 
@@ -578,6 +589,12 @@ implicitly on page load.
   `node --experimental-strip-types --test
   src/services/workflow/WorkflowService.commands.test.ts`, and
   `npm run typecheck` passed after adding the audited Pumas model delete
+  command and frontend service wrapper.
+- 2026-04-27: `cargo test -p pantograph validate_hf_search`,
+  `cargo check -p pantograph`,
+  `node --experimental-strip-types --test
+  src/services/workflow/WorkflowService.commands.test.ts`, and
+  `npm run typecheck` passed after adding the audited Pumas HuggingFace search
   command and frontend service wrapper.
 
 ### Traceability Links

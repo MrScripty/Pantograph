@@ -1,4 +1,6 @@
 import type {
+  PumasHfModelSearchAuditRequest,
+  PumasHfModelSearchAuditResponse,
   PumasModelDeleteAuditResponse,
   WorkflowRetentionPolicyQueryRequest,
   WorkflowRetentionPolicyQueryResponse,
@@ -118,6 +120,24 @@ export class WorkflowCommandService extends WorkflowProjectionService {
 
     return invokeWorkflowCommand<PumasModelDeleteAuditResponse>('delete_pumas_model_with_audit', {
       modelId,
+    });
+  }
+
+  async searchHfModelsWithAudit(
+    request: PumasHfModelSearchAuditRequest,
+  ): Promise<PumasHfModelSearchAuditResponse> {
+    if (USE_WORKFLOW_MOCKS) {
+      return {
+        models: [],
+        auditEventSeq: null,
+      };
+    }
+
+    return invokeWorkflowCommand<PumasHfModelSearchAuditResponse>('search_hf_models_with_audit', {
+      query: request.query,
+      kind: request.kind,
+      limit: request.limit,
+      hydrateLimit: request.hydrateLimit,
     });
   }
 }

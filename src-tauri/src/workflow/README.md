@@ -55,8 +55,9 @@ while still handling desktop runtime execution concerns.
   and delegate to `pantograph-workflow-service`; successful Puma-Lib option
   queries may record collection access/search after the underlying provider
   returns, and successful model delete commands may record delete events after
-  Pumas confirms deletion, but handlers must not append raw diagnostic ledger
-  events.
+  Pumas confirms deletion. HuggingFace search commands may record search events
+  after Pumas returns bounded results, but handlers must not append raw
+  diagnostic ledger events.
 - Tauri execution-handle lifecycle and undo/redo projection must stay thin
   wrappers around backend-owned `node-engine` behavior rather than becoming a
   second owner of workflow-session policy.
@@ -278,6 +279,9 @@ let snapshot = workflow_service
   events for failed provider calls.
 - Pumas model delete commands validate auditable model ids before calling Pumas,
   then record typed delete audit events only after successful cascade deletion.
+- Pumas HuggingFace search commands validate query and limit bounds before
+  calling Pumas, then record typed search audit events only after successful
+  search responses.
 
 ## Structured Producer Contract
 - `ConnectionCandidatesResponse` always includes `graph_revision`,

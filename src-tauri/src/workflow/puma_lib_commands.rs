@@ -21,6 +21,13 @@ pub struct PumaModelDeleteAuditResponse {
     pub audit_event_seq: Option<i64>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PumaHfModelSearchAuditResponse {
+    pub models: Vec<pumas_library::models::HuggingFaceModel>,
+    pub audit_event_seq: Option<i64>,
+}
+
 async fn require_pumas_api(
     extensions: &State<'_, SharedExtensions>,
 ) -> Result<Arc<pumas_library::PumasApi>, String> {
@@ -88,6 +95,31 @@ pub async fn delete_pumas_model_with_audit(
     })
 }
 
+pub async fn search_hf_models_with_audit(
+    extensions: State<'_, SharedExtensions>,
+    workflow_service: State<'_, SharedWorkflowService>,
+    query: String,
+    kind: Option<String>,
+    limit: Option<usize>,
+    hydrate_limit: Option<usize>,
+) -> Result<PumaHfModelSearchAuditResponse, String> {
+    let query = validate_hf_search_query(&query)?;
+    let kind = validate_optional_hf_search_kind(kind)?;
+    let limit = validate_hf_search_limit(limit.unwrap_or(50))?;
+    let hydrate_limit = validate_hf_search_limit(hydrate_limit.unwrap_or(limit))?.min(limit);
+    let api = require_pumas_api(&extensions).await?;
+    let models = api
+        .search_hf_models_with_hydration(query, kind.as_deref(), limit, hydrate_limit)
+        .await
+        .map_err(|error| error.to_string())?;
+    let audit_event_seq = record_hf_model_search_audit(&workflow_service);
+
+    Ok(PumaHfModelSearchAuditResponse {
+        models,
+        audit_event_seq,
+    })
+}
+
 fn record_pumas_model_delete_audit(
     workflow_service: &SharedWorkflowService,
     model_id: &str,
@@ -104,6 +136,24 @@ fn record_pumas_model_delete_audit(
         Ok(response) => response.event_seq,
         Err(error) => {
             log::warn!("Failed to record Pumas model delete audit event: {error}");
+            None
+        }
+    }
+}
+
+fn record_hf_model_search_audit(workflow_service: &SharedWorkflowService) -> Option<i64> {
+    match workflow_service.workflow_library_asset_access_record(
+        pantograph_workflow_service::WorkflowLibraryAssetAccessRecordRequest {
+            asset_id: "hf://models".to_string(),
+            operation: pantograph_workflow_service::LibraryAssetOperation::Search,
+            cache_status: Some(pantograph_workflow_service::LibraryAssetCacheStatus::Unknown),
+            network_bytes: None,
+            source_instance_id: Some("pumas-hf-search".to_string()),
+        },
+    ) {
+        Ok(response) => response.event_seq,
+        Err(error) => {
+            log::warn!("Failed to record Pumas HuggingFace search audit event: {error}");
             None
         }
     }
@@ -313,6 +363,38 @@ fn validate_pumas_model_id_for_audit(model_id: &str) -> Result<&str, String> {
         return Err("model_id contains an invalid path segment".to_string());
     }
     Ok(trimmed)
+}
+
+fn validate_hf_search_query(query: &str) -> Result<&str, String> {
+    let trimmed = query.trim();
+    if trimmed != query {
+        return Err("query must not contain leading or trailing whitespace".to_string());
+    }
+    if trimmed.len() > 256 || trimmed.chars().any(char::is_control) {
+        return Err("query is not a valid HuggingFace search string".to_string());
+    }
+    Ok(trimmed)
+}
+
+fn validate_optional_hf_search_kind(kind: Option<String>) -> Result<Option<String>, String> {
+    kind.map(|value| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            return Err("kind must not be empty when provided".to_string());
+        }
+        if trimmed != value || trimmed.len() > 64 || trimmed.chars().any(char::is_control) {
+            return Err("kind is not a valid HuggingFace search filter".to_string());
+        }
+        Ok(value)
+    })
+    .transpose()
+}
+
+fn validate_hf_search_limit(limit: usize) -> Result<usize, String> {
+    if limit == 0 || limit > 100 {
+        return Err("limit must be between 1 and 100".to_string());
+    }
+    Ok(limit)
 }
 
 fn option_value_string(option: &node_engine::PortOption) -> Option<&str> {
@@ -531,5 +613,33 @@ mod tests {
                 "{value:?} should be rejected"
             );
         }
+    }
+
+    #[test]
+    fn validate_hf_search_query_accepts_empty_and_text_queries() {
+        assert_eq!(validate_hf_search_query("").expect("empty list query"), "");
+        assert_eq!(
+            validate_hf_search_query("text-to-image").expect("valid search query"),
+            "text-to-image"
+        );
+    }
+
+    #[test]
+    fn validate_hf_search_query_rejects_unbounded_or_ambiguous_queries() {
+        let oversized = "a".repeat(257);
+        for value in [" padded", "padded ", "bad\nquery", oversized.as_str()] {
+            assert!(
+                validate_hf_search_query(value).is_err(),
+                "{value:?} should be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_hf_search_limit_bounds_queries() {
+        assert_eq!(validate_hf_search_limit(1).expect("minimum"), 1);
+        assert_eq!(validate_hf_search_limit(100).expect("maximum"), 100);
+        assert!(validate_hf_search_limit(0).is_err());
+        assert!(validate_hf_search_limit(101).is_err());
     }
 }
