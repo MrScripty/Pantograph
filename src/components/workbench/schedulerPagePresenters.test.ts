@@ -18,6 +18,7 @@ import {
   formatSchedulerTimestamp,
   schedulerPolicyFilterOptions,
   schedulerRetentionFilterOptions,
+  schedulerRunSupportsQueueControls,
   schedulerTimelinePayloadLabel,
   schedulerStatusClass,
 } from './schedulerPagePresenters.ts';
@@ -100,6 +101,18 @@ test('scheduler queue and estimate presenters keep unavailable facts explicit', 
   assert.equal(formatSchedulerEstimateLabel(run({})), 'Unavailable');
   assert.equal(formatSchedulerReasonLabel('warm_session_reused'), 'warm_session_reused');
   assert.equal(formatSchedulerReasonLabel(''), 'Unavailable');
+});
+
+test('scheduler queue controls require queued run execution-session facts', () => {
+  assert.equal(schedulerRunSupportsQueueControls(run({ status: 'queued' })), true);
+  assert.equal(schedulerRunSupportsQueueControls(run({ status: 'delayed' })), true);
+  assert.equal(schedulerRunSupportsQueueControls(run({ status: 'running' })), false);
+  assert.equal(
+    schedulerRunSupportsQueueControls(
+      run({ status: 'queued', workflow_execution_session_id: null }),
+    ),
+    false,
+  );
 });
 
 test('filterAndSortSchedulerRuns filters by status and search text', () => {

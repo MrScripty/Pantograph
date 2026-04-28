@@ -112,6 +112,13 @@ export function formatSchedulerScopeLabel(value: string | null | undefined): str
   return value && value.trim().length > 0 ? value : 'Unassigned';
 }
 
+export function schedulerRunSupportsQueueControls(run: RunListProjectionRecord | null | undefined): boolean {
+  if (!run?.workflow_execution_session_id) {
+    return false;
+  }
+  return run.status === 'queued' || run.status === 'delayed';
+}
+
 export function schedulerPolicyFilterOptions(runs: RunListProjectionRecord[]): string[] {
   return uniqueSortedOptions(runs.map((run) => formatSchedulerPolicyLabel(run.scheduler_policy_id)));
 }

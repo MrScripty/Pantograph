@@ -130,7 +130,8 @@ into a second source of truth.
   data exists.
 - [x] Add sorting/filtering/search scaffolding.
 - [ ] Add selected-run action surface with client-safe and GUI-admin actions
-  gated by projection authority.
+  gated by projection authority. Backend-supported cancel and push-to-front
+  session queue controls are now wired; broader GUI-admin controls remain open.
 - [x] Add scheduler event drawer or selected-run timeline entry point.
 - [x] Render scheduler timeline projection; do not parse raw scheduler event
   payloads in the component.
@@ -152,7 +153,8 @@ options, scheduler policy IDs, retention policy IDs, scheduler-policy and
 retention-policy filters, client/session/bucket scope columns, workflow
 execution-session projection facts for future queue controls, typed queue
 position, priority, estimate, and scheduler-reason columns, delayed status
-presentation, a selected-run timeline panel, timeline projection
+presentation, backend-supported cancel/front actions for queued selected runs,
+a selected-run timeline panel, timeline projection
 freshness, and timeline summary/detail rows without raw event parsing. Progress,
 model/runtime summaries, richer delay categories, richer retention summaries,
 and privileged queue action controls remain open.

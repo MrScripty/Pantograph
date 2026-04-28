@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { RefreshCw } from 'lucide-svelte';
+  import { ChevronsUp, RefreshCw, XCircle } from 'lucide-svelte';
   import type {
     ProjectionStateRecord,
     RunListProjectionRecord,
@@ -37,6 +37,7 @@
     schedulerPolicyFilterOptions,
     schedulerRetentionFilterOptions,
     formatSchedulerScopeLabel,
+    schedulerRunSupportsQueueControls,
     schedulerTimelinePayloadLabel,
   } from './schedulerPagePresenters';
   import { formatWorkflowCommandError } from './workflowErrorPresenters';
@@ -49,6 +50,9 @@
   let timelineProjectionState = $state<ProjectionStateRecord | null>(null);
   let timelineLoading = $state(false);
   let timelineError = $state<string | null>(null);
+  let actionBusy = $state<string | null>(null);
+  let actionError = $state<string | null>(null);
+  let actionMessage = $state<string | null>(null);
   let timelineRequestSerial = 0;
   let activeTimelineRunId = $state<string | null>(null);
   let refreshInFlight = false;
@@ -57,6 +61,10 @@
   let displayedRuns = $derived(filterAndSortSchedulerRuns(runs, $schedulerRunFilters));
   let schedulerPolicyOptions = $derived(schedulerPolicyFilterOptions(runs));
   let retentionPolicyOptions = $derived(schedulerRetentionFilterOptions(runs));
+  let selectedRunRecord = $derived(
+    runs.find((run) => run.workflow_run_id === $activeWorkflowRun?.workflow_run_id) ?? null,
+  );
+  let selectedRunHasQueueControls = $derived(schedulerRunSupportsQueueControls(selectedRunRecord));
 
   function activeRunId(): string | null {
     return $activeWorkflowRun?.workflow_run_id ?? null;
@@ -139,6 +147,53 @@
   function openRun(run: RunListProjectionRecord, pageId: 'diagnostics' | 'graph' | 'io_inspector'): void {
     selectRun(run);
     setWorkbenchPage(pageId);
+  }
+
+  async function cancelSelectedRun(): Promise<void> {
+    const run = selectedRunRecord;
+    if (!schedulerRunSupportsQueueControls(run)) {
+      return;
+    }
+    actionBusy = 'cancel';
+    actionError = null;
+    actionMessage = null;
+    try {
+      await workflowService.cancelSessionQueueItem({
+        session_id: run.workflow_execution_session_id as string,
+        workflow_run_id: run.workflow_run_id,
+      });
+      actionMessage = 'Cancel accepted by scheduler';
+      await refreshRuns();
+      await refreshTimeline(run.workflow_run_id);
+    } catch (actionFailure) {
+      actionError = formatWorkflowCommandError(actionFailure);
+    } finally {
+      actionBusy = null;
+    }
+  }
+
+  async function pushSelectedRunToFront(): Promise<void> {
+    const run = selectedRunRecord;
+    if (!schedulerRunSupportsQueueControls(run)) {
+      return;
+    }
+    actionBusy = 'front';
+    actionError = null;
+    actionMessage = null;
+    try {
+      await workflowService.reprioritizeSessionQueueItem({
+        session_id: run.workflow_execution_session_id as string,
+        workflow_run_id: run.workflow_run_id,
+        priority: 2_147_483_647,
+      });
+      actionMessage = 'Priority override accepted by scheduler';
+      await refreshRuns();
+      await refreshTimeline(run.workflow_run_id);
+    } catch (actionFailure) {
+      actionError = formatWorkflowCommandError(actionFailure);
+    } finally {
+      actionBusy = null;
+    }
   }
 
   onMount(() => {
@@ -429,6 +484,41 @@
       {#if timelineError}
         <div class="border-b border-red-900 bg-red-950/50 px-4 py-2 text-sm text-red-200">{timelineError}</div>
       {/if}
+
+      <div class="border-b border-neutral-900 px-4 py-3">
+        <div class="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            title="Cancel selected queued run"
+            class="inline-flex items-center gap-2 rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 transition-colors hover:border-red-500 hover:text-red-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-400 disabled:opacity-50"
+            onclick={() => void cancelSelectedRun()}
+            disabled={!selectedRunHasQueueControls || actionBusy !== null}
+          >
+            <XCircle size={12} aria-hidden="true" />
+            Cancel
+          </button>
+          <button
+            type="button"
+            title="Push selected run to the front of its session queue"
+            class="inline-flex items-center gap-2 rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 transition-colors hover:border-cyan-500 hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+            onclick={() => void pushSelectedRunToFront()}
+            disabled={!selectedRunHasQueueControls || actionBusy !== null}
+          >
+            <ChevronsUp size={12} aria-hidden="true" />
+            Front
+          </button>
+        </div>
+        {#if actionMessage || actionError}
+          <div
+            class="mt-2 truncate text-xs"
+            class:text-red-200={Boolean(actionError)}
+            class:text-neutral-500={!actionError}
+            title={actionError ?? actionMessage ?? ''}
+          >
+            {actionError ?? actionMessage}
+          </div>
+        {/if}
+      </div>
 
       {#if !$activeWorkflowRun}
         <div class="px-4 py-8 text-sm text-neutral-500">Select a run to inspect scheduler events</div>
