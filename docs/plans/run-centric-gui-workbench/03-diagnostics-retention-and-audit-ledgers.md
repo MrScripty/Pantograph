@@ -166,7 +166,7 @@ before implementation.
 - [x] Define event builders and validation errors. Direct raw event writes
   should be test/migration-only.
 - [x] Define I/O artifact metadata contract.
-- [ ] Define retention policy/version and artifact retention-state contract.
+- [x] Define retention policy/version and artifact retention-state contract.
 - [x] Define Pumas/Library audit event contract.
 - [x] Define centralized validators for artifact payload references,
   Library/Pumas resource identifiers, external references, and any filesystem
@@ -175,11 +175,11 @@ before implementation.
   version-aware diagnostics.
 - [x] Define `projection_state` with projection name, projection version,
   last applied event sequence, status, and rebuild timestamp.
-- [ ] Define hot, warm, and cold projection classes and which component owns
+- [x] Define hot, warm, and cold projection classes and which component owns
   synchronous, asynchronous, lazy, and explicit rebuild application.
-- [ ] Define event granularity rules that reject chunk/token/raw-artifact event
+- [x] Define event granularity rules that reject chunk/token/raw-artifact event
   spam and require bounded metadata plus payload references.
-- [ ] Define event family ownership: `run.*` owns execution lifecycle,
+- [x] Define event family ownership: `run.*` owns execution lifecycle,
   `scheduler.*` owns scheduling decisions/control/resource events, and
   projections join families instead of duplicating facts.
 
@@ -199,10 +199,13 @@ before implementation.
 **Status:** In progress. `pantograph-diagnostics-ledger` is the accepted
 storage owner. First-pass scheduler/run/I/O/library/runtime/retention event
 contracts, validation errors, source allowlists, payload hashes, embedded
-payload limits, SQLite `diagnostic_events`, `projection_state`, and safe
-payload-reference scheme validation have been implemented. Detailed I/O
-retention contracts, Pumas download/delete path validators, and hot/warm
-projection ownership details are partially pending; scheduler timeline
+payload limits, SQLite `diagnostic_events`, `projection_state`, retention
+policy/version and artifact retention-state contracts, hot/warm/cold projection
+classes, bounded event granularity rules, event-family ownership, and safe
+payload-reference scheme validation have been implemented. Pumas
+download/delete path validators are implemented at the audited command
+boundaries; broader physical payload-store policy details remain pending.
+Scheduler timeline
 projection ownership is implemented as the first hot projection. The
 I/O artifact payload now uses a typed artifact-role enum so future node
 input/output emitters share the same workflow/node role contract. The
@@ -324,7 +327,7 @@ availability.
     fields for intermediate I/O.
 - [x] Emit typed artifact events for observation, retention state changes,
   truncation, externalization, expiration, and deletion.
-- [ ] Add global retention policy record and policy version.
+- [x] Add global retention policy record and policy version.
   - Existing standard local retention policy is now exposed as a first-class
     backend/API query. The policy now carries a durable `policy_version` that
     starts at `1` and increments on each update.
@@ -334,7 +337,7 @@ availability.
   cleanup trigger/status.
 - [x] Add retroactive cleanup command that updates metadata before deleting or
   expiring payloads.
-- [ ] Emit typed `retention.*` events with policy version, timestamp, actor,
+- [x] Emit typed `retention.*` events with policy version, timestamp, actor,
   affected artifact, and reason.
   - Policy update events now include policy id, policy version, retention
     days, timestamp, typed actor scope, and reason. Artifact-specific cleanup
@@ -372,7 +375,7 @@ Scheduler, and Diagnostics pages.
 
 **Tasks:**
 
-- [ ] Wrap or instrument Pumas model search/download/delete/access paths.
+- [x] Wrap or instrument Pumas model search/download/delete/access paths.
   - Existing Puma-Lib model option queries now record successful collection
     access/search operations through a workflow-service audit boundary instead
     of writing raw ledger events from Tauri/frontend code.
@@ -385,7 +388,7 @@ Scheduler, and Diagnostics pages.
   - Pumas model cascade delete is now exposed through a Tauri command that
     validates the model id before deletion and records a typed delete audit
     event only after the Pumas delete succeeds.
-- [ ] Emit typed `library.*` events for asset access by run, session, bucket,
+- [x] Emit typed `library.*` events for asset access by run, session, bucket,
   client, or GUI actor where available.
   - Workflow-session run snapshots now emit `library.asset_accessed` events
     for model assets used by the run, carrying run, workflow version,
@@ -414,7 +417,7 @@ Scheduler, and Diagnostics pages.
   - Library usage drains now report `rebuilding` while a bounded batch has not
     applied all pending `library.asset_accessed` events, then return `current`
     once the stored cursor catches up.
-- [ ] Ensure audit events are queryable without requiring payload retention.
+- [x] Ensure audit events are queryable without requiring payload retention.
 
 **Verification:**
 
