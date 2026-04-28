@@ -67,6 +67,7 @@
   let actionBusy = $state<string | null>(null);
   let actionError = $state<string | null>(null);
   let actionMessage = $state<string | null>(null);
+  let sessionPriorityInput = $state('0');
   let adminPriorityInput = $state('0');
   let timelineKindFilter = $state('all');
   let timelineSourceFilter = $state('all');
@@ -232,6 +233,36 @@
     }
   }
 
+  async function reprioritizeSelectedRun(): Promise<void> {
+    const run = selectedRunRecord;
+    if (!schedulerRunSupportsQueueControls(run)) {
+      return;
+    }
+    const priority = Number(sessionPriorityInput);
+    if (!Number.isInteger(priority)) {
+      actionError = 'Priority must be an integer';
+      actionMessage = null;
+      return;
+    }
+    actionBusy = 'priority';
+    actionError = null;
+    actionMessage = null;
+    try {
+      await workflowService.reprioritizeSessionQueueItem({
+        session_id: run.workflow_execution_session_id as string,
+        workflow_run_id: run.workflow_run_id,
+        priority,
+      });
+      actionMessage = 'Priority accepted by scheduler';
+      await refreshRuns();
+      await refreshTimeline(run.workflow_run_id);
+    } catch (actionFailure) {
+      actionError = formatWorkflowCommandError(actionFailure);
+    } finally {
+      actionBusy = null;
+    }
+  }
+
   async function adminCancelSelectedRun(): Promise<void> {
     const run = selectedRunRecord;
     if (!schedulerRunSupportsAdminQueueControls(run)) {
@@ -344,6 +375,7 @@
       return;
     }
     adminPriorityRunId = runId;
+    sessionPriorityInput = String(run?.scheduler_priority ?? 0);
     adminPriorityInput = String(run?.scheduler_priority ?? 0);
   });
 </script>
@@ -795,6 +827,29 @@
           >
             <ChevronsUp size={12} aria-hidden="true" />
             Front
+          </button>
+          <label class="inline-flex items-center gap-2 text-xs text-neutral-500">
+            Priority
+            <input
+              type="number"
+              step="1"
+              value={sessionPriorityInput}
+              oninput={(event) => {
+                sessionPriorityInput = eventValue(event);
+              }}
+              class="h-7 w-20 rounded border border-neutral-700 bg-neutral-900 px-2 text-xs text-neutral-100 focus:border-cyan-500 focus:outline-none disabled:opacity-50"
+              disabled={!selectedRunHasQueueControls || actionBusy !== null}
+            />
+          </label>
+          <button
+            type="button"
+            title="Set selected run priority within its session queue"
+            class="inline-flex items-center gap-2 rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 transition-colors hover:border-cyan-500 hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+            onclick={() => void reprioritizeSelectedRun()}
+            disabled={!selectedRunHasQueueControls || actionBusy !== null}
+          >
+            <SlidersHorizontal size={12} aria-hidden="true" />
+            Set
           </button>
         </div>
         <div class="mt-3 border-t border-neutral-900 pt-3">

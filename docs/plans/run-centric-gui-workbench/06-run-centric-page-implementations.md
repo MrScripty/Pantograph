@@ -131,8 +131,9 @@ into a second source of truth.
   data exists.
 - [x] Add sorting/filtering/search scaffolding.
 - [ ] Add selected-run action surface with client-safe and GUI-admin actions
-  gated by projection authority. Backend-supported cancel and push-to-front
-  session queue controls are now wired; broader GUI-admin controls remain open.
+  gated by projection authority. Backend-supported cancel, push-to-front, and
+  reprioritize session queue controls are now wired; broader GUI-admin controls
+  remain open.
 - [x] Add scheduler event drawer or selected-run timeline entry point.
 - [x] Render scheduler timeline projection; do not parse raw scheduler event
   payloads in the component.
@@ -155,12 +156,13 @@ retention-policy filters, client/session/bucket scope columns and filters,
 accepted-date filters, selected runtime/device/network-node placement columns
 and filters, workflow execution-session projection facts for queued controls,
 typed queue position, priority, estimate, and scheduler-reason columns, delayed
-status presentation, backend-supported session cancel/front actions, GUI-admin
-cancel/front/priority actions for queued selected runs, a selected-run timeline
-panel, timeline projection freshness, typed timeline kind/source filters, and
-timeline summary/detail rows without raw event parsing. Progress, model/runtime
-summaries, richer delay categories, richer retention summaries, running-run
-admin cancellation, and cross-session reorder/pause controls remain open.
+status presentation, backend-supported session cancel/front/priority actions,
+GUI-admin cancel/front/priority actions for queued selected runs, a selected-run
+timeline panel, timeline projection freshness, typed timeline kind/source
+filters, and timeline summary/detail rows without raw event parsing. Progress,
+model/runtime summaries, richer delay categories, richer retention summaries,
+running-run admin cancellation, and cross-session reorder/pause controls remain
+open.
 Assigned status, policy, scope, placement, and accepted-date filters now also
 narrow the backend run-list projection query where supported; search, sort, and
 `Unassigned` label handling remain local presentation filters.
@@ -514,6 +516,9 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
   selected device, and selected network-node placement facts from typed
   run-list projection fields, and wired assigned placement filters into the
   backend run-list query.
+- Added Scheduler selected-run session priority control backed by
+  `workflowService.reprioritizeSessionQueueItem`, gated by projected workflow
+  execution-session id and queued/delayed run status.
 - Added Scheduler table columns for typed queue position, priority, estimate,
   and scheduler reason fields promoted into run-list projections.
 - Added a Scheduler selected-run timeline panel backed by

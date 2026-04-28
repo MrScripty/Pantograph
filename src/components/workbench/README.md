@@ -9,7 +9,7 @@ later plan stages fill in richer page bodies.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `WorkbenchShell.svelte` | Top-level workbench frame, toolbar navigation, active-run summary, and page outlet. |
-| `SchedulerPage.svelte` | Dense run-list view backed by the run-list projection service, active-run selection store, local table controls, future/scheduled/queued status filters, policy/scope/placement/date filters, scope and placement columns, typed queue/estimate columns, backend-gated queue actions, and selected-run scheduler timeline projection with typed kind/source filters. |
+| `SchedulerPage.svelte` | Dense run-list view backed by the run-list projection service, active-run selection store, local table controls, future/scheduled/queued status filters, policy/scope/placement/date filters, scope and placement columns, typed queue/estimate columns, backend-gated queue actions including session priority controls, and selected-run scheduler timeline projection with typed kind/source filters. |
 | `schedulerPagePresenters.ts` | Pure Scheduler page status labels/classes, duration, timestamp, future/scheduled status, scope/placement/date, queue-control gating, queue/estimate, filter, sorting, projection freshness, and typed timeline filter presenters. |
 | `schedulerPagePresenters.test.ts` | Unit coverage for Scheduler table labels, status classes, filters, sorts, projection freshness, and timeline labels. |
 | `GraphPage.svelte` | Workbench page that switches between the active run's immutable graph snapshot and the current editable workflow graph. |
@@ -100,8 +100,9 @@ transient UI state without becoming backend scheduler policy.
   come from run-list projection fields. Components must not recover those
   placement facts from scheduler payload JSON.
 - Scheduler session-scoped queue action buttons must be gated by projected
-  workflow execution-session ids and backend run status. GUI-admin queue action
-  buttons are gated by backend run status and call run-id admin command
+  workflow execution-session ids and backend run status. Session priority
+  changes use `workflowService.reprioritizeSessionQueueItem`; GUI-admin queue
+  action buttons are gated by backend run status and call run-id admin command
   boundaries. Both paths must refresh projections after confirmed backend
   responses.
 - Scheduler future, scheduled, queued, delayed, running, and terminal status
