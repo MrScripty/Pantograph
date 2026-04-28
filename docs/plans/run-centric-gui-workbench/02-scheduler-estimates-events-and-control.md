@@ -240,10 +240,11 @@ runtime admission now emits production `scheduler.model_lifecycle_changed`
 events for required-model load requested/completed/failed transitions using
 preflight required model/backend facts, and ephemeral session teardown emits
 required-model unload scheduled/started/completed/failed transitions from the
-same immutable run facts. Capacity rebalance unload emitters, broader
-client/admin action vocabulary, and frontend page wiring remain pending.
-Workflow-service now has a query boundary for the materialized scheduler
-timeline.
+same immutable run facts. Run-triggered capacity rebalance now emits unload
+scheduled/started/completed/failed transitions for the selected candidate's
+required models. Broader client/admin action vocabulary and frontend page
+wiring remain pending. Workflow-service now has a query boundary for the
+materialized scheduler timeline.
 
 ### Milestone 4: Queue Authority And Admin Controls
 
@@ -323,7 +324,8 @@ duplicate, unvalidated, or contradictory event streams.
 
 - Decide whether estimate quality should be enum-only or include numeric
   confidence.
-- Add production model load/unload emitters and admission/reservation events.
+- Add admission/reservation events and any remaining non-run-triggered runtime
+  lifecycle emitters.
 - Add explicit client/admin action vocabulary, denial outcomes, and authority
   tests for cross-session controls.
 

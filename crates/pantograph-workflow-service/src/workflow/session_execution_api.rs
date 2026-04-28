@@ -22,6 +22,7 @@ use crate::graph::{
 use crate::scheduler::{unix_timestamp_ms, WORKFLOW_SESSION_QUEUE_POLL_MS};
 use crate::technical_fit::WorkflowTechnicalFitOverride;
 
+use super::session_runtime::WorkflowSessionRuntimeAdmissionDiagnosticContext;
 use super::validation::{
     validate_bindings, validate_output_targets, validate_timeout_ms, validate_workflow_id,
     validate_workflow_semantic_version,
@@ -324,7 +325,18 @@ impl WorkflowService {
                 error: None,
             },
         )?;
-        let runtime_load_result = self.ensure_session_runtime_loaded(host, &session_id).await;
+        let runtime_load_result = self
+            .ensure_session_runtime_loaded(
+                host,
+                &session_id,
+                Some(WorkflowSessionRuntimeAdmissionDiagnosticContext {
+                    session: &session,
+                    snapshot: run_snapshot.as_ref(),
+                    workflow_run_id: &workflow_run_id,
+                    workflow_semantic_version: &queued_workflow_semantic_version,
+                }),
+            )
+            .await;
         let runtime_load_duration_ms =
             unix_timestamp_ms().saturating_sub(runtime_load_started_at_ms);
         match &runtime_load_result {

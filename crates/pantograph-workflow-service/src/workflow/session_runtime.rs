@@ -1,10 +1,20 @@
+use pantograph_diagnostics_ledger::{
+    DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
+    DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
+    SchedulerModelLifecycleChangedPayload, SchedulerModelLifecycleTransition,
+};
+use pantograph_runtime_attribution::{
+    BucketId, ClientId, ClientSessionId, WorkflowId, WorkflowRunId, WorkflowRunSnapshotRecord,
+};
+
 use crate::scheduler::WorkflowExecutionSessionPreflightCache;
 use crate::technical_fit::WorkflowTechnicalFitOverride;
 
 use super::{
     WorkflowExecutionSessionRetentionHint, WorkflowExecutionSessionRuntimeSelectionTarget,
-    WorkflowExecutionSessionRuntimeUnloadCandidate, WorkflowExecutionSessionUnloadReason,
-    WorkflowHost, WorkflowRuntimeCapability, WorkflowService, WorkflowServiceError,
+    WorkflowExecutionSessionRuntimeUnloadCandidate, WorkflowExecutionSessionSummary,
+    WorkflowExecutionSessionUnloadReason, WorkflowHost, WorkflowRuntimeCapability, WorkflowService,
+    WorkflowServiceError,
 };
 
 fn compute_runtime_capability_fingerprint(
@@ -26,6 +36,22 @@ fn compute_runtime_capability_fingerprint(
     format!("{:016x}", hash)
 }
 
+pub(super) struct WorkflowSessionRuntimeAdmissionDiagnosticContext<'a> {
+    pub(super) session: &'a WorkflowExecutionSessionSummary,
+    pub(super) snapshot: Option<&'a WorkflowRunSnapshotRecord>,
+    pub(super) workflow_run_id: &'a str,
+    pub(super) workflow_semantic_version: &'a str,
+}
+
+struct CapacityRebalanceModelLifecycleEventRequest<'a> {
+    context: &'a WorkflowSessionRuntimeAdmissionDiagnosticContext<'a>,
+    candidate: &'a WorkflowExecutionSessionRuntimeUnloadCandidate,
+    transition: SchedulerModelLifecycleTransition,
+    reason: &'a str,
+    duration_ms: Option<u64>,
+    error: Option<&'a str>,
+}
+
 impl WorkflowService {
     pub fn invalidate_all_session_runtimes(&self) -> Result<Vec<String>, WorkflowServiceError> {
         let mut store = self.session_store.lock().map_err(|_| {
@@ -38,6 +64,7 @@ impl WorkflowService {
         &self,
         host: &H,
         session_id: &str,
+        diagnostics_context: Option<WorkflowSessionRuntimeAdmissionDiagnosticContext<'_>>,
     ) -> Result<(), WorkflowServiceError> {
         enum RuntimeDecision {
             Ready,
@@ -112,12 +139,69 @@ impl WorkflowService {
                             candidates.len(),
                         ));
                     };
-                    host.unload_session_runtime(
-                        &candidate.session_id,
-                        &candidate.workflow_id,
-                        WorkflowExecutionSessionUnloadReason::CapacityRebalance,
-                    )
-                    .await?;
+                    if let Some(context) = diagnostics_context.as_ref() {
+                        self.record_capacity_rebalance_model_lifecycle_events_if_configured(
+                            CapacityRebalanceModelLifecycleEventRequest {
+                                context,
+                                candidate: &candidate,
+                                transition: SchedulerModelLifecycleTransition::UnloadScheduled,
+                                reason: "capacity rebalance selected loaded session",
+                                duration_ms: None,
+                                error: None,
+                            },
+                        )?;
+                        self.record_capacity_rebalance_model_lifecycle_events_if_configured(
+                            CapacityRebalanceModelLifecycleEventRequest {
+                                context,
+                                candidate: &candidate,
+                                transition: SchedulerModelLifecycleTransition::UnloadStarted,
+                                reason: "capacity rebalance unloading selected session",
+                                duration_ms: None,
+                                error: None,
+                            },
+                        )?;
+                    }
+                    let unload_started_at_ms = crate::scheduler::unix_timestamp_ms();
+                    let unload_result = host
+                        .unload_session_runtime(
+                            &candidate.session_id,
+                            &candidate.workflow_id,
+                            WorkflowExecutionSessionUnloadReason::CapacityRebalance,
+                        )
+                        .await;
+                    let unload_duration_ms =
+                        crate::scheduler::unix_timestamp_ms().saturating_sub(unload_started_at_ms);
+                    if let Some(context) = diagnostics_context.as_ref() {
+                        match &unload_result {
+                            Ok(()) => {
+                                self.record_capacity_rebalance_model_lifecycle_events_if_configured(
+                                    CapacityRebalanceModelLifecycleEventRequest {
+                                        context,
+                                        candidate: &candidate,
+                                        transition:
+                                            SchedulerModelLifecycleTransition::UnloadCompleted,
+                                        reason: "capacity rebalance unloaded selected session",
+                                        duration_ms: Some(unload_duration_ms),
+                                        error: None,
+                                    },
+                                )?;
+                            }
+                            Err(error) => {
+                                let error_text = error.to_string();
+                                self.record_capacity_rebalance_model_lifecycle_events_if_configured(
+                                    CapacityRebalanceModelLifecycleEventRequest {
+                                        context,
+                                        candidate: &candidate,
+                                        transition: SchedulerModelLifecycleTransition::UnloadFailed,
+                                        reason: "capacity rebalance failed to unload selected session",
+                                        duration_ms: Some(unload_duration_ms),
+                                        error: Some(error_text.as_str()),
+                                    },
+                                )?;
+                            }
+                        }
+                    }
+                    unload_result?;
                     if let Ok(mut store) = self.session_store.lock() {
                         let _ = store.mark_runtime_loaded(&candidate.session_id, false);
                     }
@@ -142,6 +226,90 @@ impl WorkflowService {
                 }
             }
         }
+    }
+
+    fn record_capacity_rebalance_model_lifecycle_events_if_configured(
+        &self,
+        request: CapacityRebalanceModelLifecycleEventRequest<'_>,
+    ) -> Result<(), WorkflowServiceError> {
+        let Some(ledger) = self.diagnostics_ledger.as_ref() else {
+            return Ok(());
+        };
+        if request.candidate.required_models.is_empty() {
+            return Ok(());
+        }
+
+        let workflow_run_id = WorkflowRunId::try_from(request.context.workflow_run_id.to_string())?;
+        let workflow_id = workflow_id_for_runtime_admission_event(
+            request.context.session,
+            request.context.snapshot,
+        )?;
+        let runtime_id = request.candidate.required_backends.first().cloned();
+        let mut ledger = ledger.lock().map_err(|_| {
+            WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
+        })?;
+        for model_id in &request.candidate.required_models {
+            DiagnosticsLedgerRepository::append_diagnostic_event(
+                &mut *ledger,
+                DiagnosticEventAppendRequest {
+                    source_component: DiagnosticEventSourceComponent::Scheduler,
+                    source_instance_id: Some("workflow-session-scheduler".to_string()),
+                    occurred_at_ms: crate::scheduler::unix_timestamp_ms() as i64,
+                    workflow_run_id: Some(workflow_run_id.clone()),
+                    workflow_id: Some(workflow_id.clone()),
+                    workflow_version_id: request
+                        .context
+                        .snapshot
+                        .map(|snapshot| snapshot.workflow_version_id.clone()),
+                    workflow_semantic_version: Some(
+                        request
+                            .context
+                            .snapshot
+                            .map(|snapshot| snapshot.workflow_semantic_version.clone())
+                            .unwrap_or_else(|| {
+                                request.context.workflow_semantic_version.to_string()
+                            }),
+                    ),
+                    node_id: None,
+                    node_type: None,
+                    node_version: None,
+                    runtime_id: runtime_id.clone(),
+                    runtime_version: None,
+                    model_id: Some(model_id.clone()),
+                    model_version: None,
+                    client_id: runtime_event_client_id(
+                        request.context.session,
+                        request.context.snapshot,
+                    )?,
+                    client_session_id: runtime_event_client_session_id(
+                        request.context.session,
+                        request.context.snapshot,
+                    )?,
+                    bucket_id: runtime_event_bucket_id(
+                        request.context.session,
+                        request.context.snapshot,
+                    )?,
+                    scheduler_policy_id: Some("priority_then_fifo".to_string()),
+                    retention_policy_id: request
+                        .context
+                        .snapshot
+                        .map(|snapshot| snapshot.retention_policy.clone()),
+                    privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+                    retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+                    payload_ref: None,
+                    payload: DiagnosticEventPayload::SchedulerModelLifecycleChanged(
+                        SchedulerModelLifecycleChangedPayload {
+                            transition: request.transition,
+                            reason: Some(request.reason.to_string()),
+                            duration_ms: request.duration_ms,
+                            error: request.error.map(str::to_string),
+                        },
+                    ),
+                },
+            )
+            .map_err(WorkflowServiceError::from)?;
+        }
+        Ok(())
     }
 
     pub(super) async fn ensure_session_runtime_preflight<H: WorkflowHost>(
@@ -211,7 +379,8 @@ impl WorkflowService {
                 super::format_runtime_not_ready_message(&cache.blocking_runtime_issues),
             ));
         }
-        self.ensure_session_runtime_loaded(host, session_id).await
+        self.ensure_session_runtime_loaded(host, session_id, None)
+            .await
     }
 
     pub(super) async fn refresh_session_runtime_affinity_basis<H: WorkflowHost>(
@@ -230,5 +399,62 @@ impl WorkflowService {
             capabilities.runtime_requirements.required_models,
         )?;
         Ok(())
+    }
+}
+
+fn workflow_id_for_runtime_admission_event(
+    session: &WorkflowExecutionSessionSummary,
+    snapshot: Option<&WorkflowRunSnapshotRecord>,
+) -> Result<WorkflowId, WorkflowServiceError> {
+    match snapshot {
+        Some(snapshot) => Ok(snapshot.workflow_id.clone()),
+        None => {
+            WorkflowId::try_from(session.workflow_id.clone()).map_err(WorkflowServiceError::from)
+        }
+    }
+}
+
+fn runtime_event_client_id(
+    session: &WorkflowExecutionSessionSummary,
+    snapshot: Option<&WorkflowRunSnapshotRecord>,
+) -> Result<Option<ClientId>, WorkflowServiceError> {
+    match snapshot.and_then(|snapshot| snapshot.client_id.clone()) {
+        Some(client_id) => Ok(Some(client_id)),
+        None => session
+            .attribution
+            .as_ref()
+            .map(|context| ClientId::try_from(context.client_id.clone()))
+            .transpose()
+            .map_err(WorkflowServiceError::from),
+    }
+}
+
+fn runtime_event_client_session_id(
+    session: &WorkflowExecutionSessionSummary,
+    snapshot: Option<&WorkflowRunSnapshotRecord>,
+) -> Result<Option<ClientSessionId>, WorkflowServiceError> {
+    match snapshot.and_then(|snapshot| snapshot.client_session_id.clone()) {
+        Some(client_session_id) => Ok(Some(client_session_id)),
+        None => session
+            .attribution
+            .as_ref()
+            .map(|context| ClientSessionId::try_from(context.client_session_id.clone()))
+            .transpose()
+            .map_err(WorkflowServiceError::from),
+    }
+}
+
+fn runtime_event_bucket_id(
+    session: &WorkflowExecutionSessionSummary,
+    snapshot: Option<&WorkflowRunSnapshotRecord>,
+) -> Result<Option<BucketId>, WorkflowServiceError> {
+    match snapshot.and_then(|snapshot| snapshot.bucket_id.clone()) {
+        Some(bucket_id) => Ok(Some(bucket_id)),
+        None => session
+            .attribution
+            .as_ref()
+            .map(|context| BucketId::try_from(context.bucket_id.clone()))
+            .transpose()
+            .map_err(WorkflowServiceError::from),
     }
 }

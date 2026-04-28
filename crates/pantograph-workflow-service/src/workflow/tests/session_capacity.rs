@@ -159,7 +159,8 @@ async fn workflow_execution_session_capacity_rebalance_preserves_shared_model_id
             ("wf-other-model".to_string(), vec!["model-b".to_string()]),
         ]),
     );
-    let service = WorkflowService::with_capacity_limits(3, 2);
+    let service = WorkflowService::with_capacity_limits(3, 2)
+        .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"));
 
     let shared_model = service
         .create_workflow_execution_session(
@@ -222,6 +223,46 @@ async fn workflow_execution_session_capacity_rebalance_preserves_shared_model_id
     assert!(!unloads
         .iter()
         .any(|session_id| session_id == &shared_model.session_id));
+
+    let diagnostic_events = {
+        let ledger = service
+            .diagnostics_ledger_guard()
+            .expect("diagnostics ledger");
+        pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::diagnostic_events_after(
+            &*ledger, 0, 20,
+        )
+        .expect("diagnostic events")
+    };
+    let capacity_rebalance_events = diagnostic_events
+        .iter()
+        .filter(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerModelLifecycleChanged
+                && event.model_id.as_deref() == Some("model-b")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(capacity_rebalance_events.len(), 3);
+    assert!(capacity_rebalance_events
+        .iter()
+        .all(|event| event.source_component
+            == pantograph_diagnostics_ledger::DiagnosticEventSourceComponent::Scheduler));
+    assert!(capacity_rebalance_events
+        .iter()
+        .all(|event| event.runtime_id.as_deref() == Some("pytorch")));
+    assert!(capacity_rebalance_events[0]
+        .payload_json
+        .contains("\"transition\":\"unload_scheduled\""));
+    assert!(capacity_rebalance_events[0]
+        .payload_json
+        .contains("\"reason\":\"capacity rebalance selected loaded session\""));
+    assert!(capacity_rebalance_events[1].event_seq > capacity_rebalance_events[0].event_seq);
+    assert!(capacity_rebalance_events[1]
+        .payload_json
+        .contains("\"transition\":\"unload_started\""));
+    assert!(capacity_rebalance_events[2].event_seq > capacity_rebalance_events[1].event_seq);
+    assert!(capacity_rebalance_events[2]
+        .payload_json
+        .contains("\"transition\":\"unload_completed\""));
 }
 
 #[tokio::test]
