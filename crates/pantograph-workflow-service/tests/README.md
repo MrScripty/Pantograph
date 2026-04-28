@@ -49,6 +49,8 @@ by external adapters.
   the GUI depends on those counts for retention-completeness display.
 - I/O artifact contract snapshots must include producer and consumer endpoint
   fields when those fields are observable through serialized service contracts.
+- I/O artifact contract snapshots must include producer and consumer node
+  filters when those filters are observable through serialized query requests.
 - Retention cleanup contract snapshots must include cleanup counts and
   `last_event_seq` because the GUI uses the response to report backend-owned
   cleanup results without local artifact mutation.

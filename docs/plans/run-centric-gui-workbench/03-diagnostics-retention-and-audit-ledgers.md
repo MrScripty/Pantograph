@@ -229,7 +229,9 @@ repair, migration, projection-version changes, and tests.
   - Run summary, run list, scheduler timeline, and selected-run detail/current
     status are implemented as incremental materialized projections. I/O
     artifact metadata is implemented as a bounded metadata/reference projection
-    for selected-run and active-run I/O Inspector reads.
+    for selected-run and active-run I/O Inspector reads. Producer and consumer
+    node filters are implemented at the projection-query boundary so
+    selected-node I/O browsing does not require client-side scans.
 - [ ] Implement warm projection drains for diagnostics summary, retention
   completeness, workflow-version performance, model/runtime comparison facets,
   and Library usage where first-pass event families exist.
@@ -617,6 +619,14 @@ implicitly on page load.
   src/services/workflow/WorkflowService.commands.test.ts`, and
   `npm run typecheck` passed after adding the audited Pumas HuggingFace
   download-start command and frontend service wrapper.
+- 2026-04-28: `cargo test -p pantograph-diagnostics-ledger io_artifact`,
+  `cargo test -p pantograph-workflow-service
+  workflow::tests::diagnostics::workflow_io_artifact_query`,
+  `cargo test -p pantograph-workflow-service
+  workflow_io_artifact_query_contract_snapshot --test contract`,
+  `npm run typecheck`, and `cargo check -p pantograph-diagnostics-ledger -p
+  pantograph-workflow-service` passed after adding producer/consumer endpoint
+  filters to I/O artifact projection and retention-summary queries.
 
 ### Traceability Links
 

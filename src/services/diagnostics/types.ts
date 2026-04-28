@@ -511,6 +511,8 @@ export interface WorkflowSchedulerEstimateQueryResponse {
 export interface WorkflowIoArtifactQueryRequest {
   workflow_run_id?: string | null;
   node_id?: string | null;
+  producer_node_id?: string | null;
+  consumer_node_id?: string | null;
   artifact_role?: string | null;
   media_type?: string | null;
   retention_state?: IoArtifactRetentionState | null;

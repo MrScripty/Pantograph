@@ -147,6 +147,9 @@ preserve the backend download/audit response.
   without reconstructing them client-side.
 - Scheduler estimate projection reads must return backend-authored estimate
   DTOs exactly and must not parse raw scheduler event payloads client-side.
+- I/O artifact projection reads must preserve backend query/filter shapes,
+  including producer and consumer node filters, instead of widening requests
+  and filtering artifact pages in `WorkflowService`.
 - Workbench-facing workflow command methods must throw `WorkflowServiceError`
   when the backend returns a `WorkflowErrorEnvelope`; callers must not parse
   raw JSON error strings.

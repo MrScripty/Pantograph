@@ -785,20 +785,24 @@ pub(super) fn query_io_artifact_projection(
          FROM io_artifact_projection
          WHERE (?1 IS NULL OR workflow_run_id = ?1)
            AND (?2 IS NULL OR node_id = ?2)
-           AND (?3 IS NULL OR artifact_role = ?3)
-           AND (?4 IS NULL OR media_type = ?4)
-           AND (?5 IS NULL OR retention_state = ?5)
-           AND (?6 IS NULL OR retention_policy_id = ?6)
-           AND (?7 IS NULL OR runtime_id = ?7)
-           AND (?8 IS NULL OR model_id = ?8)
-           AND event_seq > ?9
+           AND (?3 IS NULL OR producer_node_id = ?3)
+           AND (?4 IS NULL OR consumer_node_id = ?4)
+           AND (?5 IS NULL OR artifact_role = ?5)
+           AND (?6 IS NULL OR media_type = ?6)
+           AND (?7 IS NULL OR retention_state = ?7)
+           AND (?8 IS NULL OR retention_policy_id = ?8)
+           AND (?9 IS NULL OR runtime_id = ?9)
+           AND (?10 IS NULL OR model_id = ?10)
+           AND event_seq > ?11
          ORDER BY event_seq
-         LIMIT ?10",
+         LIMIT ?12",
     )?;
     let rows = stmt.query_map(
         params![
             query.workflow_run_id.as_ref().map(|id| id.as_str()),
             query.node_id.as_deref(),
+            query.producer_node_id.as_deref(),
+            query.consumer_node_id.as_deref(),
             query.artifact_role.as_deref(),
             query.media_type.as_deref(),
             query.retention_state.map(IoArtifactRetentionState::as_db),
@@ -824,11 +828,13 @@ pub(super) fn query_io_artifact_retention_summary(
          FROM io_artifact_projection
          WHERE (?1 IS NULL OR workflow_run_id = ?1)
            AND (?2 IS NULL OR node_id = ?2)
-           AND (?3 IS NULL OR artifact_role = ?3)
-           AND (?4 IS NULL OR media_type = ?4)
-           AND (?5 IS NULL OR retention_policy_id = ?5)
-           AND (?6 IS NULL OR runtime_id = ?6)
-           AND (?7 IS NULL OR model_id = ?7)
+           AND (?3 IS NULL OR producer_node_id = ?3)
+           AND (?4 IS NULL OR consumer_node_id = ?4)
+           AND (?5 IS NULL OR artifact_role = ?5)
+           AND (?6 IS NULL OR media_type = ?6)
+           AND (?7 IS NULL OR retention_policy_id = ?7)
+           AND (?8 IS NULL OR runtime_id = ?8)
+           AND (?9 IS NULL OR model_id = ?9)
          GROUP BY retention_state
          ORDER BY retention_state",
     )?;
@@ -836,6 +842,8 @@ pub(super) fn query_io_artifact_retention_summary(
         params![
             query.workflow_run_id.as_ref().map(|id| id.as_str()),
             query.node_id.as_deref(),
+            query.producer_node_id.as_deref(),
+            query.consumer_node_id.as_deref(),
             query.artifact_role.as_deref(),
             query.media_type.as_deref(),
             query.retention_policy_id.as_deref(),

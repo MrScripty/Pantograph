@@ -1239,6 +1239,8 @@ pub struct RunDetailProjectionRecord {
 pub struct IoArtifactProjectionQuery {
     pub workflow_run_id: Option<WorkflowRunId>,
     pub node_id: Option<String>,
+    pub producer_node_id: Option<String>,
+    pub consumer_node_id: Option<String>,
     pub artifact_role: Option<String>,
     pub media_type: Option<String>,
     pub retention_state: Option<IoArtifactRetentionState>,
@@ -1263,6 +1265,16 @@ impl IoArtifactProjectionQuery {
             });
         }
         validate_optional_text("node_id", self.node_id.as_deref(), MAX_ID_LEN)?;
+        validate_optional_text(
+            "producer_node_id",
+            self.producer_node_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "consumer_node_id",
+            self.consumer_node_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
         validate_optional_text("artifact_role", self.artifact_role.as_deref(), MAX_ID_LEN)?;
         validate_optional_text("media_type", self.media_type.as_deref(), MAX_ID_LEN)?;
         validate_optional_text(
@@ -1279,6 +1291,8 @@ impl IoArtifactProjectionQuery {
 pub struct IoArtifactRetentionSummaryQuery {
     pub workflow_run_id: Option<WorkflowRunId>,
     pub node_id: Option<String>,
+    pub producer_node_id: Option<String>,
+    pub consumer_node_id: Option<String>,
     pub artifact_role: Option<String>,
     pub media_type: Option<String>,
     pub retention_policy_id: Option<String>,
@@ -1289,6 +1303,16 @@ pub struct IoArtifactRetentionSummaryQuery {
 impl IoArtifactRetentionSummaryQuery {
     pub fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
         validate_optional_text("node_id", self.node_id.as_deref(), MAX_ID_LEN)?;
+        validate_optional_text(
+            "producer_node_id",
+            self.producer_node_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "consumer_node_id",
+            self.consumer_node_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
         validate_optional_text("artifact_role", self.artifact_role.as_deref(), MAX_ID_LEN)?;
         validate_optional_text("media_type", self.media_type.as_deref(), MAX_ID_LEN)?;
         validate_optional_text(

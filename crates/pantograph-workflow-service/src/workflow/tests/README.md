@@ -90,6 +90,9 @@ Use `workflow/tests/` for behavior-specific child modules under the parent
   through public projection queries after the cleanup command runs.
 - I/O artifact projection tests must verify endpoint metadata survives public
   queries so node producers/consumers are not inferred from raw payload JSON.
+- I/O artifact query tests must verify producer and consumer node filters at
+  the public service boundary so selected-node browsing is not implemented by
+  caller-side scans.
 - Diagnostics tests must verify scheduler estimate queries return narrow
   estimate-shaped hot projection DTOs without requiring callers to parse raw
   scheduler estimate payloads or full run-detail responses.

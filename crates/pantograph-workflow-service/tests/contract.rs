@@ -874,6 +874,8 @@ fn workflow_io_artifact_query_contract_snapshot() {
     let request = WorkflowIoArtifactQueryRequest {
         workflow_run_id: Some("run-1".to_string()),
         node_id: Some("node-1".to_string()),
+        producer_node_id: Some("node-1".to_string()),
+        consumer_node_id: None,
         artifact_role: Some("node_output".to_string()),
         media_type: Some("image/png".to_string()),
         retention_state: Some(IoArtifactRetentionState::Retained),
@@ -933,6 +935,7 @@ fn workflow_io_artifact_query_contract_snapshot() {
     let expected_request = serde_json::json!({
         "workflow_run_id": "run-1",
         "node_id": "node-1",
+        "producer_node_id": "node-1",
         "artifact_role": "node_output",
         "media_type": "image/png",
         "retention_state": "retained",

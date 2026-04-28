@@ -413,12 +413,21 @@ fn workflow_io_artifact_query_drains_and_reads_projection() {
             "artifact-b",
         ))
         .expect("io artifact event");
+    ledger
+        .append_diagnostic_event(sample_io_artifact_event(
+            "node-b",
+            "node_input",
+            "artifact-c",
+        ))
+        .expect("io artifact event");
     let service = WorkflowService::new().with_diagnostics_ledger(ledger);
 
     let response = service
         .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
             workflow_run_id: Some("run-a".to_string()),
             node_id: Some("node-b".to_string()),
+            producer_node_id: Some("node-b".to_string()),
+            consumer_node_id: None,
             artifact_role: None,
             media_type: None,
             retention_state: None,
@@ -457,12 +466,41 @@ fn workflow_io_artifact_query_drains_and_reads_projection() {
         IoArtifactRetentionState::Retained
     );
     assert_eq!(response.retention_summary[0].artifact_count, 1);
-    assert_eq!(response.projection_state.last_applied_event_seq, 2);
+    assert_eq!(response.projection_state.last_applied_event_seq, 3);
+
+    let consumer_response = service
+        .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
+            workflow_run_id: Some("run-a".to_string()),
+            node_id: None,
+            producer_node_id: None,
+            consumer_node_id: Some("node-b".to_string()),
+            artifact_role: Some("node_input".to_string()),
+            media_type: None,
+            retention_state: Some(IoArtifactRetentionState::Retained),
+            retention_policy_id: None,
+            runtime_id: None,
+            model_id: None,
+            after_event_seq: None,
+            limit: Some(10),
+            projection_batch_size: Some(10),
+        })
+        .expect("consumer io artifact query");
+
+    assert_eq!(consumer_response.artifacts.len(), 1);
+    assert_eq!(consumer_response.artifacts[0].artifact_id, "artifact-c");
+    assert_eq!(
+        consumer_response.artifacts[0].consumer_node_id.as_deref(),
+        Some("node-b")
+    );
+    assert_eq!(consumer_response.retention_summary.len(), 1);
+    assert_eq!(consumer_response.retention_summary[0].artifact_count, 1);
 
     let global_response = service
         .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
             workflow_run_id: None,
             node_id: None,
+            producer_node_id: None,
+            consumer_node_id: None,
             artifact_role: None,
             media_type: None,
             retention_state: None,
@@ -474,8 +512,8 @@ fn workflow_io_artifact_query_drains_and_reads_projection() {
             projection_batch_size: Some(10),
         })
         .expect("global io artifact query");
-    assert_eq!(global_response.artifacts.len(), 2);
-    assert_eq!(global_response.retention_summary[0].artifact_count, 2);
+    assert_eq!(global_response.artifacts.len(), 3);
+    assert_eq!(global_response.retention_summary[0].artifact_count, 3);
 }
 
 #[test]
@@ -500,6 +538,8 @@ fn workflow_io_artifact_query_exposes_expired_retention_state() {
         .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
             workflow_run_id: Some("run-a".to_string()),
             node_id: None,
+            producer_node_id: None,
+            consumer_node_id: None,
             artifact_role: None,
             media_type: None,
             retention_state: Some(IoArtifactRetentionState::Expired),
@@ -553,6 +593,8 @@ fn workflow_io_artifact_query_supports_no_active_run_browsing() {
         .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
             workflow_run_id: None,
             node_id: None,
+            producer_node_id: None,
+            consumer_node_id: None,
             artifact_role: Some("workflow_output".to_string()),
             media_type: None,
             retention_state: Some(IoArtifactRetentionState::Retained),
@@ -585,6 +627,8 @@ fn workflow_io_artifact_query_validates_bounds() {
     let invalid_id = service.workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
         workflow_run_id: Some("bad\nid".to_string()),
         node_id: None,
+        producer_node_id: None,
+        consumer_node_id: None,
         artifact_role: None,
         media_type: None,
         retention_state: None,
@@ -603,6 +647,8 @@ fn workflow_io_artifact_query_validates_bounds() {
     let oversized_limit = service.workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
         workflow_run_id: Some("run-a".to_string()),
         node_id: None,
+        producer_node_id: None,
+        consumer_node_id: None,
         artifact_role: None,
         media_type: None,
         retention_state: None,
@@ -993,6 +1039,8 @@ fn workflow_retention_cleanup_expires_artifacts_through_projection() {
         .workflow_io_artifact_query(WorkflowIoArtifactQueryRequest {
             workflow_run_id: Some("run-a".to_string()),
             node_id: None,
+            producer_node_id: None,
+            consumer_node_id: None,
             artifact_role: None,
             media_type: None,
             retention_state: Some(IoArtifactRetentionState::Expired),

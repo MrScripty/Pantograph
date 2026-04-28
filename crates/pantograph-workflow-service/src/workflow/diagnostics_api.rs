@@ -207,6 +207,10 @@ pub struct WorkflowIoArtifactQueryRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub node_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub producer_node_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub consumer_node_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub artifact_role: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub media_type: Option<String>,
@@ -849,6 +853,8 @@ impl WorkflowIoArtifactQueryRequest {
         let query = IoArtifactProjectionQuery {
             workflow_run_id: parse_optional_id("workflow_run_id", self.workflow_run_id)?,
             node_id: self.node_id,
+            producer_node_id: self.producer_node_id,
+            consumer_node_id: self.consumer_node_id,
             artifact_role: self.artifact_role,
             media_type: self.media_type,
             retention_state: self.retention_state,
@@ -869,6 +875,8 @@ fn io_artifact_retention_summary_query(
     IoArtifactRetentionSummaryQuery {
         workflow_run_id: query.workflow_run_id.clone(),
         node_id: query.node_id.clone(),
+        producer_node_id: query.producer_node_id.clone(),
+        consumer_node_id: query.consumer_node_id.clone(),
         artifact_role: query.artifact_role.clone(),
         media_type: query.media_type.clone(),
         retention_policy_id: query.retention_policy_id.clone(),

@@ -61,6 +61,9 @@ append-only audit boundary for scheduler, run, node execution, I/O, Library,
 runtime, and retention facts. The scheduler timeline, run-list, run-detail,
 I/O artifact, and node-status projections are durable materialized read models
 advanced from the event ledger by cursor.
+I/O artifact projection queries can filter producer and consumer node
+endpoints directly; callers should not scan projection pages client-side to
+answer node-produced or node-consumed artifact questions.
 Stable scheduler estimate and queue-placement facts are promoted into typed
 projection columns; consumers do not parse payload JSON for queue position,
 priority, estimate confidence, estimated wait/duration, or scheduler reason.

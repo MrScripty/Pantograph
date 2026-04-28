@@ -312,7 +312,7 @@ export class WorkflowService extends WorkflowCommandService {
         retention_summary: [],
         projection_state: {
           projection_name: 'io_artifact',
-          projection_version: 3,
+          projection_version: 4,
           last_applied_event_seq: 0,
           status: 'current',
           rebuilt_at_ms: null,

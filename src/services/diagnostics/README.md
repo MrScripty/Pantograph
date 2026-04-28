@@ -67,6 +67,9 @@ projection without inventing fallback run identities or workflow display names.
 - I/O artifact DTOs carry producer and consumer node/port fields. Consumers
   should use those endpoint fields for browsing and filtering instead of
   parsing payload JSON or overloading the event `node_id`.
+- I/O artifact query DTOs accept producer and consumer node filters. Consumers
+  should pass selected-node filters through the backend query contract instead
+  of downloading broader pages and filtering them in TypeScript.
 - I/O artifact responses carry `retention_summary` counts derived from backend
   projections. Consumers should display those counts instead of rebuilding
   completeness summaries from raw ledger events.

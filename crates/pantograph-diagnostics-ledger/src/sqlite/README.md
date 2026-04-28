@@ -88,6 +88,9 @@ helpers own restart-visible workflow run summaries.
 - I/O artifact producer and consumer node/port endpoints are persisted as
   explicit projection columns. Query consumers should use those columns instead
   of interpreting the event `node_id` as both producer and consumer.
+- I/O artifact projection and retention-summary queries filter producer and
+  consumer node ids in SQLite so selected-node I/O browsing does not require
+  client-side scans over unrelated artifact rows.
 - I/O artifact drains persist typed retention-state columns so page/API
   consumers can distinguish retained, metadata-only, external, truncated,
   too-large, expired, and deleted payload states without parsing event payloads.

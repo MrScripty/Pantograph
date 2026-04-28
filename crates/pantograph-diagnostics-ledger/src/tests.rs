@@ -1215,6 +1215,8 @@ fn io_artifact_projection_drains_artifact_events_incrementally() {
                 WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
             ),
             node_id: None,
+            producer_node_id: None,
+            consumer_node_id: None,
             artifact_role: None,
             media_type: None,
             retention_state: None,
@@ -1252,6 +1254,8 @@ fn io_artifact_projection_drains_artifact_events_incrementally() {
         .query_io_artifact_projection(IoArtifactProjectionQuery {
             workflow_run_id: None,
             node_id: None,
+            producer_node_id: None,
+            consumer_node_id: None,
             artifact_role: None,
             media_type: None,
             retention_state: None,
@@ -1270,6 +1274,8 @@ fn io_artifact_projection_drains_artifact_events_incrementally() {
                 WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
             ),
             node_id: Some("node_image".to_string()),
+            producer_node_id: Some("node_image".to_string()),
+            consumer_node_id: None,
             artifact_role: None,
             media_type: Some("image/png".to_string()),
             retention_state: Some(IoArtifactRetentionState::Retained),
@@ -1283,6 +1289,27 @@ fn io_artifact_projection_drains_artifact_events_incrementally() {
     assert_eq!(node_records.len(), 1);
     assert_eq!(node_records[0].artifact_id, "artifact_image");
 
+    let consumer_records = ledger
+        .query_io_artifact_projection(IoArtifactProjectionQuery {
+            workflow_run_id: Some(
+                WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+            ),
+            node_id: None,
+            producer_node_id: None,
+            consumer_node_id: Some("node_prompt".to_string()),
+            artifact_role: Some("workflow_input".to_string()),
+            media_type: None,
+            retention_state: Some(IoArtifactRetentionState::Retained),
+            retention_policy_id: Some("retention_default".to_string()),
+            runtime_id: None,
+            model_id: None,
+            after_event_seq: None,
+            limit: 10,
+        })
+        .expect("io artifact consumer filter loads");
+    assert_eq!(consumer_records.len(), 1);
+    assert_eq!(consumer_records[0].artifact_id, "artifact_prompt");
+
     let no_new_state = ledger
         .drain_io_artifact_projection(10)
         .expect("io artifact projection drains idempotently");
@@ -1293,6 +1320,8 @@ fn io_artifact_projection_drains_artifact_events_incrementally() {
                 WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
             ),
             node_id: None,
+            producer_node_id: None,
+            consumer_node_id: None,
             artifact_role: None,
             media_type: None,
             retention_state: None,
@@ -1337,6 +1366,8 @@ fn io_artifact_projection_applies_retention_state_changes() {
                 WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
             ),
             node_id: None,
+            producer_node_id: None,
+            consumer_node_id: None,
             artifact_role: None,
             media_type: None,
             retention_state: None,
@@ -1367,6 +1398,8 @@ fn io_artifact_projection_applies_retention_state_changes() {
                 WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
             ),
             node_id: None,
+            producer_node_id: None,
+            consumer_node_id: None,
             artifact_role: None,
             media_type: None,
             retention_policy_id: Some("retention_default".to_string()),
@@ -1390,6 +1423,8 @@ fn io_artifact_projection_applies_retention_state_changes() {
                 WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
             ),
             node_id: None,
+            producer_node_id: None,
+            consumer_node_id: None,
             artifact_role: None,
             media_type: None,
             retention_state: Some(IoArtifactRetentionState::Expired),
@@ -2331,6 +2366,8 @@ fn apply_artifact_retention_policy_expires_projected_payload_references() {
                 WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
             ),
             node_id: None,
+            producer_node_id: None,
+            consumer_node_id: None,
             artifact_role: None,
             media_type: None,
             retention_state: Some(IoArtifactRetentionState::Expired),
