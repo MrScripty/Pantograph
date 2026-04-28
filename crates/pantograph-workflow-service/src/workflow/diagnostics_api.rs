@@ -731,6 +731,7 @@ impl WorkflowService {
                 retention_class: RetentionClass::Standard,
                 now_ms: unix_timestamp_ms() as i64,
                 limit,
+                actor_scope: RetentionPolicyActorScope::GuiAdmin,
                 reason: request.reason,
             })
             .map_err(WorkflowServiceError::from)?;

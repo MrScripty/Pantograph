@@ -2351,6 +2351,7 @@ fn apply_artifact_retention_policy_expires_projected_payload_references() {
             retention_class: RetentionClass::Standard,
             now_ms,
             limit: 10,
+            actor_scope: RetentionPolicyActorScope::Maintenance,
             reason: "standard retention window elapsed".to_string(),
         })
         .expect("artifact retention policy applies");
@@ -2393,6 +2394,9 @@ fn apply_artifact_retention_policy_expires_projected_payload_references() {
         event.event_kind == DiagnosticEventKind::RetentionArtifactStateChanged
             && event.workflow_run_id.as_ref().map(|id| id.as_str()) == Some("workflow_run_alpha")
             && event.retention_policy_id.as_deref() == Some("standard-local-v1")
+            && event
+                .payload_json
+                .contains("\"actor_scope\":\"maintenance\"")
     }));
 }
 
@@ -2882,6 +2886,7 @@ fn sample_retention_artifact_state_changed_event(
             RetentionArtifactStateChangedPayload {
                 artifact_id: artifact_id.to_string(),
                 retention_state,
+                actor_scope: RetentionPolicyActorScope::Maintenance,
                 reason: reason.to_string(),
             },
         ),

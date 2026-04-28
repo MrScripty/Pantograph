@@ -340,7 +340,7 @@ availability.
     days, timestamp, typed actor scope, and reason. Artifact-specific cleanup
     cleanup events now expire retained artifact projection rows through typed
     `retention.artifact_state_changed` events carrying the active policy
-    version in the reason.
+    version in the reason and typed actor scope in the payload.
 - [x] Update affected hot/warm projections through event cursors rather than
   direct page-time artifact ledger scans.
 
@@ -363,8 +363,7 @@ content hash, retention state, and retention reason without storing raw values
 in the ledger. A first-pass retroactive cleanup command now expires retained
 artifact projection rows older than the active global policy cutoff while
 leaving metadata queryable. Node-to-node intermediate I/O, first-pass setting
-groups, cleanup actor context, and physical payload-store deletion remain
-pending.
+groups, and physical payload-store deletion remain pending.
 
 ### Milestone 4: Library And Pumas Audit
 
@@ -515,6 +514,10 @@ implicitly on page load.
 - 2026-04-27: Exposed artifact retention cleanup through workflow-service,
   Tauri, and frontend command DTOs so GUI/admin controls can trigger cleanup
   without bypassing the ledger/projection boundary.
+- 2026-04-28: Added typed actor scope to
+  `retention.artifact_state_changed` payloads. GUI retention cleanup now emits
+  `gui_admin` artifact cleanup events, while ledger maintenance callers can
+  emit `maintenance` cleanup events.
 - 2026-04-27: Added a workflow-service Library asset audit boundary and wired
   Puma-Lib model option queries to record successful `pumas://models`
   access/search events after the underlying Pumas query succeeds.
@@ -627,6 +630,12 @@ implicitly on page load.
   `npm run typecheck`, and `cargo check -p pantograph-diagnostics-ledger -p
   pantograph-workflow-service` passed after adding producer/consumer endpoint
   filters to I/O artifact projection and retention-summary queries.
+- 2026-04-28: `cargo test -p pantograph-diagnostics-ledger
+  apply_artifact_retention_policy_expires_projected_payload_references`,
+  `cargo test -p pantograph-workflow-service
+  workflow::tests::diagnostics::workflow_retention_cleanup`, and
+  `cargo fmt --all -- --check` passed after adding typed actor scope to
+  artifact retention cleanup events.
 
 ### Traceability Links
 

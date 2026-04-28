@@ -5,8 +5,8 @@ use pantograph_diagnostics_ledger::{
     LibraryAssetAccessedPayload, LibraryAssetCacheStatus, LibraryAssetOperation, LicenseSnapshot,
     ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement, NodeExecutionProjectionStatus,
     NodeExecutionStatusPayload, OutputModality, ProjectionStatus,
-    RetentionArtifactStateChangedPayload, RetentionClass, RunListFacetKind,
-    RunSnapshotAcceptedPayload, RunSnapshotNodeVersionPayload, RunStartedPayload,
+    RetentionArtifactStateChangedPayload, RetentionClass, RetentionPolicyActorScope,
+    RunListFacetKind, RunSnapshotAcceptedPayload, RunSnapshotNodeVersionPayload, RunStartedPayload,
     RunTerminalPayload, RunTerminalStatus, SchedulerEstimateProducedPayload,
     SchedulerQueuePlacementPayload, UsageEventStatus, UsageLineage,
 };
@@ -1060,6 +1060,21 @@ fn workflow_retention_cleanup_expires_artifacts_through_projection() {
         artifacts[0].retention_reason.as_deref(),
         Some("developer requested cleanup; policy_version=1")
     );
+
+    let events = {
+        let ledger = service
+            .diagnostics_ledger_guard()
+            .expect("diagnostics ledger guard");
+        pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::diagnostic_events_after(
+            &*ledger, 0, 10,
+        )
+        .expect("diagnostic events load")
+    };
+    assert!(events.iter().any(|event| {
+        event.event_kind
+            == pantograph_diagnostics_ledger::DiagnosticEventKind::RetentionArtifactStateChanged
+            && event.payload_json.contains("\"actor_scope\":\"gui_admin\"")
+    }));
 }
 
 fn sample_run_snapshot_event() -> DiagnosticEventAppendRequest {
@@ -1320,6 +1335,7 @@ fn sample_retention_artifact_state_changed_event(
             RetentionArtifactStateChangedPayload {
                 artifact_id: artifact_id.to_string(),
                 retention_state,
+                actor_scope: RetentionPolicyActorScope::Maintenance,
                 reason: "retention policy expired payload".to_string(),
             },
         ),

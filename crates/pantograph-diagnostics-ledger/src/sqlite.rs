@@ -381,6 +381,7 @@ impl DiagnosticsLedgerRepository for SqliteDiagnosticsLedger {
                     RetentionArtifactStateChangedPayload {
                         artifact_id: artifact.artifact_id.clone(),
                         retention_state: IoArtifactRetentionState::Expired,
+                        actor_scope: command.actor_scope.clone(),
                         reason: reason.clone(),
                     },
                 ),

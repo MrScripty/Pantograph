@@ -98,8 +98,8 @@ helpers own restart-visible workflow run summaries.
   replay `diagnostic_events` for normal retention-completeness display.
 - Artifact retention cleanup drains the current artifact projection batch,
   selects candidate rows from `io_artifact_projection`, emits typed retention
-  audit events, and advances the same artifact projection path so cleanup
-  remains observable without page-time ledger replay.
+  audit events with actor scope, and advances the same artifact projection path
+  so cleanup remains observable without page-time ledger replay.
 - Library usage drains apply asset-access events incrementally and report
   `rebuilding` while a limited batch has not caught up to all pending
   `library.asset_accessed` events.

@@ -3,6 +3,7 @@ use pantograph_runtime_attribution::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::event::RetentionPolicyActorScope;
 use crate::util::{validate_optional_text, validate_required_text, MAX_ID_LEN, MAX_JSON_LEN};
 use crate::DiagnosticsLedgerError;
 
@@ -262,6 +263,7 @@ pub struct ApplyArtifactRetentionPolicyCommand {
     pub retention_class: RetentionClass,
     pub now_ms: i64,
     pub limit: u32,
+    pub actor_scope: RetentionPolicyActorScope,
     pub reason: String,
 }
 

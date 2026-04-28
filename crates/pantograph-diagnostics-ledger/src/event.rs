@@ -705,6 +705,7 @@ impl RetentionPolicyChangedPayload {
 pub struct RetentionArtifactStateChangedPayload {
     pub artifact_id: String,
     pub retention_state: IoArtifactRetentionState,
+    pub actor_scope: RetentionPolicyActorScope,
     pub reason: String,
 }
 

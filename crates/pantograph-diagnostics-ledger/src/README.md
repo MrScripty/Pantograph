@@ -48,6 +48,8 @@ state, the GUI loses previous workflow timing and runtime history after restart.
   must not submit arbitrary operation labels through payload strings.
 - Retention policy change events must include typed actor scope so GUI admin
   and maintenance actions remain distinguishable without parsing source labels.
+- Retention artifact state-change events must include typed actor scope so
+  cleanup actions are auditable without parsing free-form reasons.
 - Materialized projections are rebuildable, but normal read paths advance from
   stored `projection_state` cursors instead of replaying the full ledger.
 
@@ -147,7 +149,8 @@ semantics.
 - The artifact retention cleanup command uses the active global policy to
   drain the I/O artifact projection, select retained rows older than the policy
   cutoff, append typed `retention.artifact_state_changed` audit events, and
-  leave artifact metadata queryable after payload references expire.
+  leave artifact metadata queryable after payload references expire. Cleanup
+  commands must pass typed actor scope into those audit events.
 - Library usage projection queries may filter by `workflow_run_id` through the
   materialized run-link table so active-run Library pages do not scan raw
   `library.asset_accessed` events.

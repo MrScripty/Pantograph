@@ -88,6 +88,9 @@ Use `workflow/tests/` for behavior-specific child modules under the parent
   `retention.policy_changed` events so policy mutations remain auditable.
 - Retention cleanup tests must prove expired artifact metadata is visible
   through public projection queries after the cleanup command runs.
+- Retention cleanup tests must assert the typed actor scope on
+  `retention.artifact_state_changed` events so cleanup audits distinguish GUI
+  admin actions from maintenance workers.
 - I/O artifact projection tests must verify endpoint metadata survives public
   queries so node producers/consumers are not inferred from raw payload JSON.
 - I/O artifact query tests must verify producer and consumer node filters at
