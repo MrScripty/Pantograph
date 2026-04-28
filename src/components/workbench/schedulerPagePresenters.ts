@@ -1,4 +1,6 @@
 import type {
+  IoArtifactRetentionState,
+  IoArtifactRetentionSummaryRecord,
   ProjectionStateRecord,
   RunListProjectionRecord,
   WorkflowSchedulerEstimateRecord,
@@ -75,6 +77,11 @@ export interface SchedulerEstimateFactRow {
   mono?: boolean;
 }
 
+export interface SchedulerRetentionSummaryRow {
+  label: string;
+  count: number;
+}
+
 export function buildSchedulerEstimateRows(
   estimate: WorkflowSchedulerEstimateRecord | null | undefined,
 ): SchedulerEstimateFactRow[] {
@@ -104,6 +111,36 @@ export function formatSchedulerEstimateDuration(value: number | null | undefined
     return `${Math.round(value)} ms`;
   }
   return `${(value / 1_000).toFixed(1)} s`;
+}
+
+export function buildSchedulerRetentionSummaryRows(
+  summary: IoArtifactRetentionSummaryRecord[],
+): SchedulerRetentionSummaryRow[] {
+  return summary
+    .map((item) => ({
+      label: formatSchedulerRetentionStateLabel(item.retention_state),
+      count: item.artifact_count,
+    }))
+    .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label));
+}
+
+export function formatSchedulerRetentionStateLabel(retentionState: IoArtifactRetentionState): string {
+  switch (retentionState) {
+    case 'retained':
+      return 'Payload retained';
+    case 'metadata_only':
+      return 'Metadata retained only';
+    case 'external':
+      return 'External reference';
+    case 'truncated':
+      return 'Payload truncated';
+    case 'too_large':
+      return 'Too large to retain';
+    case 'expired':
+      return 'Payload expired';
+    case 'deleted':
+      return 'Payload deleted';
+  }
 }
 
 export function formatSchedulerReasonLabel(value: string | null | undefined): string {

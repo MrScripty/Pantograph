@@ -2,11 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import type {
+  IoArtifactRetentionSummaryRecord,
   RunListProjectionRecord,
   SchedulerTimelineProjectionRecord,
 } from '../../services/diagnostics/types.ts';
 import {
   buildSchedulerEstimateRows,
+  buildSchedulerRetentionSummaryRows,
   buildSchedulerRunListQuery,
   filterSchedulerTimelineEvents,
   filterAndSortSchedulerRuns,
@@ -20,6 +22,7 @@ import {
   formatSchedulerEstimateLabel,
   formatSchedulerReasonLabel,
   formatSchedulerRetentionLabel,
+  formatSchedulerRetentionStateLabel,
   formatSchedulerScopeLabel,
   formatSchedulerStatusLabel,
   formatSchedulerTimelineKind,
@@ -191,6 +194,23 @@ test('buildSchedulerEstimateRows exposes selected-run estimate projection facts'
   assert.equal(rows.find((row) => row.label === 'Run Duration')?.value, '2.5 s');
   assert.equal(rows.find((row) => row.label === 'Policy')?.value, 'policy-a');
   assert.equal(rows.find((row) => row.label === 'Updated')?.value, new Date(86_400_000).toLocaleString());
+});
+
+test('buildSchedulerRetentionSummaryRows formats typed retention projection counts', () => {
+  const rows = buildSchedulerRetentionSummaryRows([
+    { retention_state: 'expired', artifact_count: 2 },
+    { retention_state: 'retained', artifact_count: 5 },
+    { retention_state: 'metadata_only', artifact_count: 5 },
+    { retention_state: 'too_large', artifact_count: 1 },
+  ] satisfies IoArtifactRetentionSummaryRecord[]);
+
+  assert.deepEqual(rows, [
+    { label: 'Metadata retained only', count: 5 },
+    { label: 'Payload retained', count: 5 },
+    { label: 'Payload expired', count: 2 },
+    { label: 'Too large to retain', count: 1 },
+  ]);
+  assert.equal(formatSchedulerRetentionStateLabel('deleted'), 'Payload deleted');
 });
 
 test('scheduler queue controls require queued run execution-session facts', () => {

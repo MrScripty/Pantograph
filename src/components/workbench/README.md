@@ -9,8 +9,8 @@ later plan stages fill in richer page bodies.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `WorkbenchShell.svelte` | Top-level workbench frame, toolbar navigation, active-run summary, and page outlet. |
-| `SchedulerPage.svelte` | Dense run-list view backed by the run-list projection service, active-run selection store, local table controls, future/scheduled/queued status filters, policy/scope/placement/date filters, scope and placement columns, typed queue/estimate columns, selected-run estimate projection panel, backend-gated queue actions including session priority controls, and selected-run scheduler timeline projection with typed kind/source filters. |
-| `schedulerPagePresenters.ts` | Pure Scheduler page status labels/classes, duration, timestamp, future/scheduled status, scope/placement/date, queue-control gating, selected-run estimate rows, queue/estimate, filter, sorting, projection freshness, and typed timeline filter presenters. |
+| `SchedulerPage.svelte` | Dense run-list view backed by the run-list projection service, active-run selection store, local table controls, future/scheduled/queued status filters, policy/scope/placement/date filters, scope and placement columns, typed queue/estimate columns, selected-run estimate and retention projection panels, backend-gated queue actions including session priority controls, and selected-run scheduler timeline projection with typed kind/source filters. |
+| `schedulerPagePresenters.ts` | Pure Scheduler page status labels/classes, duration, timestamp, future/scheduled status, scope/placement/date, queue-control gating, selected-run estimate and retention rows, queue/estimate, filter, sorting, projection freshness, and typed timeline filter presenters. |
 | `schedulerPagePresenters.test.ts` | Unit coverage for Scheduler table labels, status classes, filters, sorts, projection freshness, and timeline labels. |
 | `GraphPage.svelte` | Workbench page that switches between the active run's immutable graph snapshot and the current editable workflow graph. |
 | `RunGraphSnapshot.svelte` | Read-only run graph renderer backed by `workflowService.queryRunGraph`; it does not load historic graphs into the editor store. |
@@ -96,6 +96,10 @@ transient UI state without becoming backend scheduler policy.
 - Scheduler selected-run estimate facts come from
   `workflowService.querySchedulerEstimate` and presenter-built rows. Components
   must not parse `latest_estimate_json` for Scheduler page display.
+- Scheduler selected-run retention counts come from
+  `workflowService.queryIoArtifacts` retention summaries and presenter-built
+  rows. Components must not dereference payload bodies or replay ledger rows for
+  Scheduler retention display.
 - Scheduler client, session, bucket, and workflow execution-session facts come
   from run-list projection fields. Components must not recover those scope
   facts from raw events.

@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { ChevronsUp, RefreshCw, ShieldAlert, SlidersHorizontal, XCircle } from 'lucide-svelte';
   import type {
+    IoArtifactRetentionSummaryRecord,
     ProjectionStateRecord,
     RunListProjectionRecord,
     SchedulerTimelineProjectionRecord,
@@ -23,6 +24,7 @@
   } from '../../stores/schedulerRunListStore';
   import {
     buildSchedulerEstimateRows,
+    buildSchedulerRetentionSummaryRows,
     buildSchedulerRunListQuery,
     filterSchedulerTimelineEvents,
     filterAndSortSchedulerRuns,
@@ -66,10 +68,14 @@
   let timelineProjectionState = $state<ProjectionStateRecord | null>(null);
   let selectedRunEstimate = $state<WorkflowSchedulerEstimateRecord | null>(null);
   let estimateProjectionState = $state<ProjectionStateRecord | null>(null);
+  let selectedRunRetentionSummary = $state<IoArtifactRetentionSummaryRecord[]>([]);
+  let retentionProjectionState = $state<ProjectionStateRecord | null>(null);
   let timelineLoading = $state(false);
   let estimateLoading = $state(false);
+  let retentionLoading = $state(false);
   let timelineError = $state<string | null>(null);
   let estimateError = $state<string | null>(null);
+  let retentionError = $state<string | null>(null);
   let actionBusy = $state<string | null>(null);
   let actionError = $state<string | null>(null);
   let actionMessage = $state<string | null>(null);
@@ -80,6 +86,7 @@
   let adminPriorityRunId = '';
   let timelineRequestSerial = 0;
   let estimateRequestSerial = 0;
+  let retentionRequestSerial = 0;
   let activeTimelineRunId = $state<string | null>(null);
   let refreshInFlight = false;
   let refreshAgain = false;
@@ -93,6 +100,7 @@
     }),
   );
   let selectedRunEstimateRows = $derived(buildSchedulerEstimateRows(selectedRunEstimate));
+  let selectedRunRetentionRows = $derived(buildSchedulerRetentionSummaryRows(selectedRunRetentionSummary));
   let timelineKindOptions = $derived(schedulerTimelineKindFilterOptions(timelineEvents));
   let timelineSourceOptions = $derived(schedulerTimelineSourceFilterOptions(timelineEvents));
   let schedulerPolicyOptions = $derived(schedulerPolicyFilterOptions(runs));
@@ -215,6 +223,42 @@
     }
   }
 
+  async function refreshRetentionSummary(runId = activeRunId()): Promise<void> {
+    const requestSerial = ++retentionRequestSerial;
+    retentionError = null;
+
+    if (!runId) {
+      selectedRunRetentionSummary = [];
+      retentionProjectionState = null;
+      retentionLoading = false;
+      return;
+    }
+
+    retentionLoading = true;
+    try {
+      const response = await workflowService.queryIoArtifacts({
+        workflow_run_id: runId,
+        limit: 1,
+      });
+      if (requestSerial !== retentionRequestSerial) {
+        return;
+      }
+      selectedRunRetentionSummary = response.retention_summary;
+      retentionProjectionState = response.projection_state;
+    } catch (refreshError) {
+      if (requestSerial !== retentionRequestSerial) {
+        return;
+      }
+      retentionError = formatWorkflowCommandError(refreshError);
+      selectedRunRetentionSummary = [];
+      retentionProjectionState = null;
+    } finally {
+      if (requestSerial === retentionRequestSerial) {
+        retentionLoading = false;
+      }
+    }
+  }
+
   function selectRun(run: RunListProjectionRecord): void {
     selectActiveWorkflowRun({
       workflow_run_id: run.workflow_run_id,
@@ -246,6 +290,7 @@
       actionMessage = 'Cancel accepted by scheduler';
       await refreshRuns();
       await refreshEstimate(run.workflow_run_id);
+      await refreshRetentionSummary(run.workflow_run_id);
       await refreshTimeline(run.workflow_run_id);
     } catch (actionFailure) {
       actionError = formatWorkflowCommandError(actionFailure);
@@ -270,6 +315,7 @@
       actionMessage = 'Push-front accepted by scheduler';
       await refreshRuns();
       await refreshEstimate(run.workflow_run_id);
+      await refreshRetentionSummary(run.workflow_run_id);
       await refreshTimeline(run.workflow_run_id);
     } catch (actionFailure) {
       actionError = formatWorkflowCommandError(actionFailure);
@@ -301,6 +347,7 @@
       actionMessage = 'Priority accepted by scheduler';
       await refreshRuns();
       await refreshEstimate(run.workflow_run_id);
+      await refreshRetentionSummary(run.workflow_run_id);
       await refreshTimeline(run.workflow_run_id);
     } catch (actionFailure) {
       actionError = formatWorkflowCommandError(actionFailure);
@@ -324,6 +371,7 @@
       actionMessage = 'Admin cancel accepted by scheduler';
       await refreshRuns();
       await refreshEstimate(run.workflow_run_id);
+      await refreshRetentionSummary(run.workflow_run_id);
       await refreshTimeline(run.workflow_run_id);
     } catch (actionFailure) {
       actionError = formatWorkflowCommandError(actionFailure);
@@ -347,6 +395,7 @@
       actionMessage = 'Admin push-front accepted by scheduler';
       await refreshRuns();
       await refreshEstimate(run.workflow_run_id);
+      await refreshRetentionSummary(run.workflow_run_id);
       await refreshTimeline(run.workflow_run_id);
     } catch (actionFailure) {
       actionError = formatWorkflowCommandError(actionFailure);
@@ -377,6 +426,7 @@
       actionMessage = 'Admin priority accepted by scheduler';
       await refreshRuns();
       await refreshEstimate(run.workflow_run_id);
+      await refreshRetentionSummary(run.workflow_run_id);
       await refreshTimeline(run.workflow_run_id);
     } catch (actionFailure) {
       actionError = formatWorkflowCommandError(actionFailure);
@@ -390,6 +440,7 @@
       void refreshRuns();
       void refreshTimeline();
       void refreshEstimate();
+      void refreshRetentionSummary();
     });
 
     return () => {
@@ -407,6 +458,7 @@
     activeTimelineRunId = runId;
     void refreshTimeline(runId);
     void refreshEstimate(runId);
+    void refreshRetentionSummary(runId);
   });
 
   $effect(() => {
@@ -806,11 +858,16 @@
             class="inline-flex items-center gap-2 rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
             onclick={() => {
               void refreshEstimate();
+              void refreshRetentionSummary();
               void refreshTimeline();
             }}
-            disabled={timelineLoading || estimateLoading || !$activeWorkflowRun}
+            disabled={timelineLoading || estimateLoading || retentionLoading || !$activeWorkflowRun}
           >
-            <RefreshCw size={12} aria-hidden="true" class={timelineLoading || estimateLoading ? 'animate-spin' : ''} />
+            <RefreshCw
+              size={12}
+              aria-hidden="true"
+              class={timelineLoading || estimateLoading || retentionLoading ? 'animate-spin' : ''}
+            />
             Refresh
           </button>
         </div>
@@ -853,6 +910,36 @@
               </div>
             {/each}
           </dl>
+        {/if}
+      </div>
+
+      <div class="border-b border-neutral-900 px-4 py-3">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <h3 class="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">Retention</h3>
+            <div class="mt-1 text-xs text-neutral-500">
+              {formatSchedulerProjectionFreshness(retentionProjectionState)}
+            </div>
+          </div>
+          {#if retentionLoading}
+            <RefreshCw size={12} aria-hidden="true" class="mt-1 shrink-0 animate-spin text-neutral-500" />
+          {/if}
+        </div>
+        {#if retentionError}
+          <div class="mt-2 truncate text-xs text-red-200" title={retentionError}>{retentionError}</div>
+        {:else if !$activeWorkflowRun}
+          <div class="mt-3 text-xs text-neutral-500">No active run selected</div>
+        {:else if selectedRunRetentionRows.length === 0}
+          <div class="mt-3 text-xs text-neutral-500">No retained artifact summary projected</div>
+        {:else}
+          <div class="mt-3 grid grid-cols-2 gap-2">
+            {#each selectedRunRetentionRows as row (row.label)}
+              <div class="rounded border border-neutral-800 px-2 py-1.5">
+                <div class="text-[11px] text-neutral-500">{row.label}</div>
+                <div class="mt-1 font-mono text-xs text-neutral-200">{row.count}</div>
+              </div>
+            {/each}
+          </div>
         {/if}
       </div>
 
