@@ -765,6 +765,14 @@ fn scheduler_timeline_projection_drains_events_incrementally() {
     let started_event = ledger
         .append_diagnostic_event(sample_run_started_event("workflow_run_alpha"))
         .expect("run started event appends");
+    let node_status_event = ledger
+        .append_diagnostic_event(sample_node_status_event(
+            "workflow_run_alpha",
+            "node_image",
+            NodeExecutionProjectionStatus::Completed,
+            20,
+        ))
+        .expect("node status event appends");
     let terminal_event = ledger
         .append_diagnostic_event(sample_run_terminal_event("workflow_run_alpha"))
         .expect("run terminal event appends");
@@ -788,7 +796,7 @@ fn scheduler_timeline_projection_drains_events_incrementally() {
             ..SchedulerTimelineProjectionQuery::default()
         })
         .expect("scheduler timeline projection loads");
-    assert_eq!(records.len(), 9);
+    assert_eq!(records.len(), 10);
     assert_eq!(records[0].event_seq, snapshot_event.event_seq);
     assert_eq!(records[0].summary, "run snapshot accepted");
     assert_eq!(records[1].event_seq, estimate_event.event_seq);
@@ -830,9 +838,12 @@ fn scheduler_timeline_projection_drains_events_incrementally() {
         records[7].detail.as_deref(),
         Some("queue wait 10 ms; warm_session_reused")
     );
-    assert_eq!(records[8].event_seq, terminal_event.event_seq);
-    assert_eq!(records[8].summary, "run completed");
-    assert_eq!(records[8].detail.as_deref(), None);
+    assert_eq!(records[8].event_seq, node_status_event.event_seq);
+    assert_eq!(records[8].summary, "node node_image completed");
+    assert_eq!(records[8].detail.as_deref(), Some("100 ms"));
+    assert_eq!(records[9].event_seq, terminal_event.event_seq);
+    assert_eq!(records[9].summary, "run completed");
+    assert_eq!(records[9].detail.as_deref(), None);
 
     let after_first = ledger
         .query_scheduler_timeline_projection(SchedulerTimelineProjectionQuery {
@@ -840,7 +851,7 @@ fn scheduler_timeline_projection_drains_events_incrementally() {
             ..SchedulerTimelineProjectionQuery::default()
         })
         .expect("scheduler timeline projection cursor query loads");
-    assert_eq!(after_first.len(), 8);
+    assert_eq!(after_first.len(), 9);
 
     let no_new_state = ledger
         .drain_scheduler_timeline_projection(10)
@@ -852,7 +863,7 @@ fn scheduler_timeline_projection_drains_events_incrementally() {
     let records_after_duplicate_drain = ledger
         .query_scheduler_timeline_projection(SchedulerTimelineProjectionQuery::default())
         .expect("scheduler timeline projection loads after duplicate drain");
-    assert_eq!(records_after_duplicate_drain.len(), 9);
+    assert_eq!(records_after_duplicate_drain.len(), 10);
 
     let later_event = ledger
         .append_diagnostic_event(sample_scheduler_queue_event("workflow_run_alpha", 1))
@@ -864,7 +875,7 @@ fn scheduler_timeline_projection_drains_events_incrementally() {
     let records_after_later_event = ledger
         .query_scheduler_timeline_projection(SchedulerTimelineProjectionQuery::default())
         .expect("scheduler timeline projection loads after later event");
-    assert_eq!(records_after_later_event.len(), 10);
+    assert_eq!(records_after_later_event.len(), 11);
 }
 
 #[test]

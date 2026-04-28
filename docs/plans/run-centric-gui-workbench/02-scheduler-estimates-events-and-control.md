@@ -208,7 +208,7 @@ scheduler activity.
   scheduled/cancelled/started/completed events.
 - [ ] Emit retry/fallback events.
 - [x] Emit client queue action and admin override events.
-- [ ] Join or reference `run.*` lifecycle events in scheduler projections
+- [x] Join or reference `run.*` lifecycle events in scheduler projections
   without duplicating terminal execution lifecycle facts as scheduler events.
 - [x] Persist typed scheduler events through the event ledger owner.
 - [x] Build scheduler event projections from ledger events for run-scoped and
@@ -252,8 +252,11 @@ preflight required model/backend facts, and ephemeral session teardown emits
 required-model unload scheduled/started/completed/failed transitions from the
 same immutable run facts. Run-triggered capacity rebalance now emits unload
 scheduled/started/completed/failed transitions for the selected candidate's
-required models. Broader client/admin action vocabulary and frontend page
-wiring remain pending. Workflow-service now has a query boundary for the
+required models. Scheduler timeline projection now references `run.*`
+lifecycle events and `node.execution_status` rows as timeline visibility
+without duplicating those lifecycle facts as scheduler event truth. Broader
+client/admin action vocabulary and frontend page wiring remain pending.
+Workflow-service now has a query boundary for the
 materialized scheduler timeline and a narrow scheduler estimate query boundary
 backed by the hot run-detail projection.
 

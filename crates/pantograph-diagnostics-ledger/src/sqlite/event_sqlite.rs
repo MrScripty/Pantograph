@@ -274,7 +274,8 @@ pub(super) fn drain_scheduler_timeline_projection(
                     'scheduler.run_admitted',
                     'run.started',
                     'run.terminal',
-                    'run.snapshot_accepted'
+                    'run.snapshot_accepted',
+                    'node.execution_status'
                )
              ORDER BY event_seq
              LIMIT ?2",
@@ -1532,6 +1533,20 @@ fn scheduler_timeline_record_from_event(
             "run snapshot accepted".to_string(),
             Some(payload.workflow_run_snapshot_id),
         ),
+        DiagnosticEventPayload::NodeExecutionStatus(payload) => {
+            let node_id = event
+                .node_id
+                .as_deref()
+                .ok_or(DiagnosticsLedgerError::MissingField { field: "node_id" })?;
+            let summary = format!("node {node_id} {}", payload.status.as_db());
+            let detail = match (payload.duration_ms, payload.error) {
+                (Some(duration_ms), Some(error)) => Some(format!("{duration_ms} ms; {error}")),
+                (Some(duration_ms), None) => Some(format!("{duration_ms} ms")),
+                (None, Some(error)) => Some(error),
+                (None, None) => None,
+            };
+            (summary, detail)
+        }
         _ => return Ok(None),
     };
     Ok(Some(SchedulerTimelineProjectionRecord {

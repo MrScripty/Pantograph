@@ -105,6 +105,9 @@ semantics.
 - Scheduler timeline events include typed delay and model lifecycle facts when
   those events are emitted. Delay state may also update the run-list status and
   scheduler reason through projection drains.
+- Scheduler timeline projection may include `run.*` lifecycle and
+  `node.execution_status` rows for audit visibility, but those rows remain
+  their native lifecycle facts and must not be re-emitted as scheduler events.
 - Scheduler estimate and model lifecycle events carry typed model/cache state
   where known. Timeline projection details may include that state, but callers
   should still treat estimate facts and observed lifecycle facts as separate

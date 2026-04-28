@@ -66,6 +66,10 @@ helpers own restart-visible workflow run summaries.
   cursor and write idempotent rows keyed by `event_seq`.
 - Scheduler timeline page/query reads use `scheduler_timeline_projection`,
   not `diagnostic_events`.
+- Scheduler timeline drains include selected `run.*` lifecycle events and
+  `node.execution_status` rows for selected-run audit visibility. Projection
+  code must preserve their native event kind instead of manufacturing
+  duplicate scheduler lifecycle facts.
 - Scheduler delay and model lifecycle events are typed ledger events and become
   timeline rows through the same incremental projection cursor. Delay events
   may also update run-list/run-detail scheduler status and reason fields.
