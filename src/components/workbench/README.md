@@ -20,7 +20,7 @@ later plan stages fill in richer page bodies.
 | `IoInspectorPage.svelte` | Projection-backed I/O artifact browser and global retention policy form. |
 | `ioInspectorPresenters.ts` | Pure I/O media, payload availability, byte-size, and projection freshness presenters. |
 | `ioInspectorPresenters.test.ts` | Unit coverage for I/O Inspector presentation labels. |
-| `LibraryPage.svelte` | Projection-backed Library usage and audit table with active-run highlighting where the projection proves a last-run match. |
+| `LibraryPage.svelte` | Projection-backed Library usage and audit table with active-run highlighting and audited Pumas search/download/delete actions. |
 | `libraryUsagePresenters.ts` | Pure Library category, active-run match, network byte, and projection freshness presenters. |
 | `libraryUsagePresenters.test.ts` | Unit coverage for Library page presentation labels and active-run matching. |
 | `runGraphPresenters.ts` | Pure run graph summary, topology table, and SVG snapshot layout presenters. |
@@ -51,7 +51,8 @@ grow separate navigation and selection models.
 - I/O pages must treat artifact rows as metadata projections. Payload bodies
   are not loaded unless a dedicated typed payload API exists.
 - Library pages must render usage projections without issuing optimistic Pumas
-  or Library mutations.
+  or Library mutations. Audited Pumas actions must call typed workflow service
+  commands and refresh projection state after confirmed backend responses.
 - Historic run graph rendering must use immutable run graph projections and
   must not mutate the current editor store.
 - Network pages must distinguish unavailable platform metrics from zero values.

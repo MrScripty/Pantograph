@@ -291,7 +291,7 @@ projections.
 - [x] Render Library usage projections derived from typed `library.*` events.
 - [x] Render backend-provided projection freshness/catching-up state for
   Library usage counts.
-- [ ] Add Pumas search/download/delete actions where backend support exists.
+- [x] Add Pumas search/download/delete actions where backend support exists.
 - [x] Avoid optimistic display of asset mutations.
 
 **Verification:**
@@ -301,12 +301,13 @@ projections.
 - Tests cover rejected Pumas/Library actions without optimistic local mutation.
 - Accessibility checks cover asset action buttons and filters.
 
-**Status:** Partially complete. `LibraryPage.svelte` now queries
+**Status:** Complete for the first audited UI pass. `LibraryPage.svelte` now queries
 `workflowService.queryLibraryUsage`, renders a dense usage/audit table, shows
 projection freshness, formats asset categories from explicit id prefixes, and
 highlights rows whose `last_workflow_run_id` exactly matches the active run.
-Pumas search/download/delete actions remain open because the frontend workflow
-service does not yet expose typed confirmed mutation commands for those actions.
+It also exposes audited Pumas HuggingFace search, download start, and model
+delete controls through typed workflow service commands. Action results refresh
+the backend projection and do not optimistically mutate Library usage state.
 
 ### Milestone 6: Network And Node Editor Pages
 
@@ -446,9 +447,10 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
 - No-active-run retained artifact browsing now uses an optional
   `workflow_run_id` query filter and still returns metadata only; payload body
   dereferencing remains blocked on a typed payload body API.
-- Pumas search/download/delete UI is deferred because there is no typed
-  frontend workflow service method that confirms those mutations and can be
-  refreshed without optimistic local state.
+- Pumas search/download/delete UI is limited to the audited commands currently
+  exposed by the frontend workflow service. The page refreshes projections after
+  confirmed backend responses and does not optimistically mutate local usage
+  rows.
 - The first run graph view uses a lightweight read-only SVG snapshot instead
   of the full graph editor package because the current editor components are
   bound to the live workflow store.
@@ -476,8 +478,8 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
   run or global artifact scope.
 - Add payload-body media previews after typed payload body access is exposed
   through a service.
-- Add typed Pumas/Library mutation service methods before adding Library action
-  buttons.
+- Add richer Library/Pumas progress projections for downloads after Pumas
+  exposes typed download status, byte, and cache-state facts.
 - Audit any future executor path that bypasses `WorkflowTraceStore` before it
   can drive graph runtime-status overlays.
 - Add typed diagnostics facet projections for scheduler estimates, selected and
