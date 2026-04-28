@@ -2,9 +2,15 @@
 
 ## Status
 
-Draft plan. Not implemented.
+In progress. Workflow identity/version foundations, the typed diagnostics event
+ledger, incremental projection cursors, scheduler estimates/events, the
+Scheduler-first shell, and first-pass Scheduler, Diagnostics, Graph,
+I/O Inspector, Library, Network, and Node Editor pages have landed. Remaining
+work is tracked in the numbered stage files and centers on richer scheduler
+controls, deeper comparison projections, payload-store/body handling, concrete
+local cache residency, and final verification gates.
 
-Last updated: 2026-04-27.
+Last updated: 2026-04-28.
 
 ## Source Documents
 
@@ -253,8 +259,11 @@ retention state, and Pumas/Library audit records.
 
 **Status:** In progress. The typed event ledger, monotonic `event_seq`,
 projection state cursors, run/scheduler/I/O/Library projections, and explicit
-projection rebuild path are implemented. Retention cleanup and broader
-Pumas/Library audit instrumentation remain open.
+projection rebuild path are implemented. Retention cleanup and audited
+Pumas/Library search, download, delete, and access paths have first production
+coverage. Warm diagnostics/performance summaries, node-to-node intermediate
+I/O, physical payload-store lifecycle, and cache/network observations remain
+open.
 
 ### Milestone 4: API Projection Freeze
 
@@ -300,7 +309,8 @@ Scheduler-first workbench and active-run navigation.
 by default, selected-run context drives page content, and the Graph, Diagnostics,
 I/O Inspector, Library, Network, and Node Editor pages have first production
 surfaces. Remaining Stage `06` work is mostly richer backend projection fields,
-media payload renderers, Pumas actions, and queue/admin controls.
+payload body/media dereferencing, concrete local cache residency, and broader
+queue/admin controls.
 
 ### Milestone 6: Standards Review And Rollout
 
@@ -366,21 +376,39 @@ document why push/event delivery is not available yet.
 
 - 2026-04-27: first draft created from the run-centric GUI workbench
   requirements.
+- 2026-04-28: implementation progress updated after the first backend
+  projection, shell, page, scheduler control, retention, Library/Pumas audit,
+  local Network, and scheduler model-cache posture slices landed.
 
 ## Completion Summary
 
 ### Completed
 
-- None. Draft plan only.
+- Workflow identity/version, immutable run snapshot, and presentation revision
+  foundations are implemented.
+- Typed diagnostic event ledger, incremental materialized projections, and
+  explicit projection rebuild paths are implemented for the first run-centric
+  read models.
+- Scheduler estimate, placement, delay, admission, reservation, model
+  lifecycle, and queue-control event paths are implemented for current backend
+  scheduler behavior.
+- Scheduler-first workbench shell and first-pass Scheduler, Diagnostics,
+  Graph, I/O Inspector, Library, Network, and Node Editor pages are
+  implemented against projection services.
 
 ### Deviations
 
-- None.
+- The drawing-to-Svelte startup surface was retired from root navigation
+  instead of carried forward as a compatibility mode.
+- Local Network and Node Editor reserved-page slices landed during page work
+  before full distributed networking or node authoring exists.
 
 ### Follow-Ups
 
-- Review stage boundaries with the user before implementation.
-- Decide which stages require ADRs before code changes.
+- Finish the remaining open items recorded in Stages `01` through `07`.
+- Decide whether additional implementation-wave plans are needed for the
+  remaining scheduler/admin, diagnostics comparison, payload-store, and cache
+  residency work.
 
 ### Verification Summary
 

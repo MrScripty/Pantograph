@@ -60,8 +60,9 @@ appropriate.
 - Scheduler authority remains backend-owned.
 - Existing dirty user/generated files outside this directory must not be
   reverted or included in implementation commits.
-- This plan set is a first draft for iteration, not a final implementation
-  lock.
+- This plan set is the current implementation authority for the run-centric
+  workbench effort. The numbered files record both planned scope and
+  implementation progress.
 - Backwards compatibility with existing saved workflow files, old run history,
   and old graph fingerprint semantics is not required. Implementation may
   delete, ignore, or regenerate old records when the clean contracts land.

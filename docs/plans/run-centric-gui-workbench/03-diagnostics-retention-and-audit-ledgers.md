@@ -2,17 +2,18 @@
 
 ## Status
 
-In progress. Stage `01` has started the version-aware diagnostics filter
-cutover by adding workflow-version and node contract version/digest filters to
-the existing model/license usage diagnostics path. Stage `03` has started the
-typed event ledger bootstrap in `pantograph-diagnostics-ledger` with validated
-event contracts, append-only SQLite storage, bounded payloads, monotonic
-`event_seq`, and `projection_state` cursor persistence. The workflow-service
-run snapshot path now emits typed `run.snapshot_accepted` events, and the
-workflow-session scheduler emits typed `scheduler.estimate_produced` and
-`scheduler.queue_placement` events when a diagnostics ledger is configured.
-Retention, I/O, Library/Pumas emitters, and materialized projection tables
-remain pending.
+In progress. Stage `03` now has the typed event ledger, append-only SQLite
+storage, bounded payloads, monotonic `event_seq`, `projection_state` cursor
+persistence, explicit projection rebuild commands, hot run/scheduler/I/O/node
+status projections, and the first warm Library usage projection. Run snapshots,
+run lifecycle, scheduler estimates/placement/delay/admission/reservation/model
+lifecycle/control events, workflow I/O artifact metadata, retention policy and
+artifact-state events, Library/Pumas audit events, runtime capability
+observations, and node execution-status events are implemented for the first
+production paths. Remaining work centers on warm diagnostics/performance
+summaries, richer comparison facets, node-to-node intermediate I/O, physical
+payload-store cleanup/status, persisted fine-grained retention settings, and
+production cache/network observations where source systems expose them.
 
 ## Objective
 

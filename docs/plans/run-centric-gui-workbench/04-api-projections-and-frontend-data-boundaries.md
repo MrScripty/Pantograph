@@ -2,7 +2,14 @@
 
 ## Status
 
-Draft plan. Not implemented.
+In progress. Backend projection DTOs, Tauri/frontend service boundaries, hot
+run list/detail/scheduler timeline/estimate/graph/I/O/node-status projections,
+warm Library usage, retention policy/cleanup commands, local Network status,
+scoped queue controls, and first-pass GUI-admin queued-run controls are
+implemented. Remaining work is focused on immutable cancel/resubmit command
+boundaries, broader GUI-admin scheduler controls, Rust-side retirement of old
+debug/headless projection helpers, and broader DTO parity generation or schema
+checks.
 
 ## Objective
 
@@ -159,7 +166,12 @@ transport calls.
   abstraction and graceful degraded states.
 - Documentation records transport ownership and breaking-contract decisions.
 
-**Status:** Not started.
+**Status:** Complete for the accepted projection contract inventory. The
+projection families, freshness semantics, transport ownership, local Network
+degraded-state behavior, future peer placeholders, explicit error taxonomy,
+and paired Rust/TypeScript fixture parity approach are defined. Broader
+generated binding parity remains a follow-up rather than a blocker for current
+projection implementation.
 
 ### Milestone 2: Backend Projection Implementation
 
@@ -429,15 +441,19 @@ event consumer for normal page state.
 ### Completed
 
 - Backend projection boundaries implemented so far: run list, run detail,
-  scheduler timeline, I/O artifact metadata, Library/Pumas usage, retention
-  policy query/update, projection rebuild, historic run graph lookup by run id,
+  scheduler timeline, scheduler estimate facts, I/O artifact metadata,
+  node-status overlays, Library/Pumas usage, retention policy query/update,
+  retention cleanup, projection rebuild, historic run graph lookup by run id,
   and local Network status query.
 - Frontend service/type boundaries implemented so far for those projection
-  reads, the historic run graph lookup, and local Network status query.
+  reads, the historic run graph lookup, local Network status query, scoped
+  queue commands, first-pass GUI-admin queued-run commands, retention commands,
+  and audited Pumas search/download/delete actions.
 
 ### Deviations
 
-- None.
+- Native debug/headless diagnostics helpers remain internal until their
+  Rust-side retirement has a separate replacement plan.
 
 ### Follow-Ups
 

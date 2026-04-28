@@ -2,10 +2,12 @@
 
 ## Status
 
-In progress. The frontend now has a Scheduler-first workbench shell, transient
-active-run navigation, graph and diagnostics page wrappers, and reserved pages
-for I/O Inspector, Library, Network, and Node Editor. Rich I/O and Library page
-bodies remain later-stage work.
+Complete for the shell/navigation stage. The frontend now has a
+Scheduler-first workbench shell, transient active-run navigation, toolbar page
+switching, no-active-run states, root-shell ownership, and relocated graph
+editor access. Rich page bodies moved into Stage `06`, where first-pass
+Diagnostics, Graph, I/O Inspector, Library, Network, and Node Editor surfaces
+are now implemented against projection services.
 
 ## Objective
 

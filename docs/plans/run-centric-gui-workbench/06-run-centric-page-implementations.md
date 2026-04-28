@@ -5,9 +5,11 @@
 In progress. Stage `05` delivered the Scheduler-first shell, dense Scheduler
 table, local Network status page, and Node Editor reserved page. This stage now
 has first-pass Diagnostics, Graph, I/O Inspector, and Library pages backed by
-projection services. Deeper diagnostics facets, node status graph overlays,
-Pumas mutation actions, richer artifact payload renderers, and finer-grained
-retention setting groups remain open.
+projection services. Node-status graph overlays, audited Pumas
+search/download/delete actions, retention cleanup controls, and scheduler
+model-cache posture have landed. Deeper diagnostics facets, richer scheduler
+controls, payload body dereferencing/media previews, concrete local cache
+residency, and persisted fine-grained retention setting groups remain open.
 
 ## Objective
 

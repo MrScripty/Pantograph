@@ -2,36 +2,44 @@
 
 ## Status
 
-Accepted planning direction. Bootstrap implementation started in
-`pantograph-diagnostics-ledger`.
+Accepted architecture with active implementation in
+`pantograph-diagnostics-ledger` and `pantograph-workflow-service`.
 
-Last updated: 2026-04-27.
+Last updated: 2026-04-28.
 
 ## Implementation Progress
 
 - `pantograph-diagnostics-ledger` owns the typed event contract, SQLite event
-  storage, and projection cursor metadata.
-- Initial implemented event families are `scheduler.estimate_produced`,
-  `scheduler.queue_placement`, `run.snapshot_accepted`,
-  `io.artifact_observed`, `library.asset_accessed`,
-  `runtime.capability_observed`, and `retention.policy_changed`.
-- SQLite schema version `7` adds `diagnostic_events` and `projection_state`.
+  storage, projection cursor metadata, projection rebuild commands, and the
+  materialized read-model drains used by workbench pages.
+- Implemented event payload families include scheduler estimates, queue
+  placement/control, delay, admission, reservation, model lifecycle, run
+  snapshot/start/terminal lifecycle, I/O artifact observation, retention
+  policy/artifact-state changes, Library asset access, runtime capability
+  observation, and node execution status.
+- SQLite schema version `21` includes `diagnostic_events`, `projection_state`,
+  scheduler timeline, run list, run detail, I/O artifact, node status, and
+  Library usage projection tables plus the latest scheduler model-cache
+  projection fields.
 - Event append assigns durable monotonic `event_seq`, hashes bounded typed
   payload JSON, stores payload references separately, and rejects disallowed
   source components or missing required correlation fields.
 - `projection_state` persists projection version, status, rebuild timestamp,
   and `last_applied_event_seq` for incremental read-model drains.
-- The workflow-service queued run snapshot path emits
-  `run.snapshot_accepted` when a diagnostics ledger is configured.
-- The workflow-session scheduler emits `scheduler.estimate_produced` and
-  `scheduler.queue_placement` after queue insertion when a diagnostics ledger
-  is configured.
-- SQLite schema version `8` adds `scheduler_timeline_projection`, and the
-  diagnostics ledger can drain `run.snapshot_accepted`,
-  `scheduler.estimate_produced`, and `scheduler.queue_placement` events into
-  that materialized hot projection by `projection_state` cursor.
-- Warm projection tables, rebuild commands, page-facing API wiring, and
-  remaining feature emitters remain plan work.
+- Workflow-service paths now emit first-pass typed run, scheduler, I/O,
+  retention, Library/Pumas, runtime, and node-status events through backend
+  owned builders where implementation slices have source facts.
+- Hot projections cover run list, run detail/current status, scheduler
+  timeline, scheduler estimate facts, selected-run I/O artifact metadata, and
+  node execution status. The first warm projection covers Library usage with
+  catching-up freshness.
+- Ordinary page/API reads consume materialized projections and freshness
+  records. Explicit full rebuild is reserved for migration, corruption repair,
+  projection-version changes, and tests.
+- Remaining feature work is to add richer warm diagnostics summaries,
+  comparison facets, node-to-node intermediate I/O emitters, physical
+  payload-store lifecycle, and production cache/network observations where the
+  source systems expose those facts.
 
 ## Purpose
 
