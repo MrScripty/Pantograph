@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import type { WorkflowLocalNetworkNodeStatus } from '../../services/workflow/types.ts';
 import {
   buildNetworkFactRows,
+  buildSelectedRunPlacementRows,
   formatCpuUsage,
   formatGpuAvailability,
   formatNetworkBytes,
@@ -11,6 +12,7 @@ import {
   findSelectedRunPlacement,
   formatSelectedRunRequirementList,
   formatSelectedRunLocalState,
+  formatSelectedRunPlacementState,
   formatSelectedRunRuntimePosture,
   formatSessionLoad,
   formatTransportState,
@@ -121,8 +123,24 @@ test('network load presenters expose scheduler capacity', () => {
   assert.equal(formatSelectedRunRuntimePosture(placement), 'Runtime session loaded');
   assert.equal(formatSelectedRunRuntimePosture(findSelectedRunPlacement(node, 'run-queued')), 'Runtime session not loaded');
   assert.equal(formatSelectedRunRuntimePosture(null), 'Unavailable');
+  assert.equal(formatSelectedRunPlacementState(placement), 'Running locally');
+  assert.equal(formatSelectedRunPlacementState(findSelectedRunPlacement(node, 'run-queued')), 'Queued locally');
+  assert.equal(formatSelectedRunPlacementState(null), 'Unavailable');
   assert.equal(formatSelectedRunRequirementList(placement?.required_backends ?? [], 'No backends'), 'python');
   assert.equal(formatSelectedRunRequirementList([], 'No models'), 'No models');
+});
+
+test('buildSelectedRunPlacementRows exposes selected-run local relevance facts', () => {
+  const placement = findSelectedRunPlacement(createNode(), 'run-active');
+  const rows = buildSelectedRunPlacementRows(placement);
+
+  assert.equal(rows.find((row) => row.label === 'State')?.value, 'Running locally');
+  assert.equal(rows.find((row) => row.label === 'Session')?.value, 'session-active');
+  assert.equal(rows.find((row) => row.label === 'Workflow')?.value, 'workflow-a');
+  assert.equal(rows.find((row) => row.label === 'Runtime')?.value, 'Runtime session loaded');
+  assert.equal(rows.find((row) => row.label === 'Backends')?.value, 'python');
+  assert.equal(rows.find((row) => row.label === 'Models')?.value, 'model-a');
+  assert.equal(buildSelectedRunPlacementRows(null).find((row) => row.label === 'State')?.value, 'Not scheduled locally');
 });
 
 test('buildNetworkFactRows summarizes local node capabilities', () => {

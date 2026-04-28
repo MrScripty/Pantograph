@@ -25,8 +25,8 @@ later plan stages fill in richer page bodies.
 | `libraryUsagePresenters.test.ts` | Unit coverage for Library page presentation labels and active-run matching. |
 | `runGraphPresenters.ts` | Pure run graph summary, topology table, and SVG snapshot layout presenters. |
 | `runGraphPresenters.test.ts` | Unit coverage for run graph version/topology presentation without editor-store state. |
-| `NetworkPage.svelte` | Local-first node capability, scheduler load, selected-run scheduler events, disk, network-interface, degradation, and peer status page. |
-| `networkPagePresenters.ts` | Pure Network page byte, transport, degraded metric, scheduler load, and local capability presenters. |
+| `NetworkPage.svelte` | Local-first node capability, scheduler load, selected-run placement and scheduler events, disk, network-interface, degradation, and peer status page. |
+| `networkPagePresenters.ts` | Pure Network page byte, transport, degraded metric, scheduler load, selected-run placement, and local capability presenters. |
 | `networkPagePresenters.test.ts` | Unit coverage for Network page metric labels and degraded platform states. |
 | `workflowErrorPresenters.ts` | Shared workbench formatter for typed workflow service errors so backend categories remain visible in page messages. |
 | `workflowErrorPresenters.test.ts` | Unit coverage for backend error-envelope and transport-error formatting. |
@@ -124,6 +124,9 @@ transient UI state without becoming backend scheduler policy.
   page rows for comparison totals.
 - Network local-node summaries must render only API-reported local facts and
   peer records. They must not synthesize future Iroh state.
+- Network selected-run placement rows must come from local status placement
+  records. Components must not infer runtime/model state from workflow ids or
+  scheduler event payloads.
 - Workbench pages must not consume raw diagnostic ledger events.
 - Reserved pages must not invent backend state; they should display only data
   available through typed services or explicit unavailable states.

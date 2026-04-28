@@ -10,14 +10,13 @@
   import { activeWorkflowRun } from '../../stores/workbenchStore';
   import {
     buildNetworkFactRows,
+    buildSelectedRunPlacementRows,
     formatCpuUsage,
     formatNetworkBytes,
     formatNetworkTimestamp,
     formatSchedulerLoad,
     findSelectedRunPlacement,
-    formatSelectedRunRequirementList,
     formatSelectedRunLocalState,
-    formatSelectedRunRuntimePosture,
     formatSessionLoad,
     formatTransportState,
   } from './networkPagePresenters';
@@ -42,6 +41,7 @@
   let selectedRunPlacement = $derived(
     localNode ? findSelectedRunPlacement(localNode, $activeWorkflowRun?.workflow_run_id) : null,
   );
+  let selectedRunPlacementRows = $derived(buildSelectedRunPlacementRows(selectedRunPlacement));
   let timelineRequestSerial = 0;
 
   function activeRunId(): string | null {
@@ -223,28 +223,17 @@
               <section class="rounded border border-neutral-800 bg-neutral-900/50 p-4">
                 <h2 class="text-sm font-semibold text-neutral-100">Selected Run Placement</h2>
                 <dl class="mt-4 grid gap-3 text-xs sm:grid-cols-2">
-                  <div>
-                    <dt class="text-neutral-500">Session</dt>
-                    <dd class="mt-1 truncate font-mono text-neutral-200" title={selectedRunPlacement?.workflow_execution_session_id ?? ''}>
-                      {selectedRunPlacement?.workflow_execution_session_id ?? 'Unavailable'}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt class="text-neutral-500">Runtime</dt>
-                    <dd class="mt-1 text-neutral-200">{formatSelectedRunRuntimePosture(selectedRunPlacement)}</dd>
-                  </div>
-                  <div>
-                    <dt class="text-neutral-500">Backends</dt>
-                    <dd class="mt-1 truncate text-neutral-200" title={selectedRunPlacement?.required_backends.join(', ') ?? ''}>
-                      {formatSelectedRunRequirementList(selectedRunPlacement?.required_backends ?? [], 'No backend requirements')}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt class="text-neutral-500">Models</dt>
-                    <dd class="mt-1 truncate text-neutral-200" title={selectedRunPlacement?.required_models.join(', ') ?? ''}>
-                      {formatSelectedRunRequirementList(selectedRunPlacement?.required_models ?? [], 'No model requirements')}
-                    </dd>
-                  </div>
+                  {#each selectedRunPlacementRows as row (row.label)}
+                    <div>
+                      <dt class="text-neutral-500">{row.label}</dt>
+                      <dd
+                        class={`mt-1 truncate text-neutral-200 ${row.mono ? 'font-mono' : ''}`}
+                        title={row.value}
+                      >
+                        {row.value}
+                      </dd>
+                    </div>
+                  {/each}
                 </dl>
               </section>
             {/if}

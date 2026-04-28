@@ -369,7 +369,8 @@ unavailable probes as explicit degraded/unavailable states instead of fake zero
 values. The local status API now reports local active/queued run id lists, and
 the page uses those backend facts to show whether the selected run is running
 or queued locally. It also reports run-placement records with workflow
-execution-session id, runtime-loaded posture, and required backend/model facts.
+execution-session id, workflow id, local state, runtime-loaded posture, and
+required backend/model facts.
 Runtime/model cache highlights for the selected run remain open because the
 local status API still does not expose run-keyed cache residency facts. The
 page also reads the selected run's scheduler timeline projection so local

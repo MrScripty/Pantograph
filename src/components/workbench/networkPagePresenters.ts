@@ -7,7 +7,10 @@ import type {
 export interface NetworkFactRow {
   label: string;
   value: string;
+  mono?: boolean;
 }
+
+export type NetworkSelectedRunPlacementRow = NetworkFactRow;
 
 export function formatNetworkBytes(bytes: number | null | undefined): string {
   if (bytes === null || bytes === undefined) {
@@ -108,8 +111,49 @@ export function formatSelectedRunRuntimePosture(placement: WorkflowLocalRunPlace
   return placement.runtime_loaded ? 'Runtime session loaded' : 'Runtime session not loaded';
 }
 
+export function formatSelectedRunPlacementState(placement: WorkflowLocalRunPlacementRecord | null): string {
+  if (!placement) {
+    return 'Unavailable';
+  }
+  switch (placement.state) {
+    case 'running':
+      return 'Running locally';
+    case 'queued':
+      return 'Queued locally';
+  }
+}
+
 export function formatSelectedRunRequirementList(values: string[], emptyLabel: string): string {
   return values.length > 0 ? values.join(', ') : emptyLabel;
+}
+
+export function buildSelectedRunPlacementRows(
+  placement: WorkflowLocalRunPlacementRecord | null,
+): NetworkSelectedRunPlacementRow[] {
+  if (!placement) {
+    return [
+      { label: 'State', value: 'Not scheduled locally' },
+      { label: 'Session', value: 'Unavailable', mono: true },
+      { label: 'Workflow', value: 'Unavailable', mono: true },
+      { label: 'Runtime', value: 'Unavailable' },
+      { label: 'Backends', value: 'No backend requirements' },
+      { label: 'Models', value: 'No model requirements' },
+    ];
+  }
+  return [
+    { label: 'State', value: formatSelectedRunPlacementState(placement) },
+    { label: 'Session', value: placement.workflow_execution_session_id, mono: true },
+    { label: 'Workflow', value: placement.workflow_id, mono: true },
+    { label: 'Runtime', value: formatSelectedRunRuntimePosture(placement) },
+    {
+      label: 'Backends',
+      value: formatSelectedRunRequirementList(placement.required_backends, 'No backend requirements'),
+    },
+    {
+      label: 'Models',
+      value: formatSelectedRunRequirementList(placement.required_models, 'No model requirements'),
+    },
+  ];
 }
 
 export function buildNetworkFactRows(node: WorkflowLocalNetworkNodeStatus): NetworkFactRow[] {
