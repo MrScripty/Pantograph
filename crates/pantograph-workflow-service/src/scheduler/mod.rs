@@ -6,6 +6,7 @@ mod store_admission;
 pub(crate) use contracts::scheduler_snapshot_workflow_run_id;
 pub use contracts::{
     WorkflowAdminQueueCancelRequest, WorkflowAdminQueueCancelResponse,
+    WorkflowAdminQueueReprioritizeRequest, WorkflowAdminQueueReprioritizeResponse,
     WorkflowExecutionSessionAttributionContext, WorkflowExecutionSessionInspectionRequest,
     WorkflowExecutionSessionInspectionResponse, WorkflowExecutionSessionKeepAliveRequest,
     WorkflowExecutionSessionKeepAliveResponse, WorkflowExecutionSessionQueueCancelRequest,

@@ -41,8 +41,8 @@ owns in-memory session state that `WorkflowService` delegates to.
 `store_queue.rs` owns queue/run mutation and canonical admission-input
 construction so run-id ownership and queue policy do not keep growing the
 general session store. It also owns the run-id-to-session lookup used by
-GUI-admin queued-run cancellation so privileged transport callers do not scan
-or reinterpret scheduler internals.
+GUI-admin queued-run cancellation and priority override so privileged
+transport callers do not scan or reinterpret scheduler internals.
 `policy.rs` makes the current priority/FIFO queue behavior explicit and now
 also owns the first starvation-protection promotion rule plus the first
 runtime-affinity unload-ranking rule instead of leaving that behavior as ad hoc

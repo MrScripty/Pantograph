@@ -113,7 +113,7 @@ framework-injected state signatures for registration compatibility, with scoped
 lint expectations documenting that boundary exception instead of propagating
 long positional argument lists through runtime helpers.
 Execution-session queue cancel, reprioritize, push-front, and GUI-admin queued
-cancel commands stay thin transport wrappers over
+cancel/reprioritize commands stay thin transport wrappers over
 `pantograph-workflow-service`; Tauri registers the commands but does not
 compute queue priority, session ownership, authority, or audit outcomes.
 Scheduler estimate query commands likewise stay thin wrappers over

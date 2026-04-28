@@ -68,9 +68,10 @@ by external adapters.
 - Library asset access audit contract snapshots must preserve typed operation,
   cache-status, source-instance, and event-sequence fields because adapters use
   this API instead of raw ledger writes for Pumas/Library actions.
-- GUI-admin queue command contract snapshots must preserve the run-id-only
-  request and backend-authored session id response because Tauri/frontend
-  adapters must not derive the owning session themselves.
+- GUI-admin queue command contract snapshots must preserve run-id-only cancel,
+  run-id-plus-priority override, and backend-authored session id responses
+  because Tauri/frontend adapters must not derive the owning session
+  themselves.
 
 ## Revisit Triggers
 - Contract snapshots become large enough to justify fixture files.

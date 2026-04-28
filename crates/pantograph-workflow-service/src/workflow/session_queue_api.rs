@@ -10,6 +10,7 @@ use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId, WorkflowRunSnaps
 
 use super::{
     WorkflowAdminQueueCancelRequest, WorkflowAdminQueueCancelResponse,
+    WorkflowAdminQueueReprioritizeRequest, WorkflowAdminQueueReprioritizeResponse,
     WorkflowExecutionSessionInspectionRequest, WorkflowExecutionSessionInspectionResponse,
     WorkflowExecutionSessionQueueCancelRequest, WorkflowExecutionSessionQueueCancelResponse,
     WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionQueueListRequest,
@@ -309,6 +310,63 @@ impl WorkflowService {
                     SchedulerQueueControlAction::Reprioritize,
                     SchedulerQueueControlOutcome::Denied,
                     SchedulerQueueControlActorScope::ClientSession,
+                    Some(request.priority),
+                    Some(reason),
+                )?;
+                Err(error)
+            }
+        }
+    }
+
+    pub async fn workflow_admin_reprioritize_queue_item(
+        &self,
+        request: WorkflowAdminQueueReprioritizeRequest,
+    ) -> Result<WorkflowAdminQueueReprioritizeResponse, WorkflowServiceError> {
+        let workflow_run_id = request.workflow_run_id.trim();
+        if workflow_run_id.is_empty() {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "workflow_run_id must be non-empty".to_string(),
+            ));
+        }
+
+        let (session, previous_item, reprioritize_result) = {
+            let mut store = self.session_store_guard()?;
+            let session_id = store.session_id_for_queue_item(workflow_run_id)?;
+            let session = store.session_summary(&session_id)?;
+            let previous_item = store
+                .list_queue(&session_id)?
+                .into_iter()
+                .find(|item| item.workflow_run_id == workflow_run_id);
+            let reprioritize_result =
+                store.reprioritize_queue_item(&session_id, workflow_run_id, request.priority);
+            (session, previous_item, reprioritize_result)
+        };
+        match reprioritize_result {
+            Ok(()) => {
+                self.record_scheduler_queue_control_event_if_configured(
+                    &session,
+                    workflow_run_id,
+                    previous_item.as_ref(),
+                    SchedulerQueueControlAction::Reprioritize,
+                    SchedulerQueueControlOutcome::Accepted,
+                    SchedulerQueueControlActorScope::GuiAdmin,
+                    Some(request.priority),
+                    Some("admin reprioritized queue item".to_string()),
+                )?;
+                Ok(WorkflowAdminQueueReprioritizeResponse {
+                    ok: true,
+                    session_id: session.session_id,
+                })
+            }
+            Err(error) => {
+                let reason = queue_control_denial_reason(&error);
+                self.record_scheduler_queue_control_event_if_configured(
+                    &session,
+                    workflow_run_id,
+                    previous_item.as_ref(),
+                    SchedulerQueueControlAction::Reprioritize,
+                    SchedulerQueueControlOutcome::Denied,
+                    SchedulerQueueControlActorScope::GuiAdmin,
                     Some(request.priority),
                     Some(reason),
                 )?;

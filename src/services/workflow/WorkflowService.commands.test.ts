@@ -8,6 +8,7 @@ import type {
 } from '../diagnostics/types.ts';
 import type {
   WorkflowAdminQueueCancelResponse,
+  WorkflowAdminQueueReprioritizeResponse,
   WorkflowSessionQueueCancelResponse,
   WorkflowSessionQueuePushFrontResponse,
   WorkflowSessionQueueReprioritizeResponse,
@@ -72,6 +73,10 @@ test('queue control methods return backend command results exactly', async () =>
     ok: true,
     session_id: 'session-b',
   };
+  const adminReprioritizeResponse: WorkflowAdminQueueReprioritizeResponse = {
+    ok: true,
+    session_id: 'session-c',
+  };
   const reprioritizeResponse: WorkflowSessionQueueReprioritizeResponse = { ok: true };
   const pushFrontResponse: WorkflowSessionQueuePushFrontResponse = { ok: true, priority: 11 };
   mockIPC((cmd, args) => {
@@ -81,6 +86,9 @@ test('queue control methods return backend command results exactly', async () =>
     }
     if (cmd === 'workflow_admin_cancel_queue_item') {
       return adminCancelResponse;
+    }
+    if (cmd === 'workflow_admin_reprioritize_queue_item') {
+      return adminReprioritizeResponse;
     }
     if (cmd === 'workflow_reprioritize_execution_session_queue_item') {
       return reprioritizeResponse;
@@ -97,6 +105,10 @@ test('queue control methods return backend command results exactly', async () =>
     const adminCancel = await service.adminCancelQueueItem({
       workflow_run_id: 'run-admin',
     });
+    const adminReprioritize = await service.adminReprioritizeQueueItem({
+      workflow_run_id: 'run-admin-priority',
+      priority: 22,
+    });
     const reprioritize = await service.reprioritizeSessionQueueItem({
       session_id: 'session-a',
       workflow_run_id: 'run-b',
@@ -109,6 +121,7 @@ test('queue control methods return backend command results exactly', async () =>
 
     assert.deepEqual(cancel, cancelResponse);
     assert.deepEqual(adminCancel, adminCancelResponse);
+    assert.deepEqual(adminReprioritize, adminReprioritizeResponse);
     assert.deepEqual(reprioritize, reprioritizeResponse);
     assert.deepEqual(pushFront, pushFrontResponse);
     assert.deepEqual(calls, [
@@ -126,6 +139,15 @@ test('queue control methods return backend command results exactly', async () =>
         args: {
           request: {
             workflow_run_id: 'run-admin',
+          },
+        },
+      },
+      {
+        cmd: 'workflow_admin_reprioritize_queue_item',
+        args: {
+          request: {
+            workflow_run_id: 'run-admin-priority',
+            priority: 22,
           },
         },
       },

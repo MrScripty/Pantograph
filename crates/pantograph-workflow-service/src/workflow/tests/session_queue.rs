@@ -364,6 +364,45 @@ async fn workflow_admin_queue_cancel_finds_session_and_records_gui_scope() {
     assert!(first_items.is_empty());
     assert!(second_items.is_empty());
 
+    let admin_reprioritize_id = {
+        let mut store = service
+            .session_store
+            .lock()
+            .expect("session store lock poisoned");
+        store
+            .enqueue_run(
+                &first.session_id,
+                &WorkflowExecutionSessionRunRequest {
+                    session_id: first.session_id.clone(),
+                    ..request.clone()
+                },
+            )
+            .expect("enqueue admin-reprioritize run")
+    };
+    let reprioritize_response = service
+        .workflow_admin_reprioritize_queue_item(WorkflowAdminQueueReprioritizeRequest {
+            workflow_run_id: admin_reprioritize_id.clone(),
+            priority: 7,
+        })
+        .await
+        .expect("admin reprioritize queue item");
+    assert_eq!(reprioritize_response.session_id, first.session_id);
+    let reprioritized_items = {
+        let store = service
+            .session_store
+            .lock()
+            .expect("session store lock poisoned");
+        store
+            .list_queue(&first.session_id)
+            .expect("first queue should remain accessible")
+    };
+    assert_eq!(reprioritized_items.len(), 1);
+    assert_eq!(
+        reprioritized_items[0].workflow_run_id,
+        admin_reprioritize_id
+    );
+    assert_eq!(reprioritized_items[0].priority, 7);
+
     let diagnostic_events = {
         let ledger = service
             .diagnostics_ledger_guard()
@@ -380,7 +419,7 @@ async fn workflow_admin_queue_cancel_finds_session_and_records_gui_scope() {
                 == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerQueueControl
         })
         .collect::<Vec<_>>();
-    assert_eq!(queue_control_events.len(), 1);
+    assert_eq!(queue_control_events.len(), 2);
     assert_eq!(
         queue_control_events[0]
             .workflow_run_id
@@ -397,6 +436,25 @@ async fn workflow_admin_queue_cancel_finds_session_and_records_gui_scope() {
     assert!(queue_control_events[0]
         .payload_json
         .contains("admin cancelled queue item"));
+    assert_eq!(
+        queue_control_events[1]
+            .workflow_run_id
+            .as_ref()
+            .map(|id| id.as_str()),
+        Some(admin_reprioritize_id.as_str())
+    );
+    assert!(queue_control_events[1]
+        .payload_json
+        .contains("\"actor_scope\":\"gui_admin\""));
+    assert!(queue_control_events[1]
+        .payload_json
+        .contains("\"action\":\"reprioritize\""));
+    assert!(queue_control_events[1]
+        .payload_json
+        .contains("\"new_priority\":7"));
+    assert!(queue_control_events[1]
+        .payload_json
+        .contains("admin reprioritized queue item"));
 }
 
 #[tokio::test]

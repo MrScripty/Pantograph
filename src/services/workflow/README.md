@@ -266,7 +266,8 @@ const preview = await workflowService.previewNodeInsertOnEdge(
   classified as `transport_error` so they are not confused with backend policy
   rejections.
 - `updateRetentionPolicy`, `cancelSessionQueueItem`,
-  `adminCancelQueueItem`, `reprioritizeSessionQueueItem`, and
-  `pushSessionQueueItemToFront` resolve only with backend response DTOs.
+  `adminCancelQueueItem`, `adminReprioritizeQueueItem`,
+  `reprioritizeSessionQueueItem`, and `pushSessionQueueItemToFront` resolve
+  only with backend response DTOs.
   Callers refresh projections or apply the returned backend policy; they do not
   optimistically mutate queue rows or retention facts.

@@ -4,14 +4,15 @@
 //! Pantograph embedded runtime.
 
 use pantograph_workflow_service::{
-    WorkflowAdminQueueCancelRequest, WorkflowAdminQueueCancelResponse, WorkflowCapabilitiesRequest,
-    WorkflowCapabilitiesResponse, WorkflowExecutionSessionCloseRequest,
-    WorkflowExecutionSessionCloseResponse, WorkflowExecutionSessionCreateRequest,
-    WorkflowExecutionSessionCreateResponse, WorkflowExecutionSessionKeepAliveRequest,
-    WorkflowExecutionSessionKeepAliveResponse, WorkflowExecutionSessionQueueCancelRequest,
-    WorkflowExecutionSessionQueueCancelResponse, WorkflowExecutionSessionQueueListRequest,
-    WorkflowExecutionSessionQueueListResponse, WorkflowExecutionSessionQueuePushFrontRequest,
-    WorkflowExecutionSessionQueuePushFrontResponse,
+    WorkflowAdminQueueCancelRequest, WorkflowAdminQueueCancelResponse,
+    WorkflowAdminQueueReprioritizeRequest, WorkflowAdminQueueReprioritizeResponse,
+    WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse,
+    WorkflowExecutionSessionCloseRequest, WorkflowExecutionSessionCloseResponse,
+    WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionCreateResponse,
+    WorkflowExecutionSessionKeepAliveRequest, WorkflowExecutionSessionKeepAliveResponse,
+    WorkflowExecutionSessionQueueCancelRequest, WorkflowExecutionSessionQueueCancelResponse,
+    WorkflowExecutionSessionQueueListRequest, WorkflowExecutionSessionQueueListResponse,
+    WorkflowExecutionSessionQueuePushFrontRequest, WorkflowExecutionSessionQueuePushFrontResponse,
     WorkflowExecutionSessionQueueReprioritizeRequest,
     WorkflowExecutionSessionQueueReprioritizeResponse, WorkflowExecutionSessionRunRequest,
     WorkflowExecutionSessionStaleCleanupRequest, WorkflowExecutionSessionStaleCleanupResponse,
@@ -363,6 +364,16 @@ pub async fn workflow_reprioritize_execution_session_queue_item(
 ) -> Result<WorkflowExecutionSessionQueueReprioritizeResponse, String> {
     workflow_service
         .workflow_reprioritize_execution_session_queue_item(request)
+        .await
+        .map_err(workflow_error_json)
+}
+
+pub async fn workflow_admin_reprioritize_queue_item(
+    request: WorkflowAdminQueueReprioritizeRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowAdminQueueReprioritizeResponse, String> {
+    workflow_service
+        .workflow_admin_reprioritize_queue_item(request)
         .await
         .map_err(workflow_error_json)
 }

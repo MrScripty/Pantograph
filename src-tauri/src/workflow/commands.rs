@@ -407,6 +407,18 @@ pub async fn workflow_reprioritize_execution_session_queue_item(
 }
 
 #[command]
+pub async fn workflow_admin_reprioritize_queue_item(
+    request: pantograph_workflow_service::WorkflowAdminQueueReprioritizeRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<pantograph_workflow_service::WorkflowAdminQueueReprioritizeResponse, String> {
+    super::headless_workflow_commands::workflow_admin_reprioritize_queue_item(
+        request,
+        workflow_service,
+    )
+    .await
+}
+
+#[command]
 pub async fn workflow_push_execution_session_queue_item_to_front(
     request: pantograph_workflow_service::WorkflowExecutionSessionQueuePushFrontRequest,
     workflow_service: State<'_, SharedWorkflowService>,

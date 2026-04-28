@@ -88,8 +88,8 @@ Session creation and queued session run methods now live behind the facade in
 the workflow session execution API helper.
 Session status, queue inspection, scheduler snapshot, session-scoped
 cancellation/reprioritization/push-front methods, and the first GUI-admin
-queued-run cancel boundary now live behind the facade in the workflow session
-queue API helper.
+queued-run cancel/reprioritize boundaries now live behind the facade in the
+workflow session queue API helper.
 Stale cleanup, stale cleanup worker, keep-alive, and close-session methods now
 live behind the facade in the workflow session lifecycle API helper.
 Model/license usage diagnostics query methods now live behind the facade in the

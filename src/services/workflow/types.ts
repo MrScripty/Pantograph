@@ -472,6 +472,16 @@ export interface WorkflowAdminQueueCancelResponse {
   session_id: string;
 }
 
+export interface WorkflowAdminQueueReprioritizeRequest {
+  workflow_run_id: string;
+  priority: number;
+}
+
+export interface WorkflowAdminQueueReprioritizeResponse {
+  ok: boolean;
+  session_id: string;
+}
+
 export interface WorkflowSessionQueuePushFrontRequest {
   session_id: string;
   workflow_run_id: string;
