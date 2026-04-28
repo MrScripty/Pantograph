@@ -645,8 +645,13 @@ export interface PumasHfModelSearchAuditRequest {
   hydrateLimit?: number | null;
 }
 
+export interface PumasHfModelSearchResult {
+  id?: string | null;
+  [key: string]: unknown;
+}
+
 export interface PumasHfModelSearchAuditResponse {
-  models: unknown[];
+  models: PumasHfModelSearchResult[];
   auditEventSeq?: number | null;
 }
 

@@ -186,7 +186,9 @@ transient UI state without becoming backend scheduler policy.
   the backend cleanup count, and refresh artifact metadata from projections
   instead of removing artifact cards locally.
 - `LibraryPage.svelte` reads usage and audit summaries through
-  `workflowService.queryLibraryUsage`.
+  `workflowService.queryLibraryUsage`. Audited HuggingFace search results use
+  the typed diagnostics service result shape and render model ids without
+  treating provider rows as arbitrary `unknown` values.
 
 ## Structured Producer Contract
 - Workbench navigation order comes from `WORKBENCH_PAGES` in

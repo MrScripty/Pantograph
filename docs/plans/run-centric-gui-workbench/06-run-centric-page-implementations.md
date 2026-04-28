@@ -326,8 +326,10 @@ payload-store status controls remain open pending richer backend projections.
 projection freshness, formats asset categories from explicit id prefixes, and
 highlights rows whose `last_workflow_run_id` exactly matches the active run.
 It also exposes audited Pumas HuggingFace search, download start, and model
-delete controls through typed workflow service commands. Action results refresh
-the backend projection and do not optimistically mutate Library usage state.
+delete controls through typed workflow service commands. HuggingFace search
+results now use a typed frontend result shape for displayed ids instead of
+`unknown` rows. Action results refresh the backend projection and do not
+optimistically mutate Library usage state.
 
 ### Milestone 6: Network And Node Editor Pages
 

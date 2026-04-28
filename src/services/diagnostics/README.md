@@ -97,7 +97,9 @@ projection without inventing fallback run identities or workflow display names.
   ids or Library state.
 - Pumas HuggingFace search audit DTOs mirror the backend command response so
   GUI controls can display search results and audit outcomes without
-  synthesizing Library usage facts.
+  synthesizing Library usage facts. Search result rows use a typed additive
+  shape with optional `id` plus provider fields, not `unknown`, so components
+  can render stable model labels while still tolerating new backend fields.
 - Pumas HuggingFace download-start audit DTOs mirror the backend command
   response so GUI controls can display download ids and audit outcomes without
   synthesizing Library audit facts.

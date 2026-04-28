@@ -3,6 +3,7 @@
   import { Download, RefreshCw, Search, Trash2 } from 'lucide-svelte';
   import type {
     LibraryUsageProjectionRecord,
+    PumasHfModelSearchResult,
     ProjectionStateRecord,
   } from '../../services/diagnostics/types';
   import { workflowService } from '../../services/workflow/WorkflowService';
@@ -25,7 +26,7 @@
   let hfSearchQuery = $state('');
   let hfSearchKind = $state('');
   let hfSearchLimit = $state(25);
-  let hfSearchResults = $state<unknown[]>([]);
+  let hfSearchResults = $state<PumasHfModelSearchResult[]>([]);
   let downloadRepoId = $state('');
   let downloadFamily = $state('model');
   let downloadOfficialName = $state('');
@@ -37,12 +38,9 @@
     return new Date(value).toLocaleString();
   }
 
-  function modelLabel(model: unknown): string {
-    if (typeof model === 'object' && model !== null && 'id' in model) {
-      const id = (model as { id?: unknown }).id;
-      if (typeof id === 'string' && id.trim().length > 0) {
-        return id;
-      }
+  function modelLabel(model: PumasHfModelSearchResult): string {
+    if (typeof model.id === 'string' && model.id.trim().length > 0) {
+      return model.id;
     }
     return 'Unknown model';
   }
@@ -201,7 +199,7 @@
       </div>
       {#if hfSearchResults.length > 0}
         <div class="flex min-h-8 gap-2 overflow-x-auto">
-          {#each hfSearchResults.slice(0, 8) as model (model.id)}
+          {#each hfSearchResults.slice(0, 8) as model, index (model.id ?? index)}
             <span class="shrink-0 rounded border border-neutral-800 px-2 py-1 font-mono text-[11px] text-neutral-300">
               {modelLabel(model)}
             </span>
