@@ -1172,7 +1172,15 @@ impl WorkflowService {
                                 &binding.node_id,
                                 &binding.port_id,
                             ),
-                            artifact_role: role,
+                            artifact_role: role.clone(),
+                            producer_node_id: (role == IoArtifactRole::WorkflowOutput)
+                                .then(|| binding.node_id.clone()),
+                            producer_port_id: (role == IoArtifactRole::WorkflowOutput)
+                                .then(|| binding.port_id.clone()),
+                            consumer_node_id: (role == IoArtifactRole::WorkflowInput)
+                                .then(|| binding.node_id.clone()),
+                            consumer_port_id: (role == IoArtifactRole::WorkflowInput)
+                                .then(|| binding.port_id.clone()),
                             media_type: Some("application/json".to_string()),
                             size_bytes: Some(value_json.len() as u64),
                             content_hash: Some(format!("blake3:{}", blake3::hash(&value_json))),

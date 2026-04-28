@@ -778,9 +778,10 @@ pub(super) fn query_io_artifact_projection(
         "SELECT event_seq, event_id, occurred_at_ms, recorded_at_ms, workflow_run_id,
                 workflow_id, workflow_version_id, workflow_semantic_version, node_id,
                 node_type, node_version, runtime_id, runtime_version, model_id,
-                model_version, artifact_id, artifact_role, media_type, size_bytes,
-                content_hash, payload_ref, retention_state, retention_reason,
-                retention_policy_id
+                model_version, artifact_id, artifact_role, producer_node_id,
+                producer_port_id, consumer_node_id, consumer_port_id, media_type,
+                size_bytes, content_hash, payload_ref, retention_state,
+                retention_reason, retention_policy_id
          FROM io_artifact_projection
          WHERE (?1 IS NULL OR workflow_run_id = ?1)
            AND (?2 IS NULL OR node_id = ?2)
@@ -862,9 +863,10 @@ pub(super) fn query_expirable_io_artifact_projection(
         "SELECT event_seq, event_id, occurred_at_ms, recorded_at_ms, workflow_run_id,
                 workflow_id, workflow_version_id, workflow_semantic_version, node_id,
                 node_type, node_version, runtime_id, runtime_version, model_id,
-                model_version, artifact_id, artifact_role, media_type, size_bytes,
-                content_hash, payload_ref, retention_state, retention_reason,
-                retention_policy_id
+                model_version, artifact_id, artifact_role, producer_node_id,
+                producer_port_id, consumer_node_id, consumer_port_id, media_type,
+                size_bytes, content_hash, payload_ref, retention_state,
+                retention_reason, retention_policy_id
          FROM io_artifact_projection
          WHERE retention_state = ?1
            AND occurred_at_ms < ?2
@@ -1576,6 +1578,10 @@ fn io_artifact_projection_record_from_event(
         model_version: event.model_version.clone(),
         artifact_id: payload.artifact_id,
         artifact_role: payload.artifact_role.as_db().to_string(),
+        producer_node_id: payload.producer_node_id,
+        producer_port_id: payload.producer_port_id,
+        consumer_node_id: payload.consumer_node_id,
+        consumer_port_id: payload.consumer_port_id,
         media_type: payload.media_type,
         size_bytes: payload.size_bytes,
         content_hash: payload.content_hash,
@@ -2259,11 +2265,13 @@ fn insert_io_artifact_projection(
             (event_seq, event_id, occurred_at_ms, recorded_at_ms, workflow_run_id,
              workflow_id, workflow_version_id, workflow_semantic_version, node_id,
              node_type, node_version, runtime_id, runtime_version, model_id,
-             model_version, artifact_id, artifact_role, media_type, size_bytes,
-             content_hash, payload_ref, retention_state, retention_reason,
-             retention_policy_id)
+             model_version, artifact_id, artifact_role, producer_node_id,
+             producer_port_id, consumer_node_id, consumer_port_id, media_type,
+             size_bytes, content_hash, payload_ref, retention_state,
+             retention_reason, retention_policy_id)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13,
-                 ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24)",
+                 ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24,
+                 ?25, ?26, ?27, ?28)",
         params![
             record.event_seq,
             record.event_id.as_str(),
@@ -2285,6 +2293,10 @@ fn insert_io_artifact_projection(
             record.model_version.as_deref(),
             record.artifact_id.as_str(),
             record.artifact_role.as_str(),
+            record.producer_node_id.as_deref(),
+            record.producer_port_id.as_deref(),
+            record.consumer_node_id.as_deref(),
+            record.consumer_port_id.as_deref(),
             record.media_type.as_deref(),
             record.size_bytes.map(|value| value as i64),
             record.content_hash.as_deref(),
@@ -2486,17 +2498,21 @@ fn io_artifact_projection_from_row(row: &Row<'_>) -> rusqlite::Result<IoArtifact
         model_version: row.get(14)?,
         artifact_id: row.get(15)?,
         artifact_role: row.get(16)?,
-        media_type: row.get(17)?,
+        producer_node_id: row.get(17)?,
+        producer_port_id: row.get(18)?,
+        consumer_node_id: row.get(19)?,
+        consumer_port_id: row.get(20)?,
+        media_type: row.get(21)?,
         size_bytes: row
-            .get::<_, Option<i64>>(18)?
+            .get::<_, Option<i64>>(22)?
             .map(|value| u64::try_from(value).unwrap_or(u64::MAX)),
-        content_hash: row.get(19)?,
-        payload_ref: row.get(20)?,
-        retention_state: row.get::<_, String>(21).and_then(|value| {
+        content_hash: row.get(23)?,
+        payload_ref: row.get(24)?,
+        retention_state: row.get::<_, String>(25).and_then(|value| {
             IoArtifactRetentionState::from_db(&value).map_err(sqlite_conversion_error)
         })?,
-        retention_reason: row.get(22)?,
-        retention_policy_id: row.get(23)?,
+        retention_reason: row.get(26)?,
+        retention_policy_id: row.get(27)?,
     })
 }
 

@@ -15,7 +15,7 @@ pub const RUN_LIST_PROJECTION_VERSION: i64 = 3;
 pub const RUN_DETAIL_PROJECTION_NAME: &str = "run_detail";
 pub const RUN_DETAIL_PROJECTION_VERSION: i64 = 2;
 pub const IO_ARTIFACT_PROJECTION_NAME: &str = "io_artifact";
-pub const IO_ARTIFACT_PROJECTION_VERSION: i64 = 3;
+pub const IO_ARTIFACT_PROJECTION_VERSION: i64 = 4;
 pub const LIBRARY_USAGE_PROJECTION_NAME: &str = "library_usage";
 pub const LIBRARY_USAGE_PROJECTION_VERSION: i64 = 1;
 pub const NODE_STATUS_PROJECTION_NAME: &str = "node_status";
@@ -562,6 +562,14 @@ impl IoArtifactRole {
 pub struct IoArtifactObservedPayload {
     pub artifact_id: String,
     pub artifact_role: IoArtifactRole,
+    #[serde(default)]
+    pub producer_node_id: Option<String>,
+    #[serde(default)]
+    pub producer_port_id: Option<String>,
+    #[serde(default)]
+    pub consumer_node_id: Option<String>,
+    #[serde(default)]
+    pub consumer_port_id: Option<String>,
     pub media_type: Option<String>,
     pub size_bytes: Option<u64>,
     pub content_hash: Option<String>,
@@ -574,6 +582,26 @@ pub struct IoArtifactObservedPayload {
 impl IoArtifactObservedPayload {
     fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
         validate_required_text("artifact_id", &self.artifact_id, MAX_ID_LEN)?;
+        validate_optional_text(
+            "producer_node_id",
+            self.producer_node_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "producer_port_id",
+            self.producer_port_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "consumer_node_id",
+            self.consumer_node_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "consumer_port_id",
+            self.consumer_port_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
         validate_optional_text("media_type", self.media_type.as_deref(), MAX_ID_LEN)?;
         validate_optional_text("content_hash", self.content_hash.as_deref(), MAX_ID_LEN)?;
         validate_optional_text(
@@ -1298,6 +1326,10 @@ pub struct IoArtifactProjectionRecord {
     pub model_version: Option<String>,
     pub artifact_id: String,
     pub artifact_role: String,
+    pub producer_node_id: Option<String>,
+    pub producer_port_id: Option<String>,
+    pub consumer_node_id: Option<String>,
+    pub consumer_port_id: Option<String>,
     pub media_type: Option<String>,
     pub size_bytes: Option<u64>,
     pub content_hash: Option<String>,

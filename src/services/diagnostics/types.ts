@@ -395,6 +395,10 @@ export interface IoArtifactProjectionRecord {
   model_version?: string | null;
   artifact_id: string;
   artifact_role: string;
+  producer_node_id?: string | null;
+  producer_port_id?: string | null;
+  consumer_node_id?: string | null;
+  consumer_port_id?: string | null;
   media_type?: string | null;
   size_bytes?: number | null;
   content_hash?: string | null;

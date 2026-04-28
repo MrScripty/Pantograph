@@ -435,6 +435,15 @@ fn workflow_io_artifact_query_drains_and_reads_projection() {
     assert_eq!(response.artifacts[0].artifact_id, "artifact-b");
     assert_eq!(response.artifacts[0].artifact_role, "workflow_output");
     assert_eq!(
+        response.artifacts[0].producer_node_id.as_deref(),
+        Some("node-b")
+    );
+    assert_eq!(
+        response.artifacts[0].producer_port_id.as_deref(),
+        Some("out")
+    );
+    assert_eq!(response.artifacts[0].consumer_node_id, None);
+    assert_eq!(
         response.artifacts[0].retention_state,
         IoArtifactRetentionState::Retained
     );
@@ -1205,6 +1214,14 @@ fn sample_io_artifact_event(
         payload: DiagnosticEventPayload::IoArtifactObserved(IoArtifactObservedPayload {
             artifact_id: artifact_id.to_string(),
             artifact_role: io_artifact_role(artifact_role),
+            producer_node_id: matches!(artifact_role, "node_output" | "workflow_output")
+                .then(|| "node-b".to_string()),
+            producer_port_id: matches!(artifact_role, "node_output" | "workflow_output")
+                .then(|| "out".to_string()),
+            consumer_node_id: matches!(artifact_role, "node_input" | "workflow_input")
+                .then(|| "node-b".to_string()),
+            consumer_port_id: matches!(artifact_role, "node_input" | "workflow_input")
+                .then(|| "in".to_string()),
             media_type: Some("text/plain".to_string()),
             size_bytes: Some(42),
             content_hash: Some("blake3:test".to_string()),

@@ -85,6 +85,9 @@ helpers own restart-visible workflow run summaries.
   metadata/reference row per `workflow_run_id` and `artifact_id`.
 - I/O artifact roles are persisted from typed event enums to canonical labels;
   SQLite projection code must not accept ad hoc role strings from payloads.
+- I/O artifact producer and consumer node/port endpoints are persisted as
+  explicit projection columns. Query consumers should use those columns instead
+  of interpreting the event `node_id` as both producer and consumer.
 - I/O artifact drains persist typed retention-state columns so page/API
   consumers can distinguish retained, metadata-only, external, truncated,
   too-large, expired, and deleted payload states without parsing event payloads.

@@ -4,8 +4,8 @@ use crate::records::{RetentionClass, DEFAULT_STANDARD_RETENTION_DAYS};
 use crate::util::now_ms;
 use crate::DiagnosticsLedgerError;
 
-pub(crate) const SCHEMA_VERSION: i64 = 18;
-const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v18";
+pub(crate) const SCHEMA_VERSION: i64 = 19;
+const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v19";
 
 pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {
     tx.execute_batch(
@@ -225,6 +225,9 @@ pub(crate) fn migrate_schema(
     }
     if found < 18 {
         apply_workflow_execution_session_projection_migration(&tx)?;
+    }
+    if found < 19 {
+        apply_io_artifact_endpoint_migration(&tx)?;
     }
     if found < SCHEMA_VERSION {
         tx.execute(
@@ -702,6 +705,10 @@ fn apply_io_artifact_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagn
             model_version TEXT,
             artifact_id TEXT NOT NULL,
             artifact_role TEXT NOT NULL,
+            producer_node_id TEXT,
+            producer_port_id TEXT,
+            consumer_node_id TEXT,
+            consumer_port_id TEXT,
             media_type TEXT,
             size_bytes INTEGER,
             content_hash TEXT,
@@ -718,7 +725,44 @@ fn apply_io_artifact_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagn
             ON io_artifact_projection(artifact_role, event_seq);
         CREATE INDEX IF NOT EXISTS idx_io_artifact_projection_retention_state_seq
             ON io_artifact_projection(retention_state, event_seq);
+        CREATE INDEX IF NOT EXISTS idx_io_artifact_projection_producer_seq
+            ON io_artifact_projection(producer_node_id, event_seq);
+        CREATE INDEX IF NOT EXISTS idx_io_artifact_projection_consumer_seq
+            ON io_artifact_projection(consumer_node_id, event_seq);
         "#,
+    )?;
+    Ok(())
+}
+
+fn apply_io_artifact_endpoint_migration(
+    tx: &Transaction<'_>,
+) -> Result<(), DiagnosticsLedgerError> {
+    if !table_exists(tx, "io_artifact_projection")? {
+        apply_io_artifact_projection_schema(tx)?;
+        return Ok(());
+    }
+    for (column, definition) in [
+        ("producer_node_id", "TEXT"),
+        ("producer_port_id", "TEXT"),
+        ("consumer_node_id", "TEXT"),
+        ("consumer_port_id", "TEXT"),
+    ] {
+        if !column_exists(tx, "io_artifact_projection", column)? {
+            tx.execute(
+                &format!("ALTER TABLE io_artifact_projection ADD COLUMN {column} {definition}"),
+                [],
+            )?;
+        }
+    }
+    tx.execute(
+        "CREATE INDEX IF NOT EXISTS idx_io_artifact_projection_producer_seq
+            ON io_artifact_projection(producer_node_id, event_seq)",
+        [],
+    )?;
+    tx.execute(
+        "CREATE INDEX IF NOT EXISTS idx_io_artifact_projection_consumer_seq
+            ON io_artifact_projection(consumer_node_id, event_seq)",
+        [],
     )?;
     Ok(())
 }

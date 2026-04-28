@@ -234,6 +234,9 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
   through typed ledger events and are materialized into the current artifact
   projection row. Query responses also include retention-state summary counts
   from the same materialized projection.
+- I/O artifact projection rows expose producer and consumer node/port endpoint
+  fields separately from the event node id so workflow input/output metadata
+  and future node-to-node I/O can share one query contract.
 - Run-list query responses include comparison facets from backend
   `run_list_projection` rows for workflow version, status, scheduler policy,
   and retention policy.

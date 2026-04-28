@@ -1229,6 +1229,9 @@ fn io_artifact_projection_drains_artifact_events_incrementally() {
     assert_eq!(records[0].event_seq, input_event.event_seq);
     assert_eq!(records[0].artifact_id, "artifact_prompt");
     assert_eq!(records[0].artifact_role, "workflow_input");
+    assert_eq!(records[0].producer_node_id, None);
+    assert_eq!(records[0].consumer_node_id.as_deref(), Some("node_prompt"));
+    assert_eq!(records[0].consumer_port_id.as_deref(), Some("in"));
     assert_eq!(
         records[0].payload_ref.as_deref(),
         Some("artifact://artifact_prompt")
@@ -1241,6 +1244,9 @@ fn io_artifact_projection_drains_artifact_events_incrementally() {
     assert_eq!(records[1].event_seq, output_event.event_seq);
     assert_eq!(records[1].media_type.as_deref(), Some("image/png"));
     assert_eq!(records[1].size_bytes, Some(1_024));
+    assert_eq!(records[1].producer_node_id.as_deref(), Some("node_image"));
+    assert_eq!(records[1].producer_port_id.as_deref(), Some("out"));
+    assert_eq!(records[1].consumer_node_id, None);
 
     let global_records = ledger
         .query_io_artifact_projection(IoArtifactProjectionQuery {
@@ -2136,6 +2142,59 @@ fn existing_v17_schema_adds_workflow_execution_session_projection_columns() {
 }
 
 #[test]
+fn existing_v18_schema_adds_io_artifact_endpoint_columns() {
+    let temp = tempfile::NamedTempFile::new().expect("temp file");
+    let path = temp.path().to_path_buf();
+    {
+        let conn = Connection::open(&path).expect("connection opens");
+        conn.execute_batch(
+            "CREATE TABLE ledger_schema_migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at_ms INTEGER NOT NULL,
+                checksum TEXT NOT NULL
+            );
+            INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
+            VALUES (18, 0, 'pantograph-diagnostics-ledger-v18');
+            CREATE TABLE io_artifact_projection (
+                event_seq INTEGER PRIMARY KEY,
+                event_id TEXT NOT NULL UNIQUE,
+                workflow_run_id TEXT NOT NULL,
+                workflow_id TEXT NOT NULL,
+                artifact_id TEXT NOT NULL,
+                artifact_role TEXT NOT NULL,
+                retention_state TEXT NOT NULL
+            );",
+        )
+        .expect("v18 schema marker and old I/O artifact projection are installed");
+    }
+    {
+        let _ledger = SqliteDiagnosticsLedger::open(&path).expect("ledger migrates");
+    }
+    let conn = Connection::open(&path).expect("connection reopens");
+
+    for column in [
+        "producer_node_id",
+        "producer_port_id",
+        "consumer_node_id",
+        "consumer_port_id",
+    ] {
+        assert!(sqlite_column_exists(
+            &conn,
+            "io_artifact_projection",
+            column
+        ));
+    }
+    assert!(sqlite_index_exists(
+        &conn,
+        "idx_io_artifact_projection_producer_seq"
+    ));
+    assert!(sqlite_index_exists(
+        &conn,
+        "idx_io_artifact_projection_consumer_seq"
+    ));
+}
+
+#[test]
 fn unsupported_schema_version_is_rejected() {
     let conn = Connection::open_in_memory().expect("connection opens");
     conn.execute_batch(
@@ -2726,6 +2785,14 @@ fn sample_io_artifact_event(
         payload: DiagnosticEventPayload::IoArtifactObserved(IoArtifactObservedPayload {
             artifact_id: artifact_id.to_string(),
             artifact_role: io_artifact_role(artifact_role),
+            producer_node_id: matches!(artifact_role, "node_output" | "workflow_output")
+                .then(|| node_id.to_string()),
+            producer_port_id: matches!(artifact_role, "node_output" | "workflow_output")
+                .then(|| "out".to_string()),
+            consumer_node_id: matches!(artifact_role, "node_input" | "workflow_input")
+                .then(|| node_id.to_string()),
+            consumer_port_id: matches!(artifact_role, "node_input" | "workflow_input")
+                .then(|| "in".to_string()),
             media_type: Some("image/png".to_string()),
             size_bytes: Some(1_024),
             content_hash: Some("blake3:artifact-hash".to_string()),

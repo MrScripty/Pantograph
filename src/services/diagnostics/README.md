@@ -64,6 +64,9 @@ projection without inventing fallback run identities or workflow display names.
 - I/O artifact DTOs carry typed `retention_state` values. Consumers must not
   infer deleted, expired, external, truncated, or too-large states from
   `payload_ref` presence.
+- I/O artifact DTOs carry producer and consumer node/port fields. Consumers
+  should use those endpoint fields for browsing and filtering instead of
+  parsing payload JSON or overloading the event `node_id`.
 - I/O artifact responses carry `retention_summary` counts derived from backend
   projections. Consumers should display those counts instead of rebuilding
   completeness summaries from raw ledger events.

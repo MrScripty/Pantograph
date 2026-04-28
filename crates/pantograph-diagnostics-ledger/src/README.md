@@ -119,6 +119,10 @@ semantics.
   identifiers. Run-list queries can filter by those scope fields and
   accepted-at ranges. Payload JSON remains audit detail, not the normal GUI
   data path for those facts.
+- `io_artifact_projection` exposes artifact producer and consumer node/port
+  fields separately from the event node id so I/O browsing can distinguish
+  workflow inputs, workflow outputs, and future node-to-node artifacts without
+  parsing raw payload JSON.
 - Run-list facet queries group materialized run-list rows by workflow version,
   status, scheduler policy, and retention policy. They must not derive
   mixed-version warnings from raw ledger events or client-side page samples.
