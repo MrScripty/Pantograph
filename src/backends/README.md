@@ -20,6 +20,9 @@ would depend directly on invoke command names and payload conventions.
 ## Constraints
 - The adapter must preserve the package-level `WorkflowBackend` contract.
 - Tauri invoke names and payloads must stay aligned with Rust serde shapes.
+- Direct edit-session workflow execution must fail closed. Pantograph GUI
+  submission uses scheduler execution-session commands through the workflow
+  service boundary.
 - The app already has legacy services and stores, so the adapter cannot assume
   every caller has migrated at once.
 
@@ -35,6 +38,10 @@ stores apply directly instead of reconstructing local state first.
 Group create, ungroup, and update-port methods now call session-scoped Tauri
 commands that return the same graph mutation response shape, keeping collapsed
 group nodes and boundary edges backend-owned.
+`runSession()` intentionally throws for the Tauri adapter because the public GUI
+execution path is no longer an edit-session command. The app Graph page submits
+saved workflows through scheduler execution-session create/run/close commands
+owned by `src/services/workflow`.
 
 ## Alternatives Rejected
 - Call Tauri `invoke` directly from `WorkflowGraph.svelte`.
@@ -93,11 +100,11 @@ const session = await backend.createSession({ nodes: [], edges: [] });
   and `removeEdge` return updated graphs for store synchronization.
 - `createGroup`, `ungroup`, and `updateGroupPorts` return updated graphs for
   the same store synchronization path.
-- Session lifecycle ordering remains: create/load session before graph mutation
-  or execution, consume the returned backend session handle instead of
-  hardcoding local session classification, use `runSession()` as the only
-  execution path for an active editor session, and remove the session when the
-  consumer is done.
+- Session lifecycle ordering remains: create/load edit sessions before graph
+  mutation, consume the returned backend session handle instead of hardcoding
+  local session classification, and remove the edit session when the consumer is
+  done. Workflow execution is outside this adapter and must use scheduler
+  execution-session commands.
 - Compatibility policy is additive: new invoke-backed methods should extend the
   adapter without silently changing existing method semantics.
 

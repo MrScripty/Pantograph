@@ -10,8 +10,8 @@ on raw invoke payloads.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `WorkflowService.ts` | Main client-side workflow service, including session lifecycle, graph mutation, connection-intent commands, and atomic insert-and-connect. |
-| `WorkflowCommandService.ts` | Focused backend-owned queue and retention command service inherited by `WorkflowService` and tested without loading the graph runtime. |
-| `WorkflowService.commands.test.ts` | Tauri mock IPC tests proving queue and retention commands return backend-owned results without optimistic client replacement. |
+| `WorkflowCommandService.ts` | Focused backend-owned scheduler execution-session, queue, and retention command service inherited by `WorkflowService` and tested without loading the graph runtime. |
+| `WorkflowService.commands.test.ts` | Tauri mock IPC tests proving scheduler execution-session, queue, and retention commands return backend-owned results without optimistic client replacement. |
 | `WorkflowProjectionService.ts` | Focused projection service for scheduler timeline, scheduler estimate, run-list, selected-run, local Network, I/O artifact, and warm Library usage reads used by `WorkflowService` and projection boundary tests. |
 | `WorkflowService.projections.test.ts` | Tauri mock IPC tests proving scheduler timeline events, run-list facets, selected-run scheduler estimate fields, local Network scheduler-load/placement facts, and warm projection freshness state survive the service boundary. |
 | `workflowServiceErrors.ts` | Typed workflow command error normalizer and invoke wrapper for backend JSON error envelopes. |
@@ -92,6 +92,10 @@ backend/model facts for selected-run Network panels.
 Queue and retention command methods live in `WorkflowCommandService.ts` so
 their backend-owned no-optimistic-update contract can be tested without
 importing the full graph event runtime required by `WorkflowService.ts`.
+Scheduler execution-session create/run/close command methods also live in
+`WorkflowCommandService.ts`. Graph editor submission uses these methods against
+a saved workflow id so GUI-triggered runs enter the same scheduler queue,
+diagnostic ledger, and projection path as host-facing workflow sessions.
 Retention cleanup is a backend-owned command that returns cleanup counts and
 projection-derived state; frontend services forward the request and do not
 remove artifact cards optimistically.
@@ -177,6 +181,11 @@ preserve the backend download/audit response.
 - Queue and retention command methods must return backend-authored command
   responses exactly. Frontend code may show pending state while waiting, but it
   must not synthesize replacement queue state or retention policy facts.
+- Scheduler execution-session create/run/close methods must forward
+  `workflow_create_execution_session`, `workflow_run_execution_session`, and
+  `workflow_close_execution_session` requests under backend DTO envelopes.
+  Frontend code may choose the active page and selected run, but it must not
+  execute raw graphs or synthesize scheduler queue lifecycle facts.
 - Pumas model delete commands must return backend-authored delete/audit
   responses exactly. Frontend code may refresh Library projections afterward,
   but it must not synthesize audit event ids or local deletion state.
@@ -239,6 +248,10 @@ const preview = await workflowService.previewNodeInsertOnEdge(
 - Diagnostics and other run-scoped consumers must use `currentRunExecutionId`
   rather than reusing `currentExecutionId`, because session owners and run ids
   are intentionally distinct for session-backed execution.
+- Graph editor submission callers must submit saved workflow ids through
+  scheduler execution-session commands. Dirty or unsaved workflow graphs must
+  be saved before submission so versioning, diagnostics, and projections all
+  reference a backend-owned workflow identity.
 - Add/update/remove/move mutation methods return the updated graph for callers
   that need to refresh rendered state directly.
 - `getConnectionCandidates` returns compatible existing targets and insertable
@@ -283,6 +296,10 @@ const preview = await workflowService.previewNodeInsertOnEdge(
   `WorkflowServiceError.code`. Non-envelope IPC or setup failures are
   classified as `transport_error` so they are not confused with backend policy
   rejections.
+- `WorkflowCommandService` forwards scheduler execution-session create/run/close
+  commands exactly. The frontend treats `WorkflowRunResponse.workflow_run_id` as
+  the selected run handoff key after backend completion; run-list, timeline,
+  diagnostics, and I/O details still come from projections.
 - `updateRetentionPolicy`, `cancelSessionQueueItem`,
   `adminCancelQueueItem`, `adminReprioritizeQueueItem`,
   `adminPushQueueItemToFront`, `reprioritizeSessionQueueItem`, and

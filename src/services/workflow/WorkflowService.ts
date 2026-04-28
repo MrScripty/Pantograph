@@ -1,4 +1,4 @@
-import { invoke, Channel } from '@tauri-apps/api/core';
+import { invoke } from '@tauri-apps/api/core';
 import type {
   WorkflowNodeStatusQueryRequest,
   WorkflowNodeStatusQueryResponse,
@@ -24,10 +24,6 @@ import {
   MOCK_NODE_DEFINITIONS,
   mockValidateConnection,
 } from './mocks.ts';
-import {
-  getWorkflowEventWorkflowRunId,
-  projectWorkflowEventOwnership,
-} from '@pantograph/svelte-graph';
 import { parseWorkflowGraphMutationResponse } from '../../lib/workflowGraphMutationResponse.ts';
 import { WorkflowCommandService } from './WorkflowCommandService.ts';
 import { USE_WORKFLOW_MOCKS } from './workflowServiceConfig.ts';
@@ -53,19 +49,7 @@ interface WorkflowSessionQueueListRequest {
 }
 
 export class WorkflowService extends WorkflowCommandService {
-  private channel: Channel<WorkflowEvent> | null = null;
   private eventListeners: Set<(event: WorkflowEvent) => void> = new Set();
-
-  private publishEvent(event: WorkflowEvent): void {
-    this.currentRunExecutionId = projectWorkflowEventOwnership(
-      event,
-      this.currentRunExecutionId,
-    ).activeWorkflowRunId;
-    if (event.type === 'Started' && this.currentExecutionId === null) {
-      this.currentExecutionId = getWorkflowEventWorkflowRunId(event);
-    }
-    this.eventListeners.forEach((listener) => listener(event));
-  }
 
   // --- Node Definitions ---
 
@@ -149,35 +133,14 @@ export class WorkflowService extends WorkflowCommandService {
   }
 
   /**
-   * Run an existing workflow session by demanding outputs from terminal nodes.
-   * Uses the current session if no sessionId is provided.
+   * Direct edit-session execution has been removed from the app-facing GUI
+   * boundary. Submit saved workflows through scheduler execution-session
+   * commands instead.
    */
-  async runSession(sessionId?: string): Promise<WorkflowEditSessionRunResponse> {
-    const id = sessionId ?? this.currentExecutionId;
-    if (!id) {
-      throw new Error('No active session');
-    }
-
-    if (USE_WORKFLOW_MOCKS) {
-      console.log('[WorkflowService] Mock: Run session', id);
-      const workflowRunId = `mock-run-${Date.now()}`;
-      this.currentRunExecutionId = workflowRunId;
-      return { workflow_run_id: workflowRunId };
-    }
-
-    this.currentRunExecutionId = null;
-    this.channel = new Channel<WorkflowEvent>();
-
-    this.channel.onmessage = (event) => {
-      this.publishEvent(event);
-    };
-
-    const response = await invoke<WorkflowEditSessionRunResponse>('run_workflow_execution_session', {
-      sessionId: id,
-      channel: this.channel,
-    });
-    this.currentRunExecutionId = response.workflow_run_id;
-    return response;
+  async runSession(_sessionId?: string): Promise<WorkflowEditSessionRunResponse> {
+    throw new Error(
+      'Direct edit-session execution is unavailable; submit a saved workflow through scheduler execution session commands.',
+    );
   }
 
   async getWorkflowCapabilities(workflowId: string): Promise<WorkflowCapabilitiesResponse> {

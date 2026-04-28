@@ -15,7 +15,7 @@ owner of that policy itself.
 | `commands.rs` | Shared Tauri workflow state aliases plus non-execution command registration entrypoints. |
 | `workflow_execution_tauri_commands.rs` | Tauri execution/edit-session command entrypoints that forward to focused execution and graph-session helpers. |
 | `workflow_execution_commands.rs` | Thin execution command-group facade that reuses focused runtime and edit-session helpers. |
-| `workflow_execution_runtime.rs` | Desktop execution orchestration and diagnostics-emission helpers for edit-session workflow runs. |
+| `workflow_execution_runtime.rs` | Legacy desktop edit-session execution orchestration retained as internal code; it is not registered as a public GUI command. |
 | `execution_manager.rs` | Tauri execution-manager facade for host-local execution handles and stale-cleanup ownership. |
 | `execution_manager/` | Focused execution-state lifecycle helpers behind the public execution-manager facade. |
 | `event_adapter.rs` | Stable facade that bridges `node-engine` workflow events onto Tauri channels. |
@@ -48,6 +48,8 @@ while still handling desktop runtime execution concerns.
   the migration.
 - Runtime admission, reservation, retention, and eviction policy must not be
   implemented directly in Tauri workflow command handlers.
+- Public GUI workflow submission must enter through scheduler execution-session
+  commands. The legacy edit-session run command must stay unregistered.
 - Retention cleanup command handlers must stay transport-thin and delegate to
   `pantograph-workflow-service` so audit events and projection updates have one
   backend owner.
@@ -112,6 +114,11 @@ state inputs for internal orchestration. Tauri command entrypoints retain their
 framework-injected state signatures for registration compatibility, with scoped
 lint expectations documenting that boundary exception instead of propagating
 long positional argument lists through runtime helpers.
+The legacy edit-session `run_workflow_execution_session` Tauri command is not
+registered. Graph editing still uses edit sessions for mutation, undo, and redo,
+but workflow submission goes through scheduler-owned
+`workflow_create_execution_session`, `workflow_run_execution_session`, and
+`workflow_close_execution_session`.
 Execution-session queue cancel, reprioritize, push-front, and GUI-admin queued
 cancel/reprioritize/push-front commands stay thin transport wrappers over
 `pantograph-workflow-service`; Tauri registers the commands but does not

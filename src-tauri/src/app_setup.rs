@@ -401,7 +401,6 @@ pub fn run_app() -> AppStartupResult<()> {
             crate::workflow::commands::workflow_set_execution_session_keep_alive,
             // Node-engine workflow session commands
             crate::workflow::workflow_execution_tauri_commands::create_workflow_execution_session,
-            crate::workflow::workflow_execution_tauri_commands::run_workflow_execution_session,
             crate::workflow::workflow_execution_tauri_commands::get_undo_redo_state,
             crate::workflow::workflow_execution_tauri_commands::undo_workflow,
             crate::workflow::workflow_execution_tauri_commands::redo_workflow,

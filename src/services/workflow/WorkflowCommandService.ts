@@ -19,6 +19,12 @@ import type {
   WorkflowAdminQueuePushFrontResponse,
   WorkflowAdminQueueReprioritizeRequest,
   WorkflowAdminQueueReprioritizeResponse,
+  WorkflowExecutionSessionCloseRequest,
+  WorkflowExecutionSessionCloseResponse,
+  WorkflowExecutionSessionCreateRequest,
+  WorkflowExecutionSessionCreateResponse,
+  WorkflowExecutionSessionRunRequest,
+  WorkflowRunResponse,
   WorkflowSessionQueueCancelRequest,
   WorkflowSessionQueueCancelResponse,
   WorkflowSessionQueuePushFrontRequest,
@@ -31,6 +37,52 @@ import { USE_WORKFLOW_MOCKS } from './workflowServiceConfig.ts';
 import { invokeWorkflowCommand } from './workflowServiceErrors.ts';
 
 export class WorkflowCommandService extends WorkflowProjectionService {
+  async createWorkflowExecutionSession(
+    request: WorkflowExecutionSessionCreateRequest,
+  ): Promise<WorkflowExecutionSessionCreateResponse> {
+    if (USE_WORKFLOW_MOCKS) {
+      return {
+        session_id: `mock-execution-session-${Date.now()}`,
+        attribution: null,
+        runtime_capabilities: [],
+      };
+    }
+
+    return invokeWorkflowCommand<WorkflowExecutionSessionCreateResponse>(
+      'workflow_create_execution_session',
+      { request },
+    );
+  }
+
+  async runWorkflowExecutionSession(
+    request: WorkflowExecutionSessionRunRequest,
+  ): Promise<WorkflowRunResponse> {
+    if (USE_WORKFLOW_MOCKS) {
+      return {
+        workflow_run_id: `mock-run-${Date.now()}`,
+        outputs: [],
+        timing_ms: 0,
+      };
+    }
+
+    return invokeWorkflowCommand<WorkflowRunResponse>('workflow_run_execution_session', {
+      request,
+    });
+  }
+
+  async closeWorkflowExecutionSession(
+    request: WorkflowExecutionSessionCloseRequest,
+  ): Promise<WorkflowExecutionSessionCloseResponse> {
+    if (USE_WORKFLOW_MOCKS) {
+      return { ok: true };
+    }
+
+    return invokeWorkflowCommand<WorkflowExecutionSessionCloseResponse>(
+      'workflow_close_execution_session',
+      { request },
+    );
+  }
+
   async cancelSessionQueueItem(
     request: WorkflowSessionQueueCancelRequest,
   ): Promise<WorkflowSessionQueueCancelResponse> {

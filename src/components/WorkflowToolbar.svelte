@@ -1,36 +1,41 @@
 <script lang="ts">
-  import { CircleHelp, Loader2, Play } from 'lucide-svelte';
+  import { Loader2, Send } from 'lucide-svelte';
   import {
     isDirty,
     isExecuting,
-    setNodeExecutionState,
     resetExecutionStates,
-    edges,
-    updateNodeRuntimeData,
     clearNodeRuntimeData,
-    appendStreamContent,
-    setStreamContent,
     clearStreamContent,
   } from '../stores/workflowStore';
   import {
+    availableWorkflows,
+    currentGraphId,
+    currentGraphType,
     isReadOnly,
-    currentSessionId,
   } from '../stores/graphSessionStore';
   import { workflowService } from '../services/workflow/WorkflowService';
-  import type { WorkflowEvent } from '../services/workflow/types';
   import {
     AUDIO_RUNTIME_DATA_KEYS,
   } from './nodes/workflow/audioOutputState';
-  import { applyWorkflowToolbarEvent } from './workflowToolbarEvents.ts';
-  import { get } from 'svelte/store';
+  import {
+    selectActiveWorkflowRun,
+    setWorkbenchPage,
+  } from '../stores/workbenchStore';
   import WorkflowPersistenceControls from './WorkflowPersistenceControls.svelte';
+
+  const DEFAULT_WORKFLOW_SEMANTIC_VERSION = '0.1.0';
 
   let workflowError = $state<string | null>(null);
 
-  // Store unsubscribe function at module scope so event handler can access it
-  let currentUnsubscribe: (() => void) | null = null;
-  let activeWorkflowRunId: string | null = null;
-  let waitingForInput = $state(false);
+  let currentSavedWorkflow = $derived(
+    $currentGraphType === 'workflow'
+      ? $availableWorkflows.find((workflow) => (workflow.id ?? workflow.name) === $currentGraphId)
+      : undefined,
+  );
+  let submitDisabled = $derived(
+    $isExecuting || $isReadOnly || $isDirty || !currentSavedWorkflow || !$currentGraphId,
+  );
+  let submitTitle = $derived(submitButtonTitle());
 
   function normalizeError(error: unknown): string {
     if (error instanceof Error && error.message.trim().length > 0) {
@@ -42,7 +47,23 @@
     return String(error);
   }
 
-  async function handleRun() {
+  function submitButtonTitle(): string {
+    if ($isReadOnly) return 'Cannot submit a read-only graph';
+    if ($isDirty) return 'Save workflow changes before submitting';
+    if (!currentSavedWorkflow || !$currentGraphId) return 'Save the workflow before submitting';
+    if ($isExecuting) return 'Workflow submission is in progress';
+    return 'Submit workflow to the scheduler';
+  }
+
+  async function closeExecutionSession(sessionId: string): Promise<void> {
+    try {
+      await workflowService.closeWorkflowExecutionSession({ session_id: sessionId });
+    } catch (error) {
+      console.warn(`Failed to close execution session "${sessionId}":`, error);
+    }
+  }
+
+  async function handleSubmit() {
     if ($isExecuting) return;
 
     workflowError = null;
@@ -50,91 +71,50 @@
     clearNodeRuntimeData([...AUDIO_RUNTIME_DATA_KEYS]);
     resetExecutionStates();
     clearStreamContent();
-    activeWorkflowRunId = null;
-    waitingForInput = false;
-
-    // Subscribe to events - will be cleaned up in handleWorkflowEvent on completion/failure
-    currentUnsubscribe = workflowService.subscribeEvents(handleWorkflowEvent);
 
     try {
-      if (!$currentSessionId) {
-        throw new Error('No active workflow session');
+      if ($isReadOnly) {
+        throw new Error('Read-only graphs cannot be submitted');
       }
-      await workflowService.runSession($currentSessionId);
-      // Don't unsubscribe here - wait for Completed/Failed events
+      if ($isDirty) {
+        throw new Error('Save workflow changes before submitting');
+      }
+      if (!currentSavedWorkflow || !$currentGraphId) {
+        throw new Error('Save the workflow before submitting');
+      }
+
+      const executionSession = await workflowService.createWorkflowExecutionSession({
+        workflow_id: $currentGraphId,
+        usage_profile: null,
+        keep_alive: false,
+      });
+      const runPromise = workflowService.runWorkflowExecutionSession({
+        session_id: executionSession.session_id,
+        workflow_semantic_version: DEFAULT_WORKFLOW_SEMANTIC_VERSION,
+        inputs: [],
+        output_targets: null,
+        override_selection: null,
+        timeout_ms: null,
+        priority: null,
+      });
+
+      try {
+        const response = await runPromise;
+        selectActiveWorkflowRun({
+          workflow_run_id: response.workflow_run_id,
+          workflow_id: $currentGraphId,
+          workflow_semantic_version: DEFAULT_WORKFLOW_SEMANTIC_VERSION,
+          status: 'completed',
+        });
+        setWorkbenchPage('scheduler');
+      } finally {
+        await closeExecutionSession(executionSession.session_id);
+      }
     } catch (error) {
-      console.error('Workflow execution failed:', error);
+      console.error('Workflow submission failed:', error);
       workflowError = normalizeError(error);
-      // Only cleanup on synchronous errors (e.g., invoke failed)
+    } finally {
       isExecuting.set(false);
-      if (currentUnsubscribe) {
-        currentUnsubscribe();
-        currentUnsubscribe = null;
-      }
-      activeWorkflowRunId = null;
-      waitingForInput = false;
-    }
-  }
-
-  function cleanupExecution() {
-    isExecuting.set(false);
-    if (currentUnsubscribe) {
-      currentUnsubscribe();
-      currentUnsubscribe = null;
-    }
-    activeWorkflowRunId = null;
-    waitingForInput = false;
-  }
-
-  function handleWorkflowEvent(event: WorkflowEvent) {
-    const result = applyWorkflowToolbarEvent({
-      event,
-      activeWorkflowRunId,
-      waitingForInput,
-      edges: get(edges),
-      workflow: {
-        setNodeExecutionState,
-        updateNodeRuntimeData,
-        appendStreamContent,
-        setStreamContent,
-      },
-    });
-
-    activeWorkflowRunId = result.activeWorkflowRunId;
-    waitingForInput = result.waitingForInput;
-
-    if (!result.handled) {
-      return;
-    }
-
-    console.log('Workflow event:', event.type, event.data);
-
-    switch (event.type) {
-      case 'NodeError': {
-        const errorData = event.data as { node_id: string; error: string };
-        console.error(`Node ${errorData.node_id} failed:`, errorData.error);
-        break;
-      }
-      case 'Completed':
-        console.log('Workflow completed successfully');
-        workflowError = null;
-        break;
-      case 'Failed': {
-        const failedData = event.data as { error: string };
-        console.error('Workflow failed:', failedData.error);
-        workflowError = failedData.error;
-        break;
-      }
-      case 'Cancelled': {
-        const cancelledData = event.data as { error: string };
-        console.warn('Workflow cancelled:', cancelledData.error);
-        workflowError = null;
-        break;
-      }
-    }
-
-    if (result.shouldCleanup) {
-      cleanupExecution();
     }
   }
 
@@ -160,20 +140,16 @@
         class:hover:bg-green-500={!$isExecuting}
         class:bg-amber-600={$isExecuting}
         class:text-white={true}
-        onclick={handleRun}
-        disabled={$isExecuting}
+        onclick={handleSubmit}
+        disabled={submitDisabled}
+        title={submitTitle}
       >
         {#if $isExecuting}
-          {#if waitingForInput}
-            <CircleHelp size={14} aria-hidden="true" class="inline-block align-[-2px] mr-1" />
-            Waiting...
-          {:else}
-            <Loader2 size={14} aria-hidden="true" class="inline-block align-[-2px] mr-1" />
-            Running...
-          {/if}
+          <Loader2 size={14} aria-hidden="true" class="inline-block align-[-2px] mr-1" />
+          Submitting...
         {:else}
-          <Play size={14} aria-hidden="true" class="inline-block align-[-2px] mr-1" />
-          Run
+          <Send size={14} aria-hidden="true" class="inline-block align-[-2px] mr-1" />
+          Submit
         {/if}
       </button>
     </div>
@@ -181,7 +157,7 @@
 
   {#if workflowError}
     <div class="px-4 py-2 bg-red-900/70 border-b border-red-700 text-red-200 text-xs truncate" title={workflowError}>
-      Workflow failed: {workflowError}
+      Workflow submit failed: {workflowError}
     </div>
   {/if}
 </div>

@@ -98,10 +98,10 @@
     {#if waitingForInput}
       [?] Waiting...
     {:else}
-      [||] Running...
+      [||] Submitting...
     {/if}
   {:else}
-    [>] Run
+    [>] Submit
   {/if}
 </button>
 

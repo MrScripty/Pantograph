@@ -240,6 +240,9 @@ shell must not consume or interpret raw diagnostic ledger events.
   handoff actions.
 - Mounted the existing workflow graph under the Graph page and moved
   diagnostics rendering to the projection-backed Diagnostics page.
+- Updated the Graph editor action from Run to Submit and routed saved clean
+  workflow submissions through scheduler execution session create/run/close
+  commands before selecting the resulting run for workbench inspection.
 - Removed the root diagnostics-store startup hook and graph-toolbar diagnostics
   panel toggle so diagnostics are no longer a duplicate shell lifecycle.
 - Removed `src/stores/viewModeStore.ts` and the root canvas/workflow mode

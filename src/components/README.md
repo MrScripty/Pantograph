@@ -35,7 +35,7 @@ architecture views on top of the shared editor.
 | `NodePalette.svelte` | App palette for inserting workflow nodes into the active graph. |
 | `NodeGroupEditor.svelte` | App wrapper for group editing and exposed-port management. |
 | `NavigationBreadcrumb.svelte` | Breadcrumb UI for group/orchestration navigation. |
-| `WorkflowToolbar.svelte` | Toolbar actions for workflow graph persistence and execution. |
+| `WorkflowToolbar.svelte` | Toolbar actions for workflow graph persistence and scheduler-backed workflow submission. |
 | `workbench/` | Scheduler-first app shell, page wrappers, and active-run workbench views. |
 | `diagnostics/` | Legacy workflow diagnostics panel, tab views, and presentation helpers retained outside the active workbench shell. |
 | `nodes/` | Pantograph-specific node renderers and the shared app node shell. |
@@ -57,6 +57,8 @@ as the package graph so GUI behavior and backend validation stay aligned.
   starter workflow templates.
 - Diagnostics rendering should be owned by the workbench Diagnostics page. Graph
   execution controls should not subscribe to diagnostics state.
+- Graph editor workflow submission must use the scheduler execution session
+  boundary and must not directly execute the edit-session graph.
 - Settings-side runtime management must remain a presentation surface over the
   backend-owned managed-runtime contract rather than introducing GUI-owned
   runtime policy.
@@ -101,6 +103,11 @@ navigation surface and selected-run context. The graph is mounted through a page
 wrapper instead of being selected by the old root canvas/workflow mode switch,
 and diagnostics rendering now comes from the projection-backed workbench
 Diagnostics page.
+`WorkflowToolbar.svelte` labels the graph action as Submit and routes saved,
+clean workflows through scheduler execution session create/run/close commands.
+That keeps the Graph page on the same canonical run path as Scheduler,
+Diagnostics, and I/O Inspector instead of executing the edit-session graph
+directly.
 The app workflow graph delegates orchestration boundary overlay rendering to
 `WorkflowContainerBoundary.svelte` and boundary math to
 `workflowContainerBoundary.ts`, while the parent keeps viewport tracking,

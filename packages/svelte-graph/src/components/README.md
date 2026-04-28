@@ -12,7 +12,7 @@ shared node presentation rules live outside the Pantograph app shell.
 | `WorkflowGraph.svelte` | Main graph canvas that owns connect/reconnect flows, candidate loading, revision-aware edge commits, and the drag-time horseshoe insert flow. |
 | `WorkflowGraph.css` | Package graph canvas and SvelteFlow chrome styling imported by `WorkflowGraph.svelte`. |
 | `WorkflowToolbar.svelte` | Graph toolbar shell for workflow save/new/clear controls and status badges. |
-| `WorkflowRunButton.svelte` | Scheduler-backed run button, workflow-event subscription, active-run ownership, and run cleanup lifecycle. |
+| `WorkflowRunButton.svelte` | Submit button for backend run submission, workflow-event subscription, active-run ownership, and run cleanup lifecycle. |
 | `workflowGraphBackendActions.ts` | Owns package-local backend mutation calls, connection-intent loading, reconnect rollback, and accepted graph-sync projection used by `WorkflowGraph.svelte`. |
 | `../workflowGraphBackendActionCore.ts` | Provides dependency-injected backend action primitives shared by package and app graph action adapters. |
 | `../workflowGraphBackendActionCore.test.ts` | Unit coverage for shared mutation projection, connection rejection, edge removal, and reconnect rollback behavior. |
@@ -71,6 +71,9 @@ state cleanup.
 ## Constraints
 - Components must work with any `WorkflowBackend` implementation provided
   through graph context.
+- Run-submission UI must avoid implying local immediate execution; concrete
+  hosts decide whether `WorkflowBackend.runSession` is scheduler-backed or
+  another backend-owned run boundary.
 - Drag-time validation must be synchronous from the component perspective even
   though candidate discovery is async.
 - Node and edge components must preserve `@xyflow/svelte` expectations for
@@ -131,6 +134,10 @@ Rejected connection-intent fallback state also lives in
 `workflowConnections.ts`, so preserved compatible targets and insertable node
 types stay aligned while `WorkflowGraph.svelte` attaches backend rejection
 metadata.
+`WorkflowRunButton.svelte` labels its action as Submit so the package UI does
+not imply that the graph editor directly executes the workflow. The concrete
+host backend remains responsible for routing submission through its canonical
+run boundary.
 Package graph edge deletion, edge cutting, and reconnect-end cleanup now require
 an active session id before calling backend edge-removal APIs, avoiding empty
 session-id fallbacks while still allowing local node removal to proceed.

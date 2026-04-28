@@ -45,6 +45,11 @@ Binding and frontend contracts must expose scheduler-backed session execution,
 not raw graph or direct workflow-run helpers. Host/runtime traits may still own
 low-level execution mechanics, but those mechanics are implementation surfaces,
 not public caller entrypoints.
+The desktop GUI must not register the legacy edit-session
+`run_workflow_execution_session` command. Graph editing may keep edit sessions
+for mutation and undo/redo, but run submission must use
+`workflow_create_execution_session`, `workflow_run_execution_session`, and
+`workflow_close_execution_session`.
 
 ## Consequences
 

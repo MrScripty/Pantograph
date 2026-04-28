@@ -448,6 +448,55 @@ export interface WorkflowEditSessionRunResponse {
   workflow_run_id: string;
 }
 
+export interface WorkflowPortBinding {
+  node_id: string;
+  port_id: string;
+  value: unknown;
+}
+
+export interface WorkflowOutputTarget {
+  node_id: string;
+  port_id: string;
+}
+
+export type WorkflowTechnicalFitOverride = Record<string, unknown>;
+
+export interface WorkflowExecutionSessionCreateRequest {
+  workflow_id: string;
+  usage_profile?: string | null;
+  keep_alive?: boolean;
+}
+
+export interface WorkflowExecutionSessionCreateResponse {
+  session_id: string;
+  attribution?: unknown | null;
+  runtime_capabilities: WorkflowRuntimeCapability[];
+}
+
+export interface WorkflowExecutionSessionRunRequest {
+  session_id: string;
+  workflow_semantic_version: string;
+  inputs?: WorkflowPortBinding[];
+  output_targets?: WorkflowOutputTarget[] | null;
+  override_selection?: WorkflowTechnicalFitOverride | null;
+  timeout_ms?: number | null;
+  priority?: number | null;
+}
+
+export interface WorkflowExecutionSessionCloseRequest {
+  session_id: string;
+}
+
+export interface WorkflowExecutionSessionCloseResponse {
+  ok: boolean;
+}
+
+export interface WorkflowRunResponse {
+  workflow_run_id: string;
+  outputs: WorkflowPortBinding[];
+  timing_ms: number;
+}
+
 export type WorkflowSessionState = 'idle_loaded' | 'idle_unloaded' | 'running';
 
 export interface WorkflowSessionSummary {

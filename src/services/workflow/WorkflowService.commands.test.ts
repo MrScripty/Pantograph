@@ -11,6 +11,9 @@ import type {
   WorkflowAdminQueueCancelResponse,
   WorkflowAdminQueuePushFrontResponse,
   WorkflowAdminQueueReprioritizeResponse,
+  WorkflowExecutionSessionCloseResponse,
+  WorkflowExecutionSessionCreateResponse,
+  WorkflowRunResponse,
   WorkflowSessionQueueCancelResponse,
   WorkflowSessionQueuePushFrontResponse,
   WorkflowSessionQueueReprioritizeResponse,
@@ -208,6 +211,93 @@ test('queue control methods return backend command results exactly', async () =>
           request: {
             session_id: 'session-a',
             workflow_run_id: 'run-c',
+          },
+        },
+      },
+    ]);
+  } finally {
+    clearMocks();
+  }
+});
+
+test('execution session commands preserve scheduler-backed request boundaries', async () => {
+  installWindowMock();
+  const calls: Array<{ cmd: string; args: unknown }> = [];
+  const createResponse: WorkflowExecutionSessionCreateResponse = {
+    session_id: 'execution-session-a',
+    attribution: null,
+    runtime_capabilities: [],
+  };
+  const runResponse: WorkflowRunResponse = {
+    workflow_run_id: 'run-a',
+    outputs: [],
+    timing_ms: 45,
+  };
+  const closeResponse: WorkflowExecutionSessionCloseResponse = { ok: true };
+  mockIPC((cmd, args) => {
+    calls.push({ cmd, args });
+    if (cmd === 'workflow_create_execution_session') {
+      return createResponse;
+    }
+    if (cmd === 'workflow_run_execution_session') {
+      return runResponse;
+    }
+    return closeResponse;
+  });
+
+  try {
+    const service = new WorkflowCommandService();
+    const created = await service.createWorkflowExecutionSession({
+      workflow_id: 'workflow-a',
+      usage_profile: null,
+      keep_alive: false,
+    });
+    const run = await service.runWorkflowExecutionSession({
+      session_id: created.session_id,
+      workflow_semantic_version: '0.1.0',
+      inputs: [],
+      output_targets: null,
+      override_selection: null,
+      timeout_ms: null,
+      priority: null,
+    });
+    const closed = await service.closeWorkflowExecutionSession({
+      session_id: created.session_id,
+    });
+
+    assert.deepEqual(created, createResponse);
+    assert.deepEqual(run, runResponse);
+    assert.deepEqual(closed, closeResponse);
+    assert.deepEqual(calls, [
+      {
+        cmd: 'workflow_create_execution_session',
+        args: {
+          request: {
+            workflow_id: 'workflow-a',
+            usage_profile: null,
+            keep_alive: false,
+          },
+        },
+      },
+      {
+        cmd: 'workflow_run_execution_session',
+        args: {
+          request: {
+            session_id: 'execution-session-a',
+            workflow_semantic_version: '0.1.0',
+            inputs: [],
+            output_targets: null,
+            override_selection: null,
+            timeout_ms: null,
+            priority: null,
+          },
+        },
+      },
+      {
+        cmd: 'workflow_close_execution_session',
+        args: {
+          request: {
+            session_id: 'execution-session-a',
           },
         },
       },

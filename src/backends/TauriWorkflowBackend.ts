@@ -4,7 +4,7 @@
  * This is the Pantograph-specific backend implementation. Each method maps
  * directly to a Tauri command defined in src-tauri/src/commands/.
  */
-import { invoke, Channel } from '@tauri-apps/api/core';
+import { invoke } from '@tauri-apps/api/core';
 import type {
   WorkflowBackend,
   UndoRedoState,
@@ -38,7 +38,6 @@ import {
 import { parseWorkflowGraphMutationResponse } from '../lib/workflowGraphMutationResponse';
 
 export class TauriWorkflowBackend implements WorkflowBackend {
-  private channel: Channel<WorkflowEvent> | null = null;
   private eventListeners: Set<(event: WorkflowEvent) => void> = new Set();
 
   // --- Node Definitions ---
@@ -64,14 +63,10 @@ export class TauriWorkflowBackend implements WorkflowBackend {
   }
 
   async runSession(sessionId: string): Promise<WorkflowEditSessionRunResponse> {
-    this.channel = new Channel<WorkflowEvent>();
-    this.channel.onmessage = (event) => {
-      this.eventListeners.forEach((listener) => listener(event));
-    };
-    return invoke<WorkflowEditSessionRunResponse>('run_workflow_execution_session', {
-      sessionId,
-      channel: this.channel,
-    });
+    void sessionId;
+    throw new Error(
+      'Direct edit-session execution is unavailable; submit a saved workflow through scheduler execution session commands.',
+    );
   }
 
   async removeSession(sessionId: string): Promise<void> {

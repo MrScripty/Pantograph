@@ -83,7 +83,7 @@ capacity control, queue diagnostics, and trace attribution.
   language binding exposes direct workflow execution outside the scheduler.
 - Public run entrypoints require a scheduler-owned session or create one
   internally before enqueueing through scheduler code.
-- GUI Run uses scheduler-visible session execution only.
+- GUI Submit uses scheduler-visible session execution only.
 - Diagnostics scheduler snapshots show GUI-triggered running/queued state while
   execution is active.
 - Touched README files document scheduler-only lifecycle, errors, and contract
@@ -139,13 +139,13 @@ bypass APIs.
 workflow graph outside scheduler-visible session lifecycle.
 
 **Tasks:**
-- [ ] Remove `execute_workflow_v2` from Tauri command registration.
-- [ ] Remove `executeWorkflow(graph)` from `WorkflowBackend`, mocks, and app
+- [x] Remove `execute_workflow_v2` from Tauri command registration.
+- [x] Remove `executeWorkflow(graph)` from `WorkflowBackend`, mocks, and app
   services.
-- [ ] Ensure the graph editor creates or reuses a backend-owned session before
-  enabling Run.
-- [ ] Keep diagnostics events sourced from scheduler-visible session execution.
-- [ ] Update Tauri/frontend READMEs for the scheduler-only contract.
+- [x] Ensure the graph editor creates or reuses a backend-owned session before
+  enabling Submit.
+- [x] Keep diagnostics events sourced from scheduler-visible session execution.
+- [x] Update Tauri/frontend READMEs for the scheduler-only contract.
 
 **Verification:**
 - `npm run typecheck`
@@ -212,6 +212,19 @@ scheduler invariant visible to maintainers.
   source-surface guardrail script that fails on direct public workflow execution
   APIs in Rust, Tauri, binding, or frontend code. UniFFI metadata validation now
   rejects the removed `workflow_run` binding.
+- 2026-04-28: Updated the Graph editor toolbar from Run to Submit and routed
+  GUI-triggered workflow submission through the canonical scheduler execution
+  session commands: `workflow_create_execution_session`,
+  `workflow_run_execution_session`, and `workflow_close_execution_session`.
+  The toolbar now requires a saved, clean workflow before submission, selects
+  the completed run in active-run context, and opens Scheduler for projection
+  inspection. Frontend command DTOs and service-boundary coverage were added for
+  those scheduler session commands.
+- 2026-04-28: Unregistered the legacy edit-session
+  `run_workflow_execution_session` Tauri command and made old frontend
+  `runSession` adapters fail closed with an explicit scheduler-submit error.
+  The edit-session create/mutation/undo/redo commands remain available for
+  graph authoring only.
 
 ## Commit Cadence Notes
 
