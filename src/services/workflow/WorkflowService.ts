@@ -1,12 +1,9 @@
 import { invoke, Channel } from '@tauri-apps/api/core';
 import type {
-  WorkflowDiagnosticsProjection,
   WorkflowNodeStatusQueryRequest,
   WorkflowNodeStatusQueryResponse,
   WorkflowProjectionRebuildRequest,
   WorkflowProjectionRebuildResponse,
-  WorkflowTraceSnapshotRequest,
-  WorkflowTraceSnapshotResponse,
 } from '../diagnostics/types.ts';
 import type {
   NodeDefinition,
@@ -340,85 +337,6 @@ export class WorkflowService extends WorkflowCommandService {
     return invokeWorkflowCommand<WorkflowProjectionRebuildResponse>('workflow_projection_rebuild', {
       request,
     });
-  }
-
-  async getDiagnosticsSnapshot(
-    workflowId?: string | null,
-    sessionId?: string | null,
-    workflowGraph?: WorkflowGraph | null,
-  ): Promise<WorkflowDiagnosticsProjection> {
-    if (USE_WORKFLOW_MOCKS) {
-      return {
-        context: {
-          requestedSessionId: sessionId ?? null,
-          requestedWorkflowId: workflowId ?? null,
-          requestedWorkflowRunId: null,
-          sourceWorkflowRunId: null,
-          relevantWorkflowRunId: null,
-          relevant: true,
-        },
-        runsById: {},
-        runOrder: [],
-        runtime: {
-          workflowId: workflowId ?? null,
-          capturedAtMs: null,
-          maxInputBindings: null,
-          maxOutputTargets: null,
-          maxValueBytes: null,
-          runtimeRequirements: null,
-          runtimeCapabilities: [],
-          models: [],
-          lastError: null,
-          activeModelTarget: null,
-          embeddingModelTarget: null,
-          activeRuntime: null,
-          embeddingRuntime: null,
-        },
-        scheduler: {
-          workflowId: workflowId ?? null,
-          sessionId: sessionId ?? null,
-          workflowRunId: null,
-          capturedAtMs: null,
-          session: null,
-          items: [],
-          lastError: null,
-        },
-        currentSessionState: null,
-        workflowTimingHistory: null,
-        retainedEventLimit: 200,
-      };
-    }
-
-    return invoke<WorkflowDiagnosticsProjection>('workflow_get_diagnostics_snapshot', {
-      request: {
-        workflow_id: workflowId ?? null,
-        session_id: sessionId ?? null,
-        workflow_graph: workflowGraph ?? null,
-      },
-    });
-  }
-
-  async getTraceSnapshot(
-    request: WorkflowTraceSnapshotRequest = {},
-  ): Promise<WorkflowTraceSnapshotResponse> {
-    if (USE_WORKFLOW_MOCKS) {
-      return {
-        traces: [],
-        retained_trace_limit: 200,
-      };
-    }
-
-    return invoke<WorkflowTraceSnapshotResponse>('workflow_get_trace_snapshot', {
-      request,
-    });
-  }
-
-  async clearDiagnosticsHistory(): Promise<WorkflowDiagnosticsProjection> {
-    if (USE_WORKFLOW_MOCKS) {
-      return this.getDiagnosticsSnapshot(null, null, null);
-    }
-
-    return invoke<WorkflowDiagnosticsProjection>('workflow_clear_diagnostics_history');
   }
 
   // --- Undo/Redo ---

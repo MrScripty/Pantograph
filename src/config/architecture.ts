@@ -50,13 +50,6 @@ export const PANTOGRAPH_ARCHITECTURE: ArchitectureGraph = {
       description: 'Workflow graph editing and execution actions'
     },
     {
-      id: 'component:DiagnosticsPanel',
-      category: 'component',
-      label: 'DiagnosticsPanel',
-      filePath: 'src/components/diagnostics/DiagnosticsPanel.svelte',
-      description: 'Legacy diagnostics panel retained for cleanup or future reuse outside the workbench shell'
-    },
-    {
       id: 'component:NodePalette',
       category: 'component',
       label: 'NodePalette',
@@ -206,13 +199,6 @@ export const PANTOGRAPH_ARCHITECTURE: ArchitectureGraph = {
       label: 'workflowStore',
       filePath: 'src/stores/workflowStore.ts',
       description: 'Workflow nodes, edges, and execution state'
-    },
-    {
-      id: 'store:diagnosticsStore',
-      category: 'store',
-      label: 'diagnosticsStore',
-      filePath: 'src/stores/diagnosticsStore.ts',
-      description: 'Single diagnostics subscription owner and GUI snapshot facade'
     },
     {
       id: 'store:canvasStore',
@@ -378,8 +364,6 @@ export const PANTOGRAPH_ARCHITECTURE: ArchitectureGraph = {
     { id: 'c16', source: 'component:ChunkPreview', target: 'store:chunkPreviewStore', connectionType: 'subscription' },
     { id: 'c17', source: 'component:WorkflowToolbar', target: 'store:workflowStore', connectionType: 'subscription' },
     { id: 'c18', source: 'component:NodePalette', target: 'store:workflowStore', connectionType: 'subscription' },
-    { id: 'c18b', source: 'component:DiagnosticsPanel', target: 'store:diagnosticsStore', connectionType: 'subscription' },
-
     // ==================== Component → Service imports ====================
     { id: 'c20', source: 'component:Canvas', target: 'service:DrawingEngine', connectionType: 'import' },
     { id: 'c21', source: 'component:SidePanel', target: 'service:LLMService', connectionType: 'import' },
@@ -387,9 +371,6 @@ export const PANTOGRAPH_ARCHITECTURE: ArchitectureGraph = {
     { id: 'c23', source: 'component:SidePanel', target: 'service:RagService', connectionType: 'import' },
     { id: 'c24', source: 'component:HotLoadContainer', target: 'service:HotLoadRegistry', connectionType: 'import' },
     { id: 'c25', source: 'component:WorkflowToolbar', target: 'service:WorkflowService', connectionType: 'import' },
-    { id: 'c25b', source: 'store:diagnosticsStore', target: 'service:WorkflowService', connectionType: 'subscription' },
-    { id: 'c25c', source: 'store:diagnosticsStore', target: 'store:workflowStore', connectionType: 'subscription' },
-
     // ==================== Service → Tauri commands ====================
     { id: 'c30', source: 'service:WorkflowService', target: 'command:execute_workflow', connectionType: 'command' },
     { id: 'c31', source: 'service:WorkflowService', target: 'command:validate_workflow_connection', connectionType: 'command' },

@@ -23,6 +23,9 @@ without embedding hard-coded structures in components.
 
 ## Decision
 Keep frontend metadata config here and import it from feature/view modules.
+`architecture.ts` tracks active frontend ownership, so retired workbench
+surfaces should be removed from the graph when their source modules are deleted
+instead of lingering as stale nodes.
 
 ## Alternatives Rejected
 - Inline architecture metadata in components: rejected because data and
@@ -70,8 +73,7 @@ import { PANTOGRAPH_ARCHITECTURE } from './architecture';
 - Compatibility: views may depend on config ids across releases.
 - Regeneration/migration: update consumers and tests with config shape changes.
   Architecture edges should describe active app-shell ownership; retired
-  components may remain listed only when they are labeled as legacy or pending
-  cleanup.
+  components and stores must be removed when their modules are deleted.
 
 ## Testing
 ```bash

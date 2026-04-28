@@ -1,174 +1,114 @@
 # src/services/diagnostics
 
 ## Purpose
-This directory contains the diagnostics-domain service layer for Pantograph's
-workflow debugger. It exists so trace accumulation, run/node summarization, and
-diagnostics lifecycle policy stay outside Svelte components and outside Tauri
-transport adapters.
+This directory contains frontend TypeScript mirrors for diagnostics and
+workbench projection DTOs that cross the Tauri boundary. It exists so pages and
+workflow services share typed contracts without owning diagnostics accumulation
+or durable audit state in the browser.
 
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `DiagnosticsService.ts` | Framework-agnostic owner for diagnostics state, selection, trace recording, and listener notifications. |
-| `traceAccumulator.ts` | Trace accumulation helpers that normalize workflow events and graph context into diagnostics snapshots. |
-| `types.ts` | Stable diagnostics DTOs shared by the diagnostics service and frontend store/view layers, including backend-owned trace snapshot mirrors and additive workflow-session inspection state. |
+| `types.ts` | Diagnostics, scheduler, I/O artifact, Library usage, retention, local Network, and projection-state DTOs mirrored from backend command responses. |
 
 ## Problem
-Pantograph needs an internal diagnostics surface for workflow execution, but the
-GUI should not infer timing, waiting, or node lifecycle state ad hoc inside
-components. Without a dedicated diagnostics service boundary, trace logic would
-spread across toolbar handlers, global stores, and view code.
+Workbench pages need dense run lists, selected-run diagnostics, I/O artifact
+metadata, Library usage rows, and scheduler facts, but the frontend must not
+rebuild those views from raw diagnostic events. A single DTO module keeps those
+wire shapes explicit while the backend-owned ledger and materialized
+projections remain the source of truth.
 
 ## Constraints
-- Diagnostics state must remain additive to the existing workflow execution
-  path.
-- Services in this directory must stay framework-agnostic; Svelte stores and
-  components consume snapshots but do not own trace business logic.
-- Trace accumulation must tolerate additive event contracts and partial event
-  availability from the backend.
-- Workflow-service-backed capability and scheduler snapshots must coexist with
-  event-derived run traces without introducing a second source of truth for run
-  execution state.
-- Retained history must stay bounded so long sessions do not grow without
-  limit.
+- DTOs must mirror Rust serialization field names and enum labels.
+- Frontend code may filter presentation rows, but must not infer durable
+  scheduler, diagnostics, retention, or Library truth from raw payload JSON.
+- Projection freshness and cursor state must stay visible to callers.
+- Legacy snapshot DTOs may remain while native commands still expose them, but
+  new workbench pages should prefer projection-specific DTOs.
 
 ## Decision
-Use backend diagnostics projections as the source of truth for run history,
-runtime state, scheduler state, timing expectations, and workflow labels.
-Frontend stores mirror those projections by `workflow_id`, `session_id`, graph
-context, and backend-authored `workflow_run_id`; Svelte components render the
-projection without inventing fallback run identities or workflow display names.
+Keep this directory as a type-only diagnostics contract boundary. The retired
+frontend diagnostics store and panel no longer accumulate traces in the browser.
+Workbench pages call `WorkflowProjectionService` and `WorkflowCommandService`
+methods that return the DTOs defined here. Backend projections provide run
+history, scheduler timelines, selected-run estimates, retention summaries, I/O
+artifact metadata, Library usage, and local Network status.
 
 ## Alternatives Rejected
-- Accumulate diagnostics directly inside `WorkflowToolbar.svelte`.
-  Rejected because presentation components should not own workflow debugging
-  state machines or retention rules.
-- Add diagnostics state directly to `workflowStore.ts`.
-  Rejected because workflow editing state and diagnostics inspection state have
-  different lifecycles and would become harder to reason about together.
+- Rebuild workbench views from raw ledger rows in TypeScript.
+  Rejected because it would bypass validated backend projections and duplicate
+  projection cursor behavior.
+- Keep a browser diagnostics service as a second source of run history.
+  Rejected because it would drift from the typed event ledger and materialized
+  projection model.
 
 ## Invariants
-- `DiagnosticsService.ts` remains the only owner of diagnostics selection and
-  retained trace history.
-- Trace accumulation stays deterministic for the same ordered event stream.
-- Missing optional workflow metadata must degrade cleanly to `null`, not throw.
-- Per-run retained event history is bounded by the configured limit.
-- Runtime and scheduler snapshots may refresh independently, but they must land
-  in the same diagnostics state owner as run traces.
-- Additive workflow-session inspection state may arrive through direct
-  diagnostics fetches before equivalent event-driven projections, so consumers
-  must tolerate partial producer coverage without discarding the last known
-  backend snapshot.
-- Edit-session diagnostics consumers must ignore workflow events whose
-  `workflow_run_id` no longer matches the active workflow run id.
+- DTO names, field casing, and enum labels must match backend command
+  responses.
+- Projection response types must expose `projection_state` when the backend can
+  report freshness or cursor progress.
 - I/O artifact DTOs carry typed `retention_state` values. Consumers must not
   infer deleted, expired, external, truncated, or too-large states from
   `payload_ref` presence.
 - I/O artifact DTOs carry producer and consumer node/port fields. Consumers
   should use those endpoint fields for browsing and filtering instead of
   parsing payload JSON or overloading the event `node_id`.
-- I/O artifact query DTOs accept producer and consumer node filters. Consumers
-  should pass selected-node filters through the backend query contract instead
-  of downloading broader pages and filtering them in TypeScript.
-- I/O artifact responses carry `retention_summary` counts derived from backend
-  projections. Consumers should display those counts instead of rebuilding
-  completeness summaries from raw ledger events.
 - Run-list responses carry backend-owned `facets` derived from materialized
   projections. Consumers should use those counts for mixed-version and policy
   summaries instead of rebuilding them from raw ledger events or sampled pages.
-- Run-list DTOs carry backend-owned client, client-session, bucket, and
-  workflow execution-session scope fields. Consumers must render or act on
-  those fields from projection rows instead of inferring queue authority from
-  run ids or raw ledger events.
-- Run-list query DTOs include optional client, client-session, bucket, and
-  accepted-at range filters so frontend callers can narrow projection reads
-  without raw ledger access.
 - Scheduler estimate query DTOs expose a narrow estimate-shaped projection for
   selected runs so callers do not mine full run-detail payloads for scheduler
   estimate facts.
 - Library usage query DTOs include optional `workflow_run_id` filters so
-  frontend consumers can request selected-run asset usage without reconstructing
-  active-run Library state from raw ledger events.
-- Retention cleanup DTOs mirror the backend cleanup command/result shape so GUI
-  controls can display expired-artifact counts without mutating local
-  diagnostics state optimistically.
-- Pumas model delete audit DTOs mirror the backend command response so GUI
-  controls can display delete/audit outcomes without synthesizing local event
-  ids or Library state.
-- Pumas HuggingFace search audit DTOs mirror the backend command response so
-  GUI controls can display search results and audit outcomes without
-  synthesizing Library usage facts. Search result rows use a typed additive
-  shape with optional `id` plus provider fields, not `unknown`, so components
-  can render stable model labels while still tolerating new backend fields.
-- Pumas HuggingFace download-start audit DTOs mirror the backend command
-  response so GUI controls can display download ids and audit outcomes without
-  synthesizing Library audit facts.
+  frontend consumers can request selected-run asset usage without
+  reconstructing active-run Library state from raw ledger events.
+- Retention and Pumas command DTOs mirror backend command/result shapes so GUI
+  controls can display outcomes without optimistic local audit mutation.
 
 ## Revisit Triggers
-- Diagnostics needs durable persistence or export/replay support.
-- Multiple diagnostics consumers require partitioned state rather than one
-  singleton owner.
-- Backend diagnostics contracts expand enough that this directory needs a
-  versioned facade of its own.
+- Rust-to-TypeScript DTO generation replaces manual interface mirrors.
+- Native legacy snapshot commands are removed and their TypeScript interfaces
+  can be deleted.
+- Projection APIs are versioned independently from the desktop frontend.
 
 ## Dependencies
-**Internal:** `src/services/workflow/types`, app-level diagnostics store.
-**External:** TypeScript runtime and standard structured-clone support.
+**Internal:** `src/services/workflow`.
+
+**External:** TypeScript type system.
 
 ## Related ADRs
-- None identified as of 2026-04-12.
-- Reason: the diagnostics service boundary is additive and local to the
-  frontend architecture for now.
-- Revisit trigger: diagnostics becomes a stable cross-process or persisted
-  contract surface.
+- `docs/adr/ADR-014-run-centric-workbench-projection-boundary.md`
 
 ## Usage Examples
 ```ts
-import { DiagnosticsService } from './DiagnosticsService';
+import type { WorkflowRunListQueryResponse } from '../diagnostics/types.ts';
 
-const service = new DiagnosticsService();
-service.updateWorkflowMetadata({
-  workflowId: 'workflow-1',
-});
-service.recordWorkflowEvent({
-  type: 'Started',
-  data: { workflow_id: 'workflow-1', node_count: 3, workflow_run_id: 'run-1' },
-});
+function getRunCount(response: WorkflowRunListQueryResponse): number {
+  return response.runs.length;
+}
 ```
 
 ## API Consumer Contract
-- Callers update workflow metadata and graph context separately from event
-  recording.
-- `recordWorkflowEvent()` is append-only from the caller's perspective; callers
-  do not mutate runs or nodes directly.
-- Listener callbacks receive full diagnostics snapshots after each state change.
-- `clearHistory()` removes retained runs and selection state but preserves the
-  current workflow metadata context.
-- Compatibility policy is additive for diagnostics DTOs unless a future plan
-  explicitly versions the diagnostics contract.
+- Inputs: request DTOs in `types.ts` use backend wire names and optional
+  filters exactly as accepted by Tauri commands.
+- Outputs: response DTOs preserve backend-authored rows, facets, summaries, and
+  projection freshness fields without client-side replacement.
+- Lifecycle: consumers may refresh projections on page mount or user action;
+  they must not assume active-run selection is persisted.
+- Errors: command failures are normalized by workflow service boundaries rather
+  than by this type module.
+- Compatibility: additive fields are allowed when backend commands add
+  projection facts; field removals require a plan update and matching frontend
+  migration.
 
 ## Structured Producer Contract
-- `types.ts` is the structured producer for diagnostics snapshots.
-- `types.ts` also mirrors backend-owned `WorkflowTraceSnapshotRequest` and
-  `WorkflowTraceSnapshotResponse` contracts using the Rust wire casing for
-  direct inspection reads.
-- `WorkflowDiagnosticsState.runOrder` is ordered most-recent-first.
-- `DiagnosticsRunTrace.events` is retained in arrival order and trimmed from the
-  oldest end when the configured event limit is exceeded.
-- `graphFingerprintAtStart` captures the graph fingerprint known when the run is
-  first observed; later graph changes do not rewrite that field.
-- Runtime and scheduler snapshots are last-write-wins views over workflow
-  service responses keyed by current workflow and current session identity.
-- `WorkflowDiagnosticsProjection.context` mirrors backend-owned requested
-  filters, event source workflow run id, relevant workflow run id, and relevance
-  decision for app stores that render diagnostics snapshots.
-- `WorkflowDiagnosticsProjection.currentSessionState` is an additive,
-  backend-owned session inspection mirror; producer paths may omit it until the
-  backend explicitly forwards the inspection snapshot.
-- Scheduler state is backend-owned. GUI runs must be submitted through the
-  scheduler so queued/running rows and runtime traces share the same
-  `workflow_run_id`.
-- Scheduler projection DTOs include accepted, future, scheduled, queued,
-  delayed, running, and terminal run statuses plus typed scheduler timeline
-  event labels for delay/model lifecycle audit rows. Consumers must render
-  those fields from projection DTOs instead of parsing payload JSON.
+- `types.ts` is the structured producer for frontend diagnostics and workbench
+  projection DTOs.
+- Stable fields include IDs, timestamps, status labels, projection-state
+  cursors, retention state labels, and audit outcome labels.
+- Omitted optional fields mean the backend lacks that fact for the current row;
+  callers must render absence explicitly instead of inventing defaults.
+- Row ordering is backend-owned unless a page applies a documented presentation
+  sort over an already fetched page.
+- DTO changes that affect persisted consumers, saved fixtures, or contract
+  tests require coordinated Rust and TypeScript updates.

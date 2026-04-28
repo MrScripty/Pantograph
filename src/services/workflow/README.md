@@ -51,12 +51,7 @@ aligned with backend-owned state. The service also refreshes
 `currentRunExecutionId` from the first execution-scoped workflow event while
 preserving `currentExecutionId` as the editable session owner, so diagnostics
 and legacy consumers can follow ad hoc or session-backed runs without
-overwriting the session id that mutation commands still need. The same service
-boundary now exposes a direct backend-owned trace snapshot read for debugging
-or future metrics surfaces that should not depend on the GUI projection shape.
-Diagnostics snapshot reads and mock fallbacks now include backend-compatible
-projection context so app stores can consume relevance and attribution fields
-without rebuilding them from workflow events.
+overwriting the session id that mutation commands still need.
 Run identity updates now consume the package-level workflow event ownership
 projection so `WorkflowService.ts` and workflow execution reducers agree on
 active-run identity. Backend-authored event `ownership` payloads are
@@ -153,8 +148,6 @@ preserve the backend download/audit response.
   preserve the backend cleanup result exactly.
 - Mock-mode payload shapes must remain compatible enough for callers to compile
   and branch safely.
-- Mock-mode diagnostics projections must include the same projection context
-  shape as native `workflow_get_diagnostics_snapshot` responses.
 - Workflow execution must use a backend-owned session. Raw graph execution is
   not exposed because scheduler diagnostics and runtime admission depend on
   session-scoped run lifecycle state.
@@ -258,8 +251,6 @@ const preview = await workflowService.previewNodeInsertOnEdge(
 - Built-in templates that demonstrate inference-family nodes must stay aligned
   with the backend-owned node registry and port contracts shipped in the same
   build.
-- `WorkflowDiagnosticsProjection.context` fields are passed through from native
-  diagnostics responses and mirrored in mock responses.
 - `WorkflowIoArtifactQueryResponse` carries backend-authored
   `retention_state` values. Mock and native responses must preserve that field
   shape so I/O Inspector callers can render retention state without guessing

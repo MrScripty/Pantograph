@@ -100,7 +100,7 @@ Diagnostics, Graph, I/O Inspector, Library, Network, and Node Editor a shared
 navigation surface and selected-run context. The graph is mounted through a page
 wrapper instead of being selected by the old root canvas/workflow mode switch,
 and diagnostics rendering now comes from the projection-backed workbench
-Diagnostics page instead of the legacy diagnostics panel lifecycle.
+Diagnostics page.
 The app workflow graph delegates orchestration boundary overlay rendering to
 `WorkflowContainerBoundary.svelte` and boundary math to
 `workflowContainerBoundary.ts`, while the parent keeps viewport tracking,

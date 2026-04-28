@@ -109,9 +109,9 @@ import './styles.css';
 - Outputs: rendered UI, frontend command invocations, and browser-local
   interaction state.
 - Lifecycle: Svelte components mount/unmount with the app; services subscribe to
-  backend events and must clean up browser resources on teardown. App-level
-  lifecycle hooks should not start legacy diagnostics polling when the
-  workbench pages can query backend projections directly.
+  backend events and must clean up browser resources on teardown. Workbench
+  pages query backend projections directly for run diagnostics instead of
+  starting app-level diagnostics polling.
 - Errors: backend error categories should remain visible to callers and UI
   presenters instead of being collapsed into generic transport failures.
 - Versioning: frontend type and service changes must migrate backend DTO

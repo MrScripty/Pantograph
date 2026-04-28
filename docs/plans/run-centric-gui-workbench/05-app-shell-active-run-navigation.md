@@ -191,12 +191,18 @@ surfaces.
 - Existing frontend tests for drawing, graph, and diagnostics pass or have
   targeted updates.
 - README updates satisfy documentation standards for changed directories.
+- Legacy diagnostics cleanup verified with `npm run typecheck`,
+  `npm run build`, and `npm run test:frontend` after removing retired panel and
+  store tests from the frontend test script.
 
 **Status:** Complete for root-shell ownership. The old drawing-to-Svelte
 startup surface is retired from app-root navigation, and the app no longer
-starts the legacy diagnostics panel store during root mount. The retired
-drawing implementation files and legacy diagnostics panel files remain for
-separate cleanup or future reuse under standards-compliant tool surfaces.
+starts a separate diagnostics panel/store pipeline during root mount. The
+legacy diagnostics Svelte panel, presenter tests, app-level diagnostics store,
+and old workflow-service snapshot convenience methods were removed after the
+workbench pages moved to projection-backed service calls. The retired drawing
+implementation files remain for separate cleanup or future reuse under
+standards-compliant tool surfaces.
 
 ## Ownership And Lifecycle Note
 

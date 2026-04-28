@@ -350,6 +350,12 @@ Before launching workers, create a dedicated implementation-wave plan with:
   Workbench page data comes through the typed workflow service methods for run
   list/detail, scheduler timeline, run graph, I/O artifacts, Library usage, and
   local Network status.
+- Retired the inactive legacy diagnostics frontend boundary after workbench
+  pages became the active projection-backed diagnostics surface. The old
+  diagnostics Svelte panel/components, frontend diagnostics store/projection
+  helpers, presenter tests, and unused workflow-service snapshot convenience
+  methods were removed, while backend/native diagnostics DTOs remain available
+  for the ledger migration.
 - Added `docs/adr/ADR-014-run-centric-workbench-projection-boundary.md` to
   capture the Scheduler-first workbench, transient active-run context,
   projection-only page consumption, materialized projection cursor boundary,
@@ -395,6 +401,9 @@ Before launching workers, create a dedicated implementation-wave plan with:
 - `npm run typecheck` passed.
 - `npm run test:frontend` passed.
 - `npm run build` passed.
+- Legacy diagnostics frontend cleanup passed `npm run typecheck`,
+  `npm run build`, and `npm run test:frontend` with the retired diagnostics
+  panel/store tests removed from the frontend test command.
 - `cargo test -p pantograph-diagnostics-ledger` passed.
 - `cargo test -p pantograph-workflow-service` passed.
 - `npm run format:check` passed after applying `cargo fmt --all`.

@@ -56,10 +56,10 @@ grow separate navigation and selection models.
 - Historic run graph rendering must use immutable run graph projections and
   must not mutate the current editor store.
 - Network pages must distinguish unavailable platform metrics from zero values.
-- Existing graph and diagnostics surfaces must remain usable while ownership
-  moves into the workbench shell.
+- Existing graph editing surfaces must remain usable while ownership moves into
+  the workbench shell.
 - The workbench Diagnostics page owns the active diagnostics surface. Graph page
-  toolbars must not expose the legacy diagnostics panel lifecycle.
+  toolbars must keep diagnostics navigation inside the workbench page model.
 - Toolbar navigation must use semantic buttons with accessible names.
 
 ## Decision
@@ -177,7 +177,7 @@ transient UI state without becoming backend scheduler policy.
   selected-run node status through `workflowService.queryNodeStatus` for
   runtime-status overlays. It never applies that graph to the editor store, and
   its editor toolbar stays focused on workflow persistence/execution rather
-  than reopening legacy diagnostics panel controls.
+  than reopening separate diagnostics controls.
 - `DiagnosticsPage.svelte` reads selected-run facts through
   `workflowService.queryRunDetail`, scheduler history through
   `workflowService.querySchedulerTimeline`, and comparison peers through
