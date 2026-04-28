@@ -401,6 +401,10 @@ pub struct WorkflowLocalSchedulerLoad {
     pub loaded_session_count: usize,
     pub active_run_count: usize,
     pub queued_run_count: usize,
+    #[serde(default)]
+    pub active_workflow_run_ids: Vec<String>,
+    #[serde(default)]
+    pub queued_workflow_run_ids: Vec<String>,
 }
 
 /// Workflow preflight request for request-shape and runtime-readiness validation.

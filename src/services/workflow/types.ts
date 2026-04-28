@@ -330,6 +330,8 @@ export interface WorkflowLocalSchedulerLoad {
   loaded_session_count: number;
   active_run_count: number;
   queued_run_count: number;
+  active_workflow_run_ids: string[];
+  queued_workflow_run_ids: string[];
 }
 
 export interface WorkflowDerivedGraph {

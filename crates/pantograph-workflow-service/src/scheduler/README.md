@@ -97,6 +97,9 @@ needs to be the long-term home for scheduler contracts or queue mutation logic.
   than creating a second checkpoint or restore policy path in scheduler code.
 - Scheduler DTOs are machine-consumable contracts that adapters forward
   without reconstructing local scheduler truth.
+- Scheduler store active/queued workflow-run id accessors are local scheduler
+  facts for the Network page. They expose placement only and must not be used
+  to imply model, runtime, or cache residency.
 - Queue insertion should move the constructed queued-run record directly into
   the store so scheduler state transitions do not accumulate redundant
   rebinding or hidden policy steps.

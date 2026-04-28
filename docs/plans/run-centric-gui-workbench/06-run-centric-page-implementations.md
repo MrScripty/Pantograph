@@ -363,8 +363,11 @@ transport state, CPU, memory, GPU availability/degradation, disks, network
 interfaces, scheduler load/capacity, selected-run context, and future-ready peer
 records through `workflowService.queryLocalNetworkStatus`. The page now treats
 unavailable probes as explicit degraded/unavailable states instead of fake zero
-values. Runtime/model/cache highlights for the selected run remain open because
-the local status API does not yet expose run-keyed residency or cache facts.
+values. The local status API now reports local active/queued run id lists, and
+the page uses those backend facts to show whether the selected run is running
+or queued locally. Runtime/model/cache highlights for the selected run remain
+open because the local status API does not yet expose run-keyed residency or
+cache facts.
 The Node Editor page has a truthful unavailable state.
 
 ## Ownership And Lifecycle Note
@@ -490,9 +493,10 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
 - The first run diagnostics page renders scheduler timeline summary/detail
   fields and payload availability only. It does not parse `payload_json` because
   richer decision facets should be promoted into typed projection fields.
-- Network selected-run context is visible but not yet linked to runtime/model
-  residency because `WorkflowLocalNetworkStatusQueryResponse` does not expose
-  run-keyed resource placement or cache facts.
+- Network selected-run context now shows backend-reported local running/queued
+  placement, but it is not yet linked to runtime/model residency because
+  `WorkflowLocalNetworkStatusQueryResponse` does not expose run-keyed resource
+  or cache facts.
 - Scheduler timeline rows currently show typed event labels, summary/detail
   text, and payload availability only. The run table shows scheduler and
   retention policy IDs, queue position, priority, estimate, and scheduler
@@ -519,8 +523,8 @@ facts. If a page-specific refresh loop is needed, it must have teardown tests.
   rejected runtime/device choices, model load/unload decisions, graph settings,
   node/model/runtime versions, date ranges, retention completeness, and
   selected/rejected runtime-device comparisons.
-- Add local status fields for runtime/model/cache residency and run-keyed
-  scheduler placement before adding active-run Network highlights.
+- Add local status fields for runtime/model/cache residency before adding
+  selected-run resource placement highlights beyond local running/queued state.
 
 ### Verification Summary
 

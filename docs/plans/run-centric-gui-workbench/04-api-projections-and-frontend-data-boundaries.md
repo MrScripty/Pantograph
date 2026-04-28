@@ -223,8 +223,9 @@ each run row. `workflow_library_usage_query` now exposes warm
 Library/Pumas usage aggregates with projection freshness state. Retention
 policy query is exposed for GUI retention settings/inspectors. Local Network
 status query is exposed with local-only CPU/memory/disk/network-interface
-facts, scheduler load, future peer DTO placeholders, and explicit degraded GPU
-state. Frontend queue cancel/reprioritize/push-front methods now call the
+facts, scheduler load, local active/queued run ids for selected-run placement,
+future peer DTO placeholders, and explicit degraded GPU state. Frontend queue
+cancel/reprioritize/push-front methods now call the
 backend-owned execution-session queue commands, and stale frontend session
 command names were corrected. `workflow_admin_cancel_queue_item`,
 `workflow_admin_reprioritize_queue_item`, and

@@ -67,6 +67,22 @@ export function formatSessionLoad(node: WorkflowLocalNetworkNodeStatus): string 
   return `${load.active_session_count}/${load.max_sessions} sessions, ${load.loaded_session_count}/${load.max_loaded_sessions} loaded`;
 }
 
+export function formatSelectedRunLocalState(
+  node: WorkflowLocalNetworkNodeStatus,
+  workflowRunId: string | null | undefined,
+): string {
+  if (!workflowRunId) {
+    return 'No selected run';
+  }
+  if (node.scheduler_load.active_workflow_run_ids.includes(workflowRunId)) {
+    return 'Running locally';
+  }
+  if (node.scheduler_load.queued_workflow_run_ids.includes(workflowRunId)) {
+    return 'Queued locally';
+  }
+  return 'Not scheduled locally';
+}
+
 export function buildNetworkFactRows(node: WorkflowLocalNetworkNodeStatus): NetworkFactRow[] {
   const memory = node.system.memory;
   return [

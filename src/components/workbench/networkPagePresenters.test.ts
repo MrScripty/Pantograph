@@ -8,6 +8,7 @@ import {
   formatGpuAvailability,
   formatNetworkBytes,
   formatSchedulerLoad,
+  formatSelectedRunLocalState,
   formatSessionLoad,
   formatTransportState,
 } from './networkPagePresenters.ts';
@@ -59,6 +60,8 @@ function createNode(): WorkflowLocalNetworkNodeStatus {
       loaded_session_count: 1,
       active_run_count: 2,
       queued_run_count: 3,
+      active_workflow_run_ids: ['run-active'],
+      queued_workflow_run_ids: ['run-queued'],
     },
     degradation_warnings: ['GPU probe unavailable'],
   };
@@ -85,6 +88,10 @@ test('network load presenters expose scheduler capacity', () => {
 
   assert.equal(formatSchedulerLoad(node), '2 active / 3 queued');
   assert.equal(formatSessionLoad(node), '1/4 sessions, 1/2 loaded');
+  assert.equal(formatSelectedRunLocalState(node, 'run-active'), 'Running locally');
+  assert.equal(formatSelectedRunLocalState(node, 'run-queued'), 'Queued locally');
+  assert.equal(formatSelectedRunLocalState(node, 'run-missing'), 'Not scheduled locally');
+  assert.equal(formatSelectedRunLocalState(node, null), 'No selected run');
 });
 
 test('buildNetworkFactRows summarizes local node capabilities', () => {

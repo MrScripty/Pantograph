@@ -14,6 +14,7 @@ stay reviewable as more tests are split.
 | `contracts.rs` | Workflow DTO serialization and service error-envelope contract tests. |
 | `fixtures.rs` | Re-export index for shared workflow test fixture families in `fixtures/`. |
 | `fixtures/` | Shared workflow test hosts, runtime capabilities, scheduler diagnostics providers, and helper constructors split by fixture family. |
+| `local_network.rs` | Local Network status facade tests for local node identity, platform facts, scheduler load, and selected-run scheduler placement. |
 | `runtime_preflight.rs` | Runtime preflight matching tests for selected runtime precedence, fallback readiness, backend aliases, and selected-version readiness context. |
 | `scheduler_snapshot.rs` | Scheduler snapshot facade tests covering workflow/edit-session snapshot shape, trace attribution, queue bypass, and ambiguous pending queue behavior. |
 | `scheduler_snapshot_diagnostics.rs` | Scheduler snapshot diagnostics tests for admission details, runtime-registry provider merging, and runtime rebalance requirements. |
@@ -117,6 +118,9 @@ Use `workflow/tests/` for behavior-specific child modules under the parent
 - Session execution tests with diagnostics enabled must verify scheduler model
   lifecycle events for runtime admission required-model loads before terminal
   run events and ephemeral required-model unloads after I/O artifact events.
+- Local Network status tests must verify selected-run placement through
+  backend-provided active/queued workflow run id fields instead of deriving
+  placement from queue counts or selected-run context.
 - New behavior families should be added here only when they are cohesive enough
   to reduce `workflow/tests.rs` without hiding shared test setup.
 
@@ -148,6 +152,7 @@ Run the scheduler snapshot behavior slice:
 
 ```bash
 cargo test -p pantograph-workflow-service workflow::tests::contracts
+cargo test -p pantograph-workflow-service workflow::tests::local_network
 cargo test -p pantograph-workflow-service workflow::tests::session_admission
 cargo test -p pantograph-workflow-service workflow::tests::session_capacity
 cargo test -p pantograph-workflow-service workflow::tests::session_capacity_limits
@@ -168,6 +173,7 @@ cargo test -p pantograph-workflow-service workflow::tests::workflow_run
 ## Testing
 ```bash
 cargo test -p pantograph-workflow-service workflow::tests::contracts
+cargo test -p pantograph-workflow-service workflow::tests::local_network
 cargo test -p pantograph-workflow-service workflow::tests::session_admission
 cargo test -p pantograph-workflow-service workflow::tests::session_capacity
 cargo test -p pantograph-workflow-service workflow::tests::session_capacity_limits

@@ -221,6 +221,9 @@ transient UI state without becoming backend scheduler policy.
 - Network status cards are derived from `WorkflowLocalNetworkStatusQueryResponse`.
 - Network disk and interface rows render reported local metrics and show
   unavailable states when platform probes do not provide rows.
+- Network selected-run placement uses backend-provided local active/queued run
+  id lists from scheduler-load facts. It must not infer runtime/model/cache
+  residency from selected-run context alone.
 - Workflow command errors use `formatWorkflowCommandError`, preserving backend
   category labels such as `invalid_request`, `scheduler_busy`, and
   `queue_item_not_found` for users and tests.

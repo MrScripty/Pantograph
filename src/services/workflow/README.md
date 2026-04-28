@@ -79,6 +79,9 @@ Workflow command invoke paths that back workbench projections and queue,
 retention, Network, and runtime-status reads use `invokeWorkflowCommand`, which
 normalizes Tauri's JSON error strings into typed `WorkflowServiceError`
 instances while preserving backend error codes and details.
+Local Network scheduler-load DTOs include backend-provided active and queued
+workflow run id arrays so the Network page can show selected-run placement
+without inferring scheduler truth from counts or selected-run context.
 Queue and retention command methods live in `WorkflowCommandService.ts` so
 their backend-owned no-optimistic-update contract can be tested without
 importing the full graph event runtime required by `WorkflowService.ts`.

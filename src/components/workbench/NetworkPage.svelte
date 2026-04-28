@@ -10,6 +10,7 @@
     formatNetworkBytes,
     formatNetworkTimestamp,
     formatSchedulerLoad,
+    formatSelectedRunLocalState,
     formatSessionLoad,
     formatTransportState,
   } from './networkPagePresenters';
@@ -80,7 +81,8 @@
           </div>
           {#if $activeWorkflowRun}
             <div class="max-w-full truncate rounded border border-neutral-800 px-3 py-1.5 text-xs text-neutral-400">
-              Selected run <span class="font-mono text-neutral-200">{$activeWorkflowRun.workflow_run_id}</span>
+              <span class="font-mono text-neutral-200">{$activeWorkflowRun.workflow_run_id}</span>
+              <span class="ml-2 text-neutral-500">{formatSelectedRunLocalState(localNode, $activeWorkflowRun.workflow_run_id)}</span>
             </div>
           {/if}
         </div>

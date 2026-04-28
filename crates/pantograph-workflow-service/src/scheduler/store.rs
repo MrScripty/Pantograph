@@ -200,6 +200,30 @@ impl WorkflowExecutionSessionStore {
             .sum()
     }
 
+    pub(crate) fn active_workflow_run_ids(&self) -> Vec<String> {
+        self.active
+            .values()
+            .filter_map(|state| {
+                state
+                    .active_run
+                    .as_ref()
+                    .map(|active_run| active_run.workflow_run_id.clone())
+            })
+            .collect()
+    }
+
+    pub(crate) fn queued_workflow_run_ids(&self) -> Vec<String> {
+        self.active
+            .values()
+            .flat_map(|state| {
+                state
+                    .queue
+                    .iter()
+                    .map(|queued| queued.workflow_run_id.clone())
+            })
+            .collect()
+    }
+
     pub(crate) fn runtime_unload_candidates(
         &self,
         exclude_session_id: &str,

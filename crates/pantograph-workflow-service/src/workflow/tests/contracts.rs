@@ -250,6 +250,8 @@ fn workflow_local_network_status_roundtrip_uses_snake_case() {
                 loaded_session_count: 1,
                 active_run_count: 0,
                 queued_run_count: 3,
+                active_workflow_run_ids: vec!["run-active".to_string()],
+                queued_workflow_run_ids: vec!["run-queued".to_string()],
             },
             degradation_warnings: vec!["not implemented".to_string()],
         },
@@ -264,6 +266,14 @@ fn workflow_local_network_status_roundtrip_uses_snake_case() {
     let json = serde_json::to_value(&response).expect("serialize network response");
     assert_eq!(json["local_node"]["transport_state"], "local_only");
     assert_eq!(json["local_node"]["scheduler_load"]["queued_run_count"], 3);
+    assert_eq!(
+        json["local_node"]["scheduler_load"]["active_workflow_run_ids"][0],
+        "run-active"
+    );
+    assert_eq!(
+        json["local_node"]["scheduler_load"]["queued_workflow_run_ids"][0],
+        "run-queued"
+    );
     assert_eq!(
         json["local_node"]["system"]["network_interfaces"][0]["total_received_bytes"],
         10
