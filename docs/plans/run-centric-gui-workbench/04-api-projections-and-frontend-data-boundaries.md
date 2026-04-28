@@ -138,6 +138,9 @@ transport calls.
 - [ ] Choose the DTO parity mechanism before page work begins: generated
   bindings/schema checks, or paired Rust serialization tests plus TypeScript
   normalization/fixture tests for every projection.
+  - Current acceptance uses paired Rust public-DTO deserialization and
+    TypeScript service-boundary fixture tests for run-list/run-detail
+    projections. Broader generated binding parity remains a follow-up.
 - [x] If any new dependency is needed for DTO generation, media metadata,
   system metrics, or projection plumbing, record the owner, reason, alternatives
   considered, and lockfile impact before adding it.
@@ -365,17 +368,19 @@ implementation depends on it.
 
 **Status:** In progress. Run-list, selected-run detail, and typed scheduler
 timeline event acceptance now cover the frontend service boundary with Tauri
-mock IPC. Run-list projection DTOs now include client, client-session, bucket,
-workflow execution-session scope fields, and server-side filters for client,
-client-session, bucket, and accepted-at ranges so Scheduler and Diagnostics
-pages do not recover authority or time-scope context from raw events. Backend
-fixture coverage for typed event projection, retained artifact browsing,
-expired I/O artifact state, I/O artifact endpoint filters, and warm Library
-usage catching-up state is also in place. Frontend error-envelope coverage now
-proves projection service calls preserve backend error categories through typed
-service errors and shared workbench presenters. Queue and retention command
-coverage proves frontend service consumers receive backend-owned command DTOs
-without optimistic replacement.
+mock IPC. Run-list and run-detail projection acceptance now also share a JSON
+fixture deserialized by Rust public DTOs and consumed through the TypeScript
+workflow projection service. Run-list projection DTOs now include client,
+client-session, bucket, workflow execution-session scope fields, and server-side
+filters for client, client-session, bucket, and accepted-at ranges so Scheduler
+and Diagnostics pages do not recover authority or time-scope context from raw
+events. Backend fixture coverage for typed event projection, retained artifact
+browsing, expired I/O artifact state, I/O artifact endpoint filters, and warm
+Library usage catching-up state is also in place. Frontend error-envelope
+coverage now proves projection service calls preserve backend error categories
+through typed service errors and shared workbench presenters. Queue and
+retention command coverage proves frontend service consumers receive
+backend-owned command DTOs without optimistic replacement.
 
 ## Ownership And Lifecycle Note
 

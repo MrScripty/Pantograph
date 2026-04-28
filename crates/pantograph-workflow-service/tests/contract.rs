@@ -25,13 +25,13 @@ use pantograph_workflow_service::{
     WorkflowPreflightRequest, WorkflowProjectionRebuildRequest, WorkflowProjectionRebuildResponse,
     WorkflowRetentionCleanupRequest, WorkflowRetentionCleanupResponse,
     WorkflowRetentionPolicyQueryRequest, WorkflowRetentionPolicyQueryResponse,
-    WorkflowRunDetailQueryRequest, WorkflowRunDetailQueryResponse, WorkflowRuntimeCapability,
-    WorkflowRuntimeInstallState, WorkflowRuntimeRequirements, WorkflowRuntimeSourceKind,
-    WorkflowSchedulerSnapshotResponse, WorkflowSchedulerTimelineQueryRequest,
-    WorkflowSchedulerTimelineQueryResponse, WorkflowService, WorkflowServiceError,
-    WorkflowTraceNodeRecord, WorkflowTraceNodeStatus, WorkflowTraceQueueMetrics,
-    WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
-    WorkflowTraceStatus, WorkflowTraceSummary,
+    WorkflowRunDetailQueryRequest, WorkflowRunDetailQueryResponse, WorkflowRunListQueryResponse,
+    WorkflowRuntimeCapability, WorkflowRuntimeInstallState, WorkflowRuntimeRequirements,
+    WorkflowRuntimeSourceKind, WorkflowSchedulerSnapshotResponse,
+    WorkflowSchedulerTimelineQueryRequest, WorkflowSchedulerTimelineQueryResponse, WorkflowService,
+    WorkflowServiceError, WorkflowTraceNodeRecord, WorkflowTraceNodeStatus,
+    WorkflowTraceQueueMetrics, WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest,
+    WorkflowTraceSnapshotResponse, WorkflowTraceStatus, WorkflowTraceSummary,
 };
 
 struct ContractHost;
@@ -870,6 +870,37 @@ fn workflow_run_detail_query_contract_snapshot() {
         }
     });
     assert_eq!(response_value, expected_response);
+}
+
+#[test]
+fn run_projection_cross_layer_fixture_deserializes() {
+    let fixture: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/run_projection_contract.json"))
+            .expect("fixture parses");
+
+    let run_list: WorkflowRunListQueryResponse =
+        serde_json::from_value(fixture["run_list_response"].clone())
+            .expect("run list fixture matches Rust DTO");
+    let run_detail: WorkflowRunDetailQueryResponse =
+        serde_json::from_value(fixture["run_detail_response"].clone())
+            .expect("run detail fixture matches Rust DTO");
+
+    assert_eq!(
+        serde_json::to_value(&run_list).expect("serialize run list"),
+        fixture["run_list_response"]
+    );
+    assert_eq!(
+        serde_json::to_value(&run_detail).expect("serialize run detail"),
+        fixture["run_detail_response"]
+    );
+    assert_eq!(run_list.runs[0].workflow_run_id.as_str(), "run-1");
+    assert_eq!(
+        run_detail
+            .run
+            .as_ref()
+            .and_then(|run| run.workflow_execution_session_id.as_deref()),
+        Some("exec-session-1")
+    );
 }
 
 #[test]

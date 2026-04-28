@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { WorkflowProjectionService } from './WorkflowProjectionService.ts';
 import { WorkflowServiceError } from './workflowServiceErrors.ts';
@@ -12,9 +13,22 @@ import type {
   WorkflowSchedulerTimelineQueryResponse,
 } from '../diagnostics/types.ts';
 
+interface RunProjectionContractFixture {
+  run_list_response: WorkflowRunListQueryResponse;
+  run_detail_response: WorkflowRunDetailQueryResponse;
+}
+
 function installWindowMock(): void {
   const target = globalThis as unknown as Record<string, unknown>;
   target.window = globalThis;
+}
+
+function loadRunProjectionContractFixture(): RunProjectionContractFixture {
+  const fixtureUrl = new URL(
+    '../../../crates/pantograph-workflow-service/tests/fixtures/run_projection_contract.json',
+    import.meta.url,
+  );
+  return JSON.parse(readFileSync(fixtureUrl, 'utf8')) as RunProjectionContractFixture;
 }
 
 test('queryRunList preserves backend projection rows and facets', async () => {
@@ -93,6 +107,54 @@ test('queryRunList preserves backend projection rows and facets', async () => {
         limit: 25,
       },
     });
+  } finally {
+    clearMocks();
+  }
+});
+
+test('run projection contract fixture crosses Rust and TypeScript service boundaries', async () => {
+  installWindowMock();
+  const fixture = loadRunProjectionContractFixture();
+  const calls: Array<{ cmd: string; args: unknown }> = [];
+  mockIPC((cmd, args) => {
+    calls.push({ cmd, args });
+    if (cmd === 'workflow_run_list_query') {
+      return fixture.run_list_response;
+    }
+    if (cmd === 'workflow_run_detail_query') {
+      return fixture.run_detail_response;
+    }
+    throw new Error(`unexpected command ${cmd}`);
+  });
+
+  try {
+    const service = new WorkflowProjectionService();
+    const runList = await service.queryRunList({ workflow_id: 'wf-1', limit: 25 });
+    const runDetail = await service.queryRunDetail({ workflow_run_id: 'run-1' });
+
+    assert.deepEqual(runList, fixture.run_list_response);
+    assert.deepEqual(runDetail, fixture.run_detail_response);
+    assert.equal(runList.runs[0].workflow_execution_session_id, 'exec-session-1');
+    assert.equal(runDetail.run?.workflow_execution_session_id, 'exec-session-1');
+    assert.deepEqual(calls, [
+      {
+        cmd: 'workflow_run_list_query',
+        args: {
+          request: {
+            workflow_id: 'wf-1',
+            limit: 25,
+          },
+        },
+      },
+      {
+        cmd: 'workflow_run_detail_query',
+        args: {
+          request: {
+            workflow_run_id: 'run-1',
+          },
+        },
+      },
+    ]);
   } finally {
     clearMocks();
   }

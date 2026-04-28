@@ -1,0 +1,96 @@
+{
+  "run_list_response": {
+    "runs": [
+      {
+        "workflow_run_id": "run-1",
+        "workflow_id": "wf-1",
+        "workflow_version_id": "version-1",
+        "workflow_semantic_version": "1.2.3",
+        "status": "completed",
+        "accepted_at_ms": 1000,
+        "enqueued_at_ms": 1010,
+        "started_at_ms": 1020,
+        "completed_at_ms": 1100,
+        "duration_ms": 80,
+        "scheduler_policy_id": "session_fifo_v1",
+        "retention_policy_id": "standard-local-v1",
+        "client_id": "client-1",
+        "client_session_id": "session-1",
+        "bucket_id": "bucket-1",
+        "workflow_execution_session_id": "exec-session-1",
+        "scheduler_queue_position": 1,
+        "scheduler_priority": 5,
+        "estimate_confidence": "low",
+        "estimated_queue_wait_ms": 250,
+        "estimated_duration_ms": 1000,
+        "scheduler_reason": "queued behind one run",
+        "last_event_seq": 15,
+        "last_updated_at_ms": 1100
+      }
+    ],
+    "facets": [
+      {
+        "facet_kind": "workflow_version",
+        "facet_value": "1.2.3",
+        "run_count": 1
+      },
+      {
+        "facet_kind": "status",
+        "facet_value": "completed",
+        "run_count": 1
+      }
+    ],
+    "projection_state": {
+      "projection_name": "run_list",
+      "projection_version": 3,
+      "last_applied_event_seq": 15,
+      "status": "current",
+      "rebuilt_at_ms": null,
+      "updated_at_ms": 1110
+    }
+  },
+  "run_detail_response": {
+    "run": {
+      "workflow_run_id": "run-1",
+      "workflow_id": "wf-1",
+      "workflow_version_id": "version-1",
+      "workflow_semantic_version": "1.2.3",
+      "status": "completed",
+      "accepted_at_ms": 1000,
+      "enqueued_at_ms": 1010,
+      "started_at_ms": 1020,
+      "completed_at_ms": 1100,
+      "duration_ms": 80,
+      "scheduler_policy_id": "session_fifo_v1",
+      "retention_policy_id": "standard-local-v1",
+      "client_id": "client-1",
+      "client_session_id": "session-1",
+      "bucket_id": "bucket-1",
+      "workflow_run_snapshot_id": "snapshot-1",
+      "workflow_execution_session_id": "exec-session-1",
+      "workflow_presentation_revision_id": "presentation-1",
+      "latest_estimate_json": "{\"confidence\":\"low\"}",
+      "latest_queue_placement_json": "{\"queue_position\":1}",
+      "started_payload_json": "{\"queue_wait_ms\":10}",
+      "terminal_payload_json": "{\"status\":\"completed\"}",
+      "terminal_error": null,
+      "scheduler_queue_position": 1,
+      "scheduler_priority": 5,
+      "estimate_confidence": "low",
+      "estimated_queue_wait_ms": 250,
+      "estimated_duration_ms": 1000,
+      "scheduler_reason": "queued behind one run",
+      "timeline_event_count": 5,
+      "last_event_seq": 15,
+      "last_updated_at_ms": 1100
+    },
+    "projection_state": {
+      "projection_name": "run_detail",
+      "projection_version": 2,
+      "last_applied_event_seq": 15,
+      "status": "current",
+      "rebuilt_at_ms": null,
+      "updated_at_ms": 1110
+    }
+  }
+}

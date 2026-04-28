@@ -263,7 +263,7 @@ and local network facts to the GUI through stable projections.
 
 - [x] Execute the first Stage `04` implementation slices.
 - [x] Update module READMEs for host-facing API contracts.
-- [ ] Add cross-layer acceptance coverage for at least one run list and run
+- [x] Add cross-layer acceptance coverage for at least one run list and run
   detail path.
 
 **Verification:**
@@ -274,7 +274,8 @@ and local network facts to the GUI through stable projections.
 **Status:** In progress. Backend projection DTOs and frontend service
 boundaries exist for run list/detail, scheduler timeline, run graph,
 I/O artifacts, Library usage, retention policy, and local Network status.
-Additional cross-layer acceptance coverage and generated parity remain open.
+Run-list and run-detail now have shared Rust/TypeScript fixture acceptance.
+Generated parity remains open.
 
 ### Milestone 5: App Shell And Page Migration
 

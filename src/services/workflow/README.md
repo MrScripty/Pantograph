@@ -71,6 +71,9 @@ usage read paths can be tested without loading the graph package runtime.
 `WorkflowService` inherits that boundary so existing GUI callers keep the same
 method names while projection DTO tests stay focused on Tauri request/response
 contracts.
+Run-list and run-detail projection service tests consume the shared
+`pantograph-workflow-service` contract fixture so frontend request/response
+coverage stays aligned with Rust public DTO deserialization.
 Run-list projection DTOs preserve backend-provided client, client-session,
 bucket, and workflow execution-session scope fields so Scheduler pages can
 render authority context and future queue-control targets without querying
@@ -138,6 +141,8 @@ preserve the backend download/audit response.
   must not reimplement those methods separately.
 - Run-list request coverage includes scope and accepted-at range filters so
   frontend services preserve the backend projection contract.
+- Run-list and run-detail service-boundary tests must keep consuming the shared
+  Rust contract fixture for cross-layer DTO acceptance.
 - Library usage request coverage includes active-run `workflow_run_id`
   filtering so frontend services preserve the backend projection contract.
 - Retention cleanup requests must use `workflow_retention_cleanup_apply` and

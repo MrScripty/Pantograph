@@ -11,6 +11,7 @@ the public crate API used by Tauri, UniFFI, Rustler, and other host adapters.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `contract.rs` | Public contract snapshots for workflow run, capabilities, preflight, sessions, queues, traces, and scheduler diagnostics. |
+| `fixtures/` | Shared JSON fixtures consumed by Rust contract tests and frontend service-boundary tests when a DTO needs cross-layer acceptance. |
 
 ## Problem
 Workflow-service DTOs are consumed across frontend and native binding
@@ -33,8 +34,10 @@ by external adapters.
 ## Alternatives Rejected
 - Keep all coverage in module unit tests: rejected because private tests do not
   prove the public crate boundary used by adapters.
-- Use generated golden files for every response: rejected for now because the
-  current contract set is small enough to keep expected JSON inline.
+- Use generated golden files for every response: rejected for now because most
+  contract cases are still small enough to keep expected JSON inline. Shared
+  fixtures are allowed for DTOs that need cross-layer Rust/TypeScript
+  acceptance.
 
 ## Invariants
 - Tests must not depend on Tauri, UniFFI, Rustler, or frontend packages.
@@ -72,6 +75,9 @@ by external adapters.
   cancel/push-front, run-id-plus-priority override, and backend-authored
   session id responses because Tauri/frontend adapters must not derive the
   owning session themselves.
+- Shared fixture snapshots must be deserialized by Rust public DTOs and
+  consumed by frontend service tests in the same contract slice so drift is
+  detected on both sides.
 
 ## Revisit Triggers
 - Contract snapshots become large enough to justify fixture files.
