@@ -46,7 +46,9 @@ pub use self::diagnostics_api::{
     WorkflowRetentionPolicyQueryResponse, WorkflowRetentionPolicyUpdateRequest,
     WorkflowRetentionPolicyUpdateResponse, WorkflowRunDetailQueryRequest,
     WorkflowRunDetailQueryResponse, WorkflowRunListQueryRequest, WorkflowRunListQueryResponse,
-    WorkflowSchedulerTimelineQueryRequest, WorkflowSchedulerTimelineQueryResponse,
+    WorkflowSchedulerEstimateQueryRequest, WorkflowSchedulerEstimateQueryResponse,
+    WorkflowSchedulerEstimateRecord, WorkflowSchedulerTimelineQueryRequest,
+    WorkflowSchedulerTimelineQueryResponse,
 };
 pub use self::host::{
     WorkflowHost, WorkflowSchedulerDiagnosticsProvider, WorkflowSchedulerRuntimeDiagnosticsRequest,

@@ -94,6 +94,9 @@ live behind the facade in the workflow session lifecycle API helper.
 Model/license usage diagnostics query methods now live behind the facade in the
 workflow diagnostics API helper and delegate to `pantograph-diagnostics-ledger`
 for storage and query semantics.
+Scheduler estimate query methods also live in the diagnostics API helper and
+read the hot run-detail projection so clients can request estimate facts
+without parsing raw event payloads.
 Retention cleanup now lives behind the same diagnostics API helper and is
 re-exported by the crate facade so Tauri and frontend command adapters can
 trigger backend-owned artifact expiration without touching ledger internals.

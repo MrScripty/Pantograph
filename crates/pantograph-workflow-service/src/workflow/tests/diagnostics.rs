@@ -340,6 +340,39 @@ fn workflow_run_detail_query_drains_and_reads_projection() {
 }
 
 #[test]
+fn workflow_scheduler_estimate_query_returns_estimate_projection() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_run_snapshot_event())
+        .expect("run snapshot event");
+    ledger
+        .append_diagnostic_event(sample_scheduler_estimate_event())
+        .expect("scheduler estimate event");
+    let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+
+    let response = service
+        .workflow_scheduler_estimate_query(WorkflowSchedulerEstimateQueryRequest {
+            workflow_run_id: "run-a".to_string(),
+            projection_batch_size: Some(10),
+        })
+        .expect("scheduler estimate query");
+
+    let estimate = response.estimate.expect("estimate exists");
+    assert_eq!(estimate.workflow_run_id, "run-a");
+    assert_eq!(estimate.workflow_id, "workflow-a");
+    assert_eq!(estimate.workflow_version_id.as_deref(), Some("wfver-a"));
+    assert_eq!(
+        estimate.scheduler_policy_id.as_deref(),
+        Some("priority_then_fifo")
+    );
+    assert!(estimate.latest_estimate_json.is_some());
+    assert_eq!(estimate.estimate_confidence.as_deref(), Some("low"));
+    assert_eq!(estimate.estimated_queue_wait_ms, None);
+    assert_eq!(estimate.estimated_duration_ms, None);
+    assert_eq!(response.projection_state.last_applied_event_seq, 2);
+}
+
+#[test]
 fn workflow_run_detail_query_validates_bounds() {
     let service = WorkflowService::with_ephemeral_diagnostics_ledger().expect("service");
 

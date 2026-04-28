@@ -228,7 +228,9 @@ command that changes the global standard policy and records a typed
 now expose typed scheduler queue position, priority, estimate confidence,
 estimated queue wait, estimated
 duration, and scheduler reason fields rather than requiring consumers to parse
-estimate or queue-placement payload JSON for those facts. Broader command
+estimate or queue-placement payload JSON for those facts. A narrow
+`workflow_scheduler_estimate_query` command now exposes the same hot projection
+estimate facts for callers that need estimate-only reads. Broader command
 boundaries remain pending.
 `workflow_node_status_query` now exposes the hot `node_status` projection over
 typed `node.execution_status` ledger events for graph runtime-status overlays.

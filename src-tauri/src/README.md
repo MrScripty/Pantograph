@@ -106,6 +106,9 @@ improvements and backend-owned grouping DTOs over local adapter exceptions.
 - Workflow execution-session queue commands must be registered as transport
   entrypoints only; priority calculation, push-front behavior, and audit
   outcomes stay in the workflow service.
+- Workflow projection query commands, including scheduler estimate reads, must
+  stay transport-thin and return workflow-service DTOs without local payload
+  parsing.
 - Mechanical lint fixes must not change command payload shape, runtime
   ownership, or backend error categories.
 

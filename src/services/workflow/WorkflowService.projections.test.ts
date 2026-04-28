@@ -7,6 +7,7 @@ import type {
   WorkflowLibraryUsageQueryResponse,
   WorkflowRunDetailQueryResponse,
   WorkflowRunListQueryResponse,
+  WorkflowSchedulerEstimateQueryResponse,
   WorkflowSchedulerTimelineQueryResponse,
 } from '../diagnostics/types.ts';
 
@@ -244,6 +245,61 @@ test('querySchedulerTimeline preserves typed event projection fields', async () 
     assert.equal(result.events[0].event_kind, 'scheduler_queue_placement');
     assert.equal(result.events[0].payload_json, '{"queue_position":0,"priority":7}');
     assert.equal(result.projection_state.last_applied_event_seq, 8);
+  } finally {
+    clearMocks();
+  }
+});
+
+test('querySchedulerEstimate preserves backend estimate projection shape', async () => {
+  installWindowMock();
+  const calls: Array<{ cmd: string; args: unknown }> = [];
+  const response: WorkflowSchedulerEstimateQueryResponse = {
+    estimate: {
+      workflow_run_id: 'run-estimate',
+      workflow_id: 'workflow-a',
+      workflow_version_id: 'wfver-a',
+      workflow_semantic_version: '1.2.3',
+      scheduler_policy_id: 'priority_then_fifo',
+      latest_estimate_json: '{"confidence":"medium"}',
+      estimate_confidence: 'medium',
+      estimated_queue_wait_ms: 250,
+      estimated_duration_ms: 1_500,
+      last_event_seq: 12,
+      last_updated_at_ms: 220,
+    },
+    projection_state: {
+      projection_name: 'run_detail',
+      projection_version: 2,
+      last_applied_event_seq: 12,
+      status: 'current',
+      rebuilt_at_ms: null,
+      updated_at_ms: 225,
+    },
+  };
+  mockIPC((cmd, args) => {
+    calls.push({ cmd, args });
+    return response;
+  });
+
+  try {
+    const service = new WorkflowProjectionService();
+    const result = await service.querySchedulerEstimate({
+      workflow_run_id: 'run-estimate',
+      projection_batch_size: 25,
+    });
+
+    assert.deepEqual(result, response);
+    assert.deepEqual(calls, [
+      {
+        cmd: 'workflow_scheduler_estimate_query',
+        args: {
+          request: {
+            workflow_run_id: 'run-estimate',
+            projection_batch_size: 25,
+          },
+        },
+      },
+    ]);
   } finally {
     clearMocks();
   }

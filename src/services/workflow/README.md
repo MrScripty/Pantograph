@@ -12,7 +12,7 @@ on raw invoke payloads.
 | `WorkflowService.ts` | Main client-side workflow service, including session lifecycle, graph mutation, connection-intent commands, and atomic insert-and-connect. |
 | `WorkflowCommandService.ts` | Focused backend-owned queue and retention command service inherited by `WorkflowService` and tested without loading the graph runtime. |
 | `WorkflowService.commands.test.ts` | Tauri mock IPC tests proving queue and retention commands return backend-owned results without optimistic client replacement. |
-| `WorkflowProjectionService.ts` | Focused projection service for scheduler timeline, run-list, selected-run, and warm Library usage reads used by `WorkflowService` and projection boundary tests. |
+| `WorkflowProjectionService.ts` | Focused projection service for scheduler timeline, scheduler estimate, run-list, selected-run, and warm Library usage reads used by `WorkflowService` and projection boundary tests. |
 | `WorkflowService.projections.test.ts` | Tauri mock IPC tests proving scheduler timeline events, run-list facets, selected-run scheduler estimate fields, and warm projection freshness state survive the service boundary. |
 | `workflowServiceErrors.ts` | Typed workflow command error normalizer and invoke wrapper for backend JSON error envelopes. |
 | `workflowServiceErrors.test.ts` | Unit coverage for backend error-envelope parsing and transport-error fallback behavior. |
@@ -145,6 +145,8 @@ preserve the backend download/audit response.
 - Run-list projection reads must preserve backend-owned facets, projection
   state, scheduler estimate fields, queue-placement fields, and delayed status
   without reconstructing them client-side.
+- Scheduler estimate projection reads must return backend-authored estimate
+  DTOs exactly and must not parse raw scheduler event payloads client-side.
 - Workbench-facing workflow command methods must throw `WorkflowServiceError`
   when the backend returns a `WorkflowErrorEnvelope`; callers must not parse
   raw JSON error strings.

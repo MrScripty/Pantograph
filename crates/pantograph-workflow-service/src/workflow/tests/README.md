@@ -88,6 +88,9 @@ Use `workflow/tests/` for behavior-specific child modules under the parent
   `retention.policy_changed` events so policy mutations remain auditable.
 - Retention cleanup tests must prove expired artifact metadata is visible
   through public projection queries after the cleanup command runs.
+- Diagnostics tests must verify scheduler estimate queries return narrow
+  estimate-shaped hot projection DTOs without requiring callers to parse raw
+  scheduler estimate payloads or full run-detail responses.
 - Session admission tests with diagnostics enabled must verify durable
   scheduler delay events for runtime admission waits without depending on raw
   scheduler-store internals.

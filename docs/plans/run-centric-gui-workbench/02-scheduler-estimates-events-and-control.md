@@ -245,7 +245,8 @@ same immutable run facts. Run-triggered capacity rebalance now emits unload
 scheduled/started/completed/failed transitions for the selected candidate's
 required models. Broader client/admin action vocabulary and frontend page
 wiring remain pending. Workflow-service now has a query boundary for the
-materialized scheduler timeline.
+materialized scheduler timeline and a narrow scheduler estimate query boundary
+backed by the hot run-detail projection.
 
 ### Milestone 4: Queue Authority And Admin Controls
 
@@ -278,10 +279,12 @@ now gates its first cancel/front controls on projected workflow
 execution-session ids before calling those backend commands. Push-front is a
 scheduler-owned operation that computes the next priority from the current
 session queue and denies the request if the priority ceiling prevents a real
-move. These events currently use the `backend_control_api` actor scope because
-this slice does not introduce the future client/admin privilege split.
-Clone/resubmit, privileged cross-session admin controls, and richer actor
-scopes remain pending.
+move. Query-own-estimate now has a workflow-service and frontend projection
+method that returns estimate-shaped hot projection facts for a run without raw
+ledger access. Queue-control events currently use the `backend_control_api`
+actor scope because this slice does not introduce the future client/admin
+privilege split. Clone/resubmit, privileged cross-session admin controls, and
+richer actor scopes remain pending.
 
 ## Ownership And Lifecycle Note
 

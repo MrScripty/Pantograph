@@ -118,10 +118,12 @@ pub use workflow::{
     WorkflowRuntimeIssue, WorkflowRuntimeReadinessState, WorkflowRuntimeRequirements,
     WorkflowRuntimeSourceKind, WorkflowSchedulerAdmissionOutcome, WorkflowSchedulerDecisionReason,
     WorkflowSchedulerDiagnosticsProvider, WorkflowSchedulerErrorDetails,
-    WorkflowSchedulerErrorReason, WorkflowSchedulerRuntimeDiagnosticsRequest,
-    WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse,
-    WorkflowSchedulerTimelineQueryRequest, WorkflowSchedulerTimelineQueryResponse, WorkflowService,
-    WorkflowServiceError, WorkflowVersionRecord, WorkflowVersionResolveRequest,
+    WorkflowSchedulerErrorReason, WorkflowSchedulerEstimateQueryRequest,
+    WorkflowSchedulerEstimateQueryResponse, WorkflowSchedulerEstimateRecord,
+    WorkflowSchedulerRuntimeDiagnosticsRequest, WorkflowSchedulerSnapshotRequest,
+    WorkflowSchedulerSnapshotResponse, WorkflowSchedulerTimelineQueryRequest,
+    WorkflowSchedulerTimelineQueryResponse, WorkflowService, WorkflowServiceError,
+    WorkflowVersionRecord, WorkflowVersionResolveRequest,
 };
 pub use workflow::{
     IoArtifactProjectionRecord, IoArtifactRetentionState, IoArtifactRetentionSummaryRecord,

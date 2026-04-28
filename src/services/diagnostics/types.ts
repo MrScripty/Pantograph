@@ -480,6 +480,30 @@ export interface WorkflowRunDetailQueryResponse {
   projection_state: ProjectionStateRecord;
 }
 
+export interface WorkflowSchedulerEstimateQueryRequest {
+  workflow_run_id: string;
+  projection_batch_size?: number | null;
+}
+
+export interface WorkflowSchedulerEstimateRecord {
+  workflow_run_id: string;
+  workflow_id: string;
+  workflow_version_id?: string | null;
+  workflow_semantic_version?: string | null;
+  scheduler_policy_id?: string | null;
+  latest_estimate_json?: string | null;
+  estimate_confidence?: string | null;
+  estimated_queue_wait_ms?: number | null;
+  estimated_duration_ms?: number | null;
+  last_event_seq: number;
+  last_updated_at_ms: number;
+}
+
+export interface WorkflowSchedulerEstimateQueryResponse {
+  estimate?: WorkflowSchedulerEstimateRecord | null;
+  projection_state: ProjectionStateRecord;
+}
+
 export interface WorkflowIoArtifactQueryRequest {
   workflow_run_id?: string | null;
   node_id?: string | null;

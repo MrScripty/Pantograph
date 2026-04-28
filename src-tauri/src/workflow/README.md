@@ -115,6 +115,9 @@ long positional argument lists through runtime helpers.
 Execution-session queue cancel, reprioritize, and push-front commands stay
 thin transport wrappers over `pantograph-workflow-service`; Tauri registers the
 commands but does not compute queue priority, authority, or audit outcomes.
+Scheduler estimate query commands likewise stay thin wrappers over
+workflow-service projection DTOs and must not parse raw diagnostic payload JSON
+inside Tauri.
 The legacy Tauri-local node registry mirror has also been removed; definition
 commands now use the service-owned registry directly.
 The legacy Tauri-local execution manager has been removed; undo/redo and

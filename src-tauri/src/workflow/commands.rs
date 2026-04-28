@@ -285,6 +285,15 @@ pub async fn workflow_run_detail_query(
 }
 
 #[command]
+pub async fn workflow_scheduler_estimate_query(
+    request: pantograph_workflow_service::WorkflowSchedulerEstimateQueryRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<pantograph_workflow_service::WorkflowSchedulerEstimateQueryResponse, String> {
+    super::headless_workflow_commands::workflow_scheduler_estimate_query(request, workflow_service)
+        .await
+}
+
+#[command]
 pub async fn workflow_run_graph_query(
     request: pantograph_workflow_service::WorkflowRunGraphQueryRequest,
     workflow_service: State<'_, SharedWorkflowService>,

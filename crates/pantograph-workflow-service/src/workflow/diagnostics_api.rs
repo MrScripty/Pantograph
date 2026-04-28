@@ -162,6 +162,45 @@ pub struct WorkflowRunDetailQueryResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+pub struct WorkflowSchedulerEstimateQueryRequest {
+    pub workflow_run_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub projection_batch_size: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowSchedulerEstimateQueryResponse {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub estimate: Option<WorkflowSchedulerEstimateRecord>,
+    pub projection_state: ProjectionStateRecord,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowSchedulerEstimateRecord {
+    pub workflow_run_id: String,
+    pub workflow_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_version_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_semantic_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scheduler_policy_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_estimate_json: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub estimate_confidence: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub estimated_queue_wait_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub estimated_duration_ms: Option<u64>,
+    pub last_event_seq: i64,
+    pub last_updated_at_ms: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub struct WorkflowIoArtifactQueryRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workflow_run_id: Option<String>,
@@ -417,6 +456,32 @@ impl WorkflowService {
 
         Ok(WorkflowRunDetailQueryResponse {
             run,
+            projection_state,
+        })
+    }
+
+    pub fn workflow_scheduler_estimate_query(
+        &self,
+        request: WorkflowSchedulerEstimateQueryRequest,
+    ) -> Result<WorkflowSchedulerEstimateQueryResponse, WorkflowServiceError> {
+        let projection_batch_size = request.projection_batch_size.unwrap_or(500).max(1);
+        if projection_batch_size > 500 {
+            return Err(WorkflowServiceError::InvalidRequest(
+                "projection_batch_size exceeds maximum 500".to_string(),
+            ));
+        }
+        let query = request.into_run_detail_query()?;
+        let mut ledger = self.diagnostics_ledger_guard()?;
+        let projection_state = ledger
+            .drain_run_detail_projection(projection_batch_size)
+            .map_err(WorkflowServiceError::from)?;
+        let estimate = ledger
+            .query_run_detail_projection(query)
+            .map_err(WorkflowServiceError::from)?
+            .map(WorkflowSchedulerEstimateRecord::from);
+
+        Ok(WorkflowSchedulerEstimateQueryResponse {
+            estimate,
             projection_state,
         })
     }
@@ -750,6 +815,32 @@ impl WorkflowRunDetailQueryRequest {
         Ok(RunDetailProjectionQuery {
             workflow_run_id: parse_id("workflow_run_id", self.workflow_run_id)?,
         })
+    }
+}
+
+impl WorkflowSchedulerEstimateQueryRequest {
+    fn into_run_detail_query(self) -> Result<RunDetailProjectionQuery, WorkflowServiceError> {
+        Ok(RunDetailProjectionQuery {
+            workflow_run_id: parse_id("workflow_run_id", self.workflow_run_id)?,
+        })
+    }
+}
+
+impl From<RunDetailProjectionRecord> for WorkflowSchedulerEstimateRecord {
+    fn from(run: RunDetailProjectionRecord) -> Self {
+        Self {
+            workflow_run_id: run.workflow_run_id.to_string(),
+            workflow_id: run.workflow_id.to_string(),
+            workflow_version_id: run.workflow_version_id.map(|value| value.to_string()),
+            workflow_semantic_version: run.workflow_semantic_version,
+            scheduler_policy_id: run.scheduler_policy_id,
+            latest_estimate_json: run.latest_estimate_json,
+            estimate_confidence: run.estimate_confidence,
+            estimated_queue_wait_ms: run.estimated_queue_wait_ms,
+            estimated_duration_ms: run.estimated_duration_ms,
+            last_event_seq: run.last_event_seq,
+            last_updated_at_ms: run.last_updated_at_ms,
+        }
     }
 }
 

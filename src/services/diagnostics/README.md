@@ -77,6 +77,9 @@ projection without inventing fallback run identities or workflow display names.
 - Run-list query DTOs include optional client, client-session, bucket, and
   accepted-at range filters so frontend callers can narrow projection reads
   without raw ledger access.
+- Scheduler estimate query DTOs expose a narrow estimate-shaped projection for
+  selected runs so callers do not mine full run-detail payloads for scheduler
+  estimate facts.
 - Library usage query DTOs include optional `workflow_run_id` filters so
   frontend consumers can request selected-run asset usage without reconstructing
   active-run Library state from raw ledger events.

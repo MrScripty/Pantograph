@@ -17,6 +17,7 @@ public exports out of the service crate.
 | `host.rs` | Host trait defaults and scheduler diagnostics provider contracts re-exported by the parent facade. |
 | `identity.rs` | Validated workflow identity value object and grammar used by workflow submission and saved graph boundaries. |
 | `io_contract.rs` | Workflow input/output surface derivation and host-response validation helpers. |
+| `diagnostics_api.rs` | Diagnostics, scheduler timeline, scheduler estimate, run projection, I/O artifact, Library usage, retention, and projection rebuild facade methods. |
 | `preflight_api.rs` | Workflow capability, I/O discovery, and preflight facade methods. |
 | `runtime_preflight.rs` | Runtime requirement matching, issue formatting, and preflight warning collection. |
 | `session_execution_api.rs` | Workflow session creation and queued session run orchestration facade methods. |
@@ -236,6 +237,9 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
 - Run-list query responses include comparison facets from backend
   `run_list_projection` rows for workflow version, status, scheduler policy,
   and retention policy.
+- Scheduler estimate queries expose the selected run's hot run-detail
+  projection estimate fields without making frontend callers parse full run
+  detail or raw ledger payload rows.
 - Queue cancel, reprioritize, and push-front commands emit typed scheduler
   queue-control events when diagnostics are configured. Accepted and denied
   outcomes must be recorded after the scheduler store makes the authority

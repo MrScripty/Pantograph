@@ -25,9 +25,10 @@ use pantograph_workflow_service::{
     WorkflowRetentionPolicyUpdateRequest, WorkflowRetentionPolicyUpdateResponse,
     WorkflowRunDetailQueryRequest, WorkflowRunDetailQueryResponse, WorkflowRunGraphQueryRequest,
     WorkflowRunGraphQueryResponse, WorkflowRunListQueryRequest, WorkflowRunListQueryResponse,
-    WorkflowRunResponse, WorkflowSchedulerSnapshotRequest, WorkflowSchedulerSnapshotResponse,
-    WorkflowSchedulerTimelineQueryRequest, WorkflowSchedulerTimelineQueryResponse,
-    WorkflowServiceError,
+    WorkflowRunResponse, WorkflowSchedulerEstimateQueryRequest,
+    WorkflowSchedulerEstimateQueryResponse, WorkflowSchedulerSnapshotRequest,
+    WorkflowSchedulerSnapshotResponse, WorkflowSchedulerTimelineQueryRequest,
+    WorkflowSchedulerTimelineQueryResponse, WorkflowServiceError,
 };
 use tauri::{AppHandle, State};
 
@@ -242,6 +243,15 @@ pub async fn workflow_run_detail_query(
 ) -> Result<WorkflowRunDetailQueryResponse, String> {
     workflow_service
         .workflow_run_detail_query(request)
+        .map_err(workflow_error_json)
+}
+
+pub async fn workflow_scheduler_estimate_query(
+    request: WorkflowSchedulerEstimateQueryRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<WorkflowSchedulerEstimateQueryResponse, String> {
+    workflow_service
+        .workflow_scheduler_estimate_query(request)
         .map_err(workflow_error_json)
 }
 
