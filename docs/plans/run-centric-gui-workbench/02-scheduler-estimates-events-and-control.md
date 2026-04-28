@@ -118,21 +118,21 @@ logs or inferred in the frontend.
 
 **Tasks:**
 
-- [ ] Define `SchedulerEstimate` fields, estimate timestamp/version, and
+- [x] Define `SchedulerEstimate` fields, estimate timestamp/version, and
   confidence/quality semantics.
-- [ ] Define `SchedulerEvent` event types as a typed diagnostic event family
+- [x] Define `SchedulerEvent` event types as a typed diagnostic event family
   with allowlisted event kinds, schema versions, payload structs, source
   components, privacy classes, retention classes, and validation rules.
 - [ ] Define model/cache state enum used by estimates and events.
-- [ ] Define client action versus admin override event vocabulary.
+- [x] Define client action versus admin override event vocabulary.
 - [x] Confirm the shared typed diagnostic event ledger bootstrap is available
   before durable scheduler event persistence. If it is not available, execute
   that bootstrap before Milestone 3.
 - [ ] Define lock-boundary rules for estimate calculation and event
   persistence so scheduler/session locks are not held during durable writes.
-- [ ] Define the ownership split between `run.*` lifecycle events and
+- [x] Define the ownership split between `run.*` lifecycle events and
   `scheduler.*` decision/control events.
-- [ ] Define scheduler hot projection ownership for run list, run detail,
+- [x] Define scheduler hot projection ownership for run list, run detail,
   current status, and scheduler timeline updates through the shared
   `projection_state` cursor model.
 
@@ -143,17 +143,20 @@ logs or inferred in the frontend.
 - README or ADR updates record storage/ownership decisions.
 
 **Status:** In progress. The shared typed diagnostic event ledger is available
-in `pantograph-diagnostics-ledger`, and the workflow-session scheduler emits
-durable `scheduler.estimate_produced` and `scheduler.queue_placement` events
-after queue insertion when a diagnostics ledger is configured. The hot
-run-list and run-detail projections now promote typed scheduler queue position,
+in `pantograph-diagnostics-ledger`. First-pass scheduler estimate fields,
+scheduler event payload contracts, client/admin queue-control vocabulary,
+run-versus-scheduler event ownership, and hot projection ownership are
+implemented. The workflow-session scheduler emits durable
+`scheduler.estimate_produced` and `scheduler.queue_placement` events after
+queue insertion when a diagnostics ledger is configured. The hot run-list and
+run-detail projections now promote typed scheduler queue position,
 priority, estimate confidence, estimated queue wait, estimated duration, and
 scheduler reason fields from those events. The typed scheduler event family
 also has validated delay and model lifecycle payload contracts, including a
 model lifecycle transition enum, and the timeline projection can materialize
-those rows when emitted. Richer estimate DTO semantics, admin/client action
-vocabulary, production model-load emitters, and complete hot projection
-ownership remain pending.
+those rows when emitted. Model/cache state vocabulary, lock-boundary
+documentation, broader scheduler authority vocabulary, and non-queued-run
+control paths remain pending.
 
 ### Milestone 2: Estimate Production
 
@@ -196,16 +199,16 @@ scheduler activity.
   estimate produced, queue placement, delayed, promoted, cancellation
   requested/accepted/denied, admitted, reservation created/released.
 - [ ] Emit reservation/runtime/device selection events.
-- [ ] Emit model load requested/started/completed/failed and unload
+- [x] Emit model load requested/started/completed/failed and unload
   scheduled/cancelled/started/completed events.
 - [ ] Emit retry/fallback events.
 - [x] Emit client queue action and admin override events.
 - [ ] Join or reference `run.*` lifecycle events in scheduler projections
   without duplicating terminal execution lifecycle facts as scheduler events.
-- [ ] Persist typed scheduler events through the event ledger owner.
-- [ ] Build scheduler event projections from ledger events for run-scoped and
+- [x] Persist typed scheduler events through the event ledger owner.
+- [x] Build scheduler event projections from ledger events for run-scoped and
   system-scoped queries using incremental materialized projection cursors.
-- [ ] Include relevant `run.*` and `node.*` lifecycle events in scheduler
+- [x] Include relevant `run.*` and `node.*` lifecycle events in scheduler
   timeline projections where the requirements call for execution/node
   visibility.
 
