@@ -185,7 +185,9 @@ transient UI state without becoming backend scheduler policy.
   version, status, policy, scope, bucket, accepted-date, and accepted-date
   range fields. Selected-run retention completeness uses
   `workflowService.queryIoArtifacts` response `retention_summary` counts and
-  I/O projection freshness, not raw ledger events.
+  I/O projection freshness, not raw ledger events. Selected-run execution
+  facets use `workflowService.queryNodeStatus` node status projection rows for
+  node, runtime, and model version labels.
 - `IoInspectorPage.svelte` reads artifact metadata through
   `workflowService.queryIoArtifacts` and global retention state through
   `workflowService.queryRetentionPolicy`. Artifact retention labels come from
@@ -230,8 +232,9 @@ transient UI state without becoming backend scheduler policy.
   overlays render `NodeStatusProjectionRecord` rows, not raw diagnostic events.
 - Diagnostics fact rows render `RunDetailProjectionRecord` fields, and
   comparison filters/facets use `RunListProjectionRecord` fields. Scheduler
-  estimate and queue facts are read from typed projection fields. Timeline rows
-  render `SchedulerTimelineProjectionRecord` summaries.
+  estimate and queue facts are read from typed projection fields. Selected-run
+  node, runtime, and model execution facets render `NodeStatusProjectionRecord`
+  fields. Timeline rows render `SchedulerTimelineProjectionRecord` summaries.
 - Network status cards are derived from `WorkflowLocalNetworkStatusQueryResponse`.
 - Network disk and interface rows render reported local metrics and show
   unavailable states when platform probes do not provide rows.

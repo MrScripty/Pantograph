@@ -2,6 +2,7 @@
   import { RefreshCw } from 'lucide-svelte';
   import type {
     IoArtifactRetentionSummaryRecord,
+    NodeStatusProjectionRecord,
     ProjectionStateRecord,
     RunDetailProjectionRecord,
     RunListFacetRecord,
@@ -19,6 +20,7 @@
     buildDiagnosticsFactRows,
     buildDiagnosticsRetentionSummaryRows,
     buildDiagnosticsComparisonFilterOptions,
+    buildDiagnosticsExecutionFacetRows,
     diagnosticsStatusClass,
     filterDiagnosticsComparisonRuns,
     formatDiagnosticEventKind,
@@ -35,10 +37,12 @@
   let runDetail = $state<RunDetailProjectionRecord | null>(null);
   let runList = $state<RunListProjectionRecord[]>([]);
   let runListFacets = $state<RunListFacetRecord[]>([]);
+  let nodeStatuses = $state<NodeStatusProjectionRecord[]>([]);
   let retentionSummary = $state<IoArtifactRetentionSummaryRecord[]>([]);
   let timelineEvents = $state<SchedulerTimelineProjectionRecord[]>([]);
   let runDetailProjectionState = $state<ProjectionStateRecord | null>(null);
   let runListProjectionState = $state<ProjectionStateRecord | null>(null);
+  let nodeStatusProjectionState = $state<ProjectionStateRecord | null>(null);
   let ioProjectionState = $state<ProjectionStateRecord | null>(null);
   let timelineProjectionState = $state<ProjectionStateRecord | null>(null);
   let loading = $state(false);
@@ -49,6 +53,7 @@
   let requestSerial = 0;
 
   let factRows = $derived(runDetail ? buildDiagnosticsFactRows(runDetail) : []);
+  let executionFacetRows = $derived(buildDiagnosticsExecutionFacetRows(nodeStatuses));
   let retentionSummaryRows = $derived(buildDiagnosticsRetentionSummaryRows(retentionSummary));
   let comparisonFilterOptions = $derived(
     runDetail ? buildDiagnosticsComparisonFilterOptions(runDetail, runList) : EMPTY_DIAGNOSTICS_COMPARISON_FILTER_OPTIONS,
@@ -79,10 +84,12 @@
       runDetail = null;
       runList = [];
       runListFacets = [];
+      nodeStatuses = [];
       retentionSummary = [];
       timelineEvents = [];
       runDetailProjectionState = null;
       runListProjectionState = null;
+      nodeStatusProjectionState = null;
       ioProjectionState = null;
       timelineProjectionState = null;
       loading = false;
@@ -102,9 +109,10 @@
         return;
       }
       const selectedRun = runResponse.run ?? null;
-      const runListAndIoResponse = selectedRun
+      const selectedRunResponses = selectedRun
         ? await Promise.all([
             workflowService.queryRunList({ workflow_id: selectedRun.workflow_id, limit: 250 }),
+            workflowService.queryNodeStatus({ workflow_run_id: selectedRun.workflow_run_id, limit: 250 }),
             workflowService.queryIoArtifacts({ workflow_run_id: selectedRun.workflow_run_id, limit: 1 }),
           ])
         : null;
@@ -113,11 +121,13 @@
       }
       runDetail = selectedRun;
       runDetailProjectionState = runResponse.projection_state;
-      runList = runListAndIoResponse?.[0].runs ?? [];
-      runListFacets = runListAndIoResponse?.[0].facets ?? [];
-      runListProjectionState = runListAndIoResponse?.[0].projection_state ?? null;
-      retentionSummary = runListAndIoResponse?.[1].retention_summary ?? [];
-      ioProjectionState = runListAndIoResponse?.[1].projection_state ?? null;
+      runList = selectedRunResponses?.[0].runs ?? [];
+      runListFacets = selectedRunResponses?.[0].facets ?? [];
+      runListProjectionState = selectedRunResponses?.[0].projection_state ?? null;
+      nodeStatuses = selectedRunResponses?.[1].nodes ?? [];
+      nodeStatusProjectionState = selectedRunResponses?.[1].projection_state ?? null;
+      retentionSummary = selectedRunResponses?.[2].retention_summary ?? [];
+      ioProjectionState = selectedRunResponses?.[2].projection_state ?? null;
       timelineEvents = timelineResponse.events;
       timelineProjectionState = timelineResponse.projection_state;
     } catch (refreshError) {
@@ -128,10 +138,12 @@
       runDetail = null;
       runList = [];
       runListFacets = [];
+      nodeStatuses = [];
       retentionSummary = [];
       timelineEvents = [];
       runDetailProjectionState = null;
       runListProjectionState = null;
+      nodeStatusProjectionState = null;
       ioProjectionState = null;
       timelineProjectionState = null;
     } finally {
@@ -250,6 +262,10 @@
                 <dd class="mt-1 text-neutral-200">{formatDiagnosticsProjectionFreshness(runListProjectionState)}</dd>
               </div>
               <div>
+                <dt class="text-neutral-500">Node Status</dt>
+                <dd class="mt-1 text-neutral-200">{formatDiagnosticsProjectionFreshness(nodeStatusProjectionState)}</dd>
+              </div>
+              <div>
                 <dt class="text-neutral-500">I/O Retention</dt>
                 <dd class="mt-1 text-neutral-200">{formatDiagnosticsProjectionFreshness(ioProjectionState)}</dd>
               </div>
@@ -271,6 +287,25 @@
                 </div>
               {/each}
             </dl>
+          </section>
+
+          <section class="rounded border border-neutral-800 bg-neutral-900/50 p-4">
+            <h2 class="text-sm font-semibold text-neutral-100">Execution Facets</h2>
+            {#if executionFacetRows.length === 0}
+              <div class="mt-4 text-xs text-neutral-500">No node status projection rows</div>
+            {:else}
+              <dl class="mt-4 space-y-3 text-xs">
+                {#each executionFacetRows as row (`${row.label}:${row.value}`)}
+                  <div>
+                    <dt class="text-neutral-500">{row.label}</dt>
+                    <dd class="mt-1 flex items-center justify-between gap-3 text-neutral-200">
+                      <span class="min-w-0 truncate font-mono" title={row.value}>{row.value}</span>
+                      <span class="shrink-0 text-neutral-500">{row.count}</span>
+                    </dd>
+                  </div>
+                {/each}
+              </dl>
+            {/if}
           </section>
 
           <section class="rounded border border-neutral-800 bg-neutral-900/50 p-4">

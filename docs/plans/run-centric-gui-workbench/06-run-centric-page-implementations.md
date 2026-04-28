@@ -201,18 +201,20 @@ backend run-list projection query where supported; search, sort, and
 facts, status, timing, workflow execution-session authority, terminal error,
 projection freshness, and scheduler timeline summaries without parsing raw
 ledger rows or event-family payloads in the component. It also uses the
-run-list projection to render selected-run
-comparison facets, active facet counts across the current workflow's recent
-runs, and mixed workflow-version warnings. Those counts now prefer backend
-run-list facet summaries scoped to the selected workflow when no local
-comparison filters are active. The page can filter comparison peers by workflow
-version, status, scheduler policy, retention policy, client, client session,
-bucket, accepted date, and accepted date range using typed run-list projection
-fields; node/model and runtime version facets, graph-setting filters,
-and richer scheduler decision facets remain open pending additional typed
-projection fields. Retention completeness for the selected run is displayed
-from `workflowService.queryIoArtifacts` response `retention_summary` counts and
-I/O projection freshness, avoiding raw ledger replay in the page.
+run-list projection to render selected-run comparison facets, active facet
+counts across the current workflow's recent runs, and mixed workflow-version
+warnings. Those counts now prefer backend run-list facet summaries scoped to the
+selected workflow when no local comparison filters are active. The page can
+filter comparison peers by workflow version, status, scheduler policy,
+retention policy, client, client session, bucket, accepted date, and accepted
+date range using typed run-list projection fields. Selected-run node status,
+node version, runtime id/version, and model id/version facet labels are rendered
+from `workflowService.queryNodeStatus` projection rows for future comparison
+axes. Cross-run node/model/runtime filters, graph-setting filters, and richer
+scheduler decision facets remain open pending additional typed projection
+fields. Retention completeness for the selected run is displayed from
+`workflowService.queryIoArtifacts` response `retention_summary` counts and I/O
+projection freshness, avoiding raw ledger replay in the page.
 
 ### Milestone 3: Graph Page
 

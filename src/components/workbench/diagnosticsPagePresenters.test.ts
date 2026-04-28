@@ -3,11 +3,13 @@ import assert from 'node:assert/strict';
 
 import type {
   IoArtifactRetentionSummaryRecord,
+  NodeStatusProjectionRecord,
   RunDetailProjectionRecord,
   RunListProjectionRecord,
 } from '../../services/diagnostics/types.ts';
 import {
   DEFAULT_DIAGNOSTICS_COMPARISON_FILTERS,
+  buildDiagnosticsExecutionFacetRows,
   buildDiagnosticsFacetSummary,
   buildDiagnosticsFactRows,
   buildDiagnosticsRetentionSummaryRows,
@@ -75,6 +77,30 @@ function createRunListPeer(overrides: Partial<RunListProjectionRecord>): RunList
     bucket_id: 'bucket-a',
     last_event_seq: 10,
     last_updated_at_ms: 20,
+    ...overrides,
+  };
+}
+
+function createNodeStatus(overrides: Partial<NodeStatusProjectionRecord>): NodeStatusProjectionRecord {
+  return {
+    workflow_run_id: 'run-1',
+    workflow_id: 'workflow-a',
+    workflow_version_id: 'wfver-1',
+    workflow_semantic_version: '1.2.3',
+    node_id: 'node-a',
+    node_type: 'image.generate',
+    node_version: '1.0.0',
+    runtime_id: 'runtime-a',
+    runtime_version: '2.0.0',
+    model_id: 'model-a',
+    model_version: '3.0.0',
+    status: 'completed',
+    started_at_ms: 1,
+    completed_at_ms: 2,
+    duration_ms: 1,
+    error: null,
+    last_event_seq: 9,
+    last_updated_at_ms: 10,
     ...overrides,
   };
 }
@@ -224,6 +250,52 @@ test('buildDiagnosticsRetentionSummaryRows formats typed projection counts', () 
     { label: 'Payload expired', count: 2 },
     { label: 'Too large to retain', count: 1 },
   ]);
+});
+
+test('buildDiagnosticsExecutionFacetRows groups selected-run node status facts', () => {
+  const rows = buildDiagnosticsExecutionFacetRows([
+    createNodeStatus({ node_id: 'node-a', node_version: '1.0.0', runtime_version: '2.0.0', model_id: 'model-a' }),
+    createNodeStatus({ node_id: 'node-b', node_version: '1.0.0', runtime_version: '2.1.0', model_id: 'model-a' }),
+    createNodeStatus({
+      node_id: 'node-c',
+      node_version: '',
+      runtime_id: null,
+      runtime_version: null,
+      model_id: null,
+      model_version: null,
+      status: 'running',
+    }),
+  ]);
+
+  assert.deepEqual(
+    rows.filter((row) => row.label === 'Node Version'),
+    [
+      { label: 'Node Version', value: '1.0.0', count: 2 },
+      { label: 'Node Version', value: 'Unversioned', count: 1 },
+    ],
+  );
+  assert.deepEqual(
+    rows.filter((row) => row.label === 'Runtime Version'),
+    [
+      { label: 'Runtime Version', value: '2.0.0', count: 1 },
+      { label: 'Runtime Version', value: '2.1.0', count: 1 },
+      { label: 'Runtime Version', value: 'Unversioned', count: 1 },
+    ],
+  );
+  assert.deepEqual(
+    rows.filter((row) => row.label === 'Model'),
+    [
+      { label: 'Model', value: 'model-a', count: 2 },
+      { label: 'Model', value: 'Unassigned', count: 1 },
+    ],
+  );
+  assert.deepEqual(
+    rows.filter((row) => row.label === 'Node Status'),
+    [
+      { label: 'Node Status', value: 'completed', count: 2 },
+      { label: 'Node Status', value: 'running', count: 1 },
+    ],
+  );
 });
 
 test('diagnostics comparison filters expose available projection values', () => {

@@ -3,6 +3,7 @@ import type {
   DiagnosticEventSourceComponent,
   IoArtifactRetentionState,
   IoArtifactRetentionSummaryRecord,
+  NodeStatusProjectionRecord,
   ProjectionStateRecord,
   RunDetailProjectionRecord,
   RunListFacetKind,
@@ -31,6 +32,12 @@ export interface DiagnosticsFacetSummary {
 
 export interface DiagnosticsRetentionSummaryRow {
   label: string;
+  count: number;
+}
+
+export interface DiagnosticsExecutionFacetRow {
+  label: string;
+  value: string;
   count: number;
 }
 
@@ -318,6 +325,19 @@ export function buildDiagnosticsRetentionSummaryRows(
     .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label));
 }
 
+export function buildDiagnosticsExecutionFacetRows(
+  nodes: NodeStatusProjectionRecord[],
+): DiagnosticsExecutionFacetRow[] {
+  return [
+    ...buildExecutionFacetRows('Node Status', nodes.map((node) => node.status), 'Unassigned'),
+    ...buildExecutionFacetRows('Node Version', nodes.map((node) => node.node_version), 'Unversioned'),
+    ...buildExecutionFacetRows('Runtime', nodes.map((node) => node.runtime_id), 'Unassigned'),
+    ...buildExecutionFacetRows('Runtime Version', nodes.map((node) => node.runtime_version), 'Unversioned'),
+    ...buildExecutionFacetRows('Model', nodes.map((node) => node.model_id), 'Unassigned'),
+    ...buildExecutionFacetRows('Model Version', nodes.map((node) => node.model_version), 'Unversioned'),
+  ];
+}
+
 export function formatDiagnosticsRetentionStateLabel(retentionState: IoArtifactRetentionState): string {
   switch (retentionState) {
     case 'retained':
@@ -442,6 +462,21 @@ function filterMatches(value: string, filter: string): boolean {
 
 function uniqueSorted(values: string[]): string[] {
   return [...new Set(values)].sort((left, right) => left.localeCompare(right));
+}
+
+function buildExecutionFacetRows(
+  label: string,
+  values: Array<string | null | undefined>,
+  fallback: string,
+): DiagnosticsExecutionFacetRow[] {
+  const counts = new Map<string, number>();
+  for (const value of values) {
+    const normalized = value && value.trim().length > 0 ? value : fallback;
+    counts.set(normalized, (counts.get(normalized) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([value, count]) => ({ label, value, count }))
+    .sort((left, right) => right.count - left.count || left.value.localeCompare(right.value));
 }
 
 function workflowVersionLabel(run: RunListProjectionRecord): string {
