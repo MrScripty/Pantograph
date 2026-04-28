@@ -14,8 +14,8 @@ later plan stages fill in richer page bodies.
 | `schedulerPagePresenters.test.ts` | Unit coverage for Scheduler table labels, status classes, filters, sorts, projection freshness, and timeline labels. |
 | `GraphPage.svelte` | Workbench page that switches between the active run's immutable graph snapshot and the current editable workflow graph. |
 | `RunGraphSnapshot.svelte` | Read-only run graph renderer backed by `workflowService.queryRunGraph`; it does not load historic graphs into the editor store. |
-| `DiagnosticsPage.svelte` | Projection-backed selected-run diagnostics page with run detail facts, workflow-version/date-range filtered comparison facets, mixed-version warnings, and scheduler timeline records. |
-| `diagnosticsPagePresenters.ts` | Pure diagnostics page status labels/classes, duration, projection freshness, run authority fact, workflow-version/date-range/filter/facet, and timeline label presenters. |
+| `DiagnosticsPage.svelte` | Projection-backed selected-run diagnostics page with run detail facts, workflow-version/date-range/placement filtered comparison facets, mixed-version warnings, and scheduler timeline records. |
+| `diagnosticsPagePresenters.ts` | Pure diagnostics page status labels/classes, duration, projection freshness, run authority/placement facts, workflow-version/date-range/filter/facet, and timeline label presenters. |
 | `diagnosticsPagePresenters.test.ts` | Unit coverage for diagnostics page labels, comparison filters/facets, and payload availability presentation. |
 | `IoInspectorPage.svelte` | Projection-backed I/O artifact browser, retention detail surface, cleanup status surface, and global retention policy form. |
 | `ioInspectorPresenters.ts` | Pure I/O media, payload availability, retention policy/cleanup detail, byte-size, and projection freshness presenters. |
@@ -122,6 +122,9 @@ transient UI state without becoming backend scheduler policy.
   run-list projections, preferring backend-owned run-list facet counts when
   present. They must not parse diagnostic event payloads or depend on sampled
   page rows for comparison totals.
+- Diagnostics comparison filters and facets use typed selected runtime, device,
+  and network-node projection fields when present. Components must not recover
+  placement context from scheduler payload JSON.
 - Network local-node summaries must render only API-reported local facts and
   peer records. They must not synthesize future Iroh state.
 - Network selected-run placement rows must come from local status placement

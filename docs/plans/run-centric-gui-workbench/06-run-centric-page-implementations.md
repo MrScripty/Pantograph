@@ -180,11 +180,17 @@ backend run-list projection query where supported; search, sort, and
   completeness where data exists. Workflow-version, status, scheduler policy,
   retention policy, client, client-session, bucket, accepted-date, and accepted
   date-range comparison filters are wired from current run-list projection
-  fields. Selected-run retention-completeness counts are rendered from the
-  typed I/O artifact projection summary.
+  fields. Scheduler-selected runtime, device, and network-node comparison
+  filters are now wired from typed run-list projection fields. Selected-run
+  retention-completeness counts are rendered from the typed I/O artifact
+  projection summary.
 - [x] Display mixed-version warnings/facets.
 - [ ] Preserve comparison-ready labels/facets for future run, workflow-version,
   runtime-version, model-version, device, and input-profile comparisons.
+  - Diagnostics comparison summaries now include selected runtime, selected
+    device, and selected network-node backend facets where present. Runtime
+    version, model version, graph-settings, and input-profile cross-run facets
+    remain pending richer projection fields.
 - [x] Render diagnostics projections built from typed event ledger data without
   embedding event-family-specific parsing in page components.
 - [x] Render backend-provided projection freshness/catching-up state for warm
@@ -206,14 +212,16 @@ counts across the current workflow's recent runs, and mixed workflow-version
 warnings. Those counts now prefer backend run-list facet summaries scoped to the
 selected workflow when no local comparison filters are active. The page can
 filter comparison peers by workflow version, status, scheduler policy,
-retention policy, client, client session, bucket, accepted date, and accepted
-date range using typed run-list projection fields. Selected-run node status,
-node version, runtime id/version, and model id/version facet labels are rendered
+retention policy, selected runtime, selected device, selected network node,
+client, client session, bucket, accepted date, and accepted date range using
+typed run-list projection fields. Selected-run node status, node version,
+runtime id/version, and model id/version facet labels are rendered
 from `workflowService.queryNodeStatus` projection rows for future comparison
 axes, and selected-run execution facets can now be filtered by node status,
 node version, runtime id/version, and model id/version. Cross-run
-node/model/runtime filters, graph-setting filters, and richer scheduler
-decision facets remain open pending additional typed projection fields.
+node/model/runtime-version filters, graph-setting filters, input-profile
+filters, and richer scheduler decision facets remain open pending additional
+typed projection fields.
 Retention completeness for the selected run is displayed from
 `workflowService.queryIoArtifacts` response `retention_summary` counts and I/O
 projection freshness, avoiding raw ledger replay in the page.

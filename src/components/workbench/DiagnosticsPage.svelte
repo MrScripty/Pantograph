@@ -508,6 +508,48 @@
                 </select>
               </label>
               <label class="min-w-0 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
+                Runtime
+                <select
+                  aria-label="Diagnostics selected runtime filter"
+                  class="mt-1 w-full rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs normal-case tracking-normal text-neutral-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+                  value={comparisonFilters.selectedRuntime}
+                  onchange={(event) => updateComparisonFilter('selectedRuntime', selectValue(event))}
+                >
+                  <option value={DIAGNOSTICS_FILTER_ALL}>All</option>
+                  {#each comparisonFilterOptions.selectedRuntimes as selectedRuntime (selectedRuntime)}
+                    <option value={selectedRuntime}>{selectedRuntime}</option>
+                  {/each}
+                </select>
+              </label>
+              <label class="min-w-0 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
+                Device
+                <select
+                  aria-label="Diagnostics selected device filter"
+                  class="mt-1 w-full rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs normal-case tracking-normal text-neutral-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+                  value={comparisonFilters.selectedDevice}
+                  onchange={(event) => updateComparisonFilter('selectedDevice', selectValue(event))}
+                >
+                  <option value={DIAGNOSTICS_FILTER_ALL}>All</option>
+                  {#each comparisonFilterOptions.selectedDevices as selectedDevice (selectedDevice)}
+                    <option value={selectedDevice}>{selectedDevice}</option>
+                  {/each}
+                </select>
+              </label>
+              <label class="min-w-0 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
+                Network Node
+                <select
+                  aria-label="Diagnostics selected network node filter"
+                  class="mt-1 w-full rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs normal-case tracking-normal text-neutral-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+                  value={comparisonFilters.selectedNetworkNode}
+                  onchange={(event) => updateComparisonFilter('selectedNetworkNode', selectValue(event))}
+                >
+                  <option value={DIAGNOSTICS_FILTER_ALL}>All</option>
+                  {#each comparisonFilterOptions.selectedNetworkNodes as selectedNetworkNode (selectedNetworkNode)}
+                    <option value={selectedNetworkNode}>{selectedNetworkNode}</option>
+                  {/each}
+                </select>
+              </label>
+              <label class="min-w-0 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
                 Session
                 <select
                   aria-label="Diagnostics client session filter"

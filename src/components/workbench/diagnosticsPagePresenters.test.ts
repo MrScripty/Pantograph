@@ -42,6 +42,9 @@ function createRunDetail(): RunDetailProjectionRecord {
     duration_ms: null,
     scheduler_policy_id: 'policy-a',
     retention_policy_id: 'retention-a',
+    selected_runtime_id: 'runtime-a',
+    selected_device_id: 'device-a',
+    selected_network_node_id: 'network-a',
     scheduler_queue_position: 1,
     scheduler_priority: 5,
     estimate_confidence: 'low',
@@ -74,6 +77,9 @@ function createRunListPeer(overrides: Partial<RunListProjectionRecord>): RunList
     status: 'completed',
     scheduler_policy_id: 'policy-a',
     retention_policy_id: 'retention-a',
+    selected_runtime_id: 'runtime-a',
+    selected_device_id: 'device-a',
+    selected_network_node_id: 'network-a',
     accepted_at_ms: 86_400_000,
     client_id: 'client-a',
     client_session_id: 'session-a',
@@ -153,6 +159,9 @@ test('buildDiagnosticsFactRows uses projection fields without ledger parsing', (
   assert.equal(rows.find((row) => row.label === 'Workflow Version')?.value, '1.2.3');
   assert.equal(rows.find((row) => row.label === 'Queue Position')?.value, '1');
   assert.equal(rows.find((row) => row.label === 'Execution Session')?.value, 'exec-session-a');
+  assert.equal(rows.find((row) => row.label === 'Selected Runtime')?.value, 'runtime-a');
+  assert.equal(rows.find((row) => row.label === 'Selected Device')?.value, 'device-a');
+  assert.equal(rows.find((row) => row.label === 'Selected Network Node')?.value, 'network-a');
   assert.equal(rows.find((row) => row.label === 'Estimated Queue Wait')?.value, '1.5 s');
   assert.equal(rows.find((row) => row.label === 'Scheduler Reason')?.value, 'warm_session_reused');
   assert.equal(rows.find((row) => row.label === 'Timeline Events')?.value, '4');
@@ -170,6 +179,9 @@ test('buildDiagnosticsFacetSummary exposes comparison-ready run-list facets', ()
       status: 'completed',
       scheduler_policy_id: 'policy-a',
       retention_policy_id: 'retention-b',
+      selected_runtime_id: 'runtime-a',
+      selected_device_id: 'device-b',
+      selected_network_node_id: 'network-a',
       last_event_seq: 10,
       last_updated_at_ms: 20,
     },
@@ -181,6 +193,9 @@ test('buildDiagnosticsFacetSummary exposes comparison-ready run-list facets', ()
       status: 'completed',
       scheduler_policy_id: 'policy-b',
       retention_policy_id: 'retention-a',
+      selected_runtime_id: 'runtime-b',
+      selected_device_id: 'device-a',
+      selected_network_node_id: 'network-b',
       last_event_seq: 11,
       last_updated_at_ms: 30,
     },
@@ -199,6 +214,9 @@ test('buildDiagnosticsFacetSummary exposes comparison-ready run-list facets', ()
   assert.equal(summary.rows.find((row) => row.label === 'Workflow Version')?.total, 3);
   assert.equal(summary.rows.find((row) => row.label === 'Scheduler Policy')?.count, 2);
   assert.equal(summary.rows.find((row) => row.label === 'Retention Policy')?.count, 2);
+  assert.equal(summary.rows.find((row) => row.label === 'Selected Runtime')?.count, 2);
+  assert.equal(summary.rows.find((row) => row.label === 'Selected Device')?.count, 2);
+  assert.equal(summary.rows.find((row) => row.label === 'Selected Network Node')?.count, 2);
   assert.match(summary.mixedVersionWarning ?? '', /2 workflow versions/);
 });
 
@@ -231,11 +249,17 @@ test('buildDiagnosticsFacetSummary prefers backend projection facets when provid
     { facet_kind: 'status', facet_value: 'failed', run_count: 5 },
     { facet_kind: 'scheduler_policy', facet_value: 'policy-a', run_count: 15 },
     { facet_kind: 'retention_policy', facet_value: 'retention-a', run_count: 15 },
+    { facet_kind: 'selected_runtime', facet_value: 'runtime-a', run_count: 14 },
+    { facet_kind: 'selected_runtime', facet_value: 'runtime-b', run_count: 1 },
+    { facet_kind: 'selected_device', facet_value: 'device-a', run_count: 15 },
+    { facet_kind: 'selected_network_node', facet_value: 'network-a', run_count: 15 },
   ]);
 
   assert.equal(summary.rows.find((row) => row.label === 'Workflow Version')?.count, 12);
   assert.equal(summary.rows.find((row) => row.label === 'Workflow Version')?.total, 15);
   assert.equal(summary.rows.find((row) => row.label === 'Status')?.total, 15);
+  assert.equal(summary.rows.find((row) => row.label === 'Selected Runtime')?.count, 14);
+  assert.equal(summary.rows.find((row) => row.label === 'Selected Runtime')?.total, 15);
   assert.match(summary.mixedVersionWarning ?? '', /2 workflow versions/);
 });
 
@@ -357,6 +381,9 @@ test('diagnostics comparison filters expose available projection values', () => 
       client_id: null,
       client_session_id: null,
       retention_policy_id: null,
+      selected_runtime_id: null,
+      selected_device_id: null,
+      selected_network_node_id: null,
       accepted_at_ms: null,
     }),
     createRunListPeer({ workflow_run_id: 'run-4', workflow_id: 'workflow-b', status: 'failed' }),
@@ -366,6 +393,9 @@ test('diagnostics comparison filters expose available projection values', () => 
   assert.deepEqual(options.statuses, ['completed', 'running']);
   assert.deepEqual(options.schedulerPolicies, ['policy-a', 'policy-b']);
   assert.deepEqual(options.retentionPolicies, ['retention-a', 'Unassigned']);
+  assert.deepEqual(options.selectedRuntimes, ['runtime-a', 'Unassigned']);
+  assert.deepEqual(options.selectedDevices, ['device-a', 'Unassigned']);
+  assert.deepEqual(options.selectedNetworkNodes, ['network-a', 'Unassigned']);
   assert.deepEqual(options.clients, ['client-a', 'Unassigned']);
   assert.deepEqual(options.clientSessions, ['session-a', 'Unassigned']);
   assert.deepEqual(options.buckets, ['bucket-a', 'Unassigned']);
@@ -385,6 +415,7 @@ test('diagnostics comparison filters keep selected run and filter peer rows', ()
         workflow_semantic_version: '2.0.0',
         status: 'completed',
         scheduler_policy_id: 'policy-b',
+        selected_runtime_id: 'runtime-b',
       }),
       createRunListPeer({ workflow_run_id: 'run-4', workflow_id: 'workflow-b', status: 'completed' }),
     ],
@@ -393,6 +424,7 @@ test('diagnostics comparison filters keep selected run and filter peer rows', ()
       workflowVersion: '1.2.3',
       status: 'completed',
       schedulerPolicy: 'policy-b',
+      selectedRuntime: 'runtime-a',
       acceptedDate: '1970-01-02',
     },
   );

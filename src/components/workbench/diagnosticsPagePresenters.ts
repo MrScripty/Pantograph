@@ -64,6 +64,9 @@ export interface DiagnosticsComparisonFilters {
   status: string;
   schedulerPolicy: string;
   retentionPolicy: string;
+  selectedRuntime: string;
+  selectedDevice: string;
+  selectedNetworkNode: string;
   client: string;
   clientSession: string;
   bucket: string;
@@ -77,6 +80,9 @@ export interface DiagnosticsComparisonFilterOptions {
   statuses: RunListProjectionRecord['status'][];
   schedulerPolicies: string[];
   retentionPolicies: string[];
+  selectedRuntimes: string[];
+  selectedDevices: string[];
+  selectedNetworkNodes: string[];
   clients: string[];
   clientSessions: string[];
   buckets: string[];
@@ -90,6 +96,9 @@ export const DEFAULT_DIAGNOSTICS_COMPARISON_FILTERS: DiagnosticsComparisonFilter
   status: DIAGNOSTICS_FILTER_ALL,
   schedulerPolicy: DIAGNOSTICS_FILTER_ALL,
   retentionPolicy: DIAGNOSTICS_FILTER_ALL,
+  selectedRuntime: DIAGNOSTICS_FILTER_ALL,
+  selectedDevice: DIAGNOSTICS_FILTER_ALL,
+  selectedNetworkNode: DIAGNOSTICS_FILTER_ALL,
   client: DIAGNOSTICS_FILTER_ALL,
   clientSession: DIAGNOSTICS_FILTER_ALL,
   bucket: DIAGNOSTICS_FILTER_ALL,
@@ -112,6 +121,9 @@ export const EMPTY_DIAGNOSTICS_COMPARISON_FILTER_OPTIONS: DiagnosticsComparisonF
   statuses: [],
   schedulerPolicies: [],
   retentionPolicies: [],
+  selectedRuntimes: [],
+  selectedDevices: [],
+  selectedNetworkNodes: [],
   clients: [],
   clientSessions: [],
   buckets: [],
@@ -243,6 +255,13 @@ export function buildDiagnosticsFactRows(run: RunDetailProjectionRecord): Diagno
     { label: 'Bucket', value: run.bucket_id ?? 'Default', mono: true },
     { label: 'Scheduler Policy', value: run.scheduler_policy_id ?? 'Default', mono: true },
     { label: 'Retention Policy', value: run.retention_policy_id ?? 'Default', mono: true },
+    { label: 'Selected Runtime', value: run.selected_runtime_id ?? 'Unassigned', mono: true },
+    { label: 'Selected Device', value: run.selected_device_id ?? 'Unassigned', mono: true },
+    {
+      label: 'Selected Network Node',
+      value: run.selected_network_node_id ?? 'Unassigned',
+      mono: true,
+    },
     {
       label: 'Queue Position',
       value:
@@ -315,6 +334,33 @@ export function buildDiagnosticsFacetSummary(
       total,
       backendFacets,
       'retention_policy',
+    ),
+    buildDiagnosticsFacetRow(
+      'Selected Runtime',
+      optionalFacetLabel(activeRun.selected_runtime_id),
+      scopedRuns,
+      (run) => optionalFacetLabel(run.selected_runtime_id),
+      total,
+      backendFacets,
+      'selected_runtime',
+    ),
+    buildDiagnosticsFacetRow(
+      'Selected Device',
+      optionalFacetLabel(activeRun.selected_device_id),
+      scopedRuns,
+      (run) => optionalFacetLabel(run.selected_device_id),
+      total,
+      backendFacets,
+      'selected_device',
+    ),
+    buildDiagnosticsFacetRow(
+      'Selected Network Node',
+      optionalFacetLabel(activeRun.selected_network_node_id),
+      scopedRuns,
+      (run) => optionalFacetLabel(run.selected_network_node_id),
+      total,
+      backendFacets,
+      'selected_network_node',
     ),
     buildDiagnosticsFacetRow(
       'Client',
@@ -431,6 +477,9 @@ export function buildDiagnosticsComparisonFilterOptions(
     statuses: uniqueSorted(scopedRuns.map((run) => run.status)) as RunListProjectionRecord['status'][],
     schedulerPolicies: uniqueSorted(scopedRuns.map((run) => optionalFacetLabel(run.scheduler_policy_id))),
     retentionPolicies: uniqueSorted(scopedRuns.map((run) => optionalFacetLabel(run.retention_policy_id))),
+    selectedRuntimes: uniqueSorted(scopedRuns.map((run) => optionalFacetLabel(run.selected_runtime_id))),
+    selectedDevices: uniqueSorted(scopedRuns.map((run) => optionalFacetLabel(run.selected_device_id))),
+    selectedNetworkNodes: uniqueSorted(scopedRuns.map((run) => optionalFacetLabel(run.selected_network_node_id))),
     clients: uniqueSorted(scopedRuns.map((run) => optionalFacetLabel(run.client_id))),
     clientSessions: uniqueSorted(scopedRuns.map((run) => optionalFacetLabel(run.client_session_id))),
     buckets: uniqueSorted(scopedRuns.map((run) => optionalFacetLabel(run.bucket_id))),
@@ -456,6 +505,9 @@ export function hasActiveDiagnosticsComparisonFilters(filters: DiagnosticsCompar
     filters.status !== DIAGNOSTICS_FILTER_ALL ||
     filters.schedulerPolicy !== DIAGNOSTICS_FILTER_ALL ||
     filters.retentionPolicy !== DIAGNOSTICS_FILTER_ALL ||
+    filters.selectedRuntime !== DIAGNOSTICS_FILTER_ALL ||
+    filters.selectedDevice !== DIAGNOSTICS_FILTER_ALL ||
+    filters.selectedNetworkNode !== DIAGNOSTICS_FILTER_ALL ||
     filters.client !== DIAGNOSTICS_FILTER_ALL ||
     filters.clientSession !== DIAGNOSTICS_FILTER_ALL ||
     filters.bucket !== DIAGNOSTICS_FILTER_ALL ||
@@ -512,6 +564,9 @@ function diagnosticsRunMatchesFilters(
     filterMatches(run.status, filters.status) &&
     filterMatches(optionalFacetLabel(run.scheduler_policy_id), filters.schedulerPolicy) &&
     filterMatches(optionalFacetLabel(run.retention_policy_id), filters.retentionPolicy) &&
+    filterMatches(optionalFacetLabel(run.selected_runtime_id), filters.selectedRuntime) &&
+    filterMatches(optionalFacetLabel(run.selected_device_id), filters.selectedDevice) &&
+    filterMatches(optionalFacetLabel(run.selected_network_node_id), filters.selectedNetworkNode) &&
     filterMatches(optionalFacetLabel(run.client_id), filters.client) &&
     filterMatches(optionalFacetLabel(run.client_session_id), filters.clientSession) &&
     filterMatches(optionalFacetLabel(run.bucket_id), filters.bucket) &&
