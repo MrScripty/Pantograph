@@ -210,9 +210,11 @@ retention policy, client, client session, bucket, accepted date, and accepted
 date range using typed run-list projection fields. Selected-run node status,
 node version, runtime id/version, and model id/version facet labels are rendered
 from `workflowService.queryNodeStatus` projection rows for future comparison
-axes. Cross-run node/model/runtime filters, graph-setting filters, and richer
-scheduler decision facets remain open pending additional typed projection
-fields. Retention completeness for the selected run is displayed from
+axes, and selected-run execution facets can now be filtered by node status,
+node version, runtime id/version, and model id/version. Cross-run
+node/model/runtime filters, graph-setting filters, and richer scheduler
+decision facets remain open pending additional typed projection fields.
+Retention completeness for the selected run is displayed from
 `workflowService.queryIoArtifacts` response `retention_summary` counts and I/O
 projection freshness, avoiding raw ledger replay in the page.
 

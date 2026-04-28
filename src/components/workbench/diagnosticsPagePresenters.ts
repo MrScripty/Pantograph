@@ -41,6 +41,24 @@ export interface DiagnosticsExecutionFacetRow {
   count: number;
 }
 
+export interface DiagnosticsExecutionFilters {
+  status: string;
+  nodeVersion: string;
+  runtime: string;
+  runtimeVersion: string;
+  model: string;
+  modelVersion: string;
+}
+
+export interface DiagnosticsExecutionFilterOptions {
+  statuses: NodeStatusProjectionRecord['status'][];
+  nodeVersions: string[];
+  runtimes: string[];
+  runtimeVersions: string[];
+  models: string[];
+  modelVersions: string[];
+}
+
 export interface DiagnosticsComparisonFilters {
   workflowVersion: string;
   status: string;
@@ -80,6 +98,15 @@ export const DEFAULT_DIAGNOSTICS_COMPARISON_FILTERS: DiagnosticsComparisonFilter
   acceptedToDate: '',
 };
 
+export const DEFAULT_DIAGNOSTICS_EXECUTION_FILTERS: DiagnosticsExecutionFilters = {
+  status: DIAGNOSTICS_FILTER_ALL,
+  nodeVersion: DIAGNOSTICS_FILTER_ALL,
+  runtime: DIAGNOSTICS_FILTER_ALL,
+  runtimeVersion: DIAGNOSTICS_FILTER_ALL,
+  model: DIAGNOSTICS_FILTER_ALL,
+  modelVersion: DIAGNOSTICS_FILTER_ALL,
+};
+
 export const EMPTY_DIAGNOSTICS_COMPARISON_FILTER_OPTIONS: DiagnosticsComparisonFilterOptions = {
   workflowVersions: [],
   statuses: [],
@@ -89,6 +116,15 @@ export const EMPTY_DIAGNOSTICS_COMPARISON_FILTER_OPTIONS: DiagnosticsComparisonF
   clientSessions: [],
   buckets: [],
   acceptedDates: [],
+};
+
+export const EMPTY_DIAGNOSTICS_EXECUTION_FILTER_OPTIONS: DiagnosticsExecutionFilterOptions = {
+  statuses: [],
+  nodeVersions: [],
+  runtimes: [],
+  runtimeVersions: [],
+  models: [],
+  modelVersions: [],
 };
 
 export function formatDiagnosticsTimestamp(value: number | null | undefined): string {
@@ -338,6 +374,34 @@ export function buildDiagnosticsExecutionFacetRows(
   ];
 }
 
+export function buildDiagnosticsExecutionFilterOptions(
+  nodes: NodeStatusProjectionRecord[],
+): DiagnosticsExecutionFilterOptions {
+  return {
+    statuses: uniqueSorted(nodes.map((node) => node.status)) as NodeStatusProjectionRecord['status'][],
+    nodeVersions: uniqueSorted(nodes.map((node) => versionFacetLabel(node.node_version))),
+    runtimes: uniqueSorted(nodes.map((node) => optionalFacetLabel(node.runtime_id))),
+    runtimeVersions: uniqueSorted(nodes.map((node) => versionFacetLabel(node.runtime_version))),
+    models: uniqueSorted(nodes.map((node) => optionalFacetLabel(node.model_id))),
+    modelVersions: uniqueSorted(nodes.map((node) => versionFacetLabel(node.model_version))),
+  };
+}
+
+export function filterDiagnosticsExecutionNodes(
+  nodes: NodeStatusProjectionRecord[],
+  filters: DiagnosticsExecutionFilters,
+): NodeStatusProjectionRecord[] {
+  return nodes.filter(
+    (node) =>
+      filterMatches(node.status, filters.status) &&
+      filterMatches(versionFacetLabel(node.node_version), filters.nodeVersion) &&
+      filterMatches(optionalFacetLabel(node.runtime_id), filters.runtime) &&
+      filterMatches(versionFacetLabel(node.runtime_version), filters.runtimeVersion) &&
+      filterMatches(optionalFacetLabel(node.model_id), filters.model) &&
+      filterMatches(versionFacetLabel(node.model_version), filters.modelVersion),
+  );
+}
+
 export function formatDiagnosticsRetentionStateLabel(retentionState: IoArtifactRetentionState): string {
   switch (retentionState) {
     case 'retained':
@@ -485,6 +549,10 @@ function workflowVersionLabel(run: RunListProjectionRecord): string {
 
 function optionalFacetLabel(value: string | null | undefined): string {
   return value && value.trim().length > 0 ? value : 'Unassigned';
+}
+
+function versionFacetLabel(value: string | null | undefined): string {
+  return value && value.trim().length > 0 ? value : 'Unversioned';
 }
 
 function acceptedDateLabel(value: number | null | undefined): string {

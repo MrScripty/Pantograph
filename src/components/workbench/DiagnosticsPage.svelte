@@ -11,17 +11,21 @@
   } from '../../services/diagnostics/types';
   import { workflowService } from '../../services/workflow/WorkflowService';
   import { activeWorkflowRun } from '../../stores/workbenchStore';
-  import type { DiagnosticsComparisonFilters } from './diagnosticsPagePresenters';
+  import type { DiagnosticsComparisonFilters, DiagnosticsExecutionFilters } from './diagnosticsPagePresenters';
   import {
     DEFAULT_DIAGNOSTICS_COMPARISON_FILTERS,
+    DEFAULT_DIAGNOSTICS_EXECUTION_FILTERS,
     DIAGNOSTICS_FILTER_ALL,
     EMPTY_DIAGNOSTICS_COMPARISON_FILTER_OPTIONS,
+    EMPTY_DIAGNOSTICS_EXECUTION_FILTER_OPTIONS,
     buildDiagnosticsFacetSummary,
     buildDiagnosticsFactRows,
     buildDiagnosticsRetentionSummaryRows,
     buildDiagnosticsComparisonFilterOptions,
     buildDiagnosticsExecutionFacetRows,
+    buildDiagnosticsExecutionFilterOptions,
     diagnosticsStatusClass,
+    filterDiagnosticsExecutionNodes,
     filterDiagnosticsComparisonRuns,
     formatDiagnosticEventKind,
     formatDiagnosticSourceComponent,
@@ -50,10 +54,19 @@
   let comparisonFilters = $state<DiagnosticsComparisonFilters>({
     ...DEFAULT_DIAGNOSTICS_COMPARISON_FILTERS,
   });
+  let executionFilters = $state<DiagnosticsExecutionFilters>({
+    ...DEFAULT_DIAGNOSTICS_EXECUTION_FILTERS,
+  });
   let requestSerial = 0;
 
   let factRows = $derived(runDetail ? buildDiagnosticsFactRows(runDetail) : []);
-  let executionFacetRows = $derived(buildDiagnosticsExecutionFacetRows(nodeStatuses));
+  let executionFilterOptions = $derived(
+    nodeStatuses.length > 0
+      ? buildDiagnosticsExecutionFilterOptions(nodeStatuses)
+      : EMPTY_DIAGNOSTICS_EXECUTION_FILTER_OPTIONS,
+  );
+  let filteredExecutionNodes = $derived(filterDiagnosticsExecutionNodes(nodeStatuses, executionFilters));
+  let executionFacetRows = $derived(buildDiagnosticsExecutionFacetRows(filteredExecutionNodes));
   let retentionSummaryRows = $derived(buildDiagnosticsRetentionSummaryRows(retentionSummary));
   let comparisonFilterOptions = $derived(
     runDetail ? buildDiagnosticsComparisonFilterOptions(runDetail, runList) : EMPTY_DIAGNOSTICS_COMPARISON_FILTER_OPTIONS,
@@ -156,6 +169,13 @@
   function updateComparisonFilter(field: keyof DiagnosticsComparisonFilters, value: string): void {
     comparisonFilters = {
       ...comparisonFilters,
+      [field]: value,
+    };
+  }
+
+  function updateExecutionFilter(field: keyof DiagnosticsExecutionFilters, value: string): void {
+    executionFilters = {
+      ...executionFilters,
       [field]: value,
     };
   }
@@ -291,8 +311,98 @@
 
           <section class="rounded border border-neutral-800 bg-neutral-900/50 p-4">
             <h2 class="text-sm font-semibold text-neutral-100">Execution Facets</h2>
+            {#if nodeStatuses.length > 0}
+              <div class="mt-4 grid grid-cols-2 gap-2">
+                <label class="min-w-0 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
+                  Node Status
+                  <select
+                    aria-label="Diagnostics node status filter"
+                    class="mt-1 w-full rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs normal-case tracking-normal text-neutral-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+                    value={executionFilters.status}
+                    onchange={(event) => updateExecutionFilter('status', selectValue(event))}
+                  >
+                    <option value={DIAGNOSTICS_FILTER_ALL}>All</option>
+                    {#each executionFilterOptions.statuses as status (status)}
+                      <option value={status}>{status}</option>
+                    {/each}
+                  </select>
+                </label>
+                <label class="min-w-0 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
+                  Node Version
+                  <select
+                    aria-label="Diagnostics node version filter"
+                    class="mt-1 w-full rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs normal-case tracking-normal text-neutral-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+                    value={executionFilters.nodeVersion}
+                    onchange={(event) => updateExecutionFilter('nodeVersion', selectValue(event))}
+                  >
+                    <option value={DIAGNOSTICS_FILTER_ALL}>All</option>
+                    {#each executionFilterOptions.nodeVersions as nodeVersion (nodeVersion)}
+                      <option value={nodeVersion}>{nodeVersion}</option>
+                    {/each}
+                  </select>
+                </label>
+                <label class="min-w-0 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
+                  Runtime
+                  <select
+                    aria-label="Diagnostics runtime filter"
+                    class="mt-1 w-full rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs normal-case tracking-normal text-neutral-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+                    value={executionFilters.runtime}
+                    onchange={(event) => updateExecutionFilter('runtime', selectValue(event))}
+                  >
+                    <option value={DIAGNOSTICS_FILTER_ALL}>All</option>
+                    {#each executionFilterOptions.runtimes as runtime (runtime)}
+                      <option value={runtime}>{runtime}</option>
+                    {/each}
+                  </select>
+                </label>
+                <label class="min-w-0 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
+                  Runtime Ver
+                  <select
+                    aria-label="Diagnostics runtime version filter"
+                    class="mt-1 w-full rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs normal-case tracking-normal text-neutral-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+                    value={executionFilters.runtimeVersion}
+                    onchange={(event) => updateExecutionFilter('runtimeVersion', selectValue(event))}
+                  >
+                    <option value={DIAGNOSTICS_FILTER_ALL}>All</option>
+                    {#each executionFilterOptions.runtimeVersions as runtimeVersion (runtimeVersion)}
+                      <option value={runtimeVersion}>{runtimeVersion}</option>
+                    {/each}
+                  </select>
+                </label>
+                <label class="min-w-0 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
+                  Model
+                  <select
+                    aria-label="Diagnostics model filter"
+                    class="mt-1 w-full rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs normal-case tracking-normal text-neutral-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+                    value={executionFilters.model}
+                    onchange={(event) => updateExecutionFilter('model', selectValue(event))}
+                  >
+                    <option value={DIAGNOSTICS_FILTER_ALL}>All</option>
+                    {#each executionFilterOptions.models as model (model)}
+                      <option value={model}>{model}</option>
+                    {/each}
+                  </select>
+                </label>
+                <label class="min-w-0 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
+                  Model Ver
+                  <select
+                    aria-label="Diagnostics model version filter"
+                    class="mt-1 w-full rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs normal-case tracking-normal text-neutral-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+                    value={executionFilters.modelVersion}
+                    onchange={(event) => updateExecutionFilter('modelVersion', selectValue(event))}
+                  >
+                    <option value={DIAGNOSTICS_FILTER_ALL}>All</option>
+                    {#each executionFilterOptions.modelVersions as modelVersion (modelVersion)}
+                      <option value={modelVersion}>{modelVersion}</option>
+                    {/each}
+                  </select>
+                </label>
+              </div>
+            {/if}
             {#if executionFacetRows.length === 0}
-              <div class="mt-4 text-xs text-neutral-500">No node status projection rows</div>
+              <div class="mt-4 text-xs text-neutral-500">
+                {nodeStatuses.length === 0 ? 'No node status projection rows' : 'No matching node status projection rows'}
+              </div>
             {:else}
               <dl class="mt-4 space-y-3 text-xs">
                 {#each executionFacetRows as row (`${row.label}:${row.value}`)}

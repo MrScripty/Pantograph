@@ -9,12 +9,15 @@ import type {
 } from '../../services/diagnostics/types.ts';
 import {
   DEFAULT_DIAGNOSTICS_COMPARISON_FILTERS,
+  DEFAULT_DIAGNOSTICS_EXECUTION_FILTERS,
   buildDiagnosticsExecutionFacetRows,
+  buildDiagnosticsExecutionFilterOptions,
   buildDiagnosticsFacetSummary,
   buildDiagnosticsFactRows,
   buildDiagnosticsRetentionSummaryRows,
   buildDiagnosticsComparisonFilterOptions,
   diagnosticsStatusClass,
+  filterDiagnosticsExecutionNodes,
   filterDiagnosticsComparisonRuns,
   formatDiagnosticEventKind,
   formatDiagnosticSourceComponent,
@@ -295,6 +298,49 @@ test('buildDiagnosticsExecutionFacetRows groups selected-run node status facts',
       { label: 'Node Status', value: 'completed', count: 2 },
       { label: 'Node Status', value: 'running', count: 1 },
     ],
+  );
+});
+
+test('diagnostics execution filters expose and apply node runtime model values', () => {
+  const nodes = [
+    createNodeStatus({ node_id: 'node-a', node_version: '1.0.0', runtime_id: 'runtime-a', model_id: 'model-a' }),
+    createNodeStatus({
+      node_id: 'node-b',
+      node_version: '1.1.0',
+      runtime_id: 'runtime-b',
+      runtime_version: '2.1.0',
+      model_id: 'model-b',
+      model_version: '3.1.0',
+      status: 'running',
+    }),
+    createNodeStatus({
+      node_id: 'node-c',
+      node_version: null,
+      runtime_id: null,
+      runtime_version: null,
+      model_id: null,
+      model_version: null,
+      status: 'waiting',
+    }),
+  ];
+
+  const options = buildDiagnosticsExecutionFilterOptions(nodes);
+  assert.deepEqual(options.statuses, ['completed', 'running', 'waiting']);
+  assert.deepEqual(options.nodeVersions, ['1.0.0', '1.1.0', 'Unversioned']);
+  assert.deepEqual(options.runtimes, ['runtime-a', 'runtime-b', 'Unassigned']);
+  assert.deepEqual(options.runtimeVersions, ['2.0.0', '2.1.0', 'Unversioned']);
+  assert.deepEqual(options.models, ['model-a', 'model-b', 'Unassigned']);
+  assert.deepEqual(options.modelVersions, ['3.0.0', '3.1.0', 'Unversioned']);
+
+  const filteredNodes = filterDiagnosticsExecutionNodes(nodes, {
+    ...DEFAULT_DIAGNOSTICS_EXECUTION_FILTERS,
+    runtime: 'runtime-b',
+    modelVersion: '3.1.0',
+  });
+
+  assert.deepEqual(
+    filteredNodes.map((node) => node.node_id),
+    ['node-b'],
   );
 });
 
