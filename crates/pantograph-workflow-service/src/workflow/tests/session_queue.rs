@@ -690,6 +690,143 @@ async fn workflow_execution_session_push_front_denies_priority_ceiling_after_sch
 }
 
 #[tokio::test]
+async fn workflow_execution_session_queue_controls_cannot_mutate_other_sessions() {
+    let host = MockWorkflowHost::new(8, 1024);
+    let service = WorkflowService::new()
+        .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"));
+    let first = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "wf-1".to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create first session");
+    let second = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "wf-2".to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create second session");
+    let second_run_id = {
+        let mut store = service
+            .session_store
+            .lock()
+            .expect("session store lock poisoned");
+        store
+            .enqueue_run(
+                &second.session_id,
+                &WorkflowExecutionSessionRunRequest {
+                    session_id: second.session_id.clone(),
+                    workflow_semantic_version: "0.1.0".to_string(),
+                    inputs: Vec::new(),
+                    output_targets: None,
+                    override_selection: None,
+                    timeout_ms: None,
+                    priority: Some(2),
+                },
+            )
+            .expect("enqueue second session run")
+    };
+
+    service
+        .workflow_cancel_execution_session_queue_item(WorkflowExecutionSessionQueueCancelRequest {
+            session_id: first.session_id.clone(),
+            workflow_run_id: second_run_id.clone(),
+        })
+        .await
+        .expect_err("first session cannot cancel second session run");
+    service
+        .workflow_reprioritize_execution_session_queue_item(
+            WorkflowExecutionSessionQueueReprioritizeRequest {
+                session_id: first.session_id.clone(),
+                workflow_run_id: second_run_id.clone(),
+                priority: 9,
+            },
+        )
+        .await
+        .expect_err("first session cannot reprioritize second session run");
+    service
+        .workflow_push_execution_session_queue_item_to_front(
+            WorkflowExecutionSessionQueuePushFrontRequest {
+                session_id: first.session_id.clone(),
+                workflow_run_id: second_run_id.clone(),
+            },
+        )
+        .await
+        .expect_err("first session cannot push second session run");
+
+    let (first_items, second_items) = {
+        let store = service
+            .session_store
+            .lock()
+            .expect("session store lock poisoned");
+        (
+            store
+                .list_queue(&first.session_id)
+                .expect("first queue remains readable"),
+            store
+                .list_queue(&second.session_id)
+                .expect("second queue remains readable"),
+        )
+    };
+    assert!(first_items.is_empty());
+    assert_eq!(second_items.len(), 1);
+    assert_eq!(second_items[0].workflow_run_id, second_run_id);
+    assert_eq!(second_items[0].priority, 2);
+    assert_eq!(second_items[0].queue_position, Some(0));
+
+    let diagnostic_events = {
+        let ledger = service
+            .diagnostics_ledger_guard()
+            .expect("diagnostics ledger");
+        pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::diagnostic_events_after(
+            &*ledger, 0, 10,
+        )
+        .expect("diagnostic events")
+    };
+    let queue_control_events = diagnostic_events
+        .iter()
+        .filter(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerQueueControl
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(queue_control_events.len(), 3);
+    assert!(queue_control_events.iter().all(|event| event
+        .workflow_run_id
+        .as_ref()
+        .map(|id| id.as_str())
+        == Some(second_run_id.as_str())));
+    assert!(queue_control_events
+        .iter()
+        .all(|event| event.payload_json.contains("\"outcome\":\"denied\"")));
+    assert!(queue_control_events.iter().all(|event| event
+        .payload_json
+        .contains("\"actor_scope\":\"client_session\"")));
+    assert!(queue_control_events
+        .iter()
+        .all(|event| event.payload_json.contains(&format!(
+            "\"requested_session_id\":\"{}\"",
+            first.session_id
+        ))));
+    assert!(queue_control_events
+        .iter()
+        .all(|event| event.payload_json.contains(&format!(
+            "\"effective_session_id\":\"{}\"",
+            first.session_id
+        ))));
+}
+
+#[tokio::test]
 async fn workflow_execution_session_queue_marks_loaded_compatible_admission_as_warm_reuse() {
     let host = MockWorkflowHost::new(8, 1024);
     let service = WorkflowService::new();

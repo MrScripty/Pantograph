@@ -318,6 +318,9 @@ cancellation, privileged cross-session reorder, pause/resume, and other
 admin-scope event emitters remain pending. Current queue-control tests now
 cover the scheduler-owned priority-ceiling denial path so action requests are
 audited only after the store accepts, rejects, or normalizes the mutation.
+Session-scoped queue-control tests also prove cancel, reprioritize, and
+push-front requests cannot mutate another session's queued runs while denied
+audit events preserve the requesting session authority context.
 
 ## Ownership And Lifecycle Note
 
@@ -371,6 +374,8 @@ duplicate, unvalidated, or contradictory event streams.
   frontend inference.
 - Added priority-ceiling denial coverage for push-front controls, proving the
   scheduler store remains the final authority after a queue action request.
+- Added cross-session denial coverage for session-scoped queue controls so
+  normal clients cannot mutate another session's queued runs.
 - Added selected runtime and reserved model facts to admission events from
   dequeued scheduler state; selected device/network-node admission fields
   remain empty until those schedulers are implemented.

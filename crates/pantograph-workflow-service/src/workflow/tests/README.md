@@ -119,6 +119,9 @@ Use `workflow/tests/` for behavior-specific child modules under the parent
 - Session queue tests must cover policy-owned denial paths such as the
   push-front priority ceiling so public commands cannot bypass scheduler
   authority or mutate queue order after the store rejects an action.
+- Session queue tests must prove session-scoped cancel, reprioritize, and
+  push-front commands cannot mutate another session's queued runs, and denied
+  audit events must preserve the requesting session authority context.
 - Session queue tests with diagnostics enabled must verify accepted
   reprioritize and push-front actions also record refreshed scheduler estimate
   events for the updated queued run.
