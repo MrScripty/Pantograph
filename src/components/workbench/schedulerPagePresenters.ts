@@ -72,6 +72,29 @@ export function formatSchedulerReasonLabel(value: string | null | undefined): st
   return value && value.trim().length > 0 ? value : 'Unavailable';
 }
 
+export function formatSchedulerStatusLabel(status: RunListProjectionRecord['status']): string {
+  switch (status) {
+    case 'accepted':
+      return 'Accepted';
+    case 'future':
+      return 'Future';
+    case 'scheduled':
+      return 'Scheduled';
+    case 'queued':
+      return 'Queued';
+    case 'delayed':
+      return 'Delayed';
+    case 'running':
+      return 'Running';
+    case 'completed':
+      return 'Completed';
+    case 'failed':
+      return 'Failed';
+    case 'cancelled':
+      return 'Cancelled';
+  }
+}
+
 export function schedulerStatusClass(status: RunListProjectionRecord['status']): string {
   switch (status) {
     case 'completed':

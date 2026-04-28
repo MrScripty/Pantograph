@@ -23,6 +23,7 @@
     formatDiagnosticSourceComponent,
     formatDiagnosticsDuration,
     formatDiagnosticsProjectionFreshness,
+    formatDiagnosticsStatusLabel,
     formatDiagnosticsTimestamp,
     hasActiveDiagnosticsComparisonFilters,
     hasTimelinePayload,
@@ -192,7 +193,7 @@
                 </div>
               </div>
               <span class={`shrink-0 rounded border px-2 py-0.5 text-xs ${diagnosticsStatusClass(runDetail.status)}`}>
-                {runDetail.status}
+                {formatDiagnosticsStatusLabel(runDetail.status)}
               </span>
             </div>
 
@@ -278,7 +279,7 @@
                 >
                   <option value={DIAGNOSTICS_FILTER_ALL}>All</option>
                   {#each comparisonFilterOptions.statuses as status (status)}
-                    <option value={status}>{status}</option>
+                    <option value={status}>{formatDiagnosticsStatusLabel(status)}</option>
                   {/each}
                 </select>
               </label>

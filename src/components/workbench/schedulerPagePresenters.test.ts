@@ -18,6 +18,7 @@ import {
   formatSchedulerReasonLabel,
   formatSchedulerRetentionLabel,
   formatSchedulerScopeLabel,
+  formatSchedulerStatusLabel,
   formatSchedulerTimelineKind,
   formatSchedulerTimelineSource,
   formatSchedulerDuration,
@@ -109,6 +110,9 @@ test('schedulerStatusClass maps run statuses to stable classes', () => {
   assert.match(schedulerStatusClass('delayed'), /orange/);
   assert.match(schedulerStatusClass('failed'), /red/);
   assert.match(schedulerStatusClass('cancelled'), /neutral/);
+  assert.equal(formatSchedulerStatusLabel('future'), 'Future');
+  assert.equal(formatSchedulerStatusLabel('scheduled'), 'Scheduled');
+  assert.equal(formatSchedulerStatusLabel('cancelled'), 'Cancelled');
 });
 
 test('scheduler policy presenters keep missing dense table facts explicit', () => {

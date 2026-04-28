@@ -35,6 +35,7 @@
     formatSchedulerPriority,
     formatSchedulerQueuePosition,
     formatSchedulerReasonLabel,
+    formatSchedulerStatusLabel,
     schedulerStatusClass,
     schedulerAcceptedDateFilterOptions,
     schedulerBucketFilterOptions,
@@ -387,9 +388,9 @@
           setSchedulerRunFilters({ status: eventValue(event) as SchedulerStatusFilter })}
         class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
       >
-        {#each SCHEDULER_STATUS_FILTERS as status (status)}
-          <option value={status}>{status}</option>
-        {/each}
+          {#each SCHEDULER_STATUS_FILTERS as status (status)}
+            <option value={status}>{status === 'all' ? 'All' : formatSchedulerStatusLabel(status)}</option>
+          {/each}
       </select>
     </div>
     <div>
@@ -568,7 +569,7 @@
                 </td>
                 <td class="px-3 py-2">
                   <span class={`inline-flex rounded border px-2 py-0.5 text-xs ${schedulerStatusClass(run.status)}`}>
-                    {run.status}
+                    {formatSchedulerStatusLabel(run.status)}
                   </span>
                 </td>
                 <td class="max-w-[10rem] truncate px-3 py-2 text-xs text-neutral-400" title={formatSchedulerPolicyLabel(run.scheduler_policy_id)}>

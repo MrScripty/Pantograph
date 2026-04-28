@@ -42,7 +42,7 @@ export interface DiagnosticsComparisonFilters {
 
 export interface DiagnosticsComparisonFilterOptions {
   workflowVersions: string[];
-  statuses: string[];
+  statuses: RunListProjectionRecord['status'][];
   schedulerPolicies: string[];
   retentionPolicies: string[];
   clients: string[];
@@ -143,6 +143,29 @@ export function diagnosticsStatusClass(status: RunDetailProjectionRecord['status
       return 'border-red-700 bg-red-950/60 text-red-200';
     case 'cancelled':
       return 'border-neutral-700 bg-neutral-900 text-neutral-300';
+  }
+}
+
+export function formatDiagnosticsStatusLabel(status: RunDetailProjectionRecord['status']): string {
+  switch (status) {
+    case 'accepted':
+      return 'Accepted';
+    case 'future':
+      return 'Future';
+    case 'scheduled':
+      return 'Scheduled';
+    case 'queued':
+      return 'Queued';
+    case 'delayed':
+      return 'Delayed';
+    case 'running':
+      return 'Running';
+    case 'completed':
+      return 'Completed';
+    case 'failed':
+      return 'Failed';
+    case 'cancelled':
+      return 'Cancelled';
   }
 }
 
@@ -284,7 +307,7 @@ export function buildDiagnosticsComparisonFilterOptions(
   const scopedRuns = ensureActiveRunInScope(activeRun, runs);
   return {
     workflowVersions: uniqueSorted(scopedRuns.map(workflowVersionLabel)),
-    statuses: uniqueSorted(scopedRuns.map((run) => run.status)),
+    statuses: uniqueSorted(scopedRuns.map((run) => run.status)) as RunListProjectionRecord['status'][],
     schedulerPolicies: uniqueSorted(scopedRuns.map((run) => optionalFacetLabel(run.scheduler_policy_id))),
     retentionPolicies: uniqueSorted(scopedRuns.map((run) => optionalFacetLabel(run.retention_policy_id))),
     clients: uniqueSorted(scopedRuns.map((run) => optionalFacetLabel(run.client_id))),

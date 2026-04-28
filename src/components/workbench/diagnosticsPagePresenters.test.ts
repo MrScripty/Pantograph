@@ -13,6 +13,7 @@ import {
   formatDiagnosticSourceComponent,
   formatDiagnosticsDuration,
   formatDiagnosticsProjectionFreshness,
+  formatDiagnosticsStatusLabel,
   hasActiveDiagnosticsComparisonFilters,
   hasTimelinePayload,
 } from './diagnosticsPagePresenters.ts';
@@ -106,6 +107,9 @@ test('diagnosticsStatusClass maps operational statuses to stable classes', () =>
   assert.match(diagnosticsStatusClass('queued'), /amber/);
   assert.match(diagnosticsStatusClass('failed'), /red/);
   assert.match(diagnosticsStatusClass('cancelled'), /neutral/);
+  assert.equal(formatDiagnosticsStatusLabel('future'), 'Future');
+  assert.equal(formatDiagnosticsStatusLabel('scheduled'), 'Scheduled');
+  assert.equal(formatDiagnosticsStatusLabel('cancelled'), 'Cancelled');
 });
 
 test('buildDiagnosticsFactRows uses projection fields without ledger parsing', () => {
