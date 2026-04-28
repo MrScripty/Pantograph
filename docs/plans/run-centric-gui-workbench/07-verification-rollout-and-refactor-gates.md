@@ -404,6 +404,9 @@ Before launching workers, create a dedicated implementation-wave plan with:
 - Legacy diagnostics frontend cleanup passed `npm run typecheck`,
   `npm run build`, and `npm run test:frontend` with the retired diagnostics
   panel/store tests removed from the frontend test command.
+- Frontend diagnostics DTO cleanup passed `npm run typecheck`,
+  `npm run build`, and focused projection/command/presenter tests after
+  removing unused legacy snapshot and trace interfaces.
 - `cargo test -p pantograph-diagnostics-ledger` passed.
 - `cargo test -p pantograph-workflow-service` passed.
 - `npm run format:check` passed after applying `cargo fmt --all`.

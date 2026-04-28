@@ -195,6 +195,10 @@ policy into adapters.
     estimate recomputation, and forced reschedule remain pending.
 - [ ] Remove or rename old projection APIs that would expose stale
   graph-fingerprint or current-graph semantics for historic runs.
+  - Frontend legacy diagnostics snapshot methods and TypeScript snapshot/trace
+    DTOs are removed with the legacy diagnostics panel/store cleanup. Native
+    debug/headless snapshot commands remain available until the Rust-side
+    migration has a replacement plan.
 
 **Verification:**
 
@@ -205,6 +209,10 @@ policy into adapters.
 - If Rustler, UniFFI, Tauri commands, or HTTP adapter binding contracts are
   touched, native and host-language binding checks cover the changed projection
   and command DTOs.
+- Frontend projection DTO cleanup verified with `npm run typecheck`,
+  `npm run build`, and focused projection/command/presenter tests after
+  removing unused legacy diagnostics snapshot/trace interfaces from
+  `src/services/diagnostics/types.ts`.
 
 **Status:** In progress. Workflow service now exposes
 `workflow_scheduler_timeline_query`, which advances the scheduler timeline
@@ -293,7 +301,11 @@ provides the first explicit admin maintenance boundary for hot projection
 repair and projection-version rebuild scenarios. `workflow_run_graph_query`
 now reconstructs historic run graphs from immutable run snapshot, executable
 topology, graph settings, and presentation revision records instead of reading
-current graph files.
+current graph files. The frontend diagnostics type boundary now contains only
+workbench projection and command DTOs used by active TypeScript callers;
+legacy diagnostics snapshot/trace DTOs were removed with the legacy panel/store
+cleanup while native debug/headless snapshot commands remain pending separate
+Rust-side retirement.
 
 ### Milestone 3: Frontend Services And Stores
 

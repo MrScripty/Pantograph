@@ -23,8 +23,8 @@ projections remain the source of truth.
 - Frontend code may filter presentation rows, but must not infer durable
   scheduler, diagnostics, retention, or Library truth from raw payload JSON.
 - Projection freshness and cursor state must stay visible to callers.
-- Legacy snapshot DTOs may remain while native commands still expose them, but
-  new workbench pages should prefer projection-specific DTOs.
+- Legacy native snapshot DTOs should stay out of the frontend contract unless a
+  current TypeScript consumer needs them.
 
 ## Decision
 Keep this directory as a type-only diagnostics contract boundary. The retired
@@ -32,7 +32,9 @@ frontend diagnostics store and panel no longer accumulate traces in the browser.
 Workbench pages call `WorkflowProjectionService` and `WorkflowCommandService`
 methods that return the DTOs defined here. Backend projections provide run
 history, scheduler timelines, selected-run estimates, retention summaries, I/O
-artifact metadata, Library usage, and local Network status.
+artifact metadata, Library usage, and local Network status. Frontend legacy
+diagnostics snapshot and trace DTOs were removed with the legacy diagnostics
+panel because no active TypeScript boundary consumes them.
 
 ## Alternatives Rejected
 - Rebuild workbench views from raw ledger rows in TypeScript.
@@ -67,8 +69,8 @@ artifact metadata, Library usage, and local Network status.
 
 ## Revisit Triggers
 - Rust-to-TypeScript DTO generation replaces manual interface mirrors.
-- Native legacy snapshot commands are removed and their TypeScript interfaces
-  can be deleted.
+- A native legacy snapshot command becomes frontend-facing again and requires a
+  new typed request/response contract.
 - Projection APIs are versioned independently from the desktop frontend.
 
 ## Dependencies

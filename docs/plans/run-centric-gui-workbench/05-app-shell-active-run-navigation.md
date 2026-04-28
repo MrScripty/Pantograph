@@ -199,10 +199,11 @@ surfaces.
 startup surface is retired from app-root navigation, and the app no longer
 starts a separate diagnostics panel/store pipeline during root mount. The
 legacy diagnostics Svelte panel, presenter tests, app-level diagnostics store,
-and old workflow-service snapshot convenience methods were removed after the
-workbench pages moved to projection-backed service calls. The retired drawing
-implementation files remain for separate cleanup or future reuse under
-standards-compliant tool surfaces.
+old workflow-service snapshot convenience methods, and unused frontend
+diagnostics snapshot/trace DTOs were removed after the workbench pages moved to
+projection-backed service calls. The retired drawing implementation files
+remain for separate cleanup or future reuse under standards-compliant tool
+surfaces.
 
 ## Ownership And Lifecycle Note
 
