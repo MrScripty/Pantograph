@@ -459,8 +459,10 @@ model ids before deletion and records a typed delete event after success. Pumas
 HuggingFace search now validates query/limit bounds and records a typed search
 event after successful Pumas responses. Pumas HuggingFace download start now
 validates auditable repo ids and records a typed download event after Pumas
-returns a download id. Cache hit/miss facts, network byte observations, and
-broader rejected operation tests remain pending.
+returns a download id. Invalid Library/Pumas asset access requests now have a
+regression test proving they fail before appending audit events. Cache hit/miss
+facts, network byte observations from production Pumas responses, and broader
+operation-specific rejected-path tests remain pending.
 
 ## Ownership And Lifecycle Note
 

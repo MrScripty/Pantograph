@@ -951,6 +951,38 @@ fn workflow_library_asset_access_record_appends_typed_event() {
 }
 
 #[test]
+fn workflow_library_asset_access_record_rejects_invalid_assets_without_event() {
+    let service = WorkflowService::with_ephemeral_diagnostics_ledger().expect("service");
+
+    let rejected =
+        service.workflow_library_asset_access_record(WorkflowLibraryAssetAccessRecordRequest {
+            asset_id: "../unsafe-model".to_string(),
+            operation: LibraryAssetOperation::Download,
+            cache_status: Some(LibraryAssetCacheStatus::Miss),
+            network_bytes: Some(128),
+            source_instance_id: Some("pumas-hf-download".to_string()),
+        });
+
+    assert!(matches!(
+        rejected,
+        Err(WorkflowServiceError::InvalidRequest(_))
+    ));
+    let events = {
+        let ledger = service
+            .diagnostics_ledger_guard()
+            .expect("diagnostics ledger");
+        pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::diagnostic_events_after(
+            &*ledger, 0, 10,
+        )
+        .expect("diagnostic events")
+    };
+    assert!(
+        events.is_empty(),
+        "rejected Library audit commands must not append events"
+    );
+}
+
+#[test]
 fn workflow_retention_policy_query_reads_current_policy() {
     let service = WorkflowService::with_ephemeral_diagnostics_ledger().expect("service");
 

@@ -82,6 +82,9 @@ Use `workflow/tests/` for behavior-specific child modules under the parent
 - Library asset access record tests must prove adapters can append typed
   Pumas/Library audit events through the public service facade without direct
   diagnostics-ledger writes.
+- Library asset access record tests must prove invalid asset ids are rejected
+  before append so failed Pumas/Library commands do not create misleading audit
+  history.
 - Diagnostics and session-execution tests that emit Library audit facts must
   use diagnostics-ledger typed operation/cache-status values, not arbitrary
   payload strings.
