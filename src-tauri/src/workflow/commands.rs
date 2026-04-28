@@ -463,45 +463,6 @@ pub async fn workflow_set_execution_session_keep_alive(
 }
 
 #[command]
-pub async fn workflow_get_diagnostics_snapshot(
-    request: super::diagnostics::WorkflowDiagnosticsSnapshotRequest,
-    app: AppHandle,
-    gateway: State<'_, SharedGateway>,
-    runtime_registry: State<'_, SharedRuntimeRegistry>,
-    extensions: State<'_, SharedExtensions>,
-    workflow_service: State<'_, SharedWorkflowService>,
-    diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
-) -> Result<super::diagnostics::WorkflowDiagnosticsProjection, String> {
-    super::headless_diagnostics_transport::workflow_get_diagnostics_snapshot(
-        request,
-        app,
-        gateway,
-        runtime_registry,
-        extensions,
-        workflow_service,
-        diagnostics_store,
-    )
-    .await
-}
-
-#[command]
-pub async fn workflow_get_trace_snapshot(
-    request: pantograph_workflow_service::WorkflowTraceSnapshotRequest,
-    diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
-) -> Result<pantograph_workflow_service::WorkflowTraceSnapshotResponse, String> {
-    super::headless_diagnostics_transport::workflow_get_trace_snapshot(request, diagnostics_store)
-        .await
-}
-
-#[command]
-pub async fn workflow_clear_diagnostics_history(
-    diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
-) -> Result<super::diagnostics::WorkflowDiagnosticsProjection, String> {
-    super::headless_diagnostics_transport::workflow_clear_diagnostics_history(diagnostics_store)
-        .await
-}
-
-#[command]
 pub async fn query_port_options(
     registry: State<'_, SharedNodeRegistry>,
     extensions: State<'_, SharedExtensions>,

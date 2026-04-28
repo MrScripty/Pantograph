@@ -279,6 +279,7 @@ pub(crate) fn workflow_trace_snapshot_response(
         .map_err(workflow_error_json)
 }
 
+#[cfg(test)]
 pub(crate) fn workflow_clear_diagnostics_history_response(
     diagnostics_store: &SharedWorkflowDiagnosticsStore,
 ) -> WorkflowDiagnosticsProjection {

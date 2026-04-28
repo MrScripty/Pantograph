@@ -95,6 +95,7 @@ impl WorkflowDiagnosticsState {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn clear_history(&mut self) {
         self.overlays_by_workflow_run_id.clear();
     }

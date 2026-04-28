@@ -151,6 +151,7 @@ impl WorkflowDiagnosticsStore {
         self.trace_store.select_runtime_metrics(request)
     }
 
+    #[cfg(test)]
     pub fn clear_history(&self) -> WorkflowDiagnosticsProjection {
         let traces = self.trace_store.clear_history();
         let mut state = self.state.lock();

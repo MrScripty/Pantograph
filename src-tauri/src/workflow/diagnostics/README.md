@@ -107,9 +107,10 @@ let trace = diagnostics.trace_snapshot(Default::default())?;
 ```
 
 ## API Consumer Contract
-- Tauri workflow commands and runtime debug commands may request snapshots from
-  this directory, but they must treat the returned run/runtime/scheduler facts
-  as projections over backend-owned trace and runtime data.
+- Runtime debug and headless helpers may request snapshots from this directory,
+  but they must treat the returned run/runtime/scheduler facts as projections
+  over backend-owned trace and runtime data. Desktop GUI workflow commands use
+  projection-specific query endpoints instead of this legacy snapshot path.
 - `WorkflowDiagnosticsProjection` returns `runs_by_id`, `run_order`, `runtime`,
   `scheduler`, backend-authored `context`, additive `current_session_state`,
   opened-workflow timing history, timing expectation projections, and
@@ -123,8 +124,9 @@ let trace = diagnostics.trace_snapshot(Default::default())?;
 - `WorkflowDiagnosticsSnapshotRequest` uses the same trimmed optional filter
   model as the combined runtime-debug path and rejects blank filters instead of
   silently dropping them.
-- `clear_history()` clears retained overlays and backend trace history together
-  so the GUI does not keep stale local diagnostics after a reset.
+- `clear_history()` is retained only for diagnostics reset tests while the GUI
+  reset command is retired; production projection cleanup should use the typed
+  retention and projection maintenance boundaries.
 - Timing expectations are backend-projected duration comparisons from
   workflow-service traces and the diagnostics ledger. Tauri transports them but
   must not calculate historical baselines locally.

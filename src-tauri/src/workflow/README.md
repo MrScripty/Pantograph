@@ -128,10 +128,11 @@ The legacy Tauri-local workflow type mirror has also been removed; graph,
 connection, node-definition, file, and port DTOs should come from
 `pantograph-workflow-service` so command payloads do not drift from backend
 contracts.
-`headless_diagnostics_transport.rs` owns the host-facing diagnostics snapshot,
-trace snapshot, and clear-history responses so runtime debug commands and
-workflow command wrappers do not depend on the broader headless workflow
-session adapter.
+`headless_diagnostics_transport.rs` owns the internal diagnostics snapshot,
+trace snapshot, and clear-history responses used by runtime debug and headless
+tests. Those legacy diagnostics snapshot responses are no longer registered as
+desktop GUI workflow commands; the run-centric GUI uses projection-specific
+commands instead.
 That diagnostics snapshot path may forward additive backend-owned
 workflow-session inspection state, but it must not reconstruct node-memory or
 checkpoint policy inside the Tauri adapter.

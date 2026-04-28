@@ -11,9 +11,9 @@ use pantograph_embedded_runtime::{
 };
 use pantograph_workflow_service::{
     WorkflowCapabilitiesRequest, WorkflowExecutionSessionInspectionRequest,
-    WorkflowSchedulerSnapshotRequest, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
+    WorkflowSchedulerSnapshotRequest,
 };
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager};
 
 use crate::llm::{SharedGateway, SharedRuntimeRegistry};
 
@@ -22,8 +22,8 @@ use super::diagnostics::{WorkflowDiagnosticsProjection, WorkflowDiagnosticsSnaps
 pub(crate) use super::headless_diagnostics::workflow_trace_snapshot_response;
 use super::headless_diagnostics::{
     stored_runtime_model_targets, stored_runtime_snapshots, stored_runtime_trace_metrics,
-    workflow_clear_diagnostics_history_response, workflow_diagnostics_snapshot_projection,
-    workflow_error_json, WorkflowDiagnosticsSnapshotProjectionInput,
+    workflow_diagnostics_snapshot_projection, workflow_error_json,
+    WorkflowDiagnosticsSnapshotProjectionInput,
 };
 use super::headless_runtime::build_runtime;
 
@@ -34,27 +34,6 @@ fn managed_runtime_diagnostics_views(
         return Vec::new();
     };
     list_managed_runtime_manager_runtimes(&app_data_dir).unwrap_or_default()
-}
-
-pub async fn workflow_get_diagnostics_snapshot(
-    request: WorkflowDiagnosticsSnapshotRequest,
-    app: AppHandle,
-    gateway: State<'_, SharedGateway>,
-    runtime_registry: State<'_, SharedRuntimeRegistry>,
-    extensions: State<'_, SharedExtensions>,
-    workflow_service: State<'_, SharedWorkflowService>,
-    diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
-) -> Result<WorkflowDiagnosticsProjection, String> {
-    workflow_diagnostics_snapshot_response(
-        &app,
-        gateway.inner(),
-        runtime_registry.inner(),
-        extensions.inner(),
-        workflow_service.inner(),
-        diagnostics_store.inner(),
-        request,
-    )
-    .await
 }
 
 pub async fn workflow_diagnostics_snapshot_response(
@@ -182,20 +161,5 @@ pub async fn workflow_diagnostics_snapshot_response(
             managed_runtimes,
             captured_at_ms,
         },
-    ))
-}
-
-pub async fn workflow_get_trace_snapshot(
-    request: WorkflowTraceSnapshotRequest,
-    diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
-) -> Result<WorkflowTraceSnapshotResponse, String> {
-    workflow_trace_snapshot_response(diagnostics_store.inner(), request)
-}
-
-pub async fn workflow_clear_diagnostics_history(
-    diagnostics_store: State<'_, SharedWorkflowDiagnosticsStore>,
-) -> Result<WorkflowDiagnosticsProjection, String> {
-    Ok(workflow_clear_diagnostics_history_response(
-        diagnostics_store.inner(),
     ))
 }

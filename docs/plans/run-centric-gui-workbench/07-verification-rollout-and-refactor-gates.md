@@ -407,6 +407,14 @@ Before launching workers, create a dedicated implementation-wave plan with:
 - Frontend diagnostics DTO cleanup passed `npm run typecheck`,
   `npm run build`, and focused projection/command/presenter tests after
   removing unused legacy snapshot and trace interfaces.
+- Desktop GUI command cleanup passed after unregistering the old diagnostics
+  snapshot, trace snapshot, and clear-history workflow Tauri commands; native
+  debug/headless helpers remain internal.
+- `cargo check -p pantograph` passed without warnings after removing the
+  unused diagnostics snapshot transport wrappers and gating clear-history reset
+  helpers to tests.
+- `cargo test -p pantograph workflow_clear_diagnostics_history_response_preserves_backend_snapshots -- --nocapture`
+  passed.
 - `cargo test -p pantograph-diagnostics-ledger` passed.
 - `cargo test -p pantograph-workflow-service` passed.
 - `npm run format:check` passed after applying `cargo fmt --all`.

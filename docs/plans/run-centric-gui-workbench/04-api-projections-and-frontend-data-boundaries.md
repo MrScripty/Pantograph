@@ -194,9 +194,11 @@ policy into adapters.
 - [ ] Remove or rename old projection APIs that would expose stale
   graph-fingerprint or current-graph semantics for historic runs.
   - Frontend legacy diagnostics snapshot methods and TypeScript snapshot/trace
-    DTOs are removed with the legacy diagnostics panel/store cleanup. Native
-    debug/headless snapshot commands remain available until the Rust-side
-    migration has a replacement plan.
+    DTOs are removed with the legacy diagnostics panel/store cleanup. The
+    desktop GUI no longer registers the old diagnostics snapshot, trace
+    snapshot, or clear-history Tauri workflow commands; native debug/headless
+    helpers remain internal for runtime inspection and tests until their
+    Rust-side migration has a replacement plan.
 
 **Verification:**
 
@@ -211,6 +213,9 @@ policy into adapters.
   `npm run build`, and focused projection/command/presenter tests after
   removing unused legacy diagnostics snapshot/trace interfaces from
   `src/services/diagnostics/types.ts`.
+- Desktop command cleanup verified with `cargo check -p pantograph` and
+  focused diagnostics clear-history response coverage after unregistering the
+  legacy diagnostics snapshot/trace/reset Tauri workflow commands.
 
 **Status:** In progress. Workflow service now exposes
 `workflow_scheduler_timeline_query`, which advances the scheduler timeline
@@ -302,8 +307,10 @@ topology, graph settings, and presentation revision records instead of reading
 current graph files. The frontend diagnostics type boundary now contains only
 workbench projection and command DTOs used by active TypeScript callers;
 legacy diagnostics snapshot/trace DTOs were removed with the legacy panel/store
-cleanup while native debug/headless snapshot commands remain pending separate
-Rust-side retirement.
+cleanup. The GUI command registration now exposes projection-specific
+diagnostics commands instead of the old diagnostics snapshot, trace snapshot,
+and clear-history workflow commands, while native debug/headless helpers remain
+available internally pending separate Rust-side retirement.
 
 ### Milestone 3: Frontend Services And Stores
 

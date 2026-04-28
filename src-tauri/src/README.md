@@ -110,6 +110,9 @@ improvements and backend-owned grouping DTOs over local adapter exceptions.
 - Workflow projection query commands, including scheduler estimate reads, must
   stay transport-thin and return workflow-service DTOs without local payload
   parsing.
+- The run-centric GUI command surface should expose projection-specific
+  diagnostics commands, not legacy diagnostics snapshot/trace/reset commands.
+  Runtime-debug and headless diagnostics helpers may remain internal.
 - Mechanical lint fixes must not change command payload shape, runtime
   ownership, or backend error categories.
 
