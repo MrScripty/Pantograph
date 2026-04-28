@@ -15,7 +15,7 @@ later plan stages fill in richer page bodies.
 | `GraphPage.svelte` | Workbench page that switches between the active run's immutable graph snapshot and the current editable workflow graph. |
 | `RunGraphSnapshot.svelte` | Read-only run graph renderer backed by `workflowService.queryRunGraph`; it does not load historic graphs into the editor store. |
 | `DiagnosticsPage.svelte` | Projection-backed selected-run diagnostics page with run detail facts, comparison facets, mixed-version warnings, and scheduler timeline records. |
-| `diagnosticsPagePresenters.ts` | Pure diagnostics page status, duration, projection freshness, fact, comparison facet, and timeline label presenters. |
+| `diagnosticsPagePresenters.ts` | Pure diagnostics page status, duration, projection freshness, run authority fact, comparison facet, and timeline label presenters. |
 | `diagnosticsPagePresenters.test.ts` | Unit coverage for diagnostics page labels, comparison facets, and payload availability presentation. |
 | `IoInspectorPage.svelte` | Projection-backed I/O artifact browser and global retention policy form. |
 | `ioInspectorPresenters.ts` | Pure I/O media, payload availability, byte-size, and projection freshness presenters. |

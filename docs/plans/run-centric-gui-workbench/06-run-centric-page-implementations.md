@@ -188,9 +188,10 @@ and privileged queue action controls remain open.
 **Status:** Partially complete. `DiagnosticsPage.svelte` now queries
 `workflowService.queryRunDetail` and
 `workflowService.querySchedulerTimeline` for the active run, renders run detail
-facts, status, timing, terminal error, projection freshness, and scheduler
-timeline summaries without parsing raw ledger rows or event-family payloads in
-the component. It also uses the run-list projection to render selected-run
+facts, status, timing, workflow execution-session authority, terminal error,
+projection freshness, and scheduler timeline summaries without parsing raw
+ledger rows or event-family payloads in the component. It also uses the
+run-list projection to render selected-run
 comparison facets, active facet counts across the current workflow's recent
 runs, and mixed workflow-version warnings. Those counts now prefer backend
 run-list facet summaries scoped to the selected workflow. Richer aggregate

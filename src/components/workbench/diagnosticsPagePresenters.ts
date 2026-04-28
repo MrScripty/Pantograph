@@ -104,6 +104,11 @@ export function buildDiagnosticsFactRows(run: RunDetailProjectionRecord): Diagno
     },
     { label: 'Client', value: run.client_id ?? 'Unavailable', mono: true },
     { label: 'Client Session', value: run.client_session_id ?? 'Unavailable', mono: true },
+    {
+      label: 'Execution Session',
+      value: run.workflow_execution_session_id ?? 'Unavailable',
+      mono: true,
+    },
     { label: 'Bucket', value: run.bucket_id ?? 'Default', mono: true },
     { label: 'Scheduler Policy', value: run.scheduler_policy_id ?? 'Default', mono: true },
     { label: 'Retention Policy', value: run.retention_policy_id ?? 'Default', mono: true },
