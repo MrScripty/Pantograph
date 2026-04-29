@@ -33,9 +33,16 @@
   }
 
   interface StreamAudioChunk {
-    audioBase64: string;
+    audioBase64: string | null;
+    artifactId: string | null;
+    streamHandle: string | null;
     mimeType: string;
     sequence: number | null;
+    byteLength: number | null;
+    availableByteLength: number | null;
+    byteRangeStart: number | null;
+    byteRangeEndExclusive: number | null;
+    lifecycleState: string | null;
     isFinal: boolean;
     mode: 'append' | 'replace';
   }
@@ -100,8 +107,15 @@
     if (typeof payload === 'string' && payload.length > 0) {
       return {
         audioBase64: payload,
+        artifactId: null,
+        streamHandle: null,
         mimeType: 'audio/wav',
         sequence: null,
+        byteLength: null,
+        availableByteLength: null,
+        byteRangeStart: null,
+        byteRangeEndExclusive: null,
+        lifecycleState: null,
         isFinal: false,
         mode: 'append',
       };
@@ -111,11 +125,28 @@
     const maybeChunk = payload as {
       audio_base64?: unknown;
       content?: unknown;
+      artifact_id?: unknown;
+      stream_handle?: unknown;
+      media_type?: unknown;
       mime_type?: unknown;
       sequence?: unknown;
+      byte_length?: unknown;
+      available_byte_length?: unknown;
+      byte_range_start?: unknown;
+      byte_range_end_exclusive?: unknown;
+      lifecycle_state?: unknown;
       is_final?: unknown;
       mode?: unknown;
+      descriptor?: unknown;
     };
+    const descriptor =
+      maybeChunk.descriptor && typeof maybeChunk.descriptor === 'object'
+        ? maybeChunk.descriptor as Record<string, unknown>
+        : null;
+    const descriptorFormat =
+      descriptor?.format && typeof descriptor.format === 'object'
+        ? descriptor.format as Record<string, unknown>
+        : null;
 
     const audioValue =
       typeof maybeChunk.audio_base64 === 'string' && maybeChunk.audio_base64.length > 0
@@ -123,21 +154,31 @@
         : typeof maybeChunk.content === 'string' && maybeChunk.content.length > 0
           ? maybeChunk.content
           : null;
-    if (!audioValue) return null;
+    const artifactId = nonEmptyStringOrNull(maybeChunk.artifact_id) ?? nonEmptyStringOrNull(descriptor?.artifact_id);
+    const streamHandle =
+      nonEmptyStringOrNull(maybeChunk.stream_handle) ?? nonEmptyStringOrNull(descriptor?.stream_handle);
+    if (!audioValue && !artifactId) return null;
 
     const sequence =
       typeof maybeChunk.sequence === 'number' && Number.isFinite(maybeChunk.sequence)
         ? maybeChunk.sequence
         : null;
-    const mimeType =
-      typeof maybeChunk.mime_type === 'string' && maybeChunk.mime_type.length > 0
-        ? maybeChunk.mime_type
-        : 'audio/wav';
+    const mediaType =
+      nonEmptyStringOrNull(maybeChunk.media_type) ?? nonEmptyStringOrNull(descriptorFormat?.media_type);
+    const mimeType = nonEmptyStringOrNull(maybeChunk.mime_type) ?? mediaType ?? 'audio/wav';
 
     return {
       audioBase64: audioValue,
+      artifactId,
+      streamHandle,
       mimeType,
       sequence,
+      byteLength: finiteNumberOrNull(maybeChunk.byte_length) ?? finiteNumberOrNull(descriptor?.byte_length),
+      availableByteLength: finiteNumberOrNull(maybeChunk.available_byte_length),
+      byteRangeStart: finiteNumberOrNull(maybeChunk.byte_range_start),
+      byteRangeEndExclusive: finiteNumberOrNull(maybeChunk.byte_range_end_exclusive),
+      lifecycleState:
+        nonEmptyStringOrNull(maybeChunk.lifecycle_state) ?? nonEmptyStringOrNull(descriptor?.lifecycle_state),
       isFinal: maybeChunk.is_final === true,
       mode: maybeChunk.mode === 'replace' ? 'replace' : 'append',
     };
@@ -276,6 +317,14 @@
     return formatOverride?.bitrate_kbps ?? defaultFormat?.bitrate_kbps ?? 96;
   }
 
+  function finiteNumberOrNull(value: unknown): number | null {
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  }
+
+  function nonEmptyStringOrNull(value: unknown): string | null {
+    return typeof value === 'string' && value.length > 0 ? value : null;
+  }
+
   function clampToRange(value: number, min: number | null | undefined, max: number | null | undefined): number {
     let nextValue = Number.isFinite(value) ? Math.round(value) : defaultFormat?.bitrate_kbps ?? 96;
     if (min !== null && min !== undefined) {
@@ -344,6 +393,39 @@
       bytes[i] = binary.charCodeAt(i);
     }
     return bytes.buffer;
+  }
+
+  async function streamChunkToArrayBuffer(chunk: StreamAudioChunk): Promise<ArrayBuffer | null> {
+    if (chunk.audioBase64) {
+      return base64ToArrayBuffer(chunk.audioBase64);
+    }
+    if (!chunk.artifactId) {
+      return null;
+    }
+
+    const read = await workflowService.readArtifactStream({
+      artifact_id: chunk.artifactId,
+      byte_range_start: chunk.byteRangeStart,
+      byte_range_end_exclusive: chunk.byteRangeEndExclusive,
+    });
+    return new Uint8Array(read.body).buffer;
+  }
+
+  function streamChunkSignature(chunk: StreamAudioChunk): string {
+    if (chunk.audioBase64) {
+      return `inline:${chunk.audioBase64.length}:${chunk.audioBase64.slice(0, 64)}`;
+    }
+    return [
+      'artifact',
+      chunk.artifactId ?? '',
+      chunk.streamHandle ?? '',
+      chunk.byteRangeStart ?? '',
+      chunk.byteRangeEndExclusive ?? '',
+      chunk.availableByteLength ?? '',
+      chunk.byteLength ?? '',
+      chunk.lifecycleState ?? '',
+      chunk.isFinal ? 'final' : 'open',
+    ].join(':');
   }
 
   function updateStreamingProgress() {
@@ -424,7 +506,7 @@
       }
       lastProcessedSequence = chunk.sequence;
     } else {
-      const signature = `${chunk.audioBase64.length}:${chunk.audioBase64.slice(0, 64)}`;
+      const signature = streamChunkSignature(chunk);
       if (signature === lastProcessedChunkSignature) return;
       lastProcessedChunkSignature = signature;
     }
@@ -433,7 +515,8 @@
     if (!context || !streamGainNode) return;
 
     try {
-      const encoded = base64ToArrayBuffer(chunk.audioBase64);
+      const encoded = await streamChunkToArrayBuffer(chunk);
+      if (!encoded || encoded.byteLength === 0) return;
       const decoded = await context.decodeAudioData(encoded.slice(0));
 
       if (context.state === 'suspended') {

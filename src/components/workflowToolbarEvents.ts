@@ -128,6 +128,14 @@ function applyStreamNodeRuntimeData(
         audio_mime: audioChunk.mimeType,
         stream_sequence: audioChunk.sequence,
         stream_is_final: audioChunk.isFinal,
+        stream_artifact_id: audioChunk.artifactId,
+        stream_handle: audioChunk.streamHandle,
+        stream_byte_length: audioChunk.byteLength,
+        stream_available_byte_length: audioChunk.availableByteLength,
+        stream_byte_range_start: audioChunk.byteRangeStart,
+        stream_byte_range_end_exclusive: audioChunk.byteRangeEndExclusive,
+        stream_lifecycle_state: audioChunk.lifecycleState,
+        stream_descriptor: audioChunk.descriptor,
       });
       continue;
     }
@@ -159,35 +167,91 @@ function parseTextStreamChunk(chunk: unknown): { mode: 'append' | 'replace'; tex
 
 function parseAudioStreamChunk(chunk: unknown): {
   mode: 'append' | 'replace';
-  audioBase64: string;
+  audioBase64: string | null;
+  artifactId: string | null;
+  streamHandle: string | null;
   mimeType: string;
   sequence: number | null;
+  byteLength: number | null;
+  availableByteLength: number | null;
+  byteRangeStart: number | null;
+  byteRangeEndExclusive: number | null;
+  lifecycleState: string | null;
   isFinal: boolean;
+  descriptor: unknown;
 } | null {
   if (!chunk || typeof chunk !== 'object') return null;
-  if (!('audio_base64' in chunk)) return null;
-  const structured = chunk as {
-    mode?: string;
-    audio_base64: unknown;
-    mime_type?: unknown;
-    sequence?: unknown;
-    is_final?: unknown;
-  };
-  if (typeof structured.audio_base64 !== 'string' || structured.audio_base64.length === 0) {
+  if (
+    !('audio_base64' in chunk) &&
+    !('artifact_id' in chunk || 'stream_handle' in chunk || 'descriptor' in chunk)
+  ) {
     return null;
   }
+  const structured = chunk as {
+    mode?: string;
+    audio_base64?: unknown;
+    artifact_id?: unknown;
+    stream_handle?: unknown;
+    media_type?: unknown;
+    mime_type?: unknown;
+    sequence?: unknown;
+    byte_length?: unknown;
+    available_byte_length?: unknown;
+    byte_range_start?: unknown;
+    byte_range_end_exclusive?: unknown;
+    lifecycle_state?: unknown;
+    is_final?: unknown;
+    descriptor?: unknown;
+  };
+  const descriptor =
+    structured.descriptor && typeof structured.descriptor === 'object'
+      ? (structured.descriptor as Record<string, unknown>)
+      : null;
+  const descriptorFormat =
+    descriptor?.format && typeof descriptor.format === 'object'
+      ? (descriptor.format as Record<string, unknown>)
+      : null;
+
+  const audioBase64 =
+    typeof structured.audio_base64 === 'string' && structured.audio_base64.length > 0
+      ? structured.audio_base64
+      : null;
+  const artifactId = nonEmptyStringOrNull(structured.artifact_id) ?? nonEmptyStringOrNull(descriptor?.artifact_id);
+  const streamHandle =
+    nonEmptyStringOrNull(structured.stream_handle) ?? nonEmptyStringOrNull(descriptor?.stream_handle);
+
+  if (!audioBase64 && !artifactId && !streamHandle) {
+    return null;
+  }
+
   const sequence =
     typeof structured.sequence === 'number' && Number.isFinite(structured.sequence)
       ? structured.sequence
       : null;
+  const mediaType = nonEmptyStringOrNull(structured.media_type) ?? nonEmptyStringOrNull(descriptorFormat?.media_type);
+  const mimeType = nonEmptyStringOrNull(structured.mime_type) ?? mediaType;
   return {
     mode: structured.mode === 'replace' ? 'replace' : 'append',
-    audioBase64: structured.audio_base64,
-    mimeType:
-      typeof structured.mime_type === 'string' && structured.mime_type.length > 0
-        ? structured.mime_type
-        : 'audio/wav',
+    audioBase64,
+    artifactId,
+    streamHandle,
+    mimeType: mimeType ?? 'audio/wav',
     sequence,
+    byteLength: finiteNumberOrNull(structured.byte_length) ?? finiteNumberOrNull(descriptor?.byte_length),
+    availableByteLength: finiteNumberOrNull(structured.available_byte_length),
+    byteRangeStart: finiteNumberOrNull(structured.byte_range_start),
+    byteRangeEndExclusive: finiteNumberOrNull(structured.byte_range_end_exclusive),
+    lifecycleState:
+      nonEmptyStringOrNull(structured.lifecycle_state) ?? nonEmptyStringOrNull(descriptor?.lifecycle_state),
     isFinal: structured.is_final === true,
+    descriptor: structured.descriptor,
   };
+}
+
+function finiteNumberOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function nonEmptyStringOrNull(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null;
 }

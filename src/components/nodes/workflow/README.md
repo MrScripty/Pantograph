@@ -10,7 +10,7 @@ to the workflow graph runtime instead of being spread across generic canvas code
 | File/Folder | Description |
 | ----------- | ----------- |
 | `BooleanInputNode.svelte` | Renders a metadata-driven boolean editor that can bind to any downstream boolean-compatible setting. |
-| `AudioOutputNode.svelte` | Renders playback controls for streamed and final audio outputs, including rerun cleanup of execution-local playback state and explicit artifact format overrides. |
+| `AudioOutputNode.svelte` | Renders playback controls for streamed and final audio outputs, including ArtifactStore stream-reference preview reads, rerun cleanup of execution-local playback state, and explicit artifact format overrides. |
 | `ImageOutputNode.svelte` | Renders image output previews and explicit artifact format overrides for image artifacts. |
 | `PointCloudOutputNode.svelte` | Renders point-cloud previews and explicit artifact format overrides for 3D artifacts. |
 | `DiffusionInferenceNode.svelte` | Shows execution and dependency state for process-backed diffusion image generation. |
@@ -119,6 +119,11 @@ Image, audio, and point-cloud output nodes load backend-owned artifact format
 defaults and capabilities through the workflow service. Their format selectors
 store only explicit per-node overrides in `artifact_format_override`; a missing
 or `null` override means the node uses the canonical backend Settings defaults.
+`AudioOutputNode.svelte` accepts transient audio stream chunks either as legacy
+inline `audio_base64` payloads or as ArtifactStore stream references. Stream
+references keep `artifact_id`, `stream_handle`, byte range, lifecycle, sequence,
+and finality metadata in runtime data while the component reads bytes lazily with
+`workflowService.readArtifactStream` only when it needs browser preview playback.
 
 ## Alternatives Rejected
 - Reset audio output state only by remounting the workflow view.
@@ -138,6 +143,9 @@ or `null` override means the node uses the canonical backend Settings defaults.
 - Workflow completion handlers must forward final audio metadata together with
   the audio payload so output playback stays seekable even when metadata loading
   lags in the browser.
+- Streamed audio event handlers must not require inline `audio_base64`; they
+  preserve ArtifactStore stream-reference metadata and let preview components
+  fetch referenced stream bytes on demand.
 - Specialized node components must mirror canonical backend-owned port names so
   template graphs and execution bindings do not depend on UI-local aliases.
 - `PumaLibNode.svelte` must keep its shared model-option cache in a Svelte 5

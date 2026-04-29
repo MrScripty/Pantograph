@@ -241,3 +241,181 @@ test('applyWorkflowToolbarEvent forwards text stream chunks to connected targets
   assert.deepEqual(appendCalls, []);
   assert.deepEqual(replaceCalls, [{ nodeId: 'text-target', content: 'hello' }]);
 });
+
+test('applyWorkflowToolbarEvent forwards audio stream references without inline base64', () => {
+  const descriptor = {
+    artifact_id: 'artifact-audio',
+    lifecycle_state: 'retained',
+  };
+  const chunk = {
+    artifact_id: 'artifact-audio',
+    stream_handle: 'artifact-stream://artifact-audio',
+    media_type: 'audio/ogg',
+    sequence: 3,
+    byte_length: 4096,
+    available_byte_length: 2048,
+    byte_range_start: 1024,
+    byte_range_end_exclusive: 2048,
+    lifecycle_state: 'streaming',
+    is_final: false,
+    descriptor,
+  };
+
+  const { runtimeDataCalls, appendCalls, replaceCalls } = applyEvent(
+    {
+      type: 'NodeStream',
+      data: {
+        node_id: 'producer',
+        port: 'audio',
+        chunk,
+        workflow_run_id: 'run-1',
+      },
+    },
+    {
+      edges: [
+        {
+          id: 'edge-audio',
+          source: 'producer',
+          sourceHandle: 'audio',
+          target: 'audio-target',
+          targetHandle: 'stream',
+        } as Edge,
+      ],
+    },
+  );
+
+  assert.deepEqual(appendCalls, []);
+  assert.deepEqual(replaceCalls, []);
+  assert.deepEqual(runtimeDataCalls, [
+    {
+      nodeId: 'audio-target',
+      data: {
+        stream: chunk,
+        audio_mime: 'audio/ogg',
+        stream_sequence: 3,
+        stream_is_final: false,
+        stream_artifact_id: 'artifact-audio',
+        stream_handle: 'artifact-stream://artifact-audio',
+        stream_byte_length: 4096,
+        stream_available_byte_length: 2048,
+        stream_byte_range_start: 1024,
+        stream_byte_range_end_exclusive: 2048,
+        stream_lifecycle_state: 'streaming',
+        stream_descriptor: descriptor,
+      },
+    },
+  ]);
+});
+
+test('applyWorkflowToolbarEvent keeps inline audio_base64 stream handling as fallback', () => {
+  const chunk = {
+    audio_base64: 'UklGRg==',
+    mime_type: 'audio/wav',
+    sequence: 1,
+    is_final: true,
+  };
+
+  const { runtimeDataCalls } = applyEvent(
+    {
+      type: 'NodeStream',
+      data: {
+        node_id: 'producer',
+        port: 'audio',
+        chunk,
+        workflow_run_id: 'run-1',
+      },
+    },
+    {
+      edges: [
+        {
+          id: 'edge-audio',
+          source: 'producer',
+          sourceHandle: 'audio',
+          target: 'audio-target',
+          targetHandle: 'stream',
+        } as Edge,
+      ],
+    },
+  );
+
+  assert.deepEqual(runtimeDataCalls, [
+    {
+      nodeId: 'audio-target',
+      data: {
+        stream: chunk,
+        audio_mime: 'audio/wav',
+        stream_sequence: 1,
+        stream_is_final: true,
+        stream_artifact_id: null,
+        stream_handle: null,
+        stream_byte_length: null,
+        stream_available_byte_length: null,
+        stream_byte_range_start: null,
+        stream_byte_range_end_exclusive: null,
+        stream_lifecycle_state: null,
+        stream_descriptor: undefined,
+      },
+    },
+  ]);
+});
+
+test('applyWorkflowToolbarEvent reads audio stream metadata from a final descriptor', () => {
+  const descriptor = {
+    artifact_id: 'artifact-final-audio',
+    stream_handle: 'artifact-stream://artifact-final-audio',
+    byte_length: 8192,
+    lifecycle_state: 'retained',
+    format: {
+      media_type: 'audio/flac',
+    },
+  };
+
+  const { runtimeDataCalls } = applyEvent(
+    {
+      type: 'NodeStream',
+      data: {
+        node_id: 'producer',
+        port: 'audio',
+        chunk: {
+          descriptor,
+          is_final: true,
+        },
+        workflow_run_id: 'run-1',
+      },
+    },
+    {
+      edges: [
+        {
+          id: 'edge-audio',
+          source: 'producer',
+          sourceHandle: 'audio',
+          target: 'audio-target',
+          targetHandle: 'stream',
+        } as Edge,
+      ],
+    },
+  );
+
+  assert.deepEqual(runtimeDataCalls, [
+    {
+      nodeId: 'audio-target',
+      data: {
+        stream: {
+          descriptor,
+          is_final: true,
+        },
+        audio_mime: 'audio/flac',
+        stream_sequence: null,
+        stream_is_final: true,
+        stream_artifact_id: 'artifact-final-audio',
+        stream_handle: 'artifact-stream://artifact-final-audio',
+        stream_byte_length: 8192,
+        stream_available_byte_length: null,
+        stream_byte_range_start: null,
+        stream_byte_range_end_exclusive: null,
+        stream_lifecycle_state: 'retained',
+        stream_descriptor: descriptor,
+      },
+    },
+  ]);
+});
