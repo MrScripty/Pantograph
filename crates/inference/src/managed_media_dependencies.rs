@@ -64,6 +64,8 @@ pub struct MediaConversionDependencyLeaseToken {
     pub id: MediaConversionDependencyId,
     pub version: String,
     pub lease_id: String,
+    #[serde(default)]
+    pub holder: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -88,6 +90,43 @@ pub struct MediaConversionDependencyPlan {
     pub color_managed: bool,
     pub leases: Vec<MediaConversionDependencyLease>,
     pub open_color_io_activation: Option<OpenColorIoActivation>,
+}
+
+pub fn format_media_conversion_dependency_lease_holder(
+    workflow_run_id: &str,
+    node_id: &str,
+    port_id: &str,
+    conversion_id: &str,
+) -> Result<String, String> {
+    validate_holder_component("workflow_run_id", workflow_run_id)?;
+    validate_holder_component("node_id", node_id)?;
+    validate_holder_component("port_id", port_id)?;
+    validate_holder_component("conversion_id", conversion_id)?;
+
+    Ok(format!(
+        "workflow_run:{workflow_run_id}/node:{node_id}/port:{port_id}/conversion:{conversion_id}"
+    ))
+}
+
+pub fn validate_media_conversion_dependency_lease_holder(holder: &str) -> Result<(), String> {
+    let mut parts = holder.split('/');
+    validate_holder_segment(parts.next(), "workflow_run", "workflow_run_id")?;
+    validate_holder_segment(parts.next(), "node", "node_id")?;
+    validate_holder_segment(parts.next(), "port", "port_id")?;
+    validate_holder_segment(parts.next(), "conversion", "conversion_id")?;
+
+    if parts.next().is_some() {
+        return Err(format!(
+            "Media conversion dependency lease holder must use exactly 4 attribution segments: {}",
+            media_conversion_dependency_lease_holder_convention()
+        ));
+    }
+
+    Ok(())
+}
+
+pub fn media_conversion_dependency_lease_holder_convention() -> &'static str {
+    "workflow_run:{workflow_run_id}/node:{node_id}/port:{port_id}/conversion:{conversion_id}"
 }
 
 pub fn validate_open_color_io_activation(
@@ -124,9 +163,7 @@ pub fn acquire_media_conversion_dependency_plan(
     app_data_dir: &Path,
     request: MediaConversionDependencyPlanRequest,
 ) -> Result<MediaConversionDependencyPlan, String> {
-    if request.holder.trim().is_empty() {
-        return Err("Media conversion dependency lease holder must not be empty".to_string());
-    }
+    validate_media_conversion_dependency_lease_holder(&request.holder)?;
 
     let dependencies = dependency_ids_for_request(&request);
     let mut acquired = Vec::new();
@@ -258,6 +295,7 @@ fn acquire_dependency_lease(
         id: dependency_id,
         version: lease.version,
         lease_id: lease.lease_id,
+        holder: holder.to_string(),
     };
 
     Ok(MediaConversionDependencyLease { dependency, token })
@@ -357,4 +395,56 @@ fn redistributable_id_for_dependency_id(
         MediaConversionDependencyId::Oiiotool => ManagedRedistributableId::Oiiotool,
         MediaConversionDependencyId::OpenColorIo => ManagedRedistributableId::OpenColorIo,
     }
+}
+
+fn validate_holder_segment(
+    segment: Option<&str>,
+    expected_prefix: &str,
+    component_name: &str,
+) -> Result<(), String> {
+    let Some(segment) = segment else {
+        return Err(format!(
+            "Media conversion dependency lease holder is missing {component_name}; expected {}",
+            media_conversion_dependency_lease_holder_convention()
+        ));
+    };
+    let Some(value) = segment.strip_prefix(expected_prefix) else {
+        return Err(format!(
+            "Media conversion dependency lease holder segment '{segment}' must start with '{expected_prefix}:'; expected {}",
+            media_conversion_dependency_lease_holder_convention()
+        ));
+    };
+    let Some(value) = value.strip_prefix(':') else {
+        return Err(format!(
+            "Media conversion dependency lease holder segment '{segment}' must start with '{expected_prefix}:'; expected {}",
+            media_conversion_dependency_lease_holder_convention()
+        ));
+    };
+
+    validate_holder_component(component_name, value)
+}
+
+fn validate_holder_component(component_name: &str, value: &str) -> Result<(), String> {
+    if value.is_empty() {
+        return Err(format!(
+            "Media conversion dependency lease holder {component_name} must not be empty"
+        ));
+    }
+
+    if value.len() > 128 {
+        return Err(format!(
+            "Media conversion dependency lease holder {component_name} must be 128 characters or fewer"
+        ));
+    }
+
+    if !value
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b':'))
+    {
+        return Err(format!(
+            "Media conversion dependency lease holder {component_name} must contain only ASCII letters, digits, ':', '.', '_', or '-'"
+        ));
+    }
+
+    Ok(())
 }

@@ -64,12 +64,13 @@ pub use gateway::{
     InferenceStartRequest, SharedGateway,
 };
 pub use managed_media_dependencies::{
-    acquire_media_conversion_dependency_plan, open_color_io_activation_validation_state,
-    release_media_conversion_dependency_plan, validate_open_color_io_activation,
-    MediaConversionDependency, MediaConversionDependencyId, MediaConversionDependencyLease,
-    MediaConversionDependencyLeaseToken, MediaConversionDependencyPlan,
-    MediaConversionDependencyPlanRequest, MediaConversionJobKind, OpenColorIoActivation,
-    OpenColorIoActivationValidation, OpenColorIoActivationValidationState,
+    acquire_media_conversion_dependency_plan, format_media_conversion_dependency_lease_holder,
+    media_conversion_dependency_lease_holder_convention, open_color_io_activation_validation_state,
+    release_media_conversion_dependency_plan, validate_media_conversion_dependency_lease_holder,
+    validate_open_color_io_activation, MediaConversionDependency, MediaConversionDependencyId,
+    MediaConversionDependencyLease, MediaConversionDependencyLeaseToken,
+    MediaConversionDependencyPlan, MediaConversionDependencyPlanRequest, MediaConversionJobKind,
+    OpenColorIoActivation, OpenColorIoActivationValidation, OpenColorIoActivationValidationState,
 };
 pub use managed_redistributables::{
     acquire_managed_redistributable_lease, activate_managed_redistributable_version,
