@@ -311,7 +311,7 @@ mod tests {
     use inference::{
         activate_managed_redistributable_version, install_managed_redistributable_from_staging,
         load_managed_redistributable_state, managed_redistributable_catalog_entry,
-        ManagedRedistributableId,
+        remove_managed_redistributable_version, ManagedRedistributableId,
     };
     use pantograph_media_conversion::{
         ArtifactId, FormatField, GraphNodeId, MediaConversionAttribution, MediaConversionId,
@@ -494,6 +494,85 @@ mod tests {
         assert_active_leases_released(app_data_dir.path());
     }
 
+    #[tokio::test]
+    async fn managed_executor_blocks_dependency_removal_while_conversion_lease_is_active() {
+        let app_data_dir = tempfile::tempdir().expect("app data dir");
+        let version =
+            install_active_dependency(app_data_dir.path(), ManagedRedistributableId::Ffmpeg);
+        let runner = Arc::new(FakeProcessRunner::pending());
+        let executor = TauriManagedMediaConversionExecutor::with_runner(
+            app_data_dir.path().to_path_buf(),
+            runner.clone(),
+        );
+
+        let convert_task = tokio::spawn(async move {
+            executor
+                .convert(media_conversion_request(
+                    ConversionMediaKind::Audio,
+                    "audio/wav",
+                    "ogg",
+                    "audio/ogg",
+                    Some("opus"),
+                    false,
+                ))
+                .await
+        });
+
+        runner.wait_for_run_started().await;
+        let removal_error = remove_managed_redistributable_version(
+            app_data_dir.path(),
+            ManagedRedistributableId::Ffmpeg,
+            &version,
+        )
+        .expect_err("active leased dependency removal should fail");
+        assert!(removal_error.contains("while 1 lease(s) exist"));
+
+        convert_task.abort();
+        assert!(convert_task
+            .await
+            .expect_err("convert task should abort")
+            .is_cancelled());
+        assert_active_leases_released(app_data_dir.path());
+        remove_managed_redistributable_version(
+            app_data_dir.path(),
+            ManagedRedistributableId::Ffmpeg,
+            &version,
+        )
+        .expect("dependency removal succeeds after lease release");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn managed_executor_runs_unix_managed_executable_fixture() {
+        let app_data_dir = tempfile::tempdir().expect("app data dir");
+        install_active_executable_dependency(
+            app_data_dir.path(),
+            ManagedRedistributableId::Ffmpeg,
+            "#!/bin/sh\ncat >/dev/null\nprintf fixture-converted\n",
+        );
+        let executor = TauriManagedMediaConversionExecutor::new(app_data_dir.path().to_path_buf());
+
+        let result = executor
+            .convert(media_conversion_request(
+                ConversionMediaKind::Audio,
+                "audio/wav",
+                "ogg",
+                "audio/ogg",
+                Some("opus"),
+                false,
+            ))
+            .await
+            .expect("convert through executable fixture");
+
+        assert_eq!(result.body, b"fixture-converted");
+        assert_eq!(result.dependencies.len(), 1);
+        assert_eq!(
+            result.dependencies[0].dependency_id,
+            ManagedMediaDependencyId::Ffmpeg
+        );
+        assert_active_leases_released(app_data_dir.path());
+    }
+
     fn media_conversion_request(
         kind: ConversionMediaKind,
         source_media_type: &str,
@@ -536,7 +615,7 @@ mod tests {
         .expect("request")
     }
 
-    fn install_active_dependency(app_data_dir: &Path, id: ManagedRedistributableId) {
+    fn install_active_dependency(app_data_dir: &Path, id: ManagedRedistributableId) -> String {
         let staging_dir = tempfile::tempdir().expect("staging dir");
         let catalog = managed_redistributable_catalog_entry(id);
         for expected_file in &catalog.expected_files {
@@ -554,6 +633,38 @@ mod tests {
         .expect("install dependency");
         activate_managed_redistributable_version(app_data_dir, id, &catalog.version)
             .expect("activate dependency");
+        catalog.version
+    }
+
+    #[cfg(unix)]
+    fn install_active_executable_dependency(
+        app_data_dir: &Path,
+        id: ManagedRedistributableId,
+        executable_contents: &str,
+    ) -> String {
+        use std::os::unix::fs::PermissionsExt;
+
+        let staging_dir = tempfile::tempdir().expect("staging dir");
+        let catalog = managed_redistributable_catalog_entry(id);
+        for expected_file in &catalog.expected_files {
+            let path = staging_dir.path().join(expected_file);
+            fs::create_dir_all(path.parent().expect("expected file parent"))
+                .expect("create expected file parent");
+            fs::write(&path, executable_contents).expect("write executable fixture");
+            let mut permissions = fs::metadata(&path).expect("fixture metadata").permissions();
+            permissions.set_mode(0o755);
+            fs::set_permissions(&path, permissions).expect("mark executable fixture");
+        }
+        install_managed_redistributable_from_staging(
+            app_data_dir,
+            id,
+            &catalog.version,
+            staging_dir.path(),
+        )
+        .expect("install executable dependency");
+        activate_managed_redistributable_version(app_data_dir, id, &catalog.version)
+            .expect("activate executable dependency");
+        catalog.version
     }
 
     fn assert_active_leases_released(app_data_dir: &Path) {

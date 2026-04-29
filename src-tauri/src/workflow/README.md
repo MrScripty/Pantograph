@@ -176,6 +176,9 @@ leases after each attempt.
 The adapter owns a local dependency-plan cleanup guard so leases acquired before
 converter execution are also released when a conversion future is cancelled or
 dropped after acquisition.
+Focused adapter tests cover fake-runner lease attribution, dropped-future
+cleanup, managed executable fixture invocation through `StdProcessRunner`, and
+dependency removal refusal while a conversion lease is active.
 
 ## Alternatives Rejected
 - Extend `workflow_get_io` to cover graph-editing intent.

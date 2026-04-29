@@ -235,6 +235,21 @@ Wave status: `partial complete`.
   `node --experimental-strip-types --test src/components/workbench/ioInspectorPresenters.test.ts src/services/workflow/WorkflowService.commands.test.ts src/services/workflow/WorkflowService.projections.test.ts`,
   `npm run typecheck`, and targeted `npx eslint`.
 
+### 2026-04-29 Managed Executable Fixture And Removal Race Coverage
+
+Wave status: `complete`.
+
+- Added a Unix managed executable fixture test that installs an executable under
+  the managed media dependency staging path and runs it through the production
+  `StdProcessRunner` path rather than the fake process runner.
+- Added removal-race coverage proving a managed dependency version cannot be
+  removed while a conversion lease is active and can be removed after
+  cancellation releases the lease.
+- Remaining fixture risk is coverage against real bundled `ffmpeg`,
+  `ocioconvert`, and `oiiotool` archives instead of executable test doubles.
+- Verification passed:
+  `cargo test -p pantograph managed_media_conversion -- --nocapture`.
+
 ## Milestones
 
 ### Milestone 1: Conversion Boundary Design
@@ -327,7 +342,9 @@ Verification:
 - [ ] Add 3D conversion for GLB/glTF/OBJ where managed tooling exists; otherwise
   fail closed with typed unsupported-conversion errors.
 - [ ] Keep streamed previews and in-progress streams readable through ArtifactStore
-  handles while final converted artifacts are produced.
+  handles while final converted artifacts are produced. Existing stream
+  pass-through behavior is covered; converted in-progress stream semantics need
+  a dedicated fixture before this is marked complete.
 
 Verification:
 
@@ -342,7 +359,7 @@ Verification:
   I/O Inspector artifact lifecycle fields. Descriptor conversion metadata is
   visible in the I/O Inspector; pre-descriptor conversion failure projection is
   still pending.
-- [ ] Keep the workbench Settings page as the canonical owner of conversion
+- [x] Keep the workbench Settings page as the canonical owner of conversion
   defaults and managed dependency activation controls.
 - [ ] Add a stage-end standards/refactor review before marking this stage complete.
 

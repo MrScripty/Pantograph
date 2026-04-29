@@ -39,7 +39,7 @@ Stage `13` completed Waves `01` through `06`; Wave `07` is partially complete.
 | `wave-04-media-type-coverage` | Complete for command planning | Added host-neutral command plans for image/audio/video targets, managed dependency requirements, stdin/stdout stream markers, argv vectors, and fail-closed 3D planning. Real conversion execution remains for Wave `06`. |
 | `wave-05-conversion-metadata-contracts` | Complete | Added typed conversion status, conversion id, command id, and per-conversion dependency lease attribution fields to artifact descriptors and durable I/O diagnostics metadata. |
 | `wave-06-host-conversion-integration` | Complete | Workflow-service has a neutral conversion executor hook; inference exposes typed managed executable resolution; Tauri injects a host adapter that leases active managed dependencies, executes command-plan steps, returns lease attribution, and releases leases on success/failure paths. |
-| `wave-07-api-gui-rollout` | Partial | Frontend DTO visibility and I/O Inspector descriptor rendering are implemented for conversion metadata. Conversion failure projection remains pending for failures before a retained artifact descriptor exists. |
+| `wave-07-api-gui-rollout` | Partial | Frontend DTO visibility and I/O Inspector descriptor rendering are implemented for conversion metadata. Managed executable fixture and removal-race coverage are implemented. Conversion failure projection remains pending for failures before a retained artifact descriptor exists. |
 
 ## 2026-04-29 Wave 05 Contract Slice
 
@@ -187,6 +187,8 @@ host records concrete write sets.
   conversion futures. Verification passed:
   `cargo test -p pantograph managed_media_conversion -- --nocapture` and
   `cargo fmt --all -- --check`.
+- Wave `07`: Managed executable fixture and dependency removal-race coverage
+  passed through `cargo test -p pantograph managed_media_conversion -- --nocapture`.
 
 ## Open Decisions
 

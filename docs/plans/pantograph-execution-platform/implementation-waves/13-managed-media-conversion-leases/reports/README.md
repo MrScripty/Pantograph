@@ -16,6 +16,7 @@ implementation.
 | `wave-06-host-tauri-media-conversion-adapter.md` | Host report for Tauri managed media conversion adapter execution and startup injection. |
 | `wave-06-worker-workflow-service-conversion-hook.md` | Worker report for workflow-service neutral conversion executor injection and artifact output conversion handoff. |
 | `wave-07-worker-conversion-visibility.md` | Worker report for frontend/API conversion metadata DTO visibility and I/O Inspector rendering. |
+| `wave-07-host-managed-executable-fixture-and-race-coverage.md` | Host report for managed executable fixture conversion and dependency removal-race coverage. |
 | `wave-07-worker-lease-cleanup-guard.md` | Worker report for Tauri adapter dependency lease cleanup on dropped or cancelled conversion futures. |
 
 ## Usage
