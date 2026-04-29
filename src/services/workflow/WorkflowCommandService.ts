@@ -26,6 +26,8 @@ import type {
   WorkflowArtifactFormatSettingsUpdateResponse,
   WorkflowArtifactPolicy,
   WorkflowArtifactReadRequest,
+  WorkflowArtifactStreamBodyRead,
+  WorkflowArtifactStreamReadRequest,
   WorkflowArtifactStoreStats,
   WorkflowAdminQueueCancelRequest,
   WorkflowAdminQueueCancelResponse,
@@ -289,6 +291,31 @@ export class WorkflowCommandService extends WorkflowProjectionService {
     }
 
     return invokeWorkflowCommand<WorkflowArtifactBodyRead>('workflow_read_artifact_body', {
+      request,
+    });
+  }
+
+  async readArtifactStream(
+    request: WorkflowArtifactStreamReadRequest,
+  ): Promise<WorkflowArtifactStreamBodyRead> {
+    if (USE_WORKFLOW_MOCKS) {
+      const body = mockArtifactBodyBytes();
+      return {
+        response: {
+          artifact_id: request.artifact_id,
+          stream_handle: `artifact-stream://${request.artifact_id}`,
+          media_type: 'text/plain',
+          body_transport: 'binary_body',
+          byte_length: body.length,
+          available_byte_length: body.length,
+          lifecycle_state: 'streaming',
+          complete: false,
+        },
+        body,
+      };
+    }
+
+    return invokeWorkflowCommand<WorkflowArtifactStreamBodyRead>('workflow_read_artifact_stream', {
       request,
     });
   }

@@ -14,6 +14,7 @@ import type {
   WorkflowArtifactFormatSettingsQueryResponse,
   WorkflowArtifactFormatSettingsUpdateResponse,
   WorkflowArtifactPolicy,
+  WorkflowArtifactStreamBodyRead,
   WorkflowArtifactStoreStats,
   WorkflowAdminQueueCancelResponse,
   WorkflowAdminQueuePushFrontResponse,
@@ -394,6 +395,19 @@ test('artifact store commands forward backend-owned descriptor body policy and c
     },
     body: [1, 2, 3],
   };
+  const streamResponse: WorkflowArtifactStreamBodyRead = {
+    response: {
+      artifact_id: 'artifact-a',
+      stream_handle: 'artifact-stream://artifact-a',
+      media_type: 'image/png',
+      body_transport: 'binary_body',
+      byte_length: 2,
+      available_byte_length: 3,
+      lifecycle_state: 'streaming',
+      complete: false,
+    },
+    body: [2, 3],
+  };
   const policyResponse: WorkflowArtifactPolicy = {
     policy_id: 'artifact-policy-v1',
     policy_version: 1,
@@ -427,6 +441,9 @@ test('artifact store commands forward backend-owned descriptor body policy and c
     if (cmd === 'workflow_read_artifact_body') {
       return bodyResponse;
     }
+    if (cmd === 'workflow_read_artifact_stream') {
+      return streamResponse;
+    }
     if (cmd === 'workflow_acknowledge_artifact_consumed') {
       return {
         artifact_id: 'artifact-a',
@@ -446,6 +463,10 @@ test('artifact store commands forward backend-owned descriptor body policy and c
     const service = new WorkflowCommandService();
     const descriptor = await service.artifactDescriptor({ artifact_id: 'artifact-a' });
     const body = await service.readArtifactBody({ artifact_id: 'artifact-a' });
+    const stream = await service.readArtifactStream({
+      artifact_id: 'artifact-a',
+      byte_range_start: 1,
+    });
     const acknowledgement = await service.acknowledgeArtifactConsumed({
       artifact_id: 'artifact-a',
       consumer_id: 'io-inspector',
@@ -459,6 +480,7 @@ test('artifact store commands forward backend-owned descriptor body policy and c
 
     assert.deepEqual(descriptor, descriptorResponse);
     assert.deepEqual(body, bodyResponse);
+    assert.deepEqual(stream, streamResponse);
     assert.deepEqual(acknowledgement, {
       artifact_id: 'artifact-a',
       retained_after_consume: false,
@@ -480,6 +502,15 @@ test('artifact store commands forward backend-owned descriptor body policy and c
         args: {
           request: {
             artifact_id: 'artifact-a',
+          },
+        },
+      },
+      {
+        cmd: 'workflow_read_artifact_stream',
+        args: {
+          request: {
+            artifact_id: 'artifact-a',
+            byte_range_start: 1,
           },
         },
       },

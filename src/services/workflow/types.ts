@@ -695,6 +695,28 @@ export interface WorkflowArtifactBodyRead {
   body: number[];
 }
 
+export interface WorkflowArtifactStreamReadRequest {
+  artifact_id: string;
+  byte_range_start?: number | null;
+  byte_range_end_exclusive?: number | null;
+}
+
+export interface WorkflowArtifactStreamReadResponse {
+  artifact_id: string;
+  stream_handle: string;
+  media_type: string;
+  body_transport: WorkflowArtifactBodyTransport;
+  byte_length: number;
+  available_byte_length: number;
+  lifecycle_state: WorkflowArtifactLifecycleState;
+  complete: boolean;
+}
+
+export interface WorkflowArtifactStreamBodyRead {
+  response: WorkflowArtifactStreamReadResponse;
+  body: number[];
+}
+
 export interface WorkflowArtifactConsumeAcknowledgementRequest {
   artifact_id: string;
   consumer_id: string;

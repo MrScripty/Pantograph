@@ -343,8 +343,8 @@ when physical payload bodies are deleted.
   - [x] Add backend, embedded-runtime, and Tauri stream read handling for
     in-progress ArtifactStore streams without embedding stream bodies in JSON
     metadata.
-  - [ ] Add stream subscription/read handling for artifacts with stream
-    handles in frontend clients.
+  - [x] Add stream read handling for artifacts with stream handles in frontend
+    clients.
 - [ ] Expose Settings APIs for persistent artifact format defaults and
   conversion capabilities.
   - [x] Add backend artifact format settings query/update APIs, static

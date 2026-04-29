@@ -24,7 +24,10 @@
     WorkflowRetentionCleanupResult,
     WorkflowIoArtifactQueryRequest,
   } from '../../services/diagnostics/types';
-  import type { WorkflowArtifactBodyRead } from '../../services/workflow/types';
+  import type {
+    WorkflowArtifactBodyRead,
+    WorkflowArtifactStreamBodyRead,
+  } from '../../services/workflow/types';
   import { workflowService } from '../../services/workflow/WorkflowService';
   import { activeWorkflowRun } from '../../stores/workbenchStore';
   import {
@@ -162,6 +165,20 @@
     }
   }
 
+  async function readArtifactStreamPreview(artifact: IoArtifactProjectionRecord): Promise<void> {
+    setArtifactLoading(artifact.artifact_id, true);
+    setArtifactAccessError(artifact.artifact_id, null);
+    try {
+      await verifyArtifactStreamReadable(artifact);
+      const read = await workflowService.readArtifactStream({ artifact_id: artifact.artifact_id });
+      replaceArtifactBodyPreview(artifact.artifact_id, createArtifactBodyPreview(read));
+    } catch (error) {
+      setArtifactAccessError(artifact.artifact_id, formatWorkflowCommandError(error));
+    } finally {
+      setArtifactLoading(artifact.artifact_id, false);
+    }
+  }
+
   async function downloadArtifactBody(artifact: IoArtifactProjectionRecord): Promise<void> {
     setArtifactLoading(artifact.artifact_id, true);
     setArtifactAccessError(artifact.artifact_id, null);
@@ -236,7 +253,21 @@
     }
   }
 
-  function createArtifactBodyPreview(read: WorkflowArtifactBodyRead): ArtifactBodyPreview {
+  async function verifyArtifactStreamReadable(artifact: IoArtifactProjectionRecord): Promise<void> {
+    const descriptor = await workflowService
+      .artifactDescriptor({ artifact_id: artifact.artifact_id })
+      .then((response) => response.artifact ?? null);
+    if (!descriptor) {
+      throw new Error('Artifact descriptor is unavailable');
+    }
+    if (!descriptor.stream_handle && !descriptor.access_modes.includes('stream')) {
+      throw new Error('Artifact stream is not readable');
+    }
+  }
+
+  function createArtifactBodyPreview(
+    read: WorkflowArtifactBodyRead | WorkflowArtifactStreamBodyRead,
+  ): ArtifactBodyPreview {
     if (read.response.body_transport !== 'binary_body') {
       throw new Error('Artifact body transport is not available as a binary body');
     }
@@ -248,7 +279,7 @@
       mediaType,
       byteLength: read.response.byte_length,
       complete: read.response.complete,
-      contentHash: read.response.content_hash,
+      contentHash: 'content_hash' in read.response ? read.response.content_hash : null,
     };
   }
 
@@ -724,6 +755,18 @@
                 >
                   <Eye size={14} aria-hidden="true" />
                   {bodyPreview ? 'Refresh Read' : 'Read'}
+                </button>
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-xs text-neutral-200 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+                  onclick={() => {
+                    void readArtifactStreamPreview(artifact);
+                  }}
+                  aria-label={`Read artifact stream ${artifact.artifact_id}`}
+                  disabled={!artifact.stream_handle || artifactAccessLoading[artifact.artifact_id]}
+                >
+                  <RefreshCw size={14} aria-hidden="true" />
+                  {bodyPreview ? 'Refresh Stream' : 'Read Stream'}
                 </button>
                 <button
                   type="button"
