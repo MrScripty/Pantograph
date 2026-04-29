@@ -19,21 +19,23 @@ plan in `../../12-run-centric-workbench-consolidation.md`.
 
 ## Default Execution Mode
 
-Stage `12` starts serially. Do not begin page implementation until the first
-wave verifies that all former `run-centric-gui-workbench` requirements are
-covered by execution-platform tasks and that Stage `06`/Stage `11`
-dependencies are either complete or explicitly out of scope for the slice.
+Stage `12` started serially. Page implementation may proceed only after the
+source-audit/crosswalk wave verifies that all former `run-centric-gui-workbench`
+requirements are covered by execution-platform tasks and that Stage `06`/Stage
+`11` dependencies are either complete or explicitly out of scope for the slice.
 
 ## Proposed Waves
 
-1. Source audit and crosswalk closure.
+1. Source audit and crosswalk closure. Completed by
+   `reports/wave-01-host-source-audit-and-crosswalk.md`.
    - Verify every run-centric source and review finding maps to an
      execution-platform task.
    - Record any obsolete source requirement with reason.
 2. Backend projection and service readiness.
    - Close remaining run/scheduler/diagnostics/I/O/Library/Network/Settings DTO
      gaps before frontend pages consume them.
-3. Workbench shell and active-run navigation.
+3. Workbench shell and active-run navigation. Initial shell/store slice
+   completed by `reports/wave-03-host-workbench-shell-navigation.md`.
    - Replace old root mode navigation with Scheduler-default page shell and
      transient active-run state.
 4. Page implementation.
@@ -89,6 +91,10 @@ source-audit and dependency checks prove the canonical plan is ready.
 Start Stage `12` serially with a source-audit/crosswalk wave. Backend
 projection readiness comes before shell/page implementation, and verification
 closes with source audits plus the stage-end refactor gate.
+
+Current status: source audit, shell navigation, frontend lint cleanup, and
+Settings retention ownership slices are integrated. Stage-end refactor gate and
+remaining parity/media follow-ups remain open.
 
 ## Alternatives Rejected
 

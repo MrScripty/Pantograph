@@ -14,13 +14,22 @@ supporting review records that remain useful after consolidation live under
 
 ## Status
 
-Planned / not complete.
+In progress.
 
-Stage `12` depends on the completed execution-platform stages `01` through `05`,
-the reopened Stage `06` binding correction, and the active Stage `11`
-ArtifactStore/settings/media-dependency work. It should not be implemented until
-the Stage `06` request-shape drift is resolved or explicitly excluded from the
-slice being implemented.
+Stage `12` depends on the completed execution-platform stages `01` through `05`
+and the repaired Stage `06` binding correction. Stage `11`
+ArtifactStore/settings/media-dependency work has enough workbench-facing API
+surface for Stage `12` pages, but Stage `11` is not fully closed while
+producer-specific preview streams, diffusion child/revision artifacts, active
+converter/library version capture, and OpenColorIO ABI validation remain.
+
+Current Stage `12` implementation has completed source-audit/crosswalk,
+Scheduler-default shell navigation, transient active-run ownership, current
+page projection wiring, truthful Network/Node Editor states, Settings ownership
+for persistent ArtifactStore and diagnostics retention policy, and focused
+frontend/backend verification. Stage `12` remains open for stage-end refactor
+gate evidence, optional GUI/screenshot coverage if tooling is added, and
+follow-up coordination with the remaining Stage `11` media/API parity gaps.
 
 ## Consolidation Coverage Matrix
 
@@ -430,44 +439,49 @@ write sets. Default sequence:
 
 ### Milestone 1: Source Audit And Crosswalk Closure
 
-- [ ] Read this plan, Stage `06`, Stage `11`, and the moved review records in
+- [x] Read this plan, Stage `06`, Stage `11`, and the moved review records in
   `reviews/run-centric-workbench/`.
-- [ ] Verify each former run-centric requirement maps to an
+- [x] Verify each former run-centric requirement maps to an
   execution-platform implementation task or is explicitly obsolete with reason.
-- [ ] Record Stage `06` and Stage `11` dependency status before selecting a
+- [x] Record Stage `06` and Stage `11` dependency status before selecting a
   workbench implementation slice.
 
 ### Milestone 2: API And Projection Readiness
 
-- [ ] Close run, scheduler, diagnostics, I/O, Library, Network, Settings, and
-  artifact DTO gaps before page components consume them.
-- [ ] Confirm hot/warm projection freshness behavior and no-full-replay
+- [x] Close current run, scheduler, diagnostics, I/O, Library, Network,
+  Settings, and artifact DTO gaps used by implemented page components.
+- [x] Confirm hot/warm projection freshness behavior and no-full-replay
   navigation behavior are represented in backend services.
-- [ ] Choose DTO parity enforcement through generated bindings or paired
+- [x] Choose DTO parity enforcement through generated bindings or paired
   Rust/TypeScript contract tests for every new page projection.
+- [ ] Strengthen shared-fixture/generated DTO parity for Network, Settings,
+  and remaining Stage `11` media surfaces before promoting those APIs as
+  complete external contracts.
 
 ### Milestone 3: Workbench Shell And Active-Run Navigation
 
-- [ ] Replace old root mode navigation with Scheduler-default workbench
+- [x] Replace old root mode navigation with Scheduler-default workbench
   navigation.
-- [ ] Keep active-run selection as frontend session state only.
-- [ ] Relocate, embed, or retire drawing-to-Svelte and legacy graph entry
+- [x] Keep active-run selection as frontend session state only.
+- [x] Relocate, embed, or retire drawing-to-Svelte and legacy graph entry
   points with tests and documentation updated.
 
 ### Milestone 4: Page Implementations
 
-- [ ] Implement Scheduler, Diagnostics, Graph, I/O Inspector, Library, Network,
+- [x] Implement Scheduler, Diagnostics, Graph, I/O Inspector, Library, Network,
   Node Editor, and Settings pages against backend-owned projections.
-- [ ] Keep Network and Node Editor truthful when future Iroh or local-agent
+- [x] Keep Network and Node Editor truthful when future Iroh or local-agent
   features are not implemented.
-- [ ] Use ArtifactStore and Settings APIs from Stage `11` for binary-safe
+- [x] Use ArtifactStore and Settings APIs from Stage `11` for binary-safe
   previews and global persistent settings.
 
 ### Milestone 5: Verification And Refactor Gate
 
 - [ ] Run backend projection, frontend type/unit/lint, accessibility, and GUI
-  checks listed in this plan.
-- [ ] Run source audits for raw event reads, page-load full replay, inline
+  checks listed in this plan. Backend/frontend/a11y/build gates have passed;
+  GUI/screenshot checks remain pending because no Playwright/equivalent harness
+  is currently present.
+- [x] Run source audits for raw event reads, page-load full replay, inline
   media JSON, duplicate settings owners, and old root navigation ambiguity.
 - [ ] Apply `09-stage-end-refactor-gate.md` and record any required follow-up
   plan before marking Stage `12` complete.

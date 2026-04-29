@@ -5,8 +5,10 @@
 Stage `12` is in progress.
 
 The stage exists to make the execution-platform plan directory the canonical
-home for the former `run-centric-gui-workbench` requirements. Initial source
-implementation has started with the shell/store navigation slice.
+home for the former `run-centric-gui-workbench` requirements. Source audit,
+shell/store navigation, frontend lint cleanup, and Settings retention ownership
+are integrated. Stage-end refactor gate and remaining parity/media follow-ups
+are still open.
 
 ## Required First Actions
 
@@ -21,11 +23,10 @@ implementation has started with the shell/store navigation slice.
 
 ## Open Decisions
 
-- Whether Stage `12` implementation waits for all Stage `11` ArtifactStore and
-  Settings work or starts with shell/pages that can render disabled/pending
-  media surfaces.
-- Exact verification command set for frontend accessibility and screenshot
-  checks once the current frontend tooling is re-inspected.
+- Whether remaining Network/Settings/media DTO parity should use generated
+  frontend bindings or additional paired Rust/TypeScript fixture tests.
+- Whether GUI/screenshot checks wait for a new Playwright/equivalent harness or
+  are recorded as a follow-up because the repository currently has no harness.
 
 ## Resolved Decisions
 
@@ -33,9 +34,21 @@ implementation has started with the shell/store navigation slice.
   directory moved under
   `docs/plans/pantograph-execution-platform/reviews/run-centric-workbench/`.
   Stage `12` must not depend on the old plan directory remaining present.
+- Stage `12` does not wait for all Stage `11` follow-ups. Current workbench
+  pages may use the implemented ArtifactStore/settings/media APIs while Stage
+  `11` keeps producer-specific preview streams, diffusion child/revision
+  artifacts, active converter/library version capture, and OCIO ABI validation
+  open.
+- Persistent diagnostics retention policy edits belong to the workbench
+  Settings page. I/O Inspector may display policy/state and run cleanup, but it
+  must not own persistent retention policy edits.
 
 ## Verification Ledger
 
+- 2026-04-29 Wave `01` source audit and crosswalk recorded current
+  dependencies, source-audit findings, verification evidence, and remaining
+  blockers in
+  `reports/wave-01-host-source-audit-and-crosswalk.md`.
 - 2026-04-29 Wave `03` workbench shell navigation passed:
   `node --experimental-strip-types --test src/stores/workbenchStore.test.ts`,
   `npm run typecheck -- --pretty false`, and `npm run build`.
