@@ -3,7 +3,7 @@ use pantograph_workflow_service::{
     ArtifactFormatMetadata, ArtifactLifecycleState, ArtifactPayloadKind, ArtifactPolicy,
     ArtifactReadRequest, ArtifactStore, ArtifactStoreError, ArtifactStreamChunkWriteRequest,
     ArtifactStreamFinalizeRequest, ArtifactStreamOpenRequest, ArtifactStreamReadRequest,
-    ArtifactWriteRequest, IoArtifactRetentionState, WorkflowService,
+    ArtifactWriteRequest, IoArtifactRetentionState, WorkflowService, WorkflowServiceError,
 };
 
 fn policy(delete_on_consume: bool) -> ArtifactPolicy {
@@ -231,6 +231,133 @@ fn artifact_store_consume_and_retention_delete_body_but_keep_metadata() {
             .retention_state,
         IoArtifactRetentionState::Deleted
     );
+}
+
+#[test]
+fn artifact_store_retention_deletion_preserves_audit_descriptor_and_fails_body_reads() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let mut store = ArtifactStore::open(temp.path(), policy(true)).expect("open store");
+    let original = store
+        .write_artifact(ArtifactWriteRequest {
+            artifact_id: Some("retention_audit".to_string()),
+            payload_kind: ArtifactPayloadKind::Image,
+            media_type: "image/jpeg".to_string(),
+            format: Some(image_format()),
+            attribution: attribution(),
+            body: b"image-body".to_vec(),
+        })
+        .expect("write artifact");
+
+    store
+        .acknowledge_consume(ArtifactConsumeAcknowledgementRequest {
+            artifact_id: "retention_audit".to_string(),
+            consumer_id: "client_1".to_string(),
+        })
+        .expect("consume and delete body");
+
+    assert!(!temp
+        .path()
+        .join("bodies")
+        .join("retention_audit.bin")
+        .exists());
+    let descriptor = store.descriptor("retention_audit").expect("descriptor");
+    assert_eq!(descriptor.artifact_id, original.artifact_id);
+    assert_eq!(descriptor.payload_kind, original.payload_kind);
+    assert_eq!(descriptor.byte_length, original.byte_length);
+    assert_eq!(descriptor.content_hash, original.content_hash);
+    assert_eq!(descriptor.format, original.format);
+    assert_eq!(descriptor.attribution, original.attribution);
+    assert_eq!(descriptor.lifecycle_state, ArtifactLifecycleState::Deleted);
+    assert_eq!(
+        descriptor.retention_state,
+        IoArtifactRetentionState::Deleted
+    );
+    assert!(descriptor.access_modes.is_empty());
+    assert!(descriptor.read_handle.is_none());
+    assert_eq!(
+        descriptor.retention_reason.as_deref(),
+        Some("body_deleted_by_policy")
+    );
+    assert_eq!(store.stats().metadata_only_count, 1);
+    assert!(matches!(
+        store.read_body(ArtifactReadRequest {
+            artifact_id: "retention_audit".to_string(),
+            byte_range_start: None,
+            byte_range_end_exclusive: None,
+        }),
+        Err(ArtifactStoreError::BodyUnavailable { artifact_id }) if artifact_id == "retention_audit"
+    ));
+
+    let reopened = ArtifactStore::open(temp.path(), policy(true)).expect("reopen store");
+    let reopened_descriptor = reopened
+        .descriptor("retention_audit")
+        .expect("reopened descriptor");
+    assert_eq!(reopened_descriptor, descriptor);
+    assert!(matches!(
+        reopened.read_body(ArtifactReadRequest {
+            artifact_id: "retention_audit".to_string(),
+            byte_range_start: Some(0),
+            byte_range_end_exclusive: Some(1),
+        }),
+        Err(ArtifactStoreError::BodyUnavailable { artifact_id }) if artifact_id == "retention_audit"
+    ));
+}
+
+#[test]
+fn workflow_service_retention_cleanup_keeps_descriptor_queryable_while_body_is_unavailable() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let mut cleanup_policy = policy(false);
+    cleanup_policy.ttl_seconds = Some(1);
+    let store = ArtifactStore::open(temp.path(), cleanup_policy).expect("open store");
+    let service = WorkflowService::new().with_artifact_store(store);
+    let original = service
+        .write_artifact(ArtifactWriteRequest {
+            artifact_id: Some("service_retention_audit".to_string()),
+            payload_kind: ArtifactPayloadKind::Audio,
+            media_type: "audio/ogg".to_string(),
+            format: None,
+            attribution: attribution(),
+            body: b"audio-body".to_vec(),
+        })
+        .expect("write through service");
+
+    assert_eq!(
+        service
+            .apply_artifact_store_retention_cleanup(u64::MAX)
+            .expect("cleanup through service"),
+        1
+    );
+
+    let descriptor = service
+        .artifact_descriptor(
+            pantograph_workflow_service::ArtifactDescriptorQueryRequest {
+                artifact_id: "service_retention_audit".to_string(),
+            },
+        )
+        .expect("descriptor through service")
+        .artifact
+        .expect("artifact exists");
+    assert_eq!(descriptor.artifact_id, original.artifact_id);
+    assert_eq!(descriptor.payload_kind, original.payload_kind);
+    assert_eq!(descriptor.byte_length, original.byte_length);
+    assert_eq!(descriptor.content_hash, original.content_hash);
+    assert_eq!(descriptor.attribution, original.attribution);
+    assert_eq!(descriptor.lifecycle_state, ArtifactLifecycleState::Deleted);
+    assert_eq!(
+        descriptor.retention_state,
+        IoArtifactRetentionState::Deleted
+    );
+    assert!(descriptor.access_modes.is_empty());
+    assert!(descriptor.read_handle.is_none());
+    assert!(matches!(
+        service.read_artifact_body(ArtifactReadRequest {
+            artifact_id: "service_retention_audit".to_string(),
+            byte_range_start: None,
+            byte_range_end_exclusive: None,
+        }),
+        Err(WorkflowServiceError::InvalidRequest(message))
+            if message.contains("artifact body is unavailable: service_retention_audit")
+    ));
 }
 
 #[test]
