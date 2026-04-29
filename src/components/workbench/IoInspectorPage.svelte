@@ -11,7 +11,6 @@
     Image as ImageIcon,
     Music,
     RefreshCw,
-    Save,
     Table2,
     Trash2,
     Video,
@@ -68,11 +67,8 @@
   let projectionState = $state<ProjectionStateRecord | null>(null);
   let retentionPolicy = $state<DiagnosticsRetentionPolicy | null>(null);
   let retentionCleanup = $state<WorkflowRetentionCleanupResult | null>(null);
-  let retentionDays = $state('365');
-  let retentionExplanation = $state('');
   let loadingArtifacts = $state(false);
   let loadingRetention = $state(false);
-  let savingRetention = $state(false);
   let applyingRetentionCleanup = $state(false);
   let artifactError = $state<string | null>(null);
   let retentionError = $state<string | null>(null);
@@ -105,8 +101,6 @@
 
   function applyRetentionPolicy(policy: DiagnosticsRetentionPolicy): void {
     retentionPolicy = policy;
-    retentionDays = String(policy.retention_days);
-    retentionExplanation = policy.explanation;
   }
 
   async function refreshArtifacts(
@@ -371,38 +365,6 @@
       retentionError = formatWorkflowCommandError(error);
     } finally {
       loadingRetention = false;
-    }
-  }
-
-  async function saveRetentionPolicy(): Promise<void> {
-    const parsedDays = Number.parseInt(retentionDays, 10);
-    if (!Number.isFinite(parsedDays) || parsedDays < 1) {
-      retentionError = 'Retention days must be at least 1';
-      return;
-    }
-
-    const explanation = retentionExplanation.trim();
-    if (explanation.length === 0) {
-      retentionError = 'Retention explanation is required';
-      return;
-    }
-
-    savingRetention = true;
-    retentionError = null;
-    try {
-      const response = await workflowService.updateRetentionPolicy({
-        retention_days: parsedDays,
-        explanation,
-        reason: 'gui_io_inspector_policy_update',
-      });
-      retentionCleanup = null;
-      retentionCleanupMessage = null;
-      applyRetentionPolicy(response.retention_policy);
-      await refreshArtifacts();
-    } catch (error) {
-      retentionError = formatWorkflowCommandError(error);
-    } finally {
-      savingRetention = false;
     }
   }
 
@@ -911,13 +873,7 @@
     </div>
 
     <aside class="min-h-0 overflow-auto border-l border-neutral-800 bg-neutral-950/80">
-      <form
-        class="space-y-4 p-4"
-        onsubmit={(event) => {
-          event.preventDefault();
-          void saveRetentionPolicy();
-        }}
-      >
+      <div class="space-y-4 p-4">
         <div>
           <h2 class="text-sm font-semibold text-neutral-100">Retention Policy</h2>
           <div class="mt-1 text-xs text-neutral-500">
@@ -972,40 +928,6 @@
           </section>
         {/if}
 
-        <div>
-          <label for="io-retention-days" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
-            Days
-          </label>
-          <input
-            id="io-retention-days"
-            type="number"
-            min="1"
-            bind:value={retentionDays}
-            class="mt-2 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
-          />
-        </div>
-
-        <div>
-          <label for="io-retention-explanation" class="block text-xs uppercase tracking-[0.18em] text-neutral-500">
-            Explanation
-          </label>
-          <textarea
-            id="io-retention-explanation"
-            rows="5"
-            bind:value={retentionExplanation}
-            class="mt-2 w-full resize-none rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none"
-          ></textarea>
-        </div>
-
-        <button
-          type="submit"
-          class="inline-flex w-full items-center justify-center gap-2 rounded border border-cyan-800 bg-cyan-950 px-3 py-2 text-sm text-cyan-100 transition-colors hover:border-cyan-600 hover:bg-cyan-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
-          disabled={savingRetention || loadingRetention}
-        >
-          <Save size={14} aria-hidden="true" />
-          {savingRetention ? 'Saving' : 'Save Policy'}
-        </button>
-
         <button
           type="button"
           class="inline-flex w-full items-center justify-center gap-2 rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-200 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
@@ -1033,7 +955,7 @@
             </dl>
           </section>
         {/if}
-      </form>
+      </div>
     </aside>
   </div>
 </section>

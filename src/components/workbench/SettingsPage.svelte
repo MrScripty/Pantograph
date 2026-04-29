@@ -6,6 +6,7 @@
   import RagStatus from '../RagStatus.svelte';
   import SandboxSettings from '../SandboxSettings.svelte';
   import ServerStatus from '../ServerStatus.svelte';
+  import type { DiagnosticsRetentionPolicy } from '../../services/diagnostics/types';
   import type {
     WorkflowArtifactFormatCapabilities,
     WorkflowArtifactFormatSettings,
@@ -17,6 +18,8 @@
   import { workflowService } from '../../services/workflow/WorkflowService';
   import {
     buildArtifactPolicyRows,
+    buildDiagnosticsRetentionPolicyRows,
+    buildDiagnosticsRetentionSettingRows,
     buildManagedMediaDependencyRows,
     findFormatOption,
     formatManagedMediaDependencyStatus,
@@ -67,24 +70,36 @@
   }
 
   let policy = $state<WorkflowArtifactPolicy | null>(null);
+  let diagnosticsRetentionPolicy = $state<DiagnosticsRetentionPolicy | null>(null);
   let capabilities = $state<WorkflowArtifactFormatCapabilities | null>(null);
   let managedMediaDependencies = $state<WorkflowManagedMediaDependencyStatus[]>([]);
   let managedMediaDrafts = $state<Record<string, ManagedMediaDependencyDraft>>({});
   let policyDraft = $state<ArtifactPolicyDraft>(emptyPolicyDraft());
+  let diagnosticsRetentionDays = $state('365');
+  let diagnosticsRetentionExplanation = $state('');
   let formatDraft = $state<ArtifactFormatDraft>(defaultFormatDraft());
   let loading = $state(false);
   let savingPolicy = $state(false);
+  let savingDiagnosticsRetention = $state(false);
   let savingFormats = $state(false);
   let managedMediaActionKey = $state<string | null>(null);
   let pageError = $state<string | null>(null);
   let policyError = $state<string | null>(null);
+  let diagnosticsRetentionError = $state<string | null>(null);
   let formatError = $state<string | null>(null);
   let managedMediaError = $state<string | null>(null);
   let policyMessage = $state<string | null>(null);
+  let diagnosticsRetentionMessage = $state<string | null>(null);
   let formatMessage = $state<string | null>(null);
   let managedMediaMessage = $state<string | null>(null);
 
   let policyRows = $derived(buildArtifactPolicyRows(policy));
+  let diagnosticsRetentionPolicyRows = $derived(
+    buildDiagnosticsRetentionPolicyRows(diagnosticsRetentionPolicy),
+  );
+  let diagnosticsRetentionSettingRows = $derived(
+    buildDiagnosticsRetentionSettingRows(diagnosticsRetentionPolicy),
+  );
   let imageFormatOptions = $derived(
     formatOptionItems(capabilities?.image_formats ?? [], formatDraft.image.format_id),
   );
@@ -127,20 +142,30 @@
     loading = true;
     pageError = null;
     policyError = null;
+    diagnosticsRetentionError = null;
     formatError = null;
     managedMediaError = null;
     policyMessage = null;
+    diagnosticsRetentionMessage = null;
     formatMessage = null;
     managedMediaMessage = null;
     try {
-      const [loadedPolicy, loadedFormats, loadedCapabilities, loadedDependencies] = await Promise.all([
+      const [
+        loadedPolicy,
+        loadedDiagnosticsRetentionPolicy,
+        loadedFormats,
+        loadedCapabilities,
+        loadedDependencies,
+      ] = await Promise.all([
         workflowService.artifactPolicy(),
+        workflowService.queryRetentionPolicy(),
         workflowService.artifactFormatSettings(),
         workflowService.artifactFormatCapabilities(),
         workflowService.listManagedMediaDependencies(),
       ]);
       policy = loadedPolicy;
       policyDraft = policyToDraft(loadedPolicy);
+      applyDiagnosticsRetentionPolicy(loadedDiagnosticsRetentionPolicy.retention_policy);
       formatDraft = settingsToDraft(loadedFormats.settings);
       capabilities = loadedCapabilities;
       managedMediaDependencies = loadedDependencies;
@@ -180,6 +205,38 @@
       policyError = formatWorkflowCommandError(error);
     } finally {
       savingPolicy = false;
+    }
+  }
+
+  async function saveDiagnosticsRetentionPolicy(): Promise<void> {
+    diagnosticsRetentionError = null;
+    diagnosticsRetentionMessage = null;
+
+    const parsedDays = Number.parseInt(diagnosticsRetentionDays, 10);
+    if (!Number.isSafeInteger(parsedDays) || parsedDays < 1) {
+      diagnosticsRetentionError = 'Retention days must be at least 1';
+      return;
+    }
+
+    const explanation = diagnosticsRetentionExplanation.trim();
+    if (explanation.length === 0) {
+      diagnosticsRetentionError = 'Retention explanation is required';
+      return;
+    }
+
+    savingDiagnosticsRetention = true;
+    try {
+      const response = await workflowService.updateRetentionPolicy({
+        retention_days: parsedDays,
+        explanation,
+        reason: 'gui_workbench_settings_retention_update',
+      });
+      applyDiagnosticsRetentionPolicy(response.retention_policy);
+      diagnosticsRetentionMessage = 'Diagnostics retention policy saved';
+    } catch (error) {
+      diagnosticsRetentionError = formatWorkflowCommandError(error);
+    } finally {
+      savingDiagnosticsRetention = false;
     }
   }
 
@@ -508,6 +565,12 @@
     };
   }
 
+  function applyDiagnosticsRetentionPolicy(nextPolicy: DiagnosticsRetentionPolicy): void {
+    diagnosticsRetentionPolicy = nextPolicy;
+    diagnosticsRetentionDays = String(nextPolicy.retention_days);
+    diagnosticsRetentionExplanation = nextPolicy.explanation;
+  }
+
   function settingsToDraft(settings: WorkflowArtifactFormatSettings): ArtifactFormatDraft {
     return {
       image: {
@@ -779,6 +842,81 @@
             Delete payload body after consume acknowledgement
           </label>
         </div>
+      </form>
+
+      <form
+        class="border-b border-neutral-900 px-4 py-4"
+        onsubmit={(event) => {
+          event.preventDefault();
+          void saveDiagnosticsRetentionPolicy();
+        }}
+      >
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 class="text-sm font-semibold text-neutral-100">Diagnostics Retention Policy</h2>
+            <div class="mt-1 text-xs text-neutral-500">
+              {diagnosticsRetentionPolicy ? `${diagnosticsRetentionPolicy.policy_id} v${diagnosticsRetentionPolicy.policy_version}` : 'Policy unavailable'}
+            </div>
+          </div>
+          <button
+            type="submit"
+            class="inline-flex items-center gap-2 rounded border border-cyan-800 bg-cyan-950 px-3 py-1.5 text-sm text-cyan-100 transition-colors hover:border-cyan-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+            disabled={loading || savingDiagnosticsRetention || !diagnosticsRetentionPolicy}
+          >
+            <Save size={14} aria-hidden="true" />
+            Save Retention
+          </button>
+        </div>
+
+        {#if diagnosticsRetentionError}
+          <div class="mt-3 rounded border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-200" role="alert">
+            {diagnosticsRetentionError}
+          </div>
+        {:else if diagnosticsRetentionMessage}
+          <div class="mt-3 rounded border border-emerald-900 bg-emerald-950/30 px-3 py-2 text-sm text-emerald-200" role="status">
+            {diagnosticsRetentionMessage}
+          </div>
+        {/if}
+
+        <div class="mt-4 grid gap-3 md:grid-cols-[12rem_1fr]">
+          <div>
+            <label for="settings-diagnostics-retention-days" class="mb-2 block text-xs uppercase text-neutral-500">
+              Days
+            </label>
+            <input
+              id="settings-diagnostics-retention-days"
+              type="number"
+              min="1"
+              inputmode="numeric"
+              bind:value={diagnosticsRetentionDays}
+              class="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 font-mono text-xs text-neutral-100 placeholder:text-neutral-600 focus:border-cyan-500 focus:outline-none"
+            />
+          </div>
+          <div>
+            <label for="settings-diagnostics-retention-explanation" class="mb-2 block text-xs uppercase text-neutral-500">
+              Explanation
+            </label>
+            <textarea
+              id="settings-diagnostics-retention-explanation"
+              rows="3"
+              bind:value={diagnosticsRetentionExplanation}
+              class="w-full resize-none rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-100 placeholder:text-neutral-600 focus:border-cyan-500 focus:outline-none"
+            ></textarea>
+          </div>
+        </div>
+
+        {#if diagnosticsRetentionSettingRows.length > 0}
+          <dl class="mt-4 grid gap-2 text-xs md:grid-cols-2">
+            {#each diagnosticsRetentionSettingRows as row (row.label)}
+              <div class="rounded border border-neutral-800 bg-neutral-900/40 px-3 py-2">
+                <dt class="text-neutral-500">{row.label}</dt>
+                <dd class={`mt-1 truncate text-neutral-200 ${row.mono ? 'font-mono' : ''}`} title={row.value}>
+                  {row.value}
+                </dd>
+              </div>
+            {/each}
+          </dl>
+        {/if}
       </form>
 
       <form
@@ -1202,10 +1340,24 @@
       <section class="border-b border-neutral-900 px-4 py-4">
         <div class="flex items-center gap-2">
           <Settings size={15} aria-hidden="true" class="text-cyan-300" />
-          <h2 class="text-sm font-semibold text-neutral-100">Current Policy</h2>
+          <h2 class="text-sm font-semibold text-neutral-100">ArtifactStore Policy</h2>
         </div>
         <dl class="mt-3 space-y-2">
           {#each policyRows as row (row.label)}
+            <div class="grid grid-cols-[9rem_1fr] gap-2 text-xs">
+              <dt class="text-neutral-500">{row.label}</dt>
+              <dd class:font-mono={row.mono} class="min-w-0 truncate text-neutral-200" title={row.value}>
+                {row.value}
+              </dd>
+            </div>
+          {/each}
+        </dl>
+      </section>
+
+      <section class="border-b border-neutral-900 px-4 py-4">
+        <h2 class="text-sm font-semibold text-neutral-100">Diagnostics Retention</h2>
+        <dl class="mt-3 space-y-2">
+          {#each diagnosticsRetentionPolicyRows as row (row.label)}
             <div class="grid grid-cols-[9rem_1fr] gap-2 text-xs">
               <dt class="text-neutral-500">{row.label}</dt>
               <dd class:font-mono={row.mono} class="min-w-0 truncate text-neutral-200" title={row.value}>

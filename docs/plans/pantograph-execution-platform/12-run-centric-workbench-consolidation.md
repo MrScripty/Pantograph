@@ -75,8 +75,8 @@ The workbench must make a clean pipeline for current and future features:
 - Graph: workflow editor plus historic run graph projection as it existed at
   run time.
 - I/O Inspector: workflow and node input/output inspection, artifact gallery,
-  streaming/finalized/expired/deleted states, retention policy controls, and
-  binary-safe artifact previews.
+  streaming/finalized/expired/deleted states, read-only retention policy/status
+  visibility, cleanup operations, and binary-safe artifact previews.
 - Library: Pumas/Pantograph assets, models, runtimes, workflows, nodes, managed
   dependencies, usage audit, active-run asset highlighting, and management
   actions.
@@ -345,7 +345,8 @@ I/O Inspector:
   artifact change, navigation, and unmount
 - no-active-run browsing of retained artifacts where backend projections allow
   it
-- global retention/artifact persistence policy controls
+- read-only global retention/artifact persistence policy visibility plus
+  cleanup operations; persistent policy edits live on Settings
 
 Library:
 

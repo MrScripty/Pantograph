@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  buildDiagnosticsRetentionPolicyRows,
+  buildDiagnosticsRetentionSettingRows,
   buildManagedMediaDependencyRows,
   buildArtifactPolicyRows,
   findFormatOption,
@@ -15,6 +17,7 @@ import {
   optionValuesWithCurrent,
   parseNullableIntegerField,
 } from './settingsPagePresenters.ts';
+import type { DiagnosticsRetentionPolicy } from '../../services/diagnostics/types.ts';
 import type {
   WorkflowManagedMediaDependencyStatus,
   WorkflowMediaFormatOption,
@@ -85,6 +88,20 @@ test('artifact policy rows preserve backend ids and nullable budgets', () => {
   assert.equal(rows.find((row) => row.label === 'Disk Budget')?.value, 'Unlimited');
   assert.equal(rows.find((row) => row.label === 'Memory Budget')?.value, '4.0 KiB');
   assert.equal(rows.find((row) => row.label === 'Delete On Consume')?.value, 'Enabled');
+});
+
+test('diagnostics retention policy rows expose global retention settings', () => {
+  const policy = diagnosticsRetentionPolicy();
+
+  const rows = buildDiagnosticsRetentionPolicyRows(policy);
+  assert.equal(rows.find((row) => row.label === 'Policy')?.value, 'standard-local-v1');
+  assert.equal(rows.find((row) => row.label === 'Version')?.value, '3');
+  assert.equal(rows.find((row) => row.label === 'Days')?.value, '30');
+
+  const settingRows = buildDiagnosticsRetentionSettingRows(policy);
+  assert.equal(settingRows.find((row) => row.label === 'Final Outputs')?.value, '30 days, Retain Payload Reference');
+  assert.equal(settingRows.find((row) => row.label === 'Intermediate Node I/O')?.value, '14 days, Metadata Only');
+  assert.equal(settingRows.find((row) => row.label === 'Cleanup Trigger')?.value, 'Manual Or Maintenance');
 });
 
 test('format options use backend capability labels and expose unsupported current values', () => {
@@ -203,5 +220,27 @@ function managedMediaDependencyStatus(): WorkflowManagedMediaDependencyStatus {
         active: true,
       },
     ],
+  };
+}
+
+function diagnosticsRetentionPolicy(): DiagnosticsRetentionPolicy {
+  return {
+    policy_id: 'standard-local-v1',
+    policy_version: 3,
+    retention_class: 'standard',
+    retention_days: 30,
+    settings: {
+      final_outputs: { retention_days: 30, payload_mode: 'retain_payload_reference' },
+      workflow_inputs: { retention_days: 30, payload_mode: 'retain_payload_reference' },
+      intermediate_node_io: { retention_days: 14, payload_mode: 'metadata_only' },
+      failed_run_data: { retention_days: 7, payload_mode: 'metadata_only' },
+      max_artifact_bytes: null,
+      max_total_storage_bytes: null,
+      media_behavior: 'metadata_and_reference_only',
+      compression_behavior: 'not_configured',
+      cleanup_trigger: 'manual_or_maintenance',
+    },
+    applied_at_ms: 1_000,
+    explanation: 'test policy',
   };
 }

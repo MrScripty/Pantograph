@@ -17,10 +17,10 @@ later plan stages fill in richer page bodies.
 | `DiagnosticsPage.svelte` | Projection-backed selected-run diagnostics page with run detail facts, workflow-version/date-range/placement filtered comparison facets, typed model-cache posture, mixed-version warnings, and scheduler timeline records. |
 | `diagnosticsPagePresenters.ts` | Pure diagnostics page status labels/classes, duration, projection freshness, run authority/placement/model-cache facts, workflow-version/date-range/filter/facet, and timeline label presenters. |
 | `diagnosticsPagePresenters.test.ts` | Unit coverage for diagnostics page labels, comparison filters/facets, and payload availability presentation. |
-| `IoInspectorPage.svelte` | Projection-backed I/O artifact browser, retention detail surface, cleanup status surface, and global retention policy form. |
+| `IoInspectorPage.svelte` | Projection-backed I/O artifact browser, read-only retention detail surface, and cleanup status surface. |
 | `ioInspectorPresenters.ts` | Pure I/O media, payload availability, retention policy/cleanup detail, byte-size, and projection freshness presenters. |
 | `ioInspectorPresenters.test.ts` | Unit coverage for I/O Inspector presentation labels. |
-| `SettingsPage.svelte` | Canonical workbench Settings page for ArtifactStore policy, artifact format defaults/capabilities, managed media dependency controls, server connection, model paths, device policy, RAG, and sandbox configuration. |
+| `SettingsPage.svelte` | Canonical workbench Settings page for ArtifactStore policy, diagnostics retention policy, artifact format defaults/capabilities, managed media dependency controls, server connection, model paths, device policy, RAG, and sandbox configuration. |
 | `settingsPagePresenters.ts` | Pure Settings page byte/duration labels, capability option labels, policy rows, managed media dependency rows, and numeric field validation helpers. |
 | `settingsPagePresenters.test.ts` | Unit coverage for Settings page presentation labels, managed media dependency labels, and validation helpers. |
 | `LibraryPage.svelte` | Projection-backed Library usage and audit table with active-run highlighting and audited Pumas search/download/delete actions. |
@@ -235,18 +235,20 @@ transient UI state without becoming backend scheduler policy.
   categories.
 - `SettingsPage.svelte` reads and saves global ArtifactStore policy through
   `workflowService.artifactPolicy` and
-  `workflowService.updateArtifactPolicy`. Artifact format defaults are read and
-  saved through `workflowService.artifactFormatSettings` and
+  `workflowService.updateArtifactPolicy`. It also reads and saves global
+  diagnostics retention policy through `workflowService.queryRetentionPolicy`
+  and `workflowService.updateRetentionPolicy`. Artifact format defaults are
+  read and saved through `workflowService.artifactFormatSettings` and
   `workflowService.updateArtifactFormatSettings`; selectable options come from
   `workflowService.artifactFormatCapabilities`.
 - `SettingsPage.svelte` lists managed media dependencies through
   `workflowService.listManagedMediaDependencies` and updates dependency rows
   only from backend status responses returned by install/select/default/
   activate/remove commands.
-- Retention policy saves call `workflowService.updateRetentionPolicy` and
-  update displayed state only from the backend response. The page may show a
-  saving state, but it must not apply the requested policy as if it were
-  accepted before the backend responds.
+- Retention policy saves on Settings call
+  `workflowService.updateRetentionPolicy` and update displayed state only from
+  the backend response. I/O Inspector may display the active policy and cleanup
+  results, but it must not own persistent retention policy edits.
 - Retention cleanup actions call `workflowService.applyRetentionCleanup`, show
   the backend cleanup count and detail rows, and refresh artifact metadata from
   projections instead of removing artifact cards locally.

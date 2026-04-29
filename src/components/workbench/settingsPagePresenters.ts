@@ -1,3 +1,4 @@
+import type { DiagnosticsRetentionPolicy } from '../../services/diagnostics/types';
 import type {
   WorkflowManagedMediaDependencyStatus,
   WorkflowManagedMediaDependencyVersionStatus,
@@ -160,6 +161,58 @@ export function buildArtifactPolicyRows(policy: WorkflowArtifactPolicy | null): 
   ];
 }
 
+export function buildDiagnosticsRetentionPolicyRows(
+  policy: DiagnosticsRetentionPolicy | null,
+): SettingsPolicyRow[] {
+  if (!policy) {
+    return [
+      { label: 'Policy', value: 'Unavailable' },
+      { label: 'Version', value: 'Unavailable' },
+      { label: 'Class', value: 'Unavailable' },
+      { label: 'Days', value: 'Unavailable' },
+    ];
+  }
+
+  return [
+    { label: 'Policy', value: policy.policy_id, mono: true },
+    { label: 'Version', value: String(policy.policy_version), mono: true },
+    { label: 'Class', value: policy.retention_class, mono: true },
+    { label: 'Days', value: String(policy.retention_days) },
+  ];
+}
+
+export function buildDiagnosticsRetentionSettingRows(
+  policy: DiagnosticsRetentionPolicy | null,
+): SettingsPolicyRow[] {
+  if (!policy) {
+    return [];
+  }
+
+  const settings = policy.settings;
+  return [
+    {
+      label: 'Final Outputs',
+      value: formatRetentionPolicyMode(settings.final_outputs),
+    },
+    {
+      label: 'Workflow Inputs',
+      value: formatRetentionPolicyMode(settings.workflow_inputs),
+    },
+    {
+      label: 'Intermediate Node I/O',
+      value: formatRetentionPolicyMode(settings.intermediate_node_io),
+    },
+    {
+      label: 'Failed Run Data',
+      value: formatRetentionPolicyMode(settings.failed_run_data),
+    },
+    {
+      label: 'Cleanup Trigger',
+      value: titleCaseSnakeLabel(settings.cleanup_trigger),
+    },
+  ];
+}
+
 export function formatOptionItems(
   options: WorkflowMediaFormatOption[],
   currentValue?: string | null,
@@ -260,4 +313,10 @@ function titleCaseSnakeLabel(value: string): string {
     .filter((part) => part.length > 0)
     .map((part) => `${part[0].toUpperCase()}${part.slice(1)}`)
     .join(' ');
+}
+
+function formatRetentionPolicyMode(
+  policy: DiagnosticsRetentionPolicy['settings']['final_outputs'],
+): string {
+  return `${policy.retention_days} days, ${titleCaseSnakeLabel(policy.payload_mode)}`;
 }

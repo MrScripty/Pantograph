@@ -42,3 +42,7 @@ implementation has started with the shell/store navigation slice.
 - 2026-04-29 Wave `05` frontend lint cleanup passed:
   `npm run lint:full`, `npm run typecheck -- --pretty false`,
   `npm run lint:a11y`, `npm run test:frontend`, and `npm run build`.
+- 2026-04-29 Wave `06` Settings retention ownership passed:
+  `node --experimental-strip-types --test src/components/workbench/settingsPagePresenters.test.ts src/components/workbench/ioInspectorPresenters.test.ts src/services/workflow/WorkflowService.commands.test.ts`,
+  `npm run typecheck -- --pretty false`, `npm run lint:full`,
+  `npm run lint:a11y`, `npm run build`, and `npm run traceability`.
