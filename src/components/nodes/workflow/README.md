@@ -10,7 +10,8 @@ to the workflow graph runtime instead of being spread across generic canvas code
 | File/Folder | Description |
 | ----------- | ----------- |
 | `BooleanInputNode.svelte` | Renders a metadata-driven boolean editor that can bind to any downstream boolean-compatible setting. |
-| `AudioOutputNode.svelte` | Renders playback controls for streamed and final audio outputs, including rerun cleanup of execution-local playback state. |
+| `AudioOutputNode.svelte` | Renders playback controls for streamed and final audio outputs, including rerun cleanup of execution-local playback state and explicit artifact format overrides. |
+| `ImageOutputNode.svelte` | Renders image output previews and explicit artifact format overrides for image artifacts. |
 | `DiffusionInferenceNode.svelte` | Shows execution and dependency state for process-backed diffusion image generation. |
 | `DependencyEnvironmentActivityLog.svelte` | Renders the dependency environment activity log and owns log auto-scroll behavior. |
 | `DependencyEnvironmentBindingsPanel.svelte` | Renders binding selection, manual override summary controls, and per-requirement override fields. |
@@ -113,6 +114,10 @@ node persistence.
 The dependency environment node header lives in
 `DependencyEnvironmentNodeHeader.svelte`, keeping icon and title markup separate
 from node state orchestration.
+Image and audio output nodes load backend-owned artifact format defaults and
+capabilities through the workflow service. Their format selectors store only
+explicit per-node overrides in `artifact_format_override`; a missing or `null`
+override means the node uses the canonical backend Settings defaults.
 
 ## Alternatives Rejected
 - Reset audio output state only by remounting the workflow view.
@@ -181,6 +186,11 @@ from node state orchestration.
   icon and label markup.
 - Image and media preview controls must expose accessible names even when the
   visible content is an image or icon rather than text.
+- Output-node artifact format selectors must not persist backend defaults into
+  graph data unless the user explicitly chooses an override for that node.
+- Output-node artifact format overrides are graph data, so run snapshots can
+  capture them together with the workflow version while persistent defaults
+  remain owned by the workbench Settings page and backend APIs.
 - `ImageOutputNode.svelte` must treat only backdrop clicks as dialog-dismiss
   input; clicks inside the modal content stay local so expanded previews do not
   close while the user is interacting with the image or close button.

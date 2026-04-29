@@ -1,7 +1,19 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import BaseNode from '../BaseNode.svelte';
-  import type { NodeDefinition } from '../../../services/workflow/types';
-  import { nodeExecutionStates } from '../../../stores/workflowStore';
+  import type {
+    NodeDefinition,
+    WorkflowImageArtifactFormatSettings,
+    WorkflowMediaFormatOption,
+  } from '../../../services/workflow/types';
+  import { workflowService } from '../../../services/workflow/WorkflowService';
+  import { nodeExecutionStates, updateNodeData } from '../../../stores/workflowStore';
+
+  interface ImageArtifactFormatOverride {
+    format_id: string;
+    quality_percent: number;
+    color_profile_id: string;
+  }
 
   interface Props {
     id: string;
@@ -10,16 +22,60 @@
       label?: string;
       image?: string;
       streamContent?: string;
+      artifact_format_override?: ImageArtifactFormatOverride | null;
     };
     selected?: boolean;
   }
 
+  interface ImageFormatConfig {
+    defaults: WorkflowImageArtifactFormatSettings;
+    formats: WorkflowMediaFormatOption[];
+  }
+
+  const DEFAULT_SELECTION_VALUE = '__pantograph_default__';
+  let imageFormatConfigPromise: Promise<ImageFormatConfig> | null = null;
+
+  function loadImageFormatConfig(): Promise<ImageFormatConfig> {
+    imageFormatConfigPromise ??= Promise.all([
+      workflowService.artifactFormatSettings(),
+      workflowService.artifactFormatCapabilities(),
+    ]).then(([settingsResponse, capabilities]) => ({
+      defaults: settingsResponse.settings.image,
+      formats: capabilities.image_formats,
+    }));
+    return imageFormatConfigPromise;
+  }
+
   let { id, data, selected = false }: Props = $props();
+
+  let defaultFormat = $state<WorkflowImageArtifactFormatSettings | null>(null);
+  let formatOptions = $state<WorkflowMediaFormatOption[]>([]);
+  let formatLoadError = $state<string | null>(null);
 
   let executionInfo = $derived($nodeExecutionStates.get(id));
   let executionState = $derived(executionInfo?.state || 'idle');
   let imageData = $derived(data.image || '');
   let imageSrc = $derived(imageData ? `data:image/png;base64,${imageData}` : '');
+  let formatOverride = $derived(normalizeFormatOverride(data.artifact_format_override));
+  let selectedFormatId = $derived(formatOverride?.format_id ?? defaultFormat?.format_id ?? '');
+  let selectedFormat = $derived(findFormatOption(formatOptions, selectedFormatId));
+  let selectableFormats = $derived(formatOptionItems(formatOptions, selectedFormatId));
+  let colorProfileOptions = $derived(
+    optionValuesWithCurrent(selectedFormat?.color_profile_ids ?? [], effectiveColorProfile())
+  );
+  let qualityRangeLabel = $derived(
+    formatRangeLabel(selectedFormat?.quality_min_percent, selectedFormat?.quality_max_percent, '%')
+  );
+  let supportsQuality = $derived(
+    selectedFormat?.quality_min_percent !== null &&
+      selectedFormat?.quality_min_percent !== undefined &&
+      selectedFormat?.quality_max_percent !== null &&
+      selectedFormat?.quality_max_percent !== undefined
+  );
+  let formatSelectId = $derived(`image-output-${id}-format`);
+  let qualityInputId = $derived(`image-output-${id}-quality`);
+  let colorProfileSelectId = $derived(`image-output-${id}-color-profile`);
+  let isUsingDefaultFormat = $derived(!formatOverride);
 
   let showModal = $state(false);
   let modalElement = $state<HTMLDialogElement | null>(null);
@@ -35,6 +91,153 @@
 
   function stopControlEvent(event: Event) {
     event.stopPropagation();
+  }
+
+  function normalizeFormatOverride(value: unknown): ImageArtifactFormatOverride | null {
+    if (!value || typeof value !== 'object') return null;
+    const record = value as Record<string, unknown>;
+    const formatId = typeof record.format_id === 'string' ? record.format_id : '';
+    const qualityPercent =
+      typeof record.quality_percent === 'number' && Number.isFinite(record.quality_percent)
+        ? Math.round(record.quality_percent)
+        : null;
+    const colorProfileId =
+      typeof record.color_profile_id === 'string' ? record.color_profile_id : '';
+
+    if (!formatId || qualityPercent === null || !colorProfileId) {
+      return null;
+    }
+
+    return {
+      format_id: formatId,
+      quality_percent: qualityPercent,
+      color_profile_id: colorProfileId,
+    };
+  }
+
+  function findFormatOption(
+    options: WorkflowMediaFormatOption[],
+    formatId: string | null | undefined,
+  ): WorkflowMediaFormatOption | null {
+    return options.find((option) => option.format_id === formatId) ?? null;
+  }
+
+  function formatOptionItems(
+    options: WorkflowMediaFormatOption[],
+    currentValue: string,
+  ): WorkflowMediaFormatOption[] {
+    if (!currentValue || options.some((option) => option.format_id === currentValue)) {
+      return options;
+    }
+    return [
+      {
+        format_id: currentValue,
+        display_name: `${currentValue} (unsupported)`,
+        media_type: 'unknown',
+        codec_ids: [],
+        quality_min_percent: null,
+        quality_max_percent: null,
+        bitrate_min_kbps: null,
+        bitrate_max_kbps: null,
+        crf_min: null,
+        crf_max: null,
+        bit_depths: [],
+        color_profile_ids: [],
+        provided_by_dependency_id: 'unknown',
+        provided_by_version: null,
+      },
+      ...options,
+    ];
+  }
+
+  function optionValuesWithCurrent(values: string[], currentValue: string): string[] {
+    if (currentValue && !values.includes(currentValue)) {
+      return [currentValue, ...values];
+    }
+    return values;
+  }
+
+  function formatRangeLabel(
+    min: number | null | undefined,
+    max: number | null | undefined,
+    suffix = '',
+  ): string {
+    if (min === null || min === undefined || max === null || max === undefined) {
+      return 'Validated';
+    }
+    return `${min}${suffix} to ${max}${suffix}`;
+  }
+
+  function effectiveQualityPercent(): number {
+    return formatOverride?.quality_percent ?? defaultFormat?.quality_percent ?? 75;
+  }
+
+  function effectiveColorProfile(): string {
+    return formatOverride?.color_profile_id ?? defaultFormat?.color_profile_id ?? '';
+  }
+
+  function clampToRange(value: number, min: number | null | undefined, max: number | null | undefined): number {
+    let nextValue = Number.isFinite(value) ? Math.round(value) : defaultFormat?.quality_percent ?? 75;
+    if (min !== null && min !== undefined) {
+      nextValue = Math.max(min, nextValue);
+    }
+    if (max !== null && max !== undefined) {
+      nextValue = Math.min(max, nextValue);
+    }
+    return nextValue;
+  }
+
+  function buildOverrideForFormat(formatId: string): ImageArtifactFormatOverride {
+    const option = findFormatOption(formatOptions, formatId);
+    const colorProfileValues = optionValuesWithCurrent(
+      option?.color_profile_ids ?? [],
+      effectiveColorProfile()
+    );
+    return {
+      format_id: formatId,
+      quality_percent: clampToRange(
+        effectiveQualityPercent(),
+        option?.quality_min_percent,
+        option?.quality_max_percent
+      ),
+      color_profile_id: colorProfileValues[0] ?? defaultFormat?.color_profile_id ?? 'srgb',
+    };
+  }
+
+  function updateFormatOverride(override: ImageArtifactFormatOverride | null) {
+    void updateNodeData(id, { artifact_format_override: override });
+  }
+
+  function handleFormatChange(event: Event) {
+    const target = event.currentTarget as HTMLSelectElement | null;
+    const formatId = target?.value ?? DEFAULT_SELECTION_VALUE;
+    if (formatId === DEFAULT_SELECTION_VALUE) {
+      updateFormatOverride(null);
+      return;
+    }
+    updateFormatOverride(buildOverrideForFormat(formatId));
+  }
+
+  function handleQualityChange(event: Event) {
+    const target = event.currentTarget as HTMLInputElement | null;
+    const rawValue = Number(target?.value ?? effectiveQualityPercent());
+    updateFormatOverride({
+      ...buildOverrideForFormat(selectedFormatId),
+      quality_percent: clampToRange(
+        rawValue,
+        selectedFormat?.quality_min_percent,
+        selectedFormat?.quality_max_percent
+      ),
+    });
+  }
+
+  function handleColorProfileChange(event: Event) {
+    const target = event.currentTarget as HTMLSelectElement | null;
+    const colorProfileId = target?.value ?? effectiveColorProfile();
+    updateFormatOverride({
+      ...buildOverrideForFormat(selectedFormatId),
+      color_profile_id: colorProfileId,
+    });
   }
 
   function openModal(event?: Event) {
@@ -62,6 +265,25 @@
     a.click();
     requestAnimationFrame(() => URL.revokeObjectURL(url));
   }
+
+  onMount(() => {
+    let disposed = false;
+    loadImageFormatConfig()
+      .then((config) => {
+        if (disposed) return;
+        defaultFormat = config.defaults;
+        formatOptions = config.formats;
+        formatLoadError = null;
+      })
+      .catch((error: unknown) => {
+        if (disposed) return;
+        formatLoadError = error instanceof Error ? error.message : String(error);
+      });
+
+    return () => {
+      disposed = true;
+    };
+  });
 
   $effect(() => {
     if (!modalElement) {
@@ -139,6 +361,91 @@
           No image yet
         </div>
       {/if}
+
+      <div class="mt-2 space-y-2 border-t border-neutral-700/70 pt-2">
+        <div class="flex items-center justify-between gap-2">
+          <label class="text-[10px] text-neutral-400" for={formatSelectId}>Format</label>
+          {#if isUsingDefaultFormat && defaultFormat}
+            <span class="text-[10px] text-neutral-500">Default {defaultFormat.format_id}</span>
+          {:else if formatOverride}
+            <span class="text-[10px] text-violet-300">Override</span>
+          {/if}
+        </div>
+        <select
+          id={formatSelectId}
+          class="nodrag nopan nowheel w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-xs text-neutral-200 focus:border-violet-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+          value={formatOverride?.format_id ?? DEFAULT_SELECTION_VALUE}
+          disabled={!defaultFormat && !formatOverride}
+          onchange={handleFormatChange}
+          onmousedown={stopControlEvent}
+          onmouseup={stopControlEvent}
+          onpointerdown={stopControlEvent}
+          onpointerup={stopControlEvent}
+          onclickcapture={stopControlEvent}
+        >
+          <option value={DEFAULT_SELECTION_VALUE}>
+            Use default{defaultFormat ? ` (${defaultFormat.format_id})` : ''}
+          </option>
+          {#each selectableFormats as option}
+            <option value={option.format_id}>
+              {option.display_name}
+            </option>
+          {/each}
+        </select>
+
+        {#if formatOverride}
+          <div class="grid grid-cols-2 gap-2">
+            <div class="flex flex-col gap-1">
+              <label class="text-[10px] text-neutral-400" for={qualityInputId}>Quality</label>
+              <input
+                id={qualityInputId}
+                class="nodrag nopan nowheel w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-xs text-neutral-200 focus:border-violet-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                type="number"
+                min={selectedFormat?.quality_min_percent ?? undefined}
+                max={selectedFormat?.quality_max_percent ?? undefined}
+                step="1"
+                value={formatOverride.quality_percent}
+                disabled={!supportsQuality}
+                aria-describedby={`${qualityInputId}-range`}
+                onchange={handleQualityChange}
+                onmousedown={stopControlEvent}
+                onmouseup={stopControlEvent}
+                onpointerdown={stopControlEvent}
+                onpointerup={stopControlEvent}
+                onclickcapture={stopControlEvent}
+              />
+              <span id={`${qualityInputId}-range`} class="text-[10px] text-neutral-500">
+                {qualityRangeLabel}
+              </span>
+            </div>
+            <div class="flex flex-col gap-1">
+              <label class="text-[10px] text-neutral-400" for={colorProfileSelectId}>
+                Color
+              </label>
+              <select
+                id={colorProfileSelectId}
+                class="nodrag nopan nowheel w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-xs text-neutral-200 focus:border-violet-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                value={formatOverride.color_profile_id}
+                disabled={colorProfileOptions.length === 0}
+                onchange={handleColorProfileChange}
+                onmousedown={stopControlEvent}
+                onmouseup={stopControlEvent}
+                onpointerdown={stopControlEvent}
+                onpointerup={stopControlEvent}
+                onclickcapture={stopControlEvent}
+              >
+                {#each colorProfileOptions as profileId}
+                  <option value={profileId}>{profileId}</option>
+                {/each}
+              </select>
+            </div>
+          </div>
+        {/if}
+
+        {#if formatLoadError}
+          <div class="text-[10px] text-red-300">{formatLoadError}</div>
+        {/if}
+      </div>
   </BaseNode>
 </div>
 

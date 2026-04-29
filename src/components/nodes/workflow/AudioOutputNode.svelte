@@ -1,9 +1,20 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import BaseNode from '../BaseNode.svelte';
-  import type { NodeDefinition } from '../../../services/workflow/types';
-  import { nodeExecutionStates } from '../../../stores/workflowStore';
+  import type {
+    NodeDefinition,
+    WorkflowAudioArtifactFormatSettings,
+    WorkflowMediaFormatOption,
+  } from '../../../services/workflow/types';
+  import { workflowService } from '../../../services/workflow/WorkflowService';
+  import { nodeExecutionStates, updateNodeData } from '../../../stores/workflowStore';
   import { shouldResetAudioPlaybackState } from './audioOutputState';
+
+  interface AudioArtifactFormatOverride {
+    container_id: string;
+    codec_id: string;
+    bitrate_kbps: number;
+  }
 
   interface Props {
     id: string;
@@ -16,6 +27,7 @@
       audio_sample_rate?: number;
       stream?: unknown;
       streamContent?: string;
+      artifact_format_override?: AudioArtifactFormatOverride | null;
     };
     selected?: boolean;
   }
@@ -26,6 +38,25 @@
     sequence: number | null;
     isFinal: boolean;
     mode: 'append' | 'replace';
+  }
+
+  interface AudioFormatConfig {
+    defaults: WorkflowAudioArtifactFormatSettings;
+    formats: WorkflowMediaFormatOption[];
+  }
+
+  const DEFAULT_SELECTION_VALUE = '__pantograph_default__';
+  let audioFormatConfigPromise: Promise<AudioFormatConfig> | null = null;
+
+  function loadAudioFormatConfig(): Promise<AudioFormatConfig> {
+    audioFormatConfigPromise ??= Promise.all([
+      workflowService.artifactFormatSettings(),
+      workflowService.artifactFormatCapabilities(),
+    ]).then(([settingsResponse, capabilities]) => ({
+      defaults: settingsResponse.settings.audio,
+      formats: capabilities.audio_formats,
+    }));
+    return audioFormatConfigPromise;
   }
 
   let { id, data, selected = false }: Props = $props();
@@ -46,6 +77,9 @@
   let streamProgressTimer = $state<number | null>(null);
   let streamContext = $state<AudioContext | null>(null);
   let streamGainNode = $state<GainNode | null>(null);
+  let defaultFormat = $state<WorkflowAudioArtifactFormatSettings | null>(null);
+  let formatOptions = $state<WorkflowMediaFormatOption[]>([]);
+  let formatLoadError = $state<string | null>(null);
 
   let executionInfo = $derived($nodeExecutionStates.get(id));
   let executionState = $derived(executionInfo?.state || 'idle');
@@ -113,6 +147,26 @@
   let displayedDuration = $derived(finalAudioSrc ? finalDisplayedDuration : streamBufferedDuration);
   let canSeek = $derived(Boolean(finalAudioSrc));
   let hasAnyAudio = $derived(Boolean(finalAudioSrc) || hasStreamAudio);
+  let formatOverride = $derived(normalizeFormatOverride(data.artifact_format_override));
+  let selectedContainerId = $derived(formatOverride?.container_id ?? defaultFormat?.container_id ?? '');
+  let selectedFormat = $derived(findFormatOption(formatOptions, selectedContainerId));
+  let selectableFormats = $derived(formatOptionItems(formatOptions, selectedContainerId));
+  let codecOptions = $derived(
+    optionValuesWithCurrent(selectedFormat?.codec_ids ?? [], effectiveCodecId())
+  );
+  let bitrateRangeLabel = $derived(
+    formatRangeLabel(selectedFormat?.bitrate_min_kbps, selectedFormat?.bitrate_max_kbps, ' kbps')
+  );
+  let supportsBitrate = $derived(
+    selectedFormat?.bitrate_min_kbps !== null &&
+      selectedFormat?.bitrate_min_kbps !== undefined &&
+      selectedFormat?.bitrate_max_kbps !== null &&
+      selectedFormat?.bitrate_max_kbps !== undefined
+  );
+  let formatSelectId = $derived(`audio-output-${id}-format`);
+  let codecSelectId = $derived(`audio-output-${id}-codec`);
+  let bitrateInputId = $derived(`audio-output-${id}-bitrate`);
+  let isUsingDefaultFormat = $derived(!formatOverride);
 
   let statusColor = $derived(
     {
@@ -138,6 +192,149 @@
     if (normalized.includes('ogg')) return 'ogg';
     if (normalized.includes('flac')) return 'flac';
     return 'wav';
+  }
+
+  function normalizeFormatOverride(value: unknown): AudioArtifactFormatOverride | null {
+    if (!value || typeof value !== 'object') return null;
+    const record = value as Record<string, unknown>;
+    const containerId = typeof record.container_id === 'string' ? record.container_id : '';
+    const codecId = typeof record.codec_id === 'string' ? record.codec_id : '';
+    const bitrateKbps =
+      typeof record.bitrate_kbps === 'number' && Number.isFinite(record.bitrate_kbps)
+        ? Math.round(record.bitrate_kbps)
+        : null;
+
+    if (!containerId || !codecId || bitrateKbps === null) {
+      return null;
+    }
+
+    return {
+      container_id: containerId,
+      codec_id: codecId,
+      bitrate_kbps: bitrateKbps,
+    };
+  }
+
+  function findFormatOption(
+    options: WorkflowMediaFormatOption[],
+    formatId: string | null | undefined,
+  ): WorkflowMediaFormatOption | null {
+    return options.find((option) => option.format_id === formatId) ?? null;
+  }
+
+  function formatOptionItems(
+    options: WorkflowMediaFormatOption[],
+    currentValue: string,
+  ): WorkflowMediaFormatOption[] {
+    if (!currentValue || options.some((option) => option.format_id === currentValue)) {
+      return options;
+    }
+    return [
+      {
+        format_id: currentValue,
+        display_name: `${currentValue} (unsupported)`,
+        media_type: 'unknown',
+        codec_ids: [],
+        quality_min_percent: null,
+        quality_max_percent: null,
+        bitrate_min_kbps: null,
+        bitrate_max_kbps: null,
+        crf_min: null,
+        crf_max: null,
+        bit_depths: [],
+        color_profile_ids: [],
+        provided_by_dependency_id: 'unknown',
+        provided_by_version: null,
+      },
+      ...options,
+    ];
+  }
+
+  function optionValuesWithCurrent(values: string[], currentValue: string): string[] {
+    if (currentValue && !values.includes(currentValue)) {
+      return [currentValue, ...values];
+    }
+    return values;
+  }
+
+  function formatRangeLabel(
+    min: number | null | undefined,
+    max: number | null | undefined,
+    suffix = '',
+  ): string {
+    if (min === null || min === undefined || max === null || max === undefined) {
+      return 'Validated';
+    }
+    return `${min}${suffix} to ${max}${suffix}`;
+  }
+
+  function effectiveCodecId(): string {
+    return formatOverride?.codec_id ?? defaultFormat?.codec_id ?? '';
+  }
+
+  function effectiveBitrateKbps(): number {
+    return formatOverride?.bitrate_kbps ?? defaultFormat?.bitrate_kbps ?? 96;
+  }
+
+  function clampToRange(value: number, min: number | null | undefined, max: number | null | undefined): number {
+    let nextValue = Number.isFinite(value) ? Math.round(value) : defaultFormat?.bitrate_kbps ?? 96;
+    if (min !== null && min !== undefined) {
+      nextValue = Math.max(min, nextValue);
+    }
+    if (max !== null && max !== undefined) {
+      nextValue = Math.min(max, nextValue);
+    }
+    return nextValue;
+  }
+
+  function buildOverrideForFormat(containerId: string): AudioArtifactFormatOverride {
+    const option = findFormatOption(formatOptions, containerId);
+    const codecs = optionValuesWithCurrent(option?.codec_ids ?? [], effectiveCodecId());
+    return {
+      container_id: containerId,
+      codec_id: codecs[0] ?? defaultFormat?.codec_id ?? 'opus',
+      bitrate_kbps: clampToRange(
+        effectiveBitrateKbps(),
+        option?.bitrate_min_kbps,
+        option?.bitrate_max_kbps
+      ),
+    };
+  }
+
+  function updateFormatOverride(override: AudioArtifactFormatOverride | null) {
+    void updateNodeData(id, { artifact_format_override: override });
+  }
+
+  function handleFormatChange(event: Event) {
+    const target = event.currentTarget as HTMLSelectElement | null;
+    const containerId = target?.value ?? DEFAULT_SELECTION_VALUE;
+    if (containerId === DEFAULT_SELECTION_VALUE) {
+      updateFormatOverride(null);
+      return;
+    }
+    updateFormatOverride(buildOverrideForFormat(containerId));
+  }
+
+  function handleCodecChange(event: Event) {
+    const target = event.currentTarget as HTMLSelectElement | null;
+    const codecId = target?.value ?? effectiveCodecId();
+    updateFormatOverride({
+      ...buildOverrideForFormat(selectedContainerId),
+      codec_id: codecId,
+    });
+  }
+
+  function handleBitrateChange(event: Event) {
+    const target = event.currentTarget as HTMLInputElement | null;
+    const rawValue = Number(target?.value ?? effectiveBitrateKbps());
+    updateFormatOverride({
+      ...buildOverrideForFormat(selectedContainerId),
+      bitrate_kbps: clampToRange(
+        rawValue,
+        selectedFormat?.bitrate_min_kbps,
+        selectedFormat?.bitrate_max_kbps
+      ),
+    });
   }
 
   function base64ToArrayBuffer(base64: string): ArrayBuffer {
@@ -391,6 +588,25 @@
     }
   });
 
+  onMount(() => {
+    let disposed = false;
+    loadAudioFormatConfig()
+      .then((config) => {
+        if (disposed) return;
+        defaultFormat = config.defaults;
+        formatOptions = config.formats;
+        formatLoadError = null;
+      })
+      .catch((error: unknown) => {
+        if (disposed) return;
+        formatLoadError = error instanceof Error ? error.message : String(error);
+      });
+
+    return () => {
+      disposed = true;
+    };
+  });
+
   $effect(() => {
     const chunk = streamPayload;
     if (!chunk || finalAudioSrc) return;
@@ -566,6 +782,91 @@
         No audio yet
       </div>
     {/if}
+
+    <div class="mt-2 space-y-2 border-t border-neutral-700/70 pt-2">
+      <div class="flex items-center justify-between gap-2">
+        <label class="text-[10px] text-neutral-400" for={formatSelectId}>Format</label>
+        {#if isUsingDefaultFormat && defaultFormat}
+          <span class="text-[10px] text-neutral-500">
+            Default {defaultFormat.container_id}/{defaultFormat.codec_id}
+          </span>
+        {:else if formatOverride}
+          <span class="text-[10px] text-pink-300">Override</span>
+        {/if}
+      </div>
+      <select
+        id={formatSelectId}
+        class="nodrag nopan nowheel w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-xs text-neutral-200 focus:border-pink-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+        value={formatOverride?.container_id ?? DEFAULT_SELECTION_VALUE}
+        disabled={!defaultFormat && !formatOverride}
+        onchange={handleFormatChange}
+        onmousedown={stopControlEvent}
+        onmouseup={stopControlEvent}
+        onpointerdown={stopControlEvent}
+        onpointerup={stopControlEvent}
+        onclickcapture={stopControlEvent}
+      >
+        <option value={DEFAULT_SELECTION_VALUE}>
+          Use default{defaultFormat ? ` (${defaultFormat.container_id}/${defaultFormat.codec_id})` : ''}
+        </option>
+        {#each selectableFormats as option}
+          <option value={option.format_id}>
+            {option.display_name}
+          </option>
+        {/each}
+      </select>
+
+      {#if formatOverride}
+        <div class="grid grid-cols-2 gap-2">
+          <div class="flex flex-col gap-1">
+            <label class="text-[10px] text-neutral-400" for={codecSelectId}>Codec</label>
+            <select
+              id={codecSelectId}
+              class="nodrag nopan nowheel w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-xs text-neutral-200 focus:border-pink-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+              value={formatOverride.codec_id}
+              disabled={codecOptions.length === 0}
+              onchange={handleCodecChange}
+              onmousedown={stopControlEvent}
+              onmouseup={stopControlEvent}
+              onpointerdown={stopControlEvent}
+              onpointerup={stopControlEvent}
+              onclickcapture={stopControlEvent}
+            >
+              {#each codecOptions as codecId}
+                <option value={codecId}>{codecId}</option>
+              {/each}
+            </select>
+          </div>
+          <div class="flex flex-col gap-1">
+            <label class="text-[10px] text-neutral-400" for={bitrateInputId}>Bitrate</label>
+            <input
+              id={bitrateInputId}
+              class="nodrag nopan nowheel w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-xs text-neutral-200 focus:border-pink-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+              type="number"
+              min={selectedFormat?.bitrate_min_kbps ?? undefined}
+              max={selectedFormat?.bitrate_max_kbps ?? undefined}
+              step="1"
+              value={formatOverride.bitrate_kbps}
+              disabled={!supportsBitrate}
+              aria-describedby={`${bitrateInputId}-range`}
+              onchange={handleBitrateChange}
+              onmousedown={stopControlEvent}
+              onmouseup={stopControlEvent}
+              onpointerdown={stopControlEvent}
+              onpointerup={stopControlEvent}
+              onclickcapture={stopControlEvent}
+            />
+            <span id={`${bitrateInputId}-range`} class="text-[10px] text-neutral-500">
+              {bitrateRangeLabel}
+            </span>
+          </div>
+        </div>
+      {/if}
+
+      {#if formatLoadError}
+        <div class="text-[10px] text-red-300">{formatLoadError}</div>
+      {/if}
+    </div>
   </BaseNode>
 </div>
 
