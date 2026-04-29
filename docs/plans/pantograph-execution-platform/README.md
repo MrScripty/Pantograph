@@ -5,7 +5,9 @@
 This directory owns the ordered planning artifacts for Pantograph's execution
 platform work: durable attribution, backend-owned node contracts, managed
 runtime observability, model/license usage diagnostics, composition, and
-binding projections.
+binding projections. It also owns the active extensions for ArtifactStore,
+media format settings, managed media dependencies, and the consolidated
+run-centric workbench.
 
 ## Contents
 
@@ -22,7 +24,27 @@ binding projections.
 | `08-stage-start-implementation-gate.md` | Instructions for validating plan readiness, worktree hygiene, verification, and commit boundaries before each stage begins. |
 | `09-stage-end-refactor-gate.md` | Instructions for deciding whether each implementation stage needs a standards refactor before the next stage begins. |
 | `10-concurrent-phased-implementation.md` | Artifact layout and rules for converting a stage into safe phased parallel implementation waves when warranted. |
+| `11-artifact-format-settings-and-managed-media-dependencies.md` | ArtifactStore, binary-safe media payloads, canonical workbench Settings ownership, format defaults, managed OCIO/ffmpeg/OIIO dependencies, and related verification. |
+| `12-run-centric-workbench-consolidation.md` | Canonical consolidation of the run-centric GUI workbench plans into execution-platform ownership. |
 | `implementation-waves/` | Stage-specific concurrent implementation wave specs, coordination ledgers, and worker report paths. |
+| `reviews/run-centric-workbench/` | Historical review evidence moved from the retired run-centric workbench plan directory. |
+
+## Current Stage Status
+
+| Stage | Status | Notes |
+| ----- | ------ | ----- |
+| `01` | Complete | Runtime attribution implementation and tests are present. |
+| `02` | Complete | Canonical node contracts, discovery projections, compatibility checks, and tests are present. |
+| `03` | Complete | Runtime-owned observability, managed capabilities, diagnostics adapters, and tests are present. |
+| `04` | Complete | Model/license diagnostics ledger, retention, typed events, incremental projections, and tests are present. |
+| `05` | Complete | Composed-node contracts, migration records, workflow canonicalization migration, and tests are present. |
+| `06` | Reopened / not complete | Binding projection code exists, but current UniFFI/C# verification fails because execution-session run requests omit `workflow_semantic_version`; one UniFFI graph-save test uses an invalid workflow identity. |
+| `07` | Stale / not complete | Standards review docs exist, but they depend on the old Stage `06` completion claim and need refresh after Stage `06` is corrected. |
+| `08` | Gate-only | Reusable stage-start implementation gate, not an implementation stage. |
+| `09` | Gate-only | Reusable stage-end refactor gate, not an implementation stage. |
+| `10` | Coordination-only | Reusable concurrent implementation scaffold, not an implementation stage. |
+| `11` | Planned / active, not complete | ArtifactStore, format settings, canonical Settings ownership, managed media dependencies, and binding/API/frontend projection work are planned but not implemented. |
+| `12` | Planned / active, not complete | Imports the run-centric GUI workbench plans into execution-platform ownership and covers Scheduler-default workbench pages, active-run navigation, API/frontend projections, review findings, and rollout gates. |
 
 ## Problem
 
@@ -68,6 +90,8 @@ of maintaining a single oversized `final-plan.md`.
 - A numbered slice becomes large enough to need implementation-wave subplans.
 - Binding implementation sequencing diverges by host language.
 - Diagnostics persistence requires a dedicated storage-engine plan.
+- Media/artifact payload handling, persistent settings, or managed dependency
+  scope changes beyond the completed execution-platform stages.
 
 ## Dependencies
 
@@ -97,9 +121,18 @@ of maintaining a single oversized `final-plan.md`.
   preservation, runtime lineage, and saved-workflow migration behavior.`
 - `../../adr/ADR-010-binding-projection-ownership-and-support-tiers.md`
 - `Reason: Stage 06 accepted binding projection ownership, generated artifact
-  policy, and evidence-based host support tiers.`
+  policy, and evidence-based host support tiers. Completion is reopened by the
+  2026-04-29 audit until UniFFI/C# execution-session request drift is fixed and
+  verified.`
 - `Revisit trigger: Future execution-platform work changes one of these
   ownership boundaries or supersedes an accepted stage decision.`
+- `11-artifact-format-settings-and-managed-media-dependencies.md`
+- `Reason: Stage 11 extends the execution platform with ArtifactStore,
+  canonical workbench Settings ownership, binary-safe media payloads, and
+  managed media dependencies after the original Stage 01-07 closeout.`
+- `12-run-centric-workbench-consolidation.md`
+- `Reason: Stage 12 imports the run-centric GUI workbench plan set so
+  execution-platform remains the canonical planning home.`
 
 ## Implementation Entry Point
 
@@ -131,6 +164,17 @@ Execution order:
    lockfile, generated, or build files left behind from the previous step.
 13. Apply `09-stage-end-refactor-gate.md` after the stage implementation and
     verification complete, before starting the next numbered stage.
+
+Before continuing artifact/settings/media-dependency implementation, resolve the
+reopened Stage `06` binding verification work or explicitly record why Stage
+`11` can proceed without touching affected binding surfaces. For artifact work,
+select `11-artifact-format-settings-and-managed-media-dependencies.md` as the
+active implementation stage after reading the completed Stage `01` through
+Stage `05`, reopened Stage `06`, stale Stage `07`, Stage `11`, and Stage `12`
+context. For run-centric GUI work, select
+`12-run-centric-workbench-consolidation.md` after Stage `06` and Stage `11`
+dependencies are either complete or explicitly excluded from the implementation
+slice.
 
 Use the execution prompt at
 `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/prompts/implement-plan.md`
@@ -188,6 +232,8 @@ the complete implementation reading sequence:
 08-stage-start-implementation-gate.md
 09-stage-end-refactor-gate.md
 10-concurrent-phased-implementation.md
+11-artifact-format-settings-and-managed-media-dependencies.md
+12-run-centric-workbench-consolidation.md
 implementation-waves/
 ```
 
@@ -199,8 +245,10 @@ stage folder under `implementation-waves/`. After implementation, apply
 ## API Consumer Contract
 
 - This directory does not expose runtime APIs.
-- The completed stages describe implemented API and binding contracts where the
-  owning crates, ADRs, and module documentation now expose them. Historical
+- Completed stages describe implemented API and binding contracts where the
+  owning crates, ADRs, and module documentation now expose them. Stage `06`
+  binding projection ownership exists, but completion is reopened until
+  UniFFI/C# verification passes the current workflow-run contract. Historical
   future-tense notes remain audit context and are superseded by the latest
   implementation progress sections and ADRs when they conflict.
 - Compatibility expectations are defined in the numbered plan files.

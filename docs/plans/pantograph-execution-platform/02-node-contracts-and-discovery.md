@@ -5,6 +5,29 @@
 Define backend-owned node and port contracts before widening runtime execution,
 GUI authoring, or binding surfaces.
 
+## Objective
+
+Move node type, port, compatibility, and discovery semantics into canonical
+backend-owned contracts that workflow-service, GUI authoring, and future host
+bindings can consume as projections.
+
+## Scope
+
+In scope:
+
+- Canonical node and port contract types, ids, constraints, effective
+  contracts, and compatibility decisions.
+- Workflow-service graph projections backed by canonical contracts.
+- Workflow-node registration migration to backend-owned contract facts.
+- Graph compatibility tests and discovery projection verification.
+
+Out of scope:
+
+- Runtime-managed observability.
+- Durable diagnostics ledger persistence.
+- Host binding projection implementation.
+- Frontend page redesign beyond consuming contract projections later.
+
 ## Implementation Readiness Status
 
 Ready for stage-start preflight after stage `01` is complete and its

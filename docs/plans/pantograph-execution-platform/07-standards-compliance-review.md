@@ -6,6 +6,11 @@ Verify that the execution-platform plans conform to the planning standards and
 that implementation following these plans should produce code compliant with
 the repository standards.
 
+## Objective
+
+Maintain the standards compliance map for the execution-platform plan set and
+record stage-gate or plan updates needed before implementation continues.
+
 ## Implementation Progress
 
 ### 2026-04-25 Stage-Start Preflight
@@ -13,10 +18,13 @@ the repository standards.
 Start outcome: `ready_with_recorded_assumptions`.
 
 - Selected stage: Stage `07`, standards compliance review.
-- Prior-stage gates: Stage `01` through Stage `06` are implemented, their
-  architecture ADR checkpoints are recorded, and their stage-end refactor gates
-  are recorded. Stage `05` required a separate refactor plan; the module split
-  was completed before Stage `06` closeout.
+- Prior-stage gates at the time of the original review: Stage `01` through
+  Stage `06` were recorded as implemented, their architecture ADR checkpoints
+  were recorded, and their stage-end refactor gates were recorded. The
+  2026-04-29 audit reopened Stage `06` completion because current UniFFI/C#
+  binding verification no longer passes the workflow-run request contract.
+  Stage `05` required a separate refactor plan; the module split was completed
+  before the original Stage `06` closeout.
 - Current dirty files before Stage `07`: unrelated asset deletions and
   untracked asset files under `assets/`. Stage `07` must not stage, reformat,
   or revert them.
@@ -31,8 +39,9 @@ Start outcome: `ready_with_recorded_assumptions`.
 
 ### 2026-04-25 Post-Implementation Review Progress
 
-- Reconciled the review with completed Stage `01` through Stage `06`
-  architecture ADRs.
+- Reconciled the review with the then-completed Stage `01` through Stage `06`
+  architecture ADRs. This reconciliation is stale for Stage `06` completion
+  status after the 2026-04-29 audit.
 - Replaced stale future-tense residual risks for Stage `01`, Stage `04`, and
   Stage `06` with current implementation evidence and remaining host/toolchain
   limitations.
@@ -40,6 +49,10 @@ Start outcome: `ready_with_recorded_assumptions`.
   Native Rust supported for implemented surfaces, C# supported for verified
   generated/native surfaces, Python unsupported, and BEAM experimental on this
   host.
+- 2026-04-29 audit correction: C# support remains an ADR-010 target and
+  ownership decision, but Stage `06` completion is reopened for
+  execution-session run calls until UniFFI/C# request bodies include
+  `workflow_semantic_version` and pass verification.
 
 ### 2026-04-25 Stage-End Refactor Gate
 
@@ -71,6 +84,15 @@ Out of scope:
 - replacing the authoritative standards files
 - changing the crate ownership, storage engine, or release automation decisions
   recorded in the numbered plans without updating those plans first
+
+## Milestones
+
+1. Review active execution-platform plans against the external standards.
+2. Record required compliance gates and residual risks.
+3. Reconcile stale findings after Stage `06`, Stage `11`, or Stage `12`
+   changes plan or implementation status.
+4. Update completion criteria only when every residual compliance issue has an
+   owner or a recorded follow-up plan.
 
 ## Reviewed Standards
 
@@ -112,6 +134,8 @@ Out of scope:
 | `08-stage-start-implementation-gate.md` | Planning, worktree hygiene, commits, verification, concurrent worker readiness | Confirm plan readiness, standards context, dirty-file safety, write boundaries, verification, and commit expectations before source edits begin. |
 | `09-stage-end-refactor-gate.md` | Planning, coding, testing, tooling, documentation | Decide whether touched files need a standards refactor before the next stage starts, and constrain any refactor to files touched by that stage. |
 | `10-concurrent-phased-implementation.md` | Concurrent worker planning, implementation waves, reporting, coordination | Require explicit wave specs, non-overlapping write sets, report files, coordination ledger, one-wave-at-a-time execution, and one-at-a-time integration when parallel work is warranted. |
+| `11-artifact-format-settings-and-managed-media-dependencies.md` | Architecture, security, dependency, interop, frontend, testing, cross-platform | Move media payload bodies to ArtifactStore, make workbench Settings canonical, generalize/split managed redistributables, isolate OCIO FFI, verify supply-chain metadata, and migrate base64 media paths. |
+| `12-run-centric-workbench-consolidation.md` | Frontend, accessibility, API projection, persistence, diagnostics, rollout, testing | Keep Scheduler-default workbench pages backend-driven, preserve active-run as transient UI state, consume materialized projections, avoid duplicate settings owners, import run-centric review findings, and verify shell/page accessibility. |
 
 ## Implementation Compliance Gates
 
@@ -162,6 +186,26 @@ Out of scope:
 - Frontend/accessibility gate: GUI work renders backend-owned facts, avoids
   optimistic mutation of backend-owned graph state, and uses semantic,
   keyboard-accessible controls.
+- Settings ownership gate: persistent global settings must be owned by the
+  workbench Settings page. Legacy side-panel, runtime-manager, and server
+  settings surfaces must be relocated, embedded, or retired when Stage `11`
+  lands. Feature-local helper settings may remain colocated only when they do
+  not own global persistent configuration.
+- Artifact payload gate: image, audio, video, 3D, large table, and generic
+  binary payload bodies must use ArtifactStore descriptors plus binary-safe
+  retrieval/streaming. Raising JSON value caps is not an acceptable substitute.
+- Managed redistributables gate: runtime sidecars, tool binaries, and native
+  library artifacts may share infrastructure, but DTOs, tests, and code names
+  must preserve distinct product categories and avoid runtime-only semantics
+  for tools/libraries.
+- OCIO native boundary gate: OCIO loading must be isolated behind a safe
+  adapter with ABI/version validation, documented lifetime/threading/shutdown
+  behavior, fail-closed capability reporting, and no unsafe FFI code in domain
+  logic.
+- Media dependency supply-chain gate: managed media dependency catalogs must
+  validate checksum/signature, license/redistribution metadata, source owner,
+  platform support, archive kind, expected files, and rejected arbitrary
+  download URLs.
 - Release gate: public or binding-facing changes require changelog or migration
   notes, explicit artifact naming, checksums, SBOM expectations where released,
   and version-matched native/binding packages.
@@ -195,6 +239,13 @@ Out of scope:
   stage starts from a standards-compliant touched-file baseline.
 - `10`: defines the phased parallel implementation scaffold required before a
   stage can use concurrent workers.
+- `11`: adds the active extension for ArtifactStore, canonical Settings
+  ownership, managed media dependencies, OCIO FFI isolation, typed format DTOs,
+  and base64/media JSON migration.
+- `12`: imports the run-centric GUI workbench plan set into execution-platform
+  ownership, including Scheduler-default navigation, active-run page context,
+  page projection requirements, frontend service boundaries, review findings,
+  rollout gates, and source-audit requirements.
 
 ## Residual Risks
 
@@ -203,11 +254,12 @@ Out of scope:
   supersede those ADRs when it changes durable attribution, node contracts,
   runtime observability, diagnostics ledger persistence, composition/migration,
   or binding projection ownership.
-- Stage `06` support tiers are reconciled in ADR-010 and the Stage `06`
-  closeout. Remaining risk is toolchain and artifact availability rather than
-  plan ambiguity: Python stays unsupported until a real generated/native
-  package and import/load smoke exists, and BEAM stays experimental on hosts
-  without `mix` smoke coverage.
+- Stage `06` support tiers are recorded in ADR-010, but the Stage `06` closeout
+  is stale after the 2026-04-29 audit. Current risk is not only toolchain and
+  artifact availability: UniFFI/C# request-shape drift must be fixed before
+  supported C# execution-session surfaces are considered complete. Python stays
+  unsupported until a real generated/native package and import/load smoke
+  exists, and BEAM stays experimental on hosts without `mix` smoke coverage.
 - Stage `04` recorded SQLite ledger dependency, linking, migration, audit, and
   release-artifact impact before implementation. Future storage-engine changes
   require a new plan update or ADR rather than editing the ledger crate in
@@ -241,6 +293,10 @@ Out of scope:
   completion records, ADR index entries, support-tier records, and current
   dirty worktree state. No source-code verification was required because this
   stage changed review/status documentation only.
+- 2026-04-29 audit update: source-code verification has since shown Stage `06`
+  binding verification failures. Stage `07` is therefore documentation-present
+  but status-stale until Stage `06` is corrected and this standards review is
+  refreshed against the corrected evidence.
 
 ## Risks And Mitigations
 

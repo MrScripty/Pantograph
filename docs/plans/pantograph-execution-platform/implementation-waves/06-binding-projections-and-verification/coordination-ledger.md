@@ -2,9 +2,10 @@
 
 ## Status
 
-Stage `06` complete. Wave `01` through Wave `04` are integrated, the binding
-projection ADR is recorded, and the stage-end refactor gate outcome is
-`not_warranted`.
+Stage `06` reopened. Wave `01` through Wave `04` are integrated, the binding
+projection ADR is recorded, and the original stage-end refactor gate outcome was
+`not_warranted`; however, the 2026-04-29 audit found current UniFFI/C# binding
+verification failures caused by execution-session request drift.
 
 ## Wave Status
 
@@ -12,8 +13,8 @@ projection ADR is recorded, and the stage-end refactor gate outcome is
 | ---- | ------ | ----------------- |
 | `wave-01` | Complete | Stage-start outcome recorded as `ready_with_recorded_assumptions`; C# is candidate supported, Python is unsupported, and BEAM is experimental until support-tier docs and host smoke coverage align. |
 | `wave-02` | Complete | UniFFI and Rustler discovery projections are integrated and committed. |
-| `wave-03` | Complete | C# generated-artifact smoke passed; Python remains unsupported; BEAM source smoke coverage is added but host smoke is blocked by missing `mix`. |
-| `wave-04` | Complete | ADR, headless binding docs, support-tier reconciliation, final verification, and stage-end refactor gate are committed. |
+| `wave-03` | Reopened | Historical C# generated-artifact smoke passed, but current C#/UniFFI execution-session request bodies omit required `workflow_semantic_version`; Python remains unsupported; BEAM source smoke coverage is added but host smoke is blocked by missing `mix`. |
+| `wave-04` | Reopened | ADR, headless binding docs, support-tier reconciliation, final verification, and stage-end refactor gate were committed; final verification must be rerun after binding request drift is corrected. |
 
 ## Worker Reports
 
@@ -21,7 +22,7 @@ projection ADR is recorded, and the stage-end refactor gate outcome is
 | ------ | ----------- | ------ |
 | uniffi-projections | `reports/wave-02-worker-uniffi-projections.md` | Complete. |
 | rustler-projections | `reports/wave-02-worker-rustler-projections.md` | Complete; BEAM smoke remains blocked by missing `mix`. |
-| csharp-host-tests | `reports/wave-03-worker-csharp-host-tests.md` | Complete. |
+| csharp-host-tests | `reports/wave-03-worker-csharp-host-tests.md` | Reopened for execution-session request drift. |
 | python-host-tests | `reports/wave-03-worker-python-host-tests.md` | Complete as unsupported-lane reconciliation. |
 | beam-host-tests | `reports/wave-03-worker-beam-host-tests.md` | Source coverage complete; host smoke blocked by missing `mix`. |
 

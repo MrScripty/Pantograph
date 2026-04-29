@@ -5,6 +5,28 @@
 Project the backend-owned execution-platform surface into native Rust, C#,
 Python, and Elixir/BEAM without creating host-local node semantics.
 
+## Objective
+
+Freeze the native Rust base API, generate or project supported host-language
+surfaces from backend-owned contracts, and verify support tiers with
+artifact-loading tests or explicit unsupported/degraded status.
+
+## Scope
+
+In scope:
+
+- Native Rust base API projection boundaries.
+- UniFFI and Rustler DTO/error projection ownership.
+- C#, Python, and BEAM host verification status and support-tier evidence.
+- Generated artifact, unsafe boundary, and host-fixture verification gates.
+
+Out of scope:
+
+- Changing canonical runtime, node, attribution, or ledger semantics.
+- Hand-editing generated host binding artifacts.
+- Workbench page implementation.
+- ArtifactStore/media format dependency implementation.
+
 ## Implementation Readiness Status
 
 Ready for stage-start preflight after stages `01` through `05` are complete,
@@ -14,6 +36,43 @@ reconcile exact host-lane smoke commands with the binding-platform plan before
 source edits begin.
 
 ## Implementation Progress
+
+### 2026-04-29 Completion Audit Reopen
+
+Stage `06` is no longer marked complete. The backend-owned binding projection
+code and ADR-010 are present, but current verification shows request-shape drift
+between workflow-service and UniFFI/C# host surfaces.
+
+- `WorkflowExecutionSessionRunRequest` now requires
+  `workflow_semantic_version`.
+- `cargo test -p pantograph-uniffi` currently fails three tests:
+  - two session-run tests omit `workflow_semantic_version`;
+  - one graph-save test uses `"Native Edited Workflow"` where workflow identity
+    validation now rejects spaces.
+- C# smoke and quickstart request bodies also omit
+  `workflow_semantic_version` on session-run calls and must be updated and
+  reverified before C# is re-marked supported for the affected execution-session
+  surface.
+- `cargo test -p pantograph_rustler` still is not a standalone verification
+  command because Rustler NIF tests require Erlang host symbols. BEAM remains
+  experimental and should be verified through the documented BEAM smoke path
+  when `mix` is available.
+
+Completion status: `reopened`.
+
+### 2026-04-29 Stage 11 Extension Note
+
+Stage `06` owns the original execution-platform binding projections and support
+tiers, but its completion is reopened by the 2026-04-29 audit above. Stage `11`
+adds new binding/API projection requirements for ArtifactStore descriptors,
+binary-safe retrieval/streaming, artifact format settings, conversion
+capabilities, managed redistributable status/actions, and actual artifact format
+metadata.
+
+Supported host lanes must project those backend-owned contracts without
+inventing host-local media option lists, runtime dependency status, filesystem
+paths, or inline media JSON behavior. DTO parity and cross-layer tests are
+required before supported bindings expose the new Stage `11` surface.
 
 ### 2026-04-25 Wave 01 Stage-Start Preflight
 
@@ -192,10 +251,12 @@ fails immediately because `mix` is not installed on this machine.
 
 ### 2026-04-25 Wave 03 Host-Language Verification Progress
 
-- C# host verification is complete and committed. The native smoke loads the
-  real generated/native artifact and now asserts generated access to backend-owned
-  graph-authoring discovery. The package and packaged quickstart scripts pass
-  without hand-editing generated artifacts.
+- Historical note: C# host verification was recorded as complete on
+  2026-04-25. The 2026-04-29 audit supersedes that closeout for
+  execution-session request bodies because the native smoke and packaged
+  quickstart examples omit the now-required `workflow_semantic_version` field.
+  Re-run generated/native smoke and packaged quickstart verification after the
+  request bodies are updated.
 - Python remains `unsupported`. The host has `python3`, but the repository has
   no `bindings/python/` package, generated Python artifact, or import/load
   smoke command.
@@ -221,10 +282,13 @@ tests are not supported for the Rustler `cdylib` crate type.
   evidence-based support tiers.
 - Updated `docs/headless-native-bindings.md` so graph-authoring discovery is no
   longer documented as a current gap after the Stage `06` projections.
-- Confirmed support tiers match real host evidence:
+- Historical closeout, superseded for C# execution-session request verification
+  by the 2026-04-29 audit above. Previously confirmed support tiers were:
   - Native Rust: supported for implemented execution-platform surfaces.
   - C#: supported for generated/native surfaces covered by smoke and packaged
-    quickstart verification.
+    quickstart verification. This support claim is now reopened for
+    execution-session run calls until UniFFI/C# request drift is fixed and
+    verified.
   - Python: unsupported until a real generated/native host package and
     import/load smoke command exist.
   - Elixir/BEAM: experimental on this host because `mix` is unavailable.
@@ -469,6 +533,11 @@ cargo test --workspace --doc
 - Verification covers native contract logic, runtime-managed observability, and
   language-native host tests for every supported C#, Python, and BEAM binding
   surface.
+- UniFFI and C# session-run request bodies include
+  `workflow_semantic_version` and pass the current workflow-service validation
+  contract.
+- UniFFI graph persistence tests use workflow identities that satisfy current
+  Pantograph validation rules.
 - The stage-start implementation gate in
   `08-stage-start-implementation-gate.md` is recorded before source edits.
 - The stage-end refactor gate in `09-stage-end-refactor-gate.md` is completed

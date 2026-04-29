@@ -40,7 +40,7 @@ cursors.
 
 ## Required Plan Controls Added
 
-- `diagnostic-event-ledger-architecture.md` now defines `event_seq`,
+- The consolidated Stage `12` plan now defines `event_seq`,
   `projection_state`, hot/warm/cold projection classes, terminal summary rows,
   bounded event granularity, and explicit rebuild semantics.
 - Stage `03` now requires projection cursor storage, incremental projection

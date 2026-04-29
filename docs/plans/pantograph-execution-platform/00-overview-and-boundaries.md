@@ -2,13 +2,22 @@
 
 ## Status
 
-Implemented plan set.
+Partially implemented plan set with Stage `06` verification reopened and active
+Stage `11` extension.
 
-Last updated: 2026-04-25.
+Last updated: 2026-04-29.
 
-Stage `01` through Stage `07` are implemented and committed. Stage `08`
-through Stage `10` remain reusable gate and coordination instructions for
-future execution-platform changes.
+Stage `01` through Stage `05` are implemented and verified. Stage `06`
+implementation artifacts are present, but completion is reopened because the
+current UniFFI/C# session-run request examples and tests omit the required
+`workflow_semantic_version` field, and one UniFFI graph-save test uses an
+invalid workflow identity. Stage `07` review output exists but must be refreshed
+after Stage `06` verification passes again. Stage `08` through Stage `10`
+remain reusable gate and coordination instructions for future
+execution-platform changes. Stage `11` is the active extension for
+ArtifactStore, canonical Settings ownership, binary-safe media payloads, and
+managed media dependencies. Stage `12` consolidates the former run-centric GUI
+workbench plan set into execution-platform ownership.
 
 ## Source Documents
 
@@ -18,6 +27,8 @@ future execution-platform changes.
 - `../../headless-embedding-api-v1.md`
 - `../../headless-native-bindings.md`
 - `../../plans/pantograph-binding-platform/final-plan.md`
+- `./12-run-centric-workbench-consolidation.md`
+- `./reviews/run-centric-workbench/`
 - `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/`
 
 ## Objective
@@ -40,7 +51,8 @@ In scope:
 
 - ordered execution-platform planning for attribution, node contracts,
   runtime-managed observability, diagnostics ledger, composition, migration,
-  and binding projections
+  binding projections, artifact/settings/media handling, and run-centric
+  workbench consolidation
 - architecture boundaries that future implementation must preserve
 - standards gates that apply across all numbered plan slices
 
@@ -133,6 +145,60 @@ Owns durable facts:
 Trace events may remain transient, but compliance-relevant model/license usage
 facts must persist.
 
+### ArtifactStore And Media Payload Layer
+
+Owns physical workflow payload bodies for images, audio, video, 3D assets,
+large tables, and generic binary artifacts. JSON is the descriptor/control
+plane only. Workflow outputs, diagnostics, API DTOs, and bindings carry typed
+artifact descriptors, lifecycle state, retention state, hashes, and binary-safe
+read/download/stream handles instead of raw payload bodies.
+
+The ArtifactStore hides whether a payload is in memory, on disk, or later in a
+remote store. Clients must not receive raw filesystem paths, storage-tier
+details, or inline base64 media bodies in normal workflow/API JSON.
+
+### Artifact Format Settings Layer
+
+Owns backend-persistent defaults for artifact output formats and conversion
+settings. The workbench Settings page is the canonical GUI owner for those
+settings and for other Pantograph-wide persistent settings. Existing side-panel,
+runtime-manager, and server-status settings surfaces must be relocated,
+embedded, or retired so multiple persistent settings owners do not coexist.
+
+Feature-local helper settings may remain near their feature only when that
+placement is directly tied to usability, such as search filters, and they do
+not own global persistent configuration.
+
+Format settings and capabilities are backend-owned facts. The frontend must not
+hard-code image/audio/video/3D option lists or infer conversion support from
+browser or host environment capabilities.
+
+### Managed Redistributables Layer
+
+Owns backend-managed redistributable catalogs, downloads, validation,
+installation, selection, activation, and capability projection.
+
+The existing managed-runtime code is the reference pattern, but implementation
+must preserve distinct product categories:
+
+- runtime sidecars, such as llama.cpp and Ollama;
+- tool binaries, such as `ffmpeg`, `ocioconvert`, and `oiiotool`;
+- native library/artifact dependencies, such as OpenColorIO.
+
+Managed redistributable catalogs must include source owner,
+license/redistribution metadata, checksum or signature validation, platform
+support, archive kind, expected files, compatibility state, and release
+version. Required media-dependency platforms follow the current managed-runtime
+support matrix unless a new ADR changes it: Linux x86_64 and Windows x86_64
+are required, while macOS x86_64 and arm64 are best effort with degraded-state
+reporting.
+
+OpenColorIO is a managed native library/artifact dependency, not a Rust-native
+crate and not an unmanaged system install. Any OCIO FFI/native-library loading
+must be isolated behind a thin safe wrapper with ABI/version validation,
+documented lifetime/threading/shutdown rules, and fail-closed behavior for
+missing or incompatible activated artifacts.
+
 ### Adapter And Binding Layer
 
 Owns projection only:
@@ -174,6 +240,9 @@ wait for backend confirmation before changing displayed backend-owned state.
 5. Composition, factoring, and migration.
 6. Binding projections and host verification.
 7. Standards compliance review and plan-set closeout.
+8. ArtifactStore, format settings, canonical Settings ownership, and managed
+   media dependencies when implementing Stage `11`.
+9. Run-centric GUI workbench consolidation when implementing Stage `12`.
 
 Each implementation stage must start by applying
 `08-stage-start-implementation-gate.md` and finish by applying
@@ -197,13 +266,27 @@ must first be expanded using `10-concurrent-phased-implementation.md`.
 - Stage `05`: complete with a separate refactor plan recorded and implemented
   before Stage `06` closeout. ADR-009 records composed-node contracts,
   primitive trace preservation, runtime lineage, and saved-workflow migration.
-- Stage `06`: complete. ADR-010 records binding projection ownership,
-  generated artifact policy, and support tiers. C# is supported for verified
-  generated/native surfaces, Python remains unsupported, and BEAM remains
-  experimental on hosts without `mix` smoke coverage.
-- Stage `07`: complete. The standards compliance review reconciles residual
-  risks with completed implementation evidence and records a `not_warranted`
-  stage-end refactor gate outcome.
+- Stage `06`: reopened. ADR-010 records binding projection ownership,
+  generated artifact policy, and support tiers, and the binding projection code
+  exists. Current verification does not pass: `cargo test -p pantograph-uniffi`
+  fails because UniFFI session-run tests omit required
+  `workflow_semantic_version`, and a graph-save test uses a workflow identity
+  with spaces. C# smoke/quickstart request bodies must be checked against the
+  same contract before C# can be re-marked supported for the affected surface.
+  Python remains unsupported, and BEAM remains experimental on hosts without
+  `mix` smoke coverage.
+- Stage `07`: stale pending refresh. The standards compliance review exists,
+  but its closeout depends on the old Stage `06` completion claim and must be
+  updated after Stage `06` binding verification is corrected.
+- Stage `11`: active extension. It adds ArtifactStore, binary-safe media
+  payload transport, persistent artifact format defaults, canonical workbench
+  Settings ownership, managed OCIO/ffmpeg/OIIO dependencies, and required
+  source-audit/verification gates.
+- Stage `12`: active planned consolidation. It imports the run-centric GUI
+  workbench plan set into this execution-platform directory and records
+  Scheduler-default workbench pages, active-run navigation, API/frontend
+  projections, review findings, and rollout gates as canonical
+  execution-platform requirements.
 
 ## Recorded Implementation Decisions
 
@@ -233,6 +316,11 @@ must first be expanded using `10-concurrent-phased-implementation.md`.
   surfaces, Python remains unsupported until a real generated/native package and
   import/load smoke exist, and BEAM remains experimental until host smoke can
   run with `mix`.
+- Stage `11` keeps media payload bodies out of workflow JSON by introducing a
+  backend-owned ArtifactStore and typed descriptors. It also makes the
+  workbench Settings page the canonical persistent settings surface and requires
+  managed media dependencies to use a generalized/split redistributables
+  boundary rather than runtime-only contracts.
 
 ## Tasks
 
@@ -254,6 +342,9 @@ must first be expanded using `10-concurrent-phased-implementation.md`.
   completed, or broader refactor pressure requires a separate plan.
 - Create or update ADRs at the completion of the stage that first implements an
   architecture-defining decision from this plan set.
+- For Stage `11`, create or update ADRs for ArtifactStore ownership, canonical
+  Settings ownership, managed redistributables generalization, and OCIO
+  FFI/native-library loading when those decisions stabilize.
 
 ## ADR Checkpoints
 
@@ -267,8 +358,10 @@ must first be expanded using `10-concurrent-phased-implementation.md`.
   `../../adr/ADR-008-durable-model-license-diagnostics-ledger.md`.
 - Stage `05`: completed by
   `../../adr/ADR-009-composed-node-contracts-and-migration.md`.
-- Stage `06`: completed by
-  `../../adr/ADR-010-binding-projection-ownership-and-support-tiers.md`.
+- Stage `06`: ownership decision recorded by
+  `../../adr/ADR-010-binding-projection-ownership-and-support-tiers.md`;
+  implementation completion is reopened until UniFFI/C# binding verification
+  passes with the current workflow-run contract.
 
 ## Standards Gates
 

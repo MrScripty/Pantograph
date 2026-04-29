@@ -5,6 +5,30 @@
 Create the durable identity chain required before diagnostics and model/license
 usage records can be reliable.
 
+## Objective
+
+Introduce validated client, session, bucket, workflow, and workflow-run
+attribution records before execution begins so later diagnostics, scheduler,
+and model/license usage facts can join against durable identities.
+
+## Scope
+
+In scope:
+
+- Attribution id types, lifecycle states, credential proof records, and bucket
+  selection semantics.
+- Workflow-service cutover from caller-owned workflow-session execution toward
+  durable client-session and run attribution.
+- SQLite-backed attribution storage, public facade updates, tests, and ADR
+  traceability.
+
+Out of scope:
+
+- Model/license diagnostics ledger implementation.
+- Node contract registry implementation.
+- GUI workbench page implementation.
+- Long-term compatibility wrappers for removed workflow-session public APIs.
+
 ## Implementation Readiness Status
 
 Ready for stage-start preflight after this file's decisions are recorded in the

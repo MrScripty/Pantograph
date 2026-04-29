@@ -9,6 +9,12 @@ This is not a standing refactor plan. It is a repeatable gate for keeping the
 codebase at a standards-compliant starting point between execution-platform
 stages.
 
+## Objective
+
+Force each completed stage to review touched files for standards drift,
+identify whether cleanup is needed, and record either a bounded refactor or an
+explicit no-refactor decision before the next stage begins.
+
 ## Scope
 
 In scope:
@@ -28,6 +34,14 @@ Out of scope:
   touched files
 - launching a broad refactor without first creating a dedicated
   `../../refactors/<refactor-slug>/` plan
+
+## Tasks
+
+1. Identify files touched by the completed stage.
+2. Review touched files against applicable standards.
+3. Decide no refactor, in-scope refactor, or separate refactor plan.
+4. Run verification for the decision.
+5. Record the stage-end report before beginning the next stage.
 
 ## Source Prompt
 

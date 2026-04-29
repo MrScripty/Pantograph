@@ -5,6 +5,28 @@
 Support higher-level graph usability without hiding primitive runtime facts or
 breaking existing persisted workflows unnecessarily.
 
+## Objective
+
+Add composed-node contracts, node factoring, runtime lineage, and clean saved
+workflow migration so graph usability can improve without losing primitive
+diagnostics or accepting stale persisted workflow shapes indefinitely.
+
+## Scope
+
+In scope:
+
+- Composition contracts and primitive trace preservation.
+- Workflow-node factoring and runtime lineage updates.
+- Saved-workflow canonicalization, upgrade records, and typed rejection paths.
+- Migration and compatibility tests for existing persisted workflow artifacts.
+
+Out of scope:
+
+- New GUI workbench page implementation.
+- Host binding projection work.
+- ArtifactStore binary payload handling.
+- Legacy compatibility shims beyond explicit migration or rejection behavior.
+
 ## Implementation Readiness Status
 
 Ready for stage-start preflight after stages `01` through `04` are complete

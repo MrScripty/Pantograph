@@ -76,12 +76,9 @@ editable graph store.
 
 ## Implementation Notes
 - Implementation plans:
-  `docs/plans/run-centric-gui-workbench/03-diagnostics-retention-and-audit-ledgers.md`,
-  `docs/plans/run-centric-gui-workbench/04-api-projections-and-frontend-data-boundaries.md`,
-  `docs/plans/run-centric-gui-workbench/05-app-shell-active-run-navigation.md`,
-  `docs/plans/run-centric-gui-workbench/06-run-centric-page-implementations.md`,
+  `docs/plans/pantograph-execution-platform/12-run-centric-workbench-consolidation.md`
   and
-  `docs/plans/run-centric-gui-workbench/07-verification-rollout-and-refactor-gates.md`.
+  `docs/plans/pantograph-execution-platform/reviews/run-centric-workbench/`.
 - Related workflow versioning decision:
   `docs/adr/ADR-013-workflow-version-registry-and-run-snapshots.md`.
 - Related scheduler ownership decision:

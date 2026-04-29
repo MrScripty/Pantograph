@@ -5,12 +5,53 @@
 Make direct model execution observable and persistently attributable without
 explicit diagnostics nodes.
 
+## Objective
+
+Persist typed model/license usage, output measurement, retention, and query
+projection facts that join against the durable attribution and runtime
+observability foundations from earlier stages.
+
+## Scope
+
+In scope:
+
+- Durable model/license usage ledger records and retention policy.
+- Pumas license snapshot and model metadata attribution.
+- Runtime ledger submission boundary and workflow-service query projections.
+- Verification for typed measurements, unavailable states, pruning, and
+  projection queries.
+
+Out of scope:
+
+- ArtifactStore binary payload body storage.
+- Workbench page implementation.
+- Distributed network diagnostics.
+- Host binding projection implementation.
+
 ## Implementation Readiness Status
 
 Ready for stage-start preflight after stages `01`, `02`, and `03` are complete
 and their stage-end refactor gates have been recorded.
 
 ## Implementation Notes
+
+### 2026-04-29 Stage 11 Extension Note
+
+Stage `04` remains closed for durable model/license usage diagnostics,
+time-of-use license snapshots, output measurements, lineage, retention, and
+query projections. The broader typed diagnostic event and ArtifactStore work is
+now owned by Stage `11`.
+
+Stage `11` must preserve the Stage `04` boundary that durable diagnostics store
+bounded typed facts and references. Image, audio, video, 3D, large table, and
+generic binary payload bodies belong in ArtifactStore, not model/license ledger
+JSON. Diagnostics projections should retain artifact metadata, hashes,
+retention state, actual format/codec settings, and payload references after
+physical payload bodies expire or are deleted.
+
+The Stage `11` source audit must explicitly cover current base64/data-url media
+paths before any implementation claims that media payloads no longer bypass the
+descriptor and binary-safe body boundary.
 
 ### 2026-04-24 Stage-Start Report
 

@@ -9,7 +9,7 @@ Last updated: 2026-04-27.
 ## Purpose
 
 Check the run-centric GUI workbench plans against
-`../../../requirements/pantograph-gui-run-centric-workbench.md`.
+`../../../../requirements/pantograph-gui-run-centric-workbench.md`.
 
 This review records whether the current plan set satisfies the requirements,
 where coverage lives, and which gaps or weak spots were corrected during this
@@ -52,7 +52,7 @@ explicit enough for implementation:
 | Estimates distinguish expected vs observed facts | Covered | `02`, `03` | Estimate/observation separation and projection comparison are planned. |
 | Scheduler derives resources, workflows do not declare authoritative resources | Covered | `02` | Scheduler derives from node/library/runtime/diagnostics facts. |
 | Scheduler authority for reservations/load/unload/placement/order/retry/delay | Covered | `02` | Authority and admin/client boundaries are explicit. |
-| Scheduler events and model load/unload observability | Covered | `02`, `03`, `../diagnostic-event-ledger-architecture.md` | Events use shared typed ledger. Timeline projections may join `run.*` and `node.*`. |
+| Scheduler events and model load/unload observability | Covered | Former `02`, former `03`, Stage `04`, Stage `12` | Events use shared typed ledger. Timeline projections may join `run.*` and `node.*`. |
 | Client/session/bucket/admin controls | Covered | `02`, `04`, `06` | Scoped client actions and privileged GUI/admin actions are planned. |
 | Stable validated workflow identity | Covered | `01` | Exact grammar remains an open implementation decision. |
 | Invalid workflow identity explicit rejection | Covered | `01`, `04` | Error taxonomy and validation tests are planned. |
@@ -70,7 +70,7 @@ explicit enough for implementation:
 | I/O gallery object types and raw fallback | Covered after this pass | `06` | Text, image, audio, video, table, JSON, file, unknown/raw, metadata-only states. |
 | Global retention policy | Covered | `03`, `06` | Global policy, retroactivity, metadata survival, cleanup events. |
 | Retention setting controls | Covered after this pass | `03`, `06` | Concrete settings from requirements are now listed. |
-| Payload expiration with audit metadata retained | Covered | `03`, `../diagnostic-event-ledger-architecture.md` | Payload retention and audit retention are separate. |
+| Payload expiration with audit metadata retained | Covered | Former `03`, Stage `04`, Stage `11`, Stage `12` | Payload retention and audit retention are separate. |
 | Library combines Pumas and Pantograph-owned additions | Covered | `03`, `04`, `06` | Library asset categories and Pumas operations are planned. |
 | Library highlights active-run assets | Covered | `06` | Active-run asset highlighting and usage summaries are planned. |
 | Library facts feed scheduler/diagnostics | Covered | `02`, `03`, `06` | Model sizes/cache/runtime compatibility and historical performance are planned. |

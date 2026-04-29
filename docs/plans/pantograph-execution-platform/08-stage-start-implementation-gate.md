@@ -10,6 +10,12 @@ edited.
 This gate is not an implementation plan by itself. It is the readiness check
 that must pass before executing a stage plan.
 
+## Objective
+
+Define the required preflight gate that every implementation stage must pass
+before editing source code, tests, configs, generated artifacts, or build
+metadata.
+
 ## Scope
 
 In scope:
@@ -78,6 +84,27 @@ Complete these checks before implementation starts:
 11. Confirm the stage has Rust baseline verification or a recorded repo-owned
     equivalent for formatting, clippy, targeted tests, doctests, feature
     checks, and dependency/audit checks when dependencies change.
+12. For Stage `11` or any media/artifact/settings work, confirm the plan has
+    explicit checks for ArtifactStore payload boundaries, canonical workbench
+    Settings ownership, managed redistributable product categories, OCIO
+    FFI/native-library isolation, media dependency supply-chain metadata, and
+    base64/data-url migration.
+13. For Stage `12` or any run-centric GUI work, confirm the consolidated
+    Stage `12` requirements and moved review records under
+    `reviews/run-centric-workbench/` map to execution-platform tasks, Stage
+    `06` and Stage `11` dependency status is known, active-run state remains
+    frontend-transient, page data comes from backend materialized projections,
+    and Settings remains the only persistent global settings owner.
+
+## Tasks
+
+1. Read the selected stage plan and applicable standards.
+2. Inspect worktree state and identify dirty-file overlap.
+3. Confirm write set, verification commands, dependencies, and re-plan
+   triggers.
+4. Decide whether the stage is single-worker or requires the concurrent worker
+   plan.
+5. Record the start outcome before source edits begin.
 
 ## Worktree Hygiene Rules
 
@@ -174,6 +201,8 @@ Record at least:
 - verification commands expected for the stage
 - dependency additions or feature changes and the dependency-standard checks
   required before editing manifests
+- media/artifact/settings-specific boundary checks when Stage `11` or related
+  implementation is selected
 - known blockers or re-plan triggers
 
 ## Verification
@@ -208,6 +237,15 @@ Record at least:
 - Parallel work is needed but write boundaries cannot be made non-overlapping.
 - Parallel work is needed but `10-concurrent-phased-implementation.md` has not
   been applied to the selected stage.
+- Stage `11` implementation cannot identify how old base64/data-url media
+  paths will migrate to ArtifactStore descriptors and binary-safe body APIs.
+- Stage `11` implementation requires unmanaged host PATH or system-library
+  discovery for media conversion dependencies.
+- Stage `12` implementation cannot prove the former run-centric workbench
+  requirements are represented in execution-platform tasks.
+- Stage `12` implementation would make GUI pages read raw diagnostic events,
+  rebuild projections on normal navigation, persist active-run selection, or
+  add another persistent settings owner.
 
 ## Completion Criteria
 

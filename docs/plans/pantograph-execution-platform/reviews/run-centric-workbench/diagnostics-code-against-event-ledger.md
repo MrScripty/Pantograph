@@ -9,8 +9,8 @@ Last updated: 2026-04-27.
 ## Purpose
 
 Compare the current diagnostics implementation against the planned typed
-append-only diagnostic event ledger in
-`../diagnostic-event-ledger-architecture.md`.
+append-only diagnostic event ledger now consolidated by
+`../../12-run-centric-workbench-consolidation.md` and Stage `04`.
 
 The goal is to identify what can be reused, what must move, and where current
 diagnostics behavior would conflict with the new architecture.

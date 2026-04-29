@@ -11,6 +11,12 @@ item 7 of:
 
 `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/prompts/full-codebase-standards-refactor.md`
 
+## Objective
+
+Provide the required structure for concurrent implementation waves so parallel
+workers have non-overlapping write sets, explicit report paths, and a
+host-owned integration sequence.
+
 ## Scope
 
 In scope:
@@ -28,6 +34,15 @@ Out of scope:
 - broad refactor planning unrelated to the selected implementation stage
 - delegating unresolved architecture or ownership decisions to workers
 - allowing workers to write outside assigned ownership boundaries
+
+## Tasks
+
+1. Create a stage-specific implementation-wave folder and coordination ledger.
+2. Define wave specs with worker ownership, write sets, forbidden files,
+   verification, report paths, and integration order.
+3. Run one worker wave at a time from a clean integration base.
+4. Integrate worker outputs one at a time and update the coordination ledger.
+5. Run wave verification before starting the next wave.
 
 ## When To Use
 

@@ -11,8 +11,7 @@ repository root.
 
 | File/Folder | Description |
 | ----------- | ----------- |
-| `pantograph-execution-platform/` | Implemented execution-platform plan set covering attribution, node contracts, runtime observability, diagnostics ledger, composition, bindings, and reusable stage gates. |
-| `run-centric-gui-workbench/` | Draft staged plan set for the scheduler-first GUI workbench, active-run navigation, workflow versioning, scheduler events, retention, Library/Pumas audit, and local-first Network page. |
+| `pantograph-execution-platform/` | Canonical execution-platform plan set covering attribution, node contracts, runtime observability, diagnostics ledger, composition, bindings, reusable stage gates, ArtifactStore/settings/media dependencies, and the consolidated run-centric workbench plan. |
 | `diagnostics-run-history-projection/` | Focused plan for diagnostics run-history projections. |
 | `scheduler-only-workflow-execution/` | Focused plan for scheduler-owned workflow execution behavior. |
 | `workflow-duration-expectations/` | Focused plan for workflow timing expectation behavior. |
@@ -80,10 +79,10 @@ stage-specific implementation reports.
 
 ## Usage Examples
 
-Start broad GUI work from:
+Start broad GUI work from the execution-platform consolidation stage:
 
 ```text
-docs/plans/run-centric-gui-workbench/README.md
+docs/plans/pantograph-execution-platform/12-run-centric-workbench-consolidation.md
 ```
 
 Start execution-platform follow-up work from:

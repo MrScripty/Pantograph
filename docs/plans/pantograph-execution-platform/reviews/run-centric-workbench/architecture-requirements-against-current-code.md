@@ -27,16 +27,17 @@ treats legacy support as optional cleanup, not an architectural requirement.
 
 ## Investigation Scope
 
-Reviewed plan stages:
+Reviewed former run-centric plan stages, now consolidated by
+`../../12-run-centric-workbench-consolidation.md`:
 
-- `../00-overview-and-boundaries.md`
-- `../01-workflow-identity-versioning-and-run-snapshots.md`
-- `../02-scheduler-estimates-events-and-control.md`
-- `../03-diagnostics-retention-and-audit-ledgers.md`
-- `../04-api-projections-and-frontend-data-boundaries.md`
-- `../05-app-shell-active-run-navigation.md`
-- `../06-run-centric-page-implementations.md`
-- `../07-verification-rollout-and-refactor-gates.md`
+- `00-overview-and-boundaries.md`
+- `01-workflow-identity-versioning-and-run-snapshots.md`
+- `02-scheduler-estimates-events-and-control.md`
+- `03-diagnostics-retention-and-audit-ledgers.md`
+- `04-api-projections-and-frontend-data-boundaries.md`
+- `05-app-shell-active-run-navigation.md`
+- `06-run-centric-page-implementations.md`
+- `07-verification-rollout-and-refactor-gates.md`
 
 Reviewed code areas:
 

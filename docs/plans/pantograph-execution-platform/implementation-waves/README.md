@@ -15,10 +15,23 @@ Pantograph execution-platform stages.
 | `04-model-license-diagnostics-ledger/` | Durable usage ledger, retention, and query worker waves. |
 | `05-composition-factoring-and-migration/` | Composition, node factoring, and clean workflow upgrade waves. |
 | `06-binding-projections-and-verification/` | Native Rust base API projection and host binding verification waves. |
+| `11-artifact-format-settings-and-managed-media-dependencies/` | ArtifactStore, canonical Settings ownership, managed media dependency, and API/frontend projection waves. |
+| `12-run-centric-workbench-consolidation/` | Run-centric GUI workbench consolidation, shell/page implementation, and cross-plan verification waves. |
 
 Stage `07` standards compliance review did not receive an implementation-wave
 folder because its stage-start gate selected single-worker documentation review
 instead of concurrent implementation.
+
+Stage `11` has a wave folder because it crosses ArtifactStore, managed
+redistributables, runtime diagnostics, API/bindings, and frontend Settings
+ownership. Start with the serial preflight/source-audit wave before deciding
+whether later waves can run concurrently.
+
+Stage `12` has a wave folder because it consolidates the former run-centric
+workbench plans and crosses backend projections, frontend services/stores,
+app-shell navigation, page implementations, accessibility, and rollout
+verification. Start with a source-audit/crosswalk wave before shell or page
+implementation.
 
 ## Problem
 

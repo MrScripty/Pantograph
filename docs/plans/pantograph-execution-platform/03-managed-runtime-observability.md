@@ -6,12 +6,53 @@ Route standard node execution through a runtime-created context so ordinary
 nodes get diagnostics, attribution, cancellation, progress, and guarantee
 classification without node-authored boilerplate.
 
+## Objective
+
+Make the runtime the owner of execution context, managed capabilities,
+baseline diagnostics, cancellation, progress, and guarantee classification for
+standard node execution.
+
+## Scope
+
+In scope:
+
+- Runtime-created node execution context and managed capability access.
+- Baseline runtime diagnostics and workflow-service projection adapters.
+- Cancellation, progress, guarantee, and lifecycle behavior.
+- Tests proving observability does not depend on node-authored diagnostics
+  boilerplate.
+
+Out of scope:
+
+- Durable model/license ledger storage and queries.
+- ArtifactStore media payload handling.
+- Host binding projection implementation.
+- GUI diagnostics page implementation.
+
 ## Implementation Readiness Status
 
 Ready for stage-start preflight after stages `01` and `02` are complete and
 their stage-end refactor gates have been recorded.
 
 ## Implementation Notes
+
+### 2026-04-29 Stage 11 Extension Note
+
+Stage `03` remains closed for runtime-owned node execution context,
+cancellation/progress, transient diagnostics, managed capability routing, and
+guarantee classification. The active media dependency work belongs to
+Stage `11`, not this closed stage.
+
+Stage `11` may reuse the managed runtime redistributables pattern, but it must
+not force tool binaries or native library artifacts into runtime-only names or
+contracts. Runtime sidecars, tool binaries, and native library/artifact
+dependencies need distinct product categories behind shared backend-managed
+catalog, install, activation, validation, and capability helpers.
+
+OpenColorIO loading is a native-library/FFI boundary owned by Stage `11`.
+Domain runtime observability code must consume validated capability facts and
+safe wrapper results; it must not discover unmanaged system libraries or carry
+unsafe FFI mechanics directly.
 
 ### 2026-04-24 Stage-Start Report
 
