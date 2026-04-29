@@ -21,6 +21,7 @@ import type {
   WorkflowAdminQueueReprioritizeResponse,
   WorkflowExecutionSessionCloseResponse,
   WorkflowExecutionSessionCreateResponse,
+  WorkflowManagedMediaDependencyStatus,
   WorkflowRunResponse,
   WorkflowSessionQueueCancelResponse,
   WorkflowSessionQueuePushFrontResponse,
@@ -670,6 +671,108 @@ test('artifact format settings commands forward backend-owned settings and capab
   }
 });
 
+test('managed media dependency commands forward backend-owned status results', async () => {
+  installWindowMock();
+  const calls: Array<{ cmd: string; args: unknown }> = [];
+  const missingStatus = managedMediaDependencyStatus('missing');
+  const installedStatus = managedMediaDependencyStatus('installed');
+  mockIPC((cmd, args) => {
+    calls.push({ cmd, args });
+    if (cmd === 'workflow_list_managed_media_dependencies') {
+      return [missingStatus];
+    }
+    if (cmd === 'workflow_managed_media_dependency_status') {
+      return missingStatus;
+    }
+    return installedStatus;
+  });
+
+  try {
+    const service = new WorkflowCommandService();
+    const list = await service.listManagedMediaDependencies();
+    const status = await service.managedMediaDependencyStatus('ffmpeg');
+    const installed = await service.installManagedMediaDependencyFromStaging({
+      id: 'ffmpeg',
+      version: '7.1',
+      staging_dir: '/tmp/staged-ffmpeg',
+    });
+    const selected = await service.selectManagedMediaDependencyVersion({
+      id: 'ffmpeg',
+      version: '7.1',
+    });
+    const defaulted = await service.setDefaultManagedMediaDependencyVersion({
+      id: 'ffmpeg',
+      version: '7.1',
+    });
+    const activated = await service.activateManagedMediaDependencyVersion({
+      id: 'ffmpeg',
+      version: '7.1',
+    });
+    const removed = await service.removeManagedMediaDependencyVersion({
+      id: 'ffmpeg',
+      version: '7.1',
+    });
+
+    assert.deepEqual(list, [missingStatus]);
+    assert.deepEqual(status, missingStatus);
+    assert.deepEqual(installed, installedStatus);
+    assert.deepEqual(selected, installedStatus);
+    assert.deepEqual(defaulted, installedStatus);
+    assert.deepEqual(activated, installedStatus);
+    assert.deepEqual(removed, installedStatus);
+    assert.deepEqual(calls, [
+      {
+        cmd: 'workflow_list_managed_media_dependencies',
+        args: {},
+      },
+      {
+        cmd: 'workflow_managed_media_dependency_status',
+        args: {
+          id: 'ffmpeg',
+        },
+      },
+      {
+        cmd: 'workflow_install_managed_media_dependency_from_staging',
+        args: {
+          id: 'ffmpeg',
+          version: '7.1',
+          staging_dir: '/tmp/staged-ffmpeg',
+        },
+      },
+      {
+        cmd: 'workflow_select_managed_media_dependency_version',
+        args: {
+          id: 'ffmpeg',
+          version: '7.1',
+        },
+      },
+      {
+        cmd: 'workflow_set_default_managed_media_dependency_version',
+        args: {
+          id: 'ffmpeg',
+          version: '7.1',
+        },
+      },
+      {
+        cmd: 'workflow_activate_managed_media_dependency_version',
+        args: {
+          id: 'ffmpeg',
+          version: '7.1',
+        },
+      },
+      {
+        cmd: 'workflow_remove_managed_media_dependency_version',
+        args: {
+          id: 'ffmpeg',
+          version: '7.1',
+        },
+      },
+    ]);
+  } finally {
+    clearMocks();
+  }
+});
+
 test('deletePumasModelWithAudit returns backend delete audit result exactly', async () => {
   installWindowMock();
   const calls: Array<{ cmd: string; args: unknown }> = [];
@@ -775,3 +878,58 @@ test('startHfDownloadWithAudit forwards download request and preserves result', 
     clearMocks();
   }
 });
+
+function managedMediaDependencyStatus(
+  state: 'missing' | 'installed',
+): WorkflowManagedMediaDependencyStatus {
+  const installed = state === 'installed';
+  return {
+    id: 'ffmpeg',
+    display_name: 'FFmpeg',
+    category: 'tool_binary',
+    install_state: installed ? 'installed' : 'missing',
+    readiness: installed ? 'ready' : 'missing',
+    available: installed,
+    missing_files: installed ? [] : ['bin/ffmpeg'],
+    catalog: {
+      id: 'ffmpeg',
+      display_name: 'FFmpeg',
+      category: 'tool_binary',
+      source: {
+        owner: 'FFmpeg',
+        project: 'FFmpeg',
+      },
+      license_redistribution:
+        'LGPL-2.1-or-later/GPL-2.0-or-later depending on enabled codecs',
+      platform_key: 'linux-x86_64',
+      version: '7.1',
+      package_kind: 'archive',
+      archive_kind: 'tar_gz',
+      archive_name: null,
+      download_url: null,
+      expected_files: ['bin/ffmpeg'],
+      checksum_sha256: null,
+      signature: null,
+    },
+    selection: {
+      selected_version: installed ? '7.1' : null,
+      active_version: installed ? '7.1' : null,
+      default_version: installed ? '7.1' : null,
+    },
+    versions: installed
+      ? [
+          {
+            version: '7.1',
+            platform_key: 'linux-x86_64',
+            install_root: '/tmp/pantograph/managed/ffmpeg/7.1',
+            expected_files: ['bin/ffmpeg'],
+            missing_files: [],
+            install_state: 'installed',
+            readiness: 'ready',
+            selected: true,
+            active: true,
+          },
+        ]
+      : [],
+  };
+}

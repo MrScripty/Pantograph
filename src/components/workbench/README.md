@@ -20,9 +20,9 @@ later plan stages fill in richer page bodies.
 | `IoInspectorPage.svelte` | Projection-backed I/O artifact browser, retention detail surface, cleanup status surface, and global retention policy form. |
 | `ioInspectorPresenters.ts` | Pure I/O media, payload availability, retention policy/cleanup detail, byte-size, and projection freshness presenters. |
 | `ioInspectorPresenters.test.ts` | Unit coverage for I/O Inspector presentation labels. |
-| `SettingsPage.svelte` | Canonical workbench Settings page for ArtifactStore policy and artifact format defaults/capabilities. |
-| `settingsPagePresenters.ts` | Pure Settings page byte/duration labels, capability option labels, policy rows, and numeric field validation helpers. |
-| `settingsPagePresenters.test.ts` | Unit coverage for Settings page presentation labels and validation helpers. |
+| `SettingsPage.svelte` | Canonical workbench Settings page for ArtifactStore policy, artifact format defaults/capabilities, and managed media dependency controls. |
+| `settingsPagePresenters.ts` | Pure Settings page byte/duration labels, capability option labels, policy rows, managed media dependency rows, and numeric field validation helpers. |
+| `settingsPagePresenters.test.ts` | Unit coverage for Settings page presentation labels, managed media dependency labels, and validation helpers. |
 | `LibraryPage.svelte` | Projection-backed Library usage and audit table with active-run highlighting and audited Pumas search/download/delete actions. |
 | `libraryUsagePresenters.ts` | Pure Library category, active-run match, network byte, and projection freshness presenters. |
 | `libraryUsagePresenters.test.ts` | Unit coverage for Library page presentation labels and active-run matching. |
@@ -62,6 +62,9 @@ grow separate navigation and selection models.
   ArtifactStore policy and artifact format defaults. It must call typed
   backend commands and capability DTOs instead of hardcoding media option
   lists.
+- Managed media dependency controls for `ffmpeg`, `ocioconvert`, `oiiotool`,
+  and OpenColorIO must stay on the workbench Settings page and use backend
+  command responses as the source of truth.
 - Historic run graph rendering must use immutable run graph projections and
   must not mutate the current editor store.
 - Network pages must distinguish unavailable platform metrics from zero values.
@@ -235,6 +238,10 @@ transient UI state without becoming backend scheduler policy.
   saved through `workflowService.artifactFormatSettings` and
   `workflowService.updateArtifactFormatSettings`; selectable options come from
   `workflowService.artifactFormatCapabilities`.
+- `SettingsPage.svelte` lists managed media dependencies through
+  `workflowService.listManagedMediaDependencies` and updates dependency rows
+  only from backend status responses returned by install/select/default/
+  activate/remove commands.
 - Retention policy saves call `workflowService.updateRetentionPolicy` and
   update displayed state only from the backend response. The page may show a
   saving state, but it must not apply the requested policy as if it were

@@ -2,16 +2,23 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  buildManagedMediaDependencyRows,
   buildArtifactPolicyRows,
   findFormatOption,
+  formatManagedMediaDependencyStatus,
   formatOptionItems,
   formatRangeLabel,
   formatSettingsBytes,
   formatSettingsSeconds,
+  managedMediaVersionOptions,
+  managedMediaVersionStatusLabel,
   optionValuesWithCurrent,
   parseNullableIntegerField,
 } from './settingsPagePresenters.ts';
-import type { WorkflowMediaFormatOption } from '../../services/workflow/types.ts';
+import type {
+  WorkflowManagedMediaDependencyStatus,
+  WorkflowMediaFormatOption,
+} from '../../services/workflow/types.ts';
 
 const jpgOption: WorkflowMediaFormatOption = {
   format_id: 'jpg',
@@ -127,3 +134,74 @@ test('nullable integer parsing accepts blank optional values and reports simple 
     error: 'Quality must be at most 100',
   });
 });
+
+test('managed media dependency presenters expose backend status and version facts', () => {
+  const dependency = managedMediaDependencyStatus();
+
+  assert.deepEqual(formatManagedMediaDependencyStatus(dependency), {
+    installLabel: 'Installed',
+    readinessLabel: 'Ready',
+    categoryLabel: 'Tool Binary',
+    packageLabel: 'Archive',
+    statusClass: 'border-emerald-800 bg-emerald-950/40 text-emerald-200',
+  });
+
+  const rows = buildManagedMediaDependencyRows(dependency);
+  assert.equal(rows.find((row) => row.label === 'Source')?.value, 'FFmpeg/FFmpeg');
+  assert.equal(rows.find((row) => row.label === 'Catalog Version')?.value, '7.1');
+  assert.equal(rows.find((row) => row.label === 'Selected')?.value, '7.1');
+  assert.equal(rows.find((row) => row.label === 'Installed Versions')?.value, '1');
+
+  assert.deepEqual(managedMediaVersionOptions(dependency), ['7.1']);
+  assert.equal(managedMediaVersionStatusLabel(dependency.versions[0]), '7.1 | active | selected');
+});
+
+function managedMediaDependencyStatus(): WorkflowManagedMediaDependencyStatus {
+  return {
+    id: 'ffmpeg',
+    display_name: 'FFmpeg',
+    category: 'tool_binary',
+    install_state: 'installed',
+    readiness: 'ready',
+    available: true,
+    missing_files: [],
+    catalog: {
+      id: 'ffmpeg',
+      display_name: 'FFmpeg',
+      category: 'tool_binary',
+      source: {
+        owner: 'FFmpeg',
+        project: 'FFmpeg',
+      },
+      license_redistribution:
+        'LGPL-2.1-or-later/GPL-2.0-or-later depending on enabled codecs',
+      platform_key: 'linux-x86_64',
+      version: '7.1',
+      package_kind: 'archive',
+      archive_kind: 'tar_gz',
+      archive_name: null,
+      download_url: null,
+      expected_files: ['bin/ffmpeg'],
+      checksum_sha256: null,
+      signature: null,
+    },
+    selection: {
+      selected_version: '7.1',
+      active_version: '7.1',
+      default_version: '7.1',
+    },
+    versions: [
+      {
+        version: '7.1',
+        platform_key: 'linux-x86_64',
+        install_root: '/tmp/pantograph/managed/ffmpeg/7.1',
+        expected_files: ['bin/ffmpeg'],
+        missing_files: [],
+        install_state: 'installed',
+        readiness: 'ready',
+        selected: true,
+        active: true,
+      },
+    ],
+  };
+}

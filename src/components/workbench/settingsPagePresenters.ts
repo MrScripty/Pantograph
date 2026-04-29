@@ -1,4 +1,6 @@
 import type {
+  WorkflowManagedMediaDependencyStatus,
+  WorkflowManagedMediaDependencyVersionStatus,
   WorkflowArtifactPolicy,
   WorkflowMediaFormatOption,
 } from '../../services/workflow/types';
@@ -14,6 +16,14 @@ export interface SettingsPolicyRow {
   label: string;
   value: string;
   mono?: boolean;
+}
+
+export interface ManagedMediaDependencyStatusPresentation {
+  installLabel: string;
+  readinessLabel: string;
+  categoryLabel: string;
+  packageLabel: string;
+  statusClass: string;
 }
 
 export interface NullableIntegerParseResult {
@@ -59,6 +69,69 @@ export function formatSettingsSeconds(seconds: number | null | undefined): strin
 
 export function formatBooleanPolicy(value: boolean): string {
   return value ? 'Enabled' : 'Disabled';
+}
+
+export function formatManagedMediaDependencyStatus(
+  dependency: WorkflowManagedMediaDependencyStatus,
+): ManagedMediaDependencyStatusPresentation {
+  return {
+    installLabel: titleCaseSnakeLabel(dependency.install_state),
+    readinessLabel: titleCaseSnakeLabel(dependency.readiness),
+    categoryLabel: titleCaseSnakeLabel(dependency.category),
+    packageLabel: titleCaseSnakeLabel(dependency.catalog.package_kind),
+    statusClass: managedMediaDependencyStatusClass(dependency),
+  };
+}
+
+export function buildManagedMediaDependencyRows(
+  dependency: WorkflowManagedMediaDependencyStatus,
+): SettingsPolicyRow[] {
+  return [
+    { label: 'Source', value: `${dependency.catalog.source.owner}/${dependency.catalog.source.project}` },
+    { label: 'Catalog Version', value: dependency.catalog.version, mono: true },
+    { label: 'Platform', value: dependency.catalog.platform_key, mono: true },
+    { label: 'Package', value: titleCaseSnakeLabel(dependency.catalog.package_kind) },
+    { label: 'Archive', value: dependency.catalog.archive_kind ? titleCaseSnakeLabel(dependency.catalog.archive_kind) : 'None' },
+    { label: 'Selected', value: dependency.selection.selected_version ?? 'None', mono: true },
+    { label: 'Active', value: dependency.selection.active_version ?? 'None', mono: true },
+    { label: 'Default', value: dependency.selection.default_version ?? 'None', mono: true },
+    { label: 'Installed Versions', value: String(dependency.versions.length), mono: true },
+  ];
+}
+
+export function managedMediaVersionOptions(
+  dependency: WorkflowManagedMediaDependencyStatus,
+): string[] {
+  const versions = dependency.versions.map((version) => version.version);
+  return optionValuesWithCurrent(versions, dependency.selection.selected_version);
+}
+
+export function managedMediaVersionStatusLabel(
+  version: WorkflowManagedMediaDependencyVersionStatus,
+): string {
+  const labels = [version.version];
+  if (version.active) {
+    labels.push('active');
+  }
+  if (version.selected) {
+    labels.push('selected');
+  }
+  if (version.readiness !== 'ready') {
+    labels.push(titleCaseSnakeLabel(version.readiness).toLowerCase());
+  }
+  return labels.join(' | ');
+}
+
+export function managedMediaDependencyStatusClass(
+  dependency: WorkflowManagedMediaDependencyStatus,
+): string {
+  if (dependency.readiness === 'ready' && dependency.install_state === 'installed') {
+    return 'border-emerald-800 bg-emerald-950/40 text-emerald-200';
+  }
+  if (dependency.install_state === 'unsupported' || dependency.readiness === 'unsupported') {
+    return 'border-neutral-700 bg-neutral-900 text-neutral-400';
+  }
+  return 'border-amber-800 bg-amber-950/40 text-amber-200';
 }
 
 export function buildArtifactPolicyRows(policy: WorkflowArtifactPolicy | null): SettingsPolicyRow[] {
@@ -179,4 +252,12 @@ export function parseNullableIntegerField(
   }
 
   return { value, error: null };
+}
+
+function titleCaseSnakeLabel(value: string): string {
+  return value
+    .split('_')
+    .filter((part) => part.length > 0)
+    .map((part) => `${part[0].toUpperCase()}${part.slice(1)}`)
+    .join(' ');
 }

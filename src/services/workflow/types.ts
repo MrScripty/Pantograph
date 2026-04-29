@@ -807,6 +807,104 @@ export interface WorkflowArtifactFormatCapabilities {
   three_d_formats: WorkflowMediaFormatOption[];
 }
 
+export type WorkflowManagedMediaDependencyId =
+  | 'ffmpeg'
+  | 'ocioconvert'
+  | 'oiiotool'
+  | 'open_color_io';
+
+export type WorkflowManagedMediaDependencyCategory =
+  | 'tool_binary'
+  | 'native_library_artifact';
+
+export type WorkflowManagedMediaDependencyInstallState =
+  | 'installed'
+  | 'missing'
+  | 'unsupported';
+
+export type WorkflowManagedMediaDependencyReadiness =
+  | 'missing'
+  | 'ready'
+  | 'unsupported';
+
+export type WorkflowManagedMediaDependencyPackageKind =
+  | 'archive'
+  | 'native_package';
+
+export type WorkflowManagedMediaDependencyArchiveKind =
+  | 'tar_gz'
+  | 'tar_xz'
+  | 'zip';
+
+export interface WorkflowManagedMediaDependencySource {
+  owner: string;
+  project: string;
+}
+
+export interface WorkflowManagedMediaDependencyCatalogEntry {
+  id: WorkflowManagedMediaDependencyId;
+  display_name: string;
+  category: WorkflowManagedMediaDependencyCategory;
+  source: WorkflowManagedMediaDependencySource;
+  license_redistribution: string;
+  platform_key: string;
+  version: string;
+  package_kind: WorkflowManagedMediaDependencyPackageKind;
+  archive_kind?: WorkflowManagedMediaDependencyArchiveKind | null;
+  archive_name?: string | null;
+  download_url?: string | null;
+  expected_files: string[];
+  checksum_sha256?: string | null;
+  signature?: string | null;
+}
+
+export interface WorkflowManagedMediaDependencySelection {
+  selected_version?: string | null;
+  active_version?: string | null;
+  default_version?: string | null;
+}
+
+export interface WorkflowManagedMediaDependencyVersionStatus {
+  version: string;
+  platform_key: string;
+  install_root: string;
+  expected_files: string[];
+  missing_files: string[];
+  install_state: WorkflowManagedMediaDependencyInstallState;
+  readiness: WorkflowManagedMediaDependencyReadiness;
+  selected: boolean;
+  active: boolean;
+}
+
+export interface WorkflowManagedMediaDependencyStatus {
+  id: WorkflowManagedMediaDependencyId;
+  display_name: string;
+  category: WorkflowManagedMediaDependencyCategory;
+  install_state: WorkflowManagedMediaDependencyInstallState;
+  readiness: WorkflowManagedMediaDependencyReadiness;
+  available: boolean;
+  missing_files: string[];
+  catalog: WorkflowManagedMediaDependencyCatalogEntry;
+  selection: WorkflowManagedMediaDependencySelection;
+  versions: WorkflowManagedMediaDependencyVersionStatus[];
+}
+
+export interface WorkflowManagedMediaDependencyInstallFromStagingRequest {
+  id: WorkflowManagedMediaDependencyId;
+  version: string;
+  staging_dir: string;
+}
+
+export interface WorkflowManagedMediaDependencyVersionSelectionRequest {
+  id: WorkflowManagedMediaDependencyId;
+  version?: string | null;
+}
+
+export interface WorkflowManagedMediaDependencyVersionActionRequest {
+  id: WorkflowManagedMediaDependencyId;
+  version: string;
+}
+
 export interface WorkflowArtifactStoreStats {
   artifact_count: number;
   retained_body_count: number;

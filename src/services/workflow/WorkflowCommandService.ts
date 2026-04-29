@@ -40,6 +40,11 @@ import type {
   WorkflowExecutionSessionCreateRequest,
   WorkflowExecutionSessionCreateResponse,
   WorkflowExecutionSessionRunRequest,
+  WorkflowManagedMediaDependencyId,
+  WorkflowManagedMediaDependencyInstallFromStagingRequest,
+  WorkflowManagedMediaDependencyStatus,
+  WorkflowManagedMediaDependencyVersionActionRequest,
+  WorkflowManagedMediaDependencyVersionSelectionRequest,
   WorkflowRunResponse,
   WorkflowSessionQueueCancelRequest,
   WorkflowSessionQueueCancelResponse,
@@ -414,6 +419,110 @@ export class WorkflowCommandService extends WorkflowProjectionService {
     );
   }
 
+  async listManagedMediaDependencies(): Promise<WorkflowManagedMediaDependencyStatus[]> {
+    if (USE_WORKFLOW_MOCKS) {
+      return mockManagedMediaDependencies();
+    }
+
+    return invokeWorkflowCommand<WorkflowManagedMediaDependencyStatus[]>(
+      'workflow_list_managed_media_dependencies',
+    );
+  }
+
+  async managedMediaDependencyStatus(
+    id: WorkflowManagedMediaDependencyId,
+  ): Promise<WorkflowManagedMediaDependencyStatus> {
+    if (USE_WORKFLOW_MOCKS) {
+      return mockManagedMediaDependencyStatus(id);
+    }
+
+    return invokeWorkflowCommand<WorkflowManagedMediaDependencyStatus>(
+      'workflow_managed_media_dependency_status',
+      { id },
+    );
+  }
+
+  async installManagedMediaDependencyFromStaging(
+    request: WorkflowManagedMediaDependencyInstallFromStagingRequest,
+  ): Promise<WorkflowManagedMediaDependencyStatus> {
+    if (USE_WORKFLOW_MOCKS) {
+      return mockManagedMediaDependencyStatus(request.id, request.version);
+    }
+
+    return invokeWorkflowCommand<WorkflowManagedMediaDependencyStatus>(
+      'workflow_install_managed_media_dependency_from_staging',
+      {
+        id: request.id,
+        version: request.version,
+        staging_dir: request.staging_dir,
+      },
+    );
+  }
+
+  async selectManagedMediaDependencyVersion(
+    request: WorkflowManagedMediaDependencyVersionSelectionRequest,
+  ): Promise<WorkflowManagedMediaDependencyStatus> {
+    if (USE_WORKFLOW_MOCKS) {
+      return mockManagedMediaDependencyStatus(request.id, request.version ?? undefined);
+    }
+
+    return invokeWorkflowCommand<WorkflowManagedMediaDependencyStatus>(
+      'workflow_select_managed_media_dependency_version',
+      {
+        id: request.id,
+        version: request.version,
+      },
+    );
+  }
+
+  async setDefaultManagedMediaDependencyVersion(
+    request: WorkflowManagedMediaDependencyVersionSelectionRequest,
+  ): Promise<WorkflowManagedMediaDependencyStatus> {
+    if (USE_WORKFLOW_MOCKS) {
+      return mockManagedMediaDependencyStatus(request.id, request.version ?? undefined);
+    }
+
+    return invokeWorkflowCommand<WorkflowManagedMediaDependencyStatus>(
+      'workflow_set_default_managed_media_dependency_version',
+      {
+        id: request.id,
+        version: request.version,
+      },
+    );
+  }
+
+  async activateManagedMediaDependencyVersion(
+    request: WorkflowManagedMediaDependencyVersionActionRequest,
+  ): Promise<WorkflowManagedMediaDependencyStatus> {
+    if (USE_WORKFLOW_MOCKS) {
+      return mockManagedMediaDependencyStatus(request.id, request.version);
+    }
+
+    return invokeWorkflowCommand<WorkflowManagedMediaDependencyStatus>(
+      'workflow_activate_managed_media_dependency_version',
+      {
+        id: request.id,
+        version: request.version,
+      },
+    );
+  }
+
+  async removeManagedMediaDependencyVersion(
+    request: WorkflowManagedMediaDependencyVersionActionRequest,
+  ): Promise<WorkflowManagedMediaDependencyStatus> {
+    if (USE_WORKFLOW_MOCKS) {
+      return mockManagedMediaDependencyStatus(request.id);
+    }
+
+    return invokeWorkflowCommand<WorkflowManagedMediaDependencyStatus>(
+      'workflow_remove_managed_media_dependency_version',
+      {
+        id: request.id,
+        version: request.version,
+      },
+    );
+  }
+
   async deletePumasModelWithAudit(modelId: string): Promise<PumasModelDeleteAuditResponse> {
     if (USE_WORKFLOW_MOCKS) {
       return {
@@ -589,4 +698,124 @@ function mockMediaFormatOption(
     provided_by_dependency_id: options.provided_by_dependency_id ?? 'mock',
     provided_by_version: options.provided_by_version ?? null,
   };
+}
+
+function mockManagedMediaDependencies(): WorkflowManagedMediaDependencyStatus[] {
+  return [
+    mockManagedMediaDependencyStatus('ffmpeg', '7.1'),
+    mockManagedMediaDependencyStatus('ocioconvert'),
+    mockManagedMediaDependencyStatus('oiiotool'),
+    mockManagedMediaDependencyStatus('open_color_io'),
+  ];
+}
+
+function mockManagedMediaDependencyStatus(
+  id: WorkflowManagedMediaDependencyId,
+  installedVersion?: string,
+): WorkflowManagedMediaDependencyStatus {
+  const catalogVersion = managedMediaCatalogVersion(id);
+  const version = installedVersion ?? catalogVersion;
+  const installed = installedVersion !== undefined;
+  const missingFiles = installed ? [] : managedMediaExpectedFiles(id);
+  const category = id === 'open_color_io' ? 'native_library_artifact' : 'tool_binary';
+
+  return {
+    id,
+    display_name: managedMediaDisplayName(id),
+    category,
+    install_state: installed ? 'installed' : 'missing',
+    readiness: installed ? 'ready' : 'missing',
+    available: installed,
+    missing_files: missingFiles,
+    catalog: {
+      id,
+      display_name: managedMediaDisplayName(id),
+      category,
+      source: managedMediaSource(id),
+      license_redistribution: id === 'ffmpeg'
+        ? 'LGPL-2.1-or-later/GPL-2.0-or-later depending on enabled codecs'
+        : 'BSD-3-Clause',
+      platform_key: 'mock-linux-x86_64',
+      version: catalogVersion,
+      package_kind: id === 'open_color_io' ? 'native_package' : 'archive',
+      archive_kind: id === 'open_color_io' ? null : 'tar_gz',
+      archive_name: null,
+      download_url: null,
+      expected_files: managedMediaExpectedFiles(id),
+      checksum_sha256: null,
+      signature: null,
+    },
+    selection: {
+      selected_version: installed ? version : null,
+      active_version: installed ? version : null,
+      default_version: installed ? version : null,
+    },
+    versions: installed
+      ? [
+          {
+            version,
+            platform_key: 'mock-linux-x86_64',
+            install_root: `/mock/pantograph/managed-media/${id}/${version}`,
+            expected_files: managedMediaExpectedFiles(id),
+            missing_files: [],
+            install_state: 'installed',
+            readiness: 'ready',
+            selected: true,
+            active: true,
+          },
+        ]
+      : [],
+  };
+}
+
+function managedMediaDisplayName(id: WorkflowManagedMediaDependencyId): string {
+  switch (id) {
+    case 'ffmpeg':
+      return 'FFmpeg';
+    case 'ocioconvert':
+      return 'ocioconvert';
+    case 'oiiotool':
+      return 'oiiotool';
+    case 'open_color_io':
+      return 'OpenColorIO';
+  }
+}
+
+function managedMediaCatalogVersion(id: WorkflowManagedMediaDependencyId): string {
+  switch (id) {
+    case 'ffmpeg':
+      return '7.1';
+    case 'ocioconvert':
+    case 'open_color_io':
+      return '2.4.2';
+    case 'oiiotool':
+      return '3.0.0';
+  }
+}
+
+function managedMediaExpectedFiles(id: WorkflowManagedMediaDependencyId): string[] {
+  switch (id) {
+    case 'ffmpeg':
+      return ['bin/ffmpeg'];
+    case 'ocioconvert':
+      return ['bin/ocioconvert'];
+    case 'oiiotool':
+      return ['bin/oiiotool'];
+    case 'open_color_io':
+      return ['lib/OpenColorIO'];
+  }
+}
+
+function managedMediaSource(
+  id: WorkflowManagedMediaDependencyId,
+): { owner: string; project: string } {
+  switch (id) {
+    case 'ffmpeg':
+      return { owner: 'FFmpeg', project: 'FFmpeg' };
+    case 'oiiotool':
+      return { owner: 'AcademySoftwareFoundation', project: 'OpenImageIO' };
+    case 'ocioconvert':
+    case 'open_color_io':
+      return { owner: 'AcademySoftwareFoundation', project: 'OpenColorIO' };
+  }
 }

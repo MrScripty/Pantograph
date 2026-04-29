@@ -1,18 +1,24 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { RefreshCw, Save, Settings } from 'lucide-svelte';
+  import { Play, RefreshCw, Save, Settings, Trash2, Upload, X } from 'lucide-svelte';
   import type {
     WorkflowArtifactFormatCapabilities,
     WorkflowArtifactFormatSettings,
     WorkflowArtifactPolicy,
+    WorkflowManagedMediaDependencyId,
+    WorkflowManagedMediaDependencyStatus,
     WorkflowMediaFormatOption,
   } from '../../services/workflow/types';
   import { workflowService } from '../../services/workflow/WorkflowService';
   import {
     buildArtifactPolicyRows,
+    buildManagedMediaDependencyRows,
     findFormatOption,
+    formatManagedMediaDependencyStatus,
     formatOptionItems,
     formatRangeLabel,
+    managedMediaVersionOptions,
+    managedMediaVersionStatusLabel,
     optionValuesWithCurrent,
     parseNullableIntegerField,
   } from './settingsPagePresenters';
@@ -49,18 +55,29 @@
     };
   }
 
+  interface ManagedMediaDependencyDraft {
+    version: string;
+    staging_dir: string;
+    selected_version: string;
+  }
+
   let policy = $state<WorkflowArtifactPolicy | null>(null);
   let capabilities = $state<WorkflowArtifactFormatCapabilities | null>(null);
+  let managedMediaDependencies = $state<WorkflowManagedMediaDependencyStatus[]>([]);
+  let managedMediaDrafts = $state<Record<string, ManagedMediaDependencyDraft>>({});
   let policyDraft = $state<ArtifactPolicyDraft>(emptyPolicyDraft());
   let formatDraft = $state<ArtifactFormatDraft>(defaultFormatDraft());
   let loading = $state(false);
   let savingPolicy = $state(false);
   let savingFormats = $state(false);
+  let managedMediaActionKey = $state<string | null>(null);
   let pageError = $state<string | null>(null);
   let policyError = $state<string | null>(null);
   let formatError = $state<string | null>(null);
+  let managedMediaError = $state<string | null>(null);
   let policyMessage = $state<string | null>(null);
   let formatMessage = $state<string | null>(null);
+  let managedMediaMessage = $state<string | null>(null);
 
   let policyRows = $derived(buildArtifactPolicyRows(policy));
   let imageFormatOptions = $derived(
@@ -106,18 +123,23 @@
     pageError = null;
     policyError = null;
     formatError = null;
+    managedMediaError = null;
     policyMessage = null;
     formatMessage = null;
+    managedMediaMessage = null;
     try {
-      const [loadedPolicy, loadedFormats, loadedCapabilities] = await Promise.all([
+      const [loadedPolicy, loadedFormats, loadedCapabilities, loadedDependencies] = await Promise.all([
         workflowService.artifactPolicy(),
         workflowService.artifactFormatSettings(),
         workflowService.artifactFormatCapabilities(),
+        workflowService.listManagedMediaDependencies(),
       ]);
       policy = loadedPolicy;
       policyDraft = policyToDraft(loadedPolicy);
       formatDraft = settingsToDraft(loadedFormats.settings);
       capabilities = loadedCapabilities;
+      managedMediaDependencies = loadedDependencies;
+      managedMediaDrafts = buildManagedMediaDrafts(loadedDependencies);
       normalizeAllFormatDrafts();
     } catch (error) {
       pageError = formatWorkflowCommandError(error);
@@ -179,6 +201,190 @@
     } finally {
       savingFormats = false;
     }
+  }
+
+  async function refreshManagedMediaDependency(id: WorkflowManagedMediaDependencyId): Promise<void> {
+    await runManagedMediaAction(`${id}:refresh`, async () => {
+      const status = await workflowService.managedMediaDependencyStatus(id);
+      replaceManagedMediaDependency(status);
+      managedMediaMessage = `${status.display_name} status refreshed`;
+    });
+  }
+
+  async function installManagedMediaDependency(
+    dependency: WorkflowManagedMediaDependencyStatus,
+  ): Promise<void> {
+    const draft = managedMediaDrafts[dependency.id] ?? emptyManagedMediaDependencyDraft(dependency);
+    const version = draft.version.trim();
+    const stagingDir = draft.staging_dir.trim();
+    if (!version) {
+      managedMediaError = `${dependency.display_name} version is required`;
+      return;
+    }
+    if (!stagingDir) {
+      managedMediaError = `${dependency.display_name} staging directory is required`;
+      return;
+    }
+
+    await runManagedMediaAction(`${dependency.id}:install`, async () => {
+      const status = await workflowService.installManagedMediaDependencyFromStaging({
+        id: dependency.id,
+        version,
+        staging_dir: stagingDir,
+      });
+      replaceManagedMediaDependency(status);
+      managedMediaMessage = `${status.display_name} ${version} installed from staging`;
+    });
+  }
+
+  async function selectManagedMediaDependency(
+    dependency: WorkflowManagedMediaDependencyStatus,
+  ): Promise<void> {
+    const selectedVersion = selectedManagedMediaVersion(dependency);
+    await runManagedMediaAction(`${dependency.id}:select`, async () => {
+      const status = await workflowService.selectManagedMediaDependencyVersion({
+        id: dependency.id,
+        version: selectedVersion,
+      });
+      replaceManagedMediaDependency(status);
+      managedMediaMessage = selectedVersion
+        ? `${status.display_name} selected version ${selectedVersion}`
+        : `${status.display_name} selection cleared`;
+    });
+  }
+
+  async function clearManagedMediaDependencySelection(
+    dependency: WorkflowManagedMediaDependencyStatus,
+  ): Promise<void> {
+    await runManagedMediaAction(`${dependency.id}:clear-select`, async () => {
+      const status = await workflowService.selectManagedMediaDependencyVersion({
+        id: dependency.id,
+        version: null,
+      });
+      replaceManagedMediaDependency(status);
+      managedMediaMessage = `${status.display_name} selection cleared`;
+    });
+  }
+
+  async function setDefaultManagedMediaDependency(
+    dependency: WorkflowManagedMediaDependencyStatus,
+  ): Promise<void> {
+    const selectedVersion = selectedManagedMediaVersion(dependency);
+    await runManagedMediaAction(`${dependency.id}:default`, async () => {
+      const status = await workflowService.setDefaultManagedMediaDependencyVersion({
+        id: dependency.id,
+        version: selectedVersion,
+      });
+      replaceManagedMediaDependency(status);
+      managedMediaMessage = selectedVersion
+        ? `${status.display_name} default version ${selectedVersion}`
+        : `${status.display_name} default cleared`;
+    });
+  }
+
+  async function activateManagedMediaDependency(
+    dependency: WorkflowManagedMediaDependencyStatus,
+  ): Promise<void> {
+    const selectedVersion = selectedManagedMediaVersion(dependency);
+    if (!selectedVersion) {
+      managedMediaError = `${dependency.display_name} needs an installed version to activate`;
+      return;
+    }
+
+    await runManagedMediaAction(`${dependency.id}:activate`, async () => {
+      const status = await workflowService.activateManagedMediaDependencyVersion({
+        id: dependency.id,
+        version: selectedVersion,
+      });
+      replaceManagedMediaDependency(status);
+      managedMediaMessage = `${status.display_name} activated version ${selectedVersion}`;
+    });
+  }
+
+  async function removeManagedMediaDependency(
+    dependency: WorkflowManagedMediaDependencyStatus,
+  ): Promise<void> {
+    const selectedVersion = selectedManagedMediaVersion(dependency);
+    if (!selectedVersion) {
+      managedMediaError = `${dependency.display_name} needs an installed version to remove`;
+      return;
+    }
+
+    await runManagedMediaAction(`${dependency.id}:remove`, async () => {
+      const status = await workflowService.removeManagedMediaDependencyVersion({
+        id: dependency.id,
+        version: selectedVersion,
+      });
+      replaceManagedMediaDependency(status);
+      managedMediaMessage = `${dependency.display_name} removed version ${selectedVersion}`;
+    });
+  }
+
+  async function runManagedMediaAction(actionKey: string, action: () => Promise<void>): Promise<void> {
+    managedMediaActionKey = actionKey;
+    managedMediaError = null;
+    managedMediaMessage = null;
+    try {
+      await action();
+    } catch (error) {
+      managedMediaError = formatWorkflowCommandError(error);
+    } finally {
+      managedMediaActionKey = null;
+    }
+  }
+
+  function replaceManagedMediaDependency(status: WorkflowManagedMediaDependencyStatus): void {
+    managedMediaDependencies = managedMediaDependencies.map((dependency) =>
+      dependency.id === status.id ? status : dependency,
+    );
+    managedMediaDrafts = {
+      ...managedMediaDrafts,
+      [status.id]: managedMediaStatusToDraft(status, managedMediaDrafts[status.id]),
+    };
+  }
+
+  function buildManagedMediaDrafts(
+    dependencies: WorkflowManagedMediaDependencyStatus[],
+  ): Record<string, ManagedMediaDependencyDraft> {
+    return Object.fromEntries(
+      dependencies.map((dependency) => [dependency.id, managedMediaStatusToDraft(dependency)]),
+    );
+  }
+
+  function managedMediaStatusToDraft(
+    dependency: WorkflowManagedMediaDependencyStatus,
+    current?: ManagedMediaDependencyDraft,
+  ): ManagedMediaDependencyDraft {
+    return {
+      version: current?.version.trim() || dependency.catalog.version,
+      staging_dir: current?.staging_dir ?? '',
+      selected_version:
+        dependency.selection.selected_version ??
+        dependency.selection.active_version ??
+        dependency.versions[0]?.version ??
+        '',
+    };
+  }
+
+  function emptyManagedMediaDependencyDraft(
+    dependency: WorkflowManagedMediaDependencyStatus,
+  ): ManagedMediaDependencyDraft {
+    return {
+      version: dependency.catalog.version,
+      staging_dir: '',
+      selected_version: '',
+    };
+  }
+
+  function selectedManagedMediaVersion(
+    dependency: WorkflowManagedMediaDependencyStatus,
+  ): string | null {
+    const selectedVersion = managedMediaDrafts[dependency.id]?.selected_version.trim() ?? '';
+    return selectedVersion.length > 0 ? selectedVersion : null;
+  }
+
+  function managedMediaActionInProgress(id: WorkflowManagedMediaDependencyId): boolean {
+    return managedMediaActionKey?.startsWith(`${id}:`) ?? false;
   }
 
   function parseArtifactPolicyDraft():
@@ -412,7 +618,7 @@
     <div class="min-w-0">
       <h1 class="text-base font-semibold text-neutral-100">Settings</h1>
       <div class="mt-1 truncate text-xs text-neutral-500">
-        ArtifactStore policy and media artifact defaults
+        ArtifactStore policy, media artifact defaults, and managed media dependencies
       </div>
     </div>
     <button
@@ -774,6 +980,197 @@
           </section>
         </div>
       </form>
+
+      <section class="border-t border-neutral-900 px-4 py-4">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 class="text-sm font-semibold text-neutral-100">Managed Media Dependencies</h2>
+            <div class="mt-1 text-xs text-neutral-500">
+              FFmpeg, ocioconvert, oiiotool, and OpenColorIO status/actions from backend commands
+            </div>
+          </div>
+          <button
+            type="button"
+            class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+            onclick={() => refreshSettingsPage()}
+            disabled={loading || managedMediaActionKey !== null}
+          >
+            <RefreshCw size={14} aria-hidden="true" class={loading ? 'animate-spin' : ''} />
+            Refresh Dependencies
+          </button>
+        </div>
+
+        {#if managedMediaError}
+          <div class="mt-3 rounded border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-200" role="alert">
+            {managedMediaError}
+          </div>
+        {:else if managedMediaMessage}
+          <div class="mt-3 rounded border border-emerald-900 bg-emerald-950/30 px-3 py-2 text-sm text-emerald-200" role="status">
+            {managedMediaMessage}
+          </div>
+        {/if}
+
+        <div class="mt-4 grid gap-3">
+          {#each managedMediaDependencies as dependency (dependency.id)}
+            {@const presentation = formatManagedMediaDependencyStatus(dependency)}
+            {@const selectedVersionOptions = managedMediaVersionOptions(dependency)}
+            {@const actionBusy = managedMediaActionInProgress(dependency.id)}
+            <section class="rounded border border-neutral-800 bg-neutral-900/40 p-3">
+              <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <h3 class="text-sm font-medium text-neutral-100">{dependency.display_name}</h3>
+                    <span class={`inline-flex rounded border px-2 py-0.5 text-xs ${presentation.statusClass}`}>
+                      {presentation.readinessLabel}
+                    </span>
+                    <span class="inline-flex rounded border border-neutral-800 bg-neutral-950 px-2 py-0.5 text-xs text-neutral-300">
+                      {presentation.categoryLabel}
+                    </span>
+                  </div>
+                  <div class="mt-1 text-xs text-neutral-500">
+                    {dependency.catalog.source.owner}/{dependency.catalog.source.project} / {presentation.packageLabel} / {dependency.catalog.platform_key}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-2 rounded border border-neutral-700 px-2.5 py-1.5 text-xs text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+                  onclick={() => refreshManagedMediaDependency(dependency.id)}
+                  disabled={loading || actionBusy}
+                >
+                  <RefreshCw size={13} aria-hidden="true" class={actionBusy ? 'animate-spin' : ''} />
+                  Refresh
+                </button>
+              </div>
+
+              <dl class="mt-3 grid gap-2 text-xs md:grid-cols-3 xl:grid-cols-4">
+                {#each buildManagedMediaDependencyRows(dependency) as row (row.label)}
+                  <div class="min-w-0 border-b border-neutral-800 pb-2">
+                    <dt class="text-neutral-500">{row.label}</dt>
+                    <dd class:font-mono={row.mono} class="mt-1 truncate text-neutral-200" title={row.value}>
+                      {row.value}
+                    </dd>
+                  </div>
+                {/each}
+              </dl>
+
+              {#if dependency.missing_files.length > 0}
+                <div class="mt-3 rounded border border-amber-900 bg-amber-950/30 px-3 py-2 text-xs text-amber-200">
+                  Missing: {dependency.missing_files.join(', ')}
+                </div>
+              {/if}
+
+              <div class="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]">
+                <div class="grid gap-3 md:grid-cols-2">
+                  <div>
+                    <label for={`managed-media-version-${dependency.id}`} class="mb-2 block text-xs uppercase text-neutral-500">
+                      Version
+                    </label>
+                    <input
+                      id={`managed-media-version-${dependency.id}`}
+                      type="text"
+                      bind:value={managedMediaDrafts[dependency.id].version}
+                      class="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 font-mono text-xs text-neutral-100 placeholder:text-neutral-600 focus:border-cyan-500 focus:outline-none"
+                      placeholder={dependency.catalog.version}
+                    />
+                  </div>
+                  <div>
+                    <label for={`managed-media-staging-${dependency.id}`} class="mb-2 block text-xs uppercase text-neutral-500">
+                      Staging directory
+                    </label>
+                    <input
+                      id={`managed-media-staging-${dependency.id}`}
+                      type="text"
+                      bind:value={managedMediaDrafts[dependency.id].staging_dir}
+                      class="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 font-mono text-xs text-neutral-100 placeholder:text-neutral-600 focus:border-cyan-500 focus:outline-none"
+                      placeholder="/path/to/staged/package"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label for={`managed-media-selected-${dependency.id}`} class="mb-2 block text-xs uppercase text-neutral-500">
+                    Installed version
+                  </label>
+                  <select
+                    id={`managed-media-selected-${dependency.id}`}
+                    bind:value={managedMediaDrafts[dependency.id].selected_version}
+                    class="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-100 focus:border-cyan-500 focus:outline-none"
+                    disabled={selectedVersionOptions.length === 0}
+                  >
+                    {#if selectedVersionOptions.length === 0}
+                      <option value="">No installed versions</option>
+                    {:else}
+                      {#each selectedVersionOptions as version (version)}
+                        {@const versionStatus = dependency.versions.find((candidate) => candidate.version === version)}
+                        <option value={version}>
+                          {versionStatus ? managedMediaVersionStatusLabel(versionStatus) : version}
+                        </option>
+                      {/each}
+                    {/if}
+                  </select>
+                </div>
+              </div>
+
+              <div class="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-2 rounded border border-cyan-800 bg-cyan-950 px-2.5 py-1.5 text-xs text-cyan-100 transition-colors hover:border-cyan-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+                  onclick={() => installManagedMediaDependency(dependency)}
+                  disabled={loading || actionBusy}
+                >
+                  <Upload size={13} aria-hidden="true" />
+                  Install From Staging
+                </button>
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-2 rounded border border-neutral-700 px-2.5 py-1.5 text-xs text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+                  onclick={() => selectManagedMediaDependency(dependency)}
+                  disabled={loading || actionBusy || selectedVersionOptions.length === 0}
+                >
+                  <Save size={13} aria-hidden="true" />
+                  Select
+                </button>
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-2 rounded border border-neutral-700 px-2.5 py-1.5 text-xs text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+                  onclick={() => setDefaultManagedMediaDependency(dependency)}
+                  disabled={loading || actionBusy || selectedVersionOptions.length === 0}
+                >
+                  <Save size={13} aria-hidden="true" />
+                  Set Default
+                </button>
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-2 rounded border border-emerald-800 bg-emerald-950/50 px-2.5 py-1.5 text-xs text-emerald-100 transition-colors hover:border-emerald-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+                  onclick={() => activateManagedMediaDependency(dependency)}
+                  disabled={loading || actionBusy || selectedVersionOptions.length === 0}
+                >
+                  <Play size={13} aria-hidden="true" />
+                  Activate
+                </button>
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-2 rounded border border-neutral-700 px-2.5 py-1.5 text-xs text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+                  onclick={() => clearManagedMediaDependencySelection(dependency)}
+                  disabled={loading || actionBusy || !dependency.selection.selected_version}
+                >
+                  <X size={13} aria-hidden="true" />
+                  Clear Selection
+                </button>
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-2 rounded border border-red-900 bg-red-950/40 px-2.5 py-1.5 text-xs text-red-100 transition-colors hover:border-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+                  onclick={() => removeManagedMediaDependency(dependency)}
+                  disabled={loading || actionBusy || selectedVersionOptions.length === 0}
+                >
+                  <Trash2 size={13} aria-hidden="true" />
+                  Remove Version
+                </button>
+              </div>
+            </section>
+          {/each}
+        </div>
+      </section>
     </div>
 
     <aside class="min-h-0 overflow-auto border-t border-neutral-800 bg-neutral-950 xl:border-l xl:border-t-0">
