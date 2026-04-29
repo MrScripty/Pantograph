@@ -360,6 +360,20 @@ runtime-only DTO names or host PATH discovery as the source of truth.
   `cargo test -p pantograph-workflow-service artifact_output_conversion`,
   `cargo check -p pantograph-workflow-service`, and targeted `rustfmt
   --edition 2021 --check` for the artifact output conversion file.
+- 2026-04-29 Wave `05` generalized Tauri media stream ArtifactStore
+  conversion passed: `cargo test -p pantograph event_adapter`, `cargo check -p
+  pantograph`, and targeted `cargo fmt --check --` for the owned Tauri
+  event-adapter files.
+- 2026-04-29 Wave `05` embedded Python stream artifactization passed:
+  `cargo test -p pantograph-embedded-runtime recorder_stream`, `cargo check -p
+  pantograph-embedded-runtime`, and targeted `rustfmt --edition 2021 --check`
+  for the owned embedded-runtime stream files.
+- 2026-04-29 Wave `05` embedded stream artifact wiring passed:
+  `cargo test -p pantograph-embedded-runtime
+  runtime_extensions_apply_workflow_service_for_stream_artifacts`,
+  `cargo test -p pantograph-embedded-runtime recorder_stream`, `cargo check -p
+  pantograph-embedded-runtime`, and targeted `rustfmt --edition 2021 --check`
+  for the changed embedded-runtime files.
 - 2026-04-29 Separate clippy cleanup commit cleared existing
   workflow-service lints discovered by the Wave `02` package clippy gate.
 - 2026-04-29 Wave `01` verification passed:

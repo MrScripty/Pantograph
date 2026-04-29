@@ -325,8 +325,10 @@ when physical payload bodies are deleted.
   - [x] Convert buffered Python bridge audio stream output arrays into
     finalized ArtifactStore stream descriptors before workflow-output value
     validation.
-  - [ ] Convert Python bridge streaming and producer-specific streamed preview
-    outputs into ArtifactStore stream lifecycle entries.
+  - [x] Convert direct Python bridge streaming outputs into ArtifactStore
+    stream lifecycle entries in normal embedded-runtime execution paths.
+  - [ ] Convert producer-specific streamed preview outputs into ArtifactStore
+    lifecycle entries once those producers expose preview events.
 - [ ] Represent streaming assets as artifact lifecycle transitions. Diffusion
   preview passes should be child or revision artifacts; audio/video streams
   should publish chunk metadata and stream handles without placing chunk bodies
@@ -337,8 +339,14 @@ when physical payload bodies are deleted.
   - [x] Represent buffered Python bridge audio stream output arrays as
     ArtifactStore open/append/finalize lifecycle transitions before descriptor
     replacement.
-  - [ ] Represent diffusion preview passes and direct Python producer stream
-    outputs as ArtifactStore child/revision artifacts.
+  - [x] Represent direct Python producer audio/image stream chunks as
+    ArtifactStore open/append/finalize lifecycle transitions with bounded
+    metadata and no inline media bodies when the runtime owns an ArtifactStore.
+  - [x] Generalize Tauri live stream body replacement from audio-only chunks to
+    image, audio, video, 3D, and generic binary chunks before diagnostics and
+    frontend event JSON.
+  - [ ] Represent diffusion preview passes as ArtifactStore child/revision
+    artifacts after a diffusion preview producer path exists.
 - [ ] Capture actual output format, codec, quality/compression, bitrate, color
   transform/profile, 3D format, and active converter/library versions in
   artifact descriptors, run snapshots, and diagnostic metadata.
@@ -350,6 +358,8 @@ when physical payload bodies are deleted.
     metadata in artifact descriptors and run snapshots.
   - [x] Capture backend converter identity from selected media capability
     providers in artifact descriptors.
+  - [ ] Capture active converter and library versions from managed dependency
+    activation/lease state when real conversion tooling is invoked.
 - [x] Reject invalid format/codec/quality/bitrate/color/3D settings at
   submission or execution boundaries with typed errors.
   - [x] Validate persistent format defaults and image/audio output-node
