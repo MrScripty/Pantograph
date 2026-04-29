@@ -293,7 +293,11 @@ async fn test_runtime_routes_diffusion_workflow_through_python_adapter() {
 #[tokio::test]
 async fn workflow_run_execution_session_uses_graph_node_type_for_gui_style_input_ids() {
     let temp = TempDir::new().expect("temp dir");
-    write_mock_diffusion_workflow_with_prompt_node(temp.path(), "runtime-diffusion", "prompt-input");
+    write_mock_diffusion_workflow_with_prompt_node(
+        temp.path(),
+        "runtime-diffusion",
+        "prompt-input",
+    );
 
     let app_data_dir = temp.path().join("app-data");
     std::fs::create_dir_all(&app_data_dir).expect("app data dir");
