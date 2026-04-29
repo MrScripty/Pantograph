@@ -1,7 +1,17 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import BaseNode from '../BaseNode.svelte';
-  import type { NodeDefinition } from '../../../services/workflow/types';
-  import { nodeExecutionStates } from '../../../stores/workflowStore';
+  import type {
+    NodeDefinition,
+    WorkflowMediaFormatOption,
+    WorkflowThreeDArtifactFormatSettings,
+  } from '../../../services/workflow/types';
+  import { workflowService } from '../../../services/workflow/WorkflowService';
+  import { nodeExecutionStates, updateNodeData } from '../../../stores/workflowStore';
+
+  interface ThreeDArtifactFormatOverride {
+    format_id: string;
+  }
 
   interface Props {
     id: string;
@@ -12,11 +22,35 @@
         positions: number[][];
         colors: number[][];
       };
+      artifact_format_override?: ThreeDArtifactFormatOverride | null;
     };
     selected?: boolean;
   }
 
+  interface ThreeDFormatConfig {
+    defaults: WorkflowThreeDArtifactFormatSettings;
+    formats: WorkflowMediaFormatOption[];
+  }
+
+  const DEFAULT_SELECTION_VALUE = '__pantograph_default__';
+  let threeDFormatConfigPromise: Promise<ThreeDFormatConfig> | null = null;
+
+  function loadThreeDFormatConfig(): Promise<ThreeDFormatConfig> {
+    threeDFormatConfigPromise ??= Promise.all([
+      workflowService.artifactFormatSettings(),
+      workflowService.artifactFormatCapabilities(),
+    ]).then(([settingsResponse, capabilities]) => ({
+      defaults: settingsResponse.settings.three_d,
+      formats: capabilities.three_d_formats,
+    }));
+    return threeDFormatConfigPromise;
+  }
+
   let { id, data, selected = false }: Props = $props();
+
+  let defaultFormat = $state<WorkflowThreeDArtifactFormatSettings | null>(null);
+  let formatOptions = $state<WorkflowMediaFormatOption[]>([]);
+  let formatLoadError = $state<string | null>(null);
 
   let executionInfo = $derived($nodeExecutionStates.get(id));
   let executionState = $derived(executionInfo?.state || 'idle');
@@ -38,9 +72,87 @@
   let pointCount = $derived(
     data.point_cloud?.positions?.length ?? 0
   );
+  let formatOverride = $derived(normalizeFormatOverride(data.artifact_format_override));
+  let selectedFormatId = $derived(formatOverride?.format_id ?? defaultFormat?.format_id ?? '');
+  let selectableFormats = $derived(formatOptionItems(formatOptions, selectedFormatId));
+  let formatSelectId = $derived(`point-cloud-output-${id}-format`);
+  let isUsingDefaultFormat = $derived(!formatOverride);
 
   let canvasRef: HTMLCanvasElement | undefined = $state();
   let renderError = $state(false);
+
+  function stopControlEvent(event: Event) {
+    event.stopPropagation();
+  }
+
+  function normalizeFormatOverride(value: unknown): ThreeDArtifactFormatOverride | null {
+    if (!value || typeof value !== 'object') return null;
+    const record = value as Record<string, unknown>;
+    const formatId = typeof record.format_id === 'string' ? record.format_id : '';
+    if (!formatId) return null;
+    return { format_id: formatId };
+  }
+
+  function formatOptionItems(
+    options: WorkflowMediaFormatOption[],
+    currentValue: string,
+  ): WorkflowMediaFormatOption[] {
+    if (!currentValue || options.some((option) => option.format_id === currentValue)) {
+      return options;
+    }
+    return [
+      {
+        format_id: currentValue,
+        display_name: `${currentValue} (unsupported)`,
+        media_type: 'unknown',
+        codec_ids: [],
+        quality_min_percent: null,
+        quality_max_percent: null,
+        bitrate_min_kbps: null,
+        bitrate_max_kbps: null,
+        crf_min: null,
+        crf_max: null,
+        bit_depths: [],
+        color_profile_ids: [],
+        provided_by_dependency_id: 'unknown',
+        provided_by_version: null,
+      },
+      ...options,
+    ];
+  }
+
+  function updateFormatOverride(override: ThreeDArtifactFormatOverride | null) {
+    void updateNodeData(id, { artifact_format_override: override });
+  }
+
+  function handleFormatChange(event: Event) {
+    const target = event.currentTarget as HTMLSelectElement | null;
+    const formatId = target?.value ?? DEFAULT_SELECTION_VALUE;
+    if (formatId === DEFAULT_SELECTION_VALUE) {
+      updateFormatOverride(null);
+      return;
+    }
+    updateFormatOverride({ format_id: formatId });
+  }
+
+  onMount(() => {
+    let disposed = false;
+    loadThreeDFormatConfig()
+      .then((config) => {
+        if (disposed) return;
+        defaultFormat = config.defaults;
+        formatOptions = config.formats;
+        formatLoadError = null;
+      })
+      .catch((error: unknown) => {
+        if (disposed) return;
+        formatLoadError = error instanceof Error ? error.message : String(error);
+      });
+
+    return () => {
+      disposed = true;
+    };
+  });
 
   $effect(() => {
     if (!canvasRef || !hasData || !data.point_cloud) {
@@ -195,6 +307,42 @@
           No point cloud yet
         </div>
       {/if}
+
+      <div class="mt-2 space-y-2 border-t border-neutral-700/70 pt-2">
+        <div class="flex items-center justify-between gap-2">
+          <label class="text-[10px] text-neutral-400" for={formatSelectId}>Format</label>
+          {#if isUsingDefaultFormat && defaultFormat}
+            <span class="text-[10px] text-neutral-500">Default {defaultFormat.format_id}</span>
+          {:else if formatOverride}
+            <span class="text-[10px] text-teal-300">Override</span>
+          {/if}
+        </div>
+        <select
+          id={formatSelectId}
+          class="nodrag nopan nowheel w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-xs text-neutral-200 focus:border-teal-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+          value={formatOverride?.format_id ?? DEFAULT_SELECTION_VALUE}
+          disabled={!defaultFormat && !formatOverride}
+          onchange={handleFormatChange}
+          onmousedown={stopControlEvent}
+          onmouseup={stopControlEvent}
+          onpointerdown={stopControlEvent}
+          onpointerup={stopControlEvent}
+          onclickcapture={stopControlEvent}
+        >
+          <option value={DEFAULT_SELECTION_VALUE}>
+            Use default{defaultFormat ? ` (${defaultFormat.format_id})` : ''}
+          </option>
+          {#each selectableFormats as option}
+            <option value={option.format_id}>
+              {option.display_name}
+            </option>
+          {/each}
+        </select>
+
+        {#if formatLoadError}
+          <div class="text-[10px] text-red-300">{formatLoadError}</div>
+        {/if}
+      </div>
   </BaseNode>
 </div>
 

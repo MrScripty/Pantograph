@@ -12,6 +12,7 @@ to the workflow graph runtime instead of being spread across generic canvas code
 | `BooleanInputNode.svelte` | Renders a metadata-driven boolean editor that can bind to any downstream boolean-compatible setting. |
 | `AudioOutputNode.svelte` | Renders playback controls for streamed and final audio outputs, including rerun cleanup of execution-local playback state and explicit artifact format overrides. |
 | `ImageOutputNode.svelte` | Renders image output previews and explicit artifact format overrides for image artifacts. |
+| `PointCloudOutputNode.svelte` | Renders point-cloud previews and explicit artifact format overrides for 3D artifacts. |
 | `DiffusionInferenceNode.svelte` | Shows execution and dependency state for process-backed diffusion image generation. |
 | `DependencyEnvironmentActivityLog.svelte` | Renders the dependency environment activity log and owns log auto-scroll behavior. |
 | `DependencyEnvironmentBindingsPanel.svelte` | Renders binding selection, manual override summary controls, and per-requirement override fields. |
@@ -114,10 +115,10 @@ node persistence.
 The dependency environment node header lives in
 `DependencyEnvironmentNodeHeader.svelte`, keeping icon and title markup separate
 from node state orchestration.
-Image and audio output nodes load backend-owned artifact format defaults and
-capabilities through the workflow service. Their format selectors store only
-explicit per-node overrides in `artifact_format_override`; a missing or `null`
-override means the node uses the canonical backend Settings defaults.
+Image, audio, and point-cloud output nodes load backend-owned artifact format
+defaults and capabilities through the workflow service. Their format selectors
+store only explicit per-node overrides in `artifact_format_override`; a missing
+or `null` override means the node uses the canonical backend Settings defaults.
 
 ## Alternatives Rejected
 - Reset audio output state only by remounting the workflow view.
