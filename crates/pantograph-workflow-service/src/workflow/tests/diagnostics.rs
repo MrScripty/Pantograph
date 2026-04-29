@@ -1335,6 +1335,12 @@ fn sample_io_artifact_event(
             content_hash: Some("blake3:test".to_string()),
             retention_state: Some(IoArtifactRetentionState::Retained),
             retention_reason: None,
+            payload_kind: None,
+            lifecycle_state: None,
+            access_modes: Vec::new(),
+            read_handle: None,
+            stream_handle: None,
+            format: None,
         }),
     }
 }

@@ -280,6 +280,9 @@ when physical payload bodies are deleted.
   consume behavior, and cleanup status.
 - [ ] Store artifact metadata and references in durable diagnostics/run
   projections without placing payload bodies in diagnostic event JSON.
+  - [x] Add typed I/O artifact descriptor metadata to the diagnostics ledger
+    and projection contract, including payload kind, lifecycle, access handles,
+    and format metadata.
 - [ ] Preserve queryable audit metadata after physical payload deletion.
 
 ### Milestone 3: Managed Redistributables
@@ -315,6 +318,8 @@ when physical payload bodies are deleted.
 - [ ] Capture actual output format, codec, quality/compression, bitrate, color
   transform/profile, 3D format, and active converter/library versions in
   artifact descriptors, run snapshots, and diagnostic metadata.
+  - [x] Preserve ArtifactStore descriptor format metadata in the durable I/O
+    artifact diagnostics projection.
 - [ ] Reject invalid format/codec/quality/bitrate/color/3D settings at
   submission or execution boundaries with typed errors.
 

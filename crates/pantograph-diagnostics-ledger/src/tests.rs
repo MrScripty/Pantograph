@@ -7,7 +7,8 @@ use crate::{
     ApplyArtifactRetentionPolicyCommand, DiagnosticEventAppendRequest, DiagnosticEventKind,
     DiagnosticEventPayload, DiagnosticEventPrivacyClass, DiagnosticEventRetentionClass,
     DiagnosticEventSourceComponent, DiagnosticsLedgerError, DiagnosticsLedgerRepository,
-    DiagnosticsQuery, ExecutionGuaranteeLevel, IoArtifactObservedPayload,
+    DiagnosticsQuery, ExecutionGuaranteeLevel, IoArtifactAccessMode, IoArtifactFormatMetadata,
+    IoArtifactLifecycleState, IoArtifactObservedPayload, IoArtifactPayloadKind,
     IoArtifactProjectionQuery, IoArtifactRetentionState, IoArtifactRetentionSummaryQuery,
     IoArtifactRole, LibraryAssetAccessedPayload, LibraryAssetCacheStatus, LibraryAssetOperation,
     LibraryUsageProjectionQuery, LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent,
@@ -1351,6 +1352,26 @@ fn io_artifact_projection_drains_artifact_events_incrementally() {
     assert_eq!(records[1].producer_node_id.as_deref(), Some("node_image"));
     assert_eq!(records[1].producer_port_id.as_deref(), Some("out"));
     assert_eq!(records[1].consumer_node_id, None);
+    assert_eq!(records[1].payload_kind, Some(IoArtifactPayloadKind::Image));
+    assert_eq!(
+        records[1].lifecycle_state,
+        Some(IoArtifactLifecycleState::Retained)
+    );
+    assert_eq!(
+        records[1].access_modes,
+        vec![IoArtifactAccessMode::Read, IoArtifactAccessMode::Download]
+    );
+    assert_eq!(
+        records[1].read_handle.as_deref(),
+        Some("artifact-read://artifact_image")
+    );
+    assert_eq!(
+        records[1]
+            .format
+            .as_ref()
+            .map(|format| format.format_id.as_str()),
+        Some("png")
+    );
 
     let global_records = ledger
         .query_io_artifact_projection(IoArtifactProjectionQuery {
@@ -3137,6 +3158,24 @@ fn sample_io_artifact_event(
             content_hash: Some("blake3:artifact-hash".to_string()),
             retention_state: Some(IoArtifactRetentionState::Retained),
             retention_reason: None,
+            payload_kind: Some(IoArtifactPayloadKind::Image),
+            lifecycle_state: Some(IoArtifactLifecycleState::Retained),
+            access_modes: vec![IoArtifactAccessMode::Read, IoArtifactAccessMode::Download],
+            read_handle: Some(format!("artifact-read://{artifact_id}")),
+            stream_handle: None,
+            format: Some(IoArtifactFormatMetadata {
+                format_id: "png".to_string(),
+                media_type: "image/png".to_string(),
+                codec_id: None,
+                quality_percent: None,
+                bitrate_kbps: None,
+                crf: None,
+                bit_depth: None,
+                color_profile_id: Some("srgb".to_string()),
+                converter_id: None,
+                converter_version: None,
+                library_version: None,
+            }),
         }),
     }
 }

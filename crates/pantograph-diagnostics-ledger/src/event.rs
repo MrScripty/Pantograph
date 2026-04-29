@@ -15,7 +15,7 @@ pub const RUN_LIST_PROJECTION_VERSION: i64 = 5;
 pub const RUN_DETAIL_PROJECTION_NAME: &str = "run_detail";
 pub const RUN_DETAIL_PROJECTION_VERSION: i64 = 4;
 pub const IO_ARTIFACT_PROJECTION_NAME: &str = "io_artifact";
-pub const IO_ARTIFACT_PROJECTION_VERSION: i64 = 4;
+pub const IO_ARTIFACT_PROJECTION_VERSION: i64 = 5;
 pub const LIBRARY_USAGE_PROJECTION_NAME: &str = "library_usage";
 pub const LIBRARY_USAGE_PROJECTION_VERSION: i64 = 1;
 pub const NODE_STATUS_PROJECTION_NAME: &str = "node_status";
@@ -784,6 +784,157 @@ impl IoArtifactRole {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IoArtifactPayloadKind {
+    Text,
+    Image,
+    Audio,
+    Video,
+    #[serde(rename = "3d")]
+    ThreeD,
+    LargeTable,
+    GenericBinary,
+    Structured,
+}
+
+impl IoArtifactPayloadKind {
+    pub(crate) fn as_db(self) -> &'static str {
+        match self {
+            Self::Text => "text",
+            Self::Image => "image",
+            Self::Audio => "audio",
+            Self::Video => "video",
+            Self::ThreeD => "3d",
+            Self::LargeTable => "large_table",
+            Self::GenericBinary => "generic_binary",
+            Self::Structured => "structured",
+        }
+    }
+
+    pub(crate) fn from_db(value: &str) -> Result<Self, DiagnosticsLedgerError> {
+        match value {
+            "text" => Ok(Self::Text),
+            "image" => Ok(Self::Image),
+            "audio" => Ok(Self::Audio),
+            "video" => Ok(Self::Video),
+            "3d" => Ok(Self::ThreeD),
+            "large_table" => Ok(Self::LargeTable),
+            "generic_binary" => Ok(Self::GenericBinary),
+            "structured" => Ok(Self::Structured),
+            _ => Err(DiagnosticsLedgerError::InvalidField {
+                field: "io_artifact_payload_kind",
+            }),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IoArtifactLifecycleState {
+    Declared,
+    Writing,
+    Streaming,
+    Finalizing,
+    Retained,
+    Failed,
+    Expired,
+    Deleted,
+}
+
+impl IoArtifactLifecycleState {
+    pub(crate) fn as_db(self) -> &'static str {
+        match self {
+            Self::Declared => "declared",
+            Self::Writing => "writing",
+            Self::Streaming => "streaming",
+            Self::Finalizing => "finalizing",
+            Self::Retained => "retained",
+            Self::Failed => "failed",
+            Self::Expired => "expired",
+            Self::Deleted => "deleted",
+        }
+    }
+
+    pub(crate) fn from_db(value: &str) -> Result<Self, DiagnosticsLedgerError> {
+        match value {
+            "declared" => Ok(Self::Declared),
+            "writing" => Ok(Self::Writing),
+            "streaming" => Ok(Self::Streaming),
+            "finalizing" => Ok(Self::Finalizing),
+            "retained" => Ok(Self::Retained),
+            "failed" => Ok(Self::Failed),
+            "expired" => Ok(Self::Expired),
+            "deleted" => Ok(Self::Deleted),
+            _ => Err(DiagnosticsLedgerError::InvalidField {
+                field: "io_artifact_lifecycle_state",
+            }),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IoArtifactAccessMode {
+    Read,
+    Download,
+    Stream,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct IoArtifactFormatMetadata {
+    pub format_id: String,
+    pub media_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub codec_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quality_percent: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bitrate_kbps: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crf: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bit_depth: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color_profile_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub converter_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub converter_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub library_version: Option<String>,
+}
+
+impl IoArtifactFormatMetadata {
+    fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        validate_required_text("artifact_format_id", &self.format_id, MAX_ID_LEN)?;
+        validate_required_text("artifact_media_type", &self.media_type, MAX_ID_LEN)?;
+        validate_optional_text("artifact_codec_id", self.codec_id.as_deref(), MAX_ID_LEN)?;
+        validate_optional_text("artifact_bit_depth", self.bit_depth.as_deref(), MAX_ID_LEN)?;
+        validate_optional_text(
+            "artifact_color_profile_id",
+            self.color_profile_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "artifact_converter_id",
+            self.converter_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "artifact_converter_version",
+            self.converter_version.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "artifact_library_version",
+            self.library_version.as_deref(),
+            MAX_ID_LEN,
+        )
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct IoArtifactObservedPayload {
@@ -804,6 +955,18 @@ pub struct IoArtifactObservedPayload {
     pub retention_state: Option<IoArtifactRetentionState>,
     #[serde(default)]
     pub retention_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub payload_kind: Option<IoArtifactPayloadKind>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lifecycle_state: Option<IoArtifactLifecycleState>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub access_modes: Vec<IoArtifactAccessMode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub read_handle: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stream_handle: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format: Option<IoArtifactFormatMetadata>,
 }
 
 impl IoArtifactObservedPayload {
@@ -835,7 +998,13 @@ impl IoArtifactObservedPayload {
             "retention_reason",
             self.retention_reason.as_deref(),
             MAX_JSON_LEN,
-        )
+        )?;
+        validate_optional_text("read_handle", self.read_handle.as_deref(), MAX_JSON_LEN)?;
+        validate_optional_text("stream_handle", self.stream_handle.as_deref(), MAX_JSON_LEN)?;
+        if let Some(format) = &self.format {
+            format.validate()?;
+        }
+        Ok(())
     }
 }
 
@@ -1627,6 +1796,12 @@ pub struct IoArtifactProjectionRecord {
     pub retention_state: IoArtifactRetentionState,
     pub retention_reason: Option<String>,
     pub retention_policy_id: Option<String>,
+    pub payload_kind: Option<IoArtifactPayloadKind>,
+    pub lifecycle_state: Option<IoArtifactLifecycleState>,
+    pub access_modes: Vec<IoArtifactAccessMode>,
+    pub read_handle: Option<String>,
+    pub stream_handle: Option<String>,
+    pub format: Option<IoArtifactFormatMetadata>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

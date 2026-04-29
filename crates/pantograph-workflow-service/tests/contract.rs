@@ -981,6 +981,12 @@ fn workflow_io_artifact_query_contract_snapshot() {
             retention_state: IoArtifactRetentionState::Retained,
             retention_reason: None,
             retention_policy_id: Some("standard-local-v1".to_string()),
+            payload_kind: None,
+            lifecycle_state: None,
+            access_modes: Vec::new(),
+            read_handle: None,
+            stream_handle: None,
+            format: None,
         }],
         retention_summary: vec![IoArtifactRetentionSummaryRecord {
             retention_state: IoArtifactRetentionState::Retained,
@@ -988,7 +994,7 @@ fn workflow_io_artifact_query_contract_snapshot() {
         }],
         projection_state: ProjectionStateRecord {
             projection_name: "io_artifact".to_string(),
-            projection_version: 4,
+            projection_version: 5,
             last_applied_event_seq: 21,
             status: ProjectionStatus::Current,
             rebuilt_at_ms: None,
@@ -1043,7 +1049,13 @@ fn workflow_io_artifact_query_contract_snapshot() {
             "payload_ref": "artifact://artifact-1",
             "retention_state": "retained",
             "retention_reason": null,
-            "retention_policy_id": "standard-local-v1"
+            "retention_policy_id": "standard-local-v1",
+            "payload_kind": null,
+            "lifecycle_state": null,
+            "access_modes": [],
+            "read_handle": null,
+            "stream_handle": null,
+            "format": null
         }],
         "retention_summary": [{
             "retention_state": "retained",
@@ -1051,7 +1063,7 @@ fn workflow_io_artifact_query_contract_snapshot() {
         }],
         "projection_state": {
             "projection_name": "io_artifact",
-            "projection_version": 4,
+            "projection_version": 5,
             "last_applied_event_seq": 21,
             "status": "current",
             "rebuilt_at_ms": null,

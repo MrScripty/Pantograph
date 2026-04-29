@@ -4,8 +4,8 @@ use crate::records::{RetentionClass, DEFAULT_STANDARD_RETENTION_DAYS};
 use crate::util::now_ms;
 use crate::DiagnosticsLedgerError;
 
-pub(crate) const SCHEMA_VERSION: i64 = 21;
-const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v21";
+pub(crate) const SCHEMA_VERSION: i64 = 22;
+const SCHEMA_CHECKSUM: &str = "pantograph-diagnostics-ledger-v22";
 
 pub(crate) fn apply_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {
     tx.execute_batch(
@@ -828,7 +828,13 @@ fn apply_io_artifact_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagn
             payload_ref TEXT,
             retention_state TEXT NOT NULL,
             retention_reason TEXT,
-            retention_policy_id TEXT
+            retention_policy_id TEXT,
+            payload_kind TEXT,
+            lifecycle_state TEXT,
+            access_modes_json TEXT,
+            read_handle TEXT,
+            stream_handle TEXT,
+            format_json TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_io_artifact_projection_run_seq
             ON io_artifact_projection(workflow_run_id, event_seq);
@@ -907,6 +913,21 @@ fn apply_io_artifact_retention_state_migration(
              ADD COLUMN retention_reason TEXT",
             [],
         )?;
+    }
+    for (column, definition) in [
+        ("payload_kind", "TEXT"),
+        ("lifecycle_state", "TEXT"),
+        ("access_modes_json", "TEXT"),
+        ("read_handle", "TEXT"),
+        ("stream_handle", "TEXT"),
+        ("format_json", "TEXT"),
+    ] {
+        if !column_exists(tx, "io_artifact_projection", column)? {
+            tx.execute(
+                &format!("ALTER TABLE io_artifact_projection ADD COLUMN {column} {definition}"),
+                [],
+            )?;
+        }
     }
     tx.execute(
         "CREATE INDEX IF NOT EXISTS idx_io_artifact_projection_retention_state_seq

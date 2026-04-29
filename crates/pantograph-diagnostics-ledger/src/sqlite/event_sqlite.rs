@@ -7,21 +7,22 @@ use uuid::Uuid;
 use crate::event::{
     DiagnosticEventAppendRequest, DiagnosticEventKind, DiagnosticEventPayload,
     DiagnosticEventPrivacyClass, DiagnosticEventRecord, DiagnosticEventRetentionClass,
-    DiagnosticEventSourceComponent, IoArtifactProjectionQuery, IoArtifactProjectionRecord,
-    IoArtifactRetentionState, IoArtifactRetentionSummaryQuery, IoArtifactRetentionSummaryRecord,
-    LibraryUsageProjectionQuery, LibraryUsageProjectionRecord, NodeExecutionProjectionStatus,
-    NodeStatusProjectionQuery, NodeStatusProjectionRecord, ProjectionStateRecord,
-    ProjectionStateUpdate, ProjectionStatus, RetentionArtifactStateChangedPayload,
-    RunDetailProjectionQuery, RunDetailProjectionRecord, RunListFacetKind, RunListFacetRecord,
-    RunListProjectionQuery, RunListProjectionRecord, RunListProjectionStatus,
-    SchedulerModelCacheState, SchedulerQueueControlAction, SchedulerQueueControlActorScope,
-    SchedulerQueueControlOutcome, SchedulerQueueControlPayload, SchedulerTimelineProjectionQuery,
-    SchedulerTimelineProjectionRecord, DIAGNOSTIC_EVENT_SCHEMA_VERSION,
-    IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION, LIBRARY_USAGE_PROJECTION_NAME,
-    LIBRARY_USAGE_PROJECTION_VERSION, MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES,
-    NODE_STATUS_PROJECTION_NAME, NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME,
-    RUN_DETAIL_PROJECTION_VERSION, RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION,
-    SCHEDULER_TIMELINE_PROJECTION_NAME, SCHEDULER_TIMELINE_PROJECTION_VERSION,
+    DiagnosticEventSourceComponent, IoArtifactLifecycleState, IoArtifactPayloadKind,
+    IoArtifactProjectionQuery, IoArtifactProjectionRecord, IoArtifactRetentionState,
+    IoArtifactRetentionSummaryQuery, IoArtifactRetentionSummaryRecord, LibraryUsageProjectionQuery,
+    LibraryUsageProjectionRecord, NodeExecutionProjectionStatus, NodeStatusProjectionQuery,
+    NodeStatusProjectionRecord, ProjectionStateRecord, ProjectionStateUpdate, ProjectionStatus,
+    RetentionArtifactStateChangedPayload, RunDetailProjectionQuery, RunDetailProjectionRecord,
+    RunListFacetKind, RunListFacetRecord, RunListProjectionQuery, RunListProjectionRecord,
+    RunListProjectionStatus, SchedulerModelCacheState, SchedulerQueueControlAction,
+    SchedulerQueueControlActorScope, SchedulerQueueControlOutcome, SchedulerQueueControlPayload,
+    SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
+    DIAGNOSTIC_EVENT_SCHEMA_VERSION, IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION,
+    LIBRARY_USAGE_PROJECTION_NAME, LIBRARY_USAGE_PROJECTION_VERSION,
+    MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, NODE_STATUS_PROJECTION_NAME,
+    NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION,
+    RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
+    SCHEDULER_TIMELINE_PROJECTION_VERSION,
 };
 use crate::records::MAX_PAGE_SIZE;
 use crate::util::now_ms;
@@ -819,7 +820,8 @@ pub(super) fn query_io_artifact_projection(
                 model_version, artifact_id, artifact_role, producer_node_id,
                 producer_port_id, consumer_node_id, consumer_port_id, media_type,
                 size_bytes, content_hash, payload_ref, retention_state,
-                retention_reason, retention_policy_id
+                retention_reason, retention_policy_id, payload_kind, lifecycle_state,
+                access_modes_json, read_handle, stream_handle, format_json
          FROM io_artifact_projection
          WHERE (?1 IS NULL OR workflow_run_id = ?1)
            AND (?2 IS NULL OR node_id = ?2)
@@ -912,7 +914,8 @@ pub(super) fn query_expirable_io_artifact_projection(
                 model_version, artifact_id, artifact_role, producer_node_id,
                 producer_port_id, consumer_node_id, consumer_port_id, media_type,
                 size_bytes, content_hash, payload_ref, retention_state,
-                retention_reason, retention_policy_id
+                retention_reason, retention_policy_id, payload_kind, lifecycle_state,
+                access_modes_json, read_handle, stream_handle, format_json
          FROM io_artifact_projection
          WHERE retention_state = ?1
            AND occurred_at_ms < ?2
@@ -1766,6 +1769,12 @@ fn io_artifact_projection_record_from_event(
         }),
         retention_reason: payload.retention_reason,
         retention_policy_id: event.retention_policy_id.clone(),
+        payload_kind: payload.payload_kind,
+        lifecycle_state: payload.lifecycle_state,
+        access_modes: payload.access_modes,
+        read_handle: payload.read_handle,
+        stream_handle: payload.stream_handle,
+        format: payload.format,
     }))
 }
 
@@ -1807,6 +1816,7 @@ fn apply_io_artifact_retention_state_change(
             | IoArtifactRetentionState::Expired
             | IoArtifactRetentionState::Deleted
     );
+    let lifecycle_state = io_artifact_lifecycle_state_from_retention(payload.retention_state);
 
     tx.execute(
         "UPDATE io_artifact_projection
@@ -1821,9 +1831,10 @@ fn apply_io_artifact_retention_state_change(
              END,
              retention_state = ?7,
              retention_reason = ?8,
-             retention_policy_id = COALESCE(?9, retention_policy_id)
-         WHERE workflow_run_id = ?10
-           AND artifact_id = ?11",
+             retention_policy_id = COALESCE(?9, retention_policy_id),
+             lifecycle_state = COALESCE(?10, lifecycle_state)
+         WHERE workflow_run_id = ?11
+           AND artifact_id = ?12",
         params![
             event.event_seq,
             event.event_id.as_str(),
@@ -1834,11 +1845,26 @@ fn apply_io_artifact_retention_state_change(
             payload.retention_state.as_db(),
             payload.reason.as_str(),
             event.retention_policy_id.as_deref(),
+            lifecycle_state.map(IoArtifactLifecycleState::as_db),
             workflow_run_id.as_str(),
             payload.artifact_id.as_str(),
         ],
     )?;
     Ok(())
+}
+
+fn io_artifact_lifecycle_state_from_retention(
+    retention_state: IoArtifactRetentionState,
+) -> Option<IoArtifactLifecycleState> {
+    match retention_state {
+        IoArtifactRetentionState::Retained => Some(IoArtifactLifecycleState::Retained),
+        IoArtifactRetentionState::Expired => Some(IoArtifactLifecycleState::Expired),
+        IoArtifactRetentionState::Deleted => Some(IoArtifactLifecycleState::Deleted),
+        IoArtifactRetentionState::MetadataOnly
+        | IoArtifactRetentionState::External
+        | IoArtifactRetentionState::Truncated
+        | IoArtifactRetentionState::TooLarge => None,
+    }
 }
 
 fn io_artifact_retention_state_from_payload_ref(
@@ -2499,10 +2525,11 @@ fn insert_io_artifact_projection(
              model_version, artifact_id, artifact_role, producer_node_id,
              producer_port_id, consumer_node_id, consumer_port_id, media_type,
              size_bytes, content_hash, payload_ref, retention_state,
-             retention_reason, retention_policy_id)
+             retention_reason, retention_policy_id, payload_kind, lifecycle_state,
+             access_modes_json, read_handle, stream_handle, format_json)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13,
                  ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24,
-                 ?25, ?26, ?27, ?28)",
+                 ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34)",
         params![
             record.event_seq,
             record.event_id.as_str(),
@@ -2535,6 +2562,16 @@ fn insert_io_artifact_projection(
             record.retention_state.as_db(),
             record.retention_reason.as_deref(),
             record.retention_policy_id.as_deref(),
+            record.payload_kind.map(IoArtifactPayloadKind::as_db),
+            record.lifecycle_state.map(IoArtifactLifecycleState::as_db),
+            serde_json::to_string(&record.access_modes)?,
+            record.read_handle.as_deref(),
+            record.stream_handle.as_deref(),
+            record
+                .format
+                .as_ref()
+                .map(serde_json::to_string)
+                .transpose()?,
         ],
     )?;
     Ok(())
@@ -2777,6 +2814,29 @@ fn io_artifact_projection_from_row(row: &Row<'_>) -> rusqlite::Result<IoArtifact
         })?,
         retention_reason: row.get(26)?,
         retention_policy_id: row.get(27)?,
+        payload_kind: row
+            .get::<_, Option<String>>(28)?
+            .map(|value| IoArtifactPayloadKind::from_db(&value))
+            .transpose()
+            .map_err(sqlite_conversion_error)?,
+        lifecycle_state: row
+            .get::<_, Option<String>>(29)?
+            .map(|value| IoArtifactLifecycleState::from_db(&value))
+            .transpose()
+            .map_err(sqlite_conversion_error)?,
+        access_modes: row
+            .get::<_, Option<String>>(30)?
+            .map(|value| serde_json::from_str(&value))
+            .transpose()
+            .map_err(sqlite_conversion_error)?
+            .unwrap_or_default(),
+        read_handle: row.get(31)?,
+        stream_handle: row.get(32)?,
+        format: row
+            .get::<_, Option<String>>(33)?
+            .map(|value| serde_json::from_str(&value))
+            .transpose()
+            .map_err(sqlite_conversion_error)?,
     })
 }
 
