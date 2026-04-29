@@ -155,6 +155,23 @@ worker.
 | Backend video/3D output format worker | Make workflow-service artifact conversion use backend defaults and graph-local `artifact_format_override` metadata for video and 3D descriptors when run snapshots provide graph settings, validating overrides through existing backend capabilities and rejecting media-type mismatches until transcoding exists. | `crates/pantograph-workflow-service/src/workflow/artifact_output_conversion.rs`, focused workflow-service tests in the same module/file, `docs/plans/pantograph-execution-platform/implementation-waves/11-artifact-format-settings-and-managed-media-dependencies/reports/wave-05-worker-video-3d-output-format-overrides.md` | Frontend files, ArtifactStore contract DTOs, diagnostics ledger schema, managed redistributables, command registration, `.pantograph/**`, `assets/**`, generated output, and lockfiles. | `reports/wave-05-worker-video-3d-output-format-overrides.md` |
 | 3D output-node selector worker | Add a 3D output format selector driven by backend capability/default DTOs, preserving explicit per-node overrides in node data so run snapshots can capture them. | `src/components/nodes/workflow/PointCloudOutputNode.svelte`, `src/components/nodes/workflow/README.md`, focused frontend tests only if an existing harness supports this component layer, `docs/plans/pantograph-execution-platform/implementation-waves/11-artifact-format-settings-and-managed-media-dependencies/reports/wave-05-worker-3d-output-node-format-selector.md` | Rust files, workflow service command files, shared TypeScript DTO files, workbench Settings page files, diagnostics ledger schema, `.pantograph/**`, `assets/**`, generated output, and lockfiles. | `reports/wave-05-worker-3d-output-node-format-selector.md` |
 
+## 2026-04-29 Media Stream Artifact Worker Split
+
+- Previous video/3D format slices were integrated as `01b015c6` and
+  `a97afbba`.
+- Current dirty files remain limited to unrelated deleted workflow/assets and
+  untracked diagnostics/asset files; no Stage `11` implementation files are
+  dirty at split time.
+- Shared ArtifactStore read/stream commands are already exposed. This wave must
+  not change ArtifactStore contracts or command names.
+- Integration sequence: backend Tauri event-adapter stream conversion first,
+  then frontend audio stream artifact-reference consumption.
+
+| Owner | Scope | Primary Write Set | Forbidden Shared Files | Report |
+| ----- | ----- | ----------------- | ---------------------- | ------ |
+| Backend media stream event worker | Convert media `TaskStream` chunks with inline `audio_base64` into ArtifactStore stream lifecycle operations at the Tauri event-adapter boundary and emit bounded stream-reference metadata instead of raw media bodies. Preserve text streams unchanged. | `src-tauri/src/workflow/event_adapter.rs`, optional focused helper/test files under `src-tauri/src/workflow/event_adapter/**`, `src-tauri/src/workflow/workflow_execution_runtime.rs`, `src-tauri/src/workflow/orchestration.rs` only if constructor wiring requires it, `docs/plans/pantograph-execution-platform/implementation-waves/11-artifact-format-settings-and-managed-media-dependencies/reports/wave-05-worker-tauri-media-stream-artifacts.md` | Frontend files, workflow-service ArtifactStore contracts, embedded-runtime stream emitters, diagnostics ledger schema, `.pantograph/**`, `assets/**`, generated output, and lockfiles. | `reports/wave-05-worker-tauri-media-stream-artifacts.md` |
+| Frontend media stream reference worker | Teach workflow toolbar/audio output handling to consume artifact stream-reference chunks without requiring inline `audio_base64`, using existing `workflowService.readArtifactStream` body reads for graph previews. | `src/components/workflowToolbarEvents.ts`, `src/components/workflowToolbarEvents.test.ts`, `src/components/nodes/workflow/AudioOutputNode.svelte`, `src/components/nodes/workflow/README.md`, `docs/plans/pantograph-execution-platform/implementation-waves/11-artifact-format-settings-and-managed-media-dependencies/reports/wave-05-worker-frontend-media-stream-references.md` | Rust files, shared TypeScript command DTOs, workbench Settings page files, `.pantograph/**`, `assets/**`, generated output, and lockfiles. | `reports/wave-05-worker-frontend-media-stream-references.md` |
+
 ## Source Audit Snapshot
 
 Initial local audit found these migration families:
