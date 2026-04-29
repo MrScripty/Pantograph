@@ -17,6 +17,7 @@ use crate::technical_fit::{WorkflowTechnicalFitDecision, WorkflowTechnicalFitReq
 
 mod artifact_api;
 mod artifact_contracts;
+mod artifact_output_conversion;
 mod artifact_store;
 mod attribution_api;
 mod contracts;

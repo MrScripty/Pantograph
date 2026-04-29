@@ -301,6 +301,10 @@ when physical payload bodies are deleted.
 
 - [ ] Convert image, audio, video, 3D, large table, generic file, and oversized
   structured outputs to descriptors before workflow-output value validation.
+  - [x] Convert workflow-service `image` and `audio` output bindings to
+    ArtifactStore descriptors before `max_value_bytes` validation.
+  - [ ] Convert video, 3D, large table, generic file, Python bridge streaming,
+    and remaining oversized structured outputs.
 - [ ] Represent streaming assets as artifact lifecycle transitions. Diffusion
   preview passes should be child or revision artifacts; audio/video streams
   should publish chunk metadata and stream handles without placing chunk bodies

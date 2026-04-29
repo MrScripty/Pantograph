@@ -5,6 +5,7 @@ use uuid::Uuid;
 use crate::scheduler::WorkflowExecutionSessionPreflightCache;
 use crate::technical_fit::WorkflowTechnicalFitOverride;
 
+use super::artifact_output_conversion::convert_media_outputs_to_artifacts;
 use super::io_contract::validate_workflow_io;
 use super::runtime_preflight::format_runtime_not_ready_message;
 use super::validation::{
@@ -137,16 +138,22 @@ impl WorkflowService {
         }
 
         validate_host_output_bindings(&outputs, "outputs")?;
-        for binding in &outputs {
-            validate_payload_size(binding, max_value_bytes)?;
-        }
-
         let workflow_run_id = workflow_run_id
             .as_deref()
             .map(str::trim)
             .filter(|s| !s.is_empty())
             .map(ToOwned::to_owned)
             .unwrap_or_else(|| Uuid::new_v4().to_string());
+        let outputs = convert_media_outputs_to_artifacts(
+            self,
+            &request.workflow_id,
+            &request.workflow_semantic_version,
+            &workflow_run_id,
+            outputs,
+        )?;
+        for binding in &outputs {
+            validate_payload_size(binding, max_value_bytes)?;
+        }
 
         Ok(WorkflowRunResponse {
             workflow_run_id,
