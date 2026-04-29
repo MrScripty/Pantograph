@@ -80,6 +80,15 @@ pub fn run_app() -> AppStartupResult<()> {
                 startup_error(format!("failed to open artifact format settings: {error}"))
             })?,
     );
+    workflow::headless_workflow_commands::sync_artifact_format_dependency_versions(
+        &pantograph_data_dir,
+        workflow_service.as_ref(),
+    )
+    .map_err(|error| {
+        startup_error(format!(
+            "failed to load managed media dependency versions: {error}"
+        ))
+    })?;
     let workflow_timing_ledger =
         pantograph_workflow_service::SqliteDiagnosticsLedger::open(&workflow_timing_ledger_path)
             .map_err(|error| {

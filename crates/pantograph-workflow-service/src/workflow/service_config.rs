@@ -5,8 +5,9 @@ use crate::graph::GraphSessionStore;
 use crate::scheduler::WorkflowExecutionSessionStore;
 
 use super::{
-    ArtifactFormatSettings, ArtifactStore, SqliteAttributionStore, SqliteDiagnosticsLedger,
-    WorkflowSchedulerDiagnosticsProvider, WorkflowService, WorkflowServiceError,
+    ArtifactFormatDependencyVersions, ArtifactFormatSettings, ArtifactStore,
+    SqliteAttributionStore, SqliteDiagnosticsLedger, WorkflowSchedulerDiagnosticsProvider,
+    WorkflowService, WorkflowServiceError,
 };
 
 const DEFAULT_MAX_SESSIONS: usize = 8;
@@ -36,6 +37,9 @@ impl WorkflowService {
             artifact_store: None,
             artifact_format_settings: Arc::new(Mutex::new(ArtifactFormatSettings::default())),
             artifact_format_settings_path: None,
+            artifact_format_dependency_versions: Arc::new(Mutex::new(
+                ArtifactFormatDependencyVersions::default(),
+            )),
             attribution_store: None,
             diagnostics_ledger: None,
             scheduler_diagnostics_provider: Arc::new(Mutex::new(None)),
@@ -44,6 +48,14 @@ impl WorkflowService {
 
     pub fn with_artifact_store(mut self, store: ArtifactStore) -> Self {
         self.artifact_store = Some(Arc::new(Mutex::new(store)));
+        self
+    }
+
+    pub fn with_artifact_format_dependency_versions(
+        mut self,
+        versions: ArtifactFormatDependencyVersions,
+    ) -> Self {
+        self.artifact_format_dependency_versions = Arc::new(Mutex::new(versions));
         self
     }
 
@@ -150,6 +162,29 @@ impl WorkflowService {
 
     pub(crate) fn artifact_format_settings_path(&self) -> Option<Arc<PathBuf>> {
         self.artifact_format_settings_path.clone()
+    }
+
+    pub fn set_artifact_format_dependency_versions(
+        &self,
+        versions: ArtifactFormatDependencyVersions,
+    ) -> Result<(), WorkflowServiceError> {
+        let mut guard = self
+            .artifact_format_dependency_versions
+            .lock()
+            .map_err(|_| {
+                WorkflowServiceError::Internal(
+                    "artifact format dependency versions lock poisoned".to_string(),
+                )
+            })?;
+        *guard = versions;
+        Ok(())
+    }
+
+    pub(crate) fn artifact_format_dependency_versions(&self) -> ArtifactFormatDependencyVersions {
+        self.artifact_format_dependency_versions
+            .lock()
+            .map(|guard| guard.clone())
+            .unwrap_or_default()
     }
 
     pub(crate) fn diagnostics_ledger_guard(

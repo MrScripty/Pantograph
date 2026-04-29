@@ -1,6 +1,6 @@
 use pantograph_workflow_service::{
-    ArtifactFormatSettings, ArtifactFormatSettingsQueryRequest,
-    ArtifactFormatSettingsUpdateRequest, WorkflowService,
+    ArtifactFormatDependencyVersion, ArtifactFormatDependencyVersions, ArtifactFormatSettings,
+    ArtifactFormatSettingsQueryRequest, ArtifactFormatSettingsUpdateRequest, WorkflowService,
 };
 
 #[test]
@@ -38,6 +38,35 @@ fn artifact_format_settings_default_and_capabilities_match_required_defaults() {
         .three_d_formats
         .iter()
         .any(|option| option.format_id == "glb"));
+}
+
+#[test]
+fn artifact_format_capabilities_include_host_supplied_active_versions() {
+    let service = WorkflowService::new().with_artifact_format_dependency_versions(
+        ArtifactFormatDependencyVersions {
+            dependencies: vec![
+                ArtifactFormatDependencyVersion {
+                    dependency_id: "oiiotool".to_string(),
+                    active_version: Some("2.5.18".to_string()),
+                },
+                ArtifactFormatDependencyVersion {
+                    dependency_id: "ffmpeg".to_string(),
+                    active_version: Some("7.1".to_string()),
+                },
+            ],
+        },
+    );
+
+    let capabilities = service.artifact_format_capabilities();
+
+    assert!(capabilities.image_formats.iter().any(|option| {
+        option.provided_by_dependency_id == "oiiotool"
+            && option.provided_by_version.as_deref() == Some("2.5.18")
+    }));
+    assert!(capabilities.audio_formats.iter().any(|option| {
+        option.provided_by_dependency_id == "ffmpeg"
+            && option.provided_by_version.as_deref() == Some("7.1")
+    }));
 }
 
 #[test]

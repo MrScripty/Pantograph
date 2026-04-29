@@ -128,6 +128,7 @@ pub struct WorkflowService {
     artifact_store: Option<Arc<Mutex<ArtifactStore>>>,
     artifact_format_settings: Arc<Mutex<ArtifactFormatSettings>>,
     artifact_format_settings_path: Option<Arc<PathBuf>>,
+    artifact_format_dependency_versions: Arc<Mutex<ArtifactFormatDependencyVersions>>,
     attribution_store: Option<Arc<Mutex<SqliteAttributionStore>>>,
     diagnostics_ledger: Option<Arc<Mutex<SqliteDiagnosticsLedger>>>,
     scheduler_diagnostics_provider:

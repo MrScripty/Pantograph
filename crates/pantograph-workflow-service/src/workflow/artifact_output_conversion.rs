@@ -1,9 +1,10 @@
 use super::{
-    ArtifactAttribution, ArtifactFormatCapabilities, ArtifactFormatMetadata,
-    ArtifactFormatSettings, ArtifactPayloadKind, ArtifactStreamChunkWriteRequest,
-    ArtifactStreamFinalizeRequest, ArtifactStreamOpenRequest, ArtifactWriteRequest,
-    AudioArtifactFormatSettings, ImageArtifactFormatSettings, ThreeDArtifactFormatSettings,
-    VideoArtifactFormatSettings, WorkflowPortBinding, WorkflowService, WorkflowServiceError,
+    ArtifactAttribution, ArtifactFormatCapabilities, ArtifactFormatDependencyVersions,
+    ArtifactFormatMetadata, ArtifactFormatSettings, ArtifactPayloadKind,
+    ArtifactStreamChunkWriteRequest, ArtifactStreamFinalizeRequest, ArtifactStreamOpenRequest,
+    ArtifactWriteRequest, AudioArtifactFormatSettings, ImageArtifactFormatSettings,
+    ThreeDArtifactFormatSettings, VideoArtifactFormatSettings, WorkflowPortBinding,
+    WorkflowService, WorkflowServiceError,
 };
 use crate::graph::WorkflowGraphRunSettings;
 
@@ -26,6 +27,7 @@ pub(super) fn convert_media_outputs_to_artifacts(
     outputs: Vec<WorkflowPortBinding>,
 ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
     let format_settings = service.artifact_format_settings_guard()?.clone();
+    let dependency_versions = service.artifact_format_dependency_versions();
     let format_capabilities = service.artifact_format_capabilities();
     outputs
         .into_iter()
@@ -39,6 +41,7 @@ pub(super) fn convert_media_outputs_to_artifacts(
                     graph_run_settings,
                     &format_settings,
                     &format_capabilities,
+                    &dependency_versions,
                     binding,
                     stream_output,
                 );
@@ -54,6 +57,7 @@ pub(super) fn convert_media_outputs_to_artifacts(
                 graph_run_settings,
                 &format_settings,
                 &format_capabilities,
+                &dependency_versions,
                 binding,
                 artifact_output,
             )
@@ -69,6 +73,7 @@ fn convert_stream_artifact_output(
     graph_run_settings: Option<&WorkflowGraphRunSettings>,
     format_settings: &ArtifactFormatSettings,
     format_capabilities: &ArtifactFormatCapabilities,
+    dependency_versions: &ArtifactFormatDependencyVersions,
     binding: WorkflowPortBinding,
     stream_output: StreamArtifactOutput,
 ) -> Result<WorkflowPortBinding, WorkflowServiceError> {
@@ -99,6 +104,7 @@ fn convert_stream_artifact_output(
         graph_run_settings,
         format_settings,
         format_capabilities,
+        dependency_versions,
     )?;
     let artifact_id = format!(
         "run_{}_{}_{}",
@@ -149,6 +155,7 @@ fn convert_artifact_output(
     graph_run_settings: Option<&WorkflowGraphRunSettings>,
     format_settings: &ArtifactFormatSettings,
     format_capabilities: &ArtifactFormatCapabilities,
+    dependency_versions: &ArtifactFormatDependencyVersions,
     binding: WorkflowPortBinding,
     artifact_output: ArtifactOutput,
 ) -> Result<WorkflowPortBinding, WorkflowServiceError> {
@@ -167,6 +174,7 @@ fn convert_artifact_output(
         graph_run_settings,
         format_settings,
         format_capabilities,
+        dependency_versions,
     )?;
     let artifact_id = format!(
         "run_{}_{}_{}",
@@ -212,6 +220,7 @@ fn resolve_output_format_metadata(
     graph_run_settings: Option<&WorkflowGraphRunSettings>,
     settings: &ArtifactFormatSettings,
     capabilities: &ArtifactFormatCapabilities,
+    dependency_versions: &ArtifactFormatDependencyVersions,
 ) -> Result<ResolvedOutputFormat, WorkflowServiceError> {
     match payload_kind {
         ArtifactPayloadKind::Image => resolve_image_output_format(
@@ -220,6 +229,7 @@ fn resolve_output_format_metadata(
             graph_run_settings,
             &settings.image,
             capabilities,
+            dependency_versions,
         ),
         ArtifactPayloadKind::Audio => resolve_audio_output_format(
             binding,
@@ -260,6 +270,7 @@ fn resolve_image_output_format(
     graph_run_settings: Option<&WorkflowGraphRunSettings>,
     settings: &ImageArtifactFormatSettings,
     capabilities: &ArtifactFormatCapabilities,
+    dependency_versions: &ArtifactFormatDependencyVersions,
 ) -> Result<ResolvedOutputFormat, WorkflowServiceError> {
     let override_object = artifact_format_override_object(binding, graph_run_settings)?;
     let selection = ImageOutputFormatSelection {
@@ -334,7 +345,7 @@ fn resolve_image_output_format(
             color_profile_id: Some(selection.color_profile_id),
             converter_id: Some(format.provided_by_dependency_id.clone()),
             converter_version: format.provided_by_version.clone(),
-            library_version: None,
+            library_version: dependency_versions.active_version("opencolorio"),
         },
     })
 }
@@ -1235,9 +1246,10 @@ mod tests {
     use super::{convert_media_outputs_to_artifacts, decode_base64};
     use crate::graph::{WorkflowGraphRunSettings, WorkflowGraphRunSettingsNode};
     use crate::workflow::{
-        ArtifactDescriptor, ArtifactFormatSettings, ArtifactFormatSettingsUpdateRequest,
-        ArtifactLifecycleState, ArtifactPayloadKind, ArtifactPolicy, ArtifactReadRequest,
-        ArtifactStore, WorkflowPortBinding, WorkflowService, WorkflowServiceError,
+        ArtifactDescriptor, ArtifactFormatDependencyVersion, ArtifactFormatDependencyVersions,
+        ArtifactFormatSettings, ArtifactFormatSettingsUpdateRequest, ArtifactLifecycleState,
+        ArtifactPayloadKind, ArtifactPolicy, ArtifactReadRequest, ArtifactStore,
+        WorkflowPortBinding, WorkflowService, WorkflowServiceError,
     };
 
     fn policy() -> ArtifactPolicy {
@@ -1482,6 +1494,47 @@ mod tests {
         assert_eq!(format.format_id, "png");
         assert_eq!(format.media_type, "image/png");
         assert_eq!(format.converter_id.as_deref(), Some("oiiotool"));
+    }
+
+    #[test]
+    fn convert_media_outputs_records_active_converter_and_library_versions() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let store = ArtifactStore::open(temp.path(), policy()).expect("artifact store");
+        let service = WorkflowService::new()
+            .with_artifact_store(store)
+            .with_artifact_format_dependency_versions(ArtifactFormatDependencyVersions {
+                dependencies: vec![
+                    ArtifactFormatDependencyVersion {
+                        dependency_id: "oiiotool".to_string(),
+                        active_version: Some("2.5.18".to_string()),
+                    },
+                    ArtifactFormatDependencyVersion {
+                        dependency_id: "opencolorio".to_string(),
+                        active_version: Some("2.4.2".to_string()),
+                    },
+                ],
+            });
+
+        let converted = convert_media_outputs_to_artifacts(
+            &service,
+            "workflow-a",
+            "1.0.0",
+            "run-a",
+            None,
+            vec![WorkflowPortBinding {
+                node_id: "image-output".to_string(),
+                port_id: "image".to_string(),
+                value: serde_json::json!("aGVsbG8="),
+            }],
+        )
+        .expect("convert output");
+
+        let descriptor: ArtifactDescriptor =
+            serde_json::from_value(converted[0].value.clone()).expect("descriptor");
+        let format = descriptor.format.expect("format");
+        assert_eq!(format.converter_id.as_deref(), Some("oiiotool"));
+        assert_eq!(format.converter_version.as_deref(), Some("2.5.18"));
+        assert_eq!(format.library_version.as_deref(), Some("2.4.2"));
     }
 
     #[test]

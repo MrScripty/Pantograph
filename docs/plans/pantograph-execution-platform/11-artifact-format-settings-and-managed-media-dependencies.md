@@ -110,6 +110,10 @@ Wave status: `complete`.
   instead of expanding the already-large workflow `contracts.rs`.
 - Added backend-owned media capability and managed redistributable DTOs in
   `crates/pantograph-workflow-service/src/workflow/media_capability_contracts.rs`.
+- Added backend-owned artifact format dependency version DTOs in
+  `crates/pantograph-workflow-service/src/workflow/artifact_contracts.rs`
+  so host adapters can inject active managed tool/library versions without
+  coupling the host-agnostic workflow service to the `inference` crate.
 - Public workflow-service exports now include artifact descriptors, lifecycle
   states, handle-based read/stream/consume contracts, global artifact policy,
   format defaults, media capability options, and managed redistributable
@@ -358,8 +362,10 @@ when physical payload bodies are deleted.
     metadata in artifact descriptors and run snapshots.
   - [x] Capture backend converter identity from selected media capability
     providers in artifact descriptors.
-  - [ ] Capture active converter and library versions from managed dependency
-    activation/lease state when real conversion tooling is invoked.
+  - [x] Capture active converter and library versions from host-synchronized
+    managed dependency activation state in artifact descriptors.
+  - [ ] Capture per-conversion lease token versions after real conversion
+    tooling is invoked instead of pass-through descriptor attribution.
 - [x] Reject invalid format/codec/quality/bitrate/color/3D settings at
   submission or execution boundaries with typed errors.
   - [x] Validate persistent format defaults and image/audio output-node

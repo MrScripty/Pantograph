@@ -15,20 +15,21 @@ use inference::{
 use pantograph_workflow_service::{
     ArtifactBodyRead, ArtifactConsumeAcknowledgementRequest,
     ArtifactConsumeAcknowledgementResponse, ArtifactDescriptorQueryRequest,
-    ArtifactDescriptorQueryResponse, ArtifactFormatCapabilities,
-    ArtifactFormatSettingsQueryRequest, ArtifactFormatSettingsQueryResponse,
-    ArtifactFormatSettingsUpdateRequest, ArtifactFormatSettingsUpdateResponse, ArtifactPolicy,
-    ArtifactReadRequest, ArtifactStoreStats, ArtifactStreamBodyRead, ArtifactStreamReadRequest,
-    WorkflowAdminQueueCancelRequest, WorkflowAdminQueueCancelResponse,
-    WorkflowAdminQueuePushFrontRequest, WorkflowAdminQueuePushFrontResponse,
-    WorkflowAdminQueueReprioritizeRequest, WorkflowAdminQueueReprioritizeResponse,
-    WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse,
-    WorkflowExecutionSessionCloseRequest, WorkflowExecutionSessionCloseResponse,
-    WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionCreateResponse,
-    WorkflowExecutionSessionKeepAliveRequest, WorkflowExecutionSessionKeepAliveResponse,
-    WorkflowExecutionSessionQueueCancelRequest, WorkflowExecutionSessionQueueCancelResponse,
-    WorkflowExecutionSessionQueueListRequest, WorkflowExecutionSessionQueueListResponse,
-    WorkflowExecutionSessionQueuePushFrontRequest, WorkflowExecutionSessionQueuePushFrontResponse,
+    ArtifactDescriptorQueryResponse, ArtifactFormatCapabilities, ArtifactFormatDependencyVersion,
+    ArtifactFormatDependencyVersions, ArtifactFormatSettingsQueryRequest,
+    ArtifactFormatSettingsQueryResponse, ArtifactFormatSettingsUpdateRequest,
+    ArtifactFormatSettingsUpdateResponse, ArtifactPolicy, ArtifactReadRequest, ArtifactStoreStats,
+    ArtifactStreamBodyRead, ArtifactStreamReadRequest, WorkflowAdminQueueCancelRequest,
+    WorkflowAdminQueueCancelResponse, WorkflowAdminQueuePushFrontRequest,
+    WorkflowAdminQueuePushFrontResponse, WorkflowAdminQueueReprioritizeRequest,
+    WorkflowAdminQueueReprioritizeResponse, WorkflowCapabilitiesRequest,
+    WorkflowCapabilitiesResponse, WorkflowExecutionSessionCloseRequest,
+    WorkflowExecutionSessionCloseResponse, WorkflowExecutionSessionCreateRequest,
+    WorkflowExecutionSessionCreateResponse, WorkflowExecutionSessionKeepAliveRequest,
+    WorkflowExecutionSessionKeepAliveResponse, WorkflowExecutionSessionQueueCancelRequest,
+    WorkflowExecutionSessionQueueCancelResponse, WorkflowExecutionSessionQueueListRequest,
+    WorkflowExecutionSessionQueueListResponse, WorkflowExecutionSessionQueuePushFrontRequest,
+    WorkflowExecutionSessionQueuePushFrontResponse,
     WorkflowExecutionSessionQueueReprioritizeRequest,
     WorkflowExecutionSessionQueueReprioritizeResponse, WorkflowExecutionSessionRunRequest,
     WorkflowExecutionSessionStaleCleanupRequest, WorkflowExecutionSessionStaleCleanupResponse,
@@ -46,7 +47,7 @@ use pantograph_workflow_service::{
     WorkflowRunResponse, WorkflowSchedulerEstimateQueryRequest,
     WorkflowSchedulerEstimateQueryResponse, WorkflowSchedulerSnapshotRequest,
     WorkflowSchedulerSnapshotResponse, WorkflowSchedulerTimelineQueryRequest,
-    WorkflowSchedulerTimelineQueryResponse, WorkflowServiceError,
+    WorkflowSchedulerTimelineQueryResponse, WorkflowService, WorkflowServiceError,
 };
 use tauri::{AppHandle, State};
 
@@ -374,6 +375,32 @@ pub async fn workflow_artifact_format_capabilities(
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<ArtifactFormatCapabilities, String> {
     Ok(workflow_service.artifact_format_capabilities())
+}
+
+pub fn sync_artifact_format_dependency_versions(
+    app_data_dir: &Path,
+    workflow_service: &WorkflowService,
+) -> Result<(), String> {
+    let statuses = list_managed_redistributable_statuses(app_data_dir);
+    workflow_service
+        .set_artifact_format_dependency_versions(artifact_format_dependency_versions_from_statuses(
+            &statuses,
+        ))
+        .map_err(|error| error.to_envelope_json())
+}
+
+pub fn artifact_format_dependency_versions_from_statuses(
+    statuses: &[ManagedRedistributableStatus],
+) -> ArtifactFormatDependencyVersions {
+    ArtifactFormatDependencyVersions {
+        dependencies: statuses
+            .iter()
+            .map(|status| ArtifactFormatDependencyVersion {
+                dependency_id: status.id.key().to_string(),
+                active_version: status.selection.active_version.clone(),
+            })
+            .collect(),
+    }
 }
 
 pub fn workflow_list_managed_media_dependencies(

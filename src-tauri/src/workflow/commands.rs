@@ -406,90 +406,141 @@ pub async fn workflow_artifact_format_capabilities(
 #[command]
 pub fn workflow_list_managed_media_dependencies(
     app: AppHandle,
+    workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<Vec<inference::ManagedRedistributableStatus>, String> {
     let app_data_dir = app_data_dir(&app)?;
-    super::headless_workflow_commands::workflow_list_managed_media_dependencies(&app_data_dir)
+    let statuses =
+        super::headless_workflow_commands::workflow_list_managed_media_dependencies(&app_data_dir)?;
+    super::headless_workflow_commands::sync_artifact_format_dependency_versions(
+        &app_data_dir,
+        workflow_service.as_ref(),
+    )?;
+    Ok(statuses)
 }
 
 #[command]
 pub fn workflow_managed_media_dependency_status(
     app: AppHandle,
+    workflow_service: State<'_, SharedWorkflowService>,
     id: inference::ManagedRedistributableId,
 ) -> Result<inference::ManagedRedistributableStatus, String> {
     let app_data_dir = app_data_dir(&app)?;
-    super::headless_workflow_commands::workflow_managed_media_dependency_status(&app_data_dir, id)
+    let status = super::headless_workflow_commands::workflow_managed_media_dependency_status(
+        &app_data_dir,
+        id,
+    )?;
+    super::headless_workflow_commands::sync_artifact_format_dependency_versions(
+        &app_data_dir,
+        workflow_service.as_ref(),
+    )?;
+    Ok(status)
 }
 
 #[command]
 pub fn workflow_install_managed_media_dependency_from_staging(
     app: AppHandle,
+    workflow_service: State<'_, SharedWorkflowService>,
     id: inference::ManagedRedistributableId,
     version: String,
     staging_dir: String,
 ) -> Result<inference::ManagedRedistributableStatus, String> {
     let app_data_dir = app_data_dir(&app)?;
-    super::headless_workflow_commands::workflow_install_managed_media_dependency_from_staging(
+    let status =
+        super::headless_workflow_commands::workflow_install_managed_media_dependency_from_staging(
+            &app_data_dir,
+            id,
+            version,
+            PathBuf::from(staging_dir).as_path(),
+        )?;
+    super::headless_workflow_commands::sync_artifact_format_dependency_versions(
         &app_data_dir,
-        id,
-        version,
-        PathBuf::from(staging_dir).as_path(),
-    )
+        workflow_service.as_ref(),
+    )?;
+    Ok(status)
 }
 
 #[command]
 pub fn workflow_select_managed_media_dependency_version(
     app: AppHandle,
+    workflow_service: State<'_, SharedWorkflowService>,
     id: inference::ManagedRedistributableId,
     version: Option<String>,
 ) -> Result<inference::ManagedRedistributableStatus, String> {
     let app_data_dir = app_data_dir(&app)?;
-    super::headless_workflow_commands::workflow_select_managed_media_dependency_version(
+    let status =
+        super::headless_workflow_commands::workflow_select_managed_media_dependency_version(
+            &app_data_dir,
+            id,
+            version,
+        )?;
+    super::headless_workflow_commands::sync_artifact_format_dependency_versions(
         &app_data_dir,
-        id,
-        version,
-    )
+        workflow_service.as_ref(),
+    )?;
+    Ok(status)
 }
 
 #[command]
 pub fn workflow_set_default_managed_media_dependency_version(
     app: AppHandle,
+    workflow_service: State<'_, SharedWorkflowService>,
     id: inference::ManagedRedistributableId,
     version: Option<String>,
 ) -> Result<inference::ManagedRedistributableStatus, String> {
     let app_data_dir = app_data_dir(&app)?;
-    super::headless_workflow_commands::workflow_set_default_managed_media_dependency_version(
+    let status =
+        super::headless_workflow_commands::workflow_set_default_managed_media_dependency_version(
+            &app_data_dir,
+            id,
+            version,
+        )?;
+    super::headless_workflow_commands::sync_artifact_format_dependency_versions(
         &app_data_dir,
-        id,
-        version,
-    )
+        workflow_service.as_ref(),
+    )?;
+    Ok(status)
 }
 
 #[command]
 pub fn workflow_activate_managed_media_dependency_version(
     app: AppHandle,
+    workflow_service: State<'_, SharedWorkflowService>,
     id: inference::ManagedRedistributableId,
     version: String,
 ) -> Result<inference::ManagedRedistributableStatus, String> {
     let app_data_dir = app_data_dir(&app)?;
-    super::headless_workflow_commands::workflow_activate_managed_media_dependency_version(
+    let status =
+        super::headless_workflow_commands::workflow_activate_managed_media_dependency_version(
+            &app_data_dir,
+            id,
+            version,
+        )?;
+    super::headless_workflow_commands::sync_artifact_format_dependency_versions(
         &app_data_dir,
-        id,
-        version,
-    )
+        workflow_service.as_ref(),
+    )?;
+    Ok(status)
 }
 
 #[command]
 pub fn workflow_remove_managed_media_dependency_version(
     app: AppHandle,
+    workflow_service: State<'_, SharedWorkflowService>,
     id: inference::ManagedRedistributableId,
     version: String,
 ) -> Result<inference::ManagedRedistributableStatus, String> {
     let app_data_dir = app_data_dir(&app)?;
-    super::headless_workflow_commands::workflow_remove_managed_media_dependency_version(
+    let status =
+        super::headless_workflow_commands::workflow_remove_managed_media_dependency_version(
+            &app_data_dir,
+            id,
+            version,
+        )?;
+    super::headless_workflow_commands::sync_artifact_format_dependency_versions(
         &app_data_dir,
-        id,
-        version,
-    )
+        workflow_service.as_ref(),
+    )?;
+    Ok(status)
 }
 
 #[command]

@@ -5,6 +5,7 @@ use node_engine::ExecutorExtensions;
 use pantograph_embedded_runtime::{EmbeddedRuntime, EmbeddedRuntimeConfig};
 use pantograph_workflow_service::{
     ArtifactConsumeAcknowledgementRequest, ArtifactDescriptorQueryRequest,
+    ArtifactFormatDependencyVersion, ArtifactFormatDependencyVersions,
     ArtifactFormatSettingsQueryRequest, ArtifactFormatSettingsUpdateRequest, ArtifactPolicy,
     ArtifactReadRequest, ArtifactStore, BucketCreateRequest, BucketDeleteRequest,
     ClientRegistrationRequest, ClientSessionOpenRequest, ClientSessionResumeRequest,
@@ -162,6 +163,8 @@ impl FfiPantographRuntime {
         );
         workflow_service
             .set_loaded_runtime_capacity_limit(config.max_loaded_sessions)
+            .map_err(map_workflow_service_error)?;
+        sync_artifact_format_dependency_versions(&app_data_dir, workflow_service.as_ref())
             .map_err(map_workflow_service_error)?;
 
         let runtime = EmbeddedRuntime::with_default_python_runtime(
@@ -364,6 +367,11 @@ impl FfiPantographRuntime {
         .map_err(map_managed_media_dependency_error)?;
         let status =
             inference::managed_redistributable_status(&self.app_data_dir, request.dependency_id);
+        sync_artifact_format_dependency_versions(
+            &self.app_data_dir,
+            self.runtime.workflow_service().as_ref(),
+        )
+        .map_err(map_workflow_service_error)?;
         serialize_response(&ManagedMediaDependencyInstallFromStagingResponse {
             install_root: install_root.display().to_string(),
             status,
@@ -384,6 +392,11 @@ impl FfiPantographRuntime {
         .map_err(map_managed_media_dependency_error)?;
         let response =
             inference::managed_redistributable_status(&self.app_data_dir, request.dependency_id);
+        sync_artifact_format_dependency_versions(
+            &self.app_data_dir,
+            self.runtime.workflow_service().as_ref(),
+        )
+        .map_err(map_workflow_service_error)?;
         serialize_response(&response)
     }
 
@@ -401,6 +414,11 @@ impl FfiPantographRuntime {
         .map_err(map_managed_media_dependency_error)?;
         let response =
             inference::managed_redistributable_status(&self.app_data_dir, request.dependency_id);
+        sync_artifact_format_dependency_versions(
+            &self.app_data_dir,
+            self.runtime.workflow_service().as_ref(),
+        )
+        .map_err(map_workflow_service_error)?;
         serialize_response(&response)
     }
 
@@ -418,6 +436,11 @@ impl FfiPantographRuntime {
         .map_err(map_managed_media_dependency_error)?;
         let response =
             inference::managed_redistributable_status(&self.app_data_dir, request.dependency_id);
+        sync_artifact_format_dependency_versions(
+            &self.app_data_dir,
+            self.runtime.workflow_service().as_ref(),
+        )
+        .map_err(map_workflow_service_error)?;
         serialize_response(&response)
     }
 
@@ -435,6 +458,11 @@ impl FfiPantographRuntime {
         .map_err(map_managed_media_dependency_error)?;
         let response =
             inference::managed_redistributable_status(&self.app_data_dir, request.dependency_id);
+        sync_artifact_format_dependency_versions(
+            &self.app_data_dir,
+            self.runtime.workflow_service().as_ref(),
+        )
+        .map_err(map_workflow_service_error)?;
         serialize_response(&response)
     }
 
@@ -952,6 +980,22 @@ where
             WorkflowErrorCode::InternalError,
             format!("response serialization error: {}", e),
         )
+    })
+}
+
+fn sync_artifact_format_dependency_versions(
+    app_data_dir: &std::path::Path,
+    workflow_service: &WorkflowService,
+) -> Result<(), WorkflowServiceError> {
+    let statuses = inference::list_managed_redistributable_statuses(app_data_dir);
+    workflow_service.set_artifact_format_dependency_versions(ArtifactFormatDependencyVersions {
+        dependencies: statuses
+            .iter()
+            .map(|status| ArtifactFormatDependencyVersion {
+                dependency_id: status.id.key().to_string(),
+                active_version: status.selection.active_version.clone(),
+            })
+            .collect(),
     })
 }
 

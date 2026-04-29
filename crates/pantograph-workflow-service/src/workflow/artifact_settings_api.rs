@@ -1,9 +1,10 @@
 use std::path::Path;
 
 use super::{
-    ArtifactFormatCapabilities, ArtifactFormatSettings, ArtifactFormatSettingsQueryRequest,
-    ArtifactFormatSettingsQueryResponse, ArtifactFormatSettingsUpdateRequest,
-    ArtifactFormatSettingsUpdateResponse, MediaFormatOption, WorkflowService, WorkflowServiceError,
+    ArtifactFormatCapabilities, ArtifactFormatDependencyVersions, ArtifactFormatSettings,
+    ArtifactFormatSettingsQueryRequest, ArtifactFormatSettingsQueryResponse,
+    ArtifactFormatSettingsUpdateRequest, ArtifactFormatSettingsUpdateResponse, MediaFormatOption,
+    WorkflowService, WorkflowServiceError,
 };
 
 impl WorkflowService {
@@ -30,14 +31,15 @@ impl WorkflowService {
     }
 
     pub fn artifact_format_capabilities(&self) -> ArtifactFormatCapabilities {
-        artifact_format_capabilities()
+        artifact_format_capabilities_with_versions(&self.artifact_format_dependency_versions())
     }
 }
 
 fn validate_artifact_format_settings(
     settings: &ArtifactFormatSettings,
 ) -> Result<(), WorkflowServiceError> {
-    let capabilities = artifact_format_capabilities();
+    let capabilities =
+        artifact_format_capabilities_with_versions(&ArtifactFormatDependencyVersions::default());
     let image = capabilities
         .image_formats
         .iter()
@@ -156,6 +158,26 @@ fn artifact_format_capabilities() -> ArtifactFormatCapabilities {
             three_d_format("gltf", "glTF"),
             three_d_format("obj", "OBJ"),
         ],
+    }
+}
+
+fn artifact_format_capabilities_with_versions(
+    versions: &ArtifactFormatDependencyVersions,
+) -> ArtifactFormatCapabilities {
+    let mut capabilities = artifact_format_capabilities();
+    apply_active_versions(&mut capabilities.image_formats, versions);
+    apply_active_versions(&mut capabilities.audio_formats, versions);
+    apply_active_versions(&mut capabilities.video_formats, versions);
+    apply_active_versions(&mut capabilities.three_d_formats, versions);
+    capabilities
+}
+
+fn apply_active_versions(
+    formats: &mut [MediaFormatOption],
+    versions: &ArtifactFormatDependencyVersions,
+) {
+    for format in formats {
+        format.provided_by_version = versions.active_version(&format.provided_by_dependency_id);
     }
 }
 

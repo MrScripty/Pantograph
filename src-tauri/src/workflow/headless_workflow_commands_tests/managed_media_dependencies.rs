@@ -5,6 +5,7 @@ use inference::{
 };
 
 use crate::workflow::headless_workflow_commands::{
+    artifact_format_dependency_versions_from_statuses,
     workflow_activate_managed_media_dependency_version,
     workflow_install_managed_media_dependency_from_staging,
     workflow_list_managed_media_dependencies, workflow_managed_media_dependency_status,
@@ -85,6 +86,14 @@ fn managed_media_dependency_helpers_project_status_and_actions() {
     .expect("activate dependency version");
     assert_eq!(
         activated.selection.active_version.as_deref(),
+        Some(initial_ffmpeg.catalog.version.as_str())
+    );
+    let versions =
+        artifact_format_dependency_versions_from_statuses(std::slice::from_ref(&activated));
+    assert_eq!(versions.dependencies.len(), 1);
+    assert_eq!(versions.dependencies[0].dependency_id, "ffmpeg");
+    assert_eq!(
+        versions.dependencies[0].active_version.as_deref(),
         Some(initial_ffmpeg.catalog.version.as_str())
     );
 

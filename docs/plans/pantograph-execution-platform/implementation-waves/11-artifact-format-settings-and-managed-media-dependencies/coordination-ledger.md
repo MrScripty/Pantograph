@@ -26,7 +26,7 @@ backend portions of Wave `02`.
 | `wave-02-artifact-store-backend` | Complete | ArtifactStore core, private disk persistence, restart reconciliation, consume acknowledgement, cleanup, memory-cache enforcement, disk-budget enforcement, stream persistence, finalize lifecycle, service facade, and focused tests are implemented. Execution cutover and diagnostics descriptor linking remain assigned to Wave `04`. |
 | `wave-03-managed-redistributables` | Complete | Backend `inference` managed media redistributables catalog/status and activation/state scaffolds are implemented for tool/native dependency definitions, expected-file status projection, local staging installs, select/default/activate state, active-version leases, OpenColorIO activation validation state, and conversion dependency lease planning. Real OCIO ABI loading remains deferred because unsafe FFI is intentionally outside the scaffold. |
 | `wave-04-execution-diagnostics-cutover` | In progress | Workflow-service execution cutover converts image/audio/video/3D/large-table/generic-binary/structured base64 or data-url output bindings into ArtifactStore descriptors before `max_value_bytes` validation, the GUI workflow service now opens the project-local ArtifactStore, typed I/O diagnostics projections retain descriptor metadata, Tauri diagnostics overlays redact inline media bodies, and image/audio output-node format overrides are validated into descriptor metadata. Python bridge streaming and producer-specific stream lifecycle metadata remain. |
-| `wave-05-api-bindings-frontend-settings` | In progress | Tauri workflow commands and the UniFFI embedded runtime now expose ArtifactStore descriptor lookup, body read, consume acknowledgement, policy read/update, and stats. Backend artifact format settings query/update and conversion capability commands are implemented with persistence, validation, Tauri registration, and UniFFI JSON parity. ArtifactStore stream read DTOs and Tauri/embedded-runtime stream read commands are implemented for in-progress stream bytes. The I/O Inspector renders descriptor lifecycle/access/handle/format metadata and uses transient Blob URLs for read/download/consume actions, including stream reads, without placing bodies in projection state. Tauri/headless managed media dependency status/action commands, UniFFI managed dependency JSON parity, C# descriptor/body-read smoke parity, and image/audio output-node selectors are implemented. The workbench Settings page now owns ArtifactStore policy, artifact format defaults, and managed media dependency controls through typed backend commands. Remaining legacy settings consolidation remains. |
+| `wave-05-api-bindings-frontend-settings` | In progress | Tauri workflow commands and the UniFFI embedded runtime now expose ArtifactStore descriptor lookup, body read, consume acknowledgement, policy read/update, and stats. Backend artifact format settings query/update and conversion capability commands are implemented with persistence, validation, Tauri registration, and UniFFI JSON parity. ArtifactStore stream read DTOs and Tauri/embedded-runtime stream read commands are implemented for in-progress stream bytes. The I/O Inspector renders descriptor lifecycle/access/handle/format metadata and uses transient Blob URLs for read/download/consume actions, including stream reads, without placing bodies in projection state. Tauri/headless managed media dependency status/action commands, UniFFI managed dependency JSON parity, C# descriptor/body-read smoke parity, and output-node selectors are implemented. The workbench Settings page now owns ArtifactStore policy, artifact format defaults, and managed media dependency controls through typed backend commands. Host adapters now synchronize active managed media dependency versions into workflow-service artifact format capabilities and descriptor metadata. Producer-specific diffusion preview events and first-class child/revision artifact relationships remain. |
 
 ## Required First Actions
 
@@ -171,6 +171,27 @@ worker.
 | ----- | ----- | ----------------- | ---------------------- | ------ |
 | Backend media stream event worker | Convert media `TaskStream` chunks with inline `audio_base64` into ArtifactStore stream lifecycle operations at the Tauri event-adapter boundary and emit bounded stream-reference metadata instead of raw media bodies. Preserve text streams unchanged. | `src-tauri/src/workflow/event_adapter.rs`, optional focused helper/test files under `src-tauri/src/workflow/event_adapter/**`, `src-tauri/src/workflow/workflow_execution_runtime.rs`, `src-tauri/src/workflow/orchestration.rs` only if constructor wiring requires it, `docs/plans/pantograph-execution-platform/implementation-waves/11-artifact-format-settings-and-managed-media-dependencies/reports/wave-05-worker-tauri-media-stream-artifacts.md` | Frontend files, workflow-service ArtifactStore contracts, embedded-runtime stream emitters, diagnostics ledger schema, `.pantograph/**`, `assets/**`, generated output, and lockfiles. | `reports/wave-05-worker-tauri-media-stream-artifacts.md` |
 | Frontend media stream reference worker | Teach workflow toolbar/audio output handling to consume artifact stream-reference chunks without requiring inline `audio_base64`, using existing `workflowService.readArtifactStream` body reads for graph previews. | `src/components/workflowToolbarEvents.ts`, `src/components/workflowToolbarEvents.test.ts`, `src/components/nodes/workflow/AudioOutputNode.svelte`, `src/components/nodes/workflow/README.md`, `docs/plans/pantograph-execution-platform/implementation-waves/11-artifact-format-settings-and-managed-media-dependencies/reports/wave-05-worker-frontend-media-stream-references.md` | Rust files, shared TypeScript command DTOs, workbench Settings page files, `.pantograph/**`, `assets/**`, generated output, and lockfiles. | `reports/wave-05-worker-frontend-media-stream-references.md` |
+
+## 2026-04-29 Active Dependency Version Metadata Slice
+
+- Current dirty files before this slice remained limited to unrelated deleted
+  workflow/assets and untracked diagnostics/asset files.
+- Host-owned write set:
+  `crates/pantograph-workflow-service/src/workflow/artifact_contracts.rs`,
+  `crates/pantograph-workflow-service/src/workflow/service_config.rs`,
+  `crates/pantograph-workflow-service/src/workflow/artifact_settings_api.rs`,
+  `crates/pantograph-workflow-service/src/workflow/artifact_output_conversion.rs`,
+  `crates/pantograph-workflow-service/src/lib.rs`,
+  `src-tauri/src/workflow/headless_workflow_commands.rs`,
+  `src-tauri/src/workflow/commands.rs`, `src-tauri/src/app_setup.rs`,
+  `crates/pantograph-uniffi/src/runtime.rs`, focused tests, and this report.
+- Shared workflow-service DTOs were reopened only to add the narrow
+  `ArtifactFormatDependencyVersions` host snapshot required to keep the service
+  independent of the `inference` crate while still recording active managed
+  converter/library versions in artifact metadata.
+- Parallel read-only audit confirmed no producer-specific diffusion preview
+  event path exists yet; child/revision artifact semantics therefore remain a
+  follow-up contract/store slice after a producer emits preview events.
 
 ## Source Audit Snapshot
 
