@@ -59,3 +59,10 @@ are still open.
   `node --experimental-strip-types --test src/components/workbench/settingsPagePresenters.test.ts src/components/workbench/ioInspectorPresenters.test.ts src/services/workflow/WorkflowService.commands.test.ts`,
   `npm run typecheck -- --pretty false`, `npm run lint:full`,
   `npm run lint:a11y`, `npm run build`, and `npm run traceability`.
+- 2026-04-29 Wave `07` workbench DTO parity passed:
+  `cargo test -p pantograph-workflow-service --test contract workbench_settings_network_cross_layer_fixture_deserializes`,
+  `node --experimental-strip-types --test src/services/workflow/WorkflowService.projections.test.ts src/services/workflow/WorkflowService.commands.test.ts`,
+  `npm run typecheck -- --pretty false`,
+  `cargo test -p pantograph-workflow-service --test contract`,
+  `npm run lint:full`, `cargo fmt --all -- --check`, and
+  `npm run traceability`.

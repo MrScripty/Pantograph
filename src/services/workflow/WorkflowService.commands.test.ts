@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { WorkflowCommandService } from './WorkflowCommandService.ts';
 import type {
@@ -28,9 +29,23 @@ import type {
   WorkflowSessionQueueReprioritizeResponse,
 } from './types.ts';
 
+interface WorkbenchSettingsNetworkContractFixture {
+  artifact_policy: WorkflowArtifactPolicy;
+  artifact_format_settings_response: WorkflowArtifactFormatSettingsQueryResponse;
+  artifact_format_capabilities: WorkflowArtifactFormatCapabilities;
+}
+
 function installWindowMock(): void {
   const target = globalThis as unknown as Record<string, unknown>;
   target.window = globalThis;
+}
+
+function loadWorkbenchSettingsNetworkContractFixture(): WorkbenchSettingsNetworkContractFixture {
+  const fixtureUrl = new URL(
+    '../../../crates/pantograph-workflow-service/tests/fixtures/workbench_settings_network_contract.json',
+    import.meta.url,
+  );
+  return JSON.parse(readFileSync(fixtureUrl, 'utf8')) as WorkbenchSettingsNetworkContractFixture;
 }
 
 function standardRetentionSettings(retentionDays: number): DiagnosticsRetentionPolicySettings {
@@ -666,6 +681,38 @@ test('artifact format settings commands forward backend-owned settings and capab
         args: {},
       },
     ]);
+  } finally {
+    clearMocks();
+  }
+});
+
+test('settings contract fixture crosses Rust and TypeScript service boundaries', async () => {
+  installWindowMock();
+  const fixture = loadWorkbenchSettingsNetworkContractFixture();
+  mockIPC((cmd) => {
+    if (cmd === 'workflow_artifact_policy') {
+      return fixture.artifact_policy;
+    }
+    if (cmd === 'workflow_artifact_format_settings') {
+      return fixture.artifact_format_settings_response;
+    }
+    if (cmd === 'workflow_artifact_format_capabilities') {
+      return fixture.artifact_format_capabilities;
+    }
+    throw new Error(`Unexpected command ${cmd}`);
+  });
+
+  try {
+    const service = new WorkflowCommandService();
+    const policy = await service.artifactPolicy();
+    const settings = await service.artifactFormatSettings();
+    const capabilities = await service.artifactFormatCapabilities();
+
+    assert.deepEqual(policy, fixture.artifact_policy);
+    assert.deepEqual(settings, fixture.artifact_format_settings_response);
+    assert.deepEqual(capabilities, fixture.artifact_format_capabilities);
+    assert.equal(capabilities.image_formats[0].provided_by_dependency_id, 'oiiotool');
+    assert.equal(settings.settings.video.codec_id, 'svt_av1');
   } finally {
     clearMocks();
   }

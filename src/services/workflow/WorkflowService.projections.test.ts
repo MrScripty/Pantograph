@@ -19,6 +19,10 @@ interface RunProjectionContractFixture {
   run_detail_response: WorkflowRunDetailQueryResponse;
 }
 
+interface WorkbenchSettingsNetworkContractFixture {
+  local_network_status_response: WorkflowLocalNetworkStatusQueryResponse;
+}
+
 function installWindowMock(): void {
   const target = globalThis as unknown as Record<string, unknown>;
   target.window = globalThis;
@@ -30,6 +34,14 @@ function loadRunProjectionContractFixture(): RunProjectionContractFixture {
     import.meta.url,
   );
   return JSON.parse(readFileSync(fixtureUrl, 'utf8')) as RunProjectionContractFixture;
+}
+
+function loadWorkbenchSettingsNetworkContractFixture(): WorkbenchSettingsNetworkContractFixture {
+  const fixtureUrl = new URL(
+    '../../../crates/pantograph-workflow-service/tests/fixtures/workbench_settings_network_contract.json',
+    import.meta.url,
+  );
+  return JSON.parse(readFileSync(fixtureUrl, 'utf8')) as WorkbenchSettingsNetworkContractFixture;
 }
 
 test('queryRunList preserves backend projection rows and facets', async () => {
@@ -617,6 +629,29 @@ test('queryLocalNetworkStatus preserves scheduler load and run placement facts',
       },
     ]);
     assert.equal(result.local_node.scheduler_load.run_placements[0].required_models[0], 'model-a');
+  } finally {
+    clearMocks();
+  }
+});
+
+test('network contract fixture crosses Rust and TypeScript service boundaries', async () => {
+  installWindowMock();
+  const fixture = loadWorkbenchSettingsNetworkContractFixture();
+  mockIPC((cmd) => {
+    assert.equal(cmd, 'workflow_local_network_status_query');
+    return fixture.local_network_status_response;
+  });
+
+  try {
+    const service = new WorkflowProjectionService();
+    const result = await service.queryLocalNetworkStatus({
+      include_disks: true,
+      include_network_interfaces: true,
+    });
+
+    assert.deepEqual(result, fixture.local_network_status_response);
+    assert.equal(result.local_node.scheduler_load.run_placements[0].workflow_run_id, 'run-active');
+    assert.equal(result.peer_nodes[0].transport_state, 'pairing_required');
   } finally {
     clearMocks();
   }

@@ -10,6 +10,7 @@ use pantograph_diagnostics_ledger::{
 };
 use pantograph_workflow_service::graph::WorkflowExecutionSessionKind;
 use pantograph_workflow_service::{
+    ArtifactFormatCapabilities, ArtifactFormatSettingsQueryResponse, ArtifactPolicy,
     WorkflowAdminQueueCancelRequest, WorkflowAdminQueueCancelResponse,
     WorkflowAdminQueuePushFrontRequest, WorkflowAdminQueuePushFrontResponse,
     WorkflowAdminQueueReprioritizeRequest, WorkflowAdminQueueReprioritizeResponse,
@@ -20,18 +21,19 @@ use pantograph_workflow_service::{
     WorkflowIoArtifactQueryRequest, WorkflowIoArtifactQueryResponse, WorkflowIoNode,
     WorkflowIoPort, WorkflowIoRequest, WorkflowIoResponse, WorkflowLibraryAssetAccessRecordRequest,
     WorkflowLibraryAssetAccessRecordResponse, WorkflowLibraryUsageQueryRequest,
-    WorkflowLibraryUsageQueryResponse, WorkflowNodeStatusQueryRequest,
-    WorkflowNodeStatusQueryResponse, WorkflowOutputTarget, WorkflowPortBinding,
-    WorkflowPreflightRequest, WorkflowProjectionRebuildRequest, WorkflowProjectionRebuildResponse,
-    WorkflowRetentionCleanupRequest, WorkflowRetentionCleanupResponse,
-    WorkflowRetentionPolicyQueryRequest, WorkflowRetentionPolicyQueryResponse,
-    WorkflowRunDetailQueryRequest, WorkflowRunDetailQueryResponse, WorkflowRunListQueryResponse,
-    WorkflowRuntimeCapability, WorkflowRuntimeInstallState, WorkflowRuntimeRequirements,
-    WorkflowRuntimeSourceKind, WorkflowSchedulerSnapshotResponse,
-    WorkflowSchedulerTimelineQueryRequest, WorkflowSchedulerTimelineQueryResponse, WorkflowService,
-    WorkflowServiceError, WorkflowTraceNodeRecord, WorkflowTraceNodeStatus,
-    WorkflowTraceQueueMetrics, WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest,
-    WorkflowTraceSnapshotResponse, WorkflowTraceStatus, WorkflowTraceSummary,
+    WorkflowLibraryUsageQueryResponse, WorkflowLocalNetworkStatusQueryResponse,
+    WorkflowNodeStatusQueryRequest, WorkflowNodeStatusQueryResponse, WorkflowOutputTarget,
+    WorkflowPortBinding, WorkflowPreflightRequest, WorkflowProjectionRebuildRequest,
+    WorkflowProjectionRebuildResponse, WorkflowRetentionCleanupRequest,
+    WorkflowRetentionCleanupResponse, WorkflowRetentionPolicyQueryRequest,
+    WorkflowRetentionPolicyQueryResponse, WorkflowRunDetailQueryRequest,
+    WorkflowRunDetailQueryResponse, WorkflowRunListQueryResponse, WorkflowRuntimeCapability,
+    WorkflowRuntimeInstallState, WorkflowRuntimeRequirements, WorkflowRuntimeSourceKind,
+    WorkflowSchedulerSnapshotResponse, WorkflowSchedulerTimelineQueryRequest,
+    WorkflowSchedulerTimelineQueryResponse, WorkflowService, WorkflowServiceError,
+    WorkflowTraceNodeRecord, WorkflowTraceNodeStatus, WorkflowTraceQueueMetrics,
+    WorkflowTraceRuntimeMetrics, WorkflowTraceSnapshotRequest, WorkflowTraceSnapshotResponse,
+    WorkflowTraceStatus, WorkflowTraceSummary,
 };
 
 struct ContractHost;
@@ -931,6 +933,36 @@ fn run_projection_cross_layer_fixture_deserializes() {
             .as_ref()
             .and_then(|run| run.workflow_execution_session_id.as_deref()),
         Some("exec-session-1")
+    );
+}
+
+#[test]
+fn workbench_settings_network_cross_layer_fixture_deserializes() {
+    let fixture: serde_json::Value = serde_json::from_str(include_str!(
+        "fixtures/workbench_settings_network_contract.json"
+    ))
+    .expect("fixture parses");
+
+    let network: WorkflowLocalNetworkStatusQueryResponse =
+        serde_json::from_value(fixture["local_network_status_response"].clone())
+            .expect("network fixture matches Rust DTO");
+    let artifact_policy: ArtifactPolicy =
+        serde_json::from_value(fixture["artifact_policy"].clone())
+            .expect("artifact policy fixture matches Rust DTO");
+    let artifact_format_settings: ArtifactFormatSettingsQueryResponse =
+        serde_json::from_value(fixture["artifact_format_settings_response"].clone())
+            .expect("artifact settings fixture matches Rust DTO");
+    let artifact_format_capabilities: ArtifactFormatCapabilities =
+        serde_json::from_value(fixture["artifact_format_capabilities"].clone())
+            .expect("artifact capabilities fixture matches Rust DTO");
+
+    assert_eq!(network.local_node.node_id, "local");
+    assert_eq!(network.peer_nodes[0].node_id, "peer-a");
+    assert_eq!(artifact_policy.policy_id, "artifact-policy-v1");
+    assert_eq!(artifact_format_settings.settings.image.format_id, "jpg");
+    assert_eq!(
+        artifact_format_capabilities.audio_formats[0].provided_by_dependency_id,
+        "ffmpeg"
     );
 }
 

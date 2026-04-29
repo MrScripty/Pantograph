@@ -1,0 +1,182 @@
+{
+  "local_network_status_response": {
+    "local_node": {
+      "node_id": "local",
+      "display_name": "Local Pantograph",
+      "captured_at_ms": 42,
+      "transport_state": "local_only",
+      "system": {
+        "hostname": "host-a",
+        "os_name": "Linux",
+        "os_version": null,
+        "kernel_version": null,
+        "cpu": {
+          "logical_core_count": 8,
+          "average_usage_percent": 12.5
+        },
+        "memory": {
+          "total_bytes": 100,
+          "used_bytes": 40,
+          "available_bytes": 60
+        },
+        "disks": [
+          {
+            "name": "disk-a",
+            "mount_point": "/",
+            "total_bytes": 1000,
+            "available_bytes": 500
+          }
+        ],
+        "network_interfaces": [
+          {
+            "name": "eth0",
+            "total_received_bytes": 10,
+            "total_transmitted_bytes": 20
+          }
+        ],
+        "gpu": {
+          "available": false,
+          "reason": "not implemented"
+        }
+      },
+      "scheduler_load": {
+        "max_sessions": 4,
+        "active_session_count": 1,
+        "max_loaded_sessions": 2,
+        "loaded_session_count": 1,
+        "active_run_count": 1,
+        "queued_run_count": 3,
+        "active_workflow_run_ids": ["run-active"],
+        "queued_workflow_run_ids": ["run-queued"],
+        "run_placements": [
+          {
+            "workflow_run_id": "run-active",
+            "workflow_execution_session_id": "session-a",
+            "workflow_id": "workflow-a",
+            "state": "running",
+            "runtime_loaded": true,
+            "model_cache_state": "unknown",
+            "required_backends": ["python"],
+            "required_models": ["model-a"]
+          }
+        ]
+      },
+      "degradation_warnings": ["not implemented"]
+    },
+    "peer_nodes": [
+      {
+        "node_id": "peer-a",
+        "display_name": "Peer A",
+        "transport_state": "pairing_required",
+        "last_seen_at_ms": null
+      }
+    ]
+  },
+  "artifact_policy": {
+    "policy_id": "artifact-policy-v1",
+    "policy_version": 3,
+    "ttl_seconds": 604800,
+    "max_disk_bytes": null,
+    "max_memory_bytes": 4096,
+    "max_single_artifact_bytes": 1024,
+    "spill_threshold_bytes": null,
+    "delete_on_consume": true
+  },
+  "artifact_format_settings_response": {
+    "settings": {
+      "image": {
+        "format_id": "jpg",
+        "quality_percent": 75,
+        "color_profile_id": "srgb"
+      },
+      "audio": {
+        "container_id": "ogg",
+        "codec_id": "opus",
+        "bitrate_kbps": 96
+      },
+      "video": {
+        "container_id": "ivf",
+        "codec_id": "svt_av1",
+        "crf": 32,
+        "bit_depth": "8bit"
+      },
+      "three_d": {
+        "format_id": "glb"
+      }
+    }
+  },
+  "artifact_format_capabilities": {
+    "image_formats": [
+      {
+        "format_id": "jpg",
+        "display_name": "JPEG",
+        "media_type": "image/jpeg",
+        "codec_ids": [],
+        "quality_min_percent": 1,
+        "quality_max_percent": 100,
+        "bitrate_min_kbps": null,
+        "bitrate_max_kbps": null,
+        "crf_min": null,
+        "crf_max": null,
+        "bit_depths": ["8bit", "16bit", "float"],
+        "color_profile_ids": ["srgb"],
+        "provided_by_dependency_id": "oiiotool",
+        "provided_by_version": null
+      }
+    ],
+    "audio_formats": [
+      {
+        "format_id": "ogg",
+        "display_name": "Ogg",
+        "media_type": "audio/ogg",
+        "codec_ids": ["opus", "vorbis"],
+        "quality_min_percent": null,
+        "quality_max_percent": null,
+        "bitrate_min_kbps": 32,
+        "bitrate_max_kbps": 512,
+        "crf_min": null,
+        "crf_max": null,
+        "bit_depths": [],
+        "color_profile_ids": [],
+        "provided_by_dependency_id": "ffmpeg",
+        "provided_by_version": null
+      }
+    ],
+    "video_formats": [
+      {
+        "format_id": "ivf",
+        "display_name": "AV1 IVF",
+        "media_type": "video/av1",
+        "codec_ids": ["svt_av1"],
+        "quality_min_percent": null,
+        "quality_max_percent": null,
+        "bitrate_min_kbps": null,
+        "bitrate_max_kbps": null,
+        "crf_min": 0,
+        "crf_max": 63,
+        "bit_depths": ["8bit", "10bit"],
+        "color_profile_ids": [],
+        "provided_by_dependency_id": "ffmpeg",
+        "provided_by_version": null
+      }
+    ],
+    "three_d_formats": [
+      {
+        "format_id": "glb",
+        "display_name": "GLB",
+        "media_type": "model/gltf-binary",
+        "codec_ids": [],
+        "quality_min_percent": null,
+        "quality_max_percent": null,
+        "bitrate_min_kbps": null,
+        "bitrate_max_kbps": null,
+        "crf_min": null,
+        "crf_max": null,
+        "bit_depths": [],
+        "color_profile_ids": [],
+        "provided_by_dependency_id": "pantograph-3d",
+        "provided_by_version": null
+      }
+    ]
+  }
+}

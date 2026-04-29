@@ -454,9 +454,10 @@ write sets. Default sequence:
   navigation behavior are represented in backend services.
 - [x] Choose DTO parity enforcement through generated bindings or paired
   Rust/TypeScript contract tests for every new page projection.
-- [ ] Strengthen shared-fixture/generated DTO parity for Network, Settings,
-  and remaining Stage `11` media surfaces before promoting those APIs as
-  complete external contracts.
+- [x] Strengthen shared-fixture/generated DTO parity for current Network and
+  Settings workbench surfaces.
+- [ ] Extend parity strengthening to remaining Stage `11` media surfaces before
+  promoting those APIs as complete external contracts.
 
 ### Milestone 3: Workbench Shell And Active-Run Navigation
 
