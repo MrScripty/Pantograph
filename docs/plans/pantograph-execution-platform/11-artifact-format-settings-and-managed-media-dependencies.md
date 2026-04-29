@@ -380,6 +380,9 @@ when physical payload bodies are deleted.
   - [x] Add the workbench Settings page and route ArtifactStore policy plus
     artifact format defaults through typed backend commands and capability
     DTOs.
+  - [x] Add managed media dependency status and action controls for `ffmpeg`,
+    `ocioconvert`, `oiiotool`, and OpenColorIO to the workbench Settings page
+    using backend command responses as the source of truth.
   - [ ] Relocate, embed, or retire remaining legacy global settings surfaces
     that still own server/runtime settings outside the workbench Settings page.
 - [x] Add output-node format selectors that default from backend Settings and
