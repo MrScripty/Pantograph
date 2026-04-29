@@ -332,8 +332,8 @@ fn resolve_image_output_format(
             crf: None,
             bit_depth: Some("8bit".to_string()),
             color_profile_id: Some(selection.color_profile_id),
-            converter_id: None,
-            converter_version: None,
+            converter_id: Some(format.provided_by_dependency_id.clone()),
+            converter_version: format.provided_by_version.clone(),
             library_version: None,
         },
     })
@@ -425,8 +425,8 @@ fn resolve_audio_output_format(
             crf: None,
             bit_depth: None,
             color_profile_id: None,
-            converter_id: None,
-            converter_version: None,
+            converter_id: Some(format.provided_by_dependency_id.clone()),
+            converter_version: format.provided_by_version.clone(),
             library_version: None,
         },
     })
@@ -526,8 +526,8 @@ fn resolve_video_output_format(
             crf: Some(selection.crf),
             bit_depth: Some(selection.bit_depth),
             color_profile_id: None,
-            converter_id: None,
-            converter_version: None,
+            converter_id: format.map(|format| format.provided_by_dependency_id.clone()),
+            converter_version: format.and_then(|format| format.provided_by_version.clone()),
             library_version: None,
         },
     })
@@ -587,8 +587,8 @@ fn resolve_three_d_output_format(
             crf: None,
             bit_depth: None,
             color_profile_id: None,
-            converter_id: None,
-            converter_version: None,
+            converter_id: format.map(|format| format.provided_by_dependency_id.clone()),
+            converter_version: format.and_then(|format| format.provided_by_version.clone()),
             library_version: None,
         },
     })
@@ -1481,6 +1481,7 @@ mod tests {
         let format = descriptor.format.expect("format");
         assert_eq!(format.format_id, "png");
         assert_eq!(format.media_type, "image/png");
+        assert_eq!(format.converter_id.as_deref(), Some("oiiotool"));
     }
 
     #[test]
@@ -1511,6 +1512,7 @@ mod tests {
         assert_eq!(format.codec_id.as_deref(), Some("svt_av1"));
         assert_eq!(format.crf, Some(32));
         assert_eq!(format.bit_depth.as_deref(), Some("8bit"));
+        assert_eq!(format.converter_id.as_deref(), Some("ffmpeg"));
     }
 
     #[test]
@@ -1539,6 +1541,7 @@ mod tests {
         assert_eq!(descriptor.payload_kind, ArtifactPayloadKind::ThreeD);
         assert_eq!(format.format_id, "glb");
         assert_eq!(format.media_type, "model/gltf-binary");
+        assert_eq!(format.converter_id.as_deref(), Some("pantograph-3d"));
     }
 
     #[test]
@@ -1576,6 +1579,7 @@ mod tests {
         assert_eq!(format.media_type, "image/png");
         assert_eq!(format.quality_percent, Some(90));
         assert_eq!(format.color_profile_id.as_deref(), Some("srgb"));
+        assert_eq!(format.converter_id.as_deref(), Some("oiiotool"));
     }
 
     #[test]
@@ -1613,6 +1617,7 @@ mod tests {
         assert_eq!(format.media_type, "audio/ogg");
         assert_eq!(format.codec_id.as_deref(), Some("vorbis"));
         assert_eq!(format.bitrate_kbps, Some(128));
+        assert_eq!(format.converter_id.as_deref(), Some("ffmpeg"));
     }
 
     #[test]
