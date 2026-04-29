@@ -393,11 +393,14 @@ pub async fn execute_orchestration(
         .await?,
     );
 
-    let event_sink = Arc::new(super::event_adapter::TauriEventAdapter::new(
-        channel,
-        &orchestration_id,
-        Arc::new(super::diagnostics::WorkflowDiagnosticsStore::default()),
-    ));
+    let event_sink = Arc::new(
+        super::event_adapter::TauriEventAdapter::new(
+            channel,
+            &orchestration_id,
+            Arc::new(super::diagnostics::WorkflowDiagnosticsStore::default()),
+        )
+        .with_workflow_service(workflow_service.inner().clone()),
+    );
 
     let data_executor = PantographDataGraphExecutor::new(
         orchestration_store.inner().clone(),

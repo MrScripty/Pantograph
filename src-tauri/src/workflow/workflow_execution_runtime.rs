@@ -344,6 +344,7 @@ async fn run_session_graph_snapshot(input: SessionGraphSnapshotInput<'_>) -> Res
             event_workflow_id,
             diagnostics_store.inner().clone(),
         )
+        .with_workflow_service(workflow_service.inner().clone())
         .with_execution_graph(session_graph.clone()),
     );
     let guard = config.read().await;
