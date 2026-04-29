@@ -5,9 +5,9 @@ Managed media conversion contract crate.
 ## Purpose
 
 This crate defines Pantograph's neutral media conversion boundary for Stage
-`13`: typed conversion requests, target format metadata, result/error contracts,
-dependency lease attribution, and the executor trait used by host-owned
-converter implementations.
+`13`: typed conversion requests, target format metadata, command plans,
+result/error contracts, dependency lease attribution, and the executor trait
+used by host-owned converter implementations.
 
 ## Contents
 
@@ -31,6 +31,9 @@ stable boundary for conversion metadata and errors.
   serialized attribution records must stay body-free.
 - Converter executable paths and temporary files remain implementation details
   of later host-owned executors.
+- Command plans use stdin/stdout stream markers and argv vectors only; they do
+  not contain ArtifactStore paths, executable paths, shell command strings, or
+  host filesystem assumptions.
 
 ## Decision
 
@@ -50,6 +53,11 @@ contracts first, implementation after the shared shape is frozen.
 - Public ids are validated before construction.
 - Per-conversion dependency attribution records the dependency id, active
   version, and lease id used for that conversion.
+- Command planning maps image targets to `oiiotool`, color-managed image
+  targets to `ocioconvert` plus `OpenColorIO` support, and audio/video targets
+  to `ffmpeg`.
+- 3D conversion planning fails closed until Pantograph owns a concrete managed
+  3D converter dependency.
 - Request/result errors remain typed and bounded.
 - No API in this crate accepts user-supplied executable paths.
 
@@ -81,7 +89,8 @@ internal dependency.
 
 ```rust
 use pantograph_media_conversion::{
-    MediaConversionExecutor, MediaConversionRequest, MediaConversionResult,
+    plan_image_command, MediaConversionExecutor, MediaConversionRequest,
+    MediaConversionResult,
 };
 ```
 
@@ -90,6 +99,8 @@ use pantograph_media_conversion::{
 - Inputs: validated Rust structs containing conversion identity, source
   artifact attribution, source bytes, target format metadata, and optional
   timeout.
+- Plans: deterministic image, audio, and video command plans describe required
+  managed dependency ids, stdin/stdout flow, and separate argv vectors.
 - Outputs: converted bytes, conversion status, target format metadata, and
   per-conversion dependency attribution.
 - Lifecycle: hosts construct validated requests, call an executor
@@ -107,6 +118,7 @@ use pantograph_media_conversion::{
 - Defaults: omitted optional target fields mean the backend-selected default.
 - Enum meanings: conversion status and dependency id variants are behaviorally
   meaningful and must not be renamed without migration.
-- Ordering: dependency attribution preserves acquisition order.
+- Ordering: dependency attribution and command-plan dependency ids preserve
+  acquisition/order-of-use semantics.
 - Compatibility: diagnostics may persist attribution records after artifact
   bodies are deleted.

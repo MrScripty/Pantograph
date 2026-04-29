@@ -42,6 +42,12 @@ pub enum MediaConversionError {
         source_media_type: String,
         target_media_type: String,
     },
+    #[error("command planning for {kind:?} target {target_media_type} is not supported: {reason}")]
+    UnsupportedCommandPlan {
+        kind: ConversionMediaKind,
+        target_media_type: String,
+        reason: String,
+    },
     #[error("{dependency_id} dependency is unavailable: {reason}")]
     DependencyUnavailable {
         dependency_id: ManagedMediaDependencyId,
@@ -158,6 +164,230 @@ impl fmt::Display for ManagedMediaDependencyId {
         };
         f.write_str(value)
     }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum MediaCommandPlanStream {
+    Stdin,
+    Stdout,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct MediaCommandPlanStep {
+    pub dependency_id: ManagedMediaDependencyId,
+    pub argv: Vec<String>,
+    pub input: MediaCommandPlanStream,
+    pub output: MediaCommandPlanStream,
+}
+
+impl MediaCommandPlanStep {
+    pub fn try_new(
+        dependency_id: ManagedMediaDependencyId,
+        argv: Vec<String>,
+        input: MediaCommandPlanStream,
+        output: MediaCommandPlanStream,
+    ) -> Result<Self, MediaConversionError> {
+        if argv.is_empty() {
+            return Err(MediaConversionError::MissingField { field: "argv" });
+        }
+        for arg in &argv {
+            validate_process_arg(arg)?;
+        }
+        Ok(Self {
+            dependency_id,
+            argv,
+            input,
+            output,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct MediaCommandPlan {
+    pub kind: ConversionMediaKind,
+    pub target: MediaConversionTarget,
+    pub required_dependency_ids: Vec<ManagedMediaDependencyId>,
+    pub steps: Vec<MediaCommandPlanStep>,
+}
+
+impl MediaCommandPlan {
+    pub fn try_for_target(
+        kind: ConversionMediaKind,
+        target: MediaConversionTarget,
+    ) -> Result<Self, MediaConversionError> {
+        match kind {
+            ConversionMediaKind::Image => plan_image_command(target),
+            ConversionMediaKind::Audio => plan_audio_command(target),
+            ConversionMediaKind::Video => plan_video_command(target),
+            ConversionMediaKind::ThreeD => Err(unsupported_command_plan(
+                kind,
+                &target,
+                "managed 3D conversion has no concrete converter dependency",
+            )),
+        }
+    }
+
+    fn try_new(
+        kind: ConversionMediaKind,
+        target: MediaConversionTarget,
+        steps: Vec<MediaCommandPlanStep>,
+        extra_dependency_ids: Vec<ManagedMediaDependencyId>,
+    ) -> Result<Self, MediaConversionError> {
+        if steps.is_empty() {
+            return Err(MediaConversionError::MissingField { field: "steps" });
+        }
+
+        let mut required_dependency_ids = Vec::new();
+        for dependency_id in extra_dependency_ids {
+            push_unique_dependency(&mut required_dependency_ids, dependency_id);
+        }
+        for step in &steps {
+            push_unique_dependency(&mut required_dependency_ids, step.dependency_id);
+        }
+
+        Ok(Self {
+            kind,
+            target,
+            required_dependency_ids,
+            steps,
+        })
+    }
+}
+
+pub fn plan_image_command(
+    target: MediaConversionTarget,
+) -> Result<MediaCommandPlan, MediaConversionError> {
+    ensure_target_media_type(ConversionMediaKind::Image, &target, "image/")?;
+
+    let mut steps = Vec::new();
+    let mut extra_dependency_ids = Vec::new();
+    if target.color_managed {
+        let mut argv = vec![
+            "--input".to_string(),
+            "-".to_string(),
+            "--output".to_string(),
+            "-".to_string(),
+        ];
+        if let Some(color_profile_id) = target.color_profile_id.as_ref() {
+            argv.push("--output-color-space".to_string());
+            argv.push(color_profile_id.as_str().to_string());
+        }
+        steps.push(MediaCommandPlanStep::try_new(
+            ManagedMediaDependencyId::Ocioconvert,
+            argv,
+            MediaCommandPlanStream::Stdin,
+            MediaCommandPlanStream::Stdout,
+        )?);
+        extra_dependency_ids.push(ManagedMediaDependencyId::OpenColorIo);
+    }
+
+    let mut argv = vec![
+        "-".to_string(),
+        "--format".to_string(),
+        target.format_id.as_str().to_string(),
+    ];
+    if let Some(codec_id) = target.codec_id.as_ref() {
+        argv.push("--compression".to_string());
+        argv.push(codec_id.as_str().to_string());
+    }
+    if let Some(quality_percent) = target.quality_percent {
+        argv.push("--quality".to_string());
+        argv.push(quality_percent.to_string());
+    }
+    if let Some(bit_depth) = target.bit_depth.as_ref() {
+        argv.push("--bitdepth".to_string());
+        argv.push(bit_depth.as_str().to_string());
+    }
+    if !target.color_managed {
+        if let Some(color_profile_id) = target.color_profile_id.as_ref() {
+            argv.push("--color-profile".to_string());
+            argv.push(color_profile_id.as_str().to_string());
+        }
+    }
+    argv.push("-o".to_string());
+    argv.push("-".to_string());
+    steps.push(MediaCommandPlanStep::try_new(
+        ManagedMediaDependencyId::Oiiotool,
+        argv,
+        MediaCommandPlanStream::Stdin,
+        MediaCommandPlanStream::Stdout,
+    )?);
+
+    MediaCommandPlan::try_new(
+        ConversionMediaKind::Image,
+        target,
+        steps,
+        extra_dependency_ids,
+    )
+}
+
+pub fn plan_audio_command(
+    target: MediaConversionTarget,
+) -> Result<MediaCommandPlan, MediaConversionError> {
+    ensure_target_media_type(ConversionMediaKind::Audio, &target, "audio/")?;
+
+    let mut argv = ffmpeg_common_argv(&target);
+    if let Some(codec_id) = target.codec_id.as_ref() {
+        argv.push("-codec:a".to_string());
+        argv.push(codec_id.as_str().to_string());
+    }
+    if let Some(bitrate_kbps) = target.bitrate_kbps {
+        argv.push("-b:a".to_string());
+        argv.push(format!("{bitrate_kbps}k"));
+    }
+    if let Some(quality_percent) = target.quality_percent {
+        argv.push("-q:a".to_string());
+        argv.push(quality_percent.to_string());
+    }
+    argv.push("pipe:1".to_string());
+
+    MediaCommandPlan::try_new(
+        ConversionMediaKind::Audio,
+        target,
+        vec![MediaCommandPlanStep::try_new(
+            ManagedMediaDependencyId::Ffmpeg,
+            argv,
+            MediaCommandPlanStream::Stdin,
+            MediaCommandPlanStream::Stdout,
+        )?],
+        Vec::new(),
+    )
+}
+
+pub fn plan_video_command(
+    target: MediaConversionTarget,
+) -> Result<MediaCommandPlan, MediaConversionError> {
+    ensure_target_media_type(ConversionMediaKind::Video, &target, "video/")?;
+
+    let mut argv = ffmpeg_common_argv(&target);
+    if let Some(codec_id) = target.codec_id.as_ref() {
+        argv.push("-codec:v".to_string());
+        argv.push(codec_id.as_str().to_string());
+    }
+    if let Some(bitrate_kbps) = target.bitrate_kbps {
+        argv.push("-b:v".to_string());
+        argv.push(format!("{bitrate_kbps}k"));
+    }
+    if let Some(crf) = target.crf {
+        argv.push("-crf".to_string());
+        argv.push(crf.to_string());
+    }
+    argv.push("pipe:1".to_string());
+
+    MediaCommandPlan::try_new(
+        ConversionMediaKind::Video,
+        target,
+        vec![MediaCommandPlanStep::try_new(
+            ManagedMediaDependencyId::Ffmpeg,
+            argv,
+            MediaCommandPlanStream::Stdin,
+            MediaCommandPlanStream::Stdout,
+        )?],
+        Vec::new(),
+    )
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -717,6 +947,55 @@ fn validate_process_arg(arg: &str) -> Result<(), MediaConversionError> {
     Ok(())
 }
 
+fn ensure_target_media_type(
+    kind: ConversionMediaKind,
+    target: &MediaConversionTarget,
+    expected_prefix: &str,
+) -> Result<(), MediaConversionError> {
+    if target.media_type.as_str().starts_with(expected_prefix) {
+        Ok(())
+    } else {
+        Err(unsupported_command_plan(
+            kind,
+            target,
+            "target media type does not match requested conversion kind",
+        ))
+    }
+}
+
+fn unsupported_command_plan(
+    kind: ConversionMediaKind,
+    target: &MediaConversionTarget,
+    reason: impl Into<String>,
+) -> MediaConversionError {
+    MediaConversionError::UnsupportedCommandPlan {
+        kind,
+        target_media_type: target.media_type.to_string(),
+        reason: reason.into(),
+    }
+}
+
+fn push_unique_dependency(
+    dependency_ids: &mut Vec<ManagedMediaDependencyId>,
+    dependency_id: ManagedMediaDependencyId,
+) {
+    if !dependency_ids.contains(&dependency_id) {
+        dependency_ids.push(dependency_id);
+    }
+}
+
+fn ffmpeg_common_argv(target: &MediaConversionTarget) -> Vec<String> {
+    vec![
+        "-hide_banner".to_string(),
+        "-loglevel".to_string(),
+        "error".to_string(),
+        "-i".to_string(),
+        "pipe:0".to_string(),
+        "-f".to_string(),
+        target.format_id.as_str().to_string(),
+    ]
+}
+
 fn bounded_stderr_summary(stderr: &[u8]) -> Option<String> {
     let normalized = String::from_utf8_lossy(stderr)
         .split_whitespace()
@@ -750,6 +1029,32 @@ mod tests {
             Some("8bit".parse().expect("bit depth")),
             Some("srgb".parse().expect("color profile")),
             true,
+        )
+        .expect("target")
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn command_target(
+        format_id: &str,
+        media_type: &str,
+        codec_id: Option<&str>,
+        quality_percent: Option<u8>,
+        bitrate_kbps: Option<u32>,
+        crf: Option<u8>,
+        bit_depth: Option<&str>,
+        color_profile_id: Option<&str>,
+        color_managed: bool,
+    ) -> MediaConversionTarget {
+        MediaConversionTarget::try_new(
+            format_id.parse().expect("format id"),
+            media_type.parse().expect("media type"),
+            codec_id.map(|value| value.parse().expect("codec id")),
+            quality_percent,
+            bitrate_kbps,
+            crf,
+            bit_depth.map(|value| value.parse().expect("bit depth")),
+            color_profile_id.map(|value| value.parse().expect("color profile")),
+            color_managed,
         )
         .expect("target")
     }
@@ -878,6 +1183,288 @@ mod tests {
             MediaConversionError::InvalidRange {
                 field: "quality_percent",
                 value: 101
+            }
+        ));
+    }
+
+    #[test]
+    fn image_command_plan_uses_oiiotool_defaults_without_host_paths() {
+        let target = command_target(
+            "png",
+            "image/png",
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            false,
+        );
+
+        let plan = plan_image_command(target.clone()).expect("image plan");
+
+        assert_eq!(plan.kind, ConversionMediaKind::Image);
+        assert_eq!(plan.target, target);
+        assert_eq!(
+            plan.required_dependency_ids,
+            vec![ManagedMediaDependencyId::Oiiotool]
+        );
+        assert_eq!(plan.steps.len(), 1);
+        assert_eq!(
+            plan.steps[0],
+            MediaCommandPlanStep {
+                dependency_id: ManagedMediaDependencyId::Oiiotool,
+                argv: vec![
+                    "-".to_string(),
+                    "--format".to_string(),
+                    "png".to_string(),
+                    "-o".to_string(),
+                    "-".to_string(),
+                ],
+                input: MediaCommandPlanStream::Stdin,
+                output: MediaCommandPlanStream::Stdout,
+            }
+        );
+    }
+
+    #[test]
+    fn image_command_plan_includes_explicit_target_fields_and_color_management() {
+        let target = command_target(
+            "jpg",
+            "image/jpeg",
+            Some("jpeg"),
+            Some(82),
+            None,
+            None,
+            Some("uint8"),
+            Some("acescg"),
+            true,
+        );
+
+        let plan = MediaCommandPlan::try_for_target(ConversionMediaKind::Image, target)
+            .expect("image plan");
+
+        assert_eq!(
+            plan.required_dependency_ids,
+            vec![
+                ManagedMediaDependencyId::OpenColorIo,
+                ManagedMediaDependencyId::Ocioconvert,
+                ManagedMediaDependencyId::Oiiotool
+            ]
+        );
+        assert_eq!(plan.steps.len(), 2);
+        assert_eq!(
+            plan.steps[0].dependency_id,
+            ManagedMediaDependencyId::Ocioconvert
+        );
+        assert_eq!(
+            plan.steps[0].argv,
+            vec![
+                "--input",
+                "-",
+                "--output",
+                "-",
+                "--output-color-space",
+                "acescg"
+            ]
+        );
+        assert_eq!(
+            plan.steps[1].dependency_id,
+            ManagedMediaDependencyId::Oiiotool
+        );
+        assert_eq!(
+            plan.steps[1].argv,
+            vec![
+                "-",
+                "--format",
+                "jpg",
+                "--compression",
+                "jpeg",
+                "--quality",
+                "82",
+                "--bitdepth",
+                "uint8",
+                "-o",
+                "-"
+            ]
+        );
+    }
+
+    #[test]
+    fn audio_command_plan_uses_ffmpeg_defaults_and_explicit_fields() {
+        let defaults = command_target(
+            "wav",
+            "audio/wav",
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            false,
+        );
+        let explicit = command_target(
+            "mp3",
+            "audio/mpeg",
+            Some("libmp3lame"),
+            Some(4),
+            Some(192),
+            None,
+            None,
+            None,
+            false,
+        );
+
+        let defaults_plan = plan_audio_command(defaults).expect("default audio plan");
+        let explicit_plan = plan_audio_command(explicit).expect("explicit audio plan");
+
+        assert_eq!(
+            defaults_plan.required_dependency_ids,
+            vec![ManagedMediaDependencyId::Ffmpeg]
+        );
+        assert_eq!(
+            defaults_plan.steps[0].argv,
+            vec![
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-i",
+                "pipe:0",
+                "-f",
+                "wav",
+                "pipe:1"
+            ]
+        );
+        assert_eq!(
+            explicit_plan.steps[0].argv,
+            vec![
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-i",
+                "pipe:0",
+                "-f",
+                "mp3",
+                "-codec:a",
+                "libmp3lame",
+                "-b:a",
+                "192k",
+                "-q:a",
+                "4",
+                "pipe:1"
+            ]
+        );
+    }
+
+    #[test]
+    fn video_command_plan_uses_ffmpeg_defaults_and_explicit_fields() {
+        let defaults = command_target(
+            "mp4",
+            "video/mp4",
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            false,
+        );
+        let explicit = command_target(
+            "mp4",
+            "video/mp4",
+            Some("libx264"),
+            None,
+            Some(4_000),
+            Some(23),
+            None,
+            None,
+            false,
+        );
+
+        let defaults_plan = plan_video_command(defaults).expect("default video plan");
+        let explicit_plan = plan_video_command(explicit).expect("explicit video plan");
+
+        assert_eq!(
+            defaults_plan.required_dependency_ids,
+            vec![ManagedMediaDependencyId::Ffmpeg]
+        );
+        assert_eq!(
+            defaults_plan.steps[0].argv,
+            vec![
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-i",
+                "pipe:0",
+                "-f",
+                "mp4",
+                "pipe:1"
+            ]
+        );
+        assert_eq!(
+            explicit_plan.steps[0].argv,
+            vec![
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-i",
+                "pipe:0",
+                "-f",
+                "mp4",
+                "-codec:v",
+                "libx264",
+                "-b:v",
+                "4000k",
+                "-crf",
+                "23",
+                "pipe:1"
+            ]
+        );
+    }
+
+    #[test]
+    fn command_planning_fails_closed_for_unsupported_3d_and_kind_mismatch() {
+        let three_d_target = command_target(
+            "glb",
+            "model/gltf-binary",
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            false,
+        );
+        let image_target = command_target(
+            "png",
+            "image/png",
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            false,
+        );
+
+        let unsupported_three_d =
+            MediaCommandPlan::try_for_target(ConversionMediaKind::ThreeD, three_d_target)
+                .expect_err("unsupported 3D plan");
+        assert!(matches!(
+            unsupported_three_d,
+            MediaConversionError::UnsupportedCommandPlan {
+                kind: ConversionMediaKind::ThreeD,
+                ..
+            }
+        ));
+
+        let mismatch = MediaCommandPlan::try_for_target(ConversionMediaKind::Audio, image_target)
+            .expect_err("kind mismatch");
+        assert!(matches!(
+            mismatch,
+            MediaConversionError::UnsupportedCommandPlan {
+                kind: ConversionMediaKind::Audio,
+                ..
             }
         ));
     }

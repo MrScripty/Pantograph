@@ -14,7 +14,7 @@ conversion.
 
 | File/Folder | Description |
 | ----------- | ----------- |
-| `lib.rs` | Public conversion request/result/error contracts, typed ids, target format metadata, lease attribution records, and executor trait. |
+| `lib.rs` | Public conversion request/result/error contracts, typed ids, target format metadata, command-plan builders, lease attribution records, and executor trait. |
 
 ## Problem
 
@@ -33,13 +33,16 @@ force adapters to invent incompatible conversion metadata.
   raw media bodies or filesystem paths.
 - Conversion contracts must be usable by Tauri, embedded runtime adapters, and
   tests without requiring a live converter binary.
+- Command plans must remain host-neutral: no ArtifactStore paths, executable
+  paths, temporary paths, shell command strings, or PATH discovery.
 
 ## Decision
 
 Define a neutral crate for conversion contracts and executor traits. The crate
 stores in-memory source/output bodies only in internal request/result types and
-keeps serialized attribution records body-free. Later host slices can implement
-the trait with managed dependency leases and safe process invocation.
+keeps serialized attribution records body-free. It also defines deterministic
+command-plan builders for image, audio, and video targets so later host slices
+can acquire managed dependency leases before safe process invocation.
 
 ## Alternatives Rejected
 
@@ -57,6 +60,11 @@ the trait with managed dependency leases and safe process invocation.
 - Quality, CRF, bitrate, timeout, and stderr summaries are bounded.
 - Lease attribution is recorded per conversion, not inferred from ambient
   active dependency snapshots.
+- Image command planning uses `oiiotool`; color-managed image planning adds an
+  `ocioconvert` step and `OpenColorIO` dependency requirement; audio and video
+  command planning uses `ffmpeg`.
+- 3D command planning returns a typed unsupported-plan error until a concrete
+  managed 3D converter dependency exists.
 - Serialized conversion attribution does not contain media bodies.
 
 ## Revisit Triggers
@@ -93,7 +101,8 @@ timeouts, and `uuid` for conversion ids.
 
 ```rust
 use pantograph_media_conversion::{
-    ConversionMediaKind, MediaConversionExecutor, MediaConversionRequest,
+    plan_video_command, ConversionMediaKind, MediaConversionExecutor,
+    MediaConversionRequest,
 };
 ```
 
@@ -102,6 +111,9 @@ use pantograph_media_conversion::{
 - Inputs: validated conversion ids, artifact attribution, source bytes from a
   backend-owned ArtifactStore read, and target format metadata from backend
   capability settings.
+- Plans: callers can build host-neutral command plans from target metadata
+  before acquiring converter leases; plans expose required dependency ids,
+  stdin/stdout stream markers, and argv vectors.
 - Outputs: converted bytes, target format metadata, typed status, and
   per-conversion dependency lease attribution.
 - Lifecycle: callers acquire source bytes, call an executor implementation, and
@@ -116,7 +128,8 @@ use pantograph_media_conversion::{
 ## Structured Producer Contract
 
 - Stable fields: conversion ids, artifact attribution, target format metadata,
-  status, and dependency attribution are machine-consumed.
+  command-plan dependency ids, status, and dependency attribution are
+  machine-consumed.
 - Defaults: omitted codec, quality, bitrate, CRF, bit depth, and color profile
   mean the backend-selected default for the target format.
 - Enum meanings: `converted` means a converter produced new bytes;

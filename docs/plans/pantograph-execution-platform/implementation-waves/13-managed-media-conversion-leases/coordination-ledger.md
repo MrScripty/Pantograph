@@ -36,7 +36,7 @@ Stage `13` completed Wave `01` boundary contract freeze.
 | `wave-01-boundary-design` | Complete | Added neutral `pantograph-media-conversion` crate with typed conversion ids, request/result/error contracts, per-conversion dependency attribution, and executor trait. |
 | `wave-02-conversion-executor` | Complete | Added process-runner abstraction, managed executable path validation, Tokio-backed standard process runner, bounded stderr summaries, timeout/process failure mapping, and fake-runner tests in `pantograph-media-conversion`. |
 | `wave-03-lease-attribution` | Complete | Added attribution holder convention, validation, holder propagation on lease tokens, helper re-exports, and inference tests for multi-dependency acquisition, rollback, release, and invalid holders. |
-| `wave-04-media-type-coverage` | Planned | Add image/audio/video/supported-3D conversion fixtures and capability validation. |
+| `wave-04-media-type-coverage` | Complete for command planning | Added host-neutral command plans for image/audio/video targets, managed dependency requirements, stdin/stdout stream markers, argv vectors, and fail-closed 3D planning. Real conversion execution remains for Wave `05`. |
 | `wave-05-api-gui-rollout` | Planned | Surface conversion lifecycle and failures through diagnostics, API, and GUI projections. |
 
 ## Proposed Worker Split
@@ -89,6 +89,8 @@ host records concrete write sets.
 - Wave `02`: `cargo test -p pantograph-media-conversion`,
   `cargo fmt --all -- --check`, and `npm run traceability`.
 - Wave `03`: `cargo test -p inference --test managed_media_dependencies`,
+  `cargo fmt --all -- --check`, and `npm run traceability`.
+- Wave `04`: `cargo test -p pantograph-media-conversion`,
   `cargo fmt --all -- --check`, and `npm run traceability`.
 
 ## Open Decisions

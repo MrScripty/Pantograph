@@ -126,6 +126,23 @@ Wave status: `complete`.
   `cargo test -p inference --test managed_media_dependencies`,
   `cargo fmt --all -- --check`, and `npm run traceability`.
 
+### 2026-04-29 Media Command Planning
+
+Wave status: `complete`.
+
+- Wave `04` added host-neutral command plans for image, audio, and video
+  conversion targets. Plans expose required managed dependency ids, stdin/stdout
+  stream markers, and argv vectors without executable paths, ArtifactStore
+  paths, temporary paths, or shell command strings.
+- Image plans use `oiiotool`; color-managed image plans add an `ocioconvert`
+  step and an OpenColorIO dependency requirement. Audio and video plans use
+  `ffmpeg`.
+- 3D conversion planning remains fail-closed with a typed unsupported-plan
+  error until Pantograph owns a concrete managed 3D converter dependency.
+- Verification passed:
+  `cargo test -p pantograph-media-conversion`,
+  `cargo fmt --all -- --check`, and `npm run traceability`.
+
 ## Milestones
 
 ### Milestone 1: Conversion Boundary Design
@@ -160,9 +177,10 @@ Verification:
   executable paths before process launch.
 - [x] Add timeout, cancellation, stderr truncation, and process failure error
   mapping to the conversion contracts and fake-runner coverage.
-- [ ] Add converter-specific `ffmpeg`, `ocioconvert`, and `oiiotool` argument
-  planning and private temporary-file cleanup for tools that cannot operate as
-  stdin/stdout filters.
+- [x] Add converter-specific `ffmpeg`, `ocioconvert`, and `oiiotool` command
+  planning for host-neutral stdin/stdout conversion paths.
+- [ ] Add private temporary-file cleanup for tools or formats that cannot
+  operate as stdin/stdout filters.
 - [ ] Reject inactive, missing, incompatible, or removed dependency versions at
   the host conversion boundary before process launch.
 
@@ -200,6 +218,10 @@ Verification:
 
 ### Milestone 4: Media-Type Implementations
 
+- [x] Add image command planning using managed OpenImageIO/OpenColorIO tooling
+  requirements.
+- [x] Add audio/video command planning using managed ffmpeg requirements.
+- [x] Add 3D conversion planning that fails closed until managed tooling exists.
 - [ ] Add image conversion using managed OpenImageIO/OpenColorIO tooling.
 - [ ] Add audio/video conversion using managed ffmpeg.
 - [ ] Add 3D conversion for GLB/glTF/OBJ where managed tooling exists; otherwise
