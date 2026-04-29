@@ -311,6 +311,9 @@ when physical payload bodies are deleted.
   - [x] Configure the GUI's canonical workflow service with the project-local
     ArtifactStore so normal scheduler submissions can persist descriptor-backed
     media outputs.
+  - [x] Convert descriptor-eligible video, 3D, large table, generic binary, and
+    oversized structured/file-shaped base64 or data-url output bindings without
+    increasing JSON value limits.
   - [ ] Convert video, 3D, large table, generic file, Python bridge streaming,
     and remaining oversized structured outputs.
 - [ ] Represent streaming assets as artifact lifecycle transitions. Diffusion
