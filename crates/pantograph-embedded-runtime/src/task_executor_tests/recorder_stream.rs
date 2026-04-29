@@ -469,7 +469,10 @@ async fn python_direct_media_stream_chunks_are_artifactized_when_workflow_servic
             "audio_base64": "aGVs",
             "mime_type": "audio/wav",
             "sequence": 0,
-            "is_final": false
+            "is_final": false,
+            "artifact_role": "diffusion_preview",
+            "parent_artifact_id": "diffusion_final",
+            "revision_index": 4
         }),
         serde_json::json!({
             "type": "audio_chunk",
@@ -549,6 +552,9 @@ async fn python_direct_media_stream_chunks_are_artifactized_when_workflow_servic
     assert_eq!(stream_events[0]["byte_range_start"], 0);
     assert_eq!(stream_events[0]["byte_range_end_exclusive"], 3);
     assert_eq!(stream_events[0]["is_final"], false);
+    assert_eq!(stream_events[0]["artifact_role"], "diffusion_preview");
+    assert_eq!(stream_events[0]["parent_artifact_id"], "diffusion_final");
+    assert_eq!(stream_events[0]["revision_index"], 4);
     assert_eq!(stream_events[1]["byte_length"], 2);
     assert_eq!(stream_events[1]["available_byte_length"], 5);
     assert_eq!(stream_events[1]["byte_range_start"], 3);

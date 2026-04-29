@@ -256,7 +256,11 @@ def _run_pytorch(inputs: Dict[str, Any], torch_worker_path: str) -> Dict[str, An
     return outputs
 
 
-def _run_diffusion(inputs: Dict[str, Any], torch_worker_path: str) -> Dict[str, Any]:
+def _run_diffusion(
+    inputs: Dict[str, Any],
+    torch_worker_path: str,
+    emit_stream: Callable[[Dict[str, Any]], None] | None = None,
+) -> Dict[str, Any]:
     worker = _load_module("pantograph_torch_worker_process", torch_worker_path)
 
     prompt = _extract_prompt(inputs)
@@ -341,12 +345,13 @@ def _run_diffusion(inputs: Dict[str, Any], torch_worker_path: str) -> Dict[str, 
         "enable_vae_tiling",
         "model_cpu_offload",
         "sequential_cpu_offload",
+        "emit_stream",
     }
     for key, value in extra_settings.items():
         if key not in reserved_keys and value is not None:
             generation_kwargs[key] = value
 
-    result = worker.generate_image(**generation_kwargs)
+    result = worker.generate_image(**generation_kwargs, emit_stream=emit_stream)
     if not isinstance(result, dict):
         raise RuntimeError("Diffusion worker returned unexpected payload shape")
 
@@ -488,7 +493,11 @@ def _main() -> int:
         if node_type == "pytorch-inference":
             outputs = _run_pytorch(inputs, torch_worker)
         elif node_type == "diffusion-inference":
-            outputs = _run_diffusion(inputs, torch_worker)
+            outputs = _run_diffusion(
+                inputs,
+                torch_worker,
+                emit_stream=lambda chunk: _emit_stream_event("stream", chunk),
+            )
         elif node_type == "audio-generation":
             outputs = _run_audio(inputs, audio_worker)
         elif node_type == "onnx-inference":

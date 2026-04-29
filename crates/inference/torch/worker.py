@@ -14,9 +14,11 @@ Generation logic is split into sibling modules:
 """
 
 import base64
+import inspect
 import io
 import json
 import logging
+import math
 import sys
 from pathlib import Path
 
@@ -71,6 +73,9 @@ _diffusion_dtype = None
 _asr_pipeline = None
 _asr_device = None
 _asr_model_path = None
+
+_DIFFUSION_PREVIEW_MAX_EVENTS = 8
+_DIFFUSION_PREVIEW_MAX_DIMENSION = 384
 
 
 def _generate_dllm_autoregressive_safe(formatted_prompt, max_tokens, temperature, top_p, top_k=None):
@@ -483,6 +488,147 @@ def load_diffusion_model(
     return get_loaded_diffusion_info()
 
 
+def _call_accepts_kwarg(callable_obj, name):
+    try:
+        signature = inspect.signature(callable_obj)
+    except (TypeError, ValueError):
+        return False
+    return any(
+        param.kind == inspect.Parameter.VAR_KEYWORD or param_name == name
+        for param_name, param in signature.parameters.items()
+    )
+
+
+def _resize_preview_image(image, max_dimension):
+    width = getattr(image, "width", None)
+    height = getattr(image, "height", None)
+    if not width or not height or max(width, height) <= max_dimension:
+        return image
+    resized = image.copy()
+    resized.thumbnail((max_dimension, max_dimension))
+    return resized
+
+
+def _extract_callback_preview_image(callback_kwargs=None, latents=None):
+    callback_kwargs = callback_kwargs if isinstance(callback_kwargs, dict) else {}
+
+    for key in ("image", "images"):
+        candidate = callback_kwargs.get(key)
+        if isinstance(candidate, list) and candidate:
+            candidate = candidate[0]
+        if hasattr(candidate, "save") and hasattr(candidate, "width") and hasattr(candidate, "height"):
+            return _resize_preview_image(candidate, _DIFFUSION_PREVIEW_MAX_DIMENSION)
+
+    if latents is None:
+        latents = callback_kwargs.get("latents")
+    if latents is None or not torch.is_tensor(latents):
+        return None
+
+    vae = getattr(_diffusion_pipeline, "vae", None)
+    image_processor = getattr(_diffusion_pipeline, "image_processor", None)
+    if vae is None or image_processor is None or not hasattr(vae, "decode"):
+        return None
+
+    with torch.no_grad():
+        preview_latents = latents[:1].detach()
+        vae_device = getattr(vae, "device", preview_latents.device)
+        vae_dtype = getattr(vae, "dtype", preview_latents.dtype)
+        preview_latents = preview_latents.to(device=vae_device, dtype=vae_dtype)
+
+        vae_config = getattr(vae, "config", None)
+        scaling_factor = float(getattr(vae_config, "scaling_factor", 0.18215))
+        preview_latents = preview_latents / scaling_factor
+
+        decoded = vae.decode(preview_latents)
+        decoded_sample = getattr(decoded, "sample", decoded)
+        images = image_processor.postprocess(decoded_sample, output_type="pil")
+        if not images:
+            return None
+        return _resize_preview_image(images[0], _DIFFUSION_PREVIEW_MAX_DIMENSION)
+
+
+def _attach_diffusion_preview_callback(call_kwargs, total_steps, emit_stream):
+    if not callable(emit_stream):
+        return
+
+    pipeline_call = getattr(_diffusion_pipeline, "__call__", None)
+    if pipeline_call is None:
+        return
+
+    max_events = max(1, _DIFFUSION_PREVIEW_MAX_EVENTS)
+    interval = max(1, math.ceil(max(1, int(total_steps)) / max_events))
+    state = {"sequence": 0, "emitted": 0}
+
+    def normalized_step(step):
+        try:
+            return int(step)
+        except Exception:
+            return state["emitted"]
+
+    def should_emit(step):
+        if state["emitted"] >= max_events:
+            return False
+        step_number = normalized_step(step)
+        return (
+            step_number == 0
+            or (step_number + 1) % interval == 0
+            or (step_number + 1) >= total_steps
+        )
+
+    def emit_preview(step, image):
+        encoded = _encode_image(image)
+        payload = {
+            "type": "diffusion_preview",
+            "preview_role": "revision",
+            "artifact_role": "diffusion_preview",
+            "image_base64": encoded["data_base64"],
+            "media_type": encoded["mime_type"],
+            "sequence": state["sequence"],
+            "revision_index": state["sequence"],
+            "step": normalized_step(step),
+            "total_steps": int(total_steps),
+            "is_final": False,
+        }
+        if encoded.get("width") is not None:
+            payload["width"] = encoded["width"]
+        if encoded.get("height") is not None:
+            payload["height"] = encoded["height"]
+        emit_stream(payload)
+        state["sequence"] += 1
+        state["emitted"] += 1
+
+    def handle_step(step, callback_kwargs=None, latents=None):
+        if not should_emit(step):
+            return
+        try:
+            image = _extract_callback_preview_image(callback_kwargs, latents=latents)
+            if image is not None:
+                emit_preview(step, image)
+        except Exception:
+            # Streaming previews are opportunistic and must not affect final generation.
+            pass
+
+    if _call_accepts_kwarg(pipeline_call, "callback_on_step_end"):
+        def callback_on_step_end(_pipeline, step, _timestep, callback_kwargs):
+            handle_step(step, callback_kwargs=callback_kwargs)
+            return callback_kwargs
+
+        call_kwargs["callback_on_step_end"] = callback_on_step_end
+        if _call_accepts_kwarg(pipeline_call, "callback_on_step_end_tensor_inputs"):
+            tensor_inputs = getattr(_diffusion_pipeline, "_callback_tensor_inputs", None)
+            if isinstance(tensor_inputs, (list, tuple, set)) and "latents" in tensor_inputs:
+                call_kwargs["callback_on_step_end_tensor_inputs"] = ["latents"]
+        return
+
+    if _call_accepts_kwarg(pipeline_call, "callback"):
+        def callback(step, _timestep, latents):
+            handle_step(step, latents=latents)
+
+        call_kwargs["callback"] = callback
+        if _call_accepts_kwarg(pipeline_call, "callback_steps"):
+            call_kwargs["callback_steps"] = interval
+
+
 def load_asr_model(model_path, device="auto", chunk_length_s=None):
     """Load a speech-to-text pipeline into module globals for process-backed use."""
     global _asr_pipeline, _asr_device, _asr_model_path
@@ -612,6 +758,7 @@ def generate_image(
     init_image=None,
     mask_image=None,
     strength=None,
+    emit_stream=None,
     **kwargs,
 ):
     """Generate one or more images from the loaded diffusion pipeline."""
@@ -647,6 +794,8 @@ def generate_image(
     for key, value in kwargs.items():
         if value is not None:
             call_kwargs[key] = value
+
+    _attach_diffusion_preview_callback(call_kwargs, resolved_steps, emit_stream)
 
     result = _diffusion_pipeline(**call_kwargs)
     images = getattr(result, "images", None)

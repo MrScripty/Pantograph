@@ -29,6 +29,9 @@ impl ArtifactStore {
             .artifact_id
             .unwrap_or_else(|| Uuid::new_v4().to_string());
         validate_artifact_id(&artifact_id)?;
+        if let Some(parent_artifact_id) = &request.parent_artifact_id {
+            validate_artifact_id(parent_artifact_id)?;
+        }
         self.remove_existing(&artifact_id)?;
 
         let stream_file = stream_file_name(&artifact_id);
@@ -38,6 +41,9 @@ impl ArtifactStore {
             payload_kind: request.payload_kind,
             lifecycle_state: ArtifactLifecycleState::Streaming,
             retention_state: IoArtifactRetentionState::Retained,
+            artifact_role: request.artifact_role,
+            parent_artifact_id: request.parent_artifact_id,
+            revision_index: request.revision_index,
             byte_length: Some(0),
             content_hash: None,
             format: request.format,

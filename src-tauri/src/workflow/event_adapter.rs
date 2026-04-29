@@ -135,6 +135,7 @@ impl TauriEventAdapter {
                     })
                     .unwrap_or(0)
             });
+        let relationship = artifact_relationship_from_chunk(&data);
 
         let key = MediaStreamKey::new(&execution_id, &task_id, &port);
         let (
@@ -164,6 +165,9 @@ impl TauriEventAdapter {
                             model_id: None,
                             runtime_id: None,
                         },
+                        artifact_role: relationship.artifact_role.clone(),
+                        parent_artifact_id: relationship.parent_artifact_id.clone(),
+                        revision_index: relationship.revision_index,
                     })
                     .map_err(|error| event_error(error.to_string()))?;
                 streams.insert(
@@ -270,6 +274,24 @@ impl TauriEventAdapter {
         );
         chunk.insert("lifecycle_state".to_string(), lifecycle_state);
         chunk.insert("is_final".to_string(), serde_json::json!(is_final));
+        if let Some(artifact_role) = relationship.artifact_role {
+            chunk.insert(
+                "artifact_role".to_string(),
+                serde_json::json!(artifact_role),
+            );
+        }
+        if let Some(parent_artifact_id) = relationship.parent_artifact_id {
+            chunk.insert(
+                "parent_artifact_id".to_string(),
+                serde_json::json!(parent_artifact_id),
+            );
+        }
+        if let Some(revision_index) = relationship.revision_index {
+            chunk.insert(
+                "revision_index".to_string(),
+                serde_json::json!(revision_index),
+            );
+        }
 
         Ok(node_engine::WorkflowEvent::TaskStream {
             task_id,
@@ -334,6 +356,28 @@ struct InlineMediaBody<'a> {
     field_name: &'static str,
     encoded_body: &'a str,
     kind: ArtifactPayloadKind,
+}
+
+#[derive(Debug, Clone, Default)]
+struct ArtifactRelationship {
+    artifact_role: Option<String>,
+    parent_artifact_id: Option<String>,
+    revision_index: Option<u64>,
+}
+
+fn artifact_relationship_from_chunk(data: &serde_json::Value) -> ArtifactRelationship {
+    ArtifactRelationship {
+        artifact_role: data
+            .get("artifact_role")
+            .or_else(|| data.get("preview_role"))
+            .and_then(|value| value.as_str())
+            .map(ToOwned::to_owned),
+        parent_artifact_id: data
+            .get("parent_artifact_id")
+            .and_then(|value| value.as_str())
+            .map(ToOwned::to_owned),
+        revision_index: data.get("revision_index").and_then(|value| value.as_u64()),
+    }
 }
 
 fn inline_media_body_from_chunk<'a>(

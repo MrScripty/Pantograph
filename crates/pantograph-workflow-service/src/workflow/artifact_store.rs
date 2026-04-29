@@ -60,6 +60,9 @@ pub struct ArtifactWriteRequest {
     pub media_type: String,
     pub format: Option<ArtifactFormatMetadata>,
     pub attribution: ArtifactAttribution,
+    pub artifact_role: Option<String>,
+    pub parent_artifact_id: Option<String>,
+    pub revision_index: Option<u64>,
     pub body: Vec<u8>,
 }
 
@@ -70,6 +73,9 @@ pub struct ArtifactStreamOpenRequest {
     pub media_type: String,
     pub format: Option<ArtifactFormatMetadata>,
     pub attribution: ArtifactAttribution,
+    pub artifact_role: Option<String>,
+    pub parent_artifact_id: Option<String>,
+    pub revision_index: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -163,6 +169,9 @@ impl ArtifactStore {
             .artifact_id
             .unwrap_or_else(|| Uuid::new_v4().to_string());
         validate_artifact_id(&artifact_id)?;
+        if let Some(parent_artifact_id) = &request.parent_artifact_id {
+            validate_artifact_id(parent_artifact_id)?;
+        }
         let byte_length = request.body.len() as u64;
         enforce_single_artifact_limit(&self.manifest.policy, byte_length)?;
         self.enforce_disk_limit_for(&artifact_id, byte_length)?;
@@ -175,6 +184,9 @@ impl ArtifactStore {
             payload_kind: request.payload_kind,
             lifecycle_state: ArtifactLifecycleState::Retained,
             retention_state: IoArtifactRetentionState::Retained,
+            artifact_role: request.artifact_role,
+            parent_artifact_id: request.parent_artifact_id,
+            revision_index: request.revision_index,
             byte_length: Some(byte_length),
             content_hash: Some(content_hash),
             format: request.format,

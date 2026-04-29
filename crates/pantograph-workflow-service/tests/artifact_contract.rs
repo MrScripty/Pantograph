@@ -17,6 +17,9 @@ fn artifact_descriptor_contract_snapshot_uses_references_not_payload_bodies() {
         payload_kind: ArtifactPayloadKind::Image,
         lifecycle_state: ArtifactLifecycleState::Retained,
         retention_state: IoArtifactRetentionState::Retained,
+        artifact_role: Some("workflow_output".to_string()),
+        parent_artifact_id: None,
+        revision_index: None,
         byte_length: Some(1_440_866),
         content_hash: Some("blake3:image-hash".to_string()),
         format: Some(ArtifactFormatMetadata {
@@ -60,6 +63,7 @@ fn artifact_descriptor_contract_snapshot_uses_references_not_payload_bodies() {
                 "payload_kind": "image",
                 "lifecycle_state": "retained",
                 "retention_state": "retained",
+                "artifact_role": "workflow_output",
                 "byte_length": 1440866,
                 "content_hash": "blake3:image-hash",
                 "format": {

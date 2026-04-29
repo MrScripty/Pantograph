@@ -95,6 +95,12 @@ pub struct ArtifactDescriptor {
     pub lifecycle_state: ArtifactLifecycleState,
     pub retention_state: IoArtifactRetentionState,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artifact_role: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_artifact_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision_index: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub byte_length: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub content_hash: Option<String>,

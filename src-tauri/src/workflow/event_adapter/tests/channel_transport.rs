@@ -172,7 +172,10 @@ fn adapter_replaces_image_base64_stream_chunks_with_artifact_references() {
                 "type": "image_chunk",
                 "image_base64": "iVBORw0KGgo=",
                 "sequence": 0,
-                "is_final": false
+                "is_final": false,
+                "artifact_role": "diffusion_preview",
+                "parent_artifact_id": "diffusion_final",
+                "revision_index": 2
             }),
             occurred_at_ms: Some(12),
         },
@@ -195,6 +198,9 @@ fn adapter_replaces_image_base64_stream_chunks_with_artifact_references() {
     assert_eq!(chunk["byte_range_start"], 0);
     assert_eq!(chunk["byte_range_end_exclusive"], 8);
     assert_eq!(chunk["lifecycle_state"], "streaming");
+    assert_eq!(chunk["artifact_role"], "diffusion_preview");
+    assert_eq!(chunk["parent_artifact_id"], "diffusion_final");
+    assert_eq!(chunk["revision_index"], 2);
     assert!(chunk["artifact_id"].as_str().is_some());
     assert!(chunk["stream_handle"].as_str().is_some());
 }

@@ -54,6 +54,7 @@ impl StreamArtifactizer {
             .get("is_final")
             .and_then(|value| value.as_bool())
             .unwrap_or(false);
+        let relationship = artifact_relationship_from_chunk(chunk);
 
         let key = MediaStreamKey::new(execution_id, task_id, port);
         let (artifact_id, stream_handle, byte_range_start) = self.open_or_get_stream(
@@ -63,6 +64,7 @@ impl StreamArtifactizer {
             port,
             media_body.kind,
             &media_type,
+            &relationship,
         )?;
         let byte_range_end_exclusive = byte_range_start.saturating_add(body.len() as u64);
 
@@ -139,6 +141,24 @@ impl StreamArtifactizer {
         );
         artifact_chunk.insert("lifecycle_state".to_string(), lifecycle_state);
         artifact_chunk.insert("is_final".to_string(), serde_json::json!(is_final));
+        if let Some(artifact_role) = relationship.artifact_role {
+            artifact_chunk.insert(
+                "artifact_role".to_string(),
+                serde_json::json!(artifact_role),
+            );
+        }
+        if let Some(parent_artifact_id) = relationship.parent_artifact_id {
+            artifact_chunk.insert(
+                "parent_artifact_id".to_string(),
+                serde_json::json!(parent_artifact_id),
+            );
+        }
+        if let Some(revision_index) = relationship.revision_index {
+            artifact_chunk.insert(
+                "revision_index".to_string(),
+                serde_json::json!(revision_index),
+            );
+        }
 
         Some(serde_json::Value::Object(artifact_chunk))
     }
@@ -151,6 +171,7 @@ impl StreamArtifactizer {
         port: &str,
         payload_kind: ArtifactPayloadKind,
         media_type: &str,
+        relationship: &ArtifactRelationship,
     ) -> Option<(String, Option<String>, u64)> {
         let mut streams = self.streams.lock().ok()?;
         if !streams.contains_key(key) {
@@ -170,6 +191,9 @@ impl StreamArtifactizer {
                         model_id: None,
                         runtime_id: None,
                     },
+                    artifact_role: relationship.artifact_role.clone(),
+                    parent_artifact_id: relationship.parent_artifact_id.clone(),
+                    revision_index: relationship.revision_index,
                 })
                 .ok()?;
             streams.insert(
@@ -230,6 +254,28 @@ struct InlineMediaBody<'a> {
     field_name: &'static str,
     encoded_body: &'a str,
     kind: ArtifactPayloadKind,
+}
+
+#[derive(Debug, Clone, Default)]
+struct ArtifactRelationship {
+    artifact_role: Option<String>,
+    parent_artifact_id: Option<String>,
+    revision_index: Option<u64>,
+}
+
+fn artifact_relationship_from_chunk(chunk: &serde_json::Value) -> ArtifactRelationship {
+    ArtifactRelationship {
+        artifact_role: chunk
+            .get("artifact_role")
+            .or_else(|| chunk.get("preview_role"))
+            .and_then(|value| value.as_str())
+            .map(ToOwned::to_owned),
+        parent_artifact_id: chunk
+            .get("parent_artifact_id")
+            .and_then(|value| value.as_str())
+            .map(ToOwned::to_owned),
+        revision_index: chunk.get("revision_index").and_then(|value| value.as_u64()),
+    }
 }
 
 fn inline_media_body_from_chunk(data: &serde_json::Value) -> Option<InlineMediaBody<'_>> {

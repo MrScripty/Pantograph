@@ -126,6 +126,9 @@ fn convert_stream_artifact_output(
             model_id: None,
             runtime_id: None,
         },
+        artifact_role: Some("workflow_output".to_string()),
+        parent_artifact_id: None,
+        revision_index: None,
     })?;
     for (sequence, body) in decoded_chunks.into_iter().enumerate() {
         service.append_artifact_stream_chunk(ArtifactStreamChunkWriteRequest {
@@ -196,6 +199,9 @@ fn convert_artifact_output(
             model_id: None,
             runtime_id: None,
         },
+        artifact_role: Some("workflow_output".to_string()),
+        parent_artifact_id: None,
+        revision_index: None,
         body,
     })?;
     Ok(WorkflowPortBinding {

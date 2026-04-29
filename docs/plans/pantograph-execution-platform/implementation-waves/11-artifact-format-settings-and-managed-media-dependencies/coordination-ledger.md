@@ -26,7 +26,7 @@ backend portions of Wave `02`.
 | `wave-02-artifact-store-backend` | Complete | ArtifactStore core, private disk persistence, restart reconciliation, consume acknowledgement, cleanup, memory-cache enforcement, disk-budget enforcement, stream persistence, finalize lifecycle, service facade, and focused tests are implemented. Execution cutover and diagnostics descriptor linking remain assigned to Wave `04`. |
 | `wave-03-managed-redistributables` | Complete | Backend `inference` managed media redistributables catalog/status and activation/state scaffolds are implemented for tool/native dependency definitions, expected-file status projection, local staging installs, select/default/activate state, active-version leases, OpenColorIO activation validation state, and conversion dependency lease planning. Real OCIO ABI loading remains deferred because unsafe FFI is intentionally outside the scaffold. |
 | `wave-04-execution-diagnostics-cutover` | In progress | Workflow-service execution cutover converts image/audio/video/3D/large-table/generic-binary/structured base64 or data-url output bindings into ArtifactStore descriptors before `max_value_bytes` validation, the GUI workflow service now opens the project-local ArtifactStore, typed I/O diagnostics projections retain descriptor metadata, Tauri diagnostics overlays redact inline media bodies, and image/audio output-node format overrides are validated into descriptor metadata. Python bridge streaming and producer-specific stream lifecycle metadata remain. |
-| `wave-05-api-bindings-frontend-settings` | In progress | Tauri workflow commands and the UniFFI embedded runtime now expose ArtifactStore descriptor lookup, body read, consume acknowledgement, policy read/update, and stats. Backend artifact format settings query/update and conversion capability commands are implemented with persistence, validation, Tauri registration, and UniFFI JSON parity. ArtifactStore stream read DTOs and Tauri/embedded-runtime stream read commands are implemented for in-progress stream bytes. The I/O Inspector renders descriptor lifecycle/access/handle/format metadata and uses transient Blob URLs for read/download/consume actions, including stream reads, without placing bodies in projection state. Tauri/headless managed media dependency status/action commands, UniFFI managed dependency JSON parity, C# descriptor/body-read smoke parity, and output-node selectors are implemented. The workbench Settings page now owns ArtifactStore policy, artifact format defaults, and managed media dependency controls through typed backend commands. Host adapters now synchronize active managed media dependency versions into workflow-service artifact format capabilities and descriptor metadata. Producer-specific diffusion preview events and first-class child/revision artifact relationships remain. |
+| `wave-05-api-bindings-frontend-settings` | In progress | Tauri workflow commands and the UniFFI embedded runtime now expose ArtifactStore descriptor lookup, body read, consume acknowledgement, policy read/update, and stats. Backend artifact format settings query/update and conversion capability commands are implemented with persistence, validation, Tauri registration, and UniFFI JSON parity. ArtifactStore stream read DTOs and Tauri/embedded-runtime stream read commands are implemented for in-progress stream bytes. The I/O Inspector renders descriptor lifecycle/access/handle/format metadata and uses transient Blob URLs for read/download/consume actions, including stream reads, without placing bodies in projection state. Tauri/headless managed media dependency status/action commands, UniFFI managed dependency JSON parity, C# descriptor/body-read smoke parity, and output-node selectors are implemented. The workbench Settings page now owns ArtifactStore policy, artifact format defaults, and managed media dependency controls through typed backend commands. Host adapters now synchronize active managed media dependency versions into workflow-service artifact format capabilities and descriptor metadata. Diffusion preview producer events and first-class preview/revision artifact relationships are implemented. Per-conversion lease-token attribution for real transcoding remains. |
 
 ## Required First Actions
 
@@ -192,6 +192,19 @@ worker.
 - Parallel read-only audit confirmed no producer-specific diffusion preview
   event path exists yet; child/revision artifact semantics therefore remain a
   follow-up contract/store slice after a producer emits preview events.
+
+## 2026-04-29 Diffusion Preview And Relationship Slice
+
+- Worker-owned producer slice added best-effort diffusion preview emission in
+  `crates/inference/torch/worker.py` and
+  `crates/pantograph-embedded-runtime/src/python_runtime_bridge.py`.
+- Host-owned relationship slice added first-class optional relationship
+  metadata to ArtifactStore descriptors, write requests, and stream-open
+  requests, then preserved relationship metadata through embedded Python and
+  Tauri stream artifactization.
+- Relationship metadata is bounded to typed descriptor fields and stream
+  reference metadata. Inline preview image bodies are still removed before
+  consumer-visible stream JSON when ArtifactStore is configured.
 
 ## Source Audit Snapshot
 
@@ -395,6 +408,23 @@ runtime-only DTO names or host PATH discovery as the source of truth.
   `cargo test -p pantograph-embedded-runtime recorder_stream`, `cargo check -p
   pantograph-embedded-runtime`, and targeted `rustfmt --edition 2021 --check`
   for the changed embedded-runtime files.
+- 2026-04-29 Wave `05` active managed media dependency version metadata passed:
+  `cargo test -p pantograph-workflow-service artifact_output_conversion`,
+  `cargo test -p pantograph-workflow-service --test artifact_format_settings`,
+  `cargo test --manifest-path src-tauri/Cargo.toml
+  managed_media_dependency_helpers_project_status_and_actions`,
+  `cargo test -p pantograph-uniffi managed_media_dependency -- --nocapture`,
+  `cargo test -p pantograph-workflow-service --test artifact_contract`,
+  `cargo test -p pantograph-workflow-service --test contract`,
+  `cargo fmt --all -- --check`, and `npm run traceability`.
+- 2026-04-29 Wave `05` diffusion preview and child/revision artifact
+  relationship slice passed:
+  `cargo test -p pantograph-workflow-service --test artifact_store`,
+  `cargo test -p pantograph-workflow-service --test artifact_contract`,
+  `cargo test -p pantograph-embedded-runtime recorder_stream`,
+  `cargo test -p pantograph event_adapter`, `python3 -m py_compile
+  crates/pantograph-embedded-runtime/src/python_runtime_bridge.py
+  crates/inference/torch/worker.py`, and `cargo fmt --all -- --check`.
 - 2026-04-29 Separate clippy cleanup commit cleared existing
   workflow-service lints discovered by the Wave `02` package clippy gate.
 - 2026-04-29 Wave `01` verification passed:

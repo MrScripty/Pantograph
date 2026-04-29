@@ -40,6 +40,9 @@ fn artifact_store_enforces_global_disk_budget_for_retained_bodies() {
             media_type: "application/octet-stream".to_string(),
             format: None,
             attribution: attribution(),
+            artifact_role: None,
+            parent_artifact_id: None,
+            revision_index: None,
             body: b"123456".to_vec(),
         })
         .expect("write first body");
@@ -51,6 +54,9 @@ fn artifact_store_enforces_global_disk_budget_for_retained_bodies() {
             media_type: "application/octet-stream".to_string(),
             format: None,
             attribution: attribution(),
+            artifact_role: None,
+            parent_artifact_id: None,
+            revision_index: None,
             body: b"78901".to_vec(),
         })
         .expect_err("disk limit");
@@ -79,6 +85,9 @@ fn artifact_store_enforces_global_disk_budget_for_stream_growth() {
             media_type: "video/ivf".to_string(),
             format: None,
             attribution: attribution(),
+            artifact_role: None,
+            parent_artifact_id: None,
+            revision_index: None,
         })
         .expect("open stream");
     store

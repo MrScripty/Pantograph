@@ -311,7 +311,7 @@ when physical payload bodies are deleted.
 
 ### Milestone 4: Execution And Diagnostics Integration
 
-- [ ] Convert image, audio, video, 3D, large table, generic file, and oversized
+- [x] Convert image, audio, video, 3D, large table, generic file, and oversized
   structured outputs to descriptors before workflow-output value validation.
   - [x] Convert workflow-service `image` and `audio` output bindings to
     ArtifactStore descriptors before `max_value_bytes` validation.
@@ -331,9 +331,9 @@ when physical payload bodies are deleted.
     validation.
   - [x] Convert direct Python bridge streaming outputs into ArtifactStore
     stream lifecycle entries in normal embedded-runtime execution paths.
-  - [ ] Convert producer-specific streamed preview outputs into ArtifactStore
+  - [x] Convert producer-specific streamed preview outputs into ArtifactStore
     lifecycle entries once those producers expose preview events.
-- [ ] Represent streaming assets as artifact lifecycle transitions. Diffusion
+- [x] Represent streaming assets as artifact lifecycle transitions. Diffusion
   preview passes should be child or revision artifacts; audio/video streams
   should publish chunk metadata and stream handles without placing chunk bodies
   in diagnostic event JSON.
@@ -349,7 +349,7 @@ when physical payload bodies are deleted.
   - [x] Generalize Tauri live stream body replacement from audio-only chunks to
     image, audio, video, 3D, and generic binary chunks before diagnostics and
     frontend event JSON.
-  - [ ] Represent diffusion preview passes as ArtifactStore child/revision
+  - [x] Represent diffusion preview passes as ArtifactStore child/revision
     artifacts after a diffusion preview producer path exists.
 - [ ] Capture actual output format, codec, quality/compression, bitrate, color
   transform/profile, 3D format, and active converter/library versions in

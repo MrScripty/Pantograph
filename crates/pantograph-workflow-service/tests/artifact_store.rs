@@ -59,6 +59,9 @@ fn artifact_store_writes_descriptor_and_reads_body_without_path_leak() {
             media_type: "image/jpeg".to_string(),
             format: Some(image_format()),
             attribution: attribution(),
+            artifact_role: None,
+            parent_artifact_id: None,
+            revision_index: None,
             body: b"image-body".to_vec(),
         })
         .expect("write artifact");
@@ -107,6 +110,9 @@ fn artifact_store_recovers_manifest_and_missing_bodies_as_metadata_only() {
                 media_type: "audio/ogg".to_string(),
                 format: None,
                 attribution: attribution(),
+                artifact_role: None,
+                parent_artifact_id: None,
+                revision_index: None,
                 body: b"audio-body".to_vec(),
             })
             .expect("write artifact");
@@ -154,6 +160,9 @@ fn artifact_store_enforces_size_limit_and_valid_ids() {
             media_type: "application/octet-stream".to_string(),
             format: None,
             attribution: attribution(),
+            artifact_role: None,
+            parent_artifact_id: None,
+            revision_index: None,
             body: b"12345".to_vec(),
         })
         .expect_err("size limit");
@@ -172,6 +181,9 @@ fn artifact_store_enforces_size_limit_and_valid_ids() {
             media_type: "application/octet-stream".to_string(),
             format: None,
             attribution: attribution(),
+            artifact_role: None,
+            parent_artifact_id: None,
+            revision_index: None,
             body: b"123".to_vec(),
         })
         .expect_err("invalid id");
@@ -189,6 +201,9 @@ fn artifact_store_consume_and_retention_delete_body_but_keep_metadata() {
             media_type: "audio/ogg".to_string(),
             format: None,
             attribution: attribution(),
+            artifact_role: None,
+            parent_artifact_id: None,
+            revision_index: None,
             body: b"audio-body".to_vec(),
         })
         .expect("write artifact");
@@ -219,6 +234,9 @@ fn artifact_store_consume_and_retention_delete_body_but_keep_metadata() {
             media_type: "audio/ogg".to_string(),
             format: None,
             attribution: attribution(),
+            artifact_role: None,
+            parent_artifact_id: None,
+            revision_index: None,
             body: b"audio-body".to_vec(),
         })
         .expect("write second artifact");
@@ -244,6 +262,9 @@ fn artifact_store_retention_deletion_preserves_audit_descriptor_and_fails_body_r
             media_type: "image/jpeg".to_string(),
             format: Some(image_format()),
             attribution: attribution(),
+            artifact_role: None,
+            parent_artifact_id: None,
+            revision_index: None,
             body: b"image-body".to_vec(),
         })
         .expect("write artifact");
@@ -317,6 +338,9 @@ fn workflow_service_retention_cleanup_keeps_descriptor_queryable_while_body_is_u
             media_type: "audio/ogg".to_string(),
             format: None,
             attribution: attribution(),
+            artifact_role: None,
+            parent_artifact_id: None,
+            revision_index: None,
             body: b"audio-body".to_vec(),
         })
         .expect("write through service");
@@ -373,6 +397,9 @@ fn workflow_service_artifact_store_facade_uses_configured_store() {
             media_type: "image/jpeg".to_string(),
             format: Some(image_format()),
             attribution: attribution(),
+            artifact_role: None,
+            parent_artifact_id: None,
+            revision_index: None,
             body: b"image-body".to_vec(),
         })
         .expect("write through service");
@@ -417,6 +444,9 @@ fn artifact_store_streams_chunks_and_finalizes_descriptor_without_serialized_bod
             media_type: "video/ivf".to_string(),
             format: None,
             attribution: attribution(),
+            artifact_role: None,
+            parent_artifact_id: None,
+            revision_index: None,
         })
         .expect("open stream");
 
@@ -515,6 +545,66 @@ fn artifact_store_streams_chunks_and_finalizes_descriptor_without_serialized_bod
 }
 
 #[test]
+fn artifact_store_preserves_child_revision_relationship_metadata() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let mut store = ArtifactStore::open(temp.path(), policy(false)).expect("open store");
+
+    store
+        .write_artifact(ArtifactWriteRequest {
+            artifact_id: Some("diffusion_final".to_string()),
+            payload_kind: ArtifactPayloadKind::Image,
+            media_type: "image/jpeg".to_string(),
+            format: Some(image_format()),
+            attribution: attribution(),
+            artifact_role: Some("final".to_string()),
+            parent_artifact_id: None,
+            revision_index: None,
+            body: b"final-image".to_vec(),
+        })
+        .expect("write parent artifact");
+
+    let preview = store
+        .open_stream(ArtifactStreamOpenRequest {
+            artifact_id: Some("diffusion_preview_3".to_string()),
+            payload_kind: ArtifactPayloadKind::Image,
+            media_type: "image/jpeg".to_string(),
+            format: Some(image_format()),
+            attribution: attribution(),
+            artifact_role: Some("preview_revision".to_string()),
+            parent_artifact_id: Some("diffusion_final".to_string()),
+            revision_index: Some(3),
+        })
+        .expect("open preview stream");
+
+    assert_eq!(preview.artifact_role.as_deref(), Some("preview_revision"));
+    assert_eq!(
+        preview.parent_artifact_id.as_deref(),
+        Some("diffusion_final")
+    );
+    assert_eq!(preview.revision_index, Some(3));
+
+    store
+        .append_stream_chunk(ArtifactStreamChunkWriteRequest {
+            artifact_id: "diffusion_preview_3".to_string(),
+            sequence: 0,
+            body: b"preview".to_vec(),
+        })
+        .expect("append preview");
+    let finalized = store
+        .finalize_stream(ArtifactStreamFinalizeRequest {
+            artifact_id: "diffusion_preview_3".to_string(),
+        })
+        .expect("finalize preview");
+
+    assert_eq!(
+        finalized.parent_artifact_id.as_deref(),
+        Some("diffusion_final")
+    );
+    assert_eq!(finalized.revision_index, Some(3));
+    assert_eq!(finalized.artifact_role.as_deref(), Some("preview_revision"));
+}
+
+#[test]
 fn artifact_store_accounts_for_memory_cache_and_enforces_budget() {
     let temp = tempfile::tempdir().expect("temp dir");
     let mut cache_policy = policy(false);
@@ -534,6 +624,9 @@ fn artifact_store_accounts_for_memory_cache_and_enforces_budget() {
                 media_type: "application/octet-stream".to_string(),
                 format: None,
                 attribution: attribution(),
+                artifact_role: None,
+                parent_artifact_id: None,
+                revision_index: None,
                 body,
             })
             .expect("write artifact");
@@ -551,6 +644,9 @@ fn artifact_store_accounts_for_memory_cache_and_enforces_budget() {
             media_type: "application/octet-stream".to_string(),
             format: None,
             attribution: attribution(),
+            artifact_role: None,
+            parent_artifact_id: None,
+            revision_index: None,
             body: b"xx".to_vec(),
         })
         .expect("write uncached small artifact when budget is full");
@@ -581,6 +677,9 @@ fn artifact_store_cleanup_evicts_memory_cache_and_read_handle_body() {
             media_type: "application/octet-stream".to_string(),
             format: None,
             attribution: attribution(),
+            artifact_role: None,
+            parent_artifact_id: None,
+            revision_index: None,
             body: b"cached-body".to_vec(),
         })
         .expect("write artifact");
@@ -619,6 +718,9 @@ fn workflow_service_stream_facade_finalizes_readable_artifact() {
             media_type: "audio/ogg".to_string(),
             format: None,
             attribution: attribution(),
+            artifact_role: None,
+            parent_artifact_id: None,
+            revision_index: None,
         })
         .expect("open stream through service");
     service
