@@ -403,11 +403,15 @@
       return null;
     }
 
-    const read = await workflowService.readArtifactStream({
+    const request = {
       artifact_id: chunk.artifactId,
       byte_range_start: chunk.byteRangeStart,
       byte_range_end_exclusive: chunk.byteRangeEndExclusive,
-    });
+    };
+    const read =
+      chunk.lifecycleState === 'retained' || chunk.isFinal
+        ? await workflowService.readArtifactBody(request)
+        : await workflowService.readArtifactStream(request);
     return new Uint8Array(read.body).buffer;
   }
 
