@@ -662,3 +662,63 @@ async fn direct_runtime_exposes_backend_owned_graph_authoring_discovery() {
     runtime.shutdown().await;
     let _ = std::fs::remove_dir_all(root);
 }
+
+#[tokio::test]
+async fn direct_runtime_exposes_artifact_store_contract_surface() {
+    let root = create_temp_root("uniffi-runtime-artifacts");
+    let runtime = FfiPantographRuntime::new(
+        FfiEmbeddedRuntimeConfig {
+            app_data_dir: root.join("app-data").to_string_lossy().into_owned(),
+            project_root: root.to_string_lossy().into_owned(),
+            workflow_roots: Vec::new(),
+            max_loaded_sessions: None,
+        },
+        None,
+    )
+    .await
+    .expect("runtime");
+
+    let policy_json = runtime
+        .workflow_artifact_policy()
+        .expect("artifact policy is available");
+    let policy: serde_json::Value = serde_json::from_str(&policy_json).expect("parse policy");
+    assert_eq!(policy["policy_id"], "artifact-global-default");
+    assert_eq!(policy["delete_on_consume"], false);
+
+    let updated_policy = serde_json::json!({
+        "policy_id": "artifact-global-test",
+        "policy_version": 2,
+        "ttl_seconds": 60,
+        "max_disk_bytes": 4096,
+        "max_memory_bytes": 2048,
+        "max_single_artifact_bytes": 1024,
+        "spill_threshold_bytes": 512,
+        "delete_on_consume": true
+    });
+    let updated_json = runtime
+        .workflow_update_artifact_policy(updated_policy.to_string())
+        .expect("update artifact policy");
+    let updated: serde_json::Value =
+        serde_json::from_str(&updated_json).expect("parse updated policy");
+    assert_eq!(updated["policy_id"], "artifact-global-test");
+    assert_eq!(updated["delete_on_consume"], true);
+
+    let stats_json = runtime
+        .workflow_artifact_store_stats()
+        .expect("artifact store stats");
+    let stats: serde_json::Value = serde_json::from_str(&stats_json).expect("parse stats");
+    assert_eq!(stats["artifact_count"], 0);
+    assert_eq!(stats["retained_body_bytes"], 0);
+
+    let missing = runtime
+        .workflow_artifact_descriptor(
+            serde_json::json!({ "artifact_id": "missing-artifact" }).to_string(),
+        )
+        .expect_err("missing artifact should be rejected");
+    let envelope = workflow_error_envelope(missing);
+    assert_eq!(envelope.code, WorkflowErrorCode::InvalidRequest);
+    assert!(envelope.message.contains("artifact not found"));
+
+    runtime.shutdown().await;
+    let _ = std::fs::remove_dir_all(root);
+}

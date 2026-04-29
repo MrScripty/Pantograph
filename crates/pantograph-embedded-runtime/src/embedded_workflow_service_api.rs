@@ -1,4 +1,7 @@
 use pantograph_workflow_service::{
+    ArtifactBodyRead, ArtifactConsumeAcknowledgementRequest,
+    ArtifactConsumeAcknowledgementResponse, ArtifactDescriptorQueryRequest,
+    ArtifactDescriptorQueryResponse, ArtifactPolicy, ArtifactReadRequest, ArtifactStoreStats,
     BucketCreateRequest, BucketDeleteRequest, BucketRecord, ClientRegistrationRequest,
     ClientRegistrationResponse, ClientSessionOpenRequest, ClientSessionOpenResponse,
     ClientSessionRecord, ClientSessionResumeRequest, WorkflowCapabilitiesRequest,
@@ -54,6 +57,44 @@ impl EmbeddedRuntime {
         request: BucketDeleteRequest,
     ) -> Result<BucketRecord, WorkflowServiceError> {
         self.workflow_service.delete_client_bucket(request)
+    }
+
+    pub fn workflow_artifact_descriptor(
+        &self,
+        request: ArtifactDescriptorQueryRequest,
+    ) -> Result<ArtifactDescriptorQueryResponse, WorkflowServiceError> {
+        self.workflow_service.artifact_descriptor(request)
+    }
+
+    pub fn workflow_read_artifact_body(
+        &self,
+        request: ArtifactReadRequest,
+    ) -> Result<ArtifactBodyRead, WorkflowServiceError> {
+        self.workflow_service.read_artifact_body(request)
+    }
+
+    pub fn workflow_acknowledge_artifact_consumed(
+        &self,
+        request: ArtifactConsumeAcknowledgementRequest,
+    ) -> Result<ArtifactConsumeAcknowledgementResponse, WorkflowServiceError> {
+        self.workflow_service.acknowledge_artifact_consumed(request)
+    }
+
+    pub fn workflow_artifact_policy(&self) -> Result<ArtifactPolicy, WorkflowServiceError> {
+        self.workflow_service.artifact_policy()
+    }
+
+    pub fn workflow_update_artifact_policy(
+        &self,
+        policy: ArtifactPolicy,
+    ) -> Result<ArtifactPolicy, WorkflowServiceError> {
+        self.workflow_service.update_artifact_policy(policy)
+    }
+
+    pub fn workflow_artifact_store_stats(
+        &self,
+    ) -> Result<ArtifactStoreStats, WorkflowServiceError> {
+        self.workflow_service.artifact_store_stats()
     }
 
     pub async fn workflow_get_capabilities(

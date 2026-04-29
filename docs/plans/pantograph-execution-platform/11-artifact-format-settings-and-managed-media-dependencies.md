@@ -344,6 +344,12 @@ when physical payload bodies are deleted.
 - [ ] Update native Rust and supported host bindings with DTO parity tests for
   artifact descriptors, settings, capabilities, managed dependency status, and
   binary-safe payload access semantics.
+  - [x] Configure the UniFFI embedded runtime with an ArtifactStore and expose
+    artifact descriptor, body read, consume acknowledgement, policy, and stats
+    JSON methods with focused runtime tests.
+  - [ ] Add remaining binding parity for persistent settings, managed
+    dependency status/actions, media capabilities, and final binary body
+    transport semantics.
 - [ ] Make the workbench Settings page the canonical persistent settings
   surface. Relocate, embed, or retire old side-panel/server/runtime settings
   surfaces so they do not keep separate global settings ownership.

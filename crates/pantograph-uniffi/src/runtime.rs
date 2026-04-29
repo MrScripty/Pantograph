@@ -4,9 +4,11 @@ use std::sync::Arc;
 use node_engine::ExecutorExtensions;
 use pantograph_embedded_runtime::{EmbeddedRuntime, EmbeddedRuntimeConfig};
 use pantograph_workflow_service::{
-    BucketCreateRequest, BucketDeleteRequest, ClientRegistrationRequest, ClientSessionOpenRequest,
-    ClientSessionResumeRequest, NodeRegistry as WorkflowNodeRegistry, WorkflowCapabilitiesRequest,
-    WorkflowErrorCode, WorkflowErrorEnvelope, WorkflowExecutionSessionCloseRequest,
+    ArtifactConsumeAcknowledgementRequest, ArtifactDescriptorQueryRequest, ArtifactPolicy,
+    ArtifactReadRequest, ArtifactStore, BucketCreateRequest, BucketDeleteRequest,
+    ClientRegistrationRequest, ClientSessionOpenRequest, ClientSessionResumeRequest,
+    NodeRegistry as WorkflowNodeRegistry, WorkflowCapabilitiesRequest, WorkflowErrorCode,
+    WorkflowErrorEnvelope, WorkflowExecutionSessionCloseRequest,
     WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionKeepAliveRequest,
     WorkflowExecutionSessionQueueCancelRequest, WorkflowExecutionSessionQueueListRequest,
     WorkflowExecutionSessionQueuePushFrontRequest,
@@ -61,6 +63,19 @@ struct QueryablePortProjection<'a> {
     port_id: &'a str,
 }
 
+fn default_artifact_policy() -> ArtifactPolicy {
+    ArtifactPolicy {
+        policy_id: "artifact-global-default".to_string(),
+        policy_version: 1,
+        ttl_seconds: None,
+        max_disk_bytes: None,
+        max_memory_bytes: Some(256 * 1024 * 1024),
+        max_single_artifact_bytes: Some(128 * 1024 * 1024),
+        spill_threshold_bytes: Some(8 * 1024 * 1024),
+        delete_on_consume: false,
+    }
+}
+
 #[uniffi::export(async_runtime = "tokio")]
 impl FfiPantographRuntime {
     /// Create an embedded runtime with the default inference gateway and Python adapter.
@@ -89,9 +104,20 @@ impl FfiPantographRuntime {
                 .set(node_engine::extension_keys::PUMAS_API, api.api_arc());
         }
 
+        let artifact_store = ArtifactStore::open(
+            config.app_data_dir.join("artifacts"),
+            default_artifact_policy(),
+        )
+        .map_err(|error| {
+            workflow_adapter_error(
+                WorkflowErrorCode::InternalError,
+                format!("failed to open workflow artifact store: {error}"),
+            )
+        })?;
         let workflow_service = Arc::new(
             WorkflowService::with_ephemeral_attribution_store()
-                .map_err(map_workflow_service_error)?,
+                .map_err(map_workflow_service_error)?
+                .with_artifact_store(artifact_store),
         );
         workflow_service
             .set_loaded_runtime_capacity_limit(config.max_loaded_sessions)
@@ -166,6 +192,67 @@ impl FfiPantographRuntime {
         let response = self
             .runtime
             .delete_client_bucket(request)
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Return ArtifactDescriptorQueryResponse JSON.
+    pub fn workflow_artifact_descriptor(&self, request_json: String) -> Result<String, FfiError> {
+        let request: ArtifactDescriptorQueryRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .workflow_artifact_descriptor(request)
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Return ArtifactBodyRead JSON with binary bytes encoded by JSON transport.
+    pub fn workflow_read_artifact_body(&self, request_json: String) -> Result<String, FfiError> {
+        let request: ArtifactReadRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .workflow_read_artifact_body(request)
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Acknowledge artifact consumption and return ArtifactConsumeAcknowledgementResponse JSON.
+    pub fn workflow_acknowledge_artifact_consumed(
+        &self,
+        request_json: String,
+    ) -> Result<String, FfiError> {
+        let request: ArtifactConsumeAcknowledgementRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .workflow_acknowledge_artifact_consumed(request)
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Return the current ArtifactPolicy JSON.
+    pub fn workflow_artifact_policy(&self) -> Result<String, FfiError> {
+        let response = self
+            .runtime
+            .workflow_artifact_policy()
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Update the ArtifactPolicy and return the applied policy JSON.
+    pub fn workflow_update_artifact_policy(&self, policy_json: String) -> Result<String, FfiError> {
+        let policy: ArtifactPolicy = parse_request(policy_json)?;
+        let response = self
+            .runtime
+            .workflow_update_artifact_policy(policy)
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Return ArtifactStoreStats JSON.
+    pub fn workflow_artifact_store_stats(&self) -> Result<String, FfiError> {
+        let response = self
+            .runtime
+            .workflow_artifact_store_stats()
             .map_err(map_workflow_service_error)?;
         serialize_response(&response)
     }
