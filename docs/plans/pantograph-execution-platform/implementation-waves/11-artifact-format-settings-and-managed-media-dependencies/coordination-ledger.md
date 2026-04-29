@@ -24,7 +24,7 @@ backend portions of Wave `02`.
 | ---- | ------ | ----------------- |
 | `wave-01-preflight-contract-audit` | Complete | Backend ArtifactStore descriptor, handle-based access, format settings, media capability, and managed redistributable DTOs are frozen with contract snapshots. |
 | `wave-02-artifact-store-backend` | Complete | ArtifactStore core, private disk persistence, restart reconciliation, consume acknowledgement, cleanup, memory-cache enforcement, disk-budget enforcement, stream persistence, finalize lifecycle, service facade, and focused tests are implemented. Execution cutover and diagnostics descriptor linking remain assigned to Wave `04`. |
-| `wave-03-managed-redistributables` | Pending | Depends on frozen managed redistributable product-category DTOs and Stage `11` ADR decision. |
+| `wave-03-managed-redistributables` | In progress | First worker owns the backend `inference` managed media redistributables module for tool/native dependency definitions, status projection, and tests. Existing sidecar runtime code remains read-only for this first split. |
 | `wave-04-execution-diagnostics-cutover` | Pending | Depends on backend ArtifactStore and managed format capability contracts. |
 | `wave-05-api-bindings-frontend-settings` | Pending | Depends on backend Settings/capability APIs and binary-safe body access contracts. |
 
@@ -68,6 +68,16 @@ Initial local audit found these migration families:
   implement persistence.
 - Which old Settings surfaces are embedded into the workbench Settings page and
   which are retired.
+
+## Wave 03 Worker Split
+
+| Owner | Scope | Primary Write Set | Forbidden Shared Files | Report |
+| ----- | ----- | ----------------- | ---------------------- | ------ |
+| Managed media redistributables worker | Add a backend-owned non-runtime redistributables module for ffmpeg, `ocioconvert`, `oiiotool`, and OpenColorIO definitions, status projection, activation metadata scaffolding, and tests. | `crates/inference/src/managed_redistributables.rs`, `crates/inference/src/managed_redistributables/**`, `crates/inference/src/lib.rs`, `crates/inference/tests/managed_redistributables.rs`, `docs/plans/pantograph-execution-platform/implementation-waves/11-artifact-format-settings-and-managed-media-dependencies/reports/wave-03-worker-managed-media-redistributables.md` | Existing `crates/inference/src/managed_runtime/**` sidecar runtime implementation, frontend files, binding files, ArtifactStore files, generated output, `.pantograph/**`, and `assets/**`. | `reports/wave-03-worker-managed-media-redistributables.md` |
+
+Integration rule: the worker may read existing managed runtime code for
+patterns, but tool binaries and OpenColorIO must not be modeled with
+runtime-only DTO names or host PATH discovery as the source of truth.
 
 ## Verification Ledger
 
