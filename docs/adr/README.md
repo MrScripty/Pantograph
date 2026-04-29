@@ -22,6 +22,7 @@ developers to reconstruct intent from commit history.
 | `ADR-012-canonical-workflow-run-identity.md` | Freezes canonical `workflow_run_id`, `workflow_id`, `session_id`, and `runtime_instance_id` semantics across scheduler, runtime, diagnostics, bindings, and frontend projections. |
 | `ADR-013-workflow-version-registry-and-run-snapshots.md` | Freezes durable workflow-version, presentation-revision, and immutable run-snapshot ownership for version-aware diagnostics. |
 | `ADR-014-run-centric-workbench-projection-boundary.md` | Freezes the Scheduler-first workbench shell, transient active-run context, projection-only page consumption, and materialized projection boundary. |
+| `ADR-015-authoritative-runtime-node-type-injection.md` | Freezes graph node type injection as the source of truth for runtime executor dispatch. |
 
 ## Problem
 Pantograph is actively deepening its backend/runtime architecture. Without an
@@ -84,6 +85,7 @@ link to these decisions.
 - `docs/adr/ADR-012-canonical-workflow-run-identity.md`
 - `docs/adr/ADR-013-workflow-version-registry-and-run-snapshots.md`
 - `docs/adr/ADR-014-run-centric-workbench-projection-boundary.md`
+- `docs/adr/ADR-015-authoritative-runtime-node-type-injection.md`
 ```
 
 ## API Consumer Contract

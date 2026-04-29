@@ -573,6 +573,7 @@ async fn test_session_run_without_keep_alive_releases_runtime_reservation_after_
     let run_response = runtime
         .run_workflow_execution_session(WorkflowExecutionSessionRunRequest {
             session_id,
+            workflow_semantic_version: "0.1.0".to_string(),
             inputs: vec![WorkflowPortBinding {
                 node_id: "text-input-1".to_string(),
                 port_id: "text".to_string(),

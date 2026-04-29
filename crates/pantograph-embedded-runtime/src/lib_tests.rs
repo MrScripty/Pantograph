@@ -633,6 +633,14 @@ fn workflow_port_definition(id: &str, label: &str, data_type: &str) -> serde_jso
 }
 
 fn write_mock_diffusion_workflow(root: &Path, workflow_id: &str) {
+    write_mock_diffusion_workflow_with_prompt_node(root, workflow_id, "text-input-1");
+}
+
+fn write_mock_diffusion_workflow_with_prompt_node(
+    root: &Path,
+    workflow_id: &str,
+    prompt_node_id: &str,
+) {
     let workflows_dir = root.join(".pantograph").join("workflows");
     std::fs::create_dir_all(&workflows_dir).expect("create workflows dir");
     let workflow_json = serde_json::json!({
@@ -645,7 +653,7 @@ fn write_mock_diffusion_workflow(root: &Path, workflow_id: &str) {
         "graph": {
             "nodes": [
                 {
-                    "id": "text-input-1",
+                    "id": prompt_node_id,
                     "node_type": "text-input",
                     "data": {
                         "definition": {
@@ -692,7 +700,7 @@ fn write_mock_diffusion_workflow(root: &Path, workflow_id: &str) {
             "edges": [
                 {
                     "id": "e-prompt",
-                    "source": "text-input-1",
+                    "source": prompt_node_id,
                     "source_handle": "text",
                     "target": "diffusion-inference-1",
                     "target_handle": "prompt"

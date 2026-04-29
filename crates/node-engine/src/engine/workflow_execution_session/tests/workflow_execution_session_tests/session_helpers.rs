@@ -128,7 +128,7 @@ async fn sync_bound_session_node_memory_from_cache_projects_all_cached_nodes() {
     );
     assert_eq!(
         snapshots[1].input_fingerprint.as_deref(),
-        Some("{\"_data\":{},\"in\":\"a\"}")
+        Some("{\"_data\":{\"node_type\":\"process\"},\"in\":\"a\"}")
     );
     assert_eq!(
         snapshots[1].inspection_metadata,
@@ -136,7 +136,7 @@ async fn sync_bound_session_node_memory_from_cache_projects_all_cached_nodes() {
             "projection_source": "demand_engine_cache",
             "cache_version": 1,
             "input_snapshot": {
-                "_data": {},
+                "_data": { "node_type": "process" },
                 "in": "a"
             }
         }))

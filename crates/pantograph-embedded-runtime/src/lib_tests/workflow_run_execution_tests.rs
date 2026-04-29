@@ -291,6 +291,58 @@ async fn test_runtime_routes_diffusion_workflow_through_python_adapter() {
 }
 
 #[tokio::test]
+async fn workflow_run_execution_session_uses_graph_node_type_for_gui_style_input_ids() {
+    let temp = TempDir::new().expect("temp dir");
+    write_mock_diffusion_workflow_with_prompt_node(temp.path(), "runtime-diffusion", "prompt-input");
+
+    let app_data_dir = temp.path().join("app-data");
+    std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+    install_fake_default_runtime(&app_data_dir);
+
+    let python_runtime = Arc::new(MockImagePythonRuntime {
+        requests: Mutex::new(Vec::new()),
+    });
+    let runtime = EmbeddedRuntime::from_components(
+        EmbeddedRuntimeConfig {
+            app_data_dir,
+            project_root: temp.path().to_path_buf(),
+            workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+            max_loaded_sessions: None,
+        },
+        Arc::new(inference::InferenceGateway::new()),
+        Arc::new(RwLock::new(ExecutorExtensions::new())),
+        Arc::new(WorkflowService::new()),
+        None,
+        python_runtime.clone(),
+    )
+    .with_runtime_registry(Arc::new(RuntimeRegistry::new()));
+
+    let response = run_workflow_through_scheduler(
+        &runtime,
+        "runtime-diffusion",
+        vec![WorkflowPortBinding {
+            node_id: "prompt-input".to_string(),
+            port_id: "text".to_string(),
+            value: serde_json::json!("a GUI style prompt node"),
+        }],
+        Some(vec![WorkflowOutputTarget {
+            node_id: "image-output-1".to_string(),
+            port_id: "image".to_string(),
+        }]),
+    )
+    .await
+    .expect("workflow run through scheduler");
+
+    assert_eq!(response.outputs.len(), 1);
+    let requests = python_runtime.requests.lock().expect("requests lock");
+    assert_eq!(requests.len(), 1);
+    assert_eq!(
+        requests[0].inputs.get("prompt"),
+        Some(&serde_json::json!("a GUI style prompt node"))
+    );
+}
+
+#[tokio::test]
 async fn test_runtime_run_reconciles_python_sidecar_runtime_into_registry() {
     let temp = TempDir::new().expect("temp dir");
     write_mock_diffusion_workflow(temp.path(), "runtime-diffusion");

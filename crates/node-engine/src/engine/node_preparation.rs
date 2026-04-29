@@ -13,9 +13,15 @@ pub(super) fn prepare_node_inputs(
 ) -> Option<Option<String>> {
     let node = graph.find_node(node_id)?;
 
-    if !node.data.is_null() {
-        inputs.insert("_data".to_string(), node.data.clone());
+    let mut node_data = match node.data.clone() {
+        serde_json::Value::Object(map) => serde_json::Value::Object(map),
+        serde_json::Value::Null => serde_json::json!({}),
+        value => value,
+    };
+    if let serde_json::Value::Object(ref mut map) = node_data {
+        map.insert("node_type".to_string(), serde_json::json!(node.node_type));
     }
+    inputs.insert("_data".to_string(), node_data);
 
     inject_kv_cache_input_from_node_memory(inputs);
 
@@ -122,7 +128,35 @@ mod tests {
         assert_eq!(wait_prompt, None);
         assert_eq!(
             inputs.get("_data"),
-            Some(&serde_json::json!({"label": "Prompt"}))
+            Some(&serde_json::json!({
+                "label": "Prompt",
+                "node_type": "text-input"
+            }))
+        );
+    }
+
+    #[test]
+    fn prepare_node_inputs_injects_node_type_for_null_node_data() {
+        let graph = WorkflowGraph {
+            id: "workflow".to_string(),
+            name: "Workflow".to_string(),
+            nodes: vec![GraphNode {
+                id: "prompt-input".to_string(),
+                node_type: "text-input".to_string(),
+                data: serde_json::Value::Null,
+                position: (0.0, 0.0),
+            }],
+            edges: Vec::new(),
+            groups: Vec::new(),
+        };
+        let mut inputs = HashMap::new();
+
+        let wait_prompt = prepare_node_inputs(&graph, &"prompt-input".to_string(), &mut inputs);
+
+        assert_eq!(wait_prompt, None);
+        assert_eq!(
+            inputs.get("_data"),
+            Some(&serde_json::json!({ "node_type": "text-input" }))
         );
     }
 

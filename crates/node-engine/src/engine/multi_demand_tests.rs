@@ -771,13 +771,14 @@ async fn workflow_executor_parallel_multi_demand_reconciles_input_snapshots() {
     );
     assert!(snapshots
         .iter()
-        .all(|snapshot| snapshot.input_fingerprint.as_deref() == Some("{\"_data\":{}}")));
+        .all(|snapshot| snapshot.input_fingerprint.as_deref()
+            == Some("{\"_data\":{\"node_type\":\"output\"}}")));
     assert!(snapshots.iter().all(|snapshot| {
         snapshot.inspection_metadata
             == Some(serde_json::json!({
                 "projection_source": "demand_engine_cache",
                 "cache_version": 0,
-                "input_snapshot": { "_data": {} }
+                "input_snapshot": { "_data": { "node_type": "output" } }
             }))
     }));
 }
