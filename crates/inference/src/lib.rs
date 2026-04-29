@@ -63,13 +63,20 @@ pub use gateway::{
     InferenceStartRequest, SharedGateway,
 };
 pub use managed_redistributables::{
-    list_managed_redistributable_statuses, managed_redistributable_catalog,
+    acquire_managed_redistributable_lease, activate_managed_redistributable_version,
+    install_managed_redistributable_from_staging, list_managed_redistributable_statuses,
+    load_managed_redistributable_state, managed_redistributable_catalog,
     managed_redistributable_catalog_entry, managed_redistributable_status,
-    managed_redistributables_dir, ManagedRedistributableArchiveKind,
-    ManagedRedistributableCatalogEntry, ManagedRedistributableCategory, ManagedRedistributableId,
-    ManagedRedistributableInstallState, ManagedRedistributablePackageKind,
-    ManagedRedistributableReadiness, ManagedRedistributableSelection, ManagedRedistributableSource,
-    ManagedRedistributableStatus, ManagedRedistributableVersionStatus,
+    managed_redistributables_dir, release_managed_redistributable_lease,
+    remove_managed_redistributable_version, save_managed_redistributable_state,
+    select_managed_redistributable_version, set_default_managed_redistributable_version,
+    ManagedRedistributableArchiveKind, ManagedRedistributableCatalogEntry,
+    ManagedRedistributableCategory, ManagedRedistributableId, ManagedRedistributableInstallState,
+    ManagedRedistributableLease, ManagedRedistributableLeaseToken,
+    ManagedRedistributablePackageKind, ManagedRedistributablePersistedDependency,
+    ManagedRedistributablePersistedState, ManagedRedistributableReadiness,
+    ManagedRedistributableSelection, ManagedRedistributableSource, ManagedRedistributableStatus,
+    ManagedRedistributableVersionStatus,
 };
 pub use managed_runtime::{
     binary_capability, cancel_binary_download, check_binary_status, download_binary,

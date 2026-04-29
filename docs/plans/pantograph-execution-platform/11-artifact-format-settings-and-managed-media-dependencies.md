@@ -289,10 +289,10 @@ when physical payload bodies are deleted.
 - [x] Add managed redistributable catalog metadata for source owner,
   license/redistribution, checksum or signature, platform, archive kind,
   expected files, compatibility, and release version.
-- [ ] Add OpenColorIO as a managed native library/artifact dependency with
+- [x] Add OpenColorIO as a managed native library/artifact dependency with
   install/select/activate/capability state.
 - [ ] Add OCIO safe wrapper and native loading/ABI validation boundary.
-- [ ] Add `ffmpeg`, `ocioconvert`, and `oiiotool` as managed tool binaries with
+- [x] Add `ffmpeg`, `ocioconvert`, and `oiiotool` as managed tool binaries with
   install/select/activate/capability state.
 - [ ] Ensure conversion jobs resolve only activated managed tool/library
   versions and hold active-version leases while running.
