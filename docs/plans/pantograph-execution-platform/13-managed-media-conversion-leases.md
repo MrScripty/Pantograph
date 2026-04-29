@@ -104,6 +104,28 @@ Wave status: `complete`.
   `cargo test -p pantograph-media-conversion`,
   `cargo fmt --all -- --check`, and `npm run traceability`.
 
+### 2026-04-29 Executor And Lease Attribution Scaffolds
+
+Wave status: `complete`.
+
+- Wave `02` added the `pantograph-media-conversion` process-runner abstraction,
+  validated managed executable paths, Tokio-backed standard process execution,
+  bounded stderr summaries, timeout mapping, and a
+  `ManagedProcessConversionExecutor` bridge covered by fake-runner tests.
+- Wave `03` hardened `inference` media conversion dependency plans with the
+  holder convention
+  `workflow_run:{workflow_run_id}/node:{node_id}/port:{port_id}/conversion:{conversion_id}`,
+  holder validation before lease acquisition, holder propagation on lease
+  tokens, public helper re-exports, and tests for multi-dependency acquisition,
+  rollback, release, and malformed holders.
+- Real converter-specific argument planning, ArtifactStore private temporary
+  file handoff, workflow-service integration, descriptor/diagnostic propagation,
+  and GUI status projection remain assigned to later Stage `13` waves.
+- Verification passed:
+  `cargo test -p pantograph-media-conversion`,
+  `cargo test -p inference --test managed_media_dependencies`,
+  `cargo fmt --all -- --check`, and `npm run traceability`.
+
 ## Milestones
 
 ### Milestone 1: Conversion Boundary Design
@@ -132,12 +154,17 @@ Verification:
 
 ### Milestone 2: Managed Tool Invocation
 
-- [ ] Implement safe process invocation for managed `ffmpeg`, `ocioconvert`, and
-  `oiiotool` paths resolved from activated dependency state.
-- [ ] Reject arbitrary executable paths and inactive, missing, incompatible, or
-  removed dependency versions with typed errors.
-- [ ] Add timeout, cancellation, stderr truncation, temporary-file cleanup, and
-  exit-status mapping.
+- [x] Implement safe process invocation scaffolding for host-resolved managed
+  executable paths.
+- [x] Reject empty, relative, control-character, and shell-metacharacter
+  executable paths before process launch.
+- [x] Add timeout, cancellation, stderr truncation, and process failure error
+  mapping to the conversion contracts and fake-runner coverage.
+- [ ] Add converter-specific `ffmpeg`, `ocioconvert`, and `oiiotool` argument
+  planning and private temporary-file cleanup for tools that cannot operate as
+  stdin/stdout filters.
+- [ ] Reject inactive, missing, incompatible, or removed dependency versions at
+  the host conversion boundary before process launch.
 
 Verification:
 
@@ -149,10 +176,18 @@ Verification:
 
 ### Milestone 3: Lease Attribution And Artifact Metadata
 
+- [x] Add attribution-ready holder convention and validation for
+  active-version lease plans.
+- [x] Preserve dependency id, active version, lease id, holder, install root,
+  and expected files for acquired media conversion dependency plans.
+- [x] Prove multi-dependency rollback and release behavior before real
+  converter invocation is wired.
 - [ ] Acquire active-version leases immediately before invoking a converter.
-- [ ] Record leased tool/library/profile versions, lease ids, and converter command
-  identity in ArtifactStore descriptor metadata and durable I/O diagnostics.
-- [ ] Release leases on success, failure, cancellation, and dropped futures.
+- [ ] Record leased tool/library/profile versions, lease ids, and converter
+  command identity in ArtifactStore descriptor metadata and durable I/O
+  diagnostics.
+- [ ] Release leases on success, failure, cancellation, and dropped futures in
+  the host conversion executor.
 - [ ] Preserve queryable metadata after retention deletes the physical body.
 
 Verification:

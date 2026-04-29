@@ -18,6 +18,8 @@ details.
 | `gateway_tests.rs` | Gateway lifecycle, request forwarding, runtime reuse, embedding prepare/restore, and mock-backend tests extracted from the production gateway facade. |
 | `gateway_tests/` | Behavior-focused child modules for oversized gateway test families. |
 | `managed_runtime/` | Backend-owned managed binary contracts and orchestration for installable runtime sidecars such as `llama.cpp` and `Ollama`. |
+| `managed_media_dependencies.rs` | Managed media dependency activation checks, conversion dependency lease plans, holder validation, and attribution-ready lease records for ffmpeg/OIIO/OCIO tooling. |
+| `managed_redistributables/` | Shared managed redistributable catalog, state, install, activation, lease, and removal helpers for runtime sidecars and media dependencies. |
 | `process.rs` | Sidecar process abstraction used by backends that need external runtimes. |
 | `types.rs` | Shared request/response contracts consumed across backend and host boundaries. |
 | `server.rs` | Legacy sidecar/server lifecycle helpers for llama.cpp-style backends. |
@@ -47,6 +49,9 @@ of application-level scheduler policy.
   additively.
 - Runtime-residency, admission, and eviction policy must stay outside this
   crate even when gateway lifecycle data becomes richer.
+- Media conversion dependency leases must carry stable holder attribution so
+  later conversion executors can audit the workflow run, node, port, and
+  conversion that held active managed binaries or library artifacts.
 
 ## Decision
 
@@ -58,7 +63,10 @@ is modeled as its own capability and sidecar mode rather than as a chat
 completion variant. The planned `RuntimeRegistry` sits above this crate as a
 Pantograph application-layer coordinator; `InferenceGateway` remains the
 execution facade and lifecycle fact source that the registry consumes rather
-than replaces.
+than replaces. Managed media dependency planning stays in this crate because it
+owns managed redistributable activation and lease state, but real media
+conversion process execution stays in the neutral
+`pantograph-media-conversion` boundary and host adapters.
 
 ## Alternatives Rejected
 
@@ -112,6 +120,13 @@ than replaces.
   fixtures stay in `gateway_tests.rs`, while oversized behavior families split
   under `gateway_tests/` so `gateway.rs` remains focused on production gateway
   behavior.
+- Media conversion dependency lease holders use
+  `workflow_run:{workflow_run_id}/node:{node_id}/port:{port_id}/conversion:{conversion_id}`
+  and are validated before any managed redistributable lease is acquired.
+- Media conversion dependency plans expose dependency id, active version, lease
+  id, holder, install root, and expected files so host-owned conversion code can
+  record per-conversion attribution without depending on ambient active-version
+  snapshots.
 
 ## Revisit Triggers
 
@@ -122,10 +137,14 @@ than replaces.
 - A backend needs streaming image-generation events as a first-class contract.
 - Runtime policy ownership moves into this crate instead of a higher Pantograph
   application layer.
+- Media conversion dependency planning needs to depend directly on
+  `pantograph-media-conversion` instead of staying as a host-mapped managed
+  dependency boundary.
 
 ## Dependencies
 
-**Internal:** `backend`, `embedding_runtime`, `gateway`, `process`, `types`,
+**Internal:** `backend`, `embedding_runtime`, `gateway`,
+`managed_media_dependencies`, `managed_redistributables`, `process`, `types`,
 `server`, `kv_cache`.
 **External:** `tokio`, `serde`, `reqwest`, `async-trait`, and feature-gated
 runtime crates such as Candle or PyO3-backed components.
@@ -202,5 +221,7 @@ async fn run_image_request(gateway: &InferenceGateway, config: &BackendConfig) {
   `strength` for later img2img/inpaint support.
 - `RerankRequest`, `RerankResult`, and `RerankResponse` are append-only
   contracts shared across gateway, backend, and host layers.
+- `MediaConversionDependencyPlan` and lease-token records are append-only
+  managed dependency contracts consumed by host-owned conversion executors.
 - Contract changes that affect persisted consumers or saved workflows must be
   append-only or accompanied by migration guidance.

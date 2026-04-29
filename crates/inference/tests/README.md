@@ -49,12 +49,15 @@ temporary storage so status, activation, and lease behavior remain auditable.
 - Placeholder managed files stand in for managed artifacts only when the test
   is about Pantograph readiness logic, not third-party binary execution.
 - Active-version removal and lease conflicts must fail closed.
+- Conversion dependency plans must validate holder attribution before any lease
+  is acquired and must roll back earlier leases if a later dependency fails.
 
 ## Revisit Triggers
 
 - Managed media dependencies gain real download/checksum operations.
 - OpenColorIO ABI validation starts loading native libraries in tests.
 - Conversion dependency leasing moves to another crate or process boundary.
+- The holder convention changes or becomes a typed cross-crate contract.
 
 ## Dependencies
 
@@ -88,6 +91,9 @@ cargo test -p inference --test managed_media_dependencies
   invalid or unsafe operations.
 - Lifecycle: each test creates temporary roots, writes only its own placeholder
   artifacts, and lets test cleanup remove them.
+- Lease attribution: conversion dependency tests assert holder, dependency id,
+  active version, lease id, install root, expected files, rollback, and release
+  behavior.
 
 ## Structured Producer Contract
 
