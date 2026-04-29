@@ -322,6 +322,9 @@ when physical payload bodies are deleted.
   - [x] Convert Tauri event-adapter audio stream chunks with inline
     `audio_base64` into ArtifactStore stream lifecycle entries and bounded
     stream-reference event metadata.
+  - [x] Convert buffered Python bridge audio stream output arrays into
+    finalized ArtifactStore stream descriptors before workflow-output value
+    validation.
   - [ ] Convert Python bridge streaming and producer-specific streamed preview
     outputs into ArtifactStore stream lifecycle entries.
 - [ ] Represent streaming assets as artifact lifecycle transitions. Diffusion
@@ -331,6 +334,9 @@ when physical payload bodies are deleted.
   - [x] Represent audio stream chunks routed through the Tauri event adapter as
     ArtifactStore open/append/finalize lifecycle transitions with chunk
     metadata and no inline stream body in emitted `NodeStream` JSON.
+  - [x] Represent buffered Python bridge audio stream output arrays as
+    ArtifactStore open/append/finalize lifecycle transitions before descriptor
+    replacement.
   - [ ] Represent diffusion preview passes and direct Python producer stream
     outputs as ArtifactStore child/revision artifacts.
 - [ ] Capture actual output format, codec, quality/compression, bitrate, color
