@@ -178,11 +178,31 @@ Wave status: `in progress`.
   future Tauri adapter does not infer executable paths from raw expected-file
   ordering. OpenColorIO is rejected as an executable because it is a native
   library artifact.
-- Tauri host adapter execution and startup injection remain pending.
 - Verification passed:
   `cargo test -p pantograph-media-conversion`,
   `cargo test -p pantograph-workflow-service artifact_output_conversion`, and
   `cargo test -p inference --test managed_media_dependencies`.
+
+### 2026-04-29 Tauri Host Conversion Adapter
+
+Wave status: `complete`.
+
+- Tauri now injects a desktop managed-media conversion executor into the shared
+  `WorkflowService` during startup.
+- The adapter acquires active managed dependency leases immediately before
+  conversion, resolves executable paths through `inference`, executes
+  stdin/stdout command-plan steps with the neutral process runner, records
+  dependency lease attribution in the neutral conversion result, and releases
+  leases after success or failure.
+- Focused adapter tests cover ffmpeg audio conversion attribution/release and a
+  color-managed image pipeline using `ocioconvert`, `oiiotool`, and
+  OpenColorIO lease attribution with a fake process runner.
+- Private temp-file fallback paths, fixture-based real binary conversion tests,
+  activation/removal race tests, and GUI conversion failure display remain
+  future Stage `13` work.
+- Verification passed:
+  `cargo test -p pantograph managed_media_conversion -- --nocapture` and
+  `cargo check -p pantograph-embedded-runtime -p pantograph`.
 
 ## Milestones
 
@@ -224,7 +244,7 @@ Verification:
   operate as stdin/stdout filters.
 - [x] Add a typed managed executable resolver for active leased media tool
   dependencies.
-- [ ] Reject inactive, missing, incompatible, or removed dependency versions at
+- [x] Reject inactive, missing, incompatible, or removed dependency versions at
   the host conversion boundary before process launch.
 
 Verification:
@@ -245,16 +265,17 @@ Verification:
   converter invocation is wired.
 - [x] Add workflow-service neutral conversion executor injection and conversion
   request/result mapping.
-- [ ] Acquire active-version leases immediately before invoking a converter in
+- [x] Acquire active-version leases immediately before invoking a converter in
   the host adapter.
 - [x] Define descriptor and diagnostics metadata fields for leased
   tool/library/profile versions, lease ids, and converter command identity.
 - [x] Populate descriptor and diagnostics metadata from the neutral executor
   result.
-- [ ] Populate the neutral executor result from real acquired lease tokens
+- [x] Populate the neutral executor result from real acquired lease tokens
   during host converter invocation.
 - [ ] Release leases on success, failure, cancellation, and dropped futures in
-  the host conversion executor.
+  the host conversion executor. Success and explicit failure paths release
+  leases; cancellation and dropped-future cleanup still need dedicated coverage.
 - [ ] Preserve queryable metadata after retention deletes the physical body.
 
 Verification:
@@ -271,8 +292,8 @@ Verification:
   requirements.
 - [x] Add audio/video command planning using managed ffmpeg requirements.
 - [x] Add 3D conversion planning that fails closed until managed tooling exists.
-- [ ] Add image conversion using managed OpenImageIO/OpenColorIO tooling.
-- [ ] Add audio/video conversion using managed ffmpeg.
+- [x] Add image conversion using managed OpenImageIO/OpenColorIO tooling.
+- [x] Add audio/video conversion using managed ffmpeg.
 - [ ] Add 3D conversion for GLB/glTF/OBJ where managed tooling exists; otherwise
   fail closed with typed unsupported-conversion errors.
 - [ ] Keep streamed previews and in-progress streams readable through ArtifactStore

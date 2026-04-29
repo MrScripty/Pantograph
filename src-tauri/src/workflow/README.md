@@ -32,6 +32,7 @@ owner of that policy itself.
 | `headless_runtime.rs` | Shared host-resource composition for backend-owned embedded workflow runtime construction. |
 | `headless_workflow_commands_tests.rs` | Shared fixtures and module index for headless workflow command diagnostics, trace, scheduler, runtime metadata, and transport tests. |
 | `headless_workflow_commands_tests/` | Focused headless workflow command tests split by diagnostics helper recording, transport responses/errors, and diagnostics projection/storage behavior. |
+| `managed_media_conversion.rs` | Desktop host adapter that leases managed FFmpeg/OpenImageIO/OpenColorIO tools, runs bounded stdin/stdout conversion pipelines, and returns typed conversion attribution to `pantograph-workflow-service`. |
 
 ## Problem
 Pantograph’s standalone GUI still needs a native bridge, but graph editing can
@@ -167,6 +168,11 @@ sync-before-snapshot sequence.
 The legacy Tauri-local workflow persistence module has been removed; path
 boundary tests now live with `FileSystemWorkflowGraphStore` in the workflow
 service crate, which is the active owner for save/load/list behavior.
+Managed media conversion is injected into the shared workflow service at
+startup from `app_setup.rs`. The neutral conversion request/result contract
+stays in `pantograph-media-conversion`; the Tauri adapter only resolves
+desktop-managed dependency leases, executes converter processes, and releases
+leases after each attempt.
 
 ## Alternatives Rejected
 - Extend `workflow_get_io` to cover graph-editing intent.
@@ -197,6 +203,10 @@ service crate, which is the active owner for save/load/list behavior.
 - Workflow run commands must submit through the scheduler and return the
   scheduler-generated `workflow_run_id`; Tauri command payloads must not accept
   caller-authored run ids or workflow-name diagnostics side channels.
+- Media output conversion must use the injected workflow-service conversion
+  executor; Tauri may lease and execute managed converter binaries, but it must
+  return typed conversion/dependency attribution rather than appending raw
+  diagnostic events or embedding binary payloads in JSON.
 - Workflow-event serialization must include backend-authored ownership context
   for execution-scoped events so GUI reducers do not infer event execution ids
   from raw payload fields first.

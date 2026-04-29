@@ -80,6 +80,17 @@ pub fn run_app() -> AppStartupResult<()> {
                 startup_error(format!("failed to open artifact format settings: {error}"))
             })?,
     );
+    workflow_service
+        .set_media_conversion_executor(Some(Arc::new(
+            workflow::managed_media_conversion::TauriManagedMediaConversionExecutor::new(
+                pantograph_data_dir.clone(),
+            ),
+        )))
+        .map_err(|error| {
+            startup_error(format!(
+                "failed to configure managed media conversion executor: {error}"
+            ))
+        })?;
     workflow::headless_workflow_commands::sync_artifact_format_dependency_versions(
         &pantograph_data_dir,
         workflow_service.as_ref(),

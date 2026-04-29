@@ -31,6 +31,7 @@ mod headless_diagnostics;
 pub mod headless_diagnostics_transport;
 mod headless_runtime;
 pub mod headless_workflow_commands;
+pub mod managed_media_conversion;
 pub mod model_dependencies;
 pub mod model_dependency_commands;
 pub mod orchestration;

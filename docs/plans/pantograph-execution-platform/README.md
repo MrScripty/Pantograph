@@ -46,7 +46,7 @@ run-centric workbench.
 | `10` | Coordination-only | Reusable concurrent implementation scaffold, not an implementation stage. |
 | `11` | Complete with Stage `13` follow-up | ArtifactStore, format settings, canonical Settings ownership, managed media dependency scaffolding, active-version descriptor metadata, binding/API/frontend projections, and media stream artifactization are implemented. Real conversion process invocation and per-conversion lease-token attribution are owned by Stage `13`. |
 | `12` | Complete with follow-ups | Imports the run-centric GUI workbench plans into execution-platform ownership and implements Scheduler-default workbench pages, active-run navigation, current API/frontend projections, review findings, and rollout gates. GUI screenshot coverage remains a follow-up until a harness exists. |
-| `13` | Planned / not complete | Adds real managed media conversion/transcoding through activated Pantograph dependencies and records per-conversion active-version lease attribution. |
+| `13` | In progress | Neutral conversion contracts, command planning, workflow-service conversion hook, descriptor/diagnostics attribution metadata, managed executable resolution, and Tauri host conversion adapter injection are implemented. Remaining work: private temp-file fallback, cancellation/drop cleanup coverage, real-binary fixture tests, GUI/API conversion failure display, and stage-end review. |
 
 ## Problem
 

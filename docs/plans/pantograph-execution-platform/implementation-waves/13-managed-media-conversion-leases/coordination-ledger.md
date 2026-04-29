@@ -38,7 +38,7 @@ Stage `13` completed Waves `01` through `05`.
 | `wave-03-lease-attribution` | Complete | Added attribution holder convention, validation, holder propagation on lease tokens, helper re-exports, and inference tests for multi-dependency acquisition, rollback, release, and invalid holders. |
 | `wave-04-media-type-coverage` | Complete for command planning | Added host-neutral command plans for image/audio/video targets, managed dependency requirements, stdin/stdout stream markers, argv vectors, and fail-closed 3D planning. Real conversion execution remains for Wave `06`. |
 | `wave-05-conversion-metadata-contracts` | Complete | Added typed conversion status, conversion id, command id, and per-conversion dependency lease attribution fields to artifact descriptors and durable I/O diagnostics metadata. |
-| `wave-06-host-conversion-integration` | In progress | Workflow-service now has a neutral conversion executor hook and inference exposes typed managed executable resolution. Tauri host adapter execution remains pending. |
+| `wave-06-host-conversion-integration` | Complete | Workflow-service has a neutral conversion executor hook; inference exposes typed managed executable resolution; Tauri injects a host adapter that leases active managed dependencies, executes command-plan steps, returns lease attribution, and releases leases on success/failure paths. |
 | `wave-07-api-gui-rollout` | Planned | Surface conversion lifecycle and failures through diagnostics, API, and GUI projections. |
 
 ## 2026-04-29 Wave 05 Contract Slice
@@ -87,6 +87,23 @@ Stage `13` completed Waves `01` through `05`.
 - Remaining Wave `06` work: implement and inject the Tauri host adapter that
   acquires/release dependency plans, resolves managed executable paths, runs
   command-plan steps, and returns neutral conversion results.
+
+## 2026-04-29 Wave 06 Host Adapter Complete
+
+- Host-owned Tauri slice completed without touching frontend, generated
+  bindings, or workflow-service internals after the neutral hook was committed.
+- `src-tauri/src/workflow/managed_media_conversion.rs` now maps neutral
+  conversion requests to managed dependency lease plans, resolves executable
+  paths through `inference`, runs stdin/stdout command-plan steps through the
+  neutral `ProcessRunner`, and returns conversion results with dependency id,
+  active version, lease id, and lease holder attribution.
+- `src-tauri/src/app_setup.rs` injects the adapter into the shared
+  `WorkflowService` at startup, using the same `.pantograph` data directory as
+  ArtifactStore and managed media dependency activation.
+- Focused verification passed:
+  `cargo test -p pantograph managed_media_conversion -- --nocapture` and
+  `cargo check -p pantograph-embedded-runtime -p pantograph`.
+- Existing Tauri dead-code warnings remain outside this slice.
 
 ## Proposed Worker Split
 

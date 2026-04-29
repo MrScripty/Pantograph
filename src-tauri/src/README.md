@@ -54,6 +54,10 @@ Startup/setup async tasks are registered in `app_tasks.rs` and drained during
 window shutdown before runtime workers and model processes are stopped.
 Window shutdown also stops health monitoring and any tracked automatic recovery
 task before workflow cleanup and runtime process shutdown.
+Startup injects the desktop managed-media conversion executor into the shared
+workflow service. The adapter may resolve and lease managed converter tools,
+but the workflow service remains the artifact, descriptor, and diagnostics
+owner.
 `main.rs` no longer registers a Tauri-local workflow execution manager; edit
 session undo/redo and execution state are injected through the backend-owned
 workflow service instead.
@@ -114,6 +118,9 @@ improvements and backend-owned grouping DTOs over local adapter exceptions.
 - Workflow projection query commands, including scheduler estimate reads, must
   stay transport-thin and return workflow-service DTOs without local payload
   parsing.
+- Managed media conversion must be injected as a host capability at startup;
+  converter process execution and dependency leasing can live in Tauri, while
+  artifact persistence and conversion attribution stay in the workflow service.
 - The run-centric GUI command surface should expose projection-specific
   diagnostics commands, not legacy diagnostics snapshot/trace/reset commands.
   Runtime-debug and headless diagnostics helpers may remain internal.
