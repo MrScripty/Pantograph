@@ -5,10 +5,10 @@ export const WORKBENCH_PAGE_IDS = [
   'diagnostics',
   'graph',
   'io_inspector',
-  'settings',
   'library',
   'network',
   'node_lab',
+  'settings',
 ] as const;
 
 export type WorkbenchPageId = (typeof WORKBENCH_PAGE_IDS)[number];
@@ -37,10 +37,10 @@ export const WORKBENCH_PAGES: WorkbenchPageDefinition[] = [
   { id: 'diagnostics', label: 'Diagnostics' },
   { id: 'graph', label: 'Graph' },
   { id: 'io_inspector', label: 'I/O Inspector' },
-  { id: 'settings', label: 'Settings' },
   { id: 'library', label: 'Library' },
   { id: 'network', label: 'Network' },
   { id: 'node_lab', label: 'Node Editor' },
+  { id: 'settings', label: 'Settings' },
 ];
 
 export const DEFAULT_WORKBENCH_STATE: WorkbenchState = {

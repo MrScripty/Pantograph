@@ -115,14 +115,14 @@
         <GraphPage />
       {:else if $selectedWorkbenchPage === 'io_inspector'}
         <IoInspectorPage />
-      {:else if $selectedWorkbenchPage === 'settings'}
-        <SettingsPage />
       {:else if $selectedWorkbenchPage === 'library'}
         <LibraryPage />
       {:else if $selectedWorkbenchPage === 'network'}
         <NetworkPage />
       {:else if $selectedWorkbenchPage === 'node_lab'}
         <NodeLabPage />
+      {:else if $selectedWorkbenchPage === 'settings'}
+        <SettingsPage />
       {/if}
     </main>
   </div>

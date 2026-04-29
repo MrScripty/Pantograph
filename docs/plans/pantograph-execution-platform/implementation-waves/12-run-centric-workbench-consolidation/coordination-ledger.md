@@ -2,11 +2,11 @@
 
 ## Current Status
 
-Stage `12` is planned and not yet implemented.
+Stage `12` is in progress.
 
 The stage exists to make the execution-platform plan directory the canonical
-home for the former `run-centric-gui-workbench` requirements. No source-code
-implementation has started under this stage.
+home for the former `run-centric-gui-workbench` requirements. Initial source
+implementation has started with the shell/store navigation slice.
 
 ## Required First Actions
 
@@ -36,4 +36,6 @@ implementation has started under this stage.
 
 ## Verification Ledger
 
-No Stage `12` verification has run yet.
+- 2026-04-29 Wave `03` workbench shell navigation passed:
+  `node --experimental-strip-types --test src/stores/workbenchStore.test.ts`,
+  `npm run typecheck -- --pretty false`, and `npm run build`.

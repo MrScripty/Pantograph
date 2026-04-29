@@ -18,6 +18,7 @@ test('workbench page order starts at Scheduler and includes reserved pages', () 
     'library',
     'network',
     'node_lab',
+    'settings',
   ]);
 });
 
@@ -71,4 +72,26 @@ test('withActiveWorkflowRun stores transient selected run context', () => {
   const cleared = withActiveWorkflowRun(next, null, 300);
   assert.equal(cleared.active_run, null);
   assert.equal(cleared.selected_page_id, 'scheduler');
+});
+
+test('clearing active run preserves the selected workbench page', () => {
+  const selected = withSelectedWorkbenchPage(
+    withActiveWorkflowRun(
+      DEFAULT_WORKBENCH_STATE,
+      {
+        workflow_run_id: 'run-c',
+        workflow_id: 'workflow-c',
+        workflow_version_id: 'wfver-c',
+        workflow_semantic_version: '3.0.0',
+        status: 'running',
+      },
+      400,
+    ),
+    'diagnostics',
+  );
+
+  const cleared = withActiveWorkflowRun(selected, null, 500);
+
+  assert.equal(cleared.active_run, null);
+  assert.equal(cleared.selected_page_id, 'diagnostics');
 });
