@@ -2,6 +2,7 @@ use std::time::{Duration, Instant};
 
 use uuid::Uuid;
 
+use crate::graph::WorkflowGraphRunSettings;
 use crate::scheduler::WorkflowExecutionSessionPreflightCache;
 use crate::technical_fit::WorkflowTechnicalFitOverride;
 
@@ -28,6 +29,7 @@ impl WorkflowService {
         cached_preflight: Option<WorkflowExecutionSessionPreflightCache>,
         workflow_execution_session_id: Option<String>,
         workflow_run_id: Option<String>,
+        graph_run_settings: Option<WorkflowGraphRunSettings>,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
         validate_workflow_id(&request.workflow_id)?;
         validate_workflow_semantic_version(&request.workflow_semantic_version)?;
@@ -149,6 +151,7 @@ impl WorkflowService {
             &request.workflow_id,
             &request.workflow_semantic_version,
             &workflow_run_id,
+            graph_run_settings.as_ref(),
             outputs,
         )?;
         for binding in &outputs {

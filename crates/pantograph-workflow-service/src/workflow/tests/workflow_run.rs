@@ -6,7 +6,7 @@ impl WorkflowService {
         host: &H,
         request: WorkflowRunRequest,
     ) -> Result<WorkflowRunResponse, WorkflowServiceError> {
-        self.workflow_run_internal(host, request, None, None, None)
+        self.workflow_run_internal(host, request, None, None, None, None)
             .await
     }
 }

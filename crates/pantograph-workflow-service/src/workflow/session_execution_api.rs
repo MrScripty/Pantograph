@@ -323,6 +323,7 @@ impl WorkflowService {
         self.record_run_started_event_if_configured(&session, run_snapshot.as_ref(), &queued_run)?;
         let queued_workflow_semantic_version = queued_run.queued.workflow_semantic_version.clone();
         let queued_workflow_inputs = queued_run.queued.inputs.clone();
+        let queued_graph_run_settings = decode_queued_graph_run_settings(run_snapshot.as_ref())?;
 
         let preflight_cache = match self
             .ensure_session_runtime_preflight(
@@ -461,6 +462,7 @@ impl WorkflowService {
                 Some(preflight_cache),
                 Some(session_id.clone()),
                 Some(queued_run.queued.workflow_run_id.clone()),
+                queued_graph_run_settings,
             )
             .await;
 
@@ -1846,6 +1848,20 @@ fn scheduler_candidate_runtime_ids(
     candidate_runtime_ids.sort();
     candidate_runtime_ids.dedup();
     candidate_runtime_ids
+}
+
+fn decode_queued_graph_run_settings(
+    snapshot: Option<&WorkflowRunSnapshotRecord>,
+) -> Result<Option<WorkflowGraphRunSettings>, WorkflowServiceError> {
+    snapshot
+        .map(|snapshot| {
+            serde_json::from_str(&snapshot.graph_settings_json).map_err(|error| {
+                WorkflowServiceError::CapabilityViolation(format!(
+                    "failed to decode workflow run snapshot graph settings: {error}"
+                ))
+            })
+        })
+        .transpose()
 }
 
 fn workflow_execution_session_kind_label(kind: &WorkflowExecutionSessionKind) -> &'static str {
