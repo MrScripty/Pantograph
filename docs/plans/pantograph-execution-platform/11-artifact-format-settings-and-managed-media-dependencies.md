@@ -348,7 +348,9 @@ when physical payload bodies are deleted.
     metadata in artifact descriptors and run snapshots.
   - [x] Capture backend default and explicit video/3D output-node override
     metadata in artifact descriptors and run snapshots.
-- [ ] Reject invalid format/codec/quality/bitrate/color/3D settings at
+  - [x] Capture backend converter identity from selected media capability
+    providers in artifact descriptors.
+- [x] Reject invalid format/codec/quality/bitrate/color/3D settings at
   submission or execution boundaries with typed errors.
   - [x] Validate persistent format defaults and image/audio output-node
     overrides against backend capabilities with typed errors.

@@ -356,6 +356,10 @@ runtime-only DTO names or host PATH discovery as the source of truth.
   `cargo test -p pantograph-workflow-service artifact_output_conversion`,
   `cargo check -p pantograph-workflow-service`, and targeted `rustfmt
   --edition 2021 --check` for the artifact output conversion file.
+- 2026-04-29 Wave `05` artifact converter metadata passed:
+  `cargo test -p pantograph-workflow-service artifact_output_conversion`,
+  `cargo check -p pantograph-workflow-service`, and targeted `rustfmt
+  --edition 2021 --check` for the artifact output conversion file.
 - 2026-04-29 Separate clippy cleanup commit cleared existing
   workflow-service lints discovered by the Wave `02` package clippy gate.
 - 2026-04-29 Wave `01` verification passed:
