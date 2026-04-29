@@ -1,8 +1,9 @@
 use super::{
     ArtifactAttribution, ArtifactFormatCapabilities, ArtifactFormatMetadata,
-    ArtifactFormatSettings, ArtifactPayloadKind, ArtifactWriteRequest, AudioArtifactFormatSettings,
-    ImageArtifactFormatSettings, ThreeDArtifactFormatSettings, VideoArtifactFormatSettings,
-    WorkflowPortBinding, WorkflowService, WorkflowServiceError,
+    ArtifactFormatSettings, ArtifactPayloadKind, ArtifactStreamChunkWriteRequest,
+    ArtifactStreamFinalizeRequest, ArtifactStreamOpenRequest, ArtifactWriteRequest,
+    AudioArtifactFormatSettings, ImageArtifactFormatSettings, ThreeDArtifactFormatSettings,
+    VideoArtifactFormatSettings, WorkflowPortBinding, WorkflowService, WorkflowServiceError,
 };
 use crate::graph::WorkflowGraphRunSettings;
 
@@ -29,6 +30,19 @@ pub(super) fn convert_media_outputs_to_artifacts(
     outputs
         .into_iter()
         .map(|binding| {
+            if let Some(stream_output) = StreamArtifactOutput::from_binding(&binding) {
+                return convert_stream_artifact_output(
+                    service,
+                    workflow_id,
+                    workflow_version_id,
+                    workflow_run_id,
+                    graph_run_settings,
+                    &format_settings,
+                    &format_capabilities,
+                    binding,
+                    stream_output,
+                );
+            }
             let Some(artifact_output) = ArtifactOutput::from_binding(&binding) else {
                 return Ok(binding);
             };
@@ -45,6 +59,86 @@ pub(super) fn convert_media_outputs_to_artifacts(
             )
         })
         .collect()
+}
+
+fn convert_stream_artifact_output(
+    service: &WorkflowService,
+    workflow_id: &str,
+    workflow_version_id: &str,
+    workflow_run_id: &str,
+    graph_run_settings: Option<&WorkflowGraphRunSettings>,
+    format_settings: &ArtifactFormatSettings,
+    format_capabilities: &ArtifactFormatCapabilities,
+    binding: WorkflowPortBinding,
+    stream_output: StreamArtifactOutput,
+) -> Result<WorkflowPortBinding, WorkflowServiceError> {
+    let decoded_chunks = stream_output
+        .chunks
+        .iter()
+        .map(|chunk| {
+            decode_base64(&chunk.encoded_body).map_err(|reason| {
+                WorkflowServiceError::InvalidRequest(format!(
+                    "binding '{}.{}' contains invalid base64 artifact stream chunk: {}",
+                    binding.node_id, binding.port_id, reason
+                ))
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let first_body = decoded_chunks
+        .first()
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+    let media_type = stream_output
+        .explicit_media_type
+        .clone()
+        .or_else(|| detect_media_type(stream_output.payload_kind, first_body));
+    let output_format = resolve_output_format_metadata(
+        &binding,
+        stream_output.payload_kind,
+        media_type.as_deref(),
+        graph_run_settings,
+        format_settings,
+        format_capabilities,
+    )?;
+    let artifact_id = format!(
+        "run_{}_{}_{}",
+        sanitize_artifact_id(workflow_run_id),
+        sanitize_artifact_id(&binding.node_id),
+        sanitize_artifact_id(&binding.port_id)
+    );
+    service.open_artifact_stream(ArtifactStreamOpenRequest {
+        artifact_id: Some(artifact_id.clone()),
+        payload_kind: stream_output.payload_kind,
+        media_type: output_format.media_type.clone(),
+        format: Some(output_format.metadata),
+        attribution: ArtifactAttribution {
+            workflow_run_id: workflow_run_id.to_string(),
+            workflow_id: Some(workflow_id.to_string()),
+            workflow_version_id: Some(workflow_version_id.to_string()),
+            node_id: Some(binding.node_id.clone()),
+            port_id: Some(binding.port_id.clone()),
+            model_id: None,
+            runtime_id: None,
+        },
+    })?;
+    for (sequence, body) in decoded_chunks.into_iter().enumerate() {
+        service.append_artifact_stream_chunk(ArtifactStreamChunkWriteRequest {
+            artifact_id: artifact_id.clone(),
+            sequence: sequence as u64,
+            body,
+        })?;
+    }
+    let descriptor = service.finalize_artifact_stream(ArtifactStreamFinalizeRequest {
+        artifact_id: artifact_id.clone(),
+    })?;
+    Ok(WorkflowPortBinding {
+        value: serde_json::to_value(descriptor).map_err(|error| {
+            WorkflowServiceError::Internal(format!(
+                "failed to serialize artifact stream descriptor: {error}"
+            ))
+        })?,
+        ..binding
+    })
 }
 
 fn convert_artifact_output(
@@ -701,6 +795,55 @@ struct ArtifactOutput {
     explicit_media_type: Option<String>,
 }
 
+struct StreamArtifactOutput {
+    payload_kind: ArtifactPayloadKind,
+    chunks: Vec<StreamArtifactChunk>,
+    explicit_media_type: Option<String>,
+}
+
+struct StreamArtifactChunk {
+    encoded_body: String,
+}
+
+impl StreamArtifactOutput {
+    fn from_binding(binding: &WorkflowPortBinding) -> Option<Self> {
+        let values = binding.value.as_array()?;
+        let chunks = values
+            .iter()
+            .map(|value| {
+                let object = value.as_object()?;
+                let encoded_body = object
+                    .get("audio_base64")
+                    .and_then(|value| value.as_str())?;
+                Some(StreamArtifactChunk {
+                    encoded_body: encoded_body.to_string(),
+                })
+            })
+            .collect::<Option<Vec<_>>>()?;
+        if chunks.is_empty() {
+            return None;
+        }
+
+        let explicit_media_type = values
+            .iter()
+            .filter_map(|value| value.as_object())
+            .find_map(|object| {
+                explicit_media_type(object).or_else(|| {
+                    object
+                        .get("audio_base64")
+                        .and_then(|value| value.as_str())
+                        .and_then(media_type_from_data_url)
+                })
+            });
+
+        Some(Self {
+            payload_kind: ArtifactPayloadKind::Audio,
+            chunks,
+            explicit_media_type,
+        })
+    }
+}
+
 impl ArtifactOutput {
     fn from_binding(binding: &WorkflowPortBinding) -> Option<Self> {
         let payload_kind = payload_kind_from_port_id(&binding.port_id);
@@ -1093,8 +1236,8 @@ mod tests {
     use crate::graph::{WorkflowGraphRunSettings, WorkflowGraphRunSettingsNode};
     use crate::workflow::{
         ArtifactDescriptor, ArtifactFormatSettings, ArtifactFormatSettingsUpdateRequest,
-        ArtifactPayloadKind, ArtifactPolicy, ArtifactStore, WorkflowPortBinding, WorkflowService,
-        WorkflowServiceError,
+        ArtifactLifecycleState, ArtifactPayloadKind, ArtifactPolicy, ArtifactReadRequest,
+        ArtifactStore, WorkflowPortBinding, WorkflowService, WorkflowServiceError,
     };
 
     fn policy() -> ArtifactPolicy {
@@ -1246,6 +1389,63 @@ mod tests {
         assert_eq!(descriptor.byte_length, Some(4));
         assert_eq!(descriptor.format.expect("format").format_id, "csv");
         assert!(!converted[0].value.to_string().contains("YSxiCg=="));
+    }
+
+    #[test]
+    fn convert_media_outputs_replaces_buffered_audio_stream_with_artifact_descriptor() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let store = ArtifactStore::open(temp.path(), policy()).expect("artifact store");
+        let service = WorkflowService::new().with_artifact_store(store);
+
+        let converted = convert_media_outputs_to_artifacts(
+            &service,
+            "workflow-a",
+            "1.0.0",
+            "run-a",
+            None,
+            vec![WorkflowPortBinding {
+                node_id: "audio-output".to_string(),
+                port_id: "stream".to_string(),
+                value: serde_json::json!([
+                    {
+                        "type": "audio_chunk",
+                        "audio_base64": "aGVsbG8=",
+                        "sequence": 0,
+                        "media_type": "audio/wav",
+                        "is_final": false
+                    },
+                    {
+                        "type": "audio_chunk",
+                        "audio_base64": "IQ==",
+                        "sequence": 1,
+                        "media_type": "audio/wav",
+                        "is_final": true
+                    }
+                ]),
+            }],
+        )
+        .expect("convert output");
+
+        let descriptor: ArtifactDescriptor =
+            serde_json::from_value(converted[0].value.clone()).expect("descriptor");
+        assert_eq!(descriptor.payload_kind, ArtifactPayloadKind::Audio);
+        assert_eq!(descriptor.lifecycle_state, ArtifactLifecycleState::Retained);
+        assert_eq!(descriptor.byte_length, Some(6));
+        assert_eq!(
+            descriptor.read_handle.as_deref(),
+            Some("artifact-read://run_run-a_audio-output_stream")
+        );
+        assert!(descriptor.stream_handle.is_none());
+        assert!(!converted[0].value.to_string().contains("aGVsbG8="));
+
+        let body = service
+            .read_artifact_body(ArtifactReadRequest {
+                artifact_id: descriptor.artifact_id,
+                byte_range_start: None,
+                byte_range_end_exclusive: None,
+            })
+            .expect("read retained stream artifact body");
+        assert_eq!(body.body, b"hello!");
     }
 
     #[test]
