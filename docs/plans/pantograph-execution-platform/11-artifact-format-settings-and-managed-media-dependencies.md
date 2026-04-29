@@ -332,10 +332,14 @@ when physical payload bodies are deleted.
     artifact diagnostics projection.
   - [x] Capture backend default and explicit image/audio output-node override
     metadata in artifact descriptors and run snapshots.
+  - [x] Capture backend default and explicit video/3D output-node override
+    metadata in artifact descriptors and run snapshots.
 - [ ] Reject invalid format/codec/quality/bitrate/color/3D settings at
   submission or execution boundaries with typed errors.
   - [x] Validate persistent format defaults and image/audio output-node
     overrides against backend capabilities with typed errors.
+  - [x] Validate video and 3D output-node overrides against backend
+    capabilities with typed errors.
 
 ### Milestone 5: API, Binding, And GUI Projections
 
@@ -389,6 +393,8 @@ when physical payload bodies are deleted.
     that still own server/runtime settings outside the workbench Settings page.
 - [x] Add output-node format selectors that default from backend Settings and
   preserve explicit per-node overrides in run snapshots.
+  - [x] Add image, audio, and 3D output selectors driven by backend Settings
+    defaults and capability DTOs.
 
 ## Verification
 
