@@ -1,14 +1,82 @@
 use pantograph_workflow_service::{
     ArtifactAccessMode, ArtifactAttribution, ArtifactBodyTransport,
     ArtifactConsumeAcknowledgementRequest, ArtifactConsumeAcknowledgementResponse,
-    ArtifactDescriptor, ArtifactDescriptorQueryRequest, ArtifactDescriptorQueryResponse,
-    ArtifactFormatCapabilities, ArtifactFormatMetadata, ArtifactFormatSettings,
-    ArtifactLifecycleState, ArtifactPayloadKind, ArtifactPolicy, ArtifactReadRequest,
-    ArtifactReadResponse, ArtifactStreamChunkRecord, ArtifactStreamReadRequest,
-    ArtifactStreamReadResponse, IoArtifactRetentionState, ManagedRedistributableCategory,
-    ManagedRedistributableReadinessState, ManagedRedistributableStatus,
-    ManagedRedistributableStatusQueryResponse, MediaFormatOption,
+    ArtifactConversionDependency, ArtifactConversionStatus, ArtifactDescriptor,
+    ArtifactDescriptorQueryRequest, ArtifactDescriptorQueryResponse, ArtifactFormatCapabilities,
+    ArtifactFormatMetadata, ArtifactFormatSettings, ArtifactLifecycleState, ArtifactPayloadKind,
+    ArtifactPolicy, ArtifactReadRequest, ArtifactReadResponse, ArtifactStreamChunkRecord,
+    ArtifactStreamReadRequest, ArtifactStreamReadResponse, IoArtifactRetentionState,
+    ManagedRedistributableCategory, ManagedRedistributableReadinessState,
+    ManagedRedistributableStatus, ManagedRedistributableStatusQueryResponse, MediaFormatOption,
 };
+
+#[test]
+fn artifact_format_metadata_contract_carries_conversion_lease_attribution() {
+    let lease_holder = "workflow_run:run_1/node:image-output/port:image/conversion:conversion_1";
+    let format = ArtifactFormatMetadata {
+        format_id: "jpg".to_string(),
+        media_type: "image/jpeg".to_string(),
+        codec_id: None,
+        quality_percent: Some(75),
+        bitrate_kbps: None,
+        crf: None,
+        bit_depth: Some("8bit".to_string()),
+        color_profile_id: Some("srgb".to_string()),
+        converter_id: Some("oiiotool".to_string()),
+        converter_version: Some("2.5.18".to_string()),
+        library_version: Some("opencolorio-2.4.2".to_string()),
+        conversion_id: Some("conversion_1".to_string()),
+        conversion_status: Some(ArtifactConversionStatus::Converted),
+        conversion_command_id: Some("image_oiio_ocio_jpg_srgb".to_string()),
+        conversion_dependencies: vec![
+            ArtifactConversionDependency {
+                dependency_id: "oiiotool".to_string(),
+                active_version: "2.5.18".to_string(),
+                lease_id: "lease_oiio_1".to_string(),
+                lease_holder: lease_holder.to_string(),
+            },
+            ArtifactConversionDependency {
+                dependency_id: "opencolorio".to_string(),
+                active_version: "2.4.2".to_string(),
+                lease_id: "lease_ocio_1".to_string(),
+                lease_holder: lease_holder.to_string(),
+            },
+        ],
+    };
+
+    let value = serde_json::to_value(format).expect("serialize artifact format");
+
+    assert_eq!(
+        value,
+        serde_json::json!({
+            "format_id": "jpg",
+            "media_type": "image/jpeg",
+            "quality_percent": 75,
+            "bit_depth": "8bit",
+            "color_profile_id": "srgb",
+            "converter_id": "oiiotool",
+            "converter_version": "2.5.18",
+            "library_version": "opencolorio-2.4.2",
+            "conversion_id": "conversion_1",
+            "conversion_status": "converted",
+            "conversion_command_id": "image_oiio_ocio_jpg_srgb",
+            "conversion_dependencies": [
+                {
+                    "dependency_id": "oiiotool",
+                    "active_version": "2.5.18",
+                    "lease_id": "lease_oiio_1",
+                    "lease_holder": lease_holder
+                },
+                {
+                    "dependency_id": "opencolorio",
+                    "active_version": "2.4.2",
+                    "lease_id": "lease_ocio_1",
+                    "lease_holder": lease_holder
+                }
+            ]
+        })
+    );
+}
 
 #[test]
 fn artifact_descriptor_contract_snapshot_uses_references_not_payload_bodies() {
@@ -34,6 +102,10 @@ fn artifact_descriptor_contract_snapshot_uses_references_not_payload_bodies() {
             converter_id: Some("oiiotool".to_string()),
             converter_version: Some("2.5.0".to_string()),
             library_version: Some("openimageio-2.5.0".to_string()),
+            conversion_id: None,
+            conversion_status: None,
+            conversion_command_id: None,
+            conversion_dependencies: Vec::new(),
         }),
         attribution: ArtifactAttribution {
             workflow_run_id: "run-1".to_string(),

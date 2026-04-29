@@ -64,6 +64,23 @@ pub struct ArtifactAttribution {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+pub enum ArtifactConversionStatus {
+    Converted,
+    PassedThrough,
+    Failed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct ArtifactConversionDependency {
+    pub dependency_id: String,
+    pub active_version: String,
+    pub lease_id: String,
+    pub lease_holder: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub struct ArtifactFormatMetadata {
     pub format_id: String,
     pub media_type: String,
@@ -85,6 +102,14 @@ pub struct ArtifactFormatMetadata {
     pub converter_version: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub library_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conversion_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conversion_status: Option<ArtifactConversionStatus>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conversion_command_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub conversion_dependencies: Vec<ArtifactConversionDependency>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

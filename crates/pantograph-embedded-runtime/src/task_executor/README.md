@@ -59,6 +59,9 @@ same behavior without exposing helper paths outside this module boundary.
   but dependency gating must remain in dependency preflight helpers.
 - Puma-Lib helpers prepare model metadata outputs and must not own dependency
   installation decisions.
+- Stream artifact helpers may emit pass-through ArtifactStore metadata, but
+  they must leave managed conversion status and dependency lease attribution
+  empty unless a host-owned conversion executor supplies those typed facts.
 
 ## Usage Examples
 

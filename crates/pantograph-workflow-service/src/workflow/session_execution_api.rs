@@ -3,11 +3,12 @@ use std::{collections::HashMap, time::Duration};
 use pantograph_diagnostics_ledger::{
     DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
     DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
-    IoArtifactAccessMode, IoArtifactFormatMetadata, IoArtifactLifecycleState,
-    IoArtifactObservedPayload, IoArtifactPayloadKind, IoArtifactRetentionState, IoArtifactRole,
-    LibraryAssetAccessedPayload, LibraryAssetOperation, RunSnapshotAcceptedPayload,
-    RunSnapshotNodeVersionPayload, RunStartedPayload, RunTerminalPayload, RunTerminalStatus,
-    SchedulerEstimateBlockingCondition, SchedulerEstimateProducedPayload, SchedulerModelCacheState,
+    IoArtifactAccessMode, IoArtifactConversionDependency, IoArtifactConversionStatus,
+    IoArtifactFormatMetadata, IoArtifactLifecycleState, IoArtifactObservedPayload,
+    IoArtifactPayloadKind, IoArtifactRetentionState, IoArtifactRole, LibraryAssetAccessedPayload,
+    LibraryAssetOperation, RunSnapshotAcceptedPayload, RunSnapshotNodeVersionPayload,
+    RunStartedPayload, RunTerminalPayload, RunTerminalStatus, SchedulerEstimateBlockingCondition,
+    SchedulerEstimateProducedPayload, SchedulerModelCacheState,
     SchedulerModelLifecycleChangedPayload, SchedulerModelLifecycleTransition,
     SchedulerQueuePlacementPayload, SchedulerReservationChangedPayload,
     SchedulerReservationResourceKind, SchedulerReservationTransition, SchedulerRunAdmittedPayload,
@@ -31,8 +32,8 @@ use super::validation::{
     validate_workflow_semantic_version,
 };
 use super::{
-    ArtifactAccessMode, ArtifactDescriptor, ArtifactLifecycleState, ArtifactPayloadKind,
-    AttributionRepository, WorkflowCapabilityModel,
+    ArtifactAccessMode, ArtifactConversionStatus, ArtifactDescriptor, ArtifactLifecycleState,
+    ArtifactPayloadKind, AttributionRepository, WorkflowCapabilityModel,
     WorkflowExecutionSessionAttributedCreateRequest, WorkflowExecutionSessionAttributionContext,
     WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionCreateResponse,
     WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionRetentionHint,
@@ -1644,6 +1645,27 @@ fn io_artifact_format_metadata(format: super::ArtifactFormatMetadata) -> IoArtif
         converter_id: format.converter_id,
         converter_version: format.converter_version,
         library_version: format.library_version,
+        conversion_id: format.conversion_id,
+        conversion_status: format.conversion_status.map(io_artifact_conversion_status),
+        conversion_command_id: format.conversion_command_id,
+        conversion_dependencies: format
+            .conversion_dependencies
+            .into_iter()
+            .map(|dependency| IoArtifactConversionDependency {
+                dependency_id: dependency.dependency_id,
+                active_version: dependency.active_version,
+                lease_id: dependency.lease_id,
+                lease_holder: dependency.lease_holder,
+            })
+            .collect(),
+    }
+}
+
+fn io_artifact_conversion_status(status: ArtifactConversionStatus) -> IoArtifactConversionStatus {
+    match status {
+        ArtifactConversionStatus::Converted => IoArtifactConversionStatus::Converted,
+        ArtifactConversionStatus::PassedThrough => IoArtifactConversionStatus::PassedThrough,
+        ArtifactConversionStatus::Failed => IoArtifactConversionStatus::Failed,
     }
 }
 

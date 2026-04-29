@@ -109,6 +109,11 @@ Local Network status now carries scheduler-owned run placement plus typed
 model-cache posture through workflow-service DTOs so adapters can render
 selected-run Network facts without reconstructing scheduler or diagnostics
 payload state.
+Artifact format metadata now includes optional typed conversion status,
+conversion command identity, conversion id, and per-conversion dependency
+lease attribution fields. These fields are empty for pass-through
+artifactization and reserved for host-owned managed media conversion so
+workflow-service does not infer lease facts from ambient active versions.
 
 ## Alternatives Rejected
 - Keep workflow behavior in Tauri commands: rejected because native bindings
@@ -166,6 +171,10 @@ payload state.
 - Library asset access audit request/response DTOs are public workflow-service
   contracts and must preserve typed operation/cache labels rather than
   adapter-authored free-form audit rows.
+- Artifact descriptor format metadata is a public contract. Real conversion
+  fields must be added and mapped together across workflow-service,
+  diagnostics-ledger, Tauri, embedded runtime, frontend contracts, and contract
+  tests so conversion attribution does not drift across boundaries.
 
 ## Revisit Triggers
 - Public workflow DTOs need versioning rather than additive migration.

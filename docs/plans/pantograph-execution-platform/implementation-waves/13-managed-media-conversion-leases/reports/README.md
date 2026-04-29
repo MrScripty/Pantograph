@@ -10,6 +10,7 @@ implementation.
 | File | Description |
 | ---- | ----------- |
 | `README.md` | Placeholder and contract for future Stage `13` reports. |
+| `wave-05-host-conversion-metadata-contracts.md` | Host report for descriptor and diagnostics conversion attribution contract propagation. |
 
 ## Usage
 

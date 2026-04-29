@@ -44,6 +44,10 @@ state, the GUI loses previous workflow timing and runtime history after restart.
   not accepted at the repository boundary.
 - I/O artifact events must use typed artifact-role enums; callers must not
   submit arbitrary role labels for workflow or node artifacts.
+- I/O artifact format metadata must use typed conversion status and typed
+  dependency lease attribution records when real managed conversion occurs;
+  callers must not encode conversion lifecycle or leases into free-form
+  payload text.
 - Library audit events must use typed operation and cache-status enums; callers
   must not submit arbitrary operation labels through payload strings.
 - Retention policy change events must include typed actor scope so GUI admin
@@ -166,6 +170,10 @@ semantics.
 - `io_artifact_projection` keeps the latest current row per
   `workflow_run_id` and `artifact_id`; append-only ledger events remain the
   source of historical observation and retention cleanup decisions.
+- `io_artifact_projection` and durable I/O artifact events preserve
+  conversion id, conversion status, conversion command id, and per-conversion
+  dependency lease attribution in format metadata when producers provide those
+  typed fields.
 - `io_artifact_projection.retention_state` is a typed retention summary.
   Consumers must not infer expired, deleted, external, truncated, or too-large
   payload states from `payload_ref` alone.

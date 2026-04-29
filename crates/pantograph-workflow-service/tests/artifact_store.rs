@@ -44,6 +44,10 @@ fn image_format() -> ArtifactFormatMetadata {
         converter_id: Some("oiiotool".to_string()),
         converter_version: Some("2.5.0".to_string()),
         library_version: Some("openimageio-2.5.0".to_string()),
+        conversion_id: None,
+        conversion_status: None,
+        conversion_command_id: None,
+        conversion_dependencies: Vec::new(),
     }
 }
 

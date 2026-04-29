@@ -143,6 +143,23 @@ Wave status: `complete`.
   `cargo test -p pantograph-media-conversion`,
   `cargo fmt --all -- --check`, and `npm run traceability`.
 
+### 2026-04-29 Conversion Metadata Contracts
+
+Wave status: `complete`.
+
+- Wave `05` added typed conversion metadata fields to ArtifactStore descriptor
+  format metadata and durable I/O diagnostics format metadata.
+- The fields cover conversion id, conversion status, conversion command id, and
+  per-conversion dependency lease attribution. Pass-through artifactization
+  leaves these fields empty so current ambient active-version snapshots do not
+  masquerade as real lease tokens.
+- Workflow-service now maps descriptor conversion metadata into diagnostics
+  metadata using typed status enums rather than free-form strings.
+- Contract coverage now includes serialized conversion lease attribution.
+- Verification passed:
+  `cargo test -p pantograph-diagnostics-ledger -p pantograph-workflow-service artifact --tests`
+  and `cargo check -p pantograph-embedded-runtime -p pantograph`.
+
 ## Milestones
 
 ### Milestone 1: Conversion Boundary Design
@@ -201,9 +218,10 @@ Verification:
 - [x] Prove multi-dependency rollback and release behavior before real
   converter invocation is wired.
 - [ ] Acquire active-version leases immediately before invoking a converter.
-- [ ] Record leased tool/library/profile versions, lease ids, and converter
-  command identity in ArtifactStore descriptor metadata and durable I/O
-  diagnostics.
+- [x] Define descriptor and diagnostics metadata fields for leased
+  tool/library/profile versions, lease ids, and converter command identity.
+- [ ] Populate descriptor and diagnostics metadata from real acquired lease
+  tokens during converter invocation.
 - [ ] Release leases on success, failure, cancellation, and dropped futures in
   the host conversion executor.
 - [ ] Preserve queryable metadata after retention deletes the physical body.

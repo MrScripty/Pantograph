@@ -883,6 +883,44 @@ pub enum IoArtifactAccessMode {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub enum IoArtifactConversionStatus {
+    Converted,
+    PassedThrough,
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct IoArtifactConversionDependency {
+    pub dependency_id: String,
+    pub active_version: String,
+    pub lease_id: String,
+    pub lease_holder: String,
+}
+
+impl IoArtifactConversionDependency {
+    fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        validate_required_text(
+            "artifact_conversion_dependency_id",
+            &self.dependency_id,
+            MAX_ID_LEN,
+        )?;
+        validate_required_text(
+            "artifact_conversion_dependency_active_version",
+            &self.active_version,
+            MAX_ID_LEN,
+        )?;
+        validate_required_text("artifact_conversion_lease_id", &self.lease_id, MAX_ID_LEN)?;
+        validate_required_text(
+            "artifact_conversion_lease_holder",
+            &self.lease_holder,
+            MAX_ID_LEN,
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub struct IoArtifactFormatMetadata {
     pub format_id: String,
     pub media_type: String,
@@ -904,6 +942,14 @@ pub struct IoArtifactFormatMetadata {
     pub converter_version: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub library_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conversion_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conversion_status: Option<IoArtifactConversionStatus>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conversion_command_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub conversion_dependencies: Vec<IoArtifactConversionDependency>,
 }
 
 impl IoArtifactFormatMetadata {
@@ -931,7 +977,21 @@ impl IoArtifactFormatMetadata {
             "artifact_library_version",
             self.library_version.as_deref(),
             MAX_ID_LEN,
-        )
+        )?;
+        validate_optional_text(
+            "artifact_conversion_id",
+            self.conversion_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "artifact_conversion_command_id",
+            self.conversion_command_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        for dependency in &self.conversion_dependencies {
+            dependency.validate()?;
+        }
+        Ok(())
     }
 }
 

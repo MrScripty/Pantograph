@@ -13,7 +13,7 @@ public exports out of the service crate.
 | ----------- | ----------- |
 | `artifact_api.rs` | WorkflowService ArtifactStore facade methods for descriptor lookup, binary body reads, consume acknowledgement, policy updates, cleanup, and stats. |
 | `attribution_api.rs` | Client/session/bucket facade methods plus workflow-version and presentation-revision resolution against the durable attribution store. |
-| `artifact_contracts.rs` | ArtifactStore descriptor, lifecycle, policy, read, stream, consume, and format-default DTOs for binary-safe media payload handling. |
+| `artifact_contracts.rs` | ArtifactStore descriptor, lifecycle, policy, read, stream, consume, format-default, and conversion-attribution DTOs for binary-safe media payload handling. |
 | `artifact_store.rs` | Backend ArtifactStore body ownership, private disk persistence, restart reconciliation, retention cleanup, and consume acknowledgement. |
 | `contracts.rs` | Public workflow request/response/error DTO definitions re-exported by the parent facade. |
 | `graph_api.rs` | Graph edit-session, mutation, connection, persistence, and runtime snapshot facade methods. |
@@ -128,6 +128,10 @@ session-runtime workflows, and the root facade test module.
 - Session run I/O artifact events use diagnostics-ledger typed artifact roles
   for workflow inputs and outputs. Workflow-service should pass role enums to
   the ledger and use string labels only for deterministic artifact ids.
+- Artifact descriptor format metadata carries typed real-conversion status and
+  per-conversion dependency lease attribution when conversion occurs. Pass-
+  through artifactization leaves those fields empty; it must not synthesize
+  lease ids from ambient active dependency snapshots.
 - Session run Library audit events use diagnostics-ledger typed operation and
   cache-status enums. Workflow-service must not author free-form Library action
   labels when emitting run-linked model usage facts.

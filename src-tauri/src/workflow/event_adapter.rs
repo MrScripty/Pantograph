@@ -496,6 +496,10 @@ fn format_metadata(payload_kind: ArtifactPayloadKind, media_type: &str) -> Artif
             converter_id: None,
             converter_version: None,
             library_version: None,
+            conversion_id: None,
+            conversion_status: None,
+            conversion_command_id: None,
+            conversion_dependencies: Vec::new(),
         },
         ArtifactPayloadKind::Audio => ArtifactFormatMetadata {
             format_id: media_type
@@ -513,6 +517,10 @@ fn format_metadata(payload_kind: ArtifactPayloadKind, media_type: &str) -> Artif
             converter_id: None,
             converter_version: None,
             library_version: None,
+            conversion_id: None,
+            conversion_status: None,
+            conversion_command_id: None,
+            conversion_dependencies: Vec::new(),
         },
         ArtifactPayloadKind::Video => ArtifactFormatMetadata {
             format_id: video_format_id(media_type).to_string(),
@@ -526,6 +534,10 @@ fn format_metadata(payload_kind: ArtifactPayloadKind, media_type: &str) -> Artif
             converter_id: None,
             converter_version: None,
             library_version: None,
+            conversion_id: None,
+            conversion_status: None,
+            conversion_command_id: None,
+            conversion_dependencies: Vec::new(),
         },
         ArtifactPayloadKind::ThreeD => ArtifactFormatMetadata {
             format_id: three_d_format_id(media_type).to_string(),
@@ -539,6 +551,10 @@ fn format_metadata(payload_kind: ArtifactPayloadKind, media_type: &str) -> Artif
             converter_id: None,
             converter_version: None,
             library_version: None,
+            conversion_id: None,
+            conversion_status: None,
+            conversion_command_id: None,
+            conversion_dependencies: Vec::new(),
         },
         _ => ArtifactFormatMetadata {
             format_id: generic_format_id(media_type).to_string(),
@@ -552,6 +568,10 @@ fn format_metadata(payload_kind: ArtifactPayloadKind, media_type: &str) -> Artif
             converter_id: None,
             converter_version: None,
             library_version: None,
+            conversion_id: None,
+            conversion_status: None,
+            conversion_command_id: None,
+            conversion_dependencies: Vec::new(),
         },
     }
 }

@@ -346,6 +346,10 @@ fn format_metadata(payload_kind: ArtifactPayloadKind, media_type: &str) -> Artif
             converter_id: None,
             converter_version: None,
             library_version: None,
+            conversion_id: None,
+            conversion_status: None,
+            conversion_command_id: None,
+            conversion_dependencies: Vec::new(),
         },
         ArtifactPayloadKind::Image => ArtifactFormatMetadata {
             format_id: match media_type {
@@ -364,6 +368,10 @@ fn format_metadata(payload_kind: ArtifactPayloadKind, media_type: &str) -> Artif
             converter_id: None,
             converter_version: None,
             library_version: None,
+            conversion_id: None,
+            conversion_status: None,
+            conversion_command_id: None,
+            conversion_dependencies: Vec::new(),
         },
         _ => ArtifactFormatMetadata {
             format_id: "binary".to_string(),
@@ -377,6 +385,10 @@ fn format_metadata(payload_kind: ArtifactPayloadKind, media_type: &str) -> Artif
             converter_id: None,
             converter_version: None,
             library_version: None,
+            conversion_id: None,
+            conversion_status: None,
+            conversion_command_id: None,
+            conversion_dependencies: Vec::new(),
         },
     }
 }

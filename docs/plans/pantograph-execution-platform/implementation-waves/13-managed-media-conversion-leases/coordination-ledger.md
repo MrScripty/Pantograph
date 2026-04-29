@@ -2,7 +2,7 @@
 
 ## Current Status
 
-Stage `13` completed Wave `01` boundary contract freeze.
+Stage `13` completed Waves `01` through `05`.
 
 ## Boundary Snapshot
 
@@ -36,8 +36,22 @@ Stage `13` completed Wave `01` boundary contract freeze.
 | `wave-01-boundary-design` | Complete | Added neutral `pantograph-media-conversion` crate with typed conversion ids, request/result/error contracts, per-conversion dependency attribution, and executor trait. |
 | `wave-02-conversion-executor` | Complete | Added process-runner abstraction, managed executable path validation, Tokio-backed standard process runner, bounded stderr summaries, timeout/process failure mapping, and fake-runner tests in `pantograph-media-conversion`. |
 | `wave-03-lease-attribution` | Complete | Added attribution holder convention, validation, holder propagation on lease tokens, helper re-exports, and inference tests for multi-dependency acquisition, rollback, release, and invalid holders. |
-| `wave-04-media-type-coverage` | Complete for command planning | Added host-neutral command plans for image/audio/video targets, managed dependency requirements, stdin/stdout stream markers, argv vectors, and fail-closed 3D planning. Real conversion execution remains for Wave `05`. |
-| `wave-05-api-gui-rollout` | Planned | Surface conversion lifecycle and failures through diagnostics, API, and GUI projections. |
+| `wave-04-media-type-coverage` | Complete for command planning | Added host-neutral command plans for image/audio/video targets, managed dependency requirements, stdin/stdout stream markers, argv vectors, and fail-closed 3D planning. Real conversion execution remains for Wave `06`. |
+| `wave-05-conversion-metadata-contracts` | Complete | Added typed conversion status, conversion id, command id, and per-conversion dependency lease attribution fields to artifact descriptors and durable I/O diagnostics metadata. |
+| `wave-06-host-conversion-integration` | Planned | Wire host-owned conversion execution into workflow artifact output conversion, acquire/release leases around process invocation, and populate descriptor/diagnostic attribution. |
+| `wave-07-api-gui-rollout` | Planned | Surface conversion lifecycle and failures through diagnostics, API, and GUI projections. |
+
+## 2026-04-29 Wave 05 Contract Slice
+
+- Current dirty files before this slice remained limited to unrelated deleted
+  assets, untracked diagnostics SQLite, and untracked asset files.
+- Wave `05` was kept host-owned instead of delegated because it touched shared
+  public descriptor and diagnostics contracts that later workers must consume.
+- Pass-through constructors in workflow-service, embedded-runtime, and Tauri
+  were updated to leave conversion fields empty.
+- Verification passed:
+  `cargo test -p pantograph-diagnostics-ledger -p pantograph-workflow-service artifact --tests`
+  and `cargo check -p pantograph-embedded-runtime -p pantograph`.
 
 ## Proposed Worker Split
 
@@ -92,6 +106,8 @@ host records concrete write sets.
   `cargo fmt --all -- --check`, and `npm run traceability`.
 - Wave `04`: `cargo test -p pantograph-media-conversion`,
   `cargo fmt --all -- --check`, and `npm run traceability`.
+- Wave `05`: `cargo test -p pantograph-diagnostics-ledger -p pantograph-workflow-service artifact --tests`
+  and `cargo check -p pantograph-embedded-runtime -p pantograph`.
 
 ## Open Decisions
 

@@ -43,6 +43,9 @@ while still handling desktop runtime execution concerns.
 - Tauri must not own canonical graph mutation or persistence rules.
 - Editing commands must delegate to the host-agnostic core service.
 - Rust DTOs must stay aligned with the mirrored TypeScript contracts.
+- Artifact format metadata mirrors the core descriptor contract, including
+  conversion-attribution fields, but Tauri transport code must leave those
+  fields empty unless a backend conversion owner supplies typed lease facts.
 - Expected incompatibility must not be reported as transport failure.
 - Existing public facades such as `validate_connection` must keep working during
   the migration.

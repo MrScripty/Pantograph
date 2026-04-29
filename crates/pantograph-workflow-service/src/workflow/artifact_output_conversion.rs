@@ -352,6 +352,10 @@ fn resolve_image_output_format(
             converter_id: Some(format.provided_by_dependency_id.clone()),
             converter_version: format.provided_by_version.clone(),
             library_version: dependency_versions.active_version("opencolorio"),
+            conversion_id: None,
+            conversion_status: None,
+            conversion_command_id: None,
+            conversion_dependencies: Vec::new(),
         },
     })
 }
@@ -445,6 +449,10 @@ fn resolve_audio_output_format(
             converter_id: Some(format.provided_by_dependency_id.clone()),
             converter_version: format.provided_by_version.clone(),
             library_version: None,
+            conversion_id: None,
+            conversion_status: None,
+            conversion_command_id: None,
+            conversion_dependencies: Vec::new(),
         },
     })
 }
@@ -546,6 +554,10 @@ fn resolve_video_output_format(
             converter_id: format.map(|format| format.provided_by_dependency_id.clone()),
             converter_version: format.and_then(|format| format.provided_by_version.clone()),
             library_version: None,
+            conversion_id: None,
+            conversion_status: None,
+            conversion_command_id: None,
+            conversion_dependencies: Vec::new(),
         },
     })
 }
@@ -607,6 +619,10 @@ fn resolve_three_d_output_format(
             converter_id: format.map(|format| format.provided_by_dependency_id.clone()),
             converter_version: format.and_then(|format| format.provided_by_version.clone()),
             library_version: None,
+            conversion_id: None,
+            conversion_status: None,
+            conversion_command_id: None,
+            conversion_dependencies: Vec::new(),
         },
     })
 }
@@ -1029,6 +1045,10 @@ fn format_metadata(payload_kind: ArtifactPayloadKind, media_type: &str) -> Artif
             converter_id: None,
             converter_version: None,
             library_version: None,
+            conversion_id: None,
+            conversion_status: None,
+            conversion_command_id: None,
+            conversion_dependencies: Vec::new(),
         },
         ArtifactPayloadKind::Audio => ArtifactFormatMetadata {
             format_id: audio_format_id(media_type).to_string(),
@@ -1042,6 +1062,10 @@ fn format_metadata(payload_kind: ArtifactPayloadKind, media_type: &str) -> Artif
             converter_id: None,
             converter_version: None,
             library_version: None,
+            conversion_id: None,
+            conversion_status: None,
+            conversion_command_id: None,
+            conversion_dependencies: Vec::new(),
         },
         ArtifactPayloadKind::Video => ArtifactFormatMetadata {
             format_id: video_format_id(media_type).to_string(),
@@ -1055,6 +1079,10 @@ fn format_metadata(payload_kind: ArtifactPayloadKind, media_type: &str) -> Artif
             converter_id: None,
             converter_version: None,
             library_version: None,
+            conversion_id: None,
+            conversion_status: None,
+            conversion_command_id: None,
+            conversion_dependencies: Vec::new(),
         },
         ArtifactPayloadKind::ThreeD => ArtifactFormatMetadata {
             format_id: three_d_format_id(media_type).to_string(),
@@ -1068,6 +1096,10 @@ fn format_metadata(payload_kind: ArtifactPayloadKind, media_type: &str) -> Artif
             converter_id: None,
             converter_version: None,
             library_version: None,
+            conversion_id: None,
+            conversion_status: None,
+            conversion_command_id: None,
+            conversion_dependencies: Vec::new(),
         },
         _ => ArtifactFormatMetadata {
             format_id: generic_format_id(media_type).to_string(),
@@ -1081,6 +1113,10 @@ fn format_metadata(payload_kind: ArtifactPayloadKind, media_type: &str) -> Artif
             converter_id: None,
             converter_version: None,
             library_version: None,
+            conversion_id: None,
+            conversion_status: None,
+            conversion_command_id: None,
+            conversion_dependencies: Vec::new(),
         },
     }
 }
