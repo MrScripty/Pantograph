@@ -291,10 +291,10 @@ when physical payload bodies are deleted.
   expected files, compatibility, and release version.
 - [x] Add OpenColorIO as a managed native library/artifact dependency with
   install/select/activate/capability state.
-- [ ] Add OCIO safe wrapper and native loading/ABI validation boundary.
+- [x] Add OCIO safe wrapper and native loading/ABI validation boundary.
 - [x] Add `ffmpeg`, `ocioconvert`, and `oiiotool` as managed tool binaries with
   install/select/activate/capability state.
-- [ ] Ensure conversion jobs resolve only activated managed tool/library
+- [x] Ensure conversion jobs resolve only activated managed tool/library
   versions and hold active-version leases while running.
 
 ### Milestone 4: Execution And Diagnostics Integration

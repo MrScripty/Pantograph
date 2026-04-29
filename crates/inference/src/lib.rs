@@ -31,6 +31,7 @@ pub mod device;
 pub mod embedding_runtime;
 pub mod gateway;
 pub mod kv_cache;
+pub mod managed_media_dependencies;
 pub mod managed_redistributables;
 pub mod managed_runtime;
 pub mod process;
@@ -61,6 +62,14 @@ pub use embedding_runtime::{DedicatedEmbeddingRuntimeManager, LlamaCppEmbeddingR
 pub use gateway::{
     EmbeddingRuntimePreparation, EmbeddingStartRequest, GatewayError, InferenceGateway,
     InferenceStartRequest, SharedGateway,
+};
+pub use managed_media_dependencies::{
+    acquire_media_conversion_dependency_plan, open_color_io_activation_validation_state,
+    release_media_conversion_dependency_plan, validate_open_color_io_activation,
+    MediaConversionDependency, MediaConversionDependencyId, MediaConversionDependencyLease,
+    MediaConversionDependencyLeaseToken, MediaConversionDependencyPlan,
+    MediaConversionDependencyPlanRequest, MediaConversionJobKind, OpenColorIoActivation,
+    OpenColorIoActivationValidation, OpenColorIoActivationValidationState,
 };
 pub use managed_redistributables::{
     acquire_managed_redistributable_lease, activate_managed_redistributable_version,
