@@ -12,12 +12,14 @@ public exports out of the service crate.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `attribution_api.rs` | Client/session/bucket facade methods plus workflow-version and presentation-revision resolution against the durable attribution store. |
+| `artifact_contracts.rs` | ArtifactStore descriptor, lifecycle, policy, read, stream, consume, and format-default DTOs for binary-safe media payload handling. |
 | `contracts.rs` | Public workflow request/response/error DTO definitions re-exported by the parent facade. |
 | `graph_api.rs` | Graph edit-session, mutation, connection, persistence, and runtime snapshot facade methods. |
 | `host.rs` | Host trait defaults and scheduler diagnostics provider contracts re-exported by the parent facade. |
 | `identity.rs` | Validated workflow identity value object and grammar used by workflow submission and saved graph boundaries. |
 | `io_contract.rs` | Workflow input/output surface derivation and host-response validation helpers. |
 | `diagnostics_api.rs` | Diagnostics, scheduler timeline, scheduler estimate, run projection, I/O artifact, Library usage, retention, and projection rebuild facade methods. |
+| `media_capability_contracts.rs` | Backend-owned media format capability and managed redistributable category/status DTOs. |
 | `preflight_api.rs` | Workflow capability, I/O discovery, and preflight facade methods. |
 | `runtime_preflight.rs` | Runtime requirement matching, issue formatting, and preflight warning collection. |
 | `session_execution_api.rs` | Workflow session creation and queued session run orchestration facade methods. |

@@ -66,6 +66,64 @@ Out of scope:
   canonical owner for persistent settings, with legacy surfaces relocated,
   embedded, or retired.
 
+## Implementation Progress
+
+### 2026-04-29 Stage-Start Preflight
+
+Start outcome: `ready_with_recorded_assumptions`.
+
+- Selected stage: Stage `11`, artifact format settings and managed media
+  dependencies.
+- Plan, Stage `07` standards review, Stage `08` start gate, and Stage `10`
+  concurrent phased implementation rules were read before source edits.
+- Standards reviewed for this stage: coding, architecture, dependency,
+  security, frontend, language bindings, Rust standards, and Rust unsafe
+  standards. Commit standards apply to every logical slice.
+- Dirty-file review: unrelated deleted `.pantograph` workflow/asset files,
+  untracked diagnostics SQLite, and untracked asset files are present before
+  this stage. They do not overlap Stage `11` and must not be staged,
+  reformatted, or reverted.
+- Required first wave: `preflight-contract-audit`. Source implementation must
+  start with backend-owned contract/DTO freeze before ArtifactStore,
+  redistributable, execution, binding, or frontend workers are launched.
+- Initial source audit confirms existing inline media paths in workflow nodes,
+  Python bridges, embedded-runtime tests, frontend input/output nodes, C#
+  smoke helpers, and legacy LLM/VLM commands. The migration rule remains:
+  convert media bodies to ArtifactStore descriptors and binary-safe body
+  access rather than raising `max_value_bytes`.
+- Concurrency decision: use parallel agents only after contracts are frozen and
+  wave specs assign non-overlapping write sets. The host owns shared contracts,
+  coordination ledger updates, and integration commits.
+- Expected first-slice verification:
+  `cargo test -p pantograph-workflow-service --test artifact_contract`,
+  `cargo test -p pantograph-workflow-service --test contract`,
+  `cargo fmt --all -- --check`, and targeted source-audit documentation
+  review. Broader verification is added as later waves touch runtime,
+  diagnostics, bindings, frontend, or dependency manifests.
+
+### 2026-04-29 Wave 01 Contract Freeze
+
+Wave status: `complete`.
+
+- Added backend-owned ArtifactStore DTOs in
+  `crates/pantograph-workflow-service/src/workflow/artifact_contracts.rs`
+  instead of expanding the already-large workflow `contracts.rs`.
+- Added backend-owned media capability and managed redistributable DTOs in
+  `crates/pantograph-workflow-service/src/workflow/media_capability_contracts.rs`.
+- Public workflow-service exports now include artifact descriptors, lifecycle
+  states, handle-based read/stream/consume contracts, global artifact policy,
+  format defaults, media capability options, and managed redistributable
+  product categories.
+- Contract snapshots prove descriptor responses carry metadata and handles,
+  not data URLs or inline media payload bodies.
+- Validation implementation for settings bounds, handles, ids, and managed
+  dependency catalogs remains assigned to later backend waves; this wave freezes
+  the public shape those implementations must satisfy.
+- Verification passed:
+  `cargo test -p pantograph-workflow-service --test artifact_contract`,
+  `cargo test -p pantograph-workflow-service --test contract`, and
+  `cargo fmt --all -- --check`.
+
 ## Architecture Decisions
 
 ### ArtifactStore Boundary

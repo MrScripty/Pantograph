@@ -11,6 +11,8 @@ artifact format settings and managed media dependencies.
 | ---- | ----------- |
 | `README.md` | Stage `11` wave structure, constraints, and verification expectations. |
 | `coordination-ledger.md` | Host-owned status record for open decisions, dependency state, and verification notes. |
+| `waves/` | Wave specs with write sets, forbidden files, verification, report paths, and integration order. |
+| `reports/` | Worker and host reports generated during Stage `11` implementation. |
 
 ## Stage Objective
 
@@ -28,22 +30,22 @@ names integration order.
 
 ## Proposed Waves
 
-1. `preflight-contract-audit`
+1. `wave-01-preflight-contract-audit`
    - Apply `08-stage-start-implementation-gate.md`.
    - Audit current base64/data-url media paths.
    - Freeze ArtifactStore, settings, capability, and managed redistributable
      DTOs before source implementation.
-2. `artifact-store-backend`
+2. `wave-02-artifact-store-backend`
    - Artifact descriptors, physical payload storage, lifecycle, retention,
      streaming, consume acknowledgement, and cleanup.
-3. `managed-redistributables`
+3. `wave-03-managed-redistributables`
    - Generalized/split redistributables boundary, OCIO managed dependency,
      ffmpeg/`ocioconvert`/`oiiotool` managed binaries, supply-chain validation,
      activation, and leases.
-4. `execution-diagnostics-cutover`
+4. `wave-04-execution-diagnostics-cutover`
    - Workflow output descriptor cutover, streaming artifact lifecycle events,
      format metadata capture, and base64/data-url producer migration.
-5. `api-bindings-frontend-settings`
+5. `wave-05-api-bindings-frontend-settings`
    - API/binding DTO projection, binary-safe read/stream surfaces, workbench
      Settings page canonicalization, output-node selectors, and frontend tests.
 
@@ -64,6 +66,16 @@ Use the verification list in
 `../../11-artifact-format-settings-and-managed-media-dependencies.md`.
 Every skipped command or unavailable managed dependency must be recorded in the
 stage plan or this coordination ledger with residual risk.
+
+## Global Forbidden Files
+
+Workers must not edit these files without host approval:
+
+- `.pantograph/**`
+- `assets/**`
+- generated package output under `target/**`, `dist/**`, or `src/generated/**`
+- root manifests or lockfiles unless their wave spec assigns ownership
+- files owned by another active worker in the same wave
 
 ## Problem
 

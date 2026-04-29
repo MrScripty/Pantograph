@@ -15,6 +15,7 @@ use crate::technical_fit::WorkflowTechnicalFitOverride;
 #[cfg(test)]
 use crate::technical_fit::{WorkflowTechnicalFitDecision, WorkflowTechnicalFitRequest};
 
+mod artifact_contracts;
 mod attribution_api;
 mod contracts;
 mod diagnostics_api;
@@ -23,6 +24,7 @@ mod host;
 mod identity;
 mod io_contract;
 mod local_network_api;
+mod media_capability_contracts;
 mod preflight_api;
 mod runtime_preflight;
 mod service_config;
@@ -33,6 +35,7 @@ mod session_runtime;
 mod validation;
 mod workflow_run_api;
 
+pub use self::artifact_contracts::*;
 pub use self::contracts::*;
 pub use self::diagnostics_api::{
     WorkflowDiagnosticsUsageQueryRequest, WorkflowDiagnosticsUsageQueryResponse,
@@ -54,6 +57,7 @@ pub use self::host::{
     WorkflowHost, WorkflowSchedulerDiagnosticsProvider, WorkflowSchedulerRuntimeDiagnosticsRequest,
 };
 pub use self::identity::{WorkflowIdentity, WorkflowIdentityError};
+pub use self::media_capability_contracts::*;
 pub(crate) use self::runtime_preflight::runtime_issue_for_capability;
 pub use self::runtime_preflight::{evaluate_runtime_preflight, format_runtime_not_ready_message};
 pub(crate) use self::validation::validate_workflow_id;
