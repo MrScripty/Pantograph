@@ -25,6 +25,7 @@
   import { activeWorkflowRun } from '../../stores/workbenchStore';
   import {
     buildIoArtifactNodeGroups,
+    buildIoArtifactDescriptorMetadataRows,
     buildIoArtifactRendererSummary,
     buildRetentionCleanupDetailRows,
     buildRetentionPolicyDetailRows,
@@ -330,7 +331,10 @@
                       {artifact.artifact_id}
                     </div>
                     <div class="mt-1 text-xs text-neutral-500">
-                      {formatIoArtifactMediaLabel(artifact.media_type)} · {formatIoArtifactBytes(artifact.size_bytes)}
+                      {formatIoArtifactMediaLabel(
+                        artifact.media_type ?? artifact.format?.media_type,
+                        artifact.payload_kind,
+                      )} · {formatIoArtifactBytes(artifact.size_bytes)}
                     </div>
                   </div>
                 {/each}
@@ -359,7 +363,10 @@
                       {artifact.artifact_id}
                     </div>
                     <div class="mt-1 text-xs text-neutral-500">
-                      {formatIoArtifactMediaLabel(artifact.media_type)} · {formatIoArtifactBytes(artifact.size_bytes)}
+                      {formatIoArtifactMediaLabel(
+                        artifact.media_type ?? artifact.format?.media_type,
+                        artifact.payload_kind,
+                      )} · {formatIoArtifactBytes(artifact.size_bytes)}
                     </div>
                   </div>
                 {/each}
@@ -417,6 +424,7 @@
         <div class="grid gap-3 p-4 xl:grid-cols-2 2xl:grid-cols-3">
           {#each artifacts as artifact (artifact.event_id)}
             {@const renderer = buildIoArtifactRendererSummary(artifact)}
+            {@const descriptorRows = buildIoArtifactDescriptorMetadataRows(artifact)}
             <article class="rounded border border-neutral-800 bg-neutral-900/60 p-4">
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0">
@@ -424,7 +432,10 @@
                     {artifact.artifact_id}
                   </div>
                   <div class="mt-1 text-xs text-neutral-500">
-                    {formatIoArtifactRoleLabel(artifact.artifact_role)} · {formatIoArtifactMediaLabel(artifact.media_type)}
+                    {formatIoArtifactRoleLabel(artifact.artifact_role)} · {formatIoArtifactMediaLabel(
+                      artifact.media_type ?? artifact.format?.media_type,
+                      artifact.payload_kind,
+                    )}
                   </div>
                 </div>
                 <span class="shrink-0 rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-300">
@@ -442,6 +453,8 @@
                     <Music size={16} aria-hidden="true" class="text-amber-300" />
                   {:else if renderer.family === 'video'}
                     <Video size={16} aria-hidden="true" class="text-rose-300" />
+                  {:else if renderer.family === '3d'}
+                    <File size={16} aria-hidden="true" class="text-indigo-300" />
                   {:else if renderer.family === 'table'}
                     <Table2 size={16} aria-hidden="true" class="text-sky-300" />
                   {:else if renderer.family === 'json'}
@@ -532,6 +545,22 @@
                   </dd>
                 </div>
               </dl>
+
+              <section class="mt-4 rounded border border-neutral-800 bg-neutral-950/50 p-3">
+                <h3 class="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">
+                  Artifact Descriptor
+                </h3>
+                <dl class="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                  {#each descriptorRows as row (row.label)}
+                    <div class={row.label.includes('Handle') || row.label.includes('Version') ? 'col-span-2' : ''}>
+                      <dt class="text-neutral-500">{row.label}</dt>
+                      <dd class={`mt-0.5 truncate text-neutral-200 ${row.mono ? 'font-mono' : ''}`} title={row.value}>
+                        {row.value}
+                      </dd>
+                    </div>
+                  {/each}
+                </dl>
+              </section>
 
               {#if artifact.content_hash}
                 <div class="mt-3 truncate font-mono text-[11px] text-neutral-500" title={artifact.content_hash}>

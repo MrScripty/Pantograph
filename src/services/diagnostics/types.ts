@@ -151,6 +151,48 @@ export interface IoArtifactProjectionRecord {
   retention_state: IoArtifactRetentionState;
   retention_reason?: string | null;
   retention_policy_id?: string | null;
+  payload_kind?: IoArtifactPayloadKind | null;
+  lifecycle_state?: IoArtifactLifecycleState | null;
+  access_modes?: IoArtifactAccessMode[] | null;
+  read_handle?: string | null;
+  stream_handle?: string | null;
+  format?: IoArtifactFormatMetadata | null;
+}
+
+export type IoArtifactPayloadKind =
+  | 'text'
+  | 'image'
+  | 'audio'
+  | 'video'
+  | '3d'
+  | 'large_table'
+  | 'generic_binary'
+  | 'structured';
+
+export type IoArtifactLifecycleState =
+  | 'declared'
+  | 'writing'
+  | 'streaming'
+  | 'finalizing'
+  | 'retained'
+  | 'failed'
+  | 'expired'
+  | 'deleted';
+
+export type IoArtifactAccessMode = 'read' | 'download' | 'stream';
+
+export interface IoArtifactFormatMetadata {
+  format_id: string;
+  media_type: string;
+  codec_id?: string | null;
+  quality_percent?: number | null;
+  bitrate_kbps?: number | null;
+  crf?: number | null;
+  bit_depth?: string | null;
+  color_profile_id?: string | null;
+  converter_id?: string | null;
+  converter_version?: string | null;
+  library_version?: string | null;
 }
 
 export type IoArtifactRetentionState =

@@ -1,5 +1,8 @@
 import type {
+  IoArtifactAccessMode,
   DiagnosticsRetentionPolicy,
+  IoArtifactLifecycleState,
+  IoArtifactPayloadKind,
   IoArtifactProjectionRecord,
   IoArtifactRetentionState,
   ProjectionStateRecord,
@@ -11,6 +14,7 @@ export type IoArtifactMediaFamily =
   | 'image'
   | 'audio'
   | 'video'
+  | '3d'
   | 'table'
   | 'json'
   | 'file'
@@ -33,6 +37,12 @@ export interface IoArtifactRendererSummary {
   family: IoArtifactMediaFamily;
   title: string;
   detail: string;
+}
+
+export interface IoArtifactDescriptorMetadataRow {
+  label: string;
+  value: string;
+  mono: boolean;
 }
 
 export interface IoRetentionDetailRow {
@@ -134,13 +144,38 @@ export function buildIoArtifactNodeGroups(artifacts: IoArtifactNodeGroupSource[]
   );
 }
 
-export function classifyIoArtifactMedia(mediaType: string | null | undefined): IoArtifactMediaFamily {
+export function classifyIoArtifactMedia(
+  mediaType: string | null | undefined,
+  payloadKind?: IoArtifactPayloadKind | null,
+): IoArtifactMediaFamily {
   if (!mediaType) {
-    return 'unknown';
+    switch (payloadKind) {
+      case 'text':
+        return 'text';
+      case 'image':
+        return 'image';
+      case 'audio':
+        return 'audio';
+      case 'video':
+        return 'video';
+      case '3d':
+        return '3d';
+      case 'large_table':
+        return 'table';
+      case 'structured':
+        return 'json';
+      case 'generic_binary':
+        return 'file';
+      default:
+        return 'unknown';
+    }
   }
   const normalized = mediaType.toLowerCase();
   if (normalized.includes('csv') || normalized.includes('parquet') || normalized.includes('table')) {
     return 'table';
+  }
+  if (normalized.includes('model/gltf') || normalized.includes('model/obj') || normalized.includes('model/')) {
+    return '3d';
   }
   if (normalized.startsWith('text/')) {
     return 'text';
@@ -160,8 +195,11 @@ export function classifyIoArtifactMedia(mediaType: string | null | undefined): I
   return 'file';
 }
 
-export function formatIoArtifactMediaLabel(mediaType: string | null | undefined): string {
-  switch (classifyIoArtifactMedia(mediaType)) {
+export function formatIoArtifactMediaLabel(
+  mediaType: string | null | undefined,
+  payloadKind?: IoArtifactPayloadKind | null,
+): string {
+  switch (classifyIoArtifactMedia(mediaType, payloadKind)) {
     case 'text':
       return 'Text';
     case 'image':
@@ -170,6 +208,8 @@ export function formatIoArtifactMediaLabel(mediaType: string | null | undefined)
       return 'Audio';
     case 'video':
       return 'Video';
+    case '3d':
+      return '3D';
     case 'table':
       return 'Table';
     case 'json':
@@ -183,10 +223,13 @@ export function formatIoArtifactMediaLabel(mediaType: string | null | undefined)
 
 export function buildIoArtifactRendererSummary(
   artifact: Pick<IoArtifactProjectionRecord, 'media_type' | 'payload_ref'> &
-    Partial<Pick<IoArtifactProjectionRecord, 'retention_state'>>,
+    Partial<Pick<IoArtifactProjectionRecord, 'retention_state' | 'payload_kind' | 'lifecycle_state' | 'format'>>,
 ): IoArtifactRendererSummary {
-  const family = classifyIoArtifactMedia(artifact.media_type);
-  const detail = formatIoArtifactRetentionStateLabel(artifact.retention_state);
+  const mediaType = resolveIoArtifactMediaType(artifact);
+  const family = classifyIoArtifactMedia(mediaType, artifact.payload_kind);
+  const detail = artifact.lifecycle_state
+    ? `${formatIoArtifactLifecycleStateLabel(artifact.lifecycle_state)} · ${formatIoArtifactRetentionStateLabel(artifact.retention_state)}`
+    : formatIoArtifactRetentionStateLabel(artifact.retention_state);
 
   switch (family) {
     case 'text':
@@ -197,6 +240,8 @@ export function buildIoArtifactRendererSummary(
       return { family, title: 'Audio', detail };
     case 'video':
       return { family, title: 'Video', detail };
+    case '3d':
+      return { family, title: '3D asset', detail };
     case 'table':
       return { family, title: 'Table', detail };
     case 'json':
@@ -210,7 +255,7 @@ export function buildIoArtifactRendererSummary(
 
 export function resolveIoArtifactPayloadAvailability(
   artifact: Pick<IoArtifactProjectionRecord, 'payload_ref'> &
-    Partial<Pick<IoArtifactProjectionRecord, 'retention_state'>>,
+    Partial<Pick<IoArtifactProjectionRecord, 'retention_state' | 'read_handle' | 'stream_handle' | 'access_modes'>>,
 ): IoArtifactPayloadAvailability {
   if (
     artifact.retention_state === 'metadata_only' ||
@@ -220,6 +265,9 @@ export function resolveIoArtifactPayloadAvailability(
   ) {
     return 'metadata_only';
   }
+  if (artifact.read_handle || artifact.stream_handle || (artifact.access_modes?.length ?? 0) > 0) {
+    return 'referenced';
+  }
   return artifact.payload_ref && artifact.payload_ref.trim().length > 0
     ? 'referenced'
     : 'metadata_only';
@@ -227,7 +275,7 @@ export function resolveIoArtifactPayloadAvailability(
 
 export function formatIoArtifactAvailabilityLabel(
   artifact: Pick<IoArtifactProjectionRecord, 'payload_ref'> &
-    Partial<Pick<IoArtifactProjectionRecord, 'retention_state'>>,
+    Partial<Pick<IoArtifactProjectionRecord, 'retention_state' | 'read_handle' | 'stream_handle' | 'access_modes'>>,
 ): string {
   switch (resolveIoArtifactPayloadAvailability(artifact)) {
     case 'referenced':
@@ -235,6 +283,145 @@ export function formatIoArtifactAvailabilityLabel(
     case 'metadata_only':
       return 'Metadata only';
   }
+}
+
+export function resolveIoArtifactMediaType(
+  artifact: Pick<IoArtifactProjectionRecord, 'media_type'> &
+    Partial<Pick<IoArtifactProjectionRecord, 'format'>>,
+): string | null | undefined {
+  return artifact.media_type ?? artifact.format?.media_type;
+}
+
+export function formatIoArtifactPayloadKindLabel(
+  payloadKind: IoArtifactPayloadKind | null | undefined,
+): string {
+  switch (payloadKind) {
+    case 'text':
+      return 'Text';
+    case 'image':
+      return 'Image';
+    case 'audio':
+      return 'Audio';
+    case 'video':
+      return 'Video';
+    case '3d':
+      return '3D';
+    case 'large_table':
+      return 'Large table';
+    case 'generic_binary':
+      return 'Generic binary';
+    case 'structured':
+      return 'Structured';
+    default:
+      return 'Payload kind unknown';
+  }
+}
+
+export function formatIoArtifactLifecycleStateLabel(
+  lifecycleState: IoArtifactLifecycleState | null | undefined,
+): string {
+  switch (lifecycleState) {
+    case 'declared':
+      return 'Declared';
+    case 'writing':
+      return 'Writing';
+    case 'streaming':
+      return 'Streaming';
+    case 'finalizing':
+      return 'Finalizing';
+    case 'retained':
+      return 'Retained';
+    case 'failed':
+      return 'Failed';
+    case 'expired':
+      return 'Expired';
+    case 'deleted':
+      return 'Deleted';
+    default:
+      return 'Lifecycle unknown';
+  }
+}
+
+export function formatIoArtifactAccessModes(modes: IoArtifactAccessMode[] | null | undefined): string {
+  if (!modes || modes.length === 0) {
+    return 'Unavailable';
+  }
+  return modes.map(formatRetentionEnumLabel).join(', ');
+}
+
+export function buildIoArtifactDescriptorMetadataRows(
+  artifact: Pick<
+    IoArtifactProjectionRecord,
+    | 'payload_kind'
+    | 'lifecycle_state'
+    | 'access_modes'
+    | 'read_handle'
+    | 'stream_handle'
+    | 'format'
+  >,
+): IoArtifactDescriptorMetadataRow[] {
+  const rows: IoArtifactDescriptorMetadataRow[] = [
+    {
+      label: 'Payload Kind',
+      value: formatIoArtifactPayloadKindLabel(artifact.payload_kind),
+      mono: false,
+    },
+    {
+      label: 'Lifecycle',
+      value: formatIoArtifactLifecycleStateLabel(artifact.lifecycle_state),
+      mono: false,
+    },
+    {
+      label: 'Access',
+      value: formatIoArtifactAccessModes(artifact.access_modes),
+      mono: false,
+    },
+  ];
+
+  if (artifact.read_handle) {
+    rows.push({ label: 'Read Handle', value: artifact.read_handle, mono: true });
+  }
+  if (artifact.stream_handle) {
+    rows.push({ label: 'Stream Handle', value: artifact.stream_handle, mono: true });
+  }
+
+  const format = artifact.format;
+  if (!format) {
+    return rows;
+  }
+
+  rows.push(
+    { label: 'Format', value: format.format_id, mono: true },
+    { label: 'Format Media', value: format.media_type, mono: true },
+  );
+  if (format.codec_id) {
+    rows.push({ label: 'Codec', value: format.codec_id, mono: true });
+  }
+  if (format.quality_percent !== null && format.quality_percent !== undefined) {
+    rows.push({ label: 'Quality', value: `${format.quality_percent}%`, mono: false });
+  }
+  if (format.bitrate_kbps !== null && format.bitrate_kbps !== undefined) {
+    rows.push({ label: 'Bitrate', value: `${format.bitrate_kbps} kbps`, mono: false });
+  }
+  if (format.crf !== null && format.crf !== undefined) {
+    rows.push({ label: 'CRF', value: String(format.crf), mono: false });
+  }
+  if (format.bit_depth) {
+    rows.push({ label: 'Bit Depth', value: format.bit_depth, mono: true });
+  }
+  if (format.color_profile_id) {
+    rows.push({ label: 'Color Profile', value: format.color_profile_id, mono: true });
+  }
+  if (format.converter_id) {
+    rows.push({ label: 'Converter', value: format.converter_id, mono: true });
+  }
+  if (format.converter_version) {
+    rows.push({ label: 'Converter Version', value: format.converter_version, mono: true });
+  }
+  if (format.library_version) {
+    rows.push({ label: 'Library Version', value: format.library_version, mono: true });
+  }
+  return rows;
 }
 
 export function formatIoArtifactRetentionStateLabel(

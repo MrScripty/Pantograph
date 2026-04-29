@@ -332,6 +332,9 @@ when physical payload bodies are deleted.
   GUI/API boundary.
   - [x] Expose Tauri commands for descriptor lookup, body read, consume
     acknowledgement, global policy read/update, and store stats.
+  - [x] Update the I/O Inspector to display descriptor lifecycle, access,
+    handle, and format metadata without expecting payload bodies in projection
+    JSON.
   - [ ] Add final frontend binary body transport/download handling that avoids
     embedding media bodies in JSON view state.
 - [ ] Expose Settings APIs for persistent artifact format defaults and

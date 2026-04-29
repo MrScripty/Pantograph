@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  buildIoArtifactDescriptorMetadataRows,
   buildIoArtifactNodeGroups,
   buildIoArtifactRendererSummary,
   buildRetentionCleanupDetailRows,
@@ -12,7 +13,9 @@ import {
   formatIoArtifactBytes,
   formatIoArtifactDetailValue,
   formatIoArtifactEndpointValue,
+  formatIoArtifactLifecycleStateLabel,
   formatIoArtifactMediaLabel,
+  formatIoArtifactPayloadKindLabel,
   formatIoArtifactRetentionStateLabel,
   formatIoArtifactRoleLabel,
   formatProjectionFreshness,
@@ -29,12 +32,16 @@ test('classifyIoArtifactMedia groups common artifact media types', () => {
   assert.equal(classifyIoArtifactMedia('text/csv'), 'table');
   assert.equal(classifyIoArtifactMedia('application/parquet'), 'table');
   assert.equal(classifyIoArtifactMedia('application/octet-stream'), 'file');
+  assert.equal(classifyIoArtifactMedia(null, 'image'), 'image');
+  assert.equal(classifyIoArtifactMedia(null, 'large_table'), 'table');
+  assert.equal(classifyIoArtifactMedia(null, 'generic_binary'), 'file');
   assert.equal(classifyIoArtifactMedia(null), 'unknown');
 });
 
 test('formatIoArtifactMediaLabel exposes stable UI labels', () => {
   assert.equal(formatIoArtifactMediaLabel('application/json'), 'JSON');
   assert.equal(formatIoArtifactMediaLabel('image/jpeg'), 'Image');
+  assert.equal(formatIoArtifactMediaLabel(undefined, '3d'), '3D');
   assert.equal(formatIoArtifactMediaLabel(undefined), 'Unknown');
 });
 
@@ -53,9 +60,10 @@ test('buildIoArtifactRendererSummary maps media families to renderer states', ()
   );
   assert.deepEqual(
     buildIoArtifactRendererSummary({
-      media_type: 'application/json',
+      media_type: null,
       payload_ref: null,
       retention_state: 'metadata_only',
+      payload_kind: 'structured',
     }),
     {
       family: 'json',
@@ -74,7 +82,16 @@ test('buildIoArtifactRendererSummary maps media families to renderer states', ()
 test('formatIoArtifactAvailabilityLabel distinguishes referenced and metadata-only artifacts', () => {
   assert.equal(
     formatIoArtifactAvailabilityLabel({
-      payload_ref: 'artifact://run/output',
+      payload_ref: null,
+      read_handle: 'artifact-read://run/output',
+      retention_state: 'retained',
+    }),
+    'Payload referenced',
+  );
+  assert.equal(
+    formatIoArtifactAvailabilityLabel({
+      payload_ref: null,
+      stream_handle: 'artifact-stream://run/output',
       retention_state: 'retained',
     }),
     'Payload referenced',
@@ -87,6 +104,62 @@ test('formatIoArtifactAvailabilityLabel distinguishes referenced and metadata-on
     }),
     'Metadata only',
   );
+});
+
+test('artifact descriptor labels and rows tolerate absent optional projection fields', () => {
+  assert.equal(formatIoArtifactPayloadKindLabel('generic_binary'), 'Generic binary');
+  assert.equal(formatIoArtifactPayloadKindLabel(undefined), 'Payload kind unknown');
+  assert.equal(formatIoArtifactLifecycleStateLabel('streaming'), 'Streaming');
+  assert.equal(formatIoArtifactLifecycleStateLabel(null), 'Lifecycle unknown');
+
+  assert.deepEqual(
+    buildIoArtifactDescriptorMetadataRows({
+      payload_kind: undefined,
+      lifecycle_state: null,
+      access_modes: undefined,
+      read_handle: null,
+      stream_handle: null,
+      format: null,
+    }),
+    [
+      { label: 'Payload Kind', value: 'Payload kind unknown', mono: false },
+      { label: 'Lifecycle', value: 'Lifecycle unknown', mono: false },
+      { label: 'Access', value: 'Unavailable', mono: false },
+    ],
+  );
+});
+
+test('artifact descriptor rows expose handle and format metadata without payload bodies', () => {
+  const rows = buildIoArtifactDescriptorMetadataRows({
+    payload_kind: 'image',
+    lifecycle_state: 'retained',
+    access_modes: ['read', 'download'],
+    read_handle: 'artifact-read://artifact-run-1-image',
+    stream_handle: null,
+    format: {
+      format_id: 'jpg',
+      media_type: 'image/jpeg',
+      codec_id: null,
+      quality_percent: 75,
+      bitrate_kbps: null,
+      crf: null,
+      bit_depth: '8bit',
+      color_profile_id: 'srgb',
+      converter_id: 'oiiotool',
+      converter_version: '2.5.0',
+      library_version: 'openimageio-2.5.0',
+    },
+  });
+
+  assert.equal(rows.find((row) => row.label === 'Payload Kind')?.value, 'Image');
+  assert.equal(rows.find((row) => row.label === 'Lifecycle')?.value, 'Retained');
+  assert.equal(rows.find((row) => row.label === 'Access')?.value, 'Read, Download');
+  assert.equal(rows.find((row) => row.label === 'Read Handle')?.value, 'artifact-read://artifact-run-1-image');
+  assert.equal(rows.find((row) => row.label === 'Format')?.value, 'jpg');
+  assert.equal(rows.find((row) => row.label === 'Format Media')?.value, 'image/jpeg');
+  assert.equal(rows.find((row) => row.label === 'Quality')?.value, '75%');
+  assert.equal(rows.find((row) => row.label === 'Bit Depth')?.value, '8bit');
+  assert.equal(rows.find((row) => row.label === 'Library Version')?.value, 'openimageio-2.5.0');
 });
 
 test('formatIoArtifactRetentionStateLabel exposes typed retention state labels', () => {
