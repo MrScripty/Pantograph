@@ -1,5 +1,6 @@
 #[cfg(test)]
 use async_trait::async_trait;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 #[cfg(test)]
 use std::time::Duration;
@@ -18,6 +19,7 @@ use crate::technical_fit::{WorkflowTechnicalFitDecision, WorkflowTechnicalFitReq
 mod artifact_api;
 mod artifact_contracts;
 mod artifact_output_conversion;
+mod artifact_settings_api;
 mod artifact_store;
 mod attribution_api;
 mod contracts;
@@ -124,6 +126,8 @@ pub struct WorkflowService {
     session_store: Arc<Mutex<WorkflowExecutionSessionStore>>,
     graph_session_store: Arc<GraphSessionStore>,
     artifact_store: Option<Arc<Mutex<ArtifactStore>>>,
+    artifact_format_settings: Arc<Mutex<ArtifactFormatSettings>>,
+    artifact_format_settings_path: Option<Arc<PathBuf>>,
     attribution_store: Option<Arc<Mutex<SqliteAttributionStore>>>,
     diagnostics_ledger: Option<Arc<Mutex<SqliteDiagnosticsLedger>>>,
     scheduler_diagnostics_provider:

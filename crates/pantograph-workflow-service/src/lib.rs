@@ -72,6 +72,8 @@ pub use workflow::{
     ArtifactConsumeAcknowledgementRequest, ArtifactConsumeAcknowledgementResponse,
     ArtifactDescriptor, ArtifactDescriptorQueryRequest, ArtifactDescriptorQueryResponse,
     ArtifactFormatCapabilities, ArtifactFormatMetadata, ArtifactFormatSettings,
+    ArtifactFormatSettingsQueryRequest, ArtifactFormatSettingsQueryResponse,
+    ArtifactFormatSettingsUpdateRequest, ArtifactFormatSettingsUpdateResponse,
     ArtifactLifecycleState, ArtifactPayloadKind, ArtifactPolicy, ArtifactReadRequest,
     ArtifactReadResponse, ArtifactStore, ArtifactStoreError, ArtifactStoreStats,
     ArtifactStreamChunkRecord, ArtifactStreamChunkWriteRequest, ArtifactStreamFinalizeRequest,

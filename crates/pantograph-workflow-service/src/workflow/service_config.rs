@@ -1,10 +1,11 @@
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use crate::graph::GraphSessionStore;
 use crate::scheduler::WorkflowExecutionSessionStore;
 
 use super::{
-    ArtifactStore, SqliteAttributionStore, SqliteDiagnosticsLedger,
+    ArtifactFormatSettings, ArtifactStore, SqliteAttributionStore, SqliteDiagnosticsLedger,
     WorkflowSchedulerDiagnosticsProvider, WorkflowService, WorkflowServiceError,
 };
 
@@ -33,6 +34,8 @@ impl WorkflowService {
             ))),
             graph_session_store: Arc::new(GraphSessionStore::new()),
             artifact_store: None,
+            artifact_format_settings: Arc::new(Mutex::new(ArtifactFormatSettings::default())),
+            artifact_format_settings_path: None,
             attribution_store: None,
             diagnostics_ledger: None,
             scheduler_diagnostics_provider: Arc::new(Mutex::new(None)),
@@ -42,6 +45,17 @@ impl WorkflowService {
     pub fn with_artifact_store(mut self, store: ArtifactStore) -> Self {
         self.artifact_store = Some(Arc::new(Mutex::new(store)));
         self
+    }
+
+    pub fn with_artifact_format_settings_path(
+        mut self,
+        path: impl Into<PathBuf>,
+    ) -> Result<Self, WorkflowServiceError> {
+        let path = path.into();
+        let settings = load_artifact_format_settings(&path)?;
+        self.artifact_format_settings = Arc::new(Mutex::new(settings));
+        self.artifact_format_settings_path = Some(Arc::new(path));
+        Ok(self)
     }
 
     pub fn with_attribution_store(mut self, store: SqliteAttributionStore) -> Self {
@@ -126,6 +140,18 @@ impl WorkflowService {
             .map_err(|_| WorkflowServiceError::Internal("artifact store lock poisoned".to_string()))
     }
 
+    pub(crate) fn artifact_format_settings_guard(
+        &self,
+    ) -> Result<std::sync::MutexGuard<'_, ArtifactFormatSettings>, WorkflowServiceError> {
+        self.artifact_format_settings.lock().map_err(|_| {
+            WorkflowServiceError::Internal("artifact format settings lock poisoned".to_string())
+        })
+    }
+
+    pub(crate) fn artifact_format_settings_path(&self) -> Option<Arc<PathBuf>> {
+        self.artifact_format_settings_path.clone()
+    }
+
     pub(crate) fn diagnostics_ledger_guard(
         &self,
     ) -> Result<std::sync::MutexGuard<'_, SqliteDiagnosticsLedger>, WorkflowServiceError> {
@@ -138,4 +164,24 @@ impl WorkflowService {
             WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
         })
     }
+}
+
+fn load_artifact_format_settings(
+    path: &Path,
+) -> Result<ArtifactFormatSettings, WorkflowServiceError> {
+    if !path.exists() {
+        return Ok(ArtifactFormatSettings::default());
+    }
+    let content = std::fs::read_to_string(path).map_err(|error| {
+        WorkflowServiceError::Internal(format!(
+            "failed to read artifact format settings {:?}: {error}",
+            path
+        ))
+    })?;
+    serde_json::from_str(&content).map_err(|error| {
+        WorkflowServiceError::InvalidRequest(format!(
+            "artifact format settings file {:?} is invalid: {error}",
+            path
+        ))
+    })
 }

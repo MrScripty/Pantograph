@@ -6,17 +6,20 @@
 use pantograph_workflow_service::{
     ArtifactBodyRead, ArtifactConsumeAcknowledgementRequest,
     ArtifactConsumeAcknowledgementResponse, ArtifactDescriptorQueryRequest,
-    ArtifactDescriptorQueryResponse, ArtifactPolicy, ArtifactReadRequest, ArtifactStoreStats,
-    WorkflowAdminQueueCancelRequest, WorkflowAdminQueueCancelResponse,
-    WorkflowAdminQueuePushFrontRequest, WorkflowAdminQueuePushFrontResponse,
-    WorkflowAdminQueueReprioritizeRequest, WorkflowAdminQueueReprioritizeResponse,
-    WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse,
-    WorkflowExecutionSessionCloseRequest, WorkflowExecutionSessionCloseResponse,
-    WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionCreateResponse,
-    WorkflowExecutionSessionKeepAliveRequest, WorkflowExecutionSessionKeepAliveResponse,
-    WorkflowExecutionSessionQueueCancelRequest, WorkflowExecutionSessionQueueCancelResponse,
-    WorkflowExecutionSessionQueueListRequest, WorkflowExecutionSessionQueueListResponse,
-    WorkflowExecutionSessionQueuePushFrontRequest, WorkflowExecutionSessionQueuePushFrontResponse,
+    ArtifactDescriptorQueryResponse, ArtifactFormatCapabilities,
+    ArtifactFormatSettingsQueryRequest, ArtifactFormatSettingsQueryResponse,
+    ArtifactFormatSettingsUpdateRequest, ArtifactFormatSettingsUpdateResponse, ArtifactPolicy,
+    ArtifactReadRequest, ArtifactStoreStats, WorkflowAdminQueueCancelRequest,
+    WorkflowAdminQueueCancelResponse, WorkflowAdminQueuePushFrontRequest,
+    WorkflowAdminQueuePushFrontResponse, WorkflowAdminQueueReprioritizeRequest,
+    WorkflowAdminQueueReprioritizeResponse, WorkflowCapabilitiesRequest,
+    WorkflowCapabilitiesResponse, WorkflowExecutionSessionCloseRequest,
+    WorkflowExecutionSessionCloseResponse, WorkflowExecutionSessionCreateRequest,
+    WorkflowExecutionSessionCreateResponse, WorkflowExecutionSessionKeepAliveRequest,
+    WorkflowExecutionSessionKeepAliveResponse, WorkflowExecutionSessionQueueCancelRequest,
+    WorkflowExecutionSessionQueueCancelResponse, WorkflowExecutionSessionQueueListRequest,
+    WorkflowExecutionSessionQueueListResponse, WorkflowExecutionSessionQueuePushFrontRequest,
+    WorkflowExecutionSessionQueuePushFrontResponse,
     WorkflowExecutionSessionQueueReprioritizeRequest,
     WorkflowExecutionSessionQueueReprioritizeResponse, WorkflowExecutionSessionRunRequest,
     WorkflowExecutionSessionStaleCleanupRequest, WorkflowExecutionSessionStaleCleanupResponse,
@@ -329,6 +332,30 @@ pub async fn workflow_artifact_store_stats(
     workflow_service
         .artifact_store_stats()
         .map_err(workflow_error_json)
+}
+
+pub async fn workflow_artifact_format_settings(
+    request: ArtifactFormatSettingsQueryRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<ArtifactFormatSettingsQueryResponse, String> {
+    workflow_service
+        .artifact_format_settings(request)
+        .map_err(workflow_error_json)
+}
+
+pub async fn workflow_update_artifact_format_settings(
+    request: ArtifactFormatSettingsUpdateRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<ArtifactFormatSettingsUpdateResponse, String> {
+    workflow_service
+        .update_artifact_format_settings(request)
+        .map_err(workflow_error_json)
+}
+
+pub async fn workflow_artifact_format_capabilities(
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<ArtifactFormatCapabilities, String> {
+    Ok(workflow_service.artifact_format_capabilities())
 }
 
 pub async fn workflow_node_status_query(

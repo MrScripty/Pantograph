@@ -72,7 +72,13 @@ pub fn run_app() -> AppStartupResult<()> {
     let workflow_service: workflow::commands::SharedWorkflowService = Arc::new(
         pantograph_workflow_service::WorkflowService::new()
             .with_artifact_store(workflow_artifact_store)
-            .with_diagnostics_ledger(workflow_service_ledger),
+            .with_diagnostics_ledger(workflow_service_ledger)
+            .with_artifact_format_settings_path(
+                pantograph_data_dir.join("artifact-format-settings.json"),
+            )
+            .map_err(|error| {
+                startup_error(format!("failed to open artifact format settings: {error}"))
+            })?,
     );
     let workflow_timing_ledger =
         pantograph_workflow_service::SqliteDiagnosticsLedger::open(&workflow_timing_ledger_path)
@@ -416,6 +422,9 @@ pub fn run_app() -> AppStartupResult<()> {
             crate::workflow::commands::workflow_artifact_policy,
             crate::workflow::commands::workflow_update_artifact_policy,
             crate::workflow::commands::workflow_artifact_store_stats,
+            crate::workflow::commands::workflow_artifact_format_settings,
+            crate::workflow::commands::workflow_update_artifact_format_settings,
+            crate::workflow::commands::workflow_artifact_format_capabilities,
             crate::workflow::commands::workflow_node_status_query,
             crate::workflow::commands::workflow_projection_rebuild,
             crate::workflow::commands::workflow_library_usage_query,

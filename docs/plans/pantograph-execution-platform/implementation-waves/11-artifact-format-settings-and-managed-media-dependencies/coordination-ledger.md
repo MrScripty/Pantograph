@@ -26,7 +26,7 @@ backend portions of Wave `02`.
 | `wave-02-artifact-store-backend` | Complete | ArtifactStore core, private disk persistence, restart reconciliation, consume acknowledgement, cleanup, memory-cache enforcement, disk-budget enforcement, stream persistence, finalize lifecycle, service facade, and focused tests are implemented. Execution cutover and diagnostics descriptor linking remain assigned to Wave `04`. |
 | `wave-03-managed-redistributables` | Complete | Backend `inference` managed media redistributables catalog/status and activation/state scaffolds are implemented for tool/native dependency definitions, expected-file status projection, local staging installs, select/default/activate state, active-version leases, OpenColorIO activation validation state, and conversion dependency lease planning. Real OCIO ABI loading remains deferred because unsafe FFI is intentionally outside the scaffold. |
 | `wave-04-execution-diagnostics-cutover` | In progress | First workflow-service execution cutover converts image/audio output bindings into ArtifactStore descriptors before `max_value_bytes` validation, the GUI workflow service now opens the project-local ArtifactStore, typed I/O diagnostics projections retain descriptor metadata, and Tauri diagnostics overlays redact inline media bodies. Python bridge streams, additional binary producers, and frontend artifact access remain. |
-| `wave-05-api-bindings-frontend-settings` | In progress | Tauri workflow commands and the UniFFI embedded runtime now expose ArtifactStore descriptor lookup, body read, consume acknowledgement, policy read/update, and stats. The I/O Inspector renders descriptor lifecycle/access/handle/format metadata. Frontend binary body handling, settings persistence, managed redistributable controls, remaining binding parity, and output selectors remain. |
+| `wave-05-api-bindings-frontend-settings` | In progress | Tauri workflow commands and the UniFFI embedded runtime now expose ArtifactStore descriptor lookup, body read, consume acknowledgement, policy read/update, and stats. Backend artifact format settings query/update and conversion capability Tauri commands are implemented with persistence and validation. The I/O Inspector renders descriptor lifecycle/access/handle/format metadata. Frontend binary body handling, managed redistributable controls, remaining binding parity, workbench Settings page, and output selectors remain. |
 
 ## Required First Actions
 
@@ -38,6 +38,39 @@ backend portions of Wave `02`.
    redistributable DTOs before source implementation begins.
 5. Decide whether subsequent waves can run concurrently and record
    non-overlapping write sets before launching workers.
+
+## 2026-04-29 Continuation Gate
+
+- Selected stage: Stage `11`, artifact format settings and managed media
+  dependencies.
+- Gate applied: `08-stage-start-implementation-gate.md` and
+  `10-concurrent-phased-implementation.md` were reread before launching the
+  next parallel worker wave.
+- Current dirty files outside the Stage `11` write set remain unchanged:
+  deleted `.pantograph/workflows/tiny-sd-turbo-diffusion.json`, deleted image
+  assets, untracked `.pantograph/workflow-diagnostics.sqlite`, and untracked
+  assets.
+- Start outcome: `ready_with_recorded_assumptions`.
+- Assumption: the already-frozen `ArtifactDescriptor`,
+  `ArtifactFormatMetadata`, `ArtifactFormatSettings`,
+  `ArtifactFormatCapabilities`, and managed redistributable DTOs remain the
+  shared contract surface for the next worker wave. Workers must not reopen
+  those contracts without escalating to the host.
+- Verification expected for the next worker wave: targeted Rust or frontend
+  tests owned by each worker, `cargo fmt --all -- --check` for Rust changes,
+  and `npm run typecheck -- --pretty false` plus focused frontend unit tests
+  for TypeScript/Svelte changes.
+
+## Wave 04/05 Parallel Worker Split
+
+| Owner | Scope | Primary Write Set | Forbidden Shared Files | Report |
+| ----- | ----- | ----------------- | ---------------------- | ------ |
+| Backend output conversion worker | Extend workflow-service artifact conversion beyond current image/audio-only handling for descriptor-eligible output bindings, with no JSON cap increase and focused no-inline-body tests. | `crates/pantograph-workflow-service/src/workflow/artifact_output_conversion.rs` | Tauri/frontend files, diagnostics ledger schema, managed redistributables, ArtifactStore storage internals, `.pantograph/**`, `assets/**`, and generated output. | `reports/wave-04-worker-expanded-output-conversion.md` |
+| Frontend artifact access worker | Add TypeScript workflow artifact access DTOs/service methods and I/O Inspector read/download/consume behavior that creates transient browser blobs instead of storing media bodies in projection state. | `src/services/workflow/types.ts`, `src/services/workflow/WorkflowCommandService.ts`, `src/services/workflow/WorkflowService.commands.test.ts`, `src/components/workbench/ioInspectorPresenters.ts`, `src/components/workbench/ioInspectorPresenters.test.ts`, `src/components/workbench/IoInspectorPage.svelte` | Rust backend contracts/commands, diagnostics ledger schema, workbench Settings page ownership, managed redistributable files, `.pantograph/**`, `assets/**`, and generated output. | `reports/wave-05-worker-frontend-artifact-access.md` |
+
+Integration rule: integrate the backend output conversion worker first, then
+frontend artifact access. If either worker needs the shared Rust contract files
+or command registration, stop and update the split before continuing.
 
 ## Source Audit Snapshot
 
@@ -136,6 +169,11 @@ runtime-only DTO names or host PATH discovery as the source of truth.
   `cargo test -p pantograph-uniffi
   direct_runtime_exposes_artifact_store_contract_surface`,
   `cargo check -p pantograph-uniffi`, and `cargo fmt --all -- --check`.
+- 2026-04-29 Wave `05` backend artifact format settings surface passed:
+  `cargo test -p pantograph-workflow-service --test
+  artifact_format_settings` and `cargo check -p pantograph`. Targeted
+  rustfmt was run for the files in this slice because active workers own other
+  dirty Rust files in the same workspace.
 - 2026-04-29 Separate clippy cleanup commit cleared existing
   workflow-service lints discovered by the Wave `02` package clippy gate.
 - 2026-04-29 Wave `01` verification passed:

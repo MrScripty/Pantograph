@@ -361,6 +361,34 @@ pub async fn workflow_artifact_store_stats(
 }
 
 #[command]
+pub async fn workflow_artifact_format_settings(
+    request: pantograph_workflow_service::ArtifactFormatSettingsQueryRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<pantograph_workflow_service::ArtifactFormatSettingsQueryResponse, String> {
+    super::headless_workflow_commands::workflow_artifact_format_settings(request, workflow_service)
+        .await
+}
+
+#[command]
+pub async fn workflow_update_artifact_format_settings(
+    request: pantograph_workflow_service::ArtifactFormatSettingsUpdateRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<pantograph_workflow_service::ArtifactFormatSettingsUpdateResponse, String> {
+    super::headless_workflow_commands::workflow_update_artifact_format_settings(
+        request,
+        workflow_service,
+    )
+    .await
+}
+
+#[command]
+pub async fn workflow_artifact_format_capabilities(
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<pantograph_workflow_service::ArtifactFormatCapabilities, String> {
+    super::headless_workflow_commands::workflow_artifact_format_capabilities(workflow_service).await
+}
+
+#[command]
 pub async fn workflow_node_status_query(
     request: pantograph_workflow_service::WorkflowNodeStatusQueryRequest,
     workflow_service: State<'_, SharedWorkflowService>,

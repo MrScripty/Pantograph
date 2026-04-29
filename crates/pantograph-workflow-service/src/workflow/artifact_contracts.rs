@@ -200,6 +200,30 @@ pub struct ArtifactFormatSettings {
     pub three_d: ThreeDArtifactFormatSettings,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct ArtifactFormatSettingsQueryRequest {}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct ArtifactFormatSettingsQueryResponse {
+    pub settings: ArtifactFormatSettings,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct ArtifactFormatSettingsUpdateRequest {
+    pub settings: ArtifactFormatSettings,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct ArtifactFormatSettingsUpdateResponse {
+    pub settings: ArtifactFormatSettings,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct ImageArtifactFormatSettings {
