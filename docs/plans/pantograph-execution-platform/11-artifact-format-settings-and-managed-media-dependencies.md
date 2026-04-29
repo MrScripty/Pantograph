@@ -126,7 +126,7 @@ Wave status: `complete`.
 
 ### 2026-04-29 Wave 02 ArtifactStore Core Slice
 
-Wave status: `in_progress`.
+Wave status: `complete`.
 
 - Added a backend ArtifactStore owner in
   `crates/pantograph-workflow-service/src/workflow/artifact_store.rs`.
@@ -143,10 +143,10 @@ Wave status: `in_progress`.
 - Added focused ArtifactStore tests for path opacity, restart reconciliation,
   invalid id rejection, size limits, consume deletion, TTL cleanup, and service
   facade access.
-- Residual Wave `02` work: memory-cache accounting/enforcement beyond
-  persisted body stats, stream body persistence, finalize lifecycle transitions,
-  integration with execution output conversion, and diagnostics metadata
-  linking.
+- Later waves completed memory-cache accounting/enforcement, disk-budget
+  enforcement, stream body persistence, finalize lifecycle transitions,
+  execution output conversion, diagnostics metadata linking, and retention
+  audit tests proving descriptor metadata survives body deletion.
 - Verification passed:
   `cargo test -p pantograph-workflow-service --test artifact_store`,
   `cargo test -p pantograph-workflow-service --test artifact_contract`,
@@ -259,16 +259,16 @@ when physical payload bodies are deleted.
 
 ### Milestone 1: Contract And Source Audit Freeze
 
-- [ ] Audit current media paths for `base64`, `image_base64`, `audio_base64`,
+- [x] Audit current media paths for `base64`, `image_base64`, `audio_base64`,
   data URLs, oversized media JSON, and workflow outputs carrying binary bodies.
-- [ ] Record each producer/consumer migration decision: ArtifactStore
+- [x] Record each producer/consumer migration decision: ArtifactStore
   descriptor, binary-safe stream/read path, or removal during the breaking
   cutover.
-- [ ] Define ArtifactStore descriptor, lifecycle, retention, stream, consume,
+- [x] Define ArtifactStore descriptor, lifecycle, retention, stream, consume,
   read/download, and error contracts.
-- [ ] Define artifact format settings and capability DTOs with typed ids,
+- [x] Define artifact format settings and capability DTOs with typed ids,
   units, bounds, and active converter/library version fields.
-- [ ] Define managed redistributable product-category DTOs for runtime sidecar,
+- [x] Define managed redistributable product-category DTOs for runtime sidecar,
   tool binary, and native library/artifact dependency.
 
 ### Milestone 2: Backend Storage And Policy
@@ -278,14 +278,17 @@ when physical payload bodies are deleted.
 - [x] Persist global artifact policy values: TTL, maximum disk bytes, maximum
   memory bytes, maximum single artifact bytes, spill threshold, delete-on-
   consume behavior, and cleanup status.
-- [ ] Store artifact metadata and references in durable diagnostics/run
+- [x] Store artifact metadata and references in durable diagnostics/run
   projections without placing payload bodies in diagnostic event JSON.
   - [x] Add typed I/O artifact descriptor metadata to the diagnostics ledger
     and projection contract, including payload kind, lifecycle, access handles,
     and format metadata.
   - [x] Redact inline media/body fields from Tauri diagnostics overlay payloads
     while preserving metadata and ArtifactStore descriptor fields.
-- [ ] Preserve queryable audit metadata after physical payload deletion.
+- [x] Preserve queryable audit metadata after physical payload deletion.
+  - [x] Add ArtifactStore and WorkflowService tests proving consume-triggered
+    and TTL-triggered physical body deletion preserve descriptor metadata while
+    body reads fail closed.
 
 ### Milestone 3: Managed Redistributables
 
@@ -314,8 +317,10 @@ when physical payload bodies are deleted.
   - [x] Convert descriptor-eligible video, 3D, large table, generic binary, and
     oversized structured/file-shaped base64 or data-url output bindings without
     increasing JSON value limits.
-  - [ ] Convert video, 3D, large table, generic file, Python bridge streaming,
-    and remaining oversized structured outputs.
+  - [x] Confirm video, 3D, large table, generic file, and oversized structured
+    output bindings are converted to descriptors before value validation.
+  - [ ] Convert Python bridge streaming and producer-specific streamed preview
+    outputs into ArtifactStore stream lifecycle entries.
 - [ ] Represent streaming assets as artifact lifecycle transitions. Diffusion
   preview passes should be child or revision artifacts; audio/video streams
   should publish chunk metadata and stream handles without placing chunk bodies
@@ -325,12 +330,16 @@ when physical payload bodies are deleted.
   artifact descriptors, run snapshots, and diagnostic metadata.
   - [x] Preserve ArtifactStore descriptor format metadata in the durable I/O
     artifact diagnostics projection.
+  - [x] Capture backend default and explicit image/audio output-node override
+    metadata in artifact descriptors and run snapshots.
 - [ ] Reject invalid format/codec/quality/bitrate/color/3D settings at
   submission or execution boundaries with typed errors.
+  - [x] Validate persistent format defaults and image/audio output-node
+    overrides against backend capabilities with typed errors.
 
 ### Milestone 5: API, Binding, And GUI Projections
 
-- [ ] Expose ArtifactStore descriptor lookup, binary read/download, stream
+- [x] Expose ArtifactStore descriptor lookup, binary read/download, stream
   subscription/read, consume acknowledgement, and policy commands through the
   GUI/API boundary.
   - [x] Expose Tauri commands for descriptor lookup, body read, consume
@@ -345,14 +354,14 @@ when physical payload bodies are deleted.
     metadata.
   - [x] Add stream read handling for artifacts with stream handles in frontend
     clients.
-- [ ] Expose Settings APIs for persistent artifact format defaults and
+- [x] Expose Settings APIs for persistent artifact format defaults and
   conversion capabilities.
   - [x] Add backend artifact format settings query/update APIs, static
     conversion capability projection, validation, persistence, and Tauri
     command registration for the workbench Settings page to consume.
 - [x] Expose managed redistributable status/actions for OCIO, ffmpeg,
   `ocioconvert`, and `oiiotool` with degraded/missing/incompatible states.
-- [ ] Update native Rust and supported host bindings with DTO parity tests for
+- [x] Update native Rust and supported host bindings with DTO parity tests for
   artifact descriptors, settings, capabilities, managed dependency status, and
   binary-safe payload access semantics.
   - [x] Configure the UniFFI embedded runtime with an ArtifactStore and expose
@@ -362,9 +371,9 @@ when physical payload bodies are deleted.
     methods through the UniFFI embedded runtime with focused runtime tests.
   - [x] Expose managed dependency status/action JSON methods through the
     UniFFI embedded runtime with focused runtime tests.
-  - [ ] Add remaining binding parity for persistent settings, managed
-    dependency status/actions, media capabilities, and final binary body
-    transport semantics.
+  - [x] Add C# native smoke coverage that treats diffusion outputs as
+    ArtifactStore descriptors and reads bytes through the UniFFI artifact body
+    API instead of decoding inline base64/data URLs.
 - [ ] Make the workbench Settings page the canonical persistent settings
   surface. Relocate, embed, or retire old side-panel/server/runtime settings
   surfaces so they do not keep separate global settings ownership.
@@ -373,7 +382,7 @@ when physical payload bodies are deleted.
     DTOs.
   - [ ] Relocate, embed, or retire remaining legacy global settings surfaces
     that still own server/runtime settings outside the workbench Settings page.
-- [ ] Add output-node format selectors that default from backend Settings and
+- [x] Add output-node format selectors that default from backend Settings and
   preserve explicit per-node overrides in run snapshots.
 
 ## Verification

@@ -25,8 +25,8 @@ backend portions of Wave `02`.
 | `wave-01-preflight-contract-audit` | Complete | Backend ArtifactStore descriptor, handle-based access, format settings, media capability, and managed redistributable DTOs are frozen with contract snapshots. |
 | `wave-02-artifact-store-backend` | Complete | ArtifactStore core, private disk persistence, restart reconciliation, consume acknowledgement, cleanup, memory-cache enforcement, disk-budget enforcement, stream persistence, finalize lifecycle, service facade, and focused tests are implemented. Execution cutover and diagnostics descriptor linking remain assigned to Wave `04`. |
 | `wave-03-managed-redistributables` | Complete | Backend `inference` managed media redistributables catalog/status and activation/state scaffolds are implemented for tool/native dependency definitions, expected-file status projection, local staging installs, select/default/activate state, active-version leases, OpenColorIO activation validation state, and conversion dependency lease planning. Real OCIO ABI loading remains deferred because unsafe FFI is intentionally outside the scaffold. |
-| `wave-04-execution-diagnostics-cutover` | In progress | Workflow-service execution cutover converts image/audio/video/3D/large-table/generic-binary/structured base64 or data-url output bindings into ArtifactStore descriptors before `max_value_bytes` validation, the GUI workflow service now opens the project-local ArtifactStore, typed I/O diagnostics projections retain descriptor metadata, and Tauri diagnostics overlays redact inline media bodies. Python bridge streaming and producer-specific stream lifecycle metadata remain. |
-| `wave-05-api-bindings-frontend-settings` | In progress | Tauri workflow commands and the UniFFI embedded runtime now expose ArtifactStore descriptor lookup, body read, consume acknowledgement, policy read/update, and stats. Backend artifact format settings query/update and conversion capability commands are implemented with persistence, validation, Tauri registration, and UniFFI JSON parity. ArtifactStore stream read DTOs and Tauri/embedded-runtime stream read commands are implemented for in-progress stream bytes. The I/O Inspector renders descriptor lifecycle/access/handle/format metadata and uses transient Blob URLs for read/download/consume actions, including stream reads, without placing bodies in projection state. Tauri/headless managed media dependency status/action commands and UniFFI managed dependency JSON parity are implemented. The workbench Settings page now owns ArtifactStore policy and artifact format defaults through typed backend commands. Remaining legacy settings consolidation and output selectors remain. |
+| `wave-04-execution-diagnostics-cutover` | In progress | Workflow-service execution cutover converts image/audio/video/3D/large-table/generic-binary/structured base64 or data-url output bindings into ArtifactStore descriptors before `max_value_bytes` validation, the GUI workflow service now opens the project-local ArtifactStore, typed I/O diagnostics projections retain descriptor metadata, Tauri diagnostics overlays redact inline media bodies, and image/audio output-node format overrides are validated into descriptor metadata. Python bridge streaming and producer-specific stream lifecycle metadata remain. |
+| `wave-05-api-bindings-frontend-settings` | In progress | Tauri workflow commands and the UniFFI embedded runtime now expose ArtifactStore descriptor lookup, body read, consume acknowledgement, policy read/update, and stats. Backend artifact format settings query/update and conversion capability commands are implemented with persistence, validation, Tauri registration, and UniFFI JSON parity. ArtifactStore stream read DTOs and Tauri/embedded-runtime stream read commands are implemented for in-progress stream bytes. The I/O Inspector renders descriptor lifecycle/access/handle/format metadata and uses transient Blob URLs for read/download/consume actions, including stream reads, without placing bodies in projection state. Tauri/headless managed media dependency status/action commands, UniFFI managed dependency JSON parity, C# descriptor/body-read smoke parity, and image/audio output-node selectors are implemented. The workbench Settings page now owns ArtifactStore policy and artifact format defaults through typed backend commands. Remaining legacy settings consolidation and managed media dependency controls in Settings remain. |
 
 ## Required First Actions
 
@@ -148,9 +148,6 @@ Initial local audit found these migration families:
   storage.
 - Exact crate/module ownership for OCIO safe wrapper and native-library
   loading.
-- Exact persistent store owner for global artifact format defaults and
-  ArtifactStore policy. Wave `01` froze settings/policy DTO shape but did not
-  implement persistence.
 - Which old Settings surfaces are embedded into the workbench Settings page and
   which are retired.
 
@@ -267,6 +264,18 @@ runtime-only DTO names or host PATH discovery as the source of truth.
   `node --experimental-strip-types --test
   src/services/workflow/WorkflowService.commands.test.ts`, `npm run typecheck
   -- --pretty false`, and `npm run build`.
+- 2026-04-29 Wave `05` ArtifactStore retention audit passed:
+  `cargo test -p pantograph-workflow-service --test artifact_store`,
+  `cargo check -p pantograph-workflow-service`, and
+  `cargo fmt --all -- --check`.
+- 2026-04-29 Wave `05` output-node format selectors passed:
+  `npm run typecheck -- --pretty false` and `npm run build`.
+- 2026-04-29 Wave `05` C# ArtifactStore smoke parity passed:
+  `./scripts/check-uniffi-csharp-smoke.sh`.
+- 2026-04-29 Wave `05` output format override conversion passed:
+  `cargo test -p pantograph-workflow-service artifact_output_conversion`,
+  `cargo check -p pantograph-workflow-service`, and
+  `cargo fmt --all -- --check`.
 - 2026-04-29 Separate clippy cleanup commit cleared existing
   workflow-service lints discovered by the Wave `02` package clippy gate.
 - 2026-04-29 Wave `01` verification passed:
