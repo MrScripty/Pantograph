@@ -387,6 +387,17 @@ test('artifact store commands forward backend-owned descriptor body policy and c
       format: {
         format_id: 'png',
         media_type: 'image/png',
+        conversion_id: 'conversion-a',
+        conversion_status: 'converted',
+        conversion_command_id: 'image_oiio_png_srgb',
+        conversion_dependencies: [
+          {
+            dependency_id: 'oiiotool',
+            active_version: '2.5.18',
+            lease_id: 'lease-a',
+            lease_holder: 'workflow_run:run-a/node:node-a/port:out/conversion:conversion-a',
+          },
+        ],
       },
       attribution: {
         workflow_run_id: 'run-a',
@@ -495,6 +506,8 @@ test('artifact store commands forward backend-owned descriptor body policy and c
     const stats = await service.artifactStoreStats();
 
     assert.deepEqual(descriptor, descriptorResponse);
+    assert.equal(descriptor.artifact?.format?.conversion_status, 'converted');
+    assert.equal(descriptor.artifact?.format?.conversion_dependencies?.[0]?.dependency_id, 'oiiotool');
     assert.deepEqual(body, bodyResponse);
     assert.deepEqual(stream, streamResponse);
     assert.deepEqual(acknowledgement, {

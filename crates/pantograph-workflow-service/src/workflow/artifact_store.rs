@@ -429,3 +429,120 @@ impl ArtifactStore {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::workflow::{
+        ArtifactConversionDependency, ArtifactConversionStatus, ArtifactPayloadKind,
+    };
+
+    #[test]
+    fn descriptor_keeps_conversion_metadata_after_delete_on_consume_removes_body() {
+        let temp = tempfile::tempdir().expect("temp artifact store");
+        let mut store =
+            ArtifactStore::open(temp.path(), policy_with_delete_on_consume()).expect("open store");
+        let descriptor = store
+            .write_artifact(ArtifactWriteRequest {
+                artifact_id: Some("artifact-converted".to_string()),
+                payload_kind: ArtifactPayloadKind::Image,
+                media_type: "image/jpeg".to_string(),
+                format: Some(converted_format_metadata()),
+                attribution: ArtifactAttribution {
+                    workflow_run_id: "run-conversion".to_string(),
+                    workflow_id: Some("workflow-image".to_string()),
+                    workflow_version_id: Some("workflow-image@1".to_string()),
+                    node_id: Some("image-output".to_string()),
+                    port_id: Some("image".to_string()),
+                    model_id: None,
+                    runtime_id: Some("embedded".to_string()),
+                },
+                artifact_role: Some("workflow_output".to_string()),
+                parent_artifact_id: None,
+                revision_index: None,
+                body: b"converted bytes".to_vec(),
+            })
+            .expect("write artifact");
+        assert_eq!(
+            descriptor
+                .format
+                .as_ref()
+                .and_then(|format| format.conversion_status.clone()),
+            Some(ArtifactConversionStatus::Converted)
+        );
+
+        let consume = store
+            .acknowledge_consume(ArtifactConsumeAcknowledgementRequest {
+                artifact_id: "artifact-converted".to_string(),
+                consumer_id: "client-a".to_string(),
+            })
+            .expect("consume artifact");
+        assert!(!consume.retained_after_consume);
+
+        let descriptor = store
+            .descriptor("artifact-converted")
+            .expect("descriptor remains queryable");
+        assert_eq!(descriptor.lifecycle_state, ArtifactLifecycleState::Deleted);
+        assert_eq!(
+            descriptor.retention_state,
+            IoArtifactRetentionState::Deleted
+        );
+        assert!(descriptor.read_handle.is_none());
+        let format = descriptor.format.expect("format metadata is retained");
+        assert_eq!(format.conversion_id.as_deref(), Some("conversion_test"));
+        assert_eq!(
+            format.conversion_status,
+            Some(ArtifactConversionStatus::Converted)
+        );
+        assert_eq!(
+            format.conversion_command_id.as_deref(),
+            Some("image_oiiotool")
+        );
+        assert_eq!(format.conversion_dependencies.len(), 1);
+        assert_eq!(format.conversion_dependencies[0].dependency_id, "oiiotool");
+        assert_eq!(
+            format.conversion_dependencies[0].lease_holder,
+            "workflow_run:run-conversion/node:image-output/port:image/conversion:conversion_test"
+        );
+    }
+
+    fn policy_with_delete_on_consume() -> ArtifactPolicy {
+        ArtifactPolicy {
+            policy_id: "test-policy".to_string(),
+            policy_version: 1,
+            ttl_seconds: None,
+            max_disk_bytes: None,
+            max_memory_bytes: Some(1024 * 1024),
+            max_single_artifact_bytes: Some(1024 * 1024),
+            spill_threshold_bytes: Some(1024),
+            delete_on_consume: true,
+        }
+    }
+
+    fn converted_format_metadata() -> ArtifactFormatMetadata {
+        ArtifactFormatMetadata {
+            format_id: "jpg".to_string(),
+            media_type: "image/jpeg".to_string(),
+            codec_id: None,
+            quality_percent: Some(75),
+            bitrate_kbps: None,
+            crf: None,
+            bit_depth: Some("8bit".to_string()),
+            color_profile_id: Some("srgb".to_string()),
+            converter_id: None,
+            converter_version: None,
+            library_version: None,
+            conversion_id: Some("conversion_test".to_string()),
+            conversion_status: Some(ArtifactConversionStatus::Converted),
+            conversion_command_id: Some("image_oiiotool".to_string()),
+            conversion_dependencies: vec![ArtifactConversionDependency {
+                dependency_id: "oiiotool".to_string(),
+                active_version: "v3.0.3.1".to_string(),
+                lease_id: "lease_test".to_string(),
+                lease_holder:
+                    "workflow_run:run-conversion/node:image-output/port:image/conversion:conversion_test"
+                        .to_string(),
+            }],
+        }
+    }
+}

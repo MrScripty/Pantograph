@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -106,24 +106,58 @@ where
                     dependency_id: primary_dependency_id(&command_plan),
                     reason,
                 })?;
+        let dependency_plan_guard =
+            MediaConversionDependencyPlanGuard::new(self.app_data_dir.clone(), dependency_plan);
 
         let conversion_result = self
-            .convert_with_plan(request, command_plan, &dependency_plan)
+            .convert_with_plan(request, command_plan, dependency_plan_guard.plan())
             .await;
-        release_after_conversion(
-            self.app_data_dir.as_path(),
-            &dependency_plan,
-            conversion_result,
-        )
+        release_after_conversion(dependency_plan_guard, conversion_result)
+    }
+}
+
+struct MediaConversionDependencyPlanGuard {
+    app_data_dir: PathBuf,
+    dependency_plan: Option<MediaConversionDependencyPlan>,
+}
+
+impl MediaConversionDependencyPlanGuard {
+    fn new(app_data_dir: PathBuf, dependency_plan: MediaConversionDependencyPlan) -> Self {
+        Self {
+            app_data_dir,
+            dependency_plan: Some(dependency_plan),
+        }
+    }
+
+    fn plan(&self) -> &MediaConversionDependencyPlan {
+        self.dependency_plan
+            .as_ref()
+            .expect("dependency plan guard should hold a plan until release")
+    }
+
+    fn release(mut self) -> Result<(), String> {
+        self.release_inner()
+    }
+
+    fn release_inner(&mut self) -> Result<(), String> {
+        let Some(dependency_plan) = self.dependency_plan.take() else {
+            return Ok(());
+        };
+        release_media_conversion_dependency_plan(self.app_data_dir.as_path(), &dependency_plan)
+    }
+}
+
+impl Drop for MediaConversionDependencyPlanGuard {
+    fn drop(&mut self) {
+        let _ = self.release_inner();
     }
 }
 
 fn release_after_conversion(
-    app_data_dir: &Path,
-    dependency_plan: &MediaConversionDependencyPlan,
+    dependency_plan_guard: MediaConversionDependencyPlanGuard,
     conversion_result: Result<MediaConversionResult, MediaConversionError>,
 ) -> Result<MediaConversionResult, MediaConversionError> {
-    let release_result = release_media_conversion_dependency_plan(app_data_dir, dependency_plan);
+    let release_result = dependency_plan_guard.release();
     match (conversion_result, release_result) {
         (Ok(result), Ok(())) => Ok(result),
         (Ok(_), Err(release_error)) => Err(MediaConversionError::Io {
@@ -271,6 +305,7 @@ fn managed_dependency_id(id: MediaConversionDependencyId) -> ManagedMediaDepende
 mod tests {
     use std::collections::VecDeque;
     use std::fs;
+    use std::path::Path;
     use std::sync::Mutex;
 
     use inference::{
@@ -283,13 +318,15 @@ mod tests {
         MediaConversionSource, MediaConversionTarget, MediaType, PortId, ProcessRunOutput,
         WorkflowRunId,
     };
+    use tokio::sync::Notify;
 
     use super::*;
 
-    #[derive(Default)]
     struct FakeProcessRunner {
         calls: Mutex<Vec<ProcessRunRequest>>,
         outputs: Mutex<VecDeque<ProcessRunOutput>>,
+        run_started: Notify,
+        wait_forever: bool,
     }
 
     impl FakeProcessRunner {
@@ -297,11 +334,26 @@ mod tests {
             Self {
                 calls: Mutex::new(Vec::new()),
                 outputs: Mutex::new(outputs.into()),
+                run_started: Notify::new(),
+                wait_forever: false,
+            }
+        }
+
+        fn pending() -> Self {
+            Self {
+                calls: Mutex::new(Vec::new()),
+                outputs: Mutex::new(VecDeque::new()),
+                run_started: Notify::new(),
+                wait_forever: true,
             }
         }
 
         fn calls(&self) -> Vec<ProcessRunRequest> {
             self.calls.lock().expect("calls lock").clone()
+        }
+
+        async fn wait_for_run_started(&self) {
+            self.run_started.notified().await;
         }
     }
 
@@ -312,6 +364,10 @@ mod tests {
             request: ProcessRunRequest,
         ) -> Result<ProcessRunOutput, MediaConversionError> {
             self.calls.lock().expect("calls lock").push(request);
+            self.run_started.notify_one();
+            if self.wait_forever {
+                std::future::pending::<()>().await;
+            }
             self.outputs
                 .lock()
                 .expect("outputs lock")
@@ -403,6 +459,41 @@ mod tests {
         assert_active_leases_released(app_data_dir.path());
     }
 
+    #[tokio::test]
+    async fn managed_executor_releases_dependency_when_conversion_future_is_aborted() {
+        let app_data_dir = tempfile::tempdir().expect("app data dir");
+        install_active_dependency(app_data_dir.path(), ManagedRedistributableId::Ffmpeg);
+        let runner = Arc::new(FakeProcessRunner::pending());
+        let executor = TauriManagedMediaConversionExecutor::with_runner(
+            app_data_dir.path().to_path_buf(),
+            runner.clone(),
+        );
+
+        let convert_task = tokio::spawn(async move {
+            executor
+                .convert(media_conversion_request(
+                    ConversionMediaKind::Audio,
+                    "audio/wav",
+                    "ogg",
+                    "audio/ogg",
+                    Some("opus"),
+                    false,
+                ))
+                .await
+        });
+
+        runner.wait_for_run_started().await;
+        assert_eq!(runner.calls().len(), 1);
+        assert_active_leases_present(app_data_dir.path());
+
+        convert_task.abort();
+        assert!(convert_task
+            .await
+            .expect_err("convert task should abort")
+            .is_cancelled());
+        assert_active_leases_released(app_data_dir.path());
+    }
+
     fn media_conversion_request(
         kind: ConversionMediaKind,
         source_media_type: &str,
@@ -474,5 +565,16 @@ mod tests {
                 dependency.id
             );
         }
+    }
+
+    fn assert_active_leases_present(app_data_dir: &Path) {
+        let state = load_managed_redistributable_state(app_data_dir).expect("load state");
+        assert!(
+            state
+                .dependencies
+                .iter()
+                .any(|dependency| !dependency.active_leases.is_empty()),
+            "at least one dependency should retain an active lease"
+        );
     }
 }

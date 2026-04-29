@@ -14,6 +14,7 @@ import {
   classifyIoArtifactMedia,
   formatIoArtifactAvailabilityLabel,
   formatIoArtifactBytes,
+  formatIoArtifactConversionStatusLabel,
   formatIoArtifactDetailValue,
   formatIoArtifactEndpointValue,
   formatIoArtifactLifecycleStateLabel,
@@ -210,6 +211,17 @@ test('artifact descriptor rows expose handle and format metadata without payload
       converter_id: 'oiiotool',
       converter_version: '2.5.0',
       library_version: 'openimageio-2.5.0',
+      conversion_id: 'conversion-image-1',
+      conversion_status: 'converted',
+      conversion_command_id: 'image_oiio_ocio_jpg_srgb',
+      conversion_dependencies: [
+        {
+          dependency_id: 'oiiotool',
+          active_version: '2.5.0',
+          lease_id: 'lease-oiio-1',
+          lease_holder: 'workflow_run:run-a/node:image-output/port:image/conversion:conversion-image-1',
+        },
+      ],
     },
   });
 
@@ -222,6 +234,21 @@ test('artifact descriptor rows expose handle and format metadata without payload
   assert.equal(rows.find((row) => row.label === 'Quality')?.value, '75%');
   assert.equal(rows.find((row) => row.label === 'Bit Depth')?.value, '8bit');
   assert.equal(rows.find((row) => row.label === 'Library Version')?.value, 'openimageio-2.5.0');
+  assert.equal(rows.find((row) => row.label === 'Conversion')?.value, 'Converted');
+  assert.equal(rows.find((row) => row.label === 'Conversion Id')?.value, 'conversion-image-1');
+  assert.equal(rows.find((row) => row.label === 'Conversion Command')?.value, 'image_oiio_ocio_jpg_srgb');
+  assert.equal(rows.find((row) => row.label === 'Dependency 1')?.value, 'oiiotool@2.5.0 · lease-oiio-1');
+  assert.equal(
+    rows.find((row) => row.label === 'Lease Holder 1')?.value,
+    'workflow_run:run-a/node:image-output/port:image/conversion:conversion-image-1',
+  );
+});
+
+test('formatIoArtifactConversionStatusLabel exposes backend conversion states', () => {
+  assert.equal(formatIoArtifactConversionStatusLabel('converted'), 'Converted');
+  assert.equal(formatIoArtifactConversionStatusLabel('passed_through'), 'Passed through');
+  assert.equal(formatIoArtifactConversionStatusLabel('failed'), 'Failed');
+  assert.equal(formatIoArtifactConversionStatusLabel(undefined), 'Conversion unknown');
 });
 
 test('formatIoArtifactRetentionStateLabel exposes typed retention state labels', () => {

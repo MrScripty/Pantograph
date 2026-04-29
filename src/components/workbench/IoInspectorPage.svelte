@@ -851,7 +851,15 @@
                 </h3>
                 <dl class="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
                   {#each descriptorRows as row (row.label)}
-                    <div class={row.label.includes('Handle') || row.label.includes('Version') ? 'col-span-2' : ''}>
+                    <div
+                      class={row.label.includes('Handle') ||
+                      row.label.includes('Version') ||
+                      row.label.includes('Command') ||
+                      row.label.includes('Dependency') ||
+                      row.label.includes('Lease')
+                        ? 'col-span-2'
+                        : ''}
+                    >
                       <dt class="text-neutral-500">{row.label}</dt>
                       <dd class={`mt-0.5 truncate text-neutral-200 ${row.mono ? 'font-mono' : ''}`} title={row.value}>
                         {row.value}

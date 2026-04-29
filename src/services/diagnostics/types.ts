@@ -193,6 +193,19 @@ export interface IoArtifactFormatMetadata {
   converter_id?: string | null;
   converter_version?: string | null;
   library_version?: string | null;
+  conversion_id?: string | null;
+  conversion_status?: IoArtifactConversionStatus | null;
+  conversion_command_id?: string | null;
+  conversion_dependencies?: IoArtifactConversionDependency[] | null;
+}
+
+export type IoArtifactConversionStatus = 'converted' | 'passed_through' | 'failed';
+
+export interface IoArtifactConversionDependency {
+  dependency_id: string;
+  active_version: string;
+  lease_id: string;
+  lease_holder: string;
 }
 
 export type IoArtifactRetentionState =

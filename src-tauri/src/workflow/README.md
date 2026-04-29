@@ -173,6 +173,9 @@ startup from `app_setup.rs`. The neutral conversion request/result contract
 stays in `pantograph-media-conversion`; the Tauri adapter only resolves
 desktop-managed dependency leases, executes converter processes, and releases
 leases after each attempt.
+The adapter owns a local dependency-plan cleanup guard so leases acquired before
+converter execution are also released when a conversion future is cancelled or
+dropped after acquisition.
 
 ## Alternatives Rejected
 - Extend `workflow_get_io` to cover graph-editing intent.
@@ -207,6 +210,9 @@ leases after each attempt.
   executor; Tauri may lease and execute managed converter binaries, but it must
   return typed conversion/dependency attribution rather than appending raw
   diagnostic events or embedding binary payloads in JSON.
+- Managed media dependency plans acquired by the Tauri conversion adapter must
+  be guarded until explicit release so cancellation cannot leave active managed
+  dependency leases behind.
 - Workflow-event serialization must include backend-authored ownership context
   for execution-scoped events so GUI reducers do not infer event execution ids
   from raw payload fields first.

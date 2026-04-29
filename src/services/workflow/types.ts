@@ -649,6 +649,19 @@ export interface WorkflowArtifactFormatMetadata {
   converter_id?: string | null;
   converter_version?: string | null;
   library_version?: string | null;
+  conversion_id?: string | null;
+  conversion_status?: WorkflowArtifactConversionStatus | null;
+  conversion_command_id?: string | null;
+  conversion_dependencies?: WorkflowArtifactConversionDependency[] | null;
+}
+
+export type WorkflowArtifactConversionStatus = 'converted' | 'passed_through' | 'failed';
+
+export interface WorkflowArtifactConversionDependency {
+  dependency_id: string;
+  active_version: string;
+  lease_id: string;
+  lease_holder: string;
 }
 
 export interface WorkflowArtifactDescriptor {

@@ -55,6 +55,10 @@ panel because no active TypeScript boundary consumes them.
 - I/O artifact DTOs carry producer and consumer node/port fields. Consumers
   should use those endpoint fields for browsing and filtering instead of
   parsing payload JSON or overloading the event `node_id`.
+- I/O artifact format metadata DTOs preserve backend-authored conversion id,
+  status, command id, and dependency lease attribution. Consumers must render
+  those fields as facts from projections rather than deriving conversion state
+  from payload media types.
 - Run-list responses carry backend-owned `facets` derived from materialized
   projections. Consumers should use those counts for mixed-version and policy
   summaries instead of rebuilding them from raw ledger events or sampled pages.

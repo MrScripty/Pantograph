@@ -1,5 +1,6 @@
 import type {
   IoArtifactAccessMode,
+  IoArtifactConversionStatus,
   DiagnosticsRetentionPolicy,
   IoArtifactLifecycleState,
   IoArtifactPayloadKind,
@@ -454,7 +455,48 @@ export function buildIoArtifactDescriptorMetadataRows(
   if (format.library_version) {
     rows.push({ label: 'Library Version', value: format.library_version, mono: true });
   }
+  if (format.conversion_status) {
+    rows.push({
+      label: 'Conversion',
+      value: formatIoArtifactConversionStatusLabel(format.conversion_status),
+      mono: false,
+    });
+  }
+  if (format.conversion_id) {
+    rows.push({ label: 'Conversion Id', value: format.conversion_id, mono: true });
+  }
+  if (format.conversion_command_id) {
+    rows.push({ label: 'Conversion Command', value: format.conversion_command_id, mono: true });
+  }
+  format.conversion_dependencies?.forEach((dependency, index) => {
+    const ordinal = index + 1;
+    rows.push({
+      label: `Dependency ${ordinal}`,
+      value: `${dependency.dependency_id}@${dependency.active_version} · ${dependency.lease_id}`,
+      mono: true,
+    });
+    rows.push({
+      label: `Lease Holder ${ordinal}`,
+      value: dependency.lease_holder,
+      mono: true,
+    });
+  });
   return rows;
+}
+
+export function formatIoArtifactConversionStatusLabel(
+  status: IoArtifactConversionStatus | null | undefined,
+): string {
+  switch (status) {
+    case 'converted':
+      return 'Converted';
+    case 'passed_through':
+      return 'Passed through';
+    case 'failed':
+      return 'Failed';
+    default:
+      return 'Conversion unknown';
+  }
 }
 
 export function formatIoArtifactRetentionStateLabel(

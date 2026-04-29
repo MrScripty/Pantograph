@@ -175,6 +175,10 @@ preserve the backend download/audit response.
 - I/O artifact projection reads must preserve backend query/filter shapes,
   including producer and consumer node filters, instead of widening requests
   and filtering artifact pages in `WorkflowService`.
+- Artifact descriptor DTOs preserve optional backend-authored conversion
+  metadata, including conversion id/status/command id and per-conversion
+  dependency lease attribution, without synthesizing those facts in the
+  frontend service.
 - Workbench-facing workflow command methods must throw `WorkflowServiceError`
   when the backend returns a `WorkflowErrorEnvelope`; callers must not parse
   raw JSON error strings.

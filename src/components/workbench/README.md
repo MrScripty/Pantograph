@@ -138,6 +138,9 @@ transient UI state without becoming backend scheduler policy.
   reason text.
 - I/O artifact rendering must distinguish metadata-only rows from rows with
   payload references without treating missing payload references as failures.
+- I/O artifact descriptor rendering may display backend-provided conversion
+  status, command id, conversion id, and dependency lease attribution, but it
+  must not infer conversion state from media type or payload availability.
 - I/O Inspector node grouping and endpoint filters must use producer and
   consumer projection fields. Components may send backend producer/consumer
   filters, but must not infer endpoint ownership from raw payload JSON.

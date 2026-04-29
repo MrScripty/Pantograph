@@ -133,6 +133,10 @@ session-runtime workflows, and the root facade test module.
   per-conversion dependency lease attribution when conversion occurs. Pass-
   through artifactization leaves those fields empty; it must not synthesize
   lease ids from ambient active dependency snapshots.
+- ArtifactStore body cleanup may remove payload files, read handles, and
+  access modes, but descriptor format metadata remains queryable so conversion
+  status, command identity, and dependency lease attribution survive retention
+  or delete-on-consume body deletion.
 - Workflow-service may hold an optional
   `pantograph_media_conversion::MediaConversionExecutor` injected by a host.
   Artifact format override mismatches fail closed when no executor is

@@ -494,6 +494,21 @@ test('queryIoArtifacts preserves endpoint filters and retention summaries', asyn
         retention_state: 'retained',
         retention_reason: null,
         retention_policy_id: 'standard-local-v1',
+        format: {
+          format_id: 'png',
+          media_type: 'image/png',
+          conversion_id: 'conversion-a',
+          conversion_status: 'converted',
+          conversion_command_id: 'image_oiio_png_srgb',
+          conversion_dependencies: [
+            {
+              dependency_id: 'oiiotool',
+              active_version: '2.5.18',
+              lease_id: 'lease-a',
+              lease_holder: 'workflow_run:run-a/node:node-a/port:out/conversion:conversion-a',
+            },
+          ],
+        },
       },
     ],
     retention_summary: [
@@ -542,6 +557,8 @@ test('queryIoArtifacts preserves endpoint filters and retention summaries', asyn
       },
     ]);
     assert.equal(result.artifacts[0].producer_node_id, 'node-a');
+    assert.equal(result.artifacts[0].format?.conversion_command_id, 'image_oiio_png_srgb');
+    assert.equal(result.artifacts[0].format?.conversion_dependencies?.[0]?.lease_id, 'lease-a');
     assert.equal(result.retention_summary[0].artifact_count, 1);
   } finally {
     clearMocks();

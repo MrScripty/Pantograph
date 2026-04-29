@@ -2,7 +2,7 @@
 
 ## Current Status
 
-Stage `13` completed Waves `01` through `05`.
+Stage `13` completed Waves `01` through `06`; Wave `07` is partially complete.
 
 ## Boundary Snapshot
 
@@ -39,7 +39,7 @@ Stage `13` completed Waves `01` through `05`.
 | `wave-04-media-type-coverage` | Complete for command planning | Added host-neutral command plans for image/audio/video targets, managed dependency requirements, stdin/stdout stream markers, argv vectors, and fail-closed 3D planning. Real conversion execution remains for Wave `06`. |
 | `wave-05-conversion-metadata-contracts` | Complete | Added typed conversion status, conversion id, command id, and per-conversion dependency lease attribution fields to artifact descriptors and durable I/O diagnostics metadata. |
 | `wave-06-host-conversion-integration` | Complete | Workflow-service has a neutral conversion executor hook; inference exposes typed managed executable resolution; Tauri injects a host adapter that leases active managed dependencies, executes command-plan steps, returns lease attribution, and releases leases on success/failure paths. |
-| `wave-07-api-gui-rollout` | Planned | Surface conversion lifecycle and failures through diagnostics, API, and GUI projections. |
+| `wave-07-api-gui-rollout` | Partial | Frontend DTO visibility and I/O Inspector descriptor rendering are implemented for conversion metadata. Conversion failure projection remains pending for failures before a retained artifact descriptor exists. |
 
 ## 2026-04-29 Wave 05 Contract Slice
 
@@ -105,6 +105,26 @@ Stage `13` completed Waves `01` through `05`.
   `cargo check -p pantograph-embedded-runtime -p pantograph`.
 - Existing Tauri dead-code warnings remain outside this slice.
 
+## 2026-04-29 Artifact Metadata Retention Proof
+
+- Host-owned regression coverage added in `pantograph-workflow-service` proving
+  conversion metadata remains queryable on ArtifactStore descriptors after a
+  delete-on-consume body deletion clears the read handle and marks the artifact
+  deleted.
+- Verification passed:
+  `cargo test -p pantograph-workflow-service descriptor_keeps_conversion_metadata_after_delete_on_consume_removes_body -- --nocapture`.
+
+## 2026-04-29 Wave 07 Conversion Visibility Complete
+
+- Frontend/API visibility pass completed for conversion metadata without Rust,
+  generated binding, asset, or `.pantograph` edits. TypeScript DTOs now include
+  conversion status, command id, conversion id, and dependency lease
+  attribution, and the I/O Inspector artifact descriptor renders those fields
+  when present.
+- Focused verification passed:
+  `node --experimental-strip-types --test src/components/workbench/ioInspectorPresenters.test.ts src/services/workflow/WorkflowService.commands.test.ts src/services/workflow/WorkflowService.projections.test.ts`,
+  `npm run typecheck`, and targeted `npx eslint`.
+
 ## Proposed Worker Split
 
 Do not launch these workers until Wave `01` freezes shared contracts and the
@@ -163,6 +183,10 @@ host records concrete write sets.
 - Wave `06` partial: `cargo test -p pantograph-media-conversion`,
   `cargo test -p pantograph-workflow-service artifact_output_conversion`, and
   `cargo test -p inference --test managed_media_dependencies`.
+- Wave `07`: Tauri adapter lease cleanup guard completed for dropped/cancelled
+  conversion futures. Verification passed:
+  `cargo test -p pantograph managed_media_conversion -- --nocapture` and
+  `cargo fmt --all -- --check`.
 
 ## Open Decisions
 

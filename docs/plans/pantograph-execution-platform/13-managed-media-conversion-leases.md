@@ -204,6 +204,37 @@ Wave status: `complete`.
   `cargo test -p pantograph managed_media_conversion -- --nocapture` and
   `cargo check -p pantograph-embedded-runtime -p pantograph`.
 
+### 2026-04-29 Artifact Metadata Retention Proof
+
+Wave status: `complete`.
+
+- Added workflow-service regression coverage proving ArtifactStore descriptors
+  retain conversion id, status, command id, and dependency lease attribution
+  after `delete_on_consume` removes the physical body and clears read handles.
+- Verification passed:
+  `cargo test -p pantograph-workflow-service descriptor_keeps_conversion_metadata_after_delete_on_consume_removes_body -- --nocapture`.
+
+### 2026-04-29 Wave 07 Lease Cleanup And Visibility
+
+Wave status: `partial complete`.
+
+- Added a Tauri adapter dependency-plan guard so acquired managed media
+  dependency leases are released when conversion futures are dropped or
+  cancelled after acquisition.
+- Added frontend DTO fields for conversion id, status, command id, and
+  dependency lease attribution on workflow artifact descriptors and I/O
+  diagnostics format metadata.
+- The I/O Inspector artifact descriptor panel now renders conversion status,
+  conversion id, command id, dependency version/lease id, and lease holder when
+  metadata is present.
+- Remaining Wave `07` work is conversion failure projection for cases where
+  conversion fails before a retained artifact descriptor exists.
+- Verification passed:
+  `cargo test -p pantograph managed_media_conversion -- --nocapture`,
+  `cargo fmt --all -- --check`,
+  `node --experimental-strip-types --test src/components/workbench/ioInspectorPresenters.test.ts src/services/workflow/WorkflowService.commands.test.ts src/services/workflow/WorkflowService.projections.test.ts`,
+  `npm run typecheck`, and targeted `npx eslint`.
+
 ## Milestones
 
 ### Milestone 1: Conversion Boundary Design
@@ -273,10 +304,9 @@ Verification:
   result.
 - [x] Populate the neutral executor result from real acquired lease tokens
   during host converter invocation.
-- [ ] Release leases on success, failure, cancellation, and dropped futures in
-  the host conversion executor. Success and explicit failure paths release
-  leases; cancellation and dropped-future cleanup still need dedicated coverage.
-- [ ] Preserve queryable metadata after retention deletes the physical body.
+- [x] Release leases on success, failure, cancellation, and dropped futures in
+  the host conversion executor.
+- [x] Preserve queryable metadata after retention deletes the physical body.
 
 Verification:
 
@@ -309,7 +339,9 @@ Verification:
 ### Milestone 5: API, GUI, And Rollout
 
 - [ ] Surface conversion status and failures through existing run diagnostics and
-  I/O Inspector artifact lifecycle fields.
+  I/O Inspector artifact lifecycle fields. Descriptor conversion metadata is
+  visible in the I/O Inspector; pre-descriptor conversion failure projection is
+  still pending.
 - [ ] Keep the workbench Settings page as the canonical owner of conversion
   defaults and managed dependency activation controls.
 - [ ] Add a stage-end standards/refactor review before marking this stage complete.
