@@ -68,7 +68,7 @@ Reason: This crate is the neutral dependency target for later host adapters.
 Revisit trigger: A converter implementation lands here and requires a narrow
 internal dependency.
 
-**External:** `async-trait`, `serde`, `thiserror`, and `uuid`.
+**External:** `async-trait`, `serde`, `thiserror`, `tokio`, and `uuid`.
 
 ## Related ADRs
 

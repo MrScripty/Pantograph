@@ -4,11 +4,17 @@
 //! depending on workflow-service, Tauri, or inference implementation modules.
 
 use std::fmt;
+use std::path::{Path, PathBuf};
+use std::process::Stdio;
 use std::str::FromStr;
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use tokio::io::AsyncWriteExt;
+use tokio::process::Command;
+use tokio::time::{timeout, Duration};
 use uuid::Uuid;
 
 const MAX_ID_LEN: usize = 128;
@@ -29,6 +35,8 @@ pub enum MediaConversionError {
     InvalidText { field: &'static str },
     #[error("{field} value {value} is outside allowed range")]
     InvalidRange { field: &'static str, value: u64 },
+    #[error("{field} must be an absolute executable path supplied by host boundary: {reason}")]
+    InvalidExecutablePath { field: &'static str, reason: String },
     #[error("conversion from {source_media_type} to {target_media_type} is not supported")]
     UnsupportedConversion {
         source_media_type: String,
@@ -341,6 +349,234 @@ pub struct MediaConversionDependencyAttribution {
     pub lease_id: ManagedMediaDependencyLeaseId,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ManagedExecutablePath(PathBuf);
+
+impl ManagedExecutablePath {
+    pub fn try_new(path: PathBuf) -> Result<Self, MediaConversionError> {
+        validate_executable_path("executable_path", &path)?;
+        Ok(Self(path))
+    }
+
+    pub fn as_path(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl TryFrom<PathBuf> for ManagedExecutablePath {
+    type Error = MediaConversionError;
+
+    fn try_from(value: PathBuf) -> Result<Self, Self::Error> {
+        Self::try_new(value)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ManagedMediaConverter {
+    pub dependency: MediaConversionDependencyAttribution,
+    pub executable_path: ManagedExecutablePath,
+    pub source_media_type: MediaType,
+    pub target_media_type: MediaType,
+    pub args: Vec<String>,
+}
+
+impl ManagedMediaConverter {
+    pub fn try_new(
+        dependency: MediaConversionDependencyAttribution,
+        executable_path: ManagedExecutablePath,
+        source_media_type: MediaType,
+        target_media_type: MediaType,
+        args: Vec<String>,
+    ) -> Result<Self, MediaConversionError> {
+        for arg in &args {
+            validate_process_arg(arg)?;
+        }
+        Ok(Self {
+            dependency,
+            executable_path,
+            source_media_type,
+            target_media_type,
+            args,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProcessRunRequest {
+    pub executable_path: ManagedExecutablePath,
+    pub args: Vec<String>,
+    pub stdin: Vec<u8>,
+    pub timeout_ms: Option<u64>,
+}
+
+impl ProcessRunRequest {
+    pub fn try_new(
+        executable_path: ManagedExecutablePath,
+        args: Vec<String>,
+        stdin: Vec<u8>,
+        timeout_ms: Option<u64>,
+    ) -> Result<Self, MediaConversionError> {
+        if stdin.is_empty() {
+            return Err(MediaConversionError::MissingField { field: "stdin" });
+        }
+        if let Some(timeout_ms) = timeout_ms {
+            validate_non_zero("timeout_ms", timeout_ms)?;
+            validate_max("timeout_ms", timeout_ms, MAX_TIMEOUT_MS)?;
+        }
+        for arg in &args {
+            validate_process_arg(arg)?;
+        }
+        Ok(Self {
+            executable_path,
+            args,
+            stdin,
+            timeout_ms,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProcessRunOutput {
+    pub status_code: Option<i32>,
+    pub stdout: Vec<u8>,
+    pub stderr_summary: Option<String>,
+}
+
+impl ProcessRunOutput {
+    pub fn new(status_code: Option<i32>, stdout: Vec<u8>, stderr: &[u8]) -> Self {
+        Self {
+            status_code,
+            stdout,
+            stderr_summary: bounded_stderr_summary(stderr),
+        }
+    }
+
+    pub fn successful(&self) -> bool {
+        self.status_code == Some(0)
+    }
+}
+
+#[async_trait]
+pub trait ProcessRunner: Send + Sync {
+    async fn run(
+        &self,
+        request: ProcessRunRequest,
+    ) -> Result<ProcessRunOutput, MediaConversionError>;
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct StdProcessRunner;
+
+#[async_trait]
+impl ProcessRunner for StdProcessRunner {
+    async fn run(
+        &self,
+        request: ProcessRunRequest,
+    ) -> Result<ProcessRunOutput, MediaConversionError> {
+        let mut command = Command::new(request.executable_path.as_path());
+        command
+            .args(&request.args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true);
+
+        let mut child = command.spawn().map_err(|error| MediaConversionError::Io {
+            message: error.to_string(),
+        })?;
+
+        let mut stdin = child.stdin.take().ok_or_else(|| MediaConversionError::Io {
+            message: "converter stdin was unavailable".to_string(),
+        })?;
+        stdin
+            .write_all(&request.stdin)
+            .await
+            .map_err(|error| MediaConversionError::Io {
+                message: error.to_string(),
+            })?;
+        drop(stdin);
+
+        let output = if let Some(timeout_ms) = request.timeout_ms {
+            match timeout(Duration::from_millis(timeout_ms), child.wait_with_output()).await {
+                Ok(output) => output,
+                Err(_) => return Err(MediaConversionError::TimedOut { timeout_ms }),
+            }
+        } else {
+            child.wait_with_output().await
+        }
+        .map_err(|error| MediaConversionError::Io {
+            message: error.to_string(),
+        })?;
+
+        Ok(ProcessRunOutput::new(
+            output.status.code(),
+            output.stdout,
+            &output.stderr,
+        ))
+    }
+}
+
+#[derive(Clone)]
+pub struct ManagedProcessConversionExecutor<R> {
+    runner: Arc<R>,
+    converter: ManagedMediaConverter,
+}
+
+impl<R> ManagedProcessConversionExecutor<R>
+where
+    R: ProcessRunner,
+{
+    pub fn new(runner: Arc<R>, converter: ManagedMediaConverter) -> Self {
+        Self { runner, converter }
+    }
+}
+
+#[async_trait]
+impl<R> MediaConversionExecutor for ManagedProcessConversionExecutor<R>
+where
+    R: ProcessRunner + 'static,
+{
+    async fn convert(
+        &self,
+        request: MediaConversionRequest,
+    ) -> Result<MediaConversionResult, MediaConversionError> {
+        if request.source.media_type != self.converter.source_media_type
+            || request.target.media_type != self.converter.target_media_type
+        {
+            return Err(MediaConversionError::UnsupportedConversion {
+                source_media_type: request.source.media_type.to_string(),
+                target_media_type: request.target.media_type.to_string(),
+            });
+        }
+
+        let process_request = ProcessRunRequest::try_new(
+            self.converter.executable_path.clone(),
+            self.converter.args.clone(),
+            request.source.body.clone(),
+            request.timeout_ms,
+        )?;
+        let output = self.runner.run(process_request).await?;
+        if !output.successful() {
+            return Err(MediaConversionError::ProcessFailed {
+                status_code: output.status_code,
+                stderr_summary: output
+                    .stderr_summary
+                    .unwrap_or_else(|| "no stderr captured".to_string()),
+            });
+        }
+
+        MediaConversionResult::try_new(
+            request.conversion_id,
+            MediaConversionStatus::Converted,
+            self.converter.target_media_type.clone(),
+            request.target,
+            output.stdout,
+            vec![self.converter.dependency.clone()],
+            output.stderr_summary,
+        )
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MediaConversionResult {
     pub conversion_id: MediaConversionId,
@@ -442,9 +678,62 @@ fn validate_max(field: &'static str, value: u64, max: u64) -> Result<(), MediaCo
     }
 }
 
+fn validate_executable_path(field: &'static str, path: &Path) -> Result<(), MediaConversionError> {
+    let value = path.as_os_str().to_string_lossy();
+    if value.trim().is_empty() {
+        return Err(MediaConversionError::MissingField { field });
+    }
+    if !path.is_absolute() {
+        return Err(MediaConversionError::InvalidExecutablePath {
+            field,
+            reason: "path is not absolute".to_string(),
+        });
+    }
+    if value.chars().any(char::is_control) {
+        return Err(MediaConversionError::InvalidExecutablePath {
+            field,
+            reason: "path contains control characters".to_string(),
+        });
+    }
+    if value
+        .chars()
+        .any(|ch| matches!(ch, ';' | '|' | '&' | '<' | '>' | '`' | '$'))
+    {
+        return Err(MediaConversionError::InvalidExecutablePath {
+            field,
+            reason: "path contains shell metacharacters".to_string(),
+        });
+    }
+    Ok(())
+}
+
+fn validate_process_arg(arg: &str) -> Result<(), MediaConversionError> {
+    if arg.is_empty() {
+        return Err(MediaConversionError::MissingField { field: "arg" });
+    }
+    if arg.chars().any(char::is_control) {
+        return Err(MediaConversionError::InvalidText { field: "arg" });
+    }
+    Ok(())
+}
+
+fn bounded_stderr_summary(stderr: &[u8]) -> Option<String> {
+    let normalized = String::from_utf8_lossy(stderr)
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    if normalized.is_empty() {
+        return None;
+    }
+    Some(normalized.chars().take(MAX_ERROR_SUMMARY_LEN).collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::future::Future;
+    use std::sync::Mutex;
+    use std::task::{Context, Poll, Wake, Waker};
 
     fn id<T: FromStr<Err = MediaConversionError>>(value: &str) -> T {
         value.parse().expect("valid id")
@@ -463,6 +752,101 @@ mod tests {
             true,
         )
         .expect("target")
+    }
+
+    fn request(timeout_ms: Option<u64>) -> MediaConversionRequest {
+        let source = MediaConversionSource::try_new(
+            id("artifact-a"),
+            "image/png".parse().expect("source media type"),
+            vec![1, 2, 3],
+        )
+        .expect("source");
+        let attribution = MediaConversionAttribution {
+            workflow_run_id: id("run-a"),
+            source_artifact_id: id("artifact-a"),
+            node_id: None,
+            port_id: None,
+        };
+        MediaConversionRequest::try_new(
+            id("conversion-a"),
+            ConversionMediaKind::Image,
+            attribution,
+            source,
+            target(),
+            timeout_ms,
+        )
+        .expect("request")
+    }
+
+    fn converter() -> ManagedMediaConverter {
+        ManagedMediaConverter::try_new(
+            MediaConversionDependencyAttribution {
+                dependency_id: ManagedMediaDependencyId::Oiiotool,
+                version: id("2.5.18"),
+                lease_id: id("lease-1"),
+            },
+            ManagedExecutablePath::try_new(PathBuf::from("/managed/bin/oiiotool"))
+                .expect("executable path"),
+            "image/png".parse().expect("source media type"),
+            "image/jpeg".parse().expect("target media type"),
+            vec!["--stdout".to_string()],
+        )
+        .expect("converter")
+    }
+
+    struct NoopWaker;
+
+    impl Wake for NoopWaker {
+        fn wake(self: Arc<Self>) {}
+    }
+
+    fn block_on<F>(future: F) -> F::Output
+    where
+        F: Future,
+    {
+        let waker = Waker::from(Arc::new(NoopWaker));
+        let mut context = Context::from_waker(&waker);
+        let mut future = Box::pin(future);
+        loop {
+            match future.as_mut().poll(&mut context) {
+                Poll::Ready(output) => return output,
+                Poll::Pending => std::thread::yield_now(),
+            }
+        }
+    }
+
+    #[derive(Default)]
+    struct FakeProcessRunner {
+        requests: Mutex<Vec<ProcessRunRequest>>,
+        result: Mutex<Option<Result<ProcessRunOutput, MediaConversionError>>>,
+    }
+
+    impl FakeProcessRunner {
+        fn with_result(result: Result<ProcessRunOutput, MediaConversionError>) -> Self {
+            Self {
+                requests: Mutex::new(Vec::new()),
+                result: Mutex::new(Some(result)),
+            }
+        }
+
+        fn requests(&self) -> Vec<ProcessRunRequest> {
+            self.requests.lock().expect("requests").clone()
+        }
+    }
+
+    #[async_trait]
+    impl ProcessRunner for FakeProcessRunner {
+        async fn run(
+            &self,
+            request: ProcessRunRequest,
+        ) -> Result<ProcessRunOutput, MediaConversionError> {
+            self.requests.lock().expect("requests").push(request);
+            self.result
+                .lock()
+                .expect("result")
+                .take()
+                .expect("fake result")
+        }
     }
 
     #[test]
@@ -569,6 +953,119 @@ mod tests {
         assert!(matches!(
             result_error,
             MediaConversionError::MissingField { field: "body" }
+        ));
+    }
+
+    #[test]
+    fn executable_path_rejects_empty_relative_and_command_strings() {
+        let empty =
+            ManagedExecutablePath::try_new(PathBuf::from("")).expect_err("empty executable path");
+        assert!(matches!(
+            empty,
+            MediaConversionError::MissingField {
+                field: "executable_path"
+            }
+        ));
+
+        let relative = ManagedExecutablePath::try_new(PathBuf::from("ffmpeg"))
+            .expect_err("relative executable path");
+        assert!(matches!(
+            relative,
+            MediaConversionError::InvalidExecutablePath {
+                field: "executable_path",
+                ..
+            }
+        ));
+
+        let spaced_path = ManagedExecutablePath::try_new(PathBuf::from("/managed tools/ffmpeg"))
+            .expect("spaced managed path");
+        assert_eq!(spaced_path.as_path(), Path::new("/managed tools/ffmpeg"));
+
+        let command_string =
+            ManagedExecutablePath::try_new(PathBuf::from("/usr/bin/ffmpeg; rm -rf /"))
+                .expect_err("command string");
+        assert!(matches!(
+            command_string,
+            MediaConversionError::InvalidExecutablePath {
+                field: "executable_path",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn managed_executor_runs_process_with_separate_args_and_records_dependency() {
+        let runner = Arc::new(FakeProcessRunner::with_result(Ok(ProcessRunOutput::new(
+            Some(0),
+            vec![9, 8, 7],
+            b"converted\nok",
+        ))));
+        let executor = ManagedProcessConversionExecutor::new(runner.clone(), converter());
+
+        let result = block_on(executor.convert(request(Some(500)))).expect("convert");
+
+        assert_eq!(result.body, vec![9, 8, 7]);
+        assert_eq!(result.stderr_summary.as_deref(), Some("converted ok"));
+        assert_eq!(
+            result.dependencies[0].dependency_id,
+            ManagedMediaDependencyId::Oiiotool
+        );
+
+        let requests = runner.requests();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(
+            requests[0].executable_path.as_path(),
+            Path::new("/managed/bin/oiiotool")
+        );
+        assert_eq!(requests[0].args, vec!["--stdout"]);
+        assert_eq!(requests[0].stdin, vec![1, 2, 3]);
+        assert_eq!(requests[0].timeout_ms, Some(500));
+    }
+
+    #[test]
+    fn managed_executor_maps_non_zero_status_to_bounded_process_failure() {
+        let stderr = vec![b'x'; MAX_ERROR_SUMMARY_LEN + 64];
+        let runner = Arc::new(FakeProcessRunner::with_result(Ok(ProcessRunOutput::new(
+            Some(2),
+            Vec::new(),
+            &stderr,
+        ))));
+        let executor = ManagedProcessConversionExecutor::new(runner, converter());
+
+        let error = executor.convert(request(None));
+        let error = block_on(error).expect_err("process failure");
+
+        match error {
+            MediaConversionError::ProcessFailed {
+                status_code,
+                stderr_summary,
+            } => {
+                assert_eq!(status_code, Some(2));
+                assert_eq!(stderr_summary.len(), MAX_ERROR_SUMMARY_LEN);
+                assert!(stderr_summary.chars().all(|ch| ch == 'x'));
+            }
+            other => panic!("expected process failure, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn managed_executor_preserves_timeout_and_cancellation_errors() {
+        let timeout_runner = Arc::new(FakeProcessRunner::with_result(Err(
+            MediaConversionError::TimedOut { timeout_ms: 10 },
+        )));
+        let timeout_executor = ManagedProcessConversionExecutor::new(timeout_runner, converter());
+        assert!(matches!(
+            block_on(timeout_executor.convert(request(Some(10)))),
+            Err(MediaConversionError::TimedOut { timeout_ms: 10 })
+        ));
+
+        let cancel_runner = Arc::new(FakeProcessRunner::with_result(Err(
+            MediaConversionError::Cancelled,
+        )));
+        let cancel_executor = ManagedProcessConversionExecutor::new(cancel_runner, converter());
+        assert!(matches!(
+            block_on(cancel_executor.convert(request(None))),
+            Err(MediaConversionError::Cancelled)
         ));
     }
 }

@@ -77,7 +77,8 @@ Revisit trigger: A concrete converter implementation lands in this crate and
 requires a dependency on managed redistributable or ArtifactStore modules.
 
 **External:** `async-trait` for the executor trait, `serde` for attribution
-records, `thiserror` for typed errors, and `uuid` for conversion ids.
+records, `thiserror` for typed errors, `tokio` for async process execution and
+timeouts, and `uuid` for conversion ids.
 
 ## Related ADRs
 
