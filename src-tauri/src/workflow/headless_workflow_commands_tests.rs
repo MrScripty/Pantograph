@@ -113,5 +113,7 @@ fn capability_response() -> WorkflowCapabilitiesResponse {
 mod diagnostics_helpers;
 #[path = "headless_workflow_commands_tests/diagnostics_projection.rs"]
 mod diagnostics_projection;
+#[path = "headless_workflow_commands_tests/managed_media_dependencies.rs"]
+mod managed_media_dependencies;
 #[path = "headless_workflow_commands_tests/transport_responses.rs"]
 mod transport_responses;

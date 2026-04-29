@@ -3,6 +3,15 @@
 //! This module now acts as a thin transport wrapper over the backend-owned
 //! Pantograph embedded runtime.
 
+use std::path::Path;
+
+use inference::{
+    activate_managed_redistributable_version, install_managed_redistributable_from_staging,
+    list_managed_redistributable_statuses, managed_redistributable_status,
+    remove_managed_redistributable_version, select_managed_redistributable_version,
+    set_default_managed_redistributable_version, ManagedRedistributableId,
+    ManagedRedistributableStatus,
+};
 use pantograph_workflow_service::{
     ArtifactBodyRead, ArtifactConsumeAcknowledgementRequest,
     ArtifactConsumeAcknowledgementResponse, ArtifactDescriptorQueryRequest,
@@ -356,6 +365,65 @@ pub async fn workflow_artifact_format_capabilities(
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<ArtifactFormatCapabilities, String> {
     Ok(workflow_service.artifact_format_capabilities())
+}
+
+pub fn workflow_list_managed_media_dependencies(
+    app_data_dir: &Path,
+) -> Result<Vec<ManagedRedistributableStatus>, String> {
+    Ok(list_managed_redistributable_statuses(app_data_dir))
+}
+
+pub fn workflow_managed_media_dependency_status(
+    app_data_dir: &Path,
+    id: ManagedRedistributableId,
+) -> Result<ManagedRedistributableStatus, String> {
+    Ok(managed_redistributable_status(app_data_dir, id))
+}
+
+pub fn workflow_install_managed_media_dependency_from_staging(
+    app_data_dir: &Path,
+    id: ManagedRedistributableId,
+    version: String,
+    staging_dir: &Path,
+) -> Result<ManagedRedistributableStatus, String> {
+    install_managed_redistributable_from_staging(app_data_dir, id, &version, staging_dir)?;
+    Ok(managed_redistributable_status(app_data_dir, id))
+}
+
+pub fn workflow_select_managed_media_dependency_version(
+    app_data_dir: &Path,
+    id: ManagedRedistributableId,
+    version: Option<String>,
+) -> Result<ManagedRedistributableStatus, String> {
+    select_managed_redistributable_version(app_data_dir, id, version.as_deref())?;
+    Ok(managed_redistributable_status(app_data_dir, id))
+}
+
+pub fn workflow_set_default_managed_media_dependency_version(
+    app_data_dir: &Path,
+    id: ManagedRedistributableId,
+    version: Option<String>,
+) -> Result<ManagedRedistributableStatus, String> {
+    set_default_managed_redistributable_version(app_data_dir, id, version.as_deref())?;
+    Ok(managed_redistributable_status(app_data_dir, id))
+}
+
+pub fn workflow_activate_managed_media_dependency_version(
+    app_data_dir: &Path,
+    id: ManagedRedistributableId,
+    version: String,
+) -> Result<ManagedRedistributableStatus, String> {
+    activate_managed_redistributable_version(app_data_dir, id, &version)?;
+    Ok(managed_redistributable_status(app_data_dir, id))
+}
+
+pub fn workflow_remove_managed_media_dependency_version(
+    app_data_dir: &Path,
+    id: ManagedRedistributableId,
+    version: String,
+) -> Result<ManagedRedistributableStatus, String> {
+    remove_managed_redistributable_version(app_data_dir, id, &version)?;
+    Ok(managed_redistributable_status(app_data_dir, id))
 }
 
 pub async fn workflow_node_status_query(

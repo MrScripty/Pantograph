@@ -3,9 +3,9 @@
 //! This module intentionally stays thin: command wrappers live here while
 //! implementation details are decomposed into focused sibling modules.
 
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
-use tauri::{command, AppHandle, State};
+use tauri::{command, AppHandle, Manager, State};
 use tokio::sync::RwLock;
 
 use crate::agent::rag::SharedRagManager;
@@ -29,6 +29,12 @@ pub type SharedWorkflowExecutionSessionStaleCleanupWorker =
 pub type SharedWorkflowDiagnosticsStore = Arc<super::diagnostics::WorkflowDiagnosticsStore>;
 /// Shared filesystem-backed workflow graph store.
 pub type SharedWorkflowGraphStore = Arc<FileSystemWorkflowGraphStore>;
+
+fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_data_dir()
+        .map_err(|error| format!("failed to resolve app data dir: {error}"))
+}
 
 #[command]
 pub fn validate_workflow_connection(source_type: PortDataType, target_type: PortDataType) -> bool {
@@ -386,6 +392,95 @@ pub async fn workflow_artifact_format_capabilities(
     workflow_service: State<'_, SharedWorkflowService>,
 ) -> Result<pantograph_workflow_service::ArtifactFormatCapabilities, String> {
     super::headless_workflow_commands::workflow_artifact_format_capabilities(workflow_service).await
+}
+
+#[command]
+pub fn workflow_list_managed_media_dependencies(
+    app: AppHandle,
+) -> Result<Vec<inference::ManagedRedistributableStatus>, String> {
+    let app_data_dir = app_data_dir(&app)?;
+    super::headless_workflow_commands::workflow_list_managed_media_dependencies(&app_data_dir)
+}
+
+#[command]
+pub fn workflow_managed_media_dependency_status(
+    app: AppHandle,
+    id: inference::ManagedRedistributableId,
+) -> Result<inference::ManagedRedistributableStatus, String> {
+    let app_data_dir = app_data_dir(&app)?;
+    super::headless_workflow_commands::workflow_managed_media_dependency_status(&app_data_dir, id)
+}
+
+#[command]
+pub fn workflow_install_managed_media_dependency_from_staging(
+    app: AppHandle,
+    id: inference::ManagedRedistributableId,
+    version: String,
+    staging_dir: String,
+) -> Result<inference::ManagedRedistributableStatus, String> {
+    let app_data_dir = app_data_dir(&app)?;
+    super::headless_workflow_commands::workflow_install_managed_media_dependency_from_staging(
+        &app_data_dir,
+        id,
+        version,
+        PathBuf::from(staging_dir).as_path(),
+    )
+}
+
+#[command]
+pub fn workflow_select_managed_media_dependency_version(
+    app: AppHandle,
+    id: inference::ManagedRedistributableId,
+    version: Option<String>,
+) -> Result<inference::ManagedRedistributableStatus, String> {
+    let app_data_dir = app_data_dir(&app)?;
+    super::headless_workflow_commands::workflow_select_managed_media_dependency_version(
+        &app_data_dir,
+        id,
+        version,
+    )
+}
+
+#[command]
+pub fn workflow_set_default_managed_media_dependency_version(
+    app: AppHandle,
+    id: inference::ManagedRedistributableId,
+    version: Option<String>,
+) -> Result<inference::ManagedRedistributableStatus, String> {
+    let app_data_dir = app_data_dir(&app)?;
+    super::headless_workflow_commands::workflow_set_default_managed_media_dependency_version(
+        &app_data_dir,
+        id,
+        version,
+    )
+}
+
+#[command]
+pub fn workflow_activate_managed_media_dependency_version(
+    app: AppHandle,
+    id: inference::ManagedRedistributableId,
+    version: String,
+) -> Result<inference::ManagedRedistributableStatus, String> {
+    let app_data_dir = app_data_dir(&app)?;
+    super::headless_workflow_commands::workflow_activate_managed_media_dependency_version(
+        &app_data_dir,
+        id,
+        version,
+    )
+}
+
+#[command]
+pub fn workflow_remove_managed_media_dependency_version(
+    app: AppHandle,
+    id: inference::ManagedRedistributableId,
+    version: String,
+) -> Result<inference::ManagedRedistributableStatus, String> {
+    let app_data_dir = app_data_dir(&app)?;
+    super::headless_workflow_commands::workflow_remove_managed_media_dependency_version(
+        &app_data_dir,
+        id,
+        version,
+    )
 }
 
 #[command]

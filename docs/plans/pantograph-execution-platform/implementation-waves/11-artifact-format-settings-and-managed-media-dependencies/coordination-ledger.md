@@ -72,6 +72,25 @@ Integration rule: integrate the backend output conversion worker first, then
 frontend artifact access. If either worker needs the shared Rust contract files
 or command registration, stop and update the split before continuing.
 
+## Wave 05 Settings And Binding Worker Split
+
+| Owner | Scope | Primary Write Set | Forbidden Shared Files | Report |
+| ----- | ----- | ----------------- | ---------------------- | ------ |
+| UniFFI settings parity worker | Project artifact format settings query/update and capability methods through the embedded runtime and UniFFI JSON surface with focused runtime tests. | `crates/pantograph-embedded-runtime/src/embedded_workflow_service_api.rs`, `crates/pantograph-uniffi/src/runtime.rs`, `crates/pantograph-uniffi/src/runtime_tests.rs` | Tauri/frontend files, managed redistributables, ArtifactStore storage internals, `.pantograph/**`, `assets/**`, generated output, and manifests. | `reports/wave-05-worker-uniffi-artifact-format-settings.md` |
+| Workbench Settings frontend worker | Add the first canonical workbench Settings page for ArtifactStore policy and artifact format defaults/capabilities using backend commands; update shell navigation and focused frontend tests. | `src/stores/workbenchStore.ts`, `src/components/workbench/WorkbenchShell.svelte`, `src/components/workbench/SettingsPage.svelte`, `src/components/workbench/settingsPagePresenters.ts`, `src/components/workbench/settingsPagePresenters.test.ts`, `src/services/workflow/types.ts`, `src/services/workflow/WorkflowCommandService.ts`, `src/services/workflow/WorkflowService.commands.test.ts`, `src/components/workbench/README.md` | Rust backend files, managed redistributable service files, output-node components, diagnostics ledger schema, `.pantograph/**`, `assets/**`, generated output, and manifests. | `reports/wave-05-worker-workbench-settings-page.md` |
+
+Host-owned local slice: Tauri managed redistributable status/action commands may
+edit `src-tauri/src/workflow/commands.rs`,
+`src-tauri/src/workflow/headless_workflow_commands.rs`,
+`src-tauri/src/app_setup.rs`, and focused Tauri command tests. It must not edit
+frontend service/page files while the Settings frontend worker is active.
+
+Host-owned local slice completed: Tauri/headless managed media dependency
+status/action commands now expose list, status, install-from-staging, select,
+default, activate, and remove operations for the managed redistributables
+boundary. Frontend settings controls remain assigned to the Settings frontend
+worker.
+
 ## Source Audit Snapshot
 
 Initial local audit found these migration families:
@@ -186,6 +205,11 @@ runtime-only DTO names or host PATH discovery as the source of truth.
   artifact_format_settings` and `cargo check -p pantograph`. Targeted
   rustfmt was run for the files in this slice because active workers own other
   dirty Rust files in the same workspace.
+- 2026-04-29 Wave `05` Tauri managed media dependency commands passed:
+  `cargo test -p pantograph
+  managed_media_dependency_helpers_project_status_and_actions`, `cargo check -p
+  pantograph`, and targeted `rustfmt --edition 2021 --check` for the owned
+  Tauri workflow command files.
 - 2026-04-29 Separate clippy cleanup commit cleared existing
   workflow-service lints discovered by the Wave `02` package clippy gate.
 - 2026-04-29 Wave `01` verification passed:

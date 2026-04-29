@@ -347,7 +347,7 @@ when physical payload bodies are deleted.
   - [x] Add backend artifact format settings query/update APIs, static
     conversion capability projection, validation, persistence, and Tauri
     command registration for the workbench Settings page to consume.
-- [ ] Expose managed redistributable status/actions for OCIO, ffmpeg,
+- [x] Expose managed redistributable status/actions for OCIO, ffmpeg,
   `ocioconvert`, and `oiiotool` with degraded/missing/incompatible states.
 - [ ] Update native Rust and supported host bindings with DTO parity tests for
   artifact descriptors, settings, capabilities, managed dependency status, and
