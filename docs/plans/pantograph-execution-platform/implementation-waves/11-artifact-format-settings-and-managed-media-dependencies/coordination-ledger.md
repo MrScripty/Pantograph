@@ -91,6 +91,22 @@ default, activate, and remove operations for the managed redistributables
 boundary. Frontend settings controls remain assigned to the Settings frontend
 worker.
 
+## 2026-04-29 Continuation Worker Split
+
+- Current dirty files remain limited to unrelated deleted workflow/assets and
+  untracked diagnostics/asset files; no Stage `11` implementation files are
+  dirty at split time.
+- Shared contracts remain frozen for this wave. Workers may read contracts but
+  must not edit Rust DTOs, TypeScript service DTOs, command registration, or
+  persisted schema files unless their task explicitly lists those files.
+- Integration sequence: backend retention/audit proof first, frontend output
+  selectors second, then host documentation/status cleanup and verification.
+
+| Owner | Scope | Primary Write Set | Forbidden Shared Files | Report |
+| ----- | ----- | ----------------- | ---------------------- | ------ |
+| Backend retention audit worker | Prove physical artifact body deletion preserves queryable metadata and binary reads fail closed through ArtifactStore/WorkflowService tests. Add the smallest implementation fix only if the test exposes a direct Stage `11` defect. | `crates/pantograph-workflow-service/tests/artifact_store.rs`, `crates/pantograph-workflow-service/src/workflow/artifact_store.rs`, `crates/pantograph-workflow-service/src/workflow/artifact_api.rs`, `docs/plans/pantograph-execution-platform/implementation-waves/11-artifact-format-settings-and-managed-media-dependencies/reports/wave-05-worker-artifact-retention-audit.md` | Frontend files, command registration, ArtifactStore contract DTOs, diagnostics ledger schema, managed redistributables, `.pantograph/**`, `assets/**`, generated output, and lockfiles. | `reports/wave-05-worker-artifact-retention-audit.md` |
+| Output-node selector worker | Add image and audio output-node format controls driven by backend capability/default DTOs, preserving explicit per-node overrides in node data so run snapshots capture them. | `src/components/nodes/workflow/ImageOutputNode.svelte`, `src/components/nodes/workflow/AudioOutputNode.svelte`, `src/components/nodes/workflow/README.md`, focused frontend tests only if an existing harness supports this component layer, `docs/plans/pantograph-execution-platform/implementation-waves/11-artifact-format-settings-and-managed-media-dependencies/reports/wave-05-worker-output-node-format-selectors.md` | Rust files, workflow service command files, shared TypeScript DTO files, workbench Settings page files, diagnostics ledger schema, `.pantograph/**`, `assets/**`, generated output, and lockfiles. | `reports/wave-05-worker-output-node-format-selectors.md` |
+
 ## Source Audit Snapshot
 
 Initial local audit found these migration families:
