@@ -124,6 +124,20 @@ worker.
 | Backend conversion override worker | Make workflow-service artifact conversion use backend defaults and graph-local `artifact_format_override` metadata for image/audio descriptors when run snapshots provide graph settings, validating overrides through existing backend capabilities and rejecting invalid values. | `crates/pantograph-workflow-service/src/workflow/artifact_output_conversion.rs`, `crates/pantograph-workflow-service/src/workflow/workflow_run_api.rs`, `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`, focused workflow-service tests, `docs/plans/pantograph-execution-platform/implementation-waves/11-artifact-format-settings-and-managed-media-dependencies/reports/wave-05-worker-output-format-conversion-overrides.md` | Frontend files, C# bindings, ArtifactStore contract DTOs, diagnostics ledger schema, managed redistributables, `.pantograph/**`, `assets/**`, generated output, and lockfiles. | `reports/wave-05-worker-output-format-conversion-overrides.md` |
 | C# binding artifact smoke worker | Update the opt-in C# diffusion smoke so it treats image outputs as ArtifactStore descriptors and reads bytes through the UniFFI artifact body API instead of decoding inline base64/data URLs. | `bindings/csharp/Pantograph.NativeSmoke/Program.cs`, `bindings/csharp/README.md` if needed, `docs/plans/pantograph-execution-platform/implementation-waves/11-artifact-format-settings-and-managed-media-dependencies/reports/wave-05-worker-csharp-artifact-smoke.md` | Rust backend files, frontend files, generated bindings, package artifacts, `.pantograph/**`, `assets/**`, generated output, and lockfiles. | `reports/wave-05-worker-csharp-artifact-smoke.md` |
 
+## 2026-04-29 Managed Media Settings Worker Split
+
+- Previous conversion and binding slices were integrated as `0914e10e` and
+  `a9860c55`.
+- Current dirty files remain limited to unrelated deleted workflow/assets and
+  untracked diagnostics/asset files; no Stage `11` implementation files are
+  dirty at split time.
+- Backend managed media dependency commands are already exposed through Tauri
+  and headless command tests; this wave must not edit Rust command contracts.
+
+| Owner | Scope | Primary Write Set | Forbidden Shared Files | Report |
+| ----- | ----- | ----------------- | ---------------------- | ------ |
+| Managed media Settings worker | Add TypeScript workflow service DTOs/methods and workbench Settings controls for listing managed media dependencies plus select/default/activate/remove actions using backend command results as the source of truth. | `src/services/workflow/types.ts`, `src/services/workflow/WorkflowCommandService.ts`, `src/services/workflow/WorkflowService.commands.test.ts`, `src/components/workbench/SettingsPage.svelte`, `src/components/workbench/settingsPagePresenters.ts`, `src/components/workbench/settingsPagePresenters.test.ts`, `src/components/workbench/README.md`, `docs/plans/pantograph-execution-platform/implementation-waves/11-artifact-format-settings-and-managed-media-dependencies/reports/wave-05-worker-managed-media-settings-controls.md` | Rust files, generated bindings, side-panel/server-status/runtime-manager files, `.pantograph/**`, `assets/**`, generated output, and lockfiles. | `reports/wave-05-worker-managed-media-settings-controls.md` |
+
 ## Source Audit Snapshot
 
 Initial local audit found these migration families:
