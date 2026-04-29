@@ -296,6 +296,8 @@ runtime-only DTO names or host PATH discovery as the source of truth.
   --experimental-strip-types --test
   src/components/workbench/settingsPagePresenters.test.ts`, `npm run typecheck
   -- --pretty false`, and `npm run build`.
+- 2026-04-29 Wave `05` legacy side-panel Settings handoff passed:
+  `npm run typecheck -- --pretty false` and `npm run build`.
 - 2026-04-29 Separate clippy cleanup commit cleared existing
   workflow-service lints discovered by the Wave `02` package clippy gate.
 - 2026-04-29 Wave `01` verification passed:

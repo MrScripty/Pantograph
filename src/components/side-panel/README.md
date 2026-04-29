@@ -4,7 +4,7 @@ Side-panel UI components for the app shell.
 
 ## Purpose
 This directory owns focused Svelte components used inside the app side panel,
-including activity display, follow-up input, and settings.
+including activity display, follow-up input, and a Settings redirect.
 
 ## Contents
 | File/Folder | Description |
@@ -12,7 +12,7 @@ including activity display, follow-up input, and settings.
 | `index.ts` | Side-panel component exports. |
 | `ActivityLog.svelte` | Activity/event list renderer for side-panel context. |
 | `FollowUpInput.svelte` | Follow-up prompt/input component. |
-| `SettingsTab.svelte` | Side-panel settings UI. |
+| `SettingsTab.svelte` | Side-panel redirect to the canonical workbench Settings page. |
 
 ## Problem
 The side panel mixes user input, activity context, and settings controls. Those
@@ -22,11 +22,13 @@ UI state.
 ## Constraints
 - Components should own UI-local state only.
 - Agent/workflow activity facts come from services/stores.
-- Settings changes must flow through configured service/store owners.
+- Persistent settings changes must happen in the workbench Settings page.
 
 ## Decision
 Keep side-panel subcomponents here and export them through `index.ts`.
-Application containers compose these components with service-backed state.
+Application containers compose these components with service-backed state. The
+side-panel Settings tab no longer mounts global settings editors; it navigates
+to the workbench Settings page and closes the side panel.
 
 ## Alternatives Rejected
 - Keep all side-panel UI inside one large component: rejected because input,
@@ -42,7 +44,7 @@ Application containers compose these components with service-backed state.
   hover-only rows still satisfy Svelte accessibility checks.
 - Follow-up input emits user intent rather than calling backend commands
   directly.
-- Settings UI delegates persistence through configured owners.
+- The Settings tab does not own persistent settings state.
 - Hover-only activity rows must not claim button semantics; controls that do
   perform actions need keyboard behavior and accessible names.
 - Follow-up icon buttons must expose accessible names because their visible
@@ -52,6 +54,7 @@ Application containers compose these components with service-backed state.
 - Side panel becomes plugin-extensible.
 - Activity events become backend-generated structured contracts.
 - Settings move to a generated schema-driven UI.
+- The workbench Settings page no longer owns persistent app settings.
 
 ## Dependencies
 **Internal:** app stores, agent services, workflow services, and shared UI
@@ -69,8 +72,8 @@ import { ActivityLog, FollowUpInput, SettingsTab } from './index';
 ```
 
 ## API Consumer Contract
-- Inputs: side-panel props, activity records, input callbacks, and settings
-  values.
+- Inputs: side-panel props, activity records, input callbacks, and navigation
+  intent.
 - Outputs: rendered UI and user interaction events.
 - Lifecycle: components mount within the side-panel container and should clean
   up UI resources on teardown.
@@ -82,8 +85,8 @@ import { ActivityLog, FollowUpInput, SettingsTab } from './index';
 ## Structured Producer Contract
 - Stable fields: exported component names and event callback payloads are
   consumed by app UI composition.
-- Defaults: input/settings defaults should come from stores/services.
-- Enums and labels: activity type labels and settings keys carry behavior.
+- Defaults: input defaults should come from stores/services.
+- Enums and labels: activity type labels carry behavior.
 - Ordering: activity rows preserve store-provided order.
 - Compatibility: side-panel containers depend on stable exports.
 - Regeneration/migration: update containers, stores, and tests with prop
