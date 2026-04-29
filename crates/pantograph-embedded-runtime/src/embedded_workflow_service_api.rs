@@ -1,18 +1,20 @@
 use pantograph_workflow_service::{
     ArtifactBodyRead, ArtifactConsumeAcknowledgementRequest,
     ArtifactConsumeAcknowledgementResponse, ArtifactDescriptorQueryRequest,
-    ArtifactDescriptorQueryResponse, ArtifactPolicy, ArtifactReadRequest, ArtifactStoreStats,
-    BucketCreateRequest, BucketDeleteRequest, BucketRecord, ClientRegistrationRequest,
-    ClientRegistrationResponse, ClientSessionOpenRequest, ClientSessionOpenResponse,
-    ClientSessionRecord, ClientSessionResumeRequest, WorkflowCapabilitiesRequest,
-    WorkflowCapabilitiesResponse, WorkflowExecutionSessionCloseRequest,
-    WorkflowExecutionSessionCloseResponse, WorkflowExecutionSessionCreateRequest,
-    WorkflowExecutionSessionCreateResponse, WorkflowExecutionSessionInspectionRequest,
-    WorkflowExecutionSessionInspectionResponse, WorkflowExecutionSessionKeepAliveRequest,
-    WorkflowExecutionSessionKeepAliveResponse, WorkflowExecutionSessionQueueCancelRequest,
-    WorkflowExecutionSessionQueueCancelResponse, WorkflowExecutionSessionQueueListRequest,
-    WorkflowExecutionSessionQueueListResponse, WorkflowExecutionSessionQueuePushFrontRequest,
-    WorkflowExecutionSessionQueuePushFrontResponse,
+    ArtifactDescriptorQueryResponse, ArtifactFormatCapabilities,
+    ArtifactFormatSettingsQueryRequest, ArtifactFormatSettingsQueryResponse,
+    ArtifactFormatSettingsUpdateRequest, ArtifactFormatSettingsUpdateResponse, ArtifactPolicy,
+    ArtifactReadRequest, ArtifactStoreStats, BucketCreateRequest, BucketDeleteRequest,
+    BucketRecord, ClientRegistrationRequest, ClientRegistrationResponse, ClientSessionOpenRequest,
+    ClientSessionOpenResponse, ClientSessionRecord, ClientSessionResumeRequest,
+    WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse,
+    WorkflowExecutionSessionCloseRequest, WorkflowExecutionSessionCloseResponse,
+    WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionCreateResponse,
+    WorkflowExecutionSessionInspectionRequest, WorkflowExecutionSessionInspectionResponse,
+    WorkflowExecutionSessionKeepAliveRequest, WorkflowExecutionSessionKeepAliveResponse,
+    WorkflowExecutionSessionQueueCancelRequest, WorkflowExecutionSessionQueueCancelResponse,
+    WorkflowExecutionSessionQueueListRequest, WorkflowExecutionSessionQueueListResponse,
+    WorkflowExecutionSessionQueuePushFrontRequest, WorkflowExecutionSessionQueuePushFrontResponse,
     WorkflowExecutionSessionQueueReprioritizeRequest,
     WorkflowExecutionSessionQueueReprioritizeResponse, WorkflowExecutionSessionRunRequest,
     WorkflowExecutionSessionStaleCleanupRequest, WorkflowExecutionSessionStaleCleanupResponse,
@@ -95,6 +97,25 @@ impl EmbeddedRuntime {
         &self,
     ) -> Result<ArtifactStoreStats, WorkflowServiceError> {
         self.workflow_service.artifact_store_stats()
+    }
+
+    pub fn workflow_artifact_format_settings(
+        &self,
+        request: ArtifactFormatSettingsQueryRequest,
+    ) -> Result<ArtifactFormatSettingsQueryResponse, WorkflowServiceError> {
+        self.workflow_service.artifact_format_settings(request)
+    }
+
+    pub fn workflow_update_artifact_format_settings(
+        &self,
+        request: ArtifactFormatSettingsUpdateRequest,
+    ) -> Result<ArtifactFormatSettingsUpdateResponse, WorkflowServiceError> {
+        self.workflow_service
+            .update_artifact_format_settings(request)
+    }
+
+    pub fn workflow_artifact_format_capabilities(&self) -> ArtifactFormatCapabilities {
+        self.workflow_service.artifact_format_capabilities()
     }
 
     pub async fn workflow_get_capabilities(

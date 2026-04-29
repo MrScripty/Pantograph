@@ -4,7 +4,8 @@ use std::sync::Arc;
 use node_engine::ExecutorExtensions;
 use pantograph_embedded_runtime::{EmbeddedRuntime, EmbeddedRuntimeConfig};
 use pantograph_workflow_service::{
-    ArtifactConsumeAcknowledgementRequest, ArtifactDescriptorQueryRequest, ArtifactPolicy,
+    ArtifactConsumeAcknowledgementRequest, ArtifactDescriptorQueryRequest,
+    ArtifactFormatSettingsQueryRequest, ArtifactFormatSettingsUpdateRequest, ArtifactPolicy,
     ArtifactReadRequest, ArtifactStore, BucketCreateRequest, BucketDeleteRequest,
     ClientRegistrationRequest, ClientSessionOpenRequest, ClientSessionResumeRequest,
     NodeRegistry as WorkflowNodeRegistry, WorkflowCapabilitiesRequest, WorkflowErrorCode,
@@ -116,6 +117,10 @@ impl FfiPantographRuntime {
         })?;
         let workflow_service = Arc::new(
             WorkflowService::with_ephemeral_attribution_store()
+                .map_err(map_workflow_service_error)?
+                .with_artifact_format_settings_path(
+                    config.app_data_dir.join("artifact-format-settings.json"),
+                )
                 .map_err(map_workflow_service_error)?
                 .with_artifact_store(artifact_store),
         );
@@ -254,6 +259,38 @@ impl FfiPantographRuntime {
             .runtime
             .workflow_artifact_store_stats()
             .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Return ArtifactFormatSettingsQueryResponse JSON.
+    pub fn workflow_artifact_format_settings(
+        &self,
+        request_json: String,
+    ) -> Result<String, FfiError> {
+        let request: ArtifactFormatSettingsQueryRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .workflow_artifact_format_settings(request)
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Update ArtifactFormatSettings and return ArtifactFormatSettingsUpdateResponse JSON.
+    pub fn workflow_update_artifact_format_settings(
+        &self,
+        request_json: String,
+    ) -> Result<String, FfiError> {
+        let request: ArtifactFormatSettingsUpdateRequest = parse_request(request_json)?;
+        let response = self
+            .runtime
+            .workflow_update_artifact_format_settings(request)
+            .map_err(map_workflow_service_error)?;
+        serialize_response(&response)
+    }
+
+    /// Return ArtifactFormatCapabilities JSON.
+    pub fn workflow_artifact_format_capabilities(&self) -> Result<String, FfiError> {
+        let response = self.runtime.workflow_artifact_format_capabilities();
         serialize_response(&response)
     }
 

@@ -722,3 +722,149 @@ async fn direct_runtime_exposes_artifact_store_contract_surface() {
     runtime.shutdown().await;
     let _ = std::fs::remove_dir_all(root);
 }
+
+#[tokio::test]
+async fn direct_runtime_exposes_artifact_format_settings_and_capabilities_json() {
+    let root = create_temp_root("uniffi-runtime-artifact-format-settings");
+    let runtime = FfiPantographRuntime::new(
+        FfiEmbeddedRuntimeConfig {
+            app_data_dir: root.join("app-data").to_string_lossy().into_owned(),
+            project_root: root.to_string_lossy().into_owned(),
+            workflow_roots: Vec::new(),
+            max_loaded_sessions: None,
+        },
+        None,
+    )
+    .await
+    .expect("runtime");
+
+    let defaults_json = runtime
+        .workflow_artifact_format_settings("{}".to_string())
+        .expect("artifact format settings defaults");
+    let defaults: serde_json::Value = serde_json::from_str(&defaults_json).expect("parse defaults");
+    assert_eq!(defaults["settings"]["image"]["format_id"], "jpg");
+    assert_eq!(defaults["settings"]["image"]["quality_percent"], 75);
+    assert_eq!(defaults["settings"]["audio"]["container_id"], "ogg");
+    assert_eq!(defaults["settings"]["audio"]["codec_id"], "opus");
+    assert_eq!(defaults["settings"]["video"]["codec_id"], "svt_av1");
+    assert_eq!(defaults["settings"]["video"]["crf"], 32);
+    assert_eq!(defaults["settings"]["three_d"]["format_id"], "glb");
+
+    let updated_settings = serde_json::json!({
+        "image": {
+            "format_id": "png",
+            "quality_percent": 75,
+            "color_profile_id": "srgb"
+        },
+        "audio": {
+            "container_id": "ogg",
+            "codec_id": "vorbis",
+            "bitrate_kbps": 128
+        },
+        "video": {
+            "container_id": "ivf",
+            "codec_id": "svt_av1",
+            "crf": 28,
+            "bit_depth": "10bit"
+        },
+        "three_d": {
+            "format_id": "obj"
+        }
+    });
+    let update_json = runtime
+        .workflow_update_artifact_format_settings(
+            serde_json::json!({
+                "settings": updated_settings,
+                "reason": "uniffi runtime test"
+            })
+            .to_string(),
+        )
+        .expect("update artifact format settings");
+    let update: serde_json::Value = serde_json::from_str(&update_json).expect("parse update");
+    assert_eq!(update["settings"]["image"]["format_id"], "png");
+    assert_eq!(update["settings"]["audio"]["codec_id"], "vorbis");
+    assert_eq!(update["settings"]["video"]["bit_depth"], "10bit");
+    assert_eq!(update["settings"]["three_d"]["format_id"], "obj");
+
+    let persisted_json = runtime
+        .workflow_artifact_format_settings("{}".to_string())
+        .expect("artifact format settings after update");
+    let persisted: serde_json::Value =
+        serde_json::from_str(&persisted_json).expect("parse persisted settings");
+    assert_eq!(persisted["settings"], update["settings"]);
+
+    let capabilities_json = runtime
+        .workflow_artifact_format_capabilities()
+        .expect("artifact format capabilities");
+    let capabilities: serde_json::Value =
+        serde_json::from_str(&capabilities_json).expect("parse capabilities");
+    assert!(capabilities["image_formats"]
+        .as_array()
+        .expect("image formats")
+        .iter()
+        .any(|option| option["format_id"] == "jpg"
+            && option["provided_by_dependency_id"] == "oiiotool"));
+    assert!(capabilities["audio_formats"]
+        .as_array()
+        .expect("audio formats")
+        .iter()
+        .any(|option| option["format_id"] == "ogg"
+            && option["codec_ids"]
+                .as_array()
+                .expect("audio codecs")
+                .iter()
+                .any(|codec| codec == "opus")));
+    assert!(capabilities["video_formats"]
+        .as_array()
+        .expect("video formats")
+        .iter()
+        .any(|option| option["codec_ids"]
+            .as_array()
+            .expect("video codecs")
+            .iter()
+            .any(|codec| codec == "svt_av1")));
+    assert!(capabilities["three_d_formats"]
+        .as_array()
+        .expect("3d formats")
+        .iter()
+        .any(|option| option["format_id"] == "glb"));
+
+    let invalid = runtime
+        .workflow_update_artifact_format_settings(
+            serde_json::json!({
+                "settings": {
+                    "image": {
+                        "format_id": "jpg",
+                        "quality_percent": 0,
+                        "color_profile_id": "srgb"
+                    },
+                    "audio": {
+                        "container_id": "ogg",
+                        "codec_id": "opus",
+                        "bitrate_kbps": 96
+                    },
+                    "video": {
+                        "container_id": "ivf",
+                        "codec_id": "svt_av1",
+                        "crf": 32,
+                        "bit_depth": "8bit"
+                    },
+                    "three_d": {
+                        "format_id": "glb"
+                    }
+                },
+                "reason": "invalid setting test"
+            })
+            .to_string(),
+        )
+        .expect_err("invalid format setting should preserve workflow error envelope");
+    let envelope = workflow_error_envelope(invalid);
+    assert_eq!(envelope.code, WorkflowErrorCode::InvalidRequest);
+    assert_eq!(
+        envelope.message,
+        "image quality_percent 0 is outside allowed range"
+    );
+
+    runtime.shutdown().await;
+    let _ = std::fs::remove_dir_all(root);
+}

@@ -355,6 +355,8 @@ when physical payload bodies are deleted.
   - [x] Configure the UniFFI embedded runtime with an ArtifactStore and expose
     artifact descriptor, body read, consume acknowledgement, policy, and stats
     JSON methods with focused runtime tests.
+  - [x] Expose artifact format settings query/update and media capability JSON
+    methods through the UniFFI embedded runtime with focused runtime tests.
   - [ ] Add remaining binding parity for persistent settings, managed
     dependency status/actions, media capabilities, and final binary body
     transport semantics.
