@@ -20,8 +20,8 @@ using FfiPantographRuntime runtime = await FfiPantographRuntime.FfiPantographRun
 
 try
 {
-    const string workflowName = "CSharp Native Quickstart";
-    const string workflowId = "CSharp Native Quickstart";
+    const string workflowName = "csharp-native-quickstart";
+    const string workflowId = "csharp-native-quickstart";
 
     string savedPath = SaveDemoWorkflow(runtime, workflowName);
     InspectSavedWorkflows(runtime);
@@ -164,7 +164,7 @@ static async Task EditWorkflowText(FfiPantographRuntime runtime, string savedPat
     runtime.WorkflowGraphSave(
         $$"""
         {
-          "name": "CSharp Native Quickstart",
+          "name": "csharp-native-quickstart",
           "graph": {{updatedGraphJson}}
         }
         """);
@@ -185,6 +185,7 @@ static async Task RunWorkflowSession(FfiPantographRuntime runtime, string workfl
             $$"""
             {
               "session_id": {{JsonSerializer.Serialize(workflowSessionId)}},
+              "workflow_semantic_version": "0.1.0",
               "inputs": [{
                 "node_id": "text-input-1",
                 "port_id": "text",

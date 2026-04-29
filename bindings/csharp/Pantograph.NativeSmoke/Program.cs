@@ -163,6 +163,7 @@ public static class Program
         $$"""
         {
           "session_id": "{{sessionId}}",
+          "workflow_semantic_version": "0.1.0",
           "inputs": [{
             "node_id": "text-input-1",
             "port_id": "text",
@@ -181,6 +182,7 @@ public static class Program
         $$"""
         {
           "session_id": "{{sessionId}}",
+          "workflow_semantic_version": "0.1.0",
           "inputs": [{
             "node_id": "text-input-1",
             "port_id": "text",
@@ -549,7 +551,6 @@ public static class DirectRuntimeSmoke
         await runtime.WorkflowGetCapabilities(requestJson);
         await runtime.WorkflowGetIo(requestJson);
         await runtime.WorkflowPreflight(requestJson);
-        await runtime.WorkflowRun(requestJson);
         await runtime.WorkflowCreateSession(requestJson);
         await runtime.WorkflowRunSession(requestJson);
         await runtime.WorkflowGetSessionStatus(requestJson);

@@ -2,10 +2,10 @@
 
 ## Status
 
-Stage `06` reopened. Wave `01` through Wave `04` are integrated, the binding
-projection ADR is recorded, and the original stage-end refactor gate outcome was
-`not_warranted`; however, the 2026-04-29 audit found current UniFFI/C# binding
-verification failures caused by execution-session request drift.
+Stage `06` complete. Wave `01` through Wave `04` are integrated, the binding
+projection ADR is recorded, the original stage-end refactor gate outcome was
+`not_warranted`, and the 2026-04-29 UniFFI/C# execution-session request drift
+repair has been implemented and verified.
 
 ## Wave Status
 
@@ -13,8 +13,8 @@ verification failures caused by execution-session request drift.
 | ---- | ------ | ----------------- |
 | `wave-01` | Complete | Stage-start outcome recorded as `ready_with_recorded_assumptions`; C# is candidate supported, Python is unsupported, and BEAM is experimental until support-tier docs and host smoke coverage align. |
 | `wave-02` | Complete | UniFFI and Rustler discovery projections are integrated and committed. |
-| `wave-03` | Reopened | Historical C# generated-artifact smoke passed, but current C#/UniFFI execution-session request bodies omit required `workflow_semantic_version`; Python remains unsupported; BEAM source smoke coverage is added but host smoke is blocked by missing `mix`. |
-| `wave-04` | Reopened | ADR, headless binding docs, support-tier reconciliation, final verification, and stage-end refactor gate were committed; final verification must be rerun after binding request drift is corrected. |
+| `wave-03` | Complete | C#/UniFFI execution-session request bodies include required `workflow_semantic_version`; Python remains unsupported; BEAM source smoke coverage is added but host smoke is blocked by missing `mix`. |
+| `wave-04` | Complete | ADR, headless binding docs, support-tier reconciliation, final verification, and stage-end refactor gate were committed; reopened verification passed after request drift repair. |
 
 ## Worker Reports
 
@@ -22,12 +22,19 @@ verification failures caused by execution-session request drift.
 | ------ | ----------- | ------ |
 | uniffi-projections | `reports/wave-02-worker-uniffi-projections.md` | Complete. |
 | rustler-projections | `reports/wave-02-worker-rustler-projections.md` | Complete; BEAM smoke remains blocked by missing `mix`. |
-| csharp-host-tests | `reports/wave-03-worker-csharp-host-tests.md` | Reopened for execution-session request drift. |
+| csharp-host-tests | `reports/wave-03-worker-csharp-host-tests.md` | Complete. |
 | python-host-tests | `reports/wave-03-worker-python-host-tests.md` | Complete as unsupported-lane reconciliation. |
 | beam-host-tests | `reports/wave-03-worker-beam-host-tests.md` | Source coverage complete; host smoke blocked by missing `mix`. |
+| 2026-04-29-uniffi-session-request-repair | `reports/2026-04-29-worker-uniffi-session-request-repair.md` | Complete. |
+| 2026-04-29-csharp-session-request-repair | `reports/2026-04-29-worker-csharp-session-request-repair.md` | Complete. |
 
 ## Decisions
 
+- 2026-04-29: Reopened Stage `06` repair starts from a clean documentation
+  baseline commit. Parallel agents are authorized only for non-overlapping
+  write sets: UniFFI Rust fixtures/tests under `crates/pantograph-uniffi/` and
+  C# host smoke/quickstart request examples under `bindings/` and `scripts/`.
+  The host owns plan docs, final integration, and verification.
 - 2026-04-25: Implementation proceeds sequentially in this session. The wave
   plan permits parallel UniFFI/Rustler work, but no subagents were authorized,
   and `.git` was mounted read-only during the stage-start window, so worker
@@ -67,6 +74,17 @@ verification failures caused by execution-session request drift.
 
 ## Verification Results
 
+- 2026-04-29 Reopened Stage `06` repair verification passed:
+  `cargo test -p pantograph-uniffi`,
+  `./scripts/check-uniffi-embedded-runtime-surface.sh`,
+  `./scripts/check-uniffi-csharp-smoke.sh`,
+  `PANTOGRAPH_PACKAGE_PROFILE=debug ./scripts/package-uniffi-csharp-artifacts.sh`,
+  `./scripts/check-packaged-csharp-quickstart.sh`, and
+  `cargo fmt --all -- --check`. Packaging and C# smoke emitted the known
+  generated-binding CSharpier availability warning and still completed
+  successfully.
+- 2026-04-29 Reopened Stage `06` preflight recorded the request-shape repair
+  scope, dirty-file isolation, worker write sets, and verification commands.
 - 2026-04-25 Wave `01` preflight read the Stage `06` plan, stage-start gate,
   binding-platform plan, wrapper READMEs, host harness READMEs, scripts
   inventory, and `docs/headless-native-bindings.md`.

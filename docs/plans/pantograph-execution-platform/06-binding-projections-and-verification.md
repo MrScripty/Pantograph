@@ -60,6 +60,62 @@ between workflow-service and UniFFI/C# host surfaces.
 
 Completion status: `reopened`.
 
+### 2026-04-29 Reopened Stage-Start Preflight
+
+Start outcome: `ready_with_recorded_assumptions`.
+
+- Selected stage: reopened Stage `06`, binding request-shape repair and
+  verification.
+- Scope: correct UniFFI/C# execution-session request examples, tests, and
+  smoke fixtures so every session-run request supplies
+  `workflow_semantic_version`; correct the invalid graph-save fixture identity;
+  rerun Stage `06` verification needed to close the reopened status.
+- Dirty-file review: unrelated deleted workflow/asset files, untracked
+  diagnostics SQLite, and untracked assets are present before implementation.
+  They do not overlap Stage `06` and must not be staged, reformatted, or
+  reverted.
+- Concurrency decision: parallel agents are authorized for non-overlapping
+  write sets. One worker may own UniFFI Rust fixtures/tests under
+  `crates/pantograph-uniffi/`; one worker may own C# host smoke/quickstart
+  request examples under `bindings/` and `scripts/`. The host owns plan docs,
+  final integration, and verification.
+- Shared contracts/DTOs: no shared contract change is planned. The repair uses
+  the already-required `workflow_semantic_version` field and must not weaken
+  workflow identity validation.
+- Expected verification:
+  `cargo test -p pantograph-uniffi`,
+  `./scripts/check-uniffi-embedded-runtime-surface.sh`,
+  `./scripts/check-uniffi-csharp-smoke.sh`,
+  `PANTOGRAPH_PACKAGE_PROFILE=debug ./scripts/package-uniffi-csharp-artifacts.sh`,
+  `./scripts/check-packaged-csharp-quickstart.sh`, and
+  `cargo fmt --all -- --check`.
+
+### 2026-04-29 Reopened Stage Repair Completion
+
+Completion status: `complete`.
+
+- UniFFI execution-session run fixtures now include the required
+  `workflow_semantic_version` request field.
+- UniFFI graph-save fixture identity now uses a Pantograph-valid stable
+  workflow identity.
+- C# native smoke and direct-runtime quickstart session-run request examples
+  now include `workflow_semantic_version`.
+- C# smoke verification now rejects the removed direct generated `WorkflowRun`
+  surface instead of requiring it.
+- Final verification passed:
+  `cargo test -p pantograph-uniffi`,
+  `./scripts/check-uniffi-embedded-runtime-surface.sh`,
+  `./scripts/check-uniffi-csharp-smoke.sh`,
+  `PANTOGRAPH_PACKAGE_PROFILE=debug ./scripts/package-uniffi-csharp-artifacts.sh`,
+  `./scripts/check-packaged-csharp-quickstart.sh`, and
+  `cargo fmt --all -- --check`.
+- Packaging and C# smoke emitted the known generated-binding CSharpier
+  availability warning, but artifacts and smoke checks completed successfully.
+- Manual packaged quickstart execution with `--run-session` still requires an
+  installed or seeded compatible runtime backend, so the generic packaged
+  quickstart check remains the supported host check on machines without a
+  llama.cpp runtime installation.
+
 ### 2026-04-29 Stage 11 Extension Note
 
 Stage `06` owns the original execution-platform binding projections and support

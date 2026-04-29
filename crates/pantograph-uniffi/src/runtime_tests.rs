@@ -282,6 +282,7 @@ async fn direct_runtime_runs_workflow_session_from_json() {
         .workflow_run_session(
             serde_json::json!({
                 "session_id": session_id,
+                "workflow_semantic_version": "0.1.0",
                 "inputs": [{
                     "node_id": "text-input-1",
                     "port_id": "text",
@@ -377,6 +378,7 @@ async fn direct_runtime_workflow_session_run_preserves_invalid_request_envelope(
         .workflow_run_session(
             serde_json::json!({
                 "session_id": session_id,
+                "workflow_semantic_version": "0.1.0",
                 "inputs": [],
                 "output_targets": [{
                     "node_id": "text-output-1",
@@ -482,7 +484,7 @@ async fn direct_runtime_exposes_workflow_graph_persistence_and_edit_session() {
     let save_response_json = runtime
         .workflow_graph_save(
             serde_json::json!({
-                "name": "Native Edited Workflow",
+                "name": "native-edited-workflow",
                 "graph": graph
             })
             .to_string(),
@@ -499,14 +501,14 @@ async fn direct_runtime_exposes_workflow_graph_persistence_and_edit_session() {
         .as_array()
         .expect("workflows")
         .iter()
-        .any(|metadata| metadata["id"] == "Native Edited Workflow"));
+        .any(|metadata| metadata["id"] == "native-edited-workflow"));
 
     let load_response_json = runtime
         .workflow_graph_load(serde_json::json!({ "path": path }).to_string())
         .expect("load workflow graph");
     let load_response: serde_json::Value =
         serde_json::from_str(&load_response_json).expect("parse load response");
-    assert_eq!(load_response["metadata"]["name"], "Native Edited Workflow");
+    assert_eq!(load_response["metadata"]["name"], "native-edited-workflow");
 
     let create_response_json = runtime
         .workflow_graph_create_edit_session(

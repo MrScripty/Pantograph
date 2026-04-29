@@ -58,10 +58,19 @@ require_generated_text() {
   fi
 }
 
+reject_generated_text() {
+  local needle="$1"
+  if grep -Fq "$needle" "$generated_binding"; then
+    echo "Generated C# binding includes forbidden text: $needle" >&2
+    echo "Generated binding: $generated_binding" >&2
+    exit 1
+  fi
+}
+
 require_generated_text 'public class FfiPantographRuntime'
 require_generated_text 'public record FfiEmbeddedRuntimeConfig'
 require_generated_text 'namespace uniffi.pantograph_headless;'
-require_generated_text 'Task<String> WorkflowRun(String @requestJson)'
+reject_generated_text 'Task<String> WorkflowRun(String @requestJson)'
 require_generated_text 'Task<String> WorkflowCreateSession(String @requestJson)'
 
 dotnet_root="$(dirname "$(readlink -f "$(command -v dotnet)")")"
