@@ -1,7 +1,8 @@
 use super::{
     ArtifactAttribution, ArtifactFormatCapabilities, ArtifactFormatMetadata,
     ArtifactFormatSettings, ArtifactPayloadKind, ArtifactWriteRequest, AudioArtifactFormatSettings,
-    ImageArtifactFormatSettings, WorkflowPortBinding, WorkflowService, WorkflowServiceError,
+    ImageArtifactFormatSettings, ThreeDArtifactFormatSettings, VideoArtifactFormatSettings,
+    WorkflowPortBinding, WorkflowService, WorkflowServiceError,
 };
 use crate::graph::WorkflowGraphRunSettings;
 
@@ -131,6 +132,20 @@ fn resolve_output_format_metadata(
             authoritative_media_type,
             graph_run_settings,
             &settings.audio,
+            capabilities,
+        ),
+        ArtifactPayloadKind::Video => resolve_video_output_format(
+            binding,
+            authoritative_media_type,
+            graph_run_settings,
+            &settings.video,
+            capabilities,
+        ),
+        ArtifactPayloadKind::ThreeD => resolve_three_d_output_format(
+            binding,
+            authoritative_media_type,
+            graph_run_settings,
+            &settings.three_d,
             capabilities,
         ),
         _ => {
@@ -323,10 +338,185 @@ fn resolve_audio_output_format(
     })
 }
 
+fn resolve_video_output_format(
+    binding: &WorkflowPortBinding,
+    authoritative_media_type: Option<&str>,
+    graph_run_settings: Option<&WorkflowGraphRunSettings>,
+    settings: &VideoArtifactFormatSettings,
+    capabilities: &ArtifactFormatCapabilities,
+) -> Result<ResolvedOutputFormat, WorkflowServiceError> {
+    let override_object = artifact_format_override_object(binding, graph_run_settings)?;
+    let selection = VideoOutputFormatSelection {
+        container_id: read_string_override(
+            binding,
+            override_object,
+            "container_id",
+            &settings.container_id,
+        )?,
+        codec_id: read_string_override(binding, override_object, "codec_id", &settings.codec_id)?,
+        crf: read_u8_override(binding, override_object, "crf", settings.crf)?,
+        bit_depth: read_string_override(
+            binding,
+            override_object,
+            "bit_depth",
+            &settings.bit_depth,
+        )?,
+        is_override: override_object.is_some(),
+    };
+    let selected_format = capabilities
+        .video_formats
+        .iter()
+        .find(|option| option.format_id == selection.container_id)
+        .ok_or_else(|| {
+            WorkflowServiceError::InvalidRequest(format!(
+                "unsupported video artifact_format_override container_id '{}' for binding '{}.{}'",
+                selection.container_id, binding.node_id, binding.port_id
+            ))
+        })?;
+    validate_member(
+        binding,
+        "codec_id",
+        &selection.codec_id,
+        &selected_format.codec_ids,
+    )?;
+    validate_u8_range(
+        binding,
+        "crf",
+        selection.crf,
+        selected_format.crf_min,
+        selected_format.crf_max,
+    )?;
+    validate_member(
+        binding,
+        "bit_depth",
+        &selection.bit_depth,
+        &selected_format.bit_depths,
+    )?;
+
+    let actual_media_type = authoritative_media_type.unwrap_or(&selected_format.media_type);
+    if selection.is_override && actual_media_type != selected_format.media_type {
+        return Err(transcode_required_error(
+            binding,
+            actual_media_type,
+            &selected_format.media_type,
+        ));
+    }
+    let format = capabilities
+        .video_formats
+        .iter()
+        .find(|option| option.media_type == actual_media_type);
+    let codec_id = format
+        .and_then(|format| {
+            if format
+                .codec_ids
+                .iter()
+                .any(|codec| codec == &selection.codec_id)
+            {
+                Some(selection.codec_id.clone())
+            } else {
+                format.codec_ids.first().cloned()
+            }
+        })
+        .unwrap_or_else(|| selection.codec_id.clone());
+
+    Ok(ResolvedOutputFormat {
+        media_type: actual_media_type.to_string(),
+        metadata: ArtifactFormatMetadata {
+            format_id: format
+                .map(|format| format.format_id.clone())
+                .unwrap_or_else(|| video_format_id(actual_media_type).to_string()),
+            media_type: actual_media_type.to_string(),
+            codec_id: Some(codec_id),
+            quality_percent: None,
+            bitrate_kbps: None,
+            crf: Some(selection.crf),
+            bit_depth: Some(selection.bit_depth),
+            color_profile_id: None,
+            converter_id: None,
+            converter_version: None,
+            library_version: None,
+        },
+    })
+}
+
+fn resolve_three_d_output_format(
+    binding: &WorkflowPortBinding,
+    authoritative_media_type: Option<&str>,
+    graph_run_settings: Option<&WorkflowGraphRunSettings>,
+    settings: &ThreeDArtifactFormatSettings,
+    capabilities: &ArtifactFormatCapabilities,
+) -> Result<ResolvedOutputFormat, WorkflowServiceError> {
+    let override_object = artifact_format_override_object(binding, graph_run_settings)?;
+    let selection = ThreeDOutputFormatSelection {
+        format_id: read_string_override(
+            binding,
+            override_object,
+            "format_id",
+            &settings.format_id,
+        )?,
+        is_override: override_object.is_some(),
+    };
+    let selected_format = capabilities
+        .three_d_formats
+        .iter()
+        .find(|option| option.format_id == selection.format_id)
+        .ok_or_else(|| {
+            WorkflowServiceError::InvalidRequest(format!(
+                "unsupported 3d artifact_format_override format_id '{}' for binding '{}.{}'",
+                selection.format_id, binding.node_id, binding.port_id
+            ))
+        })?;
+    let selected_media_type =
+        media_type_for_three_d_format_id(&selected_format.format_id, &selected_format.media_type);
+    let actual_media_type = authoritative_media_type.unwrap_or(&selected_media_type);
+    if selection.is_override && actual_media_type != selected_media_type {
+        return Err(transcode_required_error(
+            binding,
+            actual_media_type,
+            &selected_media_type,
+        ));
+    }
+    let format = capabilities.three_d_formats.iter().find(|option| {
+        media_type_for_three_d_format_id(&option.format_id, &option.media_type) == actual_media_type
+    });
+
+    Ok(ResolvedOutputFormat {
+        media_type: actual_media_type.to_string(),
+        metadata: ArtifactFormatMetadata {
+            format_id: format
+                .map(|format| format.format_id.clone())
+                .unwrap_or_else(|| three_d_format_id(actual_media_type).to_string()),
+            media_type: actual_media_type.to_string(),
+            codec_id: None,
+            quality_percent: None,
+            bitrate_kbps: None,
+            crf: None,
+            bit_depth: None,
+            color_profile_id: None,
+            converter_id: None,
+            converter_version: None,
+            library_version: None,
+        },
+    })
+}
+
 struct ImageOutputFormatSelection {
     format_id: String,
     quality_percent: u8,
     color_profile_id: String,
+    is_override: bool,
+}
+
+struct VideoOutputFormatSelection {
+    container_id: String,
+    codec_id: String,
+    crf: u8,
+    bit_depth: String,
+    is_override: bool,
+}
+
+struct ThreeDOutputFormatSelection {
+    format_id: String,
     is_override: bool,
 }
 
@@ -799,6 +989,14 @@ fn three_d_format_id(media_type: &str) -> &str {
     }
 }
 
+fn media_type_for_three_d_format_id(format_id: &str, fallback: &str) -> String {
+    match format_id {
+        "gltf" => "model/gltf+json".to_string(),
+        "obj" => "model/obj".to_string(),
+        _ => fallback.to_string(),
+    }
+}
+
 fn generic_format_id(media_type: &str) -> &str {
     match media_type {
         "text/csv" => "csv",
@@ -977,7 +1175,9 @@ mod tests {
             serde_json::from_value(converted[0].value.clone()).expect("descriptor");
         assert_eq!(descriptor.payload_kind, ArtifactPayloadKind::Video);
         assert_eq!(descriptor.byte_length, Some(5));
-        assert_eq!(descriptor.format.expect("format").media_type, "video/webm");
+        let format = descriptor.format.expect("format");
+        assert_eq!(format.format_id, "webm");
+        assert_eq!(format.media_type, "video/webm");
         assert!(!converted[0].value.to_string().contains("aGVsbG8="));
     }
 
@@ -1084,6 +1284,64 @@ mod tests {
     }
 
     #[test]
+    fn convert_media_outputs_uses_backend_video_defaults_without_graph_settings() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let store = ArtifactStore::open(temp.path(), policy()).expect("artifact store");
+        let service = WorkflowService::new().with_artifact_store(store);
+
+        let converted = convert_media_outputs_to_artifacts(
+            &service,
+            "workflow-a",
+            "1.0.0",
+            "run-a",
+            None,
+            vec![WorkflowPortBinding {
+                node_id: "video-output".to_string(),
+                port_id: "video".to_string(),
+                value: serde_json::json!("aGVsbG8="),
+            }],
+        )
+        .expect("convert output");
+
+        let descriptor: ArtifactDescriptor =
+            serde_json::from_value(converted[0].value.clone()).expect("descriptor");
+        let format = descriptor.format.expect("format");
+        assert_eq!(format.format_id, "ivf");
+        assert_eq!(format.media_type, "video/av1");
+        assert_eq!(format.codec_id.as_deref(), Some("svt_av1"));
+        assert_eq!(format.crf, Some(32));
+        assert_eq!(format.bit_depth.as_deref(), Some("8bit"));
+    }
+
+    #[test]
+    fn convert_media_outputs_uses_backend_three_d_defaults_without_graph_settings() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let store = ArtifactStore::open(temp.path(), policy()).expect("artifact store");
+        let service = WorkflowService::new().with_artifact_store(store);
+
+        let converted = convert_media_outputs_to_artifacts(
+            &service,
+            "workflow-a",
+            "1.0.0",
+            "run-a",
+            None,
+            vec![WorkflowPortBinding {
+                node_id: "mesh-output".to_string(),
+                port_id: "mesh".to_string(),
+                value: serde_json::json!("aGVsbG8="),
+            }],
+        )
+        .expect("convert output");
+
+        let descriptor: ArtifactDescriptor =
+            serde_json::from_value(converted[0].value.clone()).expect("descriptor");
+        let format = descriptor.format.expect("format");
+        assert_eq!(descriptor.payload_kind, ArtifactPayloadKind::ThreeD);
+        assert_eq!(format.format_id, "glb");
+        assert_eq!(format.media_type, "model/gltf-binary");
+    }
+
+    #[test]
     fn convert_media_outputs_uses_graph_image_format_override() {
         let temp = tempfile::tempdir().expect("temp dir");
         let store = ArtifactStore::open(temp.path(), policy()).expect("artifact store");
@@ -1158,6 +1416,78 @@ mod tests {
     }
 
     #[test]
+    fn convert_media_outputs_uses_graph_video_format_override() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let store = ArtifactStore::open(temp.path(), policy()).expect("artifact store");
+        let service = WorkflowService::new().with_artifact_store(store);
+        let graph_settings = graph_settings_for_override(
+            "video-output",
+            serde_json::json!({
+                "container_id": "ivf",
+                "codec_id": "svt_av1",
+                "crf": 28,
+                "bit_depth": "10bit"
+            }),
+        );
+
+        let converted = convert_media_outputs_to_artifacts(
+            &service,
+            "workflow-a",
+            "1.0.0",
+            "run-a",
+            Some(&graph_settings),
+            vec![WorkflowPortBinding {
+                node_id: "video-output".to_string(),
+                port_id: "video".to_string(),
+                value: serde_json::json!("data:video/av1;base64,aGVsbG8="),
+            }],
+        )
+        .expect("convert output");
+
+        let descriptor: ArtifactDescriptor =
+            serde_json::from_value(converted[0].value.clone()).expect("descriptor");
+        let format = descriptor.format.expect("format");
+        assert_eq!(format.format_id, "ivf");
+        assert_eq!(format.media_type, "video/av1");
+        assert_eq!(format.codec_id.as_deref(), Some("svt_av1"));
+        assert_eq!(format.crf, Some(28));
+        assert_eq!(format.bit_depth.as_deref(), Some("10bit"));
+    }
+
+    #[test]
+    fn convert_media_outputs_uses_graph_three_d_format_override() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let store = ArtifactStore::open(temp.path(), policy()).expect("artifact store");
+        let service = WorkflowService::new().with_artifact_store(store);
+        let graph_settings = graph_settings_for_override(
+            "mesh-output",
+            serde_json::json!({
+                "format_id": "obj"
+            }),
+        );
+
+        let converted = convert_media_outputs_to_artifacts(
+            &service,
+            "workflow-a",
+            "1.0.0",
+            "run-a",
+            Some(&graph_settings),
+            vec![WorkflowPortBinding {
+                node_id: "mesh-output".to_string(),
+                port_id: "mesh".to_string(),
+                value: serde_json::json!("data:model/obj;base64,aGVsbG8="),
+            }],
+        )
+        .expect("convert output");
+
+        let descriptor: ArtifactDescriptor =
+            serde_json::from_value(converted[0].value.clone()).expect("descriptor");
+        let format = descriptor.format.expect("format");
+        assert_eq!(format.format_id, "obj");
+        assert_eq!(format.media_type, "model/obj");
+    }
+
+    #[test]
     fn convert_media_outputs_rejects_invalid_graph_format_override() {
         let temp = tempfile::tempdir().expect("temp dir");
         let store = ArtifactStore::open(temp.path(), policy()).expect("artifact store");
@@ -1190,6 +1520,69 @@ mod tests {
     }
 
     #[test]
+    fn convert_media_outputs_rejects_invalid_video_format_override() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let store = ArtifactStore::open(temp.path(), policy()).expect("artifact store");
+        let service = WorkflowService::new().with_artifact_store(store);
+        let graph_settings = graph_settings_for_override(
+            "video-output",
+            serde_json::json!({
+                "container_id": "ivf",
+                "codec_id": "svt_av1",
+                "crf": 99,
+                "bit_depth": "12bit"
+            }),
+        );
+
+        let error = convert_media_outputs_to_artifacts(
+            &service,
+            "workflow-a",
+            "1.0.0",
+            "run-a",
+            Some(&graph_settings),
+            vec![WorkflowPortBinding {
+                node_id: "video-output".to_string(),
+                port_id: "video".to_string(),
+                value: serde_json::json!("data:video/av1;base64,aGVsbG8="),
+            }],
+        )
+        .expect_err("invalid format");
+
+        assert!(matches!(error, WorkflowServiceError::InvalidRequest(_)));
+        assert!(error.to_string().contains("crf 99"));
+    }
+
+    #[test]
+    fn convert_media_outputs_rejects_invalid_three_d_format_override() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let store = ArtifactStore::open(temp.path(), policy()).expect("artifact store");
+        let service = WorkflowService::new().with_artifact_store(store);
+        let graph_settings = graph_settings_for_override(
+            "mesh-output",
+            serde_json::json!({
+                "format_id": "fbx"
+            }),
+        );
+
+        let error = convert_media_outputs_to_artifacts(
+            &service,
+            "workflow-a",
+            "1.0.0",
+            "run-a",
+            Some(&graph_settings),
+            vec![WorkflowPortBinding {
+                node_id: "mesh-output".to_string(),
+                port_id: "mesh".to_string(),
+                value: serde_json::json!("data:model/obj;base64,aGVsbG8="),
+            }],
+        )
+        .expect_err("invalid format");
+
+        assert!(matches!(error, WorkflowServiceError::InvalidRequest(_)));
+        assert!(error.to_string().contains("fbx"));
+    }
+
+    #[test]
     fn convert_media_outputs_rejects_override_that_requires_transcoding() {
         let temp = tempfile::tempdir().expect("temp dir");
         let store = ArtifactStore::open(temp.path(), policy()).expect("artifact store");
@@ -1213,6 +1606,75 @@ mod tests {
                 node_id: "image-output".to_string(),
                 port_id: "image".to_string(),
                 value: serde_json::json!("data:image/png;base64,aGVsbG8="),
+            }],
+        )
+        .expect_err("transcode not implemented");
+
+        assert!(matches!(
+            error,
+            WorkflowServiceError::CapabilityViolation(_)
+        ));
+        assert!(error.to_string().contains("transcoding is not implemented"));
+    }
+
+    #[test]
+    fn convert_media_outputs_rejects_video_override_that_requires_transcoding() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let store = ArtifactStore::open(temp.path(), policy()).expect("artifact store");
+        let service = WorkflowService::new().with_artifact_store(store);
+        let graph_settings = graph_settings_for_override(
+            "video-output",
+            serde_json::json!({
+                "container_id": "ivf",
+                "codec_id": "svt_av1",
+                "crf": 28,
+                "bit_depth": "8bit"
+            }),
+        );
+
+        let error = convert_media_outputs_to_artifacts(
+            &service,
+            "workflow-a",
+            "1.0.0",
+            "run-a",
+            Some(&graph_settings),
+            vec![WorkflowPortBinding {
+                node_id: "video-output".to_string(),
+                port_id: "video".to_string(),
+                value: serde_json::json!("data:video/webm;base64,aGVsbG8="),
+            }],
+        )
+        .expect_err("transcode not implemented");
+
+        assert!(matches!(
+            error,
+            WorkflowServiceError::CapabilityViolation(_)
+        ));
+        assert!(error.to_string().contains("transcoding is not implemented"));
+    }
+
+    #[test]
+    fn convert_media_outputs_rejects_three_d_override_that_requires_transcoding() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let store = ArtifactStore::open(temp.path(), policy()).expect("artifact store");
+        let service = WorkflowService::new().with_artifact_store(store);
+        let graph_settings = graph_settings_for_override(
+            "mesh-output",
+            serde_json::json!({
+                "format_id": "glb"
+            }),
+        );
+
+        let error = convert_media_outputs_to_artifacts(
+            &service,
+            "workflow-a",
+            "1.0.0",
+            "run-a",
+            Some(&graph_settings),
+            vec![WorkflowPortBinding {
+                node_id: "mesh-output".to_string(),
+                port_id: "mesh".to_string(),
+                value: serde_json::json!("data:model/obj;base64,aGVsbG8="),
             }],
         )
         .expect_err("transcode not implemented");
