@@ -332,7 +332,7 @@
           <option value={DEFAULT_SELECTION_VALUE}>
             Use default{defaultFormat ? ` (${defaultFormat.format_id})` : ''}
           </option>
-          {#each selectableFormats as option}
+          {#each selectableFormats as option (option.format_id)}
             <option value={option.format_id}>
               {option.display_name}
             </option>

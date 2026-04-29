@@ -39,3 +39,6 @@ implementation has started with the shell/store navigation slice.
 - 2026-04-29 Wave `03` workbench shell navigation passed:
   `node --experimental-strip-types --test src/stores/workbenchStore.test.ts`,
   `npm run typecheck -- --pretty false`, and `npm run build`.
+- 2026-04-29 Wave `05` frontend lint cleanup passed:
+  `npm run lint:full`, `npm run typecheck -- --pretty false`,
+  `npm run lint:a11y`, `npm run test:frontend`, and `npm run build`.

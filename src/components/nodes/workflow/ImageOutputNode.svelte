@@ -386,7 +386,7 @@
           <option value={DEFAULT_SELECTION_VALUE}>
             Use default{defaultFormat ? ` (${defaultFormat.format_id})` : ''}
           </option>
-          {#each selectableFormats as option}
+          {#each selectableFormats as option (option.format_id)}
             <option value={option.format_id}>
               {option.display_name}
             </option>
@@ -434,7 +434,7 @@
                 onpointerup={stopControlEvent}
                 onclickcapture={stopControlEvent}
               >
-                {#each colorProfileOptions as profileId}
+                {#each colorProfileOptions as profileId (profileId)}
                   <option value={profileId}>{profileId}</option>
                 {/each}
               </select>

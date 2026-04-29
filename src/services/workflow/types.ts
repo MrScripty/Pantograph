@@ -745,7 +745,7 @@ export interface WorkflowArtifactFormatSettings {
   three_d: WorkflowThreeDArtifactFormatSettings;
 }
 
-export interface WorkflowArtifactFormatSettingsQueryRequest {}
+export type WorkflowArtifactFormatSettingsQueryRequest = Record<string, never>;
 
 export interface WorkflowArtifactFormatSettingsQueryResponse {
   settings: WorkflowArtifactFormatSettings;
