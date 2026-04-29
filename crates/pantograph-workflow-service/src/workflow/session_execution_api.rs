@@ -254,8 +254,8 @@ impl WorkflowService {
                         );
                     }
                     if !runtime_admission_delay_recorded {
-                        let delayed_until_ms = unix_timestamp_ms()
-                            .saturating_add(WORKFLOW_SESSION_QUEUE_POLL_MS as u64);
+                        let delayed_until_ms =
+                            unix_timestamp_ms().saturating_add(WORKFLOW_SESSION_QUEUE_POLL_MS);
                         self.record_scheduler_delay_event_if_configured(
                             &session,
                             run_snapshot.as_ref(),
@@ -900,6 +900,7 @@ impl WorkflowService {
         .map_err(WorkflowServiceError::from)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn record_scheduler_delay_event_if_configured(
         &self,
         session: &WorkflowExecutionSessionSummary,
@@ -1162,6 +1163,7 @@ impl WorkflowService {
         .map_err(WorkflowServiceError::from)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn record_scheduler_reservation_event_if_configured(
         &self,
         session: &WorkflowExecutionSessionSummary,

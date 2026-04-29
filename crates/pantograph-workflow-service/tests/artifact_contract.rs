@@ -86,10 +86,7 @@ fn artifact_descriptor_contract_snapshot_uses_references_not_payload_bodies() {
         })
     );
 
-    assert!(
-        value.to_string().find("data:image").is_none(),
-        "descriptor response must not contain data URLs"
-    );
+    assert!(!value.to_string().contains("data:image"));
 }
 
 #[test]

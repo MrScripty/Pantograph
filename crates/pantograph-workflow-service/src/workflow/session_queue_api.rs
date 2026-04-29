@@ -538,6 +538,7 @@ impl WorkflowService {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn record_scheduler_queue_control_event_if_configured(
         &self,
         session: &WorkflowExecutionSessionSummary,

@@ -369,9 +369,11 @@ impl WorkflowTraceStore {
                 .traces_by_id
                 .get(event.workflow_run_id())
                 .and_then(|trace| run_summary_record(trace, timestamp_ms));
-            let node_status_events = event_applied
-                .then(|| node_status_events_from_trace_state(&state, event, timestamp_ms))
-                .unwrap_or_default();
+            let node_status_events = if event_applied {
+                node_status_events_from_trace_state(&state, event, timestamp_ms)
+            } else {
+                Vec::new()
+            };
             (
                 state.snapshot_all(),
                 terminal_timing_observations(&state, event, timestamp_ms),
@@ -382,8 +384,7 @@ impl WorkflowTraceStore {
         self.record_run_summary(run_summary);
         self.record_timing_observations(observations);
         self.record_node_status_events(node_status_events);
-        let snapshot = self.enrich_timing(snapshot);
-        snapshot
+        self.enrich_timing(snapshot)
     }
 
     pub fn record_event_now(&self, event: &WorkflowTraceEvent) -> WorkflowTraceRecordResult {
@@ -455,7 +456,7 @@ impl WorkflowTraceStore {
             return snapshot;
         };
         let ledger = ledger.lock();
-        enrich_snapshot_timing(snapshot, &*ledger, unix_timestamp_ms())
+        enrich_snapshot_timing(snapshot, &ledger, unix_timestamp_ms())
     }
 }
 
