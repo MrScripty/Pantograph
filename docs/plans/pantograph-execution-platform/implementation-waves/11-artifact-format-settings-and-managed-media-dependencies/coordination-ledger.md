@@ -107,6 +107,23 @@ worker.
 | Backend retention audit worker | Prove physical artifact body deletion preserves queryable metadata and binary reads fail closed through ArtifactStore/WorkflowService tests. Add the smallest implementation fix only if the test exposes a direct Stage `11` defect. | `crates/pantograph-workflow-service/tests/artifact_store.rs`, `crates/pantograph-workflow-service/src/workflow/artifact_store.rs`, `crates/pantograph-workflow-service/src/workflow/artifact_api.rs`, `docs/plans/pantograph-execution-platform/implementation-waves/11-artifact-format-settings-and-managed-media-dependencies/reports/wave-05-worker-artifact-retention-audit.md` | Frontend files, command registration, ArtifactStore contract DTOs, diagnostics ledger schema, managed redistributables, `.pantograph/**`, `assets/**`, generated output, and lockfiles. | `reports/wave-05-worker-artifact-retention-audit.md` |
 | Output-node selector worker | Add image and audio output-node format controls driven by backend capability/default DTOs, preserving explicit per-node overrides in node data so run snapshots capture them. | `src/components/nodes/workflow/ImageOutputNode.svelte`, `src/components/nodes/workflow/AudioOutputNode.svelte`, `src/components/nodes/workflow/README.md`, focused frontend tests only if an existing harness supports this component layer, `docs/plans/pantograph-execution-platform/implementation-waves/11-artifact-format-settings-and-managed-media-dependencies/reports/wave-05-worker-output-node-format-selectors.md` | Rust files, workflow service command files, shared TypeScript DTO files, workbench Settings page files, diagnostics ledger schema, `.pantograph/**`, `assets/**`, generated output, and lockfiles. | `reports/wave-05-worker-output-node-format-selectors.md` |
 
+## 2026-04-29 Conversion And Binding Worker Split
+
+- Previous continuation slices were integrated as `6ffcc4f6` and
+  `ac2692ed`.
+- Current dirty files remain limited to unrelated deleted workflow/assets and
+  untracked diagnostics/asset files; no Stage `11` implementation files are
+  dirty at split time.
+- Shared ArtifactStore, format settings, and binding contracts remain frozen.
+  Workers may consume existing DTOs but must not edit contract definitions.
+- Integration sequence: backend conversion override consumption first, then C#
+  binding smoke parity.
+
+| Owner | Scope | Primary Write Set | Forbidden Shared Files | Report |
+| ----- | ----- | ----------------- | ---------------------- | ------ |
+| Backend conversion override worker | Make workflow-service artifact conversion use backend defaults and graph-local `artifact_format_override` metadata for image/audio descriptors when run snapshots provide graph settings, validating overrides through existing backend capabilities and rejecting invalid values. | `crates/pantograph-workflow-service/src/workflow/artifact_output_conversion.rs`, `crates/pantograph-workflow-service/src/workflow/workflow_run_api.rs`, `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`, focused workflow-service tests, `docs/plans/pantograph-execution-platform/implementation-waves/11-artifact-format-settings-and-managed-media-dependencies/reports/wave-05-worker-output-format-conversion-overrides.md` | Frontend files, C# bindings, ArtifactStore contract DTOs, diagnostics ledger schema, managed redistributables, `.pantograph/**`, `assets/**`, generated output, and lockfiles. | `reports/wave-05-worker-output-format-conversion-overrides.md` |
+| C# binding artifact smoke worker | Update the opt-in C# diffusion smoke so it treats image outputs as ArtifactStore descriptors and reads bytes through the UniFFI artifact body API instead of decoding inline base64/data URLs. | `bindings/csharp/Pantograph.NativeSmoke/Program.cs`, `bindings/csharp/README.md` if needed, `docs/plans/pantograph-execution-platform/implementation-waves/11-artifact-format-settings-and-managed-media-dependencies/reports/wave-05-worker-csharp-artifact-smoke.md` | Rust backend files, frontend files, generated bindings, package artifacts, `.pantograph/**`, `assets/**`, generated output, and lockfiles. | `reports/wave-05-worker-csharp-artifact-smoke.md` |
+
 ## Source Audit Snapshot
 
 Initial local audit found these migration families:
