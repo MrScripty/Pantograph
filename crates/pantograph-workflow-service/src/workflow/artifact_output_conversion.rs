@@ -1,12 +1,18 @@
 use super::{
-    ArtifactAttribution, ArtifactFormatCapabilities, ArtifactFormatDependencyVersions,
-    ArtifactFormatMetadata, ArtifactFormatSettings, ArtifactPayloadKind,
-    ArtifactStreamChunkWriteRequest, ArtifactStreamFinalizeRequest, ArtifactStreamOpenRequest,
-    ArtifactWriteRequest, AudioArtifactFormatSettings, ImageArtifactFormatSettings,
-    ThreeDArtifactFormatSettings, VideoArtifactFormatSettings, WorkflowPortBinding,
-    WorkflowService, WorkflowServiceError,
+    ArtifactAttribution, ArtifactConversionDependency, ArtifactConversionStatus,
+    ArtifactFormatCapabilities, ArtifactFormatDependencyVersions, ArtifactFormatMetadata,
+    ArtifactFormatSettings, ArtifactPayloadKind, ArtifactStreamChunkWriteRequest,
+    ArtifactStreamFinalizeRequest, ArtifactStreamOpenRequest, ArtifactWriteRequest,
+    AudioArtifactFormatSettings, ImageArtifactFormatSettings, ThreeDArtifactFormatSettings,
+    VideoArtifactFormatSettings, WorkflowPortBinding, WorkflowService, WorkflowServiceError,
 };
 use crate::graph::WorkflowGraphRunSettings;
+use pantograph_media_conversion::{
+    ArtifactId, ConversionMediaKind, FormatField, GraphNodeId, MediaConversionAttribution,
+    MediaConversionError, MediaConversionId, MediaConversionRequest, MediaConversionResult,
+    MediaConversionSource, MediaConversionStatus, MediaConversionTarget, MediaType, PortId,
+    WorkflowRunId,
+};
 
 const IMAGE_PORT_ID: &str = "image";
 const AUDIO_PORT_ID: &str = "audio";
@@ -18,7 +24,7 @@ const DEFAULT_TABLE_MEDIA_TYPE: &str = "text/csv";
 const DEFAULT_BINARY_MEDIA_TYPE: &str = "application/octet-stream";
 const DEFAULT_STRUCTURED_MEDIA_TYPE: &str = "application/json";
 
-pub(super) fn convert_media_outputs_to_artifacts(
+pub(super) async fn convert_media_outputs_to_artifacts(
     service: &WorkflowService,
     workflow_id: &str,
     workflow_version_id: &str,
@@ -29,11 +35,11 @@ pub(super) fn convert_media_outputs_to_artifacts(
     let format_settings = service.artifact_format_settings_guard()?.clone();
     let dependency_versions = service.artifact_format_dependency_versions();
     let format_capabilities = service.artifact_format_capabilities();
-    outputs
-        .into_iter()
-        .map(|binding| {
-            if let Some(stream_output) = StreamArtifactOutput::from_binding(&binding) {
-                return convert_stream_artifact_output(
+    let mut converted = Vec::with_capacity(outputs.len());
+    for binding in outputs {
+        if let Some(stream_output) = StreamArtifactOutput::from_binding(&binding) {
+            converted.push(
+                convert_stream_artifact_output(
                     service,
                     workflow_id,
                     workflow_version_id,
@@ -44,11 +50,16 @@ pub(super) fn convert_media_outputs_to_artifacts(
                     &dependency_versions,
                     binding,
                     stream_output,
-                );
-            }
-            let Some(artifact_output) = ArtifactOutput::from_binding(&binding) else {
-                return Ok(binding);
-            };
+                )
+                .await?,
+            );
+            continue;
+        }
+        let Some(artifact_output) = ArtifactOutput::from_binding(&binding) else {
+            converted.push(binding);
+            continue;
+        };
+        converted.push(
             convert_artifact_output(
                 service,
                 workflow_id,
@@ -61,11 +72,13 @@ pub(super) fn convert_media_outputs_to_artifacts(
                 binding,
                 artifact_output,
             )
-        })
-        .collect()
+            .await?,
+        );
+    }
+    Ok(converted)
 }
 
-fn convert_stream_artifact_output(
+async fn convert_stream_artifact_output(
     service: &WorkflowService,
     workflow_id: &str,
     workflow_version_id: &str,
@@ -112,11 +125,30 @@ fn convert_stream_artifact_output(
         sanitize_artifact_id(&binding.node_id),
         sanitize_artifact_id(&binding.port_id)
     );
+    let converted_output = if output_format.conversion_required {
+        let body = decoded_chunks.concat();
+        maybe_convert_output_body(
+            service,
+            &binding,
+            workflow_run_id,
+            &artifact_id,
+            stream_output.payload_kind,
+            media_type.as_deref(),
+            output_format,
+            body,
+        )
+        .await?
+    } else {
+        ConvertedOutputBody {
+            body: Vec::new(),
+            format: output_format,
+        }
+    };
     service.open_artifact_stream(ArtifactStreamOpenRequest {
         artifact_id: Some(artifact_id.clone()),
         payload_kind: stream_output.payload_kind,
-        media_type: output_format.media_type.clone(),
-        format: Some(output_format.metadata),
+        media_type: converted_output.format.media_type.clone(),
+        format: Some(converted_output.format.metadata),
         attribution: ArtifactAttribution {
             workflow_run_id: workflow_run_id.to_string(),
             workflow_id: Some(workflow_id.to_string()),
@@ -130,7 +162,12 @@ fn convert_stream_artifact_output(
         parent_artifact_id: None,
         revision_index: None,
     })?;
-    for (sequence, body) in decoded_chunks.into_iter().enumerate() {
+    let chunks = if converted_output.body.is_empty() {
+        decoded_chunks
+    } else {
+        vec![converted_output.body]
+    };
+    for (sequence, body) in chunks.into_iter().enumerate() {
         service.append_artifact_stream_chunk(ArtifactStreamChunkWriteRequest {
             artifact_id: artifact_id.clone(),
             sequence: sequence as u64,
@@ -150,7 +187,7 @@ fn convert_stream_artifact_output(
     })
 }
 
-fn convert_artifact_output(
+async fn convert_artifact_output(
     service: &WorkflowService,
     workflow_id: &str,
     workflow_version_id: &str,
@@ -185,11 +222,22 @@ fn convert_artifact_output(
         sanitize_artifact_id(&binding.node_id),
         sanitize_artifact_id(&binding.port_id)
     );
+    let converted_output = maybe_convert_output_body(
+        service,
+        &binding,
+        workflow_run_id,
+        &artifact_id,
+        artifact_output.payload_kind,
+        media_type.as_deref(),
+        output_format,
+        body,
+    )
+    .await?;
     let descriptor = service.write_artifact(ArtifactWriteRequest {
         artifact_id: Some(artifact_id),
         payload_kind: artifact_output.payload_kind,
-        media_type: output_format.media_type.clone(),
-        format: Some(output_format.metadata),
+        media_type: converted_output.format.media_type.clone(),
+        format: Some(converted_output.format.metadata),
         attribution: ArtifactAttribution {
             workflow_run_id: workflow_run_id.to_string(),
             workflow_id: Some(workflow_id.to_string()),
@@ -202,7 +250,7 @@ fn convert_artifact_output(
         artifact_role: Some("workflow_output".to_string()),
         parent_artifact_id: None,
         revision_index: None,
-        body,
+        body: converted_output.body,
     })?;
     Ok(WorkflowPortBinding {
         value: serde_json::to_value(descriptor).map_err(|error| {
@@ -217,6 +265,189 @@ fn convert_artifact_output(
 struct ResolvedOutputFormat {
     media_type: String,
     metadata: ArtifactFormatMetadata,
+    conversion_required: bool,
+}
+
+struct ConvertedOutputBody {
+    body: Vec<u8>,
+    format: ResolvedOutputFormat,
+}
+
+async fn maybe_convert_output_body(
+    service: &WorkflowService,
+    binding: &WorkflowPortBinding,
+    workflow_run_id: &str,
+    artifact_id: &str,
+    payload_kind: ArtifactPayloadKind,
+    source_media_type: Option<&str>,
+    mut format: ResolvedOutputFormat,
+    body: Vec<u8>,
+) -> Result<ConvertedOutputBody, WorkflowServiceError> {
+    if !format.conversion_required {
+        return Ok(ConvertedOutputBody { body, format });
+    }
+
+    let source_media_type = source_media_type.ok_or_else(|| {
+        WorkflowServiceError::CapabilityViolation(format!(
+            "artifact_format_override for binding '{}.{}' requires media conversion but payload media_type is unknown",
+            binding.node_id, binding.port_id
+        ))
+    })?;
+    let executor = service.media_conversion_executor()?.ok_or_else(|| {
+        WorkflowServiceError::CapabilityViolation(format!(
+            "artifact_format_override for binding '{}.{}' requests media_type '{}' but payload is '{}'; media conversion executor is not configured",
+            binding.node_id, binding.port_id, format.media_type, source_media_type
+        ))
+    })?;
+    let request = media_conversion_request(
+        binding,
+        workflow_run_id,
+        artifact_id,
+        payload_kind,
+        source_media_type,
+        &format,
+        body,
+    )?;
+    let result = executor
+        .convert(request)
+        .await
+        .map_err(media_conversion_error)?;
+    apply_media_conversion_result(&mut format, &result)?;
+    Ok(ConvertedOutputBody {
+        body: result.body,
+        format,
+    })
+}
+
+fn media_conversion_request(
+    binding: &WorkflowPortBinding,
+    workflow_run_id: &str,
+    artifact_id: &str,
+    payload_kind: ArtifactPayloadKind,
+    source_media_type: &str,
+    format: &ResolvedOutputFormat,
+    body: Vec<u8>,
+) -> Result<MediaConversionRequest, WorkflowServiceError> {
+    let source_artifact_id =
+        ArtifactId::try_from(artifact_id.to_string()).map_err(media_conversion_contract_error)?;
+    MediaConversionRequest::try_new(
+        MediaConversionId::generate(),
+        conversion_media_kind(payload_kind)?,
+        MediaConversionAttribution {
+            workflow_run_id: WorkflowRunId::try_from(workflow_run_id.to_string())
+                .map_err(media_conversion_contract_error)?,
+            source_artifact_id: source_artifact_id.clone(),
+            node_id: Some(
+                GraphNodeId::try_from(binding.node_id.clone())
+                    .map_err(media_conversion_contract_error)?,
+            ),
+            port_id: Some(
+                PortId::try_from(binding.port_id.clone())
+                    .map_err(media_conversion_contract_error)?,
+            ),
+        },
+        MediaConversionSource::try_new(
+            source_artifact_id,
+            MediaType::try_from(source_media_type.to_string())
+                .map_err(media_conversion_contract_error)?,
+            body,
+        )
+        .map_err(media_conversion_contract_error)?,
+        media_conversion_target(format)?,
+        None,
+    )
+    .map_err(media_conversion_contract_error)
+}
+
+fn media_conversion_target(
+    format: &ResolvedOutputFormat,
+) -> Result<MediaConversionTarget, WorkflowServiceError> {
+    MediaConversionTarget::try_new(
+        FormatField::try_from(format.metadata.format_id.clone())
+            .map_err(media_conversion_contract_error)?,
+        MediaType::try_from(format.media_type.clone()).map_err(media_conversion_contract_error)?,
+        optional_format_field(format.metadata.codec_id.clone())?,
+        format.metadata.quality_percent,
+        format.metadata.bitrate_kbps,
+        format.metadata.crf,
+        optional_format_field(format.metadata.bit_depth.clone())?,
+        optional_format_field(format.metadata.color_profile_id.clone())?,
+        format.metadata.color_profile_id.is_some() || format.metadata.library_version.is_some(),
+    )
+    .map_err(media_conversion_contract_error)
+}
+
+fn optional_format_field(
+    value: Option<String>,
+) -> Result<Option<FormatField>, WorkflowServiceError> {
+    value
+        .map(FormatField::try_from)
+        .transpose()
+        .map_err(media_conversion_contract_error)
+}
+
+fn conversion_media_kind(
+    payload_kind: ArtifactPayloadKind,
+) -> Result<ConversionMediaKind, WorkflowServiceError> {
+    match payload_kind {
+        ArtifactPayloadKind::Image => Ok(ConversionMediaKind::Image),
+        ArtifactPayloadKind::Audio => Ok(ConversionMediaKind::Audio),
+        ArtifactPayloadKind::Video => Ok(ConversionMediaKind::Video),
+        ArtifactPayloadKind::ThreeD => Ok(ConversionMediaKind::ThreeD),
+        _ => Err(WorkflowServiceError::CapabilityViolation(format!(
+            "artifact payload kind {:?} does not support media conversion",
+            payload_kind
+        ))),
+    }
+}
+
+fn apply_media_conversion_result(
+    format: &mut ResolvedOutputFormat,
+    result: &MediaConversionResult,
+) -> Result<(), WorkflowServiceError> {
+    format.media_type = result.media_type.to_string();
+    format.metadata.media_type = result.media_type.to_string();
+    format.metadata.conversion_id = Some(result.conversion_id.to_string());
+    format.metadata.conversion_status = Some(match result.status {
+        MediaConversionStatus::Converted => ArtifactConversionStatus::Converted,
+        MediaConversionStatus::PassedThrough => ArtifactConversionStatus::PassedThrough,
+        MediaConversionStatus::Failed => ArtifactConversionStatus::Failed,
+    });
+    format.metadata.conversion_command_id = Some(result.command_id.clone());
+    format.metadata.conversion_dependencies = result
+        .dependencies
+        .iter()
+        .map(|dependency| ArtifactConversionDependency {
+            dependency_id: dependency.dependency_id.to_string(),
+            active_version: dependency.version.to_string(),
+            lease_id: dependency.lease_id.to_string(),
+            lease_holder: dependency.lease_holder.clone(),
+        })
+        .collect();
+    format.conversion_required = false;
+    Ok(())
+}
+
+fn media_conversion_error(error: MediaConversionError) -> WorkflowServiceError {
+    match error {
+        MediaConversionError::UnsupportedConversion { .. }
+        | MediaConversionError::UnsupportedCommandPlan { .. }
+        | MediaConversionError::DependencyUnavailable { .. } => {
+            WorkflowServiceError::CapabilityViolation(error.to_string())
+        }
+        MediaConversionError::Cancelled => WorkflowServiceError::Cancelled(error.to_string()),
+        MediaConversionError::TimedOut { .. } => {
+            WorkflowServiceError::RuntimeTimeout(error.to_string())
+        }
+        MediaConversionError::ProcessFailed { .. } | MediaConversionError::Io { .. } => {
+            WorkflowServiceError::Internal(error.to_string())
+        }
+        _ => WorkflowServiceError::InvalidRequest(error.to_string()),
+    }
+}
+
+fn media_conversion_contract_error(error: MediaConversionError) -> WorkflowServiceError {
+    WorkflowServiceError::InvalidRequest(error.to_string())
 }
 
 fn resolve_output_format_metadata(
@@ -265,6 +496,7 @@ fn resolve_output_format_metadata(
             Ok(ResolvedOutputFormat {
                 metadata: format_metadata(payload_kind, &media_type),
                 media_type,
+                conversion_required: false,
             })
         }
     }
@@ -325,24 +557,28 @@ fn resolve_image_output_format(
     )?;
 
     let actual_media_type = authoritative_media_type.unwrap_or(&selected_format.media_type);
-    if selection.is_override && actual_media_type != selected_format.media_type {
-        return Err(transcode_required_error(
-            binding,
-            actual_media_type,
-            &selected_format.media_type,
-        ));
-    }
-    let format = capabilities
-        .image_formats
-        .iter()
-        .find(|option| option.media_type == actual_media_type)
-        .unwrap_or(selected_format);
+    let conversion_required =
+        selection.is_override && actual_media_type != selected_format.media_type;
+    let target_media_type = if conversion_required {
+        selected_format.media_type.as_str()
+    } else {
+        actual_media_type
+    };
+    let format = if conversion_required {
+        selected_format
+    } else {
+        capabilities
+            .image_formats
+            .iter()
+            .find(|option| option.media_type == actual_media_type)
+            .unwrap_or(selected_format)
+    };
 
     Ok(ResolvedOutputFormat {
-        media_type: actual_media_type.to_string(),
+        media_type: target_media_type.to_string(),
         metadata: ArtifactFormatMetadata {
             format_id: format.format_id.clone(),
-            media_type: actual_media_type.to_string(),
+            media_type: target_media_type.to_string(),
             codec_id: None,
             quality_percent: Some(selection.quality_percent),
             bitrate_kbps: None,
@@ -357,6 +593,7 @@ fn resolve_image_output_format(
             conversion_command_id: None,
             conversion_dependencies: Vec::new(),
         },
+        conversion_required,
     })
 }
 
@@ -409,18 +646,22 @@ fn resolve_audio_output_format(
     )?;
 
     let actual_media_type = authoritative_media_type.unwrap_or(&selected_format.media_type);
-    if selection.is_override && actual_media_type != selected_format.media_type {
-        return Err(transcode_required_error(
-            binding,
-            actual_media_type,
-            &selected_format.media_type,
-        ));
-    }
-    let format = capabilities
-        .audio_formats
-        .iter()
-        .find(|option| option.media_type == actual_media_type)
-        .unwrap_or(selected_format);
+    let conversion_required =
+        selection.is_override && actual_media_type != selected_format.media_type;
+    let target_media_type = if conversion_required {
+        selected_format.media_type.as_str()
+    } else {
+        actual_media_type
+    };
+    let format = if conversion_required {
+        selected_format
+    } else {
+        capabilities
+            .audio_formats
+            .iter()
+            .find(|option| option.media_type == actual_media_type)
+            .unwrap_or(selected_format)
+    };
     let codec_id = if format
         .codec_ids
         .iter()
@@ -436,10 +677,10 @@ fn resolve_audio_output_format(
     };
 
     Ok(ResolvedOutputFormat {
-        media_type: actual_media_type.to_string(),
+        media_type: target_media_type.to_string(),
         metadata: ArtifactFormatMetadata {
             format_id: format.format_id.clone(),
-            media_type: actual_media_type.to_string(),
+            media_type: target_media_type.to_string(),
             codec_id: Some(codec_id),
             quality_percent: None,
             bitrate_kbps: Some(selection.bitrate_kbps),
@@ -454,6 +695,7 @@ fn resolve_audio_output_format(
             conversion_command_id: None,
             conversion_dependencies: Vec::new(),
         },
+        conversion_required,
     })
 }
 
@@ -513,17 +755,21 @@ fn resolve_video_output_format(
     )?;
 
     let actual_media_type = authoritative_media_type.unwrap_or(&selected_format.media_type);
-    if selection.is_override && actual_media_type != selected_format.media_type {
-        return Err(transcode_required_error(
-            binding,
-            actual_media_type,
-            &selected_format.media_type,
-        ));
-    }
-    let format = capabilities
-        .video_formats
-        .iter()
-        .find(|option| option.media_type == actual_media_type);
+    let conversion_required =
+        selection.is_override && actual_media_type != selected_format.media_type;
+    let target_media_type = if conversion_required {
+        selected_format.media_type.as_str()
+    } else {
+        actual_media_type
+    };
+    let format = if conversion_required {
+        Some(selected_format)
+    } else {
+        capabilities
+            .video_formats
+            .iter()
+            .find(|option| option.media_type == actual_media_type)
+    };
     let codec_id = format
         .and_then(|format| {
             if format
@@ -539,12 +785,12 @@ fn resolve_video_output_format(
         .unwrap_or_else(|| selection.codec_id.clone());
 
     Ok(ResolvedOutputFormat {
-        media_type: actual_media_type.to_string(),
+        media_type: target_media_type.to_string(),
         metadata: ArtifactFormatMetadata {
             format_id: format
                 .map(|format| format.format_id.clone())
-                .unwrap_or_else(|| video_format_id(actual_media_type).to_string()),
-            media_type: actual_media_type.to_string(),
+                .unwrap_or_else(|| video_format_id(target_media_type).to_string()),
+            media_type: target_media_type.to_string(),
             codec_id: Some(codec_id),
             quality_percent: None,
             bitrate_kbps: None,
@@ -559,6 +805,7 @@ fn resolve_video_output_format(
             conversion_command_id: None,
             conversion_dependencies: Vec::new(),
         },
+        conversion_required,
     })
 }
 
@@ -592,24 +839,28 @@ fn resolve_three_d_output_format(
     let selected_media_type =
         media_type_for_three_d_format_id(&selected_format.format_id, &selected_format.media_type);
     let actual_media_type = authoritative_media_type.unwrap_or(&selected_media_type);
-    if selection.is_override && actual_media_type != selected_media_type {
-        return Err(transcode_required_error(
-            binding,
-            actual_media_type,
-            &selected_media_type,
-        ));
-    }
-    let format = capabilities.three_d_formats.iter().find(|option| {
-        media_type_for_three_d_format_id(&option.format_id, &option.media_type) == actual_media_type
-    });
+    let conversion_required = selection.is_override && actual_media_type != selected_media_type;
+    let target_media_type = if conversion_required {
+        selected_media_type.as_str()
+    } else {
+        actual_media_type
+    };
+    let format = if conversion_required {
+        Some(selected_format)
+    } else {
+        capabilities.three_d_formats.iter().find(|option| {
+            media_type_for_three_d_format_id(&option.format_id, &option.media_type)
+                == target_media_type
+        })
+    };
 
     Ok(ResolvedOutputFormat {
-        media_type: actual_media_type.to_string(),
+        media_type: target_media_type.to_string(),
         metadata: ArtifactFormatMetadata {
             format_id: format
                 .map(|format| format.format_id.clone())
-                .unwrap_or_else(|| three_d_format_id(actual_media_type).to_string()),
-            media_type: actual_media_type.to_string(),
+                .unwrap_or_else(|| three_d_format_id(target_media_type).to_string()),
+            media_type: target_media_type.to_string(),
             codec_id: None,
             quality_percent: None,
             bitrate_kbps: None,
@@ -624,6 +875,7 @@ fn resolve_three_d_output_format(
             conversion_command_id: None,
             conversion_dependencies: Vec::new(),
         },
+        conversion_required,
     })
 }
 
@@ -798,17 +1050,6 @@ fn validate_u32_range(
         )));
     }
     Ok(())
-}
-
-fn transcode_required_error(
-    binding: &WorkflowPortBinding,
-    actual_media_type: &str,
-    requested_media_type: &str,
-) -> WorkflowServiceError {
-    WorkflowServiceError::CapabilityViolation(format!(
-        "artifact_format_override for binding '{}.{}' requests media_type '{}' but payload is '{}'; transcoding is not implemented",
-        binding.node_id, binding.port_id, requested_media_type, actual_media_type
-    ))
 }
 
 fn authoritative_media_type(
@@ -1285,14 +1526,22 @@ fn decode_base64_byte(byte: u8) -> Result<u8, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{convert_media_outputs_to_artifacts, decode_base64};
+    use super::decode_base64;
     use crate::graph::{WorkflowGraphRunSettings, WorkflowGraphRunSettingsNode};
     use crate::workflow::{
-        ArtifactDescriptor, ArtifactFormatDependencyVersion, ArtifactFormatDependencyVersions,
-        ArtifactFormatSettings, ArtifactFormatSettingsUpdateRequest, ArtifactLifecycleState,
-        ArtifactPayloadKind, ArtifactPolicy, ArtifactReadRequest, ArtifactStore,
-        WorkflowPortBinding, WorkflowService, WorkflowServiceError,
+        ArtifactConversionStatus, ArtifactDescriptor, ArtifactFormatDependencyVersion,
+        ArtifactFormatDependencyVersions, ArtifactFormatSettings,
+        ArtifactFormatSettingsUpdateRequest, ArtifactLifecycleState, ArtifactPayloadKind,
+        ArtifactPolicy, ArtifactReadRequest, ArtifactStore, WorkflowPortBinding, WorkflowService,
+        WorkflowServiceError,
     };
+    use async_trait::async_trait;
+    use pantograph_media_conversion::{
+        ManagedMediaDependencyId, ManagedMediaDependencyLeaseId, ManagedMediaDependencyVersion,
+        MediaConversionDependencyAttribution, MediaConversionError, MediaConversionExecutor,
+        MediaConversionRequest, MediaConversionResult, MediaConversionStatus,
+    };
+    use std::sync::{Arc, Mutex};
 
     fn policy() -> ArtifactPolicy {
         ArtifactPolicy {
@@ -1305,6 +1554,26 @@ mod tests {
             spill_threshold_bytes: Some(1024),
             delete_on_consume: false,
         }
+    }
+
+    fn convert_media_outputs_to_artifacts(
+        service: &WorkflowService,
+        workflow_id: &str,
+        workflow_version_id: &str,
+        workflow_run_id: &str,
+        graph_run_settings: Option<&WorkflowGraphRunSettings>,
+        outputs: Vec<WorkflowPortBinding>,
+    ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
+        tokio::runtime::Runtime::new()
+            .expect("tokio runtime")
+            .block_on(super::convert_media_outputs_to_artifacts(
+                service,
+                workflow_id,
+                workflow_version_id,
+                workflow_run_id,
+                graph_run_settings,
+                outputs,
+            ))
     }
 
     #[test]
@@ -1883,7 +2152,7 @@ mod tests {
     }
 
     #[test]
-    fn convert_media_outputs_rejects_override_that_requires_transcoding() {
+    fn convert_media_outputs_requires_converter_for_image_override_mismatch() {
         let temp = tempfile::tempdir().expect("temp dir");
         let store = ArtifactStore::open(temp.path(), policy()).expect("artifact store");
         let service = WorkflowService::new().with_artifact_store(store);
@@ -1908,17 +2177,92 @@ mod tests {
                 value: serde_json::json!("data:image/png;base64,aGVsbG8="),
             }],
         )
-        .expect_err("transcode not implemented");
+        .expect_err("converter required");
 
         assert!(matches!(
             error,
             WorkflowServiceError::CapabilityViolation(_)
         ));
-        assert!(error.to_string().contains("transcoding is not implemented"));
+        assert!(error
+            .to_string()
+            .contains("media conversion executor is not configured"));
     }
 
     #[test]
-    fn convert_media_outputs_rejects_video_override_that_requires_transcoding() {
+    fn convert_media_outputs_invokes_converter_and_records_conversion_attribution() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let store = ArtifactStore::open(temp.path(), policy()).expect("artifact store");
+        let converter = Arc::new(FakeMediaConversionExecutor::default());
+        let service = WorkflowService::new()
+            .with_artifact_store(store)
+            .with_media_conversion_executor(converter.clone());
+        let graph_settings = graph_settings_for_override(
+            "image-output",
+            serde_json::json!({
+                "format_id": "jpg",
+                "quality_percent": 90,
+                "color_profile_id": "srgb"
+            }),
+        );
+
+        let converted = convert_media_outputs_to_artifacts(
+            &service,
+            "workflow-a",
+            "1.0.0",
+            "run-a",
+            Some(&graph_settings),
+            vec![WorkflowPortBinding {
+                node_id: "image-output".to_string(),
+                port_id: "image".to_string(),
+                value: serde_json::json!("data:image/png;base64,aGVsbG8="),
+            }],
+        )
+        .expect("convert output");
+
+        let descriptor: ArtifactDescriptor =
+            serde_json::from_value(converted[0].value.clone()).expect("descriptor");
+        let request = converter.take_request();
+        assert_eq!(request.source.media_type.to_string(), "image/png");
+        assert_eq!(request.target.media_type.to_string(), "image/jpeg");
+        assert_eq!(request.attribution.workflow_run_id.to_string(), "run-a");
+        assert_eq!(
+            request.attribution.source_artifact_id.to_string(),
+            "run_run-a_image-output_image"
+        );
+
+        let format = descriptor.format.expect("format");
+        assert_eq!(format.format_id, "jpg");
+        assert_eq!(format.media_type, "image/jpeg");
+        assert_eq!(format.conversion_id.as_deref(), Some("conversion_test"));
+        assert_eq!(
+            format.conversion_status,
+            Some(ArtifactConversionStatus::Converted)
+        );
+        assert_eq!(
+            format.conversion_command_id.as_deref(),
+            Some("oiiotool_jpg")
+        );
+        assert_eq!(format.conversion_dependencies.len(), 1);
+        assert_eq!(format.conversion_dependencies[0].dependency_id, "oiiotool");
+        assert_eq!(format.conversion_dependencies[0].active_version, "2.5.18");
+        assert_eq!(format.conversion_dependencies[0].lease_id, "lease_test");
+        assert_eq!(
+            format.conversion_dependencies[0].lease_holder,
+            "workflow_run:run-a/node:image-output/port:image/conversion:conversion_test"
+        );
+
+        let body = service
+            .read_artifact_body(ArtifactReadRequest {
+                artifact_id: descriptor.artifact_id,
+                byte_range_start: None,
+                byte_range_end_exclusive: None,
+            })
+            .expect("read converted artifact body");
+        assert_eq!(body.body, b"converted-jpeg");
+    }
+
+    #[test]
+    fn convert_media_outputs_requires_converter_for_video_override_mismatch() {
         let temp = tempfile::tempdir().expect("temp dir");
         let store = ArtifactStore::open(temp.path(), policy()).expect("artifact store");
         let service = WorkflowService::new().with_artifact_store(store);
@@ -1944,17 +2288,19 @@ mod tests {
                 value: serde_json::json!("data:video/webm;base64,aGVsbG8="),
             }],
         )
-        .expect_err("transcode not implemented");
+        .expect_err("converter required");
 
         assert!(matches!(
             error,
             WorkflowServiceError::CapabilityViolation(_)
         ));
-        assert!(error.to_string().contains("transcoding is not implemented"));
+        assert!(error
+            .to_string()
+            .contains("media conversion executor is not configured"));
     }
 
     #[test]
-    fn convert_media_outputs_rejects_three_d_override_that_requires_transcoding() {
+    fn convert_media_outputs_requires_converter_for_three_d_override_mismatch() {
         let temp = tempfile::tempdir().expect("temp dir");
         let store = ArtifactStore::open(temp.path(), policy()).expect("artifact store");
         let service = WorkflowService::new().with_artifact_store(store);
@@ -1977,13 +2323,15 @@ mod tests {
                 value: serde_json::json!("data:model/obj;base64,aGVsbG8="),
             }],
         )
-        .expect_err("transcode not implemented");
+        .expect_err("converter required");
 
         assert!(matches!(
             error,
             WorkflowServiceError::CapabilityViolation(_)
         ));
-        assert!(error.to_string().contains("transcoding is not implemented"));
+        assert!(error
+            .to_string()
+            .contains("media conversion executor is not configured"));
     }
 
     #[test]
@@ -2022,6 +2370,52 @@ mod tests {
                     "artifact_format_override": override_value
                 }),
             }],
+        }
+    }
+
+    #[derive(Default)]
+    struct FakeMediaConversionExecutor {
+        request: Mutex<Option<MediaConversionRequest>>,
+    }
+
+    impl FakeMediaConversionExecutor {
+        fn take_request(&self) -> MediaConversionRequest {
+            self.request
+                .lock()
+                .expect("request lock")
+                .take()
+                .expect("conversion request")
+        }
+    }
+
+    #[async_trait]
+    impl MediaConversionExecutor for FakeMediaConversionExecutor {
+        async fn convert(
+            &self,
+            request: MediaConversionRequest,
+        ) -> Result<MediaConversionResult, MediaConversionError> {
+            let conversion_id = pantograph_media_conversion::MediaConversionId::try_from(
+                "conversion_test".to_string(),
+            )?;
+            let result = MediaConversionResult::try_new(
+                conversion_id,
+                MediaConversionStatus::Converted,
+                request.target.media_type.clone(),
+                request.target.clone(),
+                "oiiotool_jpg".to_string(),
+                b"converted-jpeg".to_vec(),
+                vec![MediaConversionDependencyAttribution {
+                    dependency_id: ManagedMediaDependencyId::Oiiotool,
+                    version: ManagedMediaDependencyVersion::try_from("2.5.18".to_string())?,
+                    lease_id: ManagedMediaDependencyLeaseId::try_from("lease_test".to_string())?,
+                    lease_holder:
+                        "workflow_run:run-a/node:image-output/port:image/conversion:conversion_test"
+                            .to_string(),
+                }],
+                None,
+            )?;
+            *self.request.lock().expect("request lock") = Some(request);
+            Ok(result)
         }
     }
 }

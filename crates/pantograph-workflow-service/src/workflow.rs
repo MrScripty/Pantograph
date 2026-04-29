@@ -131,6 +131,8 @@ pub struct WorkflowService {
     artifact_format_dependency_versions: Arc<Mutex<ArtifactFormatDependencyVersions>>,
     attribution_store: Option<Arc<Mutex<SqliteAttributionStore>>>,
     diagnostics_ledger: Option<Arc<Mutex<SqliteDiagnosticsLedger>>>,
+    media_conversion_executor:
+        Arc<Mutex<Option<Arc<dyn pantograph_media_conversion::MediaConversionExecutor>>>>,
     scheduler_diagnostics_provider:
         Arc<Mutex<Option<Arc<dyn WorkflowSchedulerDiagnosticsProvider>>>>,
 }

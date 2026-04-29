@@ -51,6 +51,8 @@ temporary storage so status, activation, and lease behavior remain auditable.
 - Active-version removal and lease conflicts must fail closed.
 - Conversion dependency plans must validate holder attribution before any lease
   is acquired and must roll back earlier leases if a later dependency fails.
+- Executable path resolution must accept only managed tool dependencies and
+  reject native library artifacts such as OpenColorIO.
 
 ## Revisit Triggers
 
@@ -94,6 +96,9 @@ cargo test -p inference --test managed_media_dependencies
 - Lease attribution: conversion dependency tests assert holder, dependency id,
   active version, lease id, install root, expected files, rollback, and release
   behavior.
+- Executable resolution: conversion dependency tests assert that tool
+  dependencies resolve to app-owned managed executable paths and that native
+  library artifacts cannot be treated as tools.
 
 ## Structured Producer Contract
 

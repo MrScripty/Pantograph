@@ -28,12 +28,18 @@ Tauri, and generated binding surfaces.
 - Graph mutation and diagnostics contracts are consumed by frontend and
   bindings, so shape changes must be coordinated.
 - Scheduler and runtime-preflight decisions must stay backend-owned.
+- Managed media conversion enters through a neutral executor trait; this crate
+  must not depend on Tauri, inference managed-dependency state, or host process
+  execution.
 
 ## Decision
 Keep workflow orchestration in a reusable Rust service crate. Transport
 adapters decode boundary payloads and call this crate; runtime hosts implement
 narrow traits. Large internal modules may be decomposed, but public facades
 should be preserved until a breaking API change is explicitly accepted.
+Media conversion is host-injected through `pantograph-media-conversion` so
+workflow-service can build conversion requests and record descriptor metadata
+without owning managed executable resolution or process execution.
 
 ## Alternatives Rejected
 - Keep workflow behavior in Tauri commands: rejected because native bindings
@@ -50,6 +56,9 @@ should be preserved until a breaking API change is explicitly accepted.
 - Diagnostics snapshots and traces must preserve backend producer identity.
 - Transport adapters may translate payloads but must not change workflow
   decisions.
+- Artifact format override conversion may call an injected neutral executor,
+  but lease acquisition, executable-path resolution, and converter process
+  lifecycle stay outside this crate.
 
 ## Revisit Triggers
 - A public binding needs a workflow operation that cannot be represented by the
@@ -58,8 +67,8 @@ should be preserved until a breaking API change is explicitly accepted.
 - `workflow.rs` facade decomposition would require public API changes.
 
 ## Dependencies
-**Internal:** `node-engine`, `workflow-nodes`, and
-`pantograph-runtime-identity`.
+**Internal:** `node-engine`, `workflow-nodes`, `pantograph-runtime-identity`,
+and `pantograph-media-conversion`.
 
 **External:** `async-trait`, `serde`, `serde_json`, `thiserror`, `tokio`,
 `uuid`, `chrono`, and `parking_lot`.

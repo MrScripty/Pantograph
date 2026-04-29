@@ -127,6 +127,10 @@ conversion process execution stays in the neutral
   id, holder, install root, and expected files so host-owned conversion code can
   record per-conversion attribution without depending on ambient active-version
   snapshots.
+- Media conversion executable paths must be resolved through the typed managed
+  media dependency resolver. Host adapters must not assume that the first
+  `expected_files` entry is executable for every dependency; OpenColorIO is a
+  native library artifact and must not be launched as a process.
 
 ## Revisit Triggers
 

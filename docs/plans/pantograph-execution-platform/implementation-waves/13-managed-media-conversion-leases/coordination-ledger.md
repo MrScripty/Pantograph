@@ -38,7 +38,7 @@ Stage `13` completed Waves `01` through `05`.
 | `wave-03-lease-attribution` | Complete | Added attribution holder convention, validation, holder propagation on lease tokens, helper re-exports, and inference tests for multi-dependency acquisition, rollback, release, and invalid holders. |
 | `wave-04-media-type-coverage` | Complete for command planning | Added host-neutral command plans for image/audio/video targets, managed dependency requirements, stdin/stdout stream markers, argv vectors, and fail-closed 3D planning. Real conversion execution remains for Wave `06`. |
 | `wave-05-conversion-metadata-contracts` | Complete | Added typed conversion status, conversion id, command id, and per-conversion dependency lease attribution fields to artifact descriptors and durable I/O diagnostics metadata. |
-| `wave-06-host-conversion-integration` | Planned | Wire host-owned conversion execution into workflow artifact output conversion, acquire/release leases around process invocation, and populate descriptor/diagnostic attribution. |
+| `wave-06-host-conversion-integration` | In progress | Workflow-service now has a neutral conversion executor hook and inference exposes typed managed executable resolution. Tauri host adapter execution remains pending. |
 | `wave-07-api-gui-rollout` | Planned | Surface conversion lifecycle and failures through diagnostics, API, and GUI projections. |
 
 ## 2026-04-29 Wave 05 Contract Slice
@@ -52,6 +52,41 @@ Stage `13` completed Waves `01` through `05`.
 - Verification passed:
   `cargo test -p pantograph-diagnostics-ledger -p pantograph-workflow-service artifact --tests`
   and `cargo check -p pantograph-embedded-runtime -p pantograph`.
+
+## 2026-04-29 Wave 06 Parallel Start
+
+- Current dirty files before this split remained limited to unrelated deleted
+  assets, untracked diagnostics SQLite, and untracked asset files.
+- Worker A owns only the workflow-service conversion hook and fake-executor
+  tests. It must not edit Tauri, inference, or conversion-crate contracts.
+- Explorer B is read-only and will identify the host adapter insertion point,
+  executable-path resolution risks, and a safe follow-up write set for the
+  Tauri/inference adapter.
+- Integration sequence: merge workflow-service hook first, review Explorer B
+  findings, then launch or implement the host adapter in a separate write set.
+
+## 2026-04-29 Wave 06 Partial Integration
+
+- Worker A completed the workflow-service neutral conversion hook. Format
+  override media-type mismatches now call an injected
+  `pantograph_media_conversion::MediaConversionExecutor` or fail closed when no
+  executor is configured.
+- Integration review added command id and lease holder fields to the neutral
+  conversion result contract so workflow-service records host-supplied
+  conversion attribution instead of deriving lease facts locally.
+- Integration review preserved pass-through stream chunk ordering. Converted
+  streams are written as one converted output chunk; non-converted streams keep
+  their original chunk sequence.
+- Explorer B identified that executable paths were only inferable from
+  `install_root + expected_files`. A typed resolver was added in `inference` so
+  the future Tauri adapter does not depend on a brittle first-file convention.
+- Verification passed:
+  `cargo test -p pantograph-media-conversion`,
+  `cargo test -p pantograph-workflow-service artifact_output_conversion`, and
+  `cargo test -p inference --test managed_media_dependencies`.
+- Remaining Wave `06` work: implement and inject the Tauri host adapter that
+  acquires/release dependency plans, resolves managed executable paths, runs
+  command-plan steps, and returns neutral conversion results.
 
 ## Proposed Worker Split
 
@@ -108,6 +143,9 @@ host records concrete write sets.
   `cargo fmt --all -- --check`, and `npm run traceability`.
 - Wave `05`: `cargo test -p pantograph-diagnostics-ledger -p pantograph-workflow-service artifact --tests`
   and `cargo check -p pantograph-embedded-runtime -p pantograph`.
+- Wave `06` partial: `cargo test -p pantograph-media-conversion`,
+  `cargo test -p pantograph-workflow-service artifact_output_conversion`, and
+  `cargo test -p inference --test managed_media_dependencies`.
 
 ## Open Decisions
 

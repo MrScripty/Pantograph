@@ -22,6 +22,7 @@ const MAX_MEDIA_TYPE_LEN: usize = 128;
 const MAX_FORMAT_FIELD_LEN: usize = 128;
 const MAX_ERROR_SUMMARY_LEN: usize = 4096;
 const MAX_TIMEOUT_MS: u64 = 24 * 60 * 60 * 1000;
+const MAX_LEASE_HOLDER_LEN: usize = 640;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum MediaConversionError {
@@ -577,6 +578,7 @@ pub struct MediaConversionDependencyAttribution {
     pub dependency_id: ManagedMediaDependencyId,
     pub version: ManagedMediaDependencyVersion,
     pub lease_id: ManagedMediaDependencyLeaseId,
+    pub lease_holder: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -795,11 +797,13 @@ where
             });
         }
 
+        let command_id = request.target.format_id.as_str().to_string();
         MediaConversionResult::try_new(
             request.conversion_id,
             MediaConversionStatus::Converted,
             self.converter.target_media_type.clone(),
             request.target,
+            command_id,
             output.stdout,
             vec![self.converter.dependency.clone()],
             output.stderr_summary,
@@ -813,6 +817,7 @@ pub struct MediaConversionResult {
     pub status: MediaConversionStatus,
     pub media_type: MediaType,
     pub target: MediaConversionTarget,
+    pub command_id: String,
     pub body: Vec<u8>,
     pub dependencies: Vec<MediaConversionDependencyAttribution>,
     pub stderr_summary: Option<String>,
@@ -824,6 +829,7 @@ impl MediaConversionResult {
         status: MediaConversionStatus,
         media_type: MediaType,
         target: MediaConversionTarget,
+        command_id: String,
         body: Vec<u8>,
         dependencies: Vec<MediaConversionDependencyAttribution>,
         stderr_summary: Option<String>,
@@ -831,14 +837,23 @@ impl MediaConversionResult {
         if body.is_empty() {
             return Err(MediaConversionError::MissingField { field: "body" });
         }
+        let command_id = validate_identifier("command_id", command_id)?;
         if let Some(summary) = stderr_summary.as_deref() {
             validate_text_field("stderr_summary", summary.to_string(), MAX_ERROR_SUMMARY_LEN)?;
+        }
+        for dependency in &dependencies {
+            validate_text_field(
+                "dependency_lease_holder",
+                dependency.lease_holder.clone(),
+                MAX_LEASE_HOLDER_LEN,
+            )?;
         }
         Ok(Self {
             conversion_id,
             status,
             media_type,
             target,
+            command_id,
             body,
             dependencies,
             stderr_summary,
@@ -1089,6 +1104,9 @@ mod tests {
                 dependency_id: ManagedMediaDependencyId::Oiiotool,
                 version: id("2.5.18"),
                 lease_id: id("lease-1"),
+                lease_holder:
+                    "workflow_run:run-a/node:node-a/port:port-image/conversion:conversion-a"
+                        .to_string(),
             },
             ManagedExecutablePath::try_new(PathBuf::from("/managed/bin/oiiotool"))
                 .expect("executable path"),
@@ -1497,6 +1515,8 @@ mod tests {
             dependency_id: ManagedMediaDependencyId::Oiiotool,
             version: id("2.5.18"),
             lease_id: id("lease-1"),
+            lease_holder: "workflow_run:run-a/node:node-a/port:port-image/conversion:conversion-a"
+                .to_string(),
         };
 
         let result = MediaConversionResult::try_new(
@@ -1504,6 +1524,7 @@ mod tests {
             MediaConversionStatus::Converted,
             "image/jpeg".parse().expect("media type"),
             target(),
+            "oiiotool_jpg".to_string(),
             vec![1, 2, 3],
             vec![dependency.clone()],
             Some("bounded stderr".to_string()),
@@ -1532,6 +1553,7 @@ mod tests {
             MediaConversionStatus::Converted,
             "image/jpeg".parse().expect("media type"),
             target(),
+            "oiiotool_jpg".to_string(),
             Vec::new(),
             Vec::new(),
             None,

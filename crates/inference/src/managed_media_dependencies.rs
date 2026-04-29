@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -223,6 +223,41 @@ pub fn release_media_conversion_dependency_plan(
             errors.join("; ")
         ))
     }
+}
+
+pub fn resolve_media_conversion_dependency_executable_path(
+    dependency: &MediaConversionDependency,
+) -> Result<PathBuf, String> {
+    match dependency.id {
+        MediaConversionDependencyId::Ffmpeg
+        | MediaConversionDependencyId::Ocioconvert
+        | MediaConversionDependencyId::Oiiotool => {}
+        MediaConversionDependencyId::OpenColorIo => {
+            return Err(
+                "OpenColorIO is a managed native library artifact, not an executable tool"
+                    .to_string(),
+            );
+        }
+    }
+
+    if dependency.expected_files.len() != 1 {
+        return Err(format!(
+            "{} {} must expose exactly one executable expected file, found {}",
+            dependency.display_name,
+            dependency.version,
+            dependency.expected_files.len()
+        ));
+    }
+
+    let executable_path = Path::new(&dependency.install_root).join(&dependency.expected_files[0]);
+    if !executable_path.is_file() {
+        return Err(format!(
+            "{} {} executable {:?} is missing",
+            dependency.display_name, dependency.version, executable_path
+        ));
+    }
+
+    Ok(executable_path)
 }
 
 fn dependency_ids_for_request(

@@ -42,6 +42,7 @@ impl WorkflowService {
             )),
             attribution_store: None,
             diagnostics_ledger: None,
+            media_conversion_executor: Arc::new(Mutex::new(None)),
             scheduler_diagnostics_provider: Arc::new(Mutex::new(None)),
         }
     }
@@ -80,6 +81,14 @@ impl WorkflowService {
         self
     }
 
+    pub fn with_media_conversion_executor(
+        mut self,
+        executor: Arc<dyn pantograph_media_conversion::MediaConversionExecutor>,
+    ) -> Self {
+        self.media_conversion_executor = Arc::new(Mutex::new(Some(executor)));
+        self
+    }
+
     pub fn with_ephemeral_attribution_store() -> Result<Self, WorkflowServiceError> {
         Ok(Self::new().with_attribution_store(
             SqliteAttributionStore::open_in_memory().map_err(WorkflowServiceError::from)?,
@@ -103,6 +112,33 @@ impl WorkflowService {
         })?;
         *guard = provider;
         Ok(())
+    }
+
+    pub fn set_media_conversion_executor(
+        &self,
+        executor: Option<Arc<dyn pantograph_media_conversion::MediaConversionExecutor>>,
+    ) -> Result<(), WorkflowServiceError> {
+        let mut guard = self.media_conversion_executor.lock().map_err(|_| {
+            WorkflowServiceError::Internal("media conversion executor lock poisoned".to_string())
+        })?;
+        *guard = executor;
+        Ok(())
+    }
+
+    pub(crate) fn media_conversion_executor(
+        &self,
+    ) -> Result<
+        Option<Arc<dyn pantograph_media_conversion::MediaConversionExecutor>>,
+        WorkflowServiceError,
+    > {
+        self.media_conversion_executor
+            .lock()
+            .map(|guard| guard.clone())
+            .map_err(|_| {
+                WorkflowServiceError::Internal(
+                    "media conversion executor lock poisoned".to_string(),
+                )
+            })
     }
 
     pub fn set_loaded_runtime_capacity_limit(

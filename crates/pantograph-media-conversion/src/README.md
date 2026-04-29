@@ -60,6 +60,9 @@ can acquire managed dependency leases before safe process invocation.
 - Quality, CRF, bitrate, timeout, and stderr summaries are bounded.
 - Lease attribution is recorded per conversion, not inferred from ambient
   active dependency snapshots.
+- Lease attribution includes the holder string from the host-managed lease
+  plan so diagnostics can audit which workflow run, node, port, and conversion
+  held each managed dependency.
 - Image command planning uses `oiiotool`; color-managed image planning adds an
   `ocioconvert` step and `OpenColorIO` dependency requirement; audio and video
   command planning uses `ffmpeg`.
@@ -114,8 +117,8 @@ use pantograph_media_conversion::{
 - Plans: callers can build host-neutral command plans from target metadata
   before acquiring converter leases; plans expose required dependency ids,
   stdin/stdout stream markers, and argv vectors.
-- Outputs: converted bytes, target format metadata, typed status, and
-  per-conversion dependency lease attribution.
+- Outputs: converted bytes, target format metadata, typed status, converter
+  command identity, and per-conversion dependency lease attribution.
 - Lifecycle: callers acquire source bytes, call an executor implementation, and
   write the returned bytes back to ArtifactStore. Executor implementations own
   converter process timeout, cancellation, temporary files, and lease release.
@@ -128,7 +131,7 @@ use pantograph_media_conversion::{
 ## Structured Producer Contract
 
 - Stable fields: conversion ids, artifact attribution, target format metadata,
-  command-plan dependency ids, status, and dependency attribution are
+  command-plan dependency ids, command identity, status, and dependency attribution are
   machine-consumed.
 - Defaults: omitted codec, quality, bitrate, CRF, bit depth, and color profile
   mean the backend-selected default for the target format.

@@ -10,9 +10,9 @@ use inference::{
     acquire_media_conversion_dependency_plan, activate_managed_redistributable_version,
     load_managed_redistributable_state, managed_redistributable_catalog_entry,
     open_color_io_activation_validation_state, release_media_conversion_dependency_plan,
-    remove_managed_redistributable_version, validate_open_color_io_activation,
-    ManagedRedistributableId, MediaConversionDependencyId, MediaConversionDependencyLease,
-    MediaConversionDependencyPlanRequest, MediaConversionJobKind,
+    remove_managed_redistributable_version, resolve_media_conversion_dependency_executable_path,
+    validate_open_color_io_activation, ManagedRedistributableId, MediaConversionDependencyId,
+    MediaConversionDependencyLease, MediaConversionDependencyPlanRequest, MediaConversionJobKind,
     OpenColorIoActivationValidationState,
 };
 
@@ -123,6 +123,65 @@ fn color_managed_image_plan_acquires_expected_managed_dependency_leases() {
         &ocio_version,
     )
     .unwrap();
+}
+
+#[test]
+fn tool_dependency_executable_path_resolves_from_lease_metadata() {
+    let temp = tempfile::tempdir().unwrap();
+    install_and_activate(temp.path(), ManagedRedistributableId::Ffmpeg);
+
+    let plan = acquire_media_conversion_dependency_plan(
+        temp.path(),
+        MediaConversionDependencyPlanRequest {
+            job_kind: MediaConversionJobKind::Audio,
+            color_managed: false,
+            holder: test_holder("audio-executable-path"),
+        },
+    )
+    .unwrap();
+
+    let executable =
+        resolve_media_conversion_dependency_executable_path(&plan.leases[0].dependency).unwrap();
+
+    assert!(executable.is_absolute());
+    assert_eq!(executable.file_name().and_then(|name| name.to_str()), {
+        if cfg!(target_os = "windows") {
+            Some("ffmpeg.exe")
+        } else {
+            Some("ffmpeg")
+        }
+    });
+
+    release_media_conversion_dependency_plan(temp.path(), &plan).unwrap();
+}
+
+#[test]
+fn native_library_dependency_is_not_resolved_as_executable() {
+    let temp = tempfile::tempdir().unwrap();
+    install_and_activate(temp.path(), ManagedRedistributableId::Oiiotool);
+    install_and_activate(temp.path(), ManagedRedistributableId::Ocioconvert);
+    install_and_activate(temp.path(), ManagedRedistributableId::OpenColorIo);
+
+    let plan = acquire_media_conversion_dependency_plan(
+        temp.path(),
+        MediaConversionDependencyPlanRequest {
+            job_kind: MediaConversionJobKind::Image,
+            color_managed: true,
+            holder: test_holder("native-library-not-executable"),
+        },
+    )
+    .unwrap();
+
+    let ocio = plan
+        .leases
+        .iter()
+        .find(|lease| lease.dependency.id == MediaConversionDependencyId::OpenColorIo)
+        .unwrap();
+    let error = resolve_media_conversion_dependency_executable_path(&ocio.dependency).unwrap_err();
+
+    assert!(error.contains("not an executable tool"));
+
+    release_media_conversion_dependency_plan(temp.path(), &plan).unwrap();
 }
 
 #[test]

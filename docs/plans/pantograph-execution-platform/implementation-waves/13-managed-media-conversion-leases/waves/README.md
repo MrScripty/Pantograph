@@ -14,6 +14,7 @@ boundary design wave freezes shared contracts and write sets.
 | `wave-03-lease-attribution.md` | Worker contract for attribution-ready managed dependency lease plans. |
 | `wave-04-media-command-planning.md` | Worker contract for typed image/audio/video command plans and fail-closed unsupported 3D conversion. |
 | `wave-05-conversion-metadata-contracts.md` | Host-owned contract slice for descriptor and diagnostics conversion attribution fields. |
+| `wave-06-host-conversion-integration.md` | Worker split for workflow-service executor injection and host-owned managed dependency adapter integration. |
 
 ## Usage
 

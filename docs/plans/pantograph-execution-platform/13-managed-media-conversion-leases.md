@@ -160,6 +160,30 @@ Wave status: `complete`.
   `cargo test -p pantograph-diagnostics-ledger -p pantograph-workflow-service artifact --tests`
   and `cargo check -p pantograph-embedded-runtime -p pantograph`.
 
+### 2026-04-29 Host Conversion Integration Partial
+
+Wave status: `in progress`.
+
+- Workflow-service now exposes an optional neutral
+  `pantograph_media_conversion::MediaConversionExecutor` injection point.
+- Artifact format override media-type mismatches now build a host-neutral
+  conversion request and call the injected executor. If no executor is
+  configured, workflow-service fails closed.
+- Successful executor results write converted bytes to ArtifactStore and record
+  conversion id, status, command id, and dependency lease attribution on the
+  artifact descriptor and durable diagnostics metadata path.
+- The neutral conversion result now carries command identity and lease holder
+  attribution supplied by the host executor.
+- `inference` now exposes a typed managed media executable resolver so the
+  future Tauri adapter does not infer executable paths from raw expected-file
+  ordering. OpenColorIO is rejected as an executable because it is a native
+  library artifact.
+- Tauri host adapter execution and startup injection remain pending.
+- Verification passed:
+  `cargo test -p pantograph-media-conversion`,
+  `cargo test -p pantograph-workflow-service artifact_output_conversion`, and
+  `cargo test -p inference --test managed_media_dependencies`.
+
 ## Milestones
 
 ### Milestone 1: Conversion Boundary Design
@@ -198,6 +222,8 @@ Verification:
   planning for host-neutral stdin/stdout conversion paths.
 - [ ] Add private temporary-file cleanup for tools or formats that cannot
   operate as stdin/stdout filters.
+- [x] Add a typed managed executable resolver for active leased media tool
+  dependencies.
 - [ ] Reject inactive, missing, incompatible, or removed dependency versions at
   the host conversion boundary before process launch.
 
@@ -217,11 +243,16 @@ Verification:
   and expected files for acquired media conversion dependency plans.
 - [x] Prove multi-dependency rollback and release behavior before real
   converter invocation is wired.
-- [ ] Acquire active-version leases immediately before invoking a converter.
+- [x] Add workflow-service neutral conversion executor injection and conversion
+  request/result mapping.
+- [ ] Acquire active-version leases immediately before invoking a converter in
+  the host adapter.
 - [x] Define descriptor and diagnostics metadata fields for leased
   tool/library/profile versions, lease ids, and converter command identity.
-- [ ] Populate descriptor and diagnostics metadata from real acquired lease
-  tokens during converter invocation.
+- [x] Populate descriptor and diagnostics metadata from the neutral executor
+  result.
+- [ ] Populate the neutral executor result from real acquired lease tokens
+  during host converter invocation.
 - [ ] Release leases on success, failure, cancellation, and dropped futures in
   the host conversion executor.
 - [ ] Preserve queryable metadata after retention deletes the physical body.

@@ -153,7 +153,8 @@ impl WorkflowService {
             &workflow_run_id,
             graph_run_settings.as_ref(),
             outputs,
-        )?;
+        )
+        .await?;
         for binding in &outputs {
             validate_payload_size(binding, max_value_bytes)?;
         }

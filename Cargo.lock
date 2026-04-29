@@ -7388,6 +7388,7 @@ dependencies = [
  "chrono",
  "node-engine",
  "pantograph-diagnostics-ledger",
+ "pantograph-media-conversion",
  "pantograph-node-contracts",
  "pantograph-runtime-attribution",
  "pantograph-runtime-identity",

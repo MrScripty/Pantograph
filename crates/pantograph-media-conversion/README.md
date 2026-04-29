@@ -52,7 +52,7 @@ contracts first, implementation after the shared shape is frozen.
 
 - Public ids are validated before construction.
 - Per-conversion dependency attribution records the dependency id, active
-  version, and lease id used for that conversion.
+  version, lease id, and lease holder used for that conversion.
 - Command planning maps image targets to `oiiotool`, color-managed image
   targets to `ocioconvert` plus `OpenColorIO` support, and audio/video targets
   to `ffmpeg`.
@@ -101,8 +101,8 @@ use pantograph_media_conversion::{
   timeout.
 - Plans: deterministic image, audio, and video command plans describe required
   managed dependency ids, stdin/stdout flow, and separate argv vectors.
-- Outputs: converted bytes, conversion status, target format metadata, and
-  per-conversion dependency attribution.
+- Outputs: converted bytes, conversion status, target format metadata,
+  converter command identity, and per-conversion dependency attribution.
 - Lifecycle: hosts construct validated requests, call an executor
   implementation, and write successful outputs back to ArtifactStore.
 - Errors: invalid requests, unsupported conversions, dependency
@@ -114,7 +114,7 @@ use pantograph_media_conversion::{
 ## Structured Producer Contract
 
 - Stable fields: id wrappers, target metadata fields, status enum, and
-  dependency attribution fields are machine-consumed.
+  command/dependency attribution fields are machine-consumed.
 - Defaults: omitted optional target fields mean the backend-selected default.
 - Enum meanings: conversion status and dependency id variants are behaviorally
   meaningful and must not be renamed without migration.

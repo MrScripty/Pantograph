@@ -114,6 +114,12 @@ conversion command identity, conversion id, and per-conversion dependency
 lease attribution fields. These fields are empty for pass-through
 artifactization and reserved for host-owned managed media conversion so
 workflow-service does not infer lease facts from ambient active versions.
+Workflow artifact output conversion now accepts an optional injected
+`pantograph_media_conversion::MediaConversionExecutor`. When an
+`artifact_format_override` requests a different media type than the payload's
+authoritative media type, workflow-service builds a host-neutral conversion
+request and records the executor result on the artifact descriptor; without an
+executor, the service fails closed.
 
 ## Alternatives Rejected
 - Keep workflow behavior in Tauri commands: rejected because native bindings
@@ -175,6 +181,10 @@ workflow-service does not infer lease facts from ambient active versions.
   fields must be added and mapped together across workflow-service,
   diagnostics-ledger, Tauri, embedded runtime, frontend contracts, and contract
   tests so conversion attribution does not drift across boundaries.
+- Workflow-service must remain host-agnostic for managed media conversion:
+  hosts inject a neutral executor, while lease acquisition, executable path
+  resolution, command execution, and inference/Tauri-specific dependency state
+  stay outside this crate.
 
 ## Revisit Triggers
 - Public workflow DTOs need versioning rather than additive migration.
@@ -184,7 +194,8 @@ workflow-service does not infer lease facts from ambient active versions.
 
 ## Dependencies
 **Internal:** `node-engine`, `workflow-nodes`, `pantograph-runtime-identity`,
-`pantograph-diagnostics-ledger`, and sibling source modules in this crate.
+`pantograph-diagnostics-ledger`, `pantograph-media-conversion`, and sibling
+source modules in this crate.
 
 **External:** `async-trait`, `serde`, `serde_json`, `thiserror`, `tokio`,
 `uuid`, `chrono`, and `parking_lot`.

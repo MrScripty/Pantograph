@@ -94,6 +94,13 @@ by external adapters.
 - Shared fixture snapshots must be deserialized by Rust public DTOs and
   consumed by frontend service tests in the same contract slice so drift is
   detected on both sides.
+- Artifact format contract snapshots must preserve conversion id, status,
+  command id, and dependency lease attribution fields. Host-owned conversion
+  execution may populate those fields, while pass-through artifacts keep them
+  empty.
+- Artifact output conversion tests must cover the injected neutral executor
+  path with a fake converter so public descriptor metadata is verified without
+  depending on host binaries, Tauri, or managed redistributable state.
 
 ## Revisit Triggers
 - Contract snapshots become large enough to justify fixture files.

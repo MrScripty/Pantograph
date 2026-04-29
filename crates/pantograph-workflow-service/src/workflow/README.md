@@ -12,6 +12,7 @@ public exports out of the service crate.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `artifact_api.rs` | WorkflowService ArtifactStore facade methods for descriptor lookup, binary body reads, consume acknowledgement, policy updates, cleanup, and stats. |
+| `artifact_output_conversion.rs` | Workflow output artifactization, format override resolution, and host-agnostic media conversion executor handoff. |
 | `attribution_api.rs` | Client/session/bucket facade methods plus workflow-version and presentation-revision resolution against the durable attribution store. |
 | `artifact_contracts.rs` | ArtifactStore descriptor, lifecycle, policy, read, stream, consume, format-default, and conversion-attribution DTOs for binary-safe media payload handling. |
 | `artifact_store.rs` | Backend ArtifactStore body ownership, private disk persistence, restart reconciliation, retention cleanup, and consume acknowledgement. |
@@ -28,7 +29,7 @@ public exports out of the service crate.
 | `session_lifecycle_api.rs` | Workflow stale cleanup, stale cleanup worker, keep-alive, and close-session facade methods. |
 | `session_queue_api.rs` | Workflow session status, queue inspection, scheduler snapshot, session-scoped queue controls, and first-pass GUI-admin queued-run cancel facade methods. |
 | `session_runtime.rs` | Session runtime preflight cache checks, runtime-capability fingerprinting, runtime loaded-state invalidation, runtime loading, unload-candidate selection, and affinity refresh helpers. |
-| `service_config.rs` | Workflow service construction, capacity-limit configuration, diagnostics-provider setup, and session-store guard helpers. |
+| `service_config.rs` | Workflow service construction, capacity-limit configuration, diagnostics-provider/media-conversion setup, and session-store guard helpers. |
 | `tests/` | Behavior-focused workflow facade test modules split from the legacy monolithic test module. |
 | `tests.rs` | Legacy workflow facade and scheduler/session behavior tests extracted from the root facade file. |
 | `validation.rs` | Request, binding, output-target, and produced-output validation helpers shared by facade operations. |
@@ -132,6 +133,14 @@ session-runtime workflows, and the root facade test module.
   per-conversion dependency lease attribution when conversion occurs. Pass-
   through artifactization leaves those fields empty; it must not synthesize
   lease ids from ambient active dependency snapshots.
+- Workflow-service may hold an optional
+  `pantograph_media_conversion::MediaConversionExecutor` injected by a host.
+  Artifact format override mismatches fail closed when no executor is
+  configured, and executor results are the only source for conversion ids,
+  status, command identity, converted bytes, and dependency lease attribution.
+- Workflow-service does not acquire managed media leases, resolve executable
+  paths, or spawn converter processes. Those remain host-owned concerns behind
+  the injected executor boundary.
 - Session run Library audit events use diagnostics-ledger typed operation and
   cache-status enums. Workflow-service must not author free-form Library action
   labels when emitting run-linked model usage facts.
@@ -175,7 +184,8 @@ session-runtime workflows, and the root facade test module.
 cache contracts, technical-fit overrides, host trait helpers, and
 `pantograph-runtime-identity`.
 
-**External:** none beyond parent crate dependencies.
+**External:** `pantograph-media-conversion` for the neutral media conversion
+executor/request/result contracts, plus inherited parent crate dependencies.
 
 Reason: helper modules inherit the parent crate dependency surface so extracted
 workflow internals do not grow new package-level coupling.
