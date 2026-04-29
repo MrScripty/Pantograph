@@ -138,6 +138,23 @@ worker.
 | ----- | ----- | ----------------- | ---------------------- | ------ |
 | Managed media Settings worker | Add TypeScript workflow service DTOs/methods and workbench Settings controls for listing managed media dependencies plus select/default/activate/remove actions using backend command results as the source of truth. | `src/services/workflow/types.ts`, `src/services/workflow/WorkflowCommandService.ts`, `src/services/workflow/WorkflowService.commands.test.ts`, `src/components/workbench/SettingsPage.svelte`, `src/components/workbench/settingsPagePresenters.ts`, `src/components/workbench/settingsPagePresenters.test.ts`, `src/components/workbench/README.md`, `docs/plans/pantograph-execution-platform/implementation-waves/11-artifact-format-settings-and-managed-media-dependencies/reports/wave-05-worker-managed-media-settings-controls.md` | Rust files, generated bindings, side-panel/server-status/runtime-manager files, `.pantograph/**`, `assets/**`, generated output, and lockfiles. | `reports/wave-05-worker-managed-media-settings-controls.md` |
 
+## 2026-04-29 Video And 3D Format Worker Split
+
+- Previous Settings slices were integrated as `bcbe5ec4` and `89d2e949`.
+- Current dirty files remain limited to unrelated deleted workflow/assets and
+  untracked diagnostics/asset files; no Stage `11` implementation files are
+  dirty at split time.
+- Shared ArtifactStore, format settings, capability, and workflow-service
+  command DTOs remain frozen. Workers may consume existing DTOs but must not
+  reopen shared contracts.
+- Integration sequence: backend video/3D output override validation first,
+  then the frontend 3D output-node selector.
+
+| Owner | Scope | Primary Write Set | Forbidden Shared Files | Report |
+| ----- | ----- | ----------------- | ---------------------- | ------ |
+| Backend video/3D output format worker | Make workflow-service artifact conversion use backend defaults and graph-local `artifact_format_override` metadata for video and 3D descriptors when run snapshots provide graph settings, validating overrides through existing backend capabilities and rejecting media-type mismatches until transcoding exists. | `crates/pantograph-workflow-service/src/workflow/artifact_output_conversion.rs`, focused workflow-service tests in the same module/file, `docs/plans/pantograph-execution-platform/implementation-waves/11-artifact-format-settings-and-managed-media-dependencies/reports/wave-05-worker-video-3d-output-format-overrides.md` | Frontend files, ArtifactStore contract DTOs, diagnostics ledger schema, managed redistributables, command registration, `.pantograph/**`, `assets/**`, generated output, and lockfiles. | `reports/wave-05-worker-video-3d-output-format-overrides.md` |
+| 3D output-node selector worker | Add a 3D output format selector driven by backend capability/default DTOs, preserving explicit per-node overrides in node data so run snapshots can capture them. | `src/components/nodes/workflow/PointCloudOutputNode.svelte`, `src/components/nodes/workflow/README.md`, focused frontend tests only if an existing harness supports this component layer, `docs/plans/pantograph-execution-platform/implementation-waves/11-artifact-format-settings-and-managed-media-dependencies/reports/wave-05-worker-3d-output-node-format-selector.md` | Rust files, workflow service command files, shared TypeScript DTO files, workbench Settings page files, diagnostics ledger schema, `.pantograph/**`, `assets/**`, generated output, and lockfiles. | `reports/wave-05-worker-3d-output-node-format-selector.md` |
+
 ## Source Audit Snapshot
 
 Initial local audit found these migration families:
