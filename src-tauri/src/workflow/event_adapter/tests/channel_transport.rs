@@ -154,6 +154,52 @@ fn adapter_replaces_audio_base64_stream_chunks_with_artifact_references() {
 }
 
 #[test]
+fn adapter_replaces_image_base64_stream_chunks_with_artifact_references() {
+    let temp = tempfile::tempdir().expect("temp artifact store");
+    let workflow_service = workflow_service_with_artifact_store(&temp);
+    let diagnostics_store = Arc::new(WorkflowDiagnosticsStore::default());
+    let (channel, emitted) = capture_channel();
+    let adapter = TauriEventAdapter::new(channel, "adapter-workflow", diagnostics_store)
+        .with_workflow_service(workflow_service);
+
+    EventSink::send(
+        &adapter,
+        node_engine::WorkflowEvent::TaskStream {
+            task_id: "image-node".to_string(),
+            execution_id: "exec-image".to_string(),
+            port: "image".to_string(),
+            data: serde_json::json!({
+                "type": "image_chunk",
+                "image_base64": "iVBORw0KGgo=",
+                "sequence": 0,
+                "is_final": false
+            }),
+            occurred_at_ms: Some(12),
+        },
+    )
+    .expect("image stream chunk sends");
+
+    let events = emitted.lock().expect("captured events lock");
+    let stream_event = events
+        .iter()
+        .find(|event| event["type"] == "NodeStream")
+        .expect("node stream event");
+    let chunk = &stream_event["data"]["chunk"];
+
+    assert!(chunk.get("image_base64").is_none());
+    assert_eq!(chunk["payload_kind"], "image");
+    assert_eq!(chunk["media_type"], "image/png");
+    assert_eq!(chunk["sequence"], 0);
+    assert_eq!(chunk["byte_length"], 8);
+    assert_eq!(chunk["available_byte_length"], 8);
+    assert_eq!(chunk["byte_range_start"], 0);
+    assert_eq!(chunk["byte_range_end_exclusive"], 8);
+    assert_eq!(chunk["lifecycle_state"], "streaming");
+    assert!(chunk["artifact_id"].as_str().is_some());
+    assert!(chunk["stream_handle"].as_str().is_some());
+}
+
+#[test]
 fn adapter_preserves_text_stream_chunks_unchanged() {
     let temp = tempfile::tempdir().expect("temp artifact store");
     let workflow_service = workflow_service_with_artifact_store(&temp);

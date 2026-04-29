@@ -77,10 +77,10 @@ impl TauriEventAdapter {
             self.diagnostics_store
                 .set_execution_graph(execution_id, graph);
         }
-        self.replace_audio_stream_body(event)
+        self.replace_inline_media_stream_body(event)
     }
 
-    fn replace_audio_stream_body(
+    fn replace_inline_media_stream_body(
         &self,
         event: node_engine::WorkflowEvent,
     ) -> Result<node_engine::WorkflowEvent, EventError> {
@@ -95,7 +95,7 @@ impl TauriEventAdapter {
             return Ok(event);
         };
 
-        let Some(audio_base64) = data.get("audio_base64").and_then(|value| value.as_str()) else {
+        let Some(media_body) = inline_media_body_from_chunk(&port, &data) else {
             return Ok(node_engine::WorkflowEvent::TaskStream {
                 task_id,
                 execution_id,
@@ -114,9 +114,9 @@ impl TauriEventAdapter {
             });
         };
 
-        let body = decode_base64(audio_base64).map_err(event_error)?;
+        let body = decode_base64(media_body.encoded_body).map_err(event_error)?;
         let media_type =
-            media_type_from_chunk(&data, audio_base64).unwrap_or_else(|| "audio/wav".to_string());
+            media_type_from_chunk(&data, media_body.encoded_body, media_body.kind, &body);
         let is_final = data
             .get("is_final")
             .and_then(|value| value.as_bool())
@@ -152,9 +152,9 @@ impl TauriEventAdapter {
                 let descriptor = workflow_service
                     .open_artifact_stream(ArtifactStreamOpenRequest {
                         artifact_id: None,
-                        payload_kind: ArtifactPayloadKind::Audio,
+                        payload_kind: media_body.kind,
                         media_type: media_type.clone(),
-                        format: Some(audio_format_metadata(&media_type)),
+                        format: Some(format_metadata(media_body.kind, &media_type)),
                         attribution: ArtifactAttribution {
                             workflow_run_id: execution_id.clone(),
                             workflow_id: Some(self.workflow_id.clone()),
@@ -236,7 +236,7 @@ impl TauriEventAdapter {
             .and_then(|descriptor| descriptor.read_handle.clone());
 
         let mut chunk = data.as_object().cloned().unwrap_or_default();
-        chunk.remove("audio_base64");
+        chunk.remove(media_body.field_name);
         chunk.insert("artifact_id".to_string(), serde_json::json!(artifact_id));
         chunk.insert(
             "stream_handle".to_string(),
@@ -246,6 +246,11 @@ impl TauriEventAdapter {
             chunk.insert("read_handle".to_string(), serde_json::json!(read_handle));
         }
         chunk.insert("media_type".to_string(), serde_json::json!(media_type));
+        chunk.insert(
+            "payload_kind".to_string(),
+            serde_json::to_value(media_body.kind)
+                .map_err(|error| event_error(error.to_string()))?,
+        );
         chunk.insert("sequence".to_string(), serde_json::json!(sequence));
         chunk.insert(
             "byte_length".to_string(),
@@ -324,32 +329,249 @@ struct MediaStreamState {
     available_byte_length: u64,
 }
 
-fn audio_format_metadata(media_type: &str) -> ArtifactFormatMetadata {
-    ArtifactFormatMetadata {
-        format_id: media_type
-            .strip_prefix("audio/")
-            .filter(|suffix| !suffix.is_empty())
-            .map(|suffix| format!("audio_{suffix}"))
-            .unwrap_or_else(|| "audio_wav".to_string()),
-        media_type: media_type.to_string(),
-        codec_id: Some("opus".to_string()),
-        quality_percent: None,
-        bitrate_kbps: Some(96),
-        crf: None,
-        bit_depth: None,
-        color_profile_id: None,
-        converter_id: None,
-        converter_version: None,
-        library_version: None,
+#[derive(Debug, Clone, Copy)]
+struct InlineMediaBody<'a> {
+    field_name: &'static str,
+    encoded_body: &'a str,
+    kind: ArtifactPayloadKind,
+}
+
+fn inline_media_body_from_chunk<'a>(
+    port: &str,
+    data: &'a serde_json::Value,
+) -> Option<InlineMediaBody<'a>> {
+    let object = data.as_object()?;
+    for (field_name, field_kind) in [
+        ("image_base64", Some(ArtifactPayloadKind::Image)),
+        ("audio_base64", Some(ArtifactPayloadKind::Audio)),
+        ("audio_data", Some(ArtifactPayloadKind::Audio)),
+        ("video_base64", Some(ArtifactPayloadKind::Video)),
+        ("model_base64", Some(ArtifactPayloadKind::ThreeD)),
+        ("mesh_base64", Some(ArtifactPayloadKind::ThreeD)),
+        ("file_base64", Some(ArtifactPayloadKind::GenericBinary)),
+        ("bytes_base64", Some(ArtifactPayloadKind::GenericBinary)),
+        ("blob_base64", Some(ArtifactPayloadKind::GenericBinary)),
+        ("data_base64", None),
+        ("data_url", None),
+    ] {
+        let Some(encoded_body) = object.get(field_name).and_then(|value| value.as_str()) else {
+            continue;
+        };
+        let kind = field_kind
+            .or_else(|| payload_kind_from_object(object))
+            .or_else(|| payload_kind_from_label(port))
+            .or_else(|| {
+                explicit_media_type(object).and_then(|value| payload_kind_from_media_type(&value))
+            })
+            .or_else(|| data_url_media_type(encoded_body).and_then(payload_kind_from_media_type))?;
+        return Some(InlineMediaBody {
+            field_name,
+            encoded_body,
+            kind,
+        });
+    }
+    None
+}
+
+fn media_type_from_chunk(
+    data: &serde_json::Value,
+    encoded_body: &str,
+    payload_kind: ArtifactPayloadKind,
+    body: &[u8],
+) -> String {
+    data.as_object()
+        .and_then(explicit_media_type)
+        .or_else(|| data_url_media_type(encoded_body).map(str::to_string))
+        .or_else(|| detect_media_type(payload_kind, body))
+        .unwrap_or_else(|| default_media_type(payload_kind).to_string())
+}
+
+fn explicit_media_type(object: &serde_json::Map<String, serde_json::Value>) -> Option<String> {
+    object
+        .get("media_type")
+        .or_else(|| object.get("mime_type"))
+        .or_else(|| object.get("content_type"))
+        .and_then(|value| value.as_str())
+        .map(ToOwned::to_owned)
+}
+
+fn payload_kind_from_object(
+    object: &serde_json::Map<String, serde_json::Value>,
+) -> Option<ArtifactPayloadKind> {
+    for field in ["payload_kind", "artifact_kind", "kind", "type"] {
+        if let Some(kind) = object
+            .get(field)
+            .and_then(|value| value.as_str())
+            .and_then(payload_kind_from_label)
+        {
+            return Some(kind);
+        }
+    }
+    None
+}
+
+fn payload_kind_from_label(value: &str) -> Option<ArtifactPayloadKind> {
+    let normalized = value
+        .strip_suffix("_chunk")
+        .or_else(|| value.strip_suffix("-chunk"))
+        .unwrap_or(value);
+    match normalized {
+        "image" | "image_base64" => Some(ArtifactPayloadKind::Image),
+        "audio" | "audio_base64" | "audio_data" => Some(ArtifactPayloadKind::Audio),
+        "video" | "video_base64" => Some(ArtifactPayloadKind::Video),
+        "3d" | "three_d" | "model_3d" | "mesh" | "point_cloud" => Some(ArtifactPayloadKind::ThreeD),
+        "generic_binary" | "binary" | "file" | "blob" | "attachment" => {
+            Some(ArtifactPayloadKind::GenericBinary)
+        }
+        _ => None,
     }
 }
 
-fn media_type_from_chunk(data: &serde_json::Value, audio_base64: &str) -> Option<String> {
-    data.get("media_type")
-        .or_else(|| data.get("mime_type"))
-        .and_then(|value| value.as_str())
-        .map(str::to_string)
-        .or_else(|| data_url_media_type(audio_base64).map(str::to_string))
+fn payload_kind_from_media_type(media_type: &str) -> Option<ArtifactPayloadKind> {
+    match media_type {
+        value if value.starts_with("image/") => Some(ArtifactPayloadKind::Image),
+        value if value.starts_with("audio/") => Some(ArtifactPayloadKind::Audio),
+        value if value.starts_with("video/") => Some(ArtifactPayloadKind::Video),
+        "model/gltf-binary" | "model/gltf+json" | "model/obj" => Some(ArtifactPayloadKind::ThreeD),
+        "application/octet-stream" => Some(ArtifactPayloadKind::GenericBinary),
+        _ => None,
+    }
+}
+
+fn format_metadata(payload_kind: ArtifactPayloadKind, media_type: &str) -> ArtifactFormatMetadata {
+    match payload_kind {
+        ArtifactPayloadKind::Image => ArtifactFormatMetadata {
+            format_id: image_format_id(media_type).to_string(),
+            media_type: media_type.to_string(),
+            codec_id: None,
+            quality_percent: Some(75),
+            bitrate_kbps: None,
+            crf: None,
+            bit_depth: Some("8bit".to_string()),
+            color_profile_id: Some("srgb".to_string()),
+            converter_id: None,
+            converter_version: None,
+            library_version: None,
+        },
+        ArtifactPayloadKind::Audio => ArtifactFormatMetadata {
+            format_id: media_type
+                .strip_prefix("audio/")
+                .filter(|suffix| !suffix.is_empty())
+                .map(|suffix| format!("audio_{suffix}"))
+                .unwrap_or_else(|| "audio_wav".to_string()),
+            media_type: media_type.to_string(),
+            codec_id: Some("opus".to_string()),
+            quality_percent: None,
+            bitrate_kbps: Some(96),
+            crf: None,
+            bit_depth: None,
+            color_profile_id: None,
+            converter_id: None,
+            converter_version: None,
+            library_version: None,
+        },
+        ArtifactPayloadKind::Video => ArtifactFormatMetadata {
+            format_id: video_format_id(media_type).to_string(),
+            media_type: media_type.to_string(),
+            codec_id: Some("av1".to_string()),
+            quality_percent: None,
+            bitrate_kbps: None,
+            crf: Some(32),
+            bit_depth: Some("8bit".to_string()),
+            color_profile_id: None,
+            converter_id: None,
+            converter_version: None,
+            library_version: None,
+        },
+        ArtifactPayloadKind::ThreeD => ArtifactFormatMetadata {
+            format_id: three_d_format_id(media_type).to_string(),
+            media_type: media_type.to_string(),
+            codec_id: None,
+            quality_percent: None,
+            bitrate_kbps: None,
+            crf: None,
+            bit_depth: None,
+            color_profile_id: None,
+            converter_id: None,
+            converter_version: None,
+            library_version: None,
+        },
+        _ => ArtifactFormatMetadata {
+            format_id: generic_format_id(media_type).to_string(),
+            media_type: media_type.to_string(),
+            codec_id: None,
+            quality_percent: None,
+            bitrate_kbps: None,
+            crf: None,
+            bit_depth: None,
+            color_profile_id: None,
+            converter_id: None,
+            converter_version: None,
+            library_version: None,
+        },
+    }
+}
+
+fn detect_media_type(payload_kind: ArtifactPayloadKind, body: &[u8]) -> Option<String> {
+    match payload_kind {
+        ArtifactPayloadKind::Image if body.starts_with(b"\x89PNG\r\n\x1a\n") => {
+            Some("image/png".to_string())
+        }
+        ArtifactPayloadKind::Image if body.starts_with(&[0xff, 0xd8, 0xff]) => {
+            Some("image/jpeg".to_string())
+        }
+        ArtifactPayloadKind::Audio if body.starts_with(b"RIFF") => Some("audio/wav".to_string()),
+        ArtifactPayloadKind::Audio if body.starts_with(b"OggS") => Some("audio/ogg".to_string()),
+        ArtifactPayloadKind::Video if body.starts_with(&[0, 0, 0]) && body.len() > 7 => {
+            Some("video/mp4".to_string())
+        }
+        ArtifactPayloadKind::ThreeD if body.starts_with(b"glTF") => {
+            Some("model/gltf-binary".to_string())
+        }
+        _ => None,
+    }
+}
+
+fn default_media_type(payload_kind: ArtifactPayloadKind) -> &'static str {
+    match payload_kind {
+        ArtifactPayloadKind::Image => "image/jpeg",
+        ArtifactPayloadKind::Audio => "audio/wav",
+        ArtifactPayloadKind::Video => "video/mp4",
+        ArtifactPayloadKind::ThreeD => "model/gltf-binary",
+        _ => "application/octet-stream",
+    }
+}
+
+fn image_format_id(media_type: &str) -> &str {
+    match media_type {
+        "image/png" => "png",
+        "image/jpeg" => "jpg",
+        _ => "jpg",
+    }
+}
+
+fn video_format_id(media_type: &str) -> &str {
+    match media_type {
+        "video/webm" => "webm",
+        "video/x-matroska" => "mkv",
+        _ => "mp4",
+    }
+}
+
+fn three_d_format_id(media_type: &str) -> &str {
+    match media_type {
+        "model/gltf+json" => "gltf",
+        "model/obj" => "obj",
+        _ => "glb",
+    }
+}
+
+fn generic_format_id(media_type: &str) -> &str {
+    match media_type {
+        "application/json" => "json",
+        "application/ndjson" => "ndjson",
+        _ => "binary",
+    }
 }
 
 fn data_url_media_type(value: &str) -> Option<&str> {
