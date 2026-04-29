@@ -70,6 +70,11 @@ the trait with managed dependency leases and safe process invocation.
 ## Dependencies
 
 **Internal:** None.
+Reason: The contract crate is intentionally neutral so workflow-service,
+inference, Tauri, and bindings can depend on or adapt it without reverse
+coupling.
+Revisit trigger: A concrete converter implementation lands in this crate and
+requires a dependency on managed redistributable or ArtifactStore modules.
 
 **External:** `async-trait` for the executor trait, `serde` for attribution
 records, `thiserror` for typed errors, and `uuid` for conversion ids.

@@ -46,9 +46,19 @@ host records concrete write sets.
 
 | Owner | Scope | Primary Write Set | Forbidden Shared Files | Report |
 | ----- | ----- | ----------------- | ---------------------- | ------ |
-| Conversion executor worker | Managed process invocation, path validation, timeout, cancellation, stderr truncation, and temp cleanup with fake process-runner tests. | To be assigned after Wave `01`. | ArtifactStore contract DTOs unless assigned, frontend files, generated bindings, lockfiles, `.pantograph/**`, `assets/**`. | `reports/wave-02-worker-conversion-executor.md` |
-| Lease attribution worker | Active-version lease acquisition/release around conversion and descriptor/diagnostics attribution propagation. | To be assigned after Wave `01`. | Process execution helpers unless assigned, frontend files, generated bindings, lockfiles, `.pantograph/**`, `assets/**`. | `reports/wave-03-worker-lease-attribution.md` |
+| Conversion executor worker | Managed process invocation, path validation, timeout, cancellation, stderr truncation, and temp cleanup with fake process-runner tests. | `crates/pantograph-media-conversion/src/**`, `crates/pantograph-media-conversion/Cargo.toml` if a dependency is justified, `reports/wave-02-worker-conversion-executor.md` | `crates/inference/**`, workflow-service files, frontend files, generated bindings, root manifests, lockfiles, `.pantograph/**`, `assets/**`. | `reports/wave-02-worker-conversion-executor.md` |
+| Lease attribution worker | Active-version lease acquisition/release hardening and attribution-ready media dependency plans. | `crates/inference/src/managed_media_dependencies.rs`, `crates/inference/tests/managed_media_dependencies.rs`, `reports/wave-03-worker-lease-attribution.md` | `crates/pantograph-media-conversion/**`, workflow-service files, frontend files, generated bindings, root manifests, lockfiles, `.pantograph/**`, `assets/**`. | `reports/wave-03-worker-lease-attribution.md` |
 | Media fixture worker | Fixture/golden tests for image/audio/video/3D conversion and capability coverage. | To be assigned after Wave `01`. | Production contracts, frontend files, generated bindings, lockfiles, `.pantograph/**`, `assets/**`. | `reports/wave-04-worker-media-fixtures.md` |
+
+## 2026-04-29 Wave 02/03 Parallel Worker Split
+
+- Current dirty files before this split remain limited to unrelated deleted
+  assets, untracked diagnostics SQLite, and untracked assets.
+- Shared contracts in `crates/pantograph-media-conversion/src/lib.rs` are
+  frozen for the lease-attribution worker. If that worker needs contract
+  changes, it must record the need in its report instead of editing the crate.
+- Integration sequence: conversion executor worker first, then lease
+  attribution worker, then host-owned docs/status updates and verification.
 
 ## 2026-04-29 Wave 01 Start Gate
 
