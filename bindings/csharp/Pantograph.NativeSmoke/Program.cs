@@ -137,11 +137,17 @@ public static class Program
             throw new InvalidOperationException($"Expected close ok=true: {closeResponse}");
         }
 
-        string imageValue = ReadString(response, "outputs", "0", "value");
-        byte[] imageBytes = DecodeImageValue(imageValue);
+        string artifactId = ReadFirstImageArtifactId(response);
+        string bodyResponse = runtime.WorkflowReadArtifactBody(
+            JsonSerializer.Serialize(new Dictionary<string, string>
+            {
+                ["artifact_id"] = artifactId,
+            }));
+        byte[] imageBytes = ReadArtifactBodyBytes(bodyResponse);
         if (imageBytes.Length == 0)
         {
-            throw new InvalidOperationException($"Diffusion response had an empty image payload: {response}");
+            throw new InvalidOperationException(
+                $"Diffusion artifact body was empty. Descriptor response: {response}. Body response: {bodyResponse}");
         }
 
         if (!string.IsNullOrWhiteSpace(outputPath))
@@ -156,7 +162,7 @@ public static class Program
         }
 
         Console.WriteLine(
-            $"Pantograph C# native binding diffusion smoke passed: {imageBytes.Length} image bytes.");
+            $"Pantograph C# native binding diffusion smoke passed: {imageBytes.Length} artifact bytes.");
     }
 
     private static string DiffusionSessionRunRequest(string sessionId, string prompt) =>
@@ -259,16 +265,75 @@ public static class Program
         return document.RootElement.GetProperty(propertyName).GetBoolean();
     }
 
-    private static byte[] DecodeImageValue(string imageValue)
+    private static string ReadFirstImageArtifactId(string responseJson)
     {
-        string base64 = imageValue;
-        int dataUrlSeparator = imageValue.IndexOf(";base64,", StringComparison.Ordinal);
-        if (dataUrlSeparator >= 0)
+        using JsonDocument document = JsonDocument.Parse(responseJson);
+        JsonElement value = document.RootElement
+            .GetProperty("outputs")[0]
+            .GetProperty("value");
+
+        if (value.ValueKind != JsonValueKind.Object)
         {
-            base64 = imageValue[(dataUrlSeparator + ";base64,".Length)..];
+            throw new InvalidOperationException(
+                $"Expected diffusion output value to be an artifact descriptor object: {responseJson}");
         }
 
-        return Convert.FromBase64String(base64);
+        string artifactId = ReadRequiredDescriptorString(value, "artifact_id", responseJson);
+        _ = ReadRequiredDescriptorString(value, "read_handle", responseJson);
+
+        if (value.TryGetProperty("payload_kind", out JsonElement payloadKindElement))
+        {
+            string? payloadKind = payloadKindElement.GetString();
+            if (!string.Equals(payloadKind, "image", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Expected diffusion artifact payload_kind=image, got '{payloadKind}'. Response: {responseJson}");
+            }
+        }
+
+        return artifactId;
+    }
+
+    private static string ReadRequiredDescriptorString(
+        JsonElement descriptor,
+        string propertyName,
+        string responseJson)
+    {
+        if (!descriptor.TryGetProperty(propertyName, out JsonElement property)
+            || property.ValueKind != JsonValueKind.String)
+        {
+            throw new InvalidOperationException(
+                $"Expected diffusion artifact descriptor string field '{propertyName}': {responseJson}");
+        }
+
+        string? value = property.GetString();
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new InvalidOperationException(
+                $"Expected diffusion artifact descriptor field '{propertyName}' to be non-empty: {responseJson}");
+        }
+
+        return value;
+    }
+
+    private static byte[] ReadArtifactBodyBytes(string responseJson)
+    {
+        using JsonDocument document = JsonDocument.Parse(responseJson);
+        JsonElement body = document.RootElement.GetProperty("body");
+        if (body.ValueKind != JsonValueKind.Array)
+        {
+            throw new InvalidOperationException($"Expected artifact body byte array: {responseJson}");
+        }
+
+        byte[] bytes = new byte[body.GetArrayLength()];
+        int index = 0;
+        foreach (JsonElement element in body.EnumerateArray())
+        {
+            bytes[index] = element.GetByte();
+            index++;
+        }
+
+        return bytes;
     }
 
     private static void WriteTextWorkflow(string projectRoot, string workflowId)

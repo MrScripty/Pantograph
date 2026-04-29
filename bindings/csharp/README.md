@@ -32,6 +32,10 @@ The script builds the Pantograph headless native library, generates
 the smoke harness against that generated file, and runs the harness with the
 native library on the dynamic-linker path.
 
+The diffusion smoke expects image outputs to be ArtifactStore descriptors and
+loads image bytes through the generated `WorkflowReadArtifactBody` UniFFI API.
+It does not accept inline image base64 or data URLs.
+
 To create local zip artifacts matching CI:
 
 ```bash
