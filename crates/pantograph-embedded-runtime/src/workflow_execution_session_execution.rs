@@ -205,7 +205,11 @@ pub(crate) async fn run_session_workflow(
     let graph = stored.to_workflow_graph(workflow_id);
     let output_node_ids = EmbeddedWorkflowHost::resolve_output_node_ids(&graph, output_targets)?;
     let graph_fingerprint = WorkflowHost::workflow_graph_fingerprint(host, workflow_id).await?;
-    let runtime_ext = RuntimeExtensionsSnapshot::from_shared(&host.extensions).await;
+    let runtime_ext = RuntimeExtensionsSnapshot::from_shared_with_workflow_service(
+        &host.extensions,
+        host.workflow_service.clone(),
+    )
+    .await;
 
     let python_runtime_execution_recorder =
         Arc::new(task_executor::PythonRuntimeExecutionRecorder::default());

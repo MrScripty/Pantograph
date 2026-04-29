@@ -17,7 +17,11 @@ impl EmbeddedRuntime {
         inputs: &HashMap<String, serde_json::Value>,
         event_sink: Arc<dyn EventSink>,
     ) -> node_engine::Result<HashMap<String, serde_json::Value>> {
-        let runtime_ext = RuntimeExtensionsSnapshot::from_shared(&self.extensions).await;
+        let runtime_ext = RuntimeExtensionsSnapshot::from_shared_with_workflow_service(
+            &self.extensions,
+            self.workflow_service.clone(),
+        )
+        .await;
         let execution_id = format!("data-graph-{}-{}", graph_id, Uuid::new_v4());
         let workflow_event_sink = event_sink.clone();
         let core = Arc::new(

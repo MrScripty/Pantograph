@@ -3,6 +3,8 @@ use std::sync::Arc;
 use node_engine::{EventSink, ExecutorExtensions, WorkflowExecutor};
 use tokio::sync::RwLock;
 
+use crate::SharedWorkflowService;
+
 pub type SharedExtensions = Arc<RwLock<ExecutorExtensions>>;
 
 #[derive(Clone, Default)]
@@ -10,12 +12,22 @@ pub struct RuntimeExtensionsSnapshot {
     pub pumas_api: Option<Arc<pumas_library::PumasApi>>,
     pub kv_cache_store: Option<Arc<inference::kv_cache::KvCacheStore>>,
     pub dependency_resolver: Option<Arc<dyn node_engine::ModelDependencyResolver>>,
+    pub workflow_service: Option<SharedWorkflowService>,
 }
 
 impl RuntimeExtensionsSnapshot {
     pub async fn from_shared(shared: &SharedExtensions) -> Self {
         let guard = shared.read().await;
         Self::from_extensions(&guard)
+    }
+
+    pub async fn from_shared_with_workflow_service(
+        shared: &SharedExtensions,
+        workflow_service: SharedWorkflowService,
+    ) -> Self {
+        let mut snapshot = Self::from_shared(shared).await;
+        snapshot.workflow_service = Some(workflow_service);
+        snapshot
     }
 
     pub fn from_extensions(shared: &ExecutorExtensions) -> Self {
@@ -31,6 +43,11 @@ impl RuntimeExtensionsSnapshot {
             dependency_resolver: shared
                 .get::<Arc<dyn node_engine::ModelDependencyResolver>>(
                     node_engine::extension_keys::MODEL_DEPENDENCY_RESOLVER,
+                )
+                .cloned(),
+            workflow_service: shared
+                .get::<SharedWorkflowService>(
+                    crate::task_executor::runtime_extension_keys::WORKFLOW_SERVICE,
                 )
                 .cloned(),
         }
@@ -67,6 +84,12 @@ pub fn apply_runtime_extensions_for_execution(
         executor.extensions_mut().set(
             node_engine::extension_keys::MODEL_DEPENDENCY_RESOLVER,
             resolver.clone(),
+        );
+    }
+    if let Some(workflow_service) = &snapshot.workflow_service {
+        executor.extensions_mut().set(
+            crate::task_executor::runtime_extension_keys::WORKFLOW_SERVICE,
+            workflow_service.clone(),
         );
     }
     if let Some(event_sink) = event_sink {

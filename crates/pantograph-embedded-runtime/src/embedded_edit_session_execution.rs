@@ -28,7 +28,11 @@ impl EmbeddedRuntime {
         embedding_request: inference::EmbeddingStartRequest,
         event_sink: Arc<dyn EventSink>,
     ) -> Result<EditSessionGraphExecutionOutcome, String> {
-        let runtime_ext = RuntimeExtensionsSnapshot::from_shared(&self.extensions).await;
+        let runtime_ext = RuntimeExtensionsSnapshot::from_shared_with_workflow_service(
+            &self.extensions,
+            self.workflow_service.clone(),
+        )
+        .await;
         let restore_config = embedding_workflow::prepare_embedding_runtime_for_workflow(
             self.gateway.as_ref(),
             runtime_ext.pumas_api.as_deref(),

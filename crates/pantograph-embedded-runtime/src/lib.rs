@@ -113,6 +113,7 @@ pub(crate) struct EmbeddedWorkflowHost {
     workflow_roots: Vec<PathBuf>,
     gateway: Arc<inference::InferenceGateway>,
     extensions: SharedExtensions,
+    workflow_service: SharedWorkflowService,
     runtime_registry: Option<SharedRuntimeRegistry>,
     session_runtime_reservations: Arc<Mutex<HashMap<String, u64>>>,
     session_executions:

@@ -6,7 +6,7 @@ use inference::backend::{
 };
 use inference::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 use inference::{RerankRequest, RerankResponse};
-use node_engine::ExecutorExtensions;
+use node_engine::{ExecutorExtensions, NullEventSink, WorkflowExecutor};
 use pantograph_runtime_registry::{
     RuntimeRegistration, RuntimeRegistry, RuntimeRegistryError, RuntimeRegistrySnapshot,
     RuntimeRegistryStatus, RuntimeReservationRequest, RuntimeRetentionHint, RuntimeTransition,
@@ -21,7 +21,7 @@ use pantograph_workflow_service::{
     WorkflowHost, WorkflowOutputTarget, WorkflowPortBinding, WorkflowPreflightRequest,
     WorkflowRunOptions, WorkflowRunResponse, WorkflowRuntimeInstallState,
     WorkflowRuntimeRequirements, WorkflowRuntimeSourceKind, WorkflowSchedulerRuntimeWarmupDecision,
-    WorkflowSchedulerRuntimeWarmupReason, WorkflowServiceError,
+    WorkflowSchedulerRuntimeWarmupReason, WorkflowService, WorkflowServiceError,
 };
 use std::path::Path;
 use std::pin::Pin;
@@ -56,6 +56,30 @@ use graph_fixtures::{
     multi_python_runtime_data_graph, runtime_diffusion_data_graph,
     synthetic_kv_node_memory_snapshot,
 };
+
+#[tokio::test]
+async fn runtime_extensions_apply_workflow_service_for_stream_artifacts() {
+    let shared = Arc::new(RwLock::new(ExecutorExtensions::new()));
+    let workflow_service = Arc::new(WorkflowService::new());
+    let snapshot = RuntimeExtensionsSnapshot::from_shared_with_workflow_service(
+        &shared,
+        workflow_service.clone(),
+    )
+    .await;
+    let mut executor = WorkflowExecutor::new(
+        "runtime-extension-test",
+        node_engine::WorkflowGraph::new("runtime-extension-test", "Runtime Extension Test"),
+        Arc::new(NullEventSink),
+    );
+
+    apply_runtime_extensions_for_execution(&mut executor, &snapshot, None, None, None);
+
+    let applied = executor
+        .extensions()
+        .get::<Arc<WorkflowService>>(runtime_extension_keys::WORKFLOW_SERVICE)
+        .expect("workflow service extension should be applied");
+    assert!(Arc::ptr_eq(applied, &workflow_service));
+}
 
 struct MockImagePythonRuntime {
     requests: Mutex<Vec<PythonNodeExecutionRequest>>,

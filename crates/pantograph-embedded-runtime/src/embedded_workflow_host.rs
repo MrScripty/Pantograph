@@ -267,7 +267,11 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         Self::apply_input_bindings(&mut graph, inputs)?;
 
         let output_node_ids = Self::resolve_output_node_ids(&graph, output_targets)?;
-        let runtime_ext = RuntimeExtensionsSnapshot::from_shared(&self.extensions).await;
+        let runtime_ext = RuntimeExtensionsSnapshot::from_shared_with_workflow_service(
+            &self.extensions,
+            self.workflow_service.clone(),
+        )
+        .await;
 
         let execution_id = Uuid::new_v4().to_string();
         let core = Arc::new(

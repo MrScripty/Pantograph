@@ -231,6 +231,7 @@ impl EmbeddedRuntime {
             workflow_roots: self.config.workflow_roots.clone(),
             gateway: self.gateway.clone(),
             extensions: self.extensions.clone(),
+            workflow_service: self.workflow_service.clone(),
             runtime_registry: self.runtime_registry.clone(),
             session_runtime_reservations: self.session_runtime_reservations.clone(),
             session_executions: self.session_executions.clone(),
