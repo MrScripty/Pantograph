@@ -716,6 +716,75 @@ export interface WorkflowArtifactPolicy {
   delete_on_consume: boolean;
 }
 
+export interface WorkflowArtifactFormatSettings {
+  image: WorkflowImageArtifactFormatSettings;
+  audio: WorkflowAudioArtifactFormatSettings;
+  video: WorkflowVideoArtifactFormatSettings;
+  three_d: WorkflowThreeDArtifactFormatSettings;
+}
+
+export interface WorkflowArtifactFormatSettingsQueryRequest {}
+
+export interface WorkflowArtifactFormatSettingsQueryResponse {
+  settings: WorkflowArtifactFormatSettings;
+}
+
+export interface WorkflowArtifactFormatSettingsUpdateRequest {
+  settings: WorkflowArtifactFormatSettings;
+  reason?: string | null;
+}
+
+export interface WorkflowArtifactFormatSettingsUpdateResponse {
+  settings: WorkflowArtifactFormatSettings;
+}
+
+export interface WorkflowImageArtifactFormatSettings {
+  format_id: string;
+  quality_percent: number;
+  color_profile_id: string;
+}
+
+export interface WorkflowAudioArtifactFormatSettings {
+  container_id: string;
+  codec_id: string;
+  bitrate_kbps: number;
+}
+
+export interface WorkflowVideoArtifactFormatSettings {
+  container_id: string;
+  codec_id: string;
+  crf: number;
+  bit_depth: string;
+}
+
+export interface WorkflowThreeDArtifactFormatSettings {
+  format_id: string;
+}
+
+export interface WorkflowMediaFormatOption {
+  format_id: string;
+  display_name: string;
+  media_type: string;
+  codec_ids: string[];
+  quality_min_percent?: number | null;
+  quality_max_percent?: number | null;
+  bitrate_min_kbps?: number | null;
+  bitrate_max_kbps?: number | null;
+  crf_min?: number | null;
+  crf_max?: number | null;
+  bit_depths: string[];
+  color_profile_ids: string[];
+  provided_by_dependency_id: string;
+  provided_by_version?: string | null;
+}
+
+export interface WorkflowArtifactFormatCapabilities {
+  image_formats: WorkflowMediaFormatOption[];
+  audio_formats: WorkflowMediaFormatOption[];
+  video_formats: WorkflowMediaFormatOption[];
+  three_d_formats: WorkflowMediaFormatOption[];
+}
+
 export interface WorkflowArtifactStoreStats {
   artifact_count: number;
   retained_body_count: number;

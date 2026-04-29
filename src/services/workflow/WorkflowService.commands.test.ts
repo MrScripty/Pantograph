@@ -10,6 +10,9 @@ import type {
 import type {
   WorkflowArtifactBodyRead,
   WorkflowArtifactDescriptorQueryResponse,
+  WorkflowArtifactFormatCapabilities,
+  WorkflowArtifactFormatSettingsQueryResponse,
+  WorkflowArtifactFormatSettingsUpdateResponse,
   WorkflowArtifactPolicy,
   WorkflowArtifactStoreStats,
   WorkflowAdminQueueCancelResponse,
@@ -504,6 +507,130 @@ test('artifact store commands forward backend-owned descriptor body policy and c
       },
       {
         cmd: 'workflow_artifact_store_stats',
+        args: {},
+      },
+    ]);
+  } finally {
+    clearMocks();
+  }
+});
+
+test('artifact format settings commands forward backend-owned settings and capabilities', async () => {
+  installWindowMock();
+  const calls: Array<{ cmd: string; args: unknown }> = [];
+  const settingsResponse: WorkflowArtifactFormatSettingsQueryResponse = {
+    settings: {
+      image: {
+        format_id: 'jpg',
+        quality_percent: 75,
+        color_profile_id: 'srgb',
+      },
+      audio: {
+        container_id: 'ogg',
+        codec_id: 'opus',
+        bitrate_kbps: 96,
+      },
+      video: {
+        container_id: 'ivf',
+        codec_id: 'svt_av1',
+        crf: 32,
+        bit_depth: '8bit',
+      },
+      three_d: {
+        format_id: 'glb',
+      },
+    },
+  };
+  const updateResponse: WorkflowArtifactFormatSettingsUpdateResponse = {
+    settings: {
+      ...settingsResponse.settings,
+      image: {
+        ...settingsResponse.settings.image,
+        quality_percent: 82,
+      },
+    },
+  };
+  const capabilitiesResponse: WorkflowArtifactFormatCapabilities = {
+    image_formats: [
+      {
+        format_id: 'jpg',
+        display_name: 'JPEG',
+        media_type: 'image/jpeg',
+        codec_ids: [],
+        quality_min_percent: 1,
+        quality_max_percent: 100,
+        bitrate_min_kbps: null,
+        bitrate_max_kbps: null,
+        crf_min: null,
+        crf_max: null,
+        bit_depths: ['8bit', '16bit', 'float'],
+        color_profile_ids: ['srgb'],
+        provided_by_dependency_id: 'oiiotool',
+        provided_by_version: null,
+      },
+    ],
+    audio_formats: [
+      {
+        format_id: 'ogg',
+        display_name: 'Ogg',
+        media_type: 'audio/ogg',
+        codec_ids: ['opus', 'vorbis'],
+        quality_min_percent: null,
+        quality_max_percent: null,
+        bitrate_min_kbps: 32,
+        bitrate_max_kbps: 512,
+        crf_min: null,
+        crf_max: null,
+        bit_depths: [],
+        color_profile_ids: [],
+        provided_by_dependency_id: 'ffmpeg',
+        provided_by_version: null,
+      },
+    ],
+    video_formats: [],
+    three_d_formats: [],
+  };
+  mockIPC((cmd, args) => {
+    calls.push({ cmd, args });
+    if (cmd === 'workflow_artifact_format_settings') {
+      return settingsResponse;
+    }
+    if (cmd === 'workflow_update_artifact_format_settings') {
+      return updateResponse;
+    }
+    return capabilitiesResponse;
+  });
+
+  try {
+    const service = new WorkflowCommandService();
+    const settings = await service.artifactFormatSettings();
+    const updated = await service.updateArtifactFormatSettings({
+      settings: updateResponse.settings,
+      reason: 'test_settings_update',
+    });
+    const capabilities = await service.artifactFormatCapabilities();
+
+    assert.deepEqual(settings, settingsResponse);
+    assert.deepEqual(updated, updateResponse);
+    assert.deepEqual(capabilities, capabilitiesResponse);
+    assert.deepEqual(calls, [
+      {
+        cmd: 'workflow_artifact_format_settings',
+        args: {
+          request: {},
+        },
+      },
+      {
+        cmd: 'workflow_update_artifact_format_settings',
+        args: {
+          request: {
+            settings: updateResponse.settings,
+            reason: 'test_settings_update',
+          },
+        },
+      },
+      {
+        cmd: 'workflow_artifact_format_capabilities',
         args: {},
       },
     ]);

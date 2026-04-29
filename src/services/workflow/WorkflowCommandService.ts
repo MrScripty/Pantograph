@@ -18,6 +18,12 @@ import type {
   WorkflowArtifactConsumeAcknowledgementResponse,
   WorkflowArtifactDescriptorQueryRequest,
   WorkflowArtifactDescriptorQueryResponse,
+  WorkflowArtifactFormatCapabilities,
+  WorkflowArtifactFormatSettings,
+  WorkflowArtifactFormatSettingsQueryRequest,
+  WorkflowArtifactFormatSettingsQueryResponse,
+  WorkflowArtifactFormatSettingsUpdateRequest,
+  WorkflowArtifactFormatSettingsUpdateResponse,
   WorkflowArtifactPolicy,
   WorkflowArtifactReadRequest,
   WorkflowArtifactStoreStats,
@@ -341,6 +347,46 @@ export class WorkflowCommandService extends WorkflowProjectionService {
     return invokeWorkflowCommand<WorkflowArtifactStoreStats>('workflow_artifact_store_stats');
   }
 
+  async artifactFormatSettings(
+    request: WorkflowArtifactFormatSettingsQueryRequest = {},
+  ): Promise<WorkflowArtifactFormatSettingsQueryResponse> {
+    if (USE_WORKFLOW_MOCKS) {
+      return {
+        settings: mockArtifactFormatSettings(),
+      };
+    }
+
+    return invokeWorkflowCommand<WorkflowArtifactFormatSettingsQueryResponse>(
+      'workflow_artifact_format_settings',
+      { request },
+    );
+  }
+
+  async updateArtifactFormatSettings(
+    request: WorkflowArtifactFormatSettingsUpdateRequest,
+  ): Promise<WorkflowArtifactFormatSettingsUpdateResponse> {
+    if (USE_WORKFLOW_MOCKS) {
+      return {
+        settings: request.settings,
+      };
+    }
+
+    return invokeWorkflowCommand<WorkflowArtifactFormatSettingsUpdateResponse>(
+      'workflow_update_artifact_format_settings',
+      { request },
+    );
+  }
+
+  async artifactFormatCapabilities(): Promise<WorkflowArtifactFormatCapabilities> {
+    if (USE_WORKFLOW_MOCKS) {
+      return mockArtifactFormatCapabilities();
+    }
+
+    return invokeWorkflowCommand<WorkflowArtifactFormatCapabilities>(
+      'workflow_artifact_format_capabilities',
+    );
+  }
+
   async deletePumasModelWithAudit(modelId: string): Promise<PumasModelDeleteAuditResponse> {
     if (USE_WORKFLOW_MOCKS) {
       return {
@@ -421,5 +467,99 @@ function mockArtifactPolicy(): WorkflowArtifactPolicy {
     max_single_artifact_bytes: null,
     spill_threshold_bytes: null,
     delete_on_consume: false,
+  };
+}
+
+function mockArtifactFormatSettings(): WorkflowArtifactFormatSettings {
+  return {
+    image: {
+      format_id: 'jpg',
+      quality_percent: 75,
+      color_profile_id: 'srgb',
+    },
+    audio: {
+      container_id: 'ogg',
+      codec_id: 'opus',
+      bitrate_kbps: 96,
+    },
+    video: {
+      container_id: 'ivf',
+      codec_id: 'svt_av1',
+      crf: 32,
+      bit_depth: '8bit',
+    },
+    three_d: {
+      format_id: 'glb',
+    },
+  };
+}
+
+function mockArtifactFormatCapabilities(): WorkflowArtifactFormatCapabilities {
+  return {
+    image_formats: [
+      mockMediaFormatOption('jpg', 'JPEG', 'image/jpeg', {
+        quality_min_percent: 1,
+        quality_max_percent: 100,
+        color_profile_ids: ['srgb'],
+        provided_by_dependency_id: 'oiiotool',
+      }),
+      mockMediaFormatOption('png', 'PNG', 'image/png', {
+        color_profile_ids: ['srgb'],
+        provided_by_dependency_id: 'oiiotool',
+      }),
+    ],
+    audio_formats: [
+      mockMediaFormatOption('ogg', 'Ogg', 'audio/ogg', {
+        codec_ids: ['opus', 'vorbis'],
+        bitrate_min_kbps: 32,
+        bitrate_max_kbps: 512,
+        provided_by_dependency_id: 'ffmpeg',
+      }),
+      mockMediaFormatOption('wav', 'WAV', 'audio/wav', {
+        codec_ids: ['pcm'],
+        provided_by_dependency_id: 'ffmpeg',
+      }),
+    ],
+    video_formats: [
+      mockMediaFormatOption('ivf', 'AV1 IVF', 'video/av1', {
+        codec_ids: ['svt_av1'],
+        crf_min: 0,
+        crf_max: 63,
+        bit_depths: ['8bit', '10bit'],
+        provided_by_dependency_id: 'ffmpeg',
+      }),
+    ],
+    three_d_formats: [
+      mockMediaFormatOption('glb', 'GLB', 'model/gltf-binary', {
+        provided_by_dependency_id: 'pantograph-3d',
+      }),
+      mockMediaFormatOption('gltf', 'glTF', 'model/gltf+json', {
+        provided_by_dependency_id: 'pantograph-3d',
+      }),
+    ],
+  };
+}
+
+function mockMediaFormatOption(
+  formatId: string,
+  displayName: string,
+  mediaType: string,
+  options: Partial<WorkflowArtifactFormatCapabilities['image_formats'][number]>,
+): WorkflowArtifactFormatCapabilities['image_formats'][number] {
+  return {
+    format_id: formatId,
+    display_name: displayName,
+    media_type: mediaType,
+    codec_ids: options.codec_ids ?? [],
+    quality_min_percent: options.quality_min_percent ?? null,
+    quality_max_percent: options.quality_max_percent ?? null,
+    bitrate_min_kbps: options.bitrate_min_kbps ?? null,
+    bitrate_max_kbps: options.bitrate_max_kbps ?? null,
+    crf_min: options.crf_min ?? null,
+    crf_max: options.crf_max ?? null,
+    bit_depths: options.bit_depths ?? [],
+    color_profile_ids: options.color_profile_ids ?? [],
+    provided_by_dependency_id: options.provided_by_dependency_id ?? 'mock',
+    provided_by_version: options.provided_by_version ?? null,
   };
 }

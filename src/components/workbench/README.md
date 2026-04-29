@@ -20,6 +20,9 @@ later plan stages fill in richer page bodies.
 | `IoInspectorPage.svelte` | Projection-backed I/O artifact browser, retention detail surface, cleanup status surface, and global retention policy form. |
 | `ioInspectorPresenters.ts` | Pure I/O media, payload availability, retention policy/cleanup detail, byte-size, and projection freshness presenters. |
 | `ioInspectorPresenters.test.ts` | Unit coverage for I/O Inspector presentation labels. |
+| `SettingsPage.svelte` | Canonical workbench Settings page for ArtifactStore policy and artifact format defaults/capabilities. |
+| `settingsPagePresenters.ts` | Pure Settings page byte/duration labels, capability option labels, policy rows, and numeric field validation helpers. |
+| `settingsPagePresenters.test.ts` | Unit coverage for Settings page presentation labels and validation helpers. |
 | `LibraryPage.svelte` | Projection-backed Library usage and audit table with active-run highlighting and audited Pumas search/download/delete actions. |
 | `libraryUsagePresenters.ts` | Pure Library category, active-run match, network byte, and projection freshness presenters. |
 | `libraryUsagePresenters.test.ts` | Unit coverage for Library page presentation labels and active-run matching. |
@@ -55,6 +58,10 @@ grow separate navigation and selection models.
 - Library pages must render usage projections without issuing optimistic Pumas
   or Library mutations. Audited Pumas actions must call typed workflow service
   commands and refresh projection state after confirmed backend responses.
+- The workbench Settings page is the canonical owner for persistent
+  ArtifactStore policy and artifact format defaults. It must call typed
+  backend commands and capability DTOs instead of hardcoding media option
+  lists.
 - Historic run graph rendering must use immutable run graph projections and
   must not mutate the current editor store.
 - Network pages must distinguish unavailable platform metrics from zero values.
@@ -62,6 +69,10 @@ grow separate navigation and selection models.
   the workbench shell.
 - The workbench Diagnostics page owns the active diagnostics surface. Graph page
   toolbars must keep diagnostics navigation inside the workbench page model.
+- The workbench Settings page owns persistent artifact policy and artifact
+  format defaults. I/O Inspector may show retention status and cleanup controls,
+  but persistent ArtifactStore and media format defaults must not be duplicated
+  in feature-local panels.
 - Toolbar navigation must use semantic buttons with accessible names.
 
 ## Decision
@@ -218,6 +229,12 @@ transient UI state without becoming backend scheduler policy.
   `retention_summary`, not from raw ledger events. Retention policy setting
   rows render backend-provided policy settings rather than hardcoded page
   categories.
+- `SettingsPage.svelte` reads and saves global ArtifactStore policy through
+  `workflowService.artifactPolicy` and
+  `workflowService.updateArtifactPolicy`. Artifact format defaults are read and
+  saved through `workflowService.artifactFormatSettings` and
+  `workflowService.updateArtifactFormatSettings`; selectable options come from
+  `workflowService.artifactFormatCapabilities`.
 - Retention policy saves call `workflowService.updateRetentionPolicy` and
   update displayed state only from the backend response. The page may show a
   saving state, but it must not apply the requested policy as if it were

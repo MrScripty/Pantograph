@@ -8,6 +8,7 @@
     Library,
     Network,
     PanelTop,
+    SlidersHorizontal,
     X,
   } from 'lucide-svelte';
   import {
@@ -25,12 +26,14 @@
   import NetworkPage from './NetworkPage.svelte';
   import NodeLabPage from './NodeLabPage.svelte';
   import SchedulerPage from './SchedulerPage.svelte';
+  import SettingsPage from './SettingsPage.svelte';
 
   const pageIcons = {
     scheduler: CalendarClock,
     diagnostics: Activity,
     graph: GitBranch,
     io_inspector: PanelTop,
+    settings: SlidersHorizontal,
     library: Library,
     network: Network,
     node_lab: FlaskConical,
@@ -112,6 +115,8 @@
         <GraphPage />
       {:else if $selectedWorkbenchPage === 'io_inspector'}
         <IoInspectorPage />
+      {:else if $selectedWorkbenchPage === 'settings'}
+        <SettingsPage />
       {:else if $selectedWorkbenchPage === 'library'}
         <LibraryPage />
       {:else if $selectedWorkbenchPage === 'network'}
