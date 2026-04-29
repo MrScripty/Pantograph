@@ -388,7 +388,7 @@ when physical payload bodies are deleted.
   - [x] Add C# native smoke coverage that treats diffusion outputs as
     ArtifactStore descriptors and reads bytes through the UniFFI artifact body
     API instead of decoding inline base64/data URLs.
-- [ ] Make the workbench Settings page the canonical persistent settings
+- [x] Make the workbench Settings page the canonical persistent settings
   surface. Relocate, embed, or retire old side-panel/server/runtime settings
   surfaces so they do not keep separate global settings ownership.
   - [x] Add the workbench Settings page and route ArtifactStore policy plus
@@ -399,7 +399,7 @@ when physical payload bodies are deleted.
     using backend command responses as the source of truth.
   - [x] Retire the side-panel Settings tab as a persistent settings owner by
     replacing it with a navigation handoff to the workbench Settings page.
-  - [ ] Relocate, embed, or retire remaining legacy global settings surfaces
+  - [x] Relocate, embed, or retire remaining legacy global settings surfaces
     that still own server/runtime settings outside the workbench Settings page.
 - [x] Add output-node format selectors that default from backend Settings and
   preserve explicit per-node overrides in run snapshots.
