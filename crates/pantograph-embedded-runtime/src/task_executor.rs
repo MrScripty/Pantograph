@@ -54,6 +54,9 @@ pub mod runtime_extension_keys {
     pub const EVENT_SINK: &str = "pantograph_event_sink";
     /// Execution identifier for host-side stream/progress events.
     pub const EXECUTION_ID: &str = "pantograph_execution_id";
+    /// `Arc<pantograph_workflow_service::WorkflowService>` used for artifactizing
+    /// host-side media stream chunks before event emission.
+    pub const WORKFLOW_SERVICE: &str = "pantograph_workflow_service";
     /// Recorder for Python-backed runtime execution metadata captured during a run.
     pub const PYTHON_RUNTIME_EXECUTION_RECORDER: &str =
         "pantograph_python_runtime_execution_recorder";
@@ -63,6 +66,7 @@ mod dependency_environment;
 mod puma_lib;
 mod python_execution;
 mod rag_search;
+mod stream_artifacts;
 impl TauriTaskExecutor {
     const FNV64_OFFSET_BASIS: u64 = 0xcbf29ce484222325;
     const FNV64_PRIME: u64 = 0x0000_0100_0000_01B3;

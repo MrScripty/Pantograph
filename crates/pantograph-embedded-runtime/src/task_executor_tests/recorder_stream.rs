@@ -1,4 +1,7 @@
 use super::*;
+use pantograph_workflow_service::{
+    ArtifactPolicy, ArtifactReadRequest, ArtifactStore, WorkflowService,
+};
 
 #[tokio::test]
 async fn python_runtime_recorder_tracks_backend_and_environment_identity() {
@@ -159,6 +162,47 @@ impl PythonRuntimeAdapter for FailingPythonAdapter {
         _request: PythonNodeExecutionRequest,
     ) -> std::result::Result<HashMap<String, serde_json::Value>, String> {
         Err("python sidecar crashed".to_string())
+    }
+}
+
+struct StreamingPythonAdapter {
+    chunks: Vec<serde_json::Value>,
+    response: HashMap<String, serde_json::Value>,
+}
+
+#[async_trait]
+impl PythonRuntimeAdapter for StreamingPythonAdapter {
+    async fn execute_node(
+        &self,
+        _request: PythonNodeExecutionRequest,
+    ) -> std::result::Result<HashMap<String, serde_json::Value>, String> {
+        Ok(self.response.clone())
+    }
+
+    async fn execute_node_with_stream(
+        &self,
+        _request: PythonNodeExecutionRequest,
+        on_stream: Option<PythonStreamHandler>,
+    ) -> std::result::Result<HashMap<String, serde_json::Value>, String> {
+        if let Some(on_stream) = on_stream {
+            for chunk in &self.chunks {
+                on_stream(chunk.clone());
+            }
+        }
+        Ok(self.response.clone())
+    }
+}
+
+fn artifact_policy() -> ArtifactPolicy {
+    ArtifactPolicy {
+        policy_id: "test-policy".to_string(),
+        policy_version: 1,
+        ttl_seconds: None,
+        max_disk_bytes: None,
+        max_memory_bytes: None,
+        max_single_artifact_bytes: None,
+        spill_threshold_bytes: None,
+        delete_on_consume: false,
     }
 }
 
@@ -413,6 +457,121 @@ async fn python_nodes_emit_stream_events_when_event_sink_extension_exists() {
     assert_eq!(stream_events[1].3["audio_base64"], "chunk-2");
     assert_eq!(stream_events[1].3["sequence"], 1);
     assert_eq!(stream_events[1].3["is_final"], true);
+}
+
+#[tokio::test]
+async fn python_direct_media_stream_chunks_are_artifactized_when_workflow_service_extension_exists()
+{
+    let chunks = vec![
+        serde_json::json!({
+            "type": "audio_chunk",
+            "mode": "append",
+            "audio_base64": "aGVs",
+            "mime_type": "audio/wav",
+            "sequence": 0,
+            "is_final": false
+        }),
+        serde_json::json!({
+            "type": "audio_chunk",
+            "mode": "append",
+            "audio_base64": "bG8=",
+            "mime_type": "audio/wav",
+            "sequence": 1,
+            "is_final": true
+        }),
+    ];
+    let mut adapter_response = HashMap::new();
+    adapter_response.insert("audio".to_string(), serde_json::json!("final-audio"));
+    let adapter: Arc<dyn PythonRuntimeAdapter> = Arc::new(StreamingPythonAdapter {
+        chunks,
+        response: adapter_response,
+    });
+
+    let resolver: Arc<dyn ModelDependencyResolver> = Arc::new(StubDependencyResolver {
+        requirements: ModelDependencyRequirements {
+            backend_key: Some("onnx-runtime".to_string()),
+            ..make_requirements(DependencyValidationState::Resolved)
+        },
+        status: make_status(DependencyState::Ready, None),
+        model_ref: None,
+    });
+    let (executor, mut extensions) = test_executor(adapter, resolver);
+    let sink = Arc::new(VecEventSink::new());
+    let temp = tempfile::TempDir::new().expect("artifact temp dir");
+    let store = ArtifactStore::open(temp.path(), artifact_policy()).expect("artifact store");
+    let workflow_service = Arc::new(WorkflowService::new().with_artifact_store(store));
+    extensions.set(
+        runtime_extension_keys::EVENT_SINK,
+        sink.clone() as Arc<dyn node_engine::EventSink>,
+    );
+    extensions.set(
+        runtime_extension_keys::EXECUTION_ID,
+        "exec-stream-artifacts".to_string(),
+    );
+    extensions.set(
+        runtime_extension_keys::WORKFLOW_SERVICE,
+        workflow_service.clone(),
+    );
+
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "model_path".to_string(),
+        serde_json::json!("/tmp/model.onnx"),
+    );
+    inputs.insert("prompt".to_string(), serde_json::json!("stream this"));
+
+    let _ = executor
+        .execute_task(
+            "onnx-inference-stream",
+            inputs,
+            &Context::new(),
+            &extensions,
+        )
+        .await
+        .expect("onnx stream execution should succeed");
+
+    let stream_events: Vec<_> = sink
+        .events()
+        .into_iter()
+        .filter_map(|event| match event {
+            WorkflowEvent::TaskStream { data, .. } => Some(data),
+            _ => None,
+        })
+        .collect();
+
+    assert_eq!(stream_events.len(), 2);
+    assert!(stream_events[0].get("audio_base64").is_none());
+    assert!(stream_events[1].get("audio_base64").is_none());
+    assert_eq!(stream_events[0]["payload_kind"], "audio");
+    assert_eq!(stream_events[0]["media_type"], "audio/wav");
+    assert_eq!(stream_events[0]["byte_length"], 3);
+    assert_eq!(stream_events[0]["available_byte_length"], 3);
+    assert_eq!(stream_events[0]["byte_range_start"], 0);
+    assert_eq!(stream_events[0]["byte_range_end_exclusive"], 3);
+    assert_eq!(stream_events[0]["is_final"], false);
+    assert_eq!(stream_events[1]["byte_length"], 2);
+    assert_eq!(stream_events[1]["available_byte_length"], 5);
+    assert_eq!(stream_events[1]["byte_range_start"], 3);
+    assert_eq!(stream_events[1]["byte_range_end_exclusive"], 5);
+    assert_eq!(stream_events[1]["is_final"], true);
+
+    let artifact_id = stream_events[1]["artifact_id"]
+        .as_str()
+        .expect("artifact id");
+    assert_eq!(stream_events[0]["artifact_id"], artifact_id);
+    assert!(stream_events[0].get("stream_handle").is_some());
+    assert!(stream_events[1].get("read_handle").is_some());
+
+    let body = workflow_service
+        .read_artifact_body(ArtifactReadRequest {
+            artifact_id: artifact_id.to_string(),
+            byte_range_start: None,
+            byte_range_end_exclusive: None,
+        })
+        .expect("final artifact body");
+    assert_eq!(body.body, b"hello");
+    assert_eq!(body.response.media_type, "audio/wav");
+    assert!(body.response.complete);
 }
 
 #[tokio::test]

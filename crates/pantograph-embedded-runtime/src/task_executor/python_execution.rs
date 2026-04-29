@@ -370,12 +370,25 @@ impl TauriTaskExecutor {
             .normalized_lifecycle_decision_reason();
 
         let streamed_any = Arc::new(AtomicBool::new(false));
+        let stream_artifactizer = Self::resolve_stream_artifactizer(extensions);
         let stream_handler: Option<PythonStreamHandler> = Self::resolve_stream_target(extensions)
             .map(|(sink, execution_id)| {
                 let streamed_any = streamed_any.clone();
+                let stream_artifactizer = stream_artifactizer.clone();
                 let task_id = task_id.to_string();
                 Arc::new(move |chunk: serde_json::Value| {
                     streamed_any.store(true, Ordering::Relaxed);
+                    let chunk = stream_artifactizer
+                        .as_ref()
+                        .map(|artifactizer| {
+                            artifactizer.artifactize_chunk(
+                                &task_id,
+                                &execution_id,
+                                "stream",
+                                chunk.clone(),
+                            )
+                        })
+                        .unwrap_or(chunk);
                     let _ = sink.send(WorkflowEvent::task_stream(
                         &task_id,
                         &execution_id,
@@ -436,6 +449,17 @@ impl TauriTaskExecutor {
         Some((sink, execution_id))
     }
 
+    pub(super) fn resolve_stream_artifactizer(
+        extensions: &ExecutorExtensions,
+    ) -> Option<crate::task_executor::stream_artifacts::StreamArtifactizer> {
+        extensions
+            .get::<Arc<pantograph_workflow_service::WorkflowService>>(
+                runtime_extension_keys::WORKFLOW_SERVICE,
+            )
+            .cloned()
+            .map(crate::task_executor::stream_artifacts::StreamArtifactizer::new)
+    }
+
     pub(super) fn emit_python_stream_events(
         task_id: &str,
         outputs: &HashMap<String, serde_json::Value>,
@@ -447,8 +471,15 @@ impl TauriTaskExecutor {
         let Some((sink, execution_id)) = Self::resolve_stream_target(extensions) else {
             return;
         };
+        let stream_artifactizer = Self::resolve_stream_artifactizer(extensions);
 
         let send_stream = |chunk: serde_json::Value| {
+            let chunk = stream_artifactizer
+                .as_ref()
+                .map(|artifactizer| {
+                    artifactizer.artifactize_chunk(task_id, &execution_id, "stream", chunk.clone())
+                })
+                .unwrap_or(chunk);
             let _ = sink.send(WorkflowEvent::task_stream(
                 task_id,
                 &execution_id,
