@@ -24,7 +24,7 @@ backend portions of Wave `02`.
 | ---- | ------ | ----------------- |
 | `wave-01-preflight-contract-audit` | Complete | Backend ArtifactStore descriptor, handle-based access, format settings, media capability, and managed redistributable DTOs are frozen with contract snapshots. |
 | `wave-02-artifact-store-backend` | Complete | ArtifactStore core, private disk persistence, restart reconciliation, consume acknowledgement, cleanup, memory-cache enforcement, disk-budget enforcement, stream persistence, finalize lifecycle, service facade, and focused tests are implemented. Execution cutover and diagnostics descriptor linking remain assigned to Wave `04`. |
-| `wave-03-managed-redistributables` | In progress | First worker owns the backend `inference` managed media redistributables module for tool/native dependency definitions, status projection, and tests. Existing sidecar runtime code remains read-only for this first split. |
+| `wave-03-managed-redistributables` | In progress | Backend `inference` managed media redistributables catalog/status scaffold is implemented for tool/native dependency definitions, expected-file status projection, and tests. Install/download/select/activate actions and active-version leases remain. |
 | `wave-04-execution-diagnostics-cutover` | Pending | Depends on backend ArtifactStore and managed format capability contracts. |
 | `wave-05-api-bindings-frontend-settings` | Pending | Depends on backend Settings/capability APIs and binary-safe body access contracts. |
 
@@ -91,6 +91,10 @@ runtime-only DTO names or host PATH discovery as the source of truth.
   passed: `cargo test -p pantograph-workflow-service --test artifact_store`,
   `cargo test -p pantograph-workflow-service --test artifact_store_policy`,
   `cargo test -p pantograph-workflow-service --test artifact_contract`, and
+  `cargo fmt --all -- --check`.
+- 2026-04-29 Wave `03` managed media redistributables catalog/status scaffold
+  passed: `cargo test -p inference --test managed_redistributables`,
+  `cargo clippy -p inference --all-targets -- -D warnings`, and
   `cargo fmt --all -- --check`.
 - 2026-04-29 Separate clippy cleanup commit cleared existing
   workflow-service lints discovered by the Wave `02` package clippy gate.

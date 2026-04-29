@@ -284,9 +284,9 @@ when physical payload bodies are deleted.
 
 ### Milestone 3: Managed Redistributables
 
-- [ ] Generalize or split the managed-runtime boundary so tool binaries and
+- [x] Generalize or split the managed-runtime boundary so tool binaries and
   native library artifacts do not use misleading runtime-only contracts.
-- [ ] Add managed redistributable catalog metadata for source owner,
+- [x] Add managed redistributable catalog metadata for source owner,
   license/redistribution, checksum or signature, platform, archive kind,
   expected files, compatibility, and release version.
 - [ ] Add OpenColorIO as a managed native library/artifact dependency with

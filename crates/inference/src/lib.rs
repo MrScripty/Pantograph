@@ -31,6 +31,7 @@ pub mod device;
 pub mod embedding_runtime;
 pub mod gateway;
 pub mod kv_cache;
+pub mod managed_redistributables;
 pub mod managed_runtime;
 pub mod process;
 pub mod server;
@@ -60,6 +61,15 @@ pub use embedding_runtime::{DedicatedEmbeddingRuntimeManager, LlamaCppEmbeddingR
 pub use gateway::{
     EmbeddingRuntimePreparation, EmbeddingStartRequest, GatewayError, InferenceGateway,
     InferenceStartRequest, SharedGateway,
+};
+pub use managed_redistributables::{
+    list_managed_redistributable_statuses, managed_redistributable_catalog,
+    managed_redistributable_catalog_entry, managed_redistributable_status,
+    managed_redistributables_dir, ManagedRedistributableArchiveKind,
+    ManagedRedistributableCatalogEntry, ManagedRedistributableCategory, ManagedRedistributableId,
+    ManagedRedistributableInstallState, ManagedRedistributablePackageKind,
+    ManagedRedistributableReadiness, ManagedRedistributableSelection, ManagedRedistributableSource,
+    ManagedRedistributableStatus, ManagedRedistributableVersionStatus,
 };
 pub use managed_runtime::{
     binary_capability, cancel_binary_download, check_binary_status, download_binary,
