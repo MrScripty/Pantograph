@@ -5,16 +5,17 @@ use std::path::Path;
 use uuid::Uuid;
 
 use super::manifest::{
-    body_file_name, enforce_single_artifact_limit, read_handle, unix_now_ms, validate_artifact_id,
-    ArtifactStoreEntry, BODIES_DIR,
+    apply_byte_range, body_file_name, enforce_single_artifact_limit, read_handle, unix_now_ms,
+    validate_artifact_id, ArtifactStoreEntry, BODIES_DIR,
 };
 use super::{
     ArtifactStore, ArtifactStoreError, ArtifactStreamChunkWriteRequest,
     ArtifactStreamFinalizeRequest, ArtifactStreamOpenRequest,
 };
 use crate::workflow::{
-    ArtifactAccessMode, ArtifactDescriptor, ArtifactLifecycleState, ArtifactStreamChunkRecord,
-    IoArtifactRetentionState,
+    ArtifactAccessMode, ArtifactBodyTransport, ArtifactDescriptor, ArtifactLifecycleState,
+    ArtifactStreamBodyRead, ArtifactStreamChunkRecord, ArtifactStreamReadRequest,
+    ArtifactStreamReadResponse, IoArtifactRetentionState,
 };
 
 const STREAM_HANDLE_SCHEME: &str = "artifact-stream://";
@@ -120,6 +121,47 @@ impl ArtifactStore {
         };
         self.save()?;
         Ok(record)
+    }
+
+    pub fn read_stream_body(
+        &self,
+        request: ArtifactStreamReadRequest,
+    ) -> Result<ArtifactStreamBodyRead, ArtifactStoreError> {
+        validate_artifact_id(&request.artifact_id)?;
+        let entry = self.entry(&request.artifact_id)?;
+        let stream =
+            entry
+                .pending_stream
+                .as_ref()
+                .ok_or_else(|| ArtifactStoreError::BodyUnavailable {
+                    artifact_id: request.artifact_id.clone(),
+                })?;
+        let body = fs::read(self.root_dir.join(BODIES_DIR).join(&stream.body_file))?;
+        let body = apply_byte_range(
+            body,
+            request.byte_range_start,
+            request.byte_range_end_exclusive,
+        )?;
+        let response = ArtifactStreamReadResponse {
+            artifact_id: request.artifact_id,
+            stream_handle: entry
+                .descriptor
+                .stream_handle
+                .clone()
+                .unwrap_or_else(|| stream_handle(&entry.descriptor.artifact_id)),
+            media_type: entry
+                .descriptor
+                .format
+                .as_ref()
+                .map(|format| format.media_type.clone())
+                .unwrap_or_else(|| "application/octet-stream".to_string()),
+            body_transport: ArtifactBodyTransport::BinaryBody,
+            byte_length: body.len() as u64,
+            available_byte_length: stream.byte_length,
+            lifecycle_state: entry.descriptor.lifecycle_state,
+            complete: false,
+        };
+        Ok(ArtifactStreamBodyRead { response, body })
     }
 
     pub fn finalize_stream(

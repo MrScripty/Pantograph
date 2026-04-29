@@ -26,7 +26,7 @@ backend portions of Wave `02`.
 | `wave-02-artifact-store-backend` | Complete | ArtifactStore core, private disk persistence, restart reconciliation, consume acknowledgement, cleanup, memory-cache enforcement, disk-budget enforcement, stream persistence, finalize lifecycle, service facade, and focused tests are implemented. Execution cutover and diagnostics descriptor linking remain assigned to Wave `04`. |
 | `wave-03-managed-redistributables` | Complete | Backend `inference` managed media redistributables catalog/status and activation/state scaffolds are implemented for tool/native dependency definitions, expected-file status projection, local staging installs, select/default/activate state, active-version leases, OpenColorIO activation validation state, and conversion dependency lease planning. Real OCIO ABI loading remains deferred because unsafe FFI is intentionally outside the scaffold. |
 | `wave-04-execution-diagnostics-cutover` | In progress | Workflow-service execution cutover converts image/audio/video/3D/large-table/generic-binary/structured base64 or data-url output bindings into ArtifactStore descriptors before `max_value_bytes` validation, the GUI workflow service now opens the project-local ArtifactStore, typed I/O diagnostics projections retain descriptor metadata, and Tauri diagnostics overlays redact inline media bodies. Python bridge streaming and producer-specific stream lifecycle metadata remain. |
-| `wave-05-api-bindings-frontend-settings` | In progress | Tauri workflow commands and the UniFFI embedded runtime now expose ArtifactStore descriptor lookup, body read, consume acknowledgement, policy read/update, and stats. Backend artifact format settings query/update and conversion capability commands are implemented with persistence, validation, Tauri registration, and UniFFI JSON parity. The I/O Inspector renders descriptor lifecycle/access/handle/format metadata and uses transient Blob URLs for read/download/consume actions without placing bodies in projection state. Tauri/headless managed media dependency status/action commands are implemented. Stream subscription handling, remaining binding parity, workbench Settings page, and output selectors remain. |
+| `wave-05-api-bindings-frontend-settings` | In progress | Tauri workflow commands and the UniFFI embedded runtime now expose ArtifactStore descriptor lookup, body read, consume acknowledgement, policy read/update, and stats. Backend artifact format settings query/update and conversion capability commands are implemented with persistence, validation, Tauri registration, and UniFFI JSON parity. ArtifactStore stream read DTOs and Tauri/embedded-runtime stream read commands are implemented for in-progress stream bytes. The I/O Inspector renders descriptor lifecycle/access/handle/format metadata and uses transient Blob URLs for read/download/consume actions without placing bodies in projection state. Tauri/headless managed media dependency status/action commands are implemented. Frontend stream subscription/read handling, remaining binding parity, workbench Settings page, and output selectors remain. |
 
 ## Required First Actions
 
@@ -213,6 +213,13 @@ runtime-only DTO names or host PATH discovery as the source of truth.
 - 2026-04-29 Wave `05` UniFFI artifact format settings parity passed:
   `cargo test -p pantograph-uniffi artifact_format`, `cargo check -p
   pantograph-uniffi`, and `cargo fmt --all -- --check`.
+- 2026-04-29 Wave `05` ArtifactStore stream read surface passed:
+  `cargo test -p pantograph-workflow-service --test artifact_contract
+  artifact_access_contracts_are_handle_based`, `cargo test -p
+  pantograph-workflow-service --test artifact_store
+  artifact_store_streams_chunks_and_finalizes_descriptor_without_serialized_bodies`,
+  `cargo check -p pantograph`, and targeted `rustfmt --edition 2021 --check`
+  for the changed Rust files.
 - 2026-04-29 Separate clippy cleanup commit cleared existing
   workflow-service lints discovered by the Wave `02` package clippy gate.
 - 2026-04-29 Wave `01` verification passed:

@@ -340,8 +340,11 @@ when physical payload bodies are deleted.
     JSON.
   - [x] Add final frontend binary body transport/download handling that avoids
     embedding media bodies in JSON view state.
+  - [x] Add backend, embedded-runtime, and Tauri stream read handling for
+    in-progress ArtifactStore streams without embedding stream bodies in JSON
+    metadata.
   - [ ] Add stream subscription/read handling for artifacts with stream
-    handles.
+    handles in frontend clients.
 - [ ] Expose Settings APIs for persistent artifact format defaults and
   conversion capabilities.
   - [x] Add backend artifact format settings query/update APIs, static

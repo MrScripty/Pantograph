@@ -2,9 +2,9 @@ use super::{
     ArtifactBodyRead, ArtifactConsumeAcknowledgementRequest,
     ArtifactConsumeAcknowledgementResponse, ArtifactDescriptor, ArtifactDescriptorQueryRequest,
     ArtifactDescriptorQueryResponse, ArtifactPolicy, ArtifactReadRequest, ArtifactStoreError,
-    ArtifactStoreStats, ArtifactStreamChunkRecord, ArtifactStreamChunkWriteRequest,
-    ArtifactStreamFinalizeRequest, ArtifactStreamOpenRequest, ArtifactWriteRequest,
-    WorkflowService, WorkflowServiceError,
+    ArtifactStoreStats, ArtifactStreamBodyRead, ArtifactStreamChunkRecord,
+    ArtifactStreamChunkWriteRequest, ArtifactStreamFinalizeRequest, ArtifactStreamOpenRequest,
+    ArtifactStreamReadRequest, ArtifactWriteRequest, WorkflowService, WorkflowServiceError,
 };
 
 impl WorkflowService {
@@ -53,6 +53,15 @@ impl WorkflowService {
     ) -> Result<ArtifactStreamChunkRecord, WorkflowServiceError> {
         self.artifact_store_guard()?
             .append_stream_chunk(request)
+            .map_err(artifact_store_error)
+    }
+
+    pub fn read_artifact_stream_body(
+        &self,
+        request: ArtifactStreamReadRequest,
+    ) -> Result<ArtifactStreamBodyRead, WorkflowServiceError> {
+        self.artifact_store_guard()?
+            .read_stream_body(request)
             .map_err(artifact_store_error)
     }
 

@@ -2,8 +2,8 @@ use pantograph_workflow_service::{
     ArtifactAttribution, ArtifactBodyTransport, ArtifactConsumeAcknowledgementRequest,
     ArtifactFormatMetadata, ArtifactLifecycleState, ArtifactPayloadKind, ArtifactPolicy,
     ArtifactReadRequest, ArtifactStore, ArtifactStoreError, ArtifactStreamChunkWriteRequest,
-    ArtifactStreamFinalizeRequest, ArtifactStreamOpenRequest, ArtifactWriteRequest,
-    IoArtifactRetentionState, WorkflowService,
+    ArtifactStreamFinalizeRequest, ArtifactStreamOpenRequest, ArtifactStreamReadRequest,
+    ArtifactWriteRequest, IoArtifactRetentionState, WorkflowService,
 };
 
 fn policy(delete_on_consume: bool) -> ArtifactPolicy {
@@ -322,6 +322,27 @@ fn artifact_store_streams_chunks_and_finalizes_descriptor_without_serialized_bod
         .expect("serialize chunk metadata")
         .contains("chunk-one"));
     assert_eq!(store.stats().streaming_body_bytes, 19);
+    let stream_read = store
+        .read_stream_body(ArtifactStreamReadRequest {
+            artifact_id: "artifact_stream_1".to_string(),
+            byte_range_start: Some(9),
+            byte_range_end_exclusive: Some(19),
+        })
+        .expect("read currently available stream bytes");
+    assert_eq!(stream_read.body, b"-chunk-two".to_vec());
+    assert_eq!(stream_read.response.byte_length, 10);
+    assert_eq!(stream_read.response.available_byte_length, 19);
+    assert_eq!(
+        stream_read.response.stream_handle,
+        "artifact-stream://artifact_stream_1"
+    );
+    assert_eq!(
+        stream_read.response.lifecycle_state,
+        ArtifactLifecycleState::Streaming
+    );
+    assert!(!serde_json::to_string(&stream_read.response)
+        .expect("serialize stream read metadata")
+        .contains("chunk-two"));
     assert!(matches!(
         store.read_body(ArtifactReadRequest {
             artifact_id: "artifact_stream_1".to_string(),

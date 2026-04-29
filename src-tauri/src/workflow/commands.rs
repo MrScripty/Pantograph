@@ -332,6 +332,15 @@ pub async fn workflow_read_artifact_body(
 }
 
 #[command]
+pub async fn workflow_read_artifact_stream(
+    request: pantograph_workflow_service::ArtifactStreamReadRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<pantograph_workflow_service::ArtifactStreamBodyRead, String> {
+    super::headless_workflow_commands::workflow_read_artifact_stream(request, workflow_service)
+        .await
+}
+
+#[command]
 pub async fn workflow_acknowledge_artifact_consumed(
     request: pantograph_workflow_service::ArtifactConsumeAcknowledgementRequest,
     workflow_service: State<'_, SharedWorkflowService>,

@@ -4,17 +4,18 @@ use pantograph_workflow_service::{
     ArtifactDescriptorQueryResponse, ArtifactFormatCapabilities,
     ArtifactFormatSettingsQueryRequest, ArtifactFormatSettingsQueryResponse,
     ArtifactFormatSettingsUpdateRequest, ArtifactFormatSettingsUpdateResponse, ArtifactPolicy,
-    ArtifactReadRequest, ArtifactStoreStats, BucketCreateRequest, BucketDeleteRequest,
-    BucketRecord, ClientRegistrationRequest, ClientRegistrationResponse, ClientSessionOpenRequest,
-    ClientSessionOpenResponse, ClientSessionRecord, ClientSessionResumeRequest,
-    WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse,
-    WorkflowExecutionSessionCloseRequest, WorkflowExecutionSessionCloseResponse,
-    WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionCreateResponse,
-    WorkflowExecutionSessionInspectionRequest, WorkflowExecutionSessionInspectionResponse,
-    WorkflowExecutionSessionKeepAliveRequest, WorkflowExecutionSessionKeepAliveResponse,
-    WorkflowExecutionSessionQueueCancelRequest, WorkflowExecutionSessionQueueCancelResponse,
-    WorkflowExecutionSessionQueueListRequest, WorkflowExecutionSessionQueueListResponse,
-    WorkflowExecutionSessionQueuePushFrontRequest, WorkflowExecutionSessionQueuePushFrontResponse,
+    ArtifactReadRequest, ArtifactStoreStats, ArtifactStreamBodyRead, ArtifactStreamReadRequest,
+    BucketCreateRequest, BucketDeleteRequest, BucketRecord, ClientRegistrationRequest,
+    ClientRegistrationResponse, ClientSessionOpenRequest, ClientSessionOpenResponse,
+    ClientSessionRecord, ClientSessionResumeRequest, WorkflowCapabilitiesRequest,
+    WorkflowCapabilitiesResponse, WorkflowExecutionSessionCloseRequest,
+    WorkflowExecutionSessionCloseResponse, WorkflowExecutionSessionCreateRequest,
+    WorkflowExecutionSessionCreateResponse, WorkflowExecutionSessionInspectionRequest,
+    WorkflowExecutionSessionInspectionResponse, WorkflowExecutionSessionKeepAliveRequest,
+    WorkflowExecutionSessionKeepAliveResponse, WorkflowExecutionSessionQueueCancelRequest,
+    WorkflowExecutionSessionQueueCancelResponse, WorkflowExecutionSessionQueueListRequest,
+    WorkflowExecutionSessionQueueListResponse, WorkflowExecutionSessionQueuePushFrontRequest,
+    WorkflowExecutionSessionQueuePushFrontResponse,
     WorkflowExecutionSessionQueueReprioritizeRequest,
     WorkflowExecutionSessionQueueReprioritizeResponse, WorkflowExecutionSessionRunRequest,
     WorkflowExecutionSessionStaleCleanupRequest, WorkflowExecutionSessionStaleCleanupResponse,
@@ -73,6 +74,13 @@ impl EmbeddedRuntime {
         request: ArtifactReadRequest,
     ) -> Result<ArtifactBodyRead, WorkflowServiceError> {
         self.workflow_service.read_artifact_body(request)
+    }
+
+    pub fn workflow_read_artifact_stream(
+        &self,
+        request: ArtifactStreamReadRequest,
+    ) -> Result<ArtifactStreamBodyRead, WorkflowServiceError> {
+        self.workflow_service.read_artifact_stream_body(request)
     }
 
     pub fn workflow_acknowledge_artifact_consumed(

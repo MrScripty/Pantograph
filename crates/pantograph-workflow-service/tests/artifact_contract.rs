@@ -4,9 +4,10 @@ use pantograph_workflow_service::{
     ArtifactDescriptor, ArtifactDescriptorQueryRequest, ArtifactDescriptorQueryResponse,
     ArtifactFormatCapabilities, ArtifactFormatMetadata, ArtifactFormatSettings,
     ArtifactLifecycleState, ArtifactPayloadKind, ArtifactPolicy, ArtifactReadRequest,
-    ArtifactReadResponse, ArtifactStreamChunkRecord, IoArtifactRetentionState,
-    ManagedRedistributableCategory, ManagedRedistributableReadinessState,
-    ManagedRedistributableStatus, ManagedRedistributableStatusQueryResponse, MediaFormatOption,
+    ArtifactReadResponse, ArtifactStreamChunkRecord, ArtifactStreamReadRequest,
+    ArtifactStreamReadResponse, IoArtifactRetentionState, ManagedRedistributableCategory,
+    ManagedRedistributableReadinessState, ManagedRedistributableStatus,
+    ManagedRedistributableStatusQueryResponse, MediaFormatOption,
 };
 
 #[test]
@@ -124,6 +125,21 @@ fn artifact_access_contracts_are_handle_based() {
         lifecycle_state: ArtifactLifecycleState::Streaming,
         content_hash: None,
     };
+    let stream_read = ArtifactStreamReadRequest {
+        artifact_id: "artifact-1".to_string(),
+        byte_range_start: Some(1024),
+        byte_range_end_exclusive: Some(2048),
+    };
+    let stream_read_response = ArtifactStreamReadResponse {
+        artifact_id: "artifact-1".to_string(),
+        stream_handle: "artifact-stream://artifact-1".to_string(),
+        media_type: "audio/ogg".to_string(),
+        body_transport: ArtifactBodyTransport::BinaryBody,
+        byte_length: 1024,
+        available_byte_length: 4096,
+        lifecycle_state: ArtifactLifecycleState::Streaming,
+        complete: false,
+    };
 
     assert_eq!(
         serde_json::to_value(query).expect("query"),
@@ -171,6 +187,27 @@ fn artifact_access_contracts_are_handle_based() {
             "sequence": 7,
             "byte_length": 2048,
             "lifecycle_state": "streaming"
+        })
+    );
+    assert_eq!(
+        serde_json::to_value(stream_read).expect("stream read request"),
+        serde_json::json!({
+            "artifact_id": "artifact-1",
+            "byte_range_start": 1024,
+            "byte_range_end_exclusive": 2048
+        })
+    );
+    assert_eq!(
+        serde_json::to_value(stream_read_response).expect("stream read response"),
+        serde_json::json!({
+            "artifact_id": "artifact-1",
+            "stream_handle": "artifact-stream://artifact-1",
+            "media_type": "audio/ogg",
+            "body_transport": "binary_body",
+            "byte_length": 1024,
+            "available_byte_length": 4096,
+            "lifecycle_state": "streaming",
+            "complete": false
         })
     );
 }

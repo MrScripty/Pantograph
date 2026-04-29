@@ -18,17 +18,17 @@ use pantograph_workflow_service::{
     ArtifactDescriptorQueryResponse, ArtifactFormatCapabilities,
     ArtifactFormatSettingsQueryRequest, ArtifactFormatSettingsQueryResponse,
     ArtifactFormatSettingsUpdateRequest, ArtifactFormatSettingsUpdateResponse, ArtifactPolicy,
-    ArtifactReadRequest, ArtifactStoreStats, WorkflowAdminQueueCancelRequest,
-    WorkflowAdminQueueCancelResponse, WorkflowAdminQueuePushFrontRequest,
-    WorkflowAdminQueuePushFrontResponse, WorkflowAdminQueueReprioritizeRequest,
-    WorkflowAdminQueueReprioritizeResponse, WorkflowCapabilitiesRequest,
-    WorkflowCapabilitiesResponse, WorkflowExecutionSessionCloseRequest,
-    WorkflowExecutionSessionCloseResponse, WorkflowExecutionSessionCreateRequest,
-    WorkflowExecutionSessionCreateResponse, WorkflowExecutionSessionKeepAliveRequest,
-    WorkflowExecutionSessionKeepAliveResponse, WorkflowExecutionSessionQueueCancelRequest,
-    WorkflowExecutionSessionQueueCancelResponse, WorkflowExecutionSessionQueueListRequest,
-    WorkflowExecutionSessionQueueListResponse, WorkflowExecutionSessionQueuePushFrontRequest,
-    WorkflowExecutionSessionQueuePushFrontResponse,
+    ArtifactReadRequest, ArtifactStoreStats, ArtifactStreamBodyRead, ArtifactStreamReadRequest,
+    WorkflowAdminQueueCancelRequest, WorkflowAdminQueueCancelResponse,
+    WorkflowAdminQueuePushFrontRequest, WorkflowAdminQueuePushFrontResponse,
+    WorkflowAdminQueueReprioritizeRequest, WorkflowAdminQueueReprioritizeResponse,
+    WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse,
+    WorkflowExecutionSessionCloseRequest, WorkflowExecutionSessionCloseResponse,
+    WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionCreateResponse,
+    WorkflowExecutionSessionKeepAliveRequest, WorkflowExecutionSessionKeepAliveResponse,
+    WorkflowExecutionSessionQueueCancelRequest, WorkflowExecutionSessionQueueCancelResponse,
+    WorkflowExecutionSessionQueueListRequest, WorkflowExecutionSessionQueueListResponse,
+    WorkflowExecutionSessionQueuePushFrontRequest, WorkflowExecutionSessionQueuePushFrontResponse,
     WorkflowExecutionSessionQueueReprioritizeRequest,
     WorkflowExecutionSessionQueueReprioritizeResponse, WorkflowExecutionSessionRunRequest,
     WorkflowExecutionSessionStaleCleanupRequest, WorkflowExecutionSessionStaleCleanupResponse,
@@ -306,6 +306,15 @@ pub async fn workflow_read_artifact_body(
 ) -> Result<ArtifactBodyRead, String> {
     workflow_service
         .read_artifact_body(request)
+        .map_err(workflow_error_json)
+}
+
+pub async fn workflow_read_artifact_stream(
+    request: ArtifactStreamReadRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<ArtifactStreamBodyRead, String> {
+    workflow_service
+        .read_artifact_stream_body(request)
         .map_err(workflow_error_json)
 }
 

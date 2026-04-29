@@ -418,6 +418,7 @@ pub fn run_app() -> AppStartupResult<()> {
             crate::workflow::commands::workflow_io_artifact_query,
             crate::workflow::commands::workflow_artifact_descriptor,
             crate::workflow::commands::workflow_read_artifact_body,
+            crate::workflow::commands::workflow_read_artifact_stream,
             crate::workflow::commands::workflow_acknowledge_artifact_consumed,
             crate::workflow::commands::workflow_artifact_policy,
             crate::workflow::commands::workflow_update_artifact_policy,
