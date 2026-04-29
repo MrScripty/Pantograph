@@ -595,6 +595,138 @@ export interface WorkflowSchedulerSnapshotResponse {
   items: WorkflowSessionQueueItem[];
 }
 
+export type WorkflowArtifactPayloadKind =
+  | 'text'
+  | 'image'
+  | 'audio'
+  | 'video'
+  | '3d'
+  | 'large_table'
+  | 'generic_binary'
+  | 'structured';
+
+export type WorkflowArtifactLifecycleState =
+  | 'declared'
+  | 'writing'
+  | 'streaming'
+  | 'finalizing'
+  | 'retained'
+  | 'failed'
+  | 'expired'
+  | 'deleted';
+
+export type WorkflowArtifactRetentionState =
+  | 'retained'
+  | 'metadata_only'
+  | 'external'
+  | 'truncated'
+  | 'too_large'
+  | 'expired'
+  | 'deleted';
+
+export type WorkflowArtifactAccessMode = 'read' | 'download' | 'stream';
+export type WorkflowArtifactBodyTransport = 'binary_body' | 'redirect_url' | 'stream_handle';
+
+export interface WorkflowArtifactAttribution {
+  workflow_run_id: string;
+  workflow_id?: string | null;
+  workflow_version_id?: string | null;
+  node_id?: string | null;
+  port_id?: string | null;
+  model_id?: string | null;
+  runtime_id?: string | null;
+}
+
+export interface WorkflowArtifactFormatMetadata {
+  format_id: string;
+  media_type: string;
+  codec_id?: string | null;
+  quality_percent?: number | null;
+  bitrate_kbps?: number | null;
+  crf?: number | null;
+  bit_depth?: string | null;
+  color_profile_id?: string | null;
+  converter_id?: string | null;
+  converter_version?: string | null;
+  library_version?: string | null;
+}
+
+export interface WorkflowArtifactDescriptor {
+  artifact_id: string;
+  payload_kind: WorkflowArtifactPayloadKind;
+  lifecycle_state: WorkflowArtifactLifecycleState;
+  retention_state: WorkflowArtifactRetentionState;
+  byte_length?: number | null;
+  content_hash?: string | null;
+  format?: WorkflowArtifactFormatMetadata | null;
+  attribution: WorkflowArtifactAttribution;
+  access_modes: WorkflowArtifactAccessMode[];
+  read_handle?: string | null;
+  stream_handle?: string | null;
+  retention_reason?: string | null;
+}
+
+export interface WorkflowArtifactDescriptorQueryRequest {
+  artifact_id: string;
+}
+
+export interface WorkflowArtifactDescriptorQueryResponse {
+  artifact?: WorkflowArtifactDescriptor | null;
+}
+
+export interface WorkflowArtifactReadRequest {
+  artifact_id: string;
+  byte_range_start?: number | null;
+  byte_range_end_exclusive?: number | null;
+}
+
+export interface WorkflowArtifactReadResponse {
+  artifact_id: string;
+  media_type: string;
+  body_transport: WorkflowArtifactBodyTransport;
+  read_handle: string;
+  byte_length: number;
+  content_hash?: string | null;
+  complete: boolean;
+}
+
+export interface WorkflowArtifactBodyRead {
+  response: WorkflowArtifactReadResponse;
+  body: number[];
+}
+
+export interface WorkflowArtifactConsumeAcknowledgementRequest {
+  artifact_id: string;
+  consumer_id: string;
+}
+
+export interface WorkflowArtifactConsumeAcknowledgementResponse {
+  artifact_id: string;
+  retained_after_consume: boolean;
+}
+
+export interface WorkflowArtifactPolicy {
+  policy_id: string;
+  policy_version: number;
+  ttl_seconds?: number | null;
+  max_disk_bytes?: number | null;
+  max_memory_bytes?: number | null;
+  max_single_artifact_bytes?: number | null;
+  spill_threshold_bytes?: number | null;
+  delete_on_consume: boolean;
+}
+
+export interface WorkflowArtifactStoreStats {
+  artifact_count: number;
+  retained_body_count: number;
+  retained_body_bytes: number;
+  memory_cache_body_count: number;
+  memory_cache_body_bytes: number;
+  streaming_body_count: number;
+  streaming_body_bytes: number;
+  metadata_only_count: number;
+}
+
 // Link mapping types for GUI element linking
 export type LinkStatus = 'linked' | 'unlinked' | 'error';
 

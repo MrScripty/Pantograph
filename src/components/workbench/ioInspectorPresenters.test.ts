@@ -3,11 +3,14 @@ import assert from 'node:assert/strict';
 
 import {
   buildIoArtifactDescriptorMetadataRows,
+  buildIoArtifactDownloadFilename,
   buildIoArtifactNodeGroups,
   buildIoArtifactRendererSummary,
   buildRetentionCleanupDetailRows,
   buildRetentionPolicyDetailRows,
   buildRetentionPolicySettingRows,
+  canAcknowledgeIoArtifactConsumed,
+  canReadIoArtifactBody,
   classifyIoArtifactMedia,
   formatIoArtifactAvailabilityLabel,
   formatIoArtifactBytes,
@@ -103,6 +106,65 @@ test('formatIoArtifactAvailabilityLabel distinguishes referenced and metadata-on
       retention_state: 'expired',
     }),
     'Metadata only',
+  );
+});
+
+test('artifact body controls are limited to retained readable artifacts', () => {
+  assert.equal(
+    canReadIoArtifactBody({
+      retention_state: 'retained',
+      lifecycle_state: 'retained',
+      read_handle: 'artifact-read://run/output',
+      access_modes: ['read', 'download'],
+    }),
+    true,
+  );
+  assert.equal(
+    canReadIoArtifactBody({
+      retention_state: 'metadata_only',
+      lifecycle_state: 'retained',
+      read_handle: 'artifact-read://run/output',
+      access_modes: ['read'],
+    }),
+    false,
+  );
+  assert.equal(
+    canReadIoArtifactBody({
+      retention_state: 'retained',
+      lifecycle_state: 'writing',
+      read_handle: 'artifact-read://run/output',
+      access_modes: ['read'],
+    }),
+    false,
+  );
+  assert.equal(canAcknowledgeIoArtifactConsumed({ artifact_id: 'artifact-a', retention_state: 'retained' }), true);
+  assert.equal(
+    canAcknowledgeIoArtifactConsumed({ artifact_id: 'artifact-a', retention_state: 'metadata_only' }),
+    false,
+  );
+});
+
+test('buildIoArtifactDownloadFilename keeps filenames local and media-derived', () => {
+  assert.equal(
+    buildIoArtifactDownloadFilename({
+      artifact_id: '../artifact:one',
+      media_type: 'image/jpeg',
+    }),
+    'artifact-one.jpg',
+  );
+  assert.equal(
+    buildIoArtifactDownloadFilename({
+      artifact_id: 'table-result',
+      media_type: 'text/csv',
+    }),
+    'table-result.csv',
+  );
+  assert.equal(
+    buildIoArtifactDownloadFilename({
+      artifact_id: 'json-result',
+      payload_kind: 'structured',
+    }),
+    'json-result.json',
   );
 });
 

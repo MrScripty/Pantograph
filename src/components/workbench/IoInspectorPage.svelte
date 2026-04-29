@@ -1,8 +1,11 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import {
     Braces,
+    Check,
     CircleHelp,
+    Download,
+    Eye,
     File,
     FileText,
     Image as ImageIcon,
@@ -21,15 +24,19 @@
     WorkflowRetentionCleanupResult,
     WorkflowIoArtifactQueryRequest,
   } from '../../services/diagnostics/types';
+  import type { WorkflowArtifactBodyRead } from '../../services/workflow/types';
   import { workflowService } from '../../services/workflow/WorkflowService';
   import { activeWorkflowRun } from '../../stores/workbenchStore';
   import {
+    buildIoArtifactDownloadFilename,
     buildIoArtifactNodeGroups,
     buildIoArtifactDescriptorMetadataRows,
     buildIoArtifactRendererSummary,
     buildRetentionCleanupDetailRows,
     buildRetentionPolicyDetailRows,
     buildRetentionPolicySettingRows,
+    canAcknowledgeIoArtifactConsumed,
+    canReadIoArtifactBody,
     formatIoArtifactAvailabilityLabel,
     formatIoArtifactBytes,
     formatIoArtifactDetailValue,
@@ -42,6 +49,16 @@
     isWorkflowOutputArtifact,
   } from './ioInspectorPresenters';
   import { formatWorkflowCommandError } from './workflowErrorPresenters';
+
+  interface ArtifactBodyPreview {
+    objectUrl: string;
+    mediaType: string;
+    byteLength: number;
+    complete: boolean;
+    contentHash?: string | null;
+  }
+
+  const DOWNLOAD_OBJECT_URL_REVOKE_DELAY_MS = 30_000;
 
   let artifacts = $state<IoArtifactProjectionRecord[]>([]);
   let retentionSummary = $state<IoArtifactRetentionSummaryRecord[]>([]);
@@ -57,6 +74,11 @@
   let artifactError = $state<string | null>(null);
   let retentionError = $state<string | null>(null);
   let retentionCleanupMessage = $state<string | null>(null);
+  let artifactBodyPreviews = $state<Record<string, ArtifactBodyPreview>>({});
+  let artifactAccessLoading = $state<Record<string, boolean>>({});
+  let artifactConsumeLoading = $state<Record<string, boolean>>({});
+  let artifactAccessErrors = $state<Record<string, string>>({});
+  let artifactConsumeMessages = $state<Record<string, string>>({});
   let endpointFilterMode = $state<'all' | 'producer' | 'consumer'>('all');
   let endpointNodeFilter = $state('');
   let artifactRequestSerial = 0;
@@ -110,6 +132,7 @@
       if (requestSerial !== artifactRequestSerial) {
         return;
       }
+      revokeMissingArtifactObjectUrls(response.artifacts);
       artifacts = response.artifacts;
       retentionSummary = response.retention_summary;
       projectionState = response.projection_state;
@@ -123,6 +146,188 @@
         loadingArtifacts = false;
       }
     }
+  }
+
+  async function readArtifactPreview(artifact: IoArtifactProjectionRecord): Promise<void> {
+    setArtifactLoading(artifact.artifact_id, true);
+    setArtifactAccessError(artifact.artifact_id, null);
+    try {
+      await verifyArtifactReadable(artifact);
+      const read = await workflowService.readArtifactBody({ artifact_id: artifact.artifact_id });
+      replaceArtifactBodyPreview(artifact.artifact_id, createArtifactBodyPreview(read));
+    } catch (error) {
+      setArtifactAccessError(artifact.artifact_id, formatWorkflowCommandError(error));
+    } finally {
+      setArtifactLoading(artifact.artifact_id, false);
+    }
+  }
+
+  async function downloadArtifactBody(artifact: IoArtifactProjectionRecord): Promise<void> {
+    setArtifactLoading(artifact.artifact_id, true);
+    setArtifactAccessError(artifact.artifact_id, null);
+    try {
+      await verifyArtifactReadable(artifact);
+      const read = await workflowService.readArtifactBody({ artifact_id: artifact.artifact_id });
+      const preview = createArtifactBodyPreview(read);
+      const anchor = document.createElement('a');
+      anchor.href = preview.objectUrl;
+      anchor.download = buildIoArtifactDownloadFilename({
+        artifact_id: artifact.artifact_id,
+        media_type: read.response.media_type || artifact.media_type,
+        format: artifact.format,
+        payload_kind: artifact.payload_kind,
+      });
+      anchor.rel = 'noopener noreferrer';
+      anchor.style.display = 'none';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => {
+        revokeObjectUrl(preview.objectUrl);
+      }, DOWNLOAD_OBJECT_URL_REVOKE_DELAY_MS);
+    } catch (error) {
+      setArtifactAccessError(artifact.artifact_id, formatWorkflowCommandError(error));
+    } finally {
+      setArtifactLoading(artifact.artifact_id, false);
+    }
+  }
+
+  async function acknowledgeArtifactConsumed(artifact: IoArtifactProjectionRecord): Promise<void> {
+    setArtifactConsumeLoading(artifact.artifact_id, true);
+    setArtifactAccessError(artifact.artifact_id, null);
+    artifactConsumeMessages = withoutArtifactKey(artifactConsumeMessages, artifact.artifact_id);
+    try {
+      const response = await workflowService.acknowledgeArtifactConsumed({
+        artifact_id: artifact.artifact_id,
+        consumer_id: 'pantograph-gui-io-inspector',
+      });
+      if (!response.retained_after_consume) {
+        releaseArtifactBodyPreview(artifact.artifact_id);
+      }
+      artifactConsumeMessages = {
+        ...artifactConsumeMessages,
+        [artifact.artifact_id]: response.retained_after_consume
+          ? 'Consume acknowledged; payload retained'
+          : 'Consume acknowledged; payload released',
+      };
+      await refreshArtifacts();
+    } catch (error) {
+      setArtifactAccessError(artifact.artifact_id, formatWorkflowCommandError(error));
+    } finally {
+      setArtifactConsumeLoading(artifact.artifact_id, false);
+    }
+  }
+
+  async function verifyArtifactReadable(artifact: IoArtifactProjectionRecord): Promise<void> {
+    const response = await workflowService.artifactDescriptor({ artifact_id: artifact.artifact_id });
+    const descriptor = response.artifact;
+    if (!descriptor) {
+      throw new Error('Artifact descriptor unavailable');
+    }
+    if (descriptor.retention_state !== 'retained' || descriptor.lifecycle_state !== 'retained') {
+      throw new Error('Artifact body is not retained');
+    }
+    if (
+      !descriptor.read_handle &&
+      !descriptor.access_modes.includes('read') &&
+      !descriptor.access_modes.includes('download')
+    ) {
+      throw new Error('Artifact body is not readable');
+    }
+  }
+
+  function createArtifactBodyPreview(read: WorkflowArtifactBodyRead): ArtifactBodyPreview {
+    if (read.response.body_transport !== 'binary_body') {
+      throw new Error('Artifact body transport is not available as a binary body');
+    }
+    const byteArray = Uint8Array.from(read.body);
+    const mediaType = read.response.media_type || 'application/octet-stream';
+    const blob = new Blob([byteArray], { type: mediaType });
+    return {
+      objectUrl: URL.createObjectURL(blob),
+      mediaType,
+      byteLength: read.response.byte_length,
+      complete: read.response.complete,
+      contentHash: read.response.content_hash,
+    };
+  }
+
+  function replaceArtifactBodyPreview(artifactId: string, preview: ArtifactBodyPreview): void {
+    const existing = artifactBodyPreviews[artifactId];
+    if (existing) {
+      revokeObjectUrl(existing.objectUrl);
+    }
+    artifactBodyPreviews = {
+      ...artifactBodyPreviews,
+      [artifactId]: preview,
+    };
+  }
+
+  function releaseArtifactBodyPreview(artifactId: string): void {
+    const existing = artifactBodyPreviews[artifactId];
+    if (!existing) {
+      return;
+    }
+    revokeObjectUrl(existing.objectUrl);
+    artifactBodyPreviews = withoutArtifactKey(artifactBodyPreviews, artifactId);
+  }
+
+  function revokeMissingArtifactObjectUrls(nextArtifacts: IoArtifactProjectionRecord[]): void {
+    const nextIds = new Set(nextArtifacts.map((artifact) => artifact.artifact_id));
+    let nextPreviews = artifactBodyPreviews;
+    let changed = false;
+    for (const [artifactId, preview] of Object.entries(artifactBodyPreviews)) {
+      if (!nextIds.has(artifactId)) {
+        revokeObjectUrl(preview.objectUrl);
+        if (!changed) {
+          nextPreviews = { ...nextPreviews };
+          changed = true;
+        }
+        delete nextPreviews[artifactId];
+      }
+    }
+    if (changed) {
+      artifactBodyPreviews = nextPreviews;
+    }
+  }
+
+  function revokeAllArtifactObjectUrls(): void {
+    for (const preview of Object.values(artifactBodyPreviews)) {
+      revokeObjectUrl(preview.objectUrl);
+    }
+    artifactBodyPreviews = {};
+  }
+
+  function revokeObjectUrl(objectUrl: string): void {
+    URL.revokeObjectURL(objectUrl);
+  }
+
+  function setArtifactLoading(artifactId: string, loading: boolean): void {
+    artifactAccessLoading = setArtifactFlag(artifactAccessLoading, artifactId, loading);
+  }
+
+  function setArtifactConsumeLoading(artifactId: string, loading: boolean): void {
+    artifactConsumeLoading = setArtifactFlag(artifactConsumeLoading, artifactId, loading);
+  }
+
+  function setArtifactAccessError(artifactId: string, message: string | null): void {
+    artifactAccessErrors = message
+      ? { ...artifactAccessErrors, [artifactId]: message }
+      : withoutArtifactKey(artifactAccessErrors, artifactId);
+  }
+
+  function setArtifactFlag(
+    flags: Record<string, boolean>,
+    artifactId: string,
+    value: boolean,
+  ): Record<string, boolean> {
+    return value ? { ...flags, [artifactId]: true } : withoutArtifactKey(flags, artifactId);
+  }
+
+  function withoutArtifactKey<T>(record: Record<string, T>, artifactId: string): Record<string, T> {
+    const next = { ...record };
+    delete next[artifactId];
+    return next;
   }
 
   async function refreshRetentionPolicy(): Promise<void> {
@@ -198,6 +403,10 @@
 
   onMount(() => {
     void refreshRetentionPolicy();
+  });
+
+  onDestroy(() => {
+    revokeAllArtifactObjectUrls();
   });
 </script>
 
@@ -425,6 +634,7 @@
           {#each artifacts as artifact (artifact.event_id)}
             {@const renderer = buildIoArtifactRendererSummary(artifact)}
             {@const descriptorRows = buildIoArtifactDescriptorMetadataRows(artifact)}
+            {@const bodyPreview = artifactBodyPreviews[artifact.artifact_id]}
             <article class="rounded border border-neutral-800 bg-neutral-900/60 p-4">
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0">
@@ -467,7 +677,91 @@
                   <span>{renderer.title}</span>
                 </div>
                 <div class="mt-2 text-xs text-neutral-500">{renderer.detail}</div>
+
+                {#if bodyPreview}
+                  <div class="mt-3 overflow-hidden rounded border border-neutral-800 bg-neutral-900/80">
+                    {#if renderer.family === 'image'}
+                      <img
+                        src={bodyPreview.objectUrl}
+                        alt={`Preview of ${artifact.artifact_id}`}
+                        class="max-h-64 w-full object-contain"
+                      />
+                    {:else if renderer.family === 'audio'}
+                      <audio
+                        src={bodyPreview.objectUrl}
+                        controls
+                        class="w-full"
+                        aria-label={`Audio preview of ${artifact.artifact_id}`}
+                      ></audio>
+                    {:else}
+                      <a
+                        href={bodyPreview.objectUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`Open retained artifact body for ${artifact.artifact_id}`}
+                        class="block px-3 py-2 text-xs text-cyan-200 underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+                      >
+                        Open retained artifact body
+                      </a>
+                    {/if}
+                  </div>
+                  <div class="mt-2 text-xs text-neutral-500">
+                    {bodyPreview.mediaType} · {formatIoArtifactBytes(bodyPreview.byteLength)}
+                    {bodyPreview.complete ? '' : ' · partial'}
+                  </div>
+                {/if}
               </div>
+
+              <div class="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-xs text-neutral-200 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+                  onclick={() => {
+                    void readArtifactPreview(artifact);
+                  }}
+                  aria-label={`Read retained artifact ${artifact.artifact_id}`}
+                  disabled={!canReadIoArtifactBody(artifact) || artifactAccessLoading[artifact.artifact_id]}
+                >
+                  <Eye size={14} aria-hidden="true" />
+                  {bodyPreview ? 'Refresh Read' : 'Read'}
+                </button>
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-xs text-neutral-200 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+                  onclick={() => {
+                    void downloadArtifactBody(artifact);
+                  }}
+                  aria-label={`Download retained artifact ${artifact.artifact_id}`}
+                  disabled={!canReadIoArtifactBody(artifact) || artifactAccessLoading[artifact.artifact_id]}
+                >
+                  <Download size={14} aria-hidden="true" />
+                  Download
+                </button>
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-xs text-neutral-200 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+                  onclick={() => {
+                    void acknowledgeArtifactConsumed(artifact);
+                  }}
+                  aria-label={`Acknowledge consume for artifact ${artifact.artifact_id}`}
+                  disabled={!canAcknowledgeIoArtifactConsumed(artifact) || artifactConsumeLoading[artifact.artifact_id]}
+                >
+                  <Check size={14} aria-hidden="true" />
+                  {artifactConsumeLoading[artifact.artifact_id] ? 'Acknowledging' : 'Acknowledge'}
+                </button>
+              </div>
+
+              {#if artifactAccessErrors[artifact.artifact_id]}
+                <div class="mt-3 rounded border border-red-900 bg-red-950/50 px-3 py-2 text-xs text-red-200">
+                  {artifactAccessErrors[artifact.artifact_id]}
+                </div>
+              {/if}
+
+              {#if artifactConsumeMessages[artifact.artifact_id]}
+                <div class="mt-3 rounded border border-emerald-900 bg-emerald-950/40 px-3 py-2 text-xs text-emerald-200">
+                  {artifactConsumeMessages[artifact.artifact_id]}
+                </div>
+              {/if}
 
               <dl class="mt-4 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
                 <div>

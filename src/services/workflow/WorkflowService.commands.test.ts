@@ -8,6 +8,10 @@ import type {
   WorkflowRetentionPolicyUpdateResponse,
 } from '../diagnostics/types.ts';
 import type {
+  WorkflowArtifactBodyRead,
+  WorkflowArtifactDescriptorQueryResponse,
+  WorkflowArtifactPolicy,
+  WorkflowArtifactStoreStats,
   WorkflowAdminQueueCancelResponse,
   WorkflowAdminQueuePushFrontResponse,
   WorkflowAdminQueueReprioritizeResponse,
@@ -342,6 +346,165 @@ test('applyRetentionCleanup returns backend cleanup result without optimistic mu
             reason: 'GUI cleanup request',
           },
         },
+      },
+    ]);
+  } finally {
+    clearMocks();
+  }
+});
+
+test('artifact store commands forward backend-owned descriptor body policy and consume contracts', async () => {
+  installWindowMock();
+  const calls: Array<{ cmd: string; args: unknown }> = [];
+  const descriptorResponse: WorkflowArtifactDescriptorQueryResponse = {
+    artifact: {
+      artifact_id: 'artifact-a',
+      payload_kind: 'image',
+      lifecycle_state: 'retained',
+      retention_state: 'retained',
+      byte_length: 3,
+      content_hash: 'sha256:a',
+      format: {
+        format_id: 'png',
+        media_type: 'image/png',
+      },
+      attribution: {
+        workflow_run_id: 'run-a',
+        node_id: 'node-a',
+        port_id: 'out',
+      },
+      access_modes: ['read', 'download'],
+      read_handle: 'artifact-read://artifact-a',
+      stream_handle: null,
+      retention_reason: 'retained for test',
+    },
+  };
+  const bodyResponse: WorkflowArtifactBodyRead = {
+    response: {
+      artifact_id: 'artifact-a',
+      media_type: 'image/png',
+      body_transport: 'binary_body',
+      read_handle: 'artifact-read://artifact-a',
+      byte_length: 3,
+      content_hash: 'sha256:a',
+      complete: true,
+    },
+    body: [1, 2, 3],
+  };
+  const policyResponse: WorkflowArtifactPolicy = {
+    policy_id: 'artifact-policy-v1',
+    policy_version: 1,
+    ttl_seconds: 60,
+    max_disk_bytes: null,
+    max_memory_bytes: null,
+    max_single_artifact_bytes: 1024,
+    spill_threshold_bytes: null,
+    delete_on_consume: false,
+  };
+  const updatedPolicyResponse: WorkflowArtifactPolicy = {
+    ...policyResponse,
+    policy_version: 2,
+    delete_on_consume: true,
+  };
+  const statsResponse: WorkflowArtifactStoreStats = {
+    artifact_count: 1,
+    retained_body_count: 1,
+    retained_body_bytes: 3,
+    memory_cache_body_count: 0,
+    memory_cache_body_bytes: 0,
+    streaming_body_count: 0,
+    streaming_body_bytes: 0,
+    metadata_only_count: 0,
+  };
+  mockIPC((cmd, args) => {
+    calls.push({ cmd, args });
+    if (cmd === 'workflow_artifact_descriptor') {
+      return descriptorResponse;
+    }
+    if (cmd === 'workflow_read_artifact_body') {
+      return bodyResponse;
+    }
+    if (cmd === 'workflow_acknowledge_artifact_consumed') {
+      return {
+        artifact_id: 'artifact-a',
+        retained_after_consume: false,
+      };
+    }
+    if (cmd === 'workflow_artifact_policy') {
+      return policyResponse;
+    }
+    if (cmd === 'workflow_update_artifact_policy') {
+      return updatedPolicyResponse;
+    }
+    return statsResponse;
+  });
+
+  try {
+    const service = new WorkflowCommandService();
+    const descriptor = await service.artifactDescriptor({ artifact_id: 'artifact-a' });
+    const body = await service.readArtifactBody({ artifact_id: 'artifact-a' });
+    const acknowledgement = await service.acknowledgeArtifactConsumed({
+      artifact_id: 'artifact-a',
+      consumer_id: 'io-inspector',
+    });
+    const policy = await service.artifactPolicy();
+    const updatedPolicy = await service.updateArtifactPolicy({
+      ...policyResponse,
+      delete_on_consume: true,
+    });
+    const stats = await service.artifactStoreStats();
+
+    assert.deepEqual(descriptor, descriptorResponse);
+    assert.deepEqual(body, bodyResponse);
+    assert.deepEqual(acknowledgement, {
+      artifact_id: 'artifact-a',
+      retained_after_consume: false,
+    });
+    assert.deepEqual(policy, policyResponse);
+    assert.deepEqual(updatedPolicy, updatedPolicyResponse);
+    assert.deepEqual(stats, statsResponse);
+    assert.deepEqual(calls, [
+      {
+        cmd: 'workflow_artifact_descriptor',
+        args: {
+          request: {
+            artifact_id: 'artifact-a',
+          },
+        },
+      },
+      {
+        cmd: 'workflow_read_artifact_body',
+        args: {
+          request: {
+            artifact_id: 'artifact-a',
+          },
+        },
+      },
+      {
+        cmd: 'workflow_acknowledge_artifact_consumed',
+        args: {
+          request: {
+            artifact_id: 'artifact-a',
+            consumer_id: 'io-inspector',
+          },
+        },
+      },
+      {
+        cmd: 'workflow_artifact_policy',
+        args: {},
+      },
+      {
+        cmd: 'workflow_update_artifact_policy',
+        args: {
+          policy: {
+            ...policyResponse,
+            delete_on_consume: true,
+          },
+        },
+      },
+      {
+        cmd: 'workflow_artifact_store_stats',
+        args: {},
       },
     ]);
   } finally {

@@ -338,8 +338,10 @@ when physical payload bodies are deleted.
   - [x] Update the I/O Inspector to display descriptor lifecycle, access,
     handle, and format metadata without expecting payload bodies in projection
     JSON.
-  - [ ] Add final frontend binary body transport/download handling that avoids
+  - [x] Add final frontend binary body transport/download handling that avoids
     embedding media bodies in JSON view state.
+  - [ ] Add stream subscription/read handling for artifacts with stream
+    handles.
 - [ ] Expose Settings APIs for persistent artifact format defaults and
   conversion capabilities.
   - [x] Add backend artifact format settings query/update APIs, static

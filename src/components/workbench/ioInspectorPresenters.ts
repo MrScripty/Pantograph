@@ -285,6 +285,39 @@ export function formatIoArtifactAvailabilityLabel(
   }
 }
 
+export function canReadIoArtifactBody(
+  artifact: Pick<IoArtifactProjectionRecord, 'retention_state'> &
+    Partial<Pick<IoArtifactProjectionRecord, 'read_handle' | 'access_modes' | 'lifecycle_state'>>,
+): boolean {
+  if (artifact.retention_state !== 'retained') {
+    return false;
+  }
+  if (artifact.lifecycle_state && artifact.lifecycle_state !== 'retained') {
+    return false;
+  }
+  return Boolean(
+    artifact.read_handle ||
+      artifact.access_modes?.includes('read') ||
+      artifact.access_modes?.includes('download'),
+  );
+}
+
+export function canAcknowledgeIoArtifactConsumed(
+  artifact: Pick<IoArtifactProjectionRecord, 'artifact_id' | 'retention_state'>,
+): boolean {
+  return artifact.artifact_id.trim().length > 0 && artifact.retention_state === 'retained';
+}
+
+export function buildIoArtifactDownloadFilename(
+  artifact: Pick<IoArtifactProjectionRecord, 'artifact_id'> &
+    Partial<Pick<IoArtifactProjectionRecord, 'media_type' | 'format' | 'payload_kind'>>,
+): string {
+  const mediaType = resolveIoArtifactMediaType(artifact);
+  const base = sanitizeArtifactFilenamePart(artifact.artifact_id) || 'artifact';
+  const extension = artifactFileExtension(mediaType, artifact.payload_kind);
+  return extension ? `${base}.${extension}` : base;
+}
+
 export function resolveIoArtifactMediaType(
   artifact: Pick<IoArtifactProjectionRecord, 'media_type'> &
     Partial<Pick<IoArtifactProjectionRecord, 'format'>>,
@@ -600,6 +633,58 @@ function formatRetentionEnumLabel(value: string): string {
     .split('_')
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ');
+}
+
+function sanitizeArtifactFilenamePart(value: string): string {
+  return value
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^[.-]+|[.-]+$/g, '')
+    .slice(0, 96);
+}
+
+function artifactFileExtension(
+  mediaType: string | null | undefined,
+  payloadKind: IoArtifactPayloadKind | null | undefined,
+): string | null {
+  const normalized = mediaType?.toLowerCase() ?? '';
+  if (normalized.includes('jpeg')) {
+    return 'jpg';
+  }
+  if (normalized.includes('png')) {
+    return 'png';
+  }
+  if (normalized.includes('webp')) {
+    return 'webp';
+  }
+  if (normalized.includes('gif')) {
+    return 'gif';
+  }
+  if (normalized.includes('wav')) {
+    return 'wav';
+  }
+  if (normalized.includes('mpeg') || normalized.includes('mp3')) {
+    return 'mp3';
+  }
+  if (normalized.includes('ogg')) {
+    return 'ogg';
+  }
+  if (normalized.includes('mp4')) {
+    return 'mp4';
+  }
+  if (normalized.includes('json')) {
+    return 'json';
+  }
+  if (normalized.includes('csv')) {
+    return 'csv';
+  }
+  if (normalized.startsWith('text/')) {
+    return 'txt';
+  }
+  if (payloadKind === 'structured') {
+    return 'json';
+  }
+  return null;
 }
 
 export function formatIoRetentionTimestamp(value: number | null | undefined): string {

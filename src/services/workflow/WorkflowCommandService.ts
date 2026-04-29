@@ -13,6 +13,14 @@ import type {
   WorkflowRetentionPolicyUpdateResponse,
 } from '../diagnostics/types.ts';
 import type {
+  WorkflowArtifactBodyRead,
+  WorkflowArtifactConsumeAcknowledgementRequest,
+  WorkflowArtifactConsumeAcknowledgementResponse,
+  WorkflowArtifactDescriptorQueryRequest,
+  WorkflowArtifactDescriptorQueryResponse,
+  WorkflowArtifactPolicy,
+  WorkflowArtifactReadRequest,
+  WorkflowArtifactStoreStats,
   WorkflowAdminQueueCancelRequest,
   WorkflowAdminQueueCancelResponse,
   WorkflowAdminQueuePushFrontRequest,
@@ -225,6 +233,114 @@ export class WorkflowCommandService extends WorkflowProjectionService {
     });
   }
 
+  async artifactDescriptor(
+    request: WorkflowArtifactDescriptorQueryRequest,
+  ): Promise<WorkflowArtifactDescriptorQueryResponse> {
+    if (USE_WORKFLOW_MOCKS) {
+      return {
+        artifact: {
+          artifact_id: request.artifact_id,
+          payload_kind: 'text',
+          lifecycle_state: 'retained',
+          retention_state: 'retained',
+          byte_length: mockArtifactBodyBytes().length,
+          content_hash: 'mock-artifact-sha256',
+          format: {
+            format_id: 'txt',
+            media_type: 'text/plain',
+          },
+          attribution: {
+            workflow_run_id: 'mock-run',
+          },
+          access_modes: ['read', 'download'],
+          read_handle: `artifact-read://${request.artifact_id}`,
+          stream_handle: null,
+          retention_reason: 'Mock retained artifact',
+        },
+      };
+    }
+
+    return invokeWorkflowCommand<WorkflowArtifactDescriptorQueryResponse>('workflow_artifact_descriptor', {
+      request,
+    });
+  }
+
+  async readArtifactBody(request: WorkflowArtifactReadRequest): Promise<WorkflowArtifactBodyRead> {
+    if (USE_WORKFLOW_MOCKS) {
+      const body = mockArtifactBodyBytes();
+      return {
+        response: {
+          artifact_id: request.artifact_id,
+          media_type: 'text/plain',
+          body_transport: 'binary_body',
+          read_handle: `artifact-read://${request.artifact_id}`,
+          byte_length: body.length,
+          content_hash: 'mock-artifact-sha256',
+          complete: true,
+        },
+        body,
+      };
+    }
+
+    return invokeWorkflowCommand<WorkflowArtifactBodyRead>('workflow_read_artifact_body', {
+      request,
+    });
+  }
+
+  async acknowledgeArtifactConsumed(
+    request: WorkflowArtifactConsumeAcknowledgementRequest,
+  ): Promise<WorkflowArtifactConsumeAcknowledgementResponse> {
+    if (USE_WORKFLOW_MOCKS) {
+      return {
+        artifact_id: request.artifact_id,
+        retained_after_consume: true,
+      };
+    }
+
+    return invokeWorkflowCommand<WorkflowArtifactConsumeAcknowledgementResponse>(
+      'workflow_acknowledge_artifact_consumed',
+      { request },
+    );
+  }
+
+  async artifactPolicy(): Promise<WorkflowArtifactPolicy> {
+    if (USE_WORKFLOW_MOCKS) {
+      return mockArtifactPolicy();
+    }
+
+    return invokeWorkflowCommand<WorkflowArtifactPolicy>('workflow_artifact_policy');
+  }
+
+  async updateArtifactPolicy(policy: WorkflowArtifactPolicy): Promise<WorkflowArtifactPolicy> {
+    if (USE_WORKFLOW_MOCKS) {
+      return {
+        ...policy,
+        policy_version: policy.policy_version + 1,
+      };
+    }
+
+    return invokeWorkflowCommand<WorkflowArtifactPolicy>('workflow_update_artifact_policy', {
+      policy,
+    });
+  }
+
+  async artifactStoreStats(): Promise<WorkflowArtifactStoreStats> {
+    if (USE_WORKFLOW_MOCKS) {
+      return {
+        artifact_count: 1,
+        retained_body_count: 1,
+        retained_body_bytes: mockArtifactBodyBytes().length,
+        memory_cache_body_count: 0,
+        memory_cache_body_bytes: 0,
+        streaming_body_count: 0,
+        streaming_body_bytes: 0,
+        metadata_only_count: 0,
+      };
+    }
+
+    return invokeWorkflowCommand<WorkflowArtifactStoreStats>('workflow_artifact_store_stats');
+  }
+
   async deletePumasModelWithAudit(modelId: string): Promise<PumasModelDeleteAuditResponse> {
     if (USE_WORKFLOW_MOCKS) {
       return {
@@ -288,5 +404,22 @@ function standardRetentionPolicySettings(retentionDays: number): DiagnosticsRete
     media_behavior: 'metadata_and_reference_only',
     compression_behavior: 'not_configured',
     cleanup_trigger: 'manual_or_maintenance',
+  };
+}
+
+function mockArtifactBodyBytes(): number[] {
+  return Array.from(new TextEncoder().encode('Mock retained artifact body\n'));
+}
+
+function mockArtifactPolicy(): WorkflowArtifactPolicy {
+  return {
+    policy_id: 'artifact-mock-v1',
+    policy_version: 1,
+    ttl_seconds: 604_800,
+    max_disk_bytes: null,
+    max_memory_bytes: null,
+    max_single_artifact_bytes: null,
+    spill_threshold_bytes: null,
+    delete_on_consume: false,
   };
 }
