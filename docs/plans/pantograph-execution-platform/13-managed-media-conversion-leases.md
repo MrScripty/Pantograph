@@ -79,24 +79,50 @@ Out of scope:
   Process spawning and managed dependency leases must not be placed directly in
   `pantograph-workflow-service`.
 
+## Implementation Progress
+
+### 2026-04-29 Stage-Start And Boundary Contract Slice
+
+Wave status: `complete`.
+
+- Start outcome: `ready_with_recorded_assumptions`.
+- Dirty-file review found only unrelated deleted asset files, untracked
+  diagnostics SQLite, and untracked asset files. They do not overlap Stage
+  `13` and remain untouched.
+- Standards reviewed before source edits: plan, architecture, security,
+  concurrency, Rust, and README/documentation standards.
+- Boundary decision: add a neutral `pantograph-media-conversion` crate for
+  conversion request/result/error contracts, typed ids, target format metadata,
+  per-conversion dependency attribution, and the executor trait. This keeps
+  process execution and managed dependency leases outside
+  `pantograph-workflow-service`.
+- Current implementation freezes contract types only. Real process invocation,
+  dependency lease acquisition/release, ArtifactStore temporary-file handling,
+  diagnostics propagation, and GUI status projection remain assigned to later
+  Stage `13` waves.
+- Verification passed:
+  `cargo test -p pantograph-media-conversion`,
+  `cargo fmt --all -- --check`, and `npm run traceability`.
+
 ## Milestones
 
 ### Milestone 1: Conversion Boundary Design
 
-- Define the host-owned conversion executor interface and keep
+- [x] Define the host-owned conversion executor interface and keep
   `pantograph-workflow-service` host-agnostic.
-- Prefer a new neutral crate/module, for example
+- [x] Prefer a new neutral crate/module, for example
   `crates/pantograph-media-conversion`, unless source inspection during this
   milestone proves an existing host/runtime boundary is cleaner.
-- Decide the concrete owner for process spawning and managed dependency lease
+- [x] Decide the concrete owner for process spawning and managed dependency lease
   acquisition. The default target is a host/runtime boundary that can access
   `inference` managed media state and ArtifactStore internals through explicit
   service methods.
-- Define pass-through versus real-conversion decision rules.
-- Define conversion attribution fields before implementation begins, including
+- [x] Define pass-through versus real-conversion decision rules.
+- [x] Define conversion attribution fields before implementation begins,
+  including
   conversion id, converter id, dependency ids, activated versions, lease token
   fingerprints or ids safe for diagnostics, and conversion status.
-- Record allowed write sets before launching workers.
+- [x] Record allowed write sets before launching workers.
 
 Verification:
 
@@ -106,11 +132,11 @@ Verification:
 
 ### Milestone 2: Managed Tool Invocation
 
-- Implement safe process invocation for managed `ffmpeg`, `ocioconvert`, and
+- [ ] Implement safe process invocation for managed `ffmpeg`, `ocioconvert`, and
   `oiiotool` paths resolved from activated dependency state.
-- Reject arbitrary executable paths and inactive, missing, incompatible, or
+- [ ] Reject arbitrary executable paths and inactive, missing, incompatible, or
   removed dependency versions with typed errors.
-- Add timeout, cancellation, stderr truncation, temporary-file cleanup, and
+- [ ] Add timeout, cancellation, stderr truncation, temporary-file cleanup, and
   exit-status mapping.
 
 Verification:
@@ -123,11 +149,11 @@ Verification:
 
 ### Milestone 3: Lease Attribution And Artifact Metadata
 
-- Acquire active-version leases immediately before invoking a converter.
-- Record leased tool/library/profile versions, lease ids, and converter command
+- [ ] Acquire active-version leases immediately before invoking a converter.
+- [ ] Record leased tool/library/profile versions, lease ids, and converter command
   identity in ArtifactStore descriptor metadata and durable I/O diagnostics.
-- Release leases on success, failure, cancellation, and dropped futures.
-- Preserve queryable metadata after retention deletes the physical body.
+- [ ] Release leases on success, failure, cancellation, and dropped futures.
+- [ ] Preserve queryable metadata after retention deletes the physical body.
 
 Verification:
 
@@ -139,11 +165,11 @@ Verification:
 
 ### Milestone 4: Media-Type Implementations
 
-- Add image conversion using managed OpenImageIO/OpenColorIO tooling.
-- Add audio/video conversion using managed ffmpeg.
-- Add 3D conversion for GLB/glTF/OBJ where managed tooling exists; otherwise
+- [ ] Add image conversion using managed OpenImageIO/OpenColorIO tooling.
+- [ ] Add audio/video conversion using managed ffmpeg.
+- [ ] Add 3D conversion for GLB/glTF/OBJ where managed tooling exists; otherwise
   fail closed with typed unsupported-conversion errors.
-- Keep streamed previews and in-progress streams readable through ArtifactStore
+- [ ] Keep streamed previews and in-progress streams readable through ArtifactStore
   handles while final converted artifacts are produced.
 
 Verification:
@@ -155,11 +181,11 @@ Verification:
 
 ### Milestone 5: API, GUI, And Rollout
 
-- Surface conversion status and failures through existing run diagnostics and
+- [ ] Surface conversion status and failures through existing run diagnostics and
   I/O Inspector artifact lifecycle fields.
-- Keep the workbench Settings page as the canonical owner of conversion
+- [ ] Keep the workbench Settings page as the canonical owner of conversion
   defaults and managed dependency activation controls.
-- Add a stage-end standards/refactor review before marking this stage complete.
+- [ ] Add a stage-end standards/refactor review before marking this stage complete.
 
 Verification:
 

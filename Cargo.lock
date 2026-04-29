@@ -7311,6 +7311,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "pantograph-media-conversion"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "uuid",
+]
+
+[[package]]
 name = "pantograph-node-contracts"
 version = "0.1.0"
 dependencies = [

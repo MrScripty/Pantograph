@@ -2,7 +2,7 @@
 
 ## Current Status
 
-Stage `13` is planned and not yet started.
+Stage `13` completed Wave `01` boundary contract freeze.
 
 ## Boundary Snapshot
 
@@ -21,12 +21,23 @@ Stage `13` is planned and not yet started.
 
 ## Required First Actions
 
-1. Apply `08-stage-start-implementation-gate.md`.
-2. Inspect current dirty files and confirm Stage `13` write-set safety.
-3. Re-read Stage `11` completion notes and Stage `13` plan.
-4. Freeze conversion request/result/error and attribution field design.
-5. Choose crate/module ownership for the conversion executor.
-6. Record non-overlapping worker write sets before launching parallel workers.
+1. [x] Apply `08-stage-start-implementation-gate.md`.
+2. [x] Inspect current dirty files and confirm Stage `13` write-set safety.
+3. [x] Re-read Stage `11` completion notes and Stage `13` plan.
+4. [x] Freeze conversion request/result/error and attribution field design.
+5. [x] Choose crate/module ownership for the conversion executor.
+6. [x] Record non-overlapping worker write sets before launching parallel
+   workers.
+
+## Wave Status
+
+| Wave | Status | Integration Notes |
+| ---- | ------ | ----------------- |
+| `wave-01-boundary-design` | Complete | Added neutral `pantograph-media-conversion` crate with typed conversion ids, request/result/error contracts, per-conversion dependency attribution, and executor trait. |
+| `wave-02-conversion-executor` | Planned | Implement managed process execution against the frozen contracts without adding workflow-service host dependencies. |
+| `wave-03-lease-attribution` | Planned | Wire active-version lease acquisition/release around conversion and descriptor/diagnostics attribution. |
+| `wave-04-media-type-coverage` | Planned | Add image/audio/video/supported-3D conversion fixtures and capability validation. |
+| `wave-05-api-gui-rollout` | Planned | Surface conversion lifecycle and failures through diagnostics, API, and GUI projections. |
 
 ## Proposed Worker Split
 
@@ -39,19 +50,30 @@ host records concrete write sets.
 | Lease attribution worker | Active-version lease acquisition/release around conversion and descriptor/diagnostics attribution propagation. | To be assigned after Wave `01`. | Process execution helpers unless assigned, frontend files, generated bindings, lockfiles, `.pantograph/**`, `assets/**`. | `reports/wave-03-worker-lease-attribution.md` |
 | Media fixture worker | Fixture/golden tests for image/audio/video/3D conversion and capability coverage. | To be assigned after Wave `01`. | Production contracts, frontend files, generated bindings, lockfiles, `.pantograph/**`, `assets/**`. | `reports/wave-04-worker-media-fixtures.md` |
 
+## 2026-04-29 Wave 01 Start Gate
+
+- Start outcome: `ready_with_recorded_assumptions`.
+- Existing dirty files before Stage `13`: deleted image assets, untracked
+  `.pantograph/workflow-diagnostics.sqlite`, and untracked asset files. They
+  remain outside the Stage `13` write set.
+- Standards reviewed: plan, architecture, security, concurrency, Rust, and
+  documentation standards.
+- Selected boundary: `crates/pantograph-media-conversion`.
+- Assumption: later host-owned implementation can adapt `inference` managed
+  dependency plans into the neutral crate without making workflow-service
+  depend on `inference`.
+
 ## Verification Notes
 
-- No verification has run for Stage `13` yet.
-- First verification gate must include traceability after this scaffold lands:
-  `npm run traceability`.
+- Wave `01`: `cargo test -p pantograph-media-conversion`,
+  `cargo fmt --all -- --check`, and `npm run traceability`.
 
 ## Open Decisions
 
-- Whether the conversion boundary is a new crate
-  `crates/pantograph-media-conversion` or a neutral module in an existing host
-  crate.
-- Exact conversion attribution fields and whether lease tokens are stored as
-  raw ids, redacted ids, or stable fingerprints.
+- Exact host adapter ownership for mapping `inference` media dependency plans
+  into `pantograph-media-conversion` attribution records.
+- Whether lease tokens are stored as raw ids, redacted ids, or stable
+  fingerprints after diagnostics projection is wired.
 - Whether unsupported 3D conversion starts as fail-closed capability behavior
   or includes a concrete managed tool in the first Stage `13` implementation
   wave.
