@@ -1,7 +1,7 @@
 # Stage 11 Coordination Ledger
 
-Stage `11` completed `wave-01-preflight-contract-audit`. Wave `02` is the next
-eligible implementation wave.
+Stage `11` completed `wave-01-preflight-contract-audit`. Wave `02` is in
+progress with the ArtifactStore core slice implemented.
 
 ## Current Status
 
@@ -22,7 +22,7 @@ eligible implementation wave.
 | Wave | Status | Integration Notes |
 | ---- | ------ | ----------------- |
 | `wave-01-preflight-contract-audit` | Complete | Backend ArtifactStore descriptor, handle-based access, format settings, media capability, and managed redistributable DTOs are frozen with contract snapshots. |
-| `wave-02-artifact-store-backend` | Pending | Depends on frozen ArtifactStore descriptor, policy, lifecycle, read, stream, and consume contracts. |
+| `wave-02-artifact-store-backend` | In progress | ArtifactStore core, private disk persistence, restart reconciliation, consume acknowledgement, cleanup, and service facade are implemented; memory-cache enforcement, stream persistence, finalize lifecycle, execution cutover, and diagnostics linking remain. |
 | `wave-03-managed-redistributables` | Pending | Depends on frozen managed redistributable product-category DTOs and Stage `11` ADR decision. |
 | `wave-04-execution-diagnostics-cutover` | Pending | Depends on backend ArtifactStore and managed format capability contracts. |
 | `wave-05-api-bindings-frontend-settings` | Pending | Depends on backend Settings/capability APIs and binary-safe body access contracts. |
@@ -70,6 +70,14 @@ Initial local audit found these migration families:
 
 ## Verification Ledger
 
+- 2026-04-29 Wave `02` ArtifactStore core-slice verification passed:
+  `cargo test -p pantograph-workflow-service --test artifact_store`,
+  `cargo test -p pantograph-workflow-service --test artifact_contract`,
+  `cargo test -p pantograph-workflow-service --test contract`,
+  `cargo clippy -p pantograph-workflow-service --all-targets -- -D warnings`,
+  and `cargo fmt --all -- --check`.
+- 2026-04-29 Separate clippy cleanup commit cleared existing
+  workflow-service lints discovered by the Wave `02` package clippy gate.
 - 2026-04-29 Wave `01` verification passed:
   `cargo test -p pantograph-workflow-service --test artifact_contract`,
   `cargo test -p pantograph-workflow-service --test contract`, and

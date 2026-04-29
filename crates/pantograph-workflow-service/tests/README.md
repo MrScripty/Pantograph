@@ -11,6 +11,7 @@ the public crate API used by Tauri, UniFFI, Rustler, and other host adapters.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `artifact_contract.rs` | Stage `11` ArtifactStore, format settings, binary-safe access, and managed redistributable DTO snapshots. |
+| `artifact_store.rs` | Stage `11` ArtifactStore persistence, restart reconciliation, retention cleanup, consume acknowledgement, and path-safety tests. |
 | `contract.rs` | Public contract snapshots for workflow run, capabilities, preflight, sessions, queues, traces, and scheduler diagnostics. |
 | `fixtures/` | Shared JSON fixtures consumed by Rust contract tests and frontend service-boundary tests when a DTO needs cross-layer acceptance. |
 

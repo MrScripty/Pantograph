@@ -4,8 +4,8 @@ use crate::graph::GraphSessionStore;
 use crate::scheduler::WorkflowExecutionSessionStore;
 
 use super::{
-    SqliteAttributionStore, SqliteDiagnosticsLedger, WorkflowSchedulerDiagnosticsProvider,
-    WorkflowService, WorkflowServiceError,
+    ArtifactStore, SqliteAttributionStore, SqliteDiagnosticsLedger,
+    WorkflowSchedulerDiagnosticsProvider, WorkflowService, WorkflowServiceError,
 };
 
 const DEFAULT_MAX_SESSIONS: usize = 8;
@@ -32,10 +32,16 @@ impl WorkflowService {
                 max_loaded_sessions,
             ))),
             graph_session_store: Arc::new(GraphSessionStore::new()),
+            artifact_store: None,
             attribution_store: None,
             diagnostics_ledger: None,
             scheduler_diagnostics_provider: Arc::new(Mutex::new(None)),
         }
+    }
+
+    pub fn with_artifact_store(mut self, store: ArtifactStore) -> Self {
+        self.artifact_store = Some(Arc::new(Mutex::new(store)));
+        self
     }
 
     pub fn with_attribution_store(mut self, store: SqliteAttributionStore) -> Self {
@@ -105,6 +111,19 @@ impl WorkflowService {
         store.lock().map_err(|_| {
             WorkflowServiceError::Internal("attribution store lock poisoned".to_string())
         })
+    }
+
+    pub(crate) fn artifact_store_guard(
+        &self,
+    ) -> Result<std::sync::MutexGuard<'_, ArtifactStore>, WorkflowServiceError> {
+        let Some(store) = self.artifact_store.as_ref() else {
+            return Err(WorkflowServiceError::Internal(
+                "artifact store is not configured".to_string(),
+            ));
+        };
+        store
+            .lock()
+            .map_err(|_| WorkflowServiceError::Internal("artifact store lock poisoned".to_string()))
     }
 
     pub(crate) fn diagnostics_ledger_guard(

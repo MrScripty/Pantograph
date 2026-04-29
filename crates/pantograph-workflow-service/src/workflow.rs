@@ -15,7 +15,9 @@ use crate::technical_fit::WorkflowTechnicalFitOverride;
 #[cfg(test)]
 use crate::technical_fit::{WorkflowTechnicalFitDecision, WorkflowTechnicalFitRequest};
 
+mod artifact_api;
 mod artifact_contracts;
+mod artifact_store;
 mod attribution_api;
 mod contracts;
 mod diagnostics_api;
@@ -36,6 +38,9 @@ mod validation;
 mod workflow_run_api;
 
 pub use self::artifact_contracts::*;
+pub use self::artifact_store::{
+    ArtifactBodyRead, ArtifactStore, ArtifactStoreError, ArtifactStoreStats, ArtifactWriteRequest,
+};
 pub use self::contracts::*;
 pub use self::diagnostics_api::{
     WorkflowDiagnosticsUsageQueryRequest, WorkflowDiagnosticsUsageQueryResponse,
@@ -115,6 +120,7 @@ pub use crate::scheduler::{
 pub struct WorkflowService {
     session_store: Arc<Mutex<WorkflowExecutionSessionStore>>,
     graph_session_store: Arc<GraphSessionStore>,
+    artifact_store: Option<Arc<Mutex<ArtifactStore>>>,
     attribution_store: Option<Arc<Mutex<SqliteAttributionStore>>>,
     diagnostics_ledger: Option<Arc<Mutex<SqliteDiagnosticsLedger>>>,
     scheduler_diagnostics_provider:

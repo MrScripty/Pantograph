@@ -124,6 +124,36 @@ Wave status: `complete`.
   `cargo test -p pantograph-workflow-service --test contract`, and
   `cargo fmt --all -- --check`.
 
+### 2026-04-29 Wave 02 ArtifactStore Core Slice
+
+Wave status: `in_progress`.
+
+- Added a backend ArtifactStore owner in
+  `crates/pantograph-workflow-service/src/workflow/artifact_store.rs`.
+- The store persists artifact bodies under private backend-owned paths, writes
+  descriptors with handles rather than raw filesystem locations, reconciles
+  missing bodies on restart as metadata-only records, enforces artifact id and
+  single-artifact size validation, supports byte-range body reads through an
+  internal binary body return type, tracks consume acknowledgement, and deletes
+  physical bodies while preserving metadata for retention cleanup.
+- Added `crates/pantograph-workflow-service/src/workflow/artifact_api.rs` so
+  `WorkflowService` owns descriptor lookup, binary body reads, consume
+  acknowledgement, policy update, cleanup, and stats through a configured
+  ArtifactStore.
+- Added focused ArtifactStore tests for path opacity, restart reconciliation,
+  invalid id rejection, size limits, consume deletion, TTL cleanup, and service
+  facade access.
+- Residual Wave `02` work: memory-cache accounting/enforcement beyond
+  persisted body stats, stream body persistence, finalize lifecycle transitions,
+  integration with execution output conversion, and diagnostics metadata
+  linking.
+- Verification passed:
+  `cargo test -p pantograph-workflow-service --test artifact_store`,
+  `cargo test -p pantograph-workflow-service --test artifact_contract`,
+  `cargo test -p pantograph-workflow-service --test contract`,
+  `cargo clippy -p pantograph-workflow-service --all-targets -- -D warnings`,
+  and `cargo fmt --all -- --check`.
+
 ## Architecture Decisions
 
 ### ArtifactStore Boundary

@@ -11,8 +11,10 @@ public exports out of the service crate.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
+| `artifact_api.rs` | WorkflowService ArtifactStore facade methods for descriptor lookup, binary body reads, consume acknowledgement, policy updates, cleanup, and stats. |
 | `attribution_api.rs` | Client/session/bucket facade methods plus workflow-version and presentation-revision resolution against the durable attribution store. |
 | `artifact_contracts.rs` | ArtifactStore descriptor, lifecycle, policy, read, stream, consume, and format-default DTOs for binary-safe media payload handling. |
+| `artifact_store.rs` | Backend ArtifactStore body ownership, private disk persistence, restart reconciliation, retention cleanup, and consume acknowledgement. |
 | `contracts.rs` | Public workflow request/response/error DTO definitions re-exported by the parent facade. |
 | `graph_api.rs` | Graph edit-session, mutation, connection, persistence, and runtime snapshot facade methods. |
 | `host.rs` | Host trait defaults and scheduler diagnostics provider contracts re-exported by the parent facade. |
