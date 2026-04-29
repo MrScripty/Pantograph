@@ -330,6 +330,10 @@ when physical payload bodies are deleted.
 - [ ] Expose ArtifactStore descriptor lookup, binary read/download, stream
   subscription/read, consume acknowledgement, and policy commands through the
   GUI/API boundary.
+  - [x] Expose Tauri commands for descriptor lookup, body read, consume
+    acknowledgement, global policy read/update, and store stats.
+  - [ ] Add final frontend binary body transport/download handling that avoids
+    embedding media bodies in JSON view state.
 - [ ] Expose Settings APIs for persistent artifact format defaults and
   conversion capabilities.
 - [ ] Expose managed redistributable status/actions for OCIO, ffmpeg,

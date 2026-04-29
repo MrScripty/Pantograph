@@ -4,6 +4,9 @@
 //! Pantograph embedded runtime.
 
 use pantograph_workflow_service::{
+    ArtifactBodyRead, ArtifactConsumeAcknowledgementRequest,
+    ArtifactConsumeAcknowledgementResponse, ArtifactDescriptorQueryRequest,
+    ArtifactDescriptorQueryResponse, ArtifactPolicy, ArtifactReadRequest, ArtifactStoreStats,
     WorkflowAdminQueueCancelRequest, WorkflowAdminQueueCancelResponse,
     WorkflowAdminQueuePushFrontRequest, WorkflowAdminQueuePushFrontResponse,
     WorkflowAdminQueueReprioritizeRequest, WorkflowAdminQueueReprioritizeResponse,
@@ -273,6 +276,58 @@ pub async fn workflow_io_artifact_query(
 ) -> Result<WorkflowIoArtifactQueryResponse, String> {
     workflow_service
         .workflow_io_artifact_query(request)
+        .map_err(workflow_error_json)
+}
+
+pub async fn workflow_artifact_descriptor(
+    request: ArtifactDescriptorQueryRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<ArtifactDescriptorQueryResponse, String> {
+    workflow_service
+        .artifact_descriptor(request)
+        .map_err(workflow_error_json)
+}
+
+pub async fn workflow_read_artifact_body(
+    request: ArtifactReadRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<ArtifactBodyRead, String> {
+    workflow_service
+        .read_artifact_body(request)
+        .map_err(workflow_error_json)
+}
+
+pub async fn workflow_acknowledge_artifact_consumed(
+    request: ArtifactConsumeAcknowledgementRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<ArtifactConsumeAcknowledgementResponse, String> {
+    workflow_service
+        .acknowledge_artifact_consumed(request)
+        .map_err(workflow_error_json)
+}
+
+pub async fn workflow_artifact_policy(
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<ArtifactPolicy, String> {
+    workflow_service
+        .artifact_policy()
+        .map_err(workflow_error_json)
+}
+
+pub async fn workflow_update_artifact_policy(
+    policy: ArtifactPolicy,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<ArtifactPolicy, String> {
+    workflow_service
+        .update_artifact_policy(policy)
+        .map_err(workflow_error_json)
+}
+
+pub async fn workflow_artifact_store_stats(
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<ArtifactStoreStats, String> {
+    workflow_service
+        .artifact_store_stats()
         .map_err(workflow_error_json)
 }
 

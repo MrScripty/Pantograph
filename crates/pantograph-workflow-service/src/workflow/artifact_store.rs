@@ -84,7 +84,7 @@ pub struct ArtifactStreamFinalizeRequest {
     pub artifact_id: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ArtifactBodyRead {
     pub response: ArtifactReadResponse,
     pub body: Vec<u8>,

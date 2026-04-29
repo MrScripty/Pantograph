@@ -310,6 +310,57 @@ pub async fn workflow_io_artifact_query(
 }
 
 #[command]
+pub async fn workflow_artifact_descriptor(
+    request: pantograph_workflow_service::ArtifactDescriptorQueryRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<pantograph_workflow_service::ArtifactDescriptorQueryResponse, String> {
+    super::headless_workflow_commands::workflow_artifact_descriptor(request, workflow_service).await
+}
+
+#[command]
+pub async fn workflow_read_artifact_body(
+    request: pantograph_workflow_service::ArtifactReadRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<pantograph_workflow_service::ArtifactBodyRead, String> {
+    super::headless_workflow_commands::workflow_read_artifact_body(request, workflow_service).await
+}
+
+#[command]
+pub async fn workflow_acknowledge_artifact_consumed(
+    request: pantograph_workflow_service::ArtifactConsumeAcknowledgementRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<pantograph_workflow_service::ArtifactConsumeAcknowledgementResponse, String> {
+    super::headless_workflow_commands::workflow_acknowledge_artifact_consumed(
+        request,
+        workflow_service,
+    )
+    .await
+}
+
+#[command]
+pub async fn workflow_artifact_policy(
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<pantograph_workflow_service::ArtifactPolicy, String> {
+    super::headless_workflow_commands::workflow_artifact_policy(workflow_service).await
+}
+
+#[command]
+pub async fn workflow_update_artifact_policy(
+    policy: pantograph_workflow_service::ArtifactPolicy,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<pantograph_workflow_service::ArtifactPolicy, String> {
+    super::headless_workflow_commands::workflow_update_artifact_policy(policy, workflow_service)
+        .await
+}
+
+#[command]
+pub async fn workflow_artifact_store_stats(
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<pantograph_workflow_service::ArtifactStoreStats, String> {
+    super::headless_workflow_commands::workflow_artifact_store_stats(workflow_service).await
+}
+
+#[command]
 pub async fn workflow_node_status_query(
     request: pantograph_workflow_service::WorkflowNodeStatusQueryRequest,
     workflow_service: State<'_, SharedWorkflowService>,
