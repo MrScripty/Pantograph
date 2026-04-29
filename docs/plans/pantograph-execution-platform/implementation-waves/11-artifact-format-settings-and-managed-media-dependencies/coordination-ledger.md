@@ -338,6 +338,18 @@ runtime-only DTO names or host PATH discovery as the source of truth.
   `cargo test -p pantograph-workflow-service artifact_output_conversion`,
   `cargo check -p pantograph-workflow-service`, and targeted `rustfmt
   --edition 2021 --check` for the artifact conversion file.
+- 2026-04-29 Wave `05` frontend media stream-reference handling passed:
+  `node --experimental-strip-types --test
+  src/components/workflowToolbarEvents.test.ts`, `npm run typecheck -- --pretty
+  false`, and `npm run build`.
+- 2026-04-29 Wave `05` Tauri media stream ArtifactStore conversion passed:
+  `cargo test -p pantograph event_adapter`, `cargo check -p pantograph`, and
+  targeted `rustfmt --edition 2021 --check` for the owned Tauri event-adapter
+  files.
+- 2026-04-29 Wave `05` final stream-reference read integration fix passed:
+  `node --experimental-strip-types --test
+  src/components/workflowToolbarEvents.test.ts`, `npm run typecheck -- --pretty
+  false`, and `npm run build`.
 - 2026-04-29 Separate clippy cleanup commit cleared existing
   workflow-service lints discovered by the Wave `02` package clippy gate.
 - 2026-04-29 Wave `01` verification passed:

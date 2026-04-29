@@ -319,12 +319,20 @@ when physical payload bodies are deleted.
     increasing JSON value limits.
   - [x] Confirm video, 3D, large table, generic file, and oversized structured
     output bindings are converted to descriptors before value validation.
+  - [x] Convert Tauri event-adapter audio stream chunks with inline
+    `audio_base64` into ArtifactStore stream lifecycle entries and bounded
+    stream-reference event metadata.
   - [ ] Convert Python bridge streaming and producer-specific streamed preview
     outputs into ArtifactStore stream lifecycle entries.
 - [ ] Represent streaming assets as artifact lifecycle transitions. Diffusion
   preview passes should be child or revision artifacts; audio/video streams
   should publish chunk metadata and stream handles without placing chunk bodies
   in diagnostic event JSON.
+  - [x] Represent audio stream chunks routed through the Tauri event adapter as
+    ArtifactStore open/append/finalize lifecycle transitions with chunk
+    metadata and no inline stream body in emitted `NodeStream` JSON.
+  - [ ] Represent diffusion preview passes and direct Python producer stream
+    outputs as ArtifactStore child/revision artifacts.
 - [ ] Capture actual output format, codec, quality/compression, bitrate, color
   transform/profile, 3D format, and active converter/library versions in
   artifact descriptors, run snapshots, and diagnostic metadata.
@@ -358,6 +366,8 @@ when physical payload bodies are deleted.
     metadata.
   - [x] Add stream read handling for artifacts with stream handles in frontend
     clients.
+  - [x] Add frontend graph-preview handling for audio stream-reference chunks,
+    including retained body reads after stream finalization.
 - [x] Expose Settings APIs for persistent artifact format defaults and
   conversion capabilities.
   - [x] Add backend artifact format settings query/update APIs, static
