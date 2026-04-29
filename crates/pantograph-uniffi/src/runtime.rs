@@ -24,8 +24,7 @@ use pantograph_workflow_service::{
     WorkflowGraphUpdateNodeDataRequest, WorkflowGraphUpdateNodePositionRequest, WorkflowIoRequest,
     WorkflowPreflightRequest, WorkflowService, WorkflowServiceError,
 };
-use serde::de::DeserializeOwned;
-use serde::Serialize;
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tokio::sync::RwLock;
 
 use crate::{FfiError, FfiPumasApi};
@@ -53,8 +52,44 @@ pub struct FfiEmbeddedRuntimeConfig {
 #[derive(uniffi::Object)]
 pub struct FfiPantographRuntime {
     runtime: Arc<EmbeddedRuntime>,
+    app_data_dir: PathBuf,
     node_registry: Arc<node_engine::NodeRegistry>,
     extensions: Arc<RwLock<ExecutorExtensions>>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+struct ManagedMediaDependencyStatusRequest {
+    dependency_id: inference::ManagedRedistributableId,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+struct ManagedMediaDependencyInstallFromStagingRequest {
+    dependency_id: inference::ManagedRedistributableId,
+    version: String,
+    staging_dir: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+struct ManagedMediaDependencySelectionRequest {
+    dependency_id: inference::ManagedRedistributableId,
+    version: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+struct ManagedMediaDependencyVersionRequest {
+    dependency_id: inference::ManagedRedistributableId,
+    version: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
+struct ManagedMediaDependencyInstallFromStagingResponse {
+    install_root: String,
+    status: inference::ManagedRedistributableStatus,
 }
 
 #[derive(Serialize)]
@@ -86,6 +121,7 @@ impl FfiPantographRuntime {
         pumas_api: Option<Arc<FfiPumasApi>>,
     ) -> Result<Arc<Self>, FfiError> {
         let config = to_embedded_config(config)?;
+        let app_data_dir = config.app_data_dir.clone();
         std::fs::create_dir_all(&config.app_data_dir).map_err(|e| {
             workflow_adapter_error(
                 WorkflowErrorCode::InvalidRequest,
@@ -138,6 +174,7 @@ impl FfiPantographRuntime {
 
         Ok(Arc::new(Self {
             runtime: Arc::new(runtime),
+            app_data_dir,
             node_registry: Arc::new(node_engine::NodeRegistry::with_builtins()),
             extensions,
         }))
@@ -291,6 +328,113 @@ impl FfiPantographRuntime {
     /// Return ArtifactFormatCapabilities JSON.
     pub fn workflow_artifact_format_capabilities(&self) -> Result<String, FfiError> {
         let response = self.runtime.workflow_artifact_format_capabilities();
+        serialize_response(&response)
+    }
+
+    /// Return ManagedRedistributableStatus JSON for all managed media dependencies.
+    pub fn managed_media_dependency_statuses(&self) -> Result<String, FfiError> {
+        let response = inference::list_managed_redistributable_statuses(&self.app_data_dir);
+        serialize_response(&response)
+    }
+
+    /// Return ManagedRedistributableStatus JSON for one managed media dependency.
+    pub fn managed_media_dependency_status(
+        &self,
+        request_json: String,
+    ) -> Result<String, FfiError> {
+        let request: ManagedMediaDependencyStatusRequest = parse_request(request_json)?;
+        let response =
+            inference::managed_redistributable_status(&self.app_data_dir, request.dependency_id);
+        serialize_response(&response)
+    }
+
+    /// Install a managed media dependency version from a staging directory and return status JSON.
+    pub fn managed_media_dependency_install_from_staging(
+        &self,
+        request_json: String,
+    ) -> Result<String, FfiError> {
+        let request: ManagedMediaDependencyInstallFromStagingRequest = parse_request(request_json)?;
+        let staging_dir = non_empty_path(request.staging_dir, "staging_dir")?;
+        let install_root = inference::install_managed_redistributable_from_staging(
+            &self.app_data_dir,
+            request.dependency_id,
+            &request.version,
+            &staging_dir,
+        )
+        .map_err(map_managed_media_dependency_error)?;
+        let status =
+            inference::managed_redistributable_status(&self.app_data_dir, request.dependency_id);
+        serialize_response(&ManagedMediaDependencyInstallFromStagingResponse {
+            install_root: install_root.display().to_string(),
+            status,
+        })
+    }
+
+    /// Select a managed media dependency version and return ManagedRedistributableStatus JSON.
+    pub fn managed_media_dependency_select_version(
+        &self,
+        request_json: String,
+    ) -> Result<String, FfiError> {
+        let request: ManagedMediaDependencySelectionRequest = parse_request(request_json)?;
+        inference::select_managed_redistributable_version(
+            &self.app_data_dir,
+            request.dependency_id,
+            request.version.as_deref(),
+        )
+        .map_err(map_managed_media_dependency_error)?;
+        let response =
+            inference::managed_redistributable_status(&self.app_data_dir, request.dependency_id);
+        serialize_response(&response)
+    }
+
+    /// Set the default managed media dependency version and return ManagedRedistributableStatus JSON.
+    pub fn managed_media_dependency_set_default_version(
+        &self,
+        request_json: String,
+    ) -> Result<String, FfiError> {
+        let request: ManagedMediaDependencySelectionRequest = parse_request(request_json)?;
+        inference::set_default_managed_redistributable_version(
+            &self.app_data_dir,
+            request.dependency_id,
+            request.version.as_deref(),
+        )
+        .map_err(map_managed_media_dependency_error)?;
+        let response =
+            inference::managed_redistributable_status(&self.app_data_dir, request.dependency_id);
+        serialize_response(&response)
+    }
+
+    /// Activate a managed media dependency version and return ManagedRedistributableStatus JSON.
+    pub fn managed_media_dependency_activate_version(
+        &self,
+        request_json: String,
+    ) -> Result<String, FfiError> {
+        let request: ManagedMediaDependencyVersionRequest = parse_request(request_json)?;
+        inference::activate_managed_redistributable_version(
+            &self.app_data_dir,
+            request.dependency_id,
+            &request.version,
+        )
+        .map_err(map_managed_media_dependency_error)?;
+        let response =
+            inference::managed_redistributable_status(&self.app_data_dir, request.dependency_id);
+        serialize_response(&response)
+    }
+
+    /// Remove a managed media dependency version and return ManagedRedistributableStatus JSON.
+    pub fn managed_media_dependency_remove_version(
+        &self,
+        request_json: String,
+    ) -> Result<String, FfiError> {
+        let request: ManagedMediaDependencyVersionRequest = parse_request(request_json)?;
+        inference::remove_managed_redistributable_version(
+            &self.app_data_dir,
+            request.dependency_id,
+            &request.version,
+        )
+        .map_err(map_managed_media_dependency_error)?;
+        let response =
+            inference::managed_redistributable_status(&self.app_data_dir, request.dependency_id);
         serialize_response(&response)
     }
 
@@ -819,6 +963,10 @@ fn map_workflow_service_error(err: WorkflowServiceError) -> FfiError {
 
 fn map_node_engine_error(err: node_engine::NodeEngineError) -> FfiError {
     workflow_adapter_error(WorkflowErrorCode::InvalidRequest, err.to_string())
+}
+
+fn map_managed_media_dependency_error(err: String) -> FfiError {
+    workflow_adapter_error(WorkflowErrorCode::InvalidRequest, err)
 }
 
 fn workflow_error_json(code: WorkflowErrorCode, message: impl Into<String>) -> String {

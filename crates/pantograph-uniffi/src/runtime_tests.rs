@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use inference::{managed_redistributable_catalog_entry, ManagedRedistributableId};
 use pantograph_workflow_service::{WorkflowErrorCode, WorkflowErrorEnvelope};
 
 use super::{FfiEmbeddedRuntimeConfig, FfiPantographRuntime};
@@ -867,4 +868,179 @@ async fn direct_runtime_exposes_artifact_format_settings_and_capabilities_json()
 
     runtime.shutdown().await;
     let _ = std::fs::remove_dir_all(root);
+}
+
+#[tokio::test]
+async fn direct_runtime_exposes_managed_media_dependency_statuses_and_actions_json() {
+    let root = create_temp_root("uniffi-runtime-managed-media");
+    let app_data_dir = root.join("app-data");
+    let runtime = FfiPantographRuntime::new(
+        FfiEmbeddedRuntimeConfig {
+            app_data_dir: app_data_dir.to_string_lossy().into_owned(),
+            project_root: root.to_string_lossy().into_owned(),
+            workflow_roots: Vec::new(),
+            max_loaded_sessions: None,
+        },
+        None,
+    )
+    .await
+    .expect("create runtime");
+
+    let statuses_json = runtime
+        .managed_media_dependency_statuses()
+        .expect("list managed media dependency statuses");
+    let statuses: serde_json::Value =
+        serde_json::from_str(&statuses_json).expect("parse managed media dependency statuses");
+    let statuses = statuses.as_array().expect("statuses array");
+    for dependency_id in ["ffmpeg", "ocioconvert", "oiiotool", "open_color_io"] {
+        assert!(
+            statuses
+                .iter()
+                .any(|status| status["id"] == serde_json::json!(dependency_id)),
+            "missing managed media dependency status for {dependency_id}"
+        );
+    }
+
+    for id in [
+        ManagedRedistributableId::Ffmpeg,
+        ManagedRedistributableId::Ocioconvert,
+        ManagedRedistributableId::Oiiotool,
+        ManagedRedistributableId::OpenColorIo,
+    ] {
+        let catalog = managed_redistributable_catalog_entry(id);
+        if catalog.platform_key == "unsupported" {
+            continue;
+        }
+
+        let dependency_id = serde_json::to_value(id).expect("serialize dependency id");
+        let staging_dir = root
+            .join("staging")
+            .join(catalog.id.key())
+            .join(&catalog.version);
+        write_managed_media_expected_files(&staging_dir, &catalog.expected_files);
+
+        let install_json = runtime
+            .managed_media_dependency_install_from_staging(
+                serde_json::json!({
+                    "dependency_id": dependency_id,
+                    "version": catalog.version,
+                    "staging_dir": staging_dir.to_string_lossy()
+                })
+                .to_string(),
+            )
+            .expect("install managed media dependency from staging");
+        let install: serde_json::Value =
+            serde_json::from_str(&install_json).expect("parse install response");
+        assert_eq!(install["status"]["id"], dependency_id);
+        assert_eq!(install["status"]["readiness"], "ready");
+        assert_eq!(install["status"]["missing_files"], serde_json::json!([]));
+
+        let selected_json = runtime
+            .managed_media_dependency_select_version(
+                serde_json::json!({
+                    "dependency_id": dependency_id,
+                    "version": catalog.version
+                })
+                .to_string(),
+            )
+            .expect("select managed media dependency version");
+        let selected: serde_json::Value =
+            serde_json::from_str(&selected_json).expect("parse selected response");
+        assert_eq!(
+            selected["selection"]["selected_version"],
+            serde_json::json!(catalog.version)
+        );
+        assert_eq!(selected["versions"][0]["selected"], true);
+
+        let default_json = runtime
+            .managed_media_dependency_set_default_version(
+                serde_json::json!({
+                    "dependency_id": dependency_id,
+                    "version": catalog.version
+                })
+                .to_string(),
+            )
+            .expect("set default managed media dependency version");
+        let default_status: serde_json::Value =
+            serde_json::from_str(&default_json).expect("parse default response");
+        assert_eq!(
+            default_status["selection"]["default_version"],
+            serde_json::json!(catalog.version)
+        );
+
+        let active_json = runtime
+            .managed_media_dependency_activate_version(
+                serde_json::json!({
+                    "dependency_id": dependency_id,
+                    "version": catalog.version
+                })
+                .to_string(),
+            )
+            .expect("activate managed media dependency version");
+        let active: serde_json::Value =
+            serde_json::from_str(&active_json).expect("parse active response");
+        assert_eq!(
+            active["selection"]["active_version"],
+            serde_json::json!(catalog.version)
+        );
+        assert_eq!(active["versions"][0]["active"], true);
+
+        let single_json = runtime
+            .managed_media_dependency_status(
+                serde_json::json!({ "dependency_id": dependency_id }).to_string(),
+            )
+            .expect("get managed media dependency status");
+        let single: serde_json::Value =
+            serde_json::from_str(&single_json).expect("parse single status");
+        assert_eq!(single["id"], dependency_id);
+        assert_eq!(single["readiness"], "ready");
+
+        let removed_json = runtime
+            .managed_media_dependency_remove_version(
+                serde_json::json!({
+                    "dependency_id": dependency_id,
+                    "version": catalog.version
+                })
+                .to_string(),
+            )
+            .expect("remove managed media dependency version");
+        let removed: serde_json::Value =
+            serde_json::from_str(&removed_json).expect("parse removed response");
+        assert_eq!(
+            removed["selection"]["active_version"],
+            serde_json::Value::Null
+        );
+        assert_eq!(removed["readiness"], "missing");
+    }
+
+    let missing_staging = root.join("missing-staging");
+    std::fs::create_dir_all(&missing_staging).expect("create missing staging dir");
+    let ffmpeg = managed_redistributable_catalog_entry(ManagedRedistributableId::Ffmpeg);
+    if ffmpeg.platform_key != "unsupported" {
+        let invalid = runtime
+            .managed_media_dependency_install_from_staging(
+                serde_json::json!({
+                    "dependency_id": "ffmpeg",
+                    "version": ffmpeg.version,
+                    "staging_dir": missing_staging.to_string_lossy()
+                })
+                .to_string(),
+            )
+            .expect_err("missing expected files should preserve workflow error envelope");
+        let envelope = workflow_error_envelope(invalid);
+        assert_eq!(envelope.code, WorkflowErrorCode::InvalidRequest);
+        assert!(envelope.message.contains("missing expected file"));
+    }
+
+    runtime.shutdown().await;
+    let _ = std::fs::remove_dir_all(root);
+}
+
+fn write_managed_media_expected_files(root: &Path, expected_files: &[String]) {
+    for expected_file in expected_files {
+        let file_path = root.join(expected_file);
+        std::fs::create_dir_all(file_path.parent().expect("expected file parent"))
+            .expect("create expected file parent");
+        std::fs::write(file_path, []).expect("write expected file");
+    }
 }

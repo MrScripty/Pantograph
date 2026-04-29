@@ -360,6 +360,8 @@ when physical payload bodies are deleted.
     JSON methods with focused runtime tests.
   - [x] Expose artifact format settings query/update and media capability JSON
     methods through the UniFFI embedded runtime with focused runtime tests.
+  - [x] Expose managed dependency status/action JSON methods through the
+    UniFFI embedded runtime with focused runtime tests.
   - [ ] Add remaining binding parity for persistent settings, managed
     dependency status/actions, media capabilities, and final binary body
     transport semantics.
