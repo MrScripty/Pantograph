@@ -20,7 +20,7 @@ later plan stages fill in richer page bodies.
 | `IoInspectorPage.svelte` | Projection-backed I/O artifact browser, retention detail surface, cleanup status surface, and global retention policy form. |
 | `ioInspectorPresenters.ts` | Pure I/O media, payload availability, retention policy/cleanup detail, byte-size, and projection freshness presenters. |
 | `ioInspectorPresenters.test.ts` | Unit coverage for I/O Inspector presentation labels. |
-| `SettingsPage.svelte` | Canonical workbench Settings page for ArtifactStore policy, artifact format defaults/capabilities, and managed media dependency controls. |
+| `SettingsPage.svelte` | Canonical workbench Settings page for ArtifactStore policy, artifact format defaults/capabilities, managed media dependency controls, server connection, model paths, device policy, RAG, and sandbox configuration. |
 | `settingsPagePresenters.ts` | Pure Settings page byte/duration labels, capability option labels, policy rows, managed media dependency rows, and numeric field validation helpers. |
 | `settingsPagePresenters.test.ts` | Unit coverage for Settings page presentation labels, managed media dependency labels, and validation helpers. |
 | `LibraryPage.svelte` | Projection-backed Library usage and audit table with active-run highlighting and audited Pumas search/download/delete actions. |
@@ -59,7 +59,8 @@ grow separate navigation and selection models.
   or Library mutations. Audited Pumas actions must call typed workflow service
   commands and refresh projection state after confirmed backend responses.
 - The workbench Settings page is the canonical owner for persistent
-  ArtifactStore policy and artifact format defaults. It must call typed
+  ArtifactStore policy, artifact format defaults, server connection, model
+  paths, device policy, RAG, and sandbox configuration. It must call typed
   backend commands and capability DTOs instead of hardcoding media option
   lists.
 - Managed media dependency controls for `ffmpeg`, `ocioconvert`, `oiiotool`,
@@ -72,10 +73,10 @@ grow separate navigation and selection models.
   the workbench shell.
 - The workbench Diagnostics page owns the active diagnostics surface. Graph page
   toolbars must keep diagnostics navigation inside the workbench page model.
-- The workbench Settings page owns persistent artifact policy and artifact
-  format defaults. I/O Inspector may show retention status and cleanup controls,
-  but persistent ArtifactStore and media format defaults must not be duplicated
-  in feature-local panels.
+- The workbench Settings page owns persistent app settings. I/O Inspector may
+  show retention status and cleanup controls, but persistent ArtifactStore,
+  media format defaults, runtime/server, model, device, RAG, and sandbox
+  settings must not be duplicated in feature-local panels.
 - Toolbar navigation must use semantic buttons with accessible names.
 
 ## Decision

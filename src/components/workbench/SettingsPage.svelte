@@ -1,6 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { Play, RefreshCw, Save, Settings, Trash2, Upload, X } from 'lucide-svelte';
+  import DeviceConfig from '../DeviceConfig.svelte';
+  import ModelConfig from '../ModelConfig.svelte';
+  import RagStatus from '../RagStatus.svelte';
+  import SandboxSettings from '../SandboxSettings.svelte';
+  import ServerStatus from '../ServerStatus.svelte';
   import type {
     WorkflowArtifactFormatCapabilities,
     WorkflowArtifactFormatSettings,
@@ -640,6 +645,26 @@
 
   <div class="grid min-h-0 flex-1 grid-cols-1 overflow-hidden xl:grid-cols-[1fr_24rem]">
     <div class="min-h-0 overflow-auto">
+      <section class="border-b border-neutral-900 px-4 py-4">
+        <div class="mb-4">
+          <h2 class="text-sm font-semibold text-neutral-100">Runtime And App Settings</h2>
+          <div class="mt-1 text-xs text-neutral-500">
+            Server connection, model paths, device policy, RAG, and sandbox configuration
+          </div>
+        </div>
+        <div class="grid gap-4 2xl:grid-cols-2">
+          <div class="space-y-4">
+            <ServerStatus />
+            <ModelConfig />
+          </div>
+          <div class="space-y-4">
+            <DeviceConfig />
+            <RagStatus />
+            <SandboxSettings />
+          </div>
+        </div>
+      </section>
+
       <form
         class="border-b border-neutral-900 px-4 py-4"
         onsubmit={(event) => {
