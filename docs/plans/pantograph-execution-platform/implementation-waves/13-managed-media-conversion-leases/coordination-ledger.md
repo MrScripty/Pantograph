@@ -48,7 +48,16 @@ host records concrete write sets.
 | ----- | ----- | ----------------- | ---------------------- | ------ |
 | Conversion executor worker | Managed process invocation, path validation, timeout, cancellation, stderr truncation, and temp cleanup with fake process-runner tests. | `crates/pantograph-media-conversion/src/**`, `crates/pantograph-media-conversion/Cargo.toml` if a dependency is justified, `reports/wave-02-worker-conversion-executor.md` | `crates/inference/**`, workflow-service files, frontend files, generated bindings, root manifests, lockfiles, `.pantograph/**`, `assets/**`. | `reports/wave-02-worker-conversion-executor.md` |
 | Lease attribution worker | Active-version lease acquisition/release hardening and attribution-ready media dependency plans. | `crates/inference/src/managed_media_dependencies.rs`, `crates/inference/tests/managed_media_dependencies.rs`, `reports/wave-03-worker-lease-attribution.md` | `crates/pantograph-media-conversion/**`, workflow-service files, frontend files, generated bindings, root manifests, lockfiles, `.pantograph/**`, `assets/**`. | `reports/wave-03-worker-lease-attribution.md` |
-| Media fixture worker | Fixture/golden tests for image/audio/video/3D conversion and capability coverage. | To be assigned after Wave `01`. | Production contracts, frontend files, generated bindings, lockfiles, `.pantograph/**`, `assets/**`. | `reports/wave-04-worker-media-fixtures.md` |
+| Media command-planning worker | Typed command-plan builders and tests for image/audio/video conversion targets plus fail-closed unsupported 3D planning. | `crates/pantograph-media-conversion/src/**`, crate READMEs, `reports/wave-04-worker-media-command-planning.md` | `crates/inference/**`, workflow-service files, frontend files, generated bindings, root manifests, lockfiles, `.pantograph/**`, `assets/**`. | `reports/wave-04-worker-media-command-planning.md` |
+
+## 2026-04-29 Wave 04 Worker Split
+
+- Current dirty files before this split remain limited to unrelated deleted
+  assets, untracked diagnostics SQLite, and untracked assets.
+- Wave `04` is assigned as a single worker because command planning touches the
+  same conversion crate contract surface as executor scaffolding.
+- The worker must not wire command plans into workflow-service or Tauri; host
+  integration remains a later wave.
 
 ## 2026-04-29 Wave 02/03 Parallel Worker Split
 

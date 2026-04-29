@@ -12,6 +12,7 @@ boundary design wave freezes shared contracts and write sets.
 | `README.md` | Placeholder and contract for future Stage `13` wave specs. |
 | `wave-02-conversion-executor.md` | Worker contract for deterministic managed process execution scaffolding. |
 | `wave-03-lease-attribution.md` | Worker contract for attribution-ready managed dependency lease plans. |
+| `wave-04-media-command-planning.md` | Worker contract for typed image/audio/video command plans and fail-closed unsupported 3D conversion. |
 
 ## Usage
 
