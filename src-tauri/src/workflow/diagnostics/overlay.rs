@@ -359,11 +359,216 @@ fn event_node_id(event: &WorkflowEvent) -> Option<String> {
 }
 
 fn event_payload(event: &WorkflowEvent) -> serde_json::Value {
+    match event {
+        WorkflowEvent::NodeStream {
+            node_id,
+            port,
+            chunk,
+            workflow_run_id,
+        } => {
+            return serde_json::json!({
+                "node_id": node_id,
+                "port": port,
+                "chunk": diagnostics_safe_value_for_key(Some(port), chunk),
+                "workflow_run_id": workflow_run_id,
+            });
+        }
+        WorkflowEvent::NodeCompleted {
+            node_id,
+            outputs,
+            workflow_run_id,
+        } => {
+            let outputs = outputs
+                .iter()
+                .map(|(port, value)| {
+                    (
+                        port.clone(),
+                        diagnostics_safe_value_for_key(Some(port), value),
+                    )
+                })
+                .collect::<serde_json::Map<_, _>>();
+            return serde_json::json!({
+                "node_id": node_id,
+                "outputs": outputs,
+                "workflow_run_id": workflow_run_id,
+            });
+        }
+        WorkflowEvent::Completed {
+            workflow_id,
+            outputs,
+            workflow_run_id,
+        } => {
+            let outputs = outputs
+                .iter()
+                .map(|(node_id, node_outputs)| {
+                    let node_outputs = node_outputs
+                        .iter()
+                        .map(|(port, value)| {
+                            (
+                                port.clone(),
+                                diagnostics_safe_value_for_key(Some(port), value),
+                            )
+                        })
+                        .collect::<serde_json::Map<_, _>>();
+                    (node_id.clone(), serde_json::Value::Object(node_outputs))
+                })
+                .collect::<serde_json::Map<_, _>>();
+            return serde_json::json!({
+                "workflow_id": workflow_id,
+                "outputs": outputs,
+                "workflow_run_id": workflow_run_id,
+            });
+        }
+        _ => {}
+    }
+
     match serde_json::to_value(event) {
         Ok(serde_json::Value::Object(mut value)) => {
             value.remove("data").unwrap_or(serde_json::Value::Null)
         }
         Ok(_) | Err(_) => serde_json::Value::Null,
+    }
+}
+
+fn diagnostics_safe_value_for_key(
+    key: Option<&str>,
+    value: &serde_json::Value,
+) -> serde_json::Value {
+    match value {
+        serde_json::Value::Object(object) => serde_json::Value::Object(
+            object
+                .iter()
+                .map(|(field, field_value)| {
+                    let sanitized = if is_inline_body_key(field) {
+                        redacted_inline_body(field_value)
+                    } else {
+                        diagnostics_safe_value_for_key(Some(field), field_value)
+                    };
+                    (field.clone(), sanitized)
+                })
+                .collect(),
+        ),
+        serde_json::Value::Array(values) => serde_json::Value::Array(
+            values
+                .iter()
+                .map(|value| diagnostics_safe_value_for_key(key, value))
+                .collect(),
+        ),
+        serde_json::Value::String(value)
+            if is_inline_body_key(key.unwrap_or_default())
+                || is_inline_media_string_key(key.unwrap_or_default(), value)
+                || data_url_base64_media_type(value).is_some() =>
+        {
+            redacted_inline_body(&serde_json::Value::String(value.clone()))
+        }
+        _ => value.clone(),
+    }
+}
+
+fn is_inline_body_key(key: &str) -> bool {
+    matches!(
+        key,
+        "audio_base64"
+            | "body"
+            | "content"
+            | "data"
+            | "encoded_body"
+            | "image_base64"
+            | "payload"
+            | "video_base64"
+    ) || key.ends_with("_base64")
+}
+
+fn is_inline_media_string_key(key: &str, value: &str) -> bool {
+    matches!(key, "audio" | "image" | "video") && is_probably_base64_body(value)
+}
+
+fn is_probably_base64_body(value: &str) -> bool {
+    let value = value.trim();
+    value.len() >= 128
+        && value.len() % 4 == 0
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'/' | b'='))
+}
+
+fn redacted_inline_body(value: &serde_json::Value) -> serde_json::Value {
+    let mut redacted = serde_json::Map::new();
+    redacted.insert(
+        "diagnostics_redacted".to_string(),
+        serde_json::Value::Bool(true),
+    );
+    redacted.insert(
+        "reason".to_string(),
+        serde_json::Value::String("inline_content_body".to_string()),
+    );
+    match value {
+        serde_json::Value::String(value) => {
+            redacted.insert(
+                "original_type".to_string(),
+                serde_json::Value::String("string".to_string()),
+            );
+            redacted.insert(
+                "character_length".to_string(),
+                serde_json::Value::Number(serde_json::Number::from(value.len())),
+            );
+            if let Some(media_type) = data_url_base64_media_type(value) {
+                redacted.insert(
+                    "media_type".to_string(),
+                    serde_json::Value::String(media_type.to_string()),
+                );
+                redacted.insert(
+                    "encoding".to_string(),
+                    serde_json::Value::String("base64".to_string()),
+                );
+            }
+        }
+        serde_json::Value::Array(values) => {
+            redacted.insert(
+                "original_type".to_string(),
+                serde_json::Value::String("array".to_string()),
+            );
+            redacted.insert(
+                "item_count".to_string(),
+                serde_json::Value::Number(serde_json::Number::from(values.len())),
+            );
+        }
+        serde_json::Value::Object(object) => {
+            redacted.insert(
+                "original_type".to_string(),
+                serde_json::Value::String("object".to_string()),
+            );
+            redacted.insert(
+                "field_count".to_string(),
+                serde_json::Value::Number(serde_json::Number::from(object.len())),
+            );
+        }
+        other => {
+            redacted.insert(
+                "original_type".to_string(),
+                serde_json::Value::String(value_type_name(other).to_string()),
+            );
+        }
+    }
+    serde_json::Value::Object(redacted)
+}
+
+fn data_url_base64_media_type(value: &str) -> Option<&str> {
+    value
+        .strip_prefix("data:")
+        .and_then(|value| value.split_once(";base64,"))
+        .map(|(media_type, _)| media_type)
+        .filter(|media_type| !media_type.trim().is_empty())
+}
+
+fn value_type_name(value: &serde_json::Value) -> &'static str {
+    match value {
+        serde_json::Value::Null => "null",
+        serde_json::Value::Bool(_) => "boolean",
+        serde_json::Value::Number(_) => "number",
+        serde_json::Value::String(_) => "string",
+        serde_json::Value::Array(_) => "array",
+        serde_json::Value::Object(_) => "object",
     }
 }
 

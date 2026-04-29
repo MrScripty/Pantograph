@@ -25,7 +25,7 @@ backend portions of Wave `02`.
 | `wave-01-preflight-contract-audit` | Complete | Backend ArtifactStore descriptor, handle-based access, format settings, media capability, and managed redistributable DTOs are frozen with contract snapshots. |
 | `wave-02-artifact-store-backend` | Complete | ArtifactStore core, private disk persistence, restart reconciliation, consume acknowledgement, cleanup, memory-cache enforcement, disk-budget enforcement, stream persistence, finalize lifecycle, service facade, and focused tests are implemented. Execution cutover and diagnostics descriptor linking remain assigned to Wave `04`. |
 | `wave-03-managed-redistributables` | Complete | Backend `inference` managed media redistributables catalog/status and activation/state scaffolds are implemented for tool/native dependency definitions, expected-file status projection, local staging installs, select/default/activate state, active-version leases, OpenColorIO activation validation state, and conversion dependency lease planning. Real OCIO ABI loading remains deferred because unsafe FFI is intentionally outside the scaffold. |
-| `wave-04-execution-diagnostics-cutover` | In progress | First workflow-service execution cutover converts image/audio output bindings into ArtifactStore descriptors before `max_value_bytes` validation, the GUI workflow service now opens the project-local ArtifactStore, and typed I/O diagnostics projections retain descriptor metadata. Python bridge streams, additional binary producers, and frontend artifact access remain. |
+| `wave-04-execution-diagnostics-cutover` | In progress | First workflow-service execution cutover converts image/audio output bindings into ArtifactStore descriptors before `max_value_bytes` validation, the GUI workflow service now opens the project-local ArtifactStore, typed I/O diagnostics projections retain descriptor metadata, and Tauri diagnostics overlays redact inline media bodies. Python bridge streams, additional binary producers, and frontend artifact access remain. |
 | `wave-05-api-bindings-frontend-settings` | Pending | Depends on backend Settings/capability APIs and binary-safe body access contracts. |
 
 ## Required First Actions
@@ -120,6 +120,9 @@ runtime-only DTO names or host PATH discovery as the source of truth.
   `cargo test -p pantograph-diagnostics-ledger io_artifact`,
   `cargo test -p pantograph-workflow-service workflow_io_artifact_query`,
   `cargo test -p pantograph-workflow-service artifact_output_conversion`, and
+  `cargo fmt --all -- --check`.
+- 2026-04-29 Wave `04` Tauri diagnostics overlay redaction passed:
+  `cargo test -p pantograph diagnostics_overlay` and
   `cargo fmt --all -- --check`.
 - 2026-04-29 Separate clippy cleanup commit cleared existing
   workflow-service lints discovered by the Wave `02` package clippy gate.

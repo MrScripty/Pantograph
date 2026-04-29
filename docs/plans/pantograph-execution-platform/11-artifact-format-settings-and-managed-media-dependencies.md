@@ -283,6 +283,8 @@ when physical payload bodies are deleted.
   - [x] Add typed I/O artifact descriptor metadata to the diagnostics ledger
     and projection contract, including payload kind, lifecycle, access handles,
     and format metadata.
+  - [x] Redact inline media/body fields from Tauri diagnostics overlay payloads
+    while preserving metadata and ArtifactStore descriptor fields.
 - [ ] Preserve queryable audit metadata after physical payload deletion.
 
 ### Milestone 3: Managed Redistributables
