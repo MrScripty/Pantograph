@@ -18,6 +18,19 @@ fn startup_error(message: impl Into<String>) -> Box<dyn std::error::Error> {
     Box::new(std::io::Error::other(message.into()))
 }
 
+fn default_artifact_policy() -> pantograph_workflow_service::ArtifactPolicy {
+    pantograph_workflow_service::ArtifactPolicy {
+        policy_id: "artifact-global-default".to_string(),
+        policy_version: 1,
+        ttl_seconds: None,
+        max_disk_bytes: None,
+        max_memory_bytes: Some(256 * 1024 * 1024),
+        max_single_artifact_bytes: Some(128 * 1024 * 1024),
+        spill_threshold_bytes: Some(8 * 1024 * 1024),
+        delete_on_consume: false,
+    }
+}
+
 pub fn run_app() -> AppStartupResult<()> {
     log::info!("Pantograph starting...");
 
@@ -45,8 +58,20 @@ pub fn run_app() -> AppStartupResult<()> {
                     workflow_timing_ledger_path
                 ))
             })?;
+    let workflow_artifact_store_path = pantograph_data_dir.join("artifacts");
+    let workflow_artifact_store = pantograph_workflow_service::ArtifactStore::open(
+        &workflow_artifact_store_path,
+        default_artifact_policy(),
+    )
+    .map_err(|error| {
+        startup_error(format!(
+            "failed to open workflow artifact store {:?}: {error}",
+            workflow_artifact_store_path
+        ))
+    })?;
     let workflow_service: workflow::commands::SharedWorkflowService = Arc::new(
         pantograph_workflow_service::WorkflowService::new()
+            .with_artifact_store(workflow_artifact_store)
             .with_diagnostics_ledger(workflow_service_ledger),
     );
     let workflow_timing_ledger =

@@ -303,6 +303,9 @@ when physical payload bodies are deleted.
   structured outputs to descriptors before workflow-output value validation.
   - [x] Convert workflow-service `image` and `audio` output bindings to
     ArtifactStore descriptors before `max_value_bytes` validation.
+  - [x] Configure the GUI's canonical workflow service with the project-local
+    ArtifactStore so normal scheduler submissions can persist descriptor-backed
+    media outputs.
   - [ ] Convert video, 3D, large table, generic file, Python bridge streaming,
     and remaining oversized structured outputs.
 - [ ] Represent streaming assets as artifact lifecycle transitions. Diffusion
