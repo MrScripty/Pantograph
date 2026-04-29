@@ -2,13 +2,14 @@
 
 ## Current Status
 
-Stage `12` is in progress.
+Stage `12` is complete with follow-ups.
 
 The stage exists to make the execution-platform plan directory the canonical
 home for the former `run-centric-gui-workbench` requirements. Source audit,
 shell/store navigation, frontend lint cleanup, and Settings retention ownership
-are integrated. Stage-end refactor gate and remaining parity/media follow-ups
-are still open.
+are integrated. Stage-end refactor gate outcome is recorded as
+`not_warranted`. GUI smoke coverage and remaining Stage `11` media work are
+recorded follow-ups rather than hidden Stage `12` blockers.
 
 ## Required First Actions
 
@@ -23,10 +24,7 @@ are still open.
 
 ## Open Decisions
 
-- Whether remaining Network/Settings/media DTO parity should use generated
-  frontend bindings or additional paired Rust/TypeScript fixture tests.
-- Whether GUI/screenshot checks wait for a new Playwright/equivalent harness or
-  are recorded as a follow-up because the repository currently has no harness.
+- None.
 
 ## Resolved Decisions
 
@@ -42,6 +40,9 @@ are still open.
 - Persistent diagnostics retention policy edits belong to the workbench
   Settings page. I/O Inspector may display policy/state and run cleanup, but it
   must not own persistent retention policy edits.
+- GUI/screenshot verification is tracked by
+  `docs/plans/pantograph-execution-platform/follow-up-gui-smoke-harness.md`
+  because this repository currently has no browser smoke harness.
 
 ## Verification Ledger
 
@@ -66,3 +67,5 @@ are still open.
   `cargo test -p pantograph-workflow-service --test contract`,
   `npm run lint:full`, `cargo fmt --all -- --check`, and
   `npm run traceability`.
+- 2026-04-29 Stage-end refactor gate outcome:
+  `reports/stage-end-refactor-gate.md` records `not_warranted`.

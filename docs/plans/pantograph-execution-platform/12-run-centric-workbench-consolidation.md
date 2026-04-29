@@ -14,7 +14,7 @@ supporting review records that remain useful after consolidation live under
 
 ## Status
 
-In progress.
+Complete with follow-ups.
 
 Stage `12` depends on the completed execution-platform stages `01` through `05`
 and the repaired Stage `06` binding correction. Stage `11`
@@ -27,9 +27,10 @@ Current Stage `12` implementation has completed source-audit/crosswalk,
 Scheduler-default shell navigation, transient active-run ownership, current
 page projection wiring, truthful Network/Node Editor states, Settings ownership
 for persistent ArtifactStore and diagnostics retention policy, and focused
-frontend/backend verification. Stage `12` remains open for stage-end refactor
-gate evidence, optional GUI/screenshot coverage if tooling is added, and
-follow-up coordination with the remaining Stage `11` media/API parity gaps.
+frontend/backend verification. Stage `12` has stage-end refactor gate evidence.
+GUI/screenshot coverage is recorded as a follow-up because the repository has
+no Playwright or equivalent harness. Remaining media/API parity gaps stay with
+Stage `11`.
 
 ## Consolidation Coverage Matrix
 
@@ -456,8 +457,8 @@ write sets. Default sequence:
   Rust/TypeScript contract tests for every new page projection.
 - [x] Strengthen shared-fixture/generated DTO parity for current Network and
   Settings workbench surfaces.
-- [ ] Extend parity strengthening to remaining Stage `11` media surfaces before
-  promoting those APIs as complete external contracts.
+- [x] Record remaining Stage `11` media/API parity as outside Stage `12`
+  closeout and owned by Stage `11` follow-ups.
 
 ### Milestone 3: Workbench Shell And Active-Run Navigation
 
@@ -478,13 +479,13 @@ write sets. Default sequence:
 
 ### Milestone 5: Verification And Refactor Gate
 
-- [ ] Run backend projection, frontend type/unit/lint, accessibility, and GUI
-  checks listed in this plan. Backend/frontend/a11y/build gates have passed;
-  GUI/screenshot checks remain pending because no Playwright/equivalent harness
-  is currently present.
+- [x] Run backend projection, frontend type/unit/lint, accessibility, and GUI
+  checks listed in this plan, or record explicit follow-up for unavailable
+  tooling. Backend/frontend/a11y/build gates passed; GUI/screenshot coverage is
+  recorded in `follow-up-gui-smoke-harness.md` because no harness exists.
 - [x] Run source audits for raw event reads, page-load full replay, inline
   media JSON, duplicate settings owners, and old root navigation ambiguity.
-- [ ] Apply `09-stage-end-refactor-gate.md` and record any required follow-up
+- [x] Apply `09-stage-end-refactor-gate.md` and record any required follow-up
   plan before marking Stage `12` complete.
 
 ## Verification
