@@ -45,6 +45,11 @@ Out of scope:
 - Iroh distributed artifact transfer.
 - Per-workflow, per-run, or per-artifact retention policy beyond future
   extensibility.
+- Real media transcoding/conversion invocation after descriptor attribution.
+  Stage `11` prepares managed dependency catalogs, settings, descriptors,
+  capability validation, and active-version metadata. Stage `13` owns actual
+  conversion process execution and per-conversion active-version lease-token
+  attribution.
 - User-facing visual redesign beyond moving persistent settings to the
   workbench Settings page.
 - Supporting legacy inline media JSON behavior after the breaking cutover.
@@ -157,6 +162,25 @@ Wave status: `complete`.
   `cargo test -p pantograph-workflow-service --test contract`,
   `cargo clippy -p pantograph-workflow-service --all-targets -- -D warnings`,
   and `cargo fmt --all -- --check`.
+
+### 2026-04-29 Real Conversion Deferral
+
+Wave status: `complete_with_stage_13_follow_up`.
+
+- Stage `11` records active managed converter/library versions from the
+  host-synchronized activation snapshot and attaches selected format metadata
+  to artifact descriptors and diagnostics.
+- Current execution still performs descriptor attribution and rejects required
+  media-type transcoding when the authoritative payload type does not match the
+  selected format. It does not invoke `ffmpeg`, `ocioconvert`, or `oiiotool`
+  for real conversions.
+- Per-conversion active-version lease-token attribution is deferred to Stage
+  `13`, where the conversion process can acquire and release real managed
+  dependency leases around a concrete tool invocation.
+- The Stage `11` completion claim is limited to binary-safe ArtifactStore
+  payload handling, format settings/capability validation, managed dependency
+  activation scaffolding, active-version descriptor metadata, GUI/API/binding
+  projections, and producer stream artifactization.
 
 ## Architecture Decisions
 
@@ -351,9 +375,10 @@ when physical payload bodies are deleted.
     frontend event JSON.
   - [x] Represent diffusion preview passes as ArtifactStore child/revision
     artifacts after a diffusion preview producer path exists.
-- [ ] Capture actual output format, codec, quality/compression, bitrate, color
+- [x] Capture actual output format, codec, quality/compression, bitrate, color
   transform/profile, 3D format, and active converter/library versions in
-  artifact descriptors, run snapshots, and diagnostic metadata.
+  artifact descriptors, run snapshots, and diagnostic metadata for current
+  descriptor attribution and pass-through output paths.
   - [x] Preserve ArtifactStore descriptor format metadata in the durable I/O
     artifact diagnostics projection.
   - [x] Capture backend default and explicit image/audio output-node override
@@ -364,8 +389,8 @@ when physical payload bodies are deleted.
     providers in artifact descriptors.
   - [x] Capture active converter and library versions from host-synchronized
     managed dependency activation state in artifact descriptors.
-  - [ ] Capture per-conversion lease token versions after real conversion
-    tooling is invoked instead of pass-through descriptor attribution.
+  - [x] Defer per-conversion lease-token attribution to Stage `13`, because
+    current Stage `11` execution does not invoke real conversion tooling.
 - [x] Reject invalid format/codec/quality/bitrate/color/3D settings at
   submission or execution boundaries with typed errors.
   - [x] Validate persistent format defaults and image/audio output-node
@@ -460,8 +485,9 @@ Required checks before completion:
   install/remove/select/activate, executable readiness, incompatible version
   handling, restart recovery, and fail-closed conversion validation.
 - Concurrency tests covering dependency install/activation locks,
-  active-version leases for conversions, retention cleanup races with active
-  reads/streams, and cancellation-safe cleanup.
+  active-version lease scaffolding for conversion readiness, retention cleanup
+  races with active reads/streams, and cancellation-safe cleanup. Real
+  conversion lease-token attribution tests are owned by Stage `13`.
 - Settings page tests proving persistent settings are reachable through the
   workbench Settings page and retired/embedded legacy settings surfaces do not
   keep separate global state ownership.
@@ -496,6 +522,8 @@ Required checks before completion:
   keeping separate persistent settings ownership.
 - Required platform support for media dependencies differs from the current
   managed-runtime support matrix.
+- Real conversion is needed before Stage `13` starts producing converted media
+  bodies instead of descriptor-attributed pass-through artifacts.
 
 ## Completion Criteria
 
@@ -514,3 +542,6 @@ Required checks before completion:
 - Existing base64/data-url media producers are migrated or removed.
 - API/binding/frontend projections use descriptors and capability DTOs rather
   than raw storage rows, host PATH probing, or frontend hard-coded options.
+- Real managed media conversion and per-conversion lease-token attribution are
+  explicitly tracked by Stage `13` and are not claimed as complete by Stage
+  `11`.

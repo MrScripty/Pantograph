@@ -1,18 +1,18 @@
 # Stage 11 Coordination Ledger
 
-Stage `11` completed `wave-01-preflight-contract-audit` and the ArtifactStore
-backend portions of Wave `02`.
+Stage `11` is complete with a Stage `13` follow-up for real managed media
+conversion and per-conversion lease-token attribution.
 
 ## Current Status
 
 - Active stage plan:
   `docs/plans/pantograph-execution-platform/11-artifact-format-settings-and-managed-media-dependencies.md`.
 - Required first wave: `wave-01-preflight-contract-audit`.
-- Source and test edits for Stage `11` are currently limited to the Wave `01`
-  backend contract freeze and Wave `02` ArtifactStore backend work in
-  `crates/pantograph-workflow-service`.
-- The current work completed stage-start preflight, source audit, shared
-  contract freeze, and implementation-wave scaffolding.
+- Stage `11` completed stage-start preflight, source audit, shared contract
+  freeze, ArtifactStore backend work, managed media dependency scaffolding,
+  execution/diagnostics cutover, API/binding/frontend projections, Settings
+  ownership, output-node selectors, stream artifactization, active dependency
+  version metadata, and diffusion preview relationship metadata.
 - Existing unrelated dirty files before Stage `11`: deleted
   `.pantograph/workflows/tiny-sd-turbo-diffusion.json`, deleted image assets,
   untracked `.pantograph/workflow-diagnostics.sqlite`, and untracked assets.
@@ -25,8 +25,8 @@ backend portions of Wave `02`.
 | `wave-01-preflight-contract-audit` | Complete | Backend ArtifactStore descriptor, handle-based access, format settings, media capability, and managed redistributable DTOs are frozen with contract snapshots. |
 | `wave-02-artifact-store-backend` | Complete | ArtifactStore core, private disk persistence, restart reconciliation, consume acknowledgement, cleanup, memory-cache enforcement, disk-budget enforcement, stream persistence, finalize lifecycle, service facade, and focused tests are implemented. Execution cutover and diagnostics descriptor linking remain assigned to Wave `04`. |
 | `wave-03-managed-redistributables` | Complete | Backend `inference` managed media redistributables catalog/status and activation/state scaffolds are implemented for tool/native dependency definitions, expected-file status projection, local staging installs, select/default/activate state, active-version leases, OpenColorIO activation validation state, and conversion dependency lease planning. Real OCIO ABI loading remains deferred because unsafe FFI is intentionally outside the scaffold. |
-| `wave-04-execution-diagnostics-cutover` | In progress | Workflow-service execution cutover converts image/audio/video/3D/large-table/generic-binary/structured base64 or data-url output bindings into ArtifactStore descriptors before `max_value_bytes` validation, the GUI workflow service now opens the project-local ArtifactStore, typed I/O diagnostics projections retain descriptor metadata, Tauri diagnostics overlays redact inline media bodies, and image/audio output-node format overrides are validated into descriptor metadata. Python bridge streaming and producer-specific stream lifecycle metadata remain. |
-| `wave-05-api-bindings-frontend-settings` | In progress | Tauri workflow commands and the UniFFI embedded runtime now expose ArtifactStore descriptor lookup, body read, consume acknowledgement, policy read/update, and stats. Backend artifact format settings query/update and conversion capability commands are implemented with persistence, validation, Tauri registration, and UniFFI JSON parity. ArtifactStore stream read DTOs and Tauri/embedded-runtime stream read commands are implemented for in-progress stream bytes. The I/O Inspector renders descriptor lifecycle/access/handle/format metadata and uses transient Blob URLs for read/download/consume actions, including stream reads, without placing bodies in projection state. Tauri/headless managed media dependency status/action commands, UniFFI managed dependency JSON parity, C# descriptor/body-read smoke parity, and output-node selectors are implemented. The workbench Settings page now owns ArtifactStore policy, artifact format defaults, and managed media dependency controls through typed backend commands. Host adapters now synchronize active managed media dependency versions into workflow-service artifact format capabilities and descriptor metadata. Diffusion preview producer events and first-class preview/revision artifact relationships are implemented. Per-conversion lease-token attribution for real transcoding remains. |
+| `wave-04-execution-diagnostics-cutover` | Complete | Workflow-service execution cutover converts image/audio/video/3D/large-table/generic-binary/structured base64 or data-url output bindings into ArtifactStore descriptors before `max_value_bytes` validation, the GUI workflow service opens the project-local ArtifactStore, typed I/O diagnostics projections retain descriptor metadata, Tauri diagnostics overlays redact inline media bodies, output-node format overrides are validated into descriptor metadata, Python bridge streaming paths are artifactized, and producer-specific preview stream metadata is represented as ArtifactStore relationships. |
+| `wave-05-api-bindings-frontend-settings` | Complete with Stage `13` follow-up | Tauri workflow commands and the UniFFI embedded runtime now expose ArtifactStore descriptor lookup, body read, consume acknowledgement, policy read/update, and stats. Backend artifact format settings query/update and conversion capability commands are implemented with persistence, validation, Tauri registration, and UniFFI JSON parity. ArtifactStore stream read DTOs and Tauri/embedded-runtime stream read commands are implemented for in-progress stream bytes. The I/O Inspector renders descriptor lifecycle/access/handle/format metadata and uses transient Blob URLs for read/download/consume actions, including stream reads, without placing bodies in projection state. Tauri/headless managed media dependency status/action commands, UniFFI managed dependency JSON parity, C# descriptor/body-read smoke parity, and output-node selectors are implemented. The workbench Settings page now owns ArtifactStore policy, artifact format defaults, and managed media dependency controls through typed backend commands. Host adapters now synchronize active managed media dependency versions into workflow-service artifact format capabilities and descriptor metadata. Diffusion preview producer events and first-class preview/revision artifact relationships are implemented. Real conversion process invocation and per-conversion lease-token attribution are deferred to Stage `13`. |
 
 ## Required First Actions
 
@@ -206,6 +206,21 @@ worker.
   reference metadata. Inline preview image bodies are still removed before
   consumer-visible stream JSON when ArtifactStore is configured.
 
+## 2026-04-29 Stage 13 Deferral
+
+- Stage `11` is complete for descriptor attribution, binary-safe ArtifactStore
+  transport, managed media dependency scaffolding, active-version descriptor
+  metadata, GUI/API/binding projections, and stream artifactization.
+- The remaining per-conversion lease-token requirement is not implementable
+  truthfully in Stage `11` because no real converter process is invoked yet.
+- New plan:
+  `docs/plans/pantograph-execution-platform/13-managed-media-conversion-leases.md`.
+- The next implementation stage for this gap must add a host-owned conversion
+  executor that resolves only activated Pantograph-managed dependencies,
+  acquires active-version leases immediately before conversion, records those
+  lease versions in descriptors and diagnostics, and releases leases on
+  success, failure, cancellation, or timeout.
+
 ## Source Audit Snapshot
 
 Initial local audit found these migration families:
@@ -219,19 +234,20 @@ Initial local audit found these migration families:
 | Binding smoke/examples | C# native smoke decodes image base64 for current compatibility checks. | Binding support must move to descriptor/read-handle DTO parity and host-language binary retrieval smoke. |
 | Workflow value validation | `max_value_bytes` rejects large JSON payloads. | Keep bounded JSON validation; media payloads must be converted before the validation boundary. |
 
-## Open Decisions
+## Closed And Deferred Decisions
 
-- Whether the managed redistributables boundary is generalized in place from
-  `managed_runtime` or split into a new dependency/tool/library boundary that
-  reuses lower-level helpers. Wave `01` froze DTO categories but did not choose
-  implementation module ownership.
-- Exact crate/module ownership for ArtifactStore physical payload storage.
-  Wave `01` froze workflow-service public contracts but did not implement body
-  storage.
-- Exact crate/module ownership for OCIO safe wrapper and native-library
-  loading.
-- Which old Settings surfaces are embedded into the workbench Settings page and
-  which are retired.
+- Managed redistributables were generalized through the `inference` managed
+  redistributable/media dependency boundary for Stage `11` catalog, status,
+  selection, activation, and GUI control surfaces.
+- ArtifactStore physical payload storage is owned by
+  `pantograph-workflow-service`; host adapters configure the store location.
+- OCIO readiness in Stage `11` is managed dependency/catalog activation
+  scaffolding, not full native ABI validation or real conversion execution.
+  Concrete ABI/tool behavior verification is deferred to Stage `13`.
+- The workbench Settings page is the canonical persistent settings owner for
+  Stage `11` ArtifactStore policy, artifact format defaults, and managed media
+  dependency controls. Legacy settings surfaces have been embedded, relocated,
+  or retired by Stage `11`/`12` implementation slices.
 
 ## Wave 03 Worker Split
 

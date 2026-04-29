@@ -26,6 +26,7 @@ run-centric workbench.
 | `10-concurrent-phased-implementation.md` | Artifact layout and rules for converting a stage into safe phased parallel implementation waves when warranted. |
 | `11-artifact-format-settings-and-managed-media-dependencies.md` | ArtifactStore, binary-safe media payloads, canonical workbench Settings ownership, format defaults, managed OCIO/ffmpeg/OIIO dependencies, and related verification. |
 | `12-run-centric-workbench-consolidation.md` | Canonical consolidation of the run-centric GUI workbench plans into execution-platform ownership. |
+| `13-managed-media-conversion-leases.md` | Real managed media conversion/transcoding and per-conversion active-version lease attribution. |
 | `implementation-waves/` | Stage-specific concurrent implementation wave specs, coordination ledgers, and worker report paths. |
 | `reviews/run-centric-workbench/` | Historical review evidence moved from the retired run-centric workbench plan directory. |
 
@@ -43,8 +44,9 @@ run-centric workbench.
 | `08` | Gate-only | Reusable stage-start implementation gate, not an implementation stage. |
 | `09` | Gate-only | Reusable stage-end refactor gate, not an implementation stage. |
 | `10` | Coordination-only | Reusable concurrent implementation scaffold, not an implementation stage. |
-| `11` | Planned / active, not complete | ArtifactStore, format settings, canonical Settings ownership, managed media dependencies, and binding/API/frontend projection work are planned but not implemented. |
-| `12` | Planned / active, not complete | Imports the run-centric GUI workbench plans into execution-platform ownership and covers Scheduler-default workbench pages, active-run navigation, API/frontend projections, review findings, and rollout gates. |
+| `11` | Complete with Stage `13` follow-up | ArtifactStore, format settings, canonical Settings ownership, managed media dependency scaffolding, active-version descriptor metadata, binding/API/frontend projections, and media stream artifactization are implemented. Real conversion process invocation and per-conversion lease-token attribution are owned by Stage `13`. |
+| `12` | Complete with follow-ups | Imports the run-centric GUI workbench plans into execution-platform ownership and implements Scheduler-default workbench pages, active-run navigation, current API/frontend projections, review findings, and rollout gates. GUI screenshot coverage remains a follow-up until a harness exists. |
+| `13` | Planned / not complete | Adds real managed media conversion/transcoding through activated Pantograph dependencies and records per-conversion active-version lease attribution. |
 
 ## Problem
 
@@ -133,6 +135,10 @@ of maintaining a single oversized `final-plan.md`.
 - `12-run-centric-workbench-consolidation.md`
 - `Reason: Stage 12 imports the run-centric GUI workbench plan set so
   execution-platform remains the canonical planning home.`
+- `13-managed-media-conversion-leases.md`
+- `Reason: Stage 13 owns real media conversion process execution and
+  per-conversion lease-token attribution that Stage 11 intentionally deferred
+  after completing descriptor attribution and managed dependency scaffolding.`
 
 ## Implementation Entry Point
 
@@ -174,7 +180,9 @@ Stage `05`, reopened Stage `06`, stale Stage `07`, Stage `11`, and Stage `12`
 context. For run-centric GUI work, select
 `12-run-centric-workbench-consolidation.md` after Stage `06` and Stage `11`
 dependencies are either complete or explicitly excluded from the implementation
-slice.
+slice. For real media transcoding, select
+`13-managed-media-conversion-leases.md` only after Stage `11` descriptor,
+settings, managed dependency, and ArtifactStore surfaces are complete.
 
 Use the execution prompt at
 `/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/prompts/implement-plan.md`

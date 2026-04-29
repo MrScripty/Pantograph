@@ -17,6 +17,7 @@ Pantograph execution-platform stages.
 | `06-binding-projections-and-verification/` | Native Rust base API projection and host binding verification waves. |
 | `11-artifact-format-settings-and-managed-media-dependencies/` | ArtifactStore, canonical Settings ownership, managed media dependency, and API/frontend projection waves. |
 | `12-run-centric-workbench-consolidation/` | Run-centric GUI workbench consolidation, shell/page implementation, and cross-plan verification waves. |
+| `13-managed-media-conversion-leases/` | Real managed media conversion/transcoding, managed tool invocation, and per-conversion active-version lease attribution waves. |
 
 Stage `07` standards compliance review did not receive an implementation-wave
 folder because its stage-start gate selected single-worker documentation review
@@ -32,6 +33,11 @@ workbench plans and crosses backend projections, frontend services/stores,
 app-shell navigation, page implementations, accessibility, and rollout
 verification. Start with a source-audit/crosswalk wave before shell or page
 implementation.
+
+Stage `13` has a wave folder because real conversion crosses managed
+dependency leases, process execution, ArtifactStore storage, diagnostics, API
+projection, and frontend status surfaces. Start with a serial boundary design
+wave before assigning process execution or lease attribution workers.
 
 ## Problem
 
