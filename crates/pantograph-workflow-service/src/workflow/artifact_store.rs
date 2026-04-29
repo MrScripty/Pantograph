@@ -1,23 +1,27 @@
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 
+mod cache;
+mod manifest;
+mod stream;
+
+use self::manifest::{
+    apply_byte_range, body_file_name, delete_body, enforce_single_artifact_limit, read_handle,
+    reconcile_manifest, save_manifest, unix_now_ms, validate_artifact_id, ArtifactStoreEntry,
+    ArtifactStoreManifest, BODIES_DIR,
+};
 use super::{
     ArtifactAccessMode, ArtifactAttribution, ArtifactBodyTransport,
     ArtifactConsumeAcknowledgementRequest, ArtifactConsumeAcknowledgementResponse,
     ArtifactDescriptor, ArtifactFormatMetadata, ArtifactLifecycleState, ArtifactPayloadKind,
     ArtifactPolicy, ArtifactReadRequest, ArtifactReadResponse, IoArtifactRetentionState,
 };
-
-const MANIFEST_FILE: &str = "manifest.json";
-const BODIES_DIR: &str = "bodies";
-const READ_HANDLE_SCHEME: &str = "artifact-read://";
 
 #[derive(Debug, Error)]
 pub enum ArtifactStoreError {
@@ -29,6 +33,18 @@ pub enum ArtifactStoreError {
     BodyUnavailable { artifact_id: String },
     #[error("artifact size {actual_bytes} exceeds max_single_artifact_bytes {max_bytes}")]
     ArtifactTooLarge { actual_bytes: u64, max_bytes: u64 },
+    #[error("artifact disk usage {actual_bytes} exceeds max_disk_bytes {max_bytes}")]
+    DiskLimitExceeded { actual_bytes: u64, max_bytes: u64 },
+    #[error("artifact stream is not writable: {artifact_id}")]
+    StreamNotWritable { artifact_id: String },
+    #[error(
+        "invalid artifact stream sequence for {artifact_id}: expected {expected}, actual {actual}"
+    )]
+    InvalidStreamSequence {
+        artifact_id: String,
+        expected: u64,
+        actual: u64,
+    },
     #[error("invalid byte range")]
     InvalidByteRange,
     #[error("artifact store io error: {0}")]
@@ -48,6 +64,27 @@ pub struct ArtifactWriteRequest {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArtifactStreamOpenRequest {
+    pub artifact_id: Option<String>,
+    pub payload_kind: ArtifactPayloadKind,
+    pub media_type: String,
+    pub format: Option<ArtifactFormatMetadata>,
+    pub attribution: ArtifactAttribution,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArtifactStreamChunkWriteRequest {
+    pub artifact_id: String,
+    pub sequence: u64,
+    pub body: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArtifactStreamFinalizeRequest {
+    pub artifact_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArtifactBodyRead {
     pub response: ArtifactReadResponse,
     pub body: Vec<u8>,
@@ -59,6 +96,10 @@ pub struct ArtifactStoreStats {
     pub artifact_count: usize,
     pub retained_body_count: usize,
     pub retained_body_bytes: u64,
+    pub memory_cache_body_count: usize,
+    pub memory_cache_body_bytes: u64,
+    pub streaming_body_count: usize,
+    pub streaming_body_bytes: u64,
     pub metadata_only_count: usize,
 }
 
@@ -67,6 +108,8 @@ pub struct ArtifactStore {
     root_dir: PathBuf,
     manifest_path: PathBuf,
     manifest: ArtifactStoreManifest,
+    memory_cache: BTreeMap<String, Vec<u8>>,
+    memory_cache_bytes: u64,
 }
 
 impl ArtifactStore {
@@ -76,7 +119,7 @@ impl ArtifactStore {
     ) -> Result<Self, ArtifactStoreError> {
         let root_dir = root_dir.as_ref().to_path_buf();
         fs::create_dir_all(root_dir.join(BODIES_DIR))?;
-        let manifest_path = root_dir.join(MANIFEST_FILE);
+        let manifest_path = root_dir.join(manifest::MANIFEST_FILE);
         let mut manifest = if manifest_path.exists() {
             let contents = fs::read_to_string(&manifest_path)?;
             serde_json::from_str::<ArtifactStoreManifest>(&contents)?
@@ -90,11 +133,16 @@ impl ArtifactStore {
         reconcile_manifest(&root_dir, &mut manifest);
         save_manifest(&manifest_path, &manifest)?;
 
-        Ok(Self {
+        let mut store = Self {
             root_dir,
             manifest_path,
             manifest,
-        })
+            memory_cache: BTreeMap::new(),
+            memory_cache_bytes: 0,
+        };
+        store.rebuild_memory_cache();
+
+        Ok(store)
     }
 
     pub fn policy(&self) -> &ArtifactPolicy {
@@ -103,6 +151,7 @@ impl ArtifactStore {
 
     pub fn update_policy(&mut self, policy: ArtifactPolicy) -> Result<(), ArtifactStoreError> {
         self.manifest.policy = policy;
+        self.rebuild_memory_cache();
         self.save()
     }
 
@@ -115,15 +164,10 @@ impl ArtifactStore {
             .unwrap_or_else(|| Uuid::new_v4().to_string());
         validate_artifact_id(&artifact_id)?;
         let byte_length = request.body.len() as u64;
-        if let Some(max_bytes) = self.manifest.policy.max_single_artifact_bytes {
-            if byte_length > max_bytes {
-                return Err(ArtifactStoreError::ArtifactTooLarge {
-                    actual_bytes: byte_length,
-                    max_bytes,
-                });
-            }
-        }
+        enforce_single_artifact_limit(&self.manifest.policy, byte_length)?;
+        self.enforce_disk_limit_for(&artifact_id, byte_length)?;
 
+        self.remove_existing(&artifact_id)?;
         fs::write(self.body_path(&artifact_id)?, &request.body)?;
         let content_hash = format!("blake3:{}", blake3::hash(&request.body).to_hex());
         let descriptor = ArtifactDescriptor {
@@ -140,13 +184,12 @@ impl ArtifactStore {
             stream_handle: None,
             retention_reason: None,
         };
-        self.remove_existing(&artifact_id);
-        self.manifest.artifacts.push(ArtifactStoreEntry {
-            descriptor: descriptor.clone(),
-            body_file: Some(body_file_name(&artifact_id)),
-            created_at_ms: unix_now_ms(),
-            consumed_by: BTreeSet::new(),
-        });
+        self.manifest.artifacts.push(ArtifactStoreEntry::retained(
+            descriptor.clone(),
+            body_file_name(&artifact_id),
+            unix_now_ms(),
+        ));
+        self.cache_body_if_allowed(&artifact_id, request.body);
         self.save()?;
         Ok(descriptor)
     }
@@ -162,6 +205,11 @@ impl ArtifactStore {
     ) -> Result<ArtifactBodyRead, ArtifactStoreError> {
         validate_artifact_id(&request.artifact_id)?;
         let entry = self.entry(&request.artifact_id)?;
+        if entry.descriptor.lifecycle_state != ArtifactLifecycleState::Retained {
+            return Err(ArtifactStoreError::BodyUnavailable {
+                artifact_id: request.artifact_id,
+            });
+        }
         let body_file =
             entry
                 .body_file
@@ -169,7 +217,12 @@ impl ArtifactStore {
                 .ok_or_else(|| ArtifactStoreError::BodyUnavailable {
                     artifact_id: request.artifact_id.clone(),
                 })?;
-        let body = fs::read(self.root_dir.join(BODIES_DIR).join(body_file))?;
+        let body = self
+            .memory_cache
+            .get(&request.artifact_id)
+            .cloned()
+            .map(Ok)
+            .unwrap_or_else(|| fs::read(self.root_dir.join(BODIES_DIR).join(body_file)))?;
         let body = apply_byte_range(
             body,
             request.byte_range_start,
@@ -204,6 +257,9 @@ impl ArtifactStore {
         validate_artifact_id(&request.artifact_id)?;
         let delete_on_consume = self.manifest.policy.delete_on_consume;
         let root_dir = self.root_dir.clone();
+        if delete_on_consume {
+            self.memory_cache_remove(&request.artifact_id);
+        }
         let entry = self.entry_mut(&request.artifact_id)?;
         entry.consumed_by.insert(request.consumer_id);
         if delete_on_consume {
@@ -223,12 +279,17 @@ impl ArtifactStore {
         };
         let cutoff_ms = now_ms.saturating_sub(ttl_seconds.saturating_mul(1000));
         let root_dir = self.root_dir.clone();
+        let mut evict_cache_ids = Vec::new();
         let mut expired_count = 0;
         for entry in &mut self.manifest.artifacts {
             if entry.body_file.is_some() && entry.created_at_ms <= cutoff_ms {
+                evict_cache_ids.push(entry.descriptor.artifact_id.clone());
                 delete_body(&root_dir, entry)?;
                 expired_count += 1;
             }
+        }
+        for artifact_id in evict_cache_ids {
+            self.memory_cache_remove(&artifact_id);
         }
         self.save()?;
         Ok(expired_count)
@@ -240,10 +301,17 @@ impl ArtifactStore {
                 artifact_count: self.manifest.artifacts.len(),
                 retained_body_count: 0,
                 retained_body_bytes: 0,
+                memory_cache_body_count: self.memory_cache.len(),
+                memory_cache_body_bytes: self.memory_cache_bytes,
+                streaming_body_count: 0,
+                streaming_body_bytes: 0,
                 metadata_only_count: 0,
             },
             |mut stats, entry| {
-                if entry.body_file.is_some() {
+                if let Some(stream) = &entry.pending_stream {
+                    stats.streaming_body_count += 1;
+                    stats.streaming_body_bytes += stream.byte_length;
+                } else if entry.body_file.is_some() {
                     stats.retained_body_count += 1;
                     stats.retained_body_bytes += entry.descriptor.byte_length.unwrap_or_default();
                 } else {
@@ -285,115 +353,67 @@ impl ArtifactStore {
             .join(body_file_name(artifact_id)))
     }
 
-    fn remove_existing(&mut self, artifact_id: &str) {
-        self.manifest
-            .artifacts
-            .retain(|entry| entry.descriptor.artifact_id != artifact_id);
+    fn remove_existing(&mut self, artifact_id: &str) -> Result<(), ArtifactStoreError> {
+        self.memory_cache_remove(artifact_id);
+        let mut removed_files = Vec::new();
+        self.manifest.artifacts.retain(|entry| {
+            if entry.descriptor.artifact_id == artifact_id {
+                if let Some(file) = &entry.body_file {
+                    removed_files.push(file.clone());
+                }
+                if let Some(stream) = &entry.pending_stream {
+                    removed_files.push(stream.body_file.clone());
+                }
+                false
+            } else {
+                true
+            }
+        });
+        for file in removed_files {
+            let path = self.root_dir.join(BODIES_DIR).join(file);
+            match fs::remove_file(path) {
+                Ok(()) => {}
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.into()),
+            }
+        }
+        Ok(())
     }
 
     fn save(&self) -> Result<(), ArtifactStoreError> {
         save_manifest(&self.manifest_path, &self.manifest)
     }
-}
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-struct ArtifactStoreManifest {
-    policy: ArtifactPolicy,
-    artifacts: Vec<ArtifactStoreEntry>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-struct ArtifactStoreEntry {
-    descriptor: ArtifactDescriptor,
-    body_file: Option<String>,
-    created_at_ms: u64,
-    #[serde(default)]
-    consumed_by: BTreeSet<String>,
-}
-
-fn validate_artifact_id(artifact_id: &str) -> Result<(), ArtifactStoreError> {
-    let valid = !artifact_id.is_empty()
-        && artifact_id.len() <= 128
-        && artifact_id
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_'));
-    if valid {
+    fn enforce_disk_limit_for(
+        &self,
+        artifact_id: &str,
+        replacement_body_bytes: u64,
+    ) -> Result<(), ArtifactStoreError> {
+        let Some(max_bytes) = self.manifest.policy.max_disk_bytes else {
+            return Ok(());
+        };
+        let projected_bytes = self
+            .manifest
+            .artifacts
+            .iter()
+            .filter(|entry| entry.descriptor.artifact_id != artifact_id)
+            .map(|entry| {
+                if let Some(stream) = &entry.pending_stream {
+                    stream.byte_length
+                } else if entry.body_file.is_some() {
+                    entry.descriptor.byte_length.unwrap_or_default()
+                } else {
+                    0
+                }
+            })
+            .sum::<u64>()
+            .saturating_add(replacement_body_bytes);
+        if projected_bytes > max_bytes {
+            return Err(ArtifactStoreError::DiskLimitExceeded {
+                actual_bytes: projected_bytes,
+                max_bytes,
+            });
+        }
         Ok(())
-    } else {
-        Err(ArtifactStoreError::InvalidArtifactId)
     }
-}
-
-fn body_file_name(artifact_id: &str) -> String {
-    format!("{artifact_id}.bin")
-}
-
-fn read_handle(artifact_id: &str) -> String {
-    format!("{READ_HANDLE_SCHEME}{artifact_id}")
-}
-
-fn reconcile_manifest(root_dir: &Path, manifest: &mut ArtifactStoreManifest) {
-    for entry in &mut manifest.artifacts {
-        let body_exists = entry
-            .body_file
-            .as_ref()
-            .map(|file| root_dir.join(BODIES_DIR).join(file).is_file())
-            .unwrap_or(false);
-        if !body_exists && entry.body_file.is_some() {
-            entry.body_file = None;
-            entry.descriptor.lifecycle_state = ArtifactLifecycleState::Failed;
-            entry.descriptor.retention_state = IoArtifactRetentionState::MetadataOnly;
-            entry.descriptor.access_modes.clear();
-            entry.descriptor.read_handle = None;
-            entry.descriptor.retention_reason = Some("body_missing_on_recovery".to_string());
-        }
-    }
-}
-
-fn delete_body(root_dir: &Path, entry: &mut ArtifactStoreEntry) -> Result<(), ArtifactStoreError> {
-    if let Some(file) = entry.body_file.take() {
-        let path = root_dir.join(BODIES_DIR).join(file);
-        match fs::remove_file(path) {
-            Ok(()) => {}
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-            Err(error) => return Err(error.into()),
-        }
-    }
-    entry.descriptor.lifecycle_state = ArtifactLifecycleState::Deleted;
-    entry.descriptor.retention_state = IoArtifactRetentionState::Deleted;
-    entry.descriptor.access_modes.clear();
-    entry.descriptor.read_handle = None;
-    entry.descriptor.retention_reason = Some("body_deleted_by_policy".to_string());
-    Ok(())
-}
-
-fn apply_byte_range(
-    body: Vec<u8>,
-    start: Option<u64>,
-    end_exclusive: Option<u64>,
-) -> Result<Vec<u8>, ArtifactStoreError> {
-    let len = body.len() as u64;
-    let start = start.unwrap_or(0);
-    let end = end_exclusive.unwrap_or(len);
-    if start > end || end > len {
-        return Err(ArtifactStoreError::InvalidByteRange);
-    }
-    let start = usize::try_from(start).map_err(|_| ArtifactStoreError::InvalidByteRange)?;
-    let end = usize::try_from(end).map_err(|_| ArtifactStoreError::InvalidByteRange)?;
-    Ok(body[start..end].to_vec())
-}
-
-fn save_manifest(path: &Path, manifest: &ArtifactStoreManifest) -> Result<(), ArtifactStoreError> {
-    let contents = serde_json::to_string_pretty(manifest)?;
-    fs::write(path, contents)?;
-    Ok(())
-}
-
-fn unix_now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis() as u64)
-        .unwrap_or_default()
 }

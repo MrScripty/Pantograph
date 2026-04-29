@@ -1,7 +1,7 @@
 # Stage 11 Coordination Ledger
 
-Stage `11` completed `wave-01-preflight-contract-audit`. Wave `02` is in
-progress with the ArtifactStore core slice implemented.
+Stage `11` completed `wave-01-preflight-contract-audit` and the ArtifactStore
+backend portions of Wave `02`.
 
 ## Current Status
 
@@ -9,7 +9,8 @@ progress with the ArtifactStore core slice implemented.
   `docs/plans/pantograph-execution-platform/11-artifact-format-settings-and-managed-media-dependencies.md`.
 - Required first wave: `wave-01-preflight-contract-audit`.
 - Source and test edits for Stage `11` are currently limited to the Wave `01`
-  backend contract freeze in `crates/pantograph-workflow-service`.
+  backend contract freeze and Wave `02` ArtifactStore backend work in
+  `crates/pantograph-workflow-service`.
 - The current work completed stage-start preflight, source audit, shared
   contract freeze, and implementation-wave scaffolding.
 - Existing unrelated dirty files before Stage `11`: deleted
@@ -22,7 +23,7 @@ progress with the ArtifactStore core slice implemented.
 | Wave | Status | Integration Notes |
 | ---- | ------ | ----------------- |
 | `wave-01-preflight-contract-audit` | Complete | Backend ArtifactStore descriptor, handle-based access, format settings, media capability, and managed redistributable DTOs are frozen with contract snapshots. |
-| `wave-02-artifact-store-backend` | In progress | ArtifactStore core, private disk persistence, restart reconciliation, consume acknowledgement, cleanup, and service facade are implemented; memory-cache enforcement, stream persistence, finalize lifecycle, execution cutover, and diagnostics linking remain. |
+| `wave-02-artifact-store-backend` | Complete | ArtifactStore core, private disk persistence, restart reconciliation, consume acknowledgement, cleanup, memory-cache enforcement, disk-budget enforcement, stream persistence, finalize lifecycle, service facade, and focused tests are implemented. Execution cutover and diagnostics descriptor linking remain assigned to Wave `04`. |
 | `wave-03-managed-redistributables` | Pending | Depends on frozen managed redistributable product-category DTOs and Stage `11` ADR decision. |
 | `wave-04-execution-diagnostics-cutover` | Pending | Depends on backend ArtifactStore and managed format capability contracts. |
 | `wave-05-api-bindings-frontend-settings` | Pending | Depends on backend Settings/capability APIs and binary-safe body access contracts. |
@@ -76,6 +77,11 @@ Initial local audit found these migration families:
   `cargo test -p pantograph-workflow-service --test contract`,
   `cargo clippy -p pantograph-workflow-service --all-targets -- -D warnings`,
   and `cargo fmt --all -- --check`.
+- 2026-04-29 Wave `02` ArtifactStore stream/cache/disk-policy integration
+  passed: `cargo test -p pantograph-workflow-service --test artifact_store`,
+  `cargo test -p pantograph-workflow-service --test artifact_store_policy`,
+  `cargo test -p pantograph-workflow-service --test artifact_contract`, and
+  `cargo fmt --all -- --check`.
 - 2026-04-29 Separate clippy cleanup commit cleared existing
   workflow-service lints discovered by the Wave `02` package clippy gate.
 - 2026-04-29 Wave `01` verification passed:

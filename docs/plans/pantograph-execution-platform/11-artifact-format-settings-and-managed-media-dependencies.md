@@ -273,9 +273,9 @@ when physical payload bodies are deleted.
 
 ### Milestone 2: Backend Storage And Policy
 
-- [ ] Implement ArtifactStore ownership for physical payload bodies, memory/disk
+- [x] Implement ArtifactStore ownership for physical payload bodies, memory/disk
   cache accounting, spill/finalize lifecycle, restart recovery, and cleanup.
-- [ ] Persist global artifact policy values: TTL, maximum disk bytes, maximum
+- [x] Persist global artifact policy values: TTL, maximum disk bytes, maximum
   memory bytes, maximum single artifact bytes, spill threshold, delete-on-
   consume behavior, and cleanup status.
 - [ ] Store artifact metadata and references in durable diagnostics/run

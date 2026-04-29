@@ -1,7 +1,8 @@
 use pantograph_workflow_service::{
     ArtifactAttribution, ArtifactBodyTransport, ArtifactConsumeAcknowledgementRequest,
     ArtifactFormatMetadata, ArtifactLifecycleState, ArtifactPayloadKind, ArtifactPolicy,
-    ArtifactReadRequest, ArtifactStore, ArtifactStoreError, ArtifactWriteRequest,
+    ArtifactReadRequest, ArtifactStore, ArtifactStoreError, ArtifactStreamChunkWriteRequest,
+    ArtifactStreamFinalizeRequest, ArtifactStreamOpenRequest, ArtifactWriteRequest,
     IoArtifactRetentionState, WorkflowService,
 };
 
@@ -275,4 +276,223 @@ fn workflow_service_artifact_store_facade_uses_configured_store() {
             .retained_body_count,
         1
     );
+}
+
+#[test]
+fn artifact_store_streams_chunks_and_finalizes_descriptor_without_serialized_bodies() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let mut store = ArtifactStore::open(temp.path(), policy(false)).expect("open store");
+
+    let streaming = store
+        .open_stream(ArtifactStreamOpenRequest {
+            artifact_id: Some("artifact_stream_1".to_string()),
+            payload_kind: ArtifactPayloadKind::Video,
+            media_type: "video/ivf".to_string(),
+            format: None,
+            attribution: attribution(),
+        })
+        .expect("open stream");
+
+    assert_eq!(streaming.lifecycle_state, ArtifactLifecycleState::Streaming);
+    assert_eq!(
+        streaming.stream_handle.as_deref(),
+        Some("artifact-stream://artifact_stream_1")
+    );
+    assert!(streaming.read_handle.is_none());
+
+    let first_chunk = store
+        .append_stream_chunk(ArtifactStreamChunkWriteRequest {
+            artifact_id: "artifact_stream_1".to_string(),
+            sequence: 0,
+            body: b"chunk-one".to_vec(),
+        })
+        .expect("append first chunk");
+    let second_chunk = store
+        .append_stream_chunk(ArtifactStreamChunkWriteRequest {
+            artifact_id: "artifact_stream_1".to_string(),
+            sequence: 1,
+            body: b"-chunk-two".to_vec(),
+        })
+        .expect("append second chunk");
+
+    assert_eq!(first_chunk.byte_length, 9);
+    assert_eq!(second_chunk.sequence, 1);
+    assert!(first_chunk.content_hash.is_some());
+    assert!(!serde_json::to_string(&first_chunk)
+        .expect("serialize chunk metadata")
+        .contains("chunk-one"));
+    assert_eq!(store.stats().streaming_body_bytes, 19);
+    assert!(matches!(
+        store.read_body(ArtifactReadRequest {
+            artifact_id: "artifact_stream_1".to_string(),
+            byte_range_start: None,
+            byte_range_end_exclusive: None,
+        }),
+        Err(ArtifactStoreError::BodyUnavailable { .. })
+    ));
+
+    let manifest = std::fs::read_to_string(temp.path().join("manifest.json")).expect("manifest");
+    assert!(!manifest.contains("chunk-one"));
+    assert!(!manifest.contains("chunk-two"));
+
+    let finalized = store
+        .finalize_stream(ArtifactStreamFinalizeRequest {
+            artifact_id: "artifact_stream_1".to_string(),
+        })
+        .expect("finalize stream");
+    assert_eq!(finalized.lifecycle_state, ArtifactLifecycleState::Retained);
+    assert_eq!(finalized.byte_length, Some(19));
+    assert!(finalized.stream_handle.is_none());
+    assert_eq!(
+        finalized.read_handle.as_deref(),
+        Some("artifact-read://artifact_stream_1")
+    );
+
+    let read = store
+        .read_body(ArtifactReadRequest {
+            artifact_id: "artifact_stream_1".to_string(),
+            byte_range_start: None,
+            byte_range_end_exclusive: None,
+        })
+        .expect("read finalized stream");
+    assert_eq!(read.body, b"chunk-one-chunk-two".to_vec());
+    assert!(!serde_json::to_string(&finalized)
+        .expect("serialize descriptor")
+        .contains("chunk-one"));
+    assert!(!serde_json::to_string(&read.response)
+        .expect("serialize read metadata")
+        .contains("chunk-one"));
+    assert_eq!(store.stats().streaming_body_count, 0);
+    assert_eq!(store.stats().retained_body_count, 1);
+}
+
+#[test]
+fn artifact_store_accounts_for_memory_cache_and_enforces_budget() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let mut cache_policy = policy(false);
+    cache_policy.spill_threshold_bytes = Some(8);
+    cache_policy.max_memory_bytes = Some(10);
+    let mut store = ArtifactStore::open(temp.path(), cache_policy).expect("open store");
+
+    for (artifact_id, body) in [
+        ("cache_a", b"1234".to_vec()),
+        ("cache_b", b"567890".to_vec()),
+        ("cache_c", b"not-cached-large".to_vec()),
+    ] {
+        store
+            .write_artifact(ArtifactWriteRequest {
+                artifact_id: Some(artifact_id.to_string()),
+                payload_kind: ArtifactPayloadKind::GenericBinary,
+                media_type: "application/octet-stream".to_string(),
+                format: None,
+                attribution: attribution(),
+                body,
+            })
+            .expect("write artifact");
+    }
+
+    let stats = store.stats();
+    assert_eq!(stats.retained_body_count, 3);
+    assert_eq!(stats.memory_cache_body_count, 2);
+    assert_eq!(stats.memory_cache_body_bytes, 10);
+
+    store
+        .write_artifact(ArtifactWriteRequest {
+            artifact_id: Some("cache_d".to_string()),
+            payload_kind: ArtifactPayloadKind::GenericBinary,
+            media_type: "application/octet-stream".to_string(),
+            format: None,
+            attribution: attribution(),
+            body: b"xx".to_vec(),
+        })
+        .expect("write uncached small artifact when budget is full");
+    let stats = store.stats();
+    assert_eq!(stats.retained_body_count, 4);
+    assert_eq!(stats.memory_cache_body_count, 2);
+    assert_eq!(stats.memory_cache_body_bytes, 10);
+
+    let reopened = ArtifactStore::open(temp.path(), store.policy().clone()).expect("reopen store");
+    let reopened_stats = reopened.stats();
+    assert_eq!(reopened_stats.memory_cache_body_count, 2);
+    assert_eq!(reopened_stats.memory_cache_body_bytes, 10);
+}
+
+#[test]
+fn artifact_store_cleanup_evicts_memory_cache_and_read_handle_body() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let mut cleanup_policy = policy(false);
+    cleanup_policy.ttl_seconds = Some(1);
+    cleanup_policy.spill_threshold_bytes = Some(32);
+    cleanup_policy.max_memory_bytes = Some(32);
+    let mut store = ArtifactStore::open(temp.path(), cleanup_policy).expect("open store");
+
+    store
+        .write_artifact(ArtifactWriteRequest {
+            artifact_id: Some("cleanup_cached".to_string()),
+            payload_kind: ArtifactPayloadKind::GenericBinary,
+            media_type: "application/octet-stream".to_string(),
+            format: None,
+            attribution: attribution(),
+            body: b"cached-body".to_vec(),
+        })
+        .expect("write artifact");
+    assert_eq!(store.stats().memory_cache_body_count, 1);
+
+    assert_eq!(store.apply_retention_cleanup(u64::MAX).expect("cleanup"), 1);
+    let stats = store.stats();
+    assert_eq!(stats.metadata_only_count, 1);
+    assert_eq!(stats.memory_cache_body_count, 0);
+    assert!(matches!(
+        store.read_body(ArtifactReadRequest {
+            artifact_id: "cleanup_cached".to_string(),
+            byte_range_start: None,
+            byte_range_end_exclusive: None,
+        }),
+        Err(ArtifactStoreError::BodyUnavailable { .. })
+    ));
+    let descriptor = store.descriptor("cleanup_cached").expect("descriptor");
+    assert_eq!(
+        descriptor.retention_state,
+        IoArtifactRetentionState::Deleted
+    );
+    assert!(descriptor.read_handle.is_none());
+}
+
+#[test]
+fn workflow_service_stream_facade_finalizes_readable_artifact() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let store = ArtifactStore::open(temp.path(), policy(false)).expect("open store");
+    let service = WorkflowService::new().with_artifact_store(store);
+
+    service
+        .open_artifact_stream(ArtifactStreamOpenRequest {
+            artifact_id: Some("service_stream".to_string()),
+            payload_kind: ArtifactPayloadKind::Audio,
+            media_type: "audio/ogg".to_string(),
+            format: None,
+            attribution: attribution(),
+        })
+        .expect("open stream through service");
+    service
+        .append_artifact_stream_chunk(ArtifactStreamChunkWriteRequest {
+            artifact_id: "service_stream".to_string(),
+            sequence: 0,
+            body: b"audio".to_vec(),
+        })
+        .expect("append stream through service");
+    let descriptor = service
+        .finalize_artifact_stream(ArtifactStreamFinalizeRequest {
+            artifact_id: "service_stream".to_string(),
+        })
+        .expect("finalize stream through service");
+    assert_eq!(descriptor.lifecycle_state, ArtifactLifecycleState::Retained);
+
+    let body = service
+        .read_artifact_body(ArtifactReadRequest {
+            artifact_id: "service_stream".to_string(),
+            byte_range_start: None,
+            byte_range_end_exclusive: None,
+        })
+        .expect("read through service");
+    assert_eq!(body.body, b"audio".to_vec());
 }

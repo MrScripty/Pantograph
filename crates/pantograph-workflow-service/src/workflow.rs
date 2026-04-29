@@ -39,7 +39,9 @@ mod workflow_run_api;
 
 pub use self::artifact_contracts::*;
 pub use self::artifact_store::{
-    ArtifactBodyRead, ArtifactStore, ArtifactStoreError, ArtifactStoreStats, ArtifactWriteRequest,
+    ArtifactBodyRead, ArtifactStore, ArtifactStoreError, ArtifactStoreStats,
+    ArtifactStreamChunkWriteRequest, ArtifactStreamFinalizeRequest, ArtifactStreamOpenRequest,
+    ArtifactWriteRequest,
 };
 pub use self::contracts::*;
 pub use self::diagnostics_api::{

@@ -2,7 +2,9 @@ use super::{
     ArtifactBodyRead, ArtifactConsumeAcknowledgementRequest,
     ArtifactConsumeAcknowledgementResponse, ArtifactDescriptor, ArtifactDescriptorQueryRequest,
     ArtifactDescriptorQueryResponse, ArtifactPolicy, ArtifactReadRequest, ArtifactStoreError,
-    ArtifactStoreStats, ArtifactWriteRequest, WorkflowService, WorkflowServiceError,
+    ArtifactStoreStats, ArtifactStreamChunkRecord, ArtifactStreamChunkWriteRequest,
+    ArtifactStreamFinalizeRequest, ArtifactStreamOpenRequest, ArtifactWriteRequest,
+    WorkflowService, WorkflowServiceError,
 };
 
 impl WorkflowService {
@@ -33,6 +35,33 @@ impl WorkflowService {
     ) -> Result<ArtifactBodyRead, WorkflowServiceError> {
         self.artifact_store_guard()?
             .read_body(request)
+            .map_err(artifact_store_error)
+    }
+
+    pub fn open_artifact_stream(
+        &self,
+        request: ArtifactStreamOpenRequest,
+    ) -> Result<ArtifactDescriptor, WorkflowServiceError> {
+        self.artifact_store_guard()?
+            .open_stream(request)
+            .map_err(artifact_store_error)
+    }
+
+    pub fn append_artifact_stream_chunk(
+        &self,
+        request: ArtifactStreamChunkWriteRequest,
+    ) -> Result<ArtifactStreamChunkRecord, WorkflowServiceError> {
+        self.artifact_store_guard()?
+            .append_stream_chunk(request)
+            .map_err(artifact_store_error)
+    }
+
+    pub fn finalize_artifact_stream(
+        &self,
+        request: ArtifactStreamFinalizeRequest,
+    ) -> Result<ArtifactDescriptor, WorkflowServiceError> {
+        self.artifact_store_guard()?
+            .finalize_stream(request)
             .map_err(artifact_store_error)
     }
 
@@ -78,6 +107,9 @@ fn artifact_store_error(error: ArtifactStoreError) -> WorkflowServiceError {
         | ArtifactStoreError::NotFound { .. }
         | ArtifactStoreError::BodyUnavailable { .. }
         | ArtifactStoreError::ArtifactTooLarge { .. }
+        | ArtifactStoreError::DiskLimitExceeded { .. }
+        | ArtifactStoreError::StreamNotWritable { .. }
+        | ArtifactStoreError::InvalidStreamSequence { .. }
         | ArtifactStoreError::InvalidByteRange => {
             WorkflowServiceError::InvalidRequest(error.to_string())
         }
