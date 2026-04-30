@@ -19,17 +19,18 @@ use pantograph_workflow_service::{
     ArtifactFormatDependencyVersions, ArtifactFormatSettingsQueryRequest,
     ArtifactFormatSettingsQueryResponse, ArtifactFormatSettingsUpdateRequest,
     ArtifactFormatSettingsUpdateResponse, ArtifactPolicy, ArtifactReadRequest, ArtifactStoreStats,
-    ArtifactStreamBodyRead, ArtifactStreamReadRequest, WorkflowAdminQueueCancelRequest,
-    WorkflowAdminQueueCancelResponse, WorkflowAdminQueuePushFrontRequest,
-    WorkflowAdminQueuePushFrontResponse, WorkflowAdminQueueReprioritizeRequest,
-    WorkflowAdminQueueReprioritizeResponse, WorkflowCapabilitiesRequest,
-    WorkflowCapabilitiesResponse, WorkflowExecutionSessionCloseRequest,
-    WorkflowExecutionSessionCloseResponse, WorkflowExecutionSessionCreateRequest,
-    WorkflowExecutionSessionCreateResponse, WorkflowExecutionSessionKeepAliveRequest,
-    WorkflowExecutionSessionKeepAliveResponse, WorkflowExecutionSessionQueueCancelRequest,
-    WorkflowExecutionSessionQueueCancelResponse, WorkflowExecutionSessionQueueListRequest,
-    WorkflowExecutionSessionQueueListResponse, WorkflowExecutionSessionQueuePushFrontRequest,
-    WorkflowExecutionSessionQueuePushFrontResponse,
+    ArtifactStreamBodyRead, ArtifactStreamReadRequest, BucketSelection, ClientRegistrationRequest,
+    ClientSessionOpenRequest, WorkflowAdminQueueCancelRequest, WorkflowAdminQueueCancelResponse,
+    WorkflowAdminQueuePushFrontRequest, WorkflowAdminQueuePushFrontResponse,
+    WorkflowAdminQueueReprioritizeRequest, WorkflowAdminQueueReprioritizeResponse,
+    WorkflowCapabilitiesRequest, WorkflowCapabilitiesResponse,
+    WorkflowExecutionSessionAttributedCreateRequest, WorkflowExecutionSessionAttributionRequest,
+    WorkflowExecutionSessionCloseRequest, WorkflowExecutionSessionCloseResponse,
+    WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionCreateResponse,
+    WorkflowExecutionSessionKeepAliveRequest, WorkflowExecutionSessionKeepAliveResponse,
+    WorkflowExecutionSessionQueueCancelRequest, WorkflowExecutionSessionQueueCancelResponse,
+    WorkflowExecutionSessionQueueListRequest, WorkflowExecutionSessionQueueListResponse,
+    WorkflowExecutionSessionQueuePushFrontRequest, WorkflowExecutionSessionQueuePushFrontResponse,
     WorkflowExecutionSessionQueueReprioritizeRequest,
     WorkflowExecutionSessionQueueReprioritizeResponse, WorkflowExecutionSessionRunRequest,
     WorkflowExecutionSessionStaleCleanupRequest, WorkflowExecutionSessionStaleCleanupResponse,
@@ -148,8 +149,33 @@ pub async fn workflow_create_execution_session(
         None,
     )
     .await?;
+    let registration = runtime
+        .register_attribution_client(ClientRegistrationRequest {
+            display_name: Some("Pantograph Desktop".to_string()),
+            metadata_json: Some(r#"{"source":"tauri_workflow_command"}"#.to_string()),
+        })
+        .map_err(workflow_error_json)?;
+    let credential = registration.credential_proof_request();
+    let opened = runtime
+        .open_client_session(ClientSessionOpenRequest {
+            credential: credential.clone(),
+            takeover: true,
+            reason: Some("desktop workflow execution session".to_string()),
+        })
+        .map_err(workflow_error_json)?;
     runtime
-        .create_workflow_execution_session(request)
+        .create_attributed_workflow_execution_session(
+            WorkflowExecutionSessionAttributedCreateRequest {
+                workflow_id: request.workflow_id,
+                usage_profile: request.usage_profile,
+                keep_alive: request.keep_alive,
+                attribution: WorkflowExecutionSessionAttributionRequest {
+                    credential,
+                    client_session_id: opened.session.client_session_id.as_str().to_string(),
+                    bucket_selection: BucketSelection::Default,
+                },
+            },
+        )
         .await
         .map_err(workflow_error_json)
 }

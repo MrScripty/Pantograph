@@ -8,14 +8,14 @@ use pantograph_workflow_service::{
     BucketCreateRequest, BucketDeleteRequest, BucketRecord, ClientRegistrationRequest,
     ClientRegistrationResponse, ClientSessionOpenRequest, ClientSessionOpenResponse,
     ClientSessionRecord, ClientSessionResumeRequest, WorkflowCapabilitiesRequest,
-    WorkflowCapabilitiesResponse, WorkflowExecutionSessionCloseRequest,
-    WorkflowExecutionSessionCloseResponse, WorkflowExecutionSessionCreateRequest,
-    WorkflowExecutionSessionCreateResponse, WorkflowExecutionSessionInspectionRequest,
-    WorkflowExecutionSessionInspectionResponse, WorkflowExecutionSessionKeepAliveRequest,
-    WorkflowExecutionSessionKeepAliveResponse, WorkflowExecutionSessionQueueCancelRequest,
-    WorkflowExecutionSessionQueueCancelResponse, WorkflowExecutionSessionQueueListRequest,
-    WorkflowExecutionSessionQueueListResponse, WorkflowExecutionSessionQueuePushFrontRequest,
-    WorkflowExecutionSessionQueuePushFrontResponse,
+    WorkflowCapabilitiesResponse, WorkflowExecutionSessionAttributedCreateRequest,
+    WorkflowExecutionSessionCloseRequest, WorkflowExecutionSessionCloseResponse,
+    WorkflowExecutionSessionCreateRequest, WorkflowExecutionSessionCreateResponse,
+    WorkflowExecutionSessionInspectionRequest, WorkflowExecutionSessionInspectionResponse,
+    WorkflowExecutionSessionKeepAliveRequest, WorkflowExecutionSessionKeepAliveResponse,
+    WorkflowExecutionSessionQueueCancelRequest, WorkflowExecutionSessionQueueCancelResponse,
+    WorkflowExecutionSessionQueueListRequest, WorkflowExecutionSessionQueueListResponse,
+    WorkflowExecutionSessionQueuePushFrontRequest, WorkflowExecutionSessionQueuePushFrontResponse,
     WorkflowExecutionSessionQueueReprioritizeRequest,
     WorkflowExecutionSessionQueueReprioritizeResponse, WorkflowExecutionSessionRunRequest,
     WorkflowExecutionSessionStaleCleanupRequest, WorkflowExecutionSessionStaleCleanupResponse,
@@ -159,6 +159,15 @@ impl EmbeddedRuntime {
     ) -> Result<WorkflowExecutionSessionCreateResponse, WorkflowServiceError> {
         self.workflow_service
             .create_workflow_execution_session(&self.host(), request)
+            .await
+    }
+
+    pub async fn create_attributed_workflow_execution_session(
+        &self,
+        request: WorkflowExecutionSessionAttributedCreateRequest,
+    ) -> Result<WorkflowExecutionSessionCreateResponse, WorkflowServiceError> {
+        self.workflow_service
+            .create_attributed_workflow_execution_session(&self.host(), request)
             .await
     }
 

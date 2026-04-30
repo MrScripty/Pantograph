@@ -152,6 +152,9 @@ pub(crate) fn migrate_schema(
         return Err(DiagnosticsLedgerError::UnsupportedSchemaVersion { found });
     }
     if found == SCHEMA_VERSION {
+        let tx = conn.transaction()?;
+        apply_latest_idempotent_schema_repairs(&tx)?;
+        tx.commit()?;
         return Ok(());
     }
 
@@ -235,6 +238,7 @@ pub(crate) fn migrate_schema(
     if found < 21 {
         apply_scheduler_model_cache_projection_migration(&tx)?;
     }
+    apply_latest_idempotent_schema_repairs(&tx)?;
     if found < SCHEMA_VERSION {
         tx.execute(
             "INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
@@ -243,6 +247,14 @@ pub(crate) fn migrate_schema(
         )?;
     }
     tx.commit()?;
+    Ok(())
+}
+
+fn apply_latest_idempotent_schema_repairs(
+    tx: &Transaction<'_>,
+) -> Result<(), DiagnosticsLedgerError> {
+    apply_io_artifact_retention_state_migration(tx)?;
+    apply_io_artifact_endpoint_migration(tx)?;
     Ok(())
 }
 

@@ -288,6 +288,37 @@ fn workflow_run_list_query_validates_bounds() {
 }
 
 #[test]
+fn workflow_marks_abandoned_nonterminal_runs_failed() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_run_snapshot_event())
+        .expect("run snapshot event");
+    ledger
+        .append_diagnostic_event(sample_scheduler_queue_event())
+        .expect("scheduler queue event");
+    ledger
+        .append_diagnostic_event(sample_run_started_event())
+        .expect("run started event");
+    let service = WorkflowService::new().with_diagnostics_ledger(ledger);
+
+    let repaired = service
+        .workflow_mark_abandoned_nonterminal_runs("startup repair")
+        .expect("abandoned run repair succeeds");
+
+    assert_eq!(repaired, 1);
+    let response = service
+        .workflow_run_list_query(WorkflowRunListQueryRequest {
+            workflow_id: Some("workflow-a".to_string()),
+            limit: Some(10),
+            projection_batch_size: Some(10),
+            ..WorkflowRunListQueryRequest::default()
+        })
+        .expect("run list query");
+    assert_eq!(response.runs.len(), 1);
+    assert_eq!(response.runs[0].status, RunListProjectionStatus::Failed);
+}
+
+#[test]
 fn workflow_run_detail_query_drains_and_reads_projection() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     ledger

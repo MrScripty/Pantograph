@@ -2145,6 +2145,68 @@ fn existing_v14_schema_adds_io_artifact_retention_state_columns() {
 }
 
 #[test]
+fn current_schema_repairs_missing_io_artifact_metadata_columns() {
+    let temp = tempfile::NamedTempFile::new().expect("temp file");
+    let path = temp.path().to_path_buf();
+    {
+        let conn = Connection::open(&path).expect("connection opens");
+        conn.execute_batch(
+            "CREATE TABLE ledger_schema_migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at_ms INTEGER NOT NULL,
+                checksum TEXT NOT NULL
+            );
+            INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
+            VALUES (22, 0, 'pantograph-diagnostics-ledger-v22');
+            CREATE TABLE io_artifact_projection (
+                event_seq INTEGER PRIMARY KEY,
+                event_id TEXT NOT NULL UNIQUE,
+                occurred_at_ms INTEGER NOT NULL,
+                recorded_at_ms INTEGER NOT NULL,
+                workflow_run_id TEXT NOT NULL,
+                workflow_id TEXT NOT NULL,
+                artifact_id TEXT NOT NULL,
+                artifact_role TEXT NOT NULL,
+                retention_state TEXT NOT NULL,
+                payload_ref TEXT
+            );",
+        )
+        .expect("current schema marker and drifted artifact table are installed");
+    }
+    {
+        let _ledger = SqliteDiagnosticsLedger::open(&path).expect("ledger repairs schema drift");
+    }
+    let conn = Connection::open(&path).expect("connection reopens");
+
+    for column in [
+        "producer_node_id",
+        "producer_port_id",
+        "consumer_node_id",
+        "consumer_port_id",
+        "payload_kind",
+        "lifecycle_state",
+        "access_modes_json",
+        "read_handle",
+        "stream_handle",
+        "format_json",
+    ] {
+        assert!(sqlite_column_exists(
+            &conn,
+            "io_artifact_projection",
+            column
+        ));
+    }
+    assert!(sqlite_index_exists(
+        &conn,
+        "idx_io_artifact_projection_producer_seq"
+    ));
+    assert!(sqlite_index_exists(
+        &conn,
+        "idx_io_artifact_projection_retention_state_seq"
+    ));
+}
+
+#[test]
 fn existing_v15_schema_adds_retention_policy_version() {
     let temp = tempfile::NamedTempFile::new().expect("temp file");
     let path = temp.path().to_path_buf();

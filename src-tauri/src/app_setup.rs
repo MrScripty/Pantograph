@@ -58,6 +58,17 @@ pub fn run_app() -> AppStartupResult<()> {
                     workflow_timing_ledger_path
                 ))
             })?;
+    let workflow_attribution_store_path = pantograph_data_dir.join("workflow-attribution.sqlite");
+    let workflow_attribution_store =
+        pantograph_workflow_service::workflow::SqliteAttributionStore::open(
+            &workflow_attribution_store_path,
+        )
+        .map_err(|error| {
+            startup_error(format!(
+                "failed to open workflow attribution store {:?}: {error}",
+                workflow_attribution_store_path
+            ))
+        })?;
     let workflow_artifact_store_path = pantograph_data_dir.join("artifacts");
     let workflow_artifact_store = pantograph_workflow_service::ArtifactStore::open(
         &workflow_artifact_store_path,
@@ -72,6 +83,7 @@ pub fn run_app() -> AppStartupResult<()> {
     let workflow_service: workflow::commands::SharedWorkflowService = Arc::new(
         pantograph_workflow_service::WorkflowService::new()
             .with_artifact_store(workflow_artifact_store)
+            .with_attribution_store(workflow_attribution_store)
             .with_diagnostics_ledger(workflow_service_ledger)
             .with_artifact_format_settings_path(
                 pantograph_data_dir.join("artifact-format-settings.json"),
@@ -100,6 +112,17 @@ pub fn run_app() -> AppStartupResult<()> {
             "failed to load managed media dependency versions: {error}"
         ))
     })?;
+    match workflow_service.workflow_mark_abandoned_nonterminal_runs(
+        "Pantograph restarted before this workflow run reached a terminal state",
+    ) {
+        Ok(repaired) if repaired > 0 => {
+            log::warn!("marked {repaired} abandoned workflow run(s) failed during startup repair");
+        }
+        Ok(_) => {}
+        Err(error) => {
+            log::warn!("failed to repair abandoned workflow run diagnostics: {error}");
+        }
+    }
     let workflow_timing_ledger =
         pantograph_workflow_service::SqliteDiagnosticsLedger::open(&workflow_timing_ledger_path)
             .map_err(|error| {
@@ -201,6 +224,12 @@ pub fn run_app() -> AppStartupResult<()> {
                 let app_data_dir = app.path().app_data_dir().map_err(|error| {
                     startup_error(format!("failed to resolve app data dir: {error}"))
                 })?;
+
+                if let Err(err) =
+                    inference::reconcile_interrupted_managed_runtime_jobs(&app_data_dir)
+                {
+                    log::warn!("Failed to reconcile interrupted managed runtime jobs: {err}");
+                }
 
                 // Clean up any lingering sidecar processes from previous runs
                 if let Err(err) = inference::LlamaServer::cleanup_stale_sidecar(&app_data_dir) {

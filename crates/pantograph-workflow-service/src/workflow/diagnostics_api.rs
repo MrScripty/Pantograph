@@ -10,14 +10,19 @@ use pantograph_diagnostics_ledger::{
     NodeStatusProjectionQuery, NodeStatusProjectionRecord, ProjectionStateRecord, RetentionClass,
     RetentionPolicyActorScope, RetentionPolicyChangedPayload, RunDetailProjectionQuery,
     RunDetailProjectionRecord, RunListFacetRecord, RunListProjectionQuery, RunListProjectionRecord,
-    RunListProjectionStatus, SchedulerModelCacheState, SchedulerTimelineProjectionQuery,
-    SchedulerTimelineProjectionRecord, UpdateRetentionPolicyCommand,
+    RunListProjectionStatus, RunTerminalPayload, RunTerminalStatus, SchedulerModelCacheState,
+    SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
+    UpdateRetentionPolicyCommand,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::scheduler::unix_timestamp_ms;
 
 use super::{WorkflowService, WorkflowServiceError};
+
+const STARTUP_REPAIR_RUN_QUERY_LIMIT: u32 = 500;
+const STARTUP_REPAIR_DRAIN_BATCH_SIZE: u32 = 500;
+const STARTUP_REPAIR_MAX_DRAIN_PASSES: usize = 100;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
@@ -369,6 +374,80 @@ pub struct WorkflowRetentionCleanupResponse {
 }
 
 impl WorkflowService {
+    pub fn workflow_mark_abandoned_nonterminal_runs(
+        &self,
+        reason: &str,
+    ) -> Result<usize, WorkflowServiceError> {
+        let now_ms = unix_timestamp_ms() as i64;
+        let mut ledger = self.diagnostics_ledger_guard()?;
+        drain_run_list_projection_until_idle(&mut *ledger)?;
+
+        let mut repaired = 0usize;
+        for status in [
+            RunListProjectionStatus::Accepted,
+            RunListProjectionStatus::Future,
+            RunListProjectionStatus::Scheduled,
+            RunListProjectionStatus::Queued,
+            RunListProjectionStatus::Delayed,
+            RunListProjectionStatus::Running,
+        ] {
+            let runs = ledger
+                .query_run_list_projection(RunListProjectionQuery {
+                    status: Some(status),
+                    limit: STARTUP_REPAIR_RUN_QUERY_LIMIT,
+                    ..RunListProjectionQuery::default()
+                })
+                .map_err(WorkflowServiceError::from)?;
+
+            for run in runs {
+                let duration_ms = run
+                    .started_at_ms
+                    .map(|started_at_ms| now_ms.saturating_sub(started_at_ms))
+                    .and_then(|duration| u64::try_from(duration).ok());
+                DiagnosticsLedgerRepository::append_diagnostic_event(
+                    &mut *ledger,
+                    DiagnosticEventAppendRequest {
+                        source_component: DiagnosticEventSourceComponent::WorkflowService,
+                        source_instance_id: Some("workflow-service-startup-repair".to_string()),
+                        occurred_at_ms: now_ms,
+                        workflow_run_id: Some(run.workflow_run_id),
+                        workflow_id: Some(run.workflow_id),
+                        workflow_version_id: run.workflow_version_id,
+                        workflow_semantic_version: run.workflow_semantic_version,
+                        node_id: None,
+                        node_type: None,
+                        node_version: None,
+                        runtime_id: None,
+                        runtime_version: None,
+                        model_id: None,
+                        model_version: None,
+                        client_id: run.client_id,
+                        client_session_id: run.client_session_id,
+                        bucket_id: run.bucket_id,
+                        scheduler_policy_id: run.scheduler_policy_id,
+                        retention_policy_id: run.retention_policy_id,
+                        privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+                        retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+                        payload_ref: None,
+                        payload: DiagnosticEventPayload::RunTerminal(RunTerminalPayload {
+                            status: RunTerminalStatus::Failed,
+                            duration_ms,
+                            error: Some(reason.to_string()),
+                        }),
+                    },
+                )
+                .map_err(WorkflowServiceError::from)?;
+                repaired = repaired.saturating_add(1);
+            }
+        }
+
+        if repaired > 0 {
+            drain_run_list_projection_until_idle(&mut *ledger)?;
+        }
+
+        Ok(repaired)
+    }
+
     pub fn workflow_diagnostics_usage_query(
         &self,
         request: WorkflowDiagnosticsUsageQueryRequest,
@@ -778,6 +857,22 @@ impl WorkflowDiagnosticsUsageQueryRequest {
         query.validate().map_err(WorkflowServiceError::from)?;
         Ok(query)
     }
+}
+
+fn drain_run_list_projection_until_idle(
+    ledger: &mut impl DiagnosticsLedgerRepository,
+) -> Result<(), WorkflowServiceError> {
+    let mut previous_event_seq = -1;
+    for _ in 0..STARTUP_REPAIR_MAX_DRAIN_PASSES {
+        let state = ledger
+            .drain_run_list_projection(STARTUP_REPAIR_DRAIN_BATCH_SIZE)
+            .map_err(WorkflowServiceError::from)?;
+        if state.last_applied_event_seq == previous_event_seq {
+            return Ok(());
+        }
+        previous_event_seq = state.last_applied_event_seq;
+    }
+    Ok(())
 }
 
 impl WorkflowSchedulerTimelineQueryRequest {
