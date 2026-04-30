@@ -8,6 +8,7 @@ use super::{
     ManagedBinaryCapability, ManagedBinaryId, ManagedBinaryInstallState, ManagedRuntimeJobState,
     ManagedRuntimeJobStatus, ManagedRuntimeReadinessState,
 };
+use crate::managed_runtime::managed_runtime_dir;
 use crate::managed_runtime::{
     load_managed_runtime_state, save_managed_runtime_state, ManagedRuntimeHistoryEventKind,
     ManagedRuntimePersistedJobArtifact, ManagedRuntimePersistedVersion,
@@ -360,7 +361,7 @@ fn runtime_install_dir_for_projection_falls_back_when_selected_version_is_missin
 
     assert_eq!(
         resolved_install_dir,
-        temp_dir.path().join("runtimes/llama-cpp")
+        managed_runtime_dir(temp_dir.path()).join("llama-cpp")
     );
 }
 
@@ -451,6 +452,8 @@ fn managed_runtime_snapshot_uses_reconciled_interrupted_job_readiness() {
     });
     save_managed_runtime_state(temp_dir.path(), &state).expect("save runtime state");
 
+    crate::managed_runtime::reconcile_interrupted_managed_runtime_jobs(temp_dir.path())
+        .expect("startup reconcile interrupted job");
     let snapshot = crate::managed_runtime::managed_runtime_snapshot(
         temp_dir.path(),
         ManagedBinaryId::LlamaCpp,

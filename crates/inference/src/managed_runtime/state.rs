@@ -106,8 +106,15 @@ pub fn load_managed_runtime_state(
         state.schema_version = MANAGED_RUNTIME_STATE_SCHEMA_VERSION;
     }
 
-    reconcile_interrupted_jobs(&mut state);
     Ok(state)
+}
+
+pub fn reconcile_interrupted_managed_runtime_jobs(app_data_dir: &Path) -> Result<(), String> {
+    let mut state = load_managed_runtime_state(app_data_dir)?;
+    if reconcile_interrupted_jobs(&mut state) {
+        save_managed_runtime_state(app_data_dir, &state)?;
+    }
+    Ok(())
 }
 
 pub fn save_managed_runtime_state(
@@ -190,7 +197,8 @@ fn temp_state_path(path: &Path) -> PathBuf {
     path.with_file_name(temp_name)
 }
 
-fn reconcile_interrupted_jobs(state: &mut ManagedRuntimePersistedState) {
+fn reconcile_interrupted_jobs(state: &mut ManagedRuntimePersistedState) -> bool {
+    let mut reconciled = false;
     for runtime in &mut state.runtimes {
         let Some(job) = runtime.active_job.as_mut() else {
             continue;
@@ -221,7 +229,9 @@ fn reconcile_interrupted_jobs(state: &mut ManagedRuntimePersistedState) {
                 at_ms: current_unix_timestamp_ms(),
                 detail: Some(detail),
             });
+        reconciled = true;
     }
+    reconciled
 }
 
 fn job_state_requires_recovery(state: ManagedRuntimeJobState) -> bool {
@@ -246,10 +256,11 @@ fn current_unix_timestamp_ms() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::{
-        load_managed_runtime_state, runtime_state_entry, save_managed_runtime_state,
-        ManagedBinaryId, ManagedRuntimeHistoryEventKind, ManagedRuntimeJobState,
-        ManagedRuntimeJobStatus, ManagedRuntimePersistedJobArtifact,
-        ManagedRuntimePersistedRuntime, ManagedRuntimePersistedState, ManagedRuntimeSelectionState,
+        load_managed_runtime_state, reconcile_interrupted_managed_runtime_jobs,
+        runtime_state_entry, save_managed_runtime_state, ManagedBinaryId,
+        ManagedRuntimeHistoryEventKind, ManagedRuntimeJobState, ManagedRuntimeJobStatus,
+        ManagedRuntimePersistedJobArtifact, ManagedRuntimePersistedRuntime,
+        ManagedRuntimePersistedState, ManagedRuntimeSelectionState,
     };
 
     #[test]
@@ -290,7 +301,7 @@ mod tests {
     }
 
     #[test]
-    fn load_reconciles_interrupted_jobs_to_failed() {
+    fn load_preserves_in_progress_jobs_without_reconciling() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let state = ManagedRuntimePersistedState {
             schema_version: 1,
@@ -325,6 +336,55 @@ mod tests {
         };
 
         save_managed_runtime_state(temp_dir.path(), &state).expect("save runtime state");
+        let loaded = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
+        let runtime =
+            runtime_state_entry(&loaded, ManagedBinaryId::LlamaCpp).expect("llama runtime entry");
+        let job = runtime.active_job.as_ref().expect("active job");
+
+        assert_eq!(job.state, ManagedRuntimeJobState::Downloading);
+        assert!(runtime.install_history.is_empty());
+    }
+
+    #[test]
+    fn startup_reconcile_marks_interrupted_jobs_failed_once() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let state = ManagedRuntimePersistedState {
+            schema_version: 1,
+            runtimes: vec![ManagedRuntimePersistedRuntime {
+                id: ManagedBinaryId::LlamaCpp,
+                catalog_versions: Vec::new(),
+                catalog_refreshed_at_ms: None,
+                versions: Vec::new(),
+                selection: ManagedRuntimeSelectionState::default(),
+                active_job: Some(ManagedRuntimeJobStatus {
+                    state: ManagedRuntimeJobState::Downloading,
+                    status: "Downloading".to_string(),
+                    current: 5,
+                    total: 10,
+                    resumable: true,
+                    cancellable: true,
+                    error: None,
+                }),
+                active_job_artifact: Some(ManagedRuntimePersistedJobArtifact {
+                    version: "b8248".to_string(),
+                    archive_name: "llama-b8248.tar.gz".to_string(),
+                    archive_path: temp_dir
+                        .path()
+                        .join("partial-llama.tar.gz")
+                        .display()
+                        .to_string(),
+                    downloaded_bytes: 5,
+                    total_bytes: 10,
+                }),
+                install_history: Vec::new(),
+            }],
+        };
+
+        save_managed_runtime_state(temp_dir.path(), &state).expect("save runtime state");
+        reconcile_interrupted_managed_runtime_jobs(temp_dir.path())
+            .expect("reconcile runtime state");
+        reconcile_interrupted_managed_runtime_jobs(temp_dir.path())
+            .expect("second reconcile is idempotent");
         let loaded = load_managed_runtime_state(temp_dir.path()).expect("load reconciled state");
         let runtime =
             runtime_state_entry(&loaded, ManagedBinaryId::LlamaCpp).expect("llama runtime entry");
@@ -333,9 +393,13 @@ mod tests {
         assert_eq!(job.state, ManagedRuntimeJobState::Failed);
         assert!(job.resumable);
         assert!(runtime.active_job_artifact.is_some());
-        assert!(runtime
-            .install_history
-            .iter()
-            .any(|entry| entry.event == ManagedRuntimeHistoryEventKind::RecoveryReconciled));
+        assert_eq!(
+            runtime
+                .install_history
+                .iter()
+                .filter(|entry| entry.event == ManagedRuntimeHistoryEventKind::RecoveryReconciled)
+                .count(),
+            1
+        );
     }
 }

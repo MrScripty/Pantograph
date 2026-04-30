@@ -25,9 +25,10 @@ pub use operations::{
 };
 pub use paths::managed_runtime_dir;
 pub use state::{
-    load_managed_runtime_state, save_managed_runtime_state, ManagedRuntimeHistoryEventKind,
-    ManagedRuntimeInstallHistoryEntry, ManagedRuntimePersistedJobArtifact,
-    ManagedRuntimePersistedRuntime, ManagedRuntimePersistedState, ManagedRuntimePersistedVersion,
+    load_managed_runtime_state, reconcile_interrupted_managed_runtime_jobs,
+    save_managed_runtime_state, ManagedRuntimeHistoryEventKind, ManagedRuntimeInstallHistoryEntry,
+    ManagedRuntimePersistedJobArtifact, ManagedRuntimePersistedRuntime,
+    ManagedRuntimePersistedState, ManagedRuntimePersistedVersion,
 };
 
 pub(crate) use contracts::{ArchiveKind, ReleaseAsset};
