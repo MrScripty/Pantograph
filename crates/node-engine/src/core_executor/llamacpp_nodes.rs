@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use inference::InferenceGateway;
@@ -55,8 +55,9 @@ pub(crate) async fn execute_llamacpp_inference(
     // Read model-specific inference settings
     let extra_settings = build_extra_settings(inputs);
 
-    // Ensure gateway is ready before sending completion requests.
-    if !gw.is_ready().await {
+    // Ensure the gateway is running the model requested by this node. A ready
+    // llama.cpp gateway may still be serving a previous workflow's model.
+    if !llamacpp_gateway_matches_requested_model(gw, &model_path).await {
         let mut config = inference::BackendConfig {
             model_path: Some(PathBuf::from(&model_path)),
             device: Some("auto".to_string()),
@@ -257,6 +258,35 @@ pub(crate) async fn execute_llamacpp_inference(
     Ok(outputs)
 }
 
+async fn llamacpp_gateway_matches_requested_model(gw: &InferenceGateway, model_path: &str) -> bool {
+    if !gw.is_ready().await || gw.is_embedding_mode().await || gw.is_reranking_mode().await {
+        return false;
+    }
+
+    let Some(config) = gw.restart_runtime_config().await else {
+        return false;
+    };
+    if config.external_url.is_some() {
+        return true;
+    }
+    let Some(active_model_path) = config.model_path.as_deref() else {
+        return false;
+    };
+
+    paths_refer_to_same_file(active_model_path, Path::new(model_path))
+}
+
+fn paths_refer_to_same_file(left: &Path, right: &Path) -> bool {
+    if left == right {
+        return true;
+    }
+
+    match (std::fs::canonicalize(left), std::fs::canonicalize(right)) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => false,
+    }
+}
+
 /// Parse a llama.cpp `/completion` SSE data line into a content token.
 ///
 /// llama.cpp streams `data: {"content": "token", ...}` per line.
@@ -270,4 +300,196 @@ fn parse_llamacpp_sse_content(line: &str) -> Option<String> {
         .and_then(|c| c.as_str())
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use async_trait::async_trait;
+    use futures_util::{stream, Stream};
+    use inference::backend::{
+        BackendCapabilities, BackendConfig, BackendError, BackendStartOutcome, ChatChunk,
+        EmbeddingResult, InferenceBackend,
+    };
+    use inference::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
+    use inference::{InferenceGateway, RerankRequest, RerankResponse};
+    use std::pin::Pin;
+    use std::sync::Arc;
+
+    struct MockProcessHandle;
+
+    impl ProcessHandle for MockProcessHandle {
+        fn pid(&self) -> u32 {
+            1
+        }
+
+        fn kill(&self) -> std::result::Result<(), String> {
+            Ok(())
+        }
+    }
+
+    struct MockProcessSpawner;
+
+    #[async_trait]
+    impl ProcessSpawner for MockProcessSpawner {
+        async fn spawn_sidecar(
+            &self,
+            _sidecar_name: &str,
+            _args: &[&str],
+        ) -> std::result::Result<
+            (
+                tokio::sync::mpsc::Receiver<ProcessEvent>,
+                Box<dyn ProcessHandle>,
+            ),
+            String,
+        > {
+            let (_tx, rx) = tokio::sync::mpsc::channel(1);
+            Ok((rx, Box::new(MockProcessHandle)))
+        }
+
+        fn app_data_dir(&self) -> std::result::Result<PathBuf, String> {
+            Ok(std::env::temp_dir())
+        }
+
+        fn binaries_dir(&self) -> std::result::Result<PathBuf, String> {
+            Ok(std::env::temp_dir())
+        }
+    }
+
+    struct MockReadyBackend {
+        ready: bool,
+    }
+
+    #[async_trait]
+    impl InferenceBackend for MockReadyBackend {
+        fn name(&self) -> &'static str {
+            "llama.cpp"
+        }
+
+        fn description(&self) -> &'static str {
+            "Mock llama.cpp backend"
+        }
+
+        fn capabilities(&self) -> BackendCapabilities {
+            BackendCapabilities {
+                streaming: true,
+                external_connection: true,
+                ..BackendCapabilities::default()
+            }
+        }
+
+        async fn start(
+            &mut self,
+            _config: &BackendConfig,
+            _spawner: Arc<dyn ProcessSpawner>,
+        ) -> std::result::Result<BackendStartOutcome, BackendError> {
+            self.ready = true;
+            Ok(BackendStartOutcome::default())
+        }
+
+        fn stop(&mut self) {
+            self.ready = false;
+        }
+
+        fn is_ready(&self) -> bool {
+            self.ready
+        }
+
+        async fn health_check(&self) -> bool {
+            self.ready
+        }
+
+        fn base_url(&self) -> Option<String> {
+            Some("http://127.0.0.1:8080".to_string())
+        }
+
+        async fn chat_completion_stream(
+            &self,
+            _request_json: String,
+        ) -> std::result::Result<
+            Pin<Box<dyn Stream<Item = std::result::Result<ChatChunk, BackendError>> + Send>>,
+            BackendError,
+        > {
+            Ok(Box::pin(stream::empty()))
+        }
+
+        async fn embeddings(
+            &self,
+            _texts: Vec<String>,
+            _model: &str,
+        ) -> std::result::Result<Vec<EmbeddingResult>, BackendError> {
+            Ok(Vec::new())
+        }
+
+        async fn rerank(
+            &self,
+            _request: RerankRequest,
+        ) -> std::result::Result<RerankResponse, BackendError> {
+            Ok(RerankResponse {
+                results: Vec::new(),
+                metadata: serde_json::Value::Null,
+            })
+        }
+    }
+
+    fn unique_model_path(name: &str) -> PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "pantograph-node-engine-{name}-{}.gguf",
+            std::process::id()
+        ));
+        std::fs::write(&path, b"gguf").expect("write mock model");
+        path
+    }
+
+    #[tokio::test]
+    async fn gateway_match_requires_active_model_path() {
+        let model_a = unique_model_path("a");
+        let model_b = unique_model_path("b");
+        let gateway = InferenceGateway::with_backend(
+            Box::new(MockReadyBackend { ready: false }),
+            "llama.cpp",
+        );
+        gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+        gateway
+            .start(&BackendConfig {
+                model_path: Some(model_a.clone()),
+                ..BackendConfig::default()
+            })
+            .await
+            .expect("start mock backend");
+
+        assert!(
+            llamacpp_gateway_matches_requested_model(&gateway, &model_a.to_string_lossy()).await
+        );
+        assert!(
+            !llamacpp_gateway_matches_requested_model(&gateway, &model_b.to_string_lossy()).await
+        );
+
+        let _ = std::fs::remove_file(model_a);
+        let _ = std::fs::remove_file(model_b);
+    }
+
+    #[tokio::test]
+    async fn gateway_match_rejects_embedding_runtime() {
+        let model = unique_model_path("embedding");
+        let gateway = InferenceGateway::with_backend(
+            Box::new(MockReadyBackend { ready: false }),
+            "llama.cpp",
+        );
+        gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+        gateway
+            .start(&BackendConfig {
+                model_path: Some(model.clone()),
+                embedding_mode: true,
+                ..BackendConfig::default()
+            })
+            .await
+            .expect("start mock backend");
+
+        assert!(
+            !llamacpp_gateway_matches_requested_model(&gateway, &model.to_string_lossy()).await
+        );
+
+        let _ = std::fs::remove_file(model);
+    }
 }
