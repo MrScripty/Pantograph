@@ -20,7 +20,7 @@ later plan stages fill in richer page bodies.
 | `IoInspectorPage.svelte` | Projection-backed I/O artifact browser, read-only retention detail surface, and cleanup status surface. |
 | `ioInspectorPresenters.ts` | Pure I/O media, payload availability, retention policy/cleanup detail, byte-size, and projection freshness presenters. |
 | `ioInspectorPresenters.test.ts` | Unit coverage for I/O Inspector presentation labels. |
-| `SettingsPage.svelte` | Canonical workbench Settings page for ArtifactStore policy, diagnostics retention policy, artifact format defaults/capabilities, managed media dependency controls, server connection, model paths, device policy, RAG, and sandbox configuration. |
+| `SettingsPage.svelte` | Canonical workbench Settings page for ArtifactStore policy, diagnostics retention policy, artifact format defaults/capabilities, managed inference runtime controls, managed media dependency controls, server connection, model paths, device policy, RAG, and sandbox configuration. |
 | `settingsPagePresenters.ts` | Pure Settings page byte/duration labels, capability option labels, policy rows, managed media dependency rows, and numeric field validation helpers. |
 | `settingsPagePresenters.test.ts` | Unit coverage for Settings page presentation labels, managed media dependency labels, and validation helpers. |
 | `LibraryPage.svelte` | Projection-backed Library usage and audit table with active-run highlighting and audited Pumas search/download/delete actions. |
@@ -59,10 +59,10 @@ grow separate navigation and selection models.
   or Library mutations. Audited Pumas actions must call typed workflow service
   commands and refresh projection state after confirmed backend responses.
 - The workbench Settings page is the canonical owner for persistent
-  ArtifactStore policy, artifact format defaults, server connection, model
-  paths, device policy, RAG, and sandbox configuration. It must call typed
-  backend commands and capability DTOs instead of hardcoding media option
-  lists.
+  ArtifactStore policy, artifact format defaults, managed inference runtimes,
+  server connection, model paths, device policy, RAG, and sandbox configuration.
+  It must call typed backend commands and capability DTOs instead of hardcoding
+  media option lists.
 - Managed media dependency controls for `ffmpeg`, `ocioconvert`, `oiiotool`,
   and OpenColorIO must stay on the workbench Settings page and use backend
   command responses as the source of truth.

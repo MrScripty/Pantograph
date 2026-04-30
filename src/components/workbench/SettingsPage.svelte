@@ -4,6 +4,7 @@
   import DeviceConfig from '../DeviceConfig.svelte';
   import ModelConfig from '../ModelConfig.svelte';
   import RagStatus from '../RagStatus.svelte';
+  import ManagedRuntimePanel from '../runtime-manager/ManagedRuntimePanel.svelte';
   import SandboxSettings from '../SandboxSettings.svelte';
   import ServerStatus from '../ServerStatus.svelte';
   import type { DiagnosticsRetentionPolicy } from '../../services/diagnostics/types';
@@ -686,7 +687,7 @@
     <div class="min-w-0">
       <h1 class="text-base font-semibold text-neutral-100">Settings</h1>
       <div class="mt-1 truncate text-xs text-neutral-500">
-        ArtifactStore policy, media artifact defaults, and managed media dependencies
+        ArtifactStore policy, media artifact defaults, managed inference runtimes, and media dependencies
       </div>
     </div>
     <button
@@ -717,7 +718,7 @@
         </div>
         <div class="grid gap-4 2xl:grid-cols-2">
           <div class="space-y-4">
-            <ServerStatus />
+            <ServerStatus showManagedRuntimePanel={false} />
             <ModelConfig />
           </div>
           <div class="space-y-4">
@@ -1145,6 +1146,16 @@
       </form>
 
       <section class="border-t border-neutral-900 px-4 py-4">
+        <div class="mb-4">
+          <h2 class="text-sm font-semibold text-neutral-100">Managed Inference Runtimes</h2>
+          <div class="mt-1 text-xs text-neutral-500">
+            Install and select sidecar backends required by scheduler workflows, including llama.cpp.
+          </div>
+        </div>
+        <ManagedRuntimePanel />
+      </section>
+
+      <section class="border-t border-neutral-900 px-4 py-4">
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 class="text-sm font-semibold text-neutral-100">Managed Media Dependencies</h2>
@@ -1279,7 +1290,16 @@
                   type="button"
                   class="inline-flex items-center gap-2 rounded border border-cyan-800 bg-cyan-950 px-2.5 py-1.5 text-xs text-cyan-100 transition-colors hover:border-cyan-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
                   onclick={() => installManagedMediaDependency(dependency)}
-                  disabled={loading || actionBusy}
+                  title={
+                    managedMediaDrafts[dependency.id].staging_dir.trim().length === 0
+                      ? 'A local staging directory is required for this manual install path'
+                      : 'Install from local staging directory'
+                  }
+                  disabled={
+                    loading ||
+                    actionBusy ||
+                    managedMediaDrafts[dependency.id].staging_dir.trim().length === 0
+                  }
                 >
                   <Upload size={13} aria-hidden="true" />
                   Install From Staging

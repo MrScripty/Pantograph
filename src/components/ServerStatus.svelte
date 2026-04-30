@@ -18,6 +18,8 @@
   import RuntimeSnapshotGrid from './server-status/RuntimeSnapshotGrid.svelte';
   import { expandedSection, toggleSection } from '../stores/accordionStore';
 
+  let { showManagedRuntimePanel = true }: { showManagedRuntimePanel?: boolean } = $props();
+
   let llmState: LLMState = $state(LLMService.getState());
   let configState: ConfigState = $state(ConfigService.getState());
   let healthState: HealthMonitorState = $state(HealthMonitorService.getState());
@@ -200,7 +202,9 @@
       {:else}
         <div class="space-y-3">
           <BackendSelector />
-          <ManagedRuntimePanel />
+          {#if showManagedRuntimePanel}
+            <ManagedRuntimePanel />
+          {/if}
         </div>
       {/if}
 
