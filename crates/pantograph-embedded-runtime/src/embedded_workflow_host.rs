@@ -152,6 +152,8 @@ impl WorkflowHost for EmbeddedWorkflowHost {
     ) -> Result<(), WorkflowServiceError> {
         self.ensure_workflow_runtime_ready_for_session_load(workflow_id)
             .await?;
+        self.ensure_workflow_inference_model_loaded(workflow_id)
+            .await?;
         self.reserve_loaded_session_runtime(session_id, workflow_id, usage_profile, retention_hint)
             .await
     }

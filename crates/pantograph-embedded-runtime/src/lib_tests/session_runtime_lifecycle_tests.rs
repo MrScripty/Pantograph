@@ -20,6 +20,222 @@ fn mock_runtime_capability() -> WorkflowRuntimeCapability {
     }
 }
 
+fn llama_runtime_capability() -> WorkflowRuntimeCapability {
+    WorkflowRuntimeCapability {
+        runtime_id: "llama_cpp".to_string(),
+        display_name: "llama.cpp".to_string(),
+        install_state: WorkflowRuntimeInstallState::Installed,
+        available: true,
+        configured: true,
+        can_install: false,
+        can_remove: false,
+        source_kind: WorkflowRuntimeSourceKind::Host,
+        selected: true,
+        readiness_state: Some(pantograph_workflow_service::WorkflowRuntimeReadinessState::Ready),
+        selected_version: None,
+        supports_external_connection: false,
+        backend_keys: vec!["llama_cpp".to_string()],
+        missing_files: Vec::new(),
+        unavailable_reason: None,
+    }
+}
+
+struct RecordingLlamaBackend {
+    ready: bool,
+    starts: Arc<Mutex<Vec<BackendConfig>>>,
+}
+
+#[async_trait::async_trait]
+impl InferenceBackend for RecordingLlamaBackend {
+    fn name(&self) -> &'static str {
+        "llama.cpp"
+    }
+
+    fn description(&self) -> &'static str {
+        "Recording llama.cpp backend"
+    }
+
+    fn capabilities(&self) -> BackendCapabilities {
+        BackendCapabilities {
+            streaming: true,
+            ..BackendCapabilities::default()
+        }
+    }
+
+    async fn start(
+        &mut self,
+        config: &BackendConfig,
+        _spawner: Arc<dyn ProcessSpawner>,
+    ) -> Result<BackendStartOutcome, BackendError> {
+        self.starts
+            .lock()
+            .expect("starts lock")
+            .push(config.clone());
+        self.ready = true;
+        Ok(BackendStartOutcome {
+            runtime_reused: Some(false),
+            lifecycle_decision_reason: Some("loaded_recorded_llamacpp_model".to_string()),
+        })
+    }
+
+    fn stop(&mut self) {
+        self.ready = false;
+    }
+
+    fn is_ready(&self) -> bool {
+        self.ready
+    }
+
+    async fn health_check(&self) -> bool {
+        self.ready
+    }
+
+    fn base_url(&self) -> Option<String> {
+        Some("http://127.0.0.1:8080".to_string())
+    }
+
+    async fn chat_completion_stream(
+        &self,
+        _request_json: String,
+    ) -> Result<
+        Pin<Box<dyn futures_util::Stream<Item = Result<ChatChunk, BackendError>> + Send>>,
+        BackendError,
+    > {
+        Ok(Box::pin(stream::empty()))
+    }
+
+    async fn embeddings(
+        &self,
+        _texts: Vec<String>,
+        _model: &str,
+    ) -> Result<Vec<EmbeddingResult>, BackendError> {
+        Ok(Vec::new())
+    }
+
+    async fn rerank(&self, _request: RerankRequest) -> Result<RerankResponse, BackendError> {
+        Ok(RerankResponse {
+            results: Vec::new(),
+            metadata: serde_json::Value::Null,
+        })
+    }
+}
+
+fn write_llamacpp_puma_workflow(root: &Path, workflow_id: &str, model_path: &Path) {
+    let workflows_dir = root.join(".pantograph").join("workflows");
+    std::fs::create_dir_all(&workflows_dir).expect("create workflows dir");
+    let workflow_json = serde_json::json!({
+        "version": "1.0",
+        "metadata": {
+            "name": "Llama Workflow",
+            "created": "2026-01-01T00:00:00Z",
+            "modified": "2026-01-01T00:00:00Z"
+        },
+        "graph": {
+            "nodes": [
+                {
+                    "id": "puma-lib-1",
+                    "node_type": "puma-lib",
+                    "data": {
+                        "model_path": model_path.display().to_string(),
+                        "backend_key": "llamacpp",
+                        "recommended_backend": "llamacpp"
+                    },
+                    "position": { "x": 0.0, "y": 0.0 }
+                },
+                {
+                    "id": "llm-1",
+                    "node_type": "llamacpp-inference",
+                    "data": {
+                        "prompt": "hello",
+                        "backend_key": "llamacpp"
+                    },
+                    "position": { "x": 200.0, "y": 0.0 }
+                },
+                {
+                    "id": "text-output-1",
+                    "node_type": "text-output",
+                    "data": {},
+                    "position": { "x": 400.0, "y": 0.0 }
+                }
+            ],
+            "edges": [
+                {
+                    "id": "e-model",
+                    "source": "puma-lib-1",
+                    "source_handle": "model_path",
+                    "target": "llm-1",
+                    "target_handle": "model_path"
+                },
+                {
+                    "id": "e-response",
+                    "source": "llm-1",
+                    "source_handle": "response",
+                    "target": "text-output-1",
+                    "target_handle": "text"
+                }
+            ]
+        }
+    });
+    std::fs::write(
+        workflows_dir.join(format!("{workflow_id}.json")),
+        serde_json::to_vec(&workflow_json).expect("serialize workflow"),
+    )
+    .expect("write workflow");
+}
+
+#[tokio::test]
+async fn session_runtime_load_starts_llamacpp_model_from_puma_lib_graph() {
+    let temp = TempDir::new().expect("temp dir");
+    let model_path = temp.path().join("maid-model.gguf");
+    std::fs::write(&model_path, b"gguf").expect("write model");
+    write_llamacpp_puma_workflow(temp.path(), "runtime-llama", &model_path);
+
+    let app_data_dir = temp.path().join("app-data");
+    std::fs::create_dir_all(&app_data_dir).expect("app data dir");
+    install_fake_default_runtime(&app_data_dir);
+
+    let starts = Arc::new(Mutex::new(Vec::new()));
+    let gateway = Arc::new(inference::InferenceGateway::with_backend(
+        Box::new(RecordingLlamaBackend {
+            ready: false,
+            starts: starts.clone(),
+        }),
+        "llama.cpp",
+    ));
+    gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
+
+    let runtime = EmbeddedRuntime::with_default_python_runtime(
+        EmbeddedRuntimeConfig {
+            app_data_dir,
+            project_root: temp.path().to_path_buf(),
+            workflow_roots: vec![temp.path().join(".pantograph").join("workflows")],
+            max_loaded_sessions: None,
+        },
+        gateway,
+        Arc::new(RwLock::new(ExecutorExtensions::new())),
+        Arc::new(WorkflowService::new()),
+        None,
+    )
+    .with_additional_runtime_capabilities(vec![llama_runtime_capability()]);
+
+    runtime
+        .host()
+        .load_session_runtime(
+            "session-llama",
+            "runtime-llama",
+            None,
+            WorkflowExecutionSessionRetentionHint::Ephemeral,
+        )
+        .await
+        .expect("load session runtime");
+
+    let starts = starts.lock().expect("starts lock");
+    assert_eq!(starts.len(), 1);
+    assert_eq!(starts[0].model_path.as_deref(), Some(model_path.as_path()));
+    assert!(!starts[0].embedding_mode);
+    assert!(!starts[0].reranking_mode);
+}
+
 #[tokio::test]
 async fn test_keep_alive_session_load_tracks_registry_reservation_lifecycle() {
     let temp = TempDir::new().expect("temp dir");

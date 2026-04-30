@@ -1,8 +1,11 @@
 use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
+use inference::BackendConfig;
 use node_engine::WorkflowGraph;
+use pantograph_runtime_identity::canonical_engine_backend_key;
 use pantograph_runtime_registry::{RuntimeReservationRequirements, RuntimeRetentionHint};
 use pantograph_workflow_service::{
     WorkflowExecutionSessionRetentionHint, WorkflowExecutionSessionRuntimeSelectionTarget,
@@ -96,6 +99,188 @@ impl EmbeddedWorkflowHost {
         Err(WorkflowServiceError::RuntimeNotReady(
             pantograph_workflow_service::format_runtime_not_ready_message(&blocking_runtime_issues),
         ))
+    }
+
+    pub(crate) async fn ensure_workflow_inference_model_loaded(
+        &self,
+        workflow_id: &str,
+    ) -> Result<(), WorkflowServiceError> {
+        let Some(model_path) = self
+            .resolve_llamacpp_workflow_model_path(workflow_id)
+            .await?
+        else {
+            return Ok(());
+        };
+
+        if !self
+            .llamacpp_gateway_matches_requested_model(&model_path)
+            .await
+        {
+            let backend_key = canonical_engine_backend_key(Some(
+                self.gateway.current_backend_name().await.as_str(),
+            ));
+            if backend_key.as_deref() != Some("llamacpp") {
+                self.gateway
+                    .switch_backend("llama.cpp")
+                    .await
+                    .map_err(|error| WorkflowServiceError::RuntimeNotReady(error.to_string()))?;
+            }
+
+            self.gateway
+                .start(&BackendConfig {
+                    model_path: Some(model_path.clone()),
+                    device: Some("auto".to_string()),
+                    gpu_layers: Some(-1),
+                    embedding_mode: false,
+                    reranking_mode: false,
+                    ..BackendConfig::default()
+                })
+                .await
+                .map_err(|error| {
+                    WorkflowServiceError::RuntimeNotReady(format!(
+                        "failed to load llama.cpp model '{}': {error}",
+                        model_path.display()
+                    ))
+                })?;
+        }
+
+        if self
+            .llamacpp_gateway_matches_requested_model(&model_path)
+            .await
+        {
+            Ok(())
+        } else {
+            Err(WorkflowServiceError::RuntimeNotReady(format!(
+                "llama.cpp reported ready but active model does not match '{}'",
+                model_path.display()
+            )))
+        }
+    }
+
+    async fn llamacpp_gateway_matches_requested_model(&self, model_path: &Path) -> bool {
+        if !self.gateway.is_ready().await
+            || self.gateway.is_embedding_mode().await
+            || self.gateway.is_reranking_mode().await
+        {
+            return false;
+        }
+
+        let backend_key =
+            canonical_engine_backend_key(Some(self.gateway.current_backend_name().await.as_str()));
+        if backend_key.as_deref() != Some("llamacpp") {
+            return false;
+        }
+
+        let Some(config) = self.gateway.restart_runtime_config().await else {
+            return false;
+        };
+        if config.external_url.is_some() {
+            return true;
+        }
+        let Some(active_model_path) = config.model_path.as_deref() else {
+            return false;
+        };
+        paths_refer_to_same_file(active_model_path, model_path)
+    }
+
+    async fn resolve_llamacpp_workflow_model_path(
+        &self,
+        workflow_id: &str,
+    ) -> Result<Option<PathBuf>, WorkflowServiceError> {
+        let stored = pantograph_workflow_service::capabilities::load_and_validate_workflow(
+            workflow_id,
+            &self.workflow_roots,
+        )?;
+        let graph = stored.to_workflow_graph(workflow_id);
+        let Some(llamacpp_node) = graph
+            .nodes
+            .iter()
+            .find(|node| node.node_type == "llamacpp-inference")
+        else {
+            return Ok(None);
+        };
+
+        if let Some(model_path) = model_path_from_node_data(&llamacpp_node.data) {
+            return resolve_gguf_path(&model_path).map(Some);
+        }
+
+        let Some(model_edge) = graph
+            .edges
+            .iter()
+            .find(|edge| edge.target == llamacpp_node.id && edge.target_handle == "model_path")
+        else {
+            return Err(WorkflowServiceError::RuntimeNotReady(format!(
+                "llama.cpp workflow '{}' has an inference node without a model_path input",
+                workflow_id
+            )));
+        };
+        let Some(source_node) = graph.find_node(&model_edge.source) else {
+            return Err(WorkflowServiceError::RuntimeNotReady(format!(
+                "llama.cpp workflow '{}' references missing model source node '{}'",
+                workflow_id, model_edge.source
+            )));
+        };
+
+        let model_path = if source_node.node_type == "puma-lib" {
+            self.resolve_puma_lib_node_model_path(&source_node.data)
+                .await?
+        } else {
+            model_path_from_node_data(&source_node.data)
+        };
+
+        let Some(model_path) = model_path else {
+            return Err(WorkflowServiceError::RuntimeNotReady(format!(
+                "llama.cpp workflow '{}' could not resolve a model path from node '{}'",
+                workflow_id, source_node.id
+            )));
+        };
+
+        resolve_gguf_path(&model_path).map(Some)
+    }
+
+    async fn resolve_puma_lib_node_model_path(
+        &self,
+        data: &serde_json::Value,
+    ) -> Result<Option<String>, WorkflowServiceError> {
+        let mut model_path = model_path_from_node_data(data);
+        let model_id = read_optional_string_aliases(data, &["model_id", "modelId"]);
+        let model_name = read_optional_string_aliases(data, &["model_name", "modelName"]);
+        let Some(api) = self.pumas_api().await else {
+            return Ok(model_path);
+        };
+
+        let model = if let Some(model_id) = model_id.as_deref() {
+            api.get_model(model_id).await.map_err(|error| {
+                WorkflowServiceError::RuntimeNotReady(format!(
+                    "failed to query Puma-Lib model '{model_id}': {error}"
+                ))
+            })?
+        } else if let Some(model_name) = model_name.as_deref() {
+            find_puma_lib_model_by_name(&api, model_name).await?
+        } else {
+            None
+        };
+
+        if let Some(model) = model {
+            if !model.path.trim().is_empty() {
+                model_path = Some(model.path.clone());
+            }
+            match api.resolve_model_execution_descriptor(&model.id).await {
+                Ok(descriptor) if !descriptor.entry_path.trim().is_empty() => {
+                    model_path = Some(descriptor.entry_path);
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    log::warn!(
+                        "Puma-Lib execution descriptor lookup failed during model preload for '{}': {}",
+                        model.id,
+                        error
+                    );
+                }
+            }
+        }
+
+        Ok(model_path)
     }
 
     pub(crate) fn record_session_runtime_reservation(
@@ -466,5 +651,90 @@ impl EmbeddedWorkflowHost {
         candidates: &[WorkflowExecutionSessionRuntimeUnloadCandidate],
     ) -> Option<WorkflowExecutionSessionRuntimeUnloadCandidate> {
         pantograph_workflow_service::select_runtime_unload_candidate_by_affinity(target, candidates)
+    }
+}
+
+fn read_optional_string_aliases(data: &serde_json::Value, aliases: &[&str]) -> Option<String> {
+    aliases.iter().find_map(|key| {
+        data.get(*key)
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
+    })
+}
+
+fn model_path_from_node_data(data: &serde_json::Value) -> Option<String> {
+    read_optional_string_aliases(data, &["model_path", "modelPath"])
+}
+
+async fn find_puma_lib_model_by_name(
+    api: &pumas_library::PumasApi,
+    model_name: &str,
+) -> Result<Option<pumas_library::ModelRecord>, WorkflowServiceError> {
+    let requested = normalized_puma_lib_model_name(model_name);
+    if requested.is_empty() {
+        return Ok(None);
+    }
+
+    let models = api.list_models().await.map_err(|error| {
+        WorkflowServiceError::RuntimeNotReady(format!(
+            "failed to list Puma-Lib models while resolving '{model_name}': {error}"
+        ))
+    })?;
+    Ok(models.into_iter().find(|record| {
+        [
+            record.id.as_str(),
+            record.official_name.as_str(),
+            record.cleaned_name.as_str(),
+        ]
+        .into_iter()
+        .any(|candidate| normalized_puma_lib_model_name(candidate) == requested)
+    }))
+}
+
+fn normalized_puma_lib_model_name(value: &str) -> String {
+    value
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+fn resolve_gguf_path(path: &str) -> Result<PathBuf, WorkflowServiceError> {
+    let path = PathBuf::from(path);
+    if !path.is_dir() {
+        return Ok(path);
+    }
+
+    std::fs::read_dir(&path)
+        .map_err(|error| {
+            WorkflowServiceError::RuntimeNotReady(format!(
+                "cannot read model directory '{}': {error}",
+                path.display()
+            ))
+        })?
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .find(|path| {
+            path.extension()
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("gguf"))
+        })
+        .ok_or_else(|| {
+            WorkflowServiceError::RuntimeNotReady(format!(
+                "no .gguf file found in model directory '{}'",
+                path.display()
+            ))
+        })
+}
+
+fn paths_refer_to_same_file(left: &Path, right: &Path) -> bool {
+    if left == right {
+        return true;
+    }
+
+    match (std::fs::canonicalize(left), std::fs::canonicalize(right)) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => false,
     }
 }
