@@ -3,14 +3,15 @@
 ## Purpose
 
 This directory contains the implementation plan for making Pantograph managed
-binary state the single source of truth for runtime readiness, process launch,
-and scheduler model-load diagnostics.
+binary state the single source of truth for all product-managed binaries,
+including inference runtime sidecars, media tool binaries, and native
+redistributable artifacts used by workflow execution and conversion paths.
 
 ## Contents
 
 | File | Description |
 | ---- | ----------- |
-| `plan.md` | Ordered implementation plan for managed binary source-of-truth cleanup and real llama.cpp model-load verification. |
+| `plan.md` | Ordered implementation plan for managed binary source-of-truth cleanup across runtime sidecars, media tools, native artifacts, and real llama.cpp model-load verification. |
 
 ## Problem
 
@@ -22,7 +23,8 @@ model are proven loaded.
 
 ## Constraints
 
-- Backend Rust owns managed runtime and redistributable truth.
+- Backend Rust owns managed binary truth across runtime sidecars, media tools,
+  and native redistributable artifacts.
 - Workflow, scheduler, diagnostics, and Tauri process launch must consume the
   same managed binary facts.
 - Existing managed runtime installs and state files must be migrated or
@@ -32,11 +34,12 @@ model are proven loaded.
 
 ## Decision
 
-Use `plan.md` as the active execution plan. The plan keeps the existing
-`crates/inference::managed_runtime` boundary as the authority for runtime
-sidecars, treats `managed_redistributables` as a sibling category for media
-dependencies, and removes duplicate host-local binary truth from workflow
-execution paths.
+Use `plan.md` as the active execution plan. The plan introduces a
+category-aware managed binary facade above the existing
+`crates/inference::managed_runtime` and
+`crates/inference::managed_redistributables` boundaries, so inference runtimes,
+media tools such as `ffmpeg`, and native artifacts such as OpenColorIO/OCIO
+remain distinct underneath one discoverable backend-owned source of truth.
 
 ## Alternatives Rejected
 
@@ -55,8 +58,9 @@ execution paths.
 - Managed runtime sidecars are resolved through backend managed-runtime
   contracts, not direct host PATH assumptions except where a definition
   explicitly declares system-command precedence.
-- Media redistributables such as `ffmpeg` stay separate from inference runtime
-  sidecars while sharing discoverable managed-binary views where useful.
+- Media redistributables such as `ffmpeg`, `ocioconvert`, `oiiotool`, and
+  OpenColorIO/OCIO artifacts stay separate from inference runtime sidecars
+  while sharing discoverable managed-binary views where useful.
 
 ## Revisit Triggers
 

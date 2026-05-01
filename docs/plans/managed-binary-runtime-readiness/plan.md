@@ -2,11 +2,14 @@
 
 ## Objective
 
-Make managed binary state the single source of truth for runtime sidecar
-availability, launch resolution, and scheduler model-load diagnostics so a
-workflow run cannot report `model load completed` until the requested
-llama.cpp process is running the requested model and has passed backend
-readiness checks.
+Make managed binary state the single source of truth for every
+Pantograph-managed binary category: inference runtime sidecars such as
+`llama.cpp` and `Ollama`, media tool binaries such as `ffmpeg`,
+`ocioconvert`, and `oiiotool`, and native redistributable artifacts such as
+OpenColorIO/OCIO. Runtime launch and scheduler model-load diagnostics must
+consume that same source of truth so a workflow run cannot report
+`model load completed` until the requested llama.cpp process is running the
+requested model and has passed backend readiness checks.
 
 ## Scope
 
@@ -16,13 +19,17 @@ readiness checks.
   `crates/inference::managed_redistributables`, Pantograph embedded-runtime
   projections, Tauri process spawning, and Settings managed-binary views.
 - Define one backend-owned managed binary contract that exposes category,
-  install/readiness state, selected version, resolved command, expected files,
-  and launch validation facts.
+  install/readiness state, selected version, resolved command when applicable,
+  expected files, missing files, checksums/source metadata when available, and
+  launch or activation validation facts.
 - Preserve distinct categories for inference runtime sidecars and media
   redistributables while allowing systems that need binaries to query one
-  authoritative registry/facade.
-- Make workflow runtime admission and scheduler diagnostics consume the same
-  managed-runtime readiness and resolved launch facts used by process spawning.
+  authoritative registry/facade. `ffmpeg`, `ocioconvert`, `oiiotool`, and
+  OpenColorIO/OCIO must be first-class managed binary entries, not UI-only
+  exceptions.
+- Make workflow runtime admission, conversion dependency planning, scheduler
+  diagnostics, and process spawning consume the same managed binary readiness
+  facts.
 - Replace ambiguous `model load completed` emission with phase-specific events:
   dependency resolved, process spawned, HTTP ready, requested model active, and
   model load complete.
@@ -33,7 +40,7 @@ readiness checks.
 
 ### Out of Scope
 
-- Replacing llama.cpp or Ollama release-source policy.
+- Replacing llama.cpp, Ollama, ffmpeg, or OCIO release-source policy.
 - Adding new managed runtime families.
 - Rebuilding the Settings UI beyond consuming the unified backend view.
 - Changing Puma-Lib model metadata semantics except where model path resolution
@@ -61,7 +68,8 @@ surfaces:
 - `crates/inference/src/managed_runtime/` owns sidecar runtime catalog,
   install, selection, validation, state, and `resolve_binary_command`.
 - `crates/inference/src/managed_redistributables/` owns non-runtime media
-  dependencies such as `ffmpeg`.
+  dependencies such as `ffmpeg`, `ocioconvert`, `oiiotool`, and
+  OpenColorIO/OCIO artifacts.
 - `src-tauri/src/llm/process_tauri.rs` maps sidecar spawn requests to
   `resolve_binary_command` and launches the executable.
 - `crates/pantograph-embedded-runtime/src/runtime_capabilities.rs` projects
@@ -83,14 +91,19 @@ surfaces:
   readiness truth.
 - Workflow, scheduler, diagnostics, and process launch must consume additive
   backend contracts.
-- Runtime sidecars and media redistributables remain distinct product
-  categories even if exposed through one facade.
+- Runtime sidecars, media tool binaries, and native redistributable artifacts
+  remain distinct product categories even if exposed through one facade.
 - Existing app-data installs may exist under legacy paths such as `runtimes/`
   while current local changes indicate a move toward `third-party/runtimes/`
   and `third-party/managed-dependencies/`; implementation must handle
   migration or explicit fallback safely.
 - Install/remove/download jobs are asynchronous and can overlap with workflow
   submission, app restart reconciliation, and diagnostics refresh.
+- Implementation must stay compliant with the external Coding Standards:
+  backend-owned data, additive contracts, source-directory READMEs,
+  decomposition review for files over 500 lines, sync-core/async-shell,
+  tracked task ownership, path validation at boundaries, isolated durable-state
+  tests, and narrow dependency ownership.
 
 ### Assumptions
 
@@ -123,12 +136,62 @@ surfaces:
 - `src/services/managedRuntime/` and Settings/workbench managed binary panels.
 - Existing ADRs and READMEs for runtime registry and managed redistributables.
 
+### Standards Compliance Review
+
+Codebase review against
+`/media/jeremy/OrangeCream/Linux Software/repos/owned/developer-tooling/Coding-Standards/`
+found these implementation requirements:
+
+- **Backend-owned data:** Settings, workflow, scheduler, diagnostics, and Tauri
+  must display or invoke backend-managed binary facts. Frontend services may
+  cache backend responses but must not synthesize readiness, selection, or
+  install state.
+- **Immutable/additive contracts:** New facade DTOs must be additive. Existing
+  Tauri commands should remain adapters unless a migration plan and
+  compatibility note are added.
+- **Correct-by-construction Rust APIs:** New managed binary identifiers,
+  categories, selected versions, install roots, activation modes, and resolved
+  command requests should use enums/newtypes or validated structs rather than
+  raw strings across module boundaries.
+- **Typed errors:** New public or cross-crate managed binary APIs should use a
+  structured error enum instead of adding more `Result<_, String>` surfaces.
+  Existing string-error adapters can remain at Tauri boundaries.
+- **Decomposition:** `crates/inference/src/managed_runtime/operations.rs`,
+  `crates/inference/src/server.rs`, and
+  `crates/pantograph-embedded-runtime/src/runtime_capabilities.rs` are already
+  over the 500-line review threshold. Any touched logic must either extract
+  focused modules or record why a narrow edit is safe.
+- **Async safety:** Download, archive extraction, install finalization, process
+  spawn, and diagnostics emission must not hold locks across blocking work.
+  New blocking filesystem/archive work in async paths should use an async shell
+  with synchronous helpers or `spawn_blocking` where appropriate.
+- **Task lifecycle:** Existing Tauri process spawning tracks stdout, stderr,
+  and monitor tasks. New runtime/background tasks must also have an owner,
+  shutdown behavior, and panic/cancel handling.
+- **Path security:** App-data migrations, retained artifacts, staging dirs,
+  install dirs, and activation paths must be resolved through centralized path
+  helpers and root-containment checks. Renderer/IPC paths are never trusted.
+- **Cross-platform:** Platform-specific binary layout, executable naming,
+  library path, and activation rules must stay in thin platform modules behind
+  shared traits. Business logic must not grow inline `cfg()` branches.
+- **Dependency ownership:** Prefer existing crates and standard library helpers.
+  New dependencies require a written justification and must be declared at the
+  narrowest owning crate.
+- **Testing:** Cross-layer changes require at least one acceptance path from
+  backend binary state through Tauri/frontend projection or workflow execution.
+  Tests that touch durable state must use isolated temp roots and cover
+  replay/recovery/idempotency for interrupted jobs and migrations.
+
 ### Affected Structured Contracts
 
+- Managed binary facade DTOs for id, category, install/readiness state,
+  selected/default/active version, install root, expected files, missing files,
+  resolved command or activation support, active job, and unavailable reason.
 - Managed runtime DTOs:
   `ManagedRuntimeSnapshot`, `ManagedRuntimeVersionStatus`,
   `ManagedRuntimeSelectionState`, `ResolvedCommand`, and job/history entries.
-- Managed redistributable DTOs for media dependency status and leases.
+- Managed redistributable DTOs for media dependency status, activation state,
+  and leases.
 - Workflow runtime capability DTOs:
   `WorkflowRuntimeCapability`, runtime readiness/install state, selected
   version, missing files, and unavailable reason.
@@ -149,7 +212,9 @@ surfaces:
 ### Concurrency and Lifecycle Review
 
 - Managed runtime install/remove transitions are serialized per runtime id
-  today; the unified facade must preserve that locking.
+  today; the unified facade must preserve that locking and add equivalent
+  category-appropriate serialization for media redistributable install,
+  activation, lease, and removal transitions.
 - Workflow submission must not race an active install/remove and mark a runtime
   ready from stale filesystem state.
 - Runtime launch must preserve ownership of stdout/stderr reader tasks, process
@@ -171,6 +236,7 @@ surfaces:
 | Install/remove races with workflow launch | High | Block or fail launch with explicit `RuntimeNotReady` when selected runtime has an active mutating job. |
 | Existing Tauri/frontend consumers rely on current DTO shapes | Medium | Keep fields additive and preserve command names while moving decision logic behind backend-owned facade. |
 | Dirty unrelated source files exist before implementation | Medium | Do not start implementation until those files are committed, stashed, or explicitly assigned. |
+| Standards drift during broad refactor | High | Add standards checks to every milestone and stop implementation when decomposition, typed-error, path-safety, async-task, or contract-additivity requirements are not met. |
 
 ## Clarifying Questions (Only If Needed)
 
@@ -179,8 +245,9 @@ surfaces:
 ## Definition of Done
 
 - A single backend-owned managed binary facade can answer status/readiness for
-  runtime sidecars and media redistributables without duplicating truth in
-  Tauri, workflow, scheduler, or frontend code.
+  runtime sidecars, media tool binaries, and native redistributable artifacts
+  without duplicating truth in Tauri, workflow, scheduler, conversion, or
+  frontend code.
 - llama.cpp workflow runs fail early with explicit missing/invalid managed
   runtime errors when the selected binary cannot launch.
 - Scheduler `model load completed` is emitted only after the requested
@@ -191,6 +258,9 @@ surfaces:
   show consistent selected version, install root, missing files, and
   unavailable reason.
 - Affected Rust and frontend tests pass, and the release build succeeds.
+- Implementation satisfies the standards compliance review above: additive
+  contracts, typed new APIs, isolated durable-state tests, path-safe migration,
+  tracked task ownership, and documented decomposition decisions.
 
 ## Milestones
 
@@ -202,6 +272,9 @@ emitted relative to managed binary resolution and llama.cpp startup.
 **Tasks:**
 - [ ] Inspect current app-data managed runtime state and selected llama.cpp
       version for legacy/current path mismatch.
+- [ ] Inspect managed redistributable state for `ffmpeg`, `ocioconvert`,
+      `oiiotool`, and OpenColorIO/OCIO so the facade design covers all
+      binary categories.
 - [ ] Trace workflow run events from admission through
       `load_session_runtime`, gateway start, `LlamaServer::wait_for_ready`,
       scheduler diagnostics emission, and terminal run state.
@@ -210,11 +283,15 @@ emitted relative to managed binary resolution and llama.cpp startup.
 - [ ] Record whether the active failure is launch resolution, install
       validation, model path resolution, process startup, readiness probing, or
       diagnostics wording.
+- [ ] Record decomposition candidates and standards exceptions before editing
+      files that already exceed the 500-line review threshold.
 
 **Verification:**
 - Focused Rust test reproducing false completion or asserting the missing guard.
 - Manual diagnostic note in this plan's execution notes with observed selected
   version/install root and emitted event sequence.
+- Standards note covering dirty-worktree ownership, decomposition targets, and
+  whether any new dependencies are needed.
 
 **Status:** Not started.
 
@@ -229,18 +306,28 @@ binaries while preserving runtime-vs-media categories.
       their category-specific validation internals.
 - [ ] Include id, category, display name, install/readiness state,
       selected/default/active version, install root, expected files, missing
-      files, active job, unavailable reason, and resolved command support where
-      applicable.
+      files, active job, unavailable reason, source/checksum metadata when
+      present, resolved command support for runtime/tool binaries, and
+      activation support for native artifacts where applicable.
+- [ ] Use correct-by-construction enums/newtypes for binary category, ids,
+      activation mode, selected version, install root, readiness state, and
+      resolved command requests.
+- [ ] Add a structured managed binary error enum and keep string conversion at
+      adapter boundaries.
 - [ ] Preserve existing runtime and media command functions as adapters over
       the facade.
 - [ ] Add path migration/fallback behavior or an explicit one-time migration
       for legacy app-data paths.
+- [ ] Extract facade modules instead of expanding existing over-threshold
+      operations files.
 
 **Verification:**
 - `cargo test -p inference managed_runtime`
 - `cargo test -p inference managed_redistributables`
 - New facade tests covering runtime sidecar, media tool, legacy path fallback,
   active mutating job, and partial install.
+- Contract tests proving additive serialization for runtime sidecars, media
+  tools, and native artifact categories.
 
 **Status:** Not started.
 
@@ -259,11 +346,17 @@ process spawning consume the same managed binary facts.
       missing, failed, partial, unsupported, or actively mutating.
 - [ ] Preserve explicit system-command precedence for definitions like Ollama
       where backend definitions declare it.
+- [ ] Preserve task ownership for process stdout/stderr/monitor tasks and add
+      lifecycle tests for cancellation or spawn failure where behavior changes.
+- [ ] Ensure any blocking filesystem/archive or command-resolution work added
+      to async paths is isolated behind sync helpers or `spawn_blocking`.
 
 **Verification:**
 - Rust tests for missing llama.cpp binary, partial install, selected version
   drift, system Ollama precedence, and active install/remove rejection.
 - Existing runtime-registry and session-runtime tests.
+- Cross-layer acceptance test or smoke path proving backend managed binary
+  state reaches Tauri launch or workflow admission unchanged.
 
 **Status:** Not started.
 
@@ -282,6 +375,9 @@ readiness instead of admission or process spawn success.
       and port before emitting model load complete.
 - [ ] Make startup failures mark the scheduler/run terminally failed with the
       managed binary or llama.cpp error.
+- [ ] Keep readiness state changes in one owner module so scheduler,
+      diagnostics, and runtime registry do not each run independent lifecycle
+      state machines.
 
 **Verification:**
 - Regression that a 17 ms admission path cannot emit `model load completed`
@@ -290,6 +386,8 @@ readiness instead of admission or process spawn success.
   treated as loaded.
 - Regression that process spawn/HTTP failure moves the workflow run out of
   `running`.
+- Replay/recovery test for interrupted runtime startup or app restart during a
+  managed binary transition.
 
 **Status:** Not started.
 
@@ -301,18 +399,22 @@ diagnostics, and release artifacts.
 **Tasks:**
 - [ ] Update TypeScript DTO mirrors and managed runtime service projections for
       the unified backend facade.
-- [ ] Update Settings to show runtime sidecars and media redistributables from
-      the same source while preserving category labels/actions.
+- [ ] Update Settings to show runtime sidecars, media tools, and native
+      artifacts from the same source while preserving category labels/actions.
 - [ ] Update scheduler diagnostics wording so "model loaded" is reserved for
       proven model readiness.
 - [ ] Update touched READMEs and ADR references for facade ownership and
       lifecycle semantics.
+- [ ] Preserve backend-owned data rules in the frontend: no optimistic install,
+      selection, activation, or readiness updates.
 
 **Verification:**
 - `npm run -w frontend check:types`
 - `npm run -w frontend test:run`
 - `cargo check --manifest-path src-tauri/Cargo.toml`
 - `bash launcher.sh --build-release`
+- Documentation review that touched source directories still have meaningful
+  README/API consumer contract updates.
 
 **Status:** Not started.
 
@@ -327,6 +429,10 @@ diagnostics, and release artifacts.
 - 2026-04-30: Worktree still contains unrelated dirty source and asset files.
   Implementation must not begin until ownership is resolved per the plan
   standards.
+- 2026-04-30: Follow-up standards review added explicit compliance gates for
+  additive contracts, typed Rust APIs, structured errors, decomposition,
+  async/task lifecycle, path safety, cross-platform adapters, dependency
+  ownership, and isolated/recovery tests.
 
 ## Commit Cadence Notes
 
@@ -361,6 +467,8 @@ write sets:
   state without migration.
 - Dirty pre-existing source changes overlap required implementation files and
   cannot be assigned cleanly.
+- Standards compliance review finds a required architecture change that cannot
+  fit the planned facade without breaking existing contracts.
 
 ## Recommendations
 
@@ -370,9 +478,9 @@ write sets:
 - Treat "model load complete" as a terminal readiness assertion, not a generic
   admission success label. This makes diagnostics useful when runtime startup
   fails.
-- Keep managed runtime sidecar readiness and media redistributable readiness in
-  separate category adapters under one facade instead of forcing both into one
-  runtime-shaped DTO.
+- Keep runtime sidecar readiness, media tool readiness, and native artifact
+  activation readiness in separate category adapters under one facade instead
+  of forcing all binaries into one runtime-shaped DTO.
 
 ## Completion Summary
 
