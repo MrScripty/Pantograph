@@ -342,7 +342,8 @@ async fn workflow_run_rejects_non_discovered_output_targets() {
 #[tokio::test]
 async fn workflow_run_returns_output_not_produced_when_target_missing() {
     let host = MockWorkflowHost::with_missing_requested_output(8, 1024);
-    let service = WorkflowService::new();
+    let service = WorkflowService::new()
+        .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"));
 
     let err = service
         .workflow_run(
@@ -366,6 +367,26 @@ async fn workflow_run_returns_output_not_produced_when_target_missing() {
     assert!(err
         .to_string()
         .contains("requested output target 'text-output-1.text' was not produced"));
+    let events = {
+        let ledger = service
+            .diagnostics_ledger_guard()
+            .expect("diagnostics ledger");
+        pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::diagnostic_events_after(
+            &*ledger, 0, 10,
+        )
+        .expect("diagnostic events")
+    };
+    let error_event = events
+        .iter()
+        .find(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::DiagnosticErrorOccurred
+        })
+        .expect("output validation diagnostic event");
+    assert!(error_event.payload_json.contains("output_validation"));
+    assert!(error_event
+        .payload_json
+        .contains("output_validation_failed"));
 }
 
 #[tokio::test]

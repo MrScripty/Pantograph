@@ -432,13 +432,15 @@ errors can be returned or swallowed.
 - [ ] Wrap model dependency resolution and Puma-Lib descriptor lookup failures.
 - [ ] Wrap managed runtime command resolution and process spawn/startup
   failures for llama.cpp, Ollama, and PyTorch.
-- [ ] Wrap node execution failures and attach node IDs/types and output port
+- [x] Wrap node execution failures and attach node IDs/types and output port
   context where available.
 - [ ] Capture node execution diagnostics at the node execution/injection
   boundary, not inside user-authored node code. User nodes may return ordinary
   errors or optional typed node errors; the host wrapper owns workflow/run,
   node, attempt, injected capability, runtime/model, and port context.
 - [ ] Wrap artifact read/write/conversion and diagnostics projection failures.
+  Workflow output artifactization failures are wrapped; artifact-store and
+  diagnostics projection failures remain.
 - [ ] Add a workflow-service domain failure path that marks scheduler/session
   state failed when a fatal run-scoped workflow error occurs. This path owns
   live state transition before diagnostics projections refresh.
@@ -465,11 +467,15 @@ scheduler admission now record a canonical `diagnostic.error_occurred` event
 with runtime/model scope before the existing failed terminal and reservation
 release events are emitted. Added a failing runtime-load workflow-service test
 that proves the canonical error is sanitized, visible in the ledger, and the
-run projection reaches `Failed`.
+run projection reaches `Failed`. Host execution errors, workflow run timeouts,
+requested-output validation failures, invalid host output bindings, and output
+artifactization failures now route through the recorder from
+`workflow_run_internal`.
 
 Verification completed for this slice:
 - `cargo check -p pantograph-workflow-service`
 - `cargo test -p pantograph-workflow-service workflow_execution_session`
+- `cargo test -p pantograph-workflow-service workflow_run_returns_output_not_produced_when_target_missing`
 
 ### Milestone 4: Projection And Query Semantics
 

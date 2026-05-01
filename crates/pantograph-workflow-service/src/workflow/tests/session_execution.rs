@@ -963,6 +963,16 @@ async fn workflow_execution_session_run_records_failed_terminal_event_with_sanit
         .payload_json
         .contains("llama.cpp stderr line"));
     assert!(!terminal_event.payload_json.chars().any(char::is_control));
+    let error_event = diagnostic_events
+        .iter()
+        .find(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::DiagnosticErrorOccurred
+        })
+        .expect("canonical node execution error event");
+    assert!(error_event.payload_json.contains("node_execution"));
+    assert!(error_event.payload_json.contains("backend not ready"));
+    assert!(!error_event.payload_json.contains("\\n"));
 
     let detail = service
         .workflow_run_detail_query(WorkflowRunDetailQueryRequest {
