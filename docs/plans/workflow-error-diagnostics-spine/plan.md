@@ -26,8 +26,11 @@ and deep-linkable from the graph editor or other surfaces that show the error.
   location when available.
 - Add diagnostics GUI affordances for obvious error visibility, filtering,
   color treatment, focused event navigation, and graph/node highlighting.
-- Add fallback persistence for errors that cannot be written to the SQLite
-  diagnostics ledger.
+- Harden diagnostics ledger appends so hostile error text, large stderr, and
+  serialization edge cases produce bounded ledger events instead of alternate
+  duplicate diagnostics files.
+- Surface explicit `diagnostics_unavailable` command/projection state when the
+  primary diagnostics ledger cannot accept an event.
 - Update module READMEs and tests for changed contracts.
 
 ### Out of Scope
@@ -38,6 +41,8 @@ and deep-linkable from the graph editor or other surfaces that show the error.
 - Changing how llama.cpp, Ollama, PyTorch, or Puma-Lib load models except to
   wrap and report their errors with richer diagnostics context.
 - Adding remote telemetry or sending diagnostics outside local app data.
+- Adding duplicate local JSONL/event-log fallback storage for workflow-run
+  diagnostics.
 - Backfilling historical runs that already lost their original error detail.
 - Building a broad analytics dashboard beyond error surfacing and trace
   navigation.
@@ -89,8 +94,10 @@ system still needs first-class error traceability.
   source for run diagnostics.
 - Existing run terminal and node failed events should remain for compatibility
   but can reference the new canonical error event.
-- A minimal fallback JSONL file under app diagnostics data is acceptable for
-  last-resort local error persistence when SQLite append fails.
+- The diagnostics ledger remains the only durable workflow-run diagnostics
+  trace. This plan intentionally does not add JSONL fallback persistence.
+- If the ledger is unavailable, callers receive a clear
+  `diagnostics_unavailable` error/link state instead of a duplicate local trace.
 - Deep links can be represented in the current frontend navigation state before
   a full route-based URL system exists.
 
@@ -108,7 +115,7 @@ system still needs first-class error traceability.
   ledger adapters: runtime, model, and node execution error context.
 - `src-tauri/src/workflow/headless_workflow_commands.rs`,
   `headless_diagnostics*.rs`, `diagnostics/`, and app setup wiring: transport
-  envelopes, fallback recording, and GUI projection transport.
+  envelopes, diagnostics-unavailable reporting, and GUI projection transport.
 - `src/services/diagnostics/types.ts`,
   `src/services/workflow/workflowServiceErrors.ts`,
   `src/services/workflow/WorkflowCommandService.ts`, and related tests:
@@ -128,6 +135,9 @@ system still needs first-class error traceability.
 - Workflow error envelope gains optional diagnostics link fields:
   `workflow_run_id`, `diagnostic_event_id`, `node_id`, `runtime_id`,
   `model_id`, `phase`, `source_component`, and `severity`.
+- Workflow error envelope and/or projection DTOs gain a typed
+  `diagnostics_unavailable` indicator for cases where the primary diagnostics
+  ledger cannot record a run error.
 - Run detail/list projections gain error summary fields, latest fatal error,
   error counts, and focused event identifiers.
 - Scheduler timeline projection gains error styling metadata and related event
@@ -139,9 +149,6 @@ system still needs first-class error traceability.
 
 - `.pantograph/workflow-diagnostics.sqlite` schema version and event payload
   shape.
-- Optional local fallback file, for example
-  `.pantograph/diagnostics-error-fallback.jsonl`, containing sanitized minimal
-  error records when ledger append fails.
 - Existing workflow JSON files are not migrated by this plan.
 
 ### Ownership and Lifecycle Notes
@@ -150,18 +157,17 @@ system still needs first-class error traceability.
   queue, terminal, artifact, and projection failures.
 - Embedded-runtime owns runtime, managed-binary, model dependency, and node
   execution error context before returning errors to workflow-service.
-- Tauri command wrappers own transport-boundary error envelopes and fallback
-  recording if backend service construction or command dispatch fails before
-  workflow-service has a run context.
+- Tauri command wrappers own transport-boundary error envelopes and explicit
+  diagnostics-unavailable reporting if backend service construction or command
+  dispatch fails before workflow-service has a run context.
 - Frontend workbench owns only presentation state: selected diagnostics page,
   focused event ID, filters, and graph highlight state. It does not mutate
   backend diagnostics status.
 - No new polling loop is planned. UI updates continue to use explicit
   projection refreshes and existing workbench state changes.
-- Fallback JSONL writes are synchronous only where already outside async hot
-  paths or are isolated behind existing async command boundaries. If fallback
-  writing becomes a background task, the task owner and shutdown path must be
-  added before implementation continues.
+- No fallback diagnostics writer is planned. If implementation discovers a
+  genuine need for a separate preservation sink, work stops and a new standards
+  review is required before adding it.
 
 ### Public Facade Preservation
 
@@ -178,7 +184,7 @@ system still needs first-class error traceability.
 
 | Risk | Impact | Mitigation |
 | ---- | ------ | ---------- |
-| Error recording itself fails and hides the original failure | High | Sanitize/truncate before validation, emit minimal fallback event, and write fallback JSONL when SQLite append fails. |
+| Error recording itself fails and hides the original failure | High | Sanitize/truncate before validation, harden ledger append paths, surface `diagnostics_unavailable` when the primary ledger cannot record the event, and do not create duplicate JSON traces. |
 | Duplicate error events make traces noisy | Medium | Define one owner per phase and link secondary failure events with `related_error_event_id` instead of re-emitting full errors. |
 | Fatal error events mark recoverable failures as failed | Medium | Add `severity`, `recoverability`, and projection rules that only fatal run-scoped errors drive failed state. |
 | Schema changes break existing projections | High | Additive migrations, compatibility tests, and projection replay tests from mixed old/new event streams. |
@@ -197,7 +203,9 @@ system still needs first-class error traceability.
 ## Definition of Done
 
 - Every workflow-run error path covered by this plan records a sanitized,
-  durable, ordered error event or a fallback local error record.
+  durable, ordered error event in the diagnostics ledger or reports
+  `diagnostics_unavailable` explicitly when the primary ledger cannot accept
+  the event.
 - Error events identify what failed, where it failed, when it happened, and
   which run/node/runtime/model they relate to when that context exists.
 - Fatal run-scoped error events cause run projections to show `Failed` without
@@ -230,9 +238,8 @@ behavior.
   must either be added with DB serialization tests or represented as typed
   phase/location fields inside the error payload.
 - [ ] Update `validate_event_scope` and `validate_event_source` so run-scoped,
-  node-scoped, runtime-scoped, and transport/fallback error events have
-  explicit allowed source rules instead of bypassing existing ledger
-  validation.
+  node-scoped, runtime-scoped, and transport-boundary error events have
+  explicit allowed source rules instead of bypassing existing ledger validation.
 - [ ] Add validation helpers that sanitize and bound error text before ledger
   validation rejects it.
 - [ ] Add SQLite serialization, deserialization, timeline summary/detail, and
@@ -249,26 +256,27 @@ behavior.
 
 ### Milestone 2: Backend Error Recorder Facade
 
-**Goal:** Provide one standards-compliant backend helper for emitting run-scoped
-and fallback error diagnostics.
+**Goal:** Provide one standards-compliant backend helper for emitting
+run-scoped error diagnostics through the primary ledger.
 
 **Tasks:**
 - [ ] Add a workflow-service error recorder that accepts typed context and
   returns the appended diagnostic event ID when available.
-- [ ] Add a minimal fallback writer for sanitized JSONL records when ledger
-  append fails or a command fails before service wiring is available.
+- [ ] Add explicit diagnostics-unavailable mapping for ledger append failure or
+  command failure before service wiring is available.
 - [ ] Add error-context builders for workflow run, scheduler, runtime, node,
   model dependency, managed binary, artifact, projection, and transport phases.
 - [ ] Ensure helper logic is sync-core/async-shell: pure shaping is sync,
   storage calls remain at existing I/O boundaries.
 - [ ] Update workflow-service and Tauri diagnostics READMEs for ownership and
-  fallback behavior.
+  diagnostics-unavailable behavior.
 
 **Verification:**
-- Unit tests for sanitization, truncation, minimal fallback shape, and event ID
-  propagation.
-- Integration tests for ledger append failure falling back without losing the
-  original error.
+- Unit tests for sanitization, truncation, event ID propagation, and
+  diagnostics-unavailable envelope shaping.
+- Integration tests for ledger append failure surfacing
+  `diagnostics_unavailable` without creating duplicate local diagnostics
+  files.
 - `cargo check -p pantograph-workflow-service`
 - `cargo check --manifest-path src-tauri/Cargo.toml`
 
@@ -366,7 +374,8 @@ diagnostics event that explains the failure.
   diagnostics actions when `workflow_run_id` and `diagnostic_event_id` exist.
 - [ ] Add workbench navigation state for selecting Diagnostics, loading the
   target run, focusing the event, and highlighting the related node if present.
-- [ ] Preserve plain text fallback for errors without diagnostics context.
+- [ ] Preserve plain text error messages for errors without diagnostics
+  context.
 - [ ] Add tests that stale async error responses do not navigate away from a
   newer active workflow/run context.
 
@@ -494,9 +503,8 @@ diagnostics event that explains the failure.
   `templates/PLAN-TEMPLATE.md`.
 - Rust implementation guidance is standards-aligned: pure error shaping and
   sanitization remain synchronous; ledger I/O stays at existing async command
-  or workflow-service boundaries; any fallback writer that becomes backgrounded
-  must have an explicit owner and shutdown path before implementation
-  continues.
+  or workflow-service boundaries; the plan intentionally avoids adding a
+  fallback writer or unowned background task.
 - Frontend guidance is standards-aligned: workbench pages consume backend
   projection DTOs, presenters own formatting/classification, and components do
   not parse raw ledger payloads or repair run state locally.
@@ -553,6 +561,37 @@ diagnostics event that explains the failure.
   user explicitly allows the unrelated dirty implementation files to remain in
   place. Planning-only Markdown edits remain allowed.
 
+### Pass 5: Primary-Ledger-Only Standards Revalidation
+
+**Status:** Complete.
+
+**Checks:**
+- Removing JSONL fallback preserves the backend-owned diagnostics source of
+  truth required by `CODING-STANDARDS.md`.
+- Diagnostics-unavailable behavior remains explicit enough for
+  `PLAN-STANDARDS.md` risk mitigation and completion criteria.
+- The updated plan still covers replay/recovery, cross-layer acceptance, and
+  error-path verification required by `TESTING-STANDARDS.md`.
+- The change does not introduce new background tasks, polling loops, or
+  blocking file writes that would violate concurrency or Rust async standards.
+
+**Findings:**
+- Removing fallback JSONL improves standards compliance by eliminating a
+  second durable diagnostics source and avoiding split ownership between
+  SQLite projections and duplicate local files.
+- The primary-ledger-only strategy remains standards-compliant because ledger
+  hardening, deterministic truncation, serialization tests, and explicit
+  `diagnostics_unavailable` envelopes replace hidden fallback writes.
+- The plan now treats diagnostics ledger append failure as a visible internal
+  diagnostics failure rather than silently writing a parallel trace.
+- The affected structured contracts now include a typed
+  `diagnostics_unavailable` indicator so frontend components do not infer this
+  state locally.
+- Verification remains standards-compliant because tests must prove hostile
+  error text and large runtime stderr still append valid ledger events, while
+  true ledger unavailability produces a typed unavailable response and no
+  duplicate JSONL files.
+
 ## Anti-Pattern And Blast-Radius Review
 
 ### Search Scope
@@ -577,7 +616,7 @@ diagnostics event that explains the failure.
 | Frontend `DiagnosticEventKind` is hand mirrored and already lags backend event kinds such as scheduler queue-control/admission/reservation events. | Adding `diagnostic_error_occurred` can compile only if casts hide drift, or fail frontend type checks unexpectedly. | Update TypeScript unions and projection fixtures with backend event-kind coverage; prefer generated DTOs later. Add tests that timeline presenter accepts every backend-projected kind. |
 | Tauri commands flatten `WorkflowServiceError` through `Result<T, String>` and `to_envelope_json`. | Diagnostics links can be lost if added outside the serialized envelope or if frontend parsing treats them as unknown details only. | Add link fields to the structured Rust envelope, preserve them in JSON serialization, and update frontend normalization to expose typed diagnostics link fields without requiring component JSON parsing. |
 | Workbench navigation state currently tracks selected page and active run only. | Clickable error navigation needs focused event and optional node focus; bolting it onto components risks stale async responses or hidden local state. | Add typed transient navigation/focus state to `workbenchStore.ts`, with stale-response guards in pages that refresh diagnostics asynchronously. |
-| Fallback JSONL can become a second diagnostics store. | Operators may see one error in fallback and different state in SQLite projections. | Treat fallback as local preservation only. Expose fallback-write failures as diagnostics metadata when possible, but keep normal GUI queries ledger/projection-owned. |
+| Fallback JSONL can become a second diagnostics store. | Operators may see one error in fallback and different state in SQLite projections. | Do not implement JSONL fallback. Harden the primary ledger path and surface `diagnostics_unavailable` if it cannot record. |
 | Ledger append is synchronous behind a mutex in workflow-service paths. | A broad recorder that formats large cause chains while holding the ledger lock can increase contention or deadlock if it calls back into workflow-service. | Shape/sanitize error context before taking the ledger lock; hold the lock only for append; never call workflow-service or runtime code from inside the locked section. |
 | Event payload size is capped at 8 KiB. | Runtime stderr, llama.cpp process output, or cause chains can still make error recording fail if not bounded before append. | Apply deterministic truncation before `DiagnosticEventAppendRequest::validate`; store only bounded summaries unless an existing payload-ref policy explicitly supports larger artifacts. |
 | Existing projection schemas use `CREATE TABLE IF NOT EXISTS`; new columns on existing user databases need explicit migration behavior. | Adding latest-error columns without migration/reset can leave installed databases missing columns. | Bump projection versions or add explicit schema migrations and mixed-version replay tests. Do not rely on `CREATE TABLE IF NOT EXISTS` to evolve existing tables. |
@@ -713,15 +752,18 @@ diagnostics event that explains the failure.
 - Async refresh paths must ignore stale focus/navigation responses when a newer
   active run or focus request has replaced them.
 
-### Fallback Persistence Boundary
+### Diagnostics Unavailable Boundary
 
-- Fallback JSONL is preservation-only and local-only. It must not become a
-  normal diagnostics query source.
-- Fallback records must be sanitized, bounded, timestamped, and include any
-  available run/error context.
-- SQLite append failure should preserve the original error and separately
-  expose fallback-write failure if fallback also fails.
-- A future fallback import or recovery viewer requires its own plan.
+- The diagnostics ledger is the only durable workflow-run diagnostics trace.
+- The implementation must not add JSONL fallback files, duplicate event logs,
+  or a second diagnostics query source.
+- SQLite append failure should preserve the original command/runtime error in
+  the returned envelope while also reporting that diagnostics recording failed.
+- Use a typed `diagnostics_unavailable` state or envelope field so GUI surfaces
+  can explain that trace persistence failed without pretending a durable event
+  exists.
+- A future secondary preservation sink, import path, or recovery viewer
+  requires its own standards-compliant plan and architecture review.
 
 ### Locking, Payload Bounds, And Schema Evolution
 
@@ -804,8 +846,8 @@ owner per wave.
 
 - Prefer one canonical error event plus links from existing lifecycle events
   over adding separate incompatible error fields to every event type.
-- Keep fallback JSONL minimal and local-only; its role is preservation of last
-  resort, not a second diagnostics query system.
+- Keep the diagnostics ledger as the only durable run-error trace; do not add
+  JSON fallback files or alternate local event stores.
 - Implement GUI color changes with icon/text labels and focused event controls
   at the same time to avoid inaccessible error-only color cues.
 
