@@ -341,10 +341,27 @@ impl WorkflowService {
         {
             Ok(cache) => cache,
             Err(error) => {
+                let diagnostic_outcome = self.record_workflow_diagnostic_error_if_configured(
+                    WorkflowDiagnosticErrorRecordRequest::runtime_preflight_failed(
+                        workflow_runtime_model_error_scope(
+                            &session,
+                            run_snapshot.as_ref(),
+                            &workflow_run_id,
+                            &queued_workflow_semantic_version,
+                            &[],
+                            &[],
+                        )?,
+                        &error,
+                    )
+                    .with_source_instance_id("workflow-session-scheduler")
+                    .with_cause("runtime admission preflight failed before model load"),
+                )?;
                 if let Ok(mut store) = self.session_store.lock() {
                     let _ = store.finish_run(&session_id, &workflow_run_id);
                 }
-                let terminal_result = Err(error);
+                let terminal_error = error
+                    .with_diagnostics(diagnostic_outcome.into_error_link(Some(&workflow_run_id)));
+                let terminal_result = Err(terminal_error);
                 self.record_run_terminal_event_if_configured(
                     &session,
                     run_snapshot.as_ref(),
