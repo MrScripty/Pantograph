@@ -130,6 +130,9 @@ system still needs first-class error traceability.
 ### Affected Structured Contracts
 
 - Diagnostics ledger payload enum gains `DiagnosticErrorOccurred`.
+- Diagnostics error registry contract gains typed phase definitions, scope
+  definitions, allowed source components, default severity/recoverability,
+  causality policy, required context fields, and projection effect.
 - Diagnostics SQLite schema gains any columns or projection tables required to
   query error events efficiently without parsing free-form payloads.
 - Workflow error envelope gains optional diagnostics link fields:
@@ -266,8 +269,14 @@ behavior.
 run-scoped error diagnostics through the primary ledger.
 
 **Tasks:**
+- [ ] Add a typed diagnostics error registry that defines supported phases,
+  required scope kind, allowed source components, default severity,
+  default recoverability, causality policy, and projection effect.
 - [ ] Add a workflow-service error recorder that accepts typed context and
   returns the appended diagnostic event ID when available.
+- [ ] Add typed scope structs for run, node, runtime/model, scheduler,
+  artifact, projection, and transport error contexts. Call sites pass scope
+  values rather than arbitrary maps or free-form field sets.
 - [ ] Add explicit diagnostics-unavailable mapping for ledger append failure or
   command failure before service wiring is available.
 - [ ] Add error-context builders for workflow run, scheduler, runtime, node,
@@ -280,6 +289,9 @@ run-scoped error diagnostics through the primary ledger.
 **Verification:**
 - Unit tests for sanitization, truncation, event ID propagation, and
   diagnostics-unavailable envelope shaping.
+- Registry matrix tests for every phase covering required scope fields, allowed
+  source components, default severity/recoverability, causality policy, and
+  projection effect.
 - Integration tests for ledger append failure surfacing
   `diagnostics_unavailable` without creating duplicate local diagnostics
   files.
@@ -627,6 +639,34 @@ diagnostics event that explains the failure.
 - Frontend code must render these fields from backend DTOs and must not derive
   them by scanning timeline order.
 
+### Pass 7: Registry Usability Standards Revalidation
+
+**Status:** Complete.
+
+**Checks:**
+- Registry-driven phase/scope definitions preserve backend-owned diagnostics
+  policy and avoid frontend or call-site inference.
+- The registry remains typed and reviewable instead of stringly dynamic.
+- Reuse across apps is enabled without weakening Pantograph workflow contracts.
+- Tests are required to keep registered phase definitions complete and
+  consistent.
+
+**Findings:**
+- A typed static registry is standards-compliant because it centralizes
+  diagnostics policy in backend code while keeping call sites simple and
+  service-independent.
+- Scope structs reduce repetitive error-handler code and make invalid phase/id
+  combinations harder to express.
+- Separating generic recorder mechanics from Pantograph workflow phase
+  registration supports reuse in another app without moving policy into
+  frontend code or arbitrary JSON configuration.
+- Registry matrix tests are required so adding/removing phases cannot silently
+  skip source validation, required IDs, default severity/recoverability,
+  projection effect, or causality policy.
+- Direct diagnostic-error payload construction outside the recorder would be a
+  standards violation because it bypasses the registered source, scope,
+  sanitization, projection, envelope, and causality rules.
+
 ## Anti-Pattern And Blast-Radius Review
 
 ### Search Scope
@@ -705,21 +745,55 @@ diagnostics event that explains the failure.
    A narrow replay test must prove one fatal `diagnostic.error_occurred` event
    updates scheduler timeline, run detail latest-error fields, run-list failed
    status, and node status when node-scoped.
-3. Add one narrow backend recorder path for the known control-character runtime
+3. Add the typed diagnostics error registry and scope model before broad
+   recorder usage. The initial registry should be a static backend-owned table
+   for Pantograph workflow phases, not a runtime string map.
+4. Add one narrow backend recorder path for the known control-character runtime
    failure mode. This path must prove sanitized error text, durable error
    event, failed projection, and visible timeline row before additional
    capture points are added.
-4. Extend `WorkflowErrorEnvelope` with typed diagnostics link fields and update
+5. Extend `WorkflowErrorEnvelope` with typed diagnostics link fields and update
    frontend parsing. GUI components must receive typed fields instead of
    parsing raw JSON or `details`.
-5. Update frontend diagnostics DTOs and add drift coverage for every
+6. Update frontend diagnostics DTOs and add drift coverage for every
    backend-projected `DiagnosticEventKind`.
-6. Add workbench diagnostics focus state and graph-editor navigation actions.
+7. Add workbench diagnostics focus state and graph-editor navigation actions.
    UI deep links may be implemented only after backend envelopes carry stable
    `workflow_run_id` and `diagnostic_event_id` fields.
-7. Broaden capture points phase by phase across submission, queue/admission,
+8. Broaden capture points phase by phase across submission, queue/admission,
    model dependency, runtime launch, node execution, artifact, projection, and
    transport boundaries.
+
+### Diagnostics Error Registry And Scope Model
+
+- Centralize phase definitions in a backend-owned diagnostics error registry.
+  The registry defines each phase's typed phase ID, required scope kind,
+  allowed `DiagnosticEventSourceComponent` values, default severity, default
+  recoverability, causality policy, projection effect, and required context
+  fields.
+- Keep the first implementation statically registered in Rust so it remains
+  compile-time reviewable and testable. Do not use arbitrary string phases,
+  JSON schema blobs, or unvalidated runtime maps for core workflow diagnostics.
+- Keep the recorder reusable by separating generic registry/recorder mechanics
+  from Pantograph workflow phase registration. A future app can provide its own
+  typed static phase table without rewriting sanitization, validation, ledger
+  append, envelope-link, or diagnostics-unavailable logic.
+- Define typed scope structs such as `RunErrorScope`, `NodeErrorScope`,
+  `RuntimeModelErrorScope`, `SchedulerErrorScope`, `ArtifactErrorScope`,
+  `ProjectionErrorScope`, and `TransportErrorScope`. Registry phase
+  definitions choose one required scope kind; call sites should not pass raw
+  field maps.
+- Expose phase-specific convenience APIs or builders from registry definitions,
+  but keep policy in the registry. Call sites should normally choose a phase,
+  provide the typed scope, and pass the original error; severity/recoverability
+  should use registry defaults unless the caller has a concrete reason to
+  override.
+- Ban direct construction of `DiagnosticEventPayload::DiagnosticErrorOccurred`
+  outside the recorder module and tests. This can start as a review rule and
+  later become a repository script or lint check.
+- Add a registry matrix test that fails if a registered phase lacks required
+  scope fields, source validation, default severity/recoverability, causality
+  policy, projection effect, or documentation.
 
 ### Projection Status Precedence
 
@@ -848,8 +922,8 @@ diagnostics event that explains the failure.
   focused files under `sqlite/`.
 - Before adding workflow capture, avoid expanding
   `session_execution_api.rs` with broad recorder logic. Put reusable error
-  context/recorder code in a focused workflow diagnostics module and keep
-  session execution limited to orchestration calls.
+  registry, scope, and recorder code in a focused workflow diagnostics module
+  and keep session execution limited to orchestration calls.
 - Before adding Diagnostics page UI, keep classification and row shaping in
   presenters and consider extracting focused Svelte subcomponents if the page
   grows further.
@@ -903,6 +977,9 @@ owner per wave.
 
 - Prefer one canonical error event plus links from existing lifecycle events
   over adding separate incompatible error fields to every event type.
+- Prefer a typed static phase/scope registry over hardcoded ad hoc call-site
+  handlers or arbitrary string configuration. This keeps the system practical
+  to use while preserving validation and reviewability.
 - Keep the diagnostics ledger as the only durable run-error trace; do not add
   JSON fallback files or alternate local event stores.
 - Implement GUI color changes with icon/text labels and focused event controls
