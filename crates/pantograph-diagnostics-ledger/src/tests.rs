@@ -841,6 +841,9 @@ fn diagnostic_event_ledger_validates_error_scope_source_and_text() {
     ledger
         .append_diagnostic_event(projection_event)
         .expect("projection diagnostic error may be global");
+    ledger
+        .drain_scheduler_timeline_projection(500)
+        .expect("global diagnostic error does not block timeline projection");
 
     let sanitized = sanitize_diagnostic_error_text("bad\u{0000}\nvalue", 64);
     assert_eq!(sanitized, "bad  value");
@@ -2404,22 +2407,19 @@ fn existing_v14_schema_adds_io_artifact_retention_state_columns() {
         &conn,
         "idx_io_artifact_projection_retention_state_seq"
     ));
-    let metadata_state = conn
-        .query_row(
-            "SELECT retention_state FROM io_artifact_projection WHERE event_seq = 1",
-            [],
-            |row| row.get::<_, String>(0),
-        )
-        .expect("metadata-only state loads");
-    let retained_state = conn
-        .query_row(
-            "SELECT retention_state FROM io_artifact_projection WHERE event_seq = 2",
-            [],
-            |row| row.get::<_, String>(0),
-        )
-        .expect("retained state loads");
-    assert_eq!(metadata_state, "metadata_only");
-    assert_eq!(retained_state, "retained");
+    assert_columns_exist(
+        &conn,
+        "io_artifact_projection",
+        &[
+            "event_id",
+            "occurred_at_ms",
+            "recorded_at_ms",
+            "workflow_run_id",
+            "workflow_id",
+            "artifact_id",
+            "artifact_role",
+        ],
+    );
 }
 
 #[test]
@@ -2570,13 +2570,176 @@ fn current_schema_repairs_missing_scheduler_timeline_error_columns() {
     }
     let conn = Connection::open(&path).expect("connection reopens");
 
-    for column in ["error_severity", "error_phase", "related_event_ids_json"] {
-        assert!(sqlite_column_exists(
-            &conn,
-            "scheduler_timeline_projection",
-            column
-        ));
+    assert_columns_exist(
+        &conn,
+        "scheduler_timeline_projection",
+        &[
+            "event_seq",
+            "event_id",
+            "event_kind",
+            "source_component",
+            "occurred_at_ms",
+            "recorded_at_ms",
+            "workflow_run_id",
+            "workflow_id",
+            "workflow_version_id",
+            "workflow_semantic_version",
+            "scheduler_policy_id",
+            "retention_policy_id",
+            "summary",
+            "detail",
+            "error_severity",
+            "error_phase",
+            "related_event_ids_json",
+            "payload_json",
+        ],
+    );
+}
+
+#[test]
+fn current_schema_repairs_all_drifted_projection_tables() {
+    let temp = tempfile::NamedTempFile::new().expect("temp file");
+    let path = temp.path().to_path_buf();
+    {
+        let conn = Connection::open(&path).expect("connection opens");
+        conn.execute_batch(
+            "CREATE TABLE ledger_schema_migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at_ms INTEGER NOT NULL,
+                checksum TEXT NOT NULL
+            );
+            INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
+            VALUES (22, 0, 'pantograph-diagnostics-ledger-v22');
+            CREATE TABLE projection_state (
+                projection_name TEXT PRIMARY KEY,
+                projection_version INTEGER NOT NULL,
+                last_applied_event_seq INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                rebuilt_at_ms INTEGER,
+                updated_at_ms INTEGER NOT NULL
+            );
+            CREATE TABLE io_artifact_projection (
+                event_seq INTEGER PRIMARY KEY,
+                event_id TEXT NOT NULL UNIQUE,
+                occurred_at_ms INTEGER NOT NULL,
+                recorded_at_ms INTEGER NOT NULL,
+                workflow_run_id TEXT NOT NULL,
+                workflow_id TEXT NOT NULL,
+                artifact_id TEXT NOT NULL,
+                artifact_role TEXT NOT NULL,
+                retention_state TEXT NOT NULL
+            );
+            CREATE TABLE node_status_projection (
+                workflow_run_id TEXT NOT NULL,
+                workflow_id TEXT NOT NULL,
+                node_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                last_event_seq INTEGER NOT NULL,
+                last_updated_at_ms INTEGER NOT NULL,
+                PRIMARY KEY(workflow_run_id, node_id)
+            );
+            CREATE TABLE library_usage_projection (
+                asset_id TEXT PRIMARY KEY,
+                total_access_count INTEGER NOT NULL,
+                run_access_count INTEGER NOT NULL,
+                total_network_bytes INTEGER NOT NULL,
+                last_accessed_at_ms INTEGER NOT NULL,
+                last_operation TEXT NOT NULL,
+                last_event_seq INTEGER NOT NULL,
+                last_updated_at_ms INTEGER NOT NULL
+            );
+            CREATE TABLE library_usage_run_projection (
+                asset_id TEXT NOT NULL,
+                workflow_run_id TEXT NOT NULL,
+                first_event_seq INTEGER NOT NULL,
+                last_event_seq INTEGER NOT NULL,
+                last_accessed_at_ms INTEGER NOT NULL,
+                PRIMARY KEY(asset_id, workflow_run_id)
+            );",
+        )
+        .expect("current schema marker and drifted projection tables are installed");
     }
+    {
+        let _ledger = SqliteDiagnosticsLedger::open(&path).expect("ledger repairs schema drift");
+    }
+    let conn = Connection::open(&path).expect("connection reopens");
+
+    assert_columns_exist(
+        &conn,
+        "io_artifact_projection",
+        &[
+            "workflow_version_id",
+            "workflow_semantic_version",
+            "node_id",
+            "node_type",
+            "node_version",
+            "runtime_id",
+            "runtime_version",
+            "model_id",
+            "model_version",
+            "producer_node_id",
+            "producer_port_id",
+            "consumer_node_id",
+            "consumer_port_id",
+            "media_type",
+            "size_bytes",
+            "content_hash",
+            "payload_ref",
+            "retention_reason",
+            "retention_policy_id",
+            "payload_kind",
+            "lifecycle_state",
+            "access_modes_json",
+            "read_handle",
+            "stream_handle",
+            "format_json",
+        ],
+    );
+    assert_columns_exist(
+        &conn,
+        "node_status_projection",
+        &[
+            "workflow_version_id",
+            "workflow_semantic_version",
+            "node_type",
+            "node_version",
+            "runtime_id",
+            "runtime_version",
+            "model_id",
+            "model_version",
+            "started_at_ms",
+            "completed_at_ms",
+            "duration_ms",
+            "error",
+            "error_event_id",
+            "error_severity",
+            "error_phase",
+            "error_code",
+        ],
+    );
+    assert_columns_exist(
+        &conn,
+        "library_usage_projection",
+        &[
+            "last_cache_status",
+            "last_workflow_run_id",
+            "last_workflow_id",
+            "last_workflow_version_id",
+            "last_workflow_semantic_version",
+            "last_client_id",
+            "last_client_session_id",
+            "last_bucket_id",
+        ],
+    );
+    assert_columns_exist(
+        &conn,
+        "library_usage_run_projection",
+        &[
+            "workflow_id",
+            "workflow_version_id",
+            "workflow_semantic_version",
+        ],
+    );
 }
 
 #[test]
@@ -2950,6 +3113,15 @@ fn sqlite_column_exists(conn: &Connection, table_name: &str, column_name: &str) 
         .map(|column| column.expect("column row loads"))
         .any(|column| column == column_name);
     exists
+}
+
+fn assert_columns_exist(conn: &Connection, table_name: &str, column_names: &[&str]) {
+    for column_name in column_names {
+        assert!(
+            sqlite_column_exists(conn, table_name, column_name),
+            "expected {table_name}.{column_name} to exist"
+        );
+    }
 }
 
 #[test]

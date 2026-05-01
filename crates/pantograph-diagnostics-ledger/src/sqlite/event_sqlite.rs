@@ -1675,6 +1675,13 @@ fn scheduler_timeline_record_from_event(
         }
         _ => return Ok(None),
     };
+    let Some(workflow_run_id) = event.workflow_run_id.clone() else {
+        return Ok(None);
+    };
+    let Some(workflow_id) = event.workflow_id.clone() else {
+        return Ok(None);
+    };
+
     Ok(Some(SchedulerTimelineProjectionRecord {
         event_seq: event.event_seq,
         event_id: event.event_id.clone(),
@@ -1682,17 +1689,8 @@ fn scheduler_timeline_record_from_event(
         source_component: event.source_component,
         occurred_at_ms: event.occurred_at_ms,
         recorded_at_ms: event.recorded_at_ms,
-        workflow_run_id: event.workflow_run_id.clone().ok_or(
-            DiagnosticsLedgerError::MissingField {
-                field: "workflow_run_id",
-            },
-        )?,
-        workflow_id: event
-            .workflow_id
-            .clone()
-            .ok_or(DiagnosticsLedgerError::MissingField {
-                field: "workflow_id",
-            })?,
+        workflow_run_id,
+        workflow_id,
         workflow_version_id: event.workflow_version_id.clone(),
         workflow_semantic_version: event.workflow_semantic_version.clone(),
         scheduler_policy_id: event.scheduler_policy_id.clone(),

@@ -254,8 +254,11 @@ fn apply_latest_idempotent_schema_repairs(
     tx: &Transaction<'_>,
 ) -> Result<(), DiagnosticsLedgerError> {
     apply_scheduler_timeline_projection_schema(tx)?;
-    apply_io_artifact_retention_state_migration(tx)?;
-    apply_io_artifact_endpoint_migration(tx)?;
+    apply_run_list_projection_schema(tx)?;
+    apply_run_detail_projection_schema(tx)?;
+    apply_io_artifact_projection_schema(tx)?;
+    apply_node_status_projection_schema(tx)?;
+    apply_library_usage_projection_schema(tx)?;
     apply_run_error_projection_migration(tx)?;
     Ok(())
 }
@@ -387,6 +390,23 @@ fn apply_event_ledger_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedg
 fn apply_scheduler_timeline_projection_schema(
     tx: &Transaction<'_>,
 ) -> Result<(), DiagnosticsLedgerError> {
+    ensure_rebuildable_projection_required_columns(
+        tx,
+        "scheduler_timeline_projection",
+        "scheduler_timeline",
+        &[
+            "event_seq",
+            "event_id",
+            "event_kind",
+            "source_component",
+            "occurred_at_ms",
+            "recorded_at_ms",
+            "workflow_run_id",
+            "workflow_id",
+            "summary",
+            "payload_json",
+        ],
+    )?;
     tx.execute_batch(
         r#"
         CREATE TABLE IF NOT EXISTS scheduler_timeline_projection (
@@ -470,6 +490,18 @@ fn ensure_scheduler_timeline_projection_columns(
 }
 
 fn apply_run_list_projection_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {
+    ensure_rebuildable_projection_required_columns(
+        tx,
+        "run_list_projection",
+        "run_list",
+        &[
+            "workflow_run_id",
+            "workflow_id",
+            "status",
+            "last_event_seq",
+            "last_updated_at_ms",
+        ],
+    )?;
     tx.execute_batch(
         r#"
         CREATE TABLE IF NOT EXISTS run_list_projection (
@@ -510,6 +542,11 @@ fn apply_run_list_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagnost
             last_event_seq INTEGER NOT NULL,
             last_updated_at_ms INTEGER NOT NULL
         );
+        "#,
+    )?;
+    ensure_run_list_projection_columns(tx)?;
+    tx.execute_batch(
+        r#"
         CREATE INDEX IF NOT EXISTS idx_run_list_projection_updated
             ON run_list_projection(last_updated_at_ms DESC, last_event_seq DESC);
         CREATE INDEX IF NOT EXISTS idx_run_list_projection_workflow_updated
@@ -536,11 +573,22 @@ fn apply_run_list_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagnost
             ON run_list_projection(workflow_execution_session_id, last_updated_at_ms DESC);
         "#,
     )?;
-    ensure_error_projection_columns(tx, "run_list_projection")?;
     Ok(())
 }
 
 fn apply_run_detail_projection_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {
+    ensure_rebuildable_projection_required_columns(
+        tx,
+        "run_detail_projection",
+        "run_detail",
+        &[
+            "workflow_run_id",
+            "workflow_id",
+            "status",
+            "last_event_seq",
+            "last_updated_at_ms",
+        ],
+    )?;
     tx.execute_batch(
         r#"
         CREATE TABLE IF NOT EXISTS run_detail_projection (
@@ -589,6 +637,11 @@ fn apply_run_detail_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagno
             last_event_seq INTEGER NOT NULL,
             last_updated_at_ms INTEGER NOT NULL
         );
+        "#,
+    )?;
+    ensure_run_detail_projection_columns(tx)?;
+    tx.execute_batch(
+        r#"
         CREATE INDEX IF NOT EXISTS idx_run_detail_projection_workflow_updated
             ON run_detail_projection(workflow_id, last_updated_at_ms DESC);
         CREATE INDEX IF NOT EXISTS idx_run_detail_projection_version_updated
@@ -599,8 +652,83 @@ fn apply_run_detail_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagno
             ON run_detail_projection(selected_runtime_id, last_updated_at_ms DESC);
         "#,
     )?;
-    ensure_error_projection_columns(tx, "run_detail_projection")?;
     Ok(())
+}
+
+fn ensure_run_list_projection_columns(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {
+    ensure_columns(
+        tx,
+        "run_list_projection",
+        &[
+            ("workflow_version_id", "TEXT"),
+            ("workflow_semantic_version", "TEXT"),
+            ("accepted_at_ms", "INTEGER"),
+            ("enqueued_at_ms", "INTEGER"),
+            ("started_at_ms", "INTEGER"),
+            ("completed_at_ms", "INTEGER"),
+            ("duration_ms", "INTEGER"),
+            ("scheduler_policy_id", "TEXT"),
+            ("retention_policy_id", "TEXT"),
+            ("selected_runtime_id", "TEXT"),
+            ("selected_device_id", "TEXT"),
+            ("selected_network_node_id", "TEXT"),
+            ("client_id", "TEXT"),
+            ("client_session_id", "TEXT"),
+            ("bucket_id", "TEXT"),
+            ("workflow_execution_session_id", "TEXT"),
+            ("scheduler_queue_position", "INTEGER"),
+            ("scheduler_priority", "INTEGER"),
+            ("estimate_confidence", "TEXT"),
+            ("estimated_queue_wait_ms", "INTEGER"),
+            ("estimated_duration_ms", "INTEGER"),
+            ("model_cache_state", "TEXT"),
+            ("scheduler_reason", "TEXT"),
+        ],
+    )?;
+    ensure_error_projection_columns(tx, "run_list_projection")
+}
+
+fn ensure_run_detail_projection_columns(
+    tx: &Transaction<'_>,
+) -> Result<(), DiagnosticsLedgerError> {
+    ensure_columns(
+        tx,
+        "run_detail_projection",
+        &[
+            ("workflow_version_id", "TEXT"),
+            ("workflow_semantic_version", "TEXT"),
+            ("accepted_at_ms", "INTEGER"),
+            ("enqueued_at_ms", "INTEGER"),
+            ("started_at_ms", "INTEGER"),
+            ("completed_at_ms", "INTEGER"),
+            ("duration_ms", "INTEGER"),
+            ("scheduler_policy_id", "TEXT"),
+            ("retention_policy_id", "TEXT"),
+            ("selected_runtime_id", "TEXT"),
+            ("selected_device_id", "TEXT"),
+            ("selected_network_node_id", "TEXT"),
+            ("client_id", "TEXT"),
+            ("client_session_id", "TEXT"),
+            ("bucket_id", "TEXT"),
+            ("workflow_run_snapshot_id", "TEXT"),
+            ("workflow_execution_session_id", "TEXT"),
+            ("workflow_presentation_revision_id", "TEXT"),
+            ("latest_estimate_json", "TEXT"),
+            ("latest_queue_placement_json", "TEXT"),
+            ("started_payload_json", "TEXT"),
+            ("terminal_payload_json", "TEXT"),
+            ("terminal_error", "TEXT"),
+            ("scheduler_queue_position", "INTEGER"),
+            ("scheduler_priority", "INTEGER"),
+            ("estimate_confidence", "TEXT"),
+            ("estimated_queue_wait_ms", "INTEGER"),
+            ("estimated_duration_ms", "INTEGER"),
+            ("model_cache_state", "TEXT"),
+            ("scheduler_reason", "TEXT"),
+            ("timeline_event_count", "INTEGER NOT NULL DEFAULT 0"),
+        ],
+    )?;
+    ensure_error_projection_columns(tx, "run_detail_projection")
 }
 
 fn ensure_error_projection_columns(
@@ -633,6 +761,17 @@ fn ensure_column(
             format!("ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}").as_str(),
             [],
         )?;
+    }
+    Ok(())
+}
+
+fn ensure_columns(
+    tx: &Transaction<'_>,
+    table_name: &str,
+    columns: &[(&str, &str)],
+) -> Result<(), DiagnosticsLedgerError> {
+    for (column_name, definition) in columns {
+        ensure_column(tx, table_name, column_name, definition)?;
     }
     Ok(())
 }
@@ -896,21 +1035,35 @@ fn ensure_rebuildable_projection_schema_compatible(
     required_columns: &[&str],
     apply_schema: fn(&Transaction<'_>) -> Result<(), DiagnosticsLedgerError>,
 ) -> Result<(), DiagnosticsLedgerError> {
+    ensure_rebuildable_projection_required_columns(
+        tx,
+        table_name,
+        projection_name,
+        required_columns,
+    )?;
     if !table_exists(tx, table_name)? {
         apply_schema(tx)?;
+    }
+    Ok(())
+}
+
+fn ensure_rebuildable_projection_required_columns(
+    tx: &Transaction<'_>,
+    table_name: &str,
+    projection_name: &str,
+    required_columns: &[&str],
+) -> Result<(), DiagnosticsLedgerError> {
+    if !table_exists(tx, table_name)? {
         return Ok(());
     }
 
-    let missing_required_column = required_columns
-        .iter()
-        .map(|column_name| column_exists(tx, table_name, column_name))
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter()
-        .any(|exists| !exists);
-    if missing_required_column {
+    if missing_any_columns(tx, table_name, required_columns)? {
         let drop_table_sql = match table_name {
+            "scheduler_timeline_projection" => "DROP TABLE scheduler_timeline_projection",
             "run_list_projection" => "DROP TABLE run_list_projection",
             "run_detail_projection" => "DROP TABLE run_detail_projection",
+            "io_artifact_projection" => "DROP TABLE io_artifact_projection",
+            "node_status_projection" => "DROP TABLE node_status_projection",
             _ => {
                 return Err(DiagnosticsLedgerError::InvalidField {
                     field: "table_name",
@@ -918,18 +1071,53 @@ fn ensure_rebuildable_projection_schema_compatible(
             }
         };
         tx.execute(drop_table_sql, [])?;
-        if table_exists(tx, "projection_state")? {
-            tx.execute(
-                "DELETE FROM projection_state WHERE projection_name = ?1",
-                params![projection_name],
-            )?;
-        }
-        apply_schema(tx)?;
+        delete_projection_state(tx, projection_name)?;
+    }
+    Ok(())
+}
+
+fn missing_any_columns(
+    tx: &Transaction<'_>,
+    table_name: &str,
+    required_columns: &[&str],
+) -> Result<bool, DiagnosticsLedgerError> {
+    required_columns
+        .iter()
+        .map(|column_name| column_exists(tx, table_name, column_name))
+        .collect::<Result<Vec<_>, _>>()
+        .map(|columns| columns.into_iter().any(|exists| !exists))
+}
+
+fn delete_projection_state(
+    tx: &Transaction<'_>,
+    projection_name: &str,
+) -> Result<(), DiagnosticsLedgerError> {
+    if table_exists(tx, "projection_state")? {
+        tx.execute(
+            "DELETE FROM projection_state WHERE projection_name = ?1",
+            params![projection_name],
+        )?;
     }
     Ok(())
 }
 
 fn apply_io_artifact_projection_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {
+    ensure_rebuildable_projection_required_columns(
+        tx,
+        "io_artifact_projection",
+        "io_artifact",
+        &[
+            "event_seq",
+            "event_id",
+            "occurred_at_ms",
+            "recorded_at_ms",
+            "workflow_run_id",
+            "workflow_id",
+            "artifact_id",
+            "artifact_role",
+            "retention_state",
+        ],
+    )?;
     tx.execute_batch(
         r#"
         CREATE TABLE IF NOT EXISTS io_artifact_projection (
@@ -968,6 +1156,11 @@ fn apply_io_artifact_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagn
             stream_handle TEXT,
             format_json TEXT
         );
+        "#,
+    )?;
+    ensure_io_artifact_projection_columns(tx)?;
+    tx.execute_batch(
+        r#"
         CREATE INDEX IF NOT EXISTS idx_io_artifact_projection_run_seq
             ON io_artifact_projection(workflow_run_id, event_seq);
         CREATE INDEX IF NOT EXISTS idx_io_artifact_projection_run_node_seq
@@ -983,6 +1176,42 @@ fn apply_io_artifact_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagn
         "#,
     )?;
     Ok(())
+}
+
+fn ensure_io_artifact_projection_columns(
+    tx: &Transaction<'_>,
+) -> Result<(), DiagnosticsLedgerError> {
+    ensure_columns(
+        tx,
+        "io_artifact_projection",
+        &[
+            ("workflow_version_id", "TEXT"),
+            ("workflow_semantic_version", "TEXT"),
+            ("node_id", "TEXT"),
+            ("node_type", "TEXT"),
+            ("node_version", "TEXT"),
+            ("runtime_id", "TEXT"),
+            ("runtime_version", "TEXT"),
+            ("model_id", "TEXT"),
+            ("model_version", "TEXT"),
+            ("producer_node_id", "TEXT"),
+            ("producer_port_id", "TEXT"),
+            ("consumer_node_id", "TEXT"),
+            ("consumer_port_id", "TEXT"),
+            ("media_type", "TEXT"),
+            ("size_bytes", "INTEGER"),
+            ("content_hash", "TEXT"),
+            ("payload_ref", "TEXT"),
+            ("retention_reason", "TEXT"),
+            ("retention_policy_id", "TEXT"),
+            ("payload_kind", "TEXT"),
+            ("lifecycle_state", "TEXT"),
+            ("access_modes_json", "TEXT"),
+            ("read_handle", "TEXT"),
+            ("stream_handle", "TEXT"),
+            ("format_json", "TEXT"),
+        ],
+    )
 }
 
 fn apply_io_artifact_endpoint_migration(
@@ -1072,6 +1301,7 @@ fn apply_io_artifact_retention_state_migration(
 fn apply_library_usage_projection_schema(
     tx: &Transaction<'_>,
 ) -> Result<(), DiagnosticsLedgerError> {
+    ensure_library_usage_projection_required_columns(tx)?;
     tx.execute_batch(
         r#"
         CREATE TABLE IF NOT EXISTS library_usage_projection (
@@ -1092,12 +1322,6 @@ fn apply_library_usage_projection_schema(
             last_event_seq INTEGER NOT NULL,
             last_updated_at_ms INTEGER NOT NULL
         );
-        CREATE INDEX IF NOT EXISTS idx_library_usage_projection_accessed
-            ON library_usage_projection(last_accessed_at_ms DESC, last_event_seq DESC);
-        CREATE INDEX IF NOT EXISTS idx_library_usage_projection_workflow
-            ON library_usage_projection(last_workflow_id, last_accessed_at_ms DESC);
-        CREATE INDEX IF NOT EXISTS idx_library_usage_projection_workflow_version
-            ON library_usage_projection(last_workflow_version_id, last_accessed_at_ms DESC);
 
         CREATE TABLE IF NOT EXISTS library_usage_run_projection (
             asset_id TEXT NOT NULL,
@@ -1110,6 +1334,17 @@ fn apply_library_usage_projection_schema(
             last_accessed_at_ms INTEGER NOT NULL,
             PRIMARY KEY(asset_id, workflow_run_id)
         );
+        "#,
+    )?;
+    ensure_library_usage_projection_columns(tx)?;
+    tx.execute_batch(
+        r#"
+        CREATE INDEX IF NOT EXISTS idx_library_usage_projection_accessed
+            ON library_usage_projection(last_accessed_at_ms DESC, last_event_seq DESC);
+        CREATE INDEX IF NOT EXISTS idx_library_usage_projection_workflow
+            ON library_usage_projection(last_workflow_id, last_accessed_at_ms DESC);
+        CREATE INDEX IF NOT EXISTS idx_library_usage_projection_workflow_version
+            ON library_usage_projection(last_workflow_version_id, last_accessed_at_ms DESC);
         CREATE INDEX IF NOT EXISTS idx_library_usage_run_projection_workflow
             ON library_usage_run_projection(workflow_id, asset_id);
         CREATE INDEX IF NOT EXISTS idx_library_usage_run_projection_version
@@ -1119,7 +1354,87 @@ fn apply_library_usage_projection_schema(
     Ok(())
 }
 
+fn ensure_library_usage_projection_required_columns(
+    tx: &Transaction<'_>,
+) -> Result<(), DiagnosticsLedgerError> {
+    let library_usage_missing = table_exists(tx, "library_usage_projection")?
+        && missing_any_columns(
+            tx,
+            "library_usage_projection",
+            &[
+                "asset_id",
+                "total_access_count",
+                "run_access_count",
+                "total_network_bytes",
+                "last_accessed_at_ms",
+                "last_operation",
+                "last_event_seq",
+                "last_updated_at_ms",
+            ],
+        )?;
+    let run_link_missing = table_exists(tx, "library_usage_run_projection")?
+        && missing_any_columns(
+            tx,
+            "library_usage_run_projection",
+            &[
+                "asset_id",
+                "workflow_run_id",
+                "first_event_seq",
+                "last_event_seq",
+                "last_accessed_at_ms",
+            ],
+        )?;
+
+    if library_usage_missing || run_link_missing {
+        tx.execute("DROP TABLE IF EXISTS library_usage_projection", [])?;
+        tx.execute("DROP TABLE IF EXISTS library_usage_run_projection", [])?;
+        delete_projection_state(tx, "library_usage")?;
+    }
+    Ok(())
+}
+
+fn ensure_library_usage_projection_columns(
+    tx: &Transaction<'_>,
+) -> Result<(), DiagnosticsLedgerError> {
+    ensure_columns(
+        tx,
+        "library_usage_projection",
+        &[
+            ("last_cache_status", "TEXT"),
+            ("last_workflow_run_id", "TEXT"),
+            ("last_workflow_id", "TEXT"),
+            ("last_workflow_version_id", "TEXT"),
+            ("last_workflow_semantic_version", "TEXT"),
+            ("last_client_id", "TEXT"),
+            ("last_client_session_id", "TEXT"),
+            ("last_bucket_id", "TEXT"),
+        ],
+    )?;
+    ensure_columns(
+        tx,
+        "library_usage_run_projection",
+        &[
+            ("workflow_id", "TEXT"),
+            ("workflow_version_id", "TEXT"),
+            ("workflow_semantic_version", "TEXT"),
+        ],
+    )
+}
+
 fn apply_node_status_projection_schema(tx: &Transaction<'_>) -> Result<(), DiagnosticsLedgerError> {
+    ensure_rebuildable_projection_required_columns(
+        tx,
+        "node_status_projection",
+        "node_status",
+        &[
+            "workflow_run_id",
+            "workflow_id",
+            "node_id",
+            "status",
+            "last_event_seq",
+            "last_updated_at_ms",
+        ],
+    )?;
     tx.execute_batch(
         r#"
         CREATE TABLE IF NOT EXISTS node_status_projection (
@@ -1147,17 +1462,45 @@ fn apply_node_status_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagn
             last_updated_at_ms INTEGER NOT NULL,
             PRIMARY KEY(workflow_run_id, node_id)
         );
+        "#,
+    )?;
+    ensure_node_status_projection_columns(tx)?;
+    tx.execute_batch(
+        r#"
         CREATE INDEX IF NOT EXISTS idx_node_status_projection_run_status
             ON node_status_projection(workflow_run_id, status, last_event_seq);
         CREATE INDEX IF NOT EXISTS idx_node_status_projection_workflow_version_status
             ON node_status_projection(workflow_version_id, status, last_event_seq);
         "#,
     )?;
-    ensure_column(tx, "node_status_projection", "error_event_id", "TEXT")?;
-    ensure_column(tx, "node_status_projection", "error_severity", "TEXT")?;
-    ensure_column(tx, "node_status_projection", "error_phase", "TEXT")?;
-    ensure_column(tx, "node_status_projection", "error_code", "TEXT")?;
     Ok(())
+}
+
+fn ensure_node_status_projection_columns(
+    tx: &Transaction<'_>,
+) -> Result<(), DiagnosticsLedgerError> {
+    ensure_columns(
+        tx,
+        "node_status_projection",
+        &[
+            ("workflow_version_id", "TEXT"),
+            ("workflow_semantic_version", "TEXT"),
+            ("node_type", "TEXT"),
+            ("node_version", "TEXT"),
+            ("runtime_id", "TEXT"),
+            ("runtime_version", "TEXT"),
+            ("model_id", "TEXT"),
+            ("model_version", "TEXT"),
+            ("started_at_ms", "INTEGER"),
+            ("completed_at_ms", "INTEGER"),
+            ("duration_ms", "INTEGER"),
+            ("error", "TEXT"),
+            ("error_event_id", "TEXT"),
+            ("error_severity", "TEXT"),
+            ("error_phase", "TEXT"),
+            ("error_code", "TEXT"),
+        ],
+    )
 }
 
 fn table_exists(tx: &Transaction<'_>, table_name: &str) -> Result<bool, DiagnosticsLedgerError> {
