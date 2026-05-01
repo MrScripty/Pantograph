@@ -51,7 +51,7 @@ impl LocalSystemMetricsProvider for SysinfoLocalSystemMetricsProvider {
             gpu: WorkflowLocalGpuMetrics {
                 available: false,
                 reason: Some(
-                    "GPU metrics are not available from the local system metrics provider"
+                    "GPU metrics are not collected by the local system metrics provider"
                         .to_string(),
                 ),
             },
@@ -84,7 +84,7 @@ impl WorkflowService {
             .hostname
             .clone()
             .unwrap_or_else(|| "Local Pantograph".to_string());
-        let degradation_warnings = system.gpu.reason.clone().into_iter().collect::<Vec<_>>();
+        let degradation_warnings = Vec::new();
 
         Ok(WorkflowLocalNetworkStatusQueryResponse {
             local_node: WorkflowLocalNetworkNodeStatus {

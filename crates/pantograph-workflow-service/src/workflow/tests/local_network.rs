@@ -76,6 +76,7 @@ async fn local_network_status_reports_local_node_and_scheduler_load() {
     assert!(response.local_node.system.disks.is_empty());
     assert!(response.local_node.system.network_interfaces.is_empty());
     assert!(!response.local_node.system.gpu.available);
-    assert!(!response.local_node.degradation_warnings.is_empty());
+    assert!(response.local_node.system.gpu.reason.is_some());
+    assert!(response.local_node.degradation_warnings.is_empty());
     assert!(response.peer_nodes.is_empty());
 }
