@@ -38,6 +38,23 @@ export interface WorkflowSubmitFailureContext {
   currentGraphType: string | null | undefined;
 }
 
+export function isNumericWorkflowSemanticVersion(version: string): boolean {
+  const parts = version.split('.');
+  return (
+    parts.length === 3 &&
+    parts.every((part) => part.length > 0 && [...part].every((character) => character >= '0' && character <= '9'))
+  );
+}
+
+export function nextWorkflowPatchSemanticVersion(version: string): string {
+  if (!isNumericWorkflowSemanticVersion(version)) {
+    return '0.1.0';
+  }
+
+  const [major, minor, patch] = version.split('.').map((part) => Number.parseInt(part, 10));
+  return `${major}.${minor}.${patch + 1}`;
+}
+
 export function isCurrentWorkflowSubmitFailure({
   submittedWorkflowId,
   currentGraphId,

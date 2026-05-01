@@ -5,6 +5,8 @@ import type { Edge } from '@xyflow/svelte';
 import {
   applyWorkflowToolbarEvent,
   isCurrentWorkflowSubmitFailure,
+  isNumericWorkflowSemanticVersion,
+  nextWorkflowPatchSemanticVersion,
 } from './workflowToolbarEvents.ts';
 import type { NodeExecutionState, WorkflowEvent } from '../services/workflow/types.ts';
 
@@ -109,6 +111,20 @@ test('isCurrentWorkflowSubmitFailure rejects stale async submit failures', () =>
     }),
     false,
   );
+});
+
+test('isNumericWorkflowSemanticVersion accepts numeric major minor patch versions', () => {
+  assert.equal(isNumericWorkflowSemanticVersion('0.1.0'), true);
+  assert.equal(isNumericWorkflowSemanticVersion('12.3.405'), true);
+  assert.equal(isNumericWorkflowSemanticVersion('0.1'), false);
+  assert.equal(isNumericWorkflowSemanticVersion('0.1.0-beta'), false);
+  assert.equal(isNumericWorkflowSemanticVersion('0.1.x'), false);
+});
+
+test('nextWorkflowPatchSemanticVersion increments valid patch versions', () => {
+  assert.equal(nextWorkflowPatchSemanticVersion('0.1.0'), '0.1.1');
+  assert.equal(nextWorkflowPatchSemanticVersion('2.4.9'), '2.4.10');
+  assert.equal(nextWorkflowPatchSemanticVersion('bad'), '0.1.0');
 });
 
 test('applyWorkflowToolbarEvent replays graph-modified dirty tasks into idle state without clearing waiting input state', () => {

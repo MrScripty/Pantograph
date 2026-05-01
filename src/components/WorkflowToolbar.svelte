@@ -28,12 +28,19 @@
   } from '../stores/workbenchStore';
   import { formatWorkflowCommandError } from './workbench/workflowErrorPresenters';
   import WorkflowPersistenceControls from './WorkflowPersistenceControls.svelte';
-  import { isCurrentWorkflowSubmitFailure } from './workflowToolbarEvents';
+  import {
+    isCurrentWorkflowSubmitFailure,
+    isNumericWorkflowSemanticVersion,
+    nextWorkflowPatchSemanticVersion,
+  } from './workflowToolbarEvents';
 
   const DEFAULT_WORKFLOW_SEMANTIC_VERSION = '0.1.0';
+  const WORKFLOW_SEMANTIC_VERSION_STORAGE_KEY_PREFIX = 'pantograph.workflowSemanticVersion.';
 
   let workflowError = $state<WorkflowServiceError | null>(null);
   let workflowErrorWorkflowId = $state<string | null>(null);
+  let workflowSemanticVersion = $state(DEFAULT_WORKFLOW_SEMANTIC_VERSION);
+  let previousWorkflowId = $state<string | null>(null);
 
   let currentSavedWorkflow = $derived(
     $currentGraphType === 'workflow'
@@ -41,7 +48,16 @@
       : undefined,
   );
   let submitDisabled = $derived(
-    $isExecuting || $isReadOnly || $isDirty || !currentSavedWorkflow || !$currentGraphId,
+    $isExecuting ||
+      $isReadOnly ||
+      $isDirty ||
+      !currentSavedWorkflow ||
+      !$currentGraphId ||
+      !isNumericWorkflowSemanticVersion(workflowSemanticVersion),
+  );
+  let workflowSemanticVersionInvalid = $derived(
+    workflowSemanticVersion.trim().length > 0 &&
+      !isNumericWorkflowSemanticVersion(workflowSemanticVersion),
   );
   let submitTitle = $derived(submitButtonTitle());
   let workflowErrorMessage = $derived(workflowError ? formatWorkflowCommandError(workflowError) : null);
@@ -59,9 +75,55 @@
     if ($isReadOnly) return 'Cannot submit a read-only graph';
     if ($isDirty) return 'Save workflow changes before submitting';
     if (!currentSavedWorkflow || !$currentGraphId) return 'Save the workflow before submitting';
+    if (workflowSemanticVersionInvalid) {
+      return 'Workflow version must use numeric major.minor.patch format';
+    }
     if ($isExecuting) return 'Workflow submission is in progress';
     return 'Submit workflow to the scheduler';
   }
+
+  function workflowSemanticVersionStorageKey(workflowId: string): string {
+    return `${WORKFLOW_SEMANTIC_VERSION_STORAGE_KEY_PREFIX}${workflowId}`;
+  }
+
+  function readStoredWorkflowSemanticVersion(workflowId: string): string {
+    try {
+      const stored = localStorage.getItem(workflowSemanticVersionStorageKey(workflowId));
+      return stored && isNumericWorkflowSemanticVersion(stored)
+        ? stored
+        : DEFAULT_WORKFLOW_SEMANTIC_VERSION;
+    } catch {
+      return DEFAULT_WORKFLOW_SEMANTIC_VERSION;
+    }
+  }
+
+  function persistWorkflowSemanticVersion(workflowId: string, version: string): void {
+    if (!isNumericWorkflowSemanticVersion(version)) {
+      return;
+    }
+
+    try {
+      localStorage.setItem(workflowSemanticVersionStorageKey(workflowId), version);
+    } catch {
+      // Ignore storage failures; the explicit field still controls this submit.
+    }
+  }
+
+  function bumpWorkflowSemanticVersion(): void {
+    workflowSemanticVersion = nextWorkflowPatchSemanticVersion(workflowSemanticVersion);
+  }
+
+  $effect(() => {
+    const workflowId = $currentGraphType === 'workflow' ? $currentGraphId : null;
+    if (workflowId === previousWorkflowId) {
+      return;
+    }
+
+    previousWorkflowId = workflowId;
+    workflowSemanticVersion = workflowId
+      ? readStoredWorkflowSemanticVersion(workflowId)
+      : DEFAULT_WORKFLOW_SEMANTIC_VERSION;
+  });
 
   async function closeExecutionSession(sessionId: string): Promise<void> {
     try {
@@ -92,7 +154,11 @@
       if (!currentSavedWorkflow || !submittedWorkflowId) {
         throw new Error('Save the workflow before submitting');
       }
+      if (!isNumericWorkflowSemanticVersion(workflowSemanticVersion)) {
+        throw new Error('Workflow version must use numeric major.minor.patch format');
+      }
 
+      persistWorkflowSemanticVersion(submittedWorkflowId, workflowSemanticVersion);
       const executionSession = await workflowService.createWorkflowExecutionSession({
         workflow_id: submittedWorkflowId,
         usage_profile: null,
@@ -100,7 +166,7 @@
       });
       const runPromise = workflowService.runWorkflowExecutionSession({
         session_id: executionSession.session_id,
-        workflow_semantic_version: DEFAULT_WORKFLOW_SEMANTIC_VERSION,
+        workflow_semantic_version: workflowSemanticVersion,
         inputs: [],
         output_targets: null,
         override_selection: null,
@@ -113,7 +179,7 @@
         selectActiveWorkflowRun({
           workflow_run_id: response.workflow_run_id,
           workflow_id: submittedWorkflowId,
-          workflow_semantic_version: DEFAULT_WORKFLOW_SEMANTIC_VERSION,
+          workflow_semantic_version: workflowSemanticVersion,
           status: 'completed',
         });
         setWorkbenchPage('scheduler');
@@ -137,7 +203,7 @@
       {
         workflow_run_id: workflowErrorDiagnostics.workflow_run_id,
         workflow_id: $currentGraphId,
-        workflow_semantic_version: DEFAULT_WORKFLOW_SEMANTIC_VERSION,
+        workflow_semantic_version: workflowSemanticVersion,
         status: 'failed',
       },
       {
@@ -162,6 +228,26 @@
     </div>
 
     <div class="flex items-center gap-2">
+      <label class="flex items-center gap-2 text-xs text-neutral-400">
+        Version
+        <input
+          class="h-8 w-24 rounded border bg-neutral-950 px-2 font-mono text-xs text-neutral-200 outline-none transition-colors focus:border-cyan-500 {workflowSemanticVersionInvalid ? 'border-red-600' : 'border-neutral-700'}"
+          bind:value={workflowSemanticVersion}
+          disabled={$isExecuting}
+          title="Workflow semantic version for run attribution"
+          inputmode="numeric"
+          aria-invalid={workflowSemanticVersionInvalid}
+        />
+      </label>
+      <button
+        type="button"
+        class="h-8 rounded border border-neutral-700 px-2 text-xs text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
+        onclick={bumpWorkflowSemanticVersion}
+        disabled={$isExecuting}
+        title="Increment workflow patch version"
+      >
+        +patch
+      </button>
       <button type="button"
         class="px-4 py-1.5 text-sm rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         class:bg-green-600={!$isExecuting}
