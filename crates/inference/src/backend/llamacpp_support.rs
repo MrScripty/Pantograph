@@ -233,9 +233,28 @@ pub fn sidecar_device_config(config: &BackendConfig) -> DeviceConfig {
 }
 
 pub fn map_sidecar_start_error(error: String) -> BackendError {
-    if error.to_lowercase().contains("out of memory") || error.to_lowercase().contains("oom") {
+    if let Some(message) = crate::process::strip_managed_binary_spawn_error(&error) {
+        BackendError::ManagedBinary(message)
+    } else if error.to_lowercase().contains("out of memory") || error.to_lowercase().contains("oom")
+    {
         BackendError::OutOfMemory(error)
     } else {
         BackendError::StartupFailed(error)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn map_sidecar_start_error_preserves_managed_binary_failures() {
+        let error = crate::process::managed_binary_spawn_error("llama.cpp is not ready for launch");
+
+        assert!(matches!(
+            map_sidecar_start_error(error),
+            BackendError::ManagedBinary(message)
+                if message == "llama.cpp is not ready for launch"
+        ));
     }
 }

@@ -440,8 +440,10 @@ errors can be returned or swallowed.
   `managed_binary`, `runtime_launch`, `model_dependency`, or
   `runtime_model_load` from a typed `WorkflowRuntimeDiagnosticPhaseHint`
   instead of parsing error text. Embedded llama.cpp model startup now marks
-  gateway switch/start failures as `runtime_launch`; direct managed-binary
-  command resolution hints from Tauri/inference process spawning remain.
+  gateway switch/start failures as `runtime_launch`; Tauri managed runtime
+  command-resolution failures are tagged at the inference `ProcessSpawner`
+  boundary and mapped to managed-binary backend failures before workflow-service
+  records them.
 - [x] Wrap node execution failures and attach node IDs/types and output port
   context where available.
 - [ ] Capture node execution diagnostics at the node execution/injection
@@ -501,6 +503,8 @@ Verification completed for this slice:
 - `cargo check -p pantograph-embedded-runtime`
 - `cargo test -p pantograph-workflow-service workflow_service_error_preserves_runtime_diagnostic_phase_hint`
 - `cargo test -p pantograph-workflow-service workflow_execution_session_runtime_load_failure_uses_phase_hint`
+- `cargo test -p inference map_sidecar_start_error_preserves_managed_binary_failures`
+- `cargo check --manifest-path src-tauri/Cargo.toml`
 
 ### Milestone 4: Projection And Query Semantics
 

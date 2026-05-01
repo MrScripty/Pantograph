@@ -53,6 +53,10 @@ companion tasks with the process owner.
 The same process bridge writes structured managed-runtime PID records with the
 process id, owner/version, mode, start time, and executable path for later
 stale-process cleanup.
+Managed runtime command-resolution failures are tagged through the inference
+process helper before crossing the `ProcessSpawner` string boundary so the
+backend can preserve them as managed-binary startup failures for workflow
+diagnostics.
 The health monitor stores its polling task handle and aborts it through
 `HealthMonitor::stop()` so the monitor loop has an explicit owner.
 Automatic recovery launched from health failures is tracked by `RecoveryManager`

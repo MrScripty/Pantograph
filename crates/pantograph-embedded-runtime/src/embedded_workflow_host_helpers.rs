@@ -143,13 +143,12 @@ impl EmbeddedWorkflowHost {
                 })
                 .await
                 .map_err(|error| {
+                    let phase = runtime_start_diagnostic_phase(&error);
                     WorkflowServiceError::RuntimeNotReady(format!(
                         "failed to load llama.cpp model '{}': {error}",
                         model_path.display()
                     ))
-                    .with_runtime_diagnostic_phase(
-                        WorkflowRuntimeDiagnosticPhaseHint::RuntimeLaunch,
-                    )
+                    .with_runtime_diagnostic_phase(phase)
                 })?;
         }
 
@@ -740,6 +739,17 @@ fn resolve_gguf_path(path: &str) -> Result<PathBuf, WorkflowServiceError> {
             ))
             .with_runtime_diagnostic_phase(WorkflowRuntimeDiagnosticPhaseHint::ModelDependency)
         })
+}
+
+fn runtime_start_diagnostic_phase(
+    error: &inference::GatewayError,
+) -> WorkflowRuntimeDiagnosticPhaseHint {
+    match error {
+        inference::GatewayError::Backend(inference::BackendError::ManagedBinary(_)) => {
+            WorkflowRuntimeDiagnosticPhaseHint::ManagedBinary
+        }
+        _ => WorkflowRuntimeDiagnosticPhaseHint::RuntimeLaunch,
+    }
 }
 
 fn paths_refer_to_same_file(left: &Path, right: &Path) -> bool {

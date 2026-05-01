@@ -20,7 +20,7 @@ details.
 | `managed_runtime/` | Backend-owned managed binary contracts and orchestration for installable runtime sidecars such as `llama.cpp` and `Ollama`. |
 | `managed_media_dependencies.rs` | Managed media dependency activation checks, conversion dependency lease plans, holder validation, and attribution-ready lease records for ffmpeg/OIIO/OCIO tooling. |
 | `managed_redistributables/` | Shared managed redistributable catalog, state, install, activation, lease, and removal helpers for runtime sidecars and media dependencies. |
-| `process.rs` | Sidecar process abstraction used by backends that need external runtimes. |
+| `process.rs` | Sidecar process abstraction used by backends that need external runtimes, including the managed-binary launch error tag consumed before backend startup errors are classified. |
 | `types.rs` | Shared request/response contracts consumed across backend and host boundaries. |
 | `server.rs` | Legacy sidecar/server lifecycle helpers for llama.cpp-style backends. |
 | `server_tests.rs` | Crate-local llama.cpp sidecar regression coverage for PID parsing, path scoping, and runtime matching. |
@@ -41,6 +41,10 @@ of application-level scheduler policy.
 - The public contract must stay stable enough for multiple hosts to consume.
 - Backends have different lifecycle models, so process ownership must be
   abstracted.
+- Host process bridges that fail while resolving managed runtime commands must
+  tag those failures with the `process` helper so backend startup maps them to
+  `BackendError::ManagedBinary` instead of flattening them into a generic
+  startup failure.
 - Host-managed PID files must remain structured enough to guard stale-process
   cleanup against PID reuse and ownership ambiguity.
 - Machine-consumed request/response payloads must preserve semantics across

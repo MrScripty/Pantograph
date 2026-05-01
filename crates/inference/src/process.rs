@@ -33,6 +33,23 @@ use std::path::PathBuf;
 use async_trait::async_trait;
 use tokio::sync::mpsc;
 
+const MANAGED_BINARY_SPAWN_ERROR_PREFIX: &str = "managed_binary_error: ";
+
+pub fn managed_binary_spawn_error(message: impl AsRef<str>) -> String {
+    format!(
+        "{MANAGED_BINARY_SPAWN_ERROR_PREFIX}{}",
+        message.as_ref().trim()
+    )
+}
+
+pub(crate) fn strip_managed_binary_spawn_error(message: &str) -> Option<String> {
+    message
+        .strip_prefix(MANAGED_BINARY_SPAWN_ERROR_PREFIX)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
 /// Output event from a spawned process
 #[derive(Debug, Clone)]
 pub enum ProcessEvent {

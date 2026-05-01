@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
-use inference::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
+use inference::process::{managed_binary_spawn_error, ProcessEvent, ProcessHandle, ProcessSpawner};
 use inference::{managed_runtime_dir, resolve_managed_binary_command, ManagedBinaryId};
 use serde::Serialize;
 use tauri::{AppHandle, Manager};
@@ -168,11 +168,11 @@ impl ProcessSpawner for TauriProcessSpawner {
         let resolved = match sidecar_name {
             "llama-server-wrapper" => {
                 resolve_managed_binary_command(&app_data_dir, ManagedBinaryId::LlamaCpp, args)
-                    .map_err(|error| error.to_string())?
+                    .map_err(|error| managed_binary_spawn_error(error.to_string()))?
             }
             "ollama" => {
                 resolve_managed_binary_command(&app_data_dir, ManagedBinaryId::Ollama, args)
-                    .map_err(|error| error.to_string())?
+                    .map_err(|error| managed_binary_spawn_error(error.to_string()))?
             }
             other => {
                 return Err(format!(

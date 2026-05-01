@@ -66,6 +66,9 @@ pub enum BackendError {
     #[error("Out of memory: {0}")]
     OutOfMemory(String),
 
+    #[error("Managed binary error: {0}")]
+    ManagedBinary(String),
+
     #[error("HTTP error: {0}")]
     Http(#[from] reqwest::Error),
 
