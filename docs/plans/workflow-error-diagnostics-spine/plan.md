@@ -134,7 +134,9 @@ system still needs first-class error traceability.
   query error events efficiently without parsing free-form payloads.
 - Workflow error envelope gains optional diagnostics link fields:
   `workflow_run_id`, `diagnostic_event_id`, `node_id`, `runtime_id`,
-  `model_id`, `phase`, `source_component`, and `severity`.
+  `model_id`, `phase`, `source_component`, `severity`, and
+  `caused_by_event_id` when the producer knows the exact prior event that
+  caused the surfaced error.
 - Workflow error envelope and/or projection DTOs gain a typed
   `diagnostics_unavailable` indicator for cases where the primary diagnostics
   ledger cannot record a run error.
@@ -142,6 +144,9 @@ system still needs first-class error traceability.
   error counts, and focused event identifiers.
 - Scheduler timeline projection gains error styling metadata and related event
   references.
+- Secondary lifecycle/status events that are direct consequences of a canonical
+  diagnostic error gain an optional `canonical_error_event_id` or equivalent
+  typed link back to that error event.
 - Frontend TypeScript mirrors gain the same additive fields and must preserve
   unknown future enum values safely where existing patterns support that.
 
@@ -230,7 +235,8 @@ behavior.
 **Tasks:**
 - [ ] Add `DiagnosticErrorOccurredPayload` with phase, component, severity,
   error code, message, technical message, cause chain, recoverability,
-  location fields, and optional related event IDs.
+  location fields, optional related event IDs, and an optional
+  `caused_by_event_id` that may only be set from direct producer knowledge.
 - [ ] Add `DiagnosticEventKind::DiagnosticErrorOccurred` and update
   `DiagnosticEventSourceComponent` support deliberately. The current source
   enum is closed to scheduler, workflow-service, runtime, node-execution,
@@ -297,7 +303,8 @@ errors can be returned or swallowed.
   context where available.
 - [ ] Wrap artifact read/write/conversion and diagnostics projection failures.
 - [ ] Link `run.terminal`, scheduler lifecycle `*_failed`, node failed, and
-  runtime snapshot error events to the canonical error event.
+  runtime snapshot error events to the canonical error event with a typed
+  `canonical_error_event_id` or equivalent link.
 
 **Verification:**
 - Workflow-service tests for submit, queue/admission, preflight, model-load,
@@ -592,6 +599,34 @@ diagnostics event that explains the failure.
   true ledger unavailability produces a typed unavailable response and no
   duplicate JSONL files.
 
+### Pass 6: Causality Link Standards Revalidation
+
+**Status:** Complete.
+
+**Checks:**
+- Optional causality fields do not weaken the ledger's existing chronological
+  ordering contract.
+- Causality and canonical-error links remain typed structured contracts rather
+  than frontend-derived or string-parsed relationships.
+- The plan prevents inferred cause links from timestamps, `event_seq`, or
+  shared `workflow_run_id` alone.
+- Tests are required for both linked direct-propagation paths and unlinked
+  chronology-only neighboring events.
+
+**Findings:**
+- The affected code currently has no causality/link field in
+  `DiagnosticEventPayload`, `DiagnosticEventAppendRequest`, or
+  `WorkflowErrorEnvelope`, so implementation must add this as an explicit typed
+  contract with validation and serialization tests.
+- The standard-compliant design is conservative: `workflow_run_id` and
+  `event_seq` remain the trace scope/order, while `caused_by_event_id` is only
+  for producer-known direct propagation.
+- `canonical_error_event_id` on secondary lifecycle/status events is the safer
+  first implementation target than a broad causality graph because it solves
+  diagnostics navigation without asking producers to infer complex causes.
+- Frontend code must render these fields from backend DTOs and must not derive
+  them by scanning timeline order.
+
 ## Anti-Pattern And Blast-Radius Review
 
 ### Search Scope
@@ -621,6 +656,7 @@ diagnostics event that explains the failure.
 | Event payload size is capped at 8 KiB. | Runtime stderr, llama.cpp process output, or cause chains can still make error recording fail if not bounded before append. | Apply deterministic truncation before `DiagnosticEventAppendRequest::validate`; store only bounded summaries unless an existing payload-ref policy explicitly supports larger artifacts. |
 | Existing projection schemas use `CREATE TABLE IF NOT EXISTS`; new columns on existing user databases need explicit migration behavior. | Adding latest-error columns without migration/reset can leave installed databases missing columns. | Bump projection versions or add explicit schema migrations and mixed-version replay tests. Do not rely on `CREATE TABLE IF NOT EXISTS` to evolve existing tables. |
 | Tauri diagnostics overlays and durable ledger projections both expose run/debug state. | Adding error state to both layers can recreate duplicate ownership. | Keep canonical run error truth in the diagnostics ledger/projections. Tauri diagnostics may transport or overlay UI-only data but must not synthesize canonical failure state. |
+| Causality links can become guessed from chronology. | Incorrect `caused_by_event_id` links would make the trace less trustworthy than ordered events alone. | Set `caused_by_event_id` only when the same producer path caught or translated a known prior failure event. Never infer cause from timestamps, `event_seq`, or shared `workflow_run_id` alone. |
 
 ### Blast Radius
 
@@ -699,6 +735,27 @@ diagnostics event that explains the failure.
 - Any future recovery semantics require a dedicated recovery event and a
   separate plan update; recovery must not be inferred from ordinary lifecycle
   events.
+
+### Conservative Causality And Canonical Error Links
+
+- Chronology is already represented by `event_seq` and `occurred_at_ms`.
+  Causality fields must not duplicate chronology or encode guesses.
+- `caused_by_event_id` is optional and may be set only when the producer has
+  direct mechanical knowledge that a prior event caused the current surfaced
+  error. Valid examples include a runtime error event being caught by
+  workflow-service and translated into a `run.terminal` failure, or a node
+  execution error event being translated into `node.execution_status = failed`.
+- Do not set `caused_by_event_id` when the only evidence is that another event
+  happened earlier, shares the same `workflow_run_id`, or has a nearby
+  timestamp.
+- When a lifecycle/status event is a direct consequence of the canonical
+  diagnostic error event, prefer a narrow `canonical_error_event_id` link on the
+  secondary event over a broad causality graph. This keeps terminal/status
+  events navigable without pretending to model every causal relationship.
+- If multiple possible causes exist and the producer cannot identify the
+  decisive one, leave `caused_by_event_id` unset and rely on the ordered trace.
+- Add tests that prove causality links are present for direct propagation paths
+  and absent for chronology-only neighboring events.
 
 ### Model Lifecycle Semantics
 
