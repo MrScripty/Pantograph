@@ -568,6 +568,7 @@ impl SchedulerReservationChangedPayload {
 #[serde(rename_all = "snake_case")]
 pub enum SchedulerModelLifecycleTransition {
     LoadRequested,
+    LoadDependencyResolved,
     LoadStarted,
     LoadCompleted,
     LoadFailed,
@@ -582,6 +583,7 @@ impl SchedulerModelLifecycleTransition {
     fn summary(self) -> &'static str {
         match self {
             Self::LoadRequested => "model load requested",
+            Self::LoadDependencyResolved => "model load dependency resolved",
             Self::LoadStarted => "model load started",
             Self::LoadCompleted => "model load completed",
             Self::LoadFailed => "model load failed",
@@ -612,6 +614,7 @@ impl SchedulerModelCacheState {
     pub fn for_lifecycle_transition(transition: SchedulerModelLifecycleTransition) -> Self {
         match transition {
             SchedulerModelLifecycleTransition::LoadRequested
+            | SchedulerModelLifecycleTransition::LoadDependencyResolved
             | SchedulerModelLifecycleTransition::LoadStarted => Self::LoadRequested,
             SchedulerModelLifecycleTransition::LoadCompleted => Self::Loaded,
             SchedulerModelLifecycleTransition::LoadFailed => Self::Failed,

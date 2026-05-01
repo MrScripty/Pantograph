@@ -466,6 +466,20 @@ diagnostics, and release artifacts.
   switched `EmbeddedWorkflowHost::runtime_capabilities` to consume
   `list_managed_binary_statuses`. The legacy snapshot projection remains as a
   compatibility helper for existing tests and callers.
+- 2026-05-01: Fixed the first false-completion diagnostics bug by adding a
+  `load_dependency_resolved` scheduler model lifecycle transition. Workflow
+  runtime-admission success now records dependency resolution with
+  `cache_state: load_requested` instead of `load_completed`/`loaded`; the
+  workflow-session regression asserts this path does not emit
+  `load_completed`.
+
+## Deferred Bugs and Follow-Up Fixes
+
+- True llama.cpp model-active proof still needs to move into a single runtime
+  readiness owner before `load_completed` can be emitted again. The current
+  stage prevents the misleading completed event, but later Milestone 4 tasks
+  still need process-spawn, HTTP-ready, requested-model-active, and terminal
+  failure regressions.
 
 ## Commit Cadence Notes
 

@@ -590,13 +590,16 @@ async fn workflow_execution_session_run_records_snapshot_before_execution() {
     assert!(model_lifecycle_events[1].event_seq > model_lifecycle_events[0].event_seq);
     assert!(model_lifecycle_events[1]
         .payload_json
-        .contains("\"transition\":\"load_completed\""));
+        .contains("\"transition\":\"load_dependency_resolved\""));
     assert!(model_lifecycle_events[1]
         .payload_json
-        .contains("\"cache_state\":\"loaded\""));
+        .contains("\"cache_state\":\"load_requested\""));
     assert!(model_lifecycle_events[1]
         .payload_json
-        .contains("\"reason\":\"runtime admission loaded required models\""));
+        .contains("\"reason\":\"runtime admission resolved required model dependencies\""));
+    assert!(model_lifecycle_events.iter().all(|event| !event
+        .payload_json
+        .contains("\"transition\":\"load_completed\"")));
     assert!(model_lifecycle_events[1]
         .payload_json
         .contains("\"duration_ms\":"));
