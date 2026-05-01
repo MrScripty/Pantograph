@@ -5,7 +5,7 @@ use pantograph_runtime_identity::canonical_runtime_backend_key;
 use serde::Deserialize;
 
 use crate::graph::{GraphEdge, GraphNode, Position, WorkflowGraph};
-use crate::workflow::WorkflowServiceError;
+use crate::workflow::{WorkflowIdentity, WorkflowServiceError};
 
 pub const DEFAULT_MAX_INPUT_BINDINGS: usize = 128;
 pub const DEFAULT_MAX_OUTPUT_TARGETS: usize = 128;
@@ -441,17 +441,9 @@ fn extend_ancestor_workflow_roots(start: &Path, out: &mut Vec<PathBuf>) {
 
 fn sanitize_workflow_stem(workflow_id: &str) -> Option<String> {
     let trimmed = workflow_id.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-    if trimmed
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == ' ')
-    {
-        Some(trimmed.to_string())
-    } else {
-        None
-    }
+    WorkflowIdentity::parse(trimmed)
+        .map(WorkflowIdentity::into_string)
+        .ok()
 }
 
 fn extract_model_ids_from_value(value: &serde_json::Value, out: &mut HashSet<String>) {

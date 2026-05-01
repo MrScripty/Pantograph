@@ -113,3 +113,39 @@ async fn default_capabilities_derive_runtime_requirements_from_workflow() {
 
     let _ = fs::remove_dir_all(temp_root);
 }
+
+#[tokio::test]
+async fn default_capabilities_accept_dot_workflow_identity() {
+    let temp_root = std::env::temp_dir()
+        .join("pantograph-workflow-service-tests")
+        .join(uuid::Uuid::new_v4().to_string());
+    let workflow_root = temp_root.join(".pantograph").join("workflows");
+    fs::create_dir_all(&workflow_root).expect("create workflow root");
+    fs::write(
+        workflow_root.join("Maid-Qwen2.6-27b-heritic.json"),
+        serde_json::json!({
+            "metadata": {
+                "name": "Maid Qwen2.6 27b heritic"
+            },
+            "graph": {
+                "nodes": [],
+                "edges": []
+            }
+        })
+        .to_string(),
+    )
+    .expect("write workflow");
+
+    let host = DefaultCapabilitiesHost { workflow_root };
+    WorkflowService::new()
+        .workflow_get_capabilities(
+            &host,
+            WorkflowCapabilitiesRequest {
+                workflow_id: "Maid-Qwen2.6-27b-heritic".to_string(),
+            },
+        )
+        .await
+        .expect("capabilities response");
+
+    let _ = fs::remove_dir_all(temp_root);
+}
