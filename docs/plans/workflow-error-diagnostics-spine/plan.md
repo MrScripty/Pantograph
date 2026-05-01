@@ -162,8 +162,11 @@ system still needs first-class error traceability.
 
 ### Affected Persisted Artifacts
 
-- `.pantograph/workflow-diagnostics.sqlite` schema version and event payload
-  shape.
+- Current-version diagnostics ledger namespace/file and event payload shape.
+- Breaking diagnostics ledger schema changes create a new ledger version instead
+  of migrating old trace data into the new shape.
+- Old diagnostics ledgers are retained or cleaned up by retention policy only;
+  active code must not append new events to old ledger versions.
 - Existing workflow JSON files are not migrated by this plan.
 
 ### Ownership and Lifecycle Notes
@@ -206,7 +209,7 @@ system still needs first-class error traceability.
 | Duplicate error events make traces noisy | Medium | Define one owner per phase and link secondary failure events with `related_error_event_id` instead of re-emitting full errors. |
 | Fatal error events are mistaken for the live scheduler state transition mechanism | High | Workflow-service domain failure handling must explicitly mark scheduler/session state failed; diagnostics events record the fact and projections provide a read-model safety net. |
 | Fatal error events mark recoverable failures as failed in read models | Medium | Add `severity`, `recoverability`, and projection rules that only fatal run-scoped errors drive failed projection state. |
-| Schema changes break existing projections | High | Additive migrations, compatibility tests, and projection replay tests from mixed old/new event streams. |
+| Schema changes break existing projections | High | Non-breaking additive changes may stay within the current ledger version only when old readers/writers remain correct. Breaking ledger changes require a new ledger version/namespace and projection rebuild tests within that version, not mixed-version migration. |
 | UI color-only error indicators fail accessibility | Medium | Pair color with icons/text, accessible labels, focus states, and keyboard navigation tests. |
 | Runtime process output exceeds ledger limits | Medium | Bound technical detail length and place oversized detail behind payload refs only if the existing artifact policy supports it. |
 | Cross-layer changes become too broad for review | Medium | Implement in small milestones with atomic commits and verification per slice. |
@@ -263,14 +266,15 @@ behavior.
 - [ ] Add validation helpers that sanitize and bound error text before ledger
   validation rejects it.
 - [ ] Add SQLite serialization, deserialization, timeline summary/detail, and
-  schema migration support.
+  ledger schema/version identity support.
 - [ ] Export the contract through the diagnostics ledger facade and update
   `crates/pantograph-diagnostics-ledger/src/README.md`.
 
 **Verification:**
 - `cargo test -p pantograph-diagnostics-ledger diagnostic_error`
 - `cargo test -p pantograph-diagnostics-ledger sqlite`
-- Replay tests proving old events still read after migration.
+- Version-bound replay tests proving current-version events read correctly and
+  incompatible old-version ledgers are not mixed into current projections.
 
 **Status:** Not started.
 
@@ -547,7 +551,7 @@ diagnostics event that explains the failure.
   icon/text labels, accessible names, keyboard focus/navigation, and tests; the
   plan does not rely on color-only diagnostics.
 - Testing guidance is standards-aligned: milestone verification covers unit,
-  SQLite serialization/migration, projection replay, idempotency/recovery,
+  SQLite serialization/versioning, projection replay, idempotency/recovery,
   workflow-service integration, embedded-runtime context, Tauri command
   envelopes, presenter tests, component accessibility tests, and an end-to-end
   smoke path.
@@ -575,9 +579,10 @@ diagnostics event that explains the failure.
   drift coverage, workbench focus state, and phased capture keep durable truth
   backend-owned before UI navigation consumes it.
 - The testing strategy remains standards-compliant because it requires native
-  Rust contract tests, SQLite migration/replay tests, frontend parser/presenter
-  tests, accessibility tests, stale-response tests, and a cross-layer
-  acceptance path for the produced error event through GUI-visible diagnostics.
+  Rust contract tests, SQLite versioning/replay tests, frontend
+  parser/presenter tests, accessibility tests, stale-response tests, and a
+  cross-layer acceptance path for the produced error event through GUI-visible
+  diagnostics.
 - Concurrency and Rust async guidance remains standards-compliant because
   payload shaping happens outside the ledger lock, the lock covers append only,
   no unowned background task is permitted, and stale frontend async responses
@@ -738,7 +743,7 @@ diagnostics event that explains the failure.
 | Fallback JSONL can become a second diagnostics store. | Operators may see one error in fallback and different state in SQLite projections. | Do not implement JSONL fallback. Harden the primary ledger path and surface `diagnostics_unavailable` if it cannot record. |
 | Ledger append is synchronous behind a mutex in workflow-service paths. | A broad recorder that formats large cause chains while holding the ledger lock can increase contention or deadlock if it calls back into workflow-service. | Shape/sanitize error context before taking the ledger lock; hold the lock only for append; never call workflow-service or runtime code from inside the locked section. |
 | Event payload size is capped at 8 KiB. | Runtime stderr, llama.cpp process output, or cause chains can still make error recording fail if not bounded before append. | Apply deterministic truncation before `DiagnosticEventAppendRequest::validate`; store only bounded summaries unless an existing payload-ref policy explicitly supports larger artifacts. |
-| Existing projection schemas use `CREATE TABLE IF NOT EXISTS`; new columns on existing user databases need explicit migration behavior. | Adding latest-error columns without migration/reset can leave installed databases missing columns. | Bump projection versions or add explicit schema migrations and mixed-version replay tests. Do not rely on `CREATE TABLE IF NOT EXISTS` to evolve existing tables. |
+| Existing projection schemas use `CREATE TABLE IF NOT EXISTS`; new columns on existing user databases need explicit version behavior. | Adding latest-error columns without a version boundary can leave installed databases missing columns. | For non-breaking projection-only changes, use explicit projection version bumps and rebuild tests. For breaking ledger/schema changes, create a new ledger version/namespace and do not mix old and new trace data. Do not rely on `CREATE TABLE IF NOT EXISTS` to evolve existing tables. |
 | Tauri diagnostics overlays and durable ledger projections both expose run/debug state. | Adding error state to both layers can recreate duplicate ownership. | Keep canonical run error truth in the diagnostics ledger/projections. Tauri diagnostics may transport or overlay UI-only data but must not synthesize canonical failure state. |
 | Causality links can become guessed from chronology. | Incorrect `caused_by_event_id` links would make the trace less trustworthy than ordered events alone. | Set `caused_by_event_id` only when the same producer path caught or translated a known prior failure event. Never infer cause from timestamps, `event_seq`, or shared `workflow_run_id` alone. |
 
@@ -962,7 +967,7 @@ diagnostics event that explains the failure.
 - A future secondary preservation sink, import path, or recovery viewer
   requires its own standards-compliant plan and architecture review.
 
-### Locking, Payload Bounds, And Schema Evolution
+### Locking, Payload Bounds, And Ledger Versioning
 
 - Build, sanitize, and truncate error payloads before taking the diagnostics
   ledger mutex.
@@ -971,9 +976,22 @@ diagnostics event that explains the failure.
   while holding it.
 - Keep error payloads under the existing 8 KiB ledger cap with deterministic
   truncation and tests for large stderr/cause-chain inputs.
-- New projection columns require explicit migration behavior or projection
-  version bumps with rebuild tests. Existing user databases must not rely on
-  `CREATE TABLE IF NOT EXISTS` to gain new columns.
+- Diagnostics trace data is short-retention operational data, so breaking
+  ledger schema changes must not in-place migrate old ledgers into the new
+  shape.
+- Each active diagnostics ledger version must have an explicit schema/version
+  identity. Breaking changes create a new ledger namespace or physical ledger
+  file such as `workflow-diagnostics-v2.sqlite`.
+- Active runtime code writes only to the current ledger version. Old ledgers are
+  read-only archived diagnostics, or ignored and cleaned by retention.
+- Projections may be rebuilt within one ledger version, but projection rebuilds
+  must not translate incompatible old-version trace data into a new-version
+  ledger.
+- Non-breaking additive changes are allowed inside the current ledger version
+  only when old readers and writers remain correct. Existing user databases must
+  not rely on `CREATE TABLE IF NOT EXISTS` to gain required columns.
+- If archived old-version diagnostics are exposed in the GUI, they must be
+  clearly labeled read-only and versioned.
 
 ### Decomposition Gates
 
@@ -1013,17 +1031,18 @@ If implementation is later parallelized, use one wave at a time:
 
 | Owner/Agent | Scope | Output Contract | Handoff Checkpoint |
 | ----------- | ----- | --------------- | ------------------ |
-| Backend ledger owner | Diagnostics ledger schema/event contract | Committed ledger event, migration, tests, README updates | Milestone 1 complete |
+| Backend ledger owner | Diagnostics ledger schema/event contract | Committed ledger event, versioning policy, tests, README updates | Milestone 1 complete |
 | Backend workflow owner | Workflow-service/embedded-runtime capture and projections | Error recorder, capture points, projection tests | Milestones 2-4 complete after ledger owner lands |
 | Frontend owner | Diagnostics UI, command error links, accessible navigation | Typed DTOs, presenters, UI tests, workbench deep links | Milestones 5-6 complete after backend DTOs stabilize |
 
 Worker write sets must be made explicit before spawning or assigning parallel
-work. Shared DTOs, schema migrations, and global frontend types must have one
+work. Shared DTOs, ledger versioning, and global frontend types must have one
 owner per wave.
 
 ## Re-Plan Triggers
 
-- Ledger schema migration cannot remain additive.
+- A proposed ledger schema change is breaking but cannot use a new ledger
+  version/namespace.
 - A workflow error occurs before any workflow/run context can be established and
   cannot be linked to diagnostics by existing command context.
 - Existing frontend navigation cannot focus a diagnostics event without a
