@@ -576,6 +576,123 @@ diagnostics event that explains the failure.
 - Add a DTO drift test or fixture coverage for every backend-projected
   `DiagnosticEventKind` before adding the new error kind.
 
+## Risk Resolution Strategy
+
+### Required Implementation Order
+
+1. Add the durable ledger error event contract with validation,
+   serialization/deserialization, DB round-trip, source-validation, and payload
+   bound tests.
+2. Add projection support and status precedence before broad error capture.
+   A narrow replay test must prove one fatal `diagnostic.error_occurred` event
+   updates scheduler timeline, run detail latest-error fields, run-list failed
+   status, and node status when node-scoped.
+3. Add one narrow backend recorder path for the known control-character runtime
+   failure mode. This path must prove sanitized error text, durable error
+   event, failed projection, and visible timeline row before additional
+   capture points are added.
+4. Extend `WorkflowErrorEnvelope` with typed diagnostics link fields and update
+   frontend parsing. GUI components must receive typed fields instead of
+   parsing raw JSON or `details`.
+5. Update frontend diagnostics DTOs and add drift coverage for every
+   backend-projected `DiagnosticEventKind`.
+6. Add workbench diagnostics focus state and graph-editor navigation actions.
+   UI deep links may be implemented only after backend envelopes carry stable
+   `workflow_run_id` and `diagnostic_event_id` fields.
+7. Broaden capture points phase by phase across submission, queue/admission,
+   model dependency, runtime launch, node execution, artifact, projection, and
+   transport boundaries.
+
+### Projection Status Precedence
+
+- Introduce a single backend helper for run projection state transitions before
+  error events can drive status.
+- Terminal statuses `completed`, `failed`, and `cancelled` must not be
+  overwritten by later nonterminal events.
+- Fatal run-scoped diagnostic errors set run status to `failed`.
+- Fatal node-scoped diagnostic errors set the node projection status to
+  `failed` without requiring a separate node failed event.
+- Later nonterminal scheduler, runtime, or node events must not revive failed
+  runs or nodes.
+- Any future recovery semantics require a dedicated recovery event and a
+  separate plan update; recovery must not be inferred from ordinary lifecycle
+  events.
+
+### Model Lifecycle Semantics
+
+- `LoadDependencyResolved` means required runtime/model dependencies were
+  resolved for admission. It must not be displayed as “model loaded”.
+- `LoadCompleted` may be emitted or displayed only after the backend runtime
+  proves the model is resident or inference-ready.
+- If llama.cpp, Ollama, PyTorch, or Puma-Lib cannot provide a real readiness
+  signal, the workflow path must stop at dependency/resolution state and avoid
+  claiming load completion.
+- Add tests that reproduce llama.cpp/Puma-Lib model-load failures and assert no
+  false `LoadCompleted` event is emitted.
+
+### Error Source And Location Modeling
+
+- Keep `DiagnosticEventSourceComponent` typed and allowlisted.
+- Use existing source components where accurate:
+  `WorkflowService`, `Scheduler`, `Runtime`, `NodeExecution`, `Library`,
+  `Retention`, and `LocalObserver`.
+- Add new source enum variants only when a producer is a true durable owner,
+  and include DB serialization/deserialization and source-validation tests in
+  the same commit.
+- Represent narrower locations in the error payload with typed fields such as
+  `phase`, `operation`, `subsystem`, `binary_id`, `command_id`, `ui_surface`,
+  `node_id`, `runtime_id`, and `model_id` instead of free-form source labels.
+
+### Transport And Frontend Contract Handling
+
+- Add optional diagnostics link fields directly to `WorkflowErrorEnvelope`:
+  `workflow_run_id`, `diagnostic_event_id`, `node_id`, `runtime_id`,
+  `model_id`, `phase`, `source_component`, and `severity`.
+- Keep the existing `message` and `details` behavior compatible for callers
+  that do not read diagnostics links.
+- Update `workflowServiceErrors.ts` so `WorkflowServiceError` exposes typed
+  diagnostics link fields and keeps the original backend envelope.
+- Graph editor, Diagnostics page, and Graph page components must use typed
+  error/link fields from services or presenters. They must not parse backend
+  envelope JSON directly.
+- Add frontend fixture coverage that fails when backend-projected diagnostic
+  event kinds are missing from TypeScript unions.
+
+### Workbench Focus State
+
+- Extend `workbenchStore.ts` with transient diagnostics focus state owned at
+  the workbench level, not inside individual page components.
+- Focus state should include selected page, active run, focused diagnostic
+  event ID, optional focused node ID, and a request timestamp or nonce for
+  stale-response protection.
+- Diagnostics and Graph pages consume focus state declaratively and clear or
+  acknowledge focus through store helpers.
+- Async refresh paths must ignore stale focus/navigation responses when a newer
+  active run or focus request has replaced them.
+
+### Fallback Persistence Boundary
+
+- Fallback JSONL is preservation-only and local-only. It must not become a
+  normal diagnostics query source.
+- Fallback records must be sanitized, bounded, timestamped, and include any
+  available run/error context.
+- SQLite append failure should preserve the original error and separately
+  expose fallback-write failure if fallback also fails.
+- A future fallback import or recovery viewer requires its own plan.
+
+### Locking, Payload Bounds, And Schema Evolution
+
+- Build, sanitize, and truncate error payloads before taking the diagnostics
+  ledger mutex.
+- The ledger lock must cover append only. Recorder code must not call back into
+  workflow-service, runtime, frontend transport, or projection refresh logic
+  while holding it.
+- Keep error payloads under the existing 8 KiB ledger cap with deterministic
+  truncation and tests for large stderr/cause-chain inputs.
+- New projection columns require explicit migration behavior or projection
+  version bumps with rebuild tests. Existing user databases must not rely on
+  `CREATE TABLE IF NOT EXISTS` to gain new columns.
+
 ## Commit Cadence Notes
 
 - Commit after each logical slice is implemented and verified.
