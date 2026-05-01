@@ -539,11 +539,11 @@ failure projections.
   related event references.
 - [x] Extend run graph/node projections so node-scoped fatal errors mark the
   node failed and expose the error event ID.
-- [ ] Add projection replay rules for old streams that only have terminal or
+- [x] Add projection replay rules for old streams that only have terminal or
   node failed events.
   Fatal `diagnostic.error_occurred` events now drive run list/detail status to
-  `Failed` when no later terminal event supersedes them; legacy terminal replay
-  rules remain unchanged.
+  `Failed` when no later terminal event supersedes them. Legacy terminal and
+  node failed replay rules are covered by focused projection tests.
 - [x] Add a typed projection operation wrapper for drains, queries, and rebuilds
   so projection code can record `projection_failed` diagnostics without
   hand-built payloads or scheduler-state side effects.
@@ -570,8 +570,10 @@ Projection drain/query/rebuild failures now route through the workflow
 diagnostic error recorder with projection name and operation context. Projection
 diagnostic errors are diagnostics-only and may be global when the failed
 projection operation does not have a specific workflow run. Remaining Milestone
-4 work is limited to documenting/validating legacy terminal/node failed replay
-coverage for old streams.
+4 work is complete. Legacy terminal failure replay remains covered by run-list
+projection tests, and legacy node failed status replay now has dedicated
+coverage proving old streams still mark nodes failed without canonical error
+IDs.
 
 Verification completed for this slice:
 - `cargo test -p pantograph-diagnostics-ledger diagnostic_event_ledger_projects_fatal_error_as_failed_run`
@@ -585,6 +587,7 @@ Verification completed for this slice:
 - `cargo test -p pantograph-workflow-service --test contract workflow_node_status_query_contract_snapshot`
 - `cargo test -p pantograph-diagnostics-ledger diagnostic_event_ledger_validates_error_scope_source_and_text`
 - `cargo test -p pantograph-workflow-service workflow_diagnostic_error_recorder_appends_global_projection_error`
+- `cargo test -p pantograph-diagnostics-ledger diagnostic_event_ledger_replays_legacy_node_failed_status`
 
 ### Milestone 5: Frontend Diagnostics Visibility
 

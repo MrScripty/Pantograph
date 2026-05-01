@@ -761,6 +761,43 @@ fn diagnostic_event_ledger_projects_node_fatal_error_as_failed_node() {
 }
 
 #[test]
+fn diagnostic_event_ledger_replays_legacy_node_failed_status() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    let mut event = sample_node_status_event(
+        "workflow_run_alpha",
+        "legacy-node",
+        NodeExecutionProjectionStatus::Failed,
+        1_200,
+    );
+    if let DiagnosticEventPayload::NodeExecutionStatus(payload) = &mut event.payload {
+        payload.error = Some("legacy node failed".to_string());
+    }
+    ledger
+        .append_diagnostic_event(event)
+        .expect("legacy failed node event");
+    ledger
+        .drain_node_status_projection(500)
+        .expect("node status projection drains");
+
+    let nodes = ledger
+        .query_node_status_projection(NodeStatusProjectionQuery {
+            workflow_run_id: Some(
+                WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+            ),
+            node_id: Some("legacy-node".to_string()),
+            status: Some(NodeExecutionProjectionStatus::Failed),
+            after_event_seq: None,
+            limit: 10,
+        })
+        .expect("node status query succeeds");
+
+    assert_eq!(nodes.len(), 1);
+    assert_eq!(nodes[0].status, NodeExecutionProjectionStatus::Failed);
+    assert_eq!(nodes[0].error.as_deref(), Some("legacy node failed"));
+    assert_eq!(nodes[0].error_event_id, None);
+}
+
+#[test]
 fn diagnostic_event_ledger_validates_error_scope_source_and_text() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
 
