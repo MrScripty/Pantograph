@@ -491,6 +491,9 @@ failure projections.
   node failed and expose the error event ID.
 - [ ] Add projection replay rules for old streams that only have terminal or
   node failed events.
+  Fatal `diagnostic.error_occurred` events now drive run list/detail status to
+  `Failed` when no later terminal event supersedes them; legacy terminal replay
+  rules remain unchanged.
 - [ ] Add a typed projection operation wrapper for drains, queries, and rebuilds
   so projection code can record `projection_failed` diagnostics without
   hand-built payloads or scheduler-state side effects.
@@ -504,7 +507,16 @@ failure projections.
 - Recovery/idempotency tests proving duplicate projection replay does not
   duplicate error counts.
 
-**Status:** Not started.
+**Status:** In progress as of 2026-05-01. Added the first fatal-error
+projection rule: run list/detail projections now treat fatal canonical error
+events as failed run facts and preserve the sanitized error message in run
+detail when no terminal event is present. Remaining Milestone 4 work includes
+latest-error/count fields, scheduler timeline severity fields, node-status
+fatal projection, projection failure wrappers, and query filters.
+
+Verification completed for this slice:
+- `cargo test -p pantograph-diagnostics-ledger diagnostic_event_ledger_projects_fatal_error_as_failed_run`
+- `cargo test -p pantograph-diagnostics-ledger diagnostic_event_ledger_appends_error_events_and_projects_timeline`
 
 ### Milestone 5: Frontend Diagnostics Visibility
 

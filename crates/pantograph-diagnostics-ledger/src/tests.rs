@@ -624,6 +624,62 @@ fn diagnostic_event_ledger_appends_error_events_and_projects_timeline() {
 }
 
 #[test]
+fn diagnostic_event_ledger_projects_fatal_error_as_failed_run() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    ledger
+        .append_diagnostic_event(sample_run_snapshot_event("workflow_run_alpha"))
+        .expect("run snapshot event");
+    ledger
+        .append_diagnostic_event(sample_run_started_event("workflow_run_alpha"))
+        .expect("run started event");
+    ledger
+        .append_diagnostic_event(sample_diagnostic_error_event("workflow_run_alpha"))
+        .expect("diagnostic error event");
+
+    ledger
+        .drain_run_list_projection(500)
+        .expect("run list projection drains");
+    ledger
+        .drain_run_detail_projection(500)
+        .expect("run detail projection drains");
+
+    let runs = ledger
+        .query_run_list_projection(RunListProjectionQuery {
+            workflow_id: Some(WorkflowId::try_from("workflow_alpha".to_string()).unwrap()),
+            workflow_version_id: None,
+            workflow_semantic_version: None,
+            status: None,
+            scheduler_policy_id: None,
+            retention_policy_id: None,
+            selected_runtime_id: None,
+            selected_device_id: None,
+            selected_network_node_id: None,
+            client_id: None,
+            client_session_id: None,
+            bucket_id: None,
+            accepted_at_from_ms: None,
+            accepted_at_to_ms: None,
+            after_event_seq: None,
+            limit: 10,
+        })
+        .expect("run list query succeeds");
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0].status, RunListProjectionStatus::Failed);
+
+    let detail = ledger
+        .query_run_detail_projection(RunDetailProjectionQuery {
+            workflow_run_id: WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+        })
+        .expect("run detail query succeeds")
+        .expect("run detail exists");
+    assert_eq!(detail.status, RunListProjectionStatus::Failed);
+    assert_eq!(
+        detail.terminal_error.as_deref(),
+        Some("backend failed to start")
+    );
+}
+
+#[test]
 fn diagnostic_event_ledger_validates_error_scope_source_and_text() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
 

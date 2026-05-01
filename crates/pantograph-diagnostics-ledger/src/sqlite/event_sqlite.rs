@@ -2000,6 +2000,11 @@ fn apply_run_list_projection_event(
             crate::event::RunTerminalStatus::Failed => RunListProjectionStatus::Failed,
             crate::event::RunTerminalStatus::Cancelled => RunListProjectionStatus::Cancelled,
         },
+        DiagnosticEventPayload::DiagnosticErrorOccurred(payload)
+            if payload.severity == crate::event::DiagnosticErrorSeverity::Fatal =>
+        {
+            RunListProjectionStatus::Failed
+        }
         _ => return Ok(()),
     };
     let accepted_at_ms = matches!(&payload, DiagnosticEventPayload::RunSnapshotAccepted(_))
@@ -2013,6 +2018,11 @@ fn apply_run_list_projection_event(
             Some(event.occurred_at_ms),
             payload.duration_ms.map(|value| value as i64),
         ),
+        DiagnosticEventPayload::DiagnosticErrorOccurred(payload)
+            if payload.severity == crate::event::DiagnosticErrorSeverity::Fatal =>
+        {
+            (Some(event.occurred_at_ms), None)
+        }
         _ => (None, None),
     };
     let scheduler_facts = scheduler_projection_facts(&payload);
@@ -2247,6 +2257,11 @@ fn apply_run_detail_projection_event(
             crate::event::RunTerminalStatus::Failed => RunListProjectionStatus::Failed,
             crate::event::RunTerminalStatus::Cancelled => RunListProjectionStatus::Cancelled,
         },
+        DiagnosticEventPayload::DiagnosticErrorOccurred(payload)
+            if payload.severity == crate::event::DiagnosticErrorSeverity::Fatal =>
+        {
+            RunListProjectionStatus::Failed
+        }
         _ => return Ok(()),
     };
 
@@ -2262,6 +2277,15 @@ fn apply_run_detail_projection_event(
             payload.duration_ms.map(|value| value as i64),
             payload.error.as_deref(),
         ),
+        DiagnosticEventPayload::DiagnosticErrorOccurred(payload)
+            if payload.severity == crate::event::DiagnosticErrorSeverity::Fatal =>
+        {
+            (
+                Some(event.occurred_at_ms),
+                None,
+                Some(payload.message.as_str()),
+            )
+        }
         _ => (None, None, None),
     };
     let (
