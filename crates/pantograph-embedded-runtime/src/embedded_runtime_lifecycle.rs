@@ -28,6 +28,11 @@ impl EmbeddedRuntime {
         rag_backend: Option<Arc<dyn RagBackend>>,
         python_runtime: Arc<dyn PythonRuntimeAdapter>,
     ) -> Self {
+        if let Err(error) =
+            inference::reconcile_interrupted_managed_runtime_jobs(&config.app_data_dir)
+        {
+            log::warn!("Failed to reconcile interrupted managed runtime jobs: {error}");
+        }
         workflow_service
             .set_loaded_runtime_capacity_limit(config.max_loaded_sessions)
             .expect("embedded runtime should apply the configured loaded-session capacity limit");

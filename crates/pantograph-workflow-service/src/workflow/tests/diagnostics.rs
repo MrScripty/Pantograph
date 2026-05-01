@@ -160,10 +160,12 @@ fn workflow_scheduler_timeline_query_validates_bounds() {
             limit: Some(501),
             ..WorkflowSchedulerTimelineQueryRequest::default()
         });
-    assert!(matches!(
-        oversized_limit,
-        Err(WorkflowServiceError::InvalidRequest(_))
-    ));
+    assert_eq!(
+        oversized_limit
+            .expect_err("oversized limit should fail")
+            .code(),
+        WorkflowErrorCode::InvalidRequest
+    );
 
     let oversized_projection_batch =
         service.workflow_scheduler_timeline_query(WorkflowSchedulerTimelineQueryRequest {
@@ -180,10 +182,12 @@ fn workflow_scheduler_timeline_query_validates_bounds() {
         accepted_at_to_ms: Some(10),
         ..WorkflowRunListQueryRequest::default()
     });
-    assert!(matches!(
-        invalid_accepted_range,
-        Err(WorkflowServiceError::InvalidRequest(_))
-    ));
+    assert_eq!(
+        invalid_accepted_range
+            .expect_err("invalid accepted range should fail")
+            .code(),
+        WorkflowErrorCode::InvalidRequest
+    );
 }
 
 #[test]
@@ -1005,10 +1009,10 @@ fn workflow_projection_rebuild_validates_bounds() {
         projection_name: "unknown".to_string(),
         batch_size: None,
     });
-    assert!(matches!(
-        unknown,
-        Err(WorkflowServiceError::InvalidRequest(_))
-    ));
+    assert_eq!(
+        unknown.expect_err("unknown projection should fail").code(),
+        WorkflowErrorCode::InvalidRequest
+    );
 }
 
 #[test]

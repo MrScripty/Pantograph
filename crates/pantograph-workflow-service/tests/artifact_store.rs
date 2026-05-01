@@ -3,7 +3,7 @@ use pantograph_workflow_service::{
     ArtifactFormatMetadata, ArtifactLifecycleState, ArtifactPayloadKind, ArtifactPolicy,
     ArtifactReadRequest, ArtifactStore, ArtifactStoreError, ArtifactStreamChunkWriteRequest,
     ArtifactStreamFinalizeRequest, ArtifactStreamOpenRequest, ArtifactStreamReadRequest,
-    ArtifactWriteRequest, IoArtifactRetentionState, WorkflowService, WorkflowServiceError,
+    ArtifactWriteRequest, IoArtifactRetentionState, WorkflowErrorCode, WorkflowService,
 };
 
 fn policy(delete_on_consume: bool) -> ArtifactPolicy {
@@ -377,15 +377,21 @@ fn workflow_service_retention_cleanup_keeps_descriptor_queryable_while_body_is_u
     );
     assert!(descriptor.access_modes.is_empty());
     assert!(descriptor.read_handle.is_none());
-    assert!(matches!(
-        service.read_artifact_body(ArtifactReadRequest {
+    let error = service
+        .read_artifact_body(ArtifactReadRequest {
             artifact_id: "service_retention_audit".to_string(),
             byte_range_start: None,
             byte_range_end_exclusive: None,
-        }),
-        Err(WorkflowServiceError::InvalidRequest(message))
-            if message.contains("artifact body is unavailable: service_retention_audit")
-    ));
+        })
+        .expect_err("retention cleanup should remove artifact body");
+    assert_eq!(error.code(), WorkflowErrorCode::InvalidRequest);
+    assert!(
+        error
+            .message()
+            .contains("artifact body is unavailable: service_retention_audit"),
+        "unexpected artifact body error: {}",
+        error.message()
+    );
 }
 
 #[test]

@@ -12,8 +12,8 @@ use pantograph_runtime_registry::{
     RuntimeRegistryStatus, RuntimeReservationRequest, RuntimeRetentionHint, RuntimeTransition,
 };
 use pantograph_workflow_service::{
-    GraphEdge, GraphNode, Position, WorkflowCapabilitiesRequest,
-    WorkflowExecutionSessionCloseRequest, WorkflowExecutionSessionCreateRequest,
+    ArtifactPolicy, ArtifactStore, GraphEdge, GraphNode, Position, WorkflowCapabilitiesRequest,
+    WorkflowErrorCode, WorkflowExecutionSessionCloseRequest, WorkflowExecutionSessionCreateRequest,
     WorkflowExecutionSessionKeepAliveRequest, WorkflowExecutionSessionRetentionHint,
     WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionRuntimeSelectionTarget,
     WorkflowExecutionSessionRuntimeUnloadCandidate, WorkflowExecutionSessionState,
@@ -56,6 +56,25 @@ use graph_fixtures::{
     multi_python_runtime_data_graph, runtime_diffusion_data_graph,
     synthetic_kv_node_memory_snapshot,
 };
+
+fn test_artifact_policy() -> ArtifactPolicy {
+    ArtifactPolicy {
+        policy_id: "embedded-runtime-test".to_string(),
+        policy_version: 1,
+        ttl_seconds: None,
+        max_disk_bytes: None,
+        max_memory_bytes: None,
+        max_single_artifact_bytes: None,
+        spill_threshold_bytes: None,
+        delete_on_consume: false,
+    }
+}
+
+fn workflow_service_with_artifact_store(temp: &TempDir) -> Arc<WorkflowService> {
+    let artifact_store = ArtifactStore::open(temp.path().join("artifacts"), test_artifact_policy())
+        .expect("open test artifact store");
+    Arc::new(WorkflowService::new().with_artifact_store(artifact_store))
+}
 
 #[tokio::test]
 async fn runtime_extensions_apply_workflow_service_for_stream_artifacts() {

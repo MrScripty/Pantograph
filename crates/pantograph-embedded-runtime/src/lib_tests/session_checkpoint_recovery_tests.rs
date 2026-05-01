@@ -269,15 +269,12 @@ async fn runtime_not_ready_resume_keeps_checkpoint_until_runtime_returns() {
         })
         .await
         .expect_err("resume should fail when the selected runtime is no longer ready");
-    match error {
-        WorkflowServiceError::RuntimeNotReady(message) => {
-            assert!(
-                message.contains("llama.cpp"),
-                "unexpected runtime-not-ready message: {message}"
-            );
-        }
-        other => panic!("expected runtime-not-ready error, got {other:?}"),
-    }
+    assert_eq!(error.code(), WorkflowErrorCode::RuntimeNotReady);
+    assert!(
+        error.message().contains("llama.cpp"),
+        "unexpected runtime-not-ready message: {}",
+        error.message()
+    );
 
     let failed_resume_summary = {
         let executor = executor.lock().await;

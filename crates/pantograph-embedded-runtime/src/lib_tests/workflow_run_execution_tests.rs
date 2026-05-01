@@ -251,7 +251,7 @@ async fn test_runtime_routes_diffusion_workflow_through_python_adapter() {
         },
         Arc::new(inference::InferenceGateway::new()),
         Arc::new(RwLock::new(ExecutorExtensions::new())),
-        Arc::new(WorkflowService::new()),
+        workflow_service_with_artifact_store(&temp),
         None,
         python_runtime.clone(),
     )
@@ -277,8 +277,16 @@ async fn test_runtime_routes_diffusion_workflow_through_python_adapter() {
     assert_eq!(response.outputs[0].node_id, "image-output-1");
     assert_eq!(response.outputs[0].port_id, "image");
     assert_eq!(
-        response.outputs[0].value,
-        serde_json::json!("data:image/png;base64,bW9jay1pbWFnZQ==")
+        response.outputs[0].value["artifact_role"],
+        serde_json::json!("workflow_output")
+    );
+    assert_eq!(
+        response.outputs[0].value["payload_kind"],
+        serde_json::json!("image")
+    );
+    assert_eq!(
+        response.outputs[0].value["attribution"]["workflow_id"],
+        serde_json::json!("runtime-diffusion")
     );
 
     let requests = python_runtime.requests.lock().expect("requests lock");
@@ -315,7 +323,7 @@ async fn workflow_run_execution_session_uses_graph_node_type_for_gui_style_input
         },
         Arc::new(inference::InferenceGateway::new()),
         Arc::new(RwLock::new(ExecutorExtensions::new())),
-        Arc::new(WorkflowService::new()),
+        workflow_service_with_artifact_store(&temp),
         None,
         python_runtime.clone(),
     )
@@ -365,7 +373,7 @@ async fn test_runtime_run_reconciles_python_sidecar_runtime_into_registry() {
         },
         Arc::new(inference::InferenceGateway::new()),
         Arc::new(RwLock::new(ExecutorExtensions::new())),
-        Arc::new(WorkflowService::new()),
+        workflow_service_with_artifact_store(&temp),
         None,
         Arc::new(MockImagePythonRuntime {
             requests: Mutex::new(Vec::new()),

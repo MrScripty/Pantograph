@@ -241,7 +241,7 @@ async fn workflow_preflight_blocks_selected_runtime_failed_after_restart() {
         })
         .await
         .expect_err("workflow run should fail when selected runtime failed validation");
-    assert!(matches!(error, WorkflowServiceError::RuntimeNotReady(_)));
+    assert_eq!(error.code(), WorkflowErrorCode::RuntimeNotReady);
 }
 
 #[tokio::test]
@@ -331,5 +331,5 @@ async fn workflow_preflight_blocks_interrupted_runtime_job_after_restart() {
         })
         .await
         .expect_err("workflow run should fail when restart reconciles an interrupted runtime job");
-    assert!(matches!(error, WorkflowServiceError::RuntimeNotReady(_)));
+    assert_eq!(error.code(), WorkflowErrorCode::RuntimeNotReady);
 }
