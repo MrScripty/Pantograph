@@ -2485,6 +2485,58 @@ fn current_schema_repairs_missing_io_artifact_metadata_columns() {
 }
 
 #[test]
+fn current_schema_repairs_missing_run_error_projection_columns() {
+    let temp = tempfile::NamedTempFile::new().expect("temp file");
+    let path = temp.path().to_path_buf();
+    {
+        let conn = Connection::open(&path).expect("connection opens");
+        conn.execute_batch(
+            "CREATE TABLE ledger_schema_migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at_ms INTEGER NOT NULL,
+                checksum TEXT NOT NULL
+            );
+            INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
+            VALUES (22, 0, 'pantograph-diagnostics-ledger-v22');
+            CREATE TABLE run_list_projection (
+                workflow_run_id TEXT PRIMARY KEY,
+                workflow_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                last_event_seq INTEGER NOT NULL,
+                last_updated_at_ms INTEGER NOT NULL
+            );
+            CREATE TABLE run_detail_projection (
+                workflow_run_id TEXT PRIMARY KEY,
+                workflow_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                last_event_seq INTEGER NOT NULL,
+                last_updated_at_ms INTEGER NOT NULL
+            );",
+        )
+        .expect("current schema marker and drifted run projections are installed");
+    }
+    {
+        let _ledger = SqliteDiagnosticsLedger::open(&path).expect("ledger repairs schema drift");
+    }
+    let conn = Connection::open(&path).expect("connection reopens");
+
+    for table in ["run_list_projection", "run_detail_projection"] {
+        for column in [
+            "latest_error_event_id",
+            "latest_error_severity",
+            "latest_error_phase",
+            "latest_error_code",
+            "latest_error_message",
+            "fatal_error_event_id",
+            "error_count",
+            "warning_count",
+        ] {
+            assert!(sqlite_column_exists(&conn, table, column));
+        }
+    }
+}
+
+#[test]
 fn existing_v15_schema_adds_retention_policy_version() {
     let temp = tempfile::NamedTempFile::new().expect("temp file");
     let path = temp.path().to_path_buf();

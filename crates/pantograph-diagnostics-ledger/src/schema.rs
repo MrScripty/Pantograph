@@ -255,6 +255,21 @@ fn apply_latest_idempotent_schema_repairs(
 ) -> Result<(), DiagnosticsLedgerError> {
     apply_io_artifact_retention_state_migration(tx)?;
     apply_io_artifact_endpoint_migration(tx)?;
+    apply_run_error_projection_migration(tx)?;
+    Ok(())
+}
+
+fn apply_run_error_projection_migration(
+    tx: &Transaction<'_>,
+) -> Result<(), DiagnosticsLedgerError> {
+    if table_exists(tx, "run_list_projection")? {
+        ensure_run_list_projection_schema_compatible(tx)?;
+        ensure_error_projection_columns(tx, "run_list_projection")?;
+    }
+    if table_exists(tx, "run_detail_projection")? {
+        ensure_run_detail_projection_schema_compatible(tx)?;
+        ensure_error_projection_columns(tx, "run_detail_projection")?;
+    }
     Ok(())
 }
 
