@@ -514,6 +514,68 @@ diagnostics event that explains the failure.
   only if implementation changes architecture beyond existing README
   contracts.
 
+## Anti-Pattern And Blast-Radius Review
+
+### Search Scope
+
+- Reviewed planned touch points against diagnostics ledger event contracts,
+  SQLite projection drains, workflow-service runtime admission, workflow error
+  envelopes, Tauri command wrappers, frontend diagnostics DTOs, presenters, and
+  workbench navigation state.
+- Search focused on anti-patterns that could produce standards violations:
+  duplicate ownership, frontend state repair, free-form event sources, status
+  projection drift, blocking async paths, stale hand-mirrored DTOs, vague model
+  lifecycle semantics, and second-source fallback storage.
+
+### Findings To Address Before Or During Implementation
+
+| Finding | Risk | Required Guardrail |
+| ------- | ---- | ------------------ |
+| Projection drains use finite event-kind allowlists. `diagnostic_projection_events_after`, `node_status_events_after`, and timeline projection code must each opt in to any new error event. | Appending a new error event can succeed while run list/detail/timeline/node projections never see it, leaving the GUI stuck on `Running`. | Milestone 4 must update every affected drain/query path and add replay tests proving the same error event updates timeline, run detail, run list, and node status when scoped. |
+| Run list/detail projections currently set `status = excluded.status` for every accepted status event. | If fatal error events become status-driving without precedence rules, later nonterminal events can accidentally revive failed runs. | Add explicit terminal/fatal precedence in projection code: fatal run-scoped errors and terminal failed/cancelled/completed states must not be overwritten by later non-recovery events. |
+| Existing model lifecycle semantics distinguish `LoadDependencyResolved`, `LoadStarted`, and `LoadCompleted`, but runtime admission currently records dependency resolution after `ensure_session_runtime_loaded`. | UI or diagnostics can imply a 20GB model was loaded when only runtime/dependency admission completed. | Do not map dependency resolution to “model loaded”. Only emit or display `LoadCompleted` after the runtime/backend proves the model is resident or ready for inference. Add tests for llama.cpp/Puma-Lib failure paths. |
+| `DiagnosticEventSourceComponent` is closed and source validation is per event kind. | Adding source labels such as graph-editor, managed-binary, or Tauri transport as free-form strings would fail validation or weaken ledger consistency. | Keep source components typed and validated. Put narrower locations in payload fields or add enum variants with DB round-trip tests. |
+| Frontend `DiagnosticEventKind` is hand mirrored and already lags backend event kinds such as scheduler queue-control/admission/reservation events. | Adding `diagnostic_error_occurred` can compile only if casts hide drift, or fail frontend type checks unexpectedly. | Update TypeScript unions and projection fixtures with backend event-kind coverage; prefer generated DTOs later. Add tests that timeline presenter accepts every backend-projected kind. |
+| Tauri commands flatten `WorkflowServiceError` through `Result<T, String>` and `to_envelope_json`. | Diagnostics links can be lost if added outside the serialized envelope or if frontend parsing treats them as unknown details only. | Add link fields to the structured Rust envelope, preserve them in JSON serialization, and update frontend normalization to expose typed diagnostics link fields without requiring component JSON parsing. |
+| Workbench navigation state currently tracks selected page and active run only. | Clickable error navigation needs focused event and optional node focus; bolting it onto components risks stale async responses or hidden local state. | Add typed transient navigation/focus state to `workbenchStore.ts`, with stale-response guards in pages that refresh diagnostics asynchronously. |
+| Fallback JSONL can become a second diagnostics store. | Operators may see one error in fallback and different state in SQLite projections. | Treat fallback as local preservation only. Expose fallback-write failures as diagnostics metadata when possible, but keep normal GUI queries ledger/projection-owned. |
+| Ledger append is synchronous behind a mutex in workflow-service paths. | A broad recorder that formats large cause chains while holding the ledger lock can increase contention or deadlock if it calls back into workflow-service. | Shape/sanitize error context before taking the ledger lock; hold the lock only for append; never call workflow-service or runtime code from inside the locked section. |
+| Event payload size is capped at 8 KiB. | Runtime stderr, llama.cpp process output, or cause chains can still make error recording fail if not bounded before append. | Apply deterministic truncation before `DiagnosticEventAppendRequest::validate`; store only bounded summaries unless an existing payload-ref policy explicitly supports larger artifacts. |
+| Existing projection schemas use `CREATE TABLE IF NOT EXISTS`; new columns on existing user databases need explicit migration behavior. | Adding latest-error columns without migration/reset can leave installed databases missing columns. | Bump projection versions or add explicit schema migrations and mixed-version replay tests. Do not rely on `CREATE TABLE IF NOT EXISTS` to evolve existing tables. |
+| Tauri diagnostics overlays and durable ledger projections both expose run/debug state. | Adding error state to both layers can recreate duplicate ownership. | Keep canonical run error truth in the diagnostics ledger/projections. Tauri diagnostics may transport or overlay UI-only data but must not synthesize canonical failure state. |
+
+### Blast Radius
+
+- **Persistence:** `crates/pantograph-diagnostics-ledger/src/event.rs`,
+  `schema.rs`, `repository.rs`, `sqlite/event_sqlite.rs`, and ledger tests.
+- **Workflow orchestration:** workflow-service session execution, queue,
+  runtime admission, diagnostics query, trace, terminal-event, and projection
+  tests.
+- **Runtime and managed binaries:** embedded-runtime registry/session helpers,
+  `crates/inference` managed-runtime status/resolution, llama.cpp/Ollama/PyTorch
+  launch and model dependency failure paths.
+- **Transport:** Tauri headless workflow command wrappers and diagnostics
+  transport DTOs that currently serialize backend errors as JSON strings.
+- **Frontend contracts:** `src/services/diagnostics/types.ts`,
+  `src/services/workflow/workflowServiceErrors.ts`,
+  command/projection service tests, diagnostics presenters, graph presenters,
+  workbench store, Diagnostics/Graph page components, and accessibility tests.
+- **Documentation:** diagnostics ledger README, workflow-service workflow and
+  trace READMEs, Tauri diagnostics README, frontend diagnostics service README,
+  and workbench README.
+
+### Implementation Priority Adjustments
+
+- Treat projection precedence and model-load semantics as Milestone 1-4
+  blockers, not frontend polish.
+- Before adding GUI deep links, make the backend envelope carry typed
+  diagnostics link fields end to end.
+- Before adding broad capture points, add a narrow recorder test that proves a
+  control-character runtime error produces a ledger error event, a failed run
+  projection, and a timeline row.
+- Add a DTO drift test or fixture coverage for every backend-projected
+  `DiagnosticEventKind` before adding the new error kind.
+
 ## Commit Cadence Notes
 
 - Commit after each logical slice is implemented and verified.
