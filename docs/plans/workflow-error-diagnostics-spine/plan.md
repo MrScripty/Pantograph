@@ -20,7 +20,11 @@ and deep-linkable from the graph editor or other surfaces that show the error.
 - Project error events into run detail, run list, scheduler timeline, node
   status, and run graph diagnostics without requiring frontend-local repair.
 - Make fatal run-scoped error events sufficient to mark a run or node failed in
-  projections when no later recovery event supersedes them.
+  projections when no later recovery event supersedes them, while keeping the
+  scheduler/session store as the primary owner of live run state.
+- Add domain failure handling so fatal workflow errors explicitly transition
+  scheduler/session state out of `Running` before diagnostics projections are
+  refreshed.
 - Return structured error envelopes to the graph editor and other callers with
   `workflow_run_id`, `diagnostic_event_id`, phase, component, and node/runtime
   location when available.
@@ -69,6 +73,9 @@ system still needs first-class error traceability.
 
 - Backend Rust remains the source of truth for workflow run identity, run
   status, scheduler/runtime state, node status, and durable diagnostics.
+- The diagnostics ledger is not the workflow state machine. Fatal error
+  handling must update scheduler/session state through workflow-service domain
+  control paths, then record diagnostics facts.
 - Frontend code must render backend projections declaratively and must not
   infer or repair business state locally.
 - Error text and structured details must be sanitized and bounded before they
@@ -163,6 +170,9 @@ system still needs first-class error traceability.
 
 - Workflow-service owns run-scoped error event creation for scheduler, session,
   queue, terminal, artifact, and projection failures.
+- Workflow-service and scheduler/session state owners own live run-state
+  transitions. Diagnostics recording must not be the trigger that mutates
+  scheduler state.
 - Embedded-runtime owns runtime, managed-binary, model dependency, and node
   execution error context before returning errors to workflow-service.
 - Tauri command wrappers own transport-boundary error envelopes and explicit
@@ -194,7 +204,8 @@ system still needs first-class error traceability.
 | ---- | ------ | ---------- |
 | Error recording itself fails and hides the original failure | High | Sanitize/truncate before validation, harden ledger append paths, surface `diagnostics_unavailable` when the primary ledger cannot record the event, and do not create duplicate JSON traces. |
 | Duplicate error events make traces noisy | Medium | Define one owner per phase and link secondary failure events with `related_error_event_id` instead of re-emitting full errors. |
-| Fatal error events mark recoverable failures as failed | Medium | Add `severity`, `recoverability`, and projection rules that only fatal run-scoped errors drive failed state. |
+| Fatal error events are mistaken for the live scheduler state transition mechanism | High | Workflow-service domain failure handling must explicitly mark scheduler/session state failed; diagnostics events record the fact and projections provide a read-model safety net. |
+| Fatal error events mark recoverable failures as failed in read models | Medium | Add `severity`, `recoverability`, and projection rules that only fatal run-scoped errors drive failed projection state. |
 | Schema changes break existing projections | High | Additive migrations, compatibility tests, and projection replay tests from mixed old/new event streams. |
 | UI color-only error indicators fail accessibility | Medium | Pair color with icons/text, accessible labels, focus states, and keyboard navigation tests. |
 | Runtime process output exceeds ledger limits | Medium | Bound technical detail length and place oversized detail behind payload refs only if the existing artifact policy supports it. |
@@ -314,6 +325,9 @@ errors can be returned or swallowed.
 - [ ] Wrap node execution failures and attach node IDs/types and output port
   context where available.
 - [ ] Wrap artifact read/write/conversion and diagnostics projection failures.
+- [ ] Add a workflow-service domain failure path that marks scheduler/session
+  state failed when a fatal run-scoped workflow error occurs. This path owns
+  live state transition before diagnostics projections refresh.
 - [ ] Link `run.terminal`, scheduler lifecycle `*_failed`, node failed, and
   runtime snapshot error events to the canonical error event with a typed
   `canonical_error_event_id` or equivalent link.
@@ -321,6 +335,8 @@ errors can be returned or swallowed.
 **Verification:**
 - Workflow-service tests for submit, queue/admission, preflight, model-load,
   and terminal failure phases.
+- Scheduler/session tests proving fatal workflow errors remove runs from
+  `Running` state through domain control flow, not by reacting to ledger appends.
 - Embedded-runtime tests for runtime launch/model dependency/node execution
   context.
 - Tauri command tests for transport envelope diagnostics fields.
@@ -667,6 +683,34 @@ diagnostics event that explains the failure.
   standards violation because it bypasses the registered source, scope,
   sanitization, projection, envelope, and causality rules.
 
+### Pass 8: Scheduler State Ownership Revalidation
+
+**Status:** Complete.
+
+**Checks:**
+- Fatal diagnostics do not make the ledger append layer the workflow state
+  machine.
+- Live scheduler/session state remains owned by workflow-service domain control
+  paths.
+- Projection failure rules remain read-model recovery/safety behavior.
+- Any push/broadcast behavior originates from workflow-domain failure handling,
+  not diagnostics logging.
+
+**Findings:**
+- The standards-compliant ownership model is domain event first, diagnostics
+  trace second: runtime/model/node failure handling must explicitly mark the run
+  failed in scheduler/session state before or alongside diagnostics recording.
+- A ledger append must not mutate scheduler state or publish control events;
+  otherwise logging would become hidden workflow control flow.
+- A typed `WorkflowRunFailed` domain event is acceptable if a push is needed,
+  provided it is emitted by workflow-service failure handling and consumed by
+  scheduler/session owners and diagnostics writers as separate subscribers.
+- Projection rules may still derive failed GUI state from fatal error events
+  when terminal/status events are missing, but only as read-model recovery so
+  the GUI does not show indefinite `Running`.
+- Verification must cover both live scheduler/session state leaving `Running`
+  and projection replay recovering failed display state from durable events.
+
 ## Anti-Pattern And Blast-Radius Review
 
 ### Search Scope
@@ -749,9 +793,10 @@ diagnostics event that explains the failure.
    recorder usage. The initial registry should be a static backend-owned table
    for Pantograph workflow phases, not a runtime string map.
 4. Add one narrow backend recorder path for the known control-character runtime
-   failure mode. This path must prove sanitized error text, durable error
-   event, failed projection, and visible timeline row before additional
-   capture points are added.
+   failure mode. This path must prove scheduler/session state exits `Running`
+   through workflow-service domain handling, sanitized error text is recorded
+   as a durable error event, projections show failed, and the timeline row is
+   visible before additional capture points are added.
 5. Extend `WorkflowErrorEnvelope` with typed diagnostics link fields and update
    frontend parsing. GUI components must receive typed fields instead of
    parsing raw JSON or `details`.
@@ -795,13 +840,34 @@ diagnostics event that explains the failure.
   scope fields, source validation, default severity/recoverability, causality
   policy, projection effect, or documentation.
 
+### Domain Failure Handling And Scheduler State
+
+- Diagnostics recording is not the workflow state machine and must not be the
+  mechanism that tells the scheduler a run failed.
+- Fatal workflow errors must flow through a workflow-service domain failure
+  path that owns the live state transition: mark scheduler/session state
+  failed, release or cancel relevant reservations/queue entries, then record
+  the canonical diagnostic error and linked lifecycle/status facts.
+- If a push/broadcast is needed, emit it from domain failure handling as a
+  typed workflow-domain event such as `WorkflowRunFailed`, carrying
+  `workflow_run_id`, optional `canonical_error_event_id`, phase, and
+  `failed_at_ms`. The diagnostics ledger append layer must not publish control
+  events that mutate scheduler state.
+- Diagnostics projections may use fatal error events to recover/read failed
+  state for GUI projections when terminal/status events are missing, but that
+  is a read-model safety net only.
+- Add tests that prove a fatal runtime/model/node error removes the run from
+  active `Running` scheduler/session state even if projection refresh is
+  delayed, and separate replay tests that projections still recover failed
+  display state from durable fatal error events.
+
 ### Projection Status Precedence
 
 - Introduce a single backend helper for run projection state transitions before
-  error events can drive status.
+  error events can drive read-model status.
 - Terminal statuses `completed`, `failed`, and `cancelled` must not be
   overwritten by later nonterminal events.
-- Fatal run-scoped diagnostic errors set run status to `failed`.
+- Fatal run-scoped diagnostic errors set projected run status to `failed`.
 - Fatal node-scoped diagnostic errors set the node projection status to
   `failed` without requiring a separate node failed event.
 - Later nonterminal scheduler, runtime, or node events must not revive failed
