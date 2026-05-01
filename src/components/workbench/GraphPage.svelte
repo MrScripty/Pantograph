@@ -10,7 +10,7 @@
   import type { WorkflowRunGraphProjection } from '../../services/workflow/types';
   import { workflowService } from '../../services/workflow/WorkflowService';
   import { isReadOnly } from '../../stores/graphSessionStore';
-  import { activeWorkflowRun } from '../../stores/workbenchStore';
+  import { activeWorkflowRun, diagnosticsFocus } from '../../stores/workbenchStore';
   import RunGraphSnapshot from './RunGraphSnapshot.svelte';
   import {
     buildRunGraphNodeArtifactSummaries,
@@ -36,6 +36,11 @@
   let runNodeStatusRequestSerial = 0;
   let artifactSummaries = $derived(buildRunGraphNodeArtifactSummaries(runArtifacts));
   let nodeStatuses = $derived(buildRunGraphNodeStatusMap(runNodeStatuses));
+  let focusedDiagnosticEventId = $derived(
+    $diagnosticsFocus?.workflow_run_id === $activeWorkflowRun?.workflow_run_id
+      ? ($diagnosticsFocus?.diagnostic_event_id ?? null)
+      : null,
+  );
 
   function activeRunId(): string | null {
     return $activeWorkflowRun?.workflow_run_id ?? null;
@@ -251,6 +256,6 @@
         Node status overlays unavailable: {runNodeStatusError}
       </div>
     {/if}
-    <RunGraphSnapshot {runGraph} {artifactSummaries} {nodeStatuses} />
+    <RunGraphSnapshot {runGraph} {artifactSummaries} {nodeStatuses} {focusedDiagnosticEventId} />
   {/if}
 </section>

@@ -8,6 +8,7 @@
     formatRunGraphTimestamp,
     resolveRunGraphCounts,
     resolveRunGraphPresentationLabel,
+    runGraphNodeErrorClass,
     type RunGraphNodeArtifactSummaryByNodeId,
     type RunGraphNodeStatusByNodeId,
   } from './runGraphPresenters';
@@ -16,10 +17,12 @@
     runGraph,
     artifactSummaries = {},
     nodeStatuses = {},
+    focusedDiagnosticEventId = null,
   }: {
     runGraph: WorkflowRunGraphProjection;
     artifactSummaries?: RunGraphNodeArtifactSummaryByNodeId;
     nodeStatuses?: RunGraphNodeStatusByNodeId;
+    focusedDiagnosticEventId?: string | null;
   } = $props();
 
   let canvas = $derived(buildRunGraphCanvasModel(runGraph.graph, artifactSummaries, nodeStatuses));
@@ -88,8 +91,8 @@
                   height={node.height}
                   rx="6"
                   fill="#171717"
-                  stroke={node.statusClass === 'failed' ? '#ef4444' : node.hasOutputArtifacts ? '#22c55e' : '#404040'}
-                  stroke-width={node.statusClass === 'unknown' && !node.hasOutputArtifacts ? '1' : '2'}
+                  stroke={node.errorEventId === focusedDiagnosticEventId ? '#22d3ee' : node.errorSeverity === 'fatal' || node.statusClass === 'failed' ? '#ef4444' : node.hasOutputArtifacts ? '#22c55e' : '#404040'}
+                  stroke-width={node.errorEventId === focusedDiagnosticEventId ? '3' : node.statusClass === 'unknown' && !node.hasOutputArtifacts ? '1' : '2'}
                 />
                 <text x="14" y="26" fill="#f5f5f5" font-size="13" font-family="ui-monospace, monospace">
                   {compactValue(node.id)}
@@ -100,7 +103,7 @@
                 {#if node.artifactCount > 0}
                   <rect
                     x="14"
-                    y="58"
+                    y={node.errorBadgeLabel ? 76 : 58}
                     width="118"
                     height="16"
                     rx="4"
@@ -108,8 +111,23 @@
                     stroke={node.hasOutputArtifacts ? '#16a34a' : '#525252'}
                     stroke-width="1"
                   />
-                  <text x="20" y="70" fill="#d4d4d4" font-size="10" font-family="ui-sans-serif, system-ui">
+                  <text x="20" y={node.errorBadgeLabel ? 88 : 70} fill="#d4d4d4" font-size="10" font-family="ui-sans-serif, system-ui">
                     {compactValue(node.artifactSummaryLabel, 18)}
+                  </text>
+                {/if}
+                {#if node.errorBadgeLabel}
+                  <rect
+                    x="14"
+                    y="58"
+                    width="148"
+                    height="16"
+                    rx="4"
+                    fill={node.errorSeverity === 'warning' ? '#451a03' : '#450a0a'}
+                    stroke={node.errorSeverity === 'warning' ? '#d97706' : '#dc2626'}
+                    stroke-width="1"
+                  />
+                  <text x="20" y="70" fill={node.errorSeverity === 'warning' ? '#fde68a' : '#fecaca'} font-size="10" font-family="ui-sans-serif, system-ui">
+                    {compactValue(node.errorBadgeLabel, 22)}
                   </text>
                 {/if}
                 {#if node.statusClass !== 'unknown'}
@@ -177,7 +195,7 @@
           </thead>
           <tbody class="divide-y divide-neutral-900">
             {#each nodeRows as node (node.nodeId)}
-              <tr>
+              <tr class:bg-cyan-950={node.errorEventId === focusedDiagnosticEventId} class:bg-opacity-30={node.errorEventId === focusedDiagnosticEventId}>
                 <td class="max-w-[12rem] px-3 py-2">
                   <div class="truncate font-mono text-neutral-200" title={node.nodeId}>{node.nodeId}</div>
                   <div class="truncate text-neutral-500" title={node.nodeType}>{node.nodeType}</div>
@@ -190,6 +208,14 @@
                   >
                     {node.statusLabel}
                   </span>
+                  {#if node.errorBadgeLabel}
+                    <div
+                      class={`mt-1 truncate rounded border px-2 py-0.5 text-[11px] ${runGraphNodeErrorClass(node.errorSeverity) === 'warning' ? 'border-amber-800 bg-amber-950 text-amber-100' : 'border-red-800 bg-red-950 text-red-100'}`}
+                      title={`${node.errorBadgeLabel} ${node.errorEventId ?? ''}`}
+                    >
+                      {node.errorBadgeLabel}
+                    </div>
+                  {/if}
                 </td>
                 <td class="max-w-[10rem] px-3 py-2">
                   <div class="truncate text-neutral-300" title={node.contractVersion}>{node.contractVersion}</div>

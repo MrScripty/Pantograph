@@ -546,7 +546,7 @@ Verification completed for this slice:
   timeline events.
 - [x] Update run list badges and run detail header to show fatal/latest error
   summaries.
-- [ ] Add graph/node badges and focused highlighting for node-scoped error
+- [x] Add graph/node badges and focused highlighting for node-scoped error
   event IDs.
 - [ ] Use semantic buttons/links with accessible names for filters, expanders,
   focused event navigation, and graph jump controls.
@@ -564,8 +564,8 @@ summary panels, node-scoped diagnostics rows, and non-color-only timeline
 treatments. Focused frontend presenter and projection service tests pass along
 with `npm run typecheck`. Added an explicit scheduler timeline Errors filter
 and a compact error list driven by projected severity/phase fields. Remaining
-work is graph-focused node badges, interactive deep-link/focus controls covered
-by Milestone 6, and a full frontend build pass after those controls land.
+work is the remaining interactive deep-link/focus controls covered by Milestone
+6 and a full frontend build pass after those controls land.
 
 ### Milestone 6: Clickable Error Deep Links
 

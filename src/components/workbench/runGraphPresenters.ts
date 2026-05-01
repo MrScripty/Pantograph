@@ -5,6 +5,7 @@ import type {
   WorkflowRunGraphProjection,
 } from '../../services/workflow/types';
 import type {
+  DiagnosticErrorSeverity,
   IoArtifactProjectionRecord,
   NodeExecutionProjectionStatus,
   NodeStatusProjectionRecord,
@@ -27,6 +28,11 @@ export interface RunGraphNodeRow {
   hasOutputArtifacts: boolean;
   statusLabel: string;
   statusClass: string;
+  errorEventId: string | null;
+  errorSeverity: DiagnosticErrorSeverity | null;
+  errorPhase: string | null;
+  errorCode: string | null;
+  errorBadgeLabel: string | null;
 }
 
 export interface RunGraphEdgeRow {
@@ -49,6 +55,11 @@ export interface RunGraphCanvasNode {
   hasOutputArtifacts: boolean;
   statusLabel: string;
   statusClass: string;
+  errorEventId: string | null;
+  errorSeverity: DiagnosticErrorSeverity | null;
+  errorPhase: string | null;
+  errorCode: string | null;
+  errorBadgeLabel: string | null;
 }
 
 export interface RunGraphCanvasEdge {
@@ -79,7 +90,7 @@ export type RunGraphNodeArtifactSummaryByNodeId = Record<string, RunGraphNodeArt
 export type RunGraphNodeStatusByNodeId = Record<string, NodeStatusProjectionRecord>;
 
 const NODE_WIDTH = 190;
-const NODE_HEIGHT = 84;
+const NODE_HEIGHT = 104;
 const CANVAS_PADDING = 96;
 const EMPTY_CANVAS_VIEWBOX = '0 0 640 360';
 
@@ -139,6 +150,11 @@ export function buildRunGraphNodeRows(
       hasOutputArtifacts: (artifactSummary?.outputCount ?? 0) > 0,
       statusLabel: formatRunGraphNodeStatusLabel(nodeStatus?.status),
       statusClass: runGraphNodeStatusClass(nodeStatus?.status),
+      errorEventId: nodeStatus?.error_event_id ?? null,
+      errorSeverity: nodeStatus?.error_severity ?? null,
+      errorPhase: nodeStatus?.error_phase ?? null,
+      errorCode: nodeStatus?.error_code ?? null,
+      errorBadgeLabel: formatRunGraphNodeErrorBadge(nodeStatus),
     };
   });
 }
@@ -186,6 +202,11 @@ export function buildRunGraphCanvasModel(
     hasOutputArtifacts: (artifactSummaries[node.id]?.outputCount ?? 0) > 0,
     statusLabel: formatRunGraphNodeStatusLabel(nodeStatuses[node.id]?.status),
     statusClass: runGraphNodeStatusClass(nodeStatuses[node.id]?.status),
+    errorEventId: nodeStatuses[node.id]?.error_event_id ?? null,
+    errorSeverity: nodeStatuses[node.id]?.error_severity ?? null,
+    errorPhase: nodeStatuses[node.id]?.error_phase ?? null,
+    errorCode: nodeStatuses[node.id]?.error_code ?? null,
+    errorBadgeLabel: formatRunGraphNodeErrorBadge(nodeStatuses[node.id]),
   }));
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const edges = graph.edges
@@ -202,6 +223,44 @@ export function buildRunGraphCanvasModel(
     nodes,
     edges,
   };
+}
+
+export function formatRunGraphNodeErrorBadge(
+  status: NodeStatusProjectionRecord | null | undefined,
+): string | null {
+  if (!status?.error_severity && !status?.error_event_id && !status?.error_code) {
+    return null;
+  }
+  const severity = status.error_severity ? formatRunGraphErrorSeverity(status.error_severity) : 'Error';
+  const code = status.error_code?.trim() || 'node_error';
+  return `${severity}: ${code}`;
+}
+
+export function runGraphNodeErrorClass(
+  severity: DiagnosticErrorSeverity | null | undefined,
+): string {
+  switch (severity) {
+    case 'fatal':
+      return 'fatal';
+    case 'error':
+      return 'error';
+    case 'warning':
+      return 'warning';
+    case null:
+    case undefined:
+      return 'none';
+  }
+}
+
+function formatRunGraphErrorSeverity(severity: DiagnosticErrorSeverity): string {
+  switch (severity) {
+    case 'fatal':
+      return 'Fatal';
+    case 'error':
+      return 'Error';
+    case 'warning':
+      return 'Warning';
+  }
 }
 
 export function buildRunGraphNodeStatusMap(

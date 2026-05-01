@@ -13,6 +13,7 @@ import {
   formatRunGraphNodeStatusLabel,
   formatRunGraphCountLabel,
   runGraphNodeStatusClass,
+  runGraphNodeErrorClass,
   resolveRunGraphCounts,
   resolveRunGraphPresentationLabel,
 } from './runGraphPresenters.ts';
@@ -158,7 +159,7 @@ test('buildRunGraphCanvasModel derives stable viewbox and skips broken edges', (
 
   const canvas = buildRunGraphCanvasModel(runGraph.graph);
 
-  assert.equal(canvas.viewBox, '-86 -76 672 276');
+  assert.equal(canvas.viewBox, '-86 -76 672 296');
   assert.deepEqual(canvas.nodes.map((node) => node.id), ['input-1', 'output-1']);
   assert.deepEqual(canvas.edges.map((edge) => edge.id), ['edge-1']);
 });
@@ -303,4 +304,43 @@ test('buildRunGraphNodeStatusMap keeps the latest node status by event sequence'
   const canvas = buildRunGraphCanvasModel(createRunGraph().graph, {}, statuses);
   const outputNode = canvas.nodes.find((node) => node.id === 'output-1');
   assert.equal(outputNode?.statusClass, 'completed');
+});
+
+test('run graph presenters expose node diagnostic error badges', () => {
+  const statuses = buildRunGraphNodeStatusMap([
+    {
+      workflow_run_id: 'run-1',
+      workflow_id: 'workflow-a',
+      workflow_version_id: 'wfver-1',
+      workflow_semantic_version: '1.2.3',
+      node_id: 'output-1',
+      node_type: 'text-output',
+      node_version: '1.0.1',
+      runtime_id: null,
+      runtime_version: null,
+      model_id: null,
+      model_version: null,
+      status: 'failed',
+      started_at_ms: 1_000,
+      completed_at_ms: 1_500,
+      duration_ms: 500,
+      error: 'node failed',
+      error_event_id: 'error-event-1',
+      error_severity: 'fatal',
+      error_phase: 'node_execution',
+      error_code: 'node_execution_failed',
+      last_event_seq: 12,
+      last_updated_at_ms: 1_500,
+    },
+  ]);
+
+  const rows = buildRunGraphNodeRows(createRunGraph(), {}, statuses);
+  const outputRow = rows.find((row) => row.nodeId === 'output-1');
+  assert.equal(outputRow?.errorEventId, 'error-event-1');
+  assert.equal(outputRow?.errorBadgeLabel, 'Fatal: node_execution_failed');
+  assert.equal(runGraphNodeErrorClass(outputRow?.errorSeverity), 'fatal');
+
+  const canvas = buildRunGraphCanvasModel(createRunGraph().graph, {}, statuses);
+  const outputNode = canvas.nodes.find((node) => node.id === 'output-1');
+  assert.equal(outputNode?.errorBadgeLabel, 'Fatal: node_execution_failed');
 });
