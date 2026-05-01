@@ -277,7 +277,8 @@ pub(super) fn drain_scheduler_timeline_projection(
                     'run.started',
                     'run.terminal',
                     'run.snapshot_accepted',
-                    'node.execution_status'
+                    'node.execution_status',
+                    'diagnostic.error_occurred'
                )
              ORDER BY event_seq
              LIMIT ?2",
@@ -1344,7 +1345,8 @@ fn diagnostic_projection_events_after(
                 'scheduler.run_admitted',
                 'run.started',
                 'run.terminal',
-                'run.snapshot_accepted'
+                'run.snapshot_accepted',
+                'diagnostic.error_occurred'
            )
          ORDER BY event_seq
          LIMIT ?2",
@@ -1644,6 +1646,20 @@ fn scheduler_timeline_record_from_event(
                 (None, None) => None,
             };
             (summary, detail)
+        }
+        DiagnosticEventPayload::DiagnosticErrorOccurred(payload) => {
+            let mut details = vec![
+                format!("phase {}", payload.phase),
+                format!("code {}", payload.code),
+                format!("scope {:?}", payload.scope).to_lowercase(),
+                format!("recoverability {:?}", payload.recoverability).to_lowercase(),
+            ];
+            if let Some(technical_message) = payload.technical_message.as_deref() {
+                details.push(technical_message.to_string());
+            }
+            let summary =
+                format!("diagnostic {:?}: {}", payload.severity, payload.summary()).to_lowercase();
+            (summary, Some(details.join("; ")))
         }
         _ => return Ok(None),
     };

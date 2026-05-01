@@ -77,6 +77,13 @@ future/scheduled run status presentation.
 Runtime and workflow services may write observations, summaries, and typed
 events through repository methods, but they do not own the schema or query
 semantics.
+Workflow error diagnostics use `diagnostic.error_occurred` as the canonical
+durable error fact. The payload carries phase, scope, severity, code, user
+message, technical detail, cause-chain summaries, recoverability, location, and
+optional directly-known causality links. Existing lifecycle rows such as
+`run.terminal`, scheduler model lifecycle, and node execution status remain
+their native facts and should link to canonical error events rather than
+duplicating the detailed error payload.
 
 ## Alternatives Rejected
 
@@ -96,6 +103,13 @@ semantics.
   history.
 - `diagnostic_events.event_seq` is the durable monotonic cursor for projection
   application.
+- `diagnostic.error_occurred` rows use typed scope validation. Run, node,
+  runtime/model, scheduler, artifact, and projection errors require enough
+  backend-owned IDs to make the event navigable; transport-scoped errors may be
+  recorded without run IDs only when no workflow run context exists.
+- Error payload text must be sanitized and bounded before append. Control
+  characters are not accepted by validation; callers can use
+  `sanitize_diagnostic_error_text` before constructing an error payload.
 - `projection_state` records the projection version and last applied event
   sequence so incremental projection drains can resume after restart.
 - Schema migrations may recreate incompatible rebuildable projection tables and

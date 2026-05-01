@@ -14,6 +14,8 @@ mod util;
 
 pub use error::DiagnosticsLedgerError;
 pub use event::{
+    sanitize_diagnostic_error_text, DiagnosticErrorLocation, DiagnosticErrorOccurredPayload,
+    DiagnosticErrorRecoverability, DiagnosticErrorScopeKind, DiagnosticErrorSeverity,
     DiagnosticEventAppendRequest, DiagnosticEventKind, DiagnosticEventPayload,
     DiagnosticEventPrivacyClass, DiagnosticEventRecord, DiagnosticEventRetentionClass,
     DiagnosticEventSourceComponent, IoArtifactAccessMode, IoArtifactConversionDependency,
@@ -39,7 +41,8 @@ pub use event::{
     SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
     DIAGNOSTIC_EVENT_SCHEMA_VERSION, IO_ARTIFACT_PROJECTION_NAME, IO_ARTIFACT_PROJECTION_VERSION,
     LIBRARY_USAGE_PROJECTION_NAME, LIBRARY_USAGE_PROJECTION_VERSION,
-    MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, NODE_STATUS_PROJECTION_NAME,
+    MAX_DIAGNOSTIC_ERROR_CAUSE_COUNT, MAX_DIAGNOSTIC_ERROR_CAUSE_LEN,
+    MAX_DIAGNOSTIC_ERROR_TEXT_LEN, MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES, NODE_STATUS_PROJECTION_NAME,
     NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION,
     RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
     SCHEDULER_TIMELINE_PROJECTION_VERSION,

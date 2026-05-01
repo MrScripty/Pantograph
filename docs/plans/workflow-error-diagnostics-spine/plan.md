@@ -276,24 +276,24 @@ system still needs first-class error traceability.
 behavior.
 
 **Tasks:**
-- [ ] Add `DiagnosticErrorOccurredPayload` with phase, component, severity,
+- [x] Add `DiagnosticErrorOccurredPayload` with phase, component, severity,
   error code, message, technical message, cause chain, recoverability,
   location fields, optional related event IDs, and an optional
   `caused_by_event_id` that may only be set from direct producer knowledge.
-- [ ] Add `DiagnosticEventKind::DiagnosticErrorOccurred` and update
+- [x] Add `DiagnosticEventKind::DiagnosticErrorOccurred` and update
   `DiagnosticEventSourceComponent` support deliberately. The current source
   enum is closed to scheduler, workflow-service, runtime, node-execution,
   retention, Library, and local-observer components, so new component labels
   must either be added with DB serialization tests or represented as typed
   phase/location fields inside the error payload.
-- [ ] Update `validate_event_scope` and `validate_event_source` so run-scoped,
+- [x] Update `validate_event_scope` and `validate_event_source` so run-scoped,
   node-scoped, runtime-scoped, and transport-boundary error events have
   explicit allowed source rules instead of bypassing existing ledger validation.
-- [ ] Add validation helpers that sanitize and bound error text before ledger
+- [x] Add validation helpers that sanitize and bound error text before ledger
   validation rejects it.
-- [ ] Add SQLite serialization, deserialization, timeline summary/detail, and
+- [x] Add SQLite serialization, deserialization, timeline summary/detail, and
   ledger schema/version identity support.
-- [ ] Export the contract through the diagnostics ledger facade and update
+- [x] Export the contract through the diagnostics ledger facade and update
   `crates/pantograph-diagnostics-ledger/src/README.md`.
 
 **Verification:**
@@ -302,7 +302,26 @@ behavior.
 - Version-bound replay tests proving current-version events read correctly and
   incompatible old-version ledgers are not mixed into current projections.
 
-**Status:** Not started.
+**Status:** Complete on 2026-05-01. Implemented the typed
+`diagnostic.error_occurred` ledger payload, source/scope validation, bounded
+sanitization helper, SQLite JSON round-trip support, scheduler timeline
+projection visibility, crate facade exports, README documentation, and ledger
+tests. The existing `schema_version` column remains the version identity for
+this additive event-kind contract; no physical ledger version bump was needed
+because the stored table shape did not change.
+
+Decomposition review: `event.rs` already owns the typed diagnostic event
+payloads, validation, and source/scope rules, and `sqlite/event_sqlite.rs`
+already owns scheduler timeline projection event selection. Extracting only the
+new error payload and one timeline branch would create a parallel local pattern
+without reducing the reviewed behavioral surface. Keep the addition local for
+Milestone 1 and revisit a broader ledger module split only if later milestones
+add more projection or payload families.
+
+Verification completed:
+- `cargo check -p pantograph-diagnostics-ledger`
+- `cargo fmt -p pantograph-diagnostics-ledger`
+- `cargo test -p pantograph-diagnostics-ledger`
 
 ### Milestone 2: Backend Error Recorder Facade
 

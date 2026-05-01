@@ -4,7 +4,9 @@ use pantograph_runtime_attribution::{
 use rusqlite::Connection;
 
 use crate::{
-    ApplyArtifactRetentionPolicyCommand, DiagnosticEventAppendRequest, DiagnosticEventKind,
+    sanitize_diagnostic_error_text, ApplyArtifactRetentionPolicyCommand, DiagnosticErrorLocation,
+    DiagnosticErrorOccurredPayload, DiagnosticErrorRecoverability, DiagnosticErrorScopeKind,
+    DiagnosticErrorSeverity, DiagnosticEventAppendRequest, DiagnosticEventKind,
     DiagnosticEventPayload, DiagnosticEventPrivacyClass, DiagnosticEventRetentionClass,
     DiagnosticEventSourceComponent, DiagnosticsLedgerError, DiagnosticsLedgerRepository,
     DiagnosticsQuery, ExecutionGuaranteeLevel, IoArtifactAccessMode, IoArtifactFormatMetadata,
@@ -574,6 +576,87 @@ fn diagnostic_event_ledger_validates_run_scope_and_event_source() {
         result,
         Err(DiagnosticsLedgerError::MissingField { field: "model_id" })
     ));
+}
+
+#[test]
+fn diagnostic_event_ledger_appends_error_events_and_projects_timeline() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    let event = ledger
+        .append_diagnostic_event(sample_diagnostic_error_event("workflow_run_alpha"))
+        .expect("diagnostic error event appends");
+
+    assert_eq!(
+        event.event_kind,
+        DiagnosticEventKind::DiagnosticErrorOccurred
+    );
+    assert!(event.payload_json.contains("runtime_model_load"));
+    assert!(event.payload_json.contains("backend failed to start"));
+
+    let projection_state = ledger
+        .drain_scheduler_timeline_projection(500)
+        .expect("timeline projection drains");
+    assert_eq!(projection_state.status, ProjectionStatus::Current);
+    let timeline = ledger
+        .query_scheduler_timeline_projection(SchedulerTimelineProjectionQuery {
+            workflow_run_id: Some(
+                WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+            ),
+            workflow_id: None,
+            scheduler_policy_id: None,
+            after_event_seq: None,
+            limit: 10,
+        })
+        .expect("timeline query succeeds");
+
+    assert_eq!(timeline.len(), 1);
+    assert_eq!(
+        timeline[0].event_kind,
+        DiagnosticEventKind::DiagnosticErrorOccurred
+    );
+    assert!(timeline[0]
+        .summary
+        .contains("diagnostic fatal: backend failed to start"));
+    assert!(timeline[0]
+        .detail
+        .as_deref()
+        .unwrap_or_default()
+        .contains("phase runtime_model_load"));
+}
+
+#[test]
+fn diagnostic_event_ledger_validates_error_scope_source_and_text() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+
+    let mut wrong_source = sample_diagnostic_error_event("workflow_run_alpha");
+    wrong_source.source_component = DiagnosticEventSourceComponent::Library;
+    let result = ledger.append_diagnostic_event(wrong_source);
+    assert!(matches!(
+        result,
+        Err(DiagnosticsLedgerError::InvalidEventSource {
+            event_kind: "diagnostic.error_occurred",
+            source_component: "library"
+        })
+    ));
+
+    let mut missing_runtime = sample_diagnostic_error_event("workflow_run_alpha");
+    missing_runtime.runtime_id = None;
+    let result = ledger.append_diagnostic_event(missing_runtime);
+    assert!(matches!(
+        result,
+        Err(DiagnosticsLedgerError::MissingField {
+            field: "runtime_id"
+        })
+    ));
+
+    let sanitized = sanitize_diagnostic_error_text("bad\u{0000}\nvalue", 64);
+    assert_eq!(sanitized, "bad  value");
+    let mut sanitized_event = sample_diagnostic_error_event("workflow_run_alpha");
+    if let DiagnosticEventPayload::DiagnosticErrorOccurred(payload) = &mut sanitized_event.payload {
+        payload.message = sanitized;
+    }
+    ledger
+        .append_diagnostic_event(sanitized_event)
+        .expect("sanitized diagnostic error appends");
 }
 
 #[test]
@@ -2997,6 +3080,52 @@ fn sample_scheduler_model_lifecycle_event(workflow_run_id: &str) -> DiagnosticEv
                 error: None,
             },
         ),
+    }
+}
+
+fn sample_diagnostic_error_event(workflow_run_id: &str) -> DiagnosticEventAppendRequest {
+    DiagnosticEventAppendRequest {
+        source_component: DiagnosticEventSourceComponent::Runtime,
+        source_instance_id: Some("llama.cpp".to_string()),
+        occurred_at_ms: 1_017,
+        workflow_run_id: Some(WorkflowRunId::try_from(workflow_run_id.to_string()).unwrap()),
+        workflow_id: Some(WorkflowId::try_from("workflow_alpha".to_string()).unwrap()),
+        workflow_version_id: Some(WorkflowVersionId::try_from("wfver_alpha".to_string()).unwrap()),
+        workflow_semantic_version: Some("1.0.0".to_string()),
+        node_id: Some("llamacpp-node".to_string()),
+        node_type: Some("llamacpp-inference".to_string()),
+        node_version: Some("node-v1".to_string()),
+        runtime_id: Some("llama_cpp".to_string()),
+        runtime_version: Some("runtime-v1".to_string()),
+        model_id: Some("model_alpha".to_string()),
+        model_version: Some("model-v1".to_string()),
+        client_id: Some(ClientId::try_from("client_alpha".to_string()).unwrap()),
+        client_session_id: Some(ClientSessionId::try_from("session_alpha".to_string()).unwrap()),
+        bucket_id: Some(BucketId::try_from("bucket_alpha".to_string()).unwrap()),
+        scheduler_policy_id: Some("scheduler_default".to_string()),
+        retention_policy_id: None,
+        privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+        retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+        payload_ref: None,
+        payload: DiagnosticEventPayload::DiagnosticErrorOccurred(DiagnosticErrorOccurredPayload {
+            phase: "runtime_model_load".to_string(),
+            scope: DiagnosticErrorScopeKind::RuntimeModel,
+            severity: DiagnosticErrorSeverity::Fatal,
+            code: "llamacpp_start_failed".to_string(),
+            message: "backend failed to start".to_string(),
+            technical_message: Some("llama-server terminated unexpectedly".to_string()),
+            cause_chain: vec!["process exited before ready".to_string()],
+            recoverability: DiagnosticErrorRecoverability::Retryable,
+            location: DiagnosticErrorLocation {
+                component: Some("inference".to_string()),
+                operation: Some("start_sidecar_inference".to_string()),
+                module_path: Some("crates/inference/src/server.rs".to_string()),
+                file: None,
+                line: None,
+            },
+            related_event_ids: Vec::new(),
+            caused_by_event_id: None,
+        }),
     }
 }
 

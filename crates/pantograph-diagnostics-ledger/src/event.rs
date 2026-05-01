@@ -20,6 +20,9 @@ pub const LIBRARY_USAGE_PROJECTION_NAME: &str = "library_usage";
 pub const LIBRARY_USAGE_PROJECTION_VERSION: i64 = 1;
 pub const NODE_STATUS_PROJECTION_NAME: &str = "node_status";
 pub const NODE_STATUS_PROJECTION_VERSION: i64 = 1;
+pub const MAX_DIAGNOSTIC_ERROR_TEXT_LEN: usize = 4_096;
+pub const MAX_DIAGNOSTIC_ERROR_CAUSE_COUNT: usize = 8;
+pub const MAX_DIAGNOSTIC_ERROR_CAUSE_LEN: usize = 1_024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -40,6 +43,7 @@ pub enum DiagnosticEventKind {
     RetentionPolicyChanged,
     RuntimeCapabilityObserved,
     NodeExecutionStatus,
+    DiagnosticErrorOccurred,
 }
 
 impl DiagnosticEventKind {
@@ -61,6 +65,7 @@ impl DiagnosticEventKind {
             Self::RetentionPolicyChanged => "retention.policy_changed",
             Self::RuntimeCapabilityObserved => "runtime.capability_observed",
             Self::NodeExecutionStatus => "node.execution_status",
+            Self::DiagnosticErrorOccurred => "diagnostic.error_occurred",
         }
     }
 
@@ -82,6 +87,7 @@ impl DiagnosticEventKind {
             "retention.policy_changed" => Ok(Self::RetentionPolicyChanged),
             "runtime.capability_observed" => Ok(Self::RuntimeCapabilityObserved),
             "node.execution_status" => Ok(Self::NodeExecutionStatus),
+            "diagnostic.error_occurred" => Ok(Self::DiagnosticErrorOccurred),
             _ => Err(DiagnosticsLedgerError::UnsupportedEventKind {
                 event_kind: value.to_string(),
             }),
@@ -245,6 +251,7 @@ pub enum DiagnosticEventPayload {
     RetentionPolicyChanged(RetentionPolicyChangedPayload),
     RuntimeCapabilityObserved(RuntimeCapabilityObservedPayload),
     NodeExecutionStatus(NodeExecutionStatusPayload),
+    DiagnosticErrorOccurred(DiagnosticErrorOccurredPayload),
 }
 
 impl DiagnosticEventPayload {
@@ -272,6 +279,7 @@ impl DiagnosticEventPayload {
             Self::RetentionPolicyChanged(_) => DiagnosticEventKind::RetentionPolicyChanged,
             Self::RuntimeCapabilityObserved(_) => DiagnosticEventKind::RuntimeCapabilityObserved,
             Self::NodeExecutionStatus(_) => DiagnosticEventKind::NodeExecutionStatus,
+            Self::DiagnosticErrorOccurred(_) => DiagnosticEventKind::DiagnosticErrorOccurred,
         }
     }
 
@@ -293,6 +301,7 @@ impl DiagnosticEventPayload {
             Self::RetentionPolicyChanged(payload) => payload.validate(),
             Self::RuntimeCapabilityObserved(payload) => payload.validate(),
             Self::NodeExecutionStatus(payload) => payload.validate(),
+            Self::DiagnosticErrorOccurred(payload) => payload.validate(),
         }
     }
 }
@@ -1259,6 +1268,139 @@ impl NodeExecutionStatusPayload {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DiagnosticErrorScopeKind {
+    Run,
+    Node,
+    RuntimeModel,
+    Scheduler,
+    Artifact,
+    Projection,
+    Transport,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DiagnosticErrorSeverity {
+    Warning,
+    Error,
+    Fatal,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DiagnosticErrorRecoverability {
+    Recoverable,
+    Retryable,
+    Unrecoverable,
+    Unknown,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct DiagnosticErrorLocation {
+    pub component: Option<String>,
+    pub operation: Option<String>,
+    pub module_path: Option<String>,
+    pub file: Option<String>,
+    pub line: Option<u32>,
+}
+
+impl DiagnosticErrorLocation {
+    fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        validate_optional_text(
+            "error_location_component",
+            self.component.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "error_location_operation",
+            self.operation.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "error_location_module_path",
+            self.module_path.as_deref(),
+            MAX_JSON_LEN,
+        )?;
+        validate_optional_text("error_location_file", self.file.as_deref(), MAX_JSON_LEN)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct DiagnosticErrorOccurredPayload {
+    pub phase: String,
+    pub scope: DiagnosticErrorScopeKind,
+    pub severity: DiagnosticErrorSeverity,
+    pub code: String,
+    pub message: String,
+    pub technical_message: Option<String>,
+    #[serde(default)]
+    pub cause_chain: Vec<String>,
+    pub recoverability: DiagnosticErrorRecoverability,
+    #[serde(default)]
+    pub location: DiagnosticErrorLocation,
+    #[serde(default)]
+    pub related_event_ids: Vec<String>,
+    pub caused_by_event_id: Option<String>,
+}
+
+impl DiagnosticErrorOccurredPayload {
+    fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        validate_required_text("error_phase", &self.phase, MAX_ID_LEN)?;
+        validate_required_text("error_code", &self.code, MAX_ID_LEN)?;
+        validate_required_text(
+            "error_message",
+            &self.message,
+            MAX_DIAGNOSTIC_ERROR_TEXT_LEN,
+        )?;
+        validate_optional_text(
+            "error_technical_message",
+            self.technical_message.as_deref(),
+            MAX_DIAGNOSTIC_ERROR_TEXT_LEN,
+        )?;
+        if self.cause_chain.len() > MAX_DIAGNOSTIC_ERROR_CAUSE_COUNT {
+            return Err(DiagnosticsLedgerError::FieldTooLong {
+                field: "error_cause_chain",
+                max_len: MAX_DIAGNOSTIC_ERROR_CAUSE_COUNT,
+            });
+        }
+        for cause in &self.cause_chain {
+            validate_required_text("error_cause", cause, MAX_DIAGNOSTIC_ERROR_CAUSE_LEN)?;
+        }
+        self.location.validate()?;
+        validate_text_list("related_event_ids", &self.related_event_ids)?;
+        validate_optional_text(
+            "caused_by_event_id",
+            self.caused_by_event_id.as_deref(),
+            MAX_ID_LEN,
+        )
+    }
+
+    pub(crate) fn summary(&self) -> &str {
+        self.message.as_str()
+    }
+}
+
+pub fn sanitize_diagnostic_error_text(value: &str, max_len: usize) -> String {
+    let mut sanitized = String::with_capacity(value.len().min(max_len));
+    for ch in value.chars() {
+        let replacement = if ch.is_control() { ' ' } else { ch };
+        if sanitized.len() + replacement.len_utf8() > max_len {
+            break;
+        }
+        sanitized.push(replacement);
+    }
+
+    if sanitized.trim().is_empty() && !value.is_empty() {
+        "error text contained only control characters".to_string()
+    } else {
+        sanitized
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DiagnosticEventAppendRequest {
     pub source_component: DiagnosticEventSourceComponent,
@@ -2109,6 +2251,26 @@ fn validate_event_scope(
                 return Err(DiagnosticsLedgerError::MissingField { field: "model_id" });
             }
         }
+        DiagnosticEventKind::DiagnosticErrorOccurred => {
+            let DiagnosticEventPayload::DiagnosticErrorOccurred(payload) = &request.payload else {
+                return Err(DiagnosticsLedgerError::InvalidField {
+                    field: "event_kind",
+                });
+            };
+            if payload.scope != DiagnosticErrorScopeKind::Transport {
+                if request.workflow_run_id.is_none() {
+                    return Err(DiagnosticsLedgerError::MissingField {
+                        field: "workflow_run_id",
+                    });
+                }
+                if request.workflow_id.is_none() {
+                    return Err(DiagnosticsLedgerError::MissingField {
+                        field: "workflow_id",
+                    });
+                }
+            }
+            validate_diagnostic_error_scope(payload.scope, request)?;
+        }
         DiagnosticEventKind::RetentionPolicyChanged => {
             if request.retention_policy_id.is_none() {
                 return Err(DiagnosticsLedgerError::MissingField {
@@ -2126,6 +2288,46 @@ fn validate_event_scope(
         DiagnosticEventKind::LibraryAssetAccessed => {}
     }
     Ok(())
+}
+
+fn validate_diagnostic_error_scope(
+    scope: DiagnosticErrorScopeKind,
+    request: &DiagnosticEventAppendRequest,
+) -> Result<(), DiagnosticsLedgerError> {
+    match scope {
+        DiagnosticErrorScopeKind::Run | DiagnosticErrorScopeKind::Transport => Ok(()),
+        DiagnosticErrorScopeKind::Node => {
+            if request.node_id.is_none() {
+                return Err(DiagnosticsLedgerError::MissingField { field: "node_id" });
+            }
+            Ok(())
+        }
+        DiagnosticErrorScopeKind::RuntimeModel => {
+            if request.runtime_id.is_none() {
+                return Err(DiagnosticsLedgerError::MissingField {
+                    field: "runtime_id",
+                });
+            }
+            Ok(())
+        }
+        DiagnosticErrorScopeKind::Scheduler => {
+            if request.scheduler_policy_id.is_none() {
+                return Err(DiagnosticsLedgerError::MissingField {
+                    field: "scheduler_policy_id",
+                });
+            }
+            Ok(())
+        }
+        DiagnosticErrorScopeKind::Artifact => {
+            if request.payload_ref.is_none() && request.node_id.is_none() {
+                return Err(DiagnosticsLedgerError::MissingField {
+                    field: "payload_ref_or_node_id",
+                });
+            }
+            Ok(())
+        }
+        DiagnosticErrorScopeKind::Projection => Ok(()),
+    }
 }
 
 fn validate_event_source(
@@ -2171,6 +2373,14 @@ fn validate_event_source(
         DiagnosticEventKind::NodeExecutionStatus => matches!(
             source_component,
             DiagnosticEventSourceComponent::NodeExecution | DiagnosticEventSourceComponent::Runtime
+        ),
+        DiagnosticEventKind::DiagnosticErrorOccurred => matches!(
+            source_component,
+            DiagnosticEventSourceComponent::Scheduler
+                | DiagnosticEventSourceComponent::WorkflowService
+                | DiagnosticEventSourceComponent::Runtime
+                | DiagnosticEventSourceComponent::NodeExecution
+                | DiagnosticEventSourceComponent::LocalObserver
         ),
     };
     if allowed {
