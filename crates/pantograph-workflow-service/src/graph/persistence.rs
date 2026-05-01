@@ -144,7 +144,50 @@ fn resolve_runtime_project_root() -> Option<PathBuf> {
 }
 
 fn workflow_identity_file_stem(name: &str) -> Result<String, WorkflowServiceError> {
-    WorkflowIdentity::parse(name)
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err(WorkflowServiceError::InvalidRequest(
+            "workflow name must be non-empty".to_string(),
+        ));
+    }
+
+    let mut file_stem = String::new();
+    let mut last_was_separator = false;
+    for character in trimmed.chars() {
+        if character.is_ascii_alphanumeric() {
+            file_stem.push(character);
+            last_was_separator = false;
+        } else if matches!(character, '.' | '-' | '_') {
+            if !file_stem.is_empty() && !last_was_separator {
+                file_stem.push(character);
+                last_was_separator = true;
+            }
+        } else if !file_stem.is_empty() && !last_was_separator {
+            file_stem.push('-');
+            last_was_separator = true;
+        }
+    }
+
+    while file_stem
+        .chars()
+        .last()
+        .is_some_and(|character| !character.is_ascii_alphanumeric())
+    {
+        file_stem.pop();
+    }
+
+    if file_stem.len() > 96 {
+        file_stem.truncate(96);
+        while file_stem
+            .chars()
+            .last()
+            .is_some_and(|character| !character.is_ascii_alphanumeric())
+        {
+            file_stem.pop();
+        }
+    }
+
+    WorkflowIdentity::parse(file_stem)
         .map(WorkflowIdentity::into_string)
         .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))
 }

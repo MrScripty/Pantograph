@@ -243,7 +243,27 @@ fn save_workflow_preserves_puma_lib_model_path_without_model_identity() {
 }
 
 #[test]
-fn save_workflow_rejects_invalid_workflow_identity() {
+fn save_workflow_derives_identity_from_display_name() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let store = FileSystemWorkflowGraphStore::new(temp.path());
+    let graph = WorkflowGraph {
+        nodes: Vec::new(),
+        edges: Vec::new(),
+        derived_graph: None,
+    };
+
+    let path = store
+        .save_workflow("Maid Workflow / Draft".to_string(), graph)
+        .expect("save workflow");
+
+    assert!(path.ends_with("Maid-Workflow-Draft.json"));
+    let saved = fs::read_to_string(path).expect("read saved workflow");
+    let workflow: WorkflowFile = serde_json::from_str(&saved).expect("parse saved workflow");
+    assert_eq!(workflow.metadata.name, "Maid Workflow / Draft");
+}
+
+#[test]
+fn save_workflow_rejects_names_without_identity_characters() {
     let temp = tempfile::tempdir().expect("tempdir");
     let store = FileSystemWorkflowGraphStore::new(temp.path());
     let graph = WorkflowGraph {
@@ -253,8 +273,8 @@ fn save_workflow_rejects_invalid_workflow_identity() {
     };
 
     let err = store
-        .save_workflow("Unsafe/Name".to_string(), graph)
-        .expect_err("invalid workflow identity should fail");
+        .save_workflow("///".to_string(), graph)
+        .expect_err("workflow name should not collapse to an empty identity");
 
     assert!(matches!(err, WorkflowServiceError::InvalidRequest(_)));
 }
