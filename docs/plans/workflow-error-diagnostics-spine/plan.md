@@ -289,9 +289,16 @@ run-scoped error diagnostics through the primary ledger.
   default recoverability, causality policy, and projection effect.
 - [ ] Add a workflow-service error recorder that accepts typed context and
   returns the appended diagnostic event ID when available.
+- [ ] Shape the recorder API so common call sites use phase-specific helpers or
+  builders such as `model_load_failed(scope, &err)`,
+  `runtime_launch_failed(scope, &err)`, `node_execution_failed(scope, &err)`,
+  `projection_failed(scope, &err)`, and `transport_failed(scope, &err)`.
 - [ ] Add typed scope structs for run, node, runtime/model, scheduler,
   artifact, projection, and transport error contexts. Call sites pass scope
   values rather than arbitrary maps or free-form field sets.
+- [ ] Add an explicit `.caused_by(event_id)` builder step for translated errors
+  that have direct knowledge of a prior canonical diagnostic event. The default
+  path leaves `caused_by_event_id` unset.
 - [ ] Add explicit diagnostics-unavailable mapping for ledger append failure or
   command failure before service wiring is available.
 - [ ] Add error-context builders for workflow run, scheduler, runtime, node,
@@ -304,6 +311,9 @@ run-scoped error diagnostics through the primary ledger.
 **Verification:**
 - Unit tests for sanitization, truncation, event ID propagation, and
   diagnostics-unavailable envelope shaping.
+- API ergonomics tests or compile-focused examples for model load, runtime
+  launch, node execution, projection failure, and transport failure that prove
+  call sites do not hand-build diagnostic payloads.
 - Registry matrix tests for every phase covering required scope fields, allowed
   source components, default severity/recoverability, causality policy, and
   projection effect.
@@ -838,6 +848,12 @@ diagnostics event that explains the failure.
   provide the typed scope, and pass the original error; severity/recoverability
   should use registry defaults unless the caller has a concrete reason to
   override.
+- The ergonomic target is that the correct recorder path is shorter than manual
+  event construction. Representative call sites should look like
+  `diagnostics.model_load_failed(scope, &err).await?` or
+  `diagnostics.run_failed(scope, &err).caused_by(error_event_id).await?`.
+  Call sites should supply only what the compiler and registry cannot know:
+  typed scope, original error, and an optional known causal diagnostic event ID.
 - Ban direct construction of `DiagnosticEventPayload::DiagnosticErrorOccurred`
   outside the recorder module and tests. This can start as a review rule and
   later become a repository script or lint check.
@@ -959,6 +975,10 @@ diagnostics event that explains the failure.
 - The diagnostics ledger is the only durable workflow-run diagnostics trace.
 - The implementation must not add JSONL fallback files, duplicate event logs,
   or a second diagnostics query source.
+- The implementation must not add a separate `error_recorded` event. A
+  `diagnostic.error_occurred` ledger row is already the durable record of the
+  error. Recording success is represented by the returned diagnostic event ID;
+  recording failure is represented by `diagnostics_unavailable`.
 - SQLite append failure should preserve the original command/runtime error in
   the returned envelope while also reporting that diagnostics recording failed.
 - Use a typed `diagnostics_unavailable` state or envelope field so GUI surfaces
