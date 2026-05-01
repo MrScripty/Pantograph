@@ -1,11 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { invoke } from '@tauri-apps/api/core';
   import { Download, RefreshCw, Search, Trash2 } from 'lucide-svelte';
   import type {
     LibraryUsageProjectionRecord,
     PumasHfModelSearchResult,
     ProjectionStateRecord,
   } from '../../services/diagnostics/types';
+  import type { PortOption, PortOptionsResult } from '../../services/workflow/types';
   import { workflowService } from '../../services/workflow/WorkflowService';
   import { activeWorkflowRun } from '../../stores/workbenchStore';
   import {
@@ -17,9 +19,12 @@
   import { formatWorkflowCommandError } from './workflowErrorPresenters';
 
   let assets = $state<LibraryUsageProjectionRecord[]>([]);
+  let pumasModels = $state<PortOption[]>([]);
   let projectionState = $state<ProjectionStateRecord | null>(null);
   let loading = $state(false);
+  let pumasLoading = $state(false);
   let error = $state<string | null>(null);
+  let pumasError = $state<string | null>(null);
   let actionMessage = $state<string | null>(null);
   let actionError = $state<string | null>(null);
   let actionBusy = $state<string | null>(null);
@@ -66,6 +71,26 @@
         loading = false;
       }
     }
+  }
+
+  async function refreshPumasModels(): Promise<void> {
+    pumasLoading = pumasModels.length === 0;
+    pumasError = null;
+    try {
+      const response = await invoke<PortOptionsResult>('query_port_options', {
+        nodeType: 'puma-lib',
+        portId: 'model_path',
+      });
+      pumasModels = response.options;
+    } catch (modelError) {
+      pumasError = formatWorkflowCommandError(modelError);
+    } finally {
+      pumasLoading = false;
+    }
+  }
+
+  async function refreshLibraryPage(): Promise<void> {
+    await Promise.all([refreshLibraryUsage(), refreshPumasModels()]);
   }
 
   async function searchHfModels(): Promise<void> {
@@ -128,7 +153,7 @@
   }
 
   onMount(() => {
-    void refreshLibraryUsage();
+    void refreshLibraryPage();
   });
 </script>
 
@@ -147,10 +172,10 @@
     <button
       type="button"
       class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
-      onclick={() => refreshLibraryUsage()}
-      disabled={loading}
+      onclick={() => refreshLibraryPage()}
+      disabled={loading || pumasLoading}
     >
-      <RefreshCw size={14} aria-hidden="true" class={loading ? 'animate-spin' : ''} />
+      <RefreshCw size={14} aria-hidden="true" class={loading || pumasLoading ? 'animate-spin' : ''} />
       Refresh
     </button>
   </div>
@@ -161,6 +186,9 @@
 
   {#if error}
     <div class="border-b border-red-900 bg-red-950/50 px-4 py-2 text-sm text-red-200">{error}</div>
+  {/if}
+  {#if pumasError}
+    <div class="border-b border-red-900 bg-red-950/50 px-4 py-2 text-sm text-red-200">{pumasError}</div>
   {/if}
 
   <div class="grid shrink-0 gap-3 border-b border-neutral-900 px-4 py-3 lg:grid-cols-[1.25fr_1fr_1fr]">
@@ -274,6 +302,51 @@
       {/if}
     </div>
   </div>
+
+  <section class="shrink-0 border-b border-neutral-900 px-4 py-3">
+    <div class="mb-2 flex items-center justify-between gap-3">
+      <h2 class="text-sm font-semibold text-neutral-100">Pumas Models</h2>
+      <span class="font-mono text-xs text-neutral-500">{pumasModels.length}</span>
+    </div>
+    <div class="max-h-36 overflow-auto rounded border border-neutral-900">
+      <table class="w-full min-w-[42rem] border-collapse text-left text-xs">
+        <thead class="sticky top-0 bg-neutral-950 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
+          <tr class="border-b border-neutral-900">
+            <th class="px-3 py-2 font-medium">Model</th>
+            <th class="px-3 py-2 font-medium">Path</th>
+            <th class="px-3 py-2 font-medium">Details</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-neutral-900">
+          {#if pumasLoading}
+            <tr>
+              <td colspan="3" class="px-3 py-4 text-center text-neutral-500">Loading Pumas models</td>
+            </tr>
+          {:else if pumasModels.length === 0}
+            <tr>
+              <td colspan="3" class="px-3 py-4 text-center text-neutral-500">No Pumas models found</td>
+            </tr>
+          {:else}
+            {#each pumasModels as model, index (`${model.value}-${index}`)}
+              <tr class="hover:bg-neutral-900/70">
+                <td class="max-w-[18rem] px-3 py-2">
+                  <div class="truncate font-medium text-neutral-100" title={model.label}>{model.label}</div>
+                </td>
+                <td class="max-w-[18rem] px-3 py-2">
+                  <div class="truncate font-mono text-[11px] text-neutral-300" title={String(model.value)}>
+                    {model.value}
+                  </div>
+                </td>
+                <td class="max-w-[20rem] truncate px-3 py-2 text-neutral-400" title={model.description ?? ''}>
+                  {model.description ?? 'Unavailable'}
+                </td>
+              </tr>
+            {/each}
+          {/if}
+        </tbody>
+      </table>
+    </div>
+  </section>
 
   <div class="min-h-0 flex-1 overflow-auto">
     <table class="w-full min-w-[72rem] border-collapse text-left text-sm">
