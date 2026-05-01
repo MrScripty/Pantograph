@@ -86,7 +86,10 @@ export async function handleWorkflowGraphPaletteDragOver({
     return;
   }
 
-  event.dataTransfer!.dropEffect = 'copy';
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = 'copy';
+  }
+
   const definition = readPaletteDefinition(event);
   if (!definition) {
     clearEdgeInsertPreview();

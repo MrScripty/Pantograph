@@ -31,12 +31,16 @@ export function registerWorkflowGraphWindowListeners(
   target.addEventListener('keydown', keyDownListener, true);
   target.addEventListener(WORKFLOW_PALETTE_DRAG_START_EVENT, onPaletteDragStart);
   target.addEventListener(WORKFLOW_PALETTE_DRAG_END_EVENT, onPaletteDragEnd);
+  target.addEventListener('dragend', onPaletteDragEnd, true);
+  target.addEventListener('drop', onPaletteDragEnd);
   target.addEventListener('blur', onPaletteDragEnd);
 
   return () => {
     target.removeEventListener('keydown', keyDownListener, true);
     target.removeEventListener(WORKFLOW_PALETTE_DRAG_START_EVENT, onPaletteDragStart);
     target.removeEventListener(WORKFLOW_PALETTE_DRAG_END_EVENT, onPaletteDragEnd);
+    target.removeEventListener('dragend', onPaletteDragEnd, true);
+    target.removeEventListener('drop', onPaletteDragEnd);
     target.removeEventListener('blur', onPaletteDragEnd);
   };
 }

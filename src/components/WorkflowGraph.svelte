@@ -189,6 +189,10 @@
   }
 
   function handleWorkflowPaletteDragEnd() {
+    if (!externalPaletteDragActive) {
+      return;
+    }
+
     externalPaletteDragActive = false;
     clearEdgeInsertPreview();
   }

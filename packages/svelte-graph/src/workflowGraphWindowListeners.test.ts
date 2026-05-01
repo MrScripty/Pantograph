@@ -49,6 +49,8 @@ test('registerWorkflowGraphWindowListeners registers and removes shared graph wi
       { type: 'keydown', options: true },
       { type: WORKFLOW_PALETTE_DRAG_START_EVENT, options: undefined },
       { type: WORKFLOW_PALETTE_DRAG_END_EVENT, options: undefined },
+      { type: 'dragend', options: true },
+      { type: 'drop', options: undefined },
       { type: 'blur', options: undefined },
     ],
   );

@@ -292,6 +292,10 @@
   }
 
   function handleWorkflowPaletteDragEnd() {
+    if (!externalPaletteDragActive) {
+      return;
+    }
+
     externalPaletteDragActive = false;
   }
 
@@ -698,7 +702,9 @@
   function handleDragOver(event: DragEvent) {
     event.preventDefault();
     if (!canEdit) return;
-    event.dataTransfer!.dropEffect = 'copy';
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'copy';
+    }
   }
 
   async function handleReconnectStart(

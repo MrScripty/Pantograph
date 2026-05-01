@@ -41,8 +41,12 @@
   }
 
   function handleDragStart(event: DragEvent, definition: NodeDefinition) {
-    event.dataTransfer?.setData('application/json', JSON.stringify(definition));
-    event.dataTransfer!.effectAllowed = 'copy';
+    if (!event.dataTransfer) {
+      return;
+    }
+
+    event.dataTransfer.setData('application/json', JSON.stringify(definition));
+    event.dataTransfer.effectAllowed = 'copy';
     dispatchWorkflowPaletteDragStart(window);
   }
 
