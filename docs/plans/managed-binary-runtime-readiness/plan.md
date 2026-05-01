@@ -500,7 +500,8 @@ passed.
   readiness owner before `load_completed` can be emitted again. The current
   stage prevents the misleading completed event, but later Milestone 4 tasks
   still need process-spawn, HTTP-ready, requested-model-active, and terminal
-  failure regressions.
+  failure regressions. See
+  `docs/plans/managed-binary-runtime-readiness/model-active-readiness-followup.md`.
 - `npm run -w frontend check:types` is listed in the original verification
   block, but this repository currently has no `frontend` workspace. The
   standards-compliant substitute used here is the root `npm run typecheck`

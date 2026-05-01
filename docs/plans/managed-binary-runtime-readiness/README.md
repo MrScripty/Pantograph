@@ -12,6 +12,7 @@ redistributable artifacts used by workflow execution and conversion paths.
 | File | Description |
 | ---- | ----------- |
 | `plan.md` | Ordered implementation plan for managed binary source-of-truth cleanup across runtime sidecars, media tools, native artifacts, and real llama.cpp model-load verification. |
+| `model-active-readiness-followup.md` | Supplemental standards-compliant plan for the deferred single-owner llama.cpp model-active proof before reintroducing `load_completed`. |
 
 ## Problem
 
