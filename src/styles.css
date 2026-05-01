@@ -3,11 +3,22 @@
 @tailwind utilities;
 
 :root {
-  --color-bg-inner: #0a0a0a;
-  --color-bg-outer: #262626;
-  --color-grid: rgba(255, 255, 255, 0.05);
-  --color-ruler: #404040;
+  color-scheme: dark;
+  --color-bg-inner: #303030;
+  --color-bg-outer: #4a4a4a;
+  --color-surface-deep: #2f2f2f;
+  --color-surface: #383838;
+  --color-surface-raised: #464646;
+  --color-surface-hover: #525252;
+  --color-border-soft: #626262;
+  --color-border-strong: #777;
+  --color-grid: rgba(255, 255, 255, 0.1);
+  --color-ruler: #5c5c5c;
   --color-accent: #3b82f6;
+  --color-control-bg: #3f3f3f;
+  --color-control-bg-hover: #4b4b4b;
+  --color-control-text: #f0f0f0;
+  --color-control-muted: #b8b8b8;
 }
 
 html,
@@ -24,6 +35,10 @@ body {
   color: #e5e7eb;
 }
 
+body.bg-neutral-950 {
+  background: radial-gradient(circle, var(--color-bg-inner) 0%, var(--color-bg-outer) 100%) !important;
+}
+
 #app {
   height: 100%;
 }
@@ -33,4 +48,97 @@ body {
     linear-gradient(to right, var(--color-grid) 1px, transparent 1px),
     linear-gradient(to bottom, var(--color-grid) 1px, transparent 1px);
   background-size: 40px 40px;
+}
+
+/* Restore the original grey drawing-app feel after the workbench shell cutover. */
+.bg-neutral-950,
+[class*="bg-neutral-950/"] {
+  background-color: var(--color-surface-deep) !important;
+}
+
+.bg-neutral-900,
+[class*="bg-neutral-900/"] {
+  background-color: var(--color-surface) !important;
+}
+
+.bg-neutral-800,
+[class*="bg-neutral-800/"] {
+  background-color: var(--color-surface-raised) !important;
+}
+
+.bg-neutral-700,
+[class*="bg-neutral-700/"] {
+  background-color: #515151 !important;
+}
+
+.hover\:bg-neutral-900:hover,
+[class*="hover:bg-neutral-900/"]:hover {
+  background-color: var(--color-surface-raised) !important;
+}
+
+.hover\:bg-neutral-800:hover,
+[class*="hover:bg-neutral-800/"]:hover {
+  background-color: var(--color-surface-hover) !important;
+}
+
+.hover\:bg-neutral-700:hover,
+[class*="hover:bg-neutral-700/"]:hover {
+  background-color: #5d5d5d !important;
+}
+
+.border-neutral-900,
+.border-neutral-800,
+.border-neutral-700,
+.border-neutral-600 {
+  border-color: var(--color-border-soft) !important;
+}
+
+.hover\:border-neutral-600:hover,
+.hover\:border-neutral-500:hover {
+  border-color: var(--color-border-strong) !important;
+}
+
+select,
+textarea,
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]) {
+  color-scheme: dark;
+  background-color: var(--color-control-bg);
+  color: var(--color-control-text);
+  border-color: var(--color-border-soft);
+}
+
+select:hover,
+textarea:hover,
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):hover {
+  background-color: var(--color-control-bg-hover);
+}
+
+select:disabled,
+textarea:disabled,
+input:disabled {
+  color: var(--color-control-muted);
+  opacity: 0.7;
+}
+
+select option,
+select optgroup {
+  background-color: var(--color-control-bg);
+  color: var(--color-control-text);
+}
+
+select option:disabled {
+  color: var(--color-control-muted);
+}
+
+::placeholder {
+  color: #8a8a8a;
+}
+
+/* Package graph components still contain a few literal pre-workbench darks. */
+.svelte-flow,
+.base-node,
+.node-palette,
+.workflow-toolbar,
+.navigation-breadcrumb {
+  background-color: var(--color-surface) !important;
 }
