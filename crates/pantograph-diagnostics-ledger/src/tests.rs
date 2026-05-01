@@ -3236,6 +3236,7 @@ fn sample_scheduler_model_lifecycle_event(workflow_run_id: &str) -> DiagnosticEv
                 reason: Some("cache miss before queued run".to_string()),
                 duration_ms: None,
                 error: None,
+                canonical_error_event_id: None,
             },
         ),
     }

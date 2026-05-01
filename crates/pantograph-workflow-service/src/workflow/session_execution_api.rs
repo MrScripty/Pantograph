@@ -63,6 +63,7 @@ struct SchedulerModelLifecycleEventRequest<'a> {
     reason: Option<&'a str>,
     duration_ms: Option<u64>,
     error: Option<&'a str>,
+    canonical_error_event_id: Option<&'a str>,
 }
 
 struct SchedulerReservationContext {
@@ -413,6 +414,7 @@ impl WorkflowService {
                 reason: Some("runtime admission requested required models"),
                 duration_ms: None,
                 error: None,
+                canonical_error_event_id: None,
             },
         )?;
         let runtime_load_result = self
@@ -442,25 +444,10 @@ impl WorkflowService {
                     reason: Some("runtime admission resolved required model dependencies"),
                     duration_ms: Some(runtime_load_duration_ms),
                     error: None,
+                    canonical_error_event_id: None,
                 },
             )?,
-            Err(error) => {
-                let error_text = sanitize_diagnostic_error_text(&error.to_string());
-                self.record_scheduler_model_lifecycle_events_if_configured(
-                    SchedulerModelLifecycleEventRequest {
-                        session: &session,
-                        snapshot: run_snapshot.as_ref(),
-                        workflow_run_id: &workflow_run_id,
-                        workflow_semantic_version: &queued_workflow_semantic_version,
-                        required_backends: &required_backends,
-                        required_models: &required_models,
-                        transition: SchedulerModelLifecycleTransition::LoadFailed,
-                        reason: Some("runtime admission failed to load required models"),
-                        duration_ms: Some(runtime_load_duration_ms),
-                        error: Some(error_text.as_str()),
-                    },
-                )?
-            }
+            Err(_) => {}
         }
         if let Err(error) = runtime_load_result {
             let diagnostic_request = workflow_runtime_load_error_record_request(
@@ -474,6 +461,23 @@ impl WorkflowService {
             )?;
             let diagnostic_outcome =
                 self.record_workflow_diagnostic_error_if_configured(diagnostic_request)?;
+            let canonical_error_event_id = diagnostic_outcome.event_id.as_deref();
+            let error_text = sanitize_diagnostic_error_text(&error.to_string());
+            self.record_scheduler_model_lifecycle_events_if_configured(
+                SchedulerModelLifecycleEventRequest {
+                    session: &session,
+                    snapshot: run_snapshot.as_ref(),
+                    workflow_run_id: &workflow_run_id,
+                    workflow_semantic_version: &queued_workflow_semantic_version,
+                    required_backends: &required_backends,
+                    required_models: &required_models,
+                    transition: SchedulerModelLifecycleTransition::LoadFailed,
+                    reason: Some("runtime admission failed to load required models"),
+                    duration_ms: Some(runtime_load_duration_ms),
+                    error: Some(error_text.as_str()),
+                    canonical_error_event_id,
+                },
+            )?;
             self.finish_failed_workflow_run_after_admission(&session_id, &workflow_run_id)?;
             let terminal_error =
                 error.with_diagnostics(diagnostic_outcome.into_error_link(Some(&workflow_run_id)));
@@ -558,6 +562,7 @@ impl WorkflowService {
                     reason: Some("keep-alive disabled after run completion"),
                     duration_ms: None,
                     error: None,
+                    canonical_error_event_id: None,
                 },
             )?;
             let runtime_unload_started_at_ms = unix_timestamp_ms();
@@ -573,6 +578,7 @@ impl WorkflowService {
                     reason: Some("keep-alive disabled after run completion"),
                     duration_ms: None,
                     error: None,
+                    canonical_error_event_id: None,
                 },
             )?;
             let runtime_unload_result = host
@@ -597,6 +603,7 @@ impl WorkflowService {
                         reason: Some("keep-alive disabled after run completion"),
                         duration_ms: Some(runtime_unload_duration_ms),
                         error: None,
+                        canonical_error_event_id: None,
                     },
                 )?,
                 Err(error) => {
@@ -613,6 +620,7 @@ impl WorkflowService {
                             reason: Some("keep-alive disabled after run completion"),
                             duration_ms: Some(runtime_unload_duration_ms),
                             error: Some(error_text.as_str()),
+                            canonical_error_event_id: None,
                         },
                     )?
                 }
@@ -1214,6 +1222,9 @@ impl WorkflowService {
                             reason: request.reason.map(str::to_string),
                             duration_ms: request.duration_ms,
                             error: request.error.map(str::to_string),
+                            canonical_error_event_id: request
+                                .canonical_error_event_id
+                                .map(str::to_string),
                         },
                     ),
                 },

@@ -1140,6 +1140,19 @@ async fn workflow_execution_session_runtime_load_failure_records_canonical_error
         Some(error_event.event_id.as_str())
     );
 
+    let lifecycle_failed_event = diagnostic_events
+        .iter()
+        .find(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::SchedulerModelLifecycleChanged
+                && event.payload_json.contains("load_failed")
+        })
+        .expect("failed scheduler model lifecycle event");
+    assert!(lifecycle_failed_event.payload_json.contains(&format!(
+        "\"canonical_error_event_id\":\"{}\"",
+        error_event.event_id
+    )));
+
     let terminal_event = diagnostic_events
         .iter()
         .find(|event| {

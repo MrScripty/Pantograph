@@ -462,8 +462,9 @@ errors can be returned or swallowed.
   runtime snapshot error events to the canonical error event with a typed
   `canonical_error_event_id` or equivalent link. `run.terminal` now carries the
   canonical diagnostic error event ID when the returned workflow error has a
-  diagnostics link; scheduler lifecycle, node failed, and runtime snapshot
-  payload links remain.
+  diagnostics link. Scheduler model lifecycle load failures now carry the same
+  canonical diagnostic error event ID. Node failed and runtime snapshot payload
+  links remain.
 
 **Verification:**
 - Workflow-service tests for submit, queue/admission, preflight, model-load,
@@ -506,6 +507,10 @@ workflow-service helper to finish the admitted run in the session store before
 terminal/reservation diagnostics are emitted. The runtime-load regression
 asserts the session leaves `Running`, returns to `IdleUnloaded`, and advances
 the run count.
+Scheduler model lifecycle failure payloads now expose
+`canonical_error_event_id`, and runtime-load failure handling records the
+canonical error before the failed lifecycle event so the lifecycle event can
+link back to the authoritative diagnostic error.
 
 Verification completed for this slice:
 - `cargo check -p pantograph-workflow-service`
@@ -520,6 +525,7 @@ Verification completed for this slice:
 - `cargo check --manifest-path src-tauri/Cargo.toml`
 - `cargo test -p pantograph-workflow-service workflow_execution_session_run_snapshot_failure_records_canonical_error`
 - `cargo test -p pantograph-workflow-service workflow_artifact_api_records_write_failure_with_run_context`
+- `cargo test -p pantograph-diagnostics-ledger diagnostic_event_ledger_appends_error_events_and_projects_timeline`
 
 ### Milestone 4: Projection And Query Semantics
 

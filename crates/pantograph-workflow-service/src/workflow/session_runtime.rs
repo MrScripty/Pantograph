@@ -307,6 +307,7 @@ impl WorkflowService {
                             reason: Some(request.reason.to_string()),
                             duration_ms: request.duration_ms,
                             error: request.error.map(str::to_string),
+                            canonical_error_event_id: None,
                         },
                     ),
                 },

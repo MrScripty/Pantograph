@@ -673,12 +673,19 @@ pub struct SchedulerModelLifecycleChangedPayload {
     pub reason: Option<String>,
     pub duration_ms: Option<u64>,
     pub error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canonical_error_event_id: Option<String>,
 }
 
 impl SchedulerModelLifecycleChangedPayload {
     fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
         validate_optional_text("model_lifecycle_reason", self.reason.as_deref(), MAX_ID_LEN)?;
-        validate_optional_text("model_lifecycle_error", self.error.as_deref(), MAX_JSON_LEN)
+        validate_optional_text("model_lifecycle_error", self.error.as_deref(), MAX_JSON_LEN)?;
+        validate_optional_text(
+            "canonical_error_event_id",
+            self.canonical_error_event_id.as_deref(),
+            MAX_ID_LEN,
+        )
     }
 
     pub(crate) fn summary(&self) -> &'static str {
