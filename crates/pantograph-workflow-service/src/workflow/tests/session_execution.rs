@@ -1079,6 +1079,7 @@ async fn workflow_execution_session_runtime_load_failure_records_canonical_error
         )
         .await
         .expect("create session");
+    let session_id = created.session_id.clone();
 
     let error = service
         .run_workflow_execution_session(
@@ -1100,6 +1101,15 @@ async fn workflow_execution_session_runtime_load_failure_records_canonical_error
         .await
         .expect_err("runtime load should fail the run");
     assert_eq!(error.code(), WorkflowErrorCode::RuntimeNotReady);
+    let status = service
+        .workflow_get_execution_session_status(WorkflowExecutionSessionStatusRequest { session_id })
+        .await
+        .expect("session status after runtime-load failure");
+    assert_eq!(
+        status.session.state,
+        WorkflowExecutionSessionState::IdleUnloaded
+    );
+    assert_eq!(status.session.run_count, 1);
 
     let diagnostic_events = {
         let ledger = service

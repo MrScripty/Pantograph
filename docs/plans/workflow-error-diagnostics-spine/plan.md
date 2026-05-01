@@ -426,7 +426,7 @@ errors can be returned or swallowed.
 
 **Tasks:**
 - [x] Wrap workflow submission/session creation errors that have run context.
-- [ ] Wrap scheduler queue/admission/preflight/runtime-load failures.
+- [x] Wrap scheduler queue/admission/preflight/runtime-load failures.
   Runtime-load and runtime-preflight failure capture are implemented; scheduler
   queue and admission diagnostics handoff failures are wrapped when a run ID
   exists.
@@ -455,7 +455,7 @@ errors can be returned or swallowed.
   Workflow output artifactization failures, attribution-backed artifact-store
   read/write/stream failures, and diagnostics projection drain/query/rebuild
   failures are wrapped.
-- [ ] Add a workflow-service domain failure path that marks scheduler/session
+- [x] Add a workflow-service domain failure path that marks scheduler/session
   state failed when a fatal run-scoped workflow error occurs. This path owns
   live state transition before diagnostics projections refresh.
 - [ ] Link `run.terminal`, scheduler lifecycle `*_failed`, node failed, and
@@ -501,6 +501,11 @@ Attribution-backed artifact-store write, open, read, append, stream-read, and
 finalize failures now record canonical artifact diagnostics and return linked
 workflow errors when the artifact request or descriptor carries workflow run
 context.
+Runtime-preflight and runtime-load fatal paths now use an explicit
+workflow-service helper to finish the admitted run in the session store before
+terminal/reservation diagnostics are emitted. The runtime-load regression
+asserts the session leaves `Running`, returns to `IdleUnloaded`, and advances
+the run count.
 
 Verification completed for this slice:
 - `cargo check -p pantograph-workflow-service`

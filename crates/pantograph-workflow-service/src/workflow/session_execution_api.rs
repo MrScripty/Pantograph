@@ -374,9 +374,7 @@ impl WorkflowService {
                     .with_source_instance_id("workflow-session-scheduler")
                     .with_cause("runtime admission preflight failed before model load"),
                 )?;
-                if let Ok(mut store) = self.session_store.lock() {
-                    let _ = store.finish_run(&session_id, &workflow_run_id);
-                }
+                self.finish_failed_workflow_run_after_admission(&session_id, &workflow_run_id)?;
                 let terminal_error = error
                     .with_diagnostics(diagnostic_outcome.into_error_link(Some(&workflow_run_id)));
                 let terminal_result = Err(terminal_error);
@@ -476,9 +474,7 @@ impl WorkflowService {
             )?;
             let diagnostic_outcome =
                 self.record_workflow_diagnostic_error_if_configured(diagnostic_request)?;
-            if let Ok(mut store) = self.session_store.lock() {
-                let _ = store.finish_run(&session_id, &workflow_run_id);
-            }
+            self.finish_failed_workflow_run_after_admission(&session_id, &workflow_run_id)?;
             let terminal_error =
                 error.with_diagnostics(diagnostic_outcome.into_error_link(Some(&workflow_run_id)));
             let terminal_result = Err(terminal_error);
@@ -625,6 +621,16 @@ impl WorkflowService {
         }
 
         run_result
+    }
+
+    fn finish_failed_workflow_run_after_admission(
+        &self,
+        session_id: &str,
+        workflow_run_id: &str,
+    ) -> Result<(), WorkflowServiceError> {
+        let mut store = self.session_store_guard()?;
+        store.finish_run(session_id, workflow_run_id)?;
+        Ok(())
     }
 
     async fn create_queued_run_snapshot_if_configured<H: WorkflowHost>(
