@@ -430,8 +430,18 @@ errors can be returned or swallowed.
   Runtime-load and runtime-preflight failure capture are implemented; scheduler
   queue and admission capture remain.
 - [ ] Wrap model dependency resolution and Puma-Lib descriptor lookup failures.
+  Embedded-runtime now preserves producer-known model dependency phase hints
+  for Puma-Lib model lookup, Puma-Lib list, model directory read, and GGUF
+  discovery failures before workflow-service records the canonical event.
+  Puma-Lib execution descriptor fallback warnings remain recoverable logs until
+  a warning diagnostics phase is implemented.
 - [ ] Wrap managed runtime command resolution and process spawn/startup
-  failures for llama.cpp, Ollama, and PyTorch.
+  failures for llama.cpp, Ollama, and PyTorch. Runtime admission now selects
+  `managed_binary`, `runtime_launch`, `model_dependency`, or
+  `runtime_model_load` from a typed `WorkflowRuntimeDiagnosticPhaseHint`
+  instead of parsing error text. Embedded llama.cpp model startup now marks
+  gateway switch/start failures as `runtime_launch`; direct managed-binary
+  command resolution hints from Tauri/inference process spawning remain.
 - [x] Wrap node execution failures and attach node IDs/types and output port
   context where available.
 - [ ] Capture node execution diagnostics at the node execution/injection
@@ -477,7 +487,10 @@ artifactization failures now route through the recorder from
 `runtime_preflight_failed` diagnostic before terminal/reservation release
 handling and carry the diagnostics link on the returned error. Failed
 `run.terminal` payloads now preserve the canonical diagnostic error event ID
-from linked workflow errors.
+from linked workflow errors. Runtime-loading errors can now carry a typed
+diagnostic phase hint so workflow-service records model dependency, managed
+binary, runtime launch, or model-load failures under the registered phase that
+the producer selected.
 
 Verification completed for this slice:
 - `cargo check -p pantograph-workflow-service`
@@ -485,6 +498,9 @@ Verification completed for this slice:
 - `cargo test -p pantograph-workflow-service workflow_run_returns_output_not_produced_when_target_missing`
 - `cargo test -p pantograph-workflow-service workflow_execution_session_runtime_load_failure_records_canonical_error`
 - `cargo check -p pantograph-workflow-service`
+- `cargo check -p pantograph-embedded-runtime`
+- `cargo test -p pantograph-workflow-service workflow_service_error_preserves_runtime_diagnostic_phase_hint`
+- `cargo test -p pantograph-workflow-service workflow_execution_session_runtime_load_failure_uses_phase_hint`
 
 ### Milestone 4: Projection And Query Semantics
 

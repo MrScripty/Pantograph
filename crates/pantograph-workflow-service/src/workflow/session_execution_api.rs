@@ -43,8 +43,9 @@ use super::{
     WorkflowExecutionSessionQueueItem, WorkflowExecutionSessionRetentionHint,
     WorkflowExecutionSessionRunRequest, WorkflowExecutionSessionSummary,
     WorkflowExecutionSessionUnloadReason, WorkflowHost, WorkflowPortBinding, WorkflowRunRequest,
-    WorkflowRunResponse, WorkflowRuntimeCapability, WorkflowRuntimeRequirements,
-    WorkflowSchedulerDecisionReason, WorkflowService, WorkflowServiceError,
+    WorkflowRunResponse, WorkflowRuntimeCapability, WorkflowRuntimeDiagnosticPhaseHint,
+    WorkflowRuntimeRequirements, WorkflowSchedulerDecisionReason, WorkflowService,
+    WorkflowServiceError,
 };
 
 const WORKFLOW_SESSION_SCHEDULER_POLICY: &str = "priority_then_fifo";
@@ -447,21 +448,17 @@ impl WorkflowService {
             }
         }
         if let Err(error) = runtime_load_result {
-            let diagnostic_outcome = self.record_workflow_diagnostic_error_if_configured(
-                WorkflowDiagnosticErrorRecordRequest::runtime_model_load_failed(
-                    workflow_runtime_model_error_scope(
-                        &session,
-                        run_snapshot.as_ref(),
-                        &workflow_run_id,
-                        &queued_workflow_semantic_version,
-                        &required_backends,
-                        &required_models,
-                    )?,
-                    &error,
-                )
-                .with_source_instance_id("workflow-session-scheduler")
-                .with_cause("runtime admission failed to load required models"),
+            let diagnostic_request = workflow_runtime_load_error_record_request(
+                &session,
+                run_snapshot.as_ref(),
+                &workflow_run_id,
+                &queued_workflow_semantic_version,
+                &required_backends,
+                &required_models,
+                &error,
             )?;
+            let diagnostic_outcome =
+                self.record_workflow_diagnostic_error_if_configured(diagnostic_request)?;
             if let Ok(mut store) = self.session_store.lock() {
                 let _ = store.finish_run(&session_id, &workflow_run_id);
             }
@@ -1560,6 +1557,46 @@ fn workflow_runtime_model_error_scope(
         model_id: required_models.first().cloned(),
         model_version: None,
     })
+}
+
+fn workflow_runtime_load_error_record_request(
+    session: &WorkflowExecutionSessionSummary,
+    snapshot: Option<&WorkflowRunSnapshotRecord>,
+    workflow_run_id: &str,
+    workflow_semantic_version: &str,
+    required_backends: &[String],
+    required_models: &[String],
+    error: &WorkflowServiceError,
+) -> Result<WorkflowDiagnosticErrorRecordRequest, WorkflowServiceError> {
+    let scope = workflow_runtime_model_error_scope(
+        session,
+        snapshot,
+        workflow_run_id,
+        workflow_semantic_version,
+        required_backends,
+        required_models,
+    )?;
+    let request = match error
+        .runtime_diagnostic_phase_hint()
+        .unwrap_or(WorkflowRuntimeDiagnosticPhaseHint::RuntimeModelLoad)
+    {
+        WorkflowRuntimeDiagnosticPhaseHint::RuntimeModelLoad => {
+            WorkflowDiagnosticErrorRecordRequest::runtime_model_load_failed(scope, error)
+        }
+        WorkflowRuntimeDiagnosticPhaseHint::RuntimeLaunch => {
+            WorkflowDiagnosticErrorRecordRequest::runtime_launch_failed(scope, error)
+        }
+        WorkflowRuntimeDiagnosticPhaseHint::ModelDependency => {
+            WorkflowDiagnosticErrorRecordRequest::model_dependency_failed(scope, error)
+        }
+        WorkflowRuntimeDiagnosticPhaseHint::ManagedBinary => {
+            WorkflowDiagnosticErrorRecordRequest::managed_binary_failed(scope, error)
+        }
+    };
+
+    Ok(request
+        .with_source_instance_id("workflow-session-scheduler")
+        .with_cause("runtime admission failed to load required models"))
 }
 
 fn session_attribution_client_id(

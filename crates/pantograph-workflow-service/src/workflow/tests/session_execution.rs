@@ -1089,3 +1089,67 @@ async fn workflow_execution_session_runtime_load_failure_records_canonical_error
         .expect("run detail");
     assert_eq!(detail.status, RunListProjectionStatus::Failed);
 }
+
+#[tokio::test]
+async fn workflow_execution_session_runtime_load_failure_uses_phase_hint() {
+    let host =
+        FailingRuntimeLoadHost::with_phase_hint(WorkflowRuntimeDiagnosticPhaseHint::ManagedBinary);
+    let service = WorkflowService::with_max_sessions(2)
+        .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"));
+
+    let created = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "wf-runtime-load-error".to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create session");
+
+    let error = service
+        .run_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionRunRequest {
+                session_id: created.session_id,
+                workflow_semantic_version: "1.2.3".to_string(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("hello"),
+                }],
+                output_targets: None,
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+            },
+        )
+        .await
+        .expect_err("runtime load should fail the run");
+    assert_eq!(
+        error.runtime_diagnostic_phase_hint(),
+        Some(WorkflowRuntimeDiagnosticPhaseHint::ManagedBinary)
+    );
+
+    let diagnostic_events = {
+        let ledger = service
+            .diagnostics_ledger_guard()
+            .expect("diagnostics ledger");
+        pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::diagnostic_events_after(
+            &*ledger, 0, 30,
+        )
+        .expect("diagnostic events")
+    };
+    let error_event = diagnostic_events
+        .iter()
+        .find(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::DiagnosticErrorOccurred
+        })
+        .expect("canonical runtime load error event");
+
+    assert!(error_event.payload_json.contains("managed_binary"));
+    assert!(error_event.payload_json.contains("managed_binary_failed"));
+}

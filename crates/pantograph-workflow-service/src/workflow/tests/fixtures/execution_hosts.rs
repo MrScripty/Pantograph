@@ -74,6 +74,7 @@ pub(in crate::workflow::tests) struct RecordingRuntimeHost {
 
 pub(in crate::workflow::tests) struct FailingRuntimeLoadHost {
     pub(in crate::workflow::tests) capabilities: WorkflowHostCapabilities,
+    pub(in crate::workflow::tests) phase_hint: Option<WorkflowRuntimeDiagnosticPhaseHint>,
 }
 
 impl RecordingRuntimeHost {
@@ -98,6 +99,16 @@ impl FailingRuntimeLoadHost {
     pub(in crate::workflow::tests) fn new() -> Self {
         Self {
             capabilities: MockWorkflowHost::new(8, 1024).capabilities,
+            phase_hint: None,
+        }
+    }
+
+    pub(in crate::workflow::tests) fn with_phase_hint(
+        phase_hint: WorkflowRuntimeDiagnosticPhaseHint,
+    ) -> Self {
+        Self {
+            capabilities: MockWorkflowHost::new(8, 1024).capabilities,
+            phase_hint: Some(phase_hint),
         }
     }
 }
@@ -318,9 +329,13 @@ impl WorkflowHost for FailingRuntimeLoadHost {
         _usage_profile: Option<&str>,
         _retention_hint: WorkflowExecutionSessionRetentionHint,
     ) -> Result<(), WorkflowServiceError> {
-        Err(WorkflowServiceError::RuntimeNotReady(
+        let error = WorkflowServiceError::RuntimeNotReady(
             "llama.cpp spawn failed\u{0000}\nmissing server".to_string(),
-        ))
+        );
+        Err(match self.phase_hint {
+            Some(phase_hint) => error.with_runtime_diagnostic_phase(phase_hint),
+            None => error,
+        })
     }
 
     async fn run_workflow(

@@ -10,7 +10,8 @@ use pantograph_runtime_registry::{RuntimeReservationRequirements, RuntimeRetenti
 use pantograph_workflow_service::{
     WorkflowExecutionSessionRetentionHint, WorkflowExecutionSessionRuntimeSelectionTarget,
     WorkflowExecutionSessionRuntimeUnloadCandidate, WorkflowExecutionSessionState, WorkflowHost,
-    WorkflowOutputTarget, WorkflowPortBinding, WorkflowRuntimeRequirements, WorkflowServiceError,
+    WorkflowOutputTarget, WorkflowPortBinding, WorkflowRuntimeDiagnosticPhaseHint,
+    WorkflowRuntimeRequirements, WorkflowServiceError,
 };
 
 use crate::{
@@ -123,7 +124,12 @@ impl EmbeddedWorkflowHost {
                 self.gateway
                     .switch_backend("llama.cpp")
                     .await
-                    .map_err(|error| WorkflowServiceError::RuntimeNotReady(error.to_string()))?;
+                    .map_err(|error| {
+                        WorkflowServiceError::RuntimeNotReady(error.to_string())
+                            .with_runtime_diagnostic_phase(
+                                WorkflowRuntimeDiagnosticPhaseHint::RuntimeLaunch,
+                            )
+                    })?;
             }
 
             self.gateway
@@ -141,6 +147,9 @@ impl EmbeddedWorkflowHost {
                         "failed to load llama.cpp model '{}': {error}",
                         model_path.display()
                     ))
+                    .with_runtime_diagnostic_phase(
+                        WorkflowRuntimeDiagnosticPhaseHint::RuntimeLaunch,
+                    )
                 })?;
         }
 
@@ -153,7 +162,8 @@ impl EmbeddedWorkflowHost {
             Err(WorkflowServiceError::RuntimeNotReady(format!(
                 "llama.cpp reported ready but active model does not match '{}'",
                 model_path.display()
-            )))
+            ))
+            .with_runtime_diagnostic_phase(WorkflowRuntimeDiagnosticPhaseHint::RuntimeModelLoad))
         }
     }
 
@@ -254,6 +264,7 @@ impl EmbeddedWorkflowHost {
                 WorkflowServiceError::RuntimeNotReady(format!(
                     "failed to query Puma-Lib model '{model_id}': {error}"
                 ))
+                .with_runtime_diagnostic_phase(WorkflowRuntimeDiagnosticPhaseHint::ModelDependency)
             })?
         } else if let Some(model_name) = model_name.as_deref() {
             find_puma_lib_model_by_name(&api, model_name).await?
@@ -681,6 +692,7 @@ async fn find_puma_lib_model_by_name(
         WorkflowServiceError::RuntimeNotReady(format!(
             "failed to list Puma-Lib models while resolving '{model_name}': {error}"
         ))
+        .with_runtime_diagnostic_phase(WorkflowRuntimeDiagnosticPhaseHint::ModelDependency)
     })?;
     Ok(models.into_iter().find(|record| {
         [
@@ -713,6 +725,7 @@ fn resolve_gguf_path(path: &str) -> Result<PathBuf, WorkflowServiceError> {
                 "cannot read model directory '{}': {error}",
                 path.display()
             ))
+            .with_runtime_diagnostic_phase(WorkflowRuntimeDiagnosticPhaseHint::ModelDependency)
         })?
         .filter_map(|entry| entry.ok())
         .map(|entry| entry.path())
@@ -725,6 +738,7 @@ fn resolve_gguf_path(path: &str) -> Result<PathBuf, WorkflowServiceError> {
                 "no .gguf file found in model directory '{}'",
                 path.display()
             ))
+            .with_runtime_diagnostic_phase(WorkflowRuntimeDiagnosticPhaseHint::ModelDependency)
         })
 }
 

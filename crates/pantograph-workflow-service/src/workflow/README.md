@@ -182,6 +182,11 @@ session-runtime workflows, and the root facade test module.
   `WorkflowServiceError::with_diagnostics(...)` so Tauri envelopes and frontend
   pages can link directly to the run diagnostic. The wrapper must preserve the
   original error code, message, and details.
+- Runtime-loading producers that know the specific failure family should attach
+  `WorkflowRuntimeDiagnosticPhaseHint` before returning the service error.
+  Session runtime admission uses that hint to choose the canonical
+  `runtime_model_load`, `runtime_launch`, `model_dependency`, or
+  `managed_binary` recorder phase without parsing error text.
 - Failed terminal events should copy the diagnostic event id into
   `RunTerminalPayload::canonical_error_event_id` when the error provides one.
   The terminal event records state transition; `diagnostic.error_occurred`

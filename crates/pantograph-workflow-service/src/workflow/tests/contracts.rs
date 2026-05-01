@@ -432,3 +432,26 @@ fn workflow_service_error_envelope_includes_diagnostics_link() {
         serde_json::from_str(&json).expect("parse workflow error envelope");
     assert_eq!(parsed.diagnostics, envelope.diagnostics);
 }
+
+#[test]
+fn workflow_service_error_preserves_runtime_diagnostic_phase_hint() {
+    let err = WorkflowServiceError::RuntimeNotReady("managed runtime missing".to_string())
+        .with_runtime_diagnostic_phase(WorkflowRuntimeDiagnosticPhaseHint::ManagedBinary)
+        .with_diagnostics(WorkflowErrorDiagnosticsLink {
+            workflow_run_id: Some("run-1".to_string()),
+            diagnostic_event_id: Some("event-error-1".to_string()),
+            diagnostics_unavailable: None,
+        });
+
+    assert_eq!(err.code(), WorkflowErrorCode::RuntimeNotReady);
+    assert_eq!(err.message(), "managed runtime missing");
+    assert_eq!(
+        err.runtime_diagnostic_phase_hint(),
+        Some(WorkflowRuntimeDiagnosticPhaseHint::ManagedBinary)
+    );
+    assert_eq!(
+        err.diagnostics()
+            .and_then(|diagnostics| diagnostics.diagnostic_event_id.as_deref()),
+        Some("event-error-1")
+    );
+}

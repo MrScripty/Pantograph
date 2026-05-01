@@ -678,6 +678,14 @@ pub struct WorkflowErrorDiagnosticsLink {
     pub diagnostics_unavailable: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkflowRuntimeDiagnosticPhaseHint {
+    RuntimeModelLoad,
+    RuntimeLaunch,
+    ModelDependency,
+    ManagedBinary,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum WorkflowServiceError {
     #[error("invalid_request: {0}")]
@@ -723,6 +731,12 @@ pub enum WorkflowServiceError {
     WithDiagnostics {
         source: Box<WorkflowServiceError>,
         diagnostics: WorkflowErrorDiagnosticsLink,
+    },
+
+    #[error("{source}")]
+    WithRuntimeDiagnosticPhase {
+        source: Box<WorkflowServiceError>,
+        phase: WorkflowRuntimeDiagnosticPhaseHint,
     },
 }
 
@@ -773,6 +787,7 @@ impl WorkflowServiceError {
             WorkflowServiceError::RuntimeTimeout(_) => WorkflowErrorCode::RuntimeTimeout,
             WorkflowServiceError::Internal(_) => WorkflowErrorCode::InternalError,
             WorkflowServiceError::WithDiagnostics { source, .. } => source.code(),
+            WorkflowServiceError::WithRuntimeDiagnosticPhase { source, .. } => source.code(),
         }
     }
 
@@ -791,6 +806,7 @@ impl WorkflowServiceError {
             | WorkflowServiceError::Internal(message) => message,
             WorkflowServiceError::SchedulerBusy { message, .. } => message,
             WorkflowServiceError::WithDiagnostics { source, .. } => source.message(),
+            WorkflowServiceError::WithRuntimeDiagnosticPhase { source, .. } => source.message(),
         }
     }
 
@@ -801,6 +817,7 @@ impl WorkflowServiceError {
                 ..
             } => Some(WorkflowErrorDetails::Scheduler(details.clone())),
             WorkflowServiceError::WithDiagnostics { source, .. } => source.details(),
+            WorkflowServiceError::WithRuntimeDiagnosticPhase { source, .. } => source.details(),
             _ => None,
         }
     }
@@ -808,6 +825,7 @@ impl WorkflowServiceError {
     pub fn diagnostics(&self) -> Option<&WorkflowErrorDiagnosticsLink> {
         match self {
             WorkflowServiceError::WithDiagnostics { diagnostics, .. } => Some(diagnostics),
+            WorkflowServiceError::WithRuntimeDiagnosticPhase { source, .. } => source.diagnostics(),
             _ => None,
         }
     }
@@ -824,6 +842,28 @@ impl WorkflowServiceError {
                 source: Box::new(source),
                 diagnostics,
             },
+        }
+    }
+
+    pub fn with_runtime_diagnostic_phase(self, phase: WorkflowRuntimeDiagnosticPhaseHint) -> Self {
+        match self {
+            WorkflowServiceError::WithRuntimeDiagnosticPhase { source, .. } => {
+                WorkflowServiceError::WithRuntimeDiagnosticPhase { source, phase }
+            }
+            source => WorkflowServiceError::WithRuntimeDiagnosticPhase {
+                source: Box::new(source),
+                phase,
+            },
+        }
+    }
+
+    pub fn runtime_diagnostic_phase_hint(&self) -> Option<WorkflowRuntimeDiagnosticPhaseHint> {
+        match self {
+            WorkflowServiceError::WithRuntimeDiagnosticPhase { phase, .. } => Some(*phase),
+            WorkflowServiceError::WithDiagnostics { source, .. } => {
+                source.runtime_diagnostic_phase_hint()
+            }
+            _ => None,
         }
     }
 

@@ -161,6 +161,11 @@ delegating methods; scheduler authority and diagnostics events stay in
   `embedded_workflow_host_helpers.rs` so reservation shaping, runtime retention
   sync, workflow I/O binding, and data-graph output shaping do not accumulate
   inside the trait implementation facade.
+- Embedded workflow host runtime-loading helpers preserve producer-known
+  diagnostic phase hints when Puma-Lib model dependency resolution, llama.cpp
+  backend launch, or loaded-model verification fails. Workflow-service owns
+  ledger recording, but this crate must not flatten those failures before the
+  session runtime admission recorder can classify them.
 - Public embedded-runtime workflow, session, queue, inspection, and keep-alive
   facade methods stay in `embedded_workflow_service_api.rs` so root composition
   remains separate from workflow-service API forwarding.
