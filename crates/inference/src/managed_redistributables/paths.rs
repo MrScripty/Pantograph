@@ -5,6 +5,12 @@ use super::contracts::{ManagedRedistributableArchiveKind, ManagedRedistributable
 const MANAGED_REDISTRIBUTABLES_STATE_FILE: &str = "state.json";
 
 pub fn managed_redistributables_dir(app_data_dir: &Path) -> PathBuf {
+    app_data_dir
+        .join("third-party")
+        .join("managed-dependencies")
+}
+
+pub(crate) fn legacy_managed_redistributables_dir(app_data_dir: &Path) -> PathBuf {
     app_data_dir.join("managed-dependencies")
 }
 
@@ -13,10 +19,23 @@ pub(crate) fn managed_redistributable_version_dir(
     id: ManagedRedistributableId,
     version: &str,
 ) -> PathBuf {
-    managed_redistributables_dir(app_data_dir)
+    let current = managed_redistributables_dir(app_data_dir)
         .join(id.key())
         .join("versions")
-        .join(version)
+        .join(version);
+    if current.exists() {
+        return current;
+    }
+
+    let legacy = legacy_managed_redistributables_dir(app_data_dir)
+        .join(id.key())
+        .join("versions")
+        .join(version);
+    if legacy.exists() {
+        return legacy;
+    }
+
+    current
 }
 
 pub(crate) fn redistributables_state_path(app_data_dir: &Path) -> PathBuf {
@@ -95,6 +114,32 @@ pub(crate) fn library_path(name: &str) -> String {
         format!("lib/lib{name}.dylib")
     } else {
         format!("lib/lib{name}.so")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{managed_redistributable_version_dir, ManagedRedistributableId};
+
+    #[test]
+    fn managed_redistributable_version_dir_falls_back_to_legacy_root() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let legacy_dir = temp_dir
+            .path()
+            .join("managed-dependencies")
+            .join("ffmpeg")
+            .join("versions")
+            .join("n7.1.1");
+        std::fs::create_dir_all(&legacy_dir).expect("legacy dependency dir");
+
+        assert_eq!(
+            managed_redistributable_version_dir(
+                temp_dir.path(),
+                ManagedRedistributableId::Ffmpeg,
+                "n7.1.1"
+            ),
+            legacy_dir
+        );
     }
 }
 

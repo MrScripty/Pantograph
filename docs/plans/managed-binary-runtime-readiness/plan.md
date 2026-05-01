@@ -316,7 +316,7 @@ binaries while preserving runtime-vs-media categories.
       adapter boundaries.
 - [x] Preserve existing runtime and media command functions as adapters over
       the facade.
-- [ ] Add path migration/fallback behavior or an explicit one-time migration
+- [x] Add path migration/fallback behavior or an explicit one-time migration
       for legacy app-data paths.
 - [x] Extract facade modules instead of expanding existing over-threshold
       operations files.
@@ -481,6 +481,11 @@ diagnostics, and release artifacts.
   renders runtime sidecars, media tools, and native artifacts from the unified
   backend facade with read-only refresh behavior; it does not perform
   optimistic install, selection, activation, or readiness updates.
+- 2026-05-01: Added legacy app-data path fallback on top of the current
+  `third-party/...` path layout. Runtime sidecar status/launch can still see
+  legacy `runtimes/...` installs when the new root is absent, and media/native
+  redistributable status can still see legacy `managed-dependencies/...`
+  installs when the new root is absent.
 
 ## Deferred Bugs and Follow-Up Fixes
 

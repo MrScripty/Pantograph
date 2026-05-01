@@ -3,11 +3,25 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 pub fn managed_runtime_dir(app_data_dir: &Path) -> PathBuf {
+    app_data_dir.join("third-party").join("runtimes")
+}
+
+pub(crate) fn legacy_managed_runtime_dir(app_data_dir: &Path) -> PathBuf {
     app_data_dir.join("runtimes")
 }
 
 pub(crate) fn managed_install_dir(app_data_dir: &Path, id: ManagedBinaryId) -> PathBuf {
-    managed_runtime_dir(app_data_dir).join(id.install_dir_name())
+    let current = managed_runtime_dir(app_data_dir).join(id.install_dir_name());
+    if current.exists() {
+        return current;
+    }
+
+    let legacy = legacy_managed_runtime_dir(app_data_dir).join(id.install_dir_name());
+    if legacy.exists() {
+        return legacy;
+    }
+
+    current
 }
 
 pub(crate) fn managed_version_install_dir(
@@ -94,11 +108,30 @@ mod tests {
     #[test]
     fn managed_version_install_dir_nests_version_under_runtime_root() {
         let app_data_dir = std::path::Path::new("/tmp/pantograph");
-        let runtime_root = managed_install_dir(app_data_dir, ManagedBinaryId::LlamaCpp);
 
         let version_dir =
             managed_version_install_dir(app_data_dir, ManagedBinaryId::LlamaCpp, "b8248");
 
-        assert_eq!(version_dir, runtime_root.join("versions").join("b8248"));
+        assert_eq!(
+            version_dir,
+            app_data_dir
+                .join("third-party")
+                .join("runtimes")
+                .join("llama-cpp")
+                .join("versions")
+                .join("b8248")
+        );
+    }
+
+    #[test]
+    fn managed_install_dir_falls_back_to_legacy_runtime_root() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let legacy_dir = temp_dir.path().join("runtimes").join("llama-cpp");
+        std::fs::create_dir_all(&legacy_dir).expect("legacy runtime dir");
+
+        assert_eq!(
+            managed_install_dir(temp_dir.path(), ManagedBinaryId::LlamaCpp),
+            legacy_dir
+        );
     }
 }
