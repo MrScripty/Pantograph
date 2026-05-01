@@ -22,6 +22,7 @@ interface WorkflowGraphPaletteHandlerParams {
   edgeInsertPreview: EdgeInsertPreviewState;
   event: DragEvent;
   getRelativePointerPosition: (clientX: number, clientY: number) => { x: number; y: number } | null;
+  onFailure?: (message: string) => void;
   onAddNode: (
     definition: NodeDefinition,
     position: { x: number; y: number },
@@ -35,7 +36,7 @@ function readPaletteDefinition(event: DragEvent): NodeDefinition | null {
   });
 }
 
-function warnIfAddNodeDidNotApply(result: unknown): void {
+function warnIfAddNodeDidNotApply(result: unknown, onFailure?: (message: string) => void): void {
   if (!result || typeof result !== 'object' || !('status' in result)) {
     return;
   }
@@ -45,7 +46,9 @@ function warnIfAddNodeDidNotApply(result: unknown): void {
     return;
   }
 
-  console.warn('[WorkflowGraph] Palette drop did not add a node:', result);
+  const message = `Palette drop did not add a node: mutation ${String(status)}.`;
+  console.warn('[WorkflowGraph]', message, result);
+  onFailure?.(message);
 }
 
 export async function handleWorkflowGraphPaletteDrop({
@@ -56,16 +59,19 @@ export async function handleWorkflowGraphPaletteDrop({
   edgeInsertPreview,
   event,
   getRelativePointerPosition,
+  onFailure,
   onAddNode,
 }: WorkflowGraphPaletteHandlerParams) {
   event.preventDefault();
   if (!canEdit) {
+    onFailure?.('Palette drop ignored because this graph is not editable.');
     return;
   }
 
   const definition = readPaletteDefinition(event);
   if (!definition) {
     clearConnectionInteraction();
+    onFailure?.('Palette drop did not include a readable node definition.');
     return;
   }
 
@@ -80,6 +86,7 @@ export async function handleWorkflowGraphPaletteDrop({
 
   clearConnectionInteraction();
   if (!position) {
+    onFailure?.('Palette drop did not resolve a graph position.');
     return;
   }
 
@@ -88,7 +95,7 @@ export async function handleWorkflowGraphPaletteDrop({
     return;
   }
 
-  warnIfAddNodeDidNotApply(await onAddNode(definition, position));
+  warnIfAddNodeDidNotApply(await onAddNode(definition, position), onFailure);
 }
 
 export async function handleWorkflowGraphPaletteDragOver({

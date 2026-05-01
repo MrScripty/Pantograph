@@ -27,6 +27,16 @@ export const WORKFLOW_PALETTE_DRAG_DATA_TYPES = [
   'text/plain',
 ] as const;
 
+let activeWorkflowPaletteDefinition: NodeDefinition | null = null;
+
+export function setActiveWorkflowPaletteDragDefinition(definition: NodeDefinition): void {
+  activeWorkflowPaletteDefinition = definition;
+}
+
+export function clearActiveWorkflowPaletteDragDefinition(): void {
+  activeWorkflowPaletteDefinition = null;
+}
+
 export function readWorkflowPaletteDragDefinition(
   event: WorkflowPaletteDragEvent,
   onParseError?: (error: unknown) => void,
@@ -35,7 +45,7 @@ export function readWorkflowPaletteDragDefinition(
     .map((type) => event.dataTransfer?.getData(type) ?? '')
     .find((value) => value.length > 0);
   if (!data) {
-    return null;
+    return activeWorkflowPaletteDefinition;
   }
 
   try {

@@ -6,7 +6,11 @@
     dispatchWorkflowPaletteDragEnd,
     dispatchWorkflowPaletteDragStart,
   } from '../paletteDragState.js';
-  import { WORKFLOW_PALETTE_DRAG_DATA_TYPES } from '../workflowPaletteDrag.js';
+  import {
+    clearActiveWorkflowPaletteDragDefinition,
+    setActiveWorkflowPaletteDragDefinition,
+    WORKFLOW_PALETTE_DRAG_DATA_TYPES,
+  } from '../workflowPaletteDrag.js';
 
   const { stores } = useGraphContext();
   const nodeDefinitionsByCategory = stores.workflow.nodeDefinitionsByCategory;
@@ -51,11 +55,13 @@
       event.dataTransfer.setData(type, payload);
     }
     event.dataTransfer.effectAllowed = 'copy';
+    setActiveWorkflowPaletteDragDefinition(definition);
     dispatchWorkflowPaletteDragStart(window);
   }
 
   function handleDragEnd() {
     dispatchWorkflowPaletteDragEnd(window);
+    clearActiveWorkflowPaletteDragDefinition();
   }
 
   function handleDoubleClick(definition: NodeDefinition) {

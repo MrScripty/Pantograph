@@ -76,6 +76,7 @@
     type WorkflowNodeClickState,
   } from '../workflowNodeActivation.js';
   import {
+    clearActiveWorkflowPaletteDragDefinition,
     readWorkflowPaletteDragDefinition,
     resolveWorkflowPaletteDropPosition,
   } from '../workflowPaletteDrag.js';
@@ -297,6 +298,7 @@
     }
 
     externalPaletteDragActive = false;
+    clearActiveWorkflowPaletteDragDefinition();
   }
 
   function handleSelectionChange({ nodes: selectedNodes }: { nodes: Node[]; edges: Edge[] }) {

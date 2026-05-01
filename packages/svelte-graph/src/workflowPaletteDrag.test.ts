@@ -2,8 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  clearActiveWorkflowPaletteDragDefinition,
   readWorkflowPaletteDragDefinition,
   resolveWorkflowPaletteDropPosition,
+  setActiveWorkflowPaletteDragDefinition,
 } from './workflowPaletteDrag.ts';
 import type { NodeDefinition } from './types/workflow.ts';
 
@@ -58,6 +60,7 @@ test('readWorkflowPaletteDragDefinition reports invalid palette drag data', () =
 });
 
 test('readWorkflowPaletteDragDefinition ignores empty drag data', () => {
+  clearActiveWorkflowPaletteDragDefinition();
   assert.equal(
     readWorkflowPaletteDragDefinition({
       dataTransfer: {
@@ -66,6 +69,22 @@ test('readWorkflowPaletteDragDefinition ignores empty drag data', () => {
     }),
     null,
   );
+});
+
+test('readWorkflowPaletteDragDefinition falls back to the active palette definition', () => {
+  setActiveWorkflowPaletteDragDefinition(paletteDefinition);
+  try {
+    assert.deepEqual(
+      readWorkflowPaletteDragDefinition({
+        dataTransfer: {
+          getData: () => '',
+        },
+      }),
+      paletteDefinition,
+    );
+  } finally {
+    clearActiveWorkflowPaletteDragDefinition();
+  }
 });
 
 test('resolveWorkflowPaletteDropPosition projects client coordinates into graph space', () => {

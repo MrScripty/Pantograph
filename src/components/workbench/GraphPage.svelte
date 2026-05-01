@@ -9,7 +9,7 @@
   } from '../../services/diagnostics/types';
   import type { WorkflowRunGraphProjection } from '../../services/workflow/types';
   import { workflowService } from '../../services/workflow/WorkflowService';
-  import { isReadOnly } from '../../stores/graphSessionStore';
+  import { graphSessionError, isReadOnly } from '../../stores/graphSessionStore';
   import { activeWorkflowRun, diagnosticsFocus } from '../../stores/workbenchStore';
   import RunGraphSnapshot from './RunGraphSnapshot.svelte';
   import {
@@ -222,6 +222,11 @@
         Editing the current workflow. Selected run remains
         <span class="font-mono text-neutral-200">{$activeWorkflowRun.workflow_run_id}</span>
         for other workbench pages.
+      </div>
+    {/if}
+    {#if $graphSessionError}
+      <div class="border-b border-red-900 bg-red-950/60 px-4 py-2 text-sm text-red-200">
+        {$graphSessionError}
       </div>
     {/if}
     <div class="flex min-h-0 flex-1 overflow-hidden">

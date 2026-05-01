@@ -29,7 +29,12 @@
     deleteSelection, nodeDefinitions, nodes as nodesStore, selectedNodeIds, setConnectionIntent,
     updateNodePosition, workflowGraph,
   } from '../stores/workflowStore';
-  import { isReadOnly, currentGraphId, currentGraphType } from '../stores/graphSessionStore';
+  import {
+    graphSessionError,
+    isReadOnly,
+    currentGraphId,
+    currentGraphType,
+  } from '../stores/graphSessionStore';
   import type {
     ConnectionAnchor,
     ConnectionCommitResponse,
@@ -78,6 +83,7 @@
   } from './workflowGraphBackendActions.ts';
   import {
     isWorkflowPaletteEdgeInsertEnabled,
+    clearActiveWorkflowPaletteDragDefinition,
   } from './workflowPaletteDrag.ts';
   import {
     handleWorkflowGraphPaletteDragOver,
@@ -194,6 +200,7 @@
     }
 
     externalPaletteDragActive = false;
+    clearActiveWorkflowPaletteDragDefinition();
     clearEdgeInsertPreview();
   }
 
@@ -729,6 +736,7 @@
   }
 
   async function handleDrop(event: DragEvent) {
+    graphSessionError.set(null);
     await handleWorkflowGraphPaletteDrop({
       canEdit,
       clearConnectionInteraction,
@@ -738,6 +746,7 @@
       edgeInsertPreview,
       event,
       getRelativePointerPosition,
+      onFailure: (message) => graphSessionError.set(message),
       onAddNode: addNode,
       refreshEdgeInsertPreview,
     });

@@ -5,7 +5,11 @@
     dispatchWorkflowPaletteDragStart,
   } from '@pantograph/svelte-graph';
   import { nodeDefinitionsByCategory, addNode } from '../stores/workflowStore';
-  import { WORKFLOW_PALETTE_DRAG_DATA_TYPES } from './workflowPaletteDrag';
+  import {
+    clearActiveWorkflowPaletteDragDefinition,
+    setActiveWorkflowPaletteDragDefinition,
+    WORKFLOW_PALETTE_DRAG_DATA_TYPES,
+  } from './workflowPaletteDrag';
   import type { NodeDefinition } from '../services/workflow/types';
 
   let searchQuery = $state('');
@@ -49,11 +53,13 @@
       event.dataTransfer.setData(type, payload);
     }
     event.dataTransfer.effectAllowed = 'copy';
+    setActiveWorkflowPaletteDragDefinition(definition);
     dispatchWorkflowPaletteDragStart(window);
   }
 
   function handleDragEnd() {
     dispatchWorkflowPaletteDragEnd(window);
+    clearActiveWorkflowPaletteDragDefinition();
   }
 
   function handleDoubleClick(definition: NodeDefinition) {
