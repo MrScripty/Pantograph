@@ -172,6 +172,13 @@ transient UI state without becoming backend scheduler policy.
   available through typed services or explicit unavailable states.
 - Workbench error messages must be formatted from typed workflow service
   errors. Components must not stringify backend envelopes directly.
+- Workflow command errors with diagnostics links should render semantic
+  navigation controls into the Diagnostics page. The workbench focus state is
+  transient UI state; durable error identity remains in backend projections and
+  ledger event ids.
+- Run graph error badges and diagnostics timeline filters consume projected
+  error fields from backend DTOs. They must not parse raw payload JSON to infer
+  node failure or error severity.
 
 ## Revisit Triggers
 - A router is introduced for deep links or browser-style navigation.

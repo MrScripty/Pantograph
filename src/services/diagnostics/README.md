@@ -80,6 +80,10 @@ panel because no active TypeScript boundary consumes them.
   those backend fields instead of inventing local policy categories.
 - Retention and Pumas command DTOs mirror backend command/result shapes so GUI
   controls can display outcomes without optimistic local audit mutation.
+- Diagnostic error projection fields such as severity, phase, code, event id,
+  and canonical terminal links are backend-authored facts. Frontend consumers
+  may filter or highlight rows with those fields, but must not parse
+  `payload_json` to reconstruct error causality.
 
 ## Revisit Triggers
 - Rust-to-TypeScript DTO generation replaces manual interface mirrors.

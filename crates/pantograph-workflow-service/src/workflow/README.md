@@ -178,6 +178,14 @@ session-runtime workflows, and the root facade test module.
   `diagnostic_errors.rs`. Call sites must use registered phase helpers and
   typed scope structs so ledger error events carry the required run, node,
   runtime/model, projection, or transport context consistently.
+- Workflow errors that have a recorded diagnostic event should return
+  `WorkflowServiceError::with_diagnostics(...)` so Tauri envelopes and frontend
+  pages can link directly to the run diagnostic. The wrapper must preserve the
+  original error code, message, and details.
+- Failed terminal events should copy the diagnostic event id into
+  `RunTerminalPayload::canonical_error_event_id` when the error provides one.
+  The terminal event records state transition; `diagnostic.error_occurred`
+  remains the detailed error fact.
 
 ## Revisit Triggers
 - Runtime preflight becomes a public reusable crate-level policy.

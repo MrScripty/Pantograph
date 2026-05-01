@@ -84,6 +84,10 @@ optional directly-known causality links. Existing lifecycle rows such as
 `run.terminal`, scheduler model lifecycle, and node execution status remain
 their native facts and should link to canonical error events rather than
 duplicating the detailed error payload.
+Failed `run.terminal` payloads may carry `canonical_error_event_id` when the
+workflow service knows the directly related `diagnostic.error_occurred` row.
+Consumers should use that link for navigation and causality display instead of
+deriving cause from adjacent timestamps.
 
 ## Alternatives Rejected
 

@@ -613,7 +613,7 @@ after the remaining capture paths are complete.
 **Tasks:**
 - [ ] Add a GUI or integration smoke path that triggers a controlled workflow
   failure and verifies run status, error event, timeline styling, and deep link.
-- [ ] Update module READMEs for diagnostics ledger, workflow diagnostics,
+- [x] Update module READMEs for diagnostics ledger, workflow diagnostics,
   workflow services, and workbench diagnostics as needed.
 - [ ] Add or update an ADR if the new error event spine changes architecture
   beyond existing README contracts.
