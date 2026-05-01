@@ -227,6 +227,54 @@ fn workflow_diagnostic_error_recorder_appends_runtime_model_error() {
 }
 
 #[test]
+fn workflow_artifact_api_records_write_failure_with_run_context() {
+    let temp = tempfile::tempdir().expect("temp artifact store");
+    let store = ArtifactStore::open(temp.path(), artifact_policy_with_one_byte_limit())
+        .expect("artifact store");
+    let service = WorkflowService::with_ephemeral_diagnostics_ledger()
+        .expect("service")
+        .with_artifact_store(store);
+
+    let error = service
+        .write_artifact(ArtifactWriteRequest {
+            artifact_id: Some("artifact-a".to_string()),
+            payload_kind: ArtifactPayloadKind::Text,
+            media_type: "text/plain".to_string(),
+            format: None,
+            attribution: sample_artifact_attribution(),
+            artifact_role: Some("workflow_output".to_string()),
+            parent_artifact_id: None,
+            revision_index: None,
+            body: b"too large".to_vec(),
+        })
+        .expect_err("oversized artifact fails");
+
+    let diagnostics = error.diagnostics().expect("diagnostics link");
+    assert_eq!(diagnostics.workflow_run_id.as_deref(), Some("run-artifact"));
+    assert!(diagnostics.diagnostic_event_id.is_some());
+
+    let events = {
+        let ledger = service
+            .diagnostics_ledger_guard()
+            .expect("diagnostics ledger guard");
+        pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::diagnostic_events_after(
+            &*ledger, 0, 10,
+        )
+        .expect("diagnostic events")
+    };
+    assert_eq!(events.len(), 1);
+    assert_eq!(
+        events[0].event_kind,
+        pantograph_diagnostics_ledger::DiagnosticEventKind::DiagnosticErrorOccurred
+    );
+    assert!(events[0].payload_json.contains("artifact_failed"));
+    assert_eq!(
+        events[0].payload_ref.as_deref(),
+        Some("artifact://artifact-a")
+    );
+}
+
+#[test]
 fn workflow_diagnostic_error_recorder_reports_unavailable_when_ledger_missing() {
     let service = WorkflowService::new();
     let error = WorkflowServiceError::Internal("route failed".to_string());
@@ -1677,6 +1725,31 @@ fn sample_library_asset_access_event(
             cache_status: Some(LibraryAssetCacheStatus::Miss),
             network_bytes: Some(network_bytes),
         }),
+    }
+}
+
+fn sample_artifact_attribution() -> ArtifactAttribution {
+    ArtifactAttribution {
+        workflow_run_id: "run-artifact".to_string(),
+        workflow_id: Some("workflow-artifact".to_string()),
+        workflow_version_id: Some("wfver-artifact".to_string()),
+        node_id: Some("node-artifact".to_string()),
+        port_id: Some("image".to_string()),
+        model_id: None,
+        runtime_id: None,
+    }
+}
+
+fn artifact_policy_with_one_byte_limit() -> ArtifactPolicy {
+    ArtifactPolicy {
+        policy_id: "artifact-test-policy".to_string(),
+        policy_version: 1,
+        ttl_seconds: None,
+        max_disk_bytes: Some(1024),
+        max_memory_bytes: Some(1024),
+        max_single_artifact_bytes: Some(1),
+        spill_threshold_bytes: Some(1024),
+        delete_on_consume: false,
     }
 }
 

@@ -451,9 +451,10 @@ errors can be returned or swallowed.
   boundary, not inside user-authored node code. User nodes may return ordinary
   errors or optional typed node errors; the host wrapper owns workflow/run,
   node, attempt, injected capability, runtime/model, and port context.
-- [ ] Wrap artifact read/write/conversion and diagnostics projection failures.
-  Workflow output artifactization failures and diagnostics projection
-  drain/query/rebuild failures are wrapped; artifact-store failures remain.
+- [x] Wrap artifact read/write/conversion and diagnostics projection failures.
+  Workflow output artifactization failures, attribution-backed artifact-store
+  read/write/stream failures, and diagnostics projection drain/query/rebuild
+  failures are wrapped.
 - [ ] Add a workflow-service domain failure path that marks scheduler/session
   state failed when a fatal run-scoped workflow error occurs. This path owns
   live state transition before diagnostics projections refresh.
@@ -496,6 +497,10 @@ binary, runtime launch, or model-load failures under the registered phase that
 the producer selected. Queued run snapshot failures and scheduler
 queue/admission diagnostics handoff failures now record canonical run-scoped
 or scheduler-scoped diagnostics before returning the service error.
+Attribution-backed artifact-store write, open, read, append, stream-read, and
+finalize failures now record canonical artifact diagnostics and return linked
+workflow errors when the artifact request or descriptor carries workflow run
+context.
 
 Verification completed for this slice:
 - `cargo check -p pantograph-workflow-service`
@@ -509,6 +514,7 @@ Verification completed for this slice:
 - `cargo test -p inference map_sidecar_start_error_preserves_managed_binary_failures`
 - `cargo check --manifest-path src-tauri/Cargo.toml`
 - `cargo test -p pantograph-workflow-service workflow_execution_session_run_snapshot_failure_records_canonical_error`
+- `cargo test -p pantograph-workflow-service workflow_artifact_api_records_write_failure_with_run_context`
 
 ### Milestone 4: Projection And Query Semantics
 
