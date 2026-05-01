@@ -325,6 +325,41 @@ run-scoped error diagnostics through the primary ledger.
 
 **Status:** Not started.
 
+### Current Error Catch-Site Fit Review
+
+**Status:** Reviewed against the current codebase before implementation.
+
+The existing workflow error handling can move into the proposed diagnostics
+design, but several paths currently flatten typed failure context before the
+diagnostics layer can classify it. Implementation must preserve typed context
+until the recorder has produced the canonical `diagnostic.error_occurred`
+event.
+
+| Current location | Current behavior | Planned phase/scope | Fit and required adjustment |
+| ---------------- | ---------------- | ------------------- | --------------------------- |
+| `workflow/session_execution_api.rs` submission validation and session lookup | Returns `WorkflowServiceError` before a run ID exists. | Transport or scheduler/session scope, not run scope. | Fits if these remain non-run command errors. Do not invent a workflow-run event before `workflow_run_id` exists. Envelope may carry no diagnostics event ID. |
+| `workflow/session_execution_api.rs` queued snapshot creation | Creates `workflow_run_id`, then may fail while building attribution/run snapshot before enqueue. | `run_snapshot` with `RunErrorScope`. | Fits well. Record a fatal run-scoped diagnostic before returning and link the command envelope to it. |
+| `workflow/session_execution_api.rs` scheduler estimate, queue placement, admission, reservation, and terminal event writes | Ledger append failures currently become `WorkflowServiceError` and can cancel or fail the request. | `diagnostics_unavailable` boundary plus existing scheduler lifecycle events. | Needs adjustment. A failure to write diagnostics must not replace the original workflow failure with an unrelated ledger failure. Surface typed `diagnostics_unavailable` while preserving the original command/runtime error. |
+| `workflow/session_execution_api.rs` preflight failure after admission | Finishes run, writes `run.terminal`, releases reservation, and returns the preflight error. | `runtime_preflight_failed` with `SchedulerErrorScope` or `RuntimeModelErrorScope`. | Fits. Record canonical diagnostic first, then terminal/release events should link with `canonical_error_event_id`. |
+| `workflow/session_execution_api.rs` runtime load failure after admission | Writes scheduler model lifecycle `LoadFailed`, finishes run, terminal event, release reservation. | `model_load_failed` or `runtime_launch_failed` with `RuntimeModelErrorScope`. | Fits, but `LoadDependencyResolved` must not be displayed as model-loaded. Only true backend readiness/model-match proof can drive loaded wording. |
+| `workflow/workflow_run_api.rs` timeout branch | Cancels the run handle and returns `RuntimeTimeout`. | `run_timeout` with `RunErrorScope`. | Fits. Recorder should emit fatal run-scoped diagnostic before terminal failure. |
+| `workflow/workflow_run_api.rs` output validation and output-target failures | Returns `OutputNotProduced`, `CapabilityViolation`, or `Internal` after host execution. | `output_validation_failed` or `artifact_conversion_failed` with run/node scope where available. | Fits. Output-target failures can use requested node/port context; zero-output internal failures are run-scoped unless node context is available. |
+| `embedded_workflow_host_helpers.rs` runtime readiness, Puma-Lib model path, backend switch, gateway start, model-match check | Converts Puma-Lib, managed runtime, gateway, and model mismatch failures into `RuntimeNotReady(String)`. | `model_dependency_failed`, `runtime_launch_failed`, `managed_binary_not_ready`, `model_load_failed`. | Needs typed preservation. Add structured embedded-runtime error/context or recorder helper inputs before converting to `WorkflowServiceError`. |
+| `embedded_workflow_host_helpers.rs` Puma-Lib execution descriptor lookup warning | Logs warning and falls back to model path when possible. | Recoverable `model_dependency_warning` if fallback succeeds; fatal `model_dependency_failed` if no model path remains. | Fits only if warning diagnostics are supported by the registry. Do not turn recoverable fallback warnings into run-fatal errors. |
+| `embedded_workflow_host.rs` `executor.demand` failure | Converts `WaitingForInput` to `InvalidRequest`; all other node engine errors become `Internal(String)`. | `node_execution_failed` with `NodeErrorScope`. | Needs better node context. The catch site should use node/task identifiers from `NodeEngineError` or node diagnostics recorder events before flattening. If only the demanded output node is known, record that uncertainty explicitly. |
+| `inference/src/gateway.rs` backend start failure | Stores lifecycle `last_error` and returns `GatewayError::Backend(error)`. | `runtime_launch_failed` or `model_load_failed` with runtime/model scope. | Fits. This is a good source for runtime lifecycle timing and should feed technical detail without being treated as scheduler state. |
+| `inference/src/server.rs` llama.cpp sidecar startup | Returns `String` errors for spawn, health timeout, OOM, process error, termination, and readiness failure. | `llamacpp_sidecar_start_failed` under runtime/model scope. | Fits, but string-only errors reduce classification quality. Prefer a typed llama.cpp sidecar start error or structured context before converting to display text. |
+| `inference/src/managed_binaries.rs` managed runtime status/command resolution | Returns structured `ManagedBinaryFacadeError`. | `managed_binary_not_ready` or `managed_binary_command_resolution_failed`. | Fits well. Preserve key, selected version, install root, missing files, readiness state, and unavailable reason in the diagnostic scope/details. |
+| `workflow/diagnostics_api.rs` projection drain/query/rebuild failures | Converts ledger/projection failures to `WorkflowServiceError`. | `projection_failed` with `ProjectionErrorScope`. | Fits as diagnostics-system errors, not workflow-run causality unless a specific run projection request has a run ID. Must not mutate scheduler state. |
+| `src-tauri/src/workflow/headless_workflow_commands.rs` command wrappers | Convert backend errors to JSON strings through `to_envelope_json`; `build_runtime(...)` failures are plain `String`. | Transport failure or envelope link propagation. | Needs envelope expansion. Backend `WorkflowServiceError` must carry diagnostics link fields; pre-service construction failures need explicit transport-scope handling or `diagnostics_unavailable`. |
+| `src/services/workflow/workflowServiceErrors.ts` frontend normalization | Parses code/message/details and treats non-envelope failures as `transport_error`. | Frontend diagnostics link consumption. | Fits after DTO expansion. Parser must expose typed diagnostics link fields and keep non-envelope failures transport-scoped. |
+
+**Design Fit Conclusion:** The new diagnostics design can cover the current
+catch sites without changing its core architecture. The implementation blocker
+is not the event model; it is preserving typed context long enough for the
+recorder to classify failures before existing code converts them to strings or
+generic `WorkflowServiceError` variants.
+
 ### Milestone 3: Workflow Path Capture
 
 **Goal:** Emit canonical error events at every workflow run boundary where
