@@ -32,6 +32,25 @@ export interface WorkflowToolbarEventResult {
   shouldCleanup: boolean;
 }
 
+export interface WorkflowSubmitFailureContext {
+  submittedWorkflowId: string | null | undefined;
+  currentGraphId: string | null | undefined;
+  currentGraphType: string | null | undefined;
+}
+
+export function isCurrentWorkflowSubmitFailure({
+  submittedWorkflowId,
+  currentGraphId,
+  currentGraphType,
+}: WorkflowSubmitFailureContext): boolean {
+  return Boolean(
+    submittedWorkflowId &&
+      currentGraphId &&
+      submittedWorkflowId === currentGraphId &&
+      currentGraphType === 'workflow',
+  );
+}
+
 export function applyWorkflowToolbarEvent({
   event,
   activeWorkflowRunId,

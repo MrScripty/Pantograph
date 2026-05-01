@@ -616,7 +616,7 @@ diagnostics event that explains the failure.
   target run, focusing the event, and highlighting the related node if present.
 - [x] Preserve plain text error messages for errors without diagnostics
   context.
-- [ ] Add tests that stale async error responses do not navigate away from a
+- [x] Add tests that stale async error responses do not navigate away from a
   newer active workflow/run context.
 
 **Verification:**
@@ -630,12 +630,15 @@ fields to workflow error envelopes, attached recorded diagnostic outcomes to
 runtime-load and workflow-run failure returns, preserved link fields in frontend
 error normalization, and added workbench diagnostics focus state. The workflow
 submit error surface now renders a semantic Diagnostics action when a linked run
-is available and the diagnostics page highlights the focused event/node. Focused
-Rust envelope tests, diagnostics recorder tests, frontend error parsing tests,
-workbench store tests, and `npm run typecheck` pass. Remaining work is extending
-the same clickable action pattern to any other save/run surfaces that can carry
-diagnostics links, stale async navigation regression coverage, and manual smoke
-after the remaining capture paths are complete.
+is available and the diagnostics page highlights the focused event/node. The
+submit diagnostics action is now guarded by the workflow ID captured when the
+submit started, so a stale async submit failure cannot navigate diagnostics
+after the graph context changes. Focused Rust envelope tests, diagnostics
+recorder tests, frontend error parsing tests, workbench store tests, the stale
+toolbar regression test, and `npm run typecheck` pass. Remaining work is
+extending the same clickable action pattern to any other save/run surfaces that
+can carry diagnostics links and manual smoke after the remaining capture paths
+are complete.
 
 ### Milestone 7: End-To-End Verification And Documentation
 

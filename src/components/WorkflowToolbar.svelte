@@ -28,10 +28,12 @@
   } from '../stores/workbenchStore';
   import { formatWorkflowCommandError } from './workbench/workflowErrorPresenters';
   import WorkflowPersistenceControls from './WorkflowPersistenceControls.svelte';
+  import { isCurrentWorkflowSubmitFailure } from './workflowToolbarEvents';
 
   const DEFAULT_WORKFLOW_SEMANTIC_VERSION = '0.1.0';
 
   let workflowError = $state<WorkflowServiceError | null>(null);
+  let workflowErrorWorkflowId = $state<string | null>(null);
 
   let currentSavedWorkflow = $derived(
     $currentGraphType === 'workflow'
@@ -44,7 +46,14 @@
   let submitTitle = $derived(submitButtonTitle());
   let workflowErrorMessage = $derived(workflowError ? formatWorkflowCommandError(workflowError) : null);
   let workflowErrorDiagnostics = $derived(workflowError?.diagnostics ?? null);
-  let canOpenWorkflowErrorDiagnostics = $derived(Boolean(workflowErrorDiagnostics?.workflow_run_id));
+  let canOpenWorkflowErrorDiagnostics = $derived(
+    Boolean(workflowErrorDiagnostics?.workflow_run_id) &&
+      isCurrentWorkflowSubmitFailure({
+        submittedWorkflowId: workflowErrorWorkflowId,
+        currentGraphId: $currentGraphId,
+        currentGraphType: $currentGraphType,
+      }),
+  );
 
   function submitButtonTitle(): string {
     if ($isReadOnly) return 'Cannot submit a read-only graph';
@@ -66,10 +75,12 @@
     if ($isExecuting) return;
 
     workflowError = null;
+    workflowErrorWorkflowId = null;
     isExecuting.set(true);
     clearNodeRuntimeData([...AUDIO_RUNTIME_DATA_KEYS]);
     resetExecutionStates();
     clearStreamContent();
+    const submittedWorkflowId = $currentGraphId;
 
     try {
       if ($isReadOnly) {
@@ -78,12 +89,12 @@
       if ($isDirty) {
         throw new Error('Save workflow changes before submitting');
       }
-      if (!currentSavedWorkflow || !$currentGraphId) {
+      if (!currentSavedWorkflow || !submittedWorkflowId) {
         throw new Error('Save the workflow before submitting');
       }
 
       const executionSession = await workflowService.createWorkflowExecutionSession({
-        workflow_id: $currentGraphId,
+        workflow_id: submittedWorkflowId,
         usage_profile: null,
         keep_alive: false,
       });
@@ -101,7 +112,7 @@
         const response = await runPromise;
         selectActiveWorkflowRun({
           workflow_run_id: response.workflow_run_id,
-          workflow_id: $currentGraphId,
+          workflow_id: submittedWorkflowId,
           workflow_semantic_version: DEFAULT_WORKFLOW_SEMANTIC_VERSION,
           status: 'completed',
         });
@@ -112,13 +123,14 @@
     } catch (error) {
       console.error('Workflow submission failed:', error);
       workflowError = normalizeWorkflowServiceError(error);
+      workflowErrorWorkflowId = submittedWorkflowId;
     } finally {
       isExecuting.set(false);
     }
   }
 
   function openWorkflowErrorDiagnostics(): void {
-    if (!workflowErrorDiagnostics?.workflow_run_id) {
+    if (!workflowErrorDiagnostics?.workflow_run_id || !canOpenWorkflowErrorDiagnostics) {
       return;
     }
     focusWorkflowDiagnostics(

@@ -2,7 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { Edge } from '@xyflow/svelte';
 
-import { applyWorkflowToolbarEvent } from './workflowToolbarEvents.ts';
+import {
+  applyWorkflowToolbarEvent,
+  isCurrentWorkflowSubmitFailure,
+} from './workflowToolbarEvents.ts';
 import type { NodeExecutionState, WorkflowEvent } from '../services/workflow/types.ts';
 
 function createWorkflowActions() {
@@ -77,6 +80,35 @@ test('applyWorkflowToolbarEvent marks incremental rerun tasks as running and cle
   ]);
   assert.equal(result.waitingForInput, false);
   assert.equal(result.handled, true);
+});
+
+test('isCurrentWorkflowSubmitFailure rejects stale async submit failures', () => {
+  assert.equal(
+    isCurrentWorkflowSubmitFailure({
+      submittedWorkflowId: 'workflow-a',
+      currentGraphId: 'workflow-a',
+      currentGraphType: 'workflow',
+    }),
+    true,
+  );
+
+  assert.equal(
+    isCurrentWorkflowSubmitFailure({
+      submittedWorkflowId: 'workflow-a',
+      currentGraphId: 'workflow-b',
+      currentGraphType: 'workflow',
+    }),
+    false,
+  );
+
+  assert.equal(
+    isCurrentWorkflowSubmitFailure({
+      submittedWorkflowId: 'workflow-a',
+      currentGraphId: 'workflow-a',
+      currentGraphType: 'node_group',
+    }),
+    false,
+  );
 });
 
 test('applyWorkflowToolbarEvent replays graph-modified dirty tasks into idle state without clearing waiting input state', () => {
