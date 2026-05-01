@@ -84,10 +84,10 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         let selected_backend_key =
             canonical_runtime_backend_key(&self.gateway.current_backend_name().await);
         let available_backends = self.gateway.available_backends();
-        let managed_runtimes = inference::list_managed_runtime_snapshots(&self.app_data_dir)
-            .map_err(WorkflowServiceError::RuntimeNotReady)?;
-        let mut runtimes = runtime_capabilities::managed_runtime_capabilities(
-            &managed_runtimes,
+        let managed_binaries = inference::list_managed_binary_statuses(&self.app_data_dir)
+            .map_err(|error| WorkflowServiceError::RuntimeNotReady(error.to_string()))?;
+        let mut runtimes = runtime_capabilities::managed_binary_runtime_capabilities(
+            &managed_binaries,
             &available_backends,
             &selected_backend_key,
         );

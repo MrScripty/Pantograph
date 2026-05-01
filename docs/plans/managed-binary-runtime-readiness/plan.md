@@ -337,9 +337,9 @@ binaries while preserving runtime-vs-media categories.
 process spawning consume the same managed binary facts.
 
 **Tasks:**
-- [ ] Update `TauriProcessSpawner` to request resolved sidecar commands from
+- [x] Update `TauriProcessSpawner` to request resolved sidecar commands from
       the facade and include selected version/install root in errors.
-- [ ] Update embedded runtime capability projection to consume facade status
+- [x] Update embedded runtime capability projection to consume facade status
       rather than independent managed runtime snapshots where that causes
       drift.
 - [ ] Reject workflow runtime loading when the selected managed runtime is
@@ -457,6 +457,15 @@ diagnostics, and release artifacts.
   focused `managed_binaries.rs` module instead of expanding over-threshold
   files (`managed_runtime/operations.rs`, `server.rs`, and
   `runtime_capabilities.rs`). No new dependencies were added.
+- 2026-05-01: Added facade-backed command resolution and switched
+  `TauriProcessSpawner` to use it for llama.cpp and Ollama sidecar launches.
+  The resolver preserves the existing backend runtime resolver underneath, but
+  now fails with facade-selected version, install-root, missing-file, and
+  unavailable-reason context before process spawn.
+- 2026-05-01: Added facade-backed managed runtime capability projection and
+  switched `EmbeddedWorkflowHost::runtime_capabilities` to consume
+  `list_managed_binary_statuses`. The legacy snapshot projection remains as a
+  compatibility helper for existing tests and callers.
 
 ## Commit Cadence Notes
 

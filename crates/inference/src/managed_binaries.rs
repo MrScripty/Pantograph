@@ -7,7 +7,7 @@ use crate::{
     list_managed_redistributable_statuses, list_managed_runtime_snapshots, ManagedBinaryId,
     ManagedBinaryInstallState, ManagedRedistributableCategory, ManagedRedistributableId,
     ManagedRedistributableInstallState, ManagedRedistributableReadiness, ManagedRuntimeJobStatus,
-    ManagedRuntimeReadinessState,
+    ManagedRuntimeReadinessState, ResolvedCommand,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -98,6 +98,22 @@ pub struct ManagedBinaryStatus {
 #[derive(Debug, Eq, PartialEq)]
 pub enum ManagedBinaryFacadeError {
     RuntimeStatus(String),
+    RuntimeNotReady {
+        key: ManagedBinaryKey,
+        display_name: String,
+        readiness_state: ManagedRuntimeReadinessState,
+        selected_version: Option<String>,
+        install_root: Option<String>,
+        missing_files: Vec<String>,
+        unavailable_reason: Option<String>,
+    },
+    RuntimeCommandResolution {
+        key: ManagedBinaryKey,
+        display_name: String,
+        selected_version: Option<String>,
+        install_root: Option<String>,
+        source: String,
+    },
 }
 
 impl fmt::Display for ManagedBinaryFacadeError {
@@ -105,6 +121,49 @@ impl fmt::Display for ManagedBinaryFacadeError {
         match self {
             Self::RuntimeStatus(error) => {
                 write!(formatter, "failed to read managed runtime status: {error}")
+            }
+            Self::RuntimeNotReady {
+                display_name,
+                readiness_state,
+                selected_version,
+                install_root,
+                missing_files,
+                unavailable_reason,
+                ..
+            } => {
+                write!(
+                    formatter,
+                    "{display_name} is not ready for launch ({readiness_state:?}"
+                )?;
+                if let Some(version) = selected_version.as_deref() {
+                    write!(formatter, ", selected version {version}")?;
+                }
+                if let Some(root) = install_root.as_deref() {
+                    write!(formatter, ", install root {root}")?;
+                }
+                if !missing_files.is_empty() {
+                    write!(formatter, ", missing {}", missing_files.join(", "))?;
+                }
+                if let Some(reason) = unavailable_reason.as_deref() {
+                    write!(formatter, ": {reason}")?;
+                }
+                formatter.write_str(")")
+            }
+            Self::RuntimeCommandResolution {
+                display_name,
+                selected_version,
+                install_root,
+                source,
+                ..
+            } => {
+                write!(formatter, "failed to resolve {display_name} launch command")?;
+                if let Some(version) = selected_version.as_deref() {
+                    write!(formatter, " for selected version {version}")?;
+                }
+                if let Some(root) = install_root.as_deref() {
+                    write!(formatter, " at {root}")?;
+                }
+                write!(formatter, ": {source}")
             }
         }
     }
@@ -129,6 +188,46 @@ pub fn list_managed_binary_statuses(
     );
     statuses.sort_by(|left, right| left.key.as_str().cmp(right.key.as_str()));
     Ok(statuses)
+}
+
+pub fn resolve_managed_binary_command(
+    app_data_dir: &Path,
+    id: ManagedBinaryId,
+    args: &[&str],
+) -> Result<ResolvedCommand, ManagedBinaryFacadeError> {
+    let status = list_managed_binary_statuses(app_data_dir)?
+        .into_iter()
+        .find(|status| status.key == ManagedBinaryKey::runtime(id))
+        .ok_or_else(|| {
+            ManagedBinaryFacadeError::RuntimeStatus(format!(
+                "managed runtime '{}' was not found",
+                id.key()
+            ))
+        })?;
+
+    if !status.available || status.readiness_state != ManagedRuntimeReadinessState::Ready {
+        let install_root = selected_install_root(&status);
+        return Err(ManagedBinaryFacadeError::RuntimeNotReady {
+            key: status.key,
+            display_name: status.display_name,
+            readiness_state: status.readiness_state,
+            selected_version: status.selected_version,
+            install_root,
+            missing_files: status.missing_files,
+            unavailable_reason: status.unavailable_reason,
+        });
+    }
+
+    crate::resolve_binary_command(app_data_dir, id, args).map_err(|source| {
+        let install_root = selected_install_root(&status);
+        ManagedBinaryFacadeError::RuntimeCommandResolution {
+            key: status.key,
+            display_name: status.display_name,
+            selected_version: status.selected_version,
+            install_root,
+            source,
+        }
+    })
 }
 
 fn runtime_status(snapshot: crate::ManagedRuntimeSnapshot) -> ManagedBinaryStatus {
@@ -266,6 +365,20 @@ fn redistributable_unavailable_reason(
     Some(format!("{} is not ready", status.display_name))
 }
 
+fn selected_install_root(status: &ManagedBinaryStatus) -> Option<String> {
+    status
+        .versions
+        .iter()
+        .find(|version| version.selected || version.active)
+        .and_then(|version| version.install_root.clone())
+        .or_else(|| {
+            status
+                .versions
+                .iter()
+                .find_map(|version| version.install_root.clone())
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -315,5 +428,31 @@ mod tests {
             .versions
             .iter()
             .any(|version| version.source.is_some()));
+    }
+
+    #[test]
+    fn resolve_command_reports_facade_not_ready_context() {
+        let temp = tempfile::tempdir().expect("temp dir");
+
+        let error = resolve_managed_binary_command(
+            temp.path(),
+            ManagedBinaryId::LlamaCpp,
+            &["--port", "0"],
+        )
+        .expect_err("missing llama.cpp should fail before command resolution");
+
+        match error {
+            ManagedBinaryFacadeError::RuntimeNotReady {
+                key,
+                readiness_state,
+                missing_files,
+                ..
+            } => {
+                assert_eq!(key, ManagedBinaryKey::runtime(ManagedBinaryId::LlamaCpp));
+                assert_eq!(readiness_state, ManagedRuntimeReadinessState::Missing);
+                assert!(!missing_files.is_empty());
+            }
+            other => panic!("unexpected error: {other}"),
+        }
     }
 }

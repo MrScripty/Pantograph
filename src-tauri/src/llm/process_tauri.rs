@@ -10,7 +10,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use inference::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
-use inference::{managed_runtime_dir, resolve_binary_command, ManagedBinaryId};
+use inference::{managed_runtime_dir, resolve_managed_binary_command, ManagedBinaryId};
 use serde::Serialize;
 use tauri::{AppHandle, Manager};
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -167,9 +167,11 @@ impl ProcessSpawner for TauriProcessSpawner {
         let app_data_dir = self.app_data_dir()?;
         let resolved = match sidecar_name {
             "llama-server-wrapper" => {
-                resolve_binary_command(&app_data_dir, ManagedBinaryId::LlamaCpp, args)?
+                resolve_managed_binary_command(&app_data_dir, ManagedBinaryId::LlamaCpp, args)
+                    .map_err(|error| error.to_string())?
             }
-            "ollama" => resolve_binary_command(&app_data_dir, ManagedBinaryId::Ollama, args)?,
+            "ollama" => resolve_managed_binary_command(&app_data_dir, ManagedBinaryId::Ollama, args)
+                .map_err(|error| error.to_string())?,
             other => {
                 return Err(format!(
                     "Unsupported direct process spawn target for Tauri runtime: {}",

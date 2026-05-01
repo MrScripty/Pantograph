@@ -65,9 +65,9 @@ pub use gateway::{
     InferenceStartRequest, SharedGateway,
 };
 pub use managed_binaries::{
-    list_managed_binary_statuses, ManagedBinaryActionSupport, ManagedBinaryCategory,
-    ManagedBinaryFacadeError, ManagedBinaryKey, ManagedBinarySource, ManagedBinaryStatus,
-    ManagedBinaryVersionStatus,
+    list_managed_binary_statuses, resolve_managed_binary_command, ManagedBinaryActionSupport,
+    ManagedBinaryCategory, ManagedBinaryFacadeError, ManagedBinaryKey, ManagedBinarySource,
+    ManagedBinaryStatus, ManagedBinaryVersionStatus,
 };
 pub use managed_media_dependencies::{
     acquire_media_conversion_dependency_plan, format_media_conversion_dependency_lease_holder,

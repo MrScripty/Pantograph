@@ -51,6 +51,45 @@ pub fn managed_runtime_capabilities(
         .collect()
 }
 
+pub fn managed_binary_runtime_capabilities(
+    statuses: &[inference::ManagedBinaryStatus],
+    available_backends: &[inference::BackendInfo],
+    selected_backend_key: &str,
+) -> Vec<WorkflowRuntimeCapability> {
+    statuses
+        .iter()
+        .filter(|status| status.category == inference::ManagedBinaryCategory::RuntimeSidecar)
+        .map(|status| {
+            let runtime_id = managed_binary_runtime_id(status);
+            let backend_keys = managed_binary_runtime_backend_keys(&runtime_id);
+            WorkflowRuntimeCapability {
+                runtime_id,
+                display_name: status.display_name.clone(),
+                install_state: managed_runtime_install_state(status.install_state),
+                available: status.available,
+                configured: status.readiness_state
+                    == inference::ManagedRuntimeReadinessState::Ready,
+                can_install: status.can_install,
+                can_remove: status.can_remove,
+                source_kind: WorkflowRuntimeSourceKind::Managed,
+                selected: runtime_matches_backend(&backend_keys, selected_backend_key),
+                readiness_state: Some(managed_runtime_readiness_state(status.readiness_state)),
+                selected_version: status.selected_version.clone(),
+                supports_external_connection: runtime_supports_external_connection(
+                    available_backends,
+                    &backend_keys,
+                ),
+                backend_keys,
+                missing_files: status.missing_files.clone(),
+                unavailable_reason: status
+                    .unavailable_reason
+                    .clone()
+                    .or_else(|| managed_binary_unavailable_reason(status)),
+            }
+        })
+        .collect()
+}
+
 pub fn host_runtime_capabilities(
     backends: &[inference::BackendInfo],
     selected_backend_key: &str,
@@ -239,6 +278,23 @@ fn runtime_backend_keys(binary_id: inference::ManagedBinaryId) -> Vec<String> {
     }
 }
 
+fn managed_binary_runtime_id(status: &inference::ManagedBinaryStatus) -> String {
+    status
+        .key
+        .as_str()
+        .strip_prefix("runtime:")
+        .unwrap_or_else(|| status.key.as_str())
+        .to_string()
+}
+
+fn managed_binary_runtime_backend_keys(runtime_id: &str) -> Vec<String> {
+    match runtime_id {
+        "llama_cpp" => backend_key_aliases("llama.cpp", "llama_cpp"),
+        "ollama" => backend_key_aliases("Ollama", "ollama"),
+        _ => runtime_backend_key_aliases(runtime_id, runtime_id),
+    }
+}
+
 fn runtime_supports_external_connection(
     available_backends: &[inference::BackendInfo],
     backend_keys: &[String],
@@ -387,6 +443,62 @@ fn managed_runtime_unavailable_reason(
         inference::ManagedRuntimeReadinessState::Unsupported => Some(format!(
             "{} is unsupported on this platform",
             runtime.display_name
+        )),
+    }
+}
+
+fn managed_binary_unavailable_reason(status: &inference::ManagedBinaryStatus) -> Option<String> {
+    match status.readiness_state {
+        inference::ManagedRuntimeReadinessState::Ready => None,
+        inference::ManagedRuntimeReadinessState::Unknown => {
+            Some(format!("{} readiness is unknown", status.display_name))
+        }
+        inference::ManagedRuntimeReadinessState::Missing => Some(
+            status
+                .selected_version
+                .as_ref()
+                .map(|version| {
+                    format!(
+                        "{} selected version '{}' is not installed",
+                        status.display_name, version
+                    )
+                })
+                .unwrap_or_else(|| format!("{} is not installed", status.display_name)),
+        ),
+        inference::ManagedRuntimeReadinessState::Downloading
+        | inference::ManagedRuntimeReadinessState::Extracting
+        | inference::ManagedRuntimeReadinessState::Validating => Some(
+            status
+                .active_job
+                .as_ref()
+                .map(|job| job.status.clone())
+                .filter(|job_status| !job_status.trim().is_empty())
+                .unwrap_or_else(|| {
+                    format!(
+                        "{} is {}",
+                        status.display_name,
+                        readiness_label(status.readiness_state)
+                    )
+                }),
+        ),
+        inference::ManagedRuntimeReadinessState::Failed => Some(
+            status
+                .active_job
+                .as_ref()
+                .and_then(|job| job.error.clone())
+                .or_else(|| {
+                    status.selected_version.as_ref().map(|version| {
+                        format!(
+                            "{} selected version '{}' failed validation",
+                            status.display_name, version
+                        )
+                    })
+                })
+                .unwrap_or_else(|| format!("{} is not ready", status.display_name)),
+        ),
+        inference::ManagedRuntimeReadinessState::Unsupported => Some(format!(
+            "{} is unsupported on this platform",
+            status.display_name
         )),
     }
 }
