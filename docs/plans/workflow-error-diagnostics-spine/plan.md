@@ -329,28 +329,28 @@ Verification completed:
 run-scoped error diagnostics through the primary ledger.
 
 **Tasks:**
-- [ ] Add a typed diagnostics error registry that defines supported phases,
+- [x] Add a typed diagnostics error registry that defines supported phases,
   required scope kind, allowed source components, default severity,
   default recoverability, causality policy, and projection effect.
-- [ ] Add a workflow-service error recorder that accepts typed context and
+- [x] Add a workflow-service error recorder that accepts typed context and
   returns the appended diagnostic event ID when available.
-- [ ] Shape the recorder API so common call sites use phase-specific helpers or
+- [x] Shape the recorder API so common call sites use phase-specific helpers or
   builders such as `model_load_failed(scope, &err)`,
   `runtime_launch_failed(scope, &err)`, `node_execution_failed(scope, &err)`,
   `projection_failed(scope, &err)`, and `transport_failed(scope, &err)`.
-- [ ] Add typed scope structs for run, node, runtime/model, scheduler,
+- [x] Add typed scope structs for run, node, runtime/model, scheduler,
   artifact, projection, and transport error contexts. Call sites pass scope
   values rather than arbitrary maps or free-form field sets.
-- [ ] Add an explicit `.caused_by(event_id)` builder step for translated errors
+- [x] Add an explicit `.caused_by(event_id)` builder step for translated errors
   that have direct knowledge of a prior canonical diagnostic event. The default
   path leaves `caused_by_event_id` unset.
-- [ ] Add explicit diagnostics-unavailable mapping for ledger append failure or
+- [x] Add explicit diagnostics-unavailable mapping for ledger append failure or
   command failure before service wiring is available.
 - [ ] Add error-context builders for workflow run, scheduler, runtime, node,
   model dependency, managed binary, artifact, projection, and transport phases.
-- [ ] Ensure helper logic is sync-core/async-shell: pure shaping is sync,
+- [x] Ensure helper logic is sync-core/async-shell: pure shaping is sync,
   storage calls remain at existing I/O boundaries.
-- [ ] Update workflow-service and Tauri diagnostics READMEs for ownership and
+- [x] Update workflow-service and Tauri diagnostics READMEs for ownership and
   diagnostics-unavailable behavior.
 
 **Verification:**
@@ -368,7 +368,20 @@ run-scoped error diagnostics through the primary ledger.
 - `cargo check -p pantograph-workflow-service`
 - `cargo check --manifest-path src-tauri/Cargo.toml`
 
-**Status:** Not started.
+**Status:** In progress as of 2026-05-01. Added the focused
+`workflow/diagnostic_errors.rs` recorder module with a typed phase registry,
+scope structs, phase-specific builder methods, direct-causality builder,
+diagnostics-unavailable outcomes, workflow-service README notes, and Tauri
+diagnostics ownership notes. The remaining Milestone 2 work is to add the
+broader context-builder set for run snapshot, scheduler, model dependency,
+managed binary, artifact, and output-validation phases before wiring every
+workflow catch site.
+
+Verification completed for this slice:
+- `cargo check -p pantograph-workflow-service`
+- `cargo test -p pantograph-workflow-service workflow_diagnostic_error`
+- `cargo check --manifest-path src-tauri/Cargo.toml` passed with existing
+  dead-code warnings in Tauri workflow modules.
 
 ### Current Error Catch-Site Fit Review
 

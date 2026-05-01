@@ -133,6 +133,11 @@ let trace = diagnostics.trace_snapshot(Default::default())?;
 - `workflow_timing_history` may be requested with the opened workflow graph so
   the GUI can display prior ledger diagnostics before a new execution trace
   exists.
+- Workflow error diagnostics originate in `pantograph-workflow-service` through
+  registered phase helpers and typed scopes. Tauri diagnostics may surface
+  `diagnostic.error_occurred` rows and `diagnostics_unavailable` command
+  metadata, but it must not create duplicate JSON error traces or infer missing
+  backend causality.
 
 ## Structured Producer Contract
 - `DiagnosticsRunTrace`, `DiagnosticsNodeTrace`, and related DTOs are

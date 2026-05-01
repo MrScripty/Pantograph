@@ -17,6 +17,7 @@ public exports out of the service crate.
 | `artifact_contracts.rs` | ArtifactStore descriptor, lifecycle, policy, read, stream, consume, format-default, and conversion-attribution DTOs for binary-safe media payload handling. |
 | `artifact_store.rs` | Backend ArtifactStore body ownership, private disk persistence, restart reconciliation, retention cleanup, and consume acknowledgement. |
 | `contracts.rs` | Public workflow request/response/error DTO definitions re-exported by the parent facade. |
+| `diagnostic_errors.rs` | Typed workflow error phase registry, scoped diagnostics recorder API, and durable error-event append helpers. |
 | `graph_api.rs` | Graph edit-session, mutation, connection, persistence, and runtime snapshot facade methods. |
 | `host.rs` | Host trait defaults and scheduler diagnostics provider contracts re-exported by the parent facade. |
 | `identity.rs` | Validated workflow identity value object and grammar used by workflow submission and saved graph boundaries. |
@@ -173,6 +174,10 @@ session-runtime workflows, and the root facade test module.
   computes `WorkflowPresentationMetadata`, and persists display-metadata
   fingerprint agreement through the attribution store without changing workflow
   execution identity.
+- Workflow run error diagnostics enter through the typed recorder in
+  `diagnostic_errors.rs`. Call sites must use registered phase helpers and
+  typed scope structs so ledger error events carry the required run, node,
+  runtime/model, projection, or transport context consistently.
 
 ## Revisit Triggers
 - Runtime preflight becomes a public reusable crate-level policy.

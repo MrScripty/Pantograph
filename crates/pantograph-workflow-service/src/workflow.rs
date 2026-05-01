@@ -23,6 +23,8 @@ mod artifact_settings_api;
 mod artifact_store;
 mod attribution_api;
 mod contracts;
+#[allow(dead_code)]
+mod diagnostic_errors;
 mod diagnostics_api;
 mod graph_api;
 mod host;

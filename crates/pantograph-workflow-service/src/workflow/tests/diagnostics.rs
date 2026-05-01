@@ -15,6 +15,12 @@ use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, UsageEventId, WorkflowId, WorkflowRunId, WorkflowVersionId,
 };
 
+use super::super::diagnostic_errors::{
+    registered_workflow_diagnostic_error_phases, WorkflowDiagnosticCausalityPolicy,
+    WorkflowDiagnosticErrorPhase, WorkflowDiagnosticErrorRecordRequest,
+    WorkflowDiagnosticProjectionEffect, WorkflowDiagnosticRunContext,
+    WorkflowDiagnosticRuntimeModelScope, WorkflowDiagnosticTransportScope,
+};
 use super::*;
 
 #[test]
@@ -177,6 +183,138 @@ fn workflow_scheduler_timeline_query_validates_bounds() {
         invalid_accepted_range,
         Err(WorkflowServiceError::InvalidRequest(_))
     ));
+}
+
+#[test]
+fn workflow_diagnostic_error_recorder_appends_runtime_model_error() {
+    let service = WorkflowService::with_ephemeral_diagnostics_ledger().expect("service");
+    let error =
+        WorkflowServiceError::RuntimeNotReady("llama.cpp exited before ready\n".to_string());
+    let outcome = service
+        .record_workflow_diagnostic_error_if_configured(
+            WorkflowDiagnosticErrorRecordRequest::runtime_model_load_failed(
+                sample_runtime_model_error_scope(),
+                &error,
+            )
+            .with_source_instance_id("workflow-session-scheduler")
+            .with_cause("process exited with code 127\u{0000}"),
+        )
+        .expect("diagnostic error appends");
+
+    assert!(outcome.event_id.is_some());
+    assert!(outcome.diagnostics_unavailable.is_none());
+    let events = {
+        let ledger = service
+            .diagnostics_ledger_guard()
+            .expect("diagnostics ledger guard");
+        pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::diagnostic_events_after(
+            &*ledger, 0, 10,
+        )
+        .expect("diagnostic events")
+    };
+
+    assert_eq!(events.len(), 1);
+    assert_eq!(
+        events[0].event_kind,
+        pantograph_diagnostics_ledger::DiagnosticEventKind::DiagnosticErrorOccurred
+    );
+    assert!(events[0].payload_json.contains("runtime_model_load"));
+    assert!(events[0]
+        .payload_json
+        .contains("llama.cpp exited before ready"));
+    assert!(!events[0].payload_json.contains("\\n"));
+}
+
+#[test]
+fn workflow_diagnostic_error_recorder_reports_unavailable_when_ledger_missing() {
+    let service = WorkflowService::new();
+    let error = WorkflowServiceError::Internal("route failed".to_string());
+    let outcome = service
+        .record_workflow_diagnostic_error_if_configured(
+            WorkflowDiagnosticErrorRecordRequest::transport_failed(
+                WorkflowDiagnosticTransportScope {
+                    workflow_run_id: None,
+                    workflow_id: None,
+                },
+                &error,
+            ),
+        )
+        .expect("missing diagnostics ledger is explicit");
+
+    assert_eq!(outcome.event_id, None);
+    assert_eq!(
+        outcome.diagnostics_unavailable.as_deref(),
+        Some("diagnostics ledger is not configured")
+    );
+}
+
+#[test]
+fn workflow_diagnostic_error_recorder_validates_registered_scope() {
+    let service = WorkflowService::with_ephemeral_diagnostics_ledger().expect("service");
+    let error = WorkflowServiceError::RuntimeNotReady("runtime missing".to_string());
+    let result = service.record_workflow_diagnostic_error_if_configured(
+        WorkflowDiagnosticErrorRecordRequest::transport_failed(
+            WorkflowDiagnosticTransportScope {
+                workflow_run_id: Some(WorkflowRunId::try_from("run-a".to_string()).unwrap()),
+                workflow_id: Some(WorkflowId::try_from("workflow-a".to_string()).unwrap()),
+            },
+            &error,
+        )
+        .with_source_component(DiagnosticEventSourceComponent::Scheduler),
+    );
+
+    assert!(matches!(result, Err(WorkflowServiceError::Internal(_))));
+}
+
+#[test]
+fn workflow_diagnostic_error_registry_declares_phase_contracts() {
+    let registry = registered_workflow_diagnostic_error_phases();
+
+    assert_eq!(registry.len(), 5);
+    let runtime_model_load = registry
+        .iter()
+        .find(|entry| entry.phase == WorkflowDiagnosticErrorPhase::RuntimeModelLoad)
+        .expect("runtime model load phase is registered");
+    assert_eq!(runtime_model_load.phase_id, "runtime_model_load");
+    assert_eq!(
+        runtime_model_load.scope_kind,
+        pantograph_diagnostics_ledger::DiagnosticErrorScopeKind::RuntimeModel
+    );
+    assert_eq!(
+        runtime_model_load.causality_policy,
+        WorkflowDiagnosticCausalityPolicy::DirectProducerKnowledgeOnly
+    );
+    assert_eq!(
+        runtime_model_load.projection_effect,
+        WorkflowDiagnosticProjectionEffect::FatalRunFailure
+    );
+
+    assert!(registry.iter().any(|entry| {
+        entry.phase == WorkflowDiagnosticErrorPhase::Projection
+            && entry.projection_effect == WorkflowDiagnosticProjectionEffect::DiagnosticsOnly
+    }));
+}
+
+#[test]
+fn workflow_diagnostic_error_recorder_reports_unavailable_on_append_failure() {
+    let service = WorkflowService::with_ephemeral_diagnostics_ledger().expect("service");
+    let error = WorkflowServiceError::RuntimeNotReady("runtime missing".to_string());
+    let outcome = service
+        .record_workflow_diagnostic_error_if_configured(
+            WorkflowDiagnosticErrorRecordRequest::runtime_model_load_failed(
+                sample_runtime_model_error_scope(),
+                &error,
+            )
+            .with_related_event_id("bad\nid"),
+        )
+        .expect("append failure is reported as diagnostics unavailable");
+
+    assert_eq!(outcome.event_id, None);
+    assert!(outcome
+        .diagnostics_unavailable
+        .as_deref()
+        .unwrap_or_default()
+        .contains("diagnostics ledger append failed"));
 }
 
 #[test]
@@ -1499,6 +1637,26 @@ fn sample_library_asset_access_event(
             cache_status: Some(LibraryAssetCacheStatus::Miss),
             network_bytes: Some(network_bytes),
         }),
+    }
+}
+
+fn sample_runtime_model_error_scope() -> WorkflowDiagnosticRuntimeModelScope {
+    WorkflowDiagnosticRuntimeModelScope {
+        run: WorkflowDiagnosticRunContext {
+            workflow_run_id: WorkflowRunId::try_from("run-a".to_string()).unwrap(),
+            workflow_id: WorkflowId::try_from("workflow-a".to_string()).unwrap(),
+            workflow_version_id: Some(WorkflowVersionId::try_from("wfver-a".to_string()).unwrap()),
+            workflow_semantic_version: Some("1.0.0".to_string()),
+            client_id: Some(ClientId::try_from("client-a".to_string()).unwrap()),
+            client_session_id: Some(ClientSessionId::try_from("session-a".to_string()).unwrap()),
+            bucket_id: Some(BucketId::try_from("bucket-a".to_string()).unwrap()),
+            scheduler_policy_id: Some("priority_then_fifo".to_string()),
+            retention_policy_id: Some("ephemeral".to_string()),
+        },
+        runtime_id: "llama_cpp".to_string(),
+        runtime_version: Some("b5012".to_string()),
+        model_id: Some("qwen-27b".to_string()),
+        model_version: Some("main".to_string()),
     }
 }
 
