@@ -253,6 +253,7 @@ pub(crate) fn migrate_schema(
 fn apply_latest_idempotent_schema_repairs(
     tx: &Transaction<'_>,
 ) -> Result<(), DiagnosticsLedgerError> {
+    apply_scheduler_timeline_projection_schema(tx)?;
     apply_io_artifact_retention_state_migration(tx)?;
     apply_io_artifact_endpoint_migration(tx)?;
     apply_run_error_projection_migration(tx)?;
@@ -408,6 +409,11 @@ fn apply_scheduler_timeline_projection_schema(
             related_event_ids_json TEXT,
             payload_json TEXT NOT NULL
         );
+        "#,
+    )?;
+    ensure_scheduler_timeline_projection_columns(tx)?;
+    tx.execute_batch(
+        r#"
         CREATE INDEX IF NOT EXISTS idx_scheduler_timeline_run_seq
             ON scheduler_timeline_projection(workflow_run_id, event_seq);
         CREATE INDEX IF NOT EXISTS idx_scheduler_timeline_workflow_seq
@@ -416,6 +422,37 @@ fn apply_scheduler_timeline_projection_schema(
             ON scheduler_timeline_projection(scheduler_policy_id, event_seq);
         "#,
     )?;
+    Ok(())
+}
+
+fn ensure_scheduler_timeline_projection_columns(
+    tx: &Transaction<'_>,
+) -> Result<(), DiagnosticsLedgerError> {
+    ensure_column(
+        tx,
+        "scheduler_timeline_projection",
+        "workflow_version_id",
+        "TEXT",
+    )?;
+    ensure_column(
+        tx,
+        "scheduler_timeline_projection",
+        "workflow_semantic_version",
+        "TEXT",
+    )?;
+    ensure_column(
+        tx,
+        "scheduler_timeline_projection",
+        "scheduler_policy_id",
+        "TEXT",
+    )?;
+    ensure_column(
+        tx,
+        "scheduler_timeline_projection",
+        "retention_policy_id",
+        "TEXT",
+    )?;
+    ensure_column(tx, "scheduler_timeline_projection", "detail", "TEXT")?;
     ensure_column(
         tx,
         "scheduler_timeline_projection",

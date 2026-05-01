@@ -2537,6 +2537,49 @@ fn current_schema_repairs_missing_run_error_projection_columns() {
 }
 
 #[test]
+fn current_schema_repairs_missing_scheduler_timeline_error_columns() {
+    let temp = tempfile::NamedTempFile::new().expect("temp file");
+    let path = temp.path().to_path_buf();
+    {
+        let conn = Connection::open(&path).expect("connection opens");
+        conn.execute_batch(
+            "CREATE TABLE ledger_schema_migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at_ms INTEGER NOT NULL,
+                checksum TEXT NOT NULL
+            );
+            INSERT INTO ledger_schema_migrations (version, applied_at_ms, checksum)
+            VALUES (22, 0, 'pantograph-diagnostics-ledger-v22');
+            CREATE TABLE scheduler_timeline_projection (
+                event_seq INTEGER PRIMARY KEY,
+                event_id TEXT NOT NULL UNIQUE,
+                event_kind TEXT NOT NULL,
+                source_component TEXT NOT NULL,
+                occurred_at_ms INTEGER NOT NULL,
+                recorded_at_ms INTEGER NOT NULL,
+                workflow_run_id TEXT NOT NULL,
+                workflow_id TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                payload_json TEXT NOT NULL
+            );",
+        )
+        .expect("current schema marker and drifted timeline projection are installed");
+    }
+    {
+        let _ledger = SqliteDiagnosticsLedger::open(&path).expect("ledger repairs schema drift");
+    }
+    let conn = Connection::open(&path).expect("connection reopens");
+
+    for column in ["error_severity", "error_phase", "related_event_ids_json"] {
+        assert!(sqlite_column_exists(
+            &conn,
+            "scheduler_timeline_projection",
+            column
+        ));
+    }
+}
+
+#[test]
 fn existing_v15_schema_adds_retention_policy_version() {
     let temp = tempfile::NamedTempFile::new().expect("temp file");
     let path = temp.path().to_path_buf();
