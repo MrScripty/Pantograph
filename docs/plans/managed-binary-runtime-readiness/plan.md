@@ -293,7 +293,8 @@ emitted relative to managed binary resolution and llama.cpp startup.
 - Standards note covering dirty-worktree ownership, decomposition targets, and
   whether any new dependencies are needed.
 
-**Status:** In progress.
+**Status:** Complete for facade/path work. Runtime model-active proof remains
+tracked in Milestone 4.
 
 ### Milestone 2: Introduce Managed Binary Facade
 
@@ -342,13 +343,13 @@ process spawning consume the same managed binary facts.
 - [x] Update embedded runtime capability projection to consume facade status
       rather than independent managed runtime snapshots where that causes
       drift.
-- [ ] Reject workflow runtime loading when the selected managed runtime is
+- [x] Reject workflow runtime loading when the selected managed runtime is
       missing, failed, partial, unsupported, or actively mutating.
-- [ ] Preserve explicit system-command precedence for definitions like Ollama
+- [x] Preserve explicit system-command precedence for definitions like Ollama
       where backend definitions declare it.
-- [ ] Preserve task ownership for process stdout/stderr/monitor tasks and add
+- [x] Preserve task ownership for process stdout/stderr/monitor tasks and add
       lifecycle tests for cancellation or spawn failure where behavior changes.
-- [ ] Ensure any blocking filesystem/archive or command-resolution work added
+- [x] Ensure any blocking filesystem/archive or command-resolution work added
       to async paths is isolated behind sync helpers or `spawn_blocking`.
 
 **Verification:**
@@ -358,7 +359,8 @@ process spawning consume the same managed binary facts.
 - Cross-layer acceptance test or smoke path proving backend managed binary
   state reaches Tauri launch or workflow admission unchanged.
 
-**Status:** Not started.
+**Status:** Complete for facade launch/admission routing. Additional process
+phase diagnostics remain tracked in Milestone 4.
 
 ### Milestone 4: Make Model Readiness Explicit
 
@@ -401,9 +403,9 @@ diagnostics, and release artifacts.
       the unified backend facade.
 - [x] Update Settings to show runtime sidecars, media tools, and native
       artifacts from the same source while preserving category labels/actions.
-- [ ] Update scheduler diagnostics wording so "model loaded" is reserved for
+- [x] Update scheduler diagnostics wording so "model loaded" is reserved for
       proven model readiness.
-- [ ] Update touched READMEs and ADR references for facade ownership and
+- [x] Update touched READMEs and ADR references for facade ownership and
       lifecycle semantics.
 - [x] Preserve backend-owned data rules in the frontend: no optimistic install,
       selection, activation, or readiness updates.
@@ -416,7 +418,8 @@ diagnostics, and release artifacts.
 - Documentation review that touched source directories still have meaningful
   README/API consumer contract updates.
 
-**Status:** Not started.
+**Status:** Complete for the facade and Settings surface. Release verification
+passed.
 
 ## Execution Notes
 
@@ -486,6 +489,10 @@ diagnostics, and release artifacts.
   legacy `runtimes/...` installs when the new root is absent, and media/native
   redistributable status can still see legacy `managed-dependencies/...`
   installs when the new root is absent.
+- 2026-05-01: Release verification passed with `bash launcher.sh
+  --build-release`; the frontend was rebuilt by the Tauri release build and
+  the release binary was produced at `target/release/pantograph`. The build
+  still reports pre-existing dead-code warnings in `src-tauri/src/workflow/*`.
 
 ## Deferred Bugs and Follow-Up Fixes
 
@@ -494,6 +501,10 @@ diagnostics, and release artifacts.
   stage prevents the misleading completed event, but later Milestone 4 tasks
   still need process-spawn, HTTP-ready, requested-model-active, and terminal
   failure regressions.
+- `npm run -w frontend check:types` is listed in the original verification
+  block, but this repository currently has no `frontend` workspace. The
+  standards-compliant substitute used here is the root `npm run typecheck`
+  command.
 
 ## Commit Cadence Notes
 
