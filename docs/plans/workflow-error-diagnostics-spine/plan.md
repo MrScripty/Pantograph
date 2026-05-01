@@ -460,13 +460,14 @@ errors can be returned or swallowed.
 - [x] Add a workflow-service domain failure path that marks scheduler/session
   state failed when a fatal run-scoped workflow error occurs. This path owns
   live state transition before diagnostics projections refresh.
-- [ ] Link `run.terminal`, scheduler lifecycle `*_failed`, node failed, and
-  runtime snapshot error events to the canonical error event with a typed
-  `canonical_error_event_id` or equivalent link. `run.terminal` now carries the
-  canonical diagnostic error event ID when the returned workflow error has a
-  diagnostics link. Scheduler model lifecycle load failures now carry the same
-  canonical diagnostic error event ID. Node failed and runtime snapshot payload
-  links remain.
+- [x] Link diagnostics-ledger terminal and scheduler lifecycle failure events to
+  the canonical error event with a typed `canonical_error_event_id`; preserve
+  legacy trace node/runtime events through their existing workflow-run and node
+  identity links. `run.terminal` now carries the canonical diagnostic error
+  event ID when the returned workflow error has a diagnostics link. Scheduler
+  model lifecycle load failures now carry the same canonical diagnostic error
+  event ID. Node failure state is now driven directly by fatal diagnostic error
+  events when available, with legacy node-failed replay retained for old traces.
 
 **Verification:**
 - Workflow-service tests for submit, queue/admission, preflight, model-load,
@@ -670,14 +671,17 @@ and they continue to preserve plain text errors.
 **Goal:** Prove the full path works and leave durable contract documentation.
 
 **Tasks:**
-- [ ] Add a GUI or integration smoke path that triggers a controlled workflow
+- [x] Add a GUI or integration smoke path that triggers a controlled workflow
   failure and verifies run status, error event, timeline styling, and deep link.
+  Covered by the runtime-load failure integration path, diagnostics projection
+  tests, timeline error-filter tests, graph node error badge tests, and stale
+  graph-editor diagnostic link tests.
 - [x] Update module READMEs for diagnostics ledger, workflow diagnostics,
   workflow services, and workbench diagnostics as needed.
 - [x] Add or update an ADR if the new error event spine changes architecture
   beyond existing README contracts.
-- [ ] Run full backend/frontend verification for touched packages.
-- [ ] Record completion summary, deviations, verification, and follow-ups in
+- [x] Run full backend/frontend verification for touched packages.
+- [x] Record completion summary, deviations, verification, and follow-ups in
   this plan.
 
 **Verification:**
@@ -1374,14 +1378,35 @@ owner per wave.
 - Plan created.
 - Standards verification passes completed against the listed standards and
   current diagnostics/workbench codebase ownership.
+- Milestones 1-7 implemented. Workflow failures now have typed canonical error
+  events, recorder ergonomics, registered phase/scope contracts, fatal run state
+  projection, scheduler/session failure state updates, GUI diagnostic surfacing,
+  timeline filtering, graph node error badges, and terminal/model-lifecycle
+  canonical links.
+- Runtime-load failure handling now records a canonical diagnostic error, marks
+  the admitted run failed instead of leaving it running, writes terminal and
+  scheduler model lifecycle failure events that link to the canonical error, and
+  avoids using dependency-resolution events as proof that a model loaded.
+- Embedded runtime startup now reconciles interrupted managed-runtime jobs
+  before capability projection so stale downloading jobs are reported as failed
+  after restart.
 
 ### Deviations
 
-- None.
+- Legacy `WorkflowTraceEvent::NodeFailed` and
+  `WorkflowTraceEvent::RuntimeSnapshotCaptured` records were not expanded with a
+  diagnostics-ledger `canonical_error_event_id`. They belong to the older trace
+  store contract, while this plan's canonical error spine is the diagnostics
+  ledger. New node failure status is projected directly from canonical fatal
+  diagnostic events; legacy trace events remain supported through existing
+  workflow-run/node identity replay.
 
 ### Follow-Ups
 
-- None yet.
+- If the legacy trace store becomes a long-term source of new workflow-run
+  diagnostics, consider a separate trace-contract migration plan that adds
+  optional canonical diagnostic links without changing old trace retention
+  semantics.
 
 ### Verification Summary
 
@@ -1390,10 +1415,19 @@ owner per wave.
 - Codebase verification corrected the Milestone 1 ledger contract work to
   account for the closed `DiagnosticEventSourceComponent` enum and
   `validate_event_source` rules.
+- Implemented-path verification completed on 2026-05-01:
+  `cargo test -p pantograph-diagnostics-ledger`,
+  `cargo test -p pantograph-workflow-service`,
+  `cargo test -p pantograph-embedded-runtime`,
+  `cargo check --manifest-path src-tauri/Cargo.toml`,
+  `npm run test:frontend`, `npm run build`, and `npm run typecheck` passed
+  before final plan closure.
 
 ### Traceability Links
 
-- Module README updated: N/A for plan creation.
-- ADR added/updated: N/A for plan creation; revisit during Milestone 7.
-- PR notes completed per `templates/PULL_REQUEST_TEMPLATE.md`: N/A until
-  implementation PR.
+- Module README updated: diagnostics ledger, workflow diagnostics, workflow
+  services, and workbench diagnostics documentation updated during implementation.
+- ADR added/updated:
+  `docs/adr/ADR-016-workflow-error-diagnostics-spine.md`.
+- PR notes completed per `templates/PULL_REQUEST_TEMPLATE.md`: N/A until a PR is
+  opened.
