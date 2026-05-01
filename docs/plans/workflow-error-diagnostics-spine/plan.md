@@ -487,7 +487,7 @@ failure projections.
   counts, fatal error ID, and warning count.
 - [x] Extend scheduler timeline projection with error severity, phase, and
   related event references.
-- [ ] Extend run graph/node projections so node-scoped fatal errors mark the
+- [x] Extend run graph/node projections so node-scoped fatal errors mark the
   node failed and expose the error event ID.
 - [ ] Add projection replay rules for old streams that only have terminal or
   node failed events.
@@ -514,8 +514,9 @@ detail when no terminal event is present. Run list/detail projections now carry
 latest error ID, severity, phase, code, message, fatal error ID, error count,
 and warning count. Scheduler timeline rows now carry error severity, phase, and
 related event IDs. Run list queries can filter by latest error severity and
-phase. Remaining Milestone 4 work includes node-status fatal projection and
-projection failure wrappers.
+phase. Node-status projections now treat node-scoped fatal error events as
+failed node facts and expose the error event ID, severity, phase, and code.
+Remaining Milestone 4 work includes projection failure wrappers.
 
 Verification completed for this slice:
 - `cargo test -p pantograph-diagnostics-ledger diagnostic_event_ledger_projects_fatal_error_as_failed_run`
@@ -525,6 +526,8 @@ Verification completed for this slice:
 - `cargo test -p pantograph-workflow-service --test contract run_projection_cross_layer_fixture_deserializes`
 - `cargo test -p pantograph-workflow-service --test contract workflow_run_detail_query_contract_snapshot`
 - `cargo test -p pantograph-workflow-service --test contract workflow_scheduler_timeline_query_contract_snapshot`
+- `cargo test -p pantograph-diagnostics-ledger diagnostic_event_ledger_projects_node_fatal_error_as_failed_node`
+- `cargo test -p pantograph-workflow-service --test contract workflow_node_status_query_contract_snapshot`
 
 ### Milestone 5: Frontend Diagnostics Visibility
 

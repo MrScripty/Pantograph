@@ -19,7 +19,7 @@ pub const IO_ARTIFACT_PROJECTION_VERSION: i64 = 5;
 pub const LIBRARY_USAGE_PROJECTION_NAME: &str = "library_usage";
 pub const LIBRARY_USAGE_PROJECTION_VERSION: i64 = 1;
 pub const NODE_STATUS_PROJECTION_NAME: &str = "node_status";
-pub const NODE_STATUS_PROJECTION_VERSION: i64 = 1;
+pub const NODE_STATUS_PROJECTION_VERSION: i64 = 2;
 pub const MAX_DIAGNOSTIC_ERROR_TEXT_LEN: usize = 4_096;
 pub const MAX_DIAGNOSTIC_ERROR_CAUSE_COUNT: usize = 8;
 pub const MAX_DIAGNOSTIC_ERROR_CAUSE_LEN: usize = 1_024;
@@ -2110,6 +2110,10 @@ pub struct NodeStatusProjectionRecord {
     pub completed_at_ms: Option<i64>,
     pub duration_ms: Option<u64>,
     pub error: Option<String>,
+    pub error_event_id: Option<String>,
+    pub error_severity: Option<DiagnosticErrorSeverity>,
+    pub error_phase: Option<String>,
+    pub error_code: Option<String>,
     pub last_event_seq: i64,
     pub last_updated_at_ms: i64,
 }

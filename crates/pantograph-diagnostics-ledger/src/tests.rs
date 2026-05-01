@@ -715,6 +715,52 @@ fn diagnostic_event_ledger_projects_fatal_error_as_failed_run() {
 }
 
 #[test]
+fn diagnostic_event_ledger_projects_node_fatal_error_as_failed_node() {
+    let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
+    let mut event = sample_diagnostic_error_event("workflow_run_alpha");
+    event.source_component = DiagnosticEventSourceComponent::NodeExecution;
+    event.runtime_id = None;
+    event.model_id = None;
+    if let DiagnosticEventPayload::DiagnosticErrorOccurred(payload) = &mut event.payload {
+        payload.scope = DiagnosticErrorScopeKind::Node;
+        payload.phase = "node_execution".to_string();
+        payload.code = "node_execution_failed".to_string();
+        payload.message = "node failed".to_string();
+    }
+    ledger
+        .append_diagnostic_event(event)
+        .expect("node diagnostic error event");
+    ledger
+        .drain_node_status_projection(500)
+        .expect("node status projection drains");
+
+    let nodes = ledger
+        .query_node_status_projection(NodeStatusProjectionQuery {
+            workflow_run_id: Some(
+                WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
+            ),
+            node_id: Some("llamacpp-node".to_string()),
+            status: Some(NodeExecutionProjectionStatus::Failed),
+            after_event_seq: None,
+            limit: 10,
+        })
+        .expect("node status query succeeds");
+
+    assert_eq!(nodes.len(), 1);
+    assert_eq!(nodes[0].error.as_deref(), Some("node failed"));
+    assert_eq!(
+        nodes[0].error_severity,
+        Some(DiagnosticErrorSeverity::Fatal)
+    );
+    assert_eq!(nodes[0].error_phase.as_deref(), Some("node_execution"));
+    assert_eq!(
+        nodes[0].error_code.as_deref(),
+        Some("node_execution_failed")
+    );
+    assert!(nodes[0].error_event_id.is_some());
+}
+
+#[test]
 fn diagnostic_event_ledger_validates_error_scope_source_and_text() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
 

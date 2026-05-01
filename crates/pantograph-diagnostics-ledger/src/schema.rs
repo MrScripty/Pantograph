@@ -1087,6 +1087,10 @@ fn apply_node_status_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagn
             completed_at_ms INTEGER,
             duration_ms INTEGER,
             error TEXT,
+            error_event_id TEXT,
+            error_severity TEXT,
+            error_phase TEXT,
+            error_code TEXT,
             last_event_seq INTEGER NOT NULL,
             last_updated_at_ms INTEGER NOT NULL,
             PRIMARY KEY(workflow_run_id, node_id)
@@ -1097,6 +1101,10 @@ fn apply_node_status_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagn
             ON node_status_projection(workflow_version_id, status, last_event_seq);
         "#,
     )?;
+    ensure_column(tx, "node_status_projection", "error_event_id", "TEXT")?;
+    ensure_column(tx, "node_status_projection", "error_severity", "TEXT")?;
+    ensure_column(tx, "node_status_projection", "error_phase", "TEXT")?;
+    ensure_column(tx, "node_status_projection", "error_code", "TEXT")?;
     Ok(())
 }
 
