@@ -16,6 +16,7 @@ import type {
   InsertNodeConnectionResponse as PackageInsertNodeConnectionResponse,
   InsertNodeOnEdgeResponse as PackageInsertNodeOnEdgeResponse,
 } from '@pantograph/svelte-graph';
+import { normalizeWorkflowGraphMutationEvent } from './workflowGraphMutationResponse.ts';
 
 type AnyConnectionAnchor = AppConnectionAnchor | PackageConnectionAnchor;
 type AnyCandidatesResponse =
@@ -101,6 +102,8 @@ interface WireConnectionCommitResponse {
   workflow_event?: AnyCommitResponse['workflow_event'];
   workflowSessionState?: AnyCommitResponse['workflow_session_state'];
   workflow_session_state?: AnyCommitResponse['workflow_session_state'];
+  workflowExecutionSessionState?: AnyCommitResponse['workflow_session_state'];
+  workflow_execution_session_state?: AnyCommitResponse['workflow_session_state'];
   rejection?: WireConnectionRejection;
 }
 
@@ -115,6 +118,8 @@ interface WireInsertNodeConnectionResponse {
   workflow_event?: AnyInsertResponse['workflow_event'];
   workflowSessionState?: AnyInsertResponse['workflow_session_state'];
   workflow_session_state?: AnyInsertResponse['workflow_session_state'];
+  workflowExecutionSessionState?: AnyInsertResponse['workflow_session_state'];
+  workflow_execution_session_state?: AnyInsertResponse['workflow_session_state'];
   rejection?: WireConnectionRejection;
 }
 
@@ -138,6 +143,8 @@ interface WireInsertNodeOnEdgeResponse {
   workflow_event?: AnyInsertNodeOnEdgeResponse['workflow_event'];
   workflowSessionState?: AnyInsertNodeOnEdgeResponse['workflow_session_state'];
   workflow_session_state?: AnyInsertNodeOnEdgeResponse['workflow_session_state'];
+  workflowExecutionSessionState?: AnyInsertNodeOnEdgeResponse['workflow_session_state'];
+  workflow_execution_session_state?: AnyInsertNodeOnEdgeResponse['workflow_session_state'];
   rejection?: WireConnectionRejection;
 }
 
@@ -167,6 +174,24 @@ function normalizeEdgeInsertionBridge(bridge: WireEdgeInsertionBridge | undefine
     input_port_id: readString(bridge.input_port_id ?? bridge.inputPortId),
     output_port_id: readString(bridge.output_port_id ?? bridge.outputPortId),
   };
+}
+
+function normalizeWorkflowSessionState<T>(
+  response: {
+    workflowSessionState?: T;
+    workflow_session_state?: T;
+    workflowExecutionSessionState?: T;
+    workflow_execution_session_state?: T;
+  },
+): T | undefined {
+  return response.workflow_session_state
+    ?? response.workflowSessionState
+    ?? response.workflow_execution_session_state
+    ?? response.workflowExecutionSessionState;
+}
+
+function normalizeOptionalWorkflowEvent(value: unknown) {
+  return typeof value === 'undefined' ? undefined : normalizeWorkflowGraphMutationEvent(value);
 }
 
 export function serializeConnectionAnchor(anchor: AnyConnectionAnchor): WireConnectionAnchor {
@@ -220,8 +245,8 @@ export function normalizeConnectionCommitResponse(
     accepted: response.accepted,
     graph_revision: readString(response.graph_revision ?? response.graphRevision),
     graph: response.graph,
-    workflow_event: response.workflow_event ?? response.workflowEvent,
-    workflow_session_state: response.workflow_session_state ?? response.workflowSessionState,
+    workflow_event: normalizeOptionalWorkflowEvent(response.workflow_event ?? response.workflowEvent),
+    workflow_session_state: normalizeWorkflowSessionState(response),
     rejection: normalizeConnectionRejection(response.rejection),
   };
 }
@@ -234,8 +259,8 @@ export function normalizeInsertNodeConnectionResponse(
     graph_revision: readString(response.graph_revision ?? response.graphRevision),
     inserted_node_id: response.inserted_node_id ?? response.insertedNodeId,
     graph: response.graph,
-    workflow_event: response.workflow_event ?? response.workflowEvent,
-    workflow_session_state: response.workflow_session_state ?? response.workflowSessionState,
+    workflow_event: normalizeOptionalWorkflowEvent(response.workflow_event ?? response.workflowEvent),
+    workflow_session_state: normalizeWorkflowSessionState(response),
     rejection: normalizeConnectionRejection(response.rejection),
   };
 }
@@ -260,8 +285,8 @@ export function normalizeInsertNodeOnEdgeResponse(
     inserted_node_id: response.inserted_node_id ?? response.insertedNodeId,
     bridge: normalizeEdgeInsertionBridge(response.bridge),
     graph: response.graph,
-    workflow_event: response.workflow_event ?? response.workflowEvent,
-    workflow_session_state: response.workflow_session_state ?? response.workflowSessionState,
+    workflow_event: normalizeOptionalWorkflowEvent(response.workflow_event ?? response.workflowEvent),
+    workflow_session_state: normalizeWorkflowSessionState(response),
     rejection: normalizeConnectionRejection(response.rejection),
   };
 }

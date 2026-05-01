@@ -24,6 +24,34 @@ test('parseWorkflowGraphMutationResponse accepts graph payloads with additive gr
   assert.equal(response.workflow_session_state?.contract_version, 1);
 });
 
+test('parseWorkflowGraphMutationResponse normalizes backend graph-modified events', () => {
+  const response = parseWorkflowGraphMutationResponse({
+    graph: { nodes: [], edges: [] },
+    workflow_event: {
+      type: 'graphModified',
+      workflowId: 'workflow-1',
+      executionId: 'session-1',
+      dirtyTasks: ['node-a'],
+      memoryImpact: null,
+      occurredAtMs: 123,
+    },
+    workflow_execution_session_state: {
+      contract_version: 1,
+      residency: 'active',
+    },
+  });
+
+  assert.equal(response.workflow_event?.type, 'GraphModified');
+  assert.deepEqual(response.workflow_event?.data, {
+    workflow_id: 'workflow-1',
+    execution_id: 'session-1',
+    dirty_tasks: ['node-a'],
+    memory_impact: null,
+    occurred_at_ms: 123,
+  });
+  assert.equal(response.workflow_session_state?.contract_version, 1);
+});
+
 test('parseWorkflowGraphMutationResponse rejects payloads without graph data', () => {
   assert.throws(
     () => parseWorkflowGraphMutationResponse({ workflow_event: null }),

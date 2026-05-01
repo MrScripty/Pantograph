@@ -12,12 +12,37 @@ function isWorkflowGraph(value: unknown): value is WorkflowGraph {
   return Array.isArray(value.nodes) && Array.isArray(value.edges);
 }
 
-function isGraphModifiedEvent(value: unknown): boolean {
+function camelToSnake(value: string): string {
+  return value.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+}
+
+function normalizeEventData(value: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => key !== 'type' && key !== 'data')
+      .map(([key, entryValue]) => [camelToSnake(key), entryValue]),
+  );
+}
+
+export function normalizeWorkflowGraphMutationEvent(
+  value: unknown,
+): WorkflowGraphMutationResponse['workflow_event'] {
   if (!isRecord(value)) {
-    return false;
+    return null;
   }
 
-  return value.type === 'GraphModified' && isRecord(value.data);
+  if (value.type === 'GraphModified' && isRecord(value.data)) {
+    return value as WorkflowGraphMutationResponse['workflow_event'];
+  }
+
+  if (value.type === 'graphModified' || value.type === 'GraphModified') {
+    return {
+      type: 'GraphModified',
+      data: normalizeEventData(value),
+    } as WorkflowGraphMutationResponse['workflow_event'];
+  }
+
+  return null;
 }
 
 function isWorkflowSessionStateView(value: unknown): boolean {
@@ -35,18 +60,26 @@ export function parseWorkflowGraphMutationResponse(
     throw new Error('Invalid workflow graph mutation response: missing graph payload');
   }
 
+  const workflowEvent =
+    typeof value.workflow_event === 'undefined' || value.workflow_event === null
+      ? value.workflow_event
+      : normalizeWorkflowGraphMutationEvent(value.workflow_event);
+
   if (
     typeof value.workflow_event !== 'undefined'
     && value.workflow_event !== null
-    && !isGraphModifiedEvent(value.workflow_event)
+    && !workflowEvent
   ) {
     throw new Error('Invalid workflow graph mutation response: invalid workflow_event payload');
   }
 
+  const workflowSessionState =
+    value.workflow_session_state ?? value.workflow_execution_session_state;
+
   if (
-    typeof value.workflow_session_state !== 'undefined'
-    && value.workflow_session_state !== null
-    && !isWorkflowSessionStateView(value.workflow_session_state)
+    typeof workflowSessionState !== 'undefined'
+    && workflowSessionState !== null
+    && !isWorkflowSessionStateView(workflowSessionState)
   ) {
     throw new Error(
       'Invalid workflow graph mutation response: invalid workflow_session_state payload',
@@ -56,12 +89,12 @@ export function parseWorkflowGraphMutationResponse(
   return {
     graph: value.graph,
     workflow_event:
-      typeof value.workflow_event === 'undefined'
+      typeof workflowEvent === 'undefined'
         ? undefined
-        : (value.workflow_event as WorkflowGraphMutationResponse['workflow_event']),
+        : workflowEvent,
     workflow_session_state:
-      typeof value.workflow_session_state === 'undefined'
+      typeof workflowSessionState === 'undefined'
         ? undefined
-        : (value.workflow_session_state as WorkflowGraphMutationResponse['workflow_session_state']),
+        : (workflowSessionState as WorkflowGraphMutationResponse['workflow_session_state']),
   };
 }
