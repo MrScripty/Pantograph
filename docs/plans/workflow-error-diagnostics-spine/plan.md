@@ -51,6 +51,32 @@ and deep-linkable from the graph editor or other surfaces that show the error.
 - Building a broad analytics dashboard beyond error surfacing and trace
   navigation.
 
+### Deferred Design Improvements
+
+These concerns are acknowledged but should not block the diagnostics spine
+implementation unless current code cannot preserve enough context for the new
+recorder API.
+
+- Typed llama.cpp sidecar startup errors for spawn failure, managed command
+  resolution, health-check timeout, process termination, OOM, and ready-but-
+  wrong-model states.
+- Broader inference backend error taxonomy across llama.cpp, Ollama, PyTorch,
+  Candle, external runtime connections, and future backends.
+- Deeper node engine error taxonomy beyond the execution-boundary wrapper,
+  provided user-authored nodes remain able to return ordinary errors without
+  diagnostics boilerplate.
+- Generated Rust-to-TypeScript diagnostics DTOs. This plan requires fixture or
+  contract tests for drift, but type generation can be a follow-up.
+- Stronger static dependency/import enforcement beyond initial module
+  visibility, review rules, scripts, and tests.
+- Extracting the generic diagnostics registry/recorder into a cross-app package
+  after Pantograph proves the API shape.
+
+Current implementation must still create clean seams for these follow-ups:
+avoid string parsing when structured context is available, preserve original
+errors until the recorder can classify them, and keep diagnostics policies in
+typed registry/recorder modules rather than scattered call-site logic.
+
 ## Inputs
 
 ### Problem
