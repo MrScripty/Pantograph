@@ -397,7 +397,7 @@ readiness instead of admission or process spawn success.
 diagnostics, and release artifacts.
 
 **Tasks:**
-- [ ] Update TypeScript DTO mirrors and managed runtime service projections for
+- [x] Update TypeScript DTO mirrors and managed runtime service projections for
       the unified backend facade.
 - [ ] Update Settings to show runtime sidecars, media tools, and native
       artifacts from the same source while preserving category labels/actions.
@@ -472,6 +472,11 @@ diagnostics, and release artifacts.
   `cache_state: load_requested` instead of `load_completed`/`loaded`; the
   workflow-session regression asserts this path does not emit
   `load_completed`.
+- 2026-05-01: Added a thin `list_managed_binaries` Tauri command plus
+  TypeScript `ManagedBinaryStatus` facade mirrors and
+  `managedRuntimeService.listManagedBinaries()`. This is read-only and keeps
+  frontend state backend-owned while the visible Settings composition is still
+  pending.
 
 ## Deferred Bugs and Follow-Up Fixes
 

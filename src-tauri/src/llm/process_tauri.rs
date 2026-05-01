@@ -170,8 +170,10 @@ impl ProcessSpawner for TauriProcessSpawner {
                 resolve_managed_binary_command(&app_data_dir, ManagedBinaryId::LlamaCpp, args)
                     .map_err(|error| error.to_string())?
             }
-            "ollama" => resolve_managed_binary_command(&app_data_dir, ManagedBinaryId::Ollama, args)
-                .map_err(|error| error.to_string())?,
+            "ollama" => {
+                resolve_managed_binary_command(&app_data_dir, ManagedBinaryId::Ollama, args)
+                    .map_err(|error| error.to_string())?
+            }
             other => {
                 return Err(format!(
                     "Unsupported direct process spawn target for Tauri runtime: {}",

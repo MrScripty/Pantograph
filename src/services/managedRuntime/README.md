@@ -9,8 +9,8 @@ actions without reintroducing runtime lifecycle policy into the frontend.
 ## Contents
 | File/Folder | Description |
 | ----------- | ----------- |
-| `ManagedRuntimeService.ts` | App-facing service owner for runtime snapshot caching, Tauri command calls, and progress fan-out. |
-| `types.ts` | TypeScript mirror of the backend-owned runtime-manager payloads projected into the GUI. |
+| `ManagedRuntimeService.ts` | App-facing service owner for runtime snapshot caching, unified managed-binary status reads, Tauri command calls, and progress fan-out. |
+| `types.ts` | TypeScript mirror of the backend-owned runtime-manager and managed-binary payloads projected into the GUI. |
 | `index.ts` | Public re-export surface for the managed-runtime service and contract types. |
 
 ## Problem
@@ -34,7 +34,8 @@ directly and drift into duplicate runtime snapshot or progress ownership.
 Keep a single app-facing managed-runtime service boundary that owns a
 synchronized snapshot cache of `ManagedRuntimeManagerRuntimeView` values.
 `ManagedRuntimeService` invokes thin Tauri commands, updates the local cache
-from backend responses and progress events, and notifies subscribers.
+from backend responses and progress events, exposes unified managed-binary
+status snapshots, and notifies subscribers.
 Components then render that projected state and call back through the service
 for actions such as install, pause, cancel, remove, and version policy updates.
 Catalog refresh and version-targeted install requests also stay here so the
@@ -102,6 +103,9 @@ const llama = await managedRuntimeService.inspectRuntime('llama_cpp');
 - `refreshCatalogs()` asks the backend to refresh persisted release catalogs,
   updates the shared snapshot cache from that backend response, and keeps
   vendor/API ownership out of Svelte components.
+- `listManagedBinaries()` reads the backend-owned unified managed-binary facade
+  for runtime sidecars, media tools, and native artifacts. It does not mutate
+  the runtime-manager cache.
 - Subscribers receive cloned runtime snapshots and must treat them as read-only
   projections.
 
@@ -110,6 +114,9 @@ const llama = await managedRuntimeService.inspectRuntime('llama_cpp');
   `ManagedRuntimeVersionStatus`, `ManagedRuntimeJobStatus`,
   `ManagedRuntimeJobArtifactStatus`, and `ManagedRuntimeInstallHistoryEntry` in
   `types.ts`.
+- Unified managed-binary fields mirror `ManagedBinaryStatus` and related
+  facade DTOs in `crates/inference`; callers must not synthesize readiness,
+  selection, or install state locally.
 - Omitted nullable fields such as `selected_version`, `default_version`,
   `active_job`, and `job_artifact` retain their backend null semantics.
 - Enum strings such as `install_state`, `readiness_state`, `state`, and

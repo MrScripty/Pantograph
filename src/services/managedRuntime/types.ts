@@ -1,5 +1,10 @@
 export type ManagedRuntimeId = 'llama_cpp' | 'ollama';
 
+export type ManagedBinaryCategory =
+  | 'runtime_sidecar'
+  | 'media_tool'
+  | 'native_artifact';
+
 export type ManagedBinaryInstallState =
   | 'installed'
   | 'system_provided'
@@ -15,6 +20,11 @@ export type ManagedRuntimeReadinessState =
   | 'ready'
   | 'failed'
   | 'unsupported';
+
+export type ManagedBinaryActionSupport =
+  | 'resolved_command'
+  | 'activation'
+  | 'status_only';
 
 export type ManagedRuntimeJobState =
   | 'queued'
@@ -57,6 +67,26 @@ export interface ManagedRuntimeVersionStatus {
   active: boolean;
 }
 
+export interface ManagedBinarySource {
+  owner: string | null;
+  project: string | null;
+}
+
+export interface ManagedBinaryVersionStatus {
+  version: string | null;
+  display_label: string;
+  platform_key: string;
+  install_root: string | null;
+  expected_files: string[];
+  missing_files: string[];
+  install_state: ManagedBinaryInstallState;
+  readiness_state: ManagedRuntimeReadinessState;
+  selected: boolean;
+  active: boolean;
+  source: ManagedBinarySource | null;
+  checksum_sha256: string | null;
+}
+
 export interface ManagedRuntimeJobStatus {
   state: ManagedRuntimeJobState;
   status: string;
@@ -97,6 +127,25 @@ export interface ManagedRuntimeManagerRuntimeView {
   active_job: ManagedRuntimeJobStatus | null;
   job_artifact: ManagedRuntimeJobArtifactStatus | null;
   install_history: ManagedRuntimeInstallHistoryEntry[];
+}
+
+export interface ManagedBinaryStatus {
+  key: string;
+  display_name: string;
+  category: ManagedBinaryCategory;
+  install_state: ManagedBinaryInstallState;
+  readiness_state: ManagedRuntimeReadinessState;
+  available: boolean;
+  can_install: boolean;
+  can_remove: boolean;
+  missing_files: string[];
+  unavailable_reason: string | null;
+  active_job: ManagedRuntimeJobStatus | null;
+  selected_version: string | null;
+  active_version: string | null;
+  default_version: string | null;
+  action_support: ManagedBinaryActionSupport;
+  versions: ManagedBinaryVersionStatus[];
 }
 
 export interface ManagedRuntimeProgress {
