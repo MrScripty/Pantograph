@@ -427,6 +427,8 @@ errors can be returned or swallowed.
 **Tasks:**
 - [ ] Wrap workflow submission/session creation errors that have run context.
 - [ ] Wrap scheduler queue/admission/preflight/runtime-load failures.
+  Runtime-load failure capture is implemented; scheduler queue, admission, and
+  preflight capture remain.
 - [ ] Wrap model dependency resolution and Puma-Lib descriptor lookup failures.
 - [ ] Wrap managed runtime command resolution and process spawn/startup
   failures for llama.cpp, Ollama, and PyTorch.
@@ -458,7 +460,16 @@ errors can be returned or swallowed.
 - Regression that control characters and large runtime stderr still produce
   error events and failed projections.
 
-**Status:** Not started.
+**Status:** In progress as of 2026-05-01. Runtime-load failures after
+scheduler admission now record a canonical `diagnostic.error_occurred` event
+with runtime/model scope before the existing failed terminal and reservation
+release events are emitted. Added a failing runtime-load workflow-service test
+that proves the canonical error is sanitized, visible in the ledger, and the
+run projection reaches `Failed`.
+
+Verification completed for this slice:
+- `cargo check -p pantograph-workflow-service`
+- `cargo test -p pantograph-workflow-service workflow_execution_session`
 
 ### Milestone 4: Projection And Query Semantics
 

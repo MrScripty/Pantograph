@@ -26,6 +26,10 @@ use crate::graph::{
 use crate::scheduler::{unix_timestamp_ms, WORKFLOW_SESSION_QUEUE_POLL_MS};
 use crate::technical_fit::WorkflowTechnicalFitOverride;
 
+use super::diagnostic_errors::{
+    WorkflowDiagnosticErrorRecordRequest, WorkflowDiagnosticRunContext,
+    WorkflowDiagnosticRuntimeModelScope,
+};
 use super::session_runtime::WorkflowSessionRuntimeAdmissionDiagnosticContext;
 use super::validation::{
     validate_bindings, validate_output_targets, validate_timeout_ms, validate_workflow_id,
@@ -426,6 +430,21 @@ impl WorkflowService {
             }
         }
         if let Err(error) = runtime_load_result {
+            let _diagnostic_error = self.record_workflow_diagnostic_error_if_configured(
+                WorkflowDiagnosticErrorRecordRequest::runtime_model_load_failed(
+                    workflow_runtime_model_error_scope(
+                        &session,
+                        run_snapshot.as_ref(),
+                        &workflow_run_id,
+                        &queued_workflow_semantic_version,
+                        &required_backends,
+                        &required_models,
+                    )?,
+                    &error,
+                )
+                .with_source_instance_id("workflow-session-scheduler")
+                .with_cause("runtime admission failed to load required models"),
+            )?;
             if let Ok(mut store) = self.session_store.lock() {
                 let _ = store.finish_run(&session_id, &workflow_run_id);
             }
@@ -1470,6 +1489,52 @@ fn workflow_id_for_scheduler_event(
             WorkflowId::try_from(session.workflow_id.clone()).map_err(WorkflowServiceError::from)
         }
     }
+}
+
+fn workflow_diagnostic_run_context(
+    session: &WorkflowExecutionSessionSummary,
+    snapshot: Option<&WorkflowRunSnapshotRecord>,
+    workflow_run_id: &str,
+    workflow_semantic_version: Option<&str>,
+) -> Result<WorkflowDiagnosticRunContext, WorkflowServiceError> {
+    Ok(WorkflowDiagnosticRunContext {
+        workflow_run_id: WorkflowRunId::try_from(workflow_run_id.to_string())?,
+        workflow_id: workflow_id_for_scheduler_event(session, snapshot)?,
+        workflow_version_id: snapshot.map(|snapshot| snapshot.workflow_version_id.clone()),
+        workflow_semantic_version: snapshot
+            .map(|snapshot| snapshot.workflow_semantic_version.clone())
+            .or_else(|| workflow_semantic_version.map(str::to_string)),
+        client_id: event_client_id(session, snapshot)?,
+        client_session_id: event_client_session_id(session, snapshot)?,
+        bucket_id: event_bucket_id(session, snapshot)?,
+        scheduler_policy_id: Some(WORKFLOW_SESSION_SCHEDULER_POLICY.to_string()),
+        retention_policy_id: snapshot.map(|snapshot| snapshot.retention_policy.clone()),
+    })
+}
+
+fn workflow_runtime_model_error_scope(
+    session: &WorkflowExecutionSessionSummary,
+    snapshot: Option<&WorkflowRunSnapshotRecord>,
+    workflow_run_id: &str,
+    workflow_semantic_version: &str,
+    required_backends: &[String],
+    required_models: &[String],
+) -> Result<WorkflowDiagnosticRuntimeModelScope, WorkflowServiceError> {
+    Ok(WorkflowDiagnosticRuntimeModelScope {
+        run: workflow_diagnostic_run_context(
+            session,
+            snapshot,
+            workflow_run_id,
+            Some(workflow_semantic_version),
+        )?,
+        runtime_id: required_backends
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "unknown_runtime".to_string()),
+        runtime_version: None,
+        model_id: required_models.first().cloned(),
+        model_version: None,
+    })
 }
 
 fn session_attribution_client_id(

@@ -72,6 +72,10 @@ pub(in crate::workflow::tests) struct RecordingRuntimeHost {
     pub(in crate::workflow::tests) capabilities: WorkflowHostCapabilities,
 }
 
+pub(in crate::workflow::tests) struct FailingRuntimeLoadHost {
+    pub(in crate::workflow::tests) capabilities: WorkflowHostCapabilities,
+}
+
 impl RecordingRuntimeHost {
     pub(in crate::workflow::tests) fn new(
         retention_hints: Arc<Mutex<Vec<WorkflowExecutionSessionRetentionHint>>>,
@@ -86,6 +90,14 @@ impl RecordingRuntimeHost {
                 models: Vec::new(),
                 runtime_capabilities: vec![ready_runtime_capability()],
             },
+        }
+    }
+}
+
+impl FailingRuntimeLoadHost {
+    pub(in crate::workflow::tests) fn new() -> Self {
+        Self {
+            capabilities: MockWorkflowHost::new(8, 1024).capabilities,
         }
     }
 }
@@ -270,5 +282,55 @@ impl WorkflowHost for RecordingRuntimeHost {
             port_id: "text".to_string(),
             value: serde_json::json!("ok"),
         }])
+    }
+}
+
+#[async_trait]
+impl WorkflowHost for FailingRuntimeLoadHost {
+    async fn validate_workflow(&self, _workflow_id: &str) -> Result<(), WorkflowServiceError> {
+        Ok(())
+    }
+
+    async fn workflow_graph_fingerprint(
+        &self,
+        _workflow_id: &str,
+    ) -> Result<String, WorkflowServiceError> {
+        Ok("failing-runtime-load-graph".to_string())
+    }
+
+    async fn workflow_capabilities(
+        &self,
+        _workflow_id: &str,
+    ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
+        Ok(self.capabilities.clone())
+    }
+
+    async fn runtime_capabilities(
+        &self,
+    ) -> Result<Vec<WorkflowRuntimeCapability>, WorkflowServiceError> {
+        Ok(self.capabilities.runtime_capabilities.clone())
+    }
+
+    async fn load_session_runtime(
+        &self,
+        _session_id: &str,
+        _workflow_id: &str,
+        _usage_profile: Option<&str>,
+        _retention_hint: WorkflowExecutionSessionRetentionHint,
+    ) -> Result<(), WorkflowServiceError> {
+        Err(WorkflowServiceError::RuntimeNotReady(
+            "llama.cpp spawn failed\u{0000}\nmissing server".to_string(),
+        ))
+    }
+
+    async fn run_workflow(
+        &self,
+        _workflow_id: &str,
+        _inputs: &[WorkflowPortBinding],
+        _output_targets: Option<&[WorkflowOutputTarget]>,
+        _run_options: WorkflowRunOptions,
+        _run_handle: WorkflowRunHandle,
+    ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
+        unreachable!("runtime load failure prevents workflow execution")
     }
 }

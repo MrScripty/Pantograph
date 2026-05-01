@@ -985,3 +985,87 @@ async fn workflow_execution_session_run_records_failed_terminal_event_with_sanit
         .chars()
         .any(char::is_control));
 }
+
+#[tokio::test]
+async fn workflow_execution_session_runtime_load_failure_records_canonical_error() {
+    let host = FailingRuntimeLoadHost::new();
+    let service = WorkflowService::with_max_sessions(2)
+        .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"));
+
+    let created = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "wf-runtime-load-error".to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create session");
+
+    let error = service
+        .run_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionRunRequest {
+                session_id: created.session_id,
+                workflow_semantic_version: "1.2.3".to_string(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("hello"),
+                }],
+                output_targets: None,
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+            },
+        )
+        .await
+        .expect_err("runtime load should fail the run");
+    assert!(matches!(error, WorkflowServiceError::RuntimeNotReady(_)));
+
+    let diagnostic_events = {
+        let ledger = service
+            .diagnostics_ledger_guard()
+            .expect("diagnostics ledger");
+        pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::diagnostic_events_after(
+            &*ledger, 0, 30,
+        )
+        .expect("diagnostic events")
+    };
+    let error_event = diagnostic_events
+        .iter()
+        .find(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::DiagnosticErrorOccurred
+        })
+        .expect("canonical runtime load error event");
+    assert!(error_event.payload_json.contains("runtime_model_load"));
+    assert!(error_event
+        .payload_json
+        .contains("runtime_model_load_failed"));
+    assert!(error_event.payload_json.contains("llama.cpp spawn failed"));
+    assert!(!error_event.payload_json.contains("\\n"));
+
+    let terminal_event = diagnostic_events
+        .iter()
+        .find(|event| {
+            event.event_kind == pantograph_diagnostics_ledger::DiagnosticEventKind::RunTerminal
+        })
+        .expect("failed terminal event");
+    let detail = service
+        .workflow_run_detail_query(WorkflowRunDetailQueryRequest {
+            workflow_run_id: terminal_event
+                .workflow_run_id
+                .as_ref()
+                .expect("terminal event workflow run id")
+                .as_str()
+                .to_string(),
+            projection_batch_size: Some(30),
+        })
+        .expect("run detail query")
+        .run
+        .expect("run detail");
+    assert_eq!(detail.status, RunListProjectionStatus::Failed);
+}
