@@ -1385,6 +1385,7 @@ fn sample_run_terminal_event() -> DiagnosticEventAppendRequest {
             status: RunTerminalStatus::Completed,
             duration_ms: Some(15),
             error: None,
+            canonical_error_event_id: None,
         }),
     }
 }

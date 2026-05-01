@@ -446,7 +446,10 @@ errors can be returned or swallowed.
   live state transition before diagnostics projections refresh.
 - [ ] Link `run.terminal`, scheduler lifecycle `*_failed`, node failed, and
   runtime snapshot error events to the canonical error event with a typed
-  `canonical_error_event_id` or equivalent link.
+  `canonical_error_event_id` or equivalent link. `run.terminal` now carries the
+  canonical diagnostic error event ID when the returned workflow error has a
+  diagnostics link; scheduler lifecycle, node failed, and runtime snapshot
+  payload links remain.
 
 **Verification:**
 - Workflow-service tests for submit, queue/admission, preflight, model-load,
@@ -472,7 +475,9 @@ requested-output validation failures, invalid host output bindings, and output
 artifactization failures now route through the recorder from
 `workflow_run_internal`. Runtime preflight failures after admission now record a
 `runtime_preflight_failed` diagnostic before terminal/reservation release
-handling and carry the diagnostics link on the returned error.
+handling and carry the diagnostics link on the returned error. Failed
+`run.terminal` payloads now preserve the canonical diagnostic error event ID
+from linked workflow errors.
 
 Verification completed for this slice:
 - `cargo check -p pantograph-workflow-service`

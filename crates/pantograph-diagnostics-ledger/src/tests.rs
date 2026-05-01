@@ -1314,6 +1314,7 @@ fn run_list_projection_drains_lifecycle_events_incrementally() {
         status: RunTerminalStatus::Failed,
         duration_ms: Some(90),
         error: Some("runtime failed".to_string()),
+        canonical_error_event_id: None,
     });
     ledger
         .append_diagnostic_event(second_terminal)
@@ -3399,6 +3400,7 @@ fn sample_run_terminal_event(workflow_run_id: &str) -> DiagnosticEventAppendRequ
             status: RunTerminalStatus::Completed,
             duration_ms: Some(80),
             error: None,
+            canonical_error_event_id: None,
         }),
     }
 }

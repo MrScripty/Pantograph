@@ -1070,6 +1070,10 @@ async fn workflow_execution_session_runtime_load_failure_records_canonical_error
             event.event_kind == pantograph_diagnostics_ledger::DiagnosticEventKind::RunTerminal
         })
         .expect("failed terminal event");
+    assert!(terminal_event.payload_json.contains(&format!(
+        "\"canonical_error_event_id\":\"{}\"",
+        error_event.event_id
+    )));
     let detail = service
         .workflow_run_detail_query(WorkflowRunDetailQueryRequest {
             workflow_run_id: terminal_event

@@ -438,6 +438,7 @@ impl WorkflowService {
                             status: RunTerminalStatus::Failed,
                             duration_ms,
                             error: Some(reason.to_string()),
+                            canonical_error_event_id: None,
                         }),
                     },
                 )

@@ -1398,21 +1398,26 @@ impl WorkflowService {
         let workflow_run_id = WorkflowRunId::try_from(workflow_run_id.to_string())?;
         let workflow_id = workflow_id_for_scheduler_event(session, snapshot)?;
         let occurred_at_ms = unix_timestamp_ms() as i64;
-        let (status, duration_ms, error) = match run_result {
+        let (status, duration_ms, error, canonical_error_event_id) = match run_result {
             Ok(response) => (
                 RunTerminalStatus::Completed,
                 Some(response.timing_ms.min(u128::from(u64::MAX)) as u64),
+                None,
                 None,
             ),
             Err(WorkflowServiceError::Cancelled(message)) => (
                 RunTerminalStatus::Cancelled,
                 None,
                 Some(sanitize_diagnostic_error_text(message)),
+                None,
             ),
             Err(error) => (
                 RunTerminalStatus::Failed,
                 None,
                 Some(sanitize_diagnostic_error_text(&error.to_string())),
+                error
+                    .diagnostics()
+                    .and_then(|diagnostics| diagnostics.diagnostic_event_id.clone()),
             ),
         };
 
@@ -1450,6 +1455,7 @@ impl WorkflowService {
                     status,
                     duration_ms,
                     error,
+                    canonical_error_event_id,
                 }),
             },
         )
