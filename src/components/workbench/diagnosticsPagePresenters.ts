@@ -51,6 +51,8 @@ export interface DiagnosticsRunErrorSummary {
   fatal: boolean;
 }
 
+export type DiagnosticsTimelineEventFilter = 'all' | 'errors';
+
 export interface DiagnosticsExecutionFilters {
   status: string;
   nodeVersion: string;
@@ -241,6 +243,20 @@ export function diagnosticsTimelineRowClass(event: SchedulerTimelineProjectionRe
     case undefined:
       return '';
   }
+}
+
+export function isDiagnosticErrorTimelineEvent(event: SchedulerTimelineProjectionRecord): boolean {
+  return Boolean(event.error_severity);
+}
+
+export function filterDiagnosticsTimelineEvents(
+  events: SchedulerTimelineProjectionRecord[],
+  filter: DiagnosticsTimelineEventFilter,
+): SchedulerTimelineProjectionRecord[] {
+  if (filter === 'errors') {
+    return events.filter(isDiagnosticErrorTimelineEvent);
+  }
+  return events;
 }
 
 export function formatDiagnosticsStatusLabel(status: RunDetailProjectionRecord['status']): string {

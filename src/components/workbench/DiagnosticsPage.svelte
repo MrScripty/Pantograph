@@ -30,6 +30,7 @@
     diagnosticsTimelineRowClass,
     filterDiagnosticsExecutionNodes,
     filterDiagnosticsComparisonRuns,
+    filterDiagnosticsTimelineEvents,
     formatDiagnosticErrorPhase,
     formatDiagnosticErrorSeverity,
     formatDiagnosticEventKind,
@@ -59,6 +60,7 @@
   let comparisonFilters = $state<DiagnosticsComparisonFilters>({
     ...DEFAULT_DIAGNOSTICS_COMPARISON_FILTERS,
   });
+  let timelineEventFilter = $state<'all' | 'errors'>('all');
   let executionFilters = $state<DiagnosticsExecutionFilters>({
     ...DEFAULT_DIAGNOSTICS_EXECUTION_FILTERS,
   });
@@ -80,6 +82,8 @@
   let filteredComparisonRuns = $derived(
     runDetail ? filterDiagnosticsComparisonRuns(runDetail, runList, comparisonFilters) : [],
   );
+  let filteredTimelineEvents = $derived(filterDiagnosticsTimelineEvents(timelineEvents, timelineEventFilter));
+  let errorTimelineEvents = $derived(filterDiagnosticsTimelineEvents(timelineEvents, 'errors'));
   let focusedDiagnosticEventId = $derived(
     $diagnosticsFocus?.workflow_run_id === runDetail?.workflow_run_id
       ? ($diagnosticsFocus?.diagnostic_event_id ?? null)
@@ -723,11 +727,54 @@
 
           <section class="rounded border border-neutral-800 bg-neutral-900/50">
             <div class="border-b border-neutral-800 px-4 py-3">
-              <h2 class="text-sm font-semibold text-neutral-100">Scheduler Timeline</h2>
-              <div class="mt-1 text-xs text-neutral-500">{timelineEvents.length} projected events</div>
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 class="text-sm font-semibold text-neutral-100">Scheduler Timeline</h2>
+                  <div class="mt-1 text-xs text-neutral-500">
+                    {filteredTimelineEvents.length} of {timelineEvents.length} projected events
+                  </div>
+                </div>
+                <div class="inline-flex rounded border border-neutral-800 bg-neutral-950 p-0.5 text-xs">
+                  <button
+                    type="button"
+                    class="rounded px-2 py-1 text-neutral-300 transition-colors hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+                    class:bg-neutral-800={timelineEventFilter === 'all'}
+                    aria-pressed={timelineEventFilter === 'all'}
+                    onclick={() => (timelineEventFilter = 'all')}
+                  >
+                    All
+                  </button>
+                  <button
+                    type="button"
+                    class="rounded px-2 py-1 text-neutral-300 transition-colors hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+                    class:bg-neutral-800={timelineEventFilter === 'errors'}
+                    aria-pressed={timelineEventFilter === 'errors'}
+                    onclick={() => (timelineEventFilter = 'errors')}
+                  >
+                    Errors {errorTimelineEvents.length}
+                  </button>
+                </div>
+              </div>
+              {#if errorTimelineEvents.length > 0}
+                <div class="mt-3 space-y-2">
+                  {#each errorTimelineEvents.slice(0, 3) as event (event.event_id)}
+                    <button
+                      type="button"
+                      class="block w-full rounded border border-red-900 bg-red-950/30 px-3 py-2 text-left text-xs text-red-100 transition-colors hover:border-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+                      onclick={() => (timelineEventFilter = 'errors')}
+                      aria-label={`Filter scheduler timeline to diagnostic error ${event.event_id}`}
+                    >
+                      <span class="font-semibold">{formatDiagnosticErrorSeverity(event.error_severity)}</span>
+                      <span class="ml-2 font-mono">{event.event_id}</span>
+                      <span class="ml-2 text-red-200">{formatDiagnosticErrorPhase(event.error_phase)}</span>
+                      <span class="mt-1 block truncate text-red-100" title={event.summary}>{event.summary}</span>
+                    </button>
+                  {/each}
+                </div>
+              {/if}
             </div>
 
-            {#if timelineEvents.length === 0}
+            {#if filteredTimelineEvents.length === 0}
               <div class="px-4 py-8 text-sm text-neutral-500">No scheduler timeline events projected</div>
             {:else}
               <div class="overflow-auto">
@@ -743,7 +790,7 @@
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-neutral-900">
-                    {#each timelineEvents as event (event.event_id)}
+                    {#each filteredTimelineEvents as event (event.event_id)}
                       <tr
                         class={diagnosticsTimelineRowClass(event)}
                         class:outline={event.event_id === focusedDiagnosticEventId}

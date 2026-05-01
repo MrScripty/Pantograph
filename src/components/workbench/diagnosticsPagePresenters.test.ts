@@ -6,6 +6,7 @@ import type {
   NodeStatusProjectionRecord,
   RunDetailProjectionRecord,
   RunListProjectionRecord,
+  SchedulerTimelineProjectionRecord,
 } from '../../services/diagnostics/types.ts';
 import {
   DEFAULT_DIAGNOSTICS_COMPARISON_FILTERS,
@@ -20,6 +21,7 @@ import {
   diagnosticsErrorSeverityClass,
   diagnosticsStatusClass,
   diagnosticsTimelineRowClass,
+  filterDiagnosticsTimelineEvents,
   filterDiagnosticsExecutionNodes,
   filterDiagnosticsComparisonRuns,
   formatDiagnosticErrorPhase,
@@ -204,25 +206,36 @@ test('diagnostic error presenters expose severity and run summary fields', () =>
 });
 
 test('diagnostics timeline row class marks error events without payload parsing', () => {
+  const errorEvent: SchedulerTimelineProjectionRecord = {
+    event_seq: 1,
+    event_id: 'event-1',
+    event_kind: 'diagnostic_error_occurred',
+    source_component: 'workflow_service',
+    occurred_at_ms: 1,
+    recorded_at_ms: 1,
+    workflow_run_id: 'run-1',
+    workflow_id: 'workflow-a',
+    summary: 'runtime load failed',
+    detail: null,
+    error_severity: 'fatal',
+    error_phase: 'runtime_model_load',
+    related_event_ids: [],
+    payload_json: '{}',
+  };
+  const metadataEvent: SchedulerTimelineProjectionRecord = {
+    ...errorEvent,
+    event_id: 'event-2',
+    event_kind: 'scheduler_queue_placement',
+    error_severity: null,
+    error_phase: null,
+  };
+
   assert.match(
-    diagnosticsTimelineRowClass({
-      event_seq: 1,
-      event_id: 'event-1',
-      event_kind: 'diagnostic_error_occurred',
-      source_component: 'workflow_service',
-      occurred_at_ms: 1,
-      recorded_at_ms: 1,
-      workflow_run_id: 'run-1',
-      workflow_id: 'workflow-a',
-      summary: 'runtime load failed',
-      detail: null,
-      error_severity: 'fatal',
-      error_phase: 'runtime_model_load',
-      related_event_ids: [],
-      payload_json: '{}',
-    }),
+    diagnosticsTimelineRowClass(errorEvent),
     /red/,
   );
+  assert.deepEqual(filterDiagnosticsTimelineEvents([metadataEvent, errorEvent], 'errors'), [errorEvent]);
+  assert.deepEqual(filterDiagnosticsTimelineEvents([metadataEvent, errorEvent], 'all'), [metadataEvent, errorEvent]);
 });
 
 test('buildDiagnosticsFactRows uses projection fields without ledger parsing', () => {

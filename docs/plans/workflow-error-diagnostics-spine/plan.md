@@ -542,7 +542,7 @@ Verification completed for this slice:
   projection fields.
 - [x] Update diagnostics presenters to classify severity, phase, component,
   and related event links from backend data.
-- [ ] Add an Errors filter/list and visual treatment for error and warning
+- [x] Add an Errors filter/list and visual treatment for error and warning
   timeline events.
 - [x] Update run list badges and run detail header to show fatal/latest error
   summaries.
@@ -562,10 +562,10 @@ Verification completed for this slice:
 diagnostic error projection fields, severity/phase presenters, run-detail error
 summary panels, node-scoped diagnostics rows, and non-color-only timeline
 treatments. Focused frontend presenter and projection service tests pass along
-with `npm run typecheck`. Remaining work is explicit error filtering/list
-controls, graph-focused node badges, interactive deep-link/focus controls
-covered by Milestone 6, and a full frontend build pass after those controls
-land.
+with `npm run typecheck`. Added an explicit scheduler timeline Errors filter
+and a compact error list driven by projected severity/phase fields. Remaining
+work is graph-focused node badges, interactive deep-link/focus controls covered
+by Milestone 6, and a full frontend build pass after those controls land.
 
 ### Milestone 6: Clickable Error Deep Links
 
