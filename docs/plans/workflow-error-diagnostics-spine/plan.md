@@ -373,6 +373,10 @@ errors can be returned or swallowed.
   failures for llama.cpp, Ollama, and PyTorch.
 - [ ] Wrap node execution failures and attach node IDs/types and output port
   context where available.
+- [ ] Capture node execution diagnostics at the node execution/injection
+  boundary, not inside user-authored node code. User nodes may return ordinary
+  errors or optional typed node errors; the host wrapper owns workflow/run,
+  node, attempt, injected capability, runtime/model, and port context.
 - [ ] Wrap artifact read/write/conversion and diagnostics projection failures.
 - [ ] Add a workflow-service domain failure path that marks scheduler/session
   state failed when a fatal run-scoped workflow error occurs. This path owns
@@ -388,6 +392,9 @@ errors can be returned or swallowed.
   `Running` state through domain control flow, not by reacting to ledger appends.
 - Embedded-runtime tests for runtime launch/model dependency/node execution
   context.
+- Node execution tests proving plain user-node errors still produce scoped
+  `node_execution_failed` diagnostics without node authors importing ledger or
+  recorder APIs.
 - Tauri command tests for transport envelope diagnostics fields.
 - Regression that control characters and large runtime stderr still produce
   error events and failed projections.
@@ -408,6 +415,9 @@ failure projections.
   node failed and expose the error event ID.
 - [ ] Add projection replay rules for old streams that only have terminal or
   node failed events.
+- [ ] Add a typed projection operation wrapper for drains, queries, and rebuilds
+  so projection code can record `projection_failed` diagnostics without
+  hand-built payloads or scheduler-state side effects.
 - [ ] Add query filters for errors and warnings without frontend-side event
   parsing.
 
@@ -855,7 +865,11 @@ diagnostics event that explains the failure.
 7. Add workbench diagnostics focus state and graph-editor navigation actions.
    UI deep links may be implemented only after backend envelopes carry stable
    `workflow_run_id` and `diagnostic_event_id` fields.
-8. Broaden capture points phase by phase across submission, queue/admission,
+8. Add the node execution boundary wrapper and projection operation wrapper
+   before broad node/projection capture. These wrappers must make the correct
+   diagnostics path the default for injected node execution and projection
+   drain/query/rebuild calls.
+9. Broaden capture points phase by phase across submission, queue/admission,
    model dependency, runtime launch, node execution, artifact, projection, and
    transport boundaries.
 
@@ -931,6 +945,47 @@ diagnostics event that explains the failure.
 - Any future recovery semantics require a dedicated recovery event and a
   separate plan update; recovery must not be inferred from ordinary lifecycle
   events.
+
+### Node Execution Boundary Diagnostics
+
+- Node authors must not be required to import diagnostics ledger, recorder, or
+  workflow-run context APIs. User-authored nodes can continue returning ordinary
+  errors.
+- The execution/injection boundary owns automatic context: `workflow_run_id`,
+  execution/session ID, `node_id`, `node_type`, node version when known,
+  attempt/cancellation state, demanded output context, injected runtime/model
+  capability context, and available input/output port context.
+- Optional typed node errors may improve classification, such as invalid input,
+  missing model, external tool failed, cancelled, or capability unavailable.
+  Plain errors still produce useful `node_execution_failed` diagnostics through
+  boundary-owned context.
+- The node diagnostics wrapper records the canonical node-scoped diagnostic
+  before existing code converts node engine failures into `WorkflowServiceError`
+  variants.
+- If the exact failing internal node/task is unknown and only the demanded
+  output node is known, record that uncertainty explicitly rather than claiming
+  false precision.
+
+### Projection Failure Wrapper
+
+- Projection drains, queries, and rebuilds should run through a typed wrapper
+  such as `ProjectionKind::RunDetail`, `ProjectionKind::RunList`,
+  `ProjectionKind::SchedulerTimeline`, `ProjectionKind::NodeStatus`, and
+  `ProjectionKind::LibraryUsage`.
+- Projection scopes should distinguish global projection work from scoped
+  requests, such as run detail, node status, or artifact projection context.
+- The wrapper records `projection_failed` diagnostics with projection name,
+  version, operation, batch size/query context when known, and the original
+  ledger/projection error.
+- The wrapper must preserve and return the original error. It must not turn
+  projection failures into workflow execution failures unless the caller is
+  explicitly handling a workflow-run operation that already owns a run context.
+- Projection failure handling may update projection-owned status such as
+  failed/rebuild-needed, but must not import or call scheduler/session mutation
+  APIs. Add tests or static review checks for this boundary.
+- After the wrapper exists, workflow-facing diagnostics APIs should avoid raw
+  `map_err(WorkflowServiceError::from)` around projection drains, queries, and
+  rebuilds unless the call site is explicitly exempted in module documentation.
 
 ### Conservative Causality And Canonical Error Links
 
