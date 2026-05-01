@@ -408,7 +408,7 @@ impl WorkflowService {
                 },
             )?,
             Err(error) => {
-                let error_text = error.to_string();
+                let error_text = sanitize_diagnostic_error_text(&error.to_string());
                 self.record_scheduler_model_lifecycle_events_if_configured(
                     SchedulerModelLifecycleEventRequest {
                         session: &session,
@@ -552,7 +552,7 @@ impl WorkflowService {
                     },
                 )?,
                 Err(error) => {
-                    let error_text = error.to_string();
+                    let error_text = sanitize_diagnostic_error_text(&error.to_string());
                     self.record_scheduler_model_lifecycle_events_if_configured(
                         SchedulerModelLifecycleEventRequest {
                             session: &session,
@@ -1366,10 +1366,16 @@ impl WorkflowService {
                 Some(response.timing_ms.min(u128::from(u64::MAX)) as u64),
                 None,
             ),
-            Err(WorkflowServiceError::Cancelled(message)) => {
-                (RunTerminalStatus::Cancelled, None, Some(message.clone()))
-            }
-            Err(error) => (RunTerminalStatus::Failed, None, Some(error.to_string())),
+            Err(WorkflowServiceError::Cancelled(message)) => (
+                RunTerminalStatus::Cancelled,
+                None,
+                Some(sanitize_diagnostic_error_text(message)),
+            ),
+            Err(error) => (
+                RunTerminalStatus::Failed,
+                None,
+                Some(sanitize_diagnostic_error_text(&error.to_string())),
+            ),
         };
 
         let mut ledger = ledger.lock().map_err(|_| {
@@ -1433,6 +1439,25 @@ fn queue_position_u32(
                 ))
             })
         })
+}
+
+fn sanitize_diagnostic_error_text(value: &str) -> String {
+    const MAX_DIAGNOSTIC_TEXT_BYTES: usize = 65_536;
+
+    let mut sanitized = String::with_capacity(value.len().min(MAX_DIAGNOSTIC_TEXT_BYTES));
+    for ch in value.chars() {
+        let replacement = if ch.is_control() { ' ' } else { ch };
+        if sanitized.len() + replacement.len_utf8() > MAX_DIAGNOSTIC_TEXT_BYTES {
+            break;
+        }
+        sanitized.push(replacement);
+    }
+
+    if sanitized.trim().is_empty() && !value.is_empty() {
+        "runtime error contained only control characters".to_string()
+    } else {
+        sanitized
+    }
 }
 
 fn workflow_id_for_scheduler_event(

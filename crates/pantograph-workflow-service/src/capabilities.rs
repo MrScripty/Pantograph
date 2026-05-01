@@ -261,11 +261,23 @@ pub fn extract_model_usages(nodes: &[StoredGraphNode]) -> Vec<ModelUsage> {
 pub fn extract_required_backends(nodes: &[StoredGraphNode]) -> Vec<String> {
     let mut out = HashSet::new();
     for node in nodes {
+        if let Some(backend_key) = backend_key_for_node_type(node.node_type()) {
+            out.insert(backend_key.to_string());
+        }
         extract_backend_keys_from_value(&node.data, &mut out);
     }
     let mut backends = out.into_iter().collect::<Vec<_>>();
     backends.sort();
     backends
+}
+
+fn backend_key_for_node_type(node_type: &str) -> Option<&'static str> {
+    match node_type {
+        "llamacpp-inference" => Some("llama_cpp"),
+        "ollama-inference" => Some("ollama"),
+        "pytorch-inference" => Some("pytorch"),
+        _ => None,
+    }
 }
 
 fn workflow_uses_kv_cache(nodes: &[StoredGraphNode], edges: &[StoredGraphEdge]) -> bool {
@@ -644,6 +656,39 @@ mod tests {
                 "onnx-runtime".to_string(),
                 "pytorch".to_string(),
                 "stable_audio".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn extract_required_backends_infers_runtime_specific_node_backends() {
+        let nodes = vec![
+            StoredGraphNode {
+                id: "torch".to_string(),
+                node_type: "pytorch-inference".to_string(),
+                data: serde_json::json!({}),
+                position: StoredPosition::default(),
+            },
+            StoredGraphNode {
+                id: "llama".to_string(),
+                node_type: "llamacpp-inference".to_string(),
+                data: serde_json::json!({}),
+                position: StoredPosition::default(),
+            },
+            StoredGraphNode {
+                id: "ollama".to_string(),
+                node_type: "ollama-inference".to_string(),
+                data: serde_json::json!({}),
+                position: StoredPosition::default(),
+            },
+        ];
+
+        assert_eq!(
+            extract_required_backends(&nodes),
+            vec![
+                "llama_cpp".to_string(),
+                "ollama".to_string(),
+                "pytorch".to_string()
             ]
         );
     }

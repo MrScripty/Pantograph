@@ -281,6 +281,18 @@ impl WorkflowHost for MockWorkflowHost {
             binding
                 .value
                 .as_str()
+                .map(|value| value.contains("runtime-error-control"))
+                .unwrap_or(false)
+        }) {
+            return Err(WorkflowServiceError::RuntimeNotReady(
+                "backend not ready\u{0000}\nllama.cpp stderr line".to_string(),
+            ));
+        }
+
+        if inputs.iter().any(|binding| {
+            binding
+                .value
+                .as_str()
                 .map(|value| value.contains("runtime-error"))
                 .unwrap_or(false)
         }) {
