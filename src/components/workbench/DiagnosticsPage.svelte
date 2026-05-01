@@ -10,7 +10,7 @@
     SchedulerTimelineProjectionRecord,
   } from '../../services/diagnostics/types';
   import { workflowService } from '../../services/workflow/WorkflowService';
-  import { activeWorkflowRun, diagnosticsFocus } from '../../stores/workbenchStore';
+  import { activeWorkflowRun, diagnosticsFocus, focusWorkflowDiagnostics } from '../../stores/workbenchStore';
   import type { DiagnosticsComparisonFilters, DiagnosticsExecutionFilters } from './diagnosticsPagePresenters';
   import {
     DEFAULT_DIAGNOSTICS_COMPARISON_FILTERS,
@@ -196,6 +196,24 @@
       ...executionFilters,
       [field]: value,
     };
+  }
+
+  function focusTimelineError(event: SchedulerTimelineProjectionRecord): void {
+    if (!runDetail) return;
+    timelineEventFilter = 'errors';
+    focusWorkflowDiagnostics(
+      {
+        workflow_run_id: runDetail.workflow_run_id,
+        workflow_id: runDetail.workflow_id,
+        workflow_version_id: runDetail.workflow_version_id,
+        workflow_semantic_version: runDetail.workflow_semantic_version,
+        status: runDetail.status,
+      },
+      {
+        diagnostic_event_id: event.event_id,
+        node_id: event.node_id ?? null,
+      },
+    );
   }
 
   function selectValue(event: Event): string {
@@ -761,8 +779,8 @@
                     <button
                       type="button"
                       class="block w-full rounded border border-red-900 bg-red-950/30 px-3 py-2 text-left text-xs text-red-100 transition-colors hover:border-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
-                      onclick={() => (timelineEventFilter = 'errors')}
-                      aria-label={`Filter scheduler timeline to diagnostic error ${event.event_id}`}
+                      onclick={() => focusTimelineError(event)}
+                      aria-label={`Focus diagnostic error event ${event.event_id}`}
                     >
                       <span class="font-semibold">{formatDiagnosticErrorSeverity(event.error_severity)}</span>
                       <span class="ml-2 font-mono">{event.event_id}</span>

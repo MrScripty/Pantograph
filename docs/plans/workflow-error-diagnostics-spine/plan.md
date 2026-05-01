@@ -595,7 +595,7 @@ Verification completed for this slice:
   summaries.
 - [x] Add graph/node badges and focused highlighting for node-scoped error
   event IDs.
-- [ ] Use semantic buttons/links with accessible names for filters, expanders,
+- [x] Use semantic buttons/links with accessible names for filters, expanders,
   focused event navigation, and graph jump controls.
 
 **Verification:**
@@ -612,7 +612,10 @@ treatments. Focused frontend presenter and projection service tests pass along
 with `npm run typecheck`. Added an explicit scheduler timeline Errors filter
 and a compact error list driven by projected severity/phase fields. Remaining
 work is the remaining interactive deep-link/focus controls covered by Milestone
-6 and a full frontend build pass after those controls land.
+6 and a full frontend build pass after those controls land. Diagnostics error
+list actions now focus the selected canonical event through workbench
+diagnostics state instead of only filtering the timeline, and the Svelte
+accessibility gate passes.
 
 ### Milestone 6: Clickable Error Deep Links
 
