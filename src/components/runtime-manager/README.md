@@ -11,6 +11,7 @@ between compact backend-picker widgets and unmounted one-off components.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `ManagedRuntimePanel.svelte` | Mounted Settings entry point that loads runtime-manager snapshots from the shared frontend service and renders one card per managed runtime. |
+| `ManagedBinaryOverviewPanel.svelte` | Read-only Settings overview for the unified backend-owned managed-binary facade across runtime sidecars, media tools, and native artifacts. |
 | `ManagedRuntimeCard.svelte` | Per-runtime coordinator that owns user actions and composes focused runtime summary, job, catalog, and activity panels. |
 | `ManagedRuntimeCatalogPanel.svelte` | Version policy selectors plus a bounded, scrollable backend-owned available-version table. |
 | `ManagedRuntimeJobPanel.svelte` | Prominent live job progress, transfer state, and retained-download controls for one managed runtime. |
@@ -63,6 +64,9 @@ server-shell components.
 ## Invariants
 - Runtime cards render backend-owned `ManagedRuntimeManagerRuntimeView`
   snapshots without redefining install/readiness policy locally.
+- The unified overview renders backend-owned `ManagedBinaryStatus` snapshots
+  from `managedRuntimeService.listManagedBinaries()` and never synthesizes
+  readiness or selection state locally.
 - Version selection and default policy updates always route through
   `managedRuntimeService`.
 - The mounted runtime-manager view remains inside the existing Settings GUI and

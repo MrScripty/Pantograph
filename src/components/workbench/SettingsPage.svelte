@@ -4,6 +4,7 @@
   import DeviceConfig from '../DeviceConfig.svelte';
   import ModelConfig from '../ModelConfig.svelte';
   import RagStatus from '../RagStatus.svelte';
+  import ManagedBinaryOverviewPanel from '../runtime-manager/ManagedBinaryOverviewPanel.svelte';
   import ManagedRuntimePanel from '../runtime-manager/ManagedRuntimePanel.svelte';
   import SandboxSettings from '../SandboxSettings.svelte';
   import ServerStatus from '../ServerStatus.svelte';
@@ -1153,6 +1154,7 @@
           </div>
         </div>
         <ManagedRuntimePanel />
+        <ManagedBinaryOverviewPanel />
       </section>
 
       <section class="border-t border-neutral-900 px-4 py-4">

@@ -399,13 +399,13 @@ diagnostics, and release artifacts.
 **Tasks:**
 - [x] Update TypeScript DTO mirrors and managed runtime service projections for
       the unified backend facade.
-- [ ] Update Settings to show runtime sidecars, media tools, and native
+- [x] Update Settings to show runtime sidecars, media tools, and native
       artifacts from the same source while preserving category labels/actions.
 - [ ] Update scheduler diagnostics wording so "model loaded" is reserved for
       proven model readiness.
 - [ ] Update touched READMEs and ADR references for facade ownership and
       lifecycle semantics.
-- [ ] Preserve backend-owned data rules in the frontend: no optimistic install,
+- [x] Preserve backend-owned data rules in the frontend: no optimistic install,
       selection, activation, or readiness updates.
 
 **Verification:**
@@ -477,6 +477,10 @@ diagnostics, and release artifacts.
   `managedRuntimeService.listManagedBinaries()`. This is read-only and keeps
   frontend state backend-owned while the visible Settings composition is still
   pending.
+- 2026-05-01: Added `ManagedBinaryOverviewPanel.svelte` under Settings. It
+  renders runtime sidecars, media tools, and native artifacts from the unified
+  backend facade with read-only refresh behavior; it does not perform
+  optimistic install, selection, activation, or readiness updates.
 
 ## Deferred Bugs and Follow-Up Fixes
 
