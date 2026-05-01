@@ -26,6 +26,7 @@
 
   let installRequested = $state(false);
   let installingVersion = $state<string | null>(null);
+  let removingVersion = $state<string | null>(null);
   let removeRequested = $state(false);
   let pauseRequested = $state(false);
   let cancelRequested = $state(false);
@@ -65,6 +66,19 @@
       error = cause instanceof Error ? cause.message : String(cause);
     } finally {
       removeRequested = false;
+    }
+  }
+
+  async function removeRuntimeVersion(version: string) {
+    removingVersion = version;
+    error = null;
+
+    try {
+      await managedRuntimeService.removeRuntimeVersion(runtime.id, version);
+    } catch (cause) {
+      error = cause instanceof Error ? cause.message : String(cause);
+    } finally {
+      removingVersion = null;
     }
   }
 
@@ -276,9 +290,11 @@
       {selectionUpdating}
       {installRequested}
       {installingVersion}
+      {removingVersion}
       onUpdateSelected={updateSelectedVersion}
       onUpdateDefault={updateDefaultVersion}
       onInstallVersion={installRuntime}
+      onRemoveVersion={removeRuntimeVersion}
       {versionBadgeLabel}
     />
 

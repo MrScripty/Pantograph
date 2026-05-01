@@ -48,9 +48,9 @@ pub use managed_runtime_manager::{
     cancel_managed_runtime_manager_job, inspect_managed_runtime_manager_runtime,
     install_managed_runtime_manager_runtime, list_managed_runtime_manager_runtimes,
     pause_managed_runtime_manager_job, refresh_managed_runtime_manager_catalog_views,
-    remove_managed_runtime_manager_runtime, select_managed_runtime_manager_version,
-    set_default_managed_runtime_manager_version_view, ManagedRuntimeManagerProgress,
-    ManagedRuntimeManagerRuntimeView,
+    remove_managed_runtime_manager_runtime, remove_managed_runtime_manager_runtime_version,
+    select_managed_runtime_manager_version, set_default_managed_runtime_manager_version_view,
+    ManagedRuntimeManagerProgress, ManagedRuntimeManagerRuntimeView,
 };
 pub use model_dependencies::{SharedModelDependencyResolver, TauriModelDependencyResolver};
 pub use node_execution::{

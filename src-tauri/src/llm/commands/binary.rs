@@ -4,9 +4,9 @@ use pantograph_embedded_runtime::{
     cancel_managed_runtime_manager_job, inspect_managed_runtime_manager_runtime,
     install_managed_runtime_manager_runtime, list_managed_runtime_manager_runtimes,
     pause_managed_runtime_manager_job, refresh_managed_runtime_manager_catalog_views,
-    remove_managed_runtime_manager_runtime, select_managed_runtime_manager_version,
-    set_default_managed_runtime_manager_version_view, ManagedRuntimeManagerProgress,
-    ManagedRuntimeManagerRuntimeView,
+    remove_managed_runtime_manager_runtime, remove_managed_runtime_manager_runtime_version,
+    select_managed_runtime_manager_version, set_default_managed_runtime_manager_version_view,
+    ManagedRuntimeManagerProgress, ManagedRuntimeManagerRuntimeView,
 };
 use tauri::{command, ipc::Channel, AppHandle, Manager};
 
@@ -82,6 +82,17 @@ pub async fn remove_managed_runtime(
 ) -> Result<(), String> {
     let app_data_dir = app_data_dir(&app)?;
     remove_managed_runtime_manager_runtime(&app_data_dir, binary_id).await
+}
+
+/// Remove one installed managed runtime version from the app-owned runtime directory.
+#[command]
+pub async fn remove_managed_runtime_version(
+    app: AppHandle,
+    binary_id: ManagedBinaryId,
+    version: String,
+) -> Result<ManagedRuntimeManagerRuntimeView, String> {
+    let app_data_dir = app_data_dir(&app)?;
+    remove_managed_runtime_manager_runtime_version(&app_data_dir, binary_id, &version).await
 }
 
 /// Request cancellation for the active managed runtime install job.

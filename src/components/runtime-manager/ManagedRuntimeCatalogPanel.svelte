@@ -10,9 +10,11 @@
     selectionUpdating: boolean;
     installRequested: boolean;
     installingVersion: string | null;
+    removingVersion: string | null;
     onUpdateSelected: (version: string | null) => Promise<void>;
     onUpdateDefault: (version: string | null) => Promise<void>;
     onInstallVersion: (version: string | null) => Promise<void>;
+    onRemoveVersion: (version: string) => Promise<void>;
     versionBadgeLabel: (version: ManagedRuntimeVersionStatus) => string;
   };
 
@@ -22,9 +24,11 @@
     selectionUpdating,
     installRequested,
     installingVersion,
+    removingVersion,
     onUpdateSelected,
     onUpdateDefault,
     onInstallVersion,
+    onRemoveVersion,
     versionBadgeLabel,
   }: Props = $props();
 </script>
@@ -130,12 +134,25 @@
                 {/if}
               </td>
               <td class="whitespace-nowrap px-3 py-2 text-right">
-                {#if version.version && version.installable && version.install_state !== 'installed' && version.install_state !== 'system_provided' && !runtime.active_job}
+                {#if version.version && version.install_state === 'installed' && !runtime.active_job}
+                  <button
+                    type="button"
+                    class="rounded border border-neutral-700 px-2 py-1 text-[10px] text-neutral-300 transition-colors hover:bg-neutral-800 disabled:border-neutral-800 disabled:text-neutral-600"
+                    onclick={() => onRemoveVersion(version.version ?? '')}
+                    disabled={removingVersion !== null || installRequested || version.version === null}
+                  >
+                    {#if removingVersion === version.version}
+                      Uninstalling...
+                    {:else}
+                      Uninstall
+                    {/if}
+                  </button>
+                {:else if version.version && version.installable && version.install_state !== 'installed' && version.install_state !== 'system_provided' && !runtime.active_job}
                   <button
                     type="button"
                     class="rounded border border-blue-700 px-2 py-1 text-[10px] text-blue-200 transition-colors hover:bg-blue-950/40 disabled:border-neutral-800 disabled:text-neutral-600"
                     onclick={() => onInstallVersion(version.version)}
-                    disabled={installRequested}
+                    disabled={installRequested || removingVersion !== null}
                   >
                     {#if installRequested && installingVersion === version.version}
                       Installing...

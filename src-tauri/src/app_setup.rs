@@ -393,6 +393,7 @@ pub fn run_app() -> AppStartupResult<()> {
             crate::llm::pause_managed_runtime_job,
             crate::llm::cancel_managed_runtime_job,
             crate::llm::remove_managed_runtime,
+            crate::llm::remove_managed_runtime_version,
             crate::llm::select_managed_runtime_version,
             crate::llm::set_default_managed_runtime_version,
             // Chunking preview commands

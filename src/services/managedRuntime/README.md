@@ -97,9 +97,9 @@ const llama = await managedRuntimeService.inspectRuntime('llama_cpp');
   also pass an explicit version so the backend installs one catalog entry
   instead of always choosing the latest/default path.
 - `pauseRuntimeJob`, `cancelRuntimeJob`, `removeRuntime`,
-  `selectRuntimeVersion`, and `setDefaultRuntimeVersion` all route through thin
-  backend commands and then update the local snapshot cache from backend
-  responses.
+  `removeRuntimeVersion`, `selectRuntimeVersion`, and
+  `setDefaultRuntimeVersion` all route through thin backend commands and then
+  update the local snapshot cache from backend responses.
 - `refreshCatalogs()` asks the backend to refresh persisted release catalogs,
   updates the shared snapshot cache from that backend response, and keeps
   vendor/API ownership out of Svelte components.

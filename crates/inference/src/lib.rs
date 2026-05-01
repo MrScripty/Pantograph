@@ -100,7 +100,7 @@ pub use managed_runtime::{
     list_binary_capabilities, list_managed_runtime_snapshots, load_managed_runtime_state,
     managed_runtime_dir, managed_runtime_snapshot, pause_binary_download,
     reconcile_interrupted_managed_runtime_jobs, refresh_managed_runtime_catalog,
-    refresh_managed_runtime_catalogs, remove_binary, resolve_binary_command,
+    refresh_managed_runtime_catalogs, remove_binary, remove_binary_version, resolve_binary_command,
     save_managed_runtime_state, select_managed_runtime_version,
     set_default_managed_runtime_version, BinaryStatus, DownloadProgress, ManagedBinaryCapability,
     ManagedBinaryId, ManagedBinaryInstallState, ManagedRuntimeCatalogVersion,

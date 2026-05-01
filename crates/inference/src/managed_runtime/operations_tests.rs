@@ -196,6 +196,61 @@ fn catalog_versions_remain_installable_after_one_version_is_installed() {
     assert!(missing.installable);
 }
 
+#[tokio::test]
+async fn remove_binary_version_removes_one_installed_version_and_clears_selection() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let first_dir = temp_dir.path().join("runtimes/llama-cpp-b8248");
+    let second_dir = temp_dir.path().join("runtimes/llama-cpp-b9000");
+    install_fake_runtime_files(&first_dir, ManagedBinaryId::LlamaCpp);
+    install_fake_runtime_files(&second_dir, ManagedBinaryId::LlamaCpp);
+
+    persist_install_success(
+        temp_dir.path(),
+        ManagedBinaryId::LlamaCpp,
+        "b8248",
+        &first_dir,
+        ManagedBinaryId::LlamaCpp.key(),
+        definition(ManagedBinaryId::LlamaCpp).platform_key(),
+    )
+    .expect("persist first install");
+    persist_install_success(
+        temp_dir.path(),
+        ManagedBinaryId::LlamaCpp,
+        "b9000",
+        &second_dir,
+        ManagedBinaryId::LlamaCpp.key(),
+        definition(ManagedBinaryId::LlamaCpp).platform_key(),
+    )
+    .expect("persist second install");
+    select_managed_runtime_version(temp_dir.path(), ManagedBinaryId::LlamaCpp, Some("b9000"))
+        .expect("select second runtime");
+
+    crate::managed_runtime::remove_binary_version(
+        temp_dir.path(),
+        ManagedBinaryId::LlamaCpp,
+        "b9000",
+    )
+    .await
+    .expect("remove selected runtime version");
+
+    let state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
+    let runtime = state
+        .runtimes
+        .iter()
+        .find(|runtime| runtime.id == ManagedBinaryId::LlamaCpp)
+        .expect("llama runtime state");
+
+    assert!(first_dir.exists());
+    assert!(!second_dir.exists());
+    assert_eq!(runtime.versions.len(), 1);
+    assert_eq!(runtime.versions[0].version, "b8248");
+    assert_eq!(runtime.selection.selected_version, None);
+    assert_eq!(runtime.selection.active_version, None);
+    assert!(runtime.install_history.iter().any(|entry| entry.event
+        == ManagedRuntimeHistoryEventKind::Removed
+        && entry.version.as_deref() == Some("b9000")));
+}
+
 #[test]
 fn persist_install_success_records_ready_version_and_selection() {
     let temp_dir = tempfile::tempdir().expect("temp dir");

@@ -252,6 +252,35 @@ pub(super) fn persist_remove_success(
     save_managed_runtime_state(app_data_dir, &state)
 }
 
+pub(super) fn persist_remove_version_success(
+    app_data_dir: &Path,
+    id: ManagedBinaryId,
+    version: &str,
+) -> Result<(), String> {
+    let mut state = load_managed_runtime_state(app_data_dir)?;
+    let Some(runtime) = runtime_state_entry_mut(&mut state, id) else {
+        return Ok(());
+    };
+
+    runtime
+        .versions
+        .retain(|installed_version| installed_version.version != version);
+    runtime.active_job = None;
+    runtime.active_job_artifact = None;
+    clear_selection_version(&mut runtime.selection.selected_version, version);
+    clear_selection_version(&mut runtime.selection.default_version, version);
+    clear_selection_version(&mut runtime.selection.active_version, version);
+    runtime
+        .install_history
+        .push(ManagedRuntimeInstallHistoryEntry {
+            event: ManagedRuntimeHistoryEventKind::Removed,
+            version: Some(version.to_string()),
+            at_ms: current_unix_timestamp_ms(),
+            detail: Some("Managed runtime version removed".to_string()),
+        });
+    save_managed_runtime_state(app_data_dir, &state)
+}
+
 pub(super) fn finish_requested_cancellation(
     app_data_dir: &Path,
     id: ManagedBinaryId,
@@ -434,5 +463,11 @@ fn selection_target_label(target: SelectionTarget) -> &'static str {
     match target {
         SelectionTarget::Selected => "selected_version_updated",
         SelectionTarget::Default => "default_version_updated",
+    }
+}
+
+fn clear_selection_version(selection: &mut Option<String>, removed_version: &str) {
+    if selection.as_deref() == Some(removed_version) {
+        *selection = None;
     }
 }

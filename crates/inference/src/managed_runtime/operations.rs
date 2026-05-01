@@ -38,7 +38,8 @@ use self::state_transitions::{
 };
 use self::state_transitions::{
     finish_requested_cancellation, finish_requested_pause, persist_install_success,
-    persist_remove_success, resolve_runtime_install_dir, runtime_install_dir_for_projection,
+    persist_remove_success, persist_remove_version_success, resolve_runtime_install_dir,
+    runtime_install_dir_for_projection,
 };
 #[cfg(test)]
 use super::contracts::ManagedRuntimeReadinessState;
@@ -773,6 +774,57 @@ pub async fn remove_binary(app_data_dir: &Path, id: ManagedBinaryId) -> Result<(
     })?;
 
     persist_remove_success(app_data_dir, id)?;
+    Ok(())
+}
+
+pub async fn remove_binary_version(
+    app_data_dir: &Path,
+    id: ManagedBinaryId,
+    version: &str,
+) -> Result<(), String> {
+    let lock = transition_lock(id);
+    let _guard = lock.lock().await;
+
+    let state = load_managed_runtime_state(app_data_dir)?;
+    let runtime = runtime_state_entry(&state, id)
+        .ok_or_else(|| format!("{} does not have managed runtime state", id.display_name()))?;
+    if runtime.active_job.is_some() {
+        return Err(format!(
+            "Refusing to remove {} {} while a managed runtime job is active",
+            id.display_name(),
+            version
+        ));
+    }
+    let persisted_version = runtime
+        .versions
+        .iter()
+        .find(|installed_version| installed_version.version == version)
+        .ok_or_else(|| {
+            format!(
+                "{} version '{}' is not installed",
+                id.display_name(),
+                version
+            )
+        })?;
+    let install_root = persisted_version
+        .install_root
+        .as_deref()
+        .map(PathBuf::from)
+        .unwrap_or_else(|| managed_version_install_dir(app_data_dir, id, version));
+
+    if install_root.exists() {
+        fs::remove_dir_all(&install_root).map_err(|e| {
+            format!(
+                "Failed to remove {} runtime version '{}' directory {:?}: {}",
+                definition(id).display_name(),
+                version,
+                install_root,
+                e
+            )
+        })?;
+    }
+
+    persist_remove_version_success(app_data_dir, id, version)?;
     Ok(())
 }
 

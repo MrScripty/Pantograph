@@ -125,6 +125,7 @@ class ManagedRuntimeServiceClass {
         version,
         channel,
       });
+      await this.inspectRuntime(runtimeId);
     } catch (error) {
       Logger.log(
         'MANAGED_RUNTIME_INSTALL_ERROR',
@@ -138,6 +139,21 @@ class ManagedRuntimeServiceClass {
   public async removeRuntime(runtimeId: ManagedRuntimeId): Promise<void> {
     await invoke('remove_managed_runtime', { binaryId: runtimeId });
     await this.listRuntimes();
+  }
+
+  public async removeRuntimeVersion(
+    runtimeId: ManagedRuntimeId,
+    version: string
+  ): Promise<ManagedRuntimeManagerRuntimeView> {
+    const runtime = await invoke<ManagedRuntimeManagerRuntimeView>(
+      'remove_managed_runtime_version',
+      {
+        binaryId: runtimeId,
+        version,
+      }
+    );
+    this.upsertRuntime(runtime);
+    return runtime;
   }
 
   public async refreshCatalogs(): Promise<ManagedRuntimeManagerRuntimeView[]> {
