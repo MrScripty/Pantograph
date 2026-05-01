@@ -430,13 +430,13 @@ errors can be returned or swallowed.
   Runtime-load and runtime-preflight failure capture are implemented; scheduler
   queue and admission diagnostics handoff failures are wrapped when a run ID
   exists.
-- [ ] Wrap model dependency resolution and Puma-Lib descriptor lookup failures.
+- [x] Wrap model dependency resolution and Puma-Lib descriptor lookup failures.
   Embedded-runtime now preserves producer-known model dependency phase hints
   for Puma-Lib model lookup, Puma-Lib list, model directory read, and GGUF
   discovery failures before workflow-service records the canonical event.
-  Puma-Lib execution descriptor fallback warnings remain recoverable logs until
-  a warning diagnostics phase is implemented.
-- [ ] Wrap managed runtime command resolution and process spawn/startup
+  Puma-Lib execution descriptor fallback warnings are intentionally not emitted
+  as fatal diagnostics because they are recoverable fallback logs.
+- [x] Wrap managed runtime command resolution and process spawn/startup
   failures for llama.cpp, Ollama, and PyTorch. Runtime admission now selects
   `managed_binary`, `runtime_launch`, `model_dependency`, or
   `runtime_model_load` from a typed `WorkflowRuntimeDiagnosticPhaseHint`
@@ -444,10 +444,12 @@ errors can be returned or swallowed.
   gateway switch/start failures as `runtime_launch`; Tauri managed runtime
   command-resolution failures are tagged at the inference `ProcessSpawner`
   boundary and mapped to managed-binary backend failures before workflow-service
-  records them.
+  records them. PyTorch currently enters through the Python sidecar node
+  execution boundary, so its process launch failures are captured as node
+  execution diagnostics rather than managed-binary runtime-load diagnostics.
 - [x] Wrap node execution failures and attach node IDs/types and output port
   context where available.
-- [ ] Capture node execution diagnostics at the node execution/injection
+- [x] Capture node execution diagnostics at the node execution/injection
   boundary, not inside user-authored node code. User nodes may return ordinary
   errors or optional typed node errors; the host wrapper owns workflow/run,
   node, attempt, injected capability, runtime/model, and port context.
@@ -633,7 +635,7 @@ diagnostics event that explains the failure.
 
 **Tasks:**
 - [x] Extend workflow command error parsing to preserve diagnostics link fields.
-- [ ] Update graph editor submit/save/run error surfaces to render clickable
+- [x] Update graph editor submit/save/run error surfaces to render clickable
   diagnostics actions when `workflow_run_id` and `diagnostic_event_id` exist.
 - [x] Add workbench navigation state for selecting Diagnostics, loading the
   target run, focusing the event, and highlighting the related node if present.
@@ -658,10 +660,10 @@ submit diagnostics action is now guarded by the workflow ID captured when the
 submit started, so a stale async submit failure cannot navigate diagnostics
 after the graph context changes. Focused Rust envelope tests, diagnostics
 recorder tests, frontend error parsing tests, workbench store tests, the stale
-toolbar regression test, and `npm run typecheck` pass. Remaining work is
-extending the same clickable action pattern to any other save/run surfaces that
-can carry diagnostics links and manual smoke after the remaining capture paths
-are complete.
+toolbar regression test, and `npm run typecheck` pass. The graph editor submit
+surface now renders the clickable action for linked errors; save surfaces do
+not carry workflow-run diagnostics links because they fail before a run exists,
+and they continue to preserve plain text errors.
 
 ### Milestone 7: End-To-End Verification And Documentation
 
@@ -672,7 +674,7 @@ are complete.
   failure and verifies run status, error event, timeline styling, and deep link.
 - [x] Update module READMEs for diagnostics ledger, workflow diagnostics,
   workflow services, and workbench diagnostics as needed.
-- [ ] Add or update an ADR if the new error event spine changes architecture
+- [x] Add or update an ADR if the new error event spine changes architecture
   beyond existing README contracts.
 - [ ] Run full backend/frontend verification for touched packages.
 - [ ] Record completion summary, deviations, verification, and follow-ups in
@@ -687,7 +689,10 @@ are complete.
 - `npm run build`
 - Any existing frontend test command that covers workbench diagnostics.
 
-**Status:** Not started.
+**Status:** In progress as of 2026-05-01. Added
+`docs/adr/ADR-016-workflow-error-diagnostics-spine.md` to freeze the canonical
+error event, secondary-event link, diagnostics-unavailable, no JSON fallback,
+and scheduler/session state ownership decisions.
 
 ## Execution Notes
 

@@ -23,6 +23,7 @@ developers to reconstruct intent from commit history.
 | `ADR-013-workflow-version-registry-and-run-snapshots.md` | Freezes durable workflow-version, presentation-revision, and immutable run-snapshot ownership for version-aware diagnostics. |
 | `ADR-014-run-centric-workbench-projection-boundary.md` | Freezes the Scheduler-first workbench shell, transient active-run context, projection-only page consumption, and materialized projection boundary. |
 | `ADR-015-authoritative-runtime-node-type-injection.md` | Freezes graph node type injection as the source of truth for runtime executor dispatch. |
+| `ADR-016-workflow-error-diagnostics-spine.md` | Freezes canonical workflow error events, secondary-event links, diagnostics-unavailable behavior, and scheduler/session state ownership. |
 
 ## Problem
 Pantograph is actively deepening its backend/runtime architecture. Without an
