@@ -18,8 +18,9 @@ use pantograph_runtime_attribution::{
 use super::super::diagnostic_errors::{
     registered_workflow_diagnostic_error_phases, WorkflowDiagnosticCausalityPolicy,
     WorkflowDiagnosticErrorPhase, WorkflowDiagnosticErrorRecordRequest,
-    WorkflowDiagnosticProjectionEffect, WorkflowDiagnosticRunContext,
-    WorkflowDiagnosticRuntimeModelScope, WorkflowDiagnosticTransportScope,
+    WorkflowDiagnosticProjectionEffect, WorkflowDiagnosticProjectionScope,
+    WorkflowDiagnosticRunContext, WorkflowDiagnosticRuntimeModelScope,
+    WorkflowDiagnosticTransportScope,
 };
 use super::*;
 
@@ -320,6 +321,39 @@ fn workflow_diagnostic_error_recorder_reports_unavailable_on_append_failure() {
         .as_deref()
         .unwrap_or_default()
         .contains("diagnostics ledger append failed"));
+}
+
+#[test]
+fn workflow_diagnostic_error_recorder_appends_global_projection_error() {
+    let service = WorkflowService::with_ephemeral_diagnostics_ledger().expect("service");
+    let error = WorkflowServiceError::Internal("projection replay failed".to_string());
+    let outcome = service
+        .record_workflow_diagnostic_error_if_configured(
+            WorkflowDiagnosticErrorRecordRequest::projection_failed(
+                WorkflowDiagnosticProjectionScope {
+                    workflow_run_id: None,
+                    workflow_id: None,
+                    projection_name: "run_list".to_string(),
+                    operation: "drain".to_string(),
+                },
+                &error,
+            ),
+        )
+        .expect("projection diagnostic appends");
+
+    assert!(outcome.event_id.is_some());
+    let events = {
+        let ledger = service
+            .diagnostics_ledger_guard()
+            .expect("diagnostics ledger guard");
+        pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::diagnostic_events_after(
+            &*ledger, 0, 10,
+        )
+        .expect("diagnostic events")
+    };
+    assert_eq!(events.len(), 1);
+    assert!(events[0].payload_json.contains("projection_failed"));
+    assert!(events[0].payload_json.contains("run_list.drain"));
 }
 
 #[test]

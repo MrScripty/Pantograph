@@ -292,7 +292,10 @@ pub(crate) struct WorkflowDiagnosticArtifactScope {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct WorkflowDiagnosticProjectionScope {
-    pub run: WorkflowDiagnosticRunContext,
+    pub workflow_run_id: Option<WorkflowRunId>,
+    pub workflow_id: Option<WorkflowId>,
+    pub projection_name: String,
+    pub operation: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -352,7 +355,10 @@ impl WorkflowDiagnosticErrorScope {
                 request.node_id = scope.node_id.clone();
                 request.payload_ref = scope.payload_ref.clone();
             }
-            Self::Projection(scope) => apply_run_context(request, &scope.run),
+            Self::Projection(scope) => {
+                request.workflow_run_id = scope.workflow_run_id.clone();
+                request.workflow_id = scope.workflow_id.clone();
+            }
             Self::Transport(scope) => {
                 request.workflow_run_id = scope.workflow_run_id.clone();
                 request.workflow_id = scope.workflow_id.clone();
@@ -551,11 +557,16 @@ impl WorkflowDiagnosticErrorRecordRequest {
         scope: WorkflowDiagnosticProjectionScope,
         error: &WorkflowServiceError,
     ) -> Self {
-        Self::from_error(
+        let operation = scope.operation.clone();
+        let projection_name = scope.projection_name.clone();
+        let mut request = Self::from_error(
             WorkflowDiagnosticErrorPhase::Projection,
             WorkflowDiagnosticErrorScope::Projection(scope),
             error,
-        )
+        );
+        request.location.component = Some("workflow-projection".to_string());
+        request.location.operation = Some(format!("{projection_name}.{operation}"));
+        request
     }
 
     #[track_caller]

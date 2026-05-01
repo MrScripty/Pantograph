@@ -785,6 +785,26 @@ fn diagnostic_event_ledger_validates_error_scope_source_and_text() {
         })
     ));
 
+    let mut projection_event = sample_diagnostic_error_event("workflow_run_alpha");
+    projection_event.source_component = DiagnosticEventSourceComponent::WorkflowService;
+    projection_event.workflow_run_id = None;
+    projection_event.workflow_id = None;
+    projection_event.workflow_version_id = None;
+    projection_event.workflow_semantic_version = None;
+    projection_event.node_id = None;
+    projection_event.runtime_id = None;
+    projection_event.model_id = None;
+    if let DiagnosticEventPayload::DiagnosticErrorOccurred(payload) = &mut projection_event.payload
+    {
+        payload.scope = DiagnosticErrorScopeKind::Projection;
+        payload.phase = "projection".to_string();
+        payload.code = "projection_failed".to_string();
+        payload.severity = DiagnosticErrorSeverity::Error;
+    }
+    ledger
+        .append_diagnostic_event(projection_event)
+        .expect("projection diagnostic error may be global");
+
     let sanitized = sanitize_diagnostic_error_text("bad\u{0000}\nvalue", 64);
     assert_eq!(sanitized, "bad  value");
     let mut sanitized_event = sample_diagnostic_error_event("workflow_run_alpha");

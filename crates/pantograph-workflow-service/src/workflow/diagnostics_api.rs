@@ -15,11 +15,15 @@ use pantograph_diagnostics_ledger::{
     SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
     UpdateRetentionPolicyCommand,
 };
+use pantograph_runtime_attribution::{WorkflowId, WorkflowRunId};
 use serde::{Deserialize, Serialize};
 
 use crate::scheduler::unix_timestamp_ms;
 
-use super::{WorkflowService, WorkflowServiceError};
+use super::diagnostic_errors::{
+    WorkflowDiagnosticErrorRecordRequest, WorkflowDiagnosticProjectionScope,
+};
+use super::{WorkflowErrorDiagnosticsLink, WorkflowService, WorkflowServiceError};
 
 const STARTUP_REPAIR_RUN_QUERY_LIMIT: u32 = 500;
 const STARTUP_REPAIR_DRAIN_BATCH_SIZE: u32 = 500;
@@ -379,6 +383,25 @@ pub struct WorkflowRetentionCleanupResponse {
 }
 
 impl WorkflowService {
+    fn projection_error(
+        &self,
+        scope: WorkflowDiagnosticProjectionScope,
+        error: WorkflowServiceError,
+    ) -> WorkflowServiceError {
+        let workflow_run_id = scope.workflow_run_id.clone();
+        let link = self
+            .record_workflow_diagnostic_error_if_configured(
+                WorkflowDiagnosticErrorRecordRequest::projection_failed(scope, &error),
+            )
+            .map(|outcome| outcome.into_error_link(workflow_run_id.clone()))
+            .unwrap_or_else(|record_error| WorkflowErrorDiagnosticsLink {
+                workflow_run_id: workflow_run_id.map(|value| value.to_string()),
+                diagnostic_event_id: None,
+                diagnostics_unavailable: Some(record_error.message().to_string()),
+            });
+        error.with_diagnostics(link)
+    }
+
     pub fn workflow_mark_abandoned_nonterminal_runs(
         &self,
         reason: &str,
@@ -489,12 +512,37 @@ impl WorkflowService {
         }
         let query = request.into_scheduler_timeline_query()?;
         let mut ledger = self.diagnostics_ledger_guard()?;
-        let projection_state = ledger
-            .drain_scheduler_timeline_projection(projection_batch_size)
-            .map_err(WorkflowServiceError::from)?;
-        let events = ledger
-            .query_scheduler_timeline_projection(query)
-            .map_err(WorkflowServiceError::from)?;
+        let projection_state =
+            match ledger.drain_scheduler_timeline_projection(projection_batch_size) {
+                Ok(projection_state) => projection_state,
+                Err(error) => {
+                    drop(ledger);
+                    return Err(self.projection_error(
+                        projection_error_scope(
+                            "scheduler_timeline",
+                            "drain",
+                            query.workflow_run_id.clone(),
+                            query.workflow_id.clone(),
+                        ),
+                        WorkflowServiceError::from(error),
+                    ));
+                }
+            };
+        let events = match ledger.query_scheduler_timeline_projection(query.clone()) {
+            Ok(events) => events,
+            Err(error) => {
+                drop(ledger);
+                return Err(self.projection_error(
+                    projection_error_scope(
+                        "scheduler_timeline",
+                        "query",
+                        query.workflow_run_id,
+                        query.workflow_id,
+                    ),
+                    WorkflowServiceError::from(error),
+                ));
+            }
+        };
 
         Ok(WorkflowSchedulerTimelineQueryResponse {
             events,
@@ -515,15 +563,36 @@ impl WorkflowService {
         let query = request.into_run_list_query()?;
         let facet_query = query.clone();
         let mut ledger = self.diagnostics_ledger_guard()?;
-        let projection_state = ledger
-            .drain_run_list_projection(projection_batch_size)
-            .map_err(WorkflowServiceError::from)?;
-        let runs = ledger
-            .query_run_list_projection(query)
-            .map_err(WorkflowServiceError::from)?;
-        let facets = ledger
-            .query_run_list_facets(facet_query)
-            .map_err(WorkflowServiceError::from)?;
+        let projection_state = match ledger.drain_run_list_projection(projection_batch_size) {
+            Ok(projection_state) => projection_state,
+            Err(error) => {
+                drop(ledger);
+                return Err(self.projection_error(
+                    projection_error_scope("run_list", "drain", None, query.workflow_id.clone()),
+                    WorkflowServiceError::from(error),
+                ));
+            }
+        };
+        let runs = match ledger.query_run_list_projection(query.clone()) {
+            Ok(runs) => runs,
+            Err(error) => {
+                drop(ledger);
+                return Err(self.projection_error(
+                    projection_error_scope("run_list", "query", None, query.workflow_id),
+                    WorkflowServiceError::from(error),
+                ));
+            }
+        };
+        let facets = match ledger.query_run_list_facets(facet_query.clone()) {
+            Ok(facets) => facets,
+            Err(error) => {
+                drop(ledger);
+                return Err(self.projection_error(
+                    projection_error_scope("run_list", "facets", None, facet_query.workflow_id),
+                    WorkflowServiceError::from(error),
+                ));
+            }
+        };
 
         Ok(WorkflowRunListQueryResponse {
             runs,
@@ -544,12 +613,36 @@ impl WorkflowService {
         }
         let query = request.into_run_detail_query()?;
         let mut ledger = self.diagnostics_ledger_guard()?;
-        let projection_state = ledger
-            .drain_run_detail_projection(projection_batch_size)
-            .map_err(WorkflowServiceError::from)?;
-        let run = ledger
-            .query_run_detail_projection(query)
-            .map_err(WorkflowServiceError::from)?;
+        let projection_state = match ledger.drain_run_detail_projection(projection_batch_size) {
+            Ok(projection_state) => projection_state,
+            Err(error) => {
+                drop(ledger);
+                return Err(self.projection_error(
+                    projection_error_scope(
+                        "run_detail",
+                        "drain",
+                        Some(query.workflow_run_id.clone()),
+                        None,
+                    ),
+                    WorkflowServiceError::from(error),
+                ));
+            }
+        };
+        let run = match ledger.query_run_detail_projection(query.clone()) {
+            Ok(run) => run,
+            Err(error) => {
+                drop(ledger);
+                return Err(self.projection_error(
+                    projection_error_scope(
+                        "run_detail",
+                        "query",
+                        Some(query.workflow_run_id),
+                        None,
+                    ),
+                    WorkflowServiceError::from(error),
+                ));
+            }
+        };
 
         Ok(WorkflowRunDetailQueryResponse {
             run,
@@ -569,13 +662,36 @@ impl WorkflowService {
         }
         let query = request.into_run_detail_query()?;
         let mut ledger = self.diagnostics_ledger_guard()?;
-        let projection_state = ledger
-            .drain_run_detail_projection(projection_batch_size)
-            .map_err(WorkflowServiceError::from)?;
-        let estimate = ledger
-            .query_run_detail_projection(query)
-            .map_err(WorkflowServiceError::from)?
-            .map(WorkflowSchedulerEstimateRecord::from);
+        let projection_state = match ledger.drain_run_detail_projection(projection_batch_size) {
+            Ok(projection_state) => projection_state,
+            Err(error) => {
+                drop(ledger);
+                return Err(self.projection_error(
+                    projection_error_scope(
+                        "scheduler_estimate",
+                        "drain",
+                        Some(query.workflow_run_id.clone()),
+                        None,
+                    ),
+                    WorkflowServiceError::from(error),
+                ));
+            }
+        };
+        let estimate = match ledger.query_run_detail_projection(query.clone()) {
+            Ok(estimate) => estimate.map(WorkflowSchedulerEstimateRecord::from),
+            Err(error) => {
+                drop(ledger);
+                return Err(self.projection_error(
+                    projection_error_scope(
+                        "scheduler_estimate",
+                        "query",
+                        Some(query.workflow_run_id),
+                        None,
+                    ),
+                    WorkflowServiceError::from(error),
+                ));
+            }
+        };
 
         Ok(WorkflowSchedulerEstimateQueryResponse {
             estimate,
@@ -596,15 +712,41 @@ impl WorkflowService {
         let query = request.into_io_artifact_query()?;
         let summary_query = io_artifact_retention_summary_query(&query);
         let mut ledger = self.diagnostics_ledger_guard()?;
-        let projection_state = ledger
-            .drain_io_artifact_projection(projection_batch_size)
-            .map_err(WorkflowServiceError::from)?;
-        let artifacts = ledger
-            .query_io_artifact_projection(query)
-            .map_err(WorkflowServiceError::from)?;
-        let retention_summary = ledger
-            .query_io_artifact_retention_summary(summary_query)
-            .map_err(WorkflowServiceError::from)?;
+        let projection_state = match ledger.drain_io_artifact_projection(projection_batch_size) {
+            Ok(projection_state) => projection_state,
+            Err(error) => {
+                drop(ledger);
+                return Err(self.projection_error(
+                    projection_error_scope(
+                        "io_artifact",
+                        "drain",
+                        query.workflow_run_id.clone(),
+                        None,
+                    ),
+                    WorkflowServiceError::from(error),
+                ));
+            }
+        };
+        let artifacts = match ledger.query_io_artifact_projection(query.clone()) {
+            Ok(artifacts) => artifacts,
+            Err(error) => {
+                drop(ledger);
+                return Err(self.projection_error(
+                    projection_error_scope("io_artifact", "query", query.workflow_run_id, None),
+                    WorkflowServiceError::from(error),
+                ));
+            }
+        };
+        let retention_summary = match ledger.query_io_artifact_retention_summary(summary_query) {
+            Ok(retention_summary) => retention_summary,
+            Err(error) => {
+                drop(ledger);
+                return Err(self.projection_error(
+                    projection_error_scope("io_artifact", "retention_summary", None, None),
+                    WorkflowServiceError::from(error),
+                ));
+            }
+        };
 
         Ok(WorkflowIoArtifactQueryResponse {
             artifacts,
@@ -625,12 +767,31 @@ impl WorkflowService {
         }
         let query = request.into_node_status_query()?;
         let mut ledger = self.diagnostics_ledger_guard()?;
-        let projection_state = ledger
-            .drain_node_status_projection(projection_batch_size)
-            .map_err(WorkflowServiceError::from)?;
-        let nodes = ledger
-            .query_node_status_projection(query)
-            .map_err(WorkflowServiceError::from)?;
+        let projection_state = match ledger.drain_node_status_projection(projection_batch_size) {
+            Ok(projection_state) => projection_state,
+            Err(error) => {
+                drop(ledger);
+                return Err(self.projection_error(
+                    projection_error_scope(
+                        "node_status",
+                        "drain",
+                        query.workflow_run_id.clone(),
+                        None,
+                    ),
+                    WorkflowServiceError::from(error),
+                ));
+            }
+        };
+        let nodes = match ledger.query_node_status_projection(query.clone()) {
+            Ok(nodes) => nodes,
+            Err(error) => {
+                drop(ledger);
+                return Err(self.projection_error(
+                    projection_error_scope("node_status", "query", query.workflow_run_id, None),
+                    WorkflowServiceError::from(error),
+                ));
+            }
+        };
 
         Ok(WorkflowNodeStatusQueryResponse {
             nodes,
@@ -650,12 +811,36 @@ impl WorkflowService {
         }
         let query = request.into_library_usage_query()?;
         let mut ledger = self.diagnostics_ledger_guard()?;
-        let projection_state = ledger
-            .drain_library_usage_projection(projection_batch_size)
-            .map_err(WorkflowServiceError::from)?;
-        let assets = ledger
-            .query_library_usage_projection(query)
-            .map_err(WorkflowServiceError::from)?;
+        let projection_state = match ledger.drain_library_usage_projection(projection_batch_size) {
+            Ok(projection_state) => projection_state,
+            Err(error) => {
+                drop(ledger);
+                return Err(self.projection_error(
+                    projection_error_scope(
+                        "library_usage",
+                        "drain",
+                        query.workflow_run_id.clone(),
+                        query.workflow_id.clone(),
+                    ),
+                    WorkflowServiceError::from(error),
+                ));
+            }
+        };
+        let assets = match ledger.query_library_usage_projection(query.clone()) {
+            Ok(assets) => assets,
+            Err(error) => {
+                drop(ledger);
+                return Err(self.projection_error(
+                    projection_error_scope(
+                        "library_usage",
+                        "query",
+                        query.workflow_run_id,
+                        query.workflow_id,
+                    ),
+                    WorkflowServiceError::from(error),
+                ));
+            }
+        };
 
         Ok(WorkflowLibraryUsageQueryResponse {
             assets,
@@ -726,9 +911,18 @@ impl WorkflowService {
             ));
         }
         let mut ledger = self.diagnostics_ledger_guard()?;
-        let projection_state = ledger
-            .rebuild_projection(&request.projection_name, batch_size)
-            .map_err(WorkflowServiceError::from)?;
+        let projection_state = match ledger.rebuild_projection(&request.projection_name, batch_size)
+        {
+            Ok(projection_state) => projection_state,
+            Err(error) => {
+                let projection_name = request.projection_name.clone();
+                drop(ledger);
+                return Err(self.projection_error(
+                    projection_error_scope(projection_name, "rebuild", None, None),
+                    WorkflowServiceError::from(error),
+                ));
+            }
+        };
 
         Ok(WorkflowProjectionRebuildResponse { projection_state })
     }
@@ -1058,6 +1252,20 @@ where
             })
         })
         .transpose()
+}
+
+fn projection_error_scope(
+    projection_name: impl Into<String>,
+    operation: impl Into<String>,
+    workflow_run_id: Option<WorkflowRunId>,
+    workflow_id: Option<WorkflowId>,
+) -> WorkflowDiagnosticProjectionScope {
+    WorkflowDiagnosticProjectionScope {
+        workflow_run_id,
+        workflow_id,
+        projection_name: projection_name.into(),
+        operation: operation.into(),
+    }
 }
 
 fn summarize_usage(events: &[ModelLicenseUsageEvent]) -> Vec<WorkflowDiagnosticsUsageSummary> {

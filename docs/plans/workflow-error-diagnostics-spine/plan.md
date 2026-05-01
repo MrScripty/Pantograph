@@ -439,8 +439,8 @@ errors can be returned or swallowed.
   errors or optional typed node errors; the host wrapper owns workflow/run,
   node, attempt, injected capability, runtime/model, and port context.
 - [ ] Wrap artifact read/write/conversion and diagnostics projection failures.
-  Workflow output artifactization failures are wrapped; artifact-store and
-  diagnostics projection failures remain.
+  Workflow output artifactization failures and diagnostics projection
+  drain/query/rebuild failures are wrapped; artifact-store failures remain.
 - [ ] Add a workflow-service domain failure path that marks scheduler/session
   state failed when a fatal run-scoped workflow error occurs. This path owns
   live state transition before diagnostics projections refresh.
@@ -503,7 +503,7 @@ failure projections.
   Fatal `diagnostic.error_occurred` events now drive run list/detail status to
   `Failed` when no later terminal event supersedes them; legacy terminal replay
   rules remain unchanged.
-- [ ] Add a typed projection operation wrapper for drains, queries, and rebuilds
+- [x] Add a typed projection operation wrapper for drains, queries, and rebuilds
   so projection code can record `projection_failed` diagnostics without
   hand-built payloads or scheduler-state side effects.
 - [x] Add query filters for errors and warnings without frontend-side event
@@ -525,7 +525,12 @@ and warning count. Scheduler timeline rows now carry error severity, phase, and
 related event IDs. Run list queries can filter by latest error severity and
 phase. Node-status projections now treat node-scoped fatal error events as
 failed node facts and expose the error event ID, severity, phase, and code.
-Remaining Milestone 4 work includes projection failure wrappers.
+Projection drain/query/rebuild failures now route through the workflow
+diagnostic error recorder with projection name and operation context. Projection
+diagnostic errors are diagnostics-only and may be global when the failed
+projection operation does not have a specific workflow run. Remaining Milestone
+4 work is limited to documenting/validating legacy terminal/node failed replay
+coverage for old streams.
 
 Verification completed for this slice:
 - `cargo test -p pantograph-diagnostics-ledger diagnostic_event_ledger_projects_fatal_error_as_failed_run`
@@ -537,6 +542,8 @@ Verification completed for this slice:
 - `cargo test -p pantograph-workflow-service --test contract workflow_scheduler_timeline_query_contract_snapshot`
 - `cargo test -p pantograph-diagnostics-ledger diagnostic_event_ledger_projects_node_fatal_error_as_failed_node`
 - `cargo test -p pantograph-workflow-service --test contract workflow_node_status_query_contract_snapshot`
+- `cargo test -p pantograph-diagnostics-ledger diagnostic_event_ledger_validates_error_scope_source_and_text`
+- `cargo test -p pantograph-workflow-service workflow_diagnostic_error_recorder_appends_global_projection_error`
 
 ### Milestone 5: Frontend Diagnostics Visibility
 

@@ -2313,7 +2313,10 @@ fn validate_event_scope(
                     field: "event_kind",
                 });
             };
-            if payload.scope != DiagnosticErrorScopeKind::Transport {
+            if !matches!(
+                payload.scope,
+                DiagnosticErrorScopeKind::Transport | DiagnosticErrorScopeKind::Projection
+            ) {
                 if request.workflow_run_id.is_none() {
                     return Err(DiagnosticsLedgerError::MissingField {
                         field: "workflow_run_id",
