@@ -45,6 +45,10 @@ agent_plan.md
 !.pantograph/workflows/README.md
 !.pantograph/workflows/coding-agent.json
 
+# Local runtime diagnostics and artifact stores
+.pantograph/artifacts/
+.pantograph/*.sqlite
+
 # Project data directory (downloaded docs, vector embeddings, etc.)
 /data/
 /shared-resources/cache/
