@@ -663,6 +663,19 @@ pub struct WorkflowErrorEnvelope {
     pub message: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub details: Option<WorkflowErrorDetails>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diagnostics: Option<WorkflowErrorDiagnosticsLink>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkflowErrorDiagnosticsLink {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_run_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diagnostic_event_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diagnostics_unavailable: Option<String>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -705,6 +718,12 @@ pub enum WorkflowServiceError {
 
     #[error("internal_error: {0}")]
     Internal(String),
+
+    #[error("{source}")]
+    WithDiagnostics {
+        source: Box<WorkflowServiceError>,
+        diagnostics: WorkflowErrorDiagnosticsLink,
+    },
 }
 
 impl From<AttributionError> for WorkflowServiceError {
@@ -753,6 +772,7 @@ impl WorkflowServiceError {
             WorkflowServiceError::OutputNotProduced(_) => WorkflowErrorCode::OutputNotProduced,
             WorkflowServiceError::RuntimeTimeout(_) => WorkflowErrorCode::RuntimeTimeout,
             WorkflowServiceError::Internal(_) => WorkflowErrorCode::InternalError,
+            WorkflowServiceError::WithDiagnostics { source, .. } => source.code(),
         }
     }
 
@@ -770,6 +790,7 @@ impl WorkflowServiceError {
             | WorkflowServiceError::RuntimeTimeout(message)
             | WorkflowServiceError::Internal(message) => message,
             WorkflowServiceError::SchedulerBusy { message, .. } => message,
+            WorkflowServiceError::WithDiagnostics { source, .. } => source.message(),
         }
     }
 
@@ -779,7 +800,30 @@ impl WorkflowServiceError {
                 details: Some(details),
                 ..
             } => Some(WorkflowErrorDetails::Scheduler(details.clone())),
+            WorkflowServiceError::WithDiagnostics { source, .. } => source.details(),
             _ => None,
+        }
+    }
+
+    pub fn diagnostics(&self) -> Option<&WorkflowErrorDiagnosticsLink> {
+        match self {
+            WorkflowServiceError::WithDiagnostics { diagnostics, .. } => Some(diagnostics),
+            _ => None,
+        }
+    }
+
+    pub fn with_diagnostics(self, diagnostics: WorkflowErrorDiagnosticsLink) -> Self {
+        match self {
+            WorkflowServiceError::WithDiagnostics { source, .. } => {
+                WorkflowServiceError::WithDiagnostics {
+                    source,
+                    diagnostics,
+                }
+            }
+            source => WorkflowServiceError::WithDiagnostics {
+                source: Box::new(source),
+                diagnostics,
+            },
         }
     }
 
@@ -836,6 +880,7 @@ impl WorkflowServiceError {
             code: self.code(),
             message: self.message().to_string(),
             details: self.details(),
+            diagnostics: self.diagnostics().cloned(),
         }
     }
 

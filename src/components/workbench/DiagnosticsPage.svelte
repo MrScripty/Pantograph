@@ -10,7 +10,7 @@
     SchedulerTimelineProjectionRecord,
   } from '../../services/diagnostics/types';
   import { workflowService } from '../../services/workflow/WorkflowService';
-  import { activeWorkflowRun } from '../../stores/workbenchStore';
+  import { activeWorkflowRun, diagnosticsFocus } from '../../stores/workbenchStore';
   import type { DiagnosticsComparisonFilters, DiagnosticsExecutionFilters } from './diagnosticsPagePresenters';
   import {
     DEFAULT_DIAGNOSTICS_COMPARISON_FILTERS,
@@ -79,6 +79,14 @@
   );
   let filteredComparisonRuns = $derived(
     runDetail ? filterDiagnosticsComparisonRuns(runDetail, runList, comparisonFilters) : [],
+  );
+  let focusedDiagnosticEventId = $derived(
+    $diagnosticsFocus?.workflow_run_id === runDetail?.workflow_run_id
+      ? ($diagnosticsFocus?.diagnostic_event_id ?? null)
+      : null,
+  );
+  let focusedNodeId = $derived(
+    $diagnosticsFocus?.workflow_run_id === runDetail?.workflow_run_id ? ($diagnosticsFocus?.node_id ?? null) : null,
   );
   let hasComparisonFilters = $derived(hasActiveDiagnosticsComparisonFilters(comparisonFilters));
   let facetSummary = $derived(
@@ -692,7 +700,7 @@
                   </thead>
                   <tbody class="divide-y divide-neutral-900">
                     {#each filteredExecutionNodes.filter((node) => node.error_event_id || node.error || node.error_severity) as node (node.node_id)}
-                      <tr>
+                      <tr class:border-l-2={node.error_event_id === focusedDiagnosticEventId || node.node_id === focusedNodeId} class:border-cyan-400={node.error_event_id === focusedDiagnosticEventId || node.node_id === focusedNodeId}>
                         <td class="px-4 py-2 font-mono text-xs text-neutral-300" title={node.node_id}>{node.node_id}</td>
                         <td class="px-3 py-2 text-xs text-neutral-300">{node.status}</td>
                         <td class="px-3 py-2 text-xs text-neutral-300">
@@ -736,7 +744,13 @@
                   </thead>
                   <tbody class="divide-y divide-neutral-900">
                     {#each timelineEvents as event (event.event_id)}
-                      <tr class={diagnosticsTimelineRowClass(event)}>
+                      <tr
+                        class={diagnosticsTimelineRowClass(event)}
+                        class:outline={event.event_id === focusedDiagnosticEventId}
+                        class:outline-2={event.event_id === focusedDiagnosticEventId}
+                        class:outline-cyan-400={event.event_id === focusedDiagnosticEventId}
+                        class:outline-offset-[-2px]={event.event_id === focusedDiagnosticEventId}
+                      >
                         <td class="px-4 py-2 font-mono text-xs text-neutral-400">{event.event_seq}</td>
                         <td class="px-3 py-2 text-xs text-neutral-400">
                           {formatDiagnosticsTimestamp(event.occurred_at_ms)}

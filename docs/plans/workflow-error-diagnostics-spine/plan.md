@@ -569,12 +569,12 @@ land.
 diagnostics event that explains the failure.
 
 **Tasks:**
-- [ ] Extend workflow command error parsing to preserve diagnostics link fields.
+- [x] Extend workflow command error parsing to preserve diagnostics link fields.
 - [ ] Update graph editor submit/save/run error surfaces to render clickable
   diagnostics actions when `workflow_run_id` and `diagnostic_event_id` exist.
-- [ ] Add workbench navigation state for selecting Diagnostics, loading the
+- [x] Add workbench navigation state for selecting Diagnostics, loading the
   target run, focusing the event, and highlighting the related node if present.
-- [ ] Preserve plain text error messages for errors without diagnostics
+- [x] Preserve plain text error messages for errors without diagnostics
   context.
 - [ ] Add tests that stale async error responses do not navigate away from a
   newer active workflow/run context.
@@ -585,7 +585,17 @@ diagnostics event that explains the failure.
 - Manual smoke: submit a failing workflow, click the graph editor error, land
   on the focused diagnostics event.
 
-**Status:** Not started.
+**Status:** In progress as of 2026-05-01. Added optional diagnostics link
+fields to workflow error envelopes, attached recorded diagnostic outcomes to
+runtime-load and workflow-run failure returns, preserved link fields in frontend
+error normalization, and added workbench diagnostics focus state. The workflow
+submit error surface now renders a semantic Diagnostics action when a linked run
+is available and the diagnostics page highlights the focused event/node. Focused
+Rust envelope tests, diagnostics recorder tests, frontend error parsing tests,
+workbench store tests, and `npm run typecheck` pass. Remaining work is extending
+the same clickable action pattern to any other save/run surfaces that can carry
+diagnostics links, stale async navigation regression coverage, and manual smoke
+after the remaining capture paths are complete.
 
 ### Milestone 7: End-To-End Verification And Documentation
 

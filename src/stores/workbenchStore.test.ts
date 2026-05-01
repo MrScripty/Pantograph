@@ -5,6 +5,7 @@ import {
   DEFAULT_WORKBENCH_STATE,
   WORKBENCH_PAGE_IDS,
   normalizeWorkbenchPageId,
+  withDiagnosticsFocus,
   withActiveWorkflowRun,
   withSelectedWorkbenchPage,
 } from './workbenchStore.ts';
@@ -94,4 +95,73 @@ test('clearing active run preserves the selected workbench page', () => {
 
   assert.equal(cleared.active_run, null);
   assert.equal(cleared.selected_page_id, 'diagnostics');
+});
+
+test('withDiagnosticsFocus selects diagnostics and stores focused event context', () => {
+  const selected = withActiveWorkflowRun(
+    DEFAULT_WORKBENCH_STATE,
+    {
+      workflow_run_id: 'run-d',
+      workflow_id: 'workflow-d',
+      workflow_version_id: null,
+      workflow_semantic_version: '1.0.0',
+      status: 'failed',
+    },
+    600,
+  );
+
+  const focused = withDiagnosticsFocus(
+    selected,
+    {
+      workflow_run_id: 'run-d',
+      diagnostic_event_id: 'event-error-d',
+      node_id: 'node-d',
+    },
+    700,
+  );
+
+  assert.equal(focused.selected_page_id, 'diagnostics');
+  assert.deepEqual(focused.diagnostics_focus, {
+    workflow_run_id: 'run-d',
+    diagnostic_event_id: 'event-error-d',
+    node_id: 'node-d',
+    requested_at_ms: 700,
+  });
+});
+
+test('changing active run clears stale diagnostics focus', () => {
+  const focused = withDiagnosticsFocus(
+    withActiveWorkflowRun(
+      DEFAULT_WORKBENCH_STATE,
+      {
+        workflow_run_id: 'run-e',
+        workflow_id: 'workflow-e',
+        workflow_version_id: null,
+        workflow_semantic_version: null,
+        status: 'failed',
+      },
+      800,
+    ),
+    {
+      workflow_run_id: 'run-e',
+      diagnostic_event_id: 'event-error-e',
+      node_id: null,
+    },
+    900,
+  );
+
+  const changed = withActiveWorkflowRun(
+    focused,
+    {
+      workflow_run_id: 'run-f',
+      workflow_id: 'workflow-f',
+      workflow_version_id: null,
+      workflow_semantic_version: null,
+      status: 'running',
+    },
+    1_000,
+  );
+
+  assert.equal(changed.diagnostics_focus, null);
+  assert.equal(changed.selected_page_id, 'diagnostics');
 });

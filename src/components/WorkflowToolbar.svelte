@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Loader2, Send } from 'lucide-svelte';
+  import { AlertTriangle, Loader2, Send } from 'lucide-svelte';
   import {
     isDirty,
     isExecuting,
@@ -15,17 +15,23 @@
   } from '../stores/graphSessionStore';
   import { workflowService } from '../services/workflow/WorkflowService';
   import {
+    normalizeWorkflowServiceError,
+    type WorkflowServiceError,
+  } from '../services/workflow/workflowServiceErrors';
+  import {
     AUDIO_RUNTIME_DATA_KEYS,
   } from './nodes/workflow/audioOutputState';
   import {
+    focusWorkflowDiagnostics,
     selectActiveWorkflowRun,
     setWorkbenchPage,
   } from '../stores/workbenchStore';
+  import { formatWorkflowCommandError } from './workbench/workflowErrorPresenters';
   import WorkflowPersistenceControls from './WorkflowPersistenceControls.svelte';
 
   const DEFAULT_WORKFLOW_SEMANTIC_VERSION = '0.1.0';
 
-  let workflowError = $state<string | null>(null);
+  let workflowError = $state<WorkflowServiceError | null>(null);
 
   let currentSavedWorkflow = $derived(
     $currentGraphType === 'workflow'
@@ -36,16 +42,9 @@
     $isExecuting || $isReadOnly || $isDirty || !currentSavedWorkflow || !$currentGraphId,
   );
   let submitTitle = $derived(submitButtonTitle());
-
-  function normalizeError(error: unknown): string {
-    if (error instanceof Error && error.message.trim().length > 0) {
-      return error.message;
-    }
-    if (typeof error === 'string' && error.trim().length > 0) {
-      return error;
-    }
-    return String(error);
-  }
+  let workflowErrorMessage = $derived(workflowError ? formatWorkflowCommandError(workflowError) : null);
+  let workflowErrorDiagnostics = $derived(workflowError?.diagnostics ?? null);
+  let canOpenWorkflowErrorDiagnostics = $derived(Boolean(workflowErrorDiagnostics?.workflow_run_id));
 
   function submitButtonTitle(): string {
     if ($isReadOnly) return 'Cannot submit a read-only graph';
@@ -112,10 +111,27 @@
       }
     } catch (error) {
       console.error('Workflow submission failed:', error);
-      workflowError = normalizeError(error);
+      workflowError = normalizeWorkflowServiceError(error);
     } finally {
       isExecuting.set(false);
     }
+  }
+
+  function openWorkflowErrorDiagnostics(): void {
+    if (!workflowErrorDiagnostics?.workflow_run_id) {
+      return;
+    }
+    focusWorkflowDiagnostics(
+      {
+        workflow_run_id: workflowErrorDiagnostics.workflow_run_id,
+        workflow_id: $currentGraphId,
+        workflow_semantic_version: DEFAULT_WORKFLOW_SEMANTIC_VERSION,
+        status: 'failed',
+      },
+      {
+        diagnostic_event_id: workflowErrorDiagnostics.diagnostic_event_id ?? null,
+      },
+    );
   }
 
 </script>
@@ -155,9 +171,22 @@
     </div>
   </div>
 
-  {#if workflowError}
-    <div class="px-4 py-2 bg-red-900/70 border-b border-red-700 text-red-200 text-xs truncate" title={workflowError}>
-      Workflow submit failed: {workflowError}
+  {#if workflowErrorMessage}
+    <div class="flex items-center justify-between gap-3 border-b border-red-700 bg-red-900/70 px-4 py-2 text-xs text-red-200">
+      <div class="min-w-0 truncate" title={workflowErrorMessage}>
+        Workflow submit failed: {workflowErrorMessage}
+      </div>
+      {#if canOpenWorkflowErrorDiagnostics}
+        <button
+          type="button"
+          class="inline-flex shrink-0 items-center gap-1 rounded border border-red-500 px-2 py-1 text-red-100 transition-colors hover:border-red-300 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+          onclick={openWorkflowErrorDiagnostics}
+          aria-label="Open workflow diagnostics for this submit error"
+        >
+          <AlertTriangle size={13} aria-hidden="true" />
+          Diagnostics
+        </button>
+      {/if}
     </div>
   {/if}
 </div>

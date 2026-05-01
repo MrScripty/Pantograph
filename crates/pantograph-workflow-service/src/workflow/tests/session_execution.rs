@@ -939,7 +939,7 @@ async fn workflow_execution_session_run_records_failed_terminal_event_with_sanit
         )
         .await
         .expect_err("runtime error should fail the run");
-    assert!(matches!(error, WorkflowServiceError::RuntimeNotReady(_)));
+    assert_eq!(error.code(), WorkflowErrorCode::RuntimeNotReady);
 
     let diagnostic_events = {
         let ledger = service
@@ -1033,7 +1033,7 @@ async fn workflow_execution_session_runtime_load_failure_records_canonical_error
         )
         .await
         .expect_err("runtime load should fail the run");
-    assert!(matches!(error, WorkflowServiceError::RuntimeNotReady(_)));
+    assert_eq!(error.code(), WorkflowErrorCode::RuntimeNotReady);
 
     let diagnostic_events = {
         let ledger = service
@@ -1057,6 +1057,12 @@ async fn workflow_execution_session_runtime_load_failure_records_canonical_error
         .contains("runtime_model_load_failed"));
     assert!(error_event.payload_json.contains("llama.cpp spawn failed"));
     assert!(!error_event.payload_json.contains("\\n"));
+    assert_eq!(
+        error
+            .diagnostics()
+            .and_then(|diagnostics| diagnostics.diagnostic_event_id.as_deref()),
+        Some(error_event.event_id.as_str())
+    );
 
     let terminal_event = diagnostic_events
         .iter()

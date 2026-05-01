@@ -22,11 +22,19 @@ export interface WorkflowBackendErrorEnvelope {
   code: WorkflowBackendErrorCode;
   message: string;
   details?: unknown;
+  diagnostics?: WorkflowBackendErrorDiagnosticsLink | null;
+}
+
+export interface WorkflowBackendErrorDiagnosticsLink {
+  workflow_run_id?: string | null;
+  diagnostic_event_id?: string | null;
+  diagnostics_unavailable?: string | null;
 }
 
 export class WorkflowServiceError extends Error {
   readonly code: WorkflowServiceErrorCode;
   readonly details: unknown;
+  readonly diagnostics: WorkflowBackendErrorDiagnosticsLink | null;
   readonly backendEnvelope: WorkflowBackendErrorEnvelope | null;
 
   constructor(
@@ -34,6 +42,7 @@ export class WorkflowServiceError extends Error {
     message: string,
     options: {
       details?: unknown;
+      diagnostics?: WorkflowBackendErrorDiagnosticsLink | null;
       backendEnvelope?: WorkflowBackendErrorEnvelope | null;
       cause?: unknown;
     } = {},
@@ -42,6 +51,7 @@ export class WorkflowServiceError extends Error {
     this.name = 'WorkflowServiceError';
     this.code = code;
     this.details = options.details;
+    this.diagnostics = options.diagnostics ?? null;
     this.backendEnvelope = options.backendEnvelope ?? null;
   }
 }
@@ -55,6 +65,25 @@ function isBackendErrorCode(value: unknown): value is WorkflowBackendErrorCode {
     typeof value === 'string' &&
     WORKFLOW_BACKEND_ERROR_CODES.includes(value as WorkflowBackendErrorCode)
   );
+}
+
+function parseDiagnosticsLink(value: unknown): WorkflowBackendErrorDiagnosticsLink | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const workflowRunId = typeof value.workflow_run_id === 'string' ? value.workflow_run_id : null;
+  const diagnosticEventId =
+    typeof value.diagnostic_event_id === 'string' ? value.diagnostic_event_id : null;
+  const diagnosticsUnavailable =
+    typeof value.diagnostics_unavailable === 'string' ? value.diagnostics_unavailable : null;
+  if (!workflowRunId && !diagnosticEventId && !diagnosticsUnavailable) {
+    return null;
+  }
+  return {
+    workflow_run_id: workflowRunId,
+    diagnostic_event_id: diagnosticEventId,
+    diagnostics_unavailable: diagnosticsUnavailable,
+  };
 }
 
 function parseJsonCandidate(value: string): unknown {
@@ -83,6 +112,7 @@ export function parseWorkflowBackendErrorEnvelope(
     code: candidate.code,
     message: candidate.message,
     details: candidate.details,
+    diagnostics: parseDiagnosticsLink(candidate.diagnostics),
   };
 }
 
@@ -95,6 +125,7 @@ export function normalizeWorkflowServiceError(error: unknown): WorkflowServiceEr
   if (envelope) {
     return new WorkflowServiceError(envelope.code, envelope.message, {
       details: envelope.details,
+      diagnostics: envelope.diagnostics,
       backendEnvelope: envelope,
       cause: error,
     });

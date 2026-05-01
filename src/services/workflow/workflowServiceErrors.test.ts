@@ -12,6 +12,10 @@ test('parseWorkflowBackendErrorEnvelope parses Tauri workflow error JSON', () =>
       code: 'queue_item_not_found',
       message: 'queue item missing',
       details: { queue: 'session-a' },
+      diagnostics: {
+        workflow_run_id: 'run-1',
+        diagnostic_event_id: 'event-error-1',
+      },
     }),
   );
 
@@ -19,6 +23,11 @@ test('parseWorkflowBackendErrorEnvelope parses Tauri workflow error JSON', () =>
     code: 'queue_item_not_found',
     message: 'queue item missing',
     details: { queue: 'session-a' },
+    diagnostics: {
+      workflow_run_id: 'run-1',
+      diagnostic_event_id: 'event-error-1',
+      diagnostics_unavailable: null,
+    },
   });
 });
 
@@ -32,6 +41,10 @@ test('normalizeWorkflowServiceError preserves backend code and details', () => {
           reason: 'runtime_capacity_exhausted',
         },
       },
+      diagnostics: {
+        workflow_run_id: 'run-a',
+        diagnostic_event_id: 'event-a',
+      },
     }),
   );
 
@@ -43,6 +56,11 @@ test('normalizeWorkflowServiceError preserves backend code and details', () => {
       reason: 'runtime_capacity_exhausted',
     },
   });
+  assert.deepEqual(error.diagnostics, {
+    workflow_run_id: 'run-a',
+    diagnostic_event_id: 'event-a',
+    diagnostics_unavailable: null,
+  });
 });
 
 test('normalizeWorkflowServiceError classifies non-envelope failures as transport errors', () => {
@@ -51,4 +69,5 @@ test('normalizeWorkflowServiceError classifies non-envelope failures as transpor
   assert.equal(error.code, 'transport_error');
   assert.equal(error.message, 'IPC disconnected');
   assert.equal(error.backendEnvelope, null);
+  assert.equal(error.diagnostics, null);
 });

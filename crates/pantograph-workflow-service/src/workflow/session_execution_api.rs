@@ -430,7 +430,7 @@ impl WorkflowService {
             }
         }
         if let Err(error) = runtime_load_result {
-            let _diagnostic_error = self.record_workflow_diagnostic_error_if_configured(
+            let diagnostic_outcome = self.record_workflow_diagnostic_error_if_configured(
                 WorkflowDiagnosticErrorRecordRequest::runtime_model_load_failed(
                     workflow_runtime_model_error_scope(
                         &session,
@@ -448,7 +448,9 @@ impl WorkflowService {
             if let Ok(mut store) = self.session_store.lock() {
                 let _ = store.finish_run(&session_id, &workflow_run_id);
             }
-            let terminal_result = Err(error);
+            let terminal_error =
+                error.with_diagnostics(diagnostic_outcome.into_error_link(Some(&workflow_run_id)));
+            let terminal_result = Err(terminal_error);
             self.record_run_terminal_event_if_configured(
                 &session,
                 run_snapshot.as_ref(),

@@ -14,7 +14,7 @@ use pantograph_runtime_attribution::{
 
 use crate::scheduler::unix_timestamp_ms;
 
-use super::{WorkflowService, WorkflowServiceError};
+use super::{WorkflowErrorDiagnosticsLink, WorkflowService, WorkflowServiceError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum WorkflowDiagnosticErrorPhase {
@@ -379,6 +379,20 @@ impl WorkflowDiagnosticErrorRecordOutcome {
         Self {
             event_id: None,
             diagnostics_unavailable: Some(reason.into()),
+        }
+    }
+
+    pub(crate) fn into_error_link<T>(
+        self,
+        workflow_run_id: Option<T>,
+    ) -> WorkflowErrorDiagnosticsLink
+    where
+        T: ToString,
+    {
+        WorkflowErrorDiagnosticsLink {
+            workflow_run_id: workflow_run_id.map(|value| value.to_string()),
+            diagnostic_event_id: self.event_id,
+            diagnostics_unavailable: self.diagnostics_unavailable,
         }
     }
 }

@@ -405,3 +405,30 @@ fn workflow_service_scheduler_busy_envelope_includes_structured_details() {
         ))
     );
 }
+
+#[test]
+fn workflow_service_error_envelope_includes_diagnostics_link() {
+    let err = WorkflowServiceError::RuntimeNotReady("llama.cpp failed to load model".to_string())
+        .with_diagnostics(WorkflowErrorDiagnosticsLink {
+            workflow_run_id: Some("run-1".to_string()),
+            diagnostic_event_id: Some("event-error-1".to_string()),
+            diagnostics_unavailable: None,
+        });
+
+    let envelope = err.to_envelope();
+    assert_eq!(envelope.code, WorkflowErrorCode::RuntimeNotReady);
+    assert_eq!(envelope.message, "llama.cpp failed to load model");
+    assert_eq!(
+        envelope.diagnostics,
+        Some(WorkflowErrorDiagnosticsLink {
+            workflow_run_id: Some("run-1".to_string()),
+            diagnostic_event_id: Some("event-error-1".to_string()),
+            diagnostics_unavailable: None,
+        })
+    );
+
+    let json = err.to_envelope_json();
+    let parsed: WorkflowErrorEnvelope =
+        serde_json::from_str(&json).expect("parse workflow error envelope");
+    assert_eq!(parsed.diagnostics, envelope.diagnostics);
+}

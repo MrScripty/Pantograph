@@ -91,7 +91,7 @@ async fn workflow_run_fails_when_host_returns_runtime_error() {
         .await
         .expect_err("expected runtime error");
 
-    assert!(matches!(err, WorkflowServiceError::RuntimeNotReady(_)));
+    assert_eq!(err.code(), WorkflowErrorCode::RuntimeNotReady);
 }
 
 #[tokio::test]
@@ -134,7 +134,7 @@ async fn workflow_run_honors_blocking_backend_technical_fit_decision() {
         .await
         .expect_err("technical-fit decision should block run");
 
-    assert!(matches!(err, WorkflowServiceError::RuntimeNotReady(_)));
+    assert_eq!(err.code(), WorkflowErrorCode::RuntimeNotReady);
     assert!(err
         .to_string()
         .contains("technical-fit could not select a ready runtime"));
@@ -160,7 +160,7 @@ async fn workflow_run_returns_internal_when_host_emits_invalid_output_shape() {
         .await
         .expect_err("invalid host output should be internal");
 
-    assert!(matches!(err, WorkflowServiceError::Internal(_)));
+    assert_eq!(err.code(), WorkflowErrorCode::InternalError);
     assert!(err
         .to_string()
         .contains("outputs.0.port_id must be non-empty"));
@@ -211,7 +211,7 @@ async fn workflow_run_timeout_cancels_host_within_grace_window() {
         .await
         .expect_err("expected timeout");
 
-    assert!(matches!(err, WorkflowServiceError::RuntimeTimeout(_)));
+    assert_eq!(err.code(), WorkflowErrorCode::RuntimeTimeout);
     assert!(cancelled.load(Ordering::SeqCst));
 }
 
@@ -363,7 +363,7 @@ async fn workflow_run_returns_output_not_produced_when_target_missing() {
         .await
         .expect_err("expected output_not_produced");
 
-    assert!(matches!(err, WorkflowServiceError::OutputNotProduced(_)));
+    assert_eq!(err.code(), WorkflowErrorCode::OutputNotProduced);
     assert!(err
         .to_string()
         .contains("requested output target 'text-output-1.text' was not produced"));
@@ -387,6 +387,11 @@ async fn workflow_run_returns_output_not_produced_when_target_missing() {
     assert!(error_event
         .payload_json
         .contains("output_validation_failed"));
+    assert_eq!(
+        err.diagnostics()
+            .and_then(|diagnostics| diagnostics.diagnostic_event_id.as_deref()),
+        Some(error_event.event_id.as_str())
+    );
 }
 
 #[tokio::test]

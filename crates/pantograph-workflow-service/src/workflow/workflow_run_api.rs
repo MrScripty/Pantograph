@@ -128,14 +128,18 @@ impl WorkflowService {
                 result = &mut run_future => match result {
                     Ok(outputs) => outputs,
                     Err(error) => {
-                        self.record_workflow_diagnostic_error_if_configured(
+                        let diagnostic_outcome = self.record_workflow_diagnostic_error_if_configured(
                             WorkflowDiagnosticErrorRecordRequest::node_execution_failed(
                                 workflow_node_diagnostic_scope(&diagnostic_run_context, &request),
                                 &error,
                             )
                             .with_source_instance_id("workflow-run-host"),
                         )?;
-                        return Err(error);
+                        return Err(error.with_diagnostics(
+                            diagnostic_outcome.into_error_link(Some(
+                                &diagnostic_run_context.workflow_run_id,
+                            )),
+                        ));
                     }
                 },
                 _ = &mut timeout => {
@@ -150,7 +154,7 @@ impl WorkflowService {
                         "workflow run exceeded timeout_ms {}",
                         timeout_ms
                     ));
-                    self.record_workflow_diagnostic_error_if_configured(
+                    let diagnostic_outcome = self.record_workflow_diagnostic_error_if_configured(
                         WorkflowDiagnosticErrorRecordRequest::run_timeout(
                             WorkflowDiagnosticRunScope {
                                 run: diagnostic_run_context.clone(),
@@ -159,59 +163,72 @@ impl WorkflowService {
                         )
                         .with_source_instance_id("workflow-run-host"),
                     )?;
-                    return Err(error);
+                    return Err(error.with_diagnostics(
+                        diagnostic_outcome
+                            .into_error_link(Some(&diagnostic_run_context.workflow_run_id)),
+                    ));
                 }
             }
         } else {
             match run_future.await {
                 Ok(outputs) => outputs,
                 Err(error) => {
-                    self.record_workflow_diagnostic_error_if_configured(
+                    let diagnostic_outcome = self.record_workflow_diagnostic_error_if_configured(
                         WorkflowDiagnosticErrorRecordRequest::node_execution_failed(
                             workflow_node_diagnostic_scope(&diagnostic_run_context, &request),
                             &error,
                         )
                         .with_source_instance_id("workflow-run-host"),
                     )?;
-                    return Err(error);
+                    return Err(error.with_diagnostics(
+                        diagnostic_outcome
+                            .into_error_link(Some(&diagnostic_run_context.workflow_run_id)),
+                    ));
                 }
             }
         };
 
         if let Some(targets) = request.output_targets.as_ref() {
             if let Err(error) = validate_requested_outputs_produced(targets, &outputs) {
-                self.record_workflow_diagnostic_error_if_configured(
+                let diagnostic_outcome = self.record_workflow_diagnostic_error_if_configured(
                     WorkflowDiagnosticErrorRecordRequest::output_validation_failed(
                         workflow_node_diagnostic_scope(&diagnostic_run_context, &request),
                         &error,
                     )
                     .with_source_instance_id("workflow-run-host"),
                 )?;
-                return Err(error);
+                return Err(error.with_diagnostics(
+                    diagnostic_outcome
+                        .into_error_link(Some(&diagnostic_run_context.workflow_run_id)),
+                ));
             }
         } else if outputs.is_empty() {
             let error = WorkflowServiceError::Internal(
                 "workflow execution returned zero outputs".to_string(),
             );
-            self.record_workflow_diagnostic_error_if_configured(
+            let diagnostic_outcome = self.record_workflow_diagnostic_error_if_configured(
                 WorkflowDiagnosticErrorRecordRequest::output_validation_failed(
                     workflow_node_diagnostic_scope(&diagnostic_run_context, &request),
                     &error,
                 )
                 .with_source_instance_id("workflow-run-host"),
             )?;
-            return Err(error);
+            return Err(error.with_diagnostics(
+                diagnostic_outcome.into_error_link(Some(&diagnostic_run_context.workflow_run_id)),
+            ));
         }
 
         if let Err(error) = validate_host_output_bindings(&outputs, "outputs") {
-            self.record_workflow_diagnostic_error_if_configured(
+            let diagnostic_outcome = self.record_workflow_diagnostic_error_if_configured(
                 WorkflowDiagnosticErrorRecordRequest::output_validation_failed(
                     workflow_node_diagnostic_scope(&diagnostic_run_context, &request),
                     &error,
                 )
                 .with_source_instance_id("workflow-run-host"),
             )?;
-            return Err(error);
+            return Err(error.with_diagnostics(
+                diagnostic_outcome.into_error_link(Some(&diagnostic_run_context.workflow_run_id)),
+            ));
         }
         let outputs = match convert_media_outputs_to_artifacts(
             self,
@@ -225,7 +242,7 @@ impl WorkflowService {
         {
             Ok(outputs) => outputs,
             Err(error) => {
-                self.record_workflow_diagnostic_error_if_configured(
+                let diagnostic_outcome = self.record_workflow_diagnostic_error_if_configured(
                     WorkflowDiagnosticErrorRecordRequest::artifact_failed(
                         WorkflowDiagnosticArtifactScope {
                             run: diagnostic_run_context.clone(),
@@ -236,7 +253,10 @@ impl WorkflowService {
                     )
                     .with_source_instance_id("workflow-run-host"),
                 )?;
-                return Err(error);
+                return Err(error.with_diagnostics(
+                    diagnostic_outcome
+                        .into_error_link(Some(&diagnostic_run_context.workflow_run_id)),
+                ));
             }
         };
         for binding in &outputs {
