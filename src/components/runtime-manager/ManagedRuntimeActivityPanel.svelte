@@ -8,6 +8,7 @@
     runtime: ManagedRuntimeManagerRuntimeView;
     recentHistory: ManagedRuntimeInstallHistoryEntry[];
     installActionLabel: string;
+    canInstallRuntime: boolean;
     installRequested: boolean;
     removeRequested: boolean;
     onInstallRuntime: () => Promise<void>;
@@ -20,6 +21,7 @@
     runtime,
     recentHistory,
     installActionLabel,
+    canInstallRuntime,
     installRequested,
     removeRequested,
     onInstallRuntime,
@@ -68,11 +70,11 @@
   {/if}
 
   <div class="flex flex-wrap gap-2">
-    {#if runtime.can_install && !runtime.active_job}
+    {#if canInstallRuntime && !runtime.active_job}
       <button
         type="button"
         class="rounded bg-blue-600 px-3 py-1.5 text-xs text-white transition-colors hover:bg-blue-500 disabled:bg-neutral-700 disabled:text-neutral-500"
-        onclick={onInstallRuntime}
+        onclick={() => onInstallRuntime()}
         disabled={installRequested || removeRequested}
       >
         {installRequested ? 'Starting...' : installActionLabel}

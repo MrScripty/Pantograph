@@ -10,8 +10,9 @@ use super::{
 };
 use crate::managed_runtime::managed_runtime_dir;
 use crate::managed_runtime::{
-    load_managed_runtime_state, save_managed_runtime_state, ManagedRuntimeHistoryEventKind,
-    ManagedRuntimePersistedJobArtifact, ManagedRuntimePersistedVersion,
+    load_managed_runtime_state, save_managed_runtime_state, ManagedRuntimeCatalogVersion,
+    ManagedRuntimeHistoryEventKind, ManagedRuntimePersistedJobArtifact,
+    ManagedRuntimePersistedVersion,
 };
 use reqwest::StatusCode;
 use std::path::Path;
@@ -130,6 +131,69 @@ fn snapshot_carries_additive_versions_and_selection_contracts() {
     assert!(!snapshot.versions[0].platform_key.is_empty());
     assert!(!snapshot.versions[0].executable_name.is_empty());
     assert!(snapshot.active_job.is_none());
+}
+
+#[test]
+fn catalog_versions_remain_installable_after_one_version_is_installed() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let installed_dir = temp_dir.path().join("runtimes/llama-cpp-b8248");
+    install_fake_runtime_files(&installed_dir, ManagedBinaryId::LlamaCpp);
+
+    let mut state = load_managed_runtime_state(temp_dir.path()).expect("load runtime state");
+    let runtime = ensure_runtime_state_entry(&mut state, ManagedBinaryId::LlamaCpp);
+    runtime.catalog_versions = vec![
+        ManagedRuntimeCatalogVersion {
+            version: "b8248".to_string(),
+            display_label: "b8248".to_string(),
+            runtime_key: ManagedBinaryId::LlamaCpp.key().to_string(),
+            platform_key: "linux-x86_64".to_string(),
+            archive_name: "llama-b8248.tar.gz".to_string(),
+            download_url: "https://example.invalid/llama-b8248.tar.gz".to_string(),
+        },
+        ManagedRuntimeCatalogVersion {
+            version: "b9000".to_string(),
+            display_label: "b9000".to_string(),
+            runtime_key: ManagedBinaryId::LlamaCpp.key().to_string(),
+            platform_key: "linux-x86_64".to_string(),
+            archive_name: "llama-b9000.tar.gz".to_string(),
+            download_url: "https://example.invalid/llama-b9000.tar.gz".to_string(),
+        },
+    ];
+    runtime.versions.push(ManagedRuntimePersistedVersion {
+        version: "b8248".to_string(),
+        runtime_key: Some(ManagedBinaryId::LlamaCpp.key().to_string()),
+        platform_key: Some("linux-x86_64".to_string()),
+        readiness_state: ManagedRuntimeReadinessState::Ready,
+        install_root: Some(installed_dir.display().to_string()),
+        last_ready_at_ms: Some(42),
+        last_error: None,
+    });
+    save_managed_runtime_state(temp_dir.path(), &state).expect("save runtime state");
+
+    let snapshot = crate::managed_runtime::managed_runtime_snapshot(
+        temp_dir.path(),
+        ManagedBinaryId::LlamaCpp,
+    )
+    .expect("managed runtime snapshot");
+
+    let installed = snapshot
+        .versions
+        .iter()
+        .find(|version| version.version.as_deref() == Some("b8248"))
+        .expect("installed version");
+    let missing = snapshot
+        .versions
+        .iter()
+        .find(|version| version.version.as_deref() == Some("b9000"))
+        .expect("missing catalog version");
+
+    assert_eq!(
+        installed.install_state,
+        ManagedBinaryInstallState::Installed
+    );
+    assert!(!installed.installable);
+    assert_eq!(missing.install_state, ManagedBinaryInstallState::Missing);
+    assert!(missing.installable);
 }
 
 #[test]

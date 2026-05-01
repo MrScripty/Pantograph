@@ -179,6 +179,20 @@
     installedVersions.filter((version) => version.version !== null)
   );
 
+  let installableVersions = $derived(
+    runtime.versions.filter(
+      (version) =>
+        version.version !== null &&
+        version.installable &&
+        version.install_state !== 'installed' &&
+        version.install_state !== 'system_provided'
+    )
+  );
+
+  let canInstallRuntime = $derived(
+    runtime.can_install || installableVersions.length > 0
+  );
+
   let progressPercent = $derived(
     runtime.active_job && runtime.active_job.total > 0
       ? (runtime.active_job.current / runtime.active_job.total) * 100
@@ -272,6 +286,7 @@
       {runtime}
       {recentHistory}
       {installActionLabel}
+      {canInstallRuntime}
       {installRequested}
       {removeRequested}
       onInstallRuntime={installRuntime}

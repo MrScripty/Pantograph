@@ -225,7 +225,7 @@ fn projected_catalog_version_status(
         install_state: ManagedBinaryInstallState::Missing,
         readiness_state: ManagedRuntimeReadinessState::Missing,
         catalog_available: true,
-        installable: capability.can_install,
+        installable: capability.install_state != ManagedBinaryInstallState::Unsupported,
         selected: selection.selected_version.as_deref() == Some(version),
         active: selection.active_version.as_deref() == Some(version),
     }
@@ -266,7 +266,7 @@ fn projected_installed_version_status(
         },
         readiness_state: version.readiness_state,
         catalog_available: true,
-        installable: capability.can_install,
+        installable: false,
         selected: selection.selected_version.as_deref() == Some(version.version.as_str()),
         active: selection.active_version.as_deref() == Some(version.version.as_str()),
     }
