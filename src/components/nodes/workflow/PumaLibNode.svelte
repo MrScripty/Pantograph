@@ -130,6 +130,12 @@
         })
       : availableModels,
   );
+  let selectedModelOption = $derived.by(() =>
+    availableModels.find((model) => String(model.value) === modelPath)
+    ?? availableModels.find((model) => (model.metadata?.id as string | undefined) === modelId)
+    ?? null,
+  );
+  let selectedModelValue = $derived(selectedModelOption ? String(selectedModelOption.value) : modelPath);
 
   interface PumaLibHydrationResult {
     nodeData: Record<string, unknown>;
@@ -181,8 +187,12 @@
     }
   }
 
-  function applyHydratedNodeState(nodeData: Record<string, unknown>) {
-    updateNodeData(id, nodeData);
+  async function applyHydratedNodeState(nodeData: Record<string, unknown>) {
+    const result = await updateNodeData(id, nodeData);
+    if (result.status !== 'applied') {
+      throw result.error ?? new Error(`Puma-Lib node update ${result.status}`);
+    }
+
     dependencyRequirements = (nodeData.dependency_requirements as ModelDependencyRequirements | null) ?? null;
     requirementsMessage = null;
     requirementsCode = null;
@@ -199,14 +209,18 @@
     }
   }
 
-  async function hydrateNodeState(resolveRequirements: boolean, nextModelPath?: string) {
+  async function hydrateNodeState(
+    resolveRequirements: boolean,
+    nextModelPath?: string,
+    nextModelId?: string,
+  ) {
     const response = await invoke<PumaLibHydrationResult>('hydrate_puma_lib_node', {
       modelPath: (nextModelPath ?? modelPath) || undefined,
-      modelId: modelId ?? undefined,
+      modelId: nextModelId ?? modelId ?? undefined,
       selectedBindingIds,
       resolveRequirements,
     });
-    applyHydratedNodeState(response.nodeData);
+    await applyHydratedNodeState(response.nodeData);
   }
 
   async function resolveDependencyRequirements() {
@@ -223,14 +237,24 @@
     }
   }
 
-  function handleModelSelect(e: Event) {
+  async function handleModelSelect(e: Event) {
     const target = e.target as HTMLSelectElement;
     const selected = availableModels.find((m) => String(m.value) === target.value);
     if (selected) {
       modelPath = String(selected.value);
       modelId = selected.metadata?.id as string | undefined;
       selectedBindingIds = [];
-      hydrateNodeState(true, modelPath).catch(console.error);
+      isDependencyActionRunning = true;
+      try {
+        await hydrateNodeState(true, modelPath, modelId);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        requirementsCode = 'model_selection_failed';
+        requirementsMessage = message;
+        console.error('Failed to hydrate Puma-Lib model selection:', error);
+      } finally {
+        isDependencyActionRunning = false;
+      }
     }
   }
 
@@ -394,8 +418,8 @@
             class="w-full bg-neutral-900 border border-neutral-600 rounded px-2 py-1 text-xs text-neutral-200 focus:outline-none focus:border-amber-500"
             style="color-scheme: dark;"
             onchange={handleModelSelect}
-            value={modelPath}
-            disabled={isLoading}
+            value={selectedModelValue}
+            disabled={isLoading || isDependencyActionRunning}
           >
             <option value="" class="bg-neutral-900 text-neutral-500">
               {isLoading ? 'Loading...' : 'Select a model'}
