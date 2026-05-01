@@ -425,10 +425,11 @@ generic `WorkflowServiceError` variants.
 errors can be returned or swallowed.
 
 **Tasks:**
-- [ ] Wrap workflow submission/session creation errors that have run context.
+- [x] Wrap workflow submission/session creation errors that have run context.
 - [ ] Wrap scheduler queue/admission/preflight/runtime-load failures.
   Runtime-load and runtime-preflight failure capture are implemented; scheduler
-  queue and admission capture remain.
+  queue and admission diagnostics handoff failures are wrapped when a run ID
+  exists.
 - [ ] Wrap model dependency resolution and Puma-Lib descriptor lookup failures.
   Embedded-runtime now preserves producer-known model dependency phase hints
   for Puma-Lib model lookup, Puma-Lib list, model directory read, and GGUF
@@ -492,7 +493,9 @@ handling and carry the diagnostics link on the returned error. Failed
 from linked workflow errors. Runtime-loading errors can now carry a typed
 diagnostic phase hint so workflow-service records model dependency, managed
 binary, runtime launch, or model-load failures under the registered phase that
-the producer selected.
+the producer selected. Queued run snapshot failures and scheduler
+queue/admission diagnostics handoff failures now record canonical run-scoped
+or scheduler-scoped diagnostics before returning the service error.
 
 Verification completed for this slice:
 - `cargo check -p pantograph-workflow-service`
@@ -505,6 +508,7 @@ Verification completed for this slice:
 - `cargo test -p pantograph-workflow-service workflow_execution_session_runtime_load_failure_uses_phase_hint`
 - `cargo test -p inference map_sidecar_start_error_preserves_managed_binary_failures`
 - `cargo check --manifest-path src-tauri/Cargo.toml`
+- `cargo test -p pantograph-workflow-service workflow_execution_session_run_snapshot_failure_records_canonical_error`
 
 ### Milestone 4: Projection And Query Semantics
 

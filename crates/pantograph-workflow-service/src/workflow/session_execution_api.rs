@@ -27,8 +27,8 @@ use crate::scheduler::{unix_timestamp_ms, WORKFLOW_SESSION_QUEUE_POLL_MS};
 use crate::technical_fit::WorkflowTechnicalFitOverride;
 
 use super::diagnostic_errors::{
-    WorkflowDiagnosticErrorRecordRequest, WorkflowDiagnosticRunContext,
-    WorkflowDiagnosticRuntimeModelScope,
+    WorkflowDiagnosticErrorRecordRequest, WorkflowDiagnosticRunContext, WorkflowDiagnosticRunScope,
+    WorkflowDiagnosticRuntimeModelScope, WorkflowDiagnosticSchedulerScope,
 };
 use super::session_runtime::WorkflowSessionRuntimeAdmissionDiagnosticContext;
 use super::validation::{
@@ -208,9 +208,20 @@ impl WorkflowService {
             store.session_summary(&session_id)?
         };
         let workflow_run_id = WorkflowRunId::generate().to_string();
-        let run_snapshot = self
+        let run_snapshot = match self
             .create_queued_run_snapshot_if_configured(host, &session, &workflow_run_id, &request)
-            .await?;
+            .await
+        {
+            Ok(run_snapshot) => run_snapshot,
+            Err(error) => {
+                return Err(self.record_run_snapshot_failure_error(
+                    &session,
+                    &workflow_run_id,
+                    Some(&request.workflow_semantic_version),
+                    error,
+                )?);
+            }
+        };
         let queued_item = {
             let mut store = self.session_store_guard()?;
             store.enqueue_run_with_id(&session_id, &request, workflow_run_id.clone())?;
@@ -244,7 +255,13 @@ impl WorkflowService {
             if let Ok(mut store) = self.session_store.lock() {
                 let _ = store.cancel_queue_item(&session_id, &workflow_run_id);
             }
-            return Err(error);
+            return Err(self.record_scheduler_admission_failure_error(
+                &session,
+                run_snapshot.as_ref(),
+                &workflow_run_id,
+                Some(&request.workflow_semantic_version),
+                error,
+            )?);
         }
 
         let mut runtime_admission_delay_recorded = false;
@@ -707,6 +724,54 @@ impl WorkflowService {
         self.record_run_snapshot_accepted_event_if_configured(&snapshot, &graph)?;
         self.record_library_model_access_events_if_configured(&snapshot, &capabilities.models)?;
         Ok(Some(snapshot))
+    }
+
+    fn record_run_snapshot_failure_error(
+        &self,
+        session: &WorkflowExecutionSessionSummary,
+        workflow_run_id: &str,
+        workflow_semantic_version: Option<&str>,
+        error: WorkflowServiceError,
+    ) -> Result<WorkflowServiceError, WorkflowServiceError> {
+        let scope = WorkflowDiagnosticRunScope {
+            run: workflow_diagnostic_run_context(
+                session,
+                None,
+                workflow_run_id,
+                workflow_semantic_version,
+            )?,
+        };
+        let outcome = self.record_workflow_diagnostic_error_if_configured(
+            WorkflowDiagnosticErrorRecordRequest::run_snapshot_failed(scope, &error)
+                .with_source_instance_id("workflow-service")
+                .with_cause("workflow run snapshot creation failed before queue admission"),
+        )?;
+        Ok(error.with_diagnostics(outcome.into_error_link(Some(workflow_run_id))))
+    }
+
+    fn record_scheduler_admission_failure_error(
+        &self,
+        session: &WorkflowExecutionSessionSummary,
+        snapshot: Option<&WorkflowRunSnapshotRecord>,
+        workflow_run_id: &str,
+        workflow_semantic_version: Option<&str>,
+        error: WorkflowServiceError,
+    ) -> Result<WorkflowServiceError, WorkflowServiceError> {
+        let scope = WorkflowDiagnosticSchedulerScope {
+            run: workflow_diagnostic_run_context(
+                session,
+                snapshot,
+                workflow_run_id,
+                workflow_semantic_version,
+            )?,
+            selected_runtime_id: None,
+        };
+        let outcome = self.record_workflow_diagnostic_error_if_configured(
+            WorkflowDiagnosticErrorRecordRequest::scheduler_admission_failed(scope, &error)
+                .with_source_instance_id("workflow-session-scheduler")
+                .with_cause("scheduler queue/admission diagnostics failed before run start"),
+        )?;
+        Ok(error.with_diagnostics(outcome.into_error_link(Some(workflow_run_id))))
     }
 
     fn record_run_snapshot_accepted_event_if_configured(

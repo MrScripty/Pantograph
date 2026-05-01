@@ -77,6 +77,10 @@ pub(in crate::workflow::tests) struct FailingRuntimeLoadHost {
     pub(in crate::workflow::tests) phase_hint: Option<WorkflowRuntimeDiagnosticPhaseHint>,
 }
 
+pub(in crate::workflow::tests) struct FailingRunSnapshotHost {
+    pub(in crate::workflow::tests) inner: MockWorkflowHost,
+}
+
 impl RecordingRuntimeHost {
     pub(in crate::workflow::tests) fn new(
         retention_hints: Arc<Mutex<Vec<WorkflowExecutionSessionRetentionHint>>>,
@@ -109,6 +113,14 @@ impl FailingRuntimeLoadHost {
         Self {
             capabilities: MockWorkflowHost::new(8, 1024).capabilities,
             phase_hint: Some(phase_hint),
+        }
+    }
+}
+
+impl FailingRunSnapshotHost {
+    pub(in crate::workflow::tests) fn new() -> Self {
+        Self {
+            inner: MockWorkflowHost::new(8, 1024),
         }
     }
 }
@@ -347,5 +359,66 @@ impl WorkflowHost for FailingRuntimeLoadHost {
         _run_handle: WorkflowRunHandle,
     ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
         unreachable!("runtime load failure prevents workflow execution")
+    }
+}
+
+#[async_trait]
+impl WorkflowHost for FailingRunSnapshotHost {
+    async fn validate_workflow(&self, workflow_id: &str) -> Result<(), WorkflowServiceError> {
+        self.inner.validate_workflow(workflow_id).await
+    }
+
+    async fn workflow_graph_fingerprint(
+        &self,
+        workflow_id: &str,
+    ) -> Result<String, WorkflowServiceError> {
+        self.inner.workflow_graph_fingerprint(workflow_id).await
+    }
+
+    async fn workflow_graph(
+        &self,
+        _workflow_id: &str,
+    ) -> Result<WorkflowGraph, WorkflowServiceError> {
+        Err(WorkflowServiceError::Internal(
+            "snapshot graph read failed".to_string(),
+        ))
+    }
+
+    async fn workflow_capabilities(
+        &self,
+        workflow_id: &str,
+    ) -> Result<WorkflowHostCapabilities, WorkflowServiceError> {
+        self.inner.workflow_capabilities(workflow_id).await
+    }
+
+    async fn runtime_capabilities(
+        &self,
+    ) -> Result<Vec<WorkflowRuntimeCapability>, WorkflowServiceError> {
+        self.inner.runtime_capabilities().await
+    }
+
+    async fn load_session_runtime(
+        &self,
+        session_id: &str,
+        workflow_id: &str,
+        usage_profile: Option<&str>,
+        retention_hint: WorkflowExecutionSessionRetentionHint,
+    ) -> Result<(), WorkflowServiceError> {
+        self.inner
+            .load_session_runtime(session_id, workflow_id, usage_profile, retention_hint)
+            .await
+    }
+
+    async fn run_workflow(
+        &self,
+        workflow_id: &str,
+        inputs: &[WorkflowPortBinding],
+        output_targets: Option<&[WorkflowOutputTarget]>,
+        run_options: WorkflowRunOptions,
+        run_handle: WorkflowRunHandle,
+    ) -> Result<Vec<WorkflowPortBinding>, WorkflowServiceError> {
+        self.inner
+            .run_workflow(workflow_id, inputs, output_targets, run_options, run_handle)
+            .await
     }
 }

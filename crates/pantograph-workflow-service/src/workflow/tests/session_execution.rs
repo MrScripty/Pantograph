@@ -997,6 +997,72 @@ async fn workflow_execution_session_run_records_failed_terminal_event_with_sanit
 }
 
 #[tokio::test]
+async fn workflow_execution_session_run_snapshot_failure_records_canonical_error() {
+    let host = FailingRunSnapshotHost::new();
+    let service = WorkflowService::with_max_sessions(2)
+        .with_attribution_store(SqliteAttributionStore::open_in_memory().expect("store"))
+        .with_diagnostics_ledger(SqliteDiagnosticsLedger::open_in_memory().expect("ledger"));
+
+    let created = service
+        .create_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionCreateRequest {
+                workflow_id: "wf-snapshot-error".to_string(),
+                usage_profile: None,
+                keep_alive: false,
+            },
+        )
+        .await
+        .expect("create session");
+
+    let error = service
+        .run_workflow_execution_session(
+            &host,
+            WorkflowExecutionSessionRunRequest {
+                session_id: created.session_id,
+                workflow_semantic_version: "1.2.3".to_string(),
+                inputs: vec![WorkflowPortBinding {
+                    node_id: "text-output-1".to_string(),
+                    port_id: "text".to_string(),
+                    value: serde_json::json!("hello"),
+                }],
+                output_targets: None,
+                override_selection: None,
+                timeout_ms: None,
+                priority: None,
+            },
+        )
+        .await
+        .expect_err("snapshot failure should fail the run");
+
+    let diagnostic_events = {
+        let ledger = service
+            .diagnostics_ledger_guard()
+            .expect("diagnostics ledger");
+        pantograph_diagnostics_ledger::DiagnosticsLedgerRepository::diagnostic_events_after(
+            &*ledger, 0, 20,
+        )
+        .expect("diagnostic events")
+    };
+    let error_event = diagnostic_events
+        .iter()
+        .find(|event| {
+            event.event_kind
+                == pantograph_diagnostics_ledger::DiagnosticEventKind::DiagnosticErrorOccurred
+        })
+        .expect("canonical run snapshot error event");
+
+    assert!(error_event.payload_json.contains("run_snapshot"));
+    assert!(error_event.payload_json.contains("run_snapshot_failed"));
+    assert_eq!(
+        error
+            .diagnostics()
+            .and_then(|diagnostics| diagnostics.diagnostic_event_id.as_deref()),
+        Some(error_event.event_id.as_str())
+    );
+}
+
+#[tokio::test]
 async fn workflow_execution_session_runtime_load_failure_records_canonical_error() {
     let host = FailingRuntimeLoadHost::new();
     let service = WorkflowService::with_max_sessions(2)
