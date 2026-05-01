@@ -514,6 +514,45 @@ diagnostics event that explains the failure.
   only if implementation changes architecture beyond existing README
   contracts.
 
+### Pass 4: Risk-Resolution Standards Revalidation
+
+**Status:** Complete with additional implementation gates added.
+
+**Checks:**
+- Updated risk-resolution strategy still follows `PLAN-STANDARDS.md`.
+- Required implementation order satisfies backend-owned data, concurrency,
+  Rust async, frontend, accessibility, documentation, and testing standards.
+- Codebase blast radius was rechecked for decomposition-review triggers and
+  existing local documentation.
+- Worktree hygiene requirements were rechecked before implementation begins.
+
+**Findings:**
+- The backend-first sequence remains standards-compliant: ledger contract,
+  projection precedence, recorder proof, typed transport envelope, frontend DTO
+  drift coverage, workbench focus state, and phased capture keep durable truth
+  backend-owned before UI navigation consumes it.
+- The testing strategy remains standards-compliant because it requires native
+  Rust contract tests, SQLite migration/replay tests, frontend parser/presenter
+  tests, accessibility tests, stale-response tests, and a cross-layer
+  acceptance path for the produced error event through GUI-visible diagnostics.
+- Concurrency and Rust async guidance remains standards-compliant because
+  payload shaping happens outside the ledger lock, the lock covers append only,
+  no unowned background task is permitted, and stale frontend async responses
+  require request timestamp or nonce checks.
+- Documentation layout is standards-compliant: the plan lives under
+  `docs/plans/<slug>/`, and the affected source directories already have
+  README files that must be updated when contracts change.
+- Decomposition review is required before implementation edits the largest
+  touch points. Current line counts exceed standards thresholds:
+  `crates/pantograph-diagnostics-ledger/src/event.rs`,
+  `crates/pantograph-diagnostics-ledger/src/sqlite/event_sqlite.rs`,
+  `crates/pantograph-workflow-service/src/workflow/session_execution_api.rs`,
+  `src/components/workbench/DiagnosticsPage.svelte`, and
+  `src/services/diagnostics/types.ts`.
+- Worktree hygiene is currently a blocker for code implementation unless the
+  user explicitly allows the unrelated dirty implementation files to remain in
+  place. Planning-only Markdown edits remain allowed.
+
 ## Anti-Pattern And Blast-Radius Review
 
 ### Search Scope
@@ -580,6 +619,10 @@ diagnostics event that explains the failure.
 
 ### Required Implementation Order
 
+0. Resolve or explicitly allow the current unrelated dirty implementation
+   files before code implementation begins. Planning/documentation edits may
+   continue, but source, test, config, build, and generated-file changes must
+   have clear ownership before Milestone 1 starts.
 1. Add the durable ledger error event contract with validation,
    serialization/deserialization, DB round-trip, source-validation, and payload
    bound tests.
@@ -693,6 +736,28 @@ diagnostics event that explains the failure.
   version bumps with rebuild tests. Existing user databases must not rely on
   `CREATE TABLE IF NOT EXISTS` to gain new columns.
 
+### Decomposition Gates
+
+- Before adding new ledger payload types, review whether
+  `crates/pantograph-diagnostics-ledger/src/event.rs` should extract the
+  diagnostic error payload, source/scope validation, or projection DTOs into
+  smaller modules. If not extracting, record why the local addition is safer
+  than a split in the milestone notes.
+- Before adding projection logic, review whether
+  `crates/pantograph-diagnostics-ledger/src/sqlite/event_sqlite.rs` should move
+  error projection helpers, status precedence, or event-kind drain queries into
+  focused files under `sqlite/`.
+- Before adding workflow capture, avoid expanding
+  `session_execution_api.rs` with broad recorder logic. Put reusable error
+  context/recorder code in a focused workflow diagnostics module and keep
+  session execution limited to orchestration calls.
+- Before adding Diagnostics page UI, keep classification and row shaping in
+  presenters and consider extracting focused Svelte subcomponents if the page
+  grows further.
+- Before expanding `src/services/diagnostics/types.ts`, group new error DTOs
+  clearly and consider a follow-up DTO generation plan if hand-mirrored unions
+  continue to drift.
+
 ## Commit Cadence Notes
 
 - Commit after each logical slice is implemented and verified.
@@ -730,6 +795,10 @@ owner per wave.
   events.
 - Standards verification finds a required README, ADR, test category, or
   ownership split missing from the plan.
+- Code implementation is requested while unrelated dirty implementation files
+  remain unresolved and not explicitly allowed.
+- Decomposition review finds that adding the new error diagnostics work to an
+  already oversized file would make review or testing materially worse.
 
 ## Recommendations
 
