@@ -29,6 +29,17 @@ test('readWorkflowPaletteDragDefinition parses node definitions from drag data',
   );
 });
 
+test('readWorkflowPaletteDragDefinition falls back to plain text drag data', () => {
+  assert.deepEqual(
+    readWorkflowPaletteDragDefinition({
+      dataTransfer: {
+        getData: (type) => type === 'text/plain' ? JSON.stringify(paletteDefinition) : '',
+      },
+    }),
+    paletteDefinition,
+  );
+});
+
 test('readWorkflowPaletteDragDefinition reports invalid palette drag data', () => {
   const parseErrors: unknown[] = [];
 

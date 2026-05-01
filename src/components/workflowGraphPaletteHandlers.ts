@@ -22,7 +22,10 @@ interface WorkflowGraphPaletteHandlerParams {
   edgeInsertPreview: EdgeInsertPreviewState;
   event: DragEvent;
   getRelativePointerPosition: (clientX: number, clientY: number) => { x: number; y: number } | null;
-  onAddNode: (definition: NodeDefinition, position: { x: number; y: number }) => void;
+  onAddNode: (
+    definition: NodeDefinition,
+    position: { x: number; y: number },
+  ) => Promise<unknown> | unknown;
   refreshEdgeInsertPreview: (event: DragEvent, definition: NodeDefinition) => Promise<void>;
 }
 
@@ -30,6 +33,19 @@ function readPaletteDefinition(event: DragEvent): NodeDefinition | null {
   return readWorkflowPaletteDragDefinition(event, (error) => {
     console.warn('[WorkflowGraph] Failed to parse palette drag data:', error);
   });
+}
+
+function warnIfAddNodeDidNotApply(result: unknown): void {
+  if (!result || typeof result !== 'object' || !('status' in result)) {
+    return;
+  }
+
+  const status = result.status;
+  if (status === 'applied') {
+    return;
+  }
+
+  console.warn('[WorkflowGraph] Palette drop did not add a node:', result);
 }
 
 export async function handleWorkflowGraphPaletteDrop({
@@ -72,7 +88,7 @@ export async function handleWorkflowGraphPaletteDrop({
     return;
   }
 
-  onAddNode(definition, position);
+  warnIfAddNodeDidNotApply(await onAddNode(definition, position));
 }
 
 export async function handleWorkflowGraphPaletteDragOver({

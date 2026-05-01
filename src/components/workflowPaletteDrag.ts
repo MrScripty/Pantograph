@@ -18,6 +18,10 @@ export const WORKFLOW_PALETTE_DROP_NODE_OFFSET: WorkflowPalettePointerPosition =
   x: 100,
   y: 50,
 };
+export const WORKFLOW_PALETTE_DRAG_DATA_TYPES = [
+  'application/json',
+  'text/plain',
+] as const;
 
 export function isWorkflowPaletteEdgeInsertEnabled(
   currentGraphType: string | null | undefined,
@@ -30,7 +34,9 @@ export function readWorkflowPaletteDragDefinition(
   event: WorkflowPaletteDragEvent,
   onParseError?: (error: unknown) => void,
 ): NodeDefinition | null {
-  const data = event.dataTransfer?.getData('application/json');
+  const data = WORKFLOW_PALETTE_DRAG_DATA_TYPES
+    .map((type) => event.dataTransfer?.getData(type) ?? '')
+    .find((value) => value.length > 0);
   if (!data) {
     return null;
   }

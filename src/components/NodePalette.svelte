@@ -5,6 +5,7 @@
     dispatchWorkflowPaletteDragStart,
   } from '@pantograph/svelte-graph';
   import { nodeDefinitionsByCategory, addNode } from '../stores/workflowStore';
+  import { WORKFLOW_PALETTE_DRAG_DATA_TYPES } from './workflowPaletteDrag';
   import type { NodeDefinition } from '../services/workflow/types';
 
   let searchQuery = $state('');
@@ -43,7 +44,10 @@
       return;
     }
 
-    event.dataTransfer.setData('application/json', JSON.stringify(definition));
+    const payload = JSON.stringify(definition);
+    for (const type of WORKFLOW_PALETTE_DRAG_DATA_TYPES) {
+      event.dataTransfer.setData(type, payload);
+    }
     event.dataTransfer.effectAllowed = 'copy';
     dispatchWorkflowPaletteDragStart(window);
   }

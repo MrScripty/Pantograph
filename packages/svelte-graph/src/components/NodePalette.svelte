@@ -6,6 +6,7 @@
     dispatchWorkflowPaletteDragEnd,
     dispatchWorkflowPaletteDragStart,
   } from '../paletteDragState.js';
+  import { WORKFLOW_PALETTE_DRAG_DATA_TYPES } from '../workflowPaletteDrag.js';
 
   const { stores } = useGraphContext();
   const nodeDefinitionsByCategory = stores.workflow.nodeDefinitionsByCategory;
@@ -45,7 +46,10 @@
       return;
     }
 
-    event.dataTransfer.setData('application/json', JSON.stringify(definition));
+    const payload = JSON.stringify(definition);
+    for (const type of WORKFLOW_PALETTE_DRAG_DATA_TYPES) {
+      event.dataTransfer.setData(type, payload);
+    }
     event.dataTransfer.effectAllowed = 'copy';
     dispatchWorkflowPaletteDragStart(window);
   }

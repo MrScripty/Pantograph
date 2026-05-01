@@ -186,8 +186,8 @@
   data-horseshoe-blocked-reason={horseshoeSession.blockedReason ?? undefined}
   data-horseshoe-display-state={horseshoeSession.displayState}
   data-horseshoe-last-trace={horseshoeLastTrace}
-  ondrop={handleDrop}
-  ondragover={handleDragOver}
+  ondropcapture={handleDrop}
+  ondragovercapture={handleDragOver}
   onkeydown={handleKeyDown}
   onmousedown={handlePaneMouseDown}
   onmousemove={handleCanvasPaneMouseMove}
