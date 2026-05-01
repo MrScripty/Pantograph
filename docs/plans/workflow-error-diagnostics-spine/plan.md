@@ -534,13 +534,13 @@ Verification completed for this slice:
 **Goal:** Make errors obvious in diagnostics without duplicating backend state.
 
 **Tasks:**
-- [ ] Extend `src/services/diagnostics/types.ts` with additive error event and
+- [x] Extend `src/services/diagnostics/types.ts` with additive error event and
   projection fields.
-- [ ] Update diagnostics presenters to classify severity, phase, component,
+- [x] Update diagnostics presenters to classify severity, phase, component,
   and related event links from backend data.
 - [ ] Add an Errors filter/list and visual treatment for error and warning
   timeline events.
-- [ ] Update run list badges and run detail header to show fatal/latest error
+- [x] Update run list badges and run detail header to show fatal/latest error
   summaries.
 - [ ] Add graph/node badges and focused highlighting for node-scoped error
   event IDs.
@@ -554,7 +554,14 @@ Verification completed for this slice:
 - Component tests for accessible error filters, keyboard navigation, and
   non-color-only status indicators.
 
-**Status:** Not started.
+**Status:** In progress as of 2026-05-01. Added TypeScript mirrors for the
+diagnostic error projection fields, severity/phase presenters, run-detail error
+summary panels, node-scoped diagnostics rows, and non-color-only timeline
+treatments. Focused frontend presenter and projection service tests pass along
+with `npm run typecheck`. Remaining work is explicit error filtering/list
+controls, graph-focused node badges, interactive deep-link/focus controls
+covered by Milestone 6, and a full frontend build pass after those controls
+land.
 
 ### Milestone 6: Clickable Error Deep Links
 

@@ -1,4 +1,5 @@
 import type {
+  DiagnosticErrorSeverity,
   DiagnosticEventKind,
   DiagnosticEventSourceComponent,
   IoArtifactRetentionState,
@@ -39,6 +40,15 @@ export interface DiagnosticsExecutionFacetRow {
   label: string;
   value: string;
   count: number;
+}
+
+export interface DiagnosticsRunErrorSummary {
+  eventId: string;
+  severity: DiagnosticErrorSeverity;
+  phase: string;
+  code: string;
+  message: string;
+  fatal: boolean;
 }
 
 export interface DiagnosticsExecutionFilters {
@@ -208,6 +218,31 @@ export function diagnosticsStatusClass(status: RunDetailProjectionRecord['status
   }
 }
 
+export function diagnosticsErrorSeverityClass(severity: DiagnosticErrorSeverity): string {
+  switch (severity) {
+    case 'fatal':
+      return 'border-red-700 bg-red-950/70 text-red-100';
+    case 'error':
+      return 'border-orange-700 bg-orange-950/60 text-orange-100';
+    case 'warning':
+      return 'border-amber-700 bg-amber-950/60 text-amber-100';
+  }
+}
+
+export function diagnosticsTimelineRowClass(event: SchedulerTimelineProjectionRecord): string {
+  switch (event.error_severity) {
+    case 'fatal':
+      return 'bg-red-950/30';
+    case 'error':
+      return 'bg-orange-950/25';
+    case 'warning':
+      return 'bg-amber-950/20';
+    case null:
+    case undefined:
+      return '';
+  }
+}
+
 export function formatDiagnosticsStatusLabel(status: RunDetailProjectionRecord['status']): string {
   switch (status) {
     case 'accepted':
@@ -229,6 +264,37 @@ export function formatDiagnosticsStatusLabel(status: RunDetailProjectionRecord['
     case 'cancelled':
       return 'Cancelled';
   }
+}
+
+export function formatDiagnosticErrorSeverity(severity: DiagnosticErrorSeverity | null | undefined): string {
+  switch (severity) {
+    case 'fatal':
+      return 'Fatal';
+    case 'error':
+      return 'Error';
+    case 'warning':
+      return 'Warning';
+    case null:
+    case undefined:
+      return 'Unknown';
+  }
+}
+
+export function buildDiagnosticsRunErrorSummary(
+  run: RunDetailProjectionRecord,
+): DiagnosticsRunErrorSummary | null {
+  if (!run.latest_error_event_id && !run.latest_error_message && !run.fatal_error_event_id) {
+    return null;
+  }
+  const severity = run.latest_error_severity ?? (run.fatal_error_event_id ? 'fatal' : 'error');
+  return {
+    eventId: run.latest_error_event_id ?? run.fatal_error_event_id ?? 'unassigned',
+    severity,
+    phase: run.latest_error_phase ?? 'unassigned',
+    code: run.latest_error_code ?? 'unknown_error',
+    message: run.latest_error_message ?? run.terminal_error ?? 'No diagnostic error message was projected.',
+    fatal: Boolean(run.fatal_error_event_id) || severity === 'fatal',
+  };
 }
 
 export function buildDiagnosticsFactRows(run: RunDetailProjectionRecord): DiagnosticsFactRow[] {
@@ -439,6 +505,8 @@ export function buildDiagnosticsExecutionFacetRows(
 ): DiagnosticsExecutionFacetRow[] {
   return [
     ...buildExecutionFacetRows('Node Status', nodes.map((node) => node.status), 'Unassigned'),
+    ...buildExecutionFacetRows('Error Severity', nodes.map((node) => node.error_severity), 'None'),
+    ...buildExecutionFacetRows('Error Phase', nodes.map((node) => node.error_phase), 'None'),
     ...buildExecutionFacetRows('Node Version', nodes.map((node) => node.node_version), 'Unversioned'),
     ...buildExecutionFacetRows('Runtime', nodes.map((node) => node.runtime_id), 'Unassigned'),
     ...buildExecutionFacetRows('Runtime Version', nodes.map((node) => node.runtime_version), 'Unversioned'),
@@ -680,6 +748,16 @@ function dateInputEndMs(value: string): number | null {
 
 export function formatDiagnosticEventKind(kind: DiagnosticEventKind): string {
   return kind
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+export function formatDiagnosticErrorPhase(phase: string | null | undefined): string {
+  if (!phase || phase.trim().length === 0) {
+    return 'Unassigned';
+  }
+  return phase
     .split('_')
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ');

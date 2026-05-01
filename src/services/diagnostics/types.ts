@@ -12,8 +12,11 @@ export interface ProjectionStateRecord {
 export type DiagnosticEventKind =
   | 'scheduler_estimate_produced'
   | 'scheduler_queue_placement'
+  | 'scheduler_queue_control'
   | 'scheduler_run_delayed'
   | 'scheduler_model_lifecycle_changed'
+  | 'scheduler_run_admitted'
+  | 'scheduler_reservation_changed'
   | 'run_started'
   | 'run_terminal'
   | 'run_snapshot_accepted'
@@ -22,7 +25,8 @@ export type DiagnosticEventKind =
   | 'library_asset_accessed'
   | 'retention_policy_changed'
   | 'runtime_capability_observed'
-  | 'node_execution_status';
+  | 'node_execution_status'
+  | 'diagnostic_error_occurred';
 
 export type DiagnosticEventSourceComponent =
   | 'scheduler'
@@ -32,6 +36,8 @@ export type DiagnosticEventSourceComponent =
   | 'retention'
   | 'library'
   | 'local_observer';
+
+export type DiagnosticErrorSeverity = 'warning' | 'error' | 'fatal';
 
 export interface SchedulerTimelineProjectionRecord {
   event_seq: number;
@@ -48,6 +54,9 @@ export interface SchedulerTimelineProjectionRecord {
   retention_policy_id?: string | null;
   summary: string;
   detail?: string | null;
+  error_severity?: DiagnosticErrorSeverity | null;
+  error_phase?: string | null;
+  related_event_ids?: string[];
   payload_json: string;
 }
 
@@ -89,6 +98,14 @@ export interface RunListProjectionRecord {
   estimated_duration_ms?: number | null;
   model_cache_state?: SchedulerModelCacheState | null;
   scheduler_reason?: string | null;
+  latest_error_event_id?: string | null;
+  latest_error_severity?: DiagnosticErrorSeverity | null;
+  latest_error_phase?: string | null;
+  latest_error_code?: string | null;
+  latest_error_message?: string | null;
+  fatal_error_event_id?: string | null;
+  error_count?: number;
+  warning_count?: number;
   last_event_seq: number;
   last_updated_at_ms: number;
 }
@@ -247,6 +264,10 @@ export interface NodeStatusProjectionRecord {
   completed_at_ms?: number | null;
   duration_ms?: number | null;
   error?: string | null;
+  error_event_id?: string | null;
+  error_severity?: DiagnosticErrorSeverity | null;
+  error_phase?: string | null;
+  error_code?: string | null;
   last_event_seq: number;
   last_updated_at_ms: number;
 }
@@ -266,6 +287,8 @@ export interface WorkflowRunListQueryRequest {
   bucket_id?: string | null;
   accepted_at_from_ms?: number | null;
   accepted_at_to_ms?: number | null;
+  error_severity?: DiagnosticErrorSeverity | null;
+  error_phase?: string | null;
   after_event_seq?: number | null;
   limit?: number | null;
   projection_batch_size?: number | null;

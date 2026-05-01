@@ -16,9 +16,14 @@ import {
   buildDiagnosticsFactRows,
   buildDiagnosticsRetentionSummaryRows,
   buildDiagnosticsComparisonFilterOptions,
+  buildDiagnosticsRunErrorSummary,
+  diagnosticsErrorSeverityClass,
   diagnosticsStatusClass,
+  diagnosticsTimelineRowClass,
   filterDiagnosticsExecutionNodes,
   filterDiagnosticsComparisonRuns,
+  formatDiagnosticErrorPhase,
+  formatDiagnosticErrorSeverity,
   formatDiagnosticEventKind,
   formatDiagnosticSourceComponent,
   formatDiagnosticsDuration,
@@ -53,6 +58,14 @@ function createRunDetail(): RunDetailProjectionRecord {
     estimated_duration_ms: 2_500,
     model_cache_state: 'cache_hit',
     scheduler_reason: 'warm_session_reused',
+    latest_error_event_id: null,
+    latest_error_severity: null,
+    latest_error_phase: null,
+    latest_error_code: null,
+    latest_error_message: null,
+    fatal_error_event_id: null,
+    error_count: 0,
+    warning_count: 0,
     last_event_seq: 9,
     last_updated_at_ms: 10,
     client_id: 'client-a',
@@ -86,6 +99,14 @@ function createRunListPeer(overrides: Partial<RunListProjectionRecord>): RunList
     client_id: 'client-a',
     client_session_id: 'session-a',
     bucket_id: 'bucket-a',
+    latest_error_event_id: null,
+    latest_error_severity: null,
+    latest_error_phase: null,
+    latest_error_code: null,
+    latest_error_message: null,
+    fatal_error_event_id: null,
+    error_count: 0,
+    warning_count: 0,
     last_event_seq: 10,
     last_updated_at_ms: 20,
     ...overrides,
@@ -110,6 +131,10 @@ function createNodeStatus(overrides: Partial<NodeStatusProjectionRecord>): NodeS
     completed_at_ms: 2,
     duration_ms: 1,
     error: null,
+    error_event_id: null,
+    error_severity: null,
+    error_phase: null,
+    error_code: null,
     last_event_seq: 9,
     last_updated_at_ms: 10,
     ...overrides,
@@ -152,6 +177,52 @@ test('diagnosticsStatusClass maps operational statuses to stable classes', () =>
   assert.equal(formatDiagnosticsStatusLabel('future'), 'Future');
   assert.equal(formatDiagnosticsStatusLabel('scheduled'), 'Scheduled');
   assert.equal(formatDiagnosticsStatusLabel('cancelled'), 'Cancelled');
+});
+
+test('diagnostic error presenters expose severity and run summary fields', () => {
+  const run = createRunDetail();
+  const summary = buildDiagnosticsRunErrorSummary({
+    ...run,
+    latest_error_event_id: 'error-event-1',
+    latest_error_severity: 'fatal',
+    latest_error_phase: 'runtime_model_load',
+    latest_error_code: 'runtime_model_load_failed',
+    latest_error_message: 'llama.cpp exited before model load completed',
+    fatal_error_event_id: 'error-event-1',
+  });
+
+  assert.equal(summary?.eventId, 'error-event-1');
+  assert.equal(summary?.fatal, true);
+  assert.equal(summary?.phase, 'runtime_model_load');
+  assert.equal(summary?.code, 'runtime_model_load_failed');
+  assert.match(diagnosticsErrorSeverityClass('fatal'), /red/);
+  assert.match(diagnosticsErrorSeverityClass('error'), /orange/);
+  assert.match(diagnosticsErrorSeverityClass('warning'), /amber/);
+  assert.equal(formatDiagnosticErrorSeverity('fatal'), 'Fatal');
+  assert.equal(formatDiagnosticErrorSeverity(null), 'Unknown');
+  assert.equal(formatDiagnosticErrorPhase('runtime_model_load'), 'Runtime Model Load');
+});
+
+test('diagnostics timeline row class marks error events without payload parsing', () => {
+  assert.match(
+    diagnosticsTimelineRowClass({
+      event_seq: 1,
+      event_id: 'event-1',
+      event_kind: 'diagnostic_error_occurred',
+      source_component: 'workflow_service',
+      occurred_at_ms: 1,
+      recorded_at_ms: 1,
+      workflow_run_id: 'run-1',
+      workflow_id: 'workflow-a',
+      summary: 'runtime load failed',
+      detail: null,
+      error_severity: 'fatal',
+      error_phase: 'runtime_model_load',
+      related_event_ids: [],
+      payload_json: '{}',
+    }),
+    /red/,
+  );
 });
 
 test('buildDiagnosticsFactRows uses projection fields without ledger parsing', () => {

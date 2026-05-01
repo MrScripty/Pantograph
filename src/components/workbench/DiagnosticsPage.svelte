@@ -24,9 +24,14 @@
     buildDiagnosticsComparisonFilterOptions,
     buildDiagnosticsExecutionFacetRows,
     buildDiagnosticsExecutionFilterOptions,
+    buildDiagnosticsRunErrorSummary,
+    diagnosticsErrorSeverityClass,
     diagnosticsStatusClass,
+    diagnosticsTimelineRowClass,
     filterDiagnosticsExecutionNodes,
     filterDiagnosticsComparisonRuns,
+    formatDiagnosticErrorPhase,
+    formatDiagnosticErrorSeverity,
     formatDiagnosticEventKind,
     formatDiagnosticSourceComponent,
     formatDiagnosticsDuration,
@@ -60,6 +65,7 @@
   let requestSerial = 0;
 
   let factRows = $derived(runDetail ? buildDiagnosticsFactRows(runDetail) : []);
+  let runErrorSummary = $derived(runDetail ? buildDiagnosticsRunErrorSummary(runDetail) : null);
   let executionFilterOptions = $derived(
     nodeStatuses.length > 0
       ? buildDiagnosticsExecutionFilterOptions(nodeStatuses)
@@ -245,6 +251,17 @@
                 {formatDiagnosticsStatusLabel(runDetail.status)}
               </span>
             </div>
+
+            {#if runErrorSummary}
+              <div class={`mt-4 rounded border px-3 py-2 text-xs ${diagnosticsErrorSeverityClass(runErrorSummary.severity)}`}>
+                <div class="flex items-center justify-between gap-3">
+                  <span class="font-semibold">{formatDiagnosticErrorSeverity(runErrorSummary.severity)}</span>
+                  <span class="font-mono text-[11px]" title={runErrorSummary.eventId}>{runErrorSummary.eventId}</span>
+                </div>
+                <div class="mt-1 font-mono text-[11px]">{runErrorSummary.code}</div>
+                <div class="mt-1 text-[11px]">{formatDiagnosticErrorPhase(runErrorSummary.phase)}</div>
+              </div>
+            {/if}
 
             <dl class="mt-4 grid grid-cols-2 gap-3 text-xs">
               <div>
@@ -639,6 +656,63 @@
             </section>
           {/if}
 
+          {#if runErrorSummary}
+            <section class={`rounded border p-4 ${diagnosticsErrorSeverityClass(runErrorSummary.severity)}`}>
+              <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <h2 class="text-sm font-semibold">{formatDiagnosticErrorSeverity(runErrorSummary.severity)} Diagnostic</h2>
+                  <div class="mt-1 font-mono text-xs">{runErrorSummary.code}</div>
+                </div>
+                <div class="shrink-0 text-right text-xs">
+                  <div>{formatDiagnosticErrorPhase(runErrorSummary.phase)}</div>
+                  <div class="mt-1 font-mono" title={runErrorSummary.eventId}>{runErrorSummary.eventId}</div>
+                </div>
+              </div>
+              <p class="mt-3 whitespace-pre-wrap text-sm">{runErrorSummary.message}</p>
+            </section>
+          {/if}
+
+          {#if filteredExecutionNodes.some((node) => node.error_event_id || node.error || node.error_severity)}
+            <section class="rounded border border-neutral-800 bg-neutral-900/50">
+              <div class="border-b border-neutral-800 px-4 py-3">
+                <h2 class="text-sm font-semibold text-neutral-100">Node Errors</h2>
+                <div class="mt-1 text-xs text-neutral-500">Node-scoped diagnostic failures</div>
+              </div>
+              <div class="overflow-auto">
+                <table class="w-full min-w-[48rem] text-left text-sm">
+                  <thead class="sticky top-0 bg-neutral-950 text-[11px] uppercase tracking-[0.18em] text-neutral-500">
+                    <tr class="border-b border-neutral-800">
+                      <th class="px-4 py-3 font-medium">Node</th>
+                      <th class="px-3 py-3 font-medium">Status</th>
+                      <th class="px-3 py-3 font-medium">Severity</th>
+                      <th class="px-3 py-3 font-medium">Phase</th>
+                      <th class="px-3 py-3 font-medium">Code</th>
+                      <th class="px-4 py-3 font-medium">Event</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-neutral-900">
+                    {#each filteredExecutionNodes.filter((node) => node.error_event_id || node.error || node.error_severity) as node (node.node_id)}
+                      <tr>
+                        <td class="px-4 py-2 font-mono text-xs text-neutral-300" title={node.node_id}>{node.node_id}</td>
+                        <td class="px-3 py-2 text-xs text-neutral-300">{node.status}</td>
+                        <td class="px-3 py-2 text-xs text-neutral-300">
+                          {formatDiagnosticErrorSeverity(node.error_severity)}
+                        </td>
+                        <td class="px-3 py-2 text-xs text-neutral-400">
+                          {formatDiagnosticErrorPhase(node.error_phase)}
+                        </td>
+                        <td class="px-3 py-2 font-mono text-xs text-neutral-400">{node.error_code ?? 'unknown_error'}</td>
+                        <td class="px-4 py-2 font-mono text-xs text-neutral-500" title={node.error_event_id ?? ''}>
+                          {node.error_event_id ?? 'Unassigned'}
+                        </td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          {/if}
+
           <section class="rounded border border-neutral-800 bg-neutral-900/50">
             <div class="border-b border-neutral-800 px-4 py-3">
               <h2 class="text-sm font-semibold text-neutral-100">Scheduler Timeline</h2>
@@ -662,7 +736,7 @@
                   </thead>
                   <tbody class="divide-y divide-neutral-900">
                     {#each timelineEvents as event (event.event_id)}
-                      <tr>
+                      <tr class={diagnosticsTimelineRowClass(event)}>
                         <td class="px-4 py-2 font-mono text-xs text-neutral-400">{event.event_seq}</td>
                         <td class="px-3 py-2 text-xs text-neutral-400">
                           {formatDiagnosticsTimestamp(event.occurred_at_ms)}
@@ -674,9 +748,19 @@
                           {formatDiagnosticSourceComponent(event.source_component)}
                         </td>
                         <td class="max-w-[28rem] px-3 py-2">
-                          <div class="truncate text-neutral-200" title={event.summary}>{event.summary}</div>
+                          <div class="flex items-center gap-2">
+                            {#if event.error_severity}
+                              <span class={`shrink-0 rounded border px-1.5 py-0.5 text-[11px] ${diagnosticsErrorSeverityClass(event.error_severity)}`}>
+                                {formatDiagnosticErrorSeverity(event.error_severity)}
+                              </span>
+                            {/if}
+                            <div class="min-w-0 truncate text-neutral-200" title={event.summary}>{event.summary}</div>
+                          </div>
                           {#if event.detail}
                             <div class="mt-1 truncate text-xs text-neutral-500" title={event.detail}>{event.detail}</div>
+                          {/if}
+                          {#if event.error_phase}
+                            <div class="mt-1 text-xs text-neutral-500">{formatDiagnosticErrorPhase(event.error_phase)}</div>
                           {/if}
                         </td>
                         <td class="px-4 py-2 text-xs text-neutral-500">
