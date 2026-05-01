@@ -346,7 +346,7 @@ run-scoped error diagnostics through the primary ledger.
   path leaves `caused_by_event_id` unset.
 - [x] Add explicit diagnostics-unavailable mapping for ledger append failure or
   command failure before service wiring is available.
-- [ ] Add error-context builders for workflow run, scheduler, runtime, node,
+- [x] Add error-context builders for workflow run, scheduler, runtime, node,
   model dependency, managed binary, artifact, projection, and transport phases.
 - [x] Ensure helper logic is sync-core/async-shell: pure shaping is sync,
   storage calls remain at existing I/O boundaries.
@@ -368,14 +368,15 @@ run-scoped error diagnostics through the primary ledger.
 - `cargo check -p pantograph-workflow-service`
 - `cargo check --manifest-path src-tauri/Cargo.toml`
 
-**Status:** In progress as of 2026-05-01. Added the focused
+**Status:** Complete on 2026-05-01. Added the focused
 `workflow/diagnostic_errors.rs` recorder module with a typed phase registry,
 scope structs, phase-specific builder methods, direct-causality builder,
 diagnostics-unavailable outcomes, workflow-service README notes, and Tauri
-diagnostics ownership notes. The remaining Milestone 2 work is to add the
-broader context-builder set for run snapshot, scheduler, model dependency,
-managed binary, artifact, and output-validation phases before wiring every
-workflow catch site.
+diagnostics ownership notes. Expanded the builder and registry set for run
+snapshot, scheduler admission, runtime preflight, runtime model load, runtime
+launch, model dependency, managed binary, node execution, output validation,
+run timeout, artifact, projection, and transport failure phases before wiring
+workflow catch sites.
 
 Verification completed for this slice:
 - `cargo check -p pantograph-workflow-service`

@@ -270,7 +270,7 @@ fn workflow_diagnostic_error_recorder_validates_registered_scope() {
 fn workflow_diagnostic_error_registry_declares_phase_contracts() {
     let registry = registered_workflow_diagnostic_error_phases();
 
-    assert_eq!(registry.len(), 5);
+    assert_eq!(registry.len(), 13);
     let runtime_model_load = registry
         .iter()
         .find(|entry| entry.phase == WorkflowDiagnosticErrorPhase::RuntimeModelLoad)
@@ -292,6 +292,11 @@ fn workflow_diagnostic_error_registry_declares_phase_contracts() {
     assert!(registry.iter().any(|entry| {
         entry.phase == WorkflowDiagnosticErrorPhase::Projection
             && entry.projection_effect == WorkflowDiagnosticProjectionEffect::DiagnosticsOnly
+    }));
+    assert!(registry.iter().any(|entry| {
+        entry.phase == WorkflowDiagnosticErrorPhase::ManagedBinary
+            && entry.phase_id == "managed_binary"
+            && entry.projection_effect == WorkflowDiagnosticProjectionEffect::FatalRunFailure
     }));
 }
 

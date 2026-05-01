@@ -18,9 +18,17 @@ use super::{WorkflowService, WorkflowServiceError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum WorkflowDiagnosticErrorPhase {
+    RunSnapshot,
+    SchedulerAdmission,
+    RuntimePreflight,
     RuntimeModelLoad,
     RuntimeLaunch,
+    ModelDependency,
+    ManagedBinary,
     NodeExecution,
+    OutputValidation,
+    RunTimeout,
+    Artifact,
     Projection,
     Transport,
 }
@@ -70,6 +78,42 @@ const WORKFLOW_SERVICE_SOURCE: &[DiagnosticEventSourceComponent] =
 
 const WORKFLOW_DIAGNOSTIC_ERROR_REGISTRY: &[WorkflowDiagnosticErrorRegistryEntry] = &[
     WorkflowDiagnosticErrorRegistryEntry {
+        phase: WorkflowDiagnosticErrorPhase::RunSnapshot,
+        phase_id: "run_snapshot",
+        code: "run_snapshot_failed",
+        scope_kind: DiagnosticErrorScopeKind::Run,
+        default_source: DiagnosticEventSourceComponent::WorkflowService,
+        allowed_sources: WORKFLOW_SERVICE_SOURCE,
+        default_severity: DiagnosticErrorSeverity::Fatal,
+        default_recoverability: DiagnosticErrorRecoverability::Unknown,
+        causality_policy: WorkflowDiagnosticCausalityPolicy::DirectProducerKnowledgeOnly,
+        projection_effect: WorkflowDiagnosticProjectionEffect::FatalRunFailure,
+    },
+    WorkflowDiagnosticErrorRegistryEntry {
+        phase: WorkflowDiagnosticErrorPhase::SchedulerAdmission,
+        phase_id: "scheduler_admission",
+        code: "scheduler_admission_failed",
+        scope_kind: DiagnosticErrorScopeKind::Scheduler,
+        default_source: DiagnosticEventSourceComponent::Scheduler,
+        allowed_sources: SCHEDULER_SOURCE,
+        default_severity: DiagnosticErrorSeverity::Fatal,
+        default_recoverability: DiagnosticErrorRecoverability::Retryable,
+        causality_policy: WorkflowDiagnosticCausalityPolicy::DirectProducerKnowledgeOnly,
+        projection_effect: WorkflowDiagnosticProjectionEffect::FatalRunFailure,
+    },
+    WorkflowDiagnosticErrorRegistryEntry {
+        phase: WorkflowDiagnosticErrorPhase::RuntimePreflight,
+        phase_id: "runtime_preflight",
+        code: "runtime_preflight_failed",
+        scope_kind: DiagnosticErrorScopeKind::RuntimeModel,
+        default_source: DiagnosticEventSourceComponent::Scheduler,
+        allowed_sources: SCHEDULER_SOURCE,
+        default_severity: DiagnosticErrorSeverity::Fatal,
+        default_recoverability: DiagnosticErrorRecoverability::Retryable,
+        causality_policy: WorkflowDiagnosticCausalityPolicy::DirectProducerKnowledgeOnly,
+        projection_effect: WorkflowDiagnosticProjectionEffect::FatalRunFailure,
+    },
+    WorkflowDiagnosticErrorRegistryEntry {
         phase: WorkflowDiagnosticErrorPhase::RuntimeModelLoad,
         phase_id: "runtime_model_load",
         code: "runtime_model_load_failed",
@@ -94,12 +138,72 @@ const WORKFLOW_DIAGNOSTIC_ERROR_REGISTRY: &[WorkflowDiagnosticErrorRegistryEntry
         projection_effect: WorkflowDiagnosticProjectionEffect::FatalRunFailure,
     },
     WorkflowDiagnosticErrorRegistryEntry {
+        phase: WorkflowDiagnosticErrorPhase::ModelDependency,
+        phase_id: "model_dependency",
+        code: "model_dependency_failed",
+        scope_kind: DiagnosticErrorScopeKind::RuntimeModel,
+        default_source: DiagnosticEventSourceComponent::Runtime,
+        allowed_sources: RUNTIME_SOURCE,
+        default_severity: DiagnosticErrorSeverity::Fatal,
+        default_recoverability: DiagnosticErrorRecoverability::Retryable,
+        causality_policy: WorkflowDiagnosticCausalityPolicy::DirectProducerKnowledgeOnly,
+        projection_effect: WorkflowDiagnosticProjectionEffect::FatalRunFailure,
+    },
+    WorkflowDiagnosticErrorRegistryEntry {
+        phase: WorkflowDiagnosticErrorPhase::ManagedBinary,
+        phase_id: "managed_binary",
+        code: "managed_binary_failed",
+        scope_kind: DiagnosticErrorScopeKind::RuntimeModel,
+        default_source: DiagnosticEventSourceComponent::Runtime,
+        allowed_sources: RUNTIME_SOURCE,
+        default_severity: DiagnosticErrorSeverity::Fatal,
+        default_recoverability: DiagnosticErrorRecoverability::Retryable,
+        causality_policy: WorkflowDiagnosticCausalityPolicy::DirectProducerKnowledgeOnly,
+        projection_effect: WorkflowDiagnosticProjectionEffect::FatalRunFailure,
+    },
+    WorkflowDiagnosticErrorRegistryEntry {
         phase: WorkflowDiagnosticErrorPhase::NodeExecution,
         phase_id: "node_execution",
         code: "node_execution_failed",
         scope_kind: DiagnosticErrorScopeKind::Node,
         default_source: DiagnosticEventSourceComponent::NodeExecution,
         allowed_sources: NODE_EXECUTION_SOURCE,
+        default_severity: DiagnosticErrorSeverity::Fatal,
+        default_recoverability: DiagnosticErrorRecoverability::Unknown,
+        causality_policy: WorkflowDiagnosticCausalityPolicy::DirectProducerKnowledgeOnly,
+        projection_effect: WorkflowDiagnosticProjectionEffect::FatalRunFailure,
+    },
+    WorkflowDiagnosticErrorRegistryEntry {
+        phase: WorkflowDiagnosticErrorPhase::OutputValidation,
+        phase_id: "output_validation",
+        code: "output_validation_failed",
+        scope_kind: DiagnosticErrorScopeKind::Node,
+        default_source: DiagnosticEventSourceComponent::WorkflowService,
+        allowed_sources: WORKFLOW_SERVICE_SOURCE,
+        default_severity: DiagnosticErrorSeverity::Fatal,
+        default_recoverability: DiagnosticErrorRecoverability::Unrecoverable,
+        causality_policy: WorkflowDiagnosticCausalityPolicy::DirectProducerKnowledgeOnly,
+        projection_effect: WorkflowDiagnosticProjectionEffect::FatalRunFailure,
+    },
+    WorkflowDiagnosticErrorRegistryEntry {
+        phase: WorkflowDiagnosticErrorPhase::RunTimeout,
+        phase_id: "run_timeout",
+        code: "run_timeout",
+        scope_kind: DiagnosticErrorScopeKind::Run,
+        default_source: DiagnosticEventSourceComponent::WorkflowService,
+        allowed_sources: WORKFLOW_SERVICE_SOURCE,
+        default_severity: DiagnosticErrorSeverity::Fatal,
+        default_recoverability: DiagnosticErrorRecoverability::Retryable,
+        causality_policy: WorkflowDiagnosticCausalityPolicy::DirectProducerKnowledgeOnly,
+        projection_effect: WorkflowDiagnosticProjectionEffect::FatalRunFailure,
+    },
+    WorkflowDiagnosticErrorRegistryEntry {
+        phase: WorkflowDiagnosticErrorPhase::Artifact,
+        phase_id: "artifact",
+        code: "artifact_failed",
+        scope_kind: DiagnosticErrorScopeKind::Artifact,
+        default_source: DiagnosticEventSourceComponent::WorkflowService,
+        allowed_sources: WORKFLOW_SERVICE_SOURCE,
         default_severity: DiagnosticErrorSeverity::Fatal,
         default_recoverability: DiagnosticErrorRecoverability::Unknown,
         causality_policy: WorkflowDiagnosticCausalityPolicy::DirectProducerKnowledgeOnly,
@@ -297,6 +401,42 @@ pub(crate) struct WorkflowDiagnosticErrorRecordRequest {
 
 impl WorkflowDiagnosticErrorRecordRequest {
     #[track_caller]
+    pub(crate) fn run_snapshot_failed(
+        scope: WorkflowDiagnosticRunScope,
+        error: &WorkflowServiceError,
+    ) -> Self {
+        Self::from_error(
+            WorkflowDiagnosticErrorPhase::RunSnapshot,
+            WorkflowDiagnosticErrorScope::Run(scope),
+            error,
+        )
+    }
+
+    #[track_caller]
+    pub(crate) fn scheduler_admission_failed(
+        scope: WorkflowDiagnosticSchedulerScope,
+        error: &WorkflowServiceError,
+    ) -> Self {
+        Self::from_error(
+            WorkflowDiagnosticErrorPhase::SchedulerAdmission,
+            WorkflowDiagnosticErrorScope::Scheduler(scope),
+            error,
+        )
+    }
+
+    #[track_caller]
+    pub(crate) fn runtime_preflight_failed(
+        scope: WorkflowDiagnosticRuntimeModelScope,
+        error: &WorkflowServiceError,
+    ) -> Self {
+        Self::from_error(
+            WorkflowDiagnosticErrorPhase::RuntimePreflight,
+            WorkflowDiagnosticErrorScope::RuntimeModel(scope),
+            error,
+        )
+    }
+
+    #[track_caller]
     pub(crate) fn runtime_model_load_failed(
         scope: WorkflowDiagnosticRuntimeModelScope,
         error: &WorkflowServiceError,
@@ -321,6 +461,30 @@ impl WorkflowDiagnosticErrorRecordRequest {
     }
 
     #[track_caller]
+    pub(crate) fn model_dependency_failed(
+        scope: WorkflowDiagnosticRuntimeModelScope,
+        error: &WorkflowServiceError,
+    ) -> Self {
+        Self::from_error(
+            WorkflowDiagnosticErrorPhase::ModelDependency,
+            WorkflowDiagnosticErrorScope::RuntimeModel(scope),
+            error,
+        )
+    }
+
+    #[track_caller]
+    pub(crate) fn managed_binary_failed(
+        scope: WorkflowDiagnosticRuntimeModelScope,
+        error: &WorkflowServiceError,
+    ) -> Self {
+        Self::from_error(
+            WorkflowDiagnosticErrorPhase::ManagedBinary,
+            WorkflowDiagnosticErrorScope::RuntimeModel(scope),
+            error,
+        )
+    }
+
+    #[track_caller]
     pub(crate) fn node_execution_failed(
         scope: WorkflowDiagnosticNodeScope,
         error: &WorkflowServiceError,
@@ -328,6 +492,42 @@ impl WorkflowDiagnosticErrorRecordRequest {
         Self::from_error(
             WorkflowDiagnosticErrorPhase::NodeExecution,
             WorkflowDiagnosticErrorScope::Node(scope),
+            error,
+        )
+    }
+
+    #[track_caller]
+    pub(crate) fn output_validation_failed(
+        scope: WorkflowDiagnosticNodeScope,
+        error: &WorkflowServiceError,
+    ) -> Self {
+        Self::from_error(
+            WorkflowDiagnosticErrorPhase::OutputValidation,
+            WorkflowDiagnosticErrorScope::Node(scope),
+            error,
+        )
+    }
+
+    #[track_caller]
+    pub(crate) fn run_timeout(
+        scope: WorkflowDiagnosticRunScope,
+        error: &WorkflowServiceError,
+    ) -> Self {
+        Self::from_error(
+            WorkflowDiagnosticErrorPhase::RunTimeout,
+            WorkflowDiagnosticErrorScope::Run(scope),
+            error,
+        )
+    }
+
+    #[track_caller]
+    pub(crate) fn artifact_failed(
+        scope: WorkflowDiagnosticArtifactScope,
+        error: &WorkflowServiceError,
+    ) -> Self {
+        Self::from_error(
+            WorkflowDiagnosticErrorPhase::Artifact,
+            WorkflowDiagnosticErrorScope::Artifact(scope),
             error,
         )
     }
