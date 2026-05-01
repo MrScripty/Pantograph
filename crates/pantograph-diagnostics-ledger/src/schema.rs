@@ -388,6 +388,9 @@ fn apply_scheduler_timeline_projection_schema(
             retention_policy_id TEXT,
             summary TEXT NOT NULL,
             detail TEXT,
+            error_severity TEXT,
+            error_phase TEXT,
+            related_event_ids_json TEXT,
             payload_json TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_scheduler_timeline_run_seq
@@ -397,6 +400,19 @@ fn apply_scheduler_timeline_projection_schema(
         CREATE INDEX IF NOT EXISTS idx_scheduler_timeline_policy_seq
             ON scheduler_timeline_projection(scheduler_policy_id, event_seq);
         "#,
+    )?;
+    ensure_column(
+        tx,
+        "scheduler_timeline_projection",
+        "error_severity",
+        "TEXT",
+    )?;
+    ensure_column(tx, "scheduler_timeline_projection", "error_phase", "TEXT")?;
+    ensure_column(
+        tx,
+        "scheduler_timeline_projection",
+        "related_event_ids_json",
+        "TEXT",
     )?;
     Ok(())
 }
@@ -431,6 +447,14 @@ fn apply_run_list_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagnost
             estimated_duration_ms INTEGER,
             model_cache_state TEXT,
             scheduler_reason TEXT,
+            latest_error_event_id TEXT,
+            latest_error_severity TEXT,
+            latest_error_phase TEXT,
+            latest_error_code TEXT,
+            latest_error_message TEXT,
+            fatal_error_event_id TEXT,
+            error_count INTEGER NOT NULL DEFAULT 0,
+            warning_count INTEGER NOT NULL DEFAULT 0,
             last_event_seq INTEGER NOT NULL,
             last_updated_at_ms INTEGER NOT NULL
         );
@@ -460,6 +484,7 @@ fn apply_run_list_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagnost
             ON run_list_projection(workflow_execution_session_id, last_updated_at_ms DESC);
         "#,
     )?;
+    ensure_error_projection_columns(tx, "run_list_projection")?;
     Ok(())
 }
 
@@ -500,6 +525,14 @@ fn apply_run_detail_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagno
             estimated_duration_ms INTEGER,
             model_cache_state TEXT,
             scheduler_reason TEXT,
+            latest_error_event_id TEXT,
+            latest_error_severity TEXT,
+            latest_error_phase TEXT,
+            latest_error_code TEXT,
+            latest_error_message TEXT,
+            fatal_error_event_id TEXT,
+            error_count INTEGER NOT NULL DEFAULT 0,
+            warning_count INTEGER NOT NULL DEFAULT 0,
             timeline_event_count INTEGER NOT NULL,
             last_event_seq INTEGER NOT NULL,
             last_updated_at_ms INTEGER NOT NULL
@@ -514,6 +547,41 @@ fn apply_run_detail_projection_schema(tx: &Transaction<'_>) -> Result<(), Diagno
             ON run_detail_projection(selected_runtime_id, last_updated_at_ms DESC);
         "#,
     )?;
+    ensure_error_projection_columns(tx, "run_detail_projection")?;
+    Ok(())
+}
+
+fn ensure_error_projection_columns(
+    tx: &Transaction<'_>,
+    table_name: &str,
+) -> Result<(), DiagnosticsLedgerError> {
+    ensure_column(tx, table_name, "latest_error_event_id", "TEXT")?;
+    ensure_column(tx, table_name, "latest_error_severity", "TEXT")?;
+    ensure_column(tx, table_name, "latest_error_phase", "TEXT")?;
+    ensure_column(tx, table_name, "latest_error_code", "TEXT")?;
+    ensure_column(tx, table_name, "latest_error_message", "TEXT")?;
+    ensure_column(tx, table_name, "fatal_error_event_id", "TEXT")?;
+    ensure_column(tx, table_name, "error_count", "INTEGER NOT NULL DEFAULT 0")?;
+    ensure_column(
+        tx,
+        table_name,
+        "warning_count",
+        "INTEGER NOT NULL DEFAULT 0",
+    )
+}
+
+fn ensure_column(
+    tx: &Transaction<'_>,
+    table_name: &str,
+    column_name: &str,
+    definition: &str,
+) -> Result<(), DiagnosticsLedgerError> {
+    if !column_exists(tx, table_name, column_name)? {
+        tx.execute(
+            format!("ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}").as_str(),
+            [],
+        )?;
+    }
     Ok(())
 }
 

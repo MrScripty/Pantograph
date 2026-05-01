@@ -9,11 +9,11 @@ use crate::DiagnosticsLedgerError;
 pub const DIAGNOSTIC_EVENT_SCHEMA_VERSION: i64 = 1;
 pub const MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES: usize = 8_192;
 pub const SCHEDULER_TIMELINE_PROJECTION_NAME: &str = "scheduler_timeline";
-pub const SCHEDULER_TIMELINE_PROJECTION_VERSION: i64 = 3;
+pub const SCHEDULER_TIMELINE_PROJECTION_VERSION: i64 = 4;
 pub const RUN_LIST_PROJECTION_NAME: &str = "run_list";
-pub const RUN_LIST_PROJECTION_VERSION: i64 = 5;
+pub const RUN_LIST_PROJECTION_VERSION: i64 = 6;
 pub const RUN_DETAIL_PROJECTION_NAME: &str = "run_detail";
-pub const RUN_DETAIL_PROJECTION_VERSION: i64 = 4;
+pub const RUN_DETAIL_PROJECTION_VERSION: i64 = 5;
 pub const IO_ARTIFACT_PROJECTION_NAME: &str = "io_artifact";
 pub const IO_ARTIFACT_PROJECTION_VERSION: i64 = 5;
 pub const LIBRARY_USAGE_PROJECTION_NAME: &str = "library_usage";
@@ -1288,6 +1288,27 @@ pub enum DiagnosticErrorSeverity {
     Fatal,
 }
 
+impl DiagnosticErrorSeverity {
+    pub(crate) fn as_db(self) -> &'static str {
+        match self {
+            Self::Warning => "warning",
+            Self::Error => "error",
+            Self::Fatal => "fatal",
+        }
+    }
+
+    pub(crate) fn from_db(value: &str) -> Result<Self, DiagnosticsLedgerError> {
+        match value {
+            "warning" => Ok(Self::Warning),
+            "error" => Ok(Self::Error),
+            "fatal" => Ok(Self::Fatal),
+            _ => Err(DiagnosticsLedgerError::InvalidField {
+                field: "error_severity",
+            }),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DiagnosticErrorRecoverability {
@@ -1623,6 +1644,9 @@ pub struct SchedulerTimelineProjectionRecord {
     pub retention_policy_id: Option<String>,
     pub summary: String,
     pub detail: Option<String>,
+    pub error_severity: Option<DiagnosticErrorSeverity>,
+    pub error_phase: Option<String>,
+    pub related_event_ids: Vec<String>,
     pub payload_json: String,
 }
 
@@ -1689,6 +1713,8 @@ pub struct RunListProjectionQuery {
     pub bucket_id: Option<BucketId>,
     pub accepted_at_from_ms: Option<i64>,
     pub accepted_at_to_ms: Option<i64>,
+    pub error_severity: Option<DiagnosticErrorSeverity>,
+    pub error_phase: Option<String>,
     pub after_event_seq: Option<i64>,
     pub limit: u32,
 }
@@ -1710,6 +1736,8 @@ impl Default for RunListProjectionQuery {
             bucket_id: None,
             accepted_at_from_ms: None,
             accepted_at_to_ms: None,
+            error_severity: None,
+            error_phase: None,
             after_event_seq: None,
             limit: 100,
         }
@@ -1775,7 +1803,8 @@ impl RunListProjectionQuery {
             "selected_network_node_id",
             self.selected_network_node_id.as_deref(),
             MAX_ID_LEN,
-        )
+        )?;
+        validate_optional_text("error_phase", self.error_phase.as_deref(), MAX_ID_LEN)
     }
 }
 
@@ -1807,6 +1836,14 @@ pub struct RunListProjectionRecord {
     pub estimated_duration_ms: Option<u64>,
     pub model_cache_state: Option<SchedulerModelCacheState>,
     pub scheduler_reason: Option<String>,
+    pub latest_error_event_id: Option<String>,
+    pub latest_error_severity: Option<DiagnosticErrorSeverity>,
+    pub latest_error_phase: Option<String>,
+    pub latest_error_code: Option<String>,
+    pub latest_error_message: Option<String>,
+    pub fatal_error_event_id: Option<String>,
+    pub error_count: u64,
+    pub warning_count: u64,
     pub last_event_seq: i64,
     pub last_updated_at_ms: i64,
 }
@@ -1870,6 +1907,14 @@ pub struct RunDetailProjectionRecord {
     pub estimated_duration_ms: Option<u64>,
     pub model_cache_state: Option<SchedulerModelCacheState>,
     pub scheduler_reason: Option<String>,
+    pub latest_error_event_id: Option<String>,
+    pub latest_error_severity: Option<DiagnosticErrorSeverity>,
+    pub latest_error_phase: Option<String>,
+    pub latest_error_code: Option<String>,
+    pub latest_error_message: Option<String>,
+    pub fatal_error_event_id: Option<String>,
+    pub error_count: u64,
+    pub warning_count: u64,
     pub timeline_event_count: u64,
     pub last_event_seq: i64,
     pub last_updated_at_ms: i64,

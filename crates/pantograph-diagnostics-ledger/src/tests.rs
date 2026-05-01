@@ -621,6 +621,14 @@ fn diagnostic_event_ledger_appends_error_events_and_projects_timeline() {
         .as_deref()
         .unwrap_or_default()
         .contains("phase runtime_model_load"));
+    assert_eq!(
+        timeline[0].error_severity,
+        Some(DiagnosticErrorSeverity::Fatal)
+    );
+    assert_eq!(
+        timeline[0].error_phase.as_deref(),
+        Some("runtime_model_load")
+    );
 }
 
 #[test]
@@ -659,12 +667,33 @@ fn diagnostic_event_ledger_projects_fatal_error_as_failed_run() {
             bucket_id: None,
             accepted_at_from_ms: None,
             accepted_at_to_ms: None,
+            error_severity: None,
+            error_phase: None,
             after_event_seq: None,
             limit: 10,
         })
         .expect("run list query succeeds");
     assert_eq!(runs.len(), 1);
     assert_eq!(runs[0].status, RunListProjectionStatus::Failed);
+    assert_eq!(
+        runs[0].latest_error_severity,
+        Some(DiagnosticErrorSeverity::Fatal)
+    );
+    assert_eq!(
+        runs[0].latest_error_phase.as_deref(),
+        Some("runtime_model_load")
+    );
+    assert_eq!(runs[0].error_count, 1);
+    assert_eq!(runs[0].warning_count, 0);
+    let fatal_runs = ledger
+        .query_run_list_projection(RunListProjectionQuery {
+            error_severity: Some(DiagnosticErrorSeverity::Fatal),
+            error_phase: Some("runtime_model_load".to_string()),
+            ..RunListProjectionQuery::default()
+        })
+        .expect("fatal error-filtered run list query succeeds");
+    assert_eq!(fatal_runs.len(), 1);
+    assert_eq!(fatal_runs[0].workflow_run_id.as_str(), "workflow_run_alpha");
 
     let detail = ledger
         .query_run_detail_projection(RunDetailProjectionQuery {
@@ -677,6 +706,12 @@ fn diagnostic_event_ledger_projects_fatal_error_as_failed_run() {
         detail.terminal_error.as_deref(),
         Some("backend failed to start")
     );
+    assert_eq!(detail.fatal_error_event_id, detail.latest_error_event_id);
+    assert_eq!(
+        detail.latest_error_code.as_deref(),
+        Some("llamacpp_start_failed")
+    );
+    assert_eq!(detail.error_count, 1);
 }
 
 #[test]

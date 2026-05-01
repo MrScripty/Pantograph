@@ -1,16 +1,17 @@
 use pantograph_diagnostics_ledger::{
     ApplyArtifactRetentionPolicyCommand, ApplyArtifactRetentionPolicyResult,
-    DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
-    DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerRepository,
-    DiagnosticsQuery, DiagnosticsRetentionPolicy, ExecutionGuaranteeLevel,
-    IoArtifactProjectionQuery, IoArtifactProjectionRecord, IoArtifactRetentionState,
-    IoArtifactRetentionSummaryQuery, IoArtifactRetentionSummaryRecord, LibraryAssetAccessedPayload,
-    LibraryAssetCacheStatus, LibraryAssetOperation, LibraryUsageProjectionQuery,
-    LibraryUsageProjectionRecord, ModelLicenseUsageEvent, NodeExecutionProjectionStatus,
-    NodeStatusProjectionQuery, NodeStatusProjectionRecord, ProjectionStateRecord, RetentionClass,
-    RetentionPolicyActorScope, RetentionPolicyChangedPayload, RunDetailProjectionQuery,
-    RunDetailProjectionRecord, RunListFacetRecord, RunListProjectionQuery, RunListProjectionRecord,
-    RunListProjectionStatus, RunTerminalPayload, RunTerminalStatus, SchedulerModelCacheState,
+    DiagnosticErrorSeverity, DiagnosticEventAppendRequest, DiagnosticEventPayload,
+    DiagnosticEventPrivacyClass, DiagnosticEventRetentionClass, DiagnosticEventSourceComponent,
+    DiagnosticsLedgerRepository, DiagnosticsQuery, DiagnosticsRetentionPolicy,
+    ExecutionGuaranteeLevel, IoArtifactProjectionQuery, IoArtifactProjectionRecord,
+    IoArtifactRetentionState, IoArtifactRetentionSummaryQuery, IoArtifactRetentionSummaryRecord,
+    LibraryAssetAccessedPayload, LibraryAssetCacheStatus, LibraryAssetOperation,
+    LibraryUsageProjectionQuery, LibraryUsageProjectionRecord, ModelLicenseUsageEvent,
+    NodeExecutionProjectionStatus, NodeStatusProjectionQuery, NodeStatusProjectionRecord,
+    ProjectionStateRecord, RetentionClass, RetentionPolicyActorScope,
+    RetentionPolicyChangedPayload, RunDetailProjectionQuery, RunDetailProjectionRecord,
+    RunListFacetRecord, RunListProjectionQuery, RunListProjectionRecord, RunListProjectionStatus,
+    RunTerminalPayload, RunTerminalStatus, SchedulerModelCacheState,
     SchedulerTimelineProjectionQuery, SchedulerTimelineProjectionRecord,
     UpdateRetentionPolicyCommand,
 };
@@ -139,6 +140,10 @@ pub struct WorkflowRunListQueryRequest {
     pub accepted_at_from_ms: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub accepted_at_to_ms: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_severity: Option<DiagnosticErrorSeverity>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_phase: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub after_event_seq: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -912,6 +917,8 @@ impl WorkflowRunListQueryRequest {
             bucket_id: parse_optional_id("bucket_id", self.bucket_id)?,
             accepted_at_from_ms: self.accepted_at_from_ms,
             accepted_at_to_ms: self.accepted_at_to_ms,
+            error_severity: self.error_severity,
+            error_phase: self.error_phase,
             after_event_seq: self.after_event_seq,
             limit: self
                 .limit

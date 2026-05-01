@@ -483,9 +483,9 @@ Verification completed for this slice:
 failure projections.
 
 **Tasks:**
-- [ ] Extend run list/detail projections with latest error summary, error
+- [x] Extend run list/detail projections with latest error summary, error
   counts, fatal error ID, and warning count.
-- [ ] Extend scheduler timeline projection with error severity, phase, and
+- [x] Extend scheduler timeline projection with error severity, phase, and
   related event references.
 - [ ] Extend run graph/node projections so node-scoped fatal errors mark the
   node failed and expose the error event ID.
@@ -497,7 +497,7 @@ failure projections.
 - [ ] Add a typed projection operation wrapper for drains, queries, and rebuilds
   so projection code can record `projection_failed` diagnostics without
   hand-built payloads or scheduler-state side effects.
-- [ ] Add query filters for errors and warnings without frontend-side event
+- [x] Add query filters for errors and warnings without frontend-side event
   parsing.
 
 **Verification:**
@@ -510,13 +510,21 @@ failure projections.
 **Status:** In progress as of 2026-05-01. Added the first fatal-error
 projection rule: run list/detail projections now treat fatal canonical error
 events as failed run facts and preserve the sanitized error message in run
-detail when no terminal event is present. Remaining Milestone 4 work includes
-latest-error/count fields, scheduler timeline severity fields, node-status
-fatal projection, projection failure wrappers, and query filters.
+detail when no terminal event is present. Run list/detail projections now carry
+latest error ID, severity, phase, code, message, fatal error ID, error count,
+and warning count. Scheduler timeline rows now carry error severity, phase, and
+related event IDs. Run list queries can filter by latest error severity and
+phase. Remaining Milestone 4 work includes node-status fatal projection and
+projection failure wrappers.
 
 Verification completed for this slice:
 - `cargo test -p pantograph-diagnostics-ledger diagnostic_event_ledger_projects_fatal_error_as_failed_run`
 - `cargo test -p pantograph-diagnostics-ledger diagnostic_event_ledger_appends_error_events_and_projects_timeline`
+- `cargo test -p pantograph-diagnostics-ledger diagnostic_event_ledger`
+- `cargo test -p pantograph-workflow-service workflow_run_list_query`
+- `cargo test -p pantograph-workflow-service --test contract run_projection_cross_layer_fixture_deserializes`
+- `cargo test -p pantograph-workflow-service --test contract workflow_run_detail_query_contract_snapshot`
+- `cargo test -p pantograph-workflow-service --test contract workflow_scheduler_timeline_query_contract_snapshot`
 
 ### Milestone 5: Frontend Diagnostics Visibility
 
