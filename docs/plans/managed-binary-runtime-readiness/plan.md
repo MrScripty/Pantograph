@@ -272,18 +272,18 @@ emitted relative to managed binary resolution and llama.cpp startup.
 **Tasks:**
 - [ ] Inspect current app-data managed runtime state and selected llama.cpp
       version for legacy/current path mismatch.
-- [ ] Inspect managed redistributable state for `ffmpeg`, `ocioconvert`,
+- [x] Inspect managed redistributable state for `ffmpeg`, `ocioconvert`,
       `oiiotool`, and OpenColorIO/OCIO so the facade design covers all
       binary categories.
-- [ ] Trace workflow run events from admission through
+- [x] Trace workflow run events from admission through
       `load_session_runtime`, gateway start, `LlamaServer::wait_for_ready`,
       scheduler diagnostics emission, and terminal run state.
 - [ ] Add a failing regression that proves `model load completed` can be
       emitted without requested model readiness.
-- [ ] Record whether the active failure is launch resolution, install
+- [x] Record whether the active failure is launch resolution, install
       validation, model path resolution, process startup, readiness probing, or
       diagnostics wording.
-- [ ] Record decomposition candidates and standards exceptions before editing
+- [x] Record decomposition candidates and standards exceptions before editing
       files that already exceed the 500-line review threshold.
 
 **Verification:**
@@ -293,7 +293,7 @@ emitted relative to managed binary resolution and llama.cpp startup.
 - Standards note covering dirty-worktree ownership, decomposition targets, and
   whether any new dependencies are needed.
 
-**Status:** Not started.
+**Status:** In progress.
 
 ### Milestone 2: Introduce Managed Binary Facade
 
@@ -301,24 +301,24 @@ emitted relative to managed binary resolution and llama.cpp startup.
 binaries while preserving runtime-vs-media categories.
 
 **Tasks:**
-- [ ] Add a category-aware managed binary facade in `crates/inference` that
+- [x] Add a category-aware managed binary facade in `crates/inference` that
       aggregates runtime sidecars and media redistributables without merging
       their category-specific validation internals.
-- [ ] Include id, category, display name, install/readiness state,
+- [x] Include id, category, display name, install/readiness state,
       selected/default/active version, install root, expected files, missing
       files, active job, unavailable reason, source/checksum metadata when
       present, resolved command support for runtime/tool binaries, and
       activation support for native artifacts where applicable.
-- [ ] Use correct-by-construction enums/newtypes for binary category, ids,
+- [x] Use correct-by-construction enums/newtypes for binary category, ids,
       activation mode, selected version, install root, readiness state, and
       resolved command requests.
-- [ ] Add a structured managed binary error enum and keep string conversion at
+- [x] Add a structured managed binary error enum and keep string conversion at
       adapter boundaries.
-- [ ] Preserve existing runtime and media command functions as adapters over
+- [x] Preserve existing runtime and media command functions as adapters over
       the facade.
 - [ ] Add path migration/fallback behavior or an explicit one-time migration
       for legacy app-data paths.
-- [ ] Extract facade modules instead of expanding existing over-threshold
+- [x] Extract facade modules instead of expanding existing over-threshold
       operations files.
 
 **Verification:**
@@ -329,7 +329,7 @@ binaries while preserving runtime-vs-media categories.
 - Contract tests proving additive serialization for runtime sidecars, media
   tools, and native artifact categories.
 
-**Status:** Not started.
+**Status:** In progress.
 
 ### Milestone 3: Route Launch and Admission Through the Facade
 
@@ -433,6 +433,30 @@ diagnostics, and release artifacts.
   additive contracts, typed Rust APIs, structured errors, decomposition,
   async/task lifecycle, path safety, cross-platform adapters, dependency
   ownership, and isolated/recovery tests.
+- 2026-05-01: User instructed implementation to begin while unrelated dirty
+  worktree files remain. Implementation will avoid those files unless a plan
+  task explicitly requires them and will keep commits path-scoped.
+- 2026-05-01: Milestone 1 trace found the false `model load completed` wording
+  is emitted in `workflow/session_execution_api.rs` immediately after
+  `ensure_session_runtime_loaded` returns. The host load path calls
+  `ensure_workflow_runtime_ready_for_session_load`,
+  `ensure_workflow_inference_model_loaded`, and then runtime reservation, so
+  the remaining defect boundary is either model-path resolution bypass,
+  gateway readiness semantics, or diagnostics treating host-load success as
+  final model residency. A failing regression still needs to lock this down.
+- 2026-05-01: Managed redistributable review found `ffmpeg`,
+  `ocioconvert`, `oiiotool`, and OpenColorIO/OCIO already modeled in
+  `managed_redistributables` with distinct tool-binary vs native-artifact
+  categories, but no shared facade with runtime sidecars.
+- 2026-05-01: Added additive `crates/inference::managed_binaries` facade with
+  typed keys/categories/action support, structured facade errors, runtime
+  sidecar projection, media tool projection, native artifact projection, and
+  focused category/source tests. Existing runtime and redistributable functions
+  remain unchanged adapters for compatibility.
+- 2026-05-01: Decomposition decision: the first facade slice added a new
+  focused `managed_binaries.rs` module instead of expanding over-threshold
+  files (`managed_runtime/operations.rs`, `server.rs`, and
+  `runtime_capabilities.rs`). No new dependencies were added.
 
 ## Commit Cadence Notes
 

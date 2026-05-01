@@ -12,7 +12,7 @@ capability and lifecycle behavior stay here.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `Cargo.toml` | Crate manifest and backend feature declarations. |
-| `src/` | Backend implementations, gateway facade, process contracts, KV-cache support, and managed-runtime lifecycle code. |
+| `src/` | Backend implementations, gateway facade, process contracts, KV-cache support, managed-runtime lifecycle code, and the managed-binary status facade. |
 | `audio/`, `depth/`, `onnx/`, `torch/` | Python/runtime helper assets used by optional backend families. |
 
 ## Problem
@@ -44,6 +44,9 @@ families rather than calling backend modules directly.
 ## Invariants
 - Backends expose explicit capabilities and unsupported behavior.
 - Managed runtime install/remove/resolve operations remain backend-owned.
+- Managed binary status for runtime sidecars, media tools, and native
+  redistributable artifacts is projected through backend-owned DTOs rather than
+  frontend or Tauri-synthesized state.
 - Process spawning is injected through `ProcessSpawner`.
 - Feature flags are public contracts and must stay documented.
 - Runtime reuse, attach, and start facts are emitted by backend-owned code.
@@ -94,8 +97,8 @@ async fn start_gateway() -> Result<(), Box<dyn std::error::Error>> {
 ## API Consumer Contract
 - Inputs: backend configuration, process spawner implementations, managed
   runtime IDs, and inference requests.
-- Outputs: chat, embedding, rerank, KV-cache, runtime lifecycle, and managed
-  runtime DTOs.
+- Outputs: chat, embedding, rerank, KV-cache, runtime lifecycle, managed
+  runtime DTOs, and additive managed-binary facade DTOs.
 - Lifecycle: callers configure a gateway, inject host process behavior, start
   or attach backends, and stop them through the gateway.
 - Errors: backend and lifecycle failures are surfaced as typed or structured
@@ -106,6 +109,8 @@ async fn start_gateway() -> Result<(), Box<dyn std::error::Error>> {
 ## Structured Producer Contract
 - Managed runtime state and runtime lifecycle payloads are structured producer
   outputs consumed by adapters and diagnostics.
+- Managed binary facade payloads are structured producer outputs consumed by
+  Settings, workflow admission, diagnostics, and process launch adapters.
 - Reason: these payloads describe install state, runtime readiness, reuse, and
   backend attachment facts.
 - Revisit trigger: payloads become externally versioned schemas or are consumed

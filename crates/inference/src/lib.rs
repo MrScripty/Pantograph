@@ -31,6 +31,7 @@ pub mod device;
 pub mod embedding_runtime;
 pub mod gateway;
 pub mod kv_cache;
+pub mod managed_binaries;
 pub mod managed_media_dependencies;
 pub mod managed_redistributables;
 pub mod managed_runtime;
@@ -62,6 +63,11 @@ pub use embedding_runtime::{DedicatedEmbeddingRuntimeManager, LlamaCppEmbeddingR
 pub use gateway::{
     EmbeddingRuntimePreparation, EmbeddingStartRequest, GatewayError, InferenceGateway,
     InferenceStartRequest, SharedGateway,
+};
+pub use managed_binaries::{
+    list_managed_binary_statuses, ManagedBinaryActionSupport, ManagedBinaryCategory,
+    ManagedBinaryFacadeError, ManagedBinaryKey, ManagedBinarySource, ManagedBinaryStatus,
+    ManagedBinaryVersionStatus,
 };
 pub use managed_media_dependencies::{
     acquire_media_conversion_dependency_plan, format_media_conversion_dependency_lease_holder,
