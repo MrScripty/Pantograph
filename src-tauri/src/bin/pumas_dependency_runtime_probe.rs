@@ -107,19 +107,19 @@ fn infer_request_fields(record: &ModelRecord) -> (String, Option<String>, Option
         if has_gguf {
             if metadata_task.as_deref() == Some("reranking") {
                 return (
-                    "reranker".to_string(),
+                    "llm-inference".to_string(),
                     Some("llamacpp".to_string()),
                     Some("reranking".to_string()),
                 );
             }
             return (
-                "llamacpp-inference".to_string(),
+                "llm-inference".to_string(),
                 Some("llamacpp".to_string()),
                 Some("text-generation".to_string()),
             );
         }
         return (
-            "pytorch-inference".to_string(),
+            "llm-inference".to_string(),
             Some("pytorch".to_string()),
             Some("text-generation".to_string()),
         );
@@ -133,7 +133,7 @@ fn infer_request_fields(record: &ModelRecord) -> (String, Option<String>, Option
     }
     if model_type == "reranker" {
         return (
-            "reranker".to_string(),
+            "llm-inference".to_string(),
             Some("llamacpp".to_string()),
             Some("reranking".to_string()),
         );
@@ -151,7 +151,7 @@ fn infer_request_fields(record: &ModelRecord) -> (String, Option<String>, Option
         .or_else(|| Some("text-generation".to_string()));
 
     (
-        "pytorch-inference".to_string(),
+        "llm-inference".to_string(),
         Some("pytorch".to_string()),
         task_type_primary,
     )

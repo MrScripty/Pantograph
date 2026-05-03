@@ -1683,6 +1683,9 @@ data resolves to PyTorch/Transformers, and the Python bridge accepts
 Tauri workflow dependency commands and Puma-Lib hydration now use canonical
 `llm-inference` for text-generation/PyTorch inference request shapes instead of
 suggesting or normalizing to the retired `pytorch-inference` node type.
+The Pumas dependency runtime probe now constructs canonical `llm-inference`
+dependency scenarios for GGUF, rerank, and PyTorch-compatible LLM models instead
+of emitting retired backend-specific inference node names.
 
 ### Milestone 12: Prepare Native Candle Slice
 
