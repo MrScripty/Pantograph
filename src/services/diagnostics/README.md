@@ -84,6 +84,10 @@ panel because no active TypeScript boundary consumes them.
   and canonical terminal links are backend-authored facts. Frontend consumers
   may filter or highlight rows with those fields, but must not parse
   `payload_json` to reconstruct error causality.
+- Node-status DTOs carry inference execution context such as `runtime_id`,
+  `task_id`, `selected_backend_key`, and `model_id` when the backend has those
+  facts. Frontend consumers should use those typed fields for run/node display
+  instead of parsing raw diagnostic event payloads.
 
 ## Revisit Triggers
 - Rust-to-TypeScript DTO generation replaces manual interface mirrors.

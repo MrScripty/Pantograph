@@ -150,6 +150,7 @@ fn inference_lifecycle_event_adapter_builds_node_status_event_with_backend_conte
             assert_eq!(payload.status, NodeExecutionProjectionStatus::Failed);
             assert_eq!(payload.completed_at_ms, Some(123));
             assert_eq!(payload.error.as_deref(), Some("backend failed"));
+            assert_eq!(payload.task_id.as_deref(), Some("text_generation"));
             assert_eq!(payload.selected_backend_key.as_deref(), Some("pytorch"));
         }
         other => panic!("expected node execution status payload, got {other:?}"),

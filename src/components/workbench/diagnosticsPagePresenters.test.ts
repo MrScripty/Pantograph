@@ -126,6 +126,8 @@ function createNodeStatus(overrides: Partial<NodeStatusProjectionRecord>): NodeS
     node_version: '1.0.0',
     runtime_id: 'runtime-a',
     runtime_version: '2.0.0',
+    task_id: 'image_generation',
+    selected_backend_key: 'mock',
     model_id: 'model-a',
     model_version: '3.0.0',
     status: 'completed',

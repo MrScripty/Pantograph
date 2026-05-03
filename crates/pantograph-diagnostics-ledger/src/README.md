@@ -67,6 +67,10 @@ append-only audit boundary for scheduler, run, node execution, I/O, Library,
 runtime, and retention facts. The scheduler timeline, run-list, run-detail,
 I/O artifact, and node-status projections are durable materialized read models
 advanced from the event ledger by cursor.
+Node-status projection rows include selected runtime id, canonical inference
+task id, selected backend key, and model id when producers provide them, so UI
+and API consumers do not need to parse raw diagnostic payload JSON for common
+inference execution context.
 Inference option-support summaries use
 `inference.execution_diagnostic_observed` events. These rows are bounded
 system metadata for request id, task id, selected backend, support-state counts,

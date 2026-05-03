@@ -800,7 +800,7 @@ fn diagnostic_event_ledger_replays_legacy_node_failed_status() {
 }
 
 #[test]
-fn diagnostic_event_ledger_projects_selected_backend_key_on_node_status() {
+fn diagnostic_event_ledger_projects_backend_and_task_on_node_status() {
     let mut ledger = SqliteDiagnosticsLedger::open_in_memory().expect("ledger opens");
     let mut event = sample_node_status_event(
         "workflow_run_alpha",
@@ -810,6 +810,7 @@ fn diagnostic_event_ledger_projects_selected_backend_key_on_node_status() {
     );
     event.runtime_id = Some("pytorch.transformers".to_string());
     if let DiagnosticEventPayload::NodeExecutionStatus(payload) = &mut event.payload {
+        payload.task_id = Some("text_generation".to_string());
         payload.selected_backend_key = Some("pytorch".to_string());
     }
 
@@ -834,6 +835,7 @@ fn diagnostic_event_ledger_projects_selected_backend_key_on_node_status() {
 
     assert_eq!(nodes.len(), 1);
     assert_eq!(nodes[0].runtime_id.as_deref(), Some("pytorch.transformers"));
+    assert_eq!(nodes[0].task_id.as_deref(), Some("text_generation"));
     assert_eq!(nodes[0].selected_backend_key.as_deref(), Some("pytorch"));
 }
 
@@ -4035,6 +4037,7 @@ fn sample_node_status_event(
                 .then_some(started_at_ms + 100),
             duration_ms: (status == NodeExecutionProjectionStatus::Completed).then_some(100),
             error: None,
+            task_id: None,
             selected_backend_key: None,
         }),
     }

@@ -2262,6 +2262,12 @@ one-off conversions.
   storing prompt/result bodies. Remaining task-option diagnostics for embedding,
   rerank, image/video/audio, and KV-cache task options stay open until those
   typed paths emit compatibility reports.
+- 2026-05-03: Node-status task projection slice added an additive `task_id`
+  field to `node_execution.status` payloads and the queryable
+  `node_status_projection`, bumped the rebuildable projection version, and
+  updated Rust/TypeScript consumer DTOs. This also corrected frontend diagnostics
+  DTO drift by exposing the already-durable `selected_backend_key` field in the
+  TypeScript projection contract.
 
 ## Execution Notes
 

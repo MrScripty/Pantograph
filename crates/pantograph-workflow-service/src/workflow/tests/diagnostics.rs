@@ -1689,6 +1689,7 @@ fn sample_node_status_event(
                 .then_some(started_at_ms + 120),
             duration_ms: (status == NodeExecutionProjectionStatus::Completed).then_some(120),
             error: None,
+            task_id: None,
             selected_backend_key: None,
         }),
     }

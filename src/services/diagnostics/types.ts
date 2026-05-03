@@ -257,6 +257,8 @@ export interface NodeStatusProjectionRecord {
   node_version?: string | null;
   runtime_id?: string | null;
   runtime_version?: string | null;
+  task_id?: string | null;
+  selected_backend_key?: string | null;
   model_id?: string | null;
   model_version?: string | null;
   status: NodeExecutionProjectionStatus;
