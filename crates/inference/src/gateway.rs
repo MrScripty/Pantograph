@@ -815,6 +815,35 @@ impl InferenceGateway {
             .map_err(GatewayError::Backend)
     }
 
+    /// Generate embeddings and emit request-scoped lifecycle facts.
+    pub async fn embeddings_with_lifecycle(
+        &self,
+        texts: Vec<String>,
+        model: &str,
+        request_id: Option<String>,
+        lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink>,
+    ) -> Result<Vec<EmbeddingResult>, GatewayError> {
+        let (backend_key, runtime_instance_id) = self.lifecycle_event_context().await;
+        record_inference_lifecycle_event(
+            lifecycle_sink.as_ref(),
+            request_id.clone(),
+            backend_key.clone(),
+            runtime_instance_id.clone(),
+            InferenceRequestLifecycleEventKind::Started,
+            None,
+        );
+
+        let result = self.embeddings(texts, model).await;
+        record_non_streaming_lifecycle_result(
+            lifecycle_sink.as_ref(),
+            request_id,
+            backend_key,
+            runtime_instance_id,
+            &result,
+        );
+        result
+    }
+
     /// Rank documents through the active backend.
     pub async fn rerank(&self, request: RerankRequest) -> Result<RerankResponse, GatewayError> {
         let guard = self.backend.read().await;
@@ -822,6 +851,34 @@ impl InferenceGateway {
             return Err(GatewayError::Backend(BackendError::NotReady));
         }
         guard.rerank(request).await.map_err(GatewayError::Backend)
+    }
+
+    /// Rank documents and emit request-scoped lifecycle facts.
+    pub async fn rerank_with_lifecycle(
+        &self,
+        request: RerankRequest,
+        request_id: Option<String>,
+        lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink>,
+    ) -> Result<RerankResponse, GatewayError> {
+        let (backend_key, runtime_instance_id) = self.lifecycle_event_context().await;
+        record_inference_lifecycle_event(
+            lifecycle_sink.as_ref(),
+            request_id.clone(),
+            backend_key.clone(),
+            runtime_instance_id.clone(),
+            InferenceRequestLifecycleEventKind::Started,
+            None,
+        );
+
+        let result = self.rerank(request).await;
+        record_non_streaming_lifecycle_result(
+            lifecycle_sink.as_ref(),
+            request_id,
+            backend_key,
+            runtime_instance_id,
+            &result,
+        );
+        result
     }
 
     /// Generate one or more images through the active backend.
@@ -839,6 +896,34 @@ impl InferenceGateway {
             .map_err(GatewayError::Backend)
     }
 
+    /// Generate one or more images and emit request-scoped lifecycle facts.
+    pub async fn generate_image_with_lifecycle(
+        &self,
+        request: ImageGenerationRequest,
+        request_id: Option<String>,
+        lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink>,
+    ) -> Result<ImageGenerationResult, GatewayError> {
+        let (backend_key, runtime_instance_id) = self.lifecycle_event_context().await;
+        record_inference_lifecycle_event(
+            lifecycle_sink.as_ref(),
+            request_id.clone(),
+            backend_key.clone(),
+            runtime_instance_id.clone(),
+            InferenceRequestLifecycleEventKind::Started,
+            None,
+        );
+
+        let result = self.generate_image(request).await;
+        record_non_streaming_lifecycle_result(
+            lifecycle_sink.as_ref(),
+            request_id,
+            backend_key,
+            runtime_instance_id,
+            &result,
+        );
+        result
+    }
+
     // ─── LEGACY COMPATIBILITY ───────────────────────────────────────
 
     /// Get a reference to the underlying backend for legacy code
@@ -847,6 +932,16 @@ impl InferenceGateway {
     /// use the gateway methods directly.
     pub fn backend(&self) -> Arc<RwLock<Box<dyn InferenceBackend>>> {
         self.backend.clone()
+    }
+
+    async fn lifecycle_event_context(&self) -> (Option<String>, Option<String>) {
+        (
+            Some(canonical_backend_key(&self.current_backend_name().await)),
+            self.runtime_lifecycle_snapshot()
+                .await
+                .runtime_instance_id
+                .clone(),
+        )
     }
 }
 
@@ -952,6 +1047,42 @@ fn record_inference_lifecycle_event(
         runtime_instance_id,
         detail,
     });
+}
+
+fn record_non_streaming_lifecycle_result<T>(
+    sink: &dyn InferenceRequestLifecycleEventSink,
+    request_id: Option<String>,
+    backend_key: Option<String>,
+    runtime_instance_id: Option<String>,
+    result: &Result<T, GatewayError>,
+) {
+    match result {
+        Ok(_) => record_inference_lifecycle_event(
+            sink,
+            request_id.clone(),
+            backend_key.clone(),
+            runtime_instance_id.clone(),
+            InferenceRequestLifecycleEventKind::Completed,
+            None,
+        ),
+        Err(error) => record_inference_lifecycle_event(
+            sink,
+            request_id.clone(),
+            backend_key.clone(),
+            runtime_instance_id.clone(),
+            InferenceRequestLifecycleEventKind::Failed,
+            Some(error.to_string()),
+        ),
+    }
+
+    record_inference_lifecycle_event(
+        sink,
+        request_id,
+        backend_key,
+        runtime_instance_id,
+        InferenceRequestLifecycleEventKind::CleanupCompleted,
+        None,
+    );
 }
 
 fn unix_timestamp_ms() -> u64 {

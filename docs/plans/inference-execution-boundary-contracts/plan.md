@@ -1325,7 +1325,10 @@ graph/preflight consumers can inspect lifecycle semantics without importing
 inference crate internals. The sixteenth slice added request-scoped lifecycle
 event DTOs and an opt-in gateway streaming API that records backend-execution
 started, completed, failed, cancelled, and cleanup-completed events for
-diagnostics-aware callers.
+diagnostics-aware callers. The seventeenth slice extended the opt-in lifecycle
+API to non-streaming gateway execution for embeddings, rerank, and image
+generation, recording completion/failure plus cleanup facts without changing the
+existing public execution methods.
 
 ### Milestone 8: Add Runtime Fact Snapshots
 
@@ -1369,12 +1372,12 @@ cancellation/cleanup semantics.
 **Open implementation gap:** Preprocessing and postprocessing currently exist as
 backend capability facts and compatibility checks, not as request-scoped
 lifecycle hooks in the inference backend trait. Streaming request lifecycle
-events are now available through the opt-in gateway API, but non-streaming
-execution, preprocessing, postprocessing, and diagnostics-ledger adapter
-integration remain pending. Milestone 8 should not be closed until the
-inference crate defines whether those lifecycle phases stay hidden inside
-backend adapters or become explicit request lifecycle facts/errors for
-diagnostics-ledger consumers.
+events are now available through the opt-in gateway API, and non-streaming
+gateway execution can report backend-execution completion/failure cleanup facts.
+Preprocessing, postprocessing, and diagnostics-ledger adapter integration remain
+pending. Milestone 8 should not be closed until the inference crate defines
+whether those lifecycle phases stay hidden inside backend adapters or become
+explicit request lifecycle facts/errors for diagnostics-ledger consumers.
 
 ### Milestone 9: Bind PyTorch Through Transformers
 

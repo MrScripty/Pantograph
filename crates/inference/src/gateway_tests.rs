@@ -932,6 +932,93 @@ async fn test_chat_completion_stream_with_lifecycle_records_drop_cancellation() 
 }
 
 #[tokio::test]
+async fn test_rerank_with_lifecycle_records_completion() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
+    let sink = Arc::new(RecordingLifecycleSink::default());
+
+    gateway
+        .rerank_with_lifecycle(
+            RerankRequest {
+                model: "mock".to_string(),
+                query: "alpha".to_string(),
+                documents: vec!["a".to_string()],
+                top_n: Some(1),
+                return_documents: true,
+                extra_options: serde_json::Value::Null,
+            },
+            Some("req-rerank".to_string()),
+            sink.clone(),
+        )
+        .await
+        .expect("rerank should complete");
+
+    let events = sink.events();
+    assert_eq!(events.len(), 3);
+    assert_eq!(events[0].kind, InferenceRequestLifecycleEventKind::Started);
+    assert_eq!(
+        events[1].kind,
+        InferenceRequestLifecycleEventKind::Completed
+    );
+    assert_eq!(
+        events[2].kind,
+        InferenceRequestLifecycleEventKind::CleanupCompleted
+    );
+}
+
+#[tokio::test]
+async fn test_generate_image_with_lifecycle_records_failure() {
+    let gateway = InferenceGateway::with_backend(
+        Box::new(MockLifecycleStreamBackend {
+            fail_on_stream: false,
+        }),
+        "mock",
+    );
+    let sink = Arc::new(RecordingLifecycleSink::default());
+
+    let error = gateway
+        .generate_image_with_lifecycle(
+            ImageGenerationRequest {
+                model: "mock".to_string(),
+                prompt: "prompt".to_string(),
+                negative_prompt: None,
+                width: None,
+                height: None,
+                num_inference_steps: None,
+                guidance_scale: None,
+                seed: None,
+                scheduler: None,
+                num_images_per_prompt: None,
+                init_image: None,
+                mask_image: None,
+                strength: None,
+                extra_options: serde_json::Value::Null,
+            },
+            Some("req-image".to_string()),
+            sink.clone(),
+        )
+        .await
+        .expect_err("image generation should be unsupported");
+
+    assert!(matches!(
+        error,
+        GatewayError::Backend(BackendError::Inference(message))
+            if message.contains("Image generation not supported")
+    ));
+    let events = sink.events();
+    assert_eq!(events.len(), 3);
+    assert_eq!(events[0].kind, InferenceRequestLifecycleEventKind::Started);
+    assert_eq!(events[1].kind, InferenceRequestLifecycleEventKind::Failed);
+    assert_eq!(
+        events[2].kind,
+        InferenceRequestLifecycleEventKind::CleanupCompleted
+    );
+    assert!(events[1]
+        .detail
+        .as_deref()
+        .is_some_and(|detail| detail.contains("Image generation not supported")));
+}
+
+#[tokio::test]
 async fn test_runtime_lifecycle_snapshot_tracks_start_and_stop() {
     let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "mock");
     gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
