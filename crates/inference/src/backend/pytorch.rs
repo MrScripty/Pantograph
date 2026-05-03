@@ -17,13 +17,15 @@ use pyo3::prelude::*;
 
 use super::{
     BackendCapabilities, BackendCapabilityFacts, BackendComponentCapability, BackendConfig,
-    BackendError, BackendFeatureCapabilityFacts, BackendFeatureSupport, BackendStartOutcome,
-    BackendTaskCapability, ChatChunk, EmbeddingResult, InferenceBackend,
+    BackendError, BackendFeatureCapabilityFacts, BackendFeatureSupport,
+    BackendModelSourceCapabilityFacts, BackendStartOutcome, BackendTaskCapability, ChatChunk,
+    EmbeddingResult, InferenceBackend,
 };
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::model_contracts::{InferenceModality, InferenceTaskId};
 use crate::process::ProcessSpawner;
 use crate::types::{RerankRequest, RerankResponse};
+use crate::{BackendHintLabel, ModelArtifactKind};
 use pantograph_runtime_identity::{canonical_runtime_backend_key, canonical_runtime_id};
 
 #[path = "pytorch_worker.rs"]
@@ -191,6 +193,14 @@ impl PyTorchBackend {
                 )],
                 preprocessing: BackendComponentCapability::RequiresPackageComponent,
                 postprocessing: BackendComponentCapability::BackendManaged,
+                model_sources: BackendModelSourceCapabilityFacts {
+                    artifact_kinds: vec![
+                        ModelArtifactKind::HfCompatibleDirectory,
+                        ModelArtifactKind::Safetensors,
+                    ],
+                    backend_hints: vec![BackendHintLabel::Transformers],
+                    custom_code: BackendFeatureSupport::Supported,
+                },
                 features: BackendFeatureCapabilityFacts {
                     streaming: BackendFeatureSupport::Supported,
                     device_selection: BackendFeatureSupport::Supported,

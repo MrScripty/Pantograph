@@ -11,12 +11,14 @@ use futures_util::Stream;
 
 use super::{
     BackendCapabilities, BackendCapabilityFacts, BackendComponentCapability, BackendConfig,
-    BackendError, BackendFeatureCapabilityFacts, BackendFeatureSupport, BackendStartOutcome,
-    BackendTaskCapability, ChatChunk, EmbeddingResult, InferenceBackend,
+    BackendError, BackendFeatureCapabilityFacts, BackendFeatureSupport,
+    BackendModelSourceCapabilityFacts, BackendStartOutcome, BackendTaskCapability, ChatChunk,
+    EmbeddingResult, InferenceBackend,
 };
 use crate::model_contracts::{InferenceModality, InferenceTaskId};
 use crate::process::ProcessSpawner;
 use crate::types::{RerankRequest, RerankResponse};
+use crate::{BackendHintLabel, ModelArtifactKind};
 
 /// Candle backend for in-process inference
 ///
@@ -61,6 +63,11 @@ impl CandleBackend {
                 )],
                 preprocessing: BackendComponentCapability::RequiresPackageComponent,
                 postprocessing: BackendComponentCapability::NotRequired,
+                model_sources: BackendModelSourceCapabilityFacts {
+                    artifact_kinds: vec![ModelArtifactKind::HfCompatibleDirectory],
+                    backend_hints: vec![BackendHintLabel::Candle],
+                    custom_code: BackendFeatureSupport::Unsupported,
+                },
                 features: BackendFeatureCapabilityFacts {
                     streaming: BackendFeatureSupport::Unsupported,
                     device_selection: BackendFeatureSupport::Unsupported,

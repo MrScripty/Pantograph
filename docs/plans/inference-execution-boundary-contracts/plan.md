@@ -1227,12 +1227,25 @@ to gate behavior without backend-name conditionals.
     embeddings, reranking, image generation, and other execution semantics.
 - [ ] Add capability checks that answer whether each backend can consume a
   given Pumas-resolved model source, task request, and option set.
+  - [x] First slice added inference-local `BackendCompatibilityRequest` and
+    `BackendCompatibilityReport` APIs that evaluate backend facts against a
+    `TaskRegistryEntry`, `ResolvedModelPackageFacts`, and requested execution
+    options.
+  - [ ] Wire compatibility reports into embedded-runtime technical-fit
+    candidate construction so package-fact candidates no longer rely only on
+    backend hints and artifact validity.
 - [ ] Make capability checks consume task registry entries and package facts
   rather than backend names, raw task strings, or graph-node type names.
-- [ ] Report preprocessing and postprocessing capability separately from model
+  - [x] The inference-local compatibility API consumes canonical task registry
+    entries and resolved package facts; broader workflow/runtime consumers
+    still need migration.
+- [x] Report preprocessing and postprocessing capability separately from model
   execution capability where component files or backend processors are missing.
 - [x] Keep existing fields compatible until consumers migrate.
 - [ ] Add tests proving declared unsupported operations return explicit errors.
+  - [x] Compatibility-report tests now prove missing package components and
+    unsupported requested KV-cache options produce explicit issue/option
+    diagnostics.
 
 **Verification:**
 - `cargo test -p inference` focused on backend capability and gateway tests.
@@ -1253,9 +1266,15 @@ and verified runtime preflight behavior stays unchanged when typed facts are
 present. The third slice added structured static feature facts for streaming,
 device selection, external connection, and KV-cache support; populated the facts
 for Llama.cpp, Candle, and PyTorch; projected them through workflow runtime
-capabilities; and updated the TypeScript workflow contract. Model/package-
-specific compatibility checks, option-support reports, and broader consumer
-migration remain pending.
+capabilities; and updated the TypeScript workflow contract. The fourth slice
+added backend model-source facts and an inference-local compatibility report API
+that checks task registry entries, Pumas-resolved package facts,
+preprocessing/postprocessing component needs, and requested options without
+selecting a runtime or moving scheduler policy into inference. Broader consumer
+migration remains pending. The next vertical slice should consume these reports in
+`pantograph-embedded-runtime/src/technical_fit.rs` when constructing
+package-fact-derived runtime candidates; workflow-service preflight can then
+consume the improved host technical-fit decision through its existing path.
 
 ### Milestone 8: Add Runtime Fact Snapshots
 

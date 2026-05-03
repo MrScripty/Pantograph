@@ -830,6 +830,7 @@ mod tests {
                         )],
                         preprocessing: inference::BackendComponentCapability::NotRequired,
                         postprocessing: inference::BackendComponentCapability::NotRequired,
+                        model_sources: inference::BackendModelSourceCapabilityFacts::default(),
                         features: inference::BackendFeatureCapabilityFacts {
                             streaming: inference::BackendFeatureSupport::Unsupported,
                             device_selection: inference::BackendFeatureSupport::Unsupported,
@@ -915,6 +916,7 @@ mod tests {
                             inference::BackendComponentCapability::RequiresPackageComponent,
                         postprocessing:
                             inference::BackendComponentCapability::RequiresPackageComponent,
+                        model_sources: inference::BackendModelSourceCapabilityFacts::default(),
                         features: inference::BackendFeatureCapabilityFacts {
                             streaming: inference::BackendFeatureSupport::Supported,
                             device_selection: inference::BackendFeatureSupport::Supported,

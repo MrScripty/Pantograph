@@ -12,14 +12,16 @@ use futures_util::Stream;
 
 use super::{
     BackendCapabilities, BackendCapabilityFacts, BackendComponentCapability, BackendConfig,
-    BackendError, BackendFeatureCapabilityFacts, BackendFeatureSupport, BackendStartOutcome,
-    BackendTaskCapability, ChatChunk, EmbeddingResult, InferenceBackend,
+    BackendError, BackendFeatureCapabilityFacts, BackendFeatureSupport,
+    BackendModelSourceCapabilityFacts, BackendStartOutcome, BackendTaskCapability, ChatChunk,
+    EmbeddingResult, InferenceBackend,
 };
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::model_contracts::{InferenceModality, InferenceTaskId};
 use crate::process::ProcessSpawner;
 use crate::server::LlamaServer;
 use crate::types::{RerankRequest, RerankResponse};
+use crate::{BackendHintLabel, ModelArtifactKind};
 
 #[path = "llamacpp_support.rs"]
 mod llamacpp_support;
@@ -81,6 +83,11 @@ impl LlamaCppBackend {
                 ],
                 preprocessing: BackendComponentCapability::RequiresPackageComponent,
                 postprocessing: BackendComponentCapability::BackendManaged,
+                model_sources: BackendModelSourceCapabilityFacts {
+                    artifact_kinds: vec![ModelArtifactKind::Gguf],
+                    backend_hints: vec![BackendHintLabel::LlamaCpp],
+                    custom_code: BackendFeatureSupport::Unsupported,
+                },
                 features: BackendFeatureCapabilityFacts {
                     streaming: BackendFeatureSupport::Supported,
                     device_selection: BackendFeatureSupport::Supported,

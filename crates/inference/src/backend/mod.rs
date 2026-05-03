@@ -4,6 +4,7 @@
 //! (llama.cpp, Candle, PyTorch, external APIs). All backends implement the same
 //! interface, allowing runtime switching between engines.
 
+pub mod compatibility;
 pub mod registry;
 
 #[cfg(feature = "backend-llamacpp")]
@@ -26,7 +27,8 @@ use serde::{Deserialize, Serialize};
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::managed_runtime::ManagedBinaryId;
 use crate::model_contracts::{
-    InferenceModality, InferenceTaskId, SupportTier, TaskModalitySignature,
+    BackendHintLabel, InferenceModality, InferenceTaskId, ModelArtifactKind, SupportTier,
+    TaskModalitySignature,
 };
 use crate::process::ProcessSpawner;
 use crate::types::{ImageGenerationRequest, ImageGenerationResult, RerankRequest, RerankResponse};
@@ -40,6 +42,10 @@ pub use candle::CandleBackend;
 #[cfg(feature = "backend-pytorch")]
 pub use pytorch::PyTorchBackend;
 
+pub use compatibility::{
+    BackendCompatibilityIssue, BackendCompatibilityIssueKind, BackendCompatibilityOptions,
+    BackendCompatibilityReport, BackendCompatibilityRequest, BackendCompatibilityStatus,
+};
 pub use registry::{canonical_backend_key, BackendFactory, BackendRegistry};
 
 /// Error types for backend operations
@@ -115,6 +121,9 @@ pub struct BackendCapabilityFacts {
     /// resolved package components, is unsupported, or is not needed.
     #[serde(default)]
     pub postprocessing: BackendComponentCapability,
+    /// Static package source facts this backend can consume.
+    #[serde(default)]
+    pub model_sources: BackendModelSourceCapabilityFacts,
     /// Static support facts for cross-cutting execution features.
     #[serde(default)]
     pub features: BackendFeatureCapabilityFacts,
@@ -128,6 +137,7 @@ impl BackendCapabilityFacts {
             tasks,
             preprocessing: BackendComponentCapability::Unknown,
             postprocessing: BackendComponentCapability::Unknown,
+            model_sources: BackendModelSourceCapabilityFacts::default(),
             features: BackendFeatureCapabilityFacts::default(),
         }
     }
@@ -144,6 +154,18 @@ impl BackendCapabilityFacts {
                 )
         })
     }
+}
+
+/// Static model package sources a backend adapter can load.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct BackendModelSourceCapabilityFacts {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub artifact_kinds: Vec<ModelArtifactKind>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub backend_hints: Vec<BackendHintLabel>,
+    #[serde(default)]
+    pub custom_code: BackendFeatureSupport,
 }
 
 /// Static backend support facts for execution features that cut across tasks.
