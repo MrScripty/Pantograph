@@ -144,6 +144,12 @@ impl Default for CoreTaskExecutor {
     }
 }
 
+fn retired_inference_node_error(node_type: &str) -> Result<HashMap<String, serde_json::Value>> {
+    Err(NodeEngineError::ExecutionFailed(format!(
+        "Retired inference node type '{node_type}' is no longer executable. Migrate this workflow to canonical llm-inference with task_kind, runtime_hint, and a Pumas model reference."
+    )))
+}
+
 // ---------------------------------------------------------------------------
 // Pure node handlers
 // ---------------------------------------------------------------------------
@@ -232,29 +238,16 @@ impl TaskExecutor for CoreTaskExecutor {
 
             // Gateway-backed inference nodes (require `inference-nodes` feature)
             #[cfg(feature = "inference-nodes")]
-            "embedding" => execute_embedding(self.gateway.as_ref(), &inputs).await,
+            "embedding" => retired_inference_node_error("embedding"),
             #[cfg(feature = "inference-nodes")]
-            "llamacpp-inference" => {
-                let resolved_model_ref =
-                    enforce_dependency_preflight("llamacpp-inference", &inputs, extensions).await?;
-                let exec_id = self.execution_id.as_deref().unwrap_or("unknown");
-                execute_llamacpp_inference(
-                    self.gateway.as_ref(),
-                    &inputs,
-                    task_id,
-                    self.event_sink.as_ref(),
-                    exec_id,
-                    resolved_model_ref,
-                    extensions,
-                )
-                .await
-            }
+            "llamacpp-inference" => retired_inference_node_error("llamacpp-inference"),
             #[cfg(feature = "inference-nodes")]
-            "reranker" => execute_reranker(self.gateway.as_ref(), &inputs).await,
+            "reranker" => retired_inference_node_error("reranker"),
             #[cfg(feature = "inference-nodes")]
             "llm-inference" => {
                 let canonical_inputs = inputs_with_model_path_from_ref(&inputs);
                 let exec_id = self.execution_id.as_deref().unwrap_or("unknown");
+                let preferred_backend = preferred_backend_key("llm-inference", &canonical_inputs);
                 match canonical_inference_task_kind(&canonical_inputs).as_deref() {
                     Some("embedding") => {
                         execute_embedding(self.gateway.as_ref(), &canonical_inputs).await
@@ -262,9 +255,7 @@ impl TaskExecutor for CoreTaskExecutor {
                     Some("rerank" | "reranking") => {
                         execute_reranker(self.gateway.as_ref(), &canonical_inputs).await
                     }
-                    _ if preferred_backend_key("llm-inference", &canonical_inputs).as_deref()
-                        == Some("llamacpp") =>
-                    {
+                    _ if preferred_backend.as_deref() == Some("llamacpp") => {
                         let resolved_model_ref = enforce_dependency_preflight(
                             "llm-inference",
                             &canonical_inputs,
@@ -281,6 +272,37 @@ impl TaskExecutor for CoreTaskExecutor {
                             extensions,
                         )
                         .await
+                    }
+                    _ if preferred_backend.as_deref() == Some("pytorch") => {
+                        #[cfg(feature = "pytorch-nodes")]
+                        {
+                            let resolved_model_ref = enforce_dependency_preflight(
+                                "llm-inference",
+                                &canonical_inputs,
+                                extensions,
+                            )
+                            .await?;
+                            execute_pytorch_inference(
+                                &canonical_inputs,
+                                task_id,
+                                self.event_sink.as_ref(),
+                                exec_id,
+                                resolved_model_ref,
+                                extensions,
+                            )
+                            .await
+                        }
+                        #[cfg(not(feature = "pytorch-nodes"))]
+                        {
+                            execute_llm_inference(
+                                self.gateway.as_ref(),
+                                &canonical_inputs,
+                                task_id,
+                                self.event_sink.as_ref(),
+                                exec_id,
+                            )
+                            .await
+                        }
                     }
                     _ => {
                         execute_llm_inference(
@@ -322,20 +344,7 @@ impl TaskExecutor for CoreTaskExecutor {
 
             // PyTorch inference (in-process via PyO3)
             #[cfg(feature = "pytorch-nodes")]
-            "pytorch-inference" => {
-                let resolved_model_ref =
-                    enforce_dependency_preflight("pytorch-inference", &inputs, extensions).await?;
-                let exec_id = self.execution_id.as_deref().unwrap_or("unknown");
-                execute_pytorch_inference(
-                    &inputs,
-                    task_id,
-                    self.event_sink.as_ref(),
-                    exec_id,
-                    resolved_model_ref,
-                    extensions,
-                )
-                .await
-            }
+            "pytorch-inference" => retired_inference_node_error("pytorch-inference"),
 
             // Audio generation (in-process via PyO3 + Stable Audio)
             #[cfg(feature = "audio-nodes")]

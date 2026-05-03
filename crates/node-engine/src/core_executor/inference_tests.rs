@@ -78,6 +78,61 @@ async fn test_canonical_llm_rerank_dispatches_to_reranker_handler() {
     }
 }
 
+#[cfg(feature = "inference-nodes")]
+#[tokio::test]
+async fn test_retired_llamacpp_node_type_is_not_executable() {
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "_data".to_string(),
+        serde_json::json!({"node_type": "llamacpp-inference"}),
+    );
+
+    let executor = CoreTaskExecutor::new();
+    let context = graph_flow::Context::new();
+    let extensions = ExecutorExtensions::new();
+    let err = executor
+        .execute_task("llamacpp-inference-1", inputs, &context, &extensions)
+        .await
+        .expect_err("retired llama.cpp inference should not execute");
+    match err {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("Retired inference node type 'llamacpp-inference'"));
+            assert!(message.contains("canonical llm-inference"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+}
+
+#[cfg(all(feature = "inference-nodes", feature = "pytorch-nodes"))]
+#[tokio::test]
+async fn test_canonical_llm_pytorch_hint_dispatches_to_dependency_preflight() {
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "_data".to_string(),
+        serde_json::json!({"node_type": "llm-inference"}),
+    );
+    inputs.insert(
+        "runtime_hint".to_string(),
+        serde_json::json!("transformers_pytorch"),
+    );
+    inputs.insert("model_path".to_string(), serde_json::json!("/tmp/model"));
+    inputs.insert("prompt".to_string(), serde_json::json!("hello"));
+
+    let executor = CoreTaskExecutor::new();
+    let context = graph_flow::Context::new();
+    let extensions = ExecutorExtensions::new();
+    let err = executor
+        .execute_task("llm-inference-1", inputs, &context, &extensions)
+        .await
+        .expect_err("canonical PyTorch inference should require dependency preflight");
+    match err {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("dependency resolver is not configured"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+}
+
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 #[tokio::test]
 async fn test_dependency_preflight_skips_llamacpp() {

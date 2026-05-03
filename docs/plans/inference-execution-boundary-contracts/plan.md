@@ -1697,6 +1697,11 @@ reranker handler, and explicit llama.cpp backend hints through the llama.cpp
 handler. Dependency request inference now understands canonical task kinds,
 runtime hints, and Pumas model references while preserving diffusion
 `recommended_backend` precedence.
+Direct node-engine execution of retired `embedding`, `reranker`,
+`llamacpp-inference`, and `pytorch-inference` node types now fails with a
+canonical migration error, while canonical `llm-inference` with an explicit
+PyTorch/Transformers hint dispatches through the PyTorch dependency preflight
+and handler when that feature is compiled.
 
 ### Milestone 12: Prepare Native Candle Slice
 
