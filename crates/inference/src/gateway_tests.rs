@@ -913,7 +913,7 @@ async fn test_chat_completion_stream_with_lifecycle_records_completion() {
 
     let mut stream = gateway
         .chat_completion_stream_with_lifecycle(
-            "{}".to_string(),
+            r#"{"model":"mock-chat"}"#.to_string(),
             Some("req-complete".to_string()),
             sink.clone(),
         )
@@ -936,6 +936,7 @@ async fn test_chat_completion_stream_with_lifecycle_records_completion() {
     assert!(events.iter().all(|event| {
         event.request_id.as_deref() == Some("req-complete")
             && event.backend_key.as_deref() == Some("mock")
+            && event.model_id.as_deref() == Some("mock-chat")
     }));
 }
 
@@ -951,7 +952,7 @@ async fn test_chat_completion_stream_with_lifecycle_records_stream_failure() {
 
     let mut stream = gateway
         .chat_completion_stream_with_lifecycle(
-            "{}".to_string(),
+            r#"{"model":"mock-chat"}"#.to_string(),
             Some("req-fail".to_string()),
             sink.clone(),
         )
@@ -976,6 +977,9 @@ async fn test_chat_completion_stream_with_lifecycle_records_stream_failure() {
         events[1].detail.as_deref(),
         Some("Inference error: mock stream failure")
     );
+    assert!(events
+        .iter()
+        .all(|event| event.model_id.as_deref() == Some("mock-chat")));
 }
 
 #[tokio::test]
@@ -990,7 +994,7 @@ async fn test_chat_completion_stream_with_lifecycle_records_drop_cancellation() 
 
     let stream = gateway
         .chat_completion_stream_with_lifecycle(
-            "{}".to_string(),
+            r#"{"model":"mock-chat"}"#.to_string(),
             Some("req-cancel".to_string()),
             sink.clone(),
         )
@@ -1013,6 +1017,9 @@ async fn test_chat_completion_stream_with_lifecycle_records_drop_cancellation() 
         events[1].detail.as_deref(),
         Some("stream dropped before completion")
     );
+    assert!(events
+        .iter()
+        .all(|event| event.model_id.as_deref() == Some("mock-chat")));
 }
 
 #[tokio::test]
@@ -1047,6 +1054,9 @@ async fn test_rerank_with_lifecycle_records_completion() {
         events[2].kind,
         InferenceRequestLifecycleEventKind::CleanupCompleted
     );
+    assert!(events
+        .iter()
+        .all(|event| event.model_id.as_deref() == Some("mock")));
 }
 
 #[tokio::test]
@@ -1100,6 +1110,9 @@ async fn test_generate_image_with_lifecycle_records_failure() {
         .detail
         .as_deref()
         .is_some_and(|detail| detail.contains("Image generation not supported")));
+    assert!(events
+        .iter()
+        .all(|event| event.model_id.as_deref() == Some("mock")));
 }
 
 #[tokio::test]

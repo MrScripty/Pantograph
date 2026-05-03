@@ -1915,7 +1915,11 @@ inference write ledger events directly.
 an append-only optional `model_id` to inference request lifecycle events and
 projects it into the existing ledger append request top-level `model_id` field
 alongside the already-recorded selected backend/runtime context, without adding
-a new ledger event type or persisting prompt/result payload bodies.
+a new ledger event type or persisting prompt/result payload bodies. The next
+slice populated gateway-produced lifecycle events with bounded model identity
+from chat, embeddings, rerank, and image-generation request contracts so
+started, terminal, cancellation, and cleanup facts carry the same selected
+model context before they reach the ledger adapter.
 
 ## Execution Notes
 
