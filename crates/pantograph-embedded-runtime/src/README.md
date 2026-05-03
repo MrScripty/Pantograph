@@ -50,7 +50,7 @@ packages.
 | `task_executor/` | Behavior modules for RAG search, Puma-Lib metadata projection, dependency environment/preflight, and Python runtime execution used by the host executor facade. |
 | `task_executor_tests.rs` | Shared Pantograph host task-executor test fixtures and behavior-module index. |
 | `task_executor_tests/` | Focused task-executor behavior tests for dependency preflight/fallback, input helpers, Puma-Lib metadata rebinding, and Python runtime recorder/stream behavior. |
-| `technical_fit.rs` | Owns embedded-runtime technical-fit translation, including host-side runtime snapshot/candidate assembly, request projection into backend runtime-registry selector input, selector invocation, and decision projection back to workflow-service contracts without moving policy into adapters. |
+| `technical_fit.rs` | Owns embedded-runtime technical-fit translation, including host-side runtime snapshot/candidate assembly, advisory Pumas package-fact candidate projection, request projection into backend runtime-registry selector input, selector invocation, and decision projection back to workflow-service contracts without moving policy into adapters. |
 | `python_runtime.rs` | Defines the out-of-process Python runtime adapter contract and the default process-backed implementation. |
 | `python_runtime_bridge.py` | Bridge script executed by the Python adapter so Pantograph can invoke Python workers without linking Python in-process. |
 | `rag.rs` | Defines the narrow RAG backend contract used by the host executor. |
@@ -85,6 +85,9 @@ Pumas-specific dependency resolution.
 - Keep Python execution out-of-process and consumer-managed.
 - Treat Pumas executable model facts as an upstream contract, not something
   Pantograph re-derives from projected metadata.
+- Treat Pumas feasible execution candidates as advisory model-library facts.
+  Runtime id, residency, warmup, admission, and final selection state must still
+  come from the runtime registry or workflow scheduler layers.
 - Keep dependency preflight deterministic because it can block workflow
   execution before node runtime starts.
 - App-global runtime residency, admission, retention, and eviction policy must
@@ -115,6 +118,10 @@ capability and execution facts, and this crate may emit reservation lifecycle
 signals into that registry when a host injects one. Registry ownership still
 belongs to a higher Pantograph application-layer coordinator rather than to this
 embedded-runtime crate.
+Pumas package-fact candidates are projected into `pumas_feasible`
+technical-fit candidates only when Pumas marks them feasible; remote search
+tags and unavailable candidates remain diagnostics/model-library facts rather
+than executable runtime candidates.
 Workflow-service facade methods exposed by this crate, including
 execution-session queue cancel, reprioritize, and push-front, must remain
 delegating methods; scheduler authority and diagnostics events stay in
@@ -166,6 +173,9 @@ delegating methods; scheduler authority and diagnostics events stay in
   backend launch, or loaded-model verification fails. Workflow-service owns
   ledger recording, but this crate must not flatten those failures before the
   session runtime admission recorder can classify them.
+- Technical-fit projection may translate feasible Pumas package facts into
+  registry candidates, but it must not synthesize live runtime id, residency,
+  warmup, queue, or memory-admission facts from model-library metadata.
 - Public embedded-runtime workflow, session, queue, inspection, and keep-alive
   facade methods stay in `embedded_workflow_service_api.rs` so root composition
   remains separate from workflow-service API forwarding.

@@ -15,6 +15,20 @@ use pantograph_workflow_service::{
 
 use crate::{workflow_runtime::unix_timestamp_ms, EmbeddedWorkflowHost};
 
+pub fn build_runtime_technical_fit_request_with_package_facts(
+    request: &WorkflowTechnicalFitRequest,
+    runtime_snapshot: Option<RuntimeRegistrySnapshot>,
+    runtime_capabilities: &[WorkflowRuntimeCapability],
+    package_facts: &[inference::ResolvedModelPackageFacts],
+) -> RuntimeTechnicalFitRequest {
+    let mut runtime_request =
+        build_runtime_technical_fit_request(request, runtime_snapshot, runtime_capabilities);
+    runtime_request
+        .candidates
+        .extend(pumas_feasible_candidates_from_package_facts(package_facts));
+    runtime_request.normalized()
+}
+
 pub(crate) async fn workflow_technical_fit_decision(
     host: &EmbeddedWorkflowHost,
     request: &WorkflowTechnicalFitRequest,
@@ -98,6 +112,31 @@ fn runtime_capability_candidates(
             residency_state: Some(runtime_capability_residency_state(capability)),
             warmup_state: runtime_capability_warmup_state(capability),
             supports_runtime_requirements: runtime_capability_is_ready(capability),
+        })
+        .collect()
+}
+
+pub fn pumas_feasible_candidates_from_package_facts(
+    package_facts: &[inference::ResolvedModelPackageFacts],
+) -> Vec<RuntimeTechnicalFitCandidate> {
+    package_facts
+        .iter()
+        .flat_map(|facts| {
+            facts
+                .feasible_execution_candidates
+                .iter()
+                .filter(|candidate| candidate.feasible)
+                .map(|candidate| RuntimeTechnicalFitCandidate {
+                    candidate_id: format!("{}|{}", candidate.backend_key, facts.model_ref.model_id),
+                    runtime_id: None,
+                    backend_key: Some(candidate.backend_key.clone()),
+                    model_id: Some(facts.model_ref.model_id.clone()),
+                    source_kind: RuntimeTechnicalFitCandidateSourceKind::PumasFeasible,
+                    context_window_tokens: None,
+                    residency_state: None,
+                    warmup_state: None,
+                    supports_runtime_requirements: candidate.feasible,
+                })
         })
         .collect()
 }
@@ -409,5 +448,96 @@ mod tests {
                 }],
             }
         );
+    }
+
+    #[test]
+    fn pumas_package_facts_project_to_advisory_runtime_candidates() {
+        let package_facts: inference::ResolvedModelPackageFacts = serde_json::from_str(
+            include_str!(
+                "../../inference/tests/fixtures/inference_package_facts/gguf_text_generation_package_facts.json"
+            ),
+        )
+        .expect("decode package facts fixture");
+
+        let candidates = pumas_feasible_candidates_from_package_facts(&[package_facts]);
+
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(
+            candidates[0].source_kind,
+            RuntimeTechnicalFitCandidateSourceKind::PumasFeasible
+        );
+        assert_eq!(candidates[0].backend_key.as_deref(), Some("llama_cpp"));
+        assert_eq!(
+            candidates[0].model_id.as_deref(),
+            Some("pumas://models/llama-3.1-8b-q4")
+        );
+        assert_eq!(candidates[0].runtime_id, None);
+        assert_eq!(candidates[0].residency_state, None);
+        assert_eq!(candidates[0].warmup_state, None);
+        assert!(candidates[0].supports_runtime_requirements);
+    }
+
+    #[test]
+    fn pumas_package_facts_do_not_project_remote_discovery_hints() {
+        let package_facts: inference::ResolvedModelPackageFacts = serde_json::from_str(
+            include_str!(
+                "../../inference/tests/fixtures/inference_package_facts/remote_search_mlx_vllm_hint.json"
+            ),
+        )
+        .expect("decode remote search fixture");
+
+        let candidates = pumas_feasible_candidates_from_package_facts(&[package_facts]);
+
+        assert!(
+            candidates.is_empty(),
+            "remote search hints are discovery facts, not executable candidates"
+        );
+    }
+
+    #[test]
+    fn technical_fit_request_can_include_pumas_feasible_candidates() {
+        let package_facts: inference::ResolvedModelPackageFacts = serde_json::from_str(
+            include_str!(
+                "../../inference/tests/fixtures/inference_package_facts/gguf_text_generation_package_facts.json"
+            ),
+        )
+        .expect("decode package facts fixture");
+        let workflow_request = build_workflow_technical_fit_request(
+            "workflow-a",
+            &WorkflowRuntimeRequirements {
+                estimated_peak_vram_mb: None,
+                estimated_peak_ram_mb: None,
+                estimated_min_vram_mb: None,
+                estimated_min_ram_mb: None,
+                estimation_confidence: "fixture".to_string(),
+                required_models: vec!["pumas://models/llama-3.1-8b-q4".to_string()],
+                required_backends: vec!["llama_cpp".to_string()],
+                required_extensions: Vec::new(),
+            },
+            None,
+            None,
+            None,
+            None,
+        );
+
+        let runtime_request = build_runtime_technical_fit_request_with_package_facts(
+            &workflow_request,
+            None,
+            &[],
+            &[package_facts],
+        );
+
+        assert_eq!(runtime_request.candidates.len(), 1);
+        assert_eq!(
+            runtime_request.candidates[0].source_kind,
+            RuntimeTechnicalFitCandidateSourceKind::PumasFeasible
+        );
+
+        let decision = select_runtime_technical_fit(&runtime_request);
+        assert_eq!(
+            decision.selected_model_id.as_deref(),
+            Some("pumas://models/llama-3.1-8b-q4")
+        );
+        assert_eq!(decision.selected_backend_key.as_deref(), Some("llama_cpp"));
     }
 }
