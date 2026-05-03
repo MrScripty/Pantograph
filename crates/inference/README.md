@@ -29,8 +29,9 @@ and workflow business logic.
   consumers.
 - Consume Pumas model/package facts through versioned DTOs or fixtures, not
   Pumas storage internals.
-- Keep Pumas feasible execution candidates advisory; runtime registry and
-  scheduler layers own final backend selection and admission policy.
+- Keep Pumas package facts separate from Pantograph-owned technical-fit
+  candidate derivation; runtime registry and scheduler layers own final
+  backend selection and admission policy.
 
 ## Decision
 Keep inference as the infrastructure owner for backend execution and runtime

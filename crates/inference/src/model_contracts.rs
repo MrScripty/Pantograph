@@ -106,9 +106,10 @@ pub enum ModelArtifactKind {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ModelStorageKind {
-    LocalPath,
-    ManagedLibrary,
-    RemoteReference,
+    #[serde(alias = "managed_library")]
+    LibraryOwned,
+    #[serde(alias = "local_path", alias = "remote_reference")]
+    ExternalReference,
     Unknown,
 }
 
@@ -117,9 +118,9 @@ pub enum ModelStorageKind {
 #[serde(rename_all = "snake_case")]
 pub enum ModelValidationState {
     Valid,
-    Warning,
+    #[serde(alias = "warning", alias = "stale")]
+    Degraded,
     Invalid,
-    Stale,
     Unknown,
 }
 
@@ -197,18 +198,46 @@ pub struct TaskRegistryEntry {
 }
 
 /// Upstream task evidence discovered from a model package.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct TaskEvidence {
-    pub task_id: InferenceTaskId,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub upstream_labels: Vec<String>,
-    pub modality_signature: TaskModalitySignature,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source: Option<String>,
+    pub pipeline_tag: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_type_primary: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub input_modalities: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub output_modalities: Vec<String>,
 }
 
-/// Backend-family hint discovered from package facts.
+/// Stable backend hint labels Pumas may expose as advisory package facts.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum BackendHintLabel {
+    Transformers,
+    #[serde(rename = "llama.cpp")]
+    LlamaCpp,
+    Vllm,
+    Mlx,
+    Candle,
+    Diffusers,
+    OnnxRuntime,
+}
+
+/// Backend hints as advisory package facts, not executable runtime decisions.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct BackendHintFacts {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub accepted: Vec<BackendHintLabel>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub raw: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unsupported: Vec<String>,
+}
+
+/// Normalized backend-family hint derived by Pantograph from package facts.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct BackendHintFact {
@@ -233,7 +262,72 @@ pub enum BackendHintSource {
     Unknown,
 }
 
-/// Parsed component presence for a model package.
+/// Package component kind with stable labels for consumer diagnostics.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ProcessorComponentKind {
+    Config,
+    Tokenizer,
+    TokenizerConfig,
+    SpecialTokensMap,
+    Processor,
+    Preprocessor,
+    ImageProcessor,
+    VideoProcessor,
+    AudioFeatureExtractor,
+    FeatureExtractor,
+    ChatTemplate,
+    GenerationConfig,
+    ModelIndex,
+    WeightIndex,
+    Shard,
+    Weights,
+    Adapter,
+    Quantization,
+    Other,
+}
+
+/// Component-level package-file evidence.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct ProcessorComponentFacts {
+    pub kind: ProcessorComponentKind,
+    pub status: PackageFactStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relative_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub class_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
+/// Transformers/Hugging Face package layout evidence.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct TransformersPackageEvidence {
+    pub config_status: PackageFactStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub config_model_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub architectures: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dtype: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub torch_dtype: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub auto_map: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub processor_class: Option<String>,
+    pub generation_config_status: PackageFactStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_repo_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_revision: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub selected_files: Vec<String>,
+}
+
+/// Parsed component presence derived by Pantograph from package facts.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct ModelComponentFacts {
@@ -285,24 +379,13 @@ pub enum PackageFactStatus {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct GenerationDefaultFacts {
+    pub status: PackageFactStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub length: Option<LengthGenerationOptions>,
+    pub source_path: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub sampling: Option<SamplingGenerationOptions>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub search: Option<SearchGenerationOptions>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub stopping: Option<StoppingGenerationOptions>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cache: Option<CacheGenerationOptions>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub output: Option<OutputGenerationOptions>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub special_tokens: Option<SpecialTokenGenerationOptions>,
-    #[serde(default, skip_serializing_if = "Value::is_null")]
-    pub backend_extensions: Value,
+    pub defaults: Option<Value>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub diagnostics: Vec<String>,
+    pub diagnostics: Vec<ModelPackageDiagnostic>,
 }
 
 /// Length-related generation options.
@@ -413,78 +496,89 @@ pub enum OptionSupportState {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub struct CustomCodeFacts {
-    #[serde(default)]
-    pub requires_trust: bool,
+    pub requires_custom_code: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub auto_map_entries: Vec<String>,
+    pub custom_code_sources: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub auto_map_sources: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub class_references: Vec<PackageClassReference>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dependency_manifests: Vec<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub diagnostics: Vec<String>,
 }
 
-/// Resource estimate attached to an advisory feasible execution candidate.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+/// Class reference discovered from package metadata without importing code.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub struct ResourceEstimate {
+pub struct PackageClassReference {
+    pub kind: ProcessorComponentKind,
+    pub class_name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub disk_bytes: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ram_bytes: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub vram_bytes: Option<u64>,
+    pub source_path: Option<String>,
 }
 
-/// Advisory model-library feasibility fact for a backend.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+/// Current-state validation finding for a resolved artifact.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub struct FeasibleExecutionCandidate {
-    pub backend_key: String,
-    pub task_id: InferenceTaskId,
-    #[serde(default)]
-    pub feasible: bool,
+pub struct AssetValidationError {
+    pub code: String,
+    pub message: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub confidence: Option<f32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source: Option<String>,
-    #[serde(default)]
-    pub resource_estimate: ResourceEstimate,
+    pub path: Option<String>,
+}
+
+/// Artifact-specific package evidence.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct ResolvedArtifactFacts {
+    pub artifact_kind: ModelArtifactKind,
+    pub entry_path: String,
+    pub storage_kind: ModelStorageKind,
+    pub validation_state: ModelValidationState,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub exclusion_reasons: Vec<String>,
+    pub validation_errors: Vec<AssetValidationError>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub companion_artifacts: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sibling_files: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub selected_files: Vec<String>,
+}
+
+/// Generic package-fact diagnostic.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct ModelPackageDiagnostic {
+    pub code: String,
+    pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
 }
 
 /// Resolved package facts consumed by inference and higher-level preflight.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct ResolvedModelPackageFacts {
-    pub contract_version: u32,
+    pub package_facts_contract_version: u32,
     pub model_ref: PumasModelRef,
-    pub artifact_kind: ModelArtifactKind,
+    pub artifact: ResolvedArtifactFacts,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub components: Vec<ProcessorComponentFacts>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub entry_path: Option<String>,
-    pub storage_kind: ModelStorageKind,
-    pub validation_state: ModelValidationState,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub task_evidence: Vec<TaskEvidence>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub backend_hints: Vec<BackendHintFact>,
-    #[serde(default)]
-    pub components: ModelComponentFacts,
-    #[serde(default)]
+    pub transformers: Option<TransformersPackageEvidence>,
+    pub task: TaskEvidence,
     pub generation_defaults: GenerationDefaultFacts,
-    #[serde(default)]
     pub custom_code: CustomCodeFacts,
+    pub backend_hints: BackendHintFacts,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub feasible_execution_candidates: Vec<FeasibleExecutionCandidate>,
-    #[serde(default, skip_serializing_if = "Value::is_null")]
-    pub provenance: Value,
+    pub diagnostics: Vec<ModelPackageDiagnostic>,
 }
 
 impl ResolvedModelPackageFacts {
     /// Whether this fact payload matches the crate's current contract version.
     #[must_use]
     pub fn uses_current_contract(&self) -> bool {
-        self.contract_version == MODEL_PACKAGE_FACTS_CONTRACT_VERSION
+        self.package_facts_contract_version == MODEL_PACKAGE_FACTS_CONTRACT_VERSION
     }
 }
 
@@ -600,7 +694,7 @@ pub struct ResolvedModelPackageFactsSummary {
     pub storage_kind: ModelStorageKind,
     pub validation_state: ModelValidationState,
     pub task: TaskEvidence,
-    pub backend_hints: Vec<BackendHintFact>,
+    pub backend_hints: BackendHintFacts,
     pub requires_custom_code: bool,
     pub config_status: PackageFactStatus,
     pub tokenizer_status: PackageFactStatus,

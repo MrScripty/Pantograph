@@ -85,8 +85,9 @@ Pumas-specific dependency resolution.
 - Keep Python execution out-of-process and consumer-managed.
 - Treat Pumas executable model facts as an upstream contract, not something
   Pantograph re-derives from projected metadata.
-- Treat Pumas feasible execution candidates as advisory model-library facts.
-  Runtime id, residency, warmup, admission, and final selection state must still
+- Treat Pumas package facts as advisory model-library facts. Pantograph derives
+  technical-fit candidates from those facts plus runtime/workflow context;
+  runtime id, residency, warmup, admission, and final selection state must still
   come from the runtime registry or workflow scheduler layers.
 - Keep dependency preflight deterministic because it can block workflow
   execution before node runtime starts.
@@ -118,10 +119,10 @@ capability and execution facts, and this crate may emit reservation lifecycle
 signals into that registry when a host injects one. Registry ownership still
 belongs to a higher Pantograph application-layer coordinator rather than to this
 embedded-runtime crate.
-Pumas package-fact candidates are projected into `pumas_feasible`
-technical-fit candidates only when Pumas marks them feasible; remote search
-tags and unavailable candidates remain diagnostics/model-library facts rather
-than executable runtime candidates.
+Pumas package-fact backend hints are projected into `pumas_package_facts`
+technical-fit candidates only after Pantograph validates the local package-fact
+shape; remote search tags and unavailable candidates remain
+diagnostics/model-library facts rather than executable runtime candidates.
 Workflow-service facade methods exposed by this crate, including
 execution-session queue cancel, reprioritize, and push-front, must remain
 delegating methods; scheduler authority and diagnostics events stay in
@@ -173,9 +174,10 @@ delegating methods; scheduler authority and diagnostics events stay in
   backend launch, or loaded-model verification fails. Workflow-service owns
   ledger recording, but this crate must not flatten those failures before the
   session runtime admission recorder can classify them.
-- Technical-fit projection may translate feasible Pumas package facts into
-  registry candidates, but it must not synthesize live runtime id, residency,
-  warmup, queue, or memory-admission facts from model-library metadata.
+- Technical-fit projection may derive registry candidates from Pumas package
+  facts and Pantograph validation context, but it must not synthesize live
+  runtime id, residency, warmup, queue, or memory-admission facts from
+  model-library metadata.
 - Public embedded-runtime workflow, session, queue, inspection, and keep-alive
   facade methods stay in `embedded_workflow_service_api.rs` so root composition
   remains separate from workflow-service API forwarding.

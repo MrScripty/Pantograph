@@ -1,39 +1,47 @@
 {
-  "contract_version": 1,
+  "package_facts_contract_version": 1,
   "model_ref": {
-    "model_id": "pumas://models/legacy-ollama-tag",
-    "artifact_id": "hf-dir"
+    "model_id": "llm/llama/ollama-hint-only",
+    "selected_artifact_path": "llm/llama/ollama-hint-only/model.gguf"
   },
-  "artifact_kind": "hf_compatible_directory",
-  "entry_path": "/models/legacy-ollama-tag",
-  "storage_kind": "managed_library",
-  "validation_state": "valid",
-  "task_evidence": [
+  "artifact": {
+    "artifact_kind": "gguf",
+    "entry_path": "llm/llama/ollama-hint-only/model.gguf",
+    "storage_kind": "library_owned",
+    "validation_state": "valid",
+    "selected_files": [
+      "model.gguf"
+    ]
+  },
+  "components": [
     {
-      "task_id": "chat_completion",
-      "upstream_labels": ["conversational"],
-      "modality_signature": {
-        "inputs": ["text"],
-        "outputs": ["text"]
-      }
+      "kind": "weights",
+      "status": "present",
+      "relative_path": "model.gguf"
     }
   ],
-  "backend_hints": [
-    {
-      "backend_key": "ollama",
-      "backend_family": "ollama",
-      "source": "package_metadata",
-      "executable_guarantee": false
-    }
-  ],
-  "feasible_execution_candidates": [
-    {
-      "backend_key": "ollama",
-      "task_id": "chat_completion",
-      "feasible": false,
-      "confidence": 1.0,
-      "source": "pumas_feasible",
-      "exclusion_reasons": ["consumer does not support ollama execution"]
-    }
-  ]
+  "task": {
+    "pipeline_tag": "text-generation",
+    "task_type_primary": "text_generation",
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ]
+  },
+  "generation_defaults": {
+    "status": "missing"
+  },
+  "custom_code": {
+    "requires_custom_code": false
+  },
+  "backend_hints": {
+    "raw": [
+      "ollama"
+    ],
+    "unsupported": [
+      "ollama"
+    ]
+  }
 }

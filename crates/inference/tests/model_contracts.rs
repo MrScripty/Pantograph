@@ -1,9 +1,9 @@
 use inference::{
-    BackendHintSource, InferenceLifecyclePhase, InferenceTaskId, ModelExecutionDescriptor,
-    ModelExecutionStorageKind, ModelExecutionValidationState, ModelFactFamily,
-    ModelLibraryChangeKind, ModelLibraryRefreshScope, ModelLibraryUpdateEvent,
-    ModelLibraryUpdateFeed, ModelPackageFactsSummarySnapshot, ModelPackageFactsSummaryStatus,
-    ModelValidationState, OptionCompatibilityDiagnostic, OptionSupportState,
+    BackendHintLabel, InferenceLifecyclePhase, ModelExecutionDescriptor, ModelExecutionStorageKind,
+    ModelExecutionValidationState, ModelFactFamily, ModelLibraryChangeKind,
+    ModelLibraryRefreshScope, ModelLibraryUpdateEvent, ModelLibraryUpdateFeed,
+    ModelPackageFactsSummarySnapshot, ModelPackageFactsSummaryStatus,
+    OptionCompatibilityDiagnostic, OptionSupportState, PackageFactStatus,
     ResolvedModelPackageFacts, MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
 };
 
@@ -35,10 +35,6 @@ const PACKAGE_FACT_FIXTURES: &[(&str, &str)] = &[
         include_str!("fixtures/inference_package_facts/unsupported_ollama_hint_package_facts.json"),
     ),
     (
-        "stale_package_facts.json",
-        include_str!("fixtures/inference_package_facts/stale_package_facts.json"),
-    ),
-    (
         "invalid_generation_config_package_facts.json",
         include_str!(
             "fixtures/inference_package_facts/invalid_generation_config_package_facts.json"
@@ -47,10 +43,6 @@ const PACKAGE_FACT_FIXTURES: &[(&str, &str)] = &[
     (
         "missing_tokenizer_package_facts.json",
         include_str!("fixtures/inference_package_facts/missing_tokenizer_package_facts.json"),
-    ),
-    (
-        "remote_search_mlx_vllm_hint.json",
-        include_str!("fixtures/inference_package_facts/remote_search_mlx_vllm_hint.json"),
     ),
 ];
 
@@ -70,7 +62,7 @@ fn package_fact_fixtures_decode_through_public_contracts() {
         let decoded: ResolvedModelPackageFacts =
             serde_json::from_str(&encoded).expect("decode encoded facts");
         assert_eq!(
-            decoded.contract_version,
+            decoded.package_facts_contract_version,
             MODEL_PACKAGE_FACTS_CONTRACT_VERSION
         );
         assert_eq!(decoded.model_ref.model_id, facts.model_ref.model_id);
@@ -109,14 +101,84 @@ fn compact_model_execution_descriptor_stays_smaller_than_package_facts() {
 
 #[test]
 fn remote_search_hints_are_not_executable_guarantees() {
-    let facts: ResolvedModelPackageFacts =
-        serde_json::from_str(PACKAGE_FACT_FIXTURES[9].1).expect("decode remote hint fixture");
+    let remote_search: serde_json::Value = serde_json::from_str(include_str!(
+        "fixtures/inference_package_facts/remote_search_mlx_vllm_hint.json"
+    ))
+    .expect("decode remote search fixture");
 
-    assert_eq!(facts.validation_state, ModelValidationState::Unknown);
-    assert!(facts.feasible_execution_candidates.is_empty());
-    assert!(facts.backend_hints.iter().all(|hint| {
-        hint.source == BackendHintSource::RemoteSearchTag && !hint.executable_guarantee
+    assert!(remote_search
+        .get("package_facts_contract_version")
+        .is_none());
+    let compatible_engines = remote_search["compatibleEngines"]
+        .as_array()
+        .expect("compatibleEngines should be an array");
+    assert!(compatible_engines
+        .iter()
+        .any(|engine| engine.as_str() == Some("mlx")));
+    assert!(compatible_engines
+        .iter()
+        .any(|engine| engine.as_str() == Some("vllm")));
+}
+
+#[test]
+fn stale_package_facts_cache_rows_wrap_canonical_facts_json() {
+    let stale_cache_row: serde_json::Value = serde_json::from_str(include_str!(
+        "fixtures/inference_package_facts/stale_package_facts.json"
+    ))
+    .expect("decode stale cache row fixture");
+    let facts_json = stale_cache_row["facts_json"]
+        .as_str()
+        .expect("stale cache row should carry facts_json");
+    let facts: ResolvedModelPackageFacts =
+        serde_json::from_str(facts_json).expect("decode stale cache row facts_json");
+
+    assert!(facts.uses_current_contract());
+    assert_eq!(
+        facts.task.task_type_primary.as_deref(),
+        Some("text_generation")
+    );
+}
+
+#[test]
+fn package_facts_use_nested_pumas_artifact_task_and_backend_hint_shape() {
+    let facts: ResolvedModelPackageFacts = serde_json::from_str(PACKAGE_FACT_FIXTURES[0].1)
+        .expect("decode gguf text generation fixture");
+
+    assert_eq!(
+        facts.artifact.entry_path,
+        "llm/llama/tiny-gguf/tiny-Q4_K_M.gguf"
+    );
+    assert_eq!(
+        facts.task.task_type_primary.as_deref(),
+        Some("text_generation")
+    );
+    assert_eq!(facts.task.input_modalities, vec!["text"]);
+    assert_eq!(facts.task.output_modalities, vec!["text"]);
+    assert_eq!(
+        facts.backend_hints.accepted,
+        vec![BackendHintLabel::LlamaCpp]
+    );
+    assert!(facts.components.iter().any(|component| {
+        component.status == PackageFactStatus::Present
+            && component.relative_path.as_deref() == Some("tiny-Q4_K_M.gguf")
     }));
+}
+
+#[test]
+fn generation_defaults_preserve_raw_pumas_defaults() {
+    let facts: ResolvedModelPackageFacts =
+        serde_json::from_str(PACKAGE_FACT_FIXTURES[2].1).expect("decode hf transformers fixture");
+
+    assert_eq!(facts.generation_defaults.status, PackageFactStatus::Present);
+    assert_eq!(
+        facts
+            .generation_defaults
+            .defaults
+            .as_ref()
+            .and_then(|defaults| defaults.get("max_new_tokens"))
+            .and_then(serde_json::Value::as_u64),
+        Some(128)
+    );
 }
 
 #[test]
@@ -247,12 +309,6 @@ fn embeddings_are_normal_task_evidence() {
     let facts: ResolvedModelPackageFacts =
         serde_json::from_str(PACKAGE_FACT_FIXTURES[1].1).expect("decode embedding fixture");
 
-    assert!(facts
-        .task_evidence
-        .iter()
-        .any(|evidence| evidence.task_id == InferenceTaskId::Embedding));
-    assert!(facts
-        .feasible_execution_candidates
-        .iter()
-        .any(|candidate| candidate.task_id == InferenceTaskId::Embedding));
+    assert_eq!(facts.task.task_type_primary.as_deref(), Some("embedding"));
+    assert_eq!(facts.task.output_modalities, vec!["embedding"]);
 }

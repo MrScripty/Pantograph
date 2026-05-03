@@ -926,7 +926,7 @@ Detailed Pumas-side work is split into
 - [ ] Keep the Pantograph inference plan focused on consuming Pumas package
   facts rather than specifying Pumas indexing, import, deduplication,
   migration, dependency binding, or storage implementation details.
-- [ ] Replace the initial Pantograph-side `PumasModelRef` and
+- [x] Replace the initial Pantograph-side `PumasModelRef` and
   `ResolvedModelPackageFacts` temporary consumer contracts with adapters or DTOs
   that align to the canonical Pumas producer shape after the cross-repo
   fixture gate completes.
@@ -971,12 +971,12 @@ Detailed Pumas-side work is split into
 - `git diff --check`.
 
 **Status:** Partially implemented. Pantograph now has crate-local package-fact
-contracts/fixtures and an embedded-runtime projection that converts
-Pantograph-derived local package-fact candidates into existing
-`pumas_feasible` technical-fit candidates. Remote MLX/vLLM search tags do not
+contracts/fixtures that decode the canonical Pumas full-detail producer shape
+and an embedded-runtime projection that derives `pumas_package_facts`
+technical-fit candidates from those facts. Remote MLX/vLLM search tags do not
 project into executable candidates. Inference now exposes Pumas-aligned update
-feed and package-fact summary snapshot DTOs. Model-list cache, full-detail
-canonical Pumas DTO alignment, and update-event consumption remain pending.
+feed and package-fact summary snapshot DTOs. Model-list cache and update-event
+consumption remain pending.
 
 ### Milestone 3: Define Transformers-Aligned Rust Model Contracts
 
@@ -1633,9 +1633,9 @@ Update during implementation:
   tests.
 - 2026-05-02: Implemented the neighboring technical-fit projection slice in
   `pantograph-embedded-runtime`. Pantograph-local package-fact candidates can
-  become `pumas_feasible` runtime-registry candidates without synthesizing live
-  runtime id, residency, warmup, queue, or memory-admission facts. Remote
-  MLX/vLLM discovery hints stay out of executable candidate projection.
+  become runtime-registry candidates without synthesizing live runtime id,
+  residency, warmup, queue, or memory-admission facts. Remote MLX/vLLM
+  discovery hints stay out of executable candidate projection.
 - 2026-05-02: Follow-up Pumas/Pantograph boundary review moved feasible
   execution candidate derivation out of the Pumas plan. Pumas remains the
   producer of package facts, dependency facts, summaries, and update cursors;
@@ -1650,13 +1650,17 @@ Update during implementation:
   with Pumas-aligned update-feed and package-fact summary snapshot/result DTOs,
   including cursor, stale-cursor, snapshot-required, refresh-scope, selected
   artifact, and producer revision fields.
-- 2026-05-03: Cross-repo contract review found remaining full-detail package
-  fact drift to resolve next: Pantograph still uses `contract_version`, flat
-  artifact fields, aggregated component facts, normalized `task_evidence[]`,
-  per-backend hint objects, and parsed generation-default groups where Pumas
-  produces `package_facts_contract_version`, nested `artifact`, `components[]`,
-  single `task`, `backend_hints.accepted/raw/unsupported`, and raw
-  `generation_defaults`.
+- 2026-05-03: Resolved full-detail package-fact DTO drift in the inference
+  contract slice. Pantograph now decodes Pumas'
+  `package_facts_contract_version`, nested `artifact`, `components[]`, single
+  `task`, `backend_hints.accepted/raw/unsupported`, custom-code diagnostics,
+  and raw `generation_defaults` producer shape. The old flattened package-fact
+  fixture shape and Pumas-owned feasible candidate list were removed from
+  `ResolvedModelPackageFacts`.
+- 2026-05-03: Renamed runtime technical-fit candidate source from
+  `pumas_feasible` to `pumas_package_facts` and changed embedded-runtime
+  projection to derive runtime candidates from Pumas backend hints plus
+  Pantograph validation context.
 
 ## Commit Cadence Notes
 
@@ -1833,7 +1837,7 @@ Update during implementation:
   fixtures, and `cargo test -p inference --test model_contracts`.
 - 2026-05-02: Embedded-runtime technical-fit slice implemented locally:
   Pantograph-local package-fact candidates project to advisory
-  `pumas_feasible` runtime-registry candidates, while remote discovery hints
+  runtime-registry candidates, while remote discovery hints
   project to none.
 
 ### Deviations
@@ -1853,10 +1857,8 @@ Update during implementation:
 - Continue Milestone 2 with the Pantograph model-list detail cache and
   consumption of Pumas' existing package-fact summary snapshot, single-summary,
   and update-feed APIs.
-- Continue Milestone 2 full-detail DTO alignment by replacing the temporary
-  flattened `ResolvedModelPackageFacts` fixture shape with Pumas' canonical
-  nested artifact, task, component, backend-hint, custom-code, diagnostics, and
-  generation-default producer shape.
+- Continue Milestone 2 with a no-missed-updates startup snapshot acceptance
+  test around Pumas summary snapshots and update cursors.
 
 ### Verification Summary
 
@@ -1872,6 +1874,19 @@ Update during implementation:
   Pumas-aligned update-feed and package-fact summary snapshot DTOs.
 - `cargo check -p inference --all-features` passed after adding Pumas-aligned
   update-feed and package-fact summary snapshot DTOs.
+- `cargo test -p inference --test model_contracts` passed after replacing the
+  flattened package-fact fixture shape with the canonical Pumas full-detail
+  producer shape.
+- `cargo test -p pantograph-embedded-runtime technical_fit` passed after
+  deriving runtime candidates from Pumas backend hints and renaming their
+  source to `pumas_package_facts`.
+- `cargo test -p pantograph-runtime-registry technical_fit` passed after the
+  source-kind rename.
+- `cargo check -p inference --all-features` passed after the full-detail Pumas
+  DTO alignment.
+- `cargo check -p pantograph-embedded-runtime --no-default-features` passed
+  after the full-detail Pumas DTO alignment, with the existing
+  `strip_managed_binary_spawn_error` dead-code warning.
 - `cargo test -p inference` failed in
   `managed_redistributables::install_from_staging_validates_expected_files_before_finalizing`
   due to the unrelated managed-dependency path mismatch recorded above.

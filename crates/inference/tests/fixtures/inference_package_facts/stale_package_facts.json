@@ -1,23 +1,11 @@
 {
-  "contract_version": 1,
-  "model_ref": {
-    "model_id": "pumas://models/stale-model",
-    "artifact_id": "main"
-  },
-  "artifact_kind": "gguf",
-  "entry_path": "/models/stale/model.gguf",
-  "storage_kind": "managed_library",
-  "validation_state": "stale",
-  "components": {
-    "diagnostics": ["artifact signature changed after facts were produced"]
-  },
-  "feasible_execution_candidates": [
-    {
-      "backend_key": "llama_cpp",
-      "task_id": "text_generation",
-      "feasible": false,
-      "source": "pumas_feasible",
-      "exclusion_reasons": ["package facts are stale"]
-    }
-  ]
+  "model_id": "llm/example/stale-cache",
+  "selected_artifact_id": "",
+  "cache_scope": "detail",
+  "package_facts_contract_version": 0,
+  "producer_revision": "package-facts-v0",
+  "source_fingerprint": "stale-source-fingerprint",
+  "facts_json": "{\"package_facts_contract_version\":1,\"model_ref\":{\"model_id\":\"llm/example/stale-cache\"},\"artifact\":{\"artifact_kind\":\"hf_compatible_directory\",\"entry_path\":\"llm/example/stale-cache\",\"storage_kind\":\"library_owned\",\"validation_state\":\"valid\",\"selected_files\":[\"config.json\",\"model.safetensors\"]},\"transformers\":{\"config_status\":\"present\",\"config_model_type\":\"llama\",\"generation_config_status\":\"missing\",\"selected_files\":[\"config.json\"]},\"task\":{\"pipeline_tag\":\"text-generation\",\"task_type_primary\":\"text_generation\",\"input_modalities\":[\"text\"],\"output_modalities\":[\"text\"]},\"generation_defaults\":{\"status\":\"missing\",\"source_path\":\"config.json\"},\"custom_code\":{\"requires_custom_code\":false},\"backend_hints\":{\"accepted\":[\"transformers\"],\"raw\":[\"transformers\"]}}",
+  "cached_at": "2026-05-02T00:00:00Z",
+  "updated_at": "2026-05-02T00:00:00Z"
 }

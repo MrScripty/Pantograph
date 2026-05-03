@@ -132,8 +132,8 @@ real media conversion process execution stays in the neutral
   helpers such as `strip_prefix`, `Path`, and direct `Path::join` inputs rather
   than manual slicing or temporary string allocations.
 - `ModelExecutionDescriptor` remains a compact Pumas execution summary. Rich
-  artifact kind, tokenizer/processor, generation default, custom-code, and
-  feasible-candidate evidence belongs in `ResolvedModelPackageFacts`.
+  artifact kind, tokenizer/processor, generation default, custom-code, backend
+  hint, and package diagnostic evidence belongs in `ResolvedModelPackageFacts`.
 - Remote MLX/vLLM search tags are discovery hints only; installed-model
   compatibility must use resolved local package facts plus backend checks.
 - Embeddings are normal task evidence in `model_contracts.rs`; dedicated

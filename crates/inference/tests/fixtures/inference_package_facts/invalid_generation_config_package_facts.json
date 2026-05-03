@@ -1,27 +1,71 @@
 {
-  "contract_version": 1,
+  "package_facts_contract_version": 1,
   "model_ref": {
-    "model_id": "pumas://models/invalid-generation-config",
-    "artifact_id": "hf-dir"
+    "model_id": "llm/example/invalid-generation-config",
+    "selected_artifact_path": "llm/example/invalid-generation-config"
   },
-  "artifact_kind": "hf_compatible_directory",
-  "entry_path": "/models/invalid-generation-config",
-  "storage_kind": "managed_library",
-  "validation_state": "warning",
-  "components": {
-    "tokenizer": "present",
-    "generation_config": "invalid",
-    "diagnostics": ["generation_config.json failed to parse"]
+  "artifact": {
+    "artifact_kind": "hf_compatible_directory",
+    "entry_path": "llm/example/invalid-generation-config",
+    "storage_kind": "library_owned",
+    "validation_state": "valid",
+    "selected_files": [
+      "config.json",
+      "generation_config.json",
+      "model.safetensors"
+    ]
+  },
+  "components": [
+    {
+      "kind": "config",
+      "status": "present",
+      "relative_path": "config.json"
+    },
+    {
+      "kind": "generation_config",
+      "status": "present",
+      "relative_path": "generation_config.json"
+    }
+  ],
+  "transformers": {
+    "config_status": "present",
+    "config_model_type": "llama",
+    "generation_config_status": "present",
+    "selected_files": [
+      "config.json",
+      "generation_config.json"
+    ]
+  },
+  "task": {
+    "pipeline_tag": "text-generation",
+    "task_type_primary": "text_generation",
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ]
   },
   "generation_defaults": {
-    "diagnostics": ["generation defaults unavailable"]
+    "status": "invalid",
+    "source_path": "generation_config.json",
+    "diagnostics": [
+      {
+        "code": "invalid_generation_config_json",
+        "message": "expected value at line 1 column 1",
+        "path": "generation_config.json"
+      }
+    ]
   },
-  "feasible_execution_candidates": [
-    {
-      "backend_key": "pytorch",
-      "task_id": "text_generation",
-      "feasible": true,
-      "source": "pumas_feasible"
-    }
-  ]
+  "custom_code": {
+    "requires_custom_code": false
+  },
+  "backend_hints": {
+    "accepted": [
+      "transformers"
+    ],
+    "raw": [
+      "transformers"
+    ]
+  }
 }

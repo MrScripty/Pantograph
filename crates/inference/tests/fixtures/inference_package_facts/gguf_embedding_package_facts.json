@@ -1,46 +1,54 @@
 {
-  "contract_version": 1,
+  "package_facts_contract_version": 1,
   "model_ref": {
-    "model_id": "pumas://models/bge-small-gguf",
-    "artifact_id": "embedding-gguf"
+    "model_id": "embedding/qwen3/tiny-embedding-gguf",
+    "selected_artifact_id": "q8_0",
+    "selected_artifact_path": "embedding/qwen3/tiny-embedding-gguf/tiny-embedding-Q8_0.gguf"
   },
-  "artifact_kind": "gguf",
-  "entry_path": "/models/bge-small/model.gguf",
-  "storage_kind": "managed_library",
-  "validation_state": "valid",
-  "task_evidence": [
+  "artifact": {
+    "artifact_kind": "gguf",
+    "entry_path": "embedding/qwen3/tiny-embedding-gguf/tiny-embedding-Q8_0.gguf",
+    "storage_kind": "library_owned",
+    "validation_state": "valid",
+    "selected_files": [
+      "tiny-embedding-Q8_0.gguf"
+    ]
+  },
+  "components": [
     {
-      "task_id": "embedding",
-      "upstream_labels": ["feature-extraction"],
-      "modality_signature": {
-        "inputs": ["text"],
-        "outputs": ["embedding"]
-      },
-      "source": "gguf_metadata"
+      "kind": "weights",
+      "status": "present",
+      "relative_path": "tiny-embedding-Q8_0.gguf"
+    },
+    {
+      "kind": "quantization",
+      "status": "present",
+      "relative_path": "tiny-embedding-Q8_0.gguf",
+      "message": "Q8_0"
     }
   ],
-  "backend_hints": [
-    {
-      "backend_key": "llama_cpp",
-      "backend_family": "llama_cpp",
-      "source": "file_pattern",
-      "executable_guarantee": false
-    }
-  ],
-  "components": {
-    "tokenizer": "not_required",
-    "processor": "not_required"
+  "task": {
+    "pipeline_tag": "feature-extraction",
+    "task_type_primary": "embedding",
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "embedding"
+    ]
   },
-  "feasible_execution_candidates": [
-    {
-      "backend_key": "llama_cpp",
-      "task_id": "embedding",
-      "feasible": true,
-      "confidence": 0.9,
-      "source": "pumas_feasible",
-      "resource_estimate": {
-        "ram_bytes": 2147483648
-      }
-    }
-  ]
+  "generation_defaults": {
+    "status": "missing"
+  },
+  "custom_code": {
+    "requires_custom_code": false
+  },
+  "backend_hints": {
+    "accepted": [
+      "llama.cpp"
+    ],
+    "raw": [
+      "llama.cpp"
+    ]
+  }
 }

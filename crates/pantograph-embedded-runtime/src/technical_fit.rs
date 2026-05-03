@@ -25,7 +25,7 @@ pub fn build_runtime_technical_fit_request_with_package_facts(
         build_runtime_technical_fit_request(request, runtime_snapshot, runtime_capabilities);
     runtime_request
         .candidates
-        .extend(pumas_feasible_candidates_from_package_facts(package_facts));
+        .extend(runtime_candidates_from_pumas_package_facts(package_facts));
     runtime_request.normalized()
 }
 
@@ -116,29 +116,45 @@ fn runtime_capability_candidates(
         .collect()
 }
 
-pub fn pumas_feasible_candidates_from_package_facts(
+pub fn runtime_candidates_from_pumas_package_facts(
     package_facts: &[inference::ResolvedModelPackageFacts],
 ) -> Vec<RuntimeTechnicalFitCandidate> {
     package_facts
         .iter()
         .flat_map(|facts| {
             facts
-                .feasible_execution_candidates
+                .backend_hints
+                .accepted
                 .iter()
-                .filter(|candidate| candidate.feasible)
-                .map(|candidate| RuntimeTechnicalFitCandidate {
-                    candidate_id: format!("{}|{}", candidate.backend_key, facts.model_ref.model_id),
+                .filter_map(|hint| pumas_backend_hint_label_to_backend_key(*hint))
+                .map(|backend_key| RuntimeTechnicalFitCandidate {
+                    candidate_id: format!("{}|{}", backend_key, facts.model_ref.model_id),
                     runtime_id: None,
-                    backend_key: Some(candidate.backend_key.clone()),
+                    backend_key: Some(backend_key),
                     model_id: Some(facts.model_ref.model_id.clone()),
-                    source_kind: RuntimeTechnicalFitCandidateSourceKind::PumasFeasible,
+                    source_kind: RuntimeTechnicalFitCandidateSourceKind::PumasPackageFacts,
                     context_window_tokens: None,
                     residency_state: None,
                     warmup_state: None,
-                    supports_runtime_requirements: candidate.feasible,
+                    supports_runtime_requirements: matches!(
+                        facts.artifact.validation_state,
+                        inference::ModelValidationState::Valid
+                    ),
                 })
         })
         .collect()
+}
+
+fn pumas_backend_hint_label_to_backend_key(label: inference::BackendHintLabel) -> Option<String> {
+    match label {
+        inference::BackendHintLabel::Transformers => Some("pytorch".to_string()),
+        inference::BackendHintLabel::LlamaCpp => Some("llama_cpp".to_string()),
+        inference::BackendHintLabel::Vllm => Some("vllm".to_string()),
+        inference::BackendHintLabel::Mlx => Some("mlx".to_string()),
+        inference::BackendHintLabel::Candle => Some("candle".to_string()),
+        inference::BackendHintLabel::Diffusers => Some("diffusers".to_string()),
+        inference::BackendHintLabel::OnnxRuntime => Some("onnx_runtime".to_string()),
+    }
 }
 
 fn project_override(
@@ -459,17 +475,17 @@ mod tests {
         )
         .expect("decode package facts fixture");
 
-        let candidates = pumas_feasible_candidates_from_package_facts(&[package_facts]);
+        let candidates = runtime_candidates_from_pumas_package_facts(&[package_facts]);
 
         assert_eq!(candidates.len(), 1);
         assert_eq!(
             candidates[0].source_kind,
-            RuntimeTechnicalFitCandidateSourceKind::PumasFeasible
+            RuntimeTechnicalFitCandidateSourceKind::PumasPackageFacts
         );
         assert_eq!(candidates[0].backend_key.as_deref(), Some("llama_cpp"));
         assert_eq!(
             candidates[0].model_id.as_deref(),
-            Some("pumas://models/llama-3.1-8b-q4")
+            Some("llm/llama/tiny-gguf")
         );
         assert_eq!(candidates[0].runtime_id, None);
         assert_eq!(candidates[0].residency_state, None);
@@ -479,23 +495,25 @@ mod tests {
 
     #[test]
     fn pumas_package_facts_do_not_project_remote_discovery_hints() {
-        let package_facts: inference::ResolvedModelPackageFacts = serde_json::from_str(
+        let remote_search_hint: serde_json::Value = serde_json::from_str(
             include_str!(
                 "../../inference/tests/fixtures/inference_package_facts/remote_search_mlx_vllm_hint.json"
             ),
         )
         .expect("decode remote search fixture");
 
-        let candidates = pumas_feasible_candidates_from_package_facts(&[package_facts]);
-
+        assert!(remote_search_hint
+            .get("package_facts_contract_version")
+            .is_none());
         assert!(
-            candidates.is_empty(),
-            "remote search hints are discovery facts, not executable candidates"
+            serde_json::from_value::<inference::ResolvedModelPackageFacts>(remote_search_hint)
+                .is_err()
         );
+        assert!(runtime_candidates_from_pumas_package_facts(&[]).is_empty());
     }
 
     #[test]
-    fn technical_fit_request_can_include_pumas_feasible_candidates() {
+    fn technical_fit_request_can_include_pumas_package_facts_candidates() {
         let package_facts: inference::ResolvedModelPackageFacts = serde_json::from_str(
             include_str!(
                 "../../inference/tests/fixtures/inference_package_facts/gguf_text_generation_package_facts.json"
@@ -510,7 +528,7 @@ mod tests {
                 estimated_min_vram_mb: None,
                 estimated_min_ram_mb: None,
                 estimation_confidence: "fixture".to_string(),
-                required_models: vec!["pumas://models/llama-3.1-8b-q4".to_string()],
+                required_models: vec!["llm/llama/tiny-gguf".to_string()],
                 required_backends: vec!["llama_cpp".to_string()],
                 required_extensions: Vec::new(),
             },
@@ -530,13 +548,13 @@ mod tests {
         assert_eq!(runtime_request.candidates.len(), 1);
         assert_eq!(
             runtime_request.candidates[0].source_kind,
-            RuntimeTechnicalFitCandidateSourceKind::PumasFeasible
+            RuntimeTechnicalFitCandidateSourceKind::PumasPackageFacts
         );
 
         let decision = select_runtime_technical_fit(&runtime_request);
         assert_eq!(
             decision.selected_model_id.as_deref(),
-            Some("pumas://models/llama-3.1-8b-q4")
+            Some("llm/llama/tiny-gguf")
         );
         assert_eq!(decision.selected_backend_key.as_deref(), Some("llama_cpp"));
     }

@@ -1,68 +1,115 @@
 {
-  "contract_version": 1,
+  "package_facts_contract_version": 1,
   "model_ref": {
-    "model_id": "pumas://models/qwen2.5-7b-instruct",
-    "artifact_id": "hf-dir",
-    "revision": "main"
+    "model_id": "llm/example/tiny-transformers",
+    "revision": "abc123",
+    "selected_artifact_id": "main",
+    "selected_artifact_path": "llm/example/tiny-transformers"
   },
-  "artifact_kind": "hf_compatible_directory",
-  "entry_path": "/models/qwen2.5-7b-instruct",
-  "storage_kind": "managed_library",
-  "validation_state": "valid",
-  "task_evidence": [
+  "artifact": {
+    "artifact_kind": "hf_compatible_directory",
+    "entry_path": "llm/example/tiny-transformers",
+    "storage_kind": "library_owned",
+    "validation_state": "valid",
+    "selected_files": [
+      "config.json",
+      "generation_config.json",
+      "model.safetensors",
+      "tokenizer.json"
+    ],
+    "sibling_files": [
+      "README.md",
+      "config.json",
+      "generation_config.json",
+      "model.safetensors",
+      "tokenizer.json"
+    ]
+  },
+  "components": [
     {
-      "task_id": "chat_completion",
-      "upstream_labels": ["text-generation", "conversational"],
-      "modality_signature": {
-        "inputs": ["text"],
-        "outputs": ["text"]
-      },
-      "source": "config.json"
-    }
-  ],
-  "backend_hints": [
-    {
-      "backend_key": "pytorch",
-      "backend_family": "transformers",
-      "source": "package_metadata",
-      "executable_guarantee": false
+      "kind": "config",
+      "status": "present",
+      "relative_path": "config.json"
     },
     {
-      "backend_key": "vllm",
-      "backend_family": "vllm",
-      "source": "package_metadata",
-      "executable_guarantee": false
+      "kind": "tokenizer",
+      "status": "present",
+      "relative_path": "tokenizer.json"
+    },
+    {
+      "kind": "generation_config",
+      "status": "present",
+      "relative_path": "generation_config.json"
     }
   ],
-  "components": {
-    "tokenizer": "present",
-    "processor": "missing",
-    "chat_template": "present",
-    "generation_config": "present"
+  "transformers": {
+    "config_status": "present",
+    "config_model_type": "llama",
+    "architectures": [
+      "LlamaForCausalLM"
+    ],
+    "torch_dtype": "bfloat16",
+    "auto_map": [
+      "AutoConfig",
+      "AutoModelForCausalLM"
+    ],
+    "generation_config_status": "present",
+    "source_repo_id": "org/tiny-transformers",
+    "source_revision": "abc123",
+    "selected_files": [
+      "config.json",
+      "generation_config.json"
+    ]
+  },
+  "task": {
+    "pipeline_tag": "text-generation",
+    "task_type_primary": "text_generation",
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ]
   },
   "generation_defaults": {
-    "length": {
-      "max_new_tokens": 1024
-    },
-    "sampling": {
-      "temperature": 0.6,
+    "status": "present",
+    "source_path": "generation_config.json",
+    "defaults": {
+      "max_new_tokens": 128,
+      "temperature": 0.7,
       "top_p": 0.95
-    },
-    "cache": {
-      "use_cache": true
     }
   },
-  "feasible_execution_candidates": [
-    {
-      "backend_key": "pytorch",
-      "task_id": "chat_completion",
-      "feasible": true,
-      "confidence": 0.9,
-      "source": "pumas_feasible",
-      "resource_estimate": {
-        "ram_bytes": 17179869184,
-        "vram_bytes": 12884901888
+  "custom_code": {
+    "requires_custom_code": true,
+    "custom_code_sources": [
+      "configuration_tiny.py"
+    ],
+    "auto_map_sources": [
+      "AutoConfig",
+      "AutoModelForCausalLM"
+    ],
+    "class_references": [
+      {
+        "kind": "config",
+        "class_name": "LlamaForCausalLM",
+        "source_path": "config.json"
       }
-    }
-  ]
+    ],
+    "dependency_manifests": [
+      "requirements.txt"
+    ]
+  },
+  "backend_hints": {
+    "accepted": [
+      "transformers",
+      "vllm",
+      "mlx"
+    ],
+    "raw": [
+      "transformers",
+      "vllm",
+      "mlx"
+    ]
+  }
 }

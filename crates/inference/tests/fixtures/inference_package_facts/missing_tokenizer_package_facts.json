@@ -1,35 +1,69 @@
 {
-  "contract_version": 1,
+  "package_facts_contract_version": 1,
   "model_ref": {
-    "model_id": "pumas://models/missing-tokenizer",
-    "artifact_id": "hf-dir"
+    "model_id": "llm/example/missing-tokenizer",
+    "selected_artifact_path": "llm/example/missing-tokenizer"
   },
-  "artifact_kind": "hf_compatible_directory",
-  "entry_path": "/models/missing-tokenizer",
-  "storage_kind": "managed_library",
-  "validation_state": "invalid",
-  "task_evidence": [
+  "artifact": {
+    "artifact_kind": "hf_compatible_directory",
+    "entry_path": "llm/example/missing-tokenizer",
+    "storage_kind": "library_owned",
+    "validation_state": "valid",
+    "selected_files": [
+      "config.json",
+      "model.safetensors",
+      "tokenizer_config.json"
+    ]
+  },
+  "components": [
     {
-      "task_id": "text_generation",
-      "upstream_labels": ["text-generation"],
-      "modality_signature": {
-        "inputs": ["text"],
-        "outputs": ["text"]
-      }
+      "kind": "config",
+      "status": "present",
+      "relative_path": "config.json"
+    },
+    {
+      "kind": "tokenizer_config",
+      "status": "present",
+      "relative_path": "tokenizer_config.json",
+      "class_name": "LlamaTokenizer"
+    },
+    {
+      "kind": "tokenizer",
+      "status": "missing",
+      "message": "tokenizer_config.json is present without a known tokenizer vocabulary file"
     }
   ],
-  "components": {
-    "tokenizer": "missing",
-    "generation_config": "present",
-    "diagnostics": ["tokenizer files are required for text generation"]
+  "transformers": {
+    "config_status": "present",
+    "config_model_type": "llama",
+    "generation_config_status": "missing",
+    "selected_files": [
+      "config.json"
+    ]
   },
-  "feasible_execution_candidates": [
-    {
-      "backend_key": "pytorch",
-      "task_id": "text_generation",
-      "feasible": false,
-      "source": "pumas_feasible",
-      "exclusion_reasons": ["missing tokenizer"]
-    }
-  ]
+  "task": {
+    "pipeline_tag": "text-generation",
+    "task_type_primary": "text_generation",
+    "input_modalities": [
+      "text"
+    ],
+    "output_modalities": [
+      "text"
+    ]
+  },
+  "generation_defaults": {
+    "status": "missing",
+    "source_path": "config.json"
+  },
+  "custom_code": {
+    "requires_custom_code": false
+  },
+  "backend_hints": {
+    "accepted": [
+      "transformers"
+    ],
+    "raw": [
+      "transformers"
+    ]
+  }
 }
