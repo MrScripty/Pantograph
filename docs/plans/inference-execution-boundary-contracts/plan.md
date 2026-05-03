@@ -1479,7 +1479,7 @@ execution semantics that backends can map locally.
   validated values rather than raw JSON.
 - [x] Add serialization and deserialization coverage for changed cross-language
   DTOs, including enum casing and optional field defaults.
-- [ ] Record backend-specific unsupported option behavior.
+- [x] Record backend-specific unsupported option behavior.
 - [x] Add public Rust API documentation requirements for new fallible parsing,
   validation, and execution methods, including `# Errors` and `# Panics`
   sections where applicable.
@@ -1515,8 +1515,10 @@ missing required payloads before backend execution.
 of requested option paths, and the PyTorch mapper test proves every requested
 path receives an `OptionCompatibilityDiagnostic`. PyTorch unsupported option
 behavior is covered for seed, stop strings, logprobs, token ids, and
-non-Transformers backend extensions; remaining backends still need equivalent
-coverage.
+non-Transformers backend extensions. llama.cpp now has equivalent staged
+mapping coverage for supported request fields, unsupported beam/min-length/
+token override/output options, KV-cache publication mapping, and non-llama.cpp
+backend extensions.
 
 ### Milestone 11: Canonical Workflow Node Migration
 
@@ -1919,6 +1921,11 @@ Update during implementation:
   coverage proving every requested generation option gets a typed compatibility
   diagnostic. This closes the report contract while leaving equivalent
   unsupported-option coverage for non-PyTorch backends open.
+- 2026-05-03: Added staged llama.cpp generation option mapping and diagnostics
+  coverage. The mapper records supported OpenAI-compatible request fields,
+  llama.cpp-specific extension mapping, unsupported option behavior, and
+  all-requested-option diagnostic coverage without changing live request
+  forwarding yet.
 
 ## Commit Cadence Notes
 

@@ -1,14 +1,25 @@
 use std::pin::Pin;
 
 use futures_util::{Stream, StreamExt};
+use serde_json::{Map, Value};
 
 use super::{BackendConfig, BackendError, ChatChunk};
 use crate::config::DeviceConfig;
 use crate::constants::defaults;
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
+use crate::model_contracts::{
+    GenerationOptions, OptionCompatibilityDiagnostic, OptionSupportState,
+};
 use crate::server::ServerMode;
 use crate::types::{RerankResponse, RerankResult};
 use pantograph_runtime_identity::{canonical_runtime_backend_key, canonical_runtime_id};
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, PartialEq)]
+pub(super) struct LlamaCppGenerationOptionMapping {
+    pub(super) request_fields: Map<String, Value>,
+    pub(super) diagnostics: Vec<OptionCompatibilityDiagnostic>,
+}
 
 pub fn normalize_rerank_results(
     json: serde_json::Value,
@@ -65,6 +76,220 @@ pub fn normalize_rerank_results(
         results: normalized,
         metadata,
     })
+}
+
+#[allow(dead_code)]
+pub(super) fn llama_cpp_generation_option_mapping(
+    options: &GenerationOptions,
+) -> LlamaCppGenerationOptionMapping {
+    let mut request_fields = Map::new();
+    let mut diagnostics = Vec::new();
+
+    map_llama_option(
+        &mut request_fields,
+        &mut diagnostics,
+        "length.max_new_tokens",
+        "max_tokens",
+        options.length.max_new_tokens,
+        OptionSupportState::Mapped,
+    );
+    push_unsupported_if_requested(
+        &mut diagnostics,
+        "length.min_new_tokens",
+        options.length.min_new_tokens.is_some(),
+        "llama.cpp OpenAI-compatible requests do not expose min_new_tokens",
+    );
+    push_unsupported_if_requested(
+        &mut diagnostics,
+        "length.max_length",
+        options.length.max_length.is_some(),
+        "llama.cpp request mapping uses max_tokens/max_new_tokens rather than max_length",
+    );
+    map_llama_option(
+        &mut request_fields,
+        &mut diagnostics,
+        "sampling.temperature",
+        "temperature",
+        options.sampling.temperature,
+        OptionSupportState::Honored,
+    );
+    map_llama_option(
+        &mut request_fields,
+        &mut diagnostics,
+        "sampling.top_p",
+        "top_p",
+        options.sampling.top_p,
+        OptionSupportState::Honored,
+    );
+    map_llama_option(
+        &mut request_fields,
+        &mut diagnostics,
+        "sampling.top_k",
+        "top_k",
+        options.sampling.top_k,
+        OptionSupportState::Honored,
+    );
+    map_llama_option(
+        &mut request_fields,
+        &mut diagnostics,
+        "sampling.repetition_penalty",
+        "repeat_penalty",
+        options.sampling.repetition_penalty,
+        OptionSupportState::Mapped,
+    );
+    map_llama_option(
+        &mut request_fields,
+        &mut diagnostics,
+        "sampling.seed",
+        "seed",
+        options.sampling.seed,
+        OptionSupportState::Honored,
+    );
+    push_unsupported_if_requested(
+        &mut diagnostics,
+        "search.num_beams",
+        options.search.num_beams.is_some(),
+        "llama.cpp does not expose beam search through the current request mapping",
+    );
+    push_unsupported_if_requested(
+        &mut diagnostics,
+        "search.num_return_sequences",
+        options.search.num_return_sequences.is_some(),
+        "llama.cpp does not expose multiple return sequences through the current request mapping",
+    );
+    if !options.stopping.stop_strings.is_empty() {
+        request_fields.insert(
+            "stop".to_string(),
+            serde_json::json!(options.stopping.stop_strings),
+        );
+        diagnostics.push(llama_option_diagnostic(
+            "stopping.stop_strings",
+            OptionSupportState::Mapped,
+            Some("mapped to llama.cpp stop".to_string()),
+        ));
+    }
+    push_unsupported_if_requested(
+        &mut diagnostics,
+        "stopping.eos_token_ids",
+        !options.stopping.eos_token_ids.is_empty(),
+        "llama.cpp OpenAI-compatible requests do not accept explicit EOS token ids",
+    );
+    push_unsupported_if_requested(
+        &mut diagnostics,
+        "cache.use_cache",
+        options.cache.use_cache.is_some(),
+        "cache.use_cache is controlled by Pantograph runtime/KV policy for llama.cpp",
+    );
+    if options.cache.kv_cache_checkpoint_requested == Some(true) {
+        diagnostics.push(llama_option_diagnostic(
+            "cache.kv_cache_checkpoint_requested",
+            OptionSupportState::Mapped,
+            Some(
+                "handled by Pantograph KV-cache publication outside llama.cpp request fields"
+                    .to_string(),
+            ),
+        ));
+    }
+    push_unsupported_if_requested(
+        &mut diagnostics,
+        "output.return_logprobs",
+        options.output.return_logprobs == Some(true),
+        "logprob output is not exposed by the current llama.cpp mapping",
+    );
+    push_unsupported_if_requested(
+        &mut diagnostics,
+        "output.return_token_ids",
+        options.output.return_token_ids == Some(true),
+        "token-id output is not exposed by the current llama.cpp mapping",
+    );
+    push_unsupported_if_requested(
+        &mut diagnostics,
+        "special_tokens.bos_token_id",
+        options.special_tokens.bos_token_id.is_some(),
+        "llama.cpp request mapping does not accept BOS token overrides",
+    );
+    push_unsupported_if_requested(
+        &mut diagnostics,
+        "special_tokens.eos_token_id",
+        options.special_tokens.eos_token_id.is_some(),
+        "llama.cpp request mapping does not accept EOS token overrides",
+    );
+    push_unsupported_if_requested(
+        &mut diagnostics,
+        "special_tokens.pad_token_id",
+        options.special_tokens.pad_token_id.is_some(),
+        "llama.cpp request mapping does not accept PAD token overrides",
+    );
+    for (key, value) in &options.backend_extensions {
+        if let Some(llama_key) = key.strip_prefix("llama.cpp:") {
+            request_fields.insert(llama_key.to_string(), value.clone());
+            diagnostics.push(llama_option_diagnostic(
+                format!("backend_extensions.{key}"),
+                OptionSupportState::Mapped,
+                Some(format!("mapped to llama.cpp extension key {llama_key}")),
+            ));
+        } else {
+            diagnostics.push(llama_option_diagnostic(
+                format!("backend_extensions.{key}"),
+                OptionSupportState::Unsupported,
+                Some("backend extension is not scoped to llama.cpp".to_string()),
+            ));
+        }
+    }
+
+    LlamaCppGenerationOptionMapping {
+        request_fields,
+        diagnostics,
+    }
+}
+
+#[allow(dead_code)]
+fn map_llama_option<T: serde::Serialize>(
+    request_fields: &mut Map<String, Value>,
+    diagnostics: &mut Vec<OptionCompatibilityDiagnostic>,
+    option_path: &'static str,
+    llama_key: &'static str,
+    value: Option<T>,
+    state: OptionSupportState,
+) {
+    if let Some(value) = value {
+        request_fields.insert(llama_key.to_string(), serde_json::json!(value));
+        diagnostics.push(llama_option_diagnostic(
+            option_path,
+            state,
+            Some(format!("mapped to llama.cpp {llama_key}")),
+        ));
+    }
+}
+
+#[allow(dead_code)]
+fn push_unsupported_if_requested(
+    diagnostics: &mut Vec<OptionCompatibilityDiagnostic>,
+    option_path: &'static str,
+    requested: bool,
+    message: &'static str,
+) {
+    if requested {
+        diagnostics.push(llama_option_diagnostic(
+            option_path,
+            OptionSupportState::Unsupported,
+            Some(message.to_string()),
+        ));
+    }
+}
+
+#[allow(dead_code)]
+fn llama_option_diagnostic(
+    option_path: impl Into<String>,
+    state: OptionSupportState,
+    message: Option<String>,
+) -> OptionCompatibilityDiagnostic {
+    OptionCompatibilityDiagnostic {
+        option_path: option_path.into(),
+        state,
+        backend_key: Some("llama_cpp".to_string()),
+        message,
+    }
 }
 
 pub async fn post_rerank_request(
@@ -245,7 +470,14 @@ pub fn map_sidecar_start_error(error: String) -> BackendError {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
+
     use super::*;
+    use crate::model_contracts::{
+        CacheGenerationOptions, GenerationOptions, LengthGenerationOptions, OptionSupportState,
+        OutputGenerationOptions, SamplingGenerationOptions, SearchGenerationOptions,
+        SpecialTokenGenerationOptions, StoppingGenerationOptions,
+    };
 
     #[test]
     fn map_sidecar_start_error_preserves_managed_binary_failures() {
@@ -256,5 +488,89 @@ mod tests {
             BackendError::ManagedBinary(message)
                 if message == "llama.cpp is not ready for launch"
         ));
+    }
+
+    #[test]
+    fn llama_cpp_generation_options_map_request_fields_and_report_all_requested_options() {
+        let options = GenerationOptions {
+            length: LengthGenerationOptions {
+                max_new_tokens: Some(128),
+                min_new_tokens: Some(8),
+                ..Default::default()
+            },
+            sampling: SamplingGenerationOptions {
+                temperature: Some(0.7),
+                top_p: Some(0.9),
+                top_k: Some(40),
+                repetition_penalty: Some(1.1),
+                seed: Some(42),
+            },
+            search: SearchGenerationOptions {
+                num_beams: Some(4),
+                ..Default::default()
+            },
+            stopping: StoppingGenerationOptions {
+                stop_strings: vec!["END".to_string()],
+                eos_token_ids: vec![2],
+            },
+            cache: CacheGenerationOptions {
+                use_cache: Some(true),
+                kv_cache_checkpoint_requested: Some(true),
+            },
+            output: OutputGenerationOptions {
+                return_logprobs: Some(true),
+                ..Default::default()
+            },
+            special_tokens: SpecialTokenGenerationOptions {
+                eos_token_id: Some(2),
+                ..Default::default()
+            },
+            backend_extensions: [
+                ("llama.cpp:mirostat".to_string(), serde_json::json!(2)),
+                (
+                    "transformers:renormalize_logits".to_string(),
+                    serde_json::json!(true),
+                ),
+            ]
+            .into_iter()
+            .collect(),
+        };
+
+        let mapping = llama_cpp_generation_option_mapping(&options);
+
+        assert_eq!(mapping.request_fields["max_tokens"], serde_json::json!(128));
+        assert_eq!(mapping.request_fields["top_k"], serde_json::json!(40));
+        let repeat_penalty = mapping.request_fields["repeat_penalty"]
+            .as_f64()
+            .expect("repeat penalty is numeric");
+        assert!((repeat_penalty - 1.1).abs() < 0.000_001);
+        assert_eq!(mapping.request_fields["stop"], serde_json::json!(["END"]));
+        assert_eq!(mapping.request_fields["mirostat"], serde_json::json!(2));
+        assert!(mapping.diagnostics.iter().any(|diagnostic| {
+            diagnostic.option_path == "length.min_new_tokens"
+                && diagnostic.state == OptionSupportState::Unsupported
+        }));
+        assert!(mapping.diagnostics.iter().any(|diagnostic| {
+            diagnostic.option_path == "cache.kv_cache_checkpoint_requested"
+                && diagnostic.state == OptionSupportState::Mapped
+        }));
+        assert!(mapping.diagnostics.iter().any(|diagnostic| {
+            diagnostic.option_path == "backend_extensions.transformers:renormalize_logits"
+                && diagnostic.state == OptionSupportState::Unsupported
+        }));
+
+        let requested_paths: BTreeSet<_> = options.requested_option_paths().into_iter().collect();
+        let diagnostic_paths: BTreeSet<_> = mapping
+            .diagnostics
+            .iter()
+            .map(|diagnostic| diagnostic.option_path.clone())
+            .collect();
+        assert!(
+            requested_paths.is_subset(&diagnostic_paths),
+            "missing diagnostics for requested options: {:?}",
+            requested_paths
+                .difference(&diagnostic_paths)
+                .collect::<Vec<_>>()
+        );
     }
 }
