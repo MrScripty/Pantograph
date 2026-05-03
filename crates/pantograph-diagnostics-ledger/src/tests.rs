@@ -4108,6 +4108,8 @@ fn sample_inference_execution_diagnostic_event() -> DiagnosticEventAppendRequest
             InferenceExecutionDiagnosticObservedPayload {
                 request_id: "req-a".to_string(),
                 task_id: "text_generation".to_string(),
+                lifecycle_phase: Some("task_validation".to_string()),
+                lifecycle_event_kind: Some("completed".to_string()),
                 selected_backend_key: Some("pytorch".to_string()),
                 selected_backend_family: Some("pytorch".to_string()),
                 compatibility_report: Some(InferenceCompatibilityReportDiagnosticSummary {

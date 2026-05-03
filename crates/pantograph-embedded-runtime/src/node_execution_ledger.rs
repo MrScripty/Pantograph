@@ -337,6 +337,18 @@ fn inference_lifecycle_phase_key(phase: &inference::InferenceLifecyclePhase) -> 
     }
 }
 
+fn inference_lifecycle_event_kind_key(
+    kind: &inference::InferenceRequestLifecycleEventKind,
+) -> &'static str {
+    match kind {
+        inference::InferenceRequestLifecycleEventKind::Started => "started",
+        inference::InferenceRequestLifecycleEventKind::Completed => "completed",
+        inference::InferenceRequestLifecycleEventKind::Failed => "failed",
+        inference::InferenceRequestLifecycleEventKind::Cancelled => "cancelled",
+        inference::InferenceRequestLifecycleEventKind::CleanupCompleted => "cleanup_completed",
+    }
+}
+
 fn build_inference_lifecycle_event_ledger_append_request(
     context: &InferenceLifecycleLedgerAppendContext<'_>,
     event: &inference::InferenceRequestLifecycleEvent,
@@ -458,6 +470,10 @@ fn build_inference_diagnostic_event_ledger_append_request(
                     .task_id
                     .clone()
                     .unwrap_or_else(|| inference_lifecycle_phase_key(&event.phase).to_string()),
+                lifecycle_phase: Some(inference_lifecycle_phase_key(&event.phase).to_string()),
+                lifecycle_event_kind: Some(
+                    inference_lifecycle_event_kind_key(&event.kind).to_string(),
+                ),
                 selected_backend_key: event.backend_key.clone(),
                 selected_backend_family: event.backend_key.clone(),
                 compatibility_report: event

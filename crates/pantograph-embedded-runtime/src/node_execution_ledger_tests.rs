@@ -231,6 +231,11 @@ fn inference_diagnostic_event_adapter_builds_option_support_summary() {
         DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) => {
             assert_eq!(payload.request_id, "req-a");
             assert_eq!(payload.task_id, "text_generation");
+            assert_eq!(
+                payload.lifecycle_phase.as_deref(),
+                Some("backend_execution")
+            );
+            assert_eq!(payload.lifecycle_event_kind.as_deref(), Some("completed"));
             assert_eq!(payload.selected_backend_key.as_deref(), Some("pytorch"));
             assert_eq!(
                 payload
@@ -285,6 +290,11 @@ fn inference_diagnostic_event_adapter_persists_compatibility_only_summary() {
 
     match request.payload {
         DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) => {
+            assert_eq!(
+                payload.lifecycle_phase.as_deref(),
+                Some("backend_execution")
+            );
+            assert_eq!(payload.lifecycle_event_kind.as_deref(), Some("completed"));
             assert_eq!(payload.option_diagnostics.len(), 0);
             assert_eq!(payload.option_support_counts, Default::default());
             assert_eq!(

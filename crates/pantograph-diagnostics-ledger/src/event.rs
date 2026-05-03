@@ -1310,6 +1310,10 @@ pub struct InferenceExecutionDiagnosticObservedPayload {
     pub request_id: String,
     pub task_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lifecycle_phase: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lifecycle_event_kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_backend_key: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_backend_family: Option<String>,
@@ -1329,6 +1333,16 @@ impl InferenceExecutionDiagnosticObservedPayload {
     fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
         validate_required_text("request_id", &self.request_id, MAX_ID_LEN)?;
         validate_required_text("task_id", &self.task_id, MAX_ID_LEN)?;
+        validate_optional_text(
+            "lifecycle_phase",
+            self.lifecycle_phase.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "lifecycle_event_kind",
+            self.lifecycle_event_kind.as_deref(),
+            MAX_ID_LEN,
+        )?;
         validate_optional_text(
             "selected_backend_key",
             self.selected_backend_key.as_deref(),

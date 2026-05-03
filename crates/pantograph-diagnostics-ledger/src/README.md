@@ -73,10 +73,10 @@ and API consumers do not need to parse raw diagnostic payload JSON for common
 inference execution context.
 Inference option-support summaries use
 `inference.execution_diagnostic_observed` events. These rows are bounded
-system metadata for request id, task id, selected backend, support-state counts,
-and per-option compatibility summaries; they must not carry prompt text,
-messages, generated content, tensors, token arrays, Python kwargs, or raw backend
-process output.
+system metadata for request id, task id, lifecycle phase/kind, selected backend,
+support-state counts, backend/model compatibility summaries, and per-option
+compatibility summaries; they must not carry prompt text, messages, generated
+content, tensors, token arrays, Python kwargs, or raw backend process output.
 I/O artifact projection queries can filter producer and consumer node
 endpoints directly; callers should not scan projection pages client-side to
 answer node-produced or node-consumed artifact questions.

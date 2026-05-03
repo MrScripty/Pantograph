@@ -2183,7 +2183,10 @@ inference write ledger events directly.
   KV-cache task-specific options remain open.
 - [ ] Map lifecycle summaries into durable bounded metadata for package
   resolution, task validation, preprocessing, backend execution, postprocessing,
-  result projection, duration, cancellation, and cleanup.
+  result projection, duration, cancellation, and cleanup. Diagnostic-observed
+  inference payloads now preserve lifecycle phase and event kind for events that
+  carry compatibility or option summaries; broader phase coverage and duration
+  summaries remain open.
 - [ ] Record usage/cache/artifact references where available, including token or
   request usage counts, cache-handle ids, KV checkpoint ids, and artifact refs,
   without storing prompt/result payload bodies.
@@ -2627,6 +2630,10 @@ Update during implementation:
   Typed embedding and rerank lifecycle completion events now emit bounded
   option support summaries for backend extra-option keys and rerank controls,
   leaving image/video/audio and KV-cache task-specific option diagnostics open.
+- 2026-05-03: Added lifecycle phase/kind metadata to durable inference
+  diagnostic-observed payloads, so compatibility and option summaries retain
+  the lifecycle phase that produced them without requiring consumers to infer it
+  from task ids or node-status projections.
 
 ## Commit Cadence Notes
 
