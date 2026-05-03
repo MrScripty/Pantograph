@@ -114,8 +114,10 @@ mod options_provider {
         extension_keys, ExecutorExtensions, NodeEngineError, PortOption, PortOptionsProvider,
         PortOptionsQuery, PortOptionsResult,
     };
-    use pumas_library::models::ModelExecutionDescriptor;
-    use std::sync::Arc;
+    use pumas_library::models::{
+        ModelExecutionDescriptor, ModelPackageFactsSummaryResult, ModelPackageFactsSummaryStatus,
+    };
+    use std::{collections::HashMap, sync::Arc};
 
     /// Provides available models from pumas-library for the `model_path` port.
     pub struct PumaLibOptionsProvider;
@@ -182,6 +184,59 @@ mod options_provider {
             .ok()
     }
 
+    pub(crate) struct PackageFactsSummaryCache {
+        pub cursor: Option<String>,
+        pub summaries: HashMap<String, ModelPackageFactsSummaryResult>,
+    }
+
+    pub(crate) async fn load_package_facts_summary_cache(
+        api: &Arc<pumas_library::PumasApi>,
+        records: &[pumas_library::ModelRecord],
+        limit: usize,
+        offset: usize,
+    ) -> PackageFactsSummaryCache {
+        let mut cache = PackageFactsSummaryCache {
+            cursor: None,
+            summaries: HashMap::new(),
+        };
+
+        if let Ok(snapshot) = api
+            .model_package_facts_summary_snapshot(limit, offset)
+            .await
+        {
+            cache.cursor = Some(snapshot.cursor);
+            for item in snapshot.items {
+                cache.summaries.insert(
+                    item.model_id.clone(),
+                    ModelPackageFactsSummaryResult {
+                        model_id: item.model_id,
+                        status: item.status,
+                        summary: item.summary,
+                    },
+                );
+            }
+        }
+
+        for record in records {
+            let needs_resolution = cache.summaries.get(&record.id).map_or(true, |result| {
+                result.summary.is_none()
+                    || matches!(
+                        result.status,
+                        ModelPackageFactsSummaryStatus::Missing
+                            | ModelPackageFactsSummaryStatus::Invalid
+                    )
+            });
+
+            if needs_resolution {
+                if let Ok(summary) = api.resolve_model_package_facts_summary(&record.id).await {
+                    cache.summaries.insert(record.id.clone(), summary);
+                }
+            }
+        }
+
+        cache
+    }
+
     fn pipeline_tag_to_task(pipeline_tag: &str) -> String {
         match pipeline_tag.to_lowercase().as_str() {
             "text-to-audio" | "text-to-speech" => "text-to-audio".to_string(),
@@ -219,6 +274,14 @@ mod options_provider {
                     .await
                     .map_err(|e| NodeEngineError::ExecutionFailed(e.to_string()))?
             };
+
+            let summary_cache = load_package_facts_summary_cache(
+                api,
+                &records,
+                query.limit.unwrap_or(records.len()).max(records.len()),
+                query.offset.unwrap_or(0),
+            )
+            .await;
 
             let mut options = Vec::with_capacity(records.len());
             for m in &records {
@@ -295,6 +358,18 @@ mod options_provider {
                     .as_ref()
                     .map(|descriptor| descriptor.entry_path.clone())
                     .unwrap_or_else(|| m.path.clone());
+                let package_facts_summary = summary_cache.summaries.get(&m.id).and_then(|result| {
+                    result
+                        .summary
+                        .as_ref()
+                        .and_then(|summary| serde_json::to_value(summary).ok())
+                });
+                let package_facts_summary_status =
+                    summary_cache.summaries.get(&m.id).and_then(|result| {
+                        serde_json::to_value(result.status)
+                            .ok()
+                            .and_then(|value| value.as_str().map(ToOwned::to_owned))
+                    });
 
                 options.push(PortOption {
                     value: serde_json::json!(execution_path),
@@ -318,6 +393,9 @@ mod options_provider {
                         "dependency_bindings": dependency_bindings,
                         "review_reasons": review_reasons,
                         "inference_settings": inference_settings,
+                        "package_facts_summary_cursor": summary_cache.cursor.clone(),
+                        "package_facts_summary_status": package_facts_summary_status,
+                        "package_facts_summary": package_facts_summary,
                     })),
                 });
             }
@@ -419,7 +497,7 @@ mod tests {
 
 #[cfg(all(test, feature = "model-library"))]
 mod model_library_tests {
-    use super::options_provider::resolve_execution_descriptor;
+    use super::options_provider::{load_package_facts_summary_cache, resolve_execution_descriptor};
     use pumas_library::PumasApi;
     use std::sync::Arc;
     use tempfile::TempDir;
@@ -572,5 +650,38 @@ mod model_library_tests {
             .expect("execution descriptor should resolve");
         assert_eq!(descriptor.entry_path, model_file.display().to_string());
         assert_eq!(descriptor.task_type_primary, "text-generation");
+    }
+
+    #[tokio::test]
+    async fn test_model_options_populate_package_facts_summary_cache() {
+        let temp_dir = create_test_env();
+        let model_dir = temp_dir
+            .path()
+            .join("shared-resources/models/llm/imported/test-gguf");
+        write_library_owned_file_model(&model_dir, "model.gguf", 256);
+
+        let api = Arc::new(PumasApi::builder(temp_dir.path()).build().await.unwrap());
+        api.rebuild_model_index().await.unwrap();
+
+        let record = api
+            .get_model("llm/imported/test-gguf")
+            .await
+            .unwrap()
+            .expect("model record should exist");
+
+        let cache = load_package_facts_summary_cache(&api, &[record], 100, 0).await;
+        let summary = cache
+            .summaries
+            .get("llm/imported/test-gguf")
+            .expect("summary should be populated for listed model");
+
+        assert!(cache
+            .cursor
+            .as_deref()
+            .is_some_and(|cursor| { cursor.starts_with("model-library-updates:") }));
+        assert!(
+            summary.summary.is_some(),
+            "missing summary rows should be regenerated through Pumas API"
+        );
     }
 }

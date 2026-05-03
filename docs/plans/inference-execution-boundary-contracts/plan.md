@@ -934,7 +934,7 @@ Detailed Pumas-side work is split into
   canonical Pumas `ModelLibraryUpdateFeed`, `ModelLibraryUpdateEvent`,
   `ModelPackageFactsSummaryResult`, and
   `ModelPackageFactsSummarySnapshot` DTOs verified by inference contract tests.
-- [ ] Define Pantograph's model-list detail cache for Pumas model rows,
+- [x] Define Pantograph's model-list detail cache for Pumas model rows,
   package-fact summaries, Pantograph-derived technical-fit summaries where
   needed, and selected detail facts during application startup or library-page
   population.
@@ -1661,6 +1661,12 @@ Update during implementation:
   `pumas_feasible` to `pumas_package_facts` and changed embedded-runtime
   projection to derive runtime candidates from Pumas backend hints plus
   Pantograph validation context.
+- 2026-05-03: Implemented the first Pantograph model-list package-summary cache
+  consumer in `workflow-nodes` `puma-lib` options. Page population now reads
+  Pumas summary snapshots for a producer cursor, resolves missing/invalid
+  summaries through Pumas' public summary API, and attaches bounded summary
+  status/payload/cursor metadata to model options without inspecting Pumas
+  storage internals.
 
 ## Commit Cadence Notes
 
@@ -1854,11 +1860,9 @@ Update during implementation:
 - Continue Milestone 1 by identifying raw fact fields versus policy-risk fields
   and deciding whether runtime facts extend `RuntimeLifecycleSnapshot` directly
   or use a new wrapper DTO.
-- Continue Milestone 2 with the Pantograph model-list detail cache and
-  consumption of Pumas' existing package-fact summary snapshot, single-summary,
-  and update-feed APIs.
-- Continue Milestone 2 with a no-missed-updates startup snapshot acceptance
-  test around Pumas summary snapshots and update cursors.
+- Continue Milestone 2 with Pumas update-feed polling/subscription consumption
+  and a no-missed-updates startup snapshot acceptance test around summary
+  snapshots and update cursors.
 
 ### Verification Summary
 
@@ -1887,6 +1891,10 @@ Update during implementation:
 - `cargo check -p pantograph-embedded-runtime --no-default-features` passed
   after the full-detail Pumas DTO alignment, with the existing
   `strip_managed_binary_spawn_error` dead-code warning.
+- `cargo test -p workflow-nodes --features model-library puma_lib` passed after
+  adding Pumas package-summary cache population to `puma-lib` options.
+- `cargo check -p workflow-nodes --features model-library` passed after adding
+  Pumas package-summary cache population to `puma-lib` options.
 - `cargo test -p inference` failed in
   `managed_redistributables::install_from_staging_validates_expected_files_before_finalizing`
   due to the unrelated managed-dependency path mismatch recorded above.

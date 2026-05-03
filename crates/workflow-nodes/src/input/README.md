@@ -27,6 +27,8 @@ routing without hardcoding runtime choices into the UI or executor.
   frontend and dependency preflight.
 - Runtime-executable model facts must come from the Pumas execution descriptor
   when a model can resolve one.
+- Model-list/package-fact summary details must come from Pumas summary snapshot
+  and summary resolution APIs, not Pumas storage internals.
 - Model metadata fallbacks must stay additive so older Pumas records continue to
   resolve when descriptor lookup is unavailable.
 
@@ -38,7 +40,10 @@ flows. For `puma-lib`, Pantograph preserves the graph-facing `model_path`,
 `model_type`, and `task_type_primary` facade, but it should source those values
 from Pumas `ModelExecutionDescriptor` whenever a `model_id` is available and
 descriptor resolution succeeds. Record metadata remains a display/fallback
-contract only, not the runtime source of truth.
+contract only, not the runtime source of truth. The model option provider also
+captures Pumas package-fact summary status, summary payload, and the producer
+cursor for the populated page so UI/model-list consumers can refresh from
+Pumas update feeds without inspecting Pumas storage.
 
 ## Alternatives Rejected
 - Keep an unregistered `model-provider` `NodeExecutor` in this crate.
@@ -56,6 +61,8 @@ contract only, not the runtime source of truth.
   handlers rather than an unregistered workflow-nodes executor.
 - `puma-lib` metadata is the primary workflow-facing bridge from Pumas-Library
   into Pantograph routing.
+- `puma-lib` option metadata may cache bounded Pumas package summaries for the
+  listed page, but Pumas remains the source of truth and update cursor producer.
 - Pantograph must not infer Pumas runtime bundle semantics from projected
   metadata when an execution descriptor is available.
 - Fallback task inference must remain conservative and deterministic.
