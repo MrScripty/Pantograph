@@ -258,6 +258,53 @@ fn inference_diagnostic_event_adapter_builds_option_support_summary() {
 }
 
 #[test]
+fn inference_diagnostic_event_adapter_persists_compatibility_only_summary() {
+    let context = context();
+    let mut event = inference_lifecycle_event(
+        inference::InferenceRequestLifecycleEventKind::Completed,
+        176,
+    );
+    event.compatibility_report = Some(inference::InferenceCompatibilityReportSummary {
+        status: "rejected".to_string(),
+        compatible: false,
+        task: "supported".to_string(),
+        model_source: "unsupported".to_string(),
+        preprocessing: "supported".to_string(),
+        postprocessing: "supported".to_string(),
+    });
+    event.compatibility_issues = vec![inference::InferenceCompatibilityIssueSummary {
+        kind: "unsupported_model_artifact".to_string(),
+        phase: inference::InferenceLifecyclePhase::ModelPackageResolution,
+        message: "backend does not declare support for this artifact".to_string(),
+        model_id: Some("pumas://models/tiny-transformers".to_string()),
+        path: Some("model.gguf".to_string()),
+    }];
+
+    let request = inference_diagnostic_event_ledger_append_request(&context, &event)
+        .expect("compatibility-only lifecycle summary should map");
+
+    match request.payload {
+        DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) => {
+            assert_eq!(payload.option_diagnostics.len(), 0);
+            assert_eq!(payload.option_support_counts, Default::default());
+            assert_eq!(
+                payload
+                    .compatibility_report
+                    .as_ref()
+                    .map(|report| report.status.as_str()),
+                Some("rejected")
+            );
+            assert_eq!(payload.compatibility_issue_count, 1);
+            assert_eq!(
+                payload.compatibility_issues[0].kind,
+                "unsupported_model_artifact"
+            );
+        }
+        other => panic!("expected inference execution diagnostic payload, got {other:?}"),
+    }
+}
+
+#[test]
 fn inference_lifecycle_recorder_projects_terminal_duration_after_started() {
     let context = context();
     let mut recorder = InferenceLifecycleLedgerRecorder::new();

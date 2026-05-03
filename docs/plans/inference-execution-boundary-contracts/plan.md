@@ -2291,6 +2291,12 @@ one-off conversions.
   follow-up is producer coverage: execution and preflight paths that already
   have package facts must attach the compatibility summaries instead of only
   option diagnostics.
+- 2026-05-03: Compatibility-only diagnostic mapping follow-up fixed a coverage
+  bug in the embedded-runtime ledger adapter. Completed backend-execution
+  lifecycle events now persist `inference.execution_diagnostic_observed` when
+  they contain either option diagnostics or compatibility summaries, so
+  rejected/degraded compatibility reports are not dropped just because no
+  generation option diagnostics were emitted.
 
 ## Execution Notes
 

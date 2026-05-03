@@ -411,7 +411,10 @@ fn build_inference_diagnostic_event_ledger_append_request(
     context: &InferenceLifecycleLedgerAppendContext<'_>,
     event: &inference::InferenceRequestLifecycleEvent,
 ) -> Option<DiagnosticEventAppendRequest> {
-    if event.option_diagnostics.is_empty()
+    let has_bounded_diagnostics = !event.option_diagnostics.is_empty()
+        || event.compatibility_report.is_some()
+        || !event.compatibility_issues.is_empty();
+    if !has_bounded_diagnostics
         || event.phase != inference::InferenceLifecyclePhase::BackendExecution
         || event.kind != inference::InferenceRequestLifecycleEventKind::Completed
     {
