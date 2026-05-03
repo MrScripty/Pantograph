@@ -101,16 +101,17 @@ pub use managed_redistributables::{
 };
 pub use managed_runtime::{
     binary_capability, cancel_binary_download, check_binary_status, download_binary,
-    list_binary_capabilities, list_managed_runtime_snapshots, load_managed_runtime_state,
+    list_binary_capabilities, list_managed_runtime_dependency_statuses,
+    list_managed_runtime_snapshots, load_managed_runtime_state, managed_runtime_dependency_status,
     managed_runtime_dir, managed_runtime_snapshot, pause_binary_download,
     reconcile_interrupted_managed_runtime_jobs, refresh_managed_runtime_catalog,
     refresh_managed_runtime_catalogs, remove_binary, remove_binary_version, resolve_binary_command,
-    save_managed_runtime_state, select_managed_runtime_version,
-    set_default_managed_runtime_version, BinaryStatus, DownloadProgress, ManagedBinaryCapability,
-    ManagedBinaryId, ManagedBinaryInstallState, ManagedRuntimeCatalogVersion,
-    ManagedRuntimeHistoryEventKind, ManagedRuntimeInstallHistoryEntry,
-    ManagedRuntimeJobArtifactStatus, ManagedRuntimeJobState, ManagedRuntimeJobStatus,
-    ManagedRuntimePersistedJobArtifact, ManagedRuntimePersistedRuntime,
+    resolve_runtime_sidecar_dependency_command, save_managed_runtime_state,
+    select_managed_runtime_version, set_default_managed_runtime_version, BinaryStatus,
+    DownloadProgress, ManagedBinaryCapability, ManagedBinaryId, ManagedBinaryInstallState,
+    ManagedRuntimeCatalogVersion, ManagedRuntimeHistoryEventKind,
+    ManagedRuntimeInstallHistoryEntry, ManagedRuntimeJobArtifactStatus, ManagedRuntimeJobState,
+    ManagedRuntimeJobStatus, ManagedRuntimePersistedJobArtifact, ManagedRuntimePersistedRuntime,
     ManagedRuntimePersistedState, ManagedRuntimePersistedVersion, ManagedRuntimeReadinessState,
     ManagedRuntimeSelectionState, ManagedRuntimeSnapshot, ManagedRuntimeVersionStatus,
     ResolvedCommand,
@@ -140,10 +141,12 @@ pub use model_contracts::{
     MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
 };
 pub use pantograph_managed_dependencies::{
-    ManagedDependencyCategory, ManagedDependencyInstallState, ManagedDependencyKey,
-    ManagedDependencyReadinessState, ManagedDependencySelectionState, ManagedDependencyStatus,
-    ManagedDependencyVersionStatus, MediaToolDependencyId, NativeArtifactDependencyId,
-    ResolvedManagedDependencyCommand, RuntimeSidecarDependencyId,
+    ManagedDependencyActivation, ManagedDependencyActivationValidationState,
+    ManagedDependencyCategory, ManagedDependencyDescriptor, ManagedDependencyInstallState,
+    ManagedDependencyKey, ManagedDependencyOperation, ManagedDependencyOperationScope,
+    ManagedDependencyReadinessState, ManagedDependencySelectionState, ManagedDependencySource,
+    ManagedDependencyStatus, ManagedDependencyVersionStatus, MediaToolDependencyId,
+    NativeArtifactDependencyId, ResolvedManagedDependencyCommand, RuntimeSidecarDependencyId,
 };
 pub use process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 pub use server::{LlamaServer, ServerMode, SharedLlamaServer};

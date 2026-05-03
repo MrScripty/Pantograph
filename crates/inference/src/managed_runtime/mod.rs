@@ -4,6 +4,7 @@ mod archive;
 mod catalog;
 mod contracts;
 mod definitions;
+mod neutral_contracts;
 mod operations;
 mod paths;
 mod state;
@@ -14,6 +15,10 @@ pub use contracts::{
     ManagedRuntimeJobState, ManagedRuntimeJobStatus, ManagedRuntimeReadinessState,
     ManagedRuntimeSelectionState, ManagedRuntimeSnapshot, ManagedRuntimeVersionStatus,
     ResolvedCommand,
+};
+pub use neutral_contracts::{
+    list_managed_runtime_dependency_statuses, managed_runtime_dependency_status,
+    resolve_runtime_sidecar_dependency_command,
 };
 pub use operations::{
     binary_capability, cancel_binary_download, check_binary_status, download_binary,

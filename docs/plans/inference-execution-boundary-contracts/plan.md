@@ -1223,10 +1223,14 @@ runtime launch behavior and media conversion readiness facts.
 - `git diff --check`.
 
 **Status:** In progress. Inventory is complete and inference now depends on the
-neutral `pantograph-managed-dependencies` contract crate. The first adapter
-slice projects existing ffmpeg, ocioconvert, oiiotool, and OpenColorIO
+neutral `pantograph-managed-dependencies` contract crate. The first media
+adapter slice projects existing ffmpeg, ocioconvert, oiiotool, and OpenColorIO
 redistributable statuses into `ManagedDependencyStatus` values without moving
-persisted state or lease ownership yet. The current implementation still keeps
+persisted state or lease ownership yet. The first runtime adapter slice projects
+llama.cpp managed runtime snapshots into `ManagedDependencyStatus` values and
+projects resolved llama.cpp command facts, including sanitized args,
+environment overrides, working directory, executable path, and pid-file path,
+into `ResolvedManagedDependencyCommand`. The current implementation still keeps
 the authoritative runtime and redistributable managers in `crates/inference`:
 `managed_runtime/` owns llama.cpp sidecar catalog, install state, job state,
 and command resolution; `managed_redistributables/` owns media dependency

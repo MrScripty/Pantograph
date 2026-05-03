@@ -268,6 +268,7 @@ pub struct ResolvedManagedDependencyCommand {
     pub working_directory: String,
     pub args: Vec<String>,
     pub env_overrides: Vec<(String, String)>,
+    pub pid_file: Option<String>,
 }
 
 #[cfg(test)]
