@@ -90,6 +90,14 @@ pub struct InferenceTask {
 }
 
 impl InferenceTask {
+    /// Port ID for canonical Pumas model reference input
+    pub const PORT_PUMAS_MODEL_REF: &'static str = "pumas_model_ref";
+    /// Port ID for resolved model-source facts input
+    pub const PORT_RESOLVED_MODEL_SOURCE: &'static str = "resolved_model_source";
+    /// Port ID for canonical generation option input
+    pub const PORT_GENERATION_OPTIONS: &'static str = "generation_options";
+    /// Port ID for canonical task option input
+    pub const PORT_TASK_OPTIONS: &'static str = "task_options";
     /// Port ID for prompt input
     pub const PORT_PROMPT: &'static str = "prompt";
     /// Port ID for system prompt input
@@ -102,6 +110,8 @@ impl InferenceTask {
     pub const PORT_KV_CACHE_IN: &'static str = "kv_cache_in";
     /// Port ID for response output
     pub const PORT_RESPONSE: &'static str = "response";
+    /// Port ID for canonical model reference output
+    pub const PORT_MODEL_REF: &'static str = "model_ref";
     /// Port ID for tool calls output
     pub const PORT_TOOL_CALLS: &'static str = "tool_calls";
     /// Port ID for has_tool_calls output
@@ -110,6 +120,10 @@ impl InferenceTask {
     pub const PORT_KV_CACHE_OUT: &'static str = "kv_cache_out";
     /// Port ID for stream output
     pub const PORT_STREAM: &'static str = "stream";
+    /// Port ID for bounded execution diagnostics output
+    pub const PORT_DIAGNOSTICS: &'static str = "diagnostics";
+    /// Port ID for bounded usage summary output
+    pub const PORT_USAGE: &'static str = "usage";
 
     /// Create a new inference task with the given ID
     pub fn new(task_id: impl Into<String>) -> Self {
@@ -142,6 +156,16 @@ impl TaskDescriptor for InferenceTask {
             description: "Runs text through a language model with optional tool calling"
                 .to_string(),
             inputs: vec![
+                PortMetadata::optional(
+                    Self::PORT_PUMAS_MODEL_REF,
+                    "Pumas Model Ref",
+                    PortDataType::Json,
+                ),
+                PortMetadata::optional(
+                    Self::PORT_RESOLVED_MODEL_SOURCE,
+                    "Resolved Model Source",
+                    PortDataType::Json,
+                ),
                 PortMetadata::required(Self::PORT_PROMPT, "Prompt", PortDataType::Prompt),
                 PortMetadata::optional(
                     Self::PORT_SYSTEM_PROMPT,
@@ -156,6 +180,12 @@ impl TaskDescriptor for InferenceTask {
                     PortDataType::KvCache,
                 ),
                 PortMetadata::optional(
+                    Self::PORT_GENERATION_OPTIONS,
+                    "Generation Options",
+                    PortDataType::Json,
+                ),
+                PortMetadata::optional(Self::PORT_TASK_OPTIONS, "Task Options", PortDataType::Json),
+                PortMetadata::optional(
                     "inference_settings",
                     "Inference Settings",
                     PortDataType::Json,
@@ -163,6 +193,7 @@ impl TaskDescriptor for InferenceTask {
             ],
             outputs: vec![
                 PortMetadata::optional(Self::PORT_RESPONSE, "Response", PortDataType::String),
+                PortMetadata::optional(Self::PORT_MODEL_REF, "Model Ref", PortDataType::Json),
                 PortMetadata::optional(Self::PORT_TOOL_CALLS, "Tool Calls", PortDataType::Json),
                 PortMetadata::optional(
                     Self::PORT_HAS_TOOL_CALLS,
@@ -175,6 +206,8 @@ impl TaskDescriptor for InferenceTask {
                     PortDataType::KvCache,
                 ),
                 PortMetadata::optional(Self::PORT_STREAM, "Stream", PortDataType::Stream),
+                PortMetadata::optional(Self::PORT_DIAGNOSTICS, "Diagnostics", PortDataType::Json),
+                PortMetadata::optional(Self::PORT_USAGE, "Usage", PortDataType::Json),
             ],
             execution_mode: ExecutionMode::Stream,
         }
@@ -412,6 +445,45 @@ mod tests {
         // Check for has_tool_calls output
         assert!(meta.outputs.iter().any(|p| p.id == "has_tool_calls"));
         assert!(meta.outputs.iter().any(|p| p.id == "kv_cache_out"));
+    }
+
+    #[test]
+    fn test_descriptor_has_canonical_inference_contract_ports() {
+        let meta = InferenceTask::descriptor();
+
+        assert!(meta
+            .inputs
+            .iter()
+            .any(|p| p.id == InferenceTask::PORT_PUMAS_MODEL_REF
+                && p.data_type == PortDataType::Json));
+        assert!(meta
+            .inputs
+            .iter()
+            .any(|p| p.id == InferenceTask::PORT_RESOLVED_MODEL_SOURCE
+                && p.data_type == PortDataType::Json));
+        assert!(meta
+            .inputs
+            .iter()
+            .any(|p| p.id == InferenceTask::PORT_GENERATION_OPTIONS
+                && p.data_type == PortDataType::Json));
+        assert!(
+            meta.inputs
+                .iter()
+                .any(|p| p.id == InferenceTask::PORT_TASK_OPTIONS
+                    && p.data_type == PortDataType::Json)
+        );
+        assert!(meta
+            .outputs
+            .iter()
+            .any(|p| p.id == InferenceTask::PORT_MODEL_REF && p.data_type == PortDataType::Json));
+        assert!(meta
+            .outputs
+            .iter()
+            .any(|p| p.id == InferenceTask::PORT_DIAGNOSTICS && p.data_type == PortDataType::Json));
+        assert!(meta
+            .outputs
+            .iter()
+            .any(|p| p.id == InferenceTask::PORT_USAGE && p.data_type == PortDataType::Json));
     }
 
     #[test]

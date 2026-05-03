@@ -1606,7 +1606,11 @@ now has an executable legacy inference-node migration inventory covering
 canonical node-data fields, task-kind/runtime-hint semantics, migration
 diagnostic codes, and old-to-new port actions for model sources, generation
 options, task options, KV-cache handles, streams, embedding outputs, and rerank
-outputs. The broader canonical workflow-node migration remains open.
+outputs. The `workflow-nodes` canonical `llm-inference` descriptor now exposes
+optional Pumas model reference, resolved model source, typed generation options,
+typed task options, model reference, diagnostics, and usage ports so migrations
+have a stable graph-visible target before backend execution uses every field.
+The broader canonical workflow-node migration remains open.
 
 ### Milestone 12: Prepare Native Candle Slice
 
