@@ -1465,7 +1465,7 @@ execution semantics that backends can map locally.
 - [x] Define a typed option-support report for every requested option:
   honored, mapped, defaulted, ignored, unsupported, rejected, conflict,
   requires model support, or requires backend support.
-- [ ] Keep backend-native flags hidden behind adapter mapping, including
+- [x] Keep backend-native flags hidden behind adapter mapping, including
   llama.cpp CLI/API names, Transformers/PyTorch kwargs, vLLM server/request
   options, MLX-specific names, and Candle-native execution knobs.
 - [x] Define typed execution request/result shapes for chat/generation,
@@ -1519,6 +1519,10 @@ non-Transformers backend extensions. llama.cpp now has equivalent staged
 mapping coverage for supported request fields, unsupported beam/min-length/
 token override/output options, KV-cache publication mapping, and non-llama.cpp
 backend extensions.
+Backend-native generation flags are now represented through backend-local
+mappers for PyTorch/Transformers and llama.cpp instead of the public
+`GenerationOptions` contract. Future vLLM, MLX, and Candle slices must follow
+the same boundary.
 
 ### Milestone 11: Canonical Workflow Node Migration
 
@@ -1926,6 +1930,10 @@ Update during implementation:
   llama.cpp-specific extension mapping, unsupported option behavior, and
   all-requested-option diagnostic coverage without changing live request
   forwarding yet.
+- 2026-05-03: Documented the backend-native option hiding rule in
+  `crates/inference/src/backend/README.md` and marked the current
+  PyTorch/Transformers and llama.cpp generation mappers as the pattern future
+  vLLM, MLX, and Candle slices must follow.
 
 ## Commit Cadence Notes
 

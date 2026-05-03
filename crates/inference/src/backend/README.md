@@ -124,8 +124,9 @@ fn create_backend() {
 - Streaming response parsers should use `strip_prefix` for SSE `data:` lines
   so prefix handling stays explicit and warning-clean under the Rust clippy
   audit.
-- llama.cpp request parsing, rerank normalization, sidecar start error mapping,
-  and KV-cache fingerprint helpers stay in `llamacpp_support.rs` so
+- llama.cpp request parsing, rerank normalization, generation-option mapping,
+  sidecar start error mapping, and KV-cache fingerprint helpers stay in
+  `llamacpp_support.rs` so
   `llamacpp.rs` remains focused on the backend facade and trait methods.
 - PyTorch backend capability, lifecycle, KV-cache fingerprint, prompt
   extraction, and system prompt tests stay in `pytorch_tests.rs` so
@@ -139,3 +140,8 @@ fn create_backend() {
 - PyTorch Rust/Python envelope DTOs stay in `pytorch_worker_contract.rs`.
   They are backend-local implementation contracts, not public Pantograph graph
   node shapes or scheduler/runtime-registry policy.
+- Backend-native generation fields and kwargs must stay inside backend-local
+  mapping helpers. PyTorch maps canonical generation options to
+  Transformers-style kwargs, while llama.cpp maps them to bounded
+  OpenAI-compatible request fields; callers consume compatibility diagnostics
+  instead of backend-native flags.
