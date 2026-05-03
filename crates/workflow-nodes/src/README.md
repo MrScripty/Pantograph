@@ -116,6 +116,9 @@ workflow_nodes::setup_extensions(&mut extensions).await;
   projection derives task fields from `inference::model_contracts`, then
   annotates text/chat, embedding, and rerank payloads without changing frontend
   rendering, scheduler policy, or runtime backend selection.
+- Canonical `llm-inference` declares `task_kind` and `runtime_hint` as
+  optional graph-visible inputs because saved-workflow migration, preflight,
+  and execution already consume those fields as canonical node data.
 
 ## Testing
 ```bash

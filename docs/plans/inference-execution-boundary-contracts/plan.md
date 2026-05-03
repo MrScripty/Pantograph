@@ -1171,6 +1171,10 @@ backend-owned contracts while leaving frontend `NodeDefinition` rendering and
 runtime backend selection unchanged. The workflow-node projection now derives
 the task contract fields from `inference::model_contracts` rather than carrying
 a separate task detail table.
+The canonical `llm-inference` descriptor now declares `task_kind` and
+`runtime_hint` as optional graph-visible inputs, aligning the descriptor with
+the saved-workflow migration data schema, workflow preflight, and node-engine
+execution inputs that already consume those fields.
 
 ### Milestone 4: Define Neutral Managed-Dependency Boundary
 
@@ -2406,6 +2410,10 @@ Update during implementation:
   derive task fields from `inference::model_contracts::TaskRequestContract`,
   reducing duplicated task semantics while preserving the graph-facing
   `pantograph-node-contracts` DTOs.
+- 2026-05-03: Added canonical `task_kind` and `runtime_hint` inputs to the
+  graph-visible `llm-inference` descriptor and annotated them as inference
+  option payloads, aligning workflow authoring with existing migration,
+  preflight, and execution data fields.
 
 ## Commit Cadence Notes
 

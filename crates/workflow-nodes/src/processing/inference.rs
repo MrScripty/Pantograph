@@ -90,6 +90,10 @@ pub struct InferenceTask {
 }
 
 impl InferenceTask {
+    /// Port ID for canonical task registry id input
+    pub const PORT_TASK_KIND: &'static str = "task_kind";
+    /// Port ID for optional runtime-family hint input
+    pub const PORT_RUNTIME_HINT: &'static str = "runtime_hint";
     /// Port ID for canonical Pumas model reference input
     pub const PORT_PUMAS_MODEL_REF: &'static str = "pumas_model_ref";
     /// Port ID for resolved model-source facts input
@@ -178,6 +182,12 @@ impl TaskDescriptor for InferenceTask {
             description: "Runs text through a language model with optional tool calling"
                 .to_string(),
             inputs: vec![
+                PortMetadata::optional(Self::PORT_TASK_KIND, "Task Kind", PortDataType::String),
+                PortMetadata::optional(
+                    Self::PORT_RUNTIME_HINT,
+                    "Runtime Hint",
+                    PortDataType::String,
+                ),
                 PortMetadata::optional(
                     Self::PORT_PUMAS_MODEL_REF,
                     "Pumas Model Ref",
@@ -492,6 +502,18 @@ mod tests {
     fn test_descriptor_has_canonical_inference_contract_ports() {
         let meta = InferenceTask::descriptor();
 
+        assert!(meta
+            .inputs
+            .iter()
+            .any(|p| p.id == InferenceTask::PORT_TASK_KIND
+                && p.data_type == PortDataType::String
+                && !p.required));
+        assert!(meta
+            .inputs
+            .iter()
+            .any(|p| p.id == InferenceTask::PORT_RUNTIME_HINT
+                && p.data_type == PortDataType::String
+                && !p.required));
         assert!(meta
             .inputs
             .iter()

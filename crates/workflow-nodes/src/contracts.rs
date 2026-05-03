@@ -348,7 +348,7 @@ fn llm_input_payloads(port_id: &str) -> Vec<InferencePortPayloadContract> {
             ],
             InferencePortPayloadRole::Options,
         ),
-        "task_options" | "inference_settings" => {
+        "task_kind" | "runtime_hint" | "task_options" | "inference_settings" => {
             task_role_payloads(&llm_supported_task_ids(), InferencePortPayloadRole::Options)
         }
         "prompt" | "system_prompt" | "context" | "tools" => vec![
@@ -666,6 +666,14 @@ mod tests {
         assert!(prompt.inference_payloads.iter().any(|payload| {
             payload.task_id == ContractInferenceTaskId::TextGeneration
                 && payload.input_kind == Some(ContractInferenceExecutionInputKind::TextGeneration)
+        }));
+
+        let task_kind = llm
+            .input(&port_id("task_kind").expect("task kind port id"))
+            .unwrap();
+        assert!(task_kind.inference_payloads.iter().any(|payload| {
+            payload.task_id == ContractInferenceTaskId::Rerank
+                && payload.role == InferencePortPayloadRole::Options
         }));
 
         let text = llm.input(&port_id("text").expect("text port id")).unwrap();
