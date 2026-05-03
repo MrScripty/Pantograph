@@ -66,7 +66,8 @@ pub use node_execution_diagnostics::{
     NodeExecutionDiagnosticEventKind, NodeExecutionDiagnosticsRecorder,
 };
 pub use node_execution_ledger::{
-    ManagedModelUsageSubmission, RuntimeLedgerSubmissionError, SubmittedModelUsageEvent,
+    inference_lifecycle_event_ledger_append_request, ManagedModelUsageSubmission,
+    RuntimeLedgerSubmissionError, SubmittedModelUsageEvent,
 };
 pub use python_runtime::{
     ProcessPythonRuntimeAdapter, PythonNodeExecutionRequest, PythonRuntimeAdapter,

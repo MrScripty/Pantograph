@@ -1328,7 +1328,11 @@ started, completed, failed, cancelled, and cleanup-completed events for
 diagnostics-aware callers. The seventeenth slice extended the opt-in lifecycle
 API to non-streaming gateway execution for embeddings, rerank, and image
 generation, recording completion/failure plus cleanup facts without changing the
-existing public execution methods.
+existing public execution methods. The eighteenth slice added an embedded
+runtime diagnostics-ledger adapter that maps inference lifecycle started,
+completed, failed, and cancelled events into bounded node execution status
+ledger append requests while carrying the selected backend and runtime instance
+as diagnostic context.
 
 ### Milestone 8: Add Runtime Fact Snapshots
 
@@ -1372,12 +1376,13 @@ cancellation/cleanup semantics.
 **Open implementation gap:** Preprocessing and postprocessing currently exist as
 backend capability facts and compatibility checks, not as request-scoped
 lifecycle hooks in the inference backend trait. Streaming request lifecycle
-events are now available through the opt-in gateway API, and non-streaming
-gateway execution can report backend-execution completion/failure cleanup facts.
-Preprocessing, postprocessing, and diagnostics-ledger adapter integration remain
-pending. Milestone 8 should not be closed until the inference crate defines
-whether those lifecycle phases stay hidden inside backend adapters or become
-explicit request lifecycle facts/errors for diagnostics-ledger consumers.
+events are now available through the opt-in gateway API, non-streaming gateway
+execution can report backend-execution completion/failure cleanup facts, and the
+embedded runtime can adapt lifecycle events into diagnostics-ledger node status
+append requests. Preprocessing and postprocessing remain pending. Milestone 8
+should not be closed until the inference crate defines whether those lifecycle
+phases stay hidden inside backend adapters or become explicit request lifecycle
+facts/errors for diagnostics-ledger consumers.
 
 ### Milestone 9: Bind PyTorch Through Transformers
 

@@ -1,7 +1,7 @@
 use pantograph_diagnostics_ledger::{
-    DiagnosticsLedgerRepository, DiagnosticsQuery, ExecutionGuaranteeLevel, LicenseSnapshot,
-    ModelIdentity, ModelOutputMeasurement, OutputMeasurementUnavailableReason, OutputModality,
-    SqliteDiagnosticsLedger,
+    DiagnosticEventPayload, DiagnosticsLedgerRepository, DiagnosticsQuery, ExecutionGuaranteeLevel,
+    LicenseSnapshot, ModelIdentity, ModelOutputMeasurement, NodeExecutionProjectionStatus,
+    OutputMeasurementUnavailableReason, OutputModality, SqliteDiagnosticsLedger,
 };
 use pantograph_node_contracts::{
     EffectiveNodeContract, NodeAuthoringMetadata, NodeCapabilityRequirement, NodeCategory,
@@ -13,10 +13,10 @@ use pantograph_runtime_attribution::{
 };
 
 use crate::{
-    ManagedCapabilityKind, ManagedCapabilityRoute, ManagedModelUsageSubmission,
-    ModelExecutionCapability, NodeCancellationToken, NodeExecutionContext,
-    NodeExecutionContextInput, NodeExecutionGuaranteeEvidence, NodeLineageContext,
-    NodeManagedCapabilities, NodeProgressHandle, RuntimeLedgerSubmissionError,
+    inference_lifecycle_event_ledger_append_request, ManagedCapabilityKind, ManagedCapabilityRoute,
+    ManagedModelUsageSubmission, ModelExecutionCapability, NodeCancellationToken,
+    NodeExecutionContext, NodeExecutionContextInput, NodeExecutionGuaranteeEvidence,
+    NodeLineageContext, NodeManagedCapabilities, NodeProgressHandle, RuntimeLedgerSubmissionError,
 };
 
 #[test]
@@ -108,6 +108,56 @@ fn unavailable_model_capability_is_not_recorded_as_usage() {
         result,
         Err(RuntimeLedgerSubmissionError::CapabilityUnavailable)
     ));
+}
+
+#[test]
+fn inference_lifecycle_event_adapter_builds_node_status_event_with_backend_context() {
+    let context = context();
+    let event = inference::InferenceRequestLifecycleEvent {
+        request_id: Some("req-a".to_string()),
+        phase: inference::InferenceLifecyclePhase::BackendExecution,
+        kind: inference::InferenceRequestLifecycleEventKind::Failed,
+        occurred_at_ms: 123,
+        backend_key: Some("pytorch".to_string()),
+        runtime_instance_id: Some("python-runtime:pytorch:1".to_string()),
+        detail: Some("backend failed".to_string()),
+    };
+
+    let request = inference_lifecycle_event_ledger_append_request(&context, &event)
+        .expect("failed lifecycle event should map to ledger request");
+
+    assert_eq!(
+        request.source_instance_id.as_deref(),
+        Some("python-runtime:pytorch:1")
+    );
+    assert_eq!(request.runtime_id.as_deref(), Some("pytorch"));
+    assert_eq!(request.node_id.as_deref(), Some("node-a"));
+    assert_eq!(request.node_type.as_deref(), Some("llm-inference"));
+    assert_eq!(request.occurred_at_ms, 123);
+    match request.payload {
+        DiagnosticEventPayload::NodeExecutionStatus(payload) => {
+            assert_eq!(payload.status, NodeExecutionProjectionStatus::Failed);
+            assert_eq!(payload.completed_at_ms, Some(123));
+            assert_eq!(payload.error.as_deref(), Some("backend failed"));
+        }
+        other => panic!("expected node execution status payload, got {other:?}"),
+    }
+}
+
+#[test]
+fn inference_lifecycle_cleanup_event_is_not_persisted_as_node_status() {
+    let context = context();
+    let event = inference::InferenceRequestLifecycleEvent {
+        request_id: Some("req-a".to_string()),
+        phase: inference::InferenceLifecyclePhase::BackendExecution,
+        kind: inference::InferenceRequestLifecycleEventKind::CleanupCompleted,
+        occurred_at_ms: 124,
+        backend_key: Some("pytorch".to_string()),
+        runtime_instance_id: Some("python-runtime:pytorch:1".to_string()),
+        detail: None,
+    };
+
+    assert!(inference_lifecycle_event_ledger_append_request(&context, &event).is_none());
 }
 
 fn context() -> NodeExecutionContext {

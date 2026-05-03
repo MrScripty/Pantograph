@@ -1,7 +1,9 @@
 use pantograph_diagnostics_ledger::{
-    DiagnosticsLedgerError, DiagnosticsLedgerRepository, ExecutionGuaranteeLevel, LicenseSnapshot,
-    ModelIdentity, ModelLicenseUsageEvent, ModelOutputMeasurement, RetentionClass,
-    UsageEventStatus, UsageLineage,
+    DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
+    DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerError,
+    DiagnosticsLedgerRepository, ExecutionGuaranteeLevel, LicenseSnapshot, ModelIdentity,
+    ModelLicenseUsageEvent, ModelOutputMeasurement, NodeExecutionProjectionStatus,
+    NodeExecutionStatusPayload, RetentionClass, UsageEventStatus, UsageLineage,
 };
 use pantograph_runtime_attribution::UsageEventId;
 use thiserror::Error;
@@ -38,6 +40,74 @@ pub struct ManagedModelUsageSubmission {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubmittedModelUsageEvent {
     pub event: ModelLicenseUsageEvent,
+}
+
+pub fn inference_lifecycle_event_ledger_append_request(
+    context: &NodeExecutionContext,
+    event: &inference::InferenceRequestLifecycleEvent,
+) -> Option<DiagnosticEventAppendRequest> {
+    let status = match event.kind {
+        inference::InferenceRequestLifecycleEventKind::Started => {
+            NodeExecutionProjectionStatus::Running
+        }
+        inference::InferenceRequestLifecycleEventKind::Completed => {
+            NodeExecutionProjectionStatus::Completed
+        }
+        inference::InferenceRequestLifecycleEventKind::Failed => {
+            NodeExecutionProjectionStatus::Failed
+        }
+        inference::InferenceRequestLifecycleEventKind::Cancelled => {
+            NodeExecutionProjectionStatus::Cancelled
+        }
+        inference::InferenceRequestLifecycleEventKind::CleanupCompleted => return None,
+    };
+    let occurred_at_ms = i64::try_from(event.occurred_at_ms).unwrap_or(i64::MAX);
+    let terminal = matches!(
+        status,
+        NodeExecutionProjectionStatus::Completed
+            | NodeExecutionProjectionStatus::Failed
+            | NodeExecutionProjectionStatus::Cancelled
+    );
+
+    Some(DiagnosticEventAppendRequest {
+        source_component: DiagnosticEventSourceComponent::NodeExecution,
+        source_instance_id: event.runtime_instance_id.clone(),
+        occurred_at_ms,
+        workflow_run_id: Some(context.attribution().workflow_run_id.clone()),
+        workflow_id: Some(context.workflow_id().clone()),
+        workflow_version_id: None,
+        workflow_semantic_version: None,
+        node_id: Some(context.node_id().as_str().to_string()),
+        node_type: Some(context.node_type().as_str().to_string()),
+        node_version: context
+            .effective_contract()
+            .static_contract
+            .contract_version
+            .clone(),
+        runtime_id: event.backend_key.clone(),
+        runtime_version: None,
+        model_id: None,
+        model_version: None,
+        client_id: Some(context.attribution().client_id.clone()),
+        client_session_id: Some(context.attribution().client_session_id.clone()),
+        bucket_id: Some(context.attribution().bucket_id.clone()),
+        scheduler_policy_id: None,
+        retention_policy_id: None,
+        privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+        retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+        payload_ref: None,
+        payload: DiagnosticEventPayload::NodeExecutionStatus(NodeExecutionStatusPayload {
+            status,
+            started_at_ms: if event.kind == inference::InferenceRequestLifecycleEventKind::Started {
+                Some(occurred_at_ms)
+            } else {
+                None
+            },
+            completed_at_ms: if terminal { Some(occurred_at_ms) } else { None },
+            duration_ms: None,
+            error: event.detail.clone(),
+        }),
+    })
 }
 
 impl ManagedModelUsageSubmission {
