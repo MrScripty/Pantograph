@@ -1322,7 +1322,10 @@ KV-cache capability facts into explicit cancellation and cleanup semantics
 without changing backend execution methods. The fifteenth slice projected those
 facts through workflow-owned capability DTOs and TypeScript contracts so
 graph/preflight consumers can inspect lifecycle semantics without importing
-inference crate internals.
+inference crate internals. The sixteenth slice added request-scoped lifecycle
+event DTOs and an opt-in gateway streaming API that records backend-execution
+started, completed, failed, cancelled, and cleanup-completed events for
+diagnostics-aware callers.
 
 ### Milestone 8: Add Runtime Fact Snapshots
 
@@ -1365,16 +1368,13 @@ cancellation/cleanup semantics.
 
 **Open implementation gap:** Preprocessing and postprocessing currently exist as
 backend capability facts and compatibility checks, not as request-scoped
-lifecycle hooks in the inference backend trait. Streaming cancellation is also
-implicit: llama.cpp streams stop when the HTTP body is dropped, and PyTorch
-streaming exits when the receiver is dropped or a send fails, but there is no
-typed request cancellation token, cancellation reason, or cleanup event at the
-inference boundary. Milestone 8 should not be closed until the inference crate
-defines whether these lifecycle phases stay hidden inside backend adapters or
-become explicit request lifecycle facts/errors for diagnostics-ledger consumers.
-Derived `BackendRequestLifecycleFacts` now records the current static behavior;
-workflow-facing projection is implemented. A request-scoped event stream remains
-pending.
+lifecycle hooks in the inference backend trait. Streaming request lifecycle
+events are now available through the opt-in gateway API, but non-streaming
+execution, preprocessing, postprocessing, and diagnostics-ledger adapter
+integration remain pending. Milestone 8 should not be closed until the
+inference crate defines whether those lifecycle phases stay hidden inside
+backend adapters or become explicit request lifecycle facts/errors for
+diagnostics-ledger consumers.
 
 ### Milestone 9: Bind PyTorch Through Transformers
 

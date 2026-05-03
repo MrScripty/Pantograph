@@ -3,6 +3,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::model_contracts::InferenceLifecyclePhase;
+
 /// Chat message with multimodal content support
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
@@ -183,6 +185,43 @@ pub struct StreamEvent {
     pub content: Option<String>,
     pub done: bool,
     pub error: Option<String>,
+}
+
+/// Request-scoped lifecycle event kind emitted by diagnostics-aware inference
+/// callers.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum InferenceRequestLifecycleEventKind {
+    Started,
+    Completed,
+    Failed,
+    Cancelled,
+    CleanupCompleted,
+}
+
+/// Request-scoped inference lifecycle event.
+///
+/// Events are facts for diagnostics and auditing. They do not control runtime
+/// selection, scheduling, or backend execution.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct InferenceRequestLifecycleEvent {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    pub phase: InferenceLifecyclePhase,
+    pub kind: InferenceRequestLifecycleEventKind,
+    pub occurred_at_ms: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backend_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_instance_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
+/// Synchronous sink for request lifecycle facts.
+pub trait InferenceRequestLifecycleEventSink: Send + Sync {
+    fn record(&self, event: InferenceRequestLifecycleEvent);
 }
 
 /// Snapshot of an inference runtime lifecycle owned by the backend.
@@ -585,6 +624,27 @@ mod tests {
             decoded.metadata["scheduler"],
             serde_json::json!("flow_match_euler")
         );
+    }
+
+    #[test]
+    fn inference_request_lifecycle_event_serde_uses_stable_contract() {
+        let event = InferenceRequestLifecycleEvent {
+            request_id: Some("req-1".to_string()),
+            phase: InferenceLifecyclePhase::BackendExecution,
+            kind: InferenceRequestLifecycleEventKind::CleanupCompleted,
+            occurred_at_ms: 42,
+            backend_key: Some("llama_cpp".to_string()),
+            runtime_instance_id: Some("llama-main-1".to_string()),
+            detail: Some("stream dropped by consumer".to_string()),
+        };
+
+        let encoded = serde_json::to_value(&event).unwrap();
+        let decoded: InferenceRequestLifecycleEvent =
+            serde_json::from_value(encoded.clone()).unwrap();
+
+        assert_eq!(encoded["phase"], serde_json::json!("backend_execution"));
+        assert_eq!(encoded["kind"], serde_json::json!("cleanup_completed"));
+        assert_eq!(decoded, event);
     }
 
     #[test]

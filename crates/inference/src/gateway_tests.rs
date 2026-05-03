@@ -1,14 +1,17 @@
 use super::*;
 use std::path::PathBuf;
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use futures_util::stream;
+use futures_util::{stream, StreamExt};
 use tokio::sync::mpsc;
 
 use crate::backend::BackendStartOutcome;
-use crate::types::RuntimeFactReadiness;
+use crate::types::{
+    InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
+    InferenceRequestLifecycleEventSink, RuntimeFactReadiness,
+};
 
 #[path = "gateway_tests/start_config.rs"]
 mod start_config;
@@ -22,7 +25,27 @@ struct MockFailAfterFirstStartBackend {
     starts: usize,
     ready: bool,
 }
+struct MockLifecycleStreamBackend {
+    fail_on_stream: bool,
+}
 struct MockKvBackend;
+
+#[derive(Default)]
+struct RecordingLifecycleSink {
+    events: Mutex<Vec<InferenceRequestLifecycleEvent>>,
+}
+
+impl RecordingLifecycleSink {
+    fn events(&self) -> Vec<InferenceRequestLifecycleEvent> {
+        self.events.lock().expect("events lock").clone()
+    }
+}
+
+impl InferenceRequestLifecycleEventSink for RecordingLifecycleSink {
+    fn record(&self, event: InferenceRequestLifecycleEvent) {
+        self.events.lock().expect("events lock").push(event);
+    }
+}
 
 struct MockProcessHandle;
 
@@ -495,6 +518,84 @@ impl InferenceBackend for MockFailAfterFirstStartBackend {
 }
 
 #[async_trait]
+impl InferenceBackend for MockLifecycleStreamBackend {
+    fn name(&self) -> &'static str {
+        "MockLifecycleStream"
+    }
+
+    fn description(&self) -> &'static str {
+        "Mock backend for lifecycle stream tests"
+    }
+
+    fn capabilities(&self) -> BackendCapabilities {
+        BackendCapabilities {
+            streaming: true,
+            ..BackendCapabilities::default()
+        }
+    }
+
+    async fn start(
+        &mut self,
+        _config: &BackendConfig,
+        _spawner: Arc<dyn ProcessSpawner>,
+    ) -> Result<BackendStartOutcome, BackendError> {
+        Ok(BackendStartOutcome::default())
+    }
+
+    fn stop(&mut self) {}
+
+    fn is_ready(&self) -> bool {
+        true
+    }
+
+    async fn health_check(&self) -> bool {
+        true
+    }
+
+    fn base_url(&self) -> Option<String> {
+        None
+    }
+
+    async fn chat_completion_stream(
+        &self,
+        _request_json: String,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, BackendError>
+    {
+        if self.fail_on_stream {
+            return Ok(Box::pin(stream::iter(vec![Err(BackendError::Inference(
+                "mock stream failure".to_string(),
+            ))])));
+        }
+
+        Ok(Box::pin(stream::iter(vec![
+            Ok(ChatChunk {
+                content: Some("hello".to_string()),
+                done: false,
+            }),
+            Ok(ChatChunk {
+                content: None,
+                done: true,
+            }),
+        ])))
+    }
+
+    async fn embeddings(
+        &self,
+        _texts: Vec<String>,
+        _model: &str,
+    ) -> Result<Vec<EmbeddingResult>, BackendError> {
+        Ok(Vec::new())
+    }
+
+    async fn rerank(&self, _request: RerankRequest) -> Result<RerankResponse, BackendError> {
+        Ok(RerankResponse {
+            results: Vec::new(),
+            metadata: serde_json::Value::Null,
+        })
+    }
+}
+
+#[async_trait]
 impl InferenceBackend for MockKvBackend {
     fn name(&self) -> &'static str {
         "MockKv"
@@ -714,6 +815,120 @@ async fn test_rerank_forwards_to_active_backend() {
         .await
         .expect("rerank should forward");
     assert!(result.results.is_empty());
+}
+
+#[tokio::test]
+async fn test_chat_completion_stream_with_lifecycle_records_completion() {
+    let gateway = InferenceGateway::with_backend(
+        Box::new(MockLifecycleStreamBackend {
+            fail_on_stream: false,
+        }),
+        "mock",
+    );
+    let sink = Arc::new(RecordingLifecycleSink::default());
+
+    let mut stream = gateway
+        .chat_completion_stream_with_lifecycle(
+            "{}".to_string(),
+            Some("req-complete".to_string()),
+            sink.clone(),
+        )
+        .await
+        .expect("stream should start");
+
+    while stream.next().await.is_some() {}
+
+    let events = sink.events();
+    assert_eq!(events.len(), 3);
+    assert_eq!(events[0].kind, InferenceRequestLifecycleEventKind::Started);
+    assert_eq!(
+        events[1].kind,
+        InferenceRequestLifecycleEventKind::Completed
+    );
+    assert_eq!(
+        events[2].kind,
+        InferenceRequestLifecycleEventKind::CleanupCompleted
+    );
+    assert!(events.iter().all(|event| {
+        event.request_id.as_deref() == Some("req-complete")
+            && event.backend_key.as_deref() == Some("mock")
+    }));
+}
+
+#[tokio::test]
+async fn test_chat_completion_stream_with_lifecycle_records_stream_failure() {
+    let gateway = InferenceGateway::with_backend(
+        Box::new(MockLifecycleStreamBackend {
+            fail_on_stream: true,
+        }),
+        "mock",
+    );
+    let sink = Arc::new(RecordingLifecycleSink::default());
+
+    let mut stream = gateway
+        .chat_completion_stream_with_lifecycle(
+            "{}".to_string(),
+            Some("req-fail".to_string()),
+            sink.clone(),
+        )
+        .await
+        .expect("stream should start");
+
+    let result = stream.next().await.expect("stream item");
+    assert!(matches!(
+        result,
+        Err(BackendError::Inference(message)) if message.contains("mock stream failure")
+    ));
+
+    let events = sink.events();
+    assert_eq!(events.len(), 3);
+    assert_eq!(events[0].kind, InferenceRequestLifecycleEventKind::Started);
+    assert_eq!(events[1].kind, InferenceRequestLifecycleEventKind::Failed);
+    assert_eq!(
+        events[2].kind,
+        InferenceRequestLifecycleEventKind::CleanupCompleted
+    );
+    assert_eq!(
+        events[1].detail.as_deref(),
+        Some("Inference error: mock stream failure")
+    );
+}
+
+#[tokio::test]
+async fn test_chat_completion_stream_with_lifecycle_records_drop_cancellation() {
+    let gateway = InferenceGateway::with_backend(
+        Box::new(MockLifecycleStreamBackend {
+            fail_on_stream: false,
+        }),
+        "mock",
+    );
+    let sink = Arc::new(RecordingLifecycleSink::default());
+
+    let stream = gateway
+        .chat_completion_stream_with_lifecycle(
+            "{}".to_string(),
+            Some("req-cancel".to_string()),
+            sink.clone(),
+        )
+        .await
+        .expect("stream should start");
+    drop(stream);
+
+    let events = sink.events();
+    assert_eq!(events.len(), 3);
+    assert_eq!(events[0].kind, InferenceRequestLifecycleEventKind::Started);
+    assert_eq!(
+        events[1].kind,
+        InferenceRequestLifecycleEventKind::Cancelled
+    );
+    assert_eq!(
+        events[2].kind,
+        InferenceRequestLifecycleEventKind::CleanupCompleted
+    );
+    assert_eq!(
+        events[1].detail.as_deref(),
+        Some("stream dropped before completion")
+    );
 }
 
 #[tokio::test]

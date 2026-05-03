@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::task::{Context, Poll};
 
 use futures_util::Stream;
 use pantograph_runtime_identity::canonical_runtime_id;
@@ -19,10 +20,12 @@ use crate::backend::{
 };
 use crate::config::EmbeddingMemoryMode;
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
+use crate::model_contracts::InferenceLifecyclePhase;
 use crate::process::ProcessSpawner;
 use crate::types::{
-    ImageGenerationRequest, ImageGenerationResult, RerankRequest, RerankResponse,
-    RuntimeLifecycleSnapshot, ServerModeInfo,
+    ImageGenerationRequest, ImageGenerationResult, InferenceRequestLifecycleEvent,
+    InferenceRequestLifecycleEventKind, InferenceRequestLifecycleEventSink, RerankRequest,
+    RerankResponse, RuntimeLifecycleSnapshot, ServerModeInfo,
 };
 
 #[cfg(feature = "backend-llamacpp")]
@@ -742,6 +745,60 @@ impl InferenceGateway {
             .map_err(GatewayError::Backend)
     }
 
+    /// Stream chat completion responses and emit request-scoped lifecycle facts.
+    pub async fn chat_completion_stream_with_lifecycle(
+        &self,
+        request_json: String,
+        request_id: Option<String>,
+        lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink>,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, GatewayError>
+    {
+        let backend_key = Some(canonical_backend_key(&self.current_backend_name().await));
+        let runtime_instance_id = self
+            .runtime_lifecycle_snapshot()
+            .await
+            .runtime_instance_id
+            .clone();
+
+        record_inference_lifecycle_event(
+            lifecycle_sink.as_ref(),
+            request_id.clone(),
+            backend_key.clone(),
+            runtime_instance_id.clone(),
+            InferenceRequestLifecycleEventKind::Started,
+            None,
+        );
+
+        match self.chat_completion_stream(request_json).await {
+            Ok(stream) => Ok(Box::pin(LifecycleStream::new(
+                stream,
+                lifecycle_sink,
+                request_id,
+                backend_key,
+                runtime_instance_id,
+            ))),
+            Err(error) => {
+                record_inference_lifecycle_event(
+                    lifecycle_sink.as_ref(),
+                    request_id.clone(),
+                    backend_key.clone(),
+                    runtime_instance_id.clone(),
+                    InferenceRequestLifecycleEventKind::Failed,
+                    Some(error.to_string()),
+                );
+                record_inference_lifecycle_event(
+                    lifecycle_sink.as_ref(),
+                    request_id,
+                    backend_key,
+                    runtime_instance_id,
+                    InferenceRequestLifecycleEventKind::CleanupCompleted,
+                    None,
+                );
+                Err(error)
+            }
+        }
+    }
+
     /// Generate embeddings for the given texts
     pub async fn embeddings(
         &self,
@@ -791,6 +848,110 @@ impl InferenceGateway {
     pub fn backend(&self) -> Arc<RwLock<Box<dyn InferenceBackend>>> {
         self.backend.clone()
     }
+}
+
+struct LifecycleStream {
+    inner: Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>,
+    lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink>,
+    request_id: Option<String>,
+    backend_key: Option<String>,
+    runtime_instance_id: Option<String>,
+    finished: bool,
+}
+
+impl LifecycleStream {
+    fn new(
+        inner: Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>,
+        lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink>,
+        request_id: Option<String>,
+        backend_key: Option<String>,
+        runtime_instance_id: Option<String>,
+    ) -> Self {
+        Self {
+            inner,
+            lifecycle_sink,
+            request_id,
+            backend_key,
+            runtime_instance_id,
+            finished: false,
+        }
+    }
+
+    fn record(&self, kind: InferenceRequestLifecycleEventKind, detail: Option<String>) {
+        record_inference_lifecycle_event(
+            self.lifecycle_sink.as_ref(),
+            self.request_id.clone(),
+            self.backend_key.clone(),
+            self.runtime_instance_id.clone(),
+            kind,
+            detail,
+        );
+    }
+
+    fn finish(&mut self, kind: InferenceRequestLifecycleEventKind, detail: Option<String>) {
+        if self.finished {
+            return;
+        }
+
+        self.record(kind, detail);
+        self.record(InferenceRequestLifecycleEventKind::CleanupCompleted, None);
+        self.finished = true;
+    }
+}
+
+impl Stream for LifecycleStream {
+    type Item = Result<ChatChunk, BackendError>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        match self.inner.as_mut().poll_next(cx) {
+            Poll::Ready(Some(Ok(chunk))) => {
+                if chunk.done {
+                    self.finish(InferenceRequestLifecycleEventKind::Completed, None);
+                }
+                Poll::Ready(Some(Ok(chunk)))
+            }
+            Poll::Ready(Some(Err(error))) => {
+                let detail = error.to_string();
+                self.finish(InferenceRequestLifecycleEventKind::Failed, Some(detail));
+                Poll::Ready(Some(Err(error)))
+            }
+            Poll::Ready(None) => {
+                self.finish(InferenceRequestLifecycleEventKind::Completed, None);
+                Poll::Ready(None)
+            }
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
+impl Drop for LifecycleStream {
+    fn drop(&mut self) {
+        if !self.finished {
+            self.finish(
+                InferenceRequestLifecycleEventKind::Cancelled,
+                Some("stream dropped before completion".to_string()),
+            );
+        }
+    }
+}
+
+fn record_inference_lifecycle_event(
+    sink: &dyn InferenceRequestLifecycleEventSink,
+    request_id: Option<String>,
+    backend_key: Option<String>,
+    runtime_instance_id: Option<String>,
+    kind: InferenceRequestLifecycleEventKind,
+    detail: Option<String>,
+) {
+    sink.record(InferenceRequestLifecycleEvent {
+        request_id,
+        phase: InferenceLifecyclePhase::BackendExecution,
+        kind,
+        occurred_at_ms: unix_timestamp_ms(),
+        backend_key,
+        runtime_instance_id,
+        detail,
+    });
 }
 
 fn unix_timestamp_ms() -> u64 {
