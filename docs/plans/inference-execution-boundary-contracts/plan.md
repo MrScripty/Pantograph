@@ -2536,6 +2536,10 @@ Update during implementation:
   `enforce_dependency_preflight_with_lifecycle` when compiled without the
   PyTorch feature set. Resolve by tightening cfg ownership or adding a focused
   non-PyTorch validation slice.
+- 2026-05-03: Resolved the non-PyTorch dead-code warning by cfg-gating
+  `enforce_dependency_preflight_with_lifecycle` to PyTorch builds and crate
+  tests, preserving direct test coverage without exposing unused symbols to
+  non-PyTorch consumers.
 
 ## Commit Cadence Notes
 
