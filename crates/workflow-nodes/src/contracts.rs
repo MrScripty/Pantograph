@@ -361,6 +361,10 @@ fn llm_input_payloads(port_id: &str) -> Vec<InferencePortPayloadContract> {
                 ContractInferenceExecutionInputKind::TextGeneration,
             ),
         ],
+        "audio" => vec![InferencePortPayloadContract::task_input(
+            ContractInferenceTaskId::AudioTranscription,
+            ContractInferenceExecutionInputKind::AudioTranscription,
+        )],
         "text" => vec![InferencePortPayloadContract::task_input(
             ContractInferenceTaskId::Embedding,
             ContractInferenceExecutionInputKind::Embedding,
@@ -392,7 +396,21 @@ fn llm_output_payloads(port_id: &str) -> Vec<InferencePortPayloadContract> {
             ],
             InferencePortPayloadRole::Usage,
         ),
-        "response" | "tool_calls" | "has_tool_calls" | "stream" => {
+        "response" => vec![
+            InferencePortPayloadContract::task_output(
+                ContractInferenceTaskId::TextGeneration,
+                ContractInferenceExecutionResultKind::TextGeneration,
+            ),
+            InferencePortPayloadContract::task_output(
+                ContractInferenceTaskId::ChatCompletion,
+                ContractInferenceExecutionResultKind::TextGeneration,
+            ),
+            InferencePortPayloadContract::task_output(
+                ContractInferenceTaskId::AudioTranscription,
+                ContractInferenceExecutionResultKind::AudioTranscription,
+            ),
+        ],
+        "tool_calls" | "has_tool_calls" | "stream" => {
             vec![
                 InferencePortPayloadContract::task_output(
                     ContractInferenceTaskId::TextGeneration,
@@ -436,21 +454,23 @@ fn task_role_payloads(
         .collect()
 }
 
-fn llm_supported_task_ids() -> [ContractInferenceTaskId; 4] {
+fn llm_supported_task_ids() -> [ContractInferenceTaskId; 5] {
     [
         ContractInferenceTaskId::TextGeneration,
         ContractInferenceTaskId::ChatCompletion,
         ContractInferenceTaskId::Embedding,
         ContractInferenceTaskId::Rerank,
+        ContractInferenceTaskId::AudioTranscription,
     ]
 }
 
-fn llm_supported_registry_task_ids() -> [InferenceTaskId; 4] {
+fn llm_supported_registry_task_ids() -> [InferenceTaskId; 5] {
     [
         InferenceTaskId::TextGeneration,
         InferenceTaskId::ChatCompletion,
         InferenceTaskId::Embedding,
         InferenceTaskId::Rerank,
+        InferenceTaskId::AudioTranscription,
     ]
 }
 
@@ -641,6 +661,12 @@ mod tests {
                 && task.input_kind == ContractInferenceExecutionInputKind::Rerank
                 && task.result_kind == ContractInferenceExecutionResultKind::Rerank
         }));
+        assert!(llm.inference_tasks.iter().any(|task| {
+            task.task_id == ContractInferenceTaskId::AudioTranscription
+                && task.input_kind == ContractInferenceExecutionInputKind::AudioTranscription
+                && task.result_kind == ContractInferenceExecutionResultKind::AudioTranscription
+                && !task.execution_supported
+        }));
         let registry_embedding = default_task_registry_entries()
             .into_iter()
             .find(|entry| entry.task_id == InferenceTaskId::Embedding)
@@ -676,6 +702,15 @@ mod tests {
                 && payload.role == InferencePortPayloadRole::Options
         }));
 
+        let audio = llm
+            .input(&port_id("audio").expect("audio port id"))
+            .unwrap();
+        assert!(audio.inference_payloads.iter().any(|payload| {
+            payload.task_id == ContractInferenceTaskId::AudioTranscription
+                && payload.input_kind
+                    == Some(ContractInferenceExecutionInputKind::AudioTranscription)
+        }));
+
         let text = llm.input(&port_id("text").expect("text port id")).unwrap();
         assert!(text.inference_payloads.iter().any(|payload| {
             payload.task_id == ContractInferenceTaskId::Embedding
@@ -705,6 +740,15 @@ mod tests {
             payload.task_id == ContractInferenceTaskId::TextGeneration
                 && payload.role == InferencePortPayloadRole::Usage
                 && payload.result_kind.is_none()
+        }));
+
+        let response = llm
+            .output(&port_id("response").expect("response port id"))
+            .unwrap();
+        assert!(response.inference_payloads.iter().any(|payload| {
+            payload.task_id == ContractInferenceTaskId::AudioTranscription
+                && payload.result_kind
+                    == Some(ContractInferenceExecutionResultKind::AudioTranscription)
         }));
     }
 

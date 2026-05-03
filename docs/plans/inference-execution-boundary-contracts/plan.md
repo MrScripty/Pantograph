@@ -1188,6 +1188,11 @@ compatibility, with grouped fields taking precedence.
 Node-engine rerank request construction now reads migrated canonical
 `task_options.top_k` and `task_options.return_documents` values, while
 connected/top-level runtime inputs keep precedence over saved task options.
+Workflow-node contract projection now advertises audio transcription on
+canonical `llm-inference` as a contract-only task from the inference registry:
+the `audio` input maps to audio transcription input, `response` maps to the
+transcription result, and `execution_supported = false` prevents consumers from
+mistaking descriptor visibility for backend support.
 
 ### Milestone 4: Define Neutral Managed-Dependency Boundary
 
@@ -2436,6 +2441,10 @@ Update during implementation:
 - 2026-05-03: Added node-engine rerank request support for migrated
   `task_options.top_k` and `task_options.return_documents`, preserving
   connected/top-level input precedence over saved task options.
+- 2026-05-03: Added contract-only audio transcription task and port payload
+  metadata to the canonical `llm-inference` descriptor projection, preserving
+  the registry's non-executable status while documenting the audio/response
+  shape for graph consumers.
 
 ## Commit Cadence Notes
 
