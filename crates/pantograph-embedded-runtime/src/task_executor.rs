@@ -33,7 +33,7 @@ use crate::runtime_health::failed_runtime_health_assessment;
 ///
 /// Currently handles:
 /// - `rag-search`: requires an injected `RagBackend`
-/// - `pytorch-inference`: python sidecar execution
+/// - `llm-inference`: python sidecar execution when runtime hints resolve to PyTorch/Transformers
 /// - `diffusion-inference`: python sidecar execution
 /// - `audio-generation`: python sidecar execution
 /// - `onnx-inference`: python sidecar execution

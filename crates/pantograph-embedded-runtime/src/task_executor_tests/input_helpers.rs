@@ -122,11 +122,8 @@ fn build_model_dependency_request_normalizes_backend_aliases() {
     let mut inputs = HashMap::new();
     inputs.insert("backend_key".to_string(), serde_json::json!("onnx-runtime"));
 
-    let request = TauriTaskExecutor::build_model_dependency_request(
-        "pytorch-inference",
-        "/tmp/model",
-        &inputs,
-    );
+    let request =
+        TauriTaskExecutor::build_model_dependency_request("llm-inference", "/tmp/model", &inputs);
     assert_eq!(request.backend_key.as_deref(), Some("onnx-runtime"));
 }
 
@@ -147,11 +144,8 @@ fn build_model_dependency_request_prefers_requirements_backend_when_input_missin
         }),
     );
 
-    let request = TauriTaskExecutor::build_model_dependency_request(
-        "pytorch-inference",
-        "/tmp/model",
-        &inputs,
-    );
+    let request =
+        TauriTaskExecutor::build_model_dependency_request("llm-inference", "/tmp/model", &inputs);
     assert_eq!(request.backend_key.as_deref(), Some("pytorch"));
 }
 

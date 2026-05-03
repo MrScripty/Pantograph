@@ -1710,6 +1710,9 @@ Embedded-runtime edit-session embedding fixtures, synthetic KV-cache memory
 fixtures, and node-engine KV-cache session/preparation fixtures now use
 canonical `llm-inference` node data instead of retired embedding or llama.cpp
 node types.
+Embedded-runtime Python-sidecar tests and executor documentation now refer to
+canonical `llm-inference` with PyTorch/Transformers runtime evidence instead of
+the retired `pytorch-inference` node name.
 
 ### Milestone 12: Prepare Native Candle Slice
 
