@@ -740,6 +740,9 @@ host DTOs, migration steps, and feature-flag compatibility checks.
   `install_from_staging_validates_expected_files_before_finalizing`. The test
   expects `/managed-dependencies/ocioconvert/...`, while the implementation
   returns `/third-party/managed-dependencies/ocioconvert/...`.
+- 2026-05-03: The same issue still fails under
+  `cargo test -p inference --all-features`; the PyTorch worker-contract slice
+  did not touch managed redistributable path construction.
 - Reason: this is in the managed redistributable path contract and is unrelated
   to the model/package contract fixture slice.
 - Revisit trigger: fix in a separate managed-dependency slice before treating
@@ -1406,7 +1409,7 @@ using Python Transformers behind the boundary for broad HF-compatible support.
   otherwise.
 - [ ] Keep Python-specific compatibility shims and kwargs inside the PyTorch
   backend worker modules.
-- [ ] Define the Rust-to-Python worker envelope, init/shutdown lifecycle,
+- [x] Define the Rust-to-Python worker envelope, init/shutdown lifecycle,
   error mapping, request correlation, cancellation behavior, and schema
   fixtures before changing worker behavior.
 - [ ] Preserve dLLM/Sherry-specific behavior if it still requires custom worker
@@ -1424,7 +1427,12 @@ using Python Transformers behind the boundary for broad HF-compatible support.
 - Existing PyTorch request tests continue to pass.
 - `cargo test -p inference`.
 
-**Status:** Not started.
+**Status:** In progress. The first contract-only slice added backend-local
+PyTorch worker envelope DTOs, Transformers load request fields, request
+correlation, init/shutdown operations, cancellation metadata, trust policy
+defaults, response/error DTOs, and JSON fixtures for load and error envelopes.
+Worker behavior still needs to move from ad hoc Python method calls to this
+contract.
 
 ### Milestone 10: Introduce Typed Execution Contracts
 
@@ -1834,6 +1842,11 @@ Update during implementation:
   commands, UniFFI JSON methods, and Rustler NIFs. This unblocks UI/runtime
   consumers from polling updates after a cached snapshot cursor without
   depending on Pumas storage internals.
+- 2026-05-03: Started the PyTorch/Transformers binding milestone with a
+  contract-only slice. Added backend-local Rust/Python worker envelope DTOs,
+  request correlation, init/shutdown operation names, cancellation metadata,
+  explicit closed-by-default custom-code trust policy, typed worker errors, and
+  JSON fixtures before changing the Python worker behavior.
 
 ## Commit Cadence Notes
 

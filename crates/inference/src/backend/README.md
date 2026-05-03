@@ -18,6 +18,7 @@ isolated here.
 | `candle.rs` | Candle backend placeholder and capability declaration. |
 | `pytorch.rs` | PyTorch backend implementation used for HuggingFace-style runtimes. |
 | `pytorch_worker.rs` | Embedded PyTorch worker loader, sibling-module registration, and Python result extraction helpers used by `pytorch.rs`. |
+| `pytorch_worker_contract.rs` | Backend-local Rust/Python worker envelope, Transformers load request, trust policy, and response/error DTOs used to migrate PyTorch behind the canonical inference contracts. |
 | `pytorch_tests.rs` | PyTorch backend capability, lifecycle, KV-cache fingerprint, prompt extraction, and system prompt tests extracted from the production adapter. |
 
 ## Problem
@@ -135,3 +136,6 @@ fn create_backend() {
 - Embedded PyTorch worker source registration and Python result extraction stay
   in `pytorch_worker.rs` so `pytorch.rs` remains focused on the backend facade,
   model lifecycle, generation, and KV-cache trait methods.
+- PyTorch Rust/Python envelope DTOs stay in `pytorch_worker_contract.rs`.
+  They are backend-local implementation contracts, not public Pantograph graph
+  node shapes or scheduler/runtime-registry policy.

@@ -30,6 +30,9 @@ use pantograph_runtime_identity::{canonical_runtime_backend_key, canonical_runti
 
 #[path = "pytorch_worker.rs"]
 mod pytorch_worker;
+#[allow(dead_code)]
+#[path = "pytorch_worker_contract.rs"]
+mod pytorch_worker_contract;
 
 /// PyTorch backend using in-process PyO3 embedded Python.
 ///

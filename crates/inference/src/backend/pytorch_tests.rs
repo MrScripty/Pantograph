@@ -1,4 +1,10 @@
+use super::pytorch_worker_contract::{
+    PyTorchTransformersLoadRequest, PyTorchTransformersTrustPolicy, PyTorchWorkerEnvelope,
+    PyTorchWorkerErrorKind, PyTorchWorkerFailure, PyTorchWorkerOperation, PyTorchWorkerResponse,
+    PYTORCH_WORKER_CONTRACT_VERSION,
+};
 use super::*;
+use crate::model_contracts::{ModelArtifactKind, PumasModelRef};
 
 #[test]
 fn test_backend_name() {
@@ -156,4 +162,104 @@ fn test_extract_system_prompt_missing() {
         "messages": [{"role": "user", "content": "Hi"}]
     });
     assert_eq!(extract_system_prompt(&req), None);
+}
+
+#[test]
+fn test_pytorch_worker_load_envelope_decodes_fixture() {
+    let fixture = include_str!(
+        "../../tests/fixtures/pytorch_worker_contract/load_transformers_model_request.json"
+    );
+    let envelope: PyTorchWorkerEnvelope<PyTorchTransformersLoadRequest> =
+        serde_json::from_str(fixture).expect("decode worker load fixture");
+
+    assert_eq!(envelope.contract_version, PYTORCH_WORKER_CONTRACT_VERSION);
+    assert_eq!(envelope.request_id, "req-load-001");
+    assert_eq!(
+        envelope.operation,
+        PyTorchWorkerOperation::LoadTransformersModel
+    );
+    assert_eq!(
+        envelope.payload.model_ref.model_id,
+        "pumas://models/tiny-causal"
+    );
+    assert_eq!(
+        envelope.payload.artifact_kind,
+        ModelArtifactKind::HfCompatibleDirectory
+    );
+    assert_eq!(envelope.payload.task_id, InferenceTaskId::TextGeneration);
+    assert_eq!(envelope.payload.device.as_deref(), Some("cuda:0"));
+    assert!(!envelope.payload.trust_policy.allow_remote_code);
+    assert!(envelope.payload.trust_policy.accepted_sources.is_empty());
+}
+
+#[test]
+fn test_pytorch_worker_trust_policy_defaults_closed() {
+    let request = PyTorchTransformersLoadRequest {
+        model_ref: PumasModelRef {
+            model_id: "pumas://models/no-custom-code".to_string(),
+            revision: None,
+            selected_artifact_id: None,
+            selected_artifact_path: None,
+            migration_diagnostics: Vec::new(),
+        },
+        artifact_kind: ModelArtifactKind::HfCompatibleDirectory,
+        entry_path: "/models/no-custom-code".to_string(),
+        task_id: InferenceTaskId::TextGeneration,
+        model_type_hint: None,
+        device: None,
+        trust_policy: PyTorchTransformersTrustPolicy::default(),
+        generation_defaults: None,
+    };
+    let envelope = PyTorchWorkerEnvelope::new(
+        "req-default-trust",
+        PyTorchWorkerOperation::LoadTransformersModel,
+        request,
+    );
+    let encoded = serde_json::to_value(&envelope).expect("encode envelope");
+
+    assert_eq!(
+        encoded["payload"]["trust_policy"]["allow_remote_code"],
+        false
+    );
+    assert!(encoded["payload"]["trust_policy"]
+        .get("accepted_sources")
+        .is_none());
+}
+
+#[test]
+fn test_pytorch_worker_error_response_preserves_request_correlation() {
+    let fixture =
+        include_str!("../../tests/fixtures/pytorch_worker_contract/worker_error_response.json");
+    let response: PyTorchWorkerResponse<serde_json::Value> =
+        serde_json::from_str(fixture).expect("decode worker error fixture");
+
+    match response {
+        PyTorchWorkerResponse::Error(PyTorchWorkerFailure { request_id, error }) => {
+            assert_eq!(request_id, "req-load-001");
+            assert_eq!(error.kind, PyTorchWorkerErrorKind::TrustPolicyRejected);
+            assert_eq!(
+                error.canonical_code.as_deref(),
+                Some("pytorch_transformers_trust_policy_rejected")
+            );
+        }
+        other => panic!("expected worker error response, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_worker_envelope_rejects_missing_required_fields() {
+    let fixture = include_str!(
+        "../../tests/fixtures/pytorch_worker_contract/load_transformers_model_request.json"
+    );
+    let mut invalid: serde_json::Value =
+        serde_json::from_str(fixture).expect("decode worker load fixture");
+    invalid
+        .as_object_mut()
+        .expect("fixture is object")
+        .remove("request_id");
+    let error =
+        serde_json::from_value::<PyTorchWorkerEnvelope<PyTorchTransformersLoadRequest>>(invalid)
+            .expect_err("missing request_id and payload fields should reject");
+
+    assert!(error.to_string().contains("request_id"));
 }

@@ -1,0 +1,9 @@
+{
+  "status": "error",
+  "request_id": "req-load-001",
+  "error": {
+    "kind": "trust_policy_rejected",
+    "message": "Model package requires custom Transformers code but trust policy is closed.",
+    "canonical_code": "pytorch_transformers_trust_policy_rejected"
+  }
+}
