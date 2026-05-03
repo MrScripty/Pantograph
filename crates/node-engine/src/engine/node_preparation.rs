@@ -215,8 +215,11 @@ mod tests {
             name: "Workflow".to_string(),
             nodes: vec![GraphNode {
                 id: "llm".to_string(),
-                node_type: "llamacpp-inference".to_string(),
-                data: serde_json::json!({}),
+                node_type: "llm-inference".to_string(),
+                data: serde_json::json!({
+                    "task_kind": "text_generation",
+                    "runtime_hint": "llamacpp"
+                }),
                 position: (0.0, 0.0),
             }],
             edges: Vec::new(),
@@ -280,8 +283,11 @@ mod tests {
             name: "Workflow".to_string(),
             nodes: vec![GraphNode {
                 id: "llm".to_string(),
-                node_type: "llamacpp-inference".to_string(),
-                data: serde_json::json!({}),
+                node_type: "llm-inference".to_string(),
+                data: serde_json::json!({
+                    "task_kind": "text_generation",
+                    "runtime_hint": "llamacpp"
+                }),
                 position: (0.0, 0.0),
             }],
             edges: Vec::new(),
@@ -343,8 +349,11 @@ mod tests {
             name: "Workflow".to_string(),
             nodes: vec![GraphNode {
                 id: "llm".to_string(),
-                node_type: "llamacpp-inference".to_string(),
-                data: serde_json::json!({}),
+                node_type: "llm-inference".to_string(),
+                data: serde_json::json!({
+                    "task_kind": "text_generation",
+                    "runtime_hint": "llamacpp"
+                }),
                 position: (0.0, 0.0),
             }],
             edges: Vec::new(),

@@ -487,14 +487,20 @@ mod tests {
                 },
                 crate::types::GraphNode {
                     id: "prefix-llm".to_string(),
-                    node_type: "llamacpp-inference".to_string(),
-                    data: serde_json::json!({}),
+                    node_type: "llm-inference".to_string(),
+                    data: serde_json::json!({
+                        "task_kind": "text_generation",
+                        "runtime_hint": "llamacpp"
+                    }),
                     position: (220.0, 0.0),
                 },
                 crate::types::GraphNode {
                     id: "suffix-llm".to_string(),
-                    node_type: "llamacpp-inference".to_string(),
-                    data: serde_json::json!({}),
+                    node_type: "llm-inference".to_string(),
+                    data: serde_json::json!({
+                        "task_kind": "text_generation",
+                        "runtime_hint": "llamacpp"
+                    }),
                     position: (460.0, 80.0),
                 },
             ],

@@ -811,17 +811,20 @@ fn edit_session_embedding_graph(model_id: &str) -> WorkflowGraph {
             },
             GraphNode {
                 id: "embedding-1".to_string(),
-                node_type: "embedding".to_string(),
+                node_type: "llm-inference".to_string(),
                 position: Position { x: 200.0, y: 0.0 },
-                data: serde_json::json!({}),
+                data: serde_json::json!({
+                    "task_kind": "embedding",
+                    "runtime_hint": "llamacpp"
+                }),
             },
         ],
         edges: vec![GraphEdge {
             id: "edge-model".to_string(),
             source: "puma-lib-1".to_string(),
-            source_handle: "model_path".to_string(),
+            source_handle: "pumas_model_ref".to_string(),
             target: "embedding-1".to_string(),
-            target_handle: "model".to_string(),
+            target_handle: "pumas_model_ref".to_string(),
         }],
         ..WorkflowGraph::default()
     }

@@ -41,8 +41,11 @@ async fn sync_bound_session_node_memory_from_cache_projects_kv_cache_reference()
     let mut graph = crate::types::WorkflowGraph::new("graph-1", "Graph");
     graph.nodes.push(crate::types::GraphNode {
         id: "llm".to_string(),
-        node_type: "llamacpp-inference".to_string(),
-        data: serde_json::json!({}),
+        node_type: "llm-inference".to_string(),
+        data: serde_json::json!({
+            "task_kind": "text_generation",
+            "runtime_hint": "llamacpp"
+        }),
         position: (0.0, 0.0),
     });
 

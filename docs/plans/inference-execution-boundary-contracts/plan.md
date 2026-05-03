@@ -1706,6 +1706,10 @@ The llama.cpp and PyTorch node-engine handlers now derive emitted
 `model_ref.task_type_primary` from canonical `llm-inference` semantics, and
 node-engine preflight coverage now exercises canonical runtime hints instead of
 retired backend node names.
+Embedded-runtime edit-session embedding fixtures, synthetic KV-cache memory
+fixtures, and node-engine KV-cache session/preparation fixtures now use
+canonical `llm-inference` node data instead of retired embedding or llama.cpp
+node types.
 
 ### Milestone 12: Prepare Native Candle Slice
 

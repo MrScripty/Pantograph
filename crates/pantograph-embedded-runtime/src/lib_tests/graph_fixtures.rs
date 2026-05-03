@@ -124,7 +124,7 @@ pub(super) fn synthetic_kv_node_memory_snapshot(
         identity: node_engine::NodeMemoryIdentity {
             session_id: session_id.to_string(),
             node_id: node_id.to_string(),
-            node_type: "llamacpp-inference".to_string(),
+            node_type: "llm-inference".to_string(),
             schema_version: Some("v1".to_string()),
         },
         status: node_engine::NodeMemoryStatus::Ready,
