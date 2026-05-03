@@ -2248,6 +2248,24 @@ mod tests {
     }
 
     #[test]
+    fn task_request_contract_serde_defaults_and_unknown_fields_are_additive() {
+        let encoded = serde_json::json!({
+            "task_id": "embedding",
+            "input_kind": "embedding",
+            "result_kind": "embedding",
+            "execution_supported": true,
+            "streaming_support": "unsupported",
+            "future_registry_field": "ignored_by_current_consumer"
+        });
+
+        let decoded: TaskRequestContract = serde_json::from_value(encoded).unwrap();
+
+        assert_eq!(decoded.task_id, InferenceTaskId::Embedding);
+        assert_eq!(decoded.required_input_modalities, Vec::new());
+        assert_eq!(decoded.output_modalities, Vec::new());
+    }
+
+    #[test]
     fn task_request_contracts_match_registry_modalities_and_streaming() {
         for entry in default_task_registry_entries() {
             let contract = entry

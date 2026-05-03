@@ -1080,7 +1080,7 @@ and llama.cpp/GGUF without exposing a Python object as the shared abstraction.
   runtime boundaries.
 - [x] Add validation rules so internal code consumes parsed model/task types
   rather than raw strings or ad hoc JSON.
-- [ ] Document that Python Transformers is one implementation of these
+- [x] Document that Python Transformers is one implementation of these
   contracts, not the source of public truth.
 
 **Verification:**
@@ -1175,6 +1175,11 @@ The canonical `llm-inference` descriptor now declares `task_kind` and
 `runtime_hint` as optional graph-visible inputs, aligning the descriptor with
 the saved-workflow migration data schema, workflow preflight, and node-engine
 execution inputs that already consume those fields.
+The task-request wire-shape tests now assert stable snake_case labels, omitted
+collection defaults, and additive unknown-field behavior for task contracts.
+`crates/inference/src/README.md` also records that Python Transformers is a
+backend implementation target for the Rust-owned contracts rather than the
+public contract source of truth.
 
 ### Milestone 4: Define Neutral Managed-Dependency Boundary
 
@@ -2414,6 +2419,9 @@ Update during implementation:
   graph-visible `llm-inference` descriptor and annotated them as inference
   option payloads, aligning workflow authoring with existing migration,
   preflight, and execution data fields.
+- 2026-05-03: Added task-request contract serde coverage for omitted defaults
+  and additive unknown fields, and documented Python Transformers as an
+  implementation target rather than the public contract source of truth.
 
 ## Commit Cadence Notes
 

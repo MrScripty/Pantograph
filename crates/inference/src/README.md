@@ -256,6 +256,10 @@ async fn run_image_request(gateway: &InferenceGateway, config: &BackendConfig) {
   backend names or raw task strings.
 - Optional fields preserve meaning when omitted; callers may rely on omission as
   “backend default”.
+- Cross-boundary task contracts use stable snake_case labels, serde defaults for
+  omitted optional collections, and additive unknown-field handling. Python
+  Transformers is one backend implementation target for these Rust-owned
+  contracts, not the source of the public Pantograph contract.
 - `ChatRequest` is an edge DTO; additive fields must be introduced only when
   they preserve typed `GenerationOptions` semantics for gateway consumers.
 - `ServerModeInfo` is the backend-owned runtime status contract for GUI and host
