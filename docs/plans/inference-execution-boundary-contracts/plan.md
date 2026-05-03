@@ -1448,9 +1448,9 @@ bounded message.
 execution semantics that backends can map locally.
 
 **Tasks:**
-- [ ] Add a typed generation options contract covering max tokens, temperature,
+- [x] Add a typed generation options contract covering max tokens, temperature,
   top-p, top-k, seed, stop conditions, and cache preference where supported.
-- [ ] Split generation options into explicit groups such as length, sampling,
+- [x] Split generation options into explicit groups such as length, sampling,
   search/beam behavior, stopping, cache, output details, special tokens,
   assistant/speculative generation where planned, and backend-scoped extensions.
 - [ ] Align generation options with Transformers `GenerationConfig` concepts,
@@ -1566,7 +1566,10 @@ canonical inference shape instead of preserving backend-specific node contracts.
 - Relevant frontend typecheck/tests if node registry or renderer DTOs change.
 - `git diff --check`.
 
-**Status:** Not started.
+**Status:** In progress. `GenerationOptions` now aggregates the existing
+length, sampling, search, stopping, cache, output, and special-token groups
+with backend-scoped extension values. Sampling includes a typed seed field.
+Backend-specific mapping and precedence/default resolution remain open.
 
 ### Milestone 12: Prepare Native Candle Slice
 
@@ -1867,6 +1870,11 @@ Update during implementation:
 - 2026-05-03: Added typed PyTorch worker failure normalization into
   Pantograph `BackendError` categories, preserving request ids and canonical
   worker error codes without exposing raw Python exception payloads.
+- 2026-05-03: Added the public `GenerationOptions` aggregate over length,
+  sampling, search, stopping, cache, output, special-token, and backend
+  extension groups. Sampling now includes an explicit seed field so typed
+  generation requests cover the option families needed by Transformers,
+  llama.cpp, vLLM, MLX, and Candle mappings.
 
 ## Commit Cadence Notes
 

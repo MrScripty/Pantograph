@@ -1,8 +1,10 @@
+use std::collections::BTreeMap;
+
 use inference::{
-    BackendHintLabel, InferenceLifecyclePhase, ModelExecutionDescriptor, ModelExecutionStorageKind,
-    ModelExecutionValidationState, ModelFactFamily, ModelLibraryChangeKind,
-    ModelLibraryRefreshScope, ModelLibraryUpdateEvent, ModelLibraryUpdateFeed,
-    ModelPackageFactsSummarySnapshot, ModelPackageFactsSummaryStatus,
+    BackendHintLabel, GenerationOptions, InferenceLifecyclePhase, ModelExecutionDescriptor,
+    ModelExecutionStorageKind, ModelExecutionValidationState, ModelFactFamily,
+    ModelLibraryChangeKind, ModelLibraryRefreshScope, ModelLibraryUpdateEvent,
+    ModelLibraryUpdateFeed, ModelPackageFactsSummarySnapshot, ModelPackageFactsSummaryStatus,
     OptionCompatibilityDiagnostic, OptionSupportState, PackageFactStatus,
     ResolvedModelPackageFacts, MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
 };
@@ -179,6 +181,51 @@ fn generation_defaults_preserve_raw_pumas_defaults() {
             .and_then(serde_json::Value::as_u64),
         Some(128)
     );
+}
+
+#[test]
+fn generation_options_group_transformers_aligned_request_fields() {
+    let mut backend_extensions = BTreeMap::new();
+    backend_extensions.insert(
+        "transformers:watermarking_config".to_string(),
+        serde_json::json!({"greenlist_ratio": 0.25}),
+    );
+    let options = GenerationOptions {
+        length: inference::LengthGenerationOptions {
+            max_new_tokens: Some(128),
+            ..Default::default()
+        },
+        sampling: inference::SamplingGenerationOptions {
+            temperature: Some(0.7),
+            top_p: Some(0.95),
+            seed: Some(42),
+            ..Default::default()
+        },
+        stopping: inference::StoppingGenerationOptions {
+            stop_strings: vec!["</s>".to_string()],
+            eos_token_ids: vec![2],
+        },
+        cache: inference::CacheGenerationOptions {
+            use_cache: Some(true),
+            kv_cache_checkpoint_requested: Some(false),
+        },
+        backend_extensions,
+        ..Default::default()
+    };
+
+    let json = serde_json::to_string(&options).expect("encode generation options");
+    assert!(json.contains("max_new_tokens"));
+    assert!(json.contains("transformers:watermarking_config"));
+
+    let decoded: GenerationOptions = serde_json::from_str(&json).expect("decode options");
+    assert_eq!(decoded.length.max_new_tokens, Some(128));
+    assert_eq!(decoded.sampling.top_p, Some(0.95));
+    assert_eq!(decoded.sampling.seed, Some(42));
+    assert_eq!(decoded.stopping.stop_strings, vec!["</s>"]);
+    assert_eq!(decoded.cache.use_cache, Some(true));
+    assert!(decoded
+        .backend_extensions
+        .contains_key("transformers:watermarking_config"));
 }
 
 #[test]

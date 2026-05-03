@@ -5,6 +5,8 @@
 //! runtime registry and scheduler layers remain responsible for final placement,
 //! admission, and policy decisions.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -418,6 +420,8 @@ pub struct SamplingGenerationOptions {
     pub top_k: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub repetition_penalty: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seed: Option<u64>,
 }
 
 /// Search/beam-related generation options.
@@ -470,6 +474,28 @@ pub struct SpecialTokenGenerationOptions {
     pub eos_token_id: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pad_token_id: Option<u32>,
+}
+
+/// Complete generation option groups for a canonical inference request.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct GenerationOptions {
+    #[serde(default)]
+    pub length: LengthGenerationOptions,
+    #[serde(default)]
+    pub sampling: SamplingGenerationOptions,
+    #[serde(default)]
+    pub search: SearchGenerationOptions,
+    #[serde(default)]
+    pub stopping: StoppingGenerationOptions,
+    #[serde(default)]
+    pub cache: CacheGenerationOptions,
+    #[serde(default)]
+    pub output: OutputGenerationOptions,
+    #[serde(default)]
+    pub special_tokens: SpecialTokenGenerationOptions,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub backend_extensions: BTreeMap<String, Value>,
 }
 
 /// Backend support result for a requested generation option.
