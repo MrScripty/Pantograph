@@ -1356,6 +1356,16 @@ publication cleanup is covered in store tests. Remaining work covers
 preprocessing, streaming, backend execution, and postprocessing
 cancellation/cleanup semantics.
 
+**Open implementation gap:** Preprocessing and postprocessing currently exist as
+backend capability facts and compatibility checks, not as request-scoped
+lifecycle hooks in the inference backend trait. Streaming cancellation is also
+implicit: llama.cpp streams stop when the HTTP body is dropped, and PyTorch
+streaming exits when the receiver is dropped or a send fails, but there is no
+typed request cancellation token, cancellation reason, or cleanup event at the
+inference boundary. Milestone 8 should not be closed until the inference crate
+defines whether these lifecycle phases stay hidden inside backend adapters or
+become explicit request lifecycle facts/errors for diagnostics-ledger consumers.
+
 ### Milestone 9: Bind PyTorch Through Transformers
 
 **Goal:** Make the PyTorch backend consume the new Rust model/task contracts by
