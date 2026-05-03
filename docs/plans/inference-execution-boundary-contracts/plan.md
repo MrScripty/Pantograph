@@ -1474,13 +1474,13 @@ execution semantics that backends can map locally.
   embeddings/feature extraction, rerank/scoring, and multimodal results,
   including optional usage, score, logprob, cache-handle, and diagnostic
   sections where supported.
-- [ ] Keep OpenAI-compatible JSON mapping at the backend or adapter edge.
-- [ ] Add validation at the boundary so internal code consumes parsed,
+- [x] Keep OpenAI-compatible JSON mapping at the backend or adapter edge.
+- [x] Add validation at the boundary so internal code consumes parsed,
   validated values rather than raw JSON.
 - [x] Add serialization and deserialization coverage for changed cross-language
   DTOs, including enum casing and optional field defaults.
 - [ ] Record backend-specific unsupported option behavior.
-- [ ] Add public Rust API documentation requirements for new fallible parsing,
+- [x] Add public Rust API documentation requirements for new fallible parsing,
   validation, and execution methods, including `# Errors` and `# Panics`
   sections where applicable.
 
@@ -1508,6 +1508,9 @@ Typed execution request/result DTOs now cover text generation/chat, embeddings,
 rerank, and image generation while preserving the existing OpenAI-compatible
 and task-specific DTOs. Serde coverage proves stable task/input/result casing,
 usage fields, cache-handle ids, and option diagnostics.
+OpenAI-compatible chat requests now map into typed execution requests at the
+adapter edge, and typed request validation rejects task/input mismatches and
+missing required payloads before backend execution.
 
 ### Milestone 11: Canonical Workflow Node Migration
 
@@ -1902,6 +1905,10 @@ Update during implementation:
   generation/chat, embeddings, rerank, and image generation. The new contracts
   preserve current DTOs, keep OpenAI-compatible JSON as an edge mapping, and
   include result usage, cache handle ids, and option diagnostics.
+- 2026-05-03: Added typed execution request boundary validation and an
+  OpenAI-chat edge mapper. Internal typed execution can now reject task/input
+  mismatches, missing text inputs, empty embedding batches, and invalid rerank
+  payloads before backend adapters see the request.
 
 ## Commit Cadence Notes
 

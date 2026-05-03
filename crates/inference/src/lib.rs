@@ -138,10 +138,11 @@ pub use server::{LlamaServer, ServerMode, SharedLlamaServer};
 pub use types::{
     ChatMessage, ChatRequest, ContentPart, Delta, EncodedImage, ImageGenerationRequest,
     ImageGenerationResult, ImageUrlData, InferenceEmbeddingResult, InferenceExecutionInput,
-    InferenceExecutionRequest, InferenceExecutionResult, InferenceRequestLifecycleEvent,
-    InferenceRequestLifecycleEventKind, InferenceRequestLifecycleEventSink, InferenceUsage,
-    MaskedPrompt, PromptSegment, RerankRequest, RerankResponse, RerankResult,
-    RuntimeLifecycleSnapshot, ServerModeInfo, StreamChoice, StreamChunk, StreamEvent,
+    InferenceExecutionRequest, InferenceExecutionRequestValidationError, InferenceExecutionResult,
+    InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
+    InferenceRequestLifecycleEventSink, InferenceUsage, MaskedPrompt, PromptSegment, RerankRequest,
+    RerankResponse, RerankResult, RuntimeLifecycleSnapshot, ServerModeInfo, StreamChoice,
+    StreamChunk, StreamEvent,
 };
 
 #[cfg(feature = "std-process")]

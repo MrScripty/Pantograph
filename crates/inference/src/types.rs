@@ -57,12 +57,137 @@ pub struct InferenceExecutionRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_ref: Option<PumasModelRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_hint: Option<String>,
     pub input: InferenceExecutionInput,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub generation_options: Option<GenerationOptions>,
     #[serde(default, skip_serializing_if = "Value::is_null")]
     pub extra_options: Value,
+}
+
+impl InferenceExecutionRequest {
+    /// Convert an OpenAI-compatible chat request at the adapter edge.
+    ///
+    /// The returned request still needs normal validation through
+    /// [`InferenceExecutionRequest::validate`] before execution.
+    #[must_use]
+    pub fn from_openai_chat_request(request_id: Option<String>, request: ChatRequest) -> Self {
+        let generation_options = if request.max_tokens.is_some() || request.temperature.is_some() {
+            Some(GenerationOptions {
+                length: crate::model_contracts::LengthGenerationOptions {
+                    max_new_tokens: request.max_tokens,
+                    ..Default::default()
+                },
+                sampling: crate::model_contracts::SamplingGenerationOptions {
+                    temperature: request.temperature,
+                    ..Default::default()
+                },
+                ..Default::default()
+            })
+        } else {
+            None
+        };
+
+        Self {
+            request_id,
+            task_id: InferenceTaskId::ChatCompletion,
+            model_ref: None,
+            model_name: Some(request.model),
+            runtime_hint: None,
+            input: InferenceExecutionInput::TextGeneration {
+                prompt: None,
+                system_prompt: None,
+                messages: request.messages,
+                stream: request.stream,
+            },
+            generation_options,
+            extra_options: Value::Null,
+        }
+    }
+
+    /// Validate task/input consistency before backend execution.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`InferenceExecutionRequestValidationError`] when the task id and
+    /// input variant disagree, when required text/query/document payloads are
+    /// empty, or when the task is not supported by the typed request contract.
+    pub fn validate(&self) -> Result<(), InferenceExecutionRequestValidationError> {
+        match (&self.task_id, &self.input) {
+            (
+                InferenceTaskId::TextGeneration | InferenceTaskId::ChatCompletion,
+                InferenceExecutionInput::TextGeneration {
+                    prompt, messages, ..
+                },
+            ) => {
+                if prompt.as_deref().is_none_or(str::is_empty) && messages.is_empty() {
+                    return Err(InferenceExecutionRequestValidationError::MissingTextInput);
+                }
+                Ok(())
+            }
+            (InferenceTaskId::Embedding, InferenceExecutionInput::Embedding { texts }) => {
+                if texts.is_empty() {
+                    return Err(InferenceExecutionRequestValidationError::EmptyEmbeddingTexts);
+                }
+                Ok(())
+            }
+            (
+                InferenceTaskId::Rerank,
+                InferenceExecutionInput::Rerank {
+                    query, documents, ..
+                },
+            ) => {
+                if query.is_empty() {
+                    return Err(InferenceExecutionRequestValidationError::EmptyRerankQuery);
+                }
+                if documents.is_empty() {
+                    return Err(InferenceExecutionRequestValidationError::EmptyRerankDocuments);
+                }
+                Ok(())
+            }
+            (InferenceTaskId::ImageGeneration, InferenceExecutionInput::ImageGeneration { .. }) => {
+                Ok(())
+            }
+            (
+                InferenceTaskId::Unknown
+                | InferenceTaskId::ImageUnderstanding
+                | InferenceTaskId::AudioTranscription
+                | InferenceTaskId::VideoUnderstanding
+                | InferenceTaskId::MultimodalGeneration,
+                _,
+            ) => Err(InferenceExecutionRequestValidationError::UnsupportedTask {
+                task_id: self.task_id.clone(),
+            }),
+            _ => Err(
+                InferenceExecutionRequestValidationError::TaskInputMismatch {
+                    task_id: self.task_id.clone(),
+                    input_type: self.input.input_type_label(),
+                },
+            ),
+        }
+    }
+}
+
+/// Typed request validation failure at the inference execution boundary.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum InferenceExecutionRequestValidationError {
+    #[error("text generation requires a prompt or chat messages")]
+    MissingTextInput,
+    #[error("embedding execution requires at least one text input")]
+    EmptyEmbeddingTexts,
+    #[error("rerank execution requires a query")]
+    EmptyRerankQuery,
+    #[error("rerank execution requires at least one document")]
+    EmptyRerankDocuments,
+    #[error("task {task_id:?} does not match input type {input_type}")]
+    TaskInputMismatch {
+        task_id: InferenceTaskId,
+        input_type: &'static str,
+    },
+    #[error("task {task_id:?} is not supported by the typed execution request contract")]
+    UnsupportedTask { task_id: InferenceTaskId },
 }
 
 /// Canonical task input payloads, separated from backend transport formats.
@@ -93,6 +218,18 @@ pub enum InferenceExecutionInput {
     ImageGeneration {
         request: ImageGenerationRequest,
     },
+}
+
+impl InferenceExecutionInput {
+    #[must_use]
+    pub fn input_type_label(&self) -> &'static str {
+        match self {
+            Self::TextGeneration { .. } => "text_generation",
+            Self::Embedding { .. } => "embedding",
+            Self::Rerank { .. } => "rerank",
+            Self::ImageGeneration { .. } => "image_generation",
+        }
+    }
 }
 
 /// Canonical task execution result emitted by future typed backend paths.
@@ -742,6 +879,7 @@ mod tests {
                 selected_artifact_path: None,
                 migration_diagnostics: Vec::new(),
             }),
+            model_name: None,
             runtime_hint: Some("pytorch".to_string()),
             input: InferenceExecutionInput::TextGeneration {
                 prompt: Some("Hello".to_string()),
@@ -772,6 +910,75 @@ mod tests {
             serde_json::json!(64)
         );
         assert_eq!(decoded, request);
+    }
+
+    #[test]
+    fn typed_execution_request_maps_openai_chat_at_edge_and_validates() {
+        let request = ChatRequest {
+            model: "tiny-chat".to_string(),
+            messages: vec![ChatMessage {
+                role: "user".to_string(),
+                content: vec![ContentPart::Text {
+                    text: "Hi".to_string(),
+                }],
+            }],
+            stream: true,
+            max_tokens: Some(32),
+            temperature: Some(0.4),
+        };
+
+        let typed = InferenceExecutionRequest::from_openai_chat_request(
+            Some("req-chat-1".to_string()),
+            request,
+        );
+
+        typed.validate().expect("mapped chat request is valid");
+        assert_eq!(typed.task_id, InferenceTaskId::ChatCompletion);
+        assert_eq!(typed.model_name.as_deref(), Some("tiny-chat"));
+        assert_eq!(
+            typed
+                .generation_options
+                .as_ref()
+                .and_then(|options| options.length.max_new_tokens),
+            Some(32)
+        );
+        assert_eq!(
+            typed
+                .generation_options
+                .as_ref()
+                .and_then(|options| options.sampling.temperature),
+            Some(0.4)
+        );
+    }
+
+    #[test]
+    fn typed_execution_request_validation_rejects_mismatched_task_and_input() {
+        let request = InferenceExecutionRequest {
+            request_id: Some("req-invalid".to_string()),
+            task_id: InferenceTaskId::Embedding,
+            model_ref: None,
+            model_name: Some("tiny".to_string()),
+            runtime_hint: None,
+            input: InferenceExecutionInput::TextGeneration {
+                prompt: Some("Hi".to_string()),
+                system_prompt: None,
+                messages: Vec::new(),
+                stream: false,
+            },
+            generation_options: None,
+            extra_options: Value::Null,
+        };
+
+        match request.validate() {
+            Err(InferenceExecutionRequestValidationError::TaskInputMismatch {
+                task_id,
+                input_type,
+            }) => {
+                assert_eq!(task_id, InferenceTaskId::Embedding);
+                assert_eq!(input_type, "text_generation");
+            }
+            other => panic!("expected task/input mismatch, got {other:?}"),
+        }
     }
 
     #[test]
