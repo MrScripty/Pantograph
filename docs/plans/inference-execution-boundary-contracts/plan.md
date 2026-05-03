@@ -1157,11 +1157,13 @@ because their registry contracts require different input payload families.
 Workflow-service backend task capability DTOs now carry optional
 `WorkflowTaskRequestContract` payload metadata, and embedded-runtime projects
 that metadata from inference backend task facts into workflow runtime
-capabilities. Node-engine result projection still needs equivalent
-contract-driven cleanup. Node-engine canonical `llm-inference` dispatch now
-also uses `TaskRequestContract` input payload families to route embedding and
-rerank tasks, so dispatch no longer needs to treat those task ids as special
-backend selectors.
+capabilities. Node-engine canonical `llm-inference` dispatch now also uses
+`TaskRequestContract` input payload families to route embedding and rerank
+tasks, so dispatch no longer needs to treat those task ids as special backend
+selectors. Node-engine typed result projection now checks the task contract's
+`result_kind` before unpacking text, embedding, or rerank output payloads,
+keeping projection errors tied to canonical request/result semantics while
+preserving the existing graph-visible output shapes.
 
 ### Milestone 4: Define Neutral Managed-Dependency Boundary
 
@@ -2354,6 +2356,9 @@ Update during implementation:
   direct embedding/rerank task-id matches to request-contract input payload
   families, preserving the same handlers while reducing duplicated task
   semantics in dispatcher code.
+- 2026-05-03: Added node-engine typed result-kind validation before projecting
+  text, embedding, and rerank gateway results, so output projection now checks
+  the task registry result contract before matching result variants.
 - 2026-05-03: Expanded the typed text/chat generation edge mapping so
   `sampling.top_p` and `sampling.top_k` travel with `max_new_tokens` and
   `temperature` through `ChatRequest` and `InferenceGateway::execute_typed`

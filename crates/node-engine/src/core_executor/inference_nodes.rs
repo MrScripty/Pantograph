@@ -117,11 +117,13 @@ pub(crate) async fn execute_llm_inference(
     if event_sink.is_none() {
         let mut request = build_text_generation_execution_request(inputs)?;
         assign_typed_request_id(&mut request, task_id, execution_id);
+        let expected_result_kind = expected_typed_result_kind(&request)?;
         let result = execute_typed_gateway(gw, request, extensions)
             .await
             .map_err(|error| {
                 NodeEngineError::ExecutionFailed(format!("Typed LLM inference failed: {error}"))
             })?;
+        ensure_typed_result_kind(&result, expected_result_kind, "Typed LLM inference")?;
         let (response, option_diagnostics) = match result {
             inference::InferenceExecutionResult::TextGeneration {
                 text,
@@ -319,6 +321,7 @@ pub(crate) async fn execute_embedding_inference(
     let gw = require_gateway(gateway)?;
     let mut request = build_embedding_execution_request(inputs)?;
     assign_typed_request_id(&mut request, task_id, execution_id);
+    let expected_result_kind = expected_typed_result_kind(&request)?;
     let model_name = request.model_name.clone();
     let start = std::time::Instant::now();
     let result = execute_typed_gateway(gw, request, extensions)
@@ -326,6 +329,7 @@ pub(crate) async fn execute_embedding_inference(
         .map_err(|error| {
             NodeEngineError::ExecutionFailed(format!("Typed embedding inference failed: {error}"))
         })?;
+    ensure_typed_result_kind(&result, expected_result_kind, "Typed embedding inference")?;
     let embeddings = match result {
         inference::InferenceExecutionResult::Embedding { embeddings, .. } => embeddings,
         other => {
@@ -412,6 +416,7 @@ pub(crate) async fn execute_rerank_inference(
     let gw = require_gateway(gateway)?;
     let mut request = build_rerank_execution_request(inputs)?;
     assign_typed_request_id(&mut request, task_id, execution_id);
+    let expected_result_kind = expected_typed_result_kind(&request)?;
     let output_model_ref = request.model_ref.clone();
     let output_model = request
         .model_name
@@ -427,6 +432,7 @@ pub(crate) async fn execute_rerank_inference(
         .map_err(|error| {
             NodeEngineError::ExecutionFailed(format!("Typed rerank inference failed: {error}"))
         })?;
+    ensure_typed_result_kind(&result, expected_result_kind, "Typed rerank inference")?;
     let response = match result {
         inference::InferenceExecutionResult::Rerank { response } => response,
         other => {
@@ -523,6 +529,39 @@ pub(crate) fn build_rerank_execution_request(
         generation_options: None,
         extra_options: serde_json::Value::Object(extra_settings.into_iter().collect()),
     })
+}
+
+#[cfg(feature = "inference-nodes")]
+pub(crate) fn expected_typed_result_kind(
+    request: &inference::InferenceExecutionRequest,
+) -> Result<inference::InferenceExecutionResultKind> {
+    inference::resolve_task_registry_entry(request.task_id.canonical_label())
+        .and_then(|entry| entry.request_contract())
+        .map(|contract| contract.result_kind)
+        .ok_or_else(|| {
+            NodeEngineError::ExecutionFailed(format!(
+                "No typed result contract is registered for task '{}'",
+                request.task_id.canonical_label()
+            ))
+        })
+}
+
+#[cfg(feature = "inference-nodes")]
+pub(crate) fn ensure_typed_result_kind(
+    result: &inference::InferenceExecutionResult,
+    expected: inference::InferenceExecutionResultKind,
+    context: &str,
+) -> Result<()> {
+    let actual = result.result_kind();
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(NodeEngineError::ExecutionFailed(format!(
+            "{context} returned result kind '{}' but task contract expected '{}'",
+            actual.canonical_label(),
+            expected.canonical_label()
+        )))
+    }
 }
 
 #[cfg(feature = "inference-nodes")]

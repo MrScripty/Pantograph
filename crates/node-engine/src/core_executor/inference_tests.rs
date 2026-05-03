@@ -479,6 +479,33 @@ fn test_build_embedding_execution_request_rejects_empty_text() {
 
 #[cfg(feature = "inference-nodes")]
 #[test]
+fn test_typed_result_projection_rejects_result_kind_mismatch() {
+    let result = inference::InferenceExecutionResult::TextGeneration {
+        text: "not an embedding".to_string(),
+        usage: None,
+        cache_handle_id: None,
+        option_diagnostics: Vec::new(),
+    };
+
+    let error = ensure_typed_result_kind(
+        &result,
+        inference::InferenceExecutionResultKind::Embedding,
+        "Typed embedding inference",
+    )
+    .expect_err("mismatched result kind should fail before output projection");
+
+    match error {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("text_generation"));
+            assert!(message.contains("embedding"));
+            assert!(message.contains("task contract expected"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
 fn test_build_rerank_execution_request_preserves_canonical_inputs() {
     let mut inputs = HashMap::new();
     inputs.insert("task_kind".to_string(), serde_json::json!("rerank"));
