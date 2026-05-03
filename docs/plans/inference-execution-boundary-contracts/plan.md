@@ -1906,7 +1906,11 @@ inference write ledger events directly.
   persisted in ledger payloads.
 - `git diff --check`.
 
-**Status:** Not started.
+**Status:** In progress. The first diagnostics-ledger integration slice added
+an append-only optional `model_id` to inference request lifecycle events and
+projects it into the existing ledger append request top-level `model_id` field
+alongside the already-recorded selected backend/runtime context, without adding
+a new ledger event type or persisting prompt/result payload bodies.
 
 ## Execution Notes
 

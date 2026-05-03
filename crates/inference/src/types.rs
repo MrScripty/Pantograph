@@ -457,6 +457,8 @@ pub struct InferenceRequestLifecycleEvent {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_instance_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
 }
 
@@ -1020,6 +1022,7 @@ mod tests {
             occurred_at_ms: 42,
             backend_key: Some("llama_cpp".to_string()),
             runtime_instance_id: Some("llama-main-1".to_string()),
+            model_id: Some("pumas://models/tiny-llama".to_string()),
             detail: Some("stream dropped by consumer".to_string()),
         };
 
@@ -1029,6 +1032,10 @@ mod tests {
 
         assert_eq!(encoded["phase"], serde_json::json!("backend_execution"));
         assert_eq!(encoded["kind"], serde_json::json!("cleanup_completed"));
+        assert_eq!(
+            encoded["model_id"],
+            serde_json::json!("pumas://models/tiny-llama")
+        );
         assert_eq!(decoded, event);
     }
 

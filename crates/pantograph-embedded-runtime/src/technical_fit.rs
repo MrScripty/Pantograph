@@ -224,13 +224,20 @@ fn task_registry_entry_from_package_facts(
         .flatten()
         .find_map(inference_task_id_from_label)?;
     let result_family = task_result_family(&task_id).to_string();
+    let registry_entry = inference::default_task_registry_entries()
+        .into_iter()
+        .find(|entry| entry.task_id == task_id);
     Some(inference::TaskRegistryEntry {
-        task_id,
+        task_id: task_id.clone(),
         aliases: labels
             .into_iter()
             .flatten()
             .map(str::to_string)
             .collect::<Vec<_>>(),
+        task_family: registry_entry
+            .as_ref()
+            .map(|entry| entry.task_family.clone())
+            .unwrap_or_default(),
         modality_signature: inference::TaskModalitySignature::new(
             facts
                 .task
@@ -246,7 +253,22 @@ fn task_registry_entry_from_package_facts(
                 .collect(),
         ),
         result_family,
+        execution_behavior: registry_entry
+            .as_ref()
+            .map(|entry| entry.execution_behavior.clone())
+            .unwrap_or_default(),
+        streaming_support: registry_entry
+            .as_ref()
+            .map(|entry| entry.streaming_support.clone())
+            .unwrap_or_default(),
         support_tier: inference::SupportTier::Stable,
+        required_components: registry_entry
+            .as_ref()
+            .map(|entry| entry.required_components.clone())
+            .unwrap_or_default(),
+        upstream_task_ids: registry_entry
+            .map(|entry| entry.upstream_task_ids)
+            .unwrap_or_default(),
     })
 }
 

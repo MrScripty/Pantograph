@@ -120,6 +120,7 @@ fn inference_lifecycle_event_adapter_builds_node_status_event_with_backend_conte
         occurred_at_ms: 123,
         backend_key: Some("pytorch".to_string()),
         runtime_instance_id: Some("python-runtime:pytorch:1".to_string()),
+        model_id: Some("pumas://models/tiny-transformers".to_string()),
         detail: Some("backend failed".to_string()),
     };
 
@@ -131,6 +132,10 @@ fn inference_lifecycle_event_adapter_builds_node_status_event_with_backend_conte
         Some("python-runtime:pytorch:1")
     );
     assert_eq!(request.runtime_id.as_deref(), Some("pytorch"));
+    assert_eq!(
+        request.model_id.as_deref(),
+        Some("pumas://models/tiny-transformers")
+    );
     assert_eq!(request.node_id.as_deref(), Some("node-a"));
     assert_eq!(request.node_type.as_deref(), Some("llm-inference"));
     assert_eq!(request.occurred_at_ms, 123);
@@ -154,6 +159,7 @@ fn inference_lifecycle_cleanup_event_is_not_persisted_as_node_status() {
         occurred_at_ms: 124,
         backend_key: Some("pytorch".to_string()),
         runtime_instance_id: Some("python-runtime:pytorch:1".to_string()),
+        model_id: Some("pumas://models/tiny-transformers".to_string()),
         detail: None,
     };
 

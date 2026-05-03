@@ -86,7 +86,7 @@ pub fn inference_lifecycle_event_ledger_append_request(
             .clone(),
         runtime_id: event.backend_key.clone(),
         runtime_version: None,
-        model_id: None,
+        model_id: event.model_id.clone(),
         model_version: None,
         client_id: Some(context.attribution().client_id.clone()),
         client_session_id: Some(context.attribution().client_session_id.clone()),

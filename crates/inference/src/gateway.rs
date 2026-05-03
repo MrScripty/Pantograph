@@ -1198,6 +1198,7 @@ fn record_inference_lifecycle_event(
         occurred_at_ms: unix_timestamp_ms(),
         backend_key,
         runtime_instance_id,
+        model_id: None,
         detail,
     });
 }
