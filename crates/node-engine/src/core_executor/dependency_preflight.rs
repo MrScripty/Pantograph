@@ -1,13 +1,17 @@
 use std::collections::HashMap;
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 use std::sync::Arc;
+#[cfg(feature = "inference-nodes")]
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 use pantograph_runtime_identity::canonical_engine_backend_key;
 
 #[cfg(feature = "inference-nodes")]
 use inference::{
-    resolve_task_registry_entry, InferenceExecutionInputKind, InferenceTaskId, TaskRegistryEntry,
+    resolve_task_registry_entry, InferenceExecutionInputKind, InferenceLifecyclePhase,
+    InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
+    InferenceRequestLifecycleEventSink, InferenceTaskId, TaskRegistryEntry,
 };
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
@@ -23,6 +27,19 @@ use crate::model_dependencies::{ModelDependencyBinding, ModelRefV2};
 use super::{read_optional_input_string, read_optional_input_value};
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 use super::{read_optional_input_string_aliases, read_optional_input_value_aliases};
+
+#[cfg(feature = "inference-nodes")]
+#[derive(Debug, Clone)]
+pub(crate) struct DependencyPreflightLifecycleContext {
+    pub(crate) task_id: String,
+    pub(crate) execution_id: String,
+    pub(crate) task_label: String,
+    pub(crate) backend_key: Option<String>,
+    pub(crate) model_id: Option<String>,
+}
+
+#[cfg(all(feature = "audio-nodes", not(feature = "inference-nodes")))]
+pub(crate) struct DependencyPreflightLifecycleContext;
 
 pub(crate) fn read_input_dependency_bindings(
     inputs: &HashMap<String, serde_json::Value>,
@@ -519,6 +536,27 @@ pub(crate) async fn enforce_dependency_preflight(
     inputs: &HashMap<String, serde_json::Value>,
     extensions: &ExecutorExtensions,
 ) -> Result<Option<ModelRefV2>> {
+    enforce_dependency_preflight_inner(node_type, inputs, extensions, None).await
+}
+
+#[cfg(feature = "inference-nodes")]
+pub(crate) async fn enforce_dependency_preflight_with_lifecycle(
+    node_type: &str,
+    inputs: &HashMap<String, serde_json::Value>,
+    extensions: &ExecutorExtensions,
+    lifecycle_context: Option<&DependencyPreflightLifecycleContext>,
+) -> Result<Option<ModelRefV2>> {
+    enforce_dependency_preflight_inner(node_type, inputs, extensions, lifecycle_context).await
+}
+
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+async fn enforce_dependency_preflight_inner(
+    node_type: &str,
+    inputs: &HashMap<String, serde_json::Value>,
+    extensions: &ExecutorExtensions,
+    #[cfg_attr(not(feature = "inference-nodes"), allow(unused_variables))]
+    lifecycle_context: Option<&DependencyPreflightLifecycleContext>,
+) -> Result<Option<ModelRefV2>> {
     let should_preflight = matches!(node_type, "diffusion-inference" | "audio-generation")
         || (node_type == "llm-inference"
             && preferred_backend_key(node_type, inputs).as_deref() == Some("pytorch"));
@@ -529,38 +567,49 @@ pub(crate) async fn enforce_dependency_preflight(
     let Some(resolver) = extensions
         .get::<Arc<dyn ModelDependencyResolver>>(extension_keys::MODEL_DEPENDENCY_RESOLVER)
     else {
-        return Err(NodeEngineError::ExecutionFailed(
+        let message =
             "Dependency preflight blocked execution: dependency resolver is not configured"
-                .to_string(),
-        ));
+                .to_string();
+        record_dependency_preflight_failure_lifecycle(extensions, lifecycle_context, &message);
+        return Err(NodeEngineError::ExecutionFailed(message));
     };
 
-    let model_path = read_model_path_from_inputs(inputs).ok_or_else(|| {
-        NodeEngineError::ExecutionFailed(
-            "Missing model_path input. Connect a Puma-Lib node.".to_string(),
-        )
-    })?;
+    let model_path = match read_model_path_from_inputs(inputs) {
+        Some(model_path) => model_path,
+        None => {
+            let message = "Missing model_path input. Connect a Puma-Lib node.".to_string();
+            record_dependency_preflight_failure_lifecycle(extensions, lifecycle_context, &message);
+            return Err(NodeEngineError::ExecutionFailed(message));
+        }
+    };
 
     let request = build_model_dependency_request(node_type, &model_path, inputs);
-    let requirements = resolver
+    let requirements = match resolver
         .resolve_model_dependency_requirements(request.clone())
         .await
-        .map_err(|e| {
-            NodeEngineError::ExecutionFailed(format!(
+    {
+        Ok(requirements) => requirements,
+        Err(error) => {
+            let message = format!(
                 "Dependency preflight requirements resolution failed for '{}': {}",
-                node_type, e
-            ))
-        })?;
+                node_type, error
+            );
+            record_dependency_preflight_failure_lifecycle(extensions, lifecycle_context, &message);
+            return Err(NodeEngineError::ExecutionFailed(message));
+        }
+    };
 
-    let status = resolver
-        .check_dependencies(request.clone())
-        .await
-        .map_err(|e| {
-            NodeEngineError::ExecutionFailed(format!(
+    let status = match resolver.check_dependencies(request.clone()).await {
+        Ok(status) => status,
+        Err(error) => {
+            let message = format!(
                 "Dependency preflight check failed for '{}': {}",
-                node_type, e
-            ))
-        })?;
+                node_type, error
+            );
+            record_dependency_preflight_failure_lifecycle(extensions, lifecycle_context, &message);
+            return Err(NodeEngineError::ExecutionFailed(message));
+        }
+    };
 
     if status.state != DependencyState::Ready {
         let payload = serde_json::json!({
@@ -575,28 +624,94 @@ pub(crate) async fn enforce_dependency_preflight(
             "bindings": status.bindings,
             "message": status.message,
         });
-        return Err(NodeEngineError::ExecutionFailed(format!(
-            "Dependency preflight blocked execution: {}",
-            payload
-        )));
+        let message = format!("Dependency preflight blocked execution: {}", payload);
+        record_dependency_preflight_failure_lifecycle(extensions, lifecycle_context, &message);
+        return Err(NodeEngineError::ExecutionFailed(message));
     }
 
-    let resolved = resolver
+    let resolved = match resolver
         .resolve_model_ref(request, Some(requirements))
         .await
-        .map_err(|e| {
-            NodeEngineError::ExecutionFailed(format!(
+    {
+        Ok(resolved) => resolved,
+        Err(error) => {
+            let message = format!(
                 "Dependency preflight failed to resolve model_ref: {}",
-                e
-            ))
-        })?;
+                error
+            );
+            record_dependency_preflight_failure_lifecycle(extensions, lifecycle_context, &message);
+            return Err(NodeEngineError::ExecutionFailed(message));
+        }
+    };
     if let Some(ref model_ref) = resolved {
-        model_ref
-            .validate()
-            .map_err(NodeEngineError::ExecutionFailed)?;
+        if let Err(error) = model_ref.validate() {
+            record_dependency_preflight_failure_lifecycle(extensions, lifecycle_context, &error);
+            return Err(NodeEngineError::ExecutionFailed(error));
+        }
     }
 
     Ok(resolved)
+}
+
+#[cfg(feature = "inference-nodes")]
+fn record_dependency_preflight_failure_lifecycle(
+    extensions: &ExecutorExtensions,
+    lifecycle_context: Option<&DependencyPreflightLifecycleContext>,
+    detail: &str,
+) {
+    let Some(context) = lifecycle_context else {
+        return;
+    };
+    let Some(sink) = extensions
+        .get::<Arc<dyn InferenceRequestLifecycleEventSink>>(
+            extension_keys::INFERENCE_LIFECYCLE_SINK,
+        )
+        .cloned()
+    else {
+        return;
+    };
+
+    let request_id = Some(format!(
+        "{}:{}:{}",
+        context.execution_id, context.task_id, context.task_label
+    ));
+    let runtime_id = context.backend_key.clone();
+    for (kind, detail) in [
+        (InferenceRequestLifecycleEventKind::Started, None),
+        (
+            InferenceRequestLifecycleEventKind::Failed,
+            Some(detail.to_string()),
+        ),
+        (InferenceRequestLifecycleEventKind::CleanupCompleted, None),
+    ] {
+        sink.record(InferenceRequestLifecycleEvent {
+            request_id: request_id.clone(),
+            phase: InferenceLifecyclePhase::ModelPackageResolution,
+            kind,
+            occurred_at_ms: dependency_preflight_unix_timestamp_ms(),
+            backend_key: context.backend_key.clone(),
+            runtime_id: runtime_id.clone(),
+            runtime_instance_id: None,
+            model_id: context.model_id.clone(),
+            detail,
+        });
+    }
+}
+
+#[cfg(not(feature = "inference-nodes"))]
+fn record_dependency_preflight_failure_lifecycle(
+    _extensions: &ExecutorExtensions,
+    _lifecycle_context: Option<&DependencyPreflightLifecycleContext>,
+    _detail: &str,
+) {
+}
+
+#[cfg(feature = "inference-nodes")]
+fn dependency_preflight_unix_timestamp_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or_default()
 }
 
 // ---------------------------------------------------------------------------
