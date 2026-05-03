@@ -339,6 +339,11 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
   from the dequeued scheduler state into `scheduler.run_admitted` events. It
   must not reread current graph files or runtime internals to populate those
   audit fields.
+- Workflow-run error handling records canonical diagnostic errors where
+  possible, but secondary diagnostic append failures must not replace the
+  original workflow execution, timeout, output-validation, artifact-conversion,
+  or terminal error. In those cases the returned error carries a
+  `diagnostics_unavailable` link with no diagnostic event id.
 - Workflow-session admission emits a local runtime-slot reservation-created
   event after the scheduler store admits a queued run, and emits the matching
   reservation-released event after `finish_run` clears the active scheduler

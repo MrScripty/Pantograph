@@ -2217,7 +2217,12 @@ inference write ledger events directly.
   payloads.
 - [ ] Update diagnostics-ledger, workflow-service diagnostics, runtime
   projection, and UI/API README contract sections for any added event or
-  projection fields.
+  projection fields. Source README updates now cover inference lifecycle
+  usage/cache fields, durable inference diagnostic summaries, node-derived
+  run-list/run-detail selected backend/model/task rollups, embedded-runtime
+  lifecycle sink projection rules, and workflow-service
+  `diagnostics_unavailable` behavior; frontend/API docs still need a separate
+  review if public TypeScript or UI surfaces change.
 
 **Verification:**
 - `cargo test -p pantograph-diagnostics-ledger` for new event/projection fields,
@@ -2678,6 +2683,12 @@ Update during implementation:
   instead of replacing the run failure with a diagnostics failure. The
   workflow-session terminal append path has the same preservation behavior for
   already-failed run results.
+- 2026-05-03: Updated source README contracts for the diagnostics slices:
+  inference lifecycle usage/cache metadata, diagnostics-ledger bounded
+  inference summaries and node-derived selected backend/model/task rollups,
+  embedded-runtime lifecycle sink projection rules, and workflow-service
+  `diagnostics_unavailable` semantics are now documented at the owning source
+  boundaries.
 
 ## Commit Cadence Notes
 

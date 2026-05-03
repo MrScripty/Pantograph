@@ -276,7 +276,11 @@ async fn run_image_request(gateway: &InferenceGateway, config: &BackendConfig) {
   facts, and completed backend-execution events may include bounded option
   compatibility diagnostics for generation, embedding, and rerank request
   options plus the canonical task id so host adapters can persist support
-  summaries without seeing backend-local payloads.
+  summaries without seeing backend-local payloads. Lifecycle facts may also
+  carry bounded usage counts and backend-local cache-handle ids when typed
+  execution results provide them; prompt text, messages, generated content,
+  embeddings, tensors, token arrays, Python kwargs, and raw process output stay
+  outside lifecycle diagnostics.
 - `InferenceGateway::stream_typed_text` and
   `InferenceGateway::stream_typed_text_with_lifecycle` keep streaming
   text/chat requests on the same canonical `InferenceExecutionRequest` boundary

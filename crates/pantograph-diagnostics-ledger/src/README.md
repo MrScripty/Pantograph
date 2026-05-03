@@ -71,12 +71,18 @@ Node-status projection rows include selected runtime id, canonical inference
 task id, selected backend key, and model id when producers provide them, so UI
 and API consumers do not need to parse raw diagnostic payload JSON for common
 inference execution context.
+Run-list and run-detail projections also roll up node-derived selected backend
+key, selected model id, and selected task id where the scheduler/run payloads do
+not already provide those facts. Scheduler-owned selected runtime, device, and
+network-node fields keep their native lifecycle semantics and are not inferred
+from inference payloads.
 Inference option-support summaries use
 `inference.execution_diagnostic_observed` events. These rows are bounded
 system metadata for request id, task id, lifecycle phase/kind, selected backend,
-support-state counts, backend/model compatibility summaries, and per-option
-compatibility summaries; they must not carry prompt text, messages, generated
-content, tensors, token arrays, Python kwargs, or raw backend process output.
+support-state counts, backend/model compatibility summaries, per-option
+compatibility summaries, usage-count summaries, and cache-handle ids; they must
+not carry prompt text, messages, generated content, embeddings, tensors, token
+arrays, Python kwargs, or raw backend process output.
 I/O artifact projection queries can filter producer and consumer node
 endpoints directly; callers should not scan projection pages client-side to
 answer node-produced or node-consumed artifact questions.
@@ -98,6 +104,10 @@ Failed `run.terminal` payloads may carry `canonical_error_event_id` when the
 workflow service knows the directly related `diagnostic.error_occurred` row.
 Consumers should use that link for navigation and causality display instead of
 deriving cause from adjacent timestamps.
+When a secondary diagnostic append fails while handling an existing workflow or
+inference error, service layers should preserve the original error and expose a
+`diagnostics_unavailable` link instead of replacing the user-visible failure
+with a ledger/storage failure.
 
 ## Alternatives Rejected
 
@@ -290,6 +300,12 @@ let history = ledger.query_workflow_run_summaries(&WorkflowRunSummaryQuery {
   durations, usage-event identity, model identity, workflow-version fields,
   run snapshot node-version payloads, and lineage node contract
   version/digest facts are machine-consumed by diagnostics projections.
+- Inference diagnostic summary fields are bounded metadata only: request id,
+  task id, lifecycle phase/kind, selected backend key/family, compatibility
+  summaries, option-support summaries, usage counts, and cache-handle ids.
+  Producers must keep raw request/result bodies, embeddings, tensors, token
+  arrays, Python kwargs, backend CLI flags, and unbounded process output out of
+  these payloads.
 - Legacy fields: timing `graph_fingerprint` remains a compatibility facet for
   existing timing expectation history only. New diagnostics grouping must use
   workflow-version and node behavior-version correlation from immutable run
