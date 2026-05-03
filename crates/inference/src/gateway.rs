@@ -570,6 +570,9 @@ impl InferenceGateway {
         *current_runtime_config = None;
         let mut lifecycle = self.runtime_lifecycle.write().await;
         lifecycle.active = false;
+        if lifecycle.last_error.is_none() {
+            lifecycle.lifecycle_decision_reason = Some("runtime_stopped".to_string());
+        }
     }
 
     /// Check if currently in embedding mode

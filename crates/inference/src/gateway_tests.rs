@@ -8,6 +8,7 @@ use futures_util::stream;
 use tokio::sync::mpsc;
 
 use crate::backend::BackendStartOutcome;
+use crate::types::RuntimeFactReadiness;
 
 #[path = "gateway_tests/start_config.rs"]
 mod start_config;
@@ -663,6 +664,23 @@ async fn test_runtime_lifecycle_snapshot_tracks_start_and_stop() {
     let stopped = gateway.runtime_lifecycle_snapshot().await;
     assert_eq!(stopped.runtime_id.as_deref(), Some("mock"));
     assert!(!stopped.active);
+    assert_eq!(
+        stopped.lifecycle_decision_reason.as_deref(),
+        Some("runtime_stopped")
+    );
+    assert_eq!(
+        stopped.runtime_fact_readiness(),
+        RuntimeFactReadiness::Stopped
+    );
+
+    let facts = gateway.mode_info().await.runtime_fact_snapshots();
+    assert_eq!(facts.len(), 1);
+    assert_eq!(facts[0].readiness, RuntimeFactReadiness::Stopped);
+    assert_eq!(
+        facts[0].lifecycle_decision_reason.as_deref(),
+        Some("runtime_stopped")
+    );
+    assert_eq!(facts[0].absence_reason, None);
 }
 
 #[tokio::test]
@@ -726,6 +744,18 @@ async fn test_runtime_lifecycle_snapshot_normalizes_start_failure_reason() {
     );
     assert_eq!(
         snapshot.last_error.as_deref(),
+        Some("Startup failed: mock start failure")
+    );
+
+    gateway.stop().await;
+
+    let stopped = gateway.runtime_lifecycle_snapshot().await;
+    assert_eq!(
+        stopped.lifecycle_decision_reason.as_deref(),
+        Some("runtime_start_failed")
+    );
+    assert_eq!(
+        stopped.last_error.as_deref(),
         Some("Startup failed: mock start failure")
     );
 }

@@ -1305,7 +1305,10 @@ compatibility reports, workflow capability projection, and explicit unsupported
 behavior are now covered. The ninth slice added an inference-owned
 `RuntimeFactSnapshot` DTO plus readiness, reuse, and absence semantics on top of
 the existing `RuntimeLifecycleSnapshot`/`ServerModeInfo` flow, without changing
-runtime-registry scheduler policy.
+runtime-registry scheduler policy. The tenth slice tightened gateway stop
+cleanup facts so stopped runtimes no longer retain stale ready reasons, while
+failed startup facts preserve their backend error and `runtime_start_failed`
+reason through cleanup.
 
 ### Milestone 8: Add Runtime Fact Snapshots
 
@@ -1339,9 +1342,11 @@ publishing scheduler conclusions.
   projection if consumer DTOs change.
 
 **Status:** In progress. Runtime fact DTO and normalization helpers are
-implemented in `crates/inference/src/types.rs`; remaining work covers
-cancellation/cleanup lifecycle semantics and gateway-supported stale-start or
-restart tests.
+implemented in `crates/inference/src/types.rs`; stop cleanup and failed-start
+preservation are covered in gateway lifecycle tests. Remaining work covers
+preprocessing, streaming, backend execution, postprocessing, process lease,
+KV-cache publication cancellation/cleanup semantics and any additional
+gateway-supported stale-start or restart tests.
 
 ### Milestone 9: Bind PyTorch Through Transformers
 
