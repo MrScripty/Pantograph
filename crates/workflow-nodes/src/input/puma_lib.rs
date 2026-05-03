@@ -117,7 +117,8 @@ mod options_provider {
         PortOptionsQuery, PortOptionsResult,
     };
     use pumas_library::models::{
-        ModelExecutionDescriptor, ModelPackageFactsSummaryResult, ModelPackageFactsSummaryStatus,
+        ModelExecutionDescriptor, ModelLibraryRefreshScope, ModelLibraryUpdateFeed,
+        ModelPackageFactsSummaryResult, ModelPackageFactsSummaryStatus,
     };
     use std::{collections::HashMap, sync::Arc};
 
@@ -191,6 +192,26 @@ mod options_provider {
         pub summaries: HashMap<String, ModelPackageFactsSummaryResult>,
     }
 
+    impl PackageFactsSummaryCache {
+        pub(crate) fn apply_update_feed(&mut self, feed: &ModelLibraryUpdateFeed) {
+            self.cursor = Some(feed.cursor.clone());
+
+            if feed.stale_cursor || feed.snapshot_required {
+                self.summaries.clear();
+                return;
+            }
+
+            for event in &feed.events {
+                if matches!(
+                    event.refresh_scope,
+                    ModelLibraryRefreshScope::Summary | ModelLibraryRefreshScope::SummaryAndDetail
+                ) {
+                    self.summaries.remove(&event.model_id);
+                }
+            }
+        }
+    }
+
     pub(crate) async fn load_package_facts_summary_cache(
         api: &Arc<pumas_library::PumasApi>,
         records: &[pumas_library::ModelRecord],
@@ -216,6 +237,15 @@ mod options_provider {
                         summary: item.summary,
                     },
                 );
+            }
+        }
+
+        if let Some(cursor) = cache.cursor.clone() {
+            if let Ok(feed) = api
+                .list_model_library_updates_since(Some(&cursor), limit)
+                .await
+            {
+                cache.apply_update_feed(&feed);
             }
         }
 
@@ -502,8 +532,15 @@ mod tests {
 
 #[cfg(all(test, feature = "model-library"))]
 mod model_library_tests {
-    use super::options_provider::{load_package_facts_summary_cache, resolve_execution_descriptor};
+    use super::options_provider::{
+        load_package_facts_summary_cache, resolve_execution_descriptor, PackageFactsSummaryCache,
+    };
+    use pumas_library::models::{
+        ModelFactFamily, ModelLibraryChangeKind, ModelLibraryRefreshScope, ModelLibraryUpdateEvent,
+        ModelLibraryUpdateFeed, ModelPackageFactsSummaryResult, ModelPackageFactsSummaryStatus,
+    };
     use pumas_library::PumasApi;
+    use std::collections::HashMap;
     use std::sync::Arc;
     use tempfile::TempDir;
 
@@ -688,5 +725,79 @@ mod model_library_tests {
             summary.summary.is_some(),
             "missing summary rows should be regenerated through Pumas API"
         );
+    }
+
+    #[test]
+    fn test_package_facts_summary_cache_applies_update_feed_invalidation() {
+        let mut cache = PackageFactsSummaryCache {
+            cursor: Some("model-library-updates:1".to_string()),
+            summaries: HashMap::from([
+                (
+                    "model-a".to_string(),
+                    ModelPackageFactsSummaryResult {
+                        model_id: "model-a".to_string(),
+                        status: ModelPackageFactsSummaryStatus::Cached,
+                        summary: None,
+                    },
+                ),
+                (
+                    "model-b".to_string(),
+                    ModelPackageFactsSummaryResult {
+                        model_id: "model-b".to_string(),
+                        status: ModelPackageFactsSummaryStatus::Cached,
+                        summary: None,
+                    },
+                ),
+            ]),
+        };
+        let feed = ModelLibraryUpdateFeed {
+            cursor: "model-library-updates:2".to_string(),
+            events: vec![ModelLibraryUpdateEvent {
+                cursor: "model-library-updates:2".to_string(),
+                model_id: "model-a".to_string(),
+                change_kind: ModelLibraryChangeKind::PackageFactsModified,
+                fact_family: ModelFactFamily::PackageFacts,
+                refresh_scope: ModelLibraryRefreshScope::SummaryAndDetail,
+                selected_artifact_id: None,
+                producer_revision: Some("rev-2".to_string()),
+            }],
+            stale_cursor: false,
+            snapshot_required: false,
+        };
+
+        cache.apply_update_feed(&feed);
+
+        assert_eq!(cache.cursor.as_deref(), Some("model-library-updates:2"));
+        assert!(!cache.summaries.contains_key("model-a"));
+        assert!(cache.summaries.contains_key("model-b"));
+    }
+
+    #[test]
+    fn test_package_facts_summary_cache_clears_on_stale_update_cursor() {
+        let mut cache = PackageFactsSummaryCache {
+            cursor: Some("model-library-updates:1".to_string()),
+            summaries: HashMap::from([(
+                "model-a".to_string(),
+                ModelPackageFactsSummaryResult {
+                    model_id: "model-a".to_string(),
+                    status: ModelPackageFactsSummaryStatus::Cached,
+                    summary: None,
+                },
+            )]),
+        };
+        let feed = ModelLibraryUpdateFeed {
+            cursor: "model-library-updates:latest".to_string(),
+            events: Vec::new(),
+            stale_cursor: true,
+            snapshot_required: true,
+        };
+
+        cache.apply_update_feed(&feed);
+
+        assert_eq!(
+            cache.cursor.as_deref(),
+            Some("model-library-updates:latest")
+        );
+        assert!(cache.summaries.is_empty());
     }
 }

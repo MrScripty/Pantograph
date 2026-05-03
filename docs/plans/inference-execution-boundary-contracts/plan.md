@@ -1020,7 +1020,14 @@ and an embedded-runtime projection that derives `pumas_package_facts`
 technical-fit candidates from those facts. Remote MLX/vLLM search tags do not
 project into executable candidates. Inference now exposes Pumas-aligned update
 feed and package-fact summary snapshot DTOs. Model-list cache and update-event
-consumption remain pending.
+consumption remain pending. The `puma-lib` model-list option cache now has a
+bounded `ModelLibraryUpdateFeed` invalidation helper: fresh cursors invalidate
+only summary/detail-scoped model ids, while stale cursors or snapshot-required
+feeds clear the cache so the next population uses a new Pumas snapshot. The
+`puma-lib` option cache polls Pumas after the startup/page snapshot and before
+bounded summary regeneration, so updates observed during population are applied
+without inspecting Pumas storage internals. A longer-lived application startup
+cache loop is still pending before the event-consumption task is complete.
 
 ### Milestone 3: Define Transformers-Aligned Rust Model Contracts
 
