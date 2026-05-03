@@ -1724,6 +1724,11 @@ aliases through the inference task registry, so upstream labels such as
 `feature-extraction`, `sentence-similarity`, `text-ranking`, and
 `text-reranking` map to canonical embedding/rerank behavior and resolver-facing
 task labels without ad hoc string branching.
+Node-engine canonical `llm-inference` hydration now consumes the typed
+`resolved_model_source` input by parsing the inference contract, filling
+`model_path` from `entry_path`, and preserving the stable Pumas model id in
+fallback `ModelRefV2` output without deriving backend selection from artifact
+kind.
 Direct node-engine execution of retired `embedding`, `reranker`,
 `llamacpp-inference`, and `pytorch-inference` node types now fails with a
 canonical migration error, while canonical `llm-inference` with an explicit

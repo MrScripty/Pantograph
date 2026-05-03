@@ -336,6 +336,66 @@ fn test_build_model_dependency_request_does_not_infer_retired_backend_node() {
     assert_eq!(request.backend_key, None);
 }
 
+#[cfg(feature = "inference-nodes")]
+#[test]
+fn test_inputs_with_model_path_uses_resolved_model_source_entry_path() {
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "resolved_model_source".to_string(),
+        resolved_model_source_value("pumas://models/tiny-gguf", "/models/tiny/model.gguf"),
+    );
+
+    let canonical =
+        inputs_with_model_path_from_ref(&inputs).expect("resolved model source should parse");
+
+    assert_eq!(
+        canonical.get("model_path").and_then(|value| value.as_str()),
+        Some("/models/tiny/model.gguf")
+    );
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
+fn test_inputs_with_model_path_rejects_malformed_resolved_model_source() {
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "resolved_model_source".to_string(),
+        serde_json::json!({"source_contract_version": 1}),
+    );
+
+    let err = inputs_with_model_path_from_ref(&inputs)
+        .expect_err("malformed resolved model source should fail explicitly");
+
+    match err {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("Invalid resolved_model_source input"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
+fn test_build_model_ref_v2_prefers_resolved_model_source_identity() {
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "resolved_model_source".to_string(),
+        resolved_model_source_value("pumas://models/tiny-gguf", "/models/tiny/model.gguf"),
+    );
+
+    let model_ref = build_model_ref_v2(
+        None,
+        "llamacpp",
+        "/models/tiny/model.gguf",
+        "/models/tiny/model.gguf",
+        "text-generation",
+        &inputs,
+    );
+
+    assert_eq!(model_ref.model_id, "pumas://models/tiny-gguf");
+    assert_eq!(model_ref.model_path, "/models/tiny/model.gguf");
+}
+
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 #[test]
 fn test_build_model_dependency_request_maps_canonical_embedding_task() {
@@ -471,4 +531,19 @@ fn test_parse_reranker_documents_input_accepts_json_string_alias() {
     );
     let documents = parse_reranker_documents_input(&inputs).expect("documents_json should parse");
     assert_eq!(documents, vec!["alpha", "beta"]);
+}
+
+#[cfg(feature = "inference-nodes")]
+fn resolved_model_source_value(model_id: &str, entry_path: &str) -> serde_json::Value {
+    serde_json::json!({
+        "source_contract_version": 1,
+        "source_kind": "pumas_resolved",
+        "artifact_kind": "gguf",
+        "entry_path": entry_path,
+        "storage_kind": "library_owned",
+        "validation_state": "valid",
+        "model_ref": {
+            "model_id": model_id
+        }
+    })
 }

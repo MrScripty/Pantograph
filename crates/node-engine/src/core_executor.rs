@@ -246,7 +246,7 @@ impl TaskExecutor for CoreTaskExecutor {
             "reranker" => retired_inference_node_error("reranker"),
             #[cfg(feature = "inference-nodes")]
             "llm-inference" => {
-                let canonical_inputs = inputs_with_model_path_from_ref(&inputs);
+                let canonical_inputs = inputs_with_model_path_from_ref(&inputs)?;
                 let exec_id = self.execution_id.as_deref().unwrap_or("unknown");
                 let preferred_backend = preferred_backend_key("llm-inference", &canonical_inputs);
                 match canonical_inference_task_id(&canonical_inputs).as_ref() {

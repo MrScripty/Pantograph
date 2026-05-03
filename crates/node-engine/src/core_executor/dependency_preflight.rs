@@ -5,7 +5,7 @@ use std::sync::Arc;
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 use pantograph_runtime_identity::canonical_engine_backend_key;
 
-#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+#[cfg(feature = "inference-nodes")]
 use inference::{resolve_task_registry_entry, InferenceTaskId, TaskRegistryEntry};
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
@@ -57,6 +57,7 @@ pub(crate) fn infer_task_type_primary(
     node_type: &str,
     inputs: &HashMap<String, serde_json::Value>,
 ) -> String {
+    #[cfg(feature = "inference-nodes")]
     if let Some(task_entry) = canonical_inference_task_entry(inputs) {
         return resolver_task_type_primary(&task_entry);
     }
@@ -99,21 +100,21 @@ pub(crate) fn infer_task_type_primary(
     }
 }
 
-#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+#[cfg(feature = "inference-nodes")]
 pub(crate) fn canonical_inference_task_id(
     inputs: &HashMap<String, serde_json::Value>,
 ) -> Option<InferenceTaskId> {
     canonical_inference_task_entry(inputs).map(|entry| entry.task_id)
 }
 
-#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+#[cfg(feature = "inference-nodes")]
 pub(crate) fn canonical_inference_task_entry(
     inputs: &HashMap<String, serde_json::Value>,
 ) -> Option<TaskRegistryEntry> {
     read_inference_task_label(inputs).and_then(|label| resolve_task_registry_entry(&label))
 }
 
-#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+#[cfg(feature = "inference-nodes")]
 fn read_inference_task_label(inputs: &HashMap<String, serde_json::Value>) -> Option<String> {
     read_optional_input_string_aliases(
         inputs,
@@ -143,7 +144,7 @@ fn read_inference_task_label(inputs: &HashMap<String, serde_json::Value>) -> Opt
     })
 }
 
-#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+#[cfg(feature = "inference-nodes")]
 fn resolver_task_type_primary(task: &TaskRegistryEntry) -> String {
     match task.task_id {
         InferenceTaskId::Embedding => "feature-extraction".to_string(),
@@ -167,11 +168,13 @@ pub(crate) fn build_model_ref_v2(
     let fallback_dependency_bindings = read_input_dependency_bindings(inputs);
     let fallback_dependency_requirements_id =
         read_optional_input_string(inputs, "dependency_requirements_id");
+    let fallback_resolved_model_id = read_resolved_model_source_model_id(inputs);
+    let fallback_model_id = fallback_resolved_model_id.as_deref().unwrap_or(model_id);
 
     let mut model_ref = resolved.unwrap_or(ModelRefV2 {
         contract_version: 2,
         engine: engine.to_string(),
-        model_id: model_id.to_string(),
+        model_id: fallback_model_id.to_string(),
         model_path: model_path.to_string(),
         task_type_primary: task_type_primary.to_string(),
         dependency_bindings: fallback_dependency_bindings.clone(),
@@ -185,7 +188,7 @@ pub(crate) fn build_model_ref_v2(
         model_ref.engine = engine.to_string();
     }
     if model_ref.model_id.trim().is_empty() {
-        model_ref.model_id = model_id.to_string();
+        model_ref.model_id = fallback_model_id.to_string();
     }
     if model_ref.model_path.trim().is_empty() {
         model_ref.model_path = model_path.to_string();
@@ -220,7 +223,13 @@ pub(crate) fn infer_backend_key(
         // execution profile.
         "diffusion-inference" => None,
         "llm-inference" => {
-            let task_id = canonical_inference_task_id(inputs);
+            #[cfg(feature = "inference-nodes")]
+            if matches!(
+                canonical_inference_task_id(inputs),
+                Some(InferenceTaskId::Embedding | InferenceTaskId::Rerank)
+            ) {
+                return Some("llamacpp".to_string());
+            }
             let model_type =
                 read_optional_input_string_aliases(inputs, &["model_type", "modelType"])
                     .or_else(|| {
@@ -233,14 +242,10 @@ pub(crate) fn infer_backend_key(
                     })
                     .unwrap_or_default()
                     .to_ascii_lowercase();
-            match task_id.as_ref() {
-                Some(InferenceTaskId::Embedding | InferenceTaskId::Rerank) => {
-                    Some("llamacpp".to_string())
-                }
-                _ if model_type == "embedding" || model_type == "reranker" => {
-                    Some("llamacpp".to_string())
-                }
-                _ => Some("pytorch".to_string()),
+            if model_type == "embedding" || model_type == "reranker" {
+                Some("llamacpp".to_string())
+            } else {
+                Some("pytorch".to_string())
             }
         }
         "onnx-inference" => Some("onnx-runtime".to_string()),
@@ -338,40 +343,108 @@ pub(crate) fn build_model_dependency_request(
     }
 }
 
-#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+#[cfg(feature = "inference-nodes")]
 pub(crate) fn inputs_with_model_path_from_ref(
     inputs: &HashMap<String, serde_json::Value>,
-) -> HashMap<String, serde_json::Value> {
+) -> Result<HashMap<String, serde_json::Value>> {
     let mut canonical_inputs = inputs.clone();
+    let resolved_model_source_entry_path = read_resolved_model_source_entry_path_result(inputs)?;
     if canonical_inputs
         .get("model_path")
         .and_then(|value| value.as_str())
         .is_none_or(|value| value.trim().is_empty())
     {
-        if let Some(model_path) = read_model_path_from_inputs(inputs) {
+        if let Some(model_path) =
+            resolved_model_source_entry_path.or_else(|| read_model_path_from_inputs(inputs))
+        {
             canonical_inputs.insert("model_path".to_string(), serde_json::json!(model_path));
         }
     }
-    canonical_inputs
+    Ok(canonical_inputs)
 }
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 fn read_model_path_from_inputs(inputs: &HashMap<String, serde_json::Value>) -> Option<String> {
-    read_optional_input_string_aliases(inputs, &["model_path", "modelPath"]).or_else(|| {
-        inputs.get("pumas_model_ref").and_then(|model_ref| {
-            read_optional_string_aliases_from_value(
-                model_ref,
-                &[
-                    "model_path",
-                    "modelPath",
-                    "selected_artifact_path",
-                    "selectedArtifactPath",
-                    "entry_path",
-                    "entryPath",
-                ],
-            )
+    read_optional_input_string_aliases(inputs, &["model_path", "modelPath"])
+        .or_else(|| read_resolved_model_source_entry_path(inputs))
+        .or_else(|| {
+            inputs.get("pumas_model_ref").and_then(|model_ref| {
+                read_optional_string_aliases_from_value(
+                    model_ref,
+                    &[
+                        "model_path",
+                        "modelPath",
+                        "selected_artifact_path",
+                        "selectedArtifactPath",
+                        "entry_path",
+                        "entryPath",
+                    ],
+                )
+            })
         })
+}
+
+#[cfg(feature = "inference-nodes")]
+fn read_resolved_model_source_from_inputs(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<Option<inference::ResolvedModelSource>> {
+    let Some(raw) = read_optional_input_value_aliases(
+        inputs,
+        &["resolved_model_source", "resolvedModelSource"],
+    ) else {
+        return Ok(None);
+    };
+    if raw.is_null() {
+        return Ok(None);
+    }
+    serde_json::from_value(raw).map(Some).map_err(|error| {
+        NodeEngineError::ExecutionFailed(format!(
+            "Invalid resolved_model_source input for canonical inference: {error}"
+        ))
     })
+}
+
+#[cfg(feature = "inference-nodes")]
+fn read_resolved_model_source_entry_path_result(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<Option<String>> {
+    Ok(read_resolved_model_source_from_inputs(inputs)?.map(|source| source.entry_path))
+}
+
+#[cfg(feature = "inference-nodes")]
+fn read_resolved_model_source_entry_path(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Option<String> {
+    read_resolved_model_source_from_inputs(inputs)
+        .ok()
+        .flatten()
+        .map(|source| source.entry_path)
+}
+
+#[cfg(not(feature = "inference-nodes"))]
+fn read_resolved_model_source_entry_path(
+    _inputs: &HashMap<String, serde_json::Value>,
+) -> Option<String> {
+    None
+}
+
+#[cfg(feature = "inference-nodes")]
+fn read_resolved_model_source_model_id(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Option<String> {
+    read_resolved_model_source_from_inputs(inputs)
+        .ok()
+        .flatten()
+        .and_then(|source| source.model_ref)
+        .map(|model_ref| model_ref.model_id)
+        .filter(|model_id| !model_id.trim().is_empty())
+}
+
+#[cfg(not(feature = "inference-nodes"))]
+fn read_resolved_model_source_model_id(
+    _inputs: &HashMap<String, serde_json::Value>,
+) -> Option<String> {
+    None
 }
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
