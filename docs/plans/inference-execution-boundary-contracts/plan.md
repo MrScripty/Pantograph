@@ -1887,7 +1887,11 @@ diagnostics. Legacy llama.cpp migration now preserves `mmproj_path` evidence in
 unresolved Pumas model-reference diagnostics, and node-engine canonical input
 hydration carries resolved `.mmproj` companion artifacts into llama.cpp runtime
 startup/matching. Pumas-backed GGUF/HF resolution, frontend/template, and
-validation slices remain open. Rust workflow-node
+validation slices remain open. Frontend mock registries now expose canonical
+Puma-Lib and `llm-inference` ports for Pumas model refs, resolved model
+sources, task/runtime hints, task options, diagnostics, and dependency facts so
+frontend-only sessions exercise the same graph-facing contract as Rust-backed
+sessions. Rust workflow-node
 inventory no longer registers retired `llamacpp-inference`,
 `pytorch-inference`, `embedding`, or `reranker` node descriptors as
 graph-visible built-ins; the descriptor structs remain only as migration
@@ -2510,6 +2514,10 @@ Update during implementation:
   saved-workflow migration and node-engine canonical model-source hydration, so
   llama.cpp runtime matching/startup distinguishes text GGUF from VLM GGUF plus
   companion projection artifacts.
+- 2026-05-03: Aligned frontend mock node registries with the canonical
+  inference/Puma-Lib descriptors so local frontend tests and mock backends use
+  Pumas model-reference, task/runtime hint, diagnostics, and dependency ports
+  instead of the old raw-path-only shape.
 
 ## Commit Cadence Notes
 

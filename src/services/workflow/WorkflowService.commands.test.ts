@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { WorkflowCommandService } from './WorkflowCommandService.ts';
+import { MOCK_NODE_DEFINITIONS } from './mocks.ts';
 import type {
   DiagnosticsRetentionPolicySettings,
   WorkflowRetentionCleanupResponse,
@@ -65,6 +66,22 @@ function standardRetentionSettings(retentionDays: number): DiagnosticsRetentionP
     cleanup_trigger: 'manual_or_maintenance',
   };
 }
+
+test('mock node definitions expose canonical Pumas inference ports', () => {
+  const pumaLib = MOCK_NODE_DEFINITIONS.find((definition) => definition.node_type === 'puma-lib');
+  const llmInference = MOCK_NODE_DEFINITIONS.find(
+    (definition) => definition.node_type === 'llm-inference',
+  );
+
+  assert.ok(pumaLib);
+  assert.ok(llmInference);
+  assert.ok(pumaLib.outputs.some((port) => port.id === 'pumas_model_ref'));
+  assert.ok(pumaLib.outputs.some((port) => port.id === 'dependency_requirements'));
+  assert.ok(llmInference.inputs.some((port) => port.id === 'task_kind'));
+  assert.ok(llmInference.inputs.some((port) => port.id === 'runtime_hint'));
+  assert.ok(llmInference.inputs.some((port) => port.id === 'resolved_model_source'));
+  assert.ok(llmInference.outputs.some((port) => port.id === 'diagnostics'));
+});
 
 test('updateRetentionPolicy returns backend policy state without client-side optimistic replacement', async () => {
   installWindowMock();

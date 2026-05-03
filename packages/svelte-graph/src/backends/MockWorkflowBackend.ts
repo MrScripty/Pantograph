@@ -70,18 +70,69 @@ export const MOCK_NODE_DEFINITIONS: NodeDefinition[] = [
     execution_mode: 'reactive',
   },
   {
+    node_type: 'puma-lib',
+    category: 'input',
+    label: 'Puma-Lib',
+    description: 'Canonical Pumas model reference provider',
+    io_binding_origin: 'integrated',
+    inputs: [],
+    outputs: [
+      { id: 'model_path', label: 'Model Path', data_type: 'string', required: false, multiple: false },
+      { id: 'pumas_model_ref', label: 'Pumas Model Ref', data_type: 'json', required: false, multiple: false },
+      { id: 'model_id', label: 'Model ID', data_type: 'string', required: false, multiple: false },
+      { id: 'model_type', label: 'Model Type', data_type: 'string', required: false, multiple: false },
+      { id: 'task_type_primary', label: 'Task Type', data_type: 'string', required: false, multiple: false },
+      { id: 'backend_key', label: 'Backend Key', data_type: 'string', required: false, multiple: false },
+      { id: 'recommended_backend', label: 'Recommended Backend', data_type: 'string', required: false, multiple: false },
+      { id: 'platform_context', label: 'Platform Context', data_type: 'json', required: false, multiple: false },
+      { id: 'selected_binding_ids', label: 'Selected Bindings', data_type: 'json', required: false, multiple: false },
+      { id: 'dependency_bindings', label: 'Dependency Bindings', data_type: 'json', required: false, multiple: false },
+      { id: 'dependency_requirements_id', label: 'Dependency Requirements ID', data_type: 'string', required: false, multiple: false },
+      { id: 'inference_settings', label: 'Inference Settings', data_type: 'json', required: false, multiple: false },
+      { id: 'dependency_requirements', label: 'Dependency Requirements', data_type: 'json', required: false, multiple: false },
+    ],
+    execution_mode: 'reactive',
+  },
+  {
     node_type: 'llm-inference',
     category: 'processing',
     label: 'LLM Inference',
-    description: 'Text completion via LLM',
+    description: 'Canonical model inference across text, embedding, rerank, and multimodal tasks',
     io_binding_origin: 'integrated',
     inputs: [
-      { id: 'prompt', label: 'Prompt', data_type: 'prompt', required: true, multiple: false },
+      { id: 'task_kind', label: 'Task Kind', data_type: 'string', required: false, multiple: false },
+      { id: 'runtime_hint', label: 'Runtime Hint', data_type: 'string', required: false, multiple: false },
+      { id: 'pumas_model_ref', label: 'Pumas Model Ref', data_type: 'json', required: false, multiple: false },
+      { id: 'resolved_model_source', label: 'Resolved Model Source', data_type: 'json', required: false, multiple: false },
+      { id: 'text', label: 'Text', data_type: 'string', required: false, multiple: false },
+      { id: 'query', label: 'Query', data_type: 'string', required: false, multiple: false },
+      { id: 'documents', label: 'Documents', data_type: 'json', required: false, multiple: false },
+      { id: 'documents_json', label: 'Documents JSON', data_type: 'string', required: false, multiple: false },
+      { id: 'prompt', label: 'Prompt', data_type: 'prompt', required: false, multiple: false },
+      { id: 'audio', label: 'Audio', data_type: 'audio', required: false, multiple: false },
       { id: 'system_prompt', label: 'System Prompt', data_type: 'string', required: false, multiple: false },
+      { id: 'context', label: 'Context', data_type: 'string', required: false, multiple: false },
+      { id: 'tools', label: 'Tools', data_type: 'tools', required: false, multiple: true },
+      { id: 'kv_cache_in', label: 'KV Cache In', data_type: 'kv_cache', required: false, multiple: false },
+      { id: 'generation_options', label: 'Generation Options', data_type: 'json', required: false, multiple: false },
+      { id: 'task_options', label: 'Task Options', data_type: 'json', required: false, multiple: false },
+      { id: 'inference_settings', label: 'Inference Settings', data_type: 'json', required: false, multiple: false },
     ],
     outputs: [
-      { id: 'response', label: 'Response', data_type: 'string', required: true, multiple: false },
-      { id: 'stream', label: 'Stream', data_type: 'stream', required: true, multiple: false },
+      { id: 'response', label: 'Response', data_type: 'string', required: false, multiple: false },
+      { id: 'results', label: 'Results', data_type: 'json', required: false, multiple: false },
+      { id: 'scores', label: 'Scores', data_type: 'json', required: false, multiple: false },
+      { id: 'top_document', label: 'Top Document', data_type: 'string', required: false, multiple: false },
+      { id: 'top_score', label: 'Top Score', data_type: 'number', required: false, multiple: false },
+      { id: 'embedding', label: 'Embedding', data_type: 'embedding', required: false, multiple: false },
+      { id: 'metadata', label: 'Metadata', data_type: 'json', required: false, multiple: false },
+      { id: 'model_ref', label: 'Model Ref', data_type: 'json', required: false, multiple: false },
+      { id: 'tool_calls', label: 'Tool Calls', data_type: 'json', required: false, multiple: false },
+      { id: 'has_tool_calls', label: 'Has Tool Calls', data_type: 'boolean', required: false, multiple: false },
+      { id: 'kv_cache_out', label: 'KV Cache Out', data_type: 'kv_cache', required: false, multiple: false },
+      { id: 'stream', label: 'Stream', data_type: 'stream', required: false, multiple: false },
+      { id: 'diagnostics', label: 'Diagnostics', data_type: 'json', required: false, multiple: false },
+      { id: 'usage', label: 'Usage', data_type: 'json', required: false, multiple: false },
     ],
     execution_mode: 'stream',
   },
@@ -109,9 +160,12 @@ export class MockWorkflowBackend implements WorkflowBackend {
   private savedWorkflows: Map<string, { graph: WorkflowGraph; metadata: WorkflowMetadata }> = new Map();
   private sessions: Map<string, WorkflowGraph> = new Map();
   private sessionCounter = 0;
+  private nodeDefinitions: NodeDefinition[];
 
   /** Optionally override mock node definitions */
-  constructor(private nodeDefinitions: NodeDefinition[] = MOCK_NODE_DEFINITIONS) {}
+  constructor(nodeDefinitions: NodeDefinition[] = MOCK_NODE_DEFINITIONS) {
+    this.nodeDefinitions = nodeDefinitions;
+  }
 
   private graphMutationResponse(
     graph: WorkflowGraph,
