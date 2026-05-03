@@ -1525,6 +1525,10 @@ worker envelope, then Rust sends that envelope to a backend-local Python
 worker entrypoint that validates the contract and adapts into the current
 embedded `load_model` implementation. Full envelope dispatch for generation,
 streaming, and KV operations remains a later adapter-local step.
+The torch-free Python `worker_contract.py` module now owns pure envelope
+validation/projection helpers so malformed contract version, operation,
+payload, and trust-policy shapes can be tested without importing torch or
+Transformers.
 
 ### Milestone 10: Introduce Typed Execution Contracts
 

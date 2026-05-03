@@ -12,6 +12,7 @@ process/runtime lifecycle and public inference contracts.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `worker.py` | PyO3-facing worker entrypoints, loaded-model state, and dispatch into generation helpers. |
+| `worker_contract.py` | Torch-free worker envelope validation and projection helpers shared by Rust-facing entrypoints and lightweight Python checks. |
 | `worker_runtime.py` | Shared device, model-type, dtype, diffusion-load, and base64 image payload helpers used by the worker facade. |
 | `worker_transformers.py` | Cross-version transformers compatibility shims used before trusted model loading. |
 | `autoregressive.py` | Autoregressive HuggingFace generation and streaming helpers. |
