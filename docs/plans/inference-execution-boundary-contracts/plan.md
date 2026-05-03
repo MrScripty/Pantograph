@@ -1665,6 +1665,9 @@ and other canonical inference requests default through the existing backend
 fallback path.
 Workflow-node contract projection no longer assigns capability requirements to
 retired backend-specific inference or dedicated embedding node descriptors.
+Workflow-service capability fixtures now model inference and KV-cache extension
+requirements with canonical `llm-inference` node data instead of retired
+backend-specific inference node names.
 
 ### Milestone 12: Prepare Native Candle Slice
 

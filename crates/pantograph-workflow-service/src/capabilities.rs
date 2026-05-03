@@ -701,12 +701,6 @@ mod tests {
                 data: serde_json::json!({"runtime_hint": "retired_ollama"}),
                 position: StoredPosition::default(),
             },
-            StoredGraphNode {
-                id: "legacy".to_string(),
-                node_type: "llamacpp-inference".to_string(),
-                data: serde_json::json!({}),
-                position: StoredPosition::default(),
-            },
         ];
 
         assert_eq!(
@@ -735,14 +729,20 @@ mod tests {
         let nodes = vec![
             StoredGraphNode {
                 id: "llm-a".to_string(),
-                node_type: "llamacpp-inference".to_string(),
-                data: serde_json::json!({}),
+                node_type: "llm-inference".to_string(),
+                data: serde_json::json!({
+                    "task_kind": "text_generation",
+                    "runtime_hint": "llamacpp"
+                }),
                 position: StoredPosition::default(),
             },
             StoredGraphNode {
                 id: "llm-b".to_string(),
-                node_type: "pytorch-inference".to_string(),
-                data: serde_json::json!({}),
+                node_type: "llm-inference".to_string(),
+                data: serde_json::json!({
+                    "task_kind": "text_generation",
+                    "runtime_hint": "transformers_pytorch"
+                }),
                 position: StoredPosition::default(),
             },
         ];
