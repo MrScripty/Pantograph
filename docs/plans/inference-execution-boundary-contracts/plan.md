@@ -1686,6 +1686,11 @@ suggesting or normalizing to the retired `pytorch-inference` node type.
 The Pumas dependency runtime probe now constructs canonical `llm-inference`
 dependency scenarios for GGUF, rerank, and PyTorch-compatible LLM models instead
 of emitting retired backend-specific inference node names.
+Embedded-runtime session model preload now finds llama.cpp model-load requests
+from canonical `llm-inference` nodes with llama.cpp runtime/backend evidence and
+resolves GGUF paths from canonical `pumas_model_ref` data or Puma-Lib source
+edges, so saved workflow load no longer depends on a retired
+`llamacpp-inference` node shape.
 
 ### Milestone 12: Prepare Native Candle Slice
 

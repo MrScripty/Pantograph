@@ -204,7 +204,7 @@ impl EmbeddedWorkflowHost {
         let Some(llamacpp_node) = graph
             .nodes
             .iter()
-            .find(|node| node.node_type == "llamacpp-inference")
+            .find(|node| is_canonical_llamacpp_inference_node(&node.node_type, &node.data))
         else {
             return Ok(None);
         };
@@ -213,13 +213,15 @@ impl EmbeddedWorkflowHost {
             return resolve_gguf_path(&model_path).map(Some);
         }
 
-        let Some(model_edge) = graph
-            .edges
-            .iter()
-            .find(|edge| edge.target == llamacpp_node.id && edge.target_handle == "model_path")
-        else {
+        let Some(model_edge) = graph.edges.iter().find(|edge| {
+            edge.target == llamacpp_node.id
+                && matches!(
+                    edge.target_handle.as_str(),
+                    "pumas_model_ref" | "model_path"
+                )
+        }) else {
             return Err(WorkflowServiceError::RuntimeNotReady(format!(
-                "llama.cpp workflow '{}' has an inference node without a model_path input",
+                "llama.cpp workflow '{}' has an inference node without a pumas_model_ref input",
                 workflow_id
             )));
         };
@@ -674,8 +676,58 @@ fn read_optional_string_aliases(data: &serde_json::Value, aliases: &[&str]) -> O
     })
 }
 
+fn is_canonical_llamacpp_inference_node(node_type: &str, data: &serde_json::Value) -> bool {
+    if node_type != "llm-inference" {
+        return false;
+    }
+
+    read_inference_backend_hint(data).as_deref() == Some("llamacpp")
+}
+
+fn read_inference_backend_hint(data: &serde_json::Value) -> Option<String> {
+    read_optional_string_aliases(
+        data,
+        &[
+            "backend_key",
+            "backendKey",
+            "runtime_hint",
+            "runtimeHint",
+            "recommended_backend",
+            "recommendedBackend",
+        ],
+    )
+    .or_else(|| {
+        data.get("pumas_model_ref").and_then(|model_ref| {
+            read_optional_string_aliases(
+                model_ref,
+                &[
+                    "backend_key",
+                    "backendKey",
+                    "recommended_backend",
+                    "recommendedBackend",
+                ],
+            )
+        })
+    })
+    .and_then(|value| canonical_engine_backend_key(Some(&value)))
+}
+
 fn model_path_from_node_data(data: &serde_json::Value) -> Option<String> {
-    read_optional_string_aliases(data, &["model_path", "modelPath"])
+    read_optional_string_aliases(data, &["model_path", "modelPath"]).or_else(|| {
+        data.get("pumas_model_ref").and_then(|model_ref| {
+            read_optional_string_aliases(
+                model_ref,
+                &[
+                    "model_path",
+                    "modelPath",
+                    "selected_artifact_path",
+                    "selectedArtifactPath",
+                    "entry_path",
+                    "entryPath",
+                ],
+            )
+        })
+    })
 }
 
 async fn find_puma_lib_model_by_name(

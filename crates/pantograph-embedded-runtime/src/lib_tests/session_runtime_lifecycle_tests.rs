@@ -146,10 +146,10 @@ fn write_llamacpp_puma_workflow(root: &Path, workflow_id: &str, model_path: &Pat
                 },
                 {
                     "id": "llm-1",
-                    "node_type": "llamacpp-inference",
+                    "node_type": "llm-inference",
                     "data": {
                         "prompt": "hello",
-                        "backend_key": "llamacpp"
+                        "runtime_hint": "llamacpp"
                     },
                     "position": { "x": 200.0, "y": 0.0 }
                 },
@@ -164,9 +164,9 @@ fn write_llamacpp_puma_workflow(root: &Path, workflow_id: &str, model_path: &Pat
                 {
                     "id": "e-model",
                     "source": "puma-lib-1",
-                    "source_handle": "model_path",
+                    "source_handle": "pumas_model_ref",
                     "target": "llm-1",
-                    "target_handle": "model_path"
+                    "target_handle": "pumas_model_ref"
                 },
                 {
                     "id": "e-response",
