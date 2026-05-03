@@ -1184,19 +1184,20 @@ and command resolution.
 now owns the neutral managed dependency DTO surface for runtime sidecars, media
 tools, native artifacts, status/readiness/install state, selected/default/active
 version state, expected and missing files, leases, native artifact activation,
-resolved command facts, and operation scopes. The crate is contract-only and
-documents that it must not perform installs, downloads, process spawning,
-scheduler admission, runtime reservation, workflow policy, or frontend
-projection. Existing inference managers still own implementation and persisted
-state until a later adapter/migration slice defines import behavior and moves
-consumers behind the neutral boundary.
+resolved command facts, and operation scopes. It also owns the media
+redistributable implementation for ffmpeg/OIIO/OCIO catalog, state, staging
+install, activation, lease, and removal behavior. Runtime sidecar implementation
+still lives in inference behind neutral adapters. The crate must not perform
+network downloads, process spawning, scheduler admission, runtime reservation,
+workflow policy, frontend projection, or converter execution.
 
 **Dependency review:** The managed-dependency boundary slices added internal
 workspace dependencies on `pantograph-managed-dependencies` from inference,
 workflow-service, and media-conversion. No new third-party crate, binary,
 native artifact, license obligation, platform artifact, or feature-gated
-external dependency was introduced. The new crate depends only on workspace
-`serde` for DTO serialization.
+external dependency was introduced. The managed-dependency crate uses existing
+workspace `serde`, `serde_json`, and `uuid` dependencies for DTO
+serialization, state persistence, and lease/install staging ids.
 
 **State migration/import behavior:** The neutral managed-dependency owner must
 preserve the existing app-data roots as import sources before it writes a new
@@ -1224,7 +1225,7 @@ runtime launch behavior and media conversion readiness facts.
   `managed_binaries`, and `managed_media_dependencies`.
 - [x] Move or adapt runtime sidecar management so inference resolves llama.cpp
   commands through the neutral managed-dependency boundary.
-- [ ] Move or adapt ffmpeg, oiiotool, ocioconvert, and OpenColorIO dependency
+- [x] Move or adapt ffmpeg, oiiotool, ocioconvert, and OpenColorIO dependency
   status/lease behavior out of inference and into the neutral
   managed-dependency/media-conversion boundary.
 - [x] Update `pantograph-media-conversion` and workflow artifact conversion
@@ -1296,6 +1297,9 @@ Removal trigger: delete those shims after UniFFI/frontend callers consume
 neutral `ManagedDependencyStatus`/`ResolvedManagedDependencyCommand` DTOs and
 media install, activation, and lease operations move behind the neutral
 managed-dependency/media-conversion owner.
+The media redistributable implementation has moved from inference into
+`pantograph-managed-dependencies::redistributables`; inference now re-exports
+that API for compatibility and keeps only neutral projection helpers locally.
 
 **Implementation findings:** Do not move media conversion DTOs by type alias
 without a JSON compatibility decision: inference `MediaConversionJobKind::ThreeD`

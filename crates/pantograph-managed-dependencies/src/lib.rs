@@ -7,6 +7,9 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod redistributables;
+pub use redistributables::*;
+
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ManagedDependencyKey {

@@ -2,19 +2,16 @@
 
 ## Purpose
 
-This directory owns Pantograph-managed media redistributables that are not
-runtime sidecars. It covers tool binaries such as `ffmpeg`, `ocioconvert`, and
-`oiiotool`, plus native library/artifact dependencies such as OpenColorIO.
+This directory is now an inference compatibility adapter for
+Pantograph-managed media redistributables. The implementation owner moved to
+`pantograph-managed-dependencies`; inference keeps only neutral projection
+helpers and re-exports for callers that have not migrated yet.
 
 ## Contents
 
 | File | Description |
 | ---- | ----------- |
-| `catalog.rs` | Static catalog entries, platform metadata, support checks, and expected-file validation. |
-| `contracts.rs` | Public DTOs for managed media dependencies, status projection, state, and leases. |
-| `operations.rs` | Status, install-from-staging, select/default/activate, lease, and remove operations. |
-| `paths.rs` | App-owned managed-dependency paths, platform keys, expected file paths, and timestamp helpers. |
-| `state.rs` | Schema-versioned durable JSON state load/save and state-entry helpers. |
+| `neutral_contracts.rs` | Adapts managed redistributable status from `pantograph-managed-dependencies` into neutral `ManagedDependencyStatus` DTOs. |
 
 ## Invariants
 
@@ -22,8 +19,8 @@ runtime sidecars. It covers tool binaries such as `ffmpeg`, `ocioconvert`, and
   `PATH` or system library probing.
 - Tool binaries and native library artifacts use managed redistributable terms,
   not managed runtime sidecar names.
-- Network download and checksum verification are intentionally outside this
-  module until source artifacts are pinned.
+- Network download and checksum verification are intentionally outside the
+  redistributable owner until source artifacts are pinned.
 
 ## Problem
 
@@ -46,10 +43,10 @@ auditable, and product-owned.
 
 ## Decision
 
-Create a managed redistributables module for non-runtime media dependencies.
-The module owns catalog entries, expected-file validation, durable selected and
-active version state, local staging installs, and lease planning for conversion
-jobs.
+Keep this directory as a thin compatibility adapter. Catalog entries,
+expected-file validation, durable selected/default/active version state, local
+staging installs, leases, and removal operations are owned by
+`pantograph-managed-dependencies`.
 
 ## Alternatives Rejected
 
@@ -69,8 +66,8 @@ jobs.
 
 ## Dependencies
 
-**Internal:** inference managed dependency paths/state helpers and workflow
-ArtifactStore format capability projections.
+**Internal:** `pantograph-managed-dependencies` redistributable APIs and
+neutral managed dependency DTOs.
 
 **External:** app-owned filesystem storage for staged/installed artifacts.
 
@@ -104,9 +101,9 @@ let status = managed_redistributable_status(root, ManagedRedistributableId::Ffmp
 
 ## Structured Producer Contract
 
-- Catalog and status DTOs are machine-consumed by workflow-service bindings and
-  the workbench Settings page.
-- State files are durable selected/default/active-version records and require
-  schema-versioned migrations if their shape changes.
+- Catalog and status DTOs are re-exported from `pantograph-managed-dependencies`
+  for compatibility.
+- State files are durable selected/default/active-version records owned by the
+  managed-dependency crate.
 - Lease records protect active conversion dependency versions from removal
-  during jobs.
+  during jobs and are owned by the managed-dependency crate.

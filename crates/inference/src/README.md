@@ -19,7 +19,7 @@ details.
 | `gateway_tests/` | Behavior-focused child modules for oversized gateway test families. |
 | `managed_runtime/` | Backend-owned managed binary contracts and orchestration for installable runtime sidecars such as `llama.cpp`, plus temporary adapters into neutral managed-dependency DTOs. |
 | `managed_media_dependencies.rs` | Transitional media dependency activation checks, conversion dependency lease plans, holder validation, and attribution-ready lease records for ffmpeg/OIIO/OCIO tooling while lease ownership moves behind the neutral managed-dependency boundary. |
-| `managed_redistributables/` | Transitional managed redistributable catalog, state, install, activation, lease, removal, and neutral status projection helpers for media dependencies. |
+| `managed_redistributables/` | Compatibility re-exports for media redistributable APIs now owned by `pantograph-managed-dependencies`, plus neutral status projection helpers for inference callers. |
 | `model_contracts.rs` | Transformers-aligned model/package/task facts, generation defaults, Pumas package-facts summary snapshots, and model-library update feeds consumed by inference without taking runtime-selection policy. |
 | `process.rs` | Sidecar process abstraction used by backends that need external runtimes, including the managed-binary launch error tag consumed before backend startup errors are classified. |
 | `types.rs` | Shared request/response contracts consumed across backend and host boundaries. |
