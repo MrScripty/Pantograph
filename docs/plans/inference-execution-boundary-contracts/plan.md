@@ -2634,6 +2634,10 @@ Update during implementation:
   diagnostic-observed payloads, so compatibility and option summaries retain
   the lifecycle phase that produced them without requiring consumers to infer it
   from task ids or node-status projections.
+- 2026-05-03: Workflow run-detail queries now return matching node-status
+  projection rows plus node projection state, exposing selected node task,
+  backend, runtime, and model context without requiring API/UI consumers to
+  parse raw ledger payload JSON.
 
 ## Commit Cadence Notes
 

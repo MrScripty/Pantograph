@@ -177,7 +177,10 @@ pub struct WorkflowRunDetailQueryRequest {
 pub struct WorkflowRunDetailQueryResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run: Option<RunDetailProjectionRecord>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub node_statuses: Vec<NodeStatusProjectionRecord>,
     pub projection_state: ProjectionStateRecord,
+    pub node_projection_state: ProjectionStateRecord,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -650,10 +653,48 @@ impl WorkflowService {
                 ));
             }
         };
+        let node_projection_state = match ledger.drain_node_status_projection(projection_batch_size)
+        {
+            Ok(projection_state) => projection_state,
+            Err(error) => {
+                drop(ledger);
+                return Err(self.projection_error(
+                    projection_error_scope(
+                        "run_detail_node_status",
+                        "drain",
+                        Some(query.workflow_run_id.clone()),
+                        None,
+                    ),
+                    WorkflowServiceError::from(error),
+                ));
+            }
+        };
+        let node_query = NodeStatusProjectionQuery {
+            workflow_run_id: Some(query.workflow_run_id.clone()),
+            limit: 500,
+            ..NodeStatusProjectionQuery::default()
+        };
+        let node_statuses = match ledger.query_node_status_projection(node_query.clone()) {
+            Ok(nodes) => nodes,
+            Err(error) => {
+                drop(ledger);
+                return Err(self.projection_error(
+                    projection_error_scope(
+                        "run_detail_node_status",
+                        "query",
+                        node_query.workflow_run_id,
+                        None,
+                    ),
+                    WorkflowServiceError::from(error),
+                ));
+            }
+        };
 
         Ok(WorkflowRunDetailQueryResponse {
             run,
+            node_statuses,
             projection_state,
+            node_projection_state,
         })
     }
 

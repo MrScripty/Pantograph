@@ -314,6 +314,9 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
   projection estimate fields, including typed scheduler model-cache posture,
   without making frontend callers parse full run detail or raw ledger payload
   rows.
+- Run-detail query responses include matching node-status projection rows and
+  node projection state so selected node task, backend, runtime, and model
+  context remains available without parsing raw ledger payload rows.
 - Queue cancel, reprioritize, and push-front commands emit typed scheduler
   queue-control events when diagnostics are configured. Accepted and denied
   outcomes must be recorded after the scheduler store makes the authority

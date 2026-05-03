@@ -565,6 +565,19 @@ fn workflow_run_detail_query_drains_and_reads_projection() {
     ledger
         .append_diagnostic_event(sample_run_terminal_event())
         .expect("run terminal event");
+    let mut node_event = sample_node_status_event(
+        "node-inference",
+        NodeExecutionProjectionStatus::Completed,
+        1_760_000_000_010,
+    );
+    node_event.model_id = Some("pumas://models/tiny-gguf".to_string());
+    if let DiagnosticEventPayload::NodeExecutionStatus(payload) = &mut node_event.payload {
+        payload.task_id = Some("text_generation".to_string());
+        payload.selected_backend_key = Some("llama_cpp".to_string());
+    }
+    ledger
+        .append_diagnostic_event(node_event)
+        .expect("node status event");
     let service = WorkflowService::new().with_diagnostics_ledger(ledger);
 
     let response = service
@@ -598,6 +611,21 @@ fn workflow_run_detail_query_drains_and_reads_projection() {
     assert_eq!(run.scheduler_reason.as_deref(), Some("warm_session_reused"));
     assert_eq!(run.timeline_event_count, 5);
     assert_eq!(response.projection_state.last_applied_event_seq, 5);
+    assert_eq!(response.node_statuses.len(), 1);
+    assert_eq!(response.node_statuses[0].node_id, "node-inference");
+    assert_eq!(
+        response.node_statuses[0].task_id.as_deref(),
+        Some("text_generation")
+    );
+    assert_eq!(
+        response.node_statuses[0].selected_backend_key.as_deref(),
+        Some("llama_cpp")
+    );
+    assert_eq!(
+        response.node_statuses[0].model_id.as_deref(),
+        Some("pumas://models/tiny-gguf")
+    );
+    assert_eq!(response.node_projection_state.last_applied_event_seq, 6);
 }
 
 #[test]

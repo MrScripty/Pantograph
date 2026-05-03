@@ -309,7 +309,9 @@ export interface WorkflowRunDetailQueryRequest {
 
 export interface WorkflowRunDetailQueryResponse {
   run?: RunDetailProjectionRecord | null;
+  node_statuses: NodeStatusProjectionRecord[];
   projection_state: ProjectionStateRecord;
+  node_projection_state: ProjectionStateRecord;
 }
 
 export interface WorkflowSchedulerEstimateQueryRequest {

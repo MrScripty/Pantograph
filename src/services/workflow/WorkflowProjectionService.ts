@@ -72,9 +72,18 @@ export class WorkflowProjectionService extends WorkflowGraphMutationService {
     if (USE_WORKFLOW_MOCKS) {
       return {
         run: null,
+        node_statuses: [],
         projection_state: {
           projection_name: 'run_detail',
           projection_version: 3,
+          last_applied_event_seq: 0,
+          status: 'current',
+          rebuilt_at_ms: null,
+          updated_at_ms: Date.now(),
+        },
+        node_projection_state: {
+          projection_name: 'node_status',
+          projection_version: 1,
           last_applied_event_seq: 0,
           status: 'current',
           rebuilt_at_ms: null,

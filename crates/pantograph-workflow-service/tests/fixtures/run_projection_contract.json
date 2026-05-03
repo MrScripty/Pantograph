@@ -113,10 +113,46 @@
       "last_event_seq": 15,
       "last_updated_at_ms": 1100
     },
+    "node_statuses": [
+      {
+        "workflow_run_id": "run-1",
+        "workflow_id": "wf-1",
+        "workflow_version_id": "version-1",
+        "workflow_semantic_version": "1.2.3",
+        "node_id": "node-1",
+        "node_type": "llm-inference",
+        "node_version": "1.0.0",
+        "runtime_id": "llama_cpp",
+        "runtime_version": "0.4.0",
+        "task_id": "text_generation",
+        "selected_backend_key": "llama_cpp",
+        "model_id": "pumas://models/tiny-gguf",
+        "model_version": "rev-1",
+        "status": "completed",
+        "started_at_ms": 1020,
+        "completed_at_ms": 1100,
+        "duration_ms": 80,
+        "error": null,
+        "error_event_id": null,
+        "error_severity": null,
+        "error_phase": null,
+        "error_code": null,
+        "last_event_seq": 16,
+        "last_updated_at_ms": 1110
+      }
+    ],
     "projection_state": {
       "projection_name": "run_detail",
       "projection_version": 5,
       "last_applied_event_seq": 15,
+      "status": "current",
+      "rebuilt_at_ms": null,
+      "updated_at_ms": 1110
+    },
+    "node_projection_state": {
+      "projection_name": "node_status",
+      "projection_version": 4,
+      "last_applied_event_seq": 16,
       "status": "current",
       "rebuilt_at_ms": null,
       "updated_at_ms": 1110
