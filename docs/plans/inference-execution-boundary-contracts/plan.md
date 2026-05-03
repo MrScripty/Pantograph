@@ -1251,10 +1251,13 @@ to gate behavior without backend-name conditionals.
 - [x] Report preprocessing and postprocessing capability separately from model
   execution capability where component files or backend processors are missing.
 - [x] Keep existing fields compatible until consumers migrate.
-- [ ] Add tests proving declared unsupported operations return explicit errors.
+- [x] Add tests proving declared unsupported operations return explicit errors.
   - [x] Compatibility-report tests now prove missing package components and
     unsupported requested KV-cache options produce explicit issue/option
     diagnostics.
+  - [x] Backend trait default-operation tests prove unsupported image generation
+    and KV-cache fingerprint requests return explicit `BackendError::Inference`
+    messages.
 
 **Verification:**
 - `cargo test -p inference` focused on backend capability and gateway tests.
@@ -1292,7 +1295,9 @@ can now consume the improved host decision through its existing path. The
 seventh slice projected backend model-source capability facts into workflow-owned
 runtime capability DTOs and TypeScript contracts so graph/preflight consumers
 can inspect artifact-kind, backend-hint, and custom-code support without
-depending on inference crate internals.
+depending on inference crate internals. The eighth slice added default
+unsupported-operation tests for image generation and KV-cache fingerprint
+requests at the backend trait boundary.
 
 ### Milestone 8: Add Runtime Fact Snapshots
 

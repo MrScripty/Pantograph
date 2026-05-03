@@ -259,9 +259,72 @@ impl BackendCapabilities {
 
 #[cfg(test)]
 mod capability_tests {
+    use futures_util::stream;
     use serde_json::json;
 
     use super::*;
+
+    struct UnsupportedBackend;
+
+    #[async_trait]
+    impl InferenceBackend for UnsupportedBackend {
+        fn name(&self) -> &'static str {
+            "unsupported"
+        }
+
+        fn description(&self) -> &'static str {
+            "unsupported backend"
+        }
+
+        fn capabilities(&self) -> BackendCapabilities {
+            BackendCapabilities::default()
+        }
+
+        async fn start(
+            &mut self,
+            _config: &BackendConfig,
+            _spawner: Arc<dyn ProcessSpawner>,
+        ) -> Result<BackendStartOutcome, BackendError> {
+            Ok(BackendStartOutcome::default())
+        }
+
+        fn stop(&mut self) {}
+
+        fn is_ready(&self) -> bool {
+            true
+        }
+
+        async fn health_check(&self) -> bool {
+            true
+        }
+
+        fn base_url(&self) -> Option<String> {
+            None
+        }
+
+        async fn chat_completion_stream(
+            &self,
+            _request_json: String,
+        ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, BackendError>
+        {
+            Ok(Box::pin(stream::empty()))
+        }
+
+        async fn embeddings(
+            &self,
+            _texts: Vec<String>,
+            _model: &str,
+        ) -> Result<Vec<EmbeddingResult>, BackendError> {
+            Ok(Vec::new())
+        }
+
+        async fn rerank(&self, _request: RerankRequest) -> Result<RerankResponse, BackendError> {
+            Ok(RerankResponse {
+                results: Vec::new(),
+                metadata: serde_json::Value::Null,
+            })
+        }
+    }
 
     #[test]
     fn backend_capabilities_deserialize_without_structured_facts() {
@@ -311,6 +374,45 @@ mod capability_tests {
         assert_eq!(
             BackendFeatureSupport::from_legacy_bool(false),
             BackendFeatureSupport::Unsupported
+        );
+    }
+
+    #[tokio::test]
+    async fn default_image_generation_returns_explicit_unsupported_error() {
+        let error = UnsupportedBackend
+            .generate_image(ImageGenerationRequest {
+                model: "model".to_string(),
+                prompt: "prompt".to_string(),
+                negative_prompt: None,
+                width: None,
+                height: None,
+                num_inference_steps: None,
+                guidance_scale: None,
+                seed: None,
+                scheduler: None,
+                num_images_per_prompt: None,
+                init_image: None,
+                mask_image: None,
+                strength: None,
+                extra_options: serde_json::Value::Null,
+            })
+            .await
+            .expect_err("default image generation should be unsupported");
+
+        assert!(
+            matches!(error, BackendError::Inference(message) if message.contains("Image generation not supported"))
+        );
+    }
+
+    #[tokio::test]
+    async fn default_kv_cache_fingerprint_returns_explicit_unsupported_error() {
+        let error = UnsupportedBackend
+            .kv_cache_runtime_fingerprint(None)
+            .await
+            .expect_err("default kv-cache fingerprint should be unsupported");
+
+        assert!(
+            matches!(error, BackendError::Inference(message) if message.contains("KV cache runtime fingerprint not supported"))
         );
     }
 }
