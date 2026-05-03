@@ -137,58 +137,19 @@ pub(crate) async fn execute_llm_inference(
         return Ok(outputs);
     }
 
-    let prompt = inputs
-        .get("prompt")
-        .and_then(|p| p.as_str())
-        .ok_or_else(|| NodeEngineError::ExecutionFailed("Missing prompt input".to_string()))?;
-
-    let system_prompt = inputs.get("system_prompt").and_then(|p| p.as_str());
-    let extra_context = inputs.get("context").and_then(|c| c.as_str());
-
-    let full_prompt = if let Some(ctx) = extra_context {
-        format!("{}\n\nContext:\n{}", prompt, ctx)
-    } else {
-        prompt.to_string()
-    };
-
-    let mut messages = Vec::new();
-    if let Some(sys) = system_prompt {
-        messages.push(serde_json::json!({"role": "system", "content": sys}));
-    }
-    messages.push(serde_json::json!({"role": "user", "content": full_prompt}));
-    let model_name = read_optional_input_string_aliases(
-        inputs,
-        &["model_name", "modelName", "model", "model_id", "modelId"],
-    )
-    .unwrap_or_else(|| "gpt-4".to_string());
-
-    let streaming = event_sink.is_some();
-    let mut request_body = serde_json::json!({
-        "model": model_name,
-        "messages": messages,
-        "stream": streaming
-    });
-
-    // Forward model-specific inference settings into the request body
-    let extra_settings = build_extra_settings(inputs);
-    for (key, value) in &extra_settings {
-        request_body[key] = value.clone();
-    }
-
     let response = if let Some(sink) = event_sink {
-        let request_json = serde_json::to_string(&request_body).map_err(|error| {
-            NodeEngineError::ExecutionFailed(format!("Failed to encode LLM request: {error}"))
-        })?;
-        let request_id = Some(inference_request_id(
-            task_id,
-            execution_id,
-            inference::InferenceTaskId::TextGeneration.canonical_label(),
-        ));
+        let mut request = build_text_generation_execution_request(inputs)?;
+        assign_typed_request_id(&mut request, task_id, execution_id);
+        if let inference::InferenceExecutionInput::TextGeneration { stream, .. } =
+            &mut request.input
+        {
+            *stream = true;
+        }
         let mut token_stream = if let Some(lifecycle_sink) = inference_lifecycle_sink(extensions) {
-            gw.chat_completion_stream_with_lifecycle(request_json, request_id, lifecycle_sink)
+            gw.stream_typed_text_with_lifecycle(request, lifecycle_sink)
                 .await
         } else {
-            gw.chat_completion_stream(request_json).await
+            gw.stream_typed_text(request).await
         }
         .map_err(|error| {
             NodeEngineError::ExecutionFailed(format!("LLM request failed: {error}"))

@@ -1755,12 +1755,15 @@ backend inference outside migration diagnostics.
 Node-engine non-streaming canonical `llm-inference` text/chat execution now
 builds `InferenceExecutionRequest` from prompt, context, task kind, runtime
 hint, Pumas model reference, and grouped generation options, then executes
-through `InferenceGateway::execute_typed`; typed token-stream request/result
-contracts remain deferred.
+through `InferenceGateway::execute_typed`.
 Node-engine generic streaming text/chat execution now also routes through the
 gateway streaming facade instead of posting directly over HTTP from node-engine,
 preserving graph `TaskStream` event shape while making backend/lifecycle facts
 available through the gateway.
+The streaming path now builds the same canonical `InferenceExecutionRequest`
+shape and calls typed gateway stream methods, so OpenAI-compatible streaming
+JSON stays inside the gateway adapter while graph-visible `TaskStream` output
+remains unchanged.
 Node-engine canonical `llm-inference` embedding execution now also builds an
 `InferenceExecutionRequest` from text, runtime hint, model alias, and Pumas
 model reference, then executes through `InferenceGateway::execute_typed` while
@@ -2174,6 +2177,9 @@ Update during implementation:
 - 2026-05-03: Routed generic `llm-inference` streaming text/chat execution
   through the inference gateway stream facade instead of node-engine direct HTTP
   transport while preserving `TaskStream` event output.
+- 2026-05-03: Added typed text/chat stream gateway methods and moved
+  node-engine streaming `llm-inference` onto `InferenceExecutionRequest`,
+  including task-validation lifecycle facts for diagnostics-aware hosts.
 - 2026-05-03: Wired embedded-runtime execution paths to provide the
   `INFERENCE_LIFECYCLE_SINK` and persist bounded inference lifecycle facts
   through workflow-service diagnostics, with regression coverage against the

@@ -812,6 +812,73 @@ impl InferenceGateway {
         }
     }
 
+    /// Stream a typed text/chat generation request.
+    ///
+    /// This keeps OpenAI-compatible transport JSON inside the gateway adapter
+    /// while callers use the canonical typed request contract.
+    pub async fn stream_typed_text(
+        &self,
+        request: InferenceExecutionRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, GatewayError>
+    {
+        request.validate()?;
+        let request_json = typed_text_generation_stream_request_json(request)?;
+        self.chat_completion_stream(request_json).await
+    }
+
+    /// Stream a typed text/chat generation request and emit lifecycle facts.
+    pub async fn stream_typed_text_with_lifecycle(
+        &self,
+        request: InferenceExecutionRequest,
+        lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink>,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, BackendError>> + Send>>, GatewayError>
+    {
+        let (backend_key, runtime_id, runtime_instance_id) = self.lifecycle_event_context().await;
+        let request_id = request.request_id.clone();
+        let model_id = non_empty_model_id(&typed_request_model_name(&request));
+        record_inference_lifecycle_phase_event(
+            lifecycle_sink.as_ref(),
+            InferenceLifecyclePhase::TaskValidation,
+            request_id.clone(),
+            backend_key.clone(),
+            runtime_id.clone(),
+            runtime_instance_id.clone(),
+            model_id.clone(),
+            InferenceRequestLifecycleEventKind::Started,
+            None,
+        );
+
+        let validation_result = request.validate().map_err(GatewayError::Validation);
+        if let Err(error) = validation_result {
+            let result = Err(error);
+            record_non_streaming_lifecycle_phase_result(
+                lifecycle_sink.as_ref(),
+                InferenceLifecyclePhase::TaskValidation,
+                request_id,
+                backend_key,
+                runtime_id,
+                runtime_instance_id,
+                model_id,
+                &result,
+            );
+            return result;
+        }
+
+        record_non_streaming_lifecycle_phase_result(
+            lifecycle_sink.as_ref(),
+            InferenceLifecyclePhase::TaskValidation,
+            request_id.clone(),
+            backend_key,
+            runtime_id,
+            runtime_instance_id,
+            model_id,
+            &Ok(()),
+        );
+        let request_json = typed_text_generation_stream_request_json(request)?;
+        self.chat_completion_stream_with_lifecycle(request_json, request_id, lifecycle_sink)
+            .await
+    }
+
     /// Generate embeddings for the given texts
     pub async fn embeddings(
         &self,
@@ -1311,6 +1378,40 @@ fn typed_text_generation_to_chat_request(
         temperature: generation_options.and_then(|options| options.sampling.temperature),
         top_p: generation_options.and_then(|options| options.sampling.top_p),
         top_k: generation_options.and_then(|options| options.sampling.top_k),
+    }
+}
+
+fn typed_text_generation_stream_request_json(
+    request: InferenceExecutionRequest,
+) -> Result<String, GatewayError> {
+    let model = typed_request_model_name(&request);
+    match request.input {
+        InferenceExecutionInput::TextGeneration {
+            prompt,
+            system_prompt,
+            messages,
+            ..
+        } => {
+            let chat_request = typed_text_generation_to_chat_request(
+                model,
+                prompt,
+                system_prompt,
+                messages,
+                true,
+                request.generation_options.as_ref(),
+            );
+            serde_json::to_string(&chat_request).map_err(|error| {
+                GatewayError::Backend(BackendError::Inference(format!(
+                    "Failed to encode typed streaming chat request: {error}"
+                )))
+            })
+        }
+        other => Err(GatewayError::Validation(
+            InferenceExecutionRequestValidationError::TaskInputMismatch {
+                task_id: request.task_id,
+                input_type: other.input_type_label(),
+            },
+        )),
     }
 }
 

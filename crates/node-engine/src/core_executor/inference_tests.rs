@@ -227,10 +227,21 @@ async fn test_execute_llm_inference_streaming_uses_gateway_stream_boundary() {
         other => panic!("expected task stream event, got {other:?}"),
     }
     let events = lifecycle_events.lock().expect("lifecycle events lock");
-    assert_eq!(events.len(), 3);
-    assert!(events
-        .iter()
-        .all(|event| event.phase == InferenceLifecyclePhase::BackendExecution));
+    assert_eq!(events.len(), 6);
+    assert_eq!(events[0].phase, InferenceLifecyclePhase::TaskValidation);
+    assert_eq!(events[0].kind, InferenceRequestLifecycleEventKind::Started);
+    assert_eq!(events[1].phase, InferenceLifecyclePhase::TaskValidation);
+    assert_eq!(
+        events[1].kind,
+        InferenceRequestLifecycleEventKind::Completed
+    );
+    assert_eq!(events[3].phase, InferenceLifecyclePhase::BackendExecution);
+    assert_eq!(events[3].kind, InferenceRequestLifecycleEventKind::Started);
+    assert_eq!(events[4].phase, InferenceLifecyclePhase::BackendExecution);
+    assert_eq!(
+        events[4].kind,
+        InferenceRequestLifecycleEventKind::Completed
+    );
     assert_eq!(
         events[0].request_id.as_deref(),
         Some("exec-a:llm-inference-1:text_generation")

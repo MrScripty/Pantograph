@@ -1071,6 +1071,78 @@ async fn test_chat_completion_stream_with_lifecycle_records_completion() {
 }
 
 #[tokio::test]
+async fn test_stream_typed_text_with_lifecycle_records_validation_and_backend_phases() {
+    let gateway = InferenceGateway::with_backend(
+        Box::new(MockLifecycleStreamBackend {
+            fail_on_stream: false,
+        }),
+        "mock",
+    );
+    let sink = Arc::new(RecordingLifecycleSink::default());
+
+    let request = InferenceExecutionRequest {
+        request_id: Some("req-typed-stream".to_string()),
+        task_id: InferenceTaskId::TextGeneration,
+        model_ref: None,
+        model_name: Some("typed-model".to_string()),
+        runtime_hint: None,
+        input: InferenceExecutionInput::TextGeneration {
+            prompt: Some("hello".to_string()),
+            system_prompt: None,
+            messages: Vec::new(),
+            stream: true,
+        },
+        generation_options: None,
+        extra_options: serde_json::Value::Null,
+    };
+
+    let mut stream = gateway
+        .stream_typed_text_with_lifecycle(request, sink.clone())
+        .await
+        .expect("typed stream should start");
+    let mut response = String::new();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.expect("stream chunk");
+        if let Some(content) = chunk.content {
+            response.push_str(&content);
+        }
+    }
+
+    assert_eq!(response, "hello");
+    let events = sink.events();
+    assert_eq!(events.len(), 6);
+    assert_eq!(events[0].phase, InferenceLifecyclePhase::TaskValidation);
+    assert_eq!(events[0].kind, InferenceRequestLifecycleEventKind::Started);
+    assert_eq!(events[1].phase, InferenceLifecyclePhase::TaskValidation);
+    assert_eq!(
+        events[1].kind,
+        InferenceRequestLifecycleEventKind::Completed
+    );
+    assert_eq!(events[2].phase, InferenceLifecyclePhase::TaskValidation);
+    assert_eq!(
+        events[2].kind,
+        InferenceRequestLifecycleEventKind::CleanupCompleted
+    );
+    assert_eq!(events[3].phase, InferenceLifecyclePhase::BackendExecution);
+    assert_eq!(events[3].kind, InferenceRequestLifecycleEventKind::Started);
+    assert_eq!(events[4].phase, InferenceLifecyclePhase::BackendExecution);
+    assert_eq!(
+        events[4].kind,
+        InferenceRequestLifecycleEventKind::Completed
+    );
+    assert_eq!(events[5].phase, InferenceLifecyclePhase::BackendExecution);
+    assert_eq!(
+        events[5].kind,
+        InferenceRequestLifecycleEventKind::CleanupCompleted
+    );
+    assert!(events.iter().all(|event| {
+        event.request_id.as_deref() == Some("req-typed-stream")
+            && event.backend_key.as_deref() == Some("mock")
+            && event.model_id.as_deref() == Some("typed-model")
+    }));
+}
+
+#[tokio::test]
 async fn test_chat_completion_stream_with_lifecycle_records_stream_failure() {
     let gateway = InferenceGateway::with_backend(
         Box::new(MockLifecycleStreamBackend {
