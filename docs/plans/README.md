@@ -13,6 +13,7 @@ repository root.
 | ----------- | ----------- |
 | `pantograph-execution-platform/` | Canonical execution-platform plan set covering attribution, node contracts, runtime observability, diagnostics ledger, composition, bindings, reusable stage gates, ArtifactStore/settings/media dependencies, and the consolidated run-centric workbench plan. |
 | `diagnostics-run-history-projection/` | Focused plan for diagnostics run-history projections. |
+| `inference-execution-boundary-contracts/` | Focused plan family for strengthening inference-produced capability, lifecycle, execution, diagnostics-ledger, and Pumas package-fact contracts without moving scheduling or model-library policy into inference. |
 | `managed-binary-runtime-readiness/` | Focused plan for unified managed binary truth and real runtime model-load readiness. |
 | `scheduler-only-workflow-execution/` | Focused plan for scheduler-owned workflow execution behavior. |
 | `workflow-duration-expectations/` | Focused plan for workflow timing expectation behavior. |
