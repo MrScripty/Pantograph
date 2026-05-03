@@ -1152,7 +1152,7 @@ and command resolution.
 - [x] Define dependency ownership explicitly so runtime sidecar dependencies,
   media tool dependencies, and native artifact dependencies are declared by the
   crate/package that owns their execution or command resolution.
-- [ ] For any new dependency or native artifact, record why in-house code is
+- [x] For any new dependency or native artifact, record why in-house code is
   insufficient, transitive dependency cost, license/security notes, platform
   support, and feature-gating behavior.
 - [x] Define typed dependency categories for runtime sidecars, media tools, and
@@ -1190,6 +1190,13 @@ scheduler admission, runtime reservation, workflow policy, or frontend
 projection. Existing inference managers still own implementation and persisted
 state until a later adapter/migration slice defines import behavior and moves
 consumers behind the neutral boundary.
+
+**Dependency review:** The managed-dependency boundary slices added internal
+workspace dependencies on `pantograph-managed-dependencies` from inference,
+workflow-service, and media-conversion. No new third-party crate, binary,
+native artifact, license obligation, platform artifact, or feature-gated
+external dependency was introduced. The new crate depends only on workspace
+`serde` for DTO serialization.
 
 **State migration/import behavior:** The neutral managed-dependency owner must
 preserve the existing app-data roots as import sources before it writes a new
