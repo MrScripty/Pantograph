@@ -1241,7 +1241,10 @@ conversion lease projections and OpenColorIO activation validation; and
 status/command facts. `pantograph-media-conversion` already owns conversion
 planning and media dependency identifiers, while `pantograph-uniffi`,
 `pantograph-embedded-runtime`, `pantograph-workflow-service`, and inference
-tests still consume inference-owned managed dependency APIs.
+tests still consume inference-owned managed dependency APIs. UniFFI now exposes
+a new neutral `managed_dependency_statuses` JSON method for runtime and media
+dependency status migration, while the existing managed-media methods remain
+compatibility surfaces returning the legacy redistributable shape.
 
 **Implementation findings:** Do not move media conversion DTOs by type alias
 without a JSON compatibility decision: inference `MediaConversionJobKind::ThreeD`

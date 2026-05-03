@@ -340,6 +340,16 @@ impl FfiPantographRuntime {
         serialize_response(&response)
     }
 
+    /// Return neutral ManagedDependencyStatus JSON for runtime and media dependencies.
+    pub fn managed_dependency_statuses(&self) -> Result<String, FfiError> {
+        let mut response = inference::list_managed_runtime_dependency_statuses(&self.app_data_dir)
+            .map_err(map_managed_dependency_error)?;
+        response.extend(inference::list_managed_dependency_statuses(
+            &self.app_data_dir,
+        ));
+        serialize_response(&response)
+    }
+
     /// Return ManagedRedistributableStatus JSON for one managed media dependency.
     pub fn managed_media_dependency_status(
         &self,
@@ -1011,6 +1021,10 @@ fn map_node_engine_error(err: node_engine::NodeEngineError) -> FfiError {
 
 fn map_managed_media_dependency_error(err: String) -> FfiError {
     workflow_adapter_error(WorkflowErrorCode::InvalidRequest, err)
+}
+
+fn map_managed_dependency_error(err: String) -> FfiError {
+    workflow_adapter_error(WorkflowErrorCode::InternalError, err)
 }
 
 fn workflow_error_json(code: WorkflowErrorCode, message: impl Into<String>) -> String {

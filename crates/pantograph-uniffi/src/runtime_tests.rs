@@ -901,6 +901,26 @@ async fn direct_runtime_exposes_managed_media_dependency_statuses_and_actions_js
         );
     }
 
+    let neutral_statuses_json = runtime
+        .managed_dependency_statuses()
+        .expect("list neutral managed dependency statuses");
+    let neutral_statuses: serde_json::Value = serde_json::from_str(&neutral_statuses_json)
+        .expect("parse neutral managed dependency statuses");
+    let neutral_statuses = neutral_statuses.as_array().expect("neutral statuses array");
+    assert!(neutral_statuses.iter().any(|status| {
+        status["key"]["runtime_sidecar"] == serde_json::json!("llama_cpp")
+            && status["category"] == serde_json::json!("runtime_sidecar")
+            && status["readiness_state"] == serde_json::json!("ready")
+    }));
+    assert!(neutral_statuses.iter().any(|status| {
+        status["key"]["media_tool"] == serde_json::json!("ffmpeg")
+            && status["category"] == serde_json::json!("media_tool")
+    }));
+    assert!(neutral_statuses.iter().any(|status| {
+        status["key"]["native_artifact"] == serde_json::json!("open_color_io")
+            && status["category"] == serde_json::json!("native_artifact")
+    }));
+
     for id in [
         ManagedRedistributableId::Ffmpeg,
         ManagedRedistributableId::Ocioconvert,
