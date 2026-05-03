@@ -197,6 +197,20 @@ fn test_pytorch_worker_load_envelope_decodes_fixture() {
     assert_eq!(envelope.payload.task_id, InferenceTaskId::TextGeneration);
     assert_eq!(envelope.payload.device.as_deref(), Some("cuda:0"));
     assert!(!envelope.payload.trust_policy.allow_remote_code);
+    assert!(envelope.payload.trust_policy.local_files_only);
+    assert_eq!(
+        envelope.payload.trust_policy.cache_policy,
+        ModelLoadCachePolicy::BackendDefault
+    );
+    assert_eq!(
+        envelope.payload.trust_policy.auth_token_source,
+        ModelAuthTokenSource::None
+    );
+    assert_eq!(
+        envelope.payload.trust_policy.revision.as_deref(),
+        Some("rev-1")
+    );
+    assert!(envelope.payload.trust_policy.code_revision.is_none());
     assert!(envelope.payload.trust_policy.accepted_sources.is_empty());
 }
 

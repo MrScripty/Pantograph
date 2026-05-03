@@ -18,6 +18,11 @@
     "device": "cuda:0",
     "trust_policy": {
       "allow_remote_code": false,
+      "local_files_only": true,
+      "cache_policy": "backend_default",
+      "auth_token_source": "none",
+      "revision": "rev-1",
+      "code_revision": null,
       "accepted_sources": []
     },
     "generation_defaults": {

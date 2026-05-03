@@ -1131,6 +1131,10 @@ id, and accepted custom-code sources. PyTorch/Transformers adapts its
 backend-local trust envelope from this public policy and passes local-file,
 revision, code-revision, and cache-policy facts to the embedded worker without
 exposing secret token values.
+The PyTorch worker load-envelope fixture now explicitly carries the
+local/offline, cache, auth-token source, revision, and code-revision policy
+fields so Rust/Python wire-shape tests exercise the stable security contract
+instead of relying only on serde defaults.
 Node-engine text/chat request construction now validates supplied `task_kind`,
 `taskKind`, `task_id`, and `taskId` labels through the inference task registry.
 Missing task labels still default to text generation for existing text nodes,
