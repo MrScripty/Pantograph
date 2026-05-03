@@ -1652,6 +1652,9 @@ warning set.
 Embedded-runtime embedding preparation now detects canonical `llm-inference`
 nodes with `task_kind = embedding` and reads model identity from canonical
 Pumas model references instead of the retired `embedding` node and `model` port.
+Workflow-service session graph hydration/sync now derives embedding metadata
+emission from canonical embedding inference nodes instead of the retired
+`embedding` node type.
 
 ### Milestone 12: Prepare Native Candle Slice
 
