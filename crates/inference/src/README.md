@@ -225,6 +225,10 @@ async fn run_image_request(gateway: &InferenceGateway, config: &BackendConfig) {
 - `rerank()` accepts one query plus candidate documents and returns scored,
   ordered results; callers should treat response order, not input order, as
   authoritative.
+- Typed text/chat generation maps grouped generation options such as
+  `length.max_new_tokens`, `sampling.temperature`, `sampling.top_p`, and
+  `sampling.top_k` into the OpenAI-compatible chat edge. Backend-native names
+  stay adapter-local.
 - Process-backed diffusion loaders may infer narrow bundle-root load overrides
   such as consistent safetensors variants when the diffusers directory layout
   makes them deterministic.
@@ -241,6 +245,8 @@ async fn run_image_request(gateway: &InferenceGateway, config: &BackendConfig) {
   invalidation events.
 - Optional fields preserve meaning when omitted; callers may rely on omission as
   “backend default”.
+- `ChatRequest` is an edge DTO; additive fields must be introduced only when
+  they preserve typed `GenerationOptions` semantics for gateway consumers.
 - `ServerModeInfo` is the backend-owned runtime status contract for GUI and host
   adapters; hosts should consume it directly instead of deriving reduced local
   status shapes.

@@ -1228,6 +1228,8 @@ fn typed_text_generation_to_chat_request(
         stream,
         max_tokens: generation_options.and_then(|options| options.length.max_new_tokens),
         temperature: generation_options.and_then(|options| options.sampling.temperature),
+        top_p: generation_options.and_then(|options| options.sampling.top_p),
+        top_k: generation_options.and_then(|options| options.sampling.top_k),
     }
 }
 

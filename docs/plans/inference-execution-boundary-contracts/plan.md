@@ -2116,6 +2116,10 @@ Update during implementation:
   rerank, and image-generation backend methods. This provides gateway mock
   coverage for typed execution semantics without replacing existing facade
   entry points.
+- 2026-05-03: Expanded the typed text/chat generation edge mapping so
+  `sampling.top_p` and `sampling.top_k` travel with `max_new_tokens` and
+  `temperature` through `ChatRequest` and `InferenceGateway::execute_typed`
+  instead of being dropped at the OpenAI-compatible adapter edge.
 
 ## Commit Cadence Notes
 

@@ -41,6 +41,10 @@ pub struct ChatRequest {
     pub max_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub top_p: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub top_k: Option<u32>,
 }
 
 /// Canonical task execution request consumed by future typed backend paths.
@@ -74,7 +78,11 @@ impl InferenceExecutionRequest {
     /// [`InferenceExecutionRequest::validate`] before execution.
     #[must_use]
     pub fn from_openai_chat_request(request_id: Option<String>, request: ChatRequest) -> Self {
-        let generation_options = if request.max_tokens.is_some() || request.temperature.is_some() {
+        let generation_options = if request.max_tokens.is_some()
+            || request.temperature.is_some()
+            || request.top_p.is_some()
+            || request.top_k.is_some()
+        {
             Some(GenerationOptions {
                 length: crate::model_contracts::LengthGenerationOptions {
                     max_new_tokens: request.max_tokens,
@@ -82,6 +90,8 @@ impl InferenceExecutionRequest {
                 },
                 sampling: crate::model_contracts::SamplingGenerationOptions {
                     temperature: request.temperature,
+                    top_p: request.top_p,
+                    top_k: request.top_k,
                     ..Default::default()
                 },
                 ..Default::default()
@@ -929,6 +939,8 @@ mod tests {
             stream: true,
             max_tokens: Some(32),
             temperature: Some(0.4),
+            top_p: Some(0.9),
+            top_k: Some(40),
         };
 
         let typed = InferenceExecutionRequest::from_openai_chat_request(
@@ -952,6 +964,20 @@ mod tests {
                 .as_ref()
                 .and_then(|options| options.sampling.temperature),
             Some(0.4)
+        );
+        assert_eq!(
+            typed
+                .generation_options
+                .as_ref()
+                .and_then(|options| options.sampling.top_p),
+            Some(0.9)
+        );
+        assert_eq!(
+            typed
+                .generation_options
+                .as_ref()
+                .and_then(|options| options.sampling.top_k),
+            Some(40)
         );
     }
 

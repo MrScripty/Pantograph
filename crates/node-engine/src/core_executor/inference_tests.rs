@@ -144,7 +144,11 @@ async fn test_execute_llm_inference_non_streaming_uses_typed_gateway_boundary() 
         "generation_options".to_string(),
         serde_json::json!({
             "length": {"max_new_tokens": 16},
-            "sampling": {"temperature": 0.2}
+            "sampling": {
+                "temperature": 0.2,
+                "top_p": 0.8,
+                "top_k": 40
+            }
         }),
     );
 
@@ -163,6 +167,8 @@ async fn test_execute_llm_inference_non_streaming_uses_typed_gateway_boundary() 
     assert_eq!(captured[0]["model"], serde_json::json!("typed-model"));
     assert_eq!(captured[0]["max_tokens"], serde_json::json!(16));
     assert_eq!(captured[0]["temperature"], serde_json::json!(0.2));
+    assert_eq!(captured[0]["top_p"], serde_json::json!(0.8));
+    assert_eq!(captured[0]["top_k"], serde_json::json!(40));
 }
 
 #[cfg(feature = "inference-nodes")]
