@@ -261,22 +261,11 @@ pub fn extract_model_usages(nodes: &[StoredGraphNode]) -> Vec<ModelUsage> {
 pub fn extract_required_backends(nodes: &[StoredGraphNode]) -> Vec<String> {
     let mut out = HashSet::new();
     for node in nodes {
-        if let Some(backend_key) = backend_key_for_node_type(node.node_type()) {
-            out.insert(backend_key.to_string());
-        }
         extract_backend_keys_from_value(&node.data, &mut out);
     }
     let mut backends = out.into_iter().collect::<Vec<_>>();
     backends.sort();
     backends
-}
-
-fn backend_key_for_node_type(node_type: &str) -> Option<&'static str> {
-    match node_type {
-        "llamacpp-inference" => Some("llama_cpp"),
-        "pytorch-inference" => Some("pytorch"),
-        _ => None,
-    }
 }
 
 fn workflow_uses_kv_cache(nodes: &[StoredGraphNode], edges: &[StoredGraphEdge]) -> bool {
@@ -489,12 +478,24 @@ fn extract_backend_keys_from_value(value: &serde_json::Value, out: &mut HashSet<
     match value {
         serde_json::Value::Object(map) => {
             for (key, child) in map {
-                if key.eq_ignore_ascii_case("backend_key") || key.eq_ignore_ascii_case("backendKey")
+                if key.eq_ignore_ascii_case("backend_key")
+                    || key.eq_ignore_ascii_case("backendKey")
+                    || key.eq_ignore_ascii_case("recommended_backend")
+                    || key.eq_ignore_ascii_case("recommendedBackend")
                 {
                     if let Some(raw) = child.as_str() {
                         let canonical_backend_key = canonical_runtime_backend_key(raw);
                         if !canonical_backend_key.is_empty() {
                             out.insert(canonical_backend_key);
+                        }
+                    }
+                }
+                if key.eq_ignore_ascii_case("runtime_hint")
+                    || key.eq_ignore_ascii_case("runtimeHint")
+                {
+                    if let Some(raw) = child.as_str() {
+                        if let Some(backend_key) = backend_key_for_runtime_hint(raw) {
+                            out.insert(backend_key);
                         }
                     }
                 }
@@ -507,6 +508,26 @@ fn extract_backend_keys_from_value(value: &serde_json::Value, out: &mut HashSet<
             }
         }
         _ => {}
+    }
+}
+
+fn backend_key_for_runtime_hint(raw: &str) -> Option<String> {
+    let normalized = raw.trim().to_ascii_lowercase();
+    if normalized.is_empty() || normalized == "retired_ollama" {
+        return None;
+    }
+
+    let backend_key = match normalized.as_str() {
+        "transformers_pytorch"
+        | "transformers-pytorch"
+        | "pytorch_transformers"
+        | "pytorch-transformers" => "pytorch".to_string(),
+        other => canonical_runtime_backend_key(other),
+    };
+    if backend_key.is_empty() {
+        None
+    } else {
+        Some(backend_key)
     }
 }
 
@@ -664,19 +685,25 @@ mod tests {
         let nodes = vec![
             StoredGraphNode {
                 id: "torch".to_string(),
-                node_type: "pytorch-inference".to_string(),
-                data: serde_json::json!({}),
+                node_type: "llm-inference".to_string(),
+                data: serde_json::json!({"runtime_hint": "transformers_pytorch"}),
                 position: StoredPosition::default(),
             },
             StoredGraphNode {
                 id: "llama".to_string(),
-                node_type: "llamacpp-inference".to_string(),
-                data: serde_json::json!({}),
+                node_type: "llm-inference".to_string(),
+                data: serde_json::json!({"runtime_hint": "llamacpp"}),
                 position: StoredPosition::default(),
             },
             StoredGraphNode {
                 id: "ollama".to_string(),
-                node_type: "ollama-inference".to_string(),
+                node_type: "llm-inference".to_string(),
+                data: serde_json::json!({"runtime_hint": "retired_ollama"}),
+                position: StoredPosition::default(),
+            },
+            StoredGraphNode {
+                id: "legacy".to_string(),
+                node_type: "llamacpp-inference".to_string(),
                 data: serde_json::json!({}),
                 position: StoredPosition::default(),
             },

@@ -1643,6 +1643,10 @@ mocks no longer expose retired backend-specific inference renderers, the GGUF
 reranker template now uses canonical `llm-inference` with
 `task_kind = rerank`, and `puma-lib` exposes a canonical JSON
 `pumas_model_ref` output for Pumas-to-inference graph wiring.
+Workflow-service capability extraction no longer infers llama.cpp or PyTorch
+requirements from retired node type names; it derives backend requirements from
+canonical `runtime_hint`, `backend_key`, or Pumas `recommended_backend` data and
+ignores `retired_ollama` hints.
 
 ### Milestone 12: Prepare Native Candle Slice
 
