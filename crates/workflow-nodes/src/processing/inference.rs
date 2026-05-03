@@ -100,6 +100,8 @@ impl InferenceTask {
     pub const PORT_TASK_OPTIONS: &'static str = "task_options";
     /// Port ID for prompt input
     pub const PORT_PROMPT: &'static str = "prompt";
+    /// Port ID for audio input used by transcription tasks
+    pub const PORT_AUDIO: &'static str = "audio";
     /// Port ID for system prompt input
     pub const PORT_SYSTEM_PROMPT: &'static str = "system_prompt";
     /// Port ID for context input (additional context to append)
@@ -167,6 +169,7 @@ impl TaskDescriptor for InferenceTask {
                     PortDataType::Json,
                 ),
                 PortMetadata::required(Self::PORT_PROMPT, "Prompt", PortDataType::Prompt),
+                PortMetadata::optional(Self::PORT_AUDIO, "Audio", PortDataType::Audio),
                 PortMetadata::optional(
                     Self::PORT_SYSTEM_PROMPT,
                     "System Prompt",
@@ -456,6 +459,10 @@ mod tests {
             .iter()
             .any(|p| p.id == InferenceTask::PORT_PUMAS_MODEL_REF
                 && p.data_type == PortDataType::Json));
+        assert!(meta
+            .inputs
+            .iter()
+            .any(|p| p.id == InferenceTask::PORT_AUDIO && p.data_type == PortDataType::Audio));
         assert!(meta
             .inputs
             .iter()

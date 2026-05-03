@@ -1613,9 +1613,12 @@ have a stable graph-visible target before backend execution uses every field.
 Saved-workflow canonicalization now structurally migrates legacy
 `llamacpp-inference` nodes to `llm-inference`, rewrites compatible model-ref
 ports, preserves generation option values into canonical node data, and records
-unresolved Pumas model-reference diagnostics. Pumas-backed GGUF resolution,
-mmproj-specific preservation, PyTorch, embedding, reranker, frontend/template,
-and validation slices remain open.
+unresolved Pumas model-reference diagnostics. It also migrates legacy
+`pytorch-inference` nodes to `llm-inference`, preserves PyTorch/Transformers
+runtime evidence, maps ASR-style legacy model types to `audio_transcription`,
+and keeps audio input topology compatible with the canonical descriptor.
+Pumas-backed GGUF/HF resolution, mmproj-specific preservation, embedding,
+reranker, frontend/template, and validation slices remain open.
 
 ### Milestone 12: Prepare Native Candle Slice
 

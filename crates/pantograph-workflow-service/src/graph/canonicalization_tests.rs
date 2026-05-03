@@ -462,6 +462,118 @@ fn canonicalize_workflow_graph_migrates_legacy_llamacpp_nodes() {
 }
 
 #[test]
+fn canonicalize_workflow_graph_migrates_legacy_pytorch_nodes() {
+    let registry = NodeRegistry::new();
+    let graph = WorkflowGraph {
+        nodes: vec![
+            GraphNode {
+                id: "model-path".to_string(),
+                node_type: "text-input".to_string(),
+                position: super::super::types::Position { x: 0.0, y: 0.0 },
+                data: json!({ "text": "/models/whisper" }),
+            },
+            GraphNode {
+                id: "audio".to_string(),
+                node_type: "audio-input".to_string(),
+                position: super::super::types::Position { x: 0.0, y: 100.0 },
+                data: json!({}),
+            },
+            GraphNode {
+                id: "pytorch".to_string(),
+                node_type: "pytorch-inference".to_string(),
+                position: super::super::types::Position { x: 100.0, y: 0.0 },
+                data: json!({
+                    "model_path": "/models/whisper",
+                    "model_type": "asr",
+                    "device": "cuda",
+                }),
+            },
+            GraphNode {
+                id: "output".to_string(),
+                node_type: "text-output".to_string(),
+                position: super::super::types::Position { x: 200.0, y: 0.0 },
+                data: json!({}),
+            },
+        ],
+        edges: vec![
+            GraphEdge {
+                id: "model-path-pytorch-model-path".to_string(),
+                source: "model-path".to_string(),
+                source_handle: "text".to_string(),
+                target: "pytorch".to_string(),
+                target_handle: "model_path".to_string(),
+            },
+            GraphEdge {
+                id: "audio-pytorch-audio".to_string(),
+                source: "audio".to_string(),
+                source_handle: "audio".to_string(),
+                target: "pytorch".to_string(),
+                target_handle: "audio".to_string(),
+            },
+            GraphEdge {
+                id: "pytorch-response-output-text".to_string(),
+                source: "pytorch".to_string(),
+                source_handle: "response".to_string(),
+                target: "output".to_string(),
+                target_handle: "text".to_string(),
+            },
+        ],
+        derived_graph: None,
+    };
+
+    let result = canonicalize_workflow_graph_with_migrations(graph, &registry);
+    let canonical = result.graph;
+    let migrated = canonical
+        .nodes
+        .iter()
+        .find(|node| node.id == "pytorch")
+        .expect("migrated PyTorch node");
+
+    assert_eq!(migrated.node_type, "llm-inference");
+    assert_eq!(migrated.data["task_kind"], json!("audio_transcription"));
+    assert_eq!(migrated.data["runtime_hint"], json!("transformers_pytorch"));
+    assert_eq!(
+        migrated.data["pumas_model_ref"]["legacy_model_path"],
+        json!("/models/whisper")
+    );
+    assert_eq!(
+        migrated.data["resolved_model_source"]["legacy_model_type"],
+        json!("asr")
+    );
+    assert_eq!(
+        migrated.data["runtime_hint_details"]["device"],
+        json!("cuda")
+    );
+    assert!(canonical.edges.iter().any(|edge| {
+        edge.id == "model-path-pytorch-model-path"
+            && edge.target == "pytorch"
+            && edge.target_handle == "pumas_model_ref"
+    }));
+    assert!(canonical.edges.iter().any(|edge| {
+        edge.id == "audio-pytorch-audio"
+            && edge.target == "pytorch"
+            && edge.target_handle == "audio"
+    }));
+
+    assert_eq!(result.migration_records.len(), 1);
+    let record = &result.migration_records[0];
+    assert_eq!(record.node_type.as_str(), "pytorch-inference");
+    assert_eq!(record.outcome, ContractUpgradeOutcome::Upgraded);
+    assert!(record.changes.iter().any(|change| matches!(
+        change,
+        ContractUpgradeChange::PortIdChanged { from, to, kind, .. }
+            if from.as_str() == "model_path"
+                && to.as_str() == "pumas_model_ref"
+                && *kind == PortKind::Input
+    )));
+    assert!(record.changes.iter().any(|change| matches!(
+        change,
+        ContractUpgradeChange::PortRemoved { port_id, kind, .. }
+            if port_id.as_str() == "model_type" && *kind == PortKind::Input
+    )));
+}
+
+#[test]
 fn canonicalize_workflow_graph_hydrates_expand_settings_and_passthrough_edges() {
     let registry = NodeRegistry::new();
     let graph = WorkflowGraph {

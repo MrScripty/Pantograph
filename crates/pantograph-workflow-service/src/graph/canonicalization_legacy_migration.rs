@@ -14,11 +14,13 @@ pub(super) enum LegacyNodeMigrationKind {
     SystemPrompt,
     OllamaInference,
     LlamaCppInference,
+    PyTorchInference,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum CanonicalInferenceTaskKind {
     TextGeneration,
+    AudioTranscription,
     Embedding,
     Rerank,
 }
@@ -27,6 +29,7 @@ impl CanonicalInferenceTaskKind {
     pub(super) fn as_str(self) -> &'static str {
         match self {
             Self::TextGeneration => "text_generation",
+            Self::AudioTranscription => "audio_transcription",
             Self::Embedding => "embedding",
             Self::Rerank => "rerank",
         }
@@ -318,6 +321,12 @@ pub(super) fn canonicalize_legacy_node_types(
                     node.node_type = "llm-inference".to_string();
                     migrate_llamacpp_node_data(&mut node.data);
                 }
+                "pytorch-inference" => {
+                    migrated_nodes
+                        .insert(node.id.clone(), LegacyNodeMigrationKind::PyTorchInference);
+                    node.node_type = "llm-inference".to_string();
+                    migrate_pytorch_node_data(&mut node.data);
+                }
                 _ => {}
             }
 
@@ -346,6 +355,14 @@ pub(super) fn canonicalize_legacy_node_types(
             {
                 return None;
             }
+            if migrated_nodes.get(&edge.target) == Some(&LegacyNodeMigrationKind::PyTorchInference)
+                && matches!(
+                    edge.target_handle.as_str(),
+                    "temperature" | "max_tokens" | "device" | "model_type" | "environment_ref"
+                )
+            {
+                return None;
+            }
             Some(edge)
         })
         .map(|mut edge| {
@@ -369,6 +386,11 @@ pub(super) fn canonicalize_legacy_node_types(
             {
                 edge.source_handle = "model_ref".to_string();
             }
+            if migrated_nodes.get(&edge.target) == Some(&LegacyNodeMigrationKind::PyTorchInference)
+                && edge.target_handle == "model_path"
+            {
+                edge.target_handle = "pumas_model_ref".to_string();
+            }
             edge
         })
         .collect::<Vec<_>>();
@@ -391,6 +413,7 @@ pub(super) fn legacy_node_type_migration_records(
             LegacyNodeMigrationKind::SystemPrompt => legacy_system_prompt_migration_record(node_id),
             LegacyNodeMigrationKind::OllamaInference => legacy_ollama_migration_record(node_id),
             LegacyNodeMigrationKind::LlamaCppInference => legacy_llamacpp_migration_record(node_id),
+            LegacyNodeMigrationKind::PyTorchInference => legacy_pytorch_migration_record(node_id),
         })
         .collect::<Vec<_>>();
     records.sort_by(|left, right| {
@@ -490,6 +513,97 @@ fn migrate_llamacpp_node_data(data: &mut serde_json::Value) {
                 "legacy_max_tokens": legacy_max_tokens
             }])
         });
+}
+
+fn migrate_pytorch_node_data(data: &mut serde_json::Value) {
+    let object = ensure_json_object(data);
+    let legacy_model_path = object.get("model_path").cloned();
+    let legacy_temperature = object.get("temperature").cloned();
+    let legacy_max_tokens = object.get("max_tokens").cloned();
+    let legacy_device = object.get("device").cloned();
+    let legacy_model_type = object.get("model_type").cloned();
+    let legacy_environment_ref = object.get("environment_ref").cloned();
+    let task_kind = pytorch_task_kind_from_model_type(legacy_model_type.as_ref());
+
+    object
+        .entry("task_kind".to_string())
+        .or_insert_with(|| json!(task_kind.as_str()));
+    object
+        .entry("runtime_hint".to_string())
+        .or_insert_with(|| json!("transformers_pytorch"));
+    object
+        .entry("pumas_model_ref".to_string())
+        .or_insert_with(|| {
+            json!({
+                "status": "unresolved",
+                "source": "legacy_pytorch",
+                "legacy_model_path": legacy_model_path,
+                "message": "Resolve this legacy PyTorch/HF model source through Pumas before running the canonical inference node."
+            })
+        });
+
+    let generation_options = object
+        .entry("generation_options".to_string())
+        .or_insert_with(|| json!({}));
+    if let Some(options) = generation_options.as_object_mut() {
+        if let Some(value) = legacy_temperature.clone() {
+            options.entry("temperature".to_string()).or_insert(value);
+        }
+        if let Some(value) = legacy_max_tokens.clone() {
+            options.entry("max_new_tokens".to_string()).or_insert(value);
+        }
+    }
+
+    let runtime_hint = object
+        .entry("runtime_hint_details".to_string())
+        .or_insert_with(|| json!({}));
+    if let Some(details) = runtime_hint.as_object_mut() {
+        if let Some(value) = legacy_device.clone() {
+            details.entry("device".to_string()).or_insert(value);
+        }
+        if let Some(value) = legacy_environment_ref.clone() {
+            details
+                .entry("environment_ref".to_string())
+                .or_insert(value);
+        }
+    }
+
+    object
+        .entry("resolved_model_source".to_string())
+        .or_insert_with(|| {
+            json!({
+                "status": "unresolved",
+                "legacy_model_type": legacy_model_type
+            })
+        });
+    object
+        .entry("migration_diagnostics".to_string())
+        .or_insert_with(|| {
+            json!([{
+                "code": "legacy_pytorch_inference_node",
+                "severity": "warning",
+                "message": "Migrated from pytorch-inference to canonical llm-inference. The legacy model path and model type were retained as unresolved Pumas/Transformers evidence until Pumas resolves the package facts.",
+                "legacy_model_path": legacy_model_path,
+                "legacy_model_type": legacy_model_type,
+                "legacy_device": legacy_device,
+                "legacy_environment_ref": legacy_environment_ref
+            }])
+        });
+}
+
+fn pytorch_task_kind_from_model_type(model_type: Option<&Value>) -> CanonicalInferenceTaskKind {
+    let Some(model_type) = model_type.and_then(Value::as_str) else {
+        return CanonicalInferenceTaskKind::TextGeneration;
+    };
+    match model_type.trim().to_ascii_lowercase().as_str() {
+        "asr"
+        | "automatic-speech-recognition"
+        | "automatic_speech_recognition"
+        | "audio_transcription"
+        | "speech_to_text"
+        | "speech-to-text" => CanonicalInferenceTaskKind::AudioTranscription,
+        _ => CanonicalInferenceTaskKind::TextGeneration,
+    }
 }
 
 fn ensure_json_object(value: &mut Value) -> &mut Map<String, Value> {
@@ -628,6 +742,66 @@ fn legacy_llamacpp_migration_record(node_id: &str) -> Option<ContractUpgradeReco
             message: "llamacpp-inference was migrated to canonical llm-inference; legacy model path evidence must resolve through Pumas before execution.".to_string(),
             node_id: Some(node_id),
             node_type: Some(NodeTypeId::try_from("llamacpp-inference".to_string()).ok()?),
+            port_id: None,
+        }],
+    };
+    record.validate().ok()?;
+    Some(record)
+}
+
+fn legacy_pytorch_migration_record(node_id: &str) -> Option<ContractUpgradeRecord> {
+    let node_id = NodeInstanceId::try_from(node_id.to_string()).ok()?;
+    let record = ContractUpgradeRecord {
+        node_type: NodeTypeId::try_from("pytorch-inference".to_string()).ok()?,
+        outcome: ContractUpgradeOutcome::Upgraded,
+        source_contract_version: Some("0.0.0".to_string()),
+        source_contract_digest: None,
+        target_contract_version: Some("1.0.0".to_string()),
+        target_contract_digest: None,
+        diagnostics_lineage: DiagnosticsLineagePolicy::RejectToAvoidSilentChange,
+        changes: vec![
+            ContractUpgradeChange::NodeTypeChanged {
+                node_id: node_id.clone(),
+                from: NodeTypeId::try_from("pytorch-inference".to_string()).ok()?,
+                to: NodeTypeId::try_from("llm-inference".to_string()).ok()?,
+            },
+            ContractUpgradeChange::PortIdChanged {
+                node_id: node_id.clone(),
+                kind: PortKind::Input,
+                from: PortId::try_from("model_path".to_string()).ok()?,
+                to: PortId::try_from("pumas_model_ref".to_string()).ok()?,
+            },
+            ContractUpgradeChange::PortRemoved {
+                node_id: node_id.clone(),
+                kind: PortKind::Input,
+                port_id: PortId::try_from("temperature".to_string()).ok()?,
+            },
+            ContractUpgradeChange::PortRemoved {
+                node_id: node_id.clone(),
+                kind: PortKind::Input,
+                port_id: PortId::try_from("max_tokens".to_string()).ok()?,
+            },
+            ContractUpgradeChange::PortRemoved {
+                node_id: node_id.clone(),
+                kind: PortKind::Input,
+                port_id: PortId::try_from("device".to_string()).ok()?,
+            },
+            ContractUpgradeChange::PortRemoved {
+                node_id: node_id.clone(),
+                kind: PortKind::Input,
+                port_id: PortId::try_from("model_type".to_string()).ok()?,
+            },
+            ContractUpgradeChange::PortRemoved {
+                node_id: node_id.clone(),
+                kind: PortKind::Input,
+                port_id: PortId::try_from("environment_ref".to_string()).ok()?,
+            },
+        ],
+        diagnostics: vec![ContractUpgradeDiagnostic {
+            reason: ContractUpgradeRejectionReason::UnsupportedLegacyContract,
+            message: "pytorch-inference was migrated to canonical llm-inference; legacy model path and model type evidence must resolve through Pumas/Transformers package facts before execution.".to_string(),
+            node_id: Some(node_id),
+            node_type: Some(NodeTypeId::try_from("pytorch-inference".to_string()).ok()?),
             port_id: None,
         }],
     };
