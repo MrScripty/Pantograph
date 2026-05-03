@@ -91,7 +91,7 @@ async fn runtime_extensions_apply_workflow_service_for_stream_artifacts() {
         Arc::new(NullEventSink),
     );
 
-    apply_runtime_extensions_for_execution(&mut executor, &snapshot, None, None, None);
+    apply_runtime_extensions_for_execution(&mut executor, &snapshot, None, None, None, None);
 
     let applied = executor
         .extensions()

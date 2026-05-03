@@ -3,7 +3,8 @@ use std::sync::{Arc, Mutex};
 
 use crate::task_executor;
 use crate::{
-    apply_runtime_extensions_for_execution, EmbeddedWorkflowHost, RuntimeExtensionsSnapshot,
+    apply_runtime_extensions_for_execution, EmbeddedWorkflowHost,
+    InferenceLifecycleWorkflowLedgerSink, RuntimeExtensionsSnapshot,
 };
 use node_engine::{CoreTaskExecutor, NullEventSink, WorkflowEvent, WorkflowExecutor};
 use pantograph_workflow_service::{
@@ -317,6 +318,15 @@ pub(crate) async fn run_session_workflow(
         None,
         Some(workflow_execution_session_id.to_string()),
         Some(python_runtime_execution_recorder.clone()),
+        InferenceLifecycleWorkflowLedgerSink::try_new(
+            host.workflow_service.clone(),
+            workflow_id.to_string(),
+            workflow_execution_session_id.to_string(),
+            workflow_execution_session_id.to_string(),
+            &graph,
+        )
+        .ok()
+        .map(|sink| Arc::new(sink) as Arc<dyn inference::InferenceRequestLifecycleEventSink>),
     );
     let mut node_outputs = HashMap::new();
     let run_result = async {
@@ -434,6 +444,7 @@ async fn build_session_executor(
         None,
         Some(workflow_execution_session_id.to_string()),
         Some(python_runtime_execution_recorder),
+        None,
     );
     executor
 }

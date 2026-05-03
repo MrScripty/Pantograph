@@ -332,6 +332,13 @@ pub struct WorkflowLibraryAssetAccessRecordResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+pub struct WorkflowDiagnosticEventRecordResponse {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event_seq: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub struct WorkflowProjectionRebuildRequest {
     pub projection_name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -896,6 +903,24 @@ impl WorkflowService {
             .map_err(WorkflowServiceError::from)?;
 
         Ok(WorkflowLibraryAssetAccessRecordResponse {
+            event_seq: Some(event.event_seq),
+        })
+    }
+
+    pub fn workflow_diagnostic_event_record(
+        &self,
+        request: DiagnosticEventAppendRequest,
+    ) -> Result<WorkflowDiagnosticEventRecordResponse, WorkflowServiceError> {
+        let Some(ledger) = self.diagnostics_ledger.as_ref() else {
+            return Ok(WorkflowDiagnosticEventRecordResponse { event_seq: None });
+        };
+        let mut ledger = ledger.lock().map_err(|_| {
+            WorkflowServiceError::Internal("diagnostics ledger lock poisoned".to_string())
+        })?;
+        let event = DiagnosticsLedgerRepository::append_diagnostic_event(&mut *ledger, request)
+            .map_err(WorkflowServiceError::from)?;
+
+        Ok(WorkflowDiagnosticEventRecordResponse {
             event_seq: Some(event.event_seq),
         })
     }

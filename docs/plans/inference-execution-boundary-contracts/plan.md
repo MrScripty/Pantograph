@@ -1967,6 +1967,13 @@ one-off conversions.
   `execute_typed_with_lifecycle` when a host provides that sink. Node-engine
   assigns stable request ids for correlation but still leaves diagnostics-ledger
   writes to host/runtime adapters.
+- 2026-05-03: Embedded-runtime diagnostics follow-up wires a host-owned
+  inference lifecycle sink into normal workflow runs, session runs, data-graph
+  execution, and edit-session graph execution. The sink maps gateway lifecycle
+  facts into existing `node_execution.status` ledger events through a
+  workflow-service diagnostic append helper, preserving selected backend,
+  runtime id, runtime instance, model id, lifecycle phase status, and duration
+  without giving inference or node-engine a diagnostics-ledger dependency.
 
 ## Execution Notes
 
@@ -2163,6 +2170,10 @@ Update during implementation:
 - 2026-05-03: Routed generic `llm-inference` streaming text/chat execution
   through the inference gateway stream facade instead of node-engine direct HTTP
   transport while preserving `TaskStream` event output.
+- 2026-05-03: Wired embedded-runtime execution paths to provide the
+  `INFERENCE_LIFECYCLE_SINK` and persist bounded inference lifecycle facts
+  through workflow-service diagnostics, with regression coverage against the
+  node-status projection.
 
 ## Commit Cadence Notes
 

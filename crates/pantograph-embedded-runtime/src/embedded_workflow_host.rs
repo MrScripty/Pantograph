@@ -18,7 +18,8 @@ use uuid::Uuid;
 use crate::{
     apply_runtime_extensions_for_execution, python_runtime, runtime_capabilities, runtime_registry,
     runtime_registry_errors, task_executor, technical_fit, workflow_execution_session_execution,
-    EmbeddedWorkflowHost, HostRuntimeModeSnapshot, RuntimeExtensionsSnapshot,
+    EmbeddedWorkflowHost, HostRuntimeModeSnapshot, InferenceLifecycleWorkflowLedgerSink,
+    RuntimeExtensionsSnapshot,
 };
 
 #[async_trait::async_trait]
@@ -293,14 +294,25 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         let python_runtime_execution_recorder =
             Arc::new(task_executor::PythonRuntimeExecutionRecorder::default());
 
+        let inference_lifecycle_graph = graph.clone();
         let mut executor =
             WorkflowExecutor::new(execution_id.clone(), graph, Arc::new(NullEventSink));
+        let inference_lifecycle_sink = InferenceLifecycleWorkflowLedgerSink::try_new(
+            self.workflow_service.clone(),
+            workflow_id.to_string(),
+            execution_id.clone(),
+            execution_id.clone(),
+            &inference_lifecycle_graph,
+        )
+        .ok()
+        .map(|sink| Arc::new(sink) as Arc<dyn inference::InferenceRequestLifecycleEventSink>);
         apply_runtime_extensions_for_execution(
             &mut executor,
             &runtime_ext,
             None,
             Some(execution_id.clone()),
             Some(python_runtime_execution_recorder.clone()),
+            inference_lifecycle_sink,
         );
 
         let mut node_outputs = HashMap::new();

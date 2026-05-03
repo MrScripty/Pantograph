@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::{
     apply_runtime_extensions_for_execution, task_executor, EmbeddedRuntime, EmbeddedWorkflowHost,
-    RuntimeExtensionsSnapshot,
+    InferenceLifecycleWorkflowLedgerSink, RuntimeExtensionsSnapshot,
 };
 
 impl EmbeddedRuntime {
@@ -45,13 +45,24 @@ impl EmbeddedRuntime {
         let terminal_nodes = EmbeddedWorkflowHost::terminal_data_graph_node_ids(&graph);
         EmbeddedWorkflowHost::apply_data_graph_inputs(&mut graph, inputs);
 
+        let inference_lifecycle_graph = graph.clone();
         let mut executor = WorkflowExecutor::new(execution_id.clone(), graph, event_sink);
+        let inference_lifecycle_sink = InferenceLifecycleWorkflowLedgerSink::try_new(
+            self.workflow_service.clone(),
+            graph_id.to_string(),
+            execution_id.clone(),
+            execution_id.clone(),
+            &inference_lifecycle_graph,
+        )
+        .ok()
+        .map(|sink| Arc::new(sink) as Arc<dyn inference::InferenceRequestLifecycleEventSink>);
         apply_runtime_extensions_for_execution(
             &mut executor,
             &runtime_ext,
             Some(workflow_event_sink),
-            Some(execution_id),
+            Some(execution_id.clone()),
             Some(python_runtime_execution_recorder.clone()),
+            inference_lifecycle_sink,
         );
 
         let mut node_outputs = HashMap::new();

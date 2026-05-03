@@ -1,4 +1,5 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
+use std::sync::Mutex;
 
 use pantograph_diagnostics_ledger::{
     DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
@@ -7,11 +8,14 @@ use pantograph_diagnostics_ledger::{
     ModelLicenseUsageEvent, ModelOutputMeasurement, NodeExecutionProjectionStatus,
     NodeExecutionStatusPayload, RetentionClass, UsageEventStatus, UsageLineage,
 };
-use pantograph_runtime_attribution::UsageEventId;
+use pantograph_runtime_attribution::{
+    BucketId, ClientId, ClientSessionId, UsageEventId, WorkflowId, WorkflowRunId,
+};
 use thiserror::Error;
 
 use crate::{
     ManagedCapabilityKind, ModelExecutionCapability, NodeExecutionContext, NodeExecutionGuarantee,
+    SharedWorkflowService,
 };
 
 #[derive(Debug, Error)]
@@ -48,12 +52,16 @@ pub fn inference_lifecycle_event_ledger_append_request(
     context: &NodeExecutionContext,
     event: &inference::InferenceRequestLifecycleEvent,
 ) -> Option<DiagnosticEventAppendRequest> {
-    build_inference_lifecycle_event_ledger_append_request(context, event, None)
+    build_inference_lifecycle_event_ledger_append_request(
+        &InferenceLifecycleLedgerAppendContext::from_node_execution_context(context),
+        event,
+        None,
+    )
 }
 
 #[derive(Debug, Default)]
 pub struct InferenceLifecycleLedgerRecorder {
-    started_at_ms_by_key: HashMap<InferenceLifecycleDurationKey, i64>,
+    recorder: InferenceLifecycleDurationRecorder,
 }
 
 impl InferenceLifecycleLedgerRecorder {
@@ -66,8 +74,182 @@ impl InferenceLifecycleLedgerRecorder {
         context: &NodeExecutionContext,
         event: &inference::InferenceRequestLifecycleEvent,
     ) -> Option<DiagnosticEventAppendRequest> {
+        self.recorder.append_request(
+            &InferenceLifecycleLedgerAppendContext::from_node_execution_context(context),
+            event,
+        )
+    }
+}
+
+pub struct InferenceLifecycleWorkflowLedgerSink {
+    workflow_service: SharedWorkflowService,
+    execution_id: String,
+    contexts_by_node_id: BTreeMap<String, InferenceLifecycleWorkflowNodeContext>,
+    recorder: Mutex<InferenceLifecycleDurationRecorder>,
+}
+
+impl InferenceLifecycleWorkflowLedgerSink {
+    pub fn try_new(
+        workflow_service: SharedWorkflowService,
+        workflow_id: impl Into<String>,
+        workflow_run_id: impl Into<String>,
+        execution_id: impl Into<String>,
+        graph: &node_engine::WorkflowGraph,
+    ) -> Result<Self, String> {
+        let workflow_id = WorkflowId::try_from(workflow_id.into()).map_err(|error| {
+            format!("invalid workflow id for inference lifecycle ledger sink: {error}")
+        })?;
+        let workflow_run_id = WorkflowRunId::try_from(workflow_run_id.into()).map_err(|error| {
+            format!("invalid workflow run id for inference lifecycle ledger sink: {error}")
+        })?;
+        Ok(Self::new(
+            workflow_service,
+            workflow_id,
+            workflow_run_id,
+            execution_id,
+            graph,
+        ))
+    }
+
+    pub fn new(
+        workflow_service: SharedWorkflowService,
+        workflow_id: WorkflowId,
+        workflow_run_id: WorkflowRunId,
+        execution_id: impl Into<String>,
+        graph: &node_engine::WorkflowGraph,
+    ) -> Self {
+        let contexts_by_node_id = graph
+            .nodes
+            .iter()
+            .map(|node| {
+                (
+                    node.id.clone(),
+                    InferenceLifecycleWorkflowNodeContext {
+                        workflow_id: workflow_id.clone(),
+                        workflow_run_id: workflow_run_id.clone(),
+                        node_id: node.id.clone(),
+                        node_type: node.node_type.clone(),
+                    },
+                )
+            })
+            .collect();
+
+        Self {
+            workflow_service,
+            execution_id: execution_id.into(),
+            contexts_by_node_id,
+            recorder: Mutex::new(InferenceLifecycleDurationRecorder::default()),
+        }
+    }
+
+    fn context_for_event(
+        &self,
+        event: &inference::InferenceRequestLifecycleEvent,
+    ) -> Option<InferenceLifecycleLedgerAppendContext<'_>> {
+        let request_id = event.request_id.as_deref()?;
+        let request_suffix = request_id.strip_prefix(&format!("{}:", self.execution_id))?;
+        self.contexts_by_node_id
+            .iter()
+            .find(|(node_id, _)| {
+                request_suffix == node_id.as_str()
+                    || request_suffix
+                        .strip_prefix(node_id.as_str())
+                        .is_some_and(|suffix| suffix.starts_with(':'))
+            })
+            .map(|(_, context)| {
+                InferenceLifecycleLedgerAppendContext::from_workflow_node_context(context)
+            })
+    }
+}
+
+impl inference::InferenceRequestLifecycleEventSink for InferenceLifecycleWorkflowLedgerSink {
+    fn record(&self, event: inference::InferenceRequestLifecycleEvent) {
+        let Some(context) = self.context_for_event(&event) else {
+            return;
+        };
+        let Some(request) = self
+            .recorder
+            .lock()
+            .ok()
+            .and_then(|mut recorder| recorder.append_request(&context, &event))
+        else {
+            return;
+        };
+
+        if let Err(error) = self
+            .workflow_service
+            .workflow_diagnostic_event_record(request)
+        {
+            log::warn!("failed to record inference lifecycle diagnostic event: {error}");
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct InferenceLifecycleWorkflowNodeContext {
+    workflow_id: WorkflowId,
+    workflow_run_id: WorkflowRunId,
+    node_id: String,
+    node_type: String,
+}
+
+#[derive(Debug, Clone)]
+struct InferenceLifecycleLedgerAppendContext<'a> {
+    workflow_id: &'a WorkflowId,
+    workflow_run_id: &'a WorkflowRunId,
+    node_id: &'a str,
+    node_type: &'a str,
+    node_version: Option<&'a String>,
+    client_id: Option<&'a ClientId>,
+    client_session_id: Option<&'a ClientSessionId>,
+    bucket_id: Option<&'a BucketId>,
+}
+
+impl<'a> InferenceLifecycleLedgerAppendContext<'a> {
+    fn from_node_execution_context(context: &'a NodeExecutionContext) -> Self {
+        Self {
+            workflow_id: context.workflow_id(),
+            workflow_run_id: &context.attribution().workflow_run_id,
+            node_id: context.node_id().as_str(),
+            node_type: context.node_type().as_str(),
+            node_version: context
+                .effective_contract()
+                .static_contract
+                .contract_version
+                .as_ref(),
+            client_id: Some(&context.attribution().client_id),
+            client_session_id: Some(&context.attribution().client_session_id),
+            bucket_id: Some(&context.attribution().bucket_id),
+        }
+    }
+
+    fn from_workflow_node_context(context: &'a InferenceLifecycleWorkflowNodeContext) -> Self {
+        Self {
+            workflow_id: &context.workflow_id,
+            workflow_run_id: &context.workflow_run_id,
+            node_id: &context.node_id,
+            node_type: &context.node_type,
+            node_version: None,
+            client_id: None,
+            client_session_id: None,
+            bucket_id: None,
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+struct InferenceLifecycleDurationRecorder {
+    started_at_ms_by_key: HashMap<InferenceLifecycleDurationKey, i64>,
+}
+
+impl InferenceLifecycleDurationRecorder {
+    fn append_request(
+        &mut self,
+        context: &InferenceLifecycleLedgerAppendContext<'_>,
+        event: &inference::InferenceRequestLifecycleEvent,
+    ) -> Option<DiagnosticEventAppendRequest> {
         let occurred_at_ms = i64::try_from(event.occurred_at_ms).unwrap_or(i64::MAX);
-        let duration_key = InferenceLifecycleDurationKey::from_event(context, event);
+        let duration_key = InferenceLifecycleDurationKey::from_append_context(context, event);
         let duration_ms = match event.kind {
             inference::InferenceRequestLifecycleEventKind::Started => {
                 if let Some(key) = duration_key {
@@ -104,12 +286,12 @@ struct InferenceLifecycleDurationKey {
 }
 
 impl InferenceLifecycleDurationKey {
-    fn from_event(
-        context: &NodeExecutionContext,
+    fn from_append_context(
+        context: &InferenceLifecycleLedgerAppendContext<'_>,
         event: &inference::InferenceRequestLifecycleEvent,
     ) -> Option<Self> {
         Some(Self {
-            node_id: context.node_id().as_str().to_string(),
+            node_id: context.node_id.to_string(),
             request_id: event.request_id.clone()?,
             phase: inference_lifecycle_phase_key(&event.phase),
             backend_key: event.backend_key.clone(),
@@ -131,7 +313,7 @@ fn inference_lifecycle_phase_key(phase: &inference::InferenceLifecyclePhase) -> 
 }
 
 fn build_inference_lifecycle_event_ledger_append_request(
-    context: &NodeExecutionContext,
+    context: &InferenceLifecycleLedgerAppendContext<'_>,
     event: &inference::InferenceRequestLifecycleEvent,
     duration_ms: Option<u64>,
 ) -> Option<DiagnosticEventAppendRequest> {
@@ -162,17 +344,13 @@ fn build_inference_lifecycle_event_ledger_append_request(
         source_component: DiagnosticEventSourceComponent::NodeExecution,
         source_instance_id: event.runtime_instance_id.clone(),
         occurred_at_ms,
-        workflow_run_id: Some(context.attribution().workflow_run_id.clone()),
-        workflow_id: Some(context.workflow_id().clone()),
+        workflow_run_id: Some(context.workflow_run_id.clone()),
+        workflow_id: Some(context.workflow_id.clone()),
         workflow_version_id: None,
         workflow_semantic_version: None,
-        node_id: Some(context.node_id().as_str().to_string()),
-        node_type: Some(context.node_type().as_str().to_string()),
-        node_version: context
-            .effective_contract()
-            .static_contract
-            .contract_version
-            .clone(),
+        node_id: Some(context.node_id.to_string()),
+        node_type: Some(context.node_type.to_string()),
+        node_version: context.node_version.cloned(),
         runtime_id: event
             .runtime_id
             .clone()
@@ -180,9 +358,9 @@ fn build_inference_lifecycle_event_ledger_append_request(
         runtime_version: None,
         model_id: event.model_id.clone(),
         model_version: None,
-        client_id: Some(context.attribution().client_id.clone()),
-        client_session_id: Some(context.attribution().client_session_id.clone()),
-        bucket_id: Some(context.attribution().bucket_id.clone()),
+        client_id: context.client_id.cloned(),
+        client_session_id: context.client_session_id.cloned(),
+        bucket_id: context.bucket_id.cloned(),
         scheduler_policy_id: None,
         retention_policy_id: None,
         privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,

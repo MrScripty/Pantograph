@@ -102,9 +102,10 @@ scheduler model-cache posture from the run-detail projection.
 Retention cleanup now lives behind the same diagnostics API helper and is
 re-exported by the crate facade so Tauri and frontend command adapters can
 trigger backend-owned artifact expiration without touching ledger internals.
-Library asset access audit recording now lives behind the diagnostics API
-helper and is re-exported by the crate facade so adapters can record typed
-Pumas/Library operations without appending raw diagnostic ledger events.
+Library asset access audit recording and trusted diagnostic event append now
+live behind the diagnostics API helper and are re-exported by the crate facade
+so adapters can record typed Pumas/Library operations and bounded runtime facts
+without owning diagnostic ledger storage.
 Local Network status now carries scheduler-owned run placement plus typed
 model-cache posture through workflow-service DTOs so adapters can render
 selected-run Network facts without reconstructing scheduler or diagnostics

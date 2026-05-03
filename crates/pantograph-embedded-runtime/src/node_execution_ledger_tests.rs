@@ -11,13 +11,14 @@ use pantograph_node_contracts::{
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, WorkflowId, WorkflowRunAttribution, WorkflowRunId,
 };
+use pantograph_workflow_service::{WorkflowNodeStatusQueryRequest, WorkflowService};
 
 use crate::{
     inference_lifecycle_event_ledger_append_request, InferenceLifecycleLedgerRecorder,
-    ManagedCapabilityKind, ManagedCapabilityRoute, ManagedModelUsageSubmission,
-    ModelExecutionCapability, NodeCancellationToken, NodeExecutionContext,
-    NodeExecutionContextInput, NodeExecutionGuaranteeEvidence, NodeLineageContext,
-    NodeManagedCapabilities, NodeProgressHandle, RuntimeLedgerSubmissionError,
+    InferenceLifecycleWorkflowLedgerSink, ManagedCapabilityKind, ManagedCapabilityRoute,
+    ManagedModelUsageSubmission, ModelExecutionCapability, NodeCancellationToken,
+    NodeExecutionContext, NodeExecutionContextInput, NodeExecutionGuaranteeEvidence,
+    NodeLineageContext, NodeManagedCapabilities, NodeProgressHandle, RuntimeLedgerSubmissionError,
 };
 
 #[test]
@@ -261,6 +262,69 @@ fn inference_lifecycle_recorder_cleanup_clears_tracked_start_without_persisting(
         }
         other => panic!("expected node execution status payload, got {other:?}"),
     }
+}
+
+#[test]
+fn inference_lifecycle_workflow_sink_records_node_status_to_workflow_ledger() {
+    let service =
+        std::sync::Arc::new(WorkflowService::with_ephemeral_diagnostics_ledger().expect("service"));
+    let graph = node_engine::WorkflowGraph {
+        id: "workflow-a".to_string(),
+        name: "Workflow A".to_string(),
+        nodes: vec![node_engine::GraphNode {
+            id: "node-a".to_string(),
+            node_type: "llm-inference".to_string(),
+            data: serde_json::json!({}),
+            position: (0.0, 0.0),
+        }],
+        edges: Vec::new(),
+        groups: Vec::new(),
+    };
+    let sink = InferenceLifecycleWorkflowLedgerSink::try_new(
+        service.clone(),
+        "workflow-a",
+        "run-a",
+        "run-a",
+        &graph,
+    )
+    .expect("sink");
+
+    let mut started =
+        inference_lifecycle_event(inference::InferenceRequestLifecycleEventKind::Started, 100);
+    started.request_id = Some("run-a:node-a:LLM".to_string());
+    inference::InferenceRequestLifecycleEventSink::record(&sink, started);
+
+    let mut completed = inference_lifecycle_event(
+        inference::InferenceRequestLifecycleEventKind::Completed,
+        175,
+    );
+    completed.request_id = Some("run-a:node-a:LLM".to_string());
+    inference::InferenceRequestLifecycleEventSink::record(&sink, completed);
+
+    let response = service
+        .workflow_node_status_query(WorkflowNodeStatusQueryRequest {
+            workflow_run_id: Some("run-a".to_string()),
+            node_id: Some("node-a".to_string()),
+            projection_batch_size: Some(10),
+            ..WorkflowNodeStatusQueryRequest::default()
+        })
+        .expect("node status query");
+
+    assert_eq!(response.nodes.len(), 1);
+    assert_eq!(response.nodes[0].node_id, "node-a");
+    assert_eq!(
+        response.nodes[0].status,
+        NodeExecutionProjectionStatus::Completed
+    );
+    assert_eq!(
+        response.nodes[0].runtime_id.as_deref(),
+        Some("pytorch.transformers")
+    );
+    assert_eq!(
+        response.nodes[0].model_id.as_deref(),
+        Some("pumas://models/tiny-transformers")
+    );
+    assert_eq!(response.nodes[0].duration_ms, Some(75));
 }
 
 fn inference_lifecycle_event(

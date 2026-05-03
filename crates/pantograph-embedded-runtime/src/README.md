@@ -42,8 +42,8 @@ packages.
 | `node_execution_capabilities.rs` | Defines managed capability route contracts and typed capability wrappers for model, resource, cache, progress, diagnostics, and external-tool access. |
 | `node_execution_diagnostics.rs` | Adapts node-engine workflow events into enriched transient runtime-owned node diagnostics with attribution, contract, lineage, and guarantee context, plus an event-sink recorder for collecting adapted diagnostics along execution paths. |
 | `node_execution_diagnostics_tests.rs` | Focused diagnostics adapter tests for lifecycle, output summary, progress, stream, failure, cancellation, and filtering behavior. |
-| `node_execution_ledger.rs` | Owns runtime submission of managed model usage facts into the durable diagnostics ledger through model execution capabilities and runtime-created node context. |
-| `node_execution_ledger_tests.rs` | Focused runtime ledger submission tests for context matching, unavailable capability rejection, output-measurement guarantee downgrades, and persisted usage submission. |
+| `node_execution_ledger.rs` | Owns runtime submission of managed model usage facts and inference lifecycle facts into the durable diagnostics ledger through workflow-service/node-execution boundaries. |
+| `node_execution_ledger_tests.rs` | Focused runtime ledger submission tests for context matching, unavailable capability rejection, output-measurement guarantee downgrades, inference lifecycle projection, and persisted usage submission. |
 | `node_execution_tests.rs` | Focused runtime-created node execution context, managed capability routing, cancellation, progress, output summary, and guarantee classification tests. |
 | `python_runtime_execution.rs` | Owns captured execution metadata for Python-backed runtime runs so workflow diagnostics and registry projection can reuse one recorder contract outside the task-executor facade. |
 | `task_executor.rs` | Hosts the Pantograph-specific task executor facade, construction, extension keys, and node-type dispatch while preserving core-node fallthrough. |
@@ -56,7 +56,7 @@ packages.
 | `rag.rs` | Defines the narrow RAG backend contract used by the host executor. |
 | `runtime_capabilities.rs` | Owns backend-side mapping from producer-specific runtime facts into workflow runtime capabilities, including managed-runtime snapshot-to-capability projection, host-runtime, dedicated-embedding, and Python-sidecar capability builders plus capability-to-lifecycle projection. |
 | `runtime_config.rs` | Owns embedded-runtime configuration and initialization error contracts re-exported by the crate facade. |
-| `runtime_extensions.rs` | Owns shared runtime extension snapshots and executor extension injection for Pumas, KV cache, model dependencies, event sinks, execution ids, and Python runtime execution records. |
+| `runtime_extensions.rs` | Owns shared runtime extension snapshots and executor extension injection for Pumas, KV cache, model dependencies, event sinks, execution ids, Python runtime execution records, and host-provided inference lifecycle sinks. |
 | `runtime_health.rs` | Owns backend-side health probe assessment, degraded/unhealthy threshold policy, and failure-count progression. |
 | `runtime_recovery.rs` | Owns backend-side recovery restart planning, retry-strategy selection, retry-attempt sequencing, retry backoff, backend port overrides, clean-restart settle delays, and dedicated-embedding restart policy. |
 | `runtime_registry.rs` | Owns backend-side translation from gateway and producer lifecycle facts into shared runtime-registry observations, active-runtime registration, active/embedding health-aware unhealthy reconciliation, sync, reclaim, stop-all, and restore coordination. |
@@ -157,6 +157,11 @@ delegating methods; scheduler authority and diagnostics events stay in
   `embedded_edit_session_execution.rs` so embedding runtime preparation,
   workflow event emission, runtime trace projection, and inference-runtime
   restore coordination are isolated from the root facade.
+- Inference lifecycle events are host-owned diagnostics facts. Execution paths
+  may inject an `INFERENCE_LIFECYCLE_SINK` that projects bounded backend,
+  runtime, model, phase, status, and duration metadata into workflow-service
+  diagnostics, but inference and node-engine must not import or write the
+  diagnostics ledger directly.
 - Public embedded-runtime graph persistence, edit-session, mutation,
   connection, and insert-preview facade methods stay in
   `embedded_workflow_graph_api.rs` so graph API forwarding remains separate

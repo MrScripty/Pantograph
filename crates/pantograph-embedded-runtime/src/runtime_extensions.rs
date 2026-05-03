@@ -58,7 +58,7 @@ pub fn apply_runtime_extensions(
     executor: &mut WorkflowExecutor,
     snapshot: &RuntimeExtensionsSnapshot,
 ) {
-    apply_runtime_extensions_for_execution(executor, snapshot, None, None, None);
+    apply_runtime_extensions_for_execution(executor, snapshot, None, None, None, None);
 }
 
 pub fn apply_runtime_extensions_for_execution(
@@ -69,6 +69,7 @@ pub fn apply_runtime_extensions_for_execution(
     python_runtime_execution_recorder: Option<
         Arc<crate::task_executor::PythonRuntimeExecutionRecorder>,
     >,
+    inference_lifecycle_sink: Option<Arc<dyn inference::InferenceRequestLifecycleEventSink>>,
 ) {
     if let Some(api) = &snapshot.pumas_api {
         executor
@@ -109,5 +110,10 @@ pub fn apply_runtime_extensions_for_execution(
             crate::task_executor::runtime_extension_keys::PYTHON_RUNTIME_EXECUTION_RECORDER,
             recorder,
         );
+    }
+    if let Some(sink) = inference_lifecycle_sink {
+        executor
+            .extensions_mut()
+            .set(node_engine::extension_keys::INFERENCE_LIFECYCLE_SINK, sink);
     }
 }

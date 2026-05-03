@@ -7,7 +7,8 @@ use pantograph_workflow_service::{
 
 use crate::{
     apply_runtime_extensions_for_execution, embedding_workflow, runtime_registry, task_executor,
-    workflow_runtime, EmbeddedRuntime, HostRuntimeModeSnapshot, RuntimeExtensionsSnapshot,
+    workflow_runtime, EmbeddedRuntime, HostRuntimeModeSnapshot,
+    InferenceLifecycleWorkflowLedgerSink, RuntimeExtensionsSnapshot,
 };
 
 #[derive(Debug, Clone)]
@@ -74,9 +75,10 @@ impl EmbeddedRuntime {
 
         let python_runtime_execution_recorder =
             Arc::new(task_executor::PythonRuntimeExecutionRecorder::default());
+        let node_engine_graph = convert_graph_to_node_engine(session_graph);
         let mut executor = WorkflowExecutor::new(
             workflow_run_id,
-            convert_graph_to_node_engine(session_graph),
+            node_engine_graph.clone(),
             event_sink.clone(),
         );
         apply_runtime_extensions_for_execution(
@@ -85,6 +87,15 @@ impl EmbeddedRuntime {
             Some(event_sink.clone()),
             Some(workflow_run_id.to_string()),
             Some(python_runtime_execution_recorder.clone()),
+            InferenceLifecycleWorkflowLedgerSink::try_new(
+                self.workflow_service.clone(),
+                session_id.to_string(),
+                workflow_run_id.to_string(),
+                workflow_run_id.to_string(),
+                &node_engine_graph,
+            )
+            .ok()
+            .map(|sink| Arc::new(sink) as Arc<dyn inference::InferenceRequestLifecycleEventSink>),
         );
         executor.set_event_sink(event_sink.clone());
         workflow_runtime::sync_embedding_emit_metadata_flags(&mut executor)

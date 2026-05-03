@@ -22,7 +22,7 @@ public exports out of the service crate.
 | `host.rs` | Host trait defaults and scheduler diagnostics provider contracts re-exported by the parent facade. |
 | `identity.rs` | Validated workflow identity value object and grammar used by workflow submission and saved graph boundaries. |
 | `io_contract.rs` | Workflow input/output surface derivation and host-response validation helpers. |
-| `diagnostics_api.rs` | Diagnostics, scheduler timeline, scheduler estimate, run projection, I/O artifact, Library usage, retention, and projection rebuild facade methods. |
+| `diagnostics_api.rs` | Diagnostics, scheduler timeline, scheduler estimate, run projection, I/O artifact, Library usage, trusted diagnostic event append, retention, and projection rebuild facade methods. |
 | `media_capability_contracts.rs` | Backend-owned media format capability and managed redistributable category/status DTOs. |
 | `preflight_api.rs` | Workflow capability, I/O discovery, and preflight facade methods. |
 | `runtime_preflight.rs` | Runtime requirement matching, issue formatting, and preflight warning collection. |
@@ -89,6 +89,10 @@ session-runtime workflows, and the root facade test module.
 - Workflow Library asset access audit writes must enter through the diagnostics
   API helper, use diagnostics-ledger typed operation/cache-status enums, and
   remain optional when diagnostics storage is not configured.
+- Trusted runtime adapters that already hold typed
+  `DiagnosticEventAppendRequest` values must append them through the workflow
+  diagnostics API helper so durable writes stay optional and ledger ownership
+  remains in workflow-service.
 - Workflow Library usage queries accept `workflow_run_id` filters for
   active-run Library views and delegate that filtering to diagnostics-ledger
   projections.
