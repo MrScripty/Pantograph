@@ -20,9 +20,20 @@ pub struct ModelConfig {
     /// Path to the Candle embedding model directory (SafeTensors format, e.g., bge-small-en-v1.5/)
     /// This is separate from embedding_model_path because Candle uses a different model format.
     pub candle_embedding_model_path: Option<String>,
-    /// Ollama model name for VLM inference (e.g., "llava:13b", "qwen2-vl:7b")
-    /// Used when Ollama is the selected backend instead of file paths.
+    /// Retired persisted compatibility field.
+    ///
+    /// Pantograph no longer supports Ollama as a first-party runtime. Existing
+    /// config files may still contain this value, so it remains deserializable
+    /// and is scrubbed when configs are loaded or saved.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ollama_vlm_model: Option<String>,
+}
+
+impl ModelConfig {
+    /// Remove fields that belonged to retired backend surfaces.
+    pub fn scrub_retired_fields(&mut self) {
+        self.ollama_vlm_model = None;
+    }
 }
 
 /// Device configuration for inference
@@ -179,6 +190,12 @@ pub struct AppConfig {
 }
 
 impl AppConfig {
+    /// Normalize persisted compatibility fields that must not affect runtime
+    /// behavior after backend retirement.
+    pub fn scrub_retired_fields(&mut self) {
+        self.models.scrub_retired_fields();
+    }
+
     /// Load configuration from disk
     pub async fn load(app_data_dir: &Path) -> Result<Self, ConfigError> {
         let config_path = app_data_dir.join("config.json");
@@ -191,7 +208,9 @@ impl AppConfig {
             .await
             .map_err(ConfigError::Io)?;
 
-        serde_json::from_str(&contents).map_err(ConfigError::Parse)
+        let mut config = serde_json::from_str::<Self>(&contents).map_err(ConfigError::Parse)?;
+        config.scrub_retired_fields();
+        Ok(config)
     }
 
     /// Save configuration to disk
@@ -202,7 +221,9 @@ impl AppConfig {
             .map_err(ConfigError::Io)?;
 
         let config_path = app_data_dir.join("config.json");
-        let contents = serde_json::to_string_pretty(self).map_err(ConfigError::Serialize)?;
+        let mut config = self.clone();
+        config.scrub_retired_fields();
+        let contents = serde_json::to_string_pretty(&config).map_err(ConfigError::Serialize)?;
 
         fs::write(&config_path, contents)
             .await
@@ -210,6 +231,41 @@ impl AppConfig {
 
         log::info!("Configuration saved to {:?}", config_path);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AppConfig, ModelConfig};
+
+    #[test]
+    fn model_config_accepts_missing_retired_ollama_field() {
+        let config = serde_json::from_str::<ModelConfig>(
+            r#"{
+                "vlm_model_path": "/models/qwen.gguf",
+                "vlm_mmproj_path": null,
+                "embedding_model_path": null,
+                "candle_embedding_model_path": null
+            }"#,
+        )
+        .expect("missing retired field should deserialize");
+
+        assert!(config.ollama_vlm_model.is_none());
+    }
+
+    #[test]
+    fn app_config_scrubs_retired_ollama_model_setting() {
+        let mut config = AppConfig {
+            models: ModelConfig {
+                ollama_vlm_model: Some("llava:13b".to_string()),
+                ..ModelConfig::default()
+            },
+            ..AppConfig::default()
+        };
+
+        config.scrub_retired_fields();
+
+        assert!(config.models.ollama_vlm_model.is_none());
     }
 }
 

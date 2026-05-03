@@ -17,7 +17,6 @@
 
   const DOWNLOAD_SIZE_LABELS: Record<ManagedRuntimeId, string> = {
     llama_cpp: '~60 MB',
-    ollama: '~1.6 GB',
   };
 
   const HISTORY_LIMIT = 4;

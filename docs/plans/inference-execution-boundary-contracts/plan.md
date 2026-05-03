@@ -1157,7 +1157,7 @@ entry points.
 - [x] Inventory every `backend-ollama`, `OllamaBackend`, Ollama managed
   dependency/runtime id, registry, gateway, managed runtime, node-engine,
   Tauri, frontend, README, and test reference.
-- [ ] Decide the migration behavior for existing user settings, saved workflows,
+- [x] Decide the migration behavior for existing user settings, saved workflows,
   and managed runtime state that reference Ollama.
 - [x] Remove graph-visible `ollama-inference` entry points from the
   workflow-node inventory and frontend node maps while preserving a stale-node
@@ -1196,8 +1196,11 @@ added saved-workflow canonicalization for legacy `ollama-inference` nodes by
 migrating them to `llm-inference`, removing unsupported Ollama-only ports,
 recording append-only upgrade diagnostics, preserving compatible response/stream
 edges, and retaining unresolved Pumas model-reference metadata for user repair.
-Legacy persisted user-setting cleanup and final deletion of retired adapter files
-remain pending.
+The fifth slice made the persisted `ollama_vlm_model` setting a scrubbed
+compatibility field, stopped configured startup requests from forwarding it, and
+removed the frontend model-setting/runtime-manager type surfaces that could
+reintroduce Ollama as a user-selectable runtime. Final deletion of retired
+adapter files remains pending.
 
 ### Milestone 7: Strengthen Capability Facts
 

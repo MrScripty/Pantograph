@@ -29,7 +29,7 @@
     available: boolean;
     unavailable_reason: string | null;
     can_install: boolean;
-    runtime_binary_id: 'llama_cpp' | 'ollama' | null;
+    runtime_binary_id: 'llama_cpp' | null;
   }
 
   let backends: BackendInfo[] = $state([]);

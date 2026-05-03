@@ -50,7 +50,7 @@ pub(crate) fn build_configured_inference_request(config: &AppConfig) -> Inferenc
         external_url: None,
         file_model_path: config.models.vlm_model_path.as_ref().map(PathBuf::from),
         mmproj_path: config.models.vlm_mmproj_path.as_ref().map(PathBuf::from),
-        ollama_model_name: config.models.ollama_vlm_model.clone(),
+        ollama_model_name: None,
         device: Some(config.device.device.clone()),
         gpu_layers: Some(config.device.gpu_layers),
     }
@@ -152,7 +152,7 @@ mod tests {
             request.mmproj_path.as_deref(),
             Some(Path::new("/models/qwen.mmproj"))
         );
-        assert_eq!(request.ollama_model_name.as_deref(), Some("qwen2.5vl"));
+        assert!(request.ollama_model_name.is_none());
         assert_eq!(request.device.as_deref(), Some("Vulkan0"));
         assert_eq!(request.gpu_layers, Some(99));
     }

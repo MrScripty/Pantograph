@@ -1,4 +1,4 @@
-export type ManagedRuntimeId = 'llama_cpp' | 'ollama';
+export type ManagedRuntimeId = 'llama_cpp';
 
 export type ManagedBinaryCategory =
   | 'runtime_sidecar'

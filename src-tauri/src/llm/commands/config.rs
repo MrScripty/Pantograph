@@ -16,7 +16,7 @@ pub async fn get_model_config(config: State<'_, SharedAppConfig>) -> Result<Mode
 pub async fn set_model_config(
     app: AppHandle,
     config: State<'_, SharedAppConfig>,
-    models: ModelConfig,
+    mut models: ModelConfig,
 ) -> Result<(), String> {
     let app_data_dir = app
         .path()
@@ -24,6 +24,7 @@ pub async fn set_model_config(
         .map_err(|e| format!("Failed to get app data dir: {}", e))?;
 
     let mut config_guard = config.write().await;
+    models.scrub_retired_fields();
     config_guard.models = models;
     config_guard
         .save(&app_data_dir)
@@ -45,7 +46,7 @@ pub async fn set_app_config(
     app: AppHandle,
     config: State<'_, SharedAppConfig>,
     workflow_service: State<'_, SharedWorkflowService>,
-    new_config: AppConfig,
+    mut new_config: AppConfig,
 ) -> Result<(), String> {
     let app_data_dir = app
         .path()
@@ -53,6 +54,7 @@ pub async fn set_app_config(
         .map_err(|e| format!("Failed to get app data dir: {}", e))?;
 
     let mut config_guard = config.write().await;
+    new_config.scrub_retired_fields();
     *config_guard = new_config;
     let max_loaded_sessions = config_guard.workflow.max_loaded_sessions;
     config_guard
