@@ -1212,6 +1212,11 @@ Node-engine task-contract validation failures now project bounded
 task-validation lifecycle events through the existing host-owned inference
 lifecycle sink when available, including request id, backend key, runtime id,
 model id, and the contract failure detail.
+Open issue discovered during the diagnostics slice: dependency preflight
+failures still originate in `enforce_dependency_preflight` without stable
+task/execution context, so a later slice must thread bounded request context
+through preflight before those failures can emit lifecycle diagnostics without
+inventing node-engine ledger writes.
 
 ### Milestone 4: Define Neutral Managed-Dependency Boundary
 
@@ -2487,6 +2492,9 @@ Update during implementation:
 - 2026-05-03: Routed contract-only canonical inference task failures through
   the existing host-owned lifecycle diagnostics sink as bounded
   task-validation failed facts when a sink is installed.
+- 2026-05-03: Recorded a remaining diagnostics gap: dependency preflight
+  failures need stable task/execution context before they can emit host-owned
+  lifecycle failure facts without moving ledger ownership into node-engine.
 
 ## Commit Cadence Notes
 
