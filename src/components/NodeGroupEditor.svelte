@@ -12,9 +12,6 @@
   import SelectionInputNode from './nodes/workflow/SelectionInputNode.svelte';
   import VectorInputNode from './nodes/workflow/VectorInputNode.svelte';
   import LLMInferenceNode from './nodes/workflow/LLMInferenceNode.svelte';
-  import LlamaCppInferenceNode from './nodes/workflow/LlamaCppInferenceNode.svelte';
-  import EmbeddingNode from './nodes/workflow/EmbeddingNode.svelte';
-  import RerankerNode from './nodes/workflow/RerankerNode.svelte';
   import OnnxInferenceNode from './nodes/workflow/OnnxInferenceNode.svelte';
   import ModelProviderNode from './nodes/workflow/ModelProviderNode.svelte';
   import TextOutputNode from './nodes/workflow/TextOutputNode.svelte';
@@ -48,9 +45,6 @@
     'selection-input': SelectionInputNode,
     'vector-input': VectorInputNode,
     'llm-inference': LLMInferenceNode,
-    'llamacpp-inference': LlamaCppInferenceNode,
-    'embedding': EmbeddingNode,
-    'reranker': RerankerNode,
     'onnx-inference': OnnxInferenceNode,
     'model-provider': ModelProviderNode,
     'text-output': TextOutputNode,

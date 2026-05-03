@@ -1,6 +1,6 @@
 {
   "name": "GGUF Reranker Workflow",
-  "description": "Minimal reranking workflow that routes a Puma-Lib GGUF reranker model into the dedicated reranker node and displays both the top result and the full ranking JSON.",
+  "description": "Minimal reranking workflow that routes a Puma-Lib GGUF reranker model into canonical inference and displays both the top result and the full ranking JSON.",
   "version": "1.0.0",
   "orchestration": {
     "id": "gguf-reranker-workflow-orch",
@@ -74,24 +74,6 @@
           }
         },
         {
-          "id": "top-k",
-          "node_type": "number-input",
-          "position": { "x": 80, "y": 520 },
-          "data": {
-            "label": "Top K",
-            "value": 3
-          }
-        },
-        {
-          "id": "return-documents",
-          "node_type": "boolean-input",
-          "position": { "x": 260, "y": 520 },
-          "data": {
-            "label": "Return Documents",
-            "value": true
-          }
-        },
-        {
           "id": "model",
           "node_type": "puma-lib",
           "position": { "x": 360, "y": 120 },
@@ -101,10 +83,16 @@
         },
         {
           "id": "reranker",
-          "node_type": "reranker",
+          "node_type": "llm-inference",
           "position": { "x": 640, "y": 240 },
           "data": {
-            "label": "GGUF Reranker"
+            "label": "GGUF Reranker",
+            "task_kind": "rerank",
+            "runtime_hint": "llamacpp",
+            "task_options": {
+              "top_k": 3,
+              "return_documents": true
+            }
           }
         },
         {
@@ -141,41 +129,27 @@
         },
         {
           "id": "e3",
-          "source": "top-k",
-          "source_handle": "value",
+          "source": "model",
+          "source_handle": "pumas_model_ref",
           "target": "reranker",
-          "target_handle": "top_k"
+          "target_handle": "pumas_model_ref"
         },
         {
           "id": "e4",
-          "source": "return-documents",
-          "source_handle": "value",
-          "target": "reranker",
-          "target_handle": "return_documents"
-        },
-        {
-          "id": "e5",
-          "source": "model",
-          "source_handle": "model_path",
-          "target": "reranker",
-          "target_handle": "model_path"
-        },
-        {
-          "id": "e6",
           "source": "model",
           "source_handle": "inference_settings",
           "target": "reranker",
           "target_handle": "inference_settings"
         },
         {
-          "id": "e7",
+          "id": "e5",
           "source": "reranker",
           "source_handle": "top_document",
           "target": "top-document",
           "target_handle": "text"
         },
         {
-          "id": "e8",
+          "id": "e6",
           "source": "reranker",
           "source_handle": "results",
           "target": "results",

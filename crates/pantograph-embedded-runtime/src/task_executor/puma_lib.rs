@@ -116,6 +116,7 @@ impl TauriTaskExecutor {
             inputs,
             &["recommended_backend", "recommendedBackend"],
         );
+        let mut resolved_from_pumas = false;
 
         if let Some(api) = extensions.get::<Arc<pumas_library::PumasApi>>(extension_keys::PUMAS_API)
         {
@@ -128,6 +129,7 @@ impl TauriTaskExecutor {
             .await
             {
                 Ok(Some(model)) => {
+                    resolved_from_pumas = true;
                     model_id = Some(model.id.clone());
                     if !model.path.trim().is_empty() {
                         model_path = model.path.clone();
@@ -225,8 +227,39 @@ impl TauriTaskExecutor {
         .unwrap_or_else(|| serde_json::json!([]));
 
         let mut outputs = HashMap::new();
-        outputs.insert("model_path".to_string(), serde_json::json!(model_path));
+        outputs.insert(
+            "model_path".to_string(),
+            serde_json::json!(model_path.clone()),
+        );
         outputs.insert("inference_settings".to_string(), inference_settings);
+        let mut pumas_model_ref = serde_json::Map::new();
+        pumas_model_ref.insert("source".to_string(), serde_json::json!("puma-lib"));
+        pumas_model_ref.insert(
+            "status".to_string(),
+            serde_json::json!(if resolved_from_pumas {
+                "resolved"
+            } else if model_id.is_some() {
+                "identity_unverified"
+            } else {
+                "path_only"
+            }),
+        );
+        pumas_model_ref.insert("model_path".to_string(), serde_json::json!(model_path));
+        for (key, value) in [
+            ("model_id", model_id.as_deref()),
+            ("model_type", model_type.as_deref()),
+            ("task_type_primary", task_type_primary.as_deref()),
+            ("backend_key", backend_key.as_deref()),
+            ("recommended_backend", recommended_backend.as_deref()),
+        ] {
+            if let Some(value) = value.filter(|value| !value.trim().is_empty()) {
+                pumas_model_ref.insert(key.to_string(), serde_json::json!(value));
+            }
+        }
+        outputs.insert(
+            "pumas_model_ref".to_string(),
+            serde_json::Value::Object(pumas_model_ref),
+        );
         Self::insert_puma_lib_output_string(&mut outputs, "model_id", model_id);
         Self::insert_puma_lib_output_string(&mut outputs, "model_type", model_type);
         Self::insert_puma_lib_output_string(&mut outputs, "task_type_primary", task_type_primary);

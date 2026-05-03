@@ -59,6 +59,18 @@ async fn puma_lib_execution_rebinds_stale_model_path_from_model_id() {
         outputs.get("recommended_backend"),
         Some(&serde_json::json!("diffusers"))
     );
+    assert_eq!(
+        outputs
+            .get("pumas_model_ref")
+            .and_then(|value| value.get("model_id")),
+        Some(&serde_json::json!("diffusion/imported/test-bundle"))
+    );
+    assert_eq!(
+        outputs
+            .get("pumas_model_ref")
+            .and_then(|value| value.get("model_path")),
+        Some(&serde_json::json!(bundle_root.display().to_string()))
+    );
 }
 
 #[tokio::test]
@@ -118,5 +130,11 @@ async fn puma_lib_execution_resolves_saved_model_name_without_path_or_id() {
     assert_eq!(
         outputs.get("task_type_primary"),
         Some(&serde_json::json!("text-to-image"))
+    );
+    assert_eq!(
+        outputs
+            .get("pumas_model_ref")
+            .and_then(|value| value.get("status")),
+        Some(&serde_json::json!("resolved"))
     );
 }

@@ -40,7 +40,7 @@ to the workflow graph runtime instead of being spread across generic canvas code
 | `TextOutputNode.svelte` | Displays terminal text values and streaming text updates from workflow execution. |
 | `AudioInputNode.svelte` | Captures user-selected audio files and writes stable input data into node configuration. |
 | `AudioGenerationNode.svelte` | Shows execution and dependency status for Stable Audio generation nodes. |
-| `RerankerNode.svelte` | Presents query, candidate-document, and ranked-output state for GGUF reranker execution. |
+| `RerankerNode.svelte` | Retired specialized renderer retained only for saved-workflow migration reference; new rerank workflows render through `LLMInferenceNode.svelte`. |
 | `GenericNode.svelte` | Fallback renderer for workflow node types that do not need specialized UI. |
 
 ## Problem

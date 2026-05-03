@@ -758,6 +758,12 @@ host DTOs, migration steps, and feature-flag compatibility checks.
 - Reason: this warning is in the inference process helper surface and is
   unrelated to hiding the retired Ollama graph node or stale-node executor
   guard.
+- 2026-05-03: Focused `pantograph-embedded-runtime puma_lib` validation for the
+  canonical template slice compiled `pantograph-workflow-service` and surfaced
+  dead-code warnings for the legacy inference migration inventory/spec helper
+  types. The warnings do not fail the slice, but the inventory should either be
+  wired into non-test validation/reporting or scoped as test-only before the
+  migration milestone is considered clean.
 - Revisit trigger: address in the backend feature cleanup slice or the next
   inference warning-baseline cleanup before requiring warning-free all-feature
   dependency checks.
@@ -1632,7 +1638,11 @@ frontend/template, and validation slices remain open. Rust workflow-node
 inventory no longer registers retired `llamacpp-inference`,
 `pytorch-inference`, `embedding`, or `reranker` node descriptors as
 graph-visible built-ins; the descriptor structs remain only as migration
-references and compatibility test surfaces.
+references and compatibility test surfaces. Frontend node maps and workflow
+mocks no longer expose retired backend-specific inference renderers, the GGUF
+reranker template now uses canonical `llm-inference` with
+`task_kind = rerank`, and `puma-lib` exposes a canonical JSON
+`pumas_model_ref` output for Pumas-to-inference graph wiring.
 
 ### Milestone 12: Prepare Native Candle Slice
 
