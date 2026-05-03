@@ -119,6 +119,12 @@ pub struct RuntimeTechnicalFitCandidate {
     pub warmup_state: Option<RuntimeTechnicalFitWarmupState>,
     #[serde(default)]
     pub supports_runtime_requirements: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compatibility_report: Option<RuntimeTechnicalFitCompatibilityReport>,
+    #[serde(default)]
+    pub compatibility_issue_count: u32,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub compatibility_issues: Vec<RuntimeTechnicalFitCompatibilityIssue>,
 }
 
 impl RuntimeTechnicalFitCandidate {
@@ -145,6 +151,67 @@ impl RuntimeTechnicalFitCandidate {
             residency_state: self.residency_state,
             warmup_state: self.warmup_state,
             supports_runtime_requirements: self.supports_runtime_requirements,
+            compatibility_report: self
+                .compatibility_report
+                .as_ref()
+                .map(RuntimeTechnicalFitCompatibilityReport::normalized),
+            compatibility_issue_count: self.compatibility_issue_count,
+            compatibility_issues: self
+                .compatibility_issues
+                .iter()
+                .map(RuntimeTechnicalFitCompatibilityIssue::normalized)
+                .collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct RuntimeTechnicalFitCompatibilityReport {
+    pub status: String,
+    pub compatible: bool,
+    pub task: String,
+    pub model_source: String,
+    pub preprocessing: String,
+    pub postprocessing: String,
+}
+
+impl RuntimeTechnicalFitCompatibilityReport {
+    pub fn normalized(&self) -> Self {
+        Self {
+            status: normalize_trimmed_string(Some(self.status.as_str())).unwrap_or_default(),
+            compatible: self.compatible,
+            task: normalize_trimmed_string(Some(self.task.as_str())).unwrap_or_default(),
+            model_source: normalize_trimmed_string(Some(self.model_source.as_str()))
+                .unwrap_or_default(),
+            preprocessing: normalize_trimmed_string(Some(self.preprocessing.as_str()))
+                .unwrap_or_default(),
+            postprocessing: normalize_trimmed_string(Some(self.postprocessing.as_str()))
+                .unwrap_or_default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct RuntimeTechnicalFitCompatibilityIssue {
+    pub kind: String,
+    pub phase: String,
+    pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+}
+
+impl RuntimeTechnicalFitCompatibilityIssue {
+    pub fn normalized(&self) -> Self {
+        Self {
+            kind: normalize_trimmed_string(Some(self.kind.as_str())).unwrap_or_default(),
+            phase: normalize_trimmed_string(Some(self.phase.as_str())).unwrap_or_default(),
+            message: normalize_trimmed_string(Some(self.message.as_str())).unwrap_or_default(),
+            model_id: normalize_trimmed_string(self.model_id.as_deref()),
+            path: normalize_trimmed_string(self.path.as_deref()),
         }
     }
 }
@@ -535,6 +602,9 @@ fn override_fallback_candidate(
         residency_state: None,
         warmup_state: None,
         supports_runtime_requirements: true,
+        compatibility_report: None,
+        compatibility_issue_count: 0,
+        compatibility_issues: Vec::new(),
     }
     .normalized()
 }

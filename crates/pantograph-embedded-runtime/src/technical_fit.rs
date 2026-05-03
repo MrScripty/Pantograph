@@ -2,7 +2,8 @@ use std::collections::HashSet;
 
 use pantograph_runtime_registry::{
     select_runtime_technical_fit, RuntimeRegistrySnapshot, RuntimeTechnicalFitCandidate,
-    RuntimeTechnicalFitCandidateSourceKind, RuntimeTechnicalFitDecision, RuntimeTechnicalFitFactor,
+    RuntimeTechnicalFitCandidateSourceKind, RuntimeTechnicalFitCompatibilityIssue,
+    RuntimeTechnicalFitCompatibilityReport, RuntimeTechnicalFitDecision, RuntimeTechnicalFitFactor,
     RuntimeTechnicalFitOverride, RuntimeTechnicalFitReason, RuntimeTechnicalFitReasonCode,
     RuntimeTechnicalFitRequest, RuntimeTechnicalFitResidencyState,
     RuntimeTechnicalFitResourcePressure, RuntimeTechnicalFitSelectionMode,
@@ -16,6 +17,8 @@ use pantograph_workflow_service::{
 };
 
 use crate::{workflow_runtime::unix_timestamp_ms, EmbeddedWorkflowHost};
+
+const MAX_RUNTIME_TECHNICAL_FIT_COMPATIBILITY_ISSUES: usize = 32;
 
 pub fn build_runtime_technical_fit_request_with_package_facts(
     request: &WorkflowTechnicalFitRequest,
@@ -149,6 +152,9 @@ fn runtime_capability_candidates(
             residency_state: Some(runtime_capability_residency_state(capability)),
             warmup_state: runtime_capability_warmup_state(capability),
             supports_runtime_requirements: runtime_capability_is_ready(capability),
+            compatibility_report: None,
+            compatibility_issue_count: 0,
+            compatibility_issues: Vec::new(),
         })
         .collect()
 }
@@ -177,6 +183,9 @@ pub fn runtime_candidates_from_pumas_package_facts(
                         facts.artifact.validation_state,
                         inference::ModelValidationState::Valid
                     ),
+                    compatibility_report: None,
+                    compatibility_issue_count: 0,
+                    compatibility_issues: Vec::new(),
                 })
         })
         .collect()
@@ -205,10 +214,59 @@ pub fn runtime_candidates_from_pumas_package_facts_with_backend_capabilities(
                     residency_state: None,
                     warmup_state: None,
                     supports_runtime_requirements: compatibility.compatible,
+                    compatibility_report: Some(runtime_compatibility_report(&compatibility)),
+                    compatibility_issue_count: compatibility.issues.len().min(u32::MAX as usize)
+                        as u32,
+                    compatibility_issues: runtime_compatibility_issues(
+                        &compatibility,
+                        MAX_RUNTIME_TECHNICAL_FIT_COMPATIBILITY_ISSUES,
+                    ),
                 }
             })
         })
         .collect()
+}
+
+fn runtime_compatibility_report(
+    report: &inference::BackendCompatibilityReport,
+) -> RuntimeTechnicalFitCompatibilityReport {
+    let summary = report.to_inference_compatibility_report_summary();
+    RuntimeTechnicalFitCompatibilityReport {
+        status: summary.status,
+        compatible: summary.compatible,
+        task: summary.task,
+        model_source: summary.model_source,
+        preprocessing: summary.preprocessing,
+        postprocessing: summary.postprocessing,
+    }
+}
+
+fn runtime_compatibility_issues(
+    report: &inference::BackendCompatibilityReport,
+    limit: usize,
+) -> Vec<RuntimeTechnicalFitCompatibilityIssue> {
+    report
+        .to_inference_compatibility_issue_summaries(limit)
+        .into_iter()
+        .map(|issue| RuntimeTechnicalFitCompatibilityIssue {
+            kind: issue.kind,
+            phase: inference_lifecycle_phase_key(&issue.phase).to_string(),
+            message: issue.message,
+            model_id: issue.model_id,
+            path: issue.path,
+        })
+        .collect()
+}
+
+fn inference_lifecycle_phase_key(phase: &inference::InferenceLifecyclePhase) -> &'static str {
+    match phase {
+        inference::InferenceLifecyclePhase::ModelPackageResolution => "model_package_resolution",
+        inference::InferenceLifecyclePhase::TaskValidation => "task_validation",
+        inference::InferenceLifecyclePhase::Preprocessing => "preprocessing",
+        inference::InferenceLifecyclePhase::BackendExecution => "backend_execution",
+        inference::InferenceLifecyclePhase::Postprocessing => "postprocessing",
+        inference::InferenceLifecyclePhase::ResultProjection => "result_projection",
+    }
 }
 
 fn task_registry_entry_from_package_facts(
@@ -813,7 +871,26 @@ mod tests {
             .expect("pytorch candidate");
 
         assert!(llama.supports_runtime_requirements);
+        assert_eq!(
+            llama
+                .compatibility_report
+                .as_ref()
+                .map(|report| report.status.as_str()),
+            Some("accepted")
+        );
+        assert_eq!(llama.compatibility_issue_count, 0);
         assert!(!pytorch.supports_runtime_requirements);
+        assert_eq!(
+            pytorch
+                .compatibility_report
+                .as_ref()
+                .map(|report| (report.status.as_str(), report.model_source.as_str())),
+            Some(("rejected", "unsupported"))
+        );
+        assert!(pytorch
+            .compatibility_issues
+            .iter()
+            .any(|issue| issue.kind == "unsupported_model_artifact"));
     }
 
     #[test]
@@ -838,6 +915,17 @@ mod tests {
         assert_eq!(candidates.len(), 1);
         assert_eq!(candidates[0].backend_key.as_deref(), Some("pytorch"));
         assert!(!candidates[0].supports_runtime_requirements);
+        assert_eq!(
+            candidates[0]
+                .compatibility_report
+                .as_ref()
+                .map(|report| report.preprocessing.as_str()),
+            Some("unsupported")
+        );
+        assert!(candidates[0]
+            .compatibility_issues
+            .iter()
+            .any(|issue| issue.kind == "missing_preprocessing_component"));
     }
 
     #[tokio::test]

@@ -601,5 +601,9 @@ let runtime = EmbeddedRuntime::with_default_python_runtime(
   should not bypass that contract with a narrower core-gateway-only helper when
   additional producer facts such as the dedicated embedding sidecar are
   available.
+- Technical-fit candidate projection preserves bounded backend compatibility
+  summaries from Pumas package facts and backend capabilities so diagnostics
+  can explain rejected/degraded candidates without moving final runtime
+  selection policy into Pumas or inference.
 - If the descriptor contract changes, this directory must regenerate its README
   contract text and add ADR coverage if the compatibility boundary expands.

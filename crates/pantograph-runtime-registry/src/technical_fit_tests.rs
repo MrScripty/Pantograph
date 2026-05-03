@@ -53,6 +53,22 @@ fn technical_fit_request_normalizes_inputs_and_defaults_legal_factors() {
             residency_state: Some(RuntimeTechnicalFitResidencyState::Loaded),
             warmup_state: Some(RuntimeTechnicalFitWarmupState::Warm),
             supports_runtime_requirements: true,
+            compatibility_report: Some(RuntimeTechnicalFitCompatibilityReport {
+                status: " rejected ".to_string(),
+                compatible: false,
+                task: " supported ".to_string(),
+                model_source: " unsupported ".to_string(),
+                preprocessing: " supported ".to_string(),
+                postprocessing: " supported ".to_string(),
+            }),
+            compatibility_issue_count: 1,
+            compatibility_issues: vec![RuntimeTechnicalFitCompatibilityIssue {
+                kind: " unsupported_model_artifact ".to_string(),
+                phase: " model_package_resolution ".to_string(),
+                message: " backend cannot load artifact ".to_string(),
+                model_id: Some(" model-a ".to_string()),
+                path: Some(" model.gguf ".to_string()),
+            }],
         }],
         resource_pressure: Some(RuntimeTechnicalFitResourcePressure {
             queued_run_count: Some(2),
@@ -91,6 +107,24 @@ fn technical_fit_request_normalizes_inputs_and_defaults_legal_factors() {
     assert_eq!(
         normalized.candidates[0].backend_key.as_deref(),
         Some("llama_cpp")
+    );
+    assert_eq!(
+        normalized.candidates[0]
+            .compatibility_report
+            .as_ref()
+            .map(|report| (report.status.as_str(), report.model_source.as_str())),
+        Some(("rejected", "unsupported"))
+    );
+    assert_eq!(normalized.candidates[0].compatibility_issue_count, 1);
+    assert_eq!(
+        normalized.candidates[0].compatibility_issues[0].kind,
+        "unsupported_model_artifact"
+    );
+    assert_eq!(
+        normalized.candidates[0].compatibility_issues[0]
+            .model_id
+            .as_deref(),
+        Some("model-a")
     );
 }
 
@@ -176,6 +210,9 @@ fn selector_prefers_explicit_override_over_hotter_candidate() {
                 residency_state: Some(RuntimeTechnicalFitResidencyState::Active),
                 warmup_state: Some(RuntimeTechnicalFitWarmupState::Ready),
                 supports_runtime_requirements: true,
+                compatibility_report: None,
+                compatibility_issue_count: 0,
+                compatibility_issues: Vec::new(),
             },
             RuntimeTechnicalFitCandidate {
                 candidate_id: "runtime-b".to_string(),
@@ -187,6 +224,9 @@ fn selector_prefers_explicit_override_over_hotter_candidate() {
                 residency_state: Some(RuntimeTechnicalFitResidencyState::Loaded),
                 warmup_state: Some(RuntimeTechnicalFitWarmupState::Warm),
                 supports_runtime_requirements: true,
+                compatibility_report: None,
+                compatibility_issue_count: 0,
+                compatibility_issues: Vec::new(),
             },
         ],
         resource_pressure: None,
@@ -247,6 +287,9 @@ fn selector_uses_snapshot_residency_and_deterministic_tie_break() {
                 residency_state: None,
                 warmup_state: None,
                 supports_runtime_requirements: true,
+                compatibility_report: None,
+                compatibility_issue_count: 0,
+                compatibility_issues: Vec::new(),
             },
             RuntimeTechnicalFitCandidate {
                 candidate_id: "runtime-a".to_string(),
@@ -258,6 +301,9 @@ fn selector_uses_snapshot_residency_and_deterministic_tie_break() {
                 residency_state: None,
                 warmup_state: None,
                 supports_runtime_requirements: true,
+                compatibility_report: None,
+                compatibility_issue_count: 0,
+                compatibility_issues: Vec::new(),
             },
         ],
         resource_pressure: None,
@@ -296,6 +342,9 @@ fn selector_falls_back_conservatively_when_required_context_is_missing() {
             residency_state: None,
             warmup_state: None,
             supports_runtime_requirements: true,
+            compatibility_report: None,
+            compatibility_issue_count: 0,
+            compatibility_issues: Vec::new(),
         }],
         resource_pressure: None,
     });
@@ -337,6 +386,9 @@ fn selector_conservative_fallback_stays_with_required_backend_candidate() {
                 residency_state: Some(RuntimeTechnicalFitResidencyState::Active),
                 warmup_state: Some(RuntimeTechnicalFitWarmupState::Ready),
                 supports_runtime_requirements: true,
+                compatibility_report: None,
+                compatibility_issue_count: 0,
+                compatibility_issues: Vec::new(),
             },
             RuntimeTechnicalFitCandidate {
                 candidate_id: "llama_cpp".to_string(),
@@ -348,6 +400,9 @@ fn selector_conservative_fallback_stays_with_required_backend_candidate() {
                 residency_state: Some(RuntimeTechnicalFitResidencyState::Unloaded),
                 warmup_state: None,
                 supports_runtime_requirements: false,
+                compatibility_report: None,
+                compatibility_issue_count: 0,
+                compatibility_issues: Vec::new(),
             },
         ],
         resource_pressure: None,
@@ -405,6 +460,9 @@ fn selector_prefers_more_headroom_under_queue_pressure() {
                 residency_state: None,
                 warmup_state: None,
                 supports_runtime_requirements: true,
+                compatibility_report: None,
+                compatibility_issue_count: 0,
+                compatibility_issues: Vec::new(),
             },
             RuntimeTechnicalFitCandidate {
                 candidate_id: "runtime-cool".to_string(),
@@ -416,6 +474,9 @@ fn selector_prefers_more_headroom_under_queue_pressure() {
                 residency_state: None,
                 warmup_state: None,
                 supports_runtime_requirements: true,
+                compatibility_report: None,
+                compatibility_issue_count: 0,
+                compatibility_issues: Vec::new(),
             },
         ],
         resource_pressure: Some(RuntimeTechnicalFitResourcePressure {
@@ -476,6 +537,9 @@ fn selector_prefers_more_headroom_under_budget_pressure() {
                 residency_state: None,
                 warmup_state: None,
                 supports_runtime_requirements: true,
+                compatibility_report: None,
+                compatibility_issue_count: 0,
+                compatibility_issues: Vec::new(),
             },
             RuntimeTechnicalFitCandidate {
                 candidate_id: "runtime-roomy".to_string(),
@@ -487,6 +551,9 @@ fn selector_prefers_more_headroom_under_budget_pressure() {
                 residency_state: None,
                 warmup_state: None,
                 supports_runtime_requirements: true,
+                compatibility_report: None,
+                compatibility_issue_count: 0,
+                compatibility_issues: Vec::new(),
             },
         ],
         resource_pressure: Some(RuntimeTechnicalFitResourcePressure {

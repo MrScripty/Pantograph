@@ -1024,7 +1024,11 @@ uses a new Pumas snapshot. The `puma-lib` option cache polls Pumas after the
 startup/page snapshot and before bounded summary regeneration, so updates
 observed during population are applied without inspecting Pumas storage
 internals. A longer-lived application startup cache loop is still pending before
-the event-consumption task is complete.
+the event-consumption task is complete. Backend-checked Pumas package-fact
+candidate projection now preserves bounded compatibility report and issue
+summaries on `RuntimeTechnicalFitCandidate` so rejected/degraded candidates can
+be explained without asking Pumas to own candidate derivation or scheduler
+selection.
 
 ### Milestone 3: Define Transformers-Aligned Rust Model Contracts
 

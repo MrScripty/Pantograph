@@ -90,6 +90,10 @@ let snapshot = registry.snapshot();
 - Stable fields: registry snapshots, reservation leases, reclaim dispositions,
   warmup dispositions, and technical-fit decisions are machine-consumed by
   runtime hosts and diagnostics.
+- Technical-fit candidates may carry bounded compatibility report and issue
+  summaries from backend/model checks. The selector treats those as candidate
+  facts and still uses `supports_runtime_requirements` plus legal factors for
+  eligibility and ranking.
 - Defaults: absent observations mean the registry has no current fact for that
   runtime.
 - Enums and labels: status and reason-code enums are semantic contracts, not
