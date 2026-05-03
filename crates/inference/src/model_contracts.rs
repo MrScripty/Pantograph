@@ -354,6 +354,84 @@ impl TaskRegistryEntry {
     }
 }
 
+/// Stable diagnostic for task-registry resolution at package/request boundaries.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct TaskRegistryResolutionDiagnostic {
+    pub kind: TaskRegistryResolutionDiagnosticKind,
+    pub message: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub labels: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub canonical_task_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub input_modalities: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub output_modalities: Vec<String>,
+}
+
+/// Stable task-registry resolution diagnostic labels.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskRegistryResolutionDiagnosticKind {
+    MissingTaskEvidence,
+    UnsupportedTaskLabel,
+    ConflictingTaskEvidence,
+    ModalityMismatch,
+}
+
+impl TaskRegistryResolutionDiagnostic {
+    fn missing_task_evidence() -> Self {
+        Self {
+            kind: TaskRegistryResolutionDiagnosticKind::MissingTaskEvidence,
+            message: "package task evidence does not include a task label".to_string(),
+            labels: Vec::new(),
+            canonical_task_ids: Vec::new(),
+            input_modalities: Vec::new(),
+            output_modalities: Vec::new(),
+        }
+    }
+
+    fn unsupported_task_label(labels: Vec<String>) -> Self {
+        Self {
+            kind: TaskRegistryResolutionDiagnosticKind::UnsupportedTaskLabel,
+            message:
+                "package task evidence does not match a canonical inference task registry entry"
+                    .to_string(),
+            labels,
+            canonical_task_ids: Vec::new(),
+            input_modalities: Vec::new(),
+            output_modalities: Vec::new(),
+        }
+    }
+
+    fn conflicting_task_evidence(labels: Vec<String>, canonical_task_ids: Vec<String>) -> Self {
+        Self {
+            kind: TaskRegistryResolutionDiagnosticKind::ConflictingTaskEvidence,
+            message: "package task labels resolve to different canonical inference tasks"
+                .to_string(),
+            labels,
+            canonical_task_ids,
+            input_modalities: Vec::new(),
+            output_modalities: Vec::new(),
+        }
+    }
+
+    fn modality_mismatch(entry: &TaskRegistryEntry, evidence: &TaskEvidence) -> Self {
+        Self {
+            kind: TaskRegistryResolutionDiagnosticKind::ModalityMismatch,
+            message: format!(
+                "package modalities do not match canonical task {}",
+                entry.canonical_label()
+            ),
+            labels: task_evidence_labels(evidence),
+            canonical_task_ids: vec![entry.canonical_label().to_string()],
+            input_modalities: evidence.input_modalities.clone(),
+            output_modalities: evidence.output_modalities.clone(),
+        }
+    }
+}
+
 /// Seeded canonical task registry entries for the first inference vertical
 /// slices. This is a contract fixture, not a runtime selection table.
 #[must_use]
@@ -540,6 +618,83 @@ pub fn resolve_task_registry_entry(value: &str) -> Option<TaskRegistryEntry> {
     default_task_registry_entries()
         .into_iter()
         .find(|entry| entry.matches_label(value))
+}
+
+/// Resolve package task evidence to a validated canonical task registry entry.
+///
+/// This is a boundary parser for model-library package facts. Internal backend
+/// code should consume the returned `TaskRegistryEntry` rather than inspecting
+/// raw task strings directly.
+///
+/// # Errors
+///
+/// Returns a typed diagnostic when evidence is missing, unsupported, resolves
+/// to conflicting canonical tasks, or declares modalities outside the resolved
+/// task signature.
+pub fn resolve_task_registry_entry_from_evidence(
+    evidence: &TaskEvidence,
+) -> Result<TaskRegistryEntry, TaskRegistryResolutionDiagnostic> {
+    let labels = task_evidence_labels(evidence);
+    if labels.is_empty() {
+        return Err(TaskRegistryResolutionDiagnostic::missing_task_evidence());
+    }
+
+    let mut resolved_entries = Vec::new();
+    for label in &labels {
+        if let Some(entry) = resolve_task_registry_entry(label) {
+            resolved_entries.push(entry);
+        }
+    }
+
+    let Some(first) = resolved_entries.first().cloned() else {
+        return Err(TaskRegistryResolutionDiagnostic::unsupported_task_label(
+            labels,
+        ));
+    };
+
+    let mut canonical_task_ids = vec![first.canonical_label().to_string()];
+    for entry in resolved_entries.iter().skip(1) {
+        if entry.task_id != first.task_id {
+            let label = entry.canonical_label().to_string();
+            if !canonical_task_ids.contains(&label) {
+                canonical_task_ids.push(label);
+            }
+        }
+    }
+
+    if canonical_task_ids.len() > 1 {
+        return Err(TaskRegistryResolutionDiagnostic::conflicting_task_evidence(
+            labels,
+            canonical_task_ids,
+        ));
+    }
+
+    if !first.matches_task_evidence(evidence) {
+        return Err(TaskRegistryResolutionDiagnostic::unsupported_task_label(
+            labels,
+        ));
+    }
+
+    if !first.matches_modality_evidence(evidence) {
+        return Err(TaskRegistryResolutionDiagnostic::modality_mismatch(
+            &first, evidence,
+        ));
+    }
+
+    Ok(first)
+}
+
+fn task_evidence_labels(evidence: &TaskEvidence) -> Vec<String> {
+    [
+        evidence.task_type_primary.as_deref(),
+        evidence.pipeline_tag.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    .map(str::trim)
+    .filter(|label| !label.is_empty())
+    .map(ToOwned::to_owned)
+    .collect()
 }
 
 /// Normalize a task label for registry alias matching.

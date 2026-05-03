@@ -28,8 +28,8 @@ use super::{
 };
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::model_contracts::{
-    resolve_task_registry_entry, GenerationOptions, InferenceModality, InferenceTaskId,
-    ModelValidationState, OptionCompatibilityDiagnostic, OptionSupportState,
+    resolve_task_registry_entry_from_evidence, GenerationOptions, InferenceModality,
+    InferenceTaskId, ModelValidationState, OptionCompatibilityDiagnostic, OptionSupportState,
     ResolvedModelPackageFacts, ResolvedModelSource, TaskEvidence, TaskRegistryEntry,
 };
 use crate::process::ProcessSpawner;
@@ -377,19 +377,13 @@ impl PyTorchBackend {
     fn transformers_task_profile_from_evidence(
         evidence: &TaskEvidence,
     ) -> Result<PyTorchTransformersTaskProfile, BackendError> {
-        let labels = [
-            evidence.task_type_primary.as_deref(),
-            evidence.pipeline_tag.as_deref(),
-        ];
-        for label in labels.into_iter().flatten() {
-            if let Some(entry) = resolve_task_registry_entry(label) {
-                return Self::transformers_task_profile_from_registry_entry(&entry);
-            }
-        }
-
-        Err(BackendError::Config(
-            "PyTorch/Transformers load requires text-generation or chat task evidence".to_string(),
-        ))
+        let entry = resolve_task_registry_entry_from_evidence(evidence).map_err(|diagnostic| {
+            BackendError::Config(format!(
+                "PyTorch/Transformers task evidence did not resolve: {:?}: {}",
+                diagnostic.kind, diagnostic.message
+            ))
+        })?;
+        Self::transformers_task_profile_from_registry_entry(&entry)
     }
 
     fn transformers_task_profile_from_registry_entry(

@@ -1020,17 +1020,17 @@ consume Pumas package facts and feed PyTorch/Transformers, vLLM, MLX, Candle,
 and llama.cpp/GGUF without exposing a Python object as the shared abstraction.
 
 **Tasks:**
-- [ ] Define a `ResolvedModelSource`-style contract that is normally produced
+- [x] Define a `ResolvedModelSource`-style contract that is normally produced
   from a Pumas model reference and distinguishes artifact kinds such as
   HF-compatible directories, GGUF files, safetensors, diffusers bundles, ONNX,
   and future formats.
-- [ ] Define direct-source variants only for import/debug/compatibility use,
+- [x] Define direct-source variants only for import/debug/compatibility use,
   including local HF-compatible directories, Hugging Face repo ids, and raw GGUF
   paths.
-- [ ] Define model package facts such as model type, architecture hints,
+- [x] Define model package facts such as model type, architecture hints,
   tokenizer presence, processor presence, chat template presence, generation
   config presence, weight format, and supported modalities.
-- [ ] Define component facts and overrides for tokenizer, processor,
+- [x] Define component facts and overrides for tokenizer, processor,
   image_processor, video_processor, feature_extractor/audio_processor, chat
   template, and generation config.
 - [ ] Define task request contracts aligned with Transformers task semantics
@@ -1041,20 +1041,20 @@ and llama.cpp/GGUF without exposing a Python object as the shared abstraction.
   processor/component requirements, streaming support, generative/scoring
   behavior, default lifecycle phases, support tier, and backend compatibility
   hooks.
-- [ ] Seed the task registry from the planned vertical slices first:
+- [x] Seed the task registry from the planned vertical slices first:
   GGUF text generation, GGUF embeddings, HF/Transformers text generation,
   rerank, and one multimodal validation path.
-- [ ] Preserve neighboring Transformers task ids as explicit unsupported,
+- [x] Preserve neighboring Transformers task ids as explicit unsupported,
   roadmap, or contract-only entries where they are useful for compatibility
   diagnostics, rather than silently collapsing them into generic task labels.
-- [ ] Preserve the original Transformers pipeline task id where known, plus
+- [x] Preserve the original Transformers pipeline task id where known, plus
   normalized Pumas modality/task signatures for routing and validation.
-- [ ] Define task alias handling for common upstream aliases while preventing
+- [x] Define task alias handling for common upstream aliases while preventing
   raw unvalidated task strings from reaching backend execution.
 - [ ] Define explicit security policy fields for `trust_remote_code`,
   custom-code requirements, local-only/offline loading, cache use, auth-token
   source, revision, and code revision.
-- [ ] Define public versus hidden lifecycle fields for task execution:
+- [x] Define public versus hidden lifecycle fields for task execution:
   package resolution, task validation, preprocessing, backend execution,
   postprocessing, result projection, and diagnostics are public facts; tensors,
   token ids, raw framework objects, logits processors, loaded handles, and
@@ -1065,7 +1065,7 @@ and llama.cpp/GGUF without exposing a Python object as the shared abstraction.
   unknown-field behavior for every contract that crosses Rust/Python,
   Rust/Tauri/TypeScript, Pumas/inference, saved workflow, or external HTTP
   runtime boundaries.
-- [ ] Add validation rules so internal code consumes parsed model/task types
+- [x] Add validation rules so internal code consumes parsed model/task types
   rather than raw strings or ad hoc JSON.
 - [ ] Document that Python Transformers is one implementation of these
   contracts, not the source of public truth.
@@ -1076,7 +1076,7 @@ and llama.cpp/GGUF without exposing a Python object as the shared abstraction.
 - Review against `ARCHITECTURE-PATTERNS.md` immutable contract guidance.
 - Unit tests for model source parsing and invalid-state rejection once code is
   added.
-- Unit tests or fixtures for task registry alias normalization, unsupported task
+- [x] Unit tests or fixtures for task registry alias normalization, unsupported task
   diagnostics, modality mismatch diagnostics, and missing processor/component
   diagnostics once code is added.
 - Serde/wire-shape tests for any DTO crossing Rust/Python/Tauri/TypeScript
@@ -1101,6 +1101,13 @@ without selecting a backend or runtime policy.
 Task-evidence and modality-evidence matching now live on `TaskRegistryEntry`,
 so backend compatibility checks consume the canonical registry validation path
 instead of duplicating task-label and modality normalization locally.
+The task-registry boundary now also exposes
+`resolve_task_registry_entry_from_evidence`, which parses Pumas package task
+evidence into a validated registry entry or a bounded
+`TaskRegistryResolutionDiagnostic` for missing task labels, unsupported task
+labels, conflicting upstream labels, and modality mismatches. PyTorch/
+Transformers load profiling now consumes this parsed task entry rather than
+walking raw task strings locally.
 
 ### Milestone 4: Define Neutral Managed-Dependency Boundary
 

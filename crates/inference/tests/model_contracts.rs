@@ -2,14 +2,16 @@ use std::collections::BTreeMap;
 
 use inference::{
     default_task_registry_entries, normalize_modality_label, normalize_task_label,
-    resolve_task_registry_entry, BackendHintLabel, GenerationOptionSource, GenerationOptions,
-    InferenceLifecyclePhase, InferenceModality, InferenceTaskId, ModelArtifactKind,
-    ModelExecutionDescriptor, ModelExecutionStorageKind, ModelExecutionValidationState,
-    ModelFactFamily, ModelLibraryChangeKind, ModelLibraryRefreshScope, ModelLibraryUpdateEvent,
-    ModelLibraryUpdateFeed, ModelPackageFactsSummarySnapshot, ModelPackageFactsSummaryStatus,
+    resolve_task_registry_entry, resolve_task_registry_entry_from_evidence, BackendHintLabel,
+    GenerationOptionSource, GenerationOptions, InferenceLifecyclePhase, InferenceModality,
+    InferenceTaskId, ModelArtifactKind, ModelExecutionDescriptor, ModelExecutionStorageKind,
+    ModelExecutionValidationState, ModelFactFamily, ModelLibraryChangeKind,
+    ModelLibraryRefreshScope, ModelLibraryUpdateEvent, ModelLibraryUpdateFeed,
+    ModelPackageFactsSummarySnapshot, ModelPackageFactsSummaryStatus,
     OptionCompatibilityDiagnostic, OptionSupportState, PackageFactStatus, ProcessorComponentKind,
     ResolvedModelPackageFacts, ResolvedModelSource, ResolvedModelSourceKind, SupportTier,
-    TaskEvidence, TaskExecutionBehavior, TaskFamily, TaskRegistryEntry, TaskStreamingSupport,
+    TaskEvidence, TaskExecutionBehavior, TaskFamily, TaskRegistryEntry,
+    TaskRegistryResolutionDiagnosticKind, TaskStreamingSupport,
     MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
 };
 
@@ -255,6 +257,102 @@ fn task_registry_matches_package_task_and_modality_evidence() {
         input_modalities: vec!["image".to_string()],
         ..TaskEvidence::default()
     }));
+}
+
+#[test]
+fn task_registry_resolution_returns_validated_entry_from_package_evidence() {
+    let entry = resolve_task_registry_entry_from_evidence(&TaskEvidence {
+        pipeline_tag: Some("causal-lm".to_string()),
+        task_type_primary: Some("text-generation".to_string()),
+        input_modalities: vec!["Text".to_string()],
+        output_modalities: vec!["text".to_string()],
+    })
+    .expect("text generation evidence should resolve");
+
+    assert_eq!(entry.task_id, InferenceTaskId::TextGeneration);
+}
+
+#[test]
+fn task_registry_resolution_reports_unsupported_task_evidence() {
+    let diagnostic = resolve_task_registry_entry_from_evidence(&TaskEvidence {
+        pipeline_tag: Some("object-detection".to_string()),
+        task_type_primary: Some("object_detection".to_string()),
+        input_modalities: vec!["image".to_string()],
+        output_modalities: vec!["json".to_string()],
+    })
+    .expect_err("unsupported task should report diagnostic");
+
+    assert_eq!(
+        diagnostic.kind,
+        TaskRegistryResolutionDiagnosticKind::UnsupportedTaskLabel
+    );
+    assert_eq!(
+        diagnostic.labels,
+        vec![
+            "object_detection".to_string(),
+            "object-detection".to_string()
+        ]
+    );
+
+    let encoded = serde_json::to_value(&diagnostic).expect("encode diagnostic");
+    assert_eq!(encoded["kind"], serde_json::json!("unsupported_task_label"));
+}
+
+#[test]
+fn task_registry_resolution_reports_missing_task_evidence() {
+    let diagnostic = resolve_task_registry_entry_from_evidence(&TaskEvidence {
+        input_modalities: vec!["text".to_string()],
+        output_modalities: vec!["text".to_string()],
+        ..TaskEvidence::default()
+    })
+    .expect_err("missing task labels should report diagnostic");
+
+    assert_eq!(
+        diagnostic.kind,
+        TaskRegistryResolutionDiagnosticKind::MissingTaskEvidence
+    );
+    assert!(diagnostic.labels.is_empty());
+}
+
+#[test]
+fn task_registry_resolution_reports_conflicting_task_evidence() {
+    let diagnostic = resolve_task_registry_entry_from_evidence(&TaskEvidence {
+        pipeline_tag: Some("feature-extraction".to_string()),
+        task_type_primary: Some("text-generation".to_string()),
+        input_modalities: vec!["text".to_string()],
+        output_modalities: vec!["text".to_string()],
+    })
+    .expect_err("conflicting task labels should report diagnostic");
+
+    assert_eq!(
+        diagnostic.kind,
+        TaskRegistryResolutionDiagnosticKind::ConflictingTaskEvidence
+    );
+    assert_eq!(
+        diagnostic.canonical_task_ids,
+        vec!["text_generation".to_string(), "embedding".to_string()]
+    );
+}
+
+#[test]
+fn task_registry_resolution_reports_modality_mismatch() {
+    let diagnostic = resolve_task_registry_entry_from_evidence(&TaskEvidence {
+        task_type_primary: Some("text-generation".to_string()),
+        input_modalities: vec!["image".to_string()],
+        output_modalities: vec!["text".to_string()],
+        ..TaskEvidence::default()
+    })
+    .expect_err("modality mismatch should report diagnostic");
+
+    assert_eq!(
+        diagnostic.kind,
+        TaskRegistryResolutionDiagnosticKind::ModalityMismatch
+    );
+    assert_eq!(
+        diagnostic.canonical_task_ids,
+        vec!["text_generation".to_string()]
+    );
+    assert_eq!(diagnostic.input_modalities, vec!["image".to_string()]);
 }
 
 #[test]

@@ -413,6 +413,22 @@ fn test_pytorch_task_profile_rejects_registry_tasks_without_loader() {
 }
 
 #[test]
+fn test_pytorch_task_profile_rejects_unregistered_task_evidence() {
+    match PyTorchBackend::transformers_task_profile_from_evidence(&TaskEvidence {
+        task_type_primary: Some("object-detection".to_string()),
+        pipeline_tag: Some("object-detection".to_string()),
+        input_modalities: vec!["image".to_string()],
+        output_modalities: vec!["json".to_string()],
+    }) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("UnsupportedTaskLabel"));
+            assert!(message.contains("task evidence did not resolve"));
+        }
+        other => panic!("expected unsupported task evidence config error, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_pytorch_load_envelope_rejects_custom_code_without_trust_opt_in() {
     let fixture = include_str!(
         "../../tests/fixtures/inference_package_facts/hf_transformers_text_generation_package_facts.json"
