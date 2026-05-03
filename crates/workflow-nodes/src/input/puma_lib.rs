@@ -117,8 +117,8 @@ mod options_provider {
         PortOptionsQuery, PortOptionsResult,
     };
     use pumas_library::models::{
-        ModelExecutionDescriptor, ModelLibraryRefreshScope, ModelLibraryUpdateFeed,
-        ModelPackageFactsSummaryResult, ModelPackageFactsSummaryStatus,
+        ModelExecutionDescriptor, ModelLibraryChangeKind, ModelLibraryRefreshScope,
+        ModelLibraryUpdateFeed, ModelPackageFactsSummaryResult, ModelPackageFactsSummaryStatus,
     };
     use std::{collections::HashMap, sync::Arc};
 
@@ -202,10 +202,13 @@ mod options_provider {
             }
 
             for event in &feed.events {
-                if matches!(
-                    event.refresh_scope,
-                    ModelLibraryRefreshScope::Summary | ModelLibraryRefreshScope::SummaryAndDetail
-                ) {
+                if event.change_kind == ModelLibraryChangeKind::ModelRemoved
+                    || matches!(
+                        event.refresh_scope,
+                        ModelLibraryRefreshScope::Summary
+                            | ModelLibraryRefreshScope::SummaryAndDetail
+                    )
+                {
                     self.summaries.remove(&event.model_id);
                 }
             }
@@ -770,6 +773,39 @@ mod model_library_tests {
         assert_eq!(cache.cursor.as_deref(), Some("model-library-updates:2"));
         assert!(!cache.summaries.contains_key("model-a"));
         assert!(cache.summaries.contains_key("model-b"));
+    }
+
+    #[test]
+    fn test_package_facts_summary_cache_invalidates_removed_model_for_detail_scope() {
+        let mut cache = PackageFactsSummaryCache {
+            cursor: Some("model-library-updates:1".to_string()),
+            summaries: HashMap::from([(
+                "model-a".to_string(),
+                ModelPackageFactsSummaryResult {
+                    model_id: "model-a".to_string(),
+                    status: ModelPackageFactsSummaryStatus::Cached,
+                    summary: None,
+                },
+            )]),
+        };
+        let feed = ModelLibraryUpdateFeed {
+            cursor: "model-library-updates:2".to_string(),
+            events: vec![ModelLibraryUpdateEvent {
+                cursor: "model-library-updates:2".to_string(),
+                model_id: "model-a".to_string(),
+                change_kind: ModelLibraryChangeKind::ModelRemoved,
+                fact_family: ModelFactFamily::ModelRecord,
+                refresh_scope: ModelLibraryRefreshScope::Detail,
+                selected_artifact_id: None,
+                producer_revision: None,
+            }],
+            stale_cursor: false,
+            snapshot_required: false,
+        };
+
+        cache.apply_update_feed(&feed);
+
+        assert!(!cache.summaries.contains_key("model-a"));
     }
 
     #[test]
