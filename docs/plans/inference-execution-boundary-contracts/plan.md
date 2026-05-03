@@ -761,12 +761,10 @@ host DTOs, migration steps, and feature-flag compatibility checks.
 - 2026-05-03: Focused `pantograph-embedded-runtime puma_lib` validation for the
   canonical template slice compiled `pantograph-workflow-service` and surfaced
   dead-code warnings for the legacy inference migration inventory/spec helper
-  types. The warnings do not fail the slice, but the inventory should either be
-  wired into non-test validation/reporting or scoped as test-only before the
-  migration milestone is considered clean.
-- Revisit trigger: address in the backend feature cleanup slice or the next
-  inference warning-baseline cleanup before requiring warning-free all-feature
-  dependency checks.
+  types.
+- Resolution: the warning set was cleared by scoping inventory/spec helpers to
+  test builds and using canonical task-kind enum variants in runtime migration
+  code.
 - 2026-05-03: `cargo check -p pantograph-uniffi --all-features` exposed a
   missed `WorkflowErrorEnvelope.diagnostics` initializer in the optional
   frontend HTTP UniFFI adapter. The initializer was updated to preserve the
@@ -1647,6 +1645,10 @@ Workflow-service capability extraction no longer infers llama.cpp or PyTorch
 requirements from retired node type names; it derives backend requirements from
 canonical `runtime_hint`, `backend_key`, or Pumas `recommended_backend` data and
 ignores `retired_ollama` hints.
+The legacy migration inventory/spec helpers are now scoped to test builds, and
+runtime migration task-kind literals use the canonical task-kind enum so focused
+embedded-runtime validation no longer surfaces the workflow-service dead-code
+warning set.
 
 ### Milestone 12: Prepare Native Candle Slice
 

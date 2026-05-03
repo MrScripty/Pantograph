@@ -38,6 +38,7 @@ impl CanonicalInferenceTaskKind {
     }
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum CanonicalInferenceRuntimeHint {
     RetiredOllama,
@@ -46,6 +47,7 @@ pub(super) enum CanonicalInferenceRuntimeHint {
     OpenAiCompatible,
 }
 
+#[cfg(test)]
 impl CanonicalInferenceRuntimeHint {
     pub(super) fn as_str(self) -> &'static str {
         match self {
@@ -57,12 +59,14 @@ impl CanonicalInferenceRuntimeHint {
     }
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(super) enum LegacyInferencePortDirection {
     Input,
     Output,
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum LegacyInferencePortAction {
     Preserve,
@@ -70,6 +74,7 @@ pub(super) enum LegacyInferencePortAction {
     Remove,
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct LegacyInferencePortMigration {
     pub(super) direction: LegacyInferencePortDirection,
@@ -77,6 +82,7 @@ pub(super) struct LegacyInferencePortMigration {
     pub(super) action: LegacyInferencePortAction,
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct LegacyInferenceNodeMigrationSpec {
     pub(super) legacy_node_type: &'static str,
@@ -88,7 +94,9 @@ pub(super) struct LegacyInferenceNodeMigrationSpec {
     pub(super) diagnostic_code: &'static str,
 }
 
+#[cfg(test)]
 const CANONICAL_INFERENCE_NODE_TYPE: &str = "llm-inference";
+#[cfg(test)]
 const CANONICAL_INFERENCE_NODE_DATA_FIELDS: &[&str] = &[
     "task_kind",
     "pumas_model_ref",
@@ -99,6 +107,7 @@ const CANONICAL_INFERENCE_NODE_DATA_FIELDS: &[&str] = &[
     "migration_diagnostics",
 ];
 
+#[cfg(test)]
 const OLLAMA_PORTS: &[LegacyInferencePortMigration] = &[
     legacy_input_preserve("prompt"),
     legacy_input_preserve("system_prompt"),
@@ -112,6 +121,7 @@ const OLLAMA_PORTS: &[LegacyInferencePortMigration] = &[
     legacy_output_preserve("stream"),
 ];
 
+#[cfg(test)]
 const LLAMACPP_PORTS: &[LegacyInferencePortMigration] = &[
     legacy_input_data("model_path", "pumas_model_ref"),
     legacy_input_preserve("prompt"),
@@ -130,6 +140,7 @@ const LLAMACPP_PORTS: &[LegacyInferencePortMigration] = &[
     legacy_output_preserve("stream"),
 ];
 
+#[cfg(test)]
 const PYTORCH_PORTS: &[LegacyInferencePortMigration] = &[
     legacy_input_data("model_path", "pumas_model_ref"),
     legacy_input_preserve("prompt"),
@@ -148,6 +159,7 @@ const PYTORCH_PORTS: &[LegacyInferencePortMigration] = &[
     legacy_output_preserve("stream"),
 ];
 
+#[cfg(test)]
 const EMBEDDING_PORTS: &[LegacyInferencePortMigration] = &[
     legacy_input_preserve("text"),
     legacy_input_data("model", "pumas_model_ref"),
@@ -155,6 +167,7 @@ const EMBEDDING_PORTS: &[LegacyInferencePortMigration] = &[
     legacy_output_preserve("metadata"),
 ];
 
+#[cfg(test)]
 const RERANKER_PORTS: &[LegacyInferencePortMigration] = &[
     legacy_input_data("model_path", "pumas_model_ref"),
     legacy_input_preserve("query"),
@@ -171,6 +184,7 @@ const RERANKER_PORTS: &[LegacyInferencePortMigration] = &[
     legacy_output_data("model_ref", "pumas_model_ref"),
 ];
 
+#[cfg(test)]
 const GENERIC_INFERENCE_PORTS: &[LegacyInferencePortMigration] = &[
     legacy_input_preserve("prompt"),
     legacy_input_preserve("system_prompt"),
@@ -185,6 +199,7 @@ const GENERIC_INFERENCE_PORTS: &[LegacyInferencePortMigration] = &[
     legacy_output_preserve("stream"),
 ];
 
+#[cfg(test)]
 const LEGACY_INFERENCE_NODE_MIGRATION_SPECS: &[LegacyInferenceNodeMigrationSpec] = &[
     LegacyInferenceNodeMigrationSpec {
         legacy_node_type: "ollama-inference",
@@ -242,11 +257,13 @@ const LEGACY_INFERENCE_NODE_MIGRATION_SPECS: &[LegacyInferenceNodeMigrationSpec]
     },
 ];
 
+#[cfg(test)]
 pub(super) fn legacy_inference_node_migration_specs() -> &'static [LegacyInferenceNodeMigrationSpec]
 {
     LEGACY_INFERENCE_NODE_MIGRATION_SPECS
 }
 
+#[cfg(test)]
 const fn legacy_input_preserve(legacy_port_id: &'static str) -> LegacyInferencePortMigration {
     LegacyInferencePortMigration {
         direction: LegacyInferencePortDirection::Input,
@@ -255,6 +272,7 @@ const fn legacy_input_preserve(legacy_port_id: &'static str) -> LegacyInferenceP
     }
 }
 
+#[cfg(test)]
 const fn legacy_output_preserve(legacy_port_id: &'static str) -> LegacyInferencePortMigration {
     LegacyInferencePortMigration {
         direction: LegacyInferencePortDirection::Output,
@@ -263,6 +281,7 @@ const fn legacy_output_preserve(legacy_port_id: &'static str) -> LegacyInference
     }
 }
 
+#[cfg(test)]
 const fn legacy_input_data(
     legacy_port_id: &'static str,
     field_path: &'static str,
@@ -274,6 +293,7 @@ const fn legacy_input_data(
     }
 }
 
+#[cfg(test)]
 const fn legacy_output_data(
     legacy_port_id: &'static str,
     field_path: &'static str,
@@ -285,6 +305,7 @@ const fn legacy_output_data(
     }
 }
 
+#[cfg(test)]
 const fn legacy_output_remove(legacy_port_id: &'static str) -> LegacyInferencePortMigration {
     LegacyInferencePortMigration {
         direction: LegacyInferencePortDirection::Output,
@@ -470,7 +491,7 @@ fn migrate_ollama_node_data(data: &mut serde_json::Value) {
 
     object
         .entry("task_kind".to_string())
-        .or_insert_with(|| json!("text_generation"));
+        .or_insert_with(|| json!(CanonicalInferenceTaskKind::TextGeneration.as_str()));
     object
         .entry("runtime_hint".to_string())
         .or_insert_with(|| json!("retired_ollama"));
@@ -506,7 +527,7 @@ fn migrate_llamacpp_node_data(data: &mut serde_json::Value) {
 
     object
         .entry("task_kind".to_string())
-        .or_insert_with(|| json!("text_generation"));
+        .or_insert_with(|| json!(CanonicalInferenceTaskKind::TextGeneration.as_str()));
     object
         .entry("runtime_hint".to_string())
         .or_insert_with(|| json!("llamacpp"));
@@ -629,7 +650,7 @@ fn migrate_embedding_node_data(data: &mut serde_json::Value) {
 
     object
         .entry("task_kind".to_string())
-        .or_insert_with(|| json!("embedding"));
+        .or_insert_with(|| json!(CanonicalInferenceTaskKind::Embedding.as_str()));
     object
         .entry("runtime_hint".to_string())
         .or_insert_with(|| json!("llamacpp"));
@@ -663,7 +684,7 @@ fn migrate_reranker_node_data(data: &mut serde_json::Value) {
 
     object
         .entry("task_kind".to_string())
-        .or_insert_with(|| json!("rerank"));
+        .or_insert_with(|| json!(CanonicalInferenceTaskKind::Rerank.as_str()));
     object
         .entry("runtime_hint".to_string())
         .or_insert_with(|| json!("llamacpp"));
