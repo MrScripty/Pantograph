@@ -17,8 +17,8 @@ use pyo3::prelude::*;
 use serde_json::{Map, Value};
 
 use self::pytorch_worker_contract::{
-    PyTorchTransformersLoadRequest, PyTorchTransformersTrustPolicy, PyTorchWorkerEnvelope,
-    PyTorchWorkerOperation,
+    PyTorchTransformersLoadRequest, PyTorchTransformersModelLoader, PyTorchTransformersTaskProfile,
+    PyTorchTransformersTrustPolicy, PyTorchWorkerEnvelope, PyTorchWorkerOperation,
 };
 use super::{
     BackendCapabilities, BackendCapabilityFacts, BackendComponentCapability, BackendConfig,
@@ -28,9 +28,9 @@ use super::{
 };
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::model_contracts::{
-    GenerationOptions, InferenceModality, InferenceTaskId, ModelValidationState,
-    OptionCompatibilityDiagnostic, OptionSupportState, ResolvedModelPackageFacts,
-    ResolvedModelSource, TaskEvidence,
+    resolve_task_registry_entry, GenerationOptions, InferenceModality, InferenceTaskId,
+    ModelValidationState, OptionCompatibilityDiagnostic, OptionSupportState,
+    ResolvedModelPackageFacts, ResolvedModelSource, TaskEvidence, TaskRegistryEntry,
 };
 use crate::process::ProcessSpawner;
 use crate::types::{RerankRequest, RerankResponse};
@@ -340,7 +340,8 @@ impl PyTorchBackend {
             )));
         }
 
-        let task_id = Self::transformers_task_id_from_evidence(&package.task)?;
+        let task_profile = Self::transformers_task_profile_from_evidence(&package.task)?;
+        let task_id = task_profile.task_id.clone();
         if package.custom_code.requires_custom_code && !trust_policy.allow_remote_code {
             return Err(BackendError::Config(
                 "Model package requires custom Transformers code but trust policy is closed"
@@ -363,6 +364,7 @@ impl PyTorchBackend {
                 entry_path: package.artifact.entry_path.clone(),
                 model_source: Some(ResolvedModelSource::from_package_facts(package)),
                 task_id,
+                task_profile: Some(task_profile),
                 model_type_hint,
                 device: device.map(str::to_string),
                 trust_policy,
@@ -372,25 +374,41 @@ impl PyTorchBackend {
     }
 
     #[allow(dead_code)]
-    fn transformers_task_id_from_evidence(
+    fn transformers_task_profile_from_evidence(
         evidence: &TaskEvidence,
-    ) -> Result<InferenceTaskId, BackendError> {
+    ) -> Result<PyTorchTransformersTaskProfile, BackendError> {
         let labels = [
             evidence.task_type_primary.as_deref(),
             evidence.pipeline_tag.as_deref(),
         ];
         for label in labels.into_iter().flatten() {
-            match label.replace('-', "_").as_str() {
-                "text_generation" => return Ok(InferenceTaskId::TextGeneration),
-                "chat_completion" | "conversational" => return Ok(InferenceTaskId::ChatCompletion),
-                other if !other.is_empty() => continue,
-                _ => {}
+            if let Some(entry) = resolve_task_registry_entry(label) {
+                return Self::transformers_task_profile_from_registry_entry(&entry);
             }
         }
 
         Err(BackendError::Config(
             "PyTorch/Transformers load requires text-generation or chat task evidence".to_string(),
         ))
+    }
+
+    fn transformers_task_profile_from_registry_entry(
+        entry: &TaskRegistryEntry,
+    ) -> Result<PyTorchTransformersTaskProfile, BackendError> {
+        match entry.task_id {
+            InferenceTaskId::TextGeneration | InferenceTaskId::ChatCompletion => {
+                Ok(PyTorchTransformersTaskProfile {
+                    task_id: entry.task_id.clone(),
+                    canonical_task_label: entry.canonical_label().to_string(),
+                    loader: PyTorchTransformersModelLoader::CausalLm,
+                    required_components: entry.required_components.clone(),
+                })
+            }
+            ref task_id => Err(BackendError::Config(format!(
+                "PyTorch/Transformers load does not support canonical task {} yet",
+                task_id.canonical_label()
+            ))),
+        }
     }
 
     #[allow(dead_code)]

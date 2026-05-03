@@ -3,8 +3,8 @@ use serde_json::Value;
 
 use crate::backend::BackendError;
 use crate::model_contracts::{
-    InferenceTaskId, ModelArtifactKind, OptionCompatibilityDiagnostic, PumasModelRef,
-    ResolvedModelSource,
+    InferenceTaskId, ModelArtifactKind, OptionCompatibilityDiagnostic, ProcessorComponentKind,
+    PumasModelRef, ResolvedModelSource,
 };
 
 pub(super) const PYTORCH_WORKER_CONTRACT_VERSION: u32 = 1;
@@ -72,6 +72,8 @@ pub(super) struct PyTorchTransformersLoadRequest {
     pub model_source: Option<ResolvedModelSource>,
     pub task_id: InferenceTaskId,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_profile: Option<PyTorchTransformersTaskProfile>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_type_hint: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub device: Option<String>,
@@ -79,6 +81,22 @@ pub(super) struct PyTorchTransformersLoadRequest {
     pub trust_policy: PyTorchTransformersTrustPolicy,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub generation_defaults: Option<Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(super) struct PyTorchTransformersTaskProfile {
+    pub task_id: InferenceTaskId,
+    pub canonical_task_label: String,
+    pub loader: PyTorchTransformersModelLoader,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub required_components: Vec<ProcessorComponentKind>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum PyTorchTransformersModelLoader {
+    CausalLm,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]

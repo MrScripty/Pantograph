@@ -1,16 +1,16 @@
 use std::collections::BTreeSet;
 
 use super::pytorch_worker_contract::{
-    PyTorchTransformersLoadRequest, PyTorchTransformersTrustPolicy, PyTorchWorkerEnvelope,
-    PyTorchWorkerErrorKind, PyTorchWorkerFailure, PyTorchWorkerOperation, PyTorchWorkerResponse,
-    PYTORCH_WORKER_CONTRACT_VERSION,
+    PyTorchTransformersLoadRequest, PyTorchTransformersModelLoader, PyTorchTransformersTrustPolicy,
+    PyTorchWorkerEnvelope, PyTorchWorkerErrorKind, PyTorchWorkerFailure, PyTorchWorkerOperation,
+    PyTorchWorkerResponse, PYTORCH_WORKER_CONTRACT_VERSION,
 };
 use super::*;
 use crate::model_contracts::{
     CacheGenerationOptions, GenerationOptions, LengthGenerationOptions, ModelArtifactKind,
-    OptionSupportState, OutputGenerationOptions, PumasModelRef, ResolvedModelPackageFacts,
-    ResolvedModelSourceKind, SamplingGenerationOptions, SpecialTokenGenerationOptions,
-    StoppingGenerationOptions,
+    OptionSupportState, OutputGenerationOptions, ProcessorComponentKind, PumasModelRef,
+    ResolvedModelPackageFacts, ResolvedModelSourceKind, SamplingGenerationOptions,
+    SpecialTokenGenerationOptions, StoppingGenerationOptions, TaskEvidence,
 };
 
 #[test]
@@ -218,6 +218,7 @@ fn test_pytorch_worker_trust_policy_defaults_closed() {
         entry_path: "/models/no-custom-code".to_string(),
         model_source: None,
         task_id: InferenceTaskId::TextGeneration,
+        task_profile: None,
         model_type_hint: None,
         device: None,
         trust_policy: PyTorchTransformersTrustPolicy::default(),
@@ -347,6 +348,20 @@ fn test_pytorch_load_envelope_maps_pumas_package_facts() {
         Some(&envelope.payload.model_ref)
     );
     assert_eq!(envelope.payload.task_id, InferenceTaskId::TextGeneration);
+    let task_profile = envelope
+        .payload
+        .task_profile
+        .as_ref()
+        .expect("task profile should project from registry entry");
+    assert_eq!(task_profile.task_id, InferenceTaskId::TextGeneration);
+    assert_eq!(task_profile.canonical_task_label, "text_generation");
+    assert_eq!(
+        task_profile.loader,
+        PyTorchTransformersModelLoader::CausalLm
+    );
+    assert!(task_profile
+        .required_components
+        .contains(&ProcessorComponentKind::Tokenizer));
     assert_eq!(envelope.payload.model_type_hint.as_deref(), Some("llama"));
     assert_eq!(envelope.payload.device.as_deref(), Some("cuda:0"));
     assert!(envelope.payload.trust_policy.allow_remote_code);
@@ -366,6 +381,35 @@ fn test_pytorch_load_envelope_maps_pumas_package_facts() {
             }),
         Some(128)
     );
+}
+
+#[test]
+fn test_pytorch_task_profile_uses_canonical_registry_aliases() {
+    let profile = PyTorchBackend::transformers_task_profile_from_evidence(&TaskEvidence {
+        pipeline_tag: Some("causal-lm".to_string()),
+        ..TaskEvidence::default()
+    })
+    .expect("causal-lm alias should resolve through task registry");
+
+    assert_eq!(profile.task_id, InferenceTaskId::TextGeneration);
+    assert_eq!(profile.canonical_task_label, "text_generation");
+    assert_eq!(profile.loader, PyTorchTransformersModelLoader::CausalLm);
+    assert!(profile
+        .required_components
+        .contains(&ProcessorComponentKind::Tokenizer));
+}
+
+#[test]
+fn test_pytorch_task_profile_rejects_registry_tasks_without_loader() {
+    match PyTorchBackend::transformers_task_profile_from_evidence(&TaskEvidence {
+        task_type_primary: Some("feature-extraction".to_string()),
+        ..TaskEvidence::default()
+    }) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("does not support canonical task embedding yet"));
+        }
+        other => panic!("expected unsupported task config error, got {other:?}"),
+    }
 }
 
 #[test]
