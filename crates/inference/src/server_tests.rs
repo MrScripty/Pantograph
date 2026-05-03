@@ -1,5 +1,13 @@
 use super::{parse_sidecar_pid, LlamaServer, ServerMode};
 use crate::config::DeviceConfig;
+use crate::process::{ProcessEvent, ProcessHandle, ProcessSpawner};
+use async_trait::async_trait;
+use std::path::PathBuf;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
+use tokio::sync::mpsc;
 
 #[test]
 fn parse_sidecar_pid_accepts_legacy_plain_pid() {
@@ -78,4 +86,99 @@ fn inference_runtime_matcher_requires_matching_port() {
         &device,
         Some(18080),
     ));
+}
+
+struct ErroringProcessHandle {
+    killed: Arc<AtomicBool>,
+}
+
+impl ProcessHandle for ErroringProcessHandle {
+    fn pid(&self) -> u32 {
+        1234
+    }
+
+    fn kill(&self) -> Result<(), String> {
+        self.killed.store(true, Ordering::SeqCst);
+        Ok(())
+    }
+}
+
+struct ErroringProcessSpawner {
+    app_data_dir: PathBuf,
+    killed: Arc<AtomicBool>,
+}
+
+#[async_trait]
+impl ProcessSpawner for ErroringProcessSpawner {
+    async fn spawn_sidecar(
+        &self,
+        _sidecar_name: &str,
+        args: &[&str],
+    ) -> Result<(mpsc::Receiver<ProcessEvent>, Box<dyn ProcessHandle>), String> {
+        if let Some(pid_path) = pid_path_arg(args) {
+            std::fs::write(pid_path, "1234\n").expect("write pid file");
+        }
+
+        let (tx, rx) = mpsc::channel(1);
+        tx.send(ProcessEvent::Error("mock startup error".to_string()))
+            .await
+            .expect("send startup error");
+
+        Ok((
+            rx,
+            Box::new(ErroringProcessHandle {
+                killed: self.killed.clone(),
+            }),
+        ))
+    }
+
+    fn app_data_dir(&self) -> Result<PathBuf, String> {
+        Ok(self.app_data_dir.clone())
+    }
+
+    fn binaries_dir(&self) -> Result<PathBuf, String> {
+        Ok(self.app_data_dir.clone())
+    }
+}
+
+fn pid_path_arg(args: &[&str]) -> Option<PathBuf> {
+    args.windows(2)
+        .find(|window| window[0] == "--pid-file")
+        .map(|window| PathBuf::from(window[1]))
+}
+
+#[tokio::test]
+async fn start_sidecar_inference_cleans_process_and_pid_file_on_start_error() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let pid_file = temp.path().join(super::SIDECAR_PID_FILE);
+    let killed = Arc::new(AtomicBool::new(false));
+    let mut server = LlamaServer::new();
+
+    let result = server
+        .start_sidecar_inference(
+            Arc::new(ErroringProcessSpawner {
+                app_data_dir: temp.path().to_path_buf(),
+                killed: killed.clone(),
+            }),
+            "/models/main.gguf",
+            None,
+            &DeviceConfig {
+                device: "auto".to_string(),
+                gpu_layers: -1,
+            },
+            Some(18080),
+        )
+        .await;
+
+    assert_eq!(
+        result,
+        Err("llama-server error: mock startup error".to_string())
+    );
+    assert!(killed.load(Ordering::SeqCst));
+    assert!(!pid_file.exists());
+    assert!(!server.is_ready());
+    assert_eq!(server.mode_info().mode, "none");
+
+    server.stop();
+    assert_eq!(server.mode_info().mode, "none");
 }
