@@ -128,7 +128,7 @@ mod tests {
         assert!(err.contains("node_type"));
 
         let err = build_model_dependency_request(node_engine::ModelDependencyRequest {
-            node_type: "pytorch-inference".to_string(),
+            node_type: "llm-inference".to_string(),
             model_path: " ".to_string(),
             ..Default::default()
         })
@@ -139,7 +139,7 @@ mod tests {
     #[test]
     fn test_build_model_dependency_request_normalizes_optional_and_bindings() {
         let request = build_model_dependency_request(node_engine::ModelDependencyRequest {
-            node_type: " pytorch-inference ".to_string(),
+            node_type: " llm-inference ".to_string(),
             model_path: " /tmp/model ".to_string(),
             model_id: Some(" ".to_string()),
             model_type: Some(" diffusion ".to_string()),
@@ -155,7 +155,7 @@ mod tests {
         })
         .unwrap();
 
-        assert_eq!(request.node_type, "pytorch-inference");
+        assert_eq!(request.node_type, "llm-inference");
         assert_eq!(request.model_path, "/tmp/model");
         assert_eq!(request.model_id, None);
         assert_eq!(request.model_type.as_deref(), Some("diffusion"));

@@ -620,7 +620,7 @@ fn infer_runtime_node_type(task_type_primary: Option<&str>, backend_key: Option<
         return "audio-generation".to_string();
     }
 
-    "pytorch-inference".to_string()
+    "llm-inference".to_string()
 }
 
 fn current_platform_context() -> Value {
@@ -709,7 +709,7 @@ mod tests {
         );
         assert_eq!(
             infer_runtime_node_type(Some("text-generation"), Some("pytorch")),
-            "pytorch-inference"
+            "llm-inference"
         );
     }
 

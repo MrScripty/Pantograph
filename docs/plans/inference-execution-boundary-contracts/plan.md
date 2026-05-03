@@ -773,6 +773,14 @@ host DTOs, migration steps, and feature-flag compatibility checks.
   validating the Ollama backend feature-surface removal slice.
 - Revisit trigger: add focused all-feature binding coverage when workflow error
   envelope fields change again.
+- 2026-05-03: Focused `cargo test -p pantograph workflow::*_commands::tests`
+  validation for canonical Tauri dependency command fixtures passed but surfaced
+  an existing src-tauri dead-code warning set in workflow execution runtime and
+  event adapter helpers.
+- Reason: the warnings are outside the canonical inference node migration slice
+  and do not affect dependency command request normalization.
+- Revisit trigger: clean up or gate the unused Tauri workflow execution runtime
+  helpers before requiring warning-free desktop command test builds.
 
 ## Definition of Done
 
@@ -1672,6 +1680,9 @@ Embedded-runtime Python dependency preflight and host dispatch now route
 canonical `llm-inference` through the Python adapter only when canonical backend
 data resolves to PyTorch/Transformers, and the Python bridge accepts
 `llm-inference` as the canonical PyTorch execution node type.
+Tauri workflow dependency commands and Puma-Lib hydration now use canonical
+`llm-inference` for text-generation/PyTorch inference request shapes instead of
+suggesting or normalizing to the retired `pytorch-inference` node type.
 
 ### Milestone 12: Prepare Native Candle Slice
 
