@@ -1,0 +1,39 @@
+{
+  "contract_version": 1,
+  "model_ref": {
+    "model_id": "pumas://models/legacy-ollama-tag",
+    "artifact_id": "hf-dir"
+  },
+  "artifact_kind": "hf_compatible_directory",
+  "entry_path": "/models/legacy-ollama-tag",
+  "storage_kind": "managed_library",
+  "validation_state": "valid",
+  "task_evidence": [
+    {
+      "task_id": "chat_completion",
+      "upstream_labels": ["conversational"],
+      "modality_signature": {
+        "inputs": ["text"],
+        "outputs": ["text"]
+      }
+    }
+  ],
+  "backend_hints": [
+    {
+      "backend_key": "ollama",
+      "backend_family": "ollama",
+      "source": "package_metadata",
+      "executable_guarantee": false
+    }
+  ],
+  "feasible_execution_candidates": [
+    {
+      "backend_key": "ollama",
+      "task_id": "chat_completion",
+      "feasible": false,
+      "confidence": 1.0,
+      "source": "pumas_feasible",
+      "exclusion_reasons": ["consumer does not support ollama execution"]
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "contract_version": 1,
+  "model_ref": {
+    "model_id": "pumas://models/llama-3.1-8b-q4",
+    "artifact_id": "main-gguf"
+  },
+  "artifact_kind": "gguf",
+  "entry_path": "/models/llama-3.1-8b-q4/model.gguf",
+  "storage_kind": "managed_library",
+  "validation_state": "valid",
+  "task_evidence": [
+    {
+      "task_id": "text_generation",
+      "upstream_labels": ["text-generation"],
+      "modality_signature": {
+        "inputs": ["text"],
+        "outputs": ["text"]
+      },
+      "source": "gguf_metadata"
+    }
+  ],
+  "backend_hints": [
+    {
+      "backend_key": "llama_cpp",
+      "backend_family": "llama_cpp",
+      "source": "file_pattern",
+      "executable_guarantee": false
+    }
+  ],
+  "components": {
+    "tokenizer": "not_required",
+    "processor": "not_required",
+    "generation_config": "missing"
+  },
+  "generation_defaults": {
+    "length": {
+      "max_new_tokens": 512
+    },
+    "sampling": {
+      "temperature": 0.7,
+      "top_p": 0.9
+    }
+  },
+  "feasible_execution_candidates": [
+    {
+      "backend_key": "llama_cpp",
+      "task_id": "text_generation",
+      "feasible": true,
+      "confidence": 0.95,
+      "source": "pumas_feasible",
+      "resource_estimate": {
+        "disk_bytes": 5368709120,
+        "ram_bytes": 8589934592,
+        "vram_bytes": 6442450944
+      }
+    }
+  ],
+  "provenance": {
+    "source": "fixture"
+  }
+}

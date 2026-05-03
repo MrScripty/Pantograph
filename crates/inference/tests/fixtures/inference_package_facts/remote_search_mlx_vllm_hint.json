@@ -1,0 +1,27 @@
+{
+  "contract_version": 1,
+  "model_ref": {
+    "model_id": "hf://example/remote-model"
+  },
+  "artifact_kind": "unknown",
+  "storage_kind": "remote_reference",
+  "validation_state": "unknown",
+  "backend_hints": [
+    {
+      "backend_key": "mlx",
+      "backend_family": "mlx",
+      "source": "remote_search_tag",
+      "executable_guarantee": false
+    },
+    {
+      "backend_key": "vllm",
+      "backend_family": "vllm",
+      "source": "remote_search_tag",
+      "executable_guarantee": false
+    }
+  ],
+  "provenance": {
+    "source": "remote_search",
+    "installed_compatibility": false
+  }
+}

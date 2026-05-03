@@ -1,0 +1,68 @@
+{
+  "contract_version": 1,
+  "model_ref": {
+    "model_id": "pumas://models/qwen2.5-7b-instruct",
+    "artifact_id": "hf-dir",
+    "revision": "main"
+  },
+  "artifact_kind": "hf_compatible_directory",
+  "entry_path": "/models/qwen2.5-7b-instruct",
+  "storage_kind": "managed_library",
+  "validation_state": "valid",
+  "task_evidence": [
+    {
+      "task_id": "chat_completion",
+      "upstream_labels": ["text-generation", "conversational"],
+      "modality_signature": {
+        "inputs": ["text"],
+        "outputs": ["text"]
+      },
+      "source": "config.json"
+    }
+  ],
+  "backend_hints": [
+    {
+      "backend_key": "pytorch",
+      "backend_family": "transformers",
+      "source": "package_metadata",
+      "executable_guarantee": false
+    },
+    {
+      "backend_key": "vllm",
+      "backend_family": "vllm",
+      "source": "package_metadata",
+      "executable_guarantee": false
+    }
+  ],
+  "components": {
+    "tokenizer": "present",
+    "processor": "missing",
+    "chat_template": "present",
+    "generation_config": "present"
+  },
+  "generation_defaults": {
+    "length": {
+      "max_new_tokens": 1024
+    },
+    "sampling": {
+      "temperature": 0.6,
+      "top_p": 0.95
+    },
+    "cache": {
+      "use_cache": true
+    }
+  },
+  "feasible_execution_candidates": [
+    {
+      "backend_key": "pytorch",
+      "task_id": "chat_completion",
+      "feasible": true,
+      "confidence": 0.9,
+      "source": "pumas_feasible",
+      "resource_estimate": {
+        "ram_bytes": 17179869184,
+        "vram_bytes": 12884901888
+      }
+    }
+  ]
+}

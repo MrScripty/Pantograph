@@ -1,0 +1,47 @@
+{
+  "contract_version": 1,
+  "model_ref": {
+    "model_id": "pumas://models/qwen2.5-vl",
+    "artifact_id": "hf-vl-dir"
+  },
+  "artifact_kind": "hf_compatible_directory",
+  "entry_path": "/models/qwen2.5-vl",
+  "storage_kind": "managed_library",
+  "validation_state": "warning",
+  "task_evidence": [
+    {
+      "task_id": "image_understanding",
+      "upstream_labels": ["image-text-to-text"],
+      "modality_signature": {
+        "inputs": ["text", "image"],
+        "outputs": ["text"]
+      },
+      "source": "processor_config.json"
+    }
+  ],
+  "backend_hints": [
+    {
+      "backend_key": "pytorch",
+      "backend_family": "transformers",
+      "source": "package_metadata",
+      "executable_guarantee": false
+    }
+  ],
+  "components": {
+    "tokenizer": "present",
+    "processor": "present",
+    "image_processor": "present",
+    "video_processor": "missing",
+    "chat_template": "present",
+    "diagnostics": ["video processor not present for image-only fixture"]
+  },
+  "feasible_execution_candidates": [
+    {
+      "backend_key": "pytorch",
+      "task_id": "image_understanding",
+      "feasible": true,
+      "confidence": 0.75,
+      "source": "pumas_feasible"
+    }
+  ]
+}

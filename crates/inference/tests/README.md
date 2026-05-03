@@ -11,6 +11,8 @@ runtime and managed media dependency boundaries.
 | ---- | ----------- |
 | `managed_media_dependencies.rs` | Conversion dependency lease and media-tool/native-library planning tests. |
 | `managed_redistributables.rs` | Managed redistributable catalog, status, activation, selection, and removal tests. |
+| `model_contracts.rs` | Public contract fixture tests for Pumas model refs, package facts, task evidence, generation defaults, option diagnostics, lifecycle phases, feasible candidates, and model-library cache invalidation events. |
+| `fixtures/inference_package_facts/` | Named JSON fixtures matching the inference execution boundary plan. |
 
 ## Problem
 
@@ -18,6 +20,9 @@ Managed runtime and media dependency behavior crosses filesystem state,
 catalog metadata, platform-specific expected files, and durable activation
 records. Unit-only tests would miss the integration behavior that determines
 whether Settings and conversion jobs receive trustworthy readiness facts.
+Model package facts also cross producer/consumer boundaries, so fixture tests
+prove that Pantograph can decode Pumas-style DTOs without depending on Pumas
+storage internals.
 
 ## Constraints
 
@@ -27,12 +32,16 @@ whether Settings and conversion jobs receive trustworthy readiness facts.
   system library discovery.
 - Tests may create placeholder files for expected managed artifacts, but they
   must not require real third-party media binaries.
+- Model package fixtures must be stable JSON DTOs and must not expose Pumas
+  SQLite layout, `models.metadata_json`, or search-cache internals.
 
 ## Decision
 
 Keep managed redistributable and conversion dependency tests as integration
 tests under this directory. They exercise the public crate contracts with
 temporary storage so status, activation, and lease behavior remain auditable.
+Keep model package fixtures here as public contract tests because later
+workflow, backend, and diagnostics slices will consume the same shapes.
 
 ## Alternatives Rejected
 
@@ -60,6 +69,7 @@ temporary storage so status, activation, and lease behavior remain auditable.
 - OpenColorIO ABI validation starts loading native libraries in tests.
 - Conversion dependency leasing moves to another crate or process boundary.
 - The holder convention changes or becomes a typed cross-crate contract.
+- Pumas package-fact fixtures move to a shared contract crate or schema package.
 
 ## Dependencies
 
@@ -83,6 +93,7 @@ Run the focused integration tests from the workspace root:
 ```bash
 cargo test -p inference --test managed_redistributables
 cargo test -p inference --test managed_media_dependencies
+cargo test -p inference --test model_contracts
 ```
 
 ## API Consumer Contract
@@ -103,5 +114,7 @@ cargo test -p inference --test managed_media_dependencies
 ## Structured Producer Contract
 
 - Test fixtures are producer evidence for public status and lease DTOs.
+- Package-fact fixtures are producer evidence for public model/task/generation
+  contracts and advisory backend feasibility facts.
 - Any DTO shape changes require updating these integration tests and the
   workflow-service/frontend contract tests that consume the same facts.

@@ -1,0 +1,42 @@
+{
+  "contract_version": 1,
+  "model_ref": {
+    "model_id": "pumas://models/custom-remote-code",
+    "artifact_id": "hf-dir"
+  },
+  "artifact_kind": "hf_compatible_directory",
+  "entry_path": "/models/custom-remote-code",
+  "storage_kind": "managed_library",
+  "validation_state": "warning",
+  "task_evidence": [
+    {
+      "task_id": "text_generation",
+      "upstream_labels": ["text-generation"],
+      "modality_signature": {
+        "inputs": ["text"],
+        "outputs": ["text"]
+      },
+      "source": "config.json"
+    }
+  ],
+  "components": {
+    "tokenizer": "present",
+    "generation_config": "present"
+  },
+  "custom_code": {
+    "requires_trust": true,
+    "auto_map_entries": ["AutoModelForCausalLM"],
+    "dependency_manifests": ["requirements.txt"],
+    "diagnostics": ["custom code must be trusted before Python execution"]
+  },
+  "feasible_execution_candidates": [
+    {
+      "backend_key": "pytorch",
+      "task_id": "text_generation",
+      "feasible": false,
+      "confidence": 0.85,
+      "source": "pumas_feasible",
+      "exclusion_reasons": ["trust policy required"]
+    }
+  ]
+}

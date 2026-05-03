@@ -1,0 +1,23 @@
+{
+  "contract_version": 1,
+  "model_ref": {
+    "model_id": "pumas://models/stale-model",
+    "artifact_id": "main"
+  },
+  "artifact_kind": "gguf",
+  "entry_path": "/models/stale/model.gguf",
+  "storage_kind": "managed_library",
+  "validation_state": "stale",
+  "components": {
+    "diagnostics": ["artifact signature changed after facts were produced"]
+  },
+  "feasible_execution_candidates": [
+    {
+      "backend_key": "llama_cpp",
+      "task_id": "text_generation",
+      "feasible": false,
+      "source": "pumas_feasible",
+      "exclusion_reasons": ["package facts are stale"]
+    }
+  ]
+}

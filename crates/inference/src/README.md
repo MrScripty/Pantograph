@@ -20,6 +20,7 @@ details.
 | `managed_runtime/` | Backend-owned managed binary contracts and orchestration for installable runtime sidecars such as `llama.cpp` and `Ollama`. |
 | `managed_media_dependencies.rs` | Managed media dependency activation checks, conversion dependency lease plans, holder validation, and attribution-ready lease records for ffmpeg/OIIO/OCIO tooling. |
 | `managed_redistributables/` | Shared managed redistributable catalog, state, install, activation, lease, and removal helpers for runtime sidecars and media dependencies. |
+| `model_contracts.rs` | Transformers-aligned model/package/task facts, generation defaults, advisory feasible execution candidates, and Pumas model-library update events consumed by inference without taking runtime-selection policy. |
 | `process.rs` | Sidecar process abstraction used by backends that need external runtimes, including the managed-binary launch error tag consumed before backend startup errors are classified. |
 | `types.rs` | Shared request/response contracts consumed across backend and host boundaries. |
 | `server.rs` | Legacy sidecar/server lifecycle helpers for llama.cpp-style backends. |
@@ -51,6 +52,12 @@ of application-level scheduler policy.
   process and language boundaries.
 - New capability areas such as diffusion and reranking must extend the contract
   additively.
+- Pumas model/package facts consumed by this crate must be versioned DTO/API
+  projections or fixtures, not Pumas SQLite, `metadata_json`, or search-cache
+  internals.
+- Pumas feasible execution candidates are advisory durable facts. Live runtime
+  placement, admission, loaded-state interpretation, and final backend choice
+  remain outside this crate.
 - Runtime-residency, admission, and eviction policy must stay outside this
   crate even when gateway lifecycle data becomes richer.
 - Media conversion dependency leases must carry stable holder attribution so
@@ -62,7 +69,10 @@ of application-level scheduler policy.
 Use a gateway + backend trait architecture with shared request/response types.
 Backends implement a common interface, while the gateway owns lifecycle and
 routing. Shared payload types live in `types.rs` so chat, embedding, reranking,
-and image-generation contracts stay explicit and testable. llama.cpp reranking
+and image-generation contracts stay explicit and testable. Model-library and
+Transformers-aligned task/package facts live in `model_contracts.rs` so Pumas
+facts, generation defaults, lifecycle phases, and advisory backend feasibility
+can be tested before backend execution paths consume them. llama.cpp reranking
 is modeled as its own capability and sidecar mode rather than as a chat
 completion variant. The planned `RuntimeRegistry` sits above this crate as a
 Pantograph application-layer coordinator; `InferenceGateway` remains the
@@ -120,6 +130,13 @@ conversion process execution stays in the neutral
 - Backend parsing and managed-runtime path handling should use standard-library
   helpers such as `strip_prefix`, `Path`, and direct `Path::join` inputs rather
   than manual slicing or temporary string allocations.
+- `ModelExecutionDescriptor` remains a compact Pumas execution summary. Rich
+  artifact kind, tokenizer/processor, generation default, custom-code, and
+  feasible-candidate evidence belongs in `ResolvedModelPackageFacts`.
+- Remote MLX/vLLM search tags are discovery hints only; installed-model
+  compatibility must use resolved local package facts plus backend checks.
+- Embeddings are normal task evidence in `model_contracts.rs`; dedicated
+  embedding runtime state remains a backend-local residency strategy.
 - Gateway lifecycle, request forwarding, runtime reuse, and shared mock-backend
   fixtures stay in `gateway_tests.rs`, while oversized behavior families split
   under `gateway_tests/` so `gateway.rs` remains focused on production gateway
@@ -152,8 +169,8 @@ conversion process execution stays in the neutral
 ## Dependencies
 
 **Internal:** `backend`, `embedding_runtime`, `gateway`,
-`managed_media_dependencies`, `managed_redistributables`, `process`, `types`,
-`server`, `kv_cache`.
+`managed_media_dependencies`, `managed_redistributables`, `model_contracts`,
+`process`, `types`, `server`, `kv_cache`.
 **External:** `tokio`, `serde`, `reqwest`, `async-trait`, and feature-gated
 runtime crates such as Candle or PyO3-backed components.
 
@@ -217,6 +234,10 @@ async fn run_image_request(gateway: &InferenceGateway, config: &BackendConfig) {
 ## Structured Producer Contract
 
 - `types.rs` defines the stable machine-consumed request and response shapes.
+- `model_contracts.rs` defines additive producer/consumer facts for
+  Transformers-aligned package evidence, canonical task ids, generation
+  defaults, option compatibility, lifecycle phases, and model-library cache
+  invalidation events.
 - Optional fields preserve meaning when omitted; callers may rely on omission as
   “backend default”.
 - `ServerModeInfo` is the backend-owned runtime status contract for GUI and host

@@ -12,7 +12,7 @@ capability and lifecycle behavior stay here.
 | File/Folder | Description |
 | ----------- | ----------- |
 | `Cargo.toml` | Crate manifest and backend feature declarations. |
-| `src/` | Backend implementations, gateway facade, process contracts, KV-cache support, managed-runtime lifecycle code, and the managed-binary status facade. |
+| `src/` | Backend implementations, gateway facade, model/package contract DTOs, process contracts, KV-cache support, managed-runtime lifecycle code, and the managed-binary status facade. |
 | `audio/`, `depth/`, `onnx/`, `torch/` | Python/runtime helper assets used by optional backend families. |
 
 ## Problem
@@ -27,11 +27,18 @@ and workflow business logic.
 - Report unsupported capabilities explicitly instead of silently succeeding.
 - Preserve backend-owned lifecycle facts for diagnostics and runtime registry
   consumers.
+- Consume Pumas model/package facts through versioned DTOs or fixtures, not
+  Pumas storage internals.
+- Keep Pumas feasible execution candidates advisory; runtime registry and
+  scheduler layers own final backend selection and admission policy.
 
 ## Decision
 Keep inference as the infrastructure owner for backend execution and runtime
 process control. Consumers use `InferenceGateway` plus feature-gated backend
-families rather than calling backend modules directly.
+families rather than calling backend modules directly. Transformers-aligned
+model package, task, generation, lifecycle, and cache-invalidation contracts
+live in `model_contracts.rs` so later backend slices can consume Pumas facts
+without depending on Pumas SQLite or turning inference into a model library.
 
 ## Alternatives Rejected
 - Put backend lifecycle logic in Tauri commands: rejected because runtime
@@ -57,6 +64,8 @@ families rather than calling backend modules directly.
 - A backend feature becomes part of the default desktop product surface or is
   removed from supported builds.
 - Managed runtime state becomes a generated or externally versioned schema.
+- Model-library facts require live runtime placement, admission, queueing, or
+  scheduler policy inside this crate.
 
 ## Dependencies
 **Internal:** `pantograph-runtime-identity`.
@@ -98,7 +107,8 @@ async fn start_gateway() -> Result<(), Box<dyn std::error::Error>> {
 - Inputs: backend configuration, process spawner implementations, managed
   runtime IDs, and inference requests.
 - Outputs: chat, embedding, rerank, KV-cache, runtime lifecycle, managed
-  runtime DTOs, and additive managed-binary facade DTOs.
+  runtime DTOs, additive managed-binary facade DTOs, and model/package fact
+  DTOs.
 - Lifecycle: callers configure a gateway, inject host process behavior, start
   or attach backends, and stop them through the gateway.
 - Errors: backend and lifecycle failures are surfaced as typed or structured
@@ -111,6 +121,10 @@ async fn start_gateway() -> Result<(), Box<dyn std::error::Error>> {
   outputs consumed by adapters and diagnostics.
 - Managed binary facade payloads are structured producer outputs consumed by
   Settings, workflow admission, diagnostics, and process launch adapters.
+- `ResolvedModelPackageFacts`, task registry entries, generation defaults,
+  option compatibility diagnostics, lifecycle phases, and Pumas model-library
+  change events are structured producer/consumer contracts for later inference
+  slices.
 - Reason: these payloads describe install state, runtime readiness, reuse, and
   backend attachment facts.
 - Revisit trigger: payloads become externally versioned schemas or are consumed

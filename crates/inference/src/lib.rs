@@ -35,6 +35,7 @@ pub mod managed_binaries;
 pub mod managed_media_dependencies;
 pub mod managed_redistributables;
 pub mod managed_runtime;
+pub mod model_contracts;
 pub mod process;
 pub mod server;
 pub mod types;
@@ -110,6 +111,17 @@ pub use managed_runtime::{
     ManagedRuntimePersistedState, ManagedRuntimePersistedVersion, ManagedRuntimeReadinessState,
     ManagedRuntimeSelectionState, ManagedRuntimeSnapshot, ManagedRuntimeVersionStatus,
     ResolvedCommand,
+};
+pub use model_contracts::{
+    BackendHintFact, BackendHintSource, CacheGenerationOptions, ComponentState, CustomCodeFacts,
+    FeasibleExecutionCandidate, GenerationDefaultFacts, InferenceLifecyclePhase, InferenceModality,
+    InferenceTaskId, LengthGenerationOptions, ModelArtifactKind, ModelComponentFacts,
+    ModelExecutionDescriptor, ModelExecutionStorageKind, ModelExecutionValidationState,
+    ModelStorageKind, ModelValidationState, OptionCompatibilityDiagnostic, OptionSupportState,
+    OutputGenerationOptions, PumasModelLibraryChangeEvent, PumasModelLibraryChangeKind,
+    PumasModelRef, ResolvedModelPackageFacts, ResourceEstimate, SamplingGenerationOptions,
+    SearchGenerationOptions, SpecialTokenGenerationOptions, StoppingGenerationOptions, SupportTier,
+    TaskEvidence, TaskModalitySignature, TaskRegistryEntry, MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
 };
 pub use process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 pub use server::{LlamaServer, ServerMode, SharedLlamaServer};

@@ -1,0 +1,35 @@
+{
+  "contract_version": 1,
+  "model_ref": {
+    "model_id": "pumas://models/missing-tokenizer",
+    "artifact_id": "hf-dir"
+  },
+  "artifact_kind": "hf_compatible_directory",
+  "entry_path": "/models/missing-tokenizer",
+  "storage_kind": "managed_library",
+  "validation_state": "invalid",
+  "task_evidence": [
+    {
+      "task_id": "text_generation",
+      "upstream_labels": ["text-generation"],
+      "modality_signature": {
+        "inputs": ["text"],
+        "outputs": ["text"]
+      }
+    }
+  ],
+  "components": {
+    "tokenizer": "missing",
+    "generation_config": "present",
+    "diagnostics": ["tokenizer files are required for text generation"]
+  },
+  "feasible_execution_candidates": [
+    {
+      "backend_key": "pytorch",
+      "task_id": "text_generation",
+      "feasible": false,
+      "source": "pumas_feasible",
+      "exclusion_reasons": ["missing tokenizer"]
+    }
+  ]
+}

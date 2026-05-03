@@ -1,0 +1,27 @@
+{
+  "contract_version": 1,
+  "model_ref": {
+    "model_id": "pumas://models/invalid-generation-config",
+    "artifact_id": "hf-dir"
+  },
+  "artifact_kind": "hf_compatible_directory",
+  "entry_path": "/models/invalid-generation-config",
+  "storage_kind": "managed_library",
+  "validation_state": "warning",
+  "components": {
+    "tokenizer": "present",
+    "generation_config": "invalid",
+    "diagnostics": ["generation_config.json failed to parse"]
+  },
+  "generation_defaults": {
+    "diagnostics": ["generation defaults unavailable"]
+  },
+  "feasible_execution_candidates": [
+    {
+      "backend_key": "pytorch",
+      "task_id": "text_generation",
+      "feasible": true,
+      "source": "pumas_feasible"
+    }
+  ]
+}
