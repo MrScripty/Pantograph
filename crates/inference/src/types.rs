@@ -271,6 +271,8 @@ pub enum InferenceExecutionResult {
     },
     ImageGeneration {
         result: ImageGenerationResult,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
     },
 }
 

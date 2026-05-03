@@ -2178,9 +2178,10 @@ inference write ledger events directly.
 - [ ] Map non-generation task option support summaries into durable bounded
   metadata for embedding, rerank, image/video/audio, and KV-cache task options
   after those task option diagnostics are emitted by the corresponding typed
-  execution paths. Embedding/rerank typed gateway diagnostics now emit bounded
-  option support for extra options and rerank controls; image/video/audio and
-  KV-cache task-specific options remain open.
+  execution paths. Embedding/rerank/image-generation typed gateway diagnostics
+  now emit bounded option support for extra options, rerank controls, and
+  first-class image request settings; video/audio and KV-cache task-specific
+  options remain open.
 - [ ] Map lifecycle summaries into durable bounded metadata for package
   resolution, task validation, preprocessing, backend execution, postprocessing,
   result projection, duration, cancellation, and cleanup. Diagnostic-observed
@@ -2630,6 +2631,10 @@ Update during implementation:
   Typed embedding and rerank lifecycle completion events now emit bounded
   option support summaries for backend extra-option keys and rerank controls,
   leaving image/video/audio and KV-cache task-specific option diagnostics open.
+- 2026-05-03: Extended typed image-generation results and lifecycle completion
+  events with bounded option diagnostics for first-class image settings and
+  backend-specific image extra-option keys, without recording prompts or image
+  payload bodies.
 - 2026-05-03: Added lifecycle phase/kind metadata to durable inference
   diagnostic-observed payloads, so compatibility and option summaries retain
   the lifecycle phase that produced them without requiring consumers to infer it

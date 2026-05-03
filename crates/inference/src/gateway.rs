@@ -1162,6 +1162,7 @@ impl InferenceGateway {
         let result = self.execute_typed_validated(request).await;
         let mut option_diagnostics = option_diagnostics_from_execution_result(&result);
         option_diagnostics.extend(request_option_diagnostics);
+        dedupe_option_diagnostics(&mut option_diagnostics);
         record_non_streaming_lifecycle_result_with_option_diagnostics(
             lifecycle_sink.as_ref(),
             request_id,
@@ -1258,8 +1259,20 @@ impl InferenceGateway {
                 Ok(InferenceExecutionResult::Rerank { response })
             }
             InferenceExecutionInput::ImageGeneration { request } => {
+                let backend_key = canonical_backend_key(&self.current_backend_name().await);
+                let mut option_diagnostics =
+                    typed_image_generation_option_diagnostics(&request, Some(&backend_key));
+                option_diagnostics.extend(extra_option_diagnostics(
+                    &request.extra_options,
+                    Some(&backend_key),
+                    "image.extra_options",
+                ));
+                dedupe_option_diagnostics(&mut option_diagnostics);
                 let result = self.generate_image(request).await?;
-                Ok(InferenceExecutionResult::ImageGeneration { result })
+                Ok(InferenceExecutionResult::ImageGeneration {
+                    result,
+                    option_diagnostics,
+                })
             }
         }
     }
@@ -1593,8 +1606,16 @@ fn typed_non_generation_option_diagnostics(
             }
             diagnostics
         }
-        InferenceExecutionInput::ImageGeneration { .. }
-        | InferenceExecutionInput::TextGeneration { .. } => Vec::new(),
+        InferenceExecutionInput::ImageGeneration { request } => {
+            let mut diagnostics = typed_image_generation_option_diagnostics(request, backend_key);
+            diagnostics.extend(extra_option_diagnostics(
+                &request.extra_options,
+                backend_key,
+                "image.extra_options",
+            ));
+            diagnostics
+        }
+        InferenceExecutionInput::TextGeneration { .. } => Vec::new(),
     };
 
     diagnostics.extend(extra_option_diagnostics(
@@ -1603,6 +1624,109 @@ fn typed_non_generation_option_diagnostics(
         "extra_options",
     ));
     diagnostics
+}
+
+fn typed_image_generation_option_diagnostics(
+    request: &ImageGenerationRequest,
+    backend_key: Option<&str>,
+) -> Vec<OptionCompatibilityDiagnostic> {
+    let mut diagnostics = Vec::new();
+    push_image_option_diagnostic(
+        &mut diagnostics,
+        backend_key,
+        "image.negative_prompt",
+        request.negative_prompt.is_some(),
+        "typed image gateway forwards negative_prompt",
+    );
+    push_image_option_diagnostic(
+        &mut diagnostics,
+        backend_key,
+        "image.width",
+        request.width.is_some(),
+        "typed image gateway forwards width",
+    );
+    push_image_option_diagnostic(
+        &mut diagnostics,
+        backend_key,
+        "image.height",
+        request.height.is_some(),
+        "typed image gateway forwards height",
+    );
+    push_image_option_diagnostic(
+        &mut diagnostics,
+        backend_key,
+        "image.num_inference_steps",
+        request.num_inference_steps.is_some(),
+        "typed image gateway forwards num_inference_steps",
+    );
+    push_image_option_diagnostic(
+        &mut diagnostics,
+        backend_key,
+        "image.guidance_scale",
+        request.guidance_scale.is_some(),
+        "typed image gateway forwards guidance_scale",
+    );
+    push_image_option_diagnostic(
+        &mut diagnostics,
+        backend_key,
+        "image.seed",
+        request.seed.is_some(),
+        "typed image gateway forwards seed",
+    );
+    push_image_option_diagnostic(
+        &mut diagnostics,
+        backend_key,
+        "image.scheduler",
+        request.scheduler.is_some(),
+        "typed image gateway forwards scheduler",
+    );
+    push_image_option_diagnostic(
+        &mut diagnostics,
+        backend_key,
+        "image.num_images_per_prompt",
+        request.num_images_per_prompt.is_some(),
+        "typed image gateway forwards num_images_per_prompt",
+    );
+    push_image_option_diagnostic(
+        &mut diagnostics,
+        backend_key,
+        "image.init_image",
+        request.init_image.is_some(),
+        "typed image gateway forwards init_image presence",
+    );
+    push_image_option_diagnostic(
+        &mut diagnostics,
+        backend_key,
+        "image.mask_image",
+        request.mask_image.is_some(),
+        "typed image gateway forwards mask_image presence",
+    );
+    push_image_option_diagnostic(
+        &mut diagnostics,
+        backend_key,
+        "image.strength",
+        request.strength.is_some(),
+        "typed image gateway forwards strength",
+    );
+    diagnostics
+}
+
+fn push_image_option_diagnostic(
+    diagnostics: &mut Vec<OptionCompatibilityDiagnostic>,
+    backend_key: Option<&str>,
+    option_path: &'static str,
+    requested: bool,
+    message: &'static str,
+) {
+    if !requested {
+        return;
+    }
+    diagnostics.push(OptionCompatibilityDiagnostic {
+        option_path: option_path.to_string(),
+        state: OptionSupportState::Honored,
+        backend_key: backend_key.map(ToOwned::to_owned),
+        message: Some(message.to_string()),
+    });
 }
 
 fn extra_option_diagnostics(
@@ -1978,8 +2102,28 @@ fn option_diagnostics_from_execution_result(
         Ok(InferenceExecutionResult::TextGeneration {
             option_diagnostics, ..
         }) => option_diagnostics.clone(),
+        Ok(InferenceExecutionResult::ImageGeneration {
+            option_diagnostics, ..
+        }) => option_diagnostics.clone(),
         _ => Vec::new(),
     }
+}
+
+fn dedupe_option_diagnostics(diagnostics: &mut Vec<OptionCompatibilityDiagnostic>) {
+    let mut seen = Vec::new();
+    diagnostics.retain(|diagnostic| {
+        let key = (
+            diagnostic.option_path.clone(),
+            diagnostic.state,
+            diagnostic.backend_key.clone(),
+        );
+        if seen.iter().any(|existing| existing == &key) {
+            false
+        } else {
+            seen.push(key);
+            true
+        }
+    });
 }
 
 fn unix_timestamp_ms() -> u64 {

@@ -821,17 +821,19 @@ async fn test_execute_typed_forwards_image_generation_to_active_backend() {
                 model: "mock-image".to_string(),
                 prompt: "typed prompt".to_string(),
                 negative_prompt: None,
-                width: None,
-                height: None,
+                width: Some(512),
+                height: Some(512),
                 num_inference_steps: None,
                 guidance_scale: None,
-                seed: None,
-                scheduler: None,
+                seed: Some(123),
+                scheduler: Some("euler".to_string()),
                 num_images_per_prompt: None,
                 init_image: None,
                 mask_image: None,
                 strength: None,
-                extra_options: serde_json::Value::Null,
+                extra_options: serde_json::json!({
+                    "safety_checker": false,
+                }),
             },
         },
         generation_options: None,
@@ -844,9 +846,25 @@ async fn test_execute_typed_forwards_image_generation_to_active_backend() {
         .expect("typed image request should execute");
 
     match result {
-        InferenceExecutionResult::ImageGeneration { result } => {
+        InferenceExecutionResult::ImageGeneration {
+            result,
+            option_diagnostics,
+        } => {
             assert_eq!(result.images[0].data_base64, "typed prompt");
             assert_eq!(result.seed_used, Some(7));
+            assert!(option_diagnostics.iter().any(|diagnostic| {
+                diagnostic.option_path == "image.width"
+                    && diagnostic.state == OptionSupportState::Honored
+                    && diagnostic.backend_key.as_deref() == Some("mock")
+            }));
+            assert!(option_diagnostics.iter().any(|diagnostic| {
+                diagnostic.option_path == "image.scheduler"
+                    && diagnostic.state == OptionSupportState::Honored
+            }));
+            assert!(option_diagnostics.iter().any(|diagnostic| {
+                diagnostic.option_path == "image.extra_options.safety_checker"
+                    && diagnostic.state == OptionSupportState::Mapped
+            }));
         }
         other => panic!("expected image generation result, got {other:?}"),
     }
@@ -1148,21 +1166,25 @@ async fn test_execute_typed_with_lifecycle_records_validation_and_backend_comple
                 model: "mock-image".to_string(),
                 prompt: "typed prompt".to_string(),
                 negative_prompt: None,
-                width: None,
+                width: Some(768),
                 height: None,
                 num_inference_steps: None,
                 guidance_scale: None,
-                seed: None,
+                seed: Some(42),
                 scheduler: None,
                 num_images_per_prompt: None,
                 init_image: None,
                 mask_image: None,
                 strength: None,
-                extra_options: serde_json::Value::Null,
+                extra_options: serde_json::json!({
+                    "safety_checker": false,
+                }),
             },
         },
         generation_options: None,
-        extra_options: serde_json::Value::Null,
+        extra_options: serde_json::json!({
+            "audit": true,
+        }),
     };
 
     gateway
@@ -1193,6 +1215,19 @@ async fn test_execute_typed_with_lifecycle_records_validation_and_backend_comple
         events[4].kind,
         InferenceRequestLifecycleEventKind::Completed
     );
+    assert!(events[4].option_diagnostics.iter().any(|diagnostic| {
+        diagnostic.option_path == "image.width"
+            && diagnostic.state == OptionSupportState::Honored
+            && diagnostic.backend_key.as_deref() == Some("mock")
+    }));
+    assert!(events[4].option_diagnostics.iter().any(|diagnostic| {
+        diagnostic.option_path == "image.extra_options.safety_checker"
+            && diagnostic.state == OptionSupportState::Mapped
+    }));
+    assert!(events[4].option_diagnostics.iter().any(|diagnostic| {
+        diagnostic.option_path == "extra_options.audit"
+            && diagnostic.state == OptionSupportState::Mapped
+    }));
     assert_eq!(events[5].phase, InferenceLifecyclePhase::BackendExecution);
     assert_eq!(
         events[5].kind,
