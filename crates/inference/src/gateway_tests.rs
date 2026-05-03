@@ -8,8 +8,10 @@ use futures_util::{stream, StreamExt};
 use tokio::sync::mpsc;
 
 use crate::backend::BackendStartOutcome;
+use crate::model_contracts::InferenceTaskId;
 use crate::types::{
-    InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
+    ImageGenerationRequest, InferenceExecutionInput, InferenceExecutionRequest,
+    InferenceExecutionResult, InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
     InferenceRequestLifecycleEventSink, RuntimeFactReadiness,
 };
 
@@ -798,6 +800,88 @@ async fn test_generate_image_forwards_to_active_backend() {
     assert_eq!(result.seed_used, Some(7));
     assert_eq!(result.images.len(), 1);
     assert_eq!(result.images[0].data_base64, "paper lantern");
+}
+
+#[tokio::test]
+async fn test_execute_typed_forwards_image_generation_to_active_backend() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "Mock");
+    let request = InferenceExecutionRequest {
+        request_id: Some("typed-image-1".to_string()),
+        task_id: InferenceTaskId::ImageGeneration,
+        model_ref: None,
+        model_name: Some("mock-image".to_string()),
+        runtime_hint: Some("mock".to_string()),
+        input: InferenceExecutionInput::ImageGeneration {
+            request: ImageGenerationRequest {
+                model: "mock-image".to_string(),
+                prompt: "typed prompt".to_string(),
+                negative_prompt: None,
+                width: None,
+                height: None,
+                num_inference_steps: None,
+                guidance_scale: None,
+                seed: None,
+                scheduler: None,
+                num_images_per_prompt: None,
+                init_image: None,
+                mask_image: None,
+                strength: None,
+                extra_options: serde_json::Value::Null,
+            },
+        },
+        generation_options: None,
+        extra_options: serde_json::Value::Null,
+    };
+
+    let result = gateway
+        .execute_typed(request)
+        .await
+        .expect("typed image request should execute");
+
+    match result {
+        InferenceExecutionResult::ImageGeneration { result } => {
+            assert_eq!(result.images[0].data_base64, "typed prompt");
+            assert_eq!(result.seed_used, Some(7));
+        }
+        other => panic!("expected image generation result, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn test_execute_typed_validates_before_backend_execution() {
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "Mock");
+    let request = InferenceExecutionRequest {
+        request_id: Some("typed-invalid-1".to_string()),
+        task_id: InferenceTaskId::Embedding,
+        model_ref: None,
+        model_name: Some("mock-image".to_string()),
+        runtime_hint: Some("mock".to_string()),
+        input: InferenceExecutionInput::ImageGeneration {
+            request: ImageGenerationRequest {
+                model: "mock-image".to_string(),
+                prompt: "typed prompt".to_string(),
+                negative_prompt: None,
+                width: None,
+                height: None,
+                num_inference_steps: None,
+                guidance_scale: None,
+                seed: None,
+                scheduler: None,
+                num_images_per_prompt: None,
+                init_image: None,
+                mask_image: None,
+                strength: None,
+                extra_options: serde_json::Value::Null,
+            },
+        },
+        generation_options: None,
+        extra_options: serde_json::Value::Null,
+    };
+
+    match gateway.execute_typed(request).await {
+        Err(GatewayError::Validation(_)) => {}
+        other => panic!("expected validation error, got {other:?}"),
+    }
 }
 
 #[tokio::test]

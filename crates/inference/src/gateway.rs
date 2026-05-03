@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use futures_util::Stream;
+use futures_util::{Stream, StreamExt};
 use pantograph_runtime_identity::canonical_runtime_id;
 use tokio::sync::RwLock;
 
@@ -20,12 +20,15 @@ use crate::backend::{
 };
 use crate::config::EmbeddingMemoryMode;
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
-use crate::model_contracts::InferenceLifecyclePhase;
+use crate::model_contracts::{GenerationOptions, InferenceLifecyclePhase};
 use crate::process::ProcessSpawner;
 use crate::types::{
-    ImageGenerationRequest, ImageGenerationResult, InferenceRequestLifecycleEvent,
-    InferenceRequestLifecycleEventKind, InferenceRequestLifecycleEventSink, RerankRequest,
-    RerankResponse, RuntimeLifecycleSnapshot, ServerModeInfo,
+    ChatMessage, ChatRequest, ContentPart, ImageGenerationRequest, ImageGenerationResult,
+    InferenceEmbeddingResult, InferenceExecutionInput, InferenceExecutionRequest,
+    InferenceExecutionRequestValidationError, InferenceExecutionResult,
+    InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
+    InferenceRequestLifecycleEventSink, RerankRequest, RerankResponse, RuntimeLifecycleSnapshot,
+    ServerModeInfo,
 };
 
 #[cfg(feature = "backend-llamacpp")]
@@ -45,6 +48,9 @@ pub enum GatewayError {
 
     #[error("No process spawner configured")]
     NoSpawner,
+
+    #[error("Invalid typed inference request: {0}")]
+    Validation(#[from] InferenceExecutionRequestValidationError),
 }
 
 /// Host-supplied inputs for starting the active backend in inference mode.
@@ -924,6 +930,102 @@ impl InferenceGateway {
         result
     }
 
+    /// Execute a typed inference request through the current backend facade.
+    ///
+    /// This adapter validates canonical typed request semantics and then
+    /// bridges into the existing backend methods. Backend-specific transports
+    /// such as OpenAI-compatible JSON remain at this gateway/backend edge.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GatewayError::Validation`] when the typed request is malformed
+    /// and [`GatewayError::Backend`] when the active backend rejects or fails
+    /// execution.
+    pub async fn execute_typed(
+        &self,
+        request: InferenceExecutionRequest,
+    ) -> Result<InferenceExecutionResult, GatewayError> {
+        request.validate()?;
+        let model = typed_request_model_name(&request);
+
+        match request.input {
+            InferenceExecutionInput::TextGeneration {
+                prompt,
+                system_prompt,
+                messages,
+                stream,
+            } => {
+                let chat_request = typed_text_generation_to_chat_request(
+                    model,
+                    prompt,
+                    system_prompt,
+                    messages,
+                    stream,
+                    request.generation_options.as_ref(),
+                );
+                let request_json = serde_json::to_string(&chat_request).map_err(|error| {
+                    GatewayError::Backend(BackendError::Inference(format!(
+                        "Failed to encode typed chat request: {error}"
+                    )))
+                })?;
+                let mut stream = self.chat_completion_stream(request_json).await?;
+                let mut text = String::new();
+                while let Some(chunk) = stream.next().await {
+                    let chunk = chunk.map_err(GatewayError::Backend)?;
+                    if let Some(content) = chunk.content {
+                        text.push_str(&content);
+                    }
+                    if chunk.done {
+                        break;
+                    }
+                }
+                Ok(InferenceExecutionResult::TextGeneration {
+                    text,
+                    usage: None,
+                    cache_handle_id: None,
+                    option_diagnostics: Vec::new(),
+                })
+            }
+            InferenceExecutionInput::Embedding { texts } => {
+                let embeddings = self.embeddings(texts, &model).await?;
+                Ok(InferenceExecutionResult::Embedding {
+                    embeddings: embeddings
+                        .into_iter()
+                        .enumerate()
+                        .map(|(index, embedding)| InferenceEmbeddingResult {
+                            vector: embedding.vector,
+                            token_count: Some(embedding.token_count),
+                            index: Some(index),
+                        })
+                        .collect(),
+                    usage: None,
+                })
+            }
+            InferenceExecutionInput::Rerank {
+                query,
+                documents,
+                top_n,
+                return_documents,
+            } => {
+                let response = self
+                    .rerank(RerankRequest {
+                        model,
+                        query,
+                        documents,
+                        top_n,
+                        return_documents,
+                        extra_options: request.extra_options,
+                    })
+                    .await?;
+                Ok(InferenceExecutionResult::Rerank { response })
+            }
+            InferenceExecutionInput::ImageGeneration { request } => {
+                let result = self.generate_image(request).await?;
+                Ok(InferenceExecutionResult::ImageGeneration { result })
+            }
+        }
+    }
+
     // ─── LEGACY COMPATIBILITY ───────────────────────────────────────
 
     /// Get a reference to the underlying backend for legacy code
@@ -1027,6 +1129,57 @@ impl Drop for LifecycleStream {
                 Some("stream dropped before completion".to_string()),
             );
         }
+    }
+}
+
+fn typed_request_model_name(request: &InferenceExecutionRequest) -> String {
+    request
+        .model_name
+        .clone()
+        .or_else(|| {
+            request
+                .model_ref
+                .as_ref()
+                .map(|model_ref| model_ref.model_id.clone())
+        })
+        .unwrap_or_default()
+}
+
+fn typed_text_generation_to_chat_request(
+    model: String,
+    prompt: Option<String>,
+    system_prompt: Option<String>,
+    messages: Vec<ChatMessage>,
+    stream: bool,
+    generation_options: Option<&GenerationOptions>,
+) -> ChatRequest {
+    let messages = if messages.is_empty() {
+        let mut converted = Vec::new();
+        if let Some(system_prompt) = system_prompt {
+            converted.push(ChatMessage {
+                role: "system".to_string(),
+                content: vec![ContentPart::Text {
+                    text: system_prompt,
+                }],
+            });
+        }
+        if let Some(prompt) = prompt {
+            converted.push(ChatMessage {
+                role: "user".to_string(),
+                content: vec![ContentPart::Text { text: prompt }],
+            });
+        }
+        converted
+    } else {
+        messages
+    };
+
+    ChatRequest {
+        model,
+        messages,
+        stream,
+        max_tokens: generation_options.and_then(|options| options.length.max_new_tokens),
+        temperature: generation_options.and_then(|options| options.sampling.temperature),
     }
 }
 

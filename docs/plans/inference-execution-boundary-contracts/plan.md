@@ -1495,7 +1495,7 @@ execution semantics that backends can map locally.
 - Existing llama.cpp/PyTorch request tests continue to pass.
 - `cargo test -p inference`.
 
-**Status:** In progress. `GenerationOptions` now aggregates the existing
+**Status:** Implemented. `GenerationOptions` now aggregates the existing
 length, sampling, search, stopping, cache, output, and special-token groups
 with backend-scoped extension values. Sampling includes a typed seed field.
 PyTorch has an initial Transformers kwargs mapper with diagnostics for honored,
@@ -1522,7 +1522,9 @@ backend extensions.
 Backend-native generation flags are now represented through backend-local
 mappers for PyTorch/Transformers and llama.cpp instead of the public
 `GenerationOptions` contract. Future vLLM, MLX, and Candle slices must follow
-the same boundary.
+the same boundary. `InferenceGateway::execute_typed` validates typed execution
+requests and bridges them into existing backend paths for text/chat,
+embedding, rerank, and image generation.
 
 ### Milestone 11: Canonical Workflow Node Migration
 
@@ -1934,6 +1936,11 @@ Update during implementation:
   `crates/inference/src/backend/README.md` and marked the current
   PyTorch/Transformers and llama.cpp generation mappers as the pattern future
   vLLM, MLX, and Candle slices must follow.
+- 2026-05-03: Added `InferenceGateway::execute_typed`, a validating adapter
+  from canonical typed execution requests into existing chat, embedding,
+  rerank, and image-generation backend methods. This provides gateway mock
+  coverage for typed execution semantics without replacing existing facade
+  entry points.
 
 ## Commit Cadence Notes
 
