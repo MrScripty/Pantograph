@@ -171,8 +171,10 @@ impl ProcessSpawner for TauriProcessSpawner {
                     .map_err(|error| managed_binary_spawn_error(error.to_string()))?
             }
             "ollama" => {
-                resolve_managed_binary_command(&app_data_dir, ManagedBinaryId::Ollama, args)
-                    .map_err(|error| managed_binary_spawn_error(error.to_string()))?
+                return Err(managed_binary_spawn_error(
+                    "Ollama is no longer supported as a first-party Pantograph runtime. Use a Pumas model reference with a supported runtime such as llama.cpp."
+                        .to_string(),
+                ));
             }
             other => {
                 return Err(format!(

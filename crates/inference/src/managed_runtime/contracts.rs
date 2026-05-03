@@ -11,7 +11,20 @@ pub enum ManagedBinaryId {
 
 impl ManagedBinaryId {
     pub fn all() -> &'static [Self] {
-        &[Self::LlamaCpp, Self::Ollama]
+        &[Self::LlamaCpp]
+    }
+
+    pub fn is_first_party_supported(self) -> bool {
+        matches!(self, Self::LlamaCpp)
+    }
+
+    pub fn retired_message(self) -> Option<&'static str> {
+        match self {
+            Self::LlamaCpp => None,
+            Self::Ollama => {
+                Some("Ollama is no longer supported as a first-party Pantograph managed runtime")
+            }
+        }
     }
 
     pub fn key(self) -> &'static str {

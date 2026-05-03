@@ -1163,7 +1163,7 @@ entry points.
   workflow-node inventory and frontend node maps while preserving a stale-node
   migration guard.
 - [x] Remove Ollama backend registration and public backend feature surface.
-- [ ] Remove or quarantine managed Ollama runtime/platform code so it cannot be
+- [x] Remove or quarantine managed Ollama runtime/platform code so it cannot be
   selected as an active backend.
 - [ ] Update user-facing and developer documentation to explain that Pantograph
   does not wrap Ollama as a first-party runtime.
@@ -1188,7 +1188,10 @@ execution to return a migration-focused error without contacting Ollama, and
 updated touched source READMEs. The second slice removed public/default
 `backend-ollama` feature surfaces from inference, embedded runtime, UniFFI, and
 Tauri; stopped registering Ollama in the inference backend registry; and added
-registry/gateway checks for retired Ollama behavior. Managed runtime cleanup,
+registry/gateway checks for retired Ollama behavior. The third slice
+quarantined managed-runtime exposure by removing Ollama from supported runtime
+enumeration, rejecting direct Ollama command resolution, and preventing stale
+Ollama runtime ids from projecting selectable backend keys. Legacy state cleanup,
 user-setting migration, and saved-workflow structural migration remain pending.
 
 ### Milestone 7: Strengthen Capability Facts

@@ -3,7 +3,7 @@
 ## Purpose
 
 This directory owns Pantograph's backend-managed runtime binary boundary for
-installable sidecar runtimes such as `llama.cpp` and `Ollama`. The boundary
+installable sidecar runtimes such as `llama.cpp`. The boundary
 exists so inference callers and host adapters can consume one Rust-owned source
 of truth for managed runtime contracts, install validation, command resolution,
 and transition coordination without moving runtime lifecycle policy into Tauri.
@@ -23,7 +23,7 @@ and transition coordination without moving runtime lifecycle policy into Tauri.
 | `paths.rs` | Managed runtime root/path helpers plus shared argument and environment helpers used by platform adapters. |
 | `state.rs` | Durable managed runtime catalog, selection, and interrupted-job reconciliation helpers for restart-safe state projection. |
 | `llama_cpp_platform/` | Thin per-platform `llama.cpp` install/finalization/launch adapters kept behind the managed runtime boundary. |
-| `ollama_platform/` | Thin per-platform `Ollama` install and command-resolution adapters behind the same backend contracts. |
+| `ollama_platform/` | Retired per-platform `Ollama` adapters retained only until legacy managed-runtime state cleanup is completed. |
 | `managed_binaries/` | Reserved marker documenting that runtime binary artifacts must not be stored under `src/`. |
 
 ## Problem
@@ -56,9 +56,9 @@ rebuild runtime state independently.
 - `llama.cpp` managed installs depend on vendor release artifacts matching the
   current platform key; unsupported targets should surface an unsupported
   runtime state instead of attempting a partial install flow.
-- `Ollama` keeps system-command precedence when `ollama` is already available
-  on the host. Managed install support is additive, not a promise that
-  Pantograph always replaces a host-provided `Ollama` binary.
+- `Ollama` is retired as a first-party managed runtime. Supported runtime
+  lists, command resolution, and capability projections must not advertise or
+  launch it.
 - Runtime-family-specific packaging differences still belong in backend
   definition/platform modules; if a future runtime needs materially different
   packaging or validation, document that as a new bounded limit rather than
@@ -69,7 +69,7 @@ rebuild runtime state independently.
 Use a small managed-runtime module tree with explicit responsibility splits:
 contracts, catalog refresh, definition lookup, orchestration, archive
 extraction, and path helpers. Runtime-specific platform details remain in
-`llama_cpp_platform/` and `ollama_platform/`, while `operations.rs` owns the
+`llama_cpp_platform/`, while `operations.rs` owns the
 backend-facing transition and availability flow. Helper modules under
 `operations/` keep download-source resolution, snapshot projection, and
 persisted state transitions below the large-file threshold without changing the
@@ -88,7 +88,8 @@ backend services instead of becoming the owner of install or launch policy.
 ## Invariants
 
 - `ManagedBinaryId` remains the canonical backend identifier for installable
-  sidecar runtimes owned here.
+  sidecar runtimes owned here. Retired ids may deserialize for old state but
+  must not appear in supported runtime lists or launch paths.
 - Platform-specific install and command behavior lives behind adapter modules,
   not inline in orchestration code.
 - Availability and command resolution use the same backend validation path so
@@ -122,7 +123,7 @@ backend services instead of becoming the owner of install or launch policy.
 
 ## Dependencies
 
-**Internal:** `crate::inference`, `llama_cpp_platform`, `ollama_platform`.
+**Internal:** `crate::inference`, `llama_cpp_platform`.
 **External:** `reqwest`, `tokio`, `parking_lot`, `flate2`, `tar`, `zstd`,
 `zip`, `uuid`, `once_cell`, `which`.
 

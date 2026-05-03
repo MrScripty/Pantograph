@@ -2,7 +2,7 @@ use super::{
     binary_capability, cancel_binary_download, definition, download_response_mode,
     ensure_runtime_state_entry, existing_download_artifact, finish_requested_cancellation,
     finish_requested_pause, pause_binary_download, persist_install_success, persist_remove_success,
-    readiness_state_for_capability, resolve_runtime_install_dir,
+    readiness_state_for_capability, resolve_binary_command, resolve_runtime_install_dir,
     runtime_install_dir_for_projection, select_managed_runtime_version,
     set_default_managed_runtime_version, snapshot_from_capability, DownloadResponseMode,
     ManagedBinaryCapability, ManagedBinaryId, ManagedBinaryInstallState, ManagedRuntimeJobState,
@@ -43,6 +43,44 @@ fn install_fake_runtime_files(dir: &Path, id: ManagedBinaryId) {
         definition(id).validate_installation(dir).is_empty(),
         "fake runtime files should satisfy install validation"
     );
+}
+
+#[test]
+fn managed_runtime_supported_ids_exclude_retired_ollama() {
+    assert_eq!(ManagedBinaryId::all(), &[ManagedBinaryId::LlamaCpp]);
+    assert!(!ManagedBinaryId::Ollama.is_first_party_supported());
+}
+
+#[test]
+fn retired_ollama_binary_capability_is_unsupported() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+
+    let capability =
+        binary_capability(temp_dir.path(), ManagedBinaryId::Ollama).expect("ollama capability");
+
+    assert_eq!(capability.id, ManagedBinaryId::Ollama);
+    assert_eq!(
+        capability.install_state,
+        ManagedBinaryInstallState::Unsupported
+    );
+    assert!(!capability.available);
+    assert!(!capability.can_install);
+    assert!(capability
+        .unavailable_reason
+        .as_deref()
+        .unwrap_or_default()
+        .contains("no longer supported"));
+}
+
+#[test]
+fn retired_ollama_binary_command_resolution_is_rejected() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+
+    let error = resolve_binary_command(temp_dir.path(), ManagedBinaryId::Ollama, &[])
+        .expect_err("ollama command resolution should be retired");
+
+    assert!(error.contains("no longer supported"));
+    assert!(error.contains("Pumas model reference"));
 }
 
 #[test]

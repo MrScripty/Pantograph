@@ -60,6 +60,17 @@ fn transition_lock(id: ManagedBinaryId) -> Arc<tokio::sync::Mutex<()>> {
         .clone()
 }
 
+fn ensure_first_party_runtime(id: ManagedBinaryId) -> Result<(), String> {
+    if let Some(message) = id.retired_message() {
+        Err(format!(
+            "{}. Use a Pumas model reference with a supported runtime such as llama.cpp.",
+            message
+        ))
+    } else {
+        Ok(())
+    }
+}
+
 fn cancellation_request(id: ManagedBinaryId) -> Arc<AtomicBool> {
     let mut requests = CANCELLATION_REQUESTS.lock();
     requests
@@ -115,6 +126,19 @@ pub fn binary_capability(
     app_data_dir: &Path,
     id: ManagedBinaryId,
 ) -> Result<ManagedBinaryCapability, String> {
+    if let Some(message) = id.retired_message() {
+        return Ok(ManagedBinaryCapability {
+            id,
+            display_name: id.display_name().to_string(),
+            install_state: ManagedBinaryInstallState::Unsupported,
+            available: false,
+            can_install: false,
+            can_remove: false,
+            missing_files: Vec::new(),
+            unavailable_reason: Some(message.to_string()),
+        });
+    }
+
     let definition = definition(id);
     let install_dir = runtime_install_dir_for_projection(app_data_dir, id)?;
     let has_managed_install = install_dir.exists();
@@ -210,6 +234,7 @@ pub async fn refresh_managed_runtime_catalog(
     app_data_dir: &Path,
     id: ManagedBinaryId,
 ) -> Result<ManagedRuntimeSnapshot, String> {
+    ensure_first_party_runtime(id)?;
     let catalog = fetch_managed_runtime_catalog(id).await?;
     persist_catalog_versions(app_data_dir, id, catalog)?;
     managed_runtime_snapshot(app_data_dir, id)
@@ -232,6 +257,7 @@ pub fn select_managed_runtime_version(
     id: ManagedBinaryId,
     version: Option<&str>,
 ) -> Result<(), String> {
+    ensure_first_party_runtime(id)?;
     update_runtime_selection(app_data_dir, id, version, SelectionTarget::Selected)
 }
 
@@ -240,10 +266,12 @@ pub fn set_default_managed_runtime_version(
     id: ManagedBinaryId,
     version: Option<&str>,
 ) -> Result<(), String> {
+    ensure_first_party_runtime(id)?;
     update_runtime_selection(app_data_dir, id, version, SelectionTarget::Default)
 }
 
 pub fn cancel_binary_download(app_data_dir: &Path, id: ManagedBinaryId) -> Result<(), String> {
+    ensure_first_party_runtime(id)?;
     let state = load_managed_runtime_state(app_data_dir)?;
     let Some(runtime) = runtime_state_entry(&state, id) else {
         return Err(format!(
@@ -273,6 +301,7 @@ pub fn cancel_binary_download(app_data_dir: &Path, id: ManagedBinaryId) -> Resul
 }
 
 pub fn pause_binary_download(app_data_dir: &Path, id: ManagedBinaryId) -> Result<(), String> {
+    ensure_first_party_runtime(id)?;
     let state = load_managed_runtime_state(app_data_dir)?;
     let Some(runtime) = runtime_state_entry(&state, id) else {
         return Err(format!(
@@ -306,6 +335,7 @@ pub async fn download_binary<F>(
 where
     F: FnMut(DownloadProgress),
 {
+    ensure_first_party_runtime(id)?;
     let lock = transition_lock(id);
     let _guard = lock.lock().await;
     clear_cancellation_request(id);
@@ -756,6 +786,7 @@ where
 }
 
 pub async fn remove_binary(app_data_dir: &Path, id: ManagedBinaryId) -> Result<(), String> {
+    ensure_first_party_runtime(id)?;
     let lock = transition_lock(id);
     let _guard = lock.lock().await;
 
@@ -782,6 +813,7 @@ pub async fn remove_binary_version(
     id: ManagedBinaryId,
     version: &str,
 ) -> Result<(), String> {
+    ensure_first_party_runtime(id)?;
     let lock = transition_lock(id);
     let _guard = lock.lock().await;
 
@@ -833,6 +865,7 @@ pub fn resolve_binary_command(
     id: ManagedBinaryId,
     args: &[&str],
 ) -> Result<ResolvedCommand, String> {
+    ensure_first_party_runtime(id)?;
     let definition = definition(id);
 
     if let Some(executable_path) = definition.system_command() {
