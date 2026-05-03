@@ -339,6 +339,16 @@ fn parse_pumas_model_ref(
         .get("pumas_model_ref")
         .or_else(|| inputs.get("model_ref"))
         .and_then(|value| serde_json::from_value(value.clone()).ok())
+        .or_else(|| parse_resolved_model_source_ref(inputs))
+}
+
+#[cfg(feature = "inference-nodes")]
+fn parse_resolved_model_source_ref(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Option<inference::PumasModelRef> {
+    read_optional_input_value(inputs, "resolved_model_source")
+        .and_then(|value| serde_json::from_value::<inference::ResolvedModelSource>(value).ok())
+        .and_then(|source| source.model_ref)
 }
 
 #[cfg(feature = "inference-nodes")]

@@ -126,6 +126,31 @@ fn test_build_text_generation_execution_request_accepts_legacy_flat_generation_o
 
 #[cfg(feature = "inference-nodes")]
 #[test]
+fn test_build_text_generation_execution_request_uses_resolved_model_source_ref() {
+    let mut inputs = HashMap::new();
+    inputs.insert("prompt".to_string(), serde_json::json!("hello"));
+    inputs.insert(
+        "resolved_model_source".to_string(),
+        resolved_model_source_value("pumas://models/tiny-gguf", "/models/tiny/model.gguf"),
+    );
+
+    let request = build_text_generation_execution_request(&inputs)
+        .expect("resolved model source should provide model identity");
+
+    assert_eq!(
+        request.model_ref,
+        Some(PumasModelRef {
+            model_id: "pumas://models/tiny-gguf".to_string(),
+            revision: None,
+            selected_artifact_id: None,
+            selected_artifact_path: None,
+            migration_diagnostics: Vec::new(),
+        })
+    );
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
 fn test_build_text_generation_execution_request_defaults_missing_task_kind_to_text_generation() {
     let mut inputs = HashMap::new();
     inputs.insert("prompt".to_string(), serde_json::json!("hello"));

@@ -1193,6 +1193,10 @@ canonical `llm-inference` as a contract-only task from the inference registry:
 the `audio` input maps to audio transcription input, `response` maps to the
 transcription result, and `execution_supported = false` prevents consumers from
 mistaking descriptor visibility for backend support.
+Node-engine typed request construction now also derives `PumasModelRef`
+identity from `resolved_model_source.model_ref` when a canonical node receives
+fully resolved Pumas model-source facts instead of a separate
+`pumas_model_ref` input.
 
 ### Milestone 4: Define Neutral Managed-Dependency Boundary
 
@@ -2445,6 +2449,10 @@ Update during implementation:
   metadata to the canonical `llm-inference` descriptor projection, preserving
   the registry's non-executable status while documenting the audio/response
   shape for graph consumers.
+- 2026-05-03: Extended node-engine typed request construction to recover the
+  canonical Pumas model identity from `resolved_model_source.model_ref`, so
+  resolved model-source facts can carry identity into typed backend requests
+  without requiring a duplicate `pumas_model_ref` input.
 
 ## Commit Cadence Notes
 
