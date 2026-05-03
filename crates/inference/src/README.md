@@ -250,6 +250,10 @@ async fn run_image_request(gateway: &InferenceGateway, config: &BackendConfig) {
   Transformers-aligned package evidence, canonical task ids, generation
   defaults, option compatibility, lifecycle phases, and model-library cache
   invalidation events.
+- Task registry entries publish `TaskRequestContract` metadata for canonical
+  typed input and result payload families. Consumers should use that contract
+  for task/request compatibility checks instead of deriving payload shape from
+  backend names or raw task strings.
 - Optional fields preserve meaning when omitted; callers may rely on omission as
   “backend default”.
 - `ChatRequest` is an edge DTO; additive fields must be introduced only when

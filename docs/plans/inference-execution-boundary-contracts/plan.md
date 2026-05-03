@@ -1138,6 +1138,17 @@ Missing task labels still default to text generation for existing text nodes,
 but non-string labels, unknown labels, or labels that resolve to non-text tasks
 now fail before gateway/backend execution instead of silently collapsing to text
 generation.
+The task registry now publishes canonical typed request/result payload contracts
+through `TaskRequestContract`, including executable mappings for text/chat,
+embedding, rerank, and image generation plus visible contract-only mappings for
+audio, video, image-understanding, and multimodal roadmap tasks. Typed request
+validation now consumes this contract instead of carrying an independent
+task/input table, and `crates/inference/src/README.md` documents the consumer
+rule that payload compatibility comes from the registry contract rather than
+backend names or raw task strings. Node-engine and workflow-service still carry
+their own neighboring task/output projections, so later consumer-migration
+slices should move those consumers to the exported contract before marking the
+broader task request/registry tasks complete.
 
 ### Milestone 4: Define Neutral Managed-Dependency Boundary
 
@@ -2313,6 +2324,11 @@ Update during implementation:
   rerank, and image-generation backend methods. This provides gateway mock
   coverage for typed execution semantics without replacing existing facade
   entry points.
+- 2026-05-03: Added task request/result payload contracts to the inference task
+  registry. `TaskRequestContract` now defines canonical input/result payload
+  families and executable versus contract-only task status, and typed request
+  validation consumes that registry contract instead of duplicating the
+  task/input map.
 - 2026-05-03: Expanded the typed text/chat generation edge mapping so
   `sampling.top_p` and `sampling.top_k` travel with `max_new_tokens` and
   `temperature` through `ChatRequest` and `InferenceGateway::execute_typed`

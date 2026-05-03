@@ -197,6 +197,183 @@ impl InferenceTaskId {
     }
 }
 
+/// Canonical typed execution input payload kind.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum InferenceExecutionInputKind {
+    TextGeneration,
+    Embedding,
+    Rerank,
+    ImageGeneration,
+    ImageUnderstanding,
+    AudioTranscription,
+    VideoUnderstanding,
+    MultimodalGeneration,
+}
+
+impl InferenceExecutionInputKind {
+    /// Stable snake_case label used in typed request diagnostics.
+    #[must_use]
+    pub fn canonical_label(self) -> &'static str {
+        match self {
+            Self::TextGeneration => "text_generation",
+            Self::Embedding => "embedding",
+            Self::Rerank => "rerank",
+            Self::ImageGeneration => "image_generation",
+            Self::ImageUnderstanding => "image_understanding",
+            Self::AudioTranscription => "audio_transcription",
+            Self::VideoUnderstanding => "video_understanding",
+            Self::MultimodalGeneration => "multimodal_generation",
+        }
+    }
+}
+
+/// Canonical typed execution result payload kind.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum InferenceExecutionResultKind {
+    TextGeneration,
+    Embedding,
+    Rerank,
+    ImageGeneration,
+    ImageUnderstanding,
+    AudioTranscription,
+    VideoUnderstanding,
+    MultimodalGeneration,
+}
+
+impl InferenceExecutionResultKind {
+    /// Stable snake_case label used in result contracts and diagnostics.
+    #[must_use]
+    pub fn canonical_label(self) -> &'static str {
+        match self {
+            Self::TextGeneration => "text_generation",
+            Self::Embedding => "embedding",
+            Self::Rerank => "rerank",
+            Self::ImageGeneration => "image_generation",
+            Self::ImageUnderstanding => "image_understanding",
+            Self::AudioTranscription => "audio_transcription",
+            Self::VideoUnderstanding => "video_understanding",
+            Self::MultimodalGeneration => "multimodal_generation",
+        }
+    }
+}
+
+/// Typed request/result payload contract for a canonical task.
+///
+/// This is a semantic compatibility contract, not a backend route table.
+/// Backends can map the same payload kind to Transformers, llama.cpp, vLLM,
+/// MLX, Candle, or another adapter internally.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct TaskRequestContract {
+    pub task_id: InferenceTaskId,
+    pub input_kind: InferenceExecutionInputKind,
+    pub result_kind: InferenceExecutionResultKind,
+    pub execution_supported: bool,
+    pub streaming_support: TaskStreamingSupport,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub required_input_modalities: Vec<InferenceModality>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub output_modalities: Vec<InferenceModality>,
+}
+
+impl TaskRequestContract {
+    /// Build the canonical request/result contract for a task id.
+    #[must_use]
+    pub fn for_task(task_id: &InferenceTaskId) -> Option<Self> {
+        let contract = match task_id {
+            InferenceTaskId::TextGeneration => Self {
+                task_id: task_id.clone(),
+                input_kind: InferenceExecutionInputKind::TextGeneration,
+                result_kind: InferenceExecutionResultKind::TextGeneration,
+                execution_supported: true,
+                streaming_support: TaskStreamingSupport::BackendDependent,
+                required_input_modalities: vec![InferenceModality::Text],
+                output_modalities: vec![InferenceModality::Text],
+            },
+            InferenceTaskId::ChatCompletion => Self {
+                task_id: task_id.clone(),
+                input_kind: InferenceExecutionInputKind::TextGeneration,
+                result_kind: InferenceExecutionResultKind::TextGeneration,
+                execution_supported: true,
+                streaming_support: TaskStreamingSupport::BackendDependent,
+                required_input_modalities: vec![InferenceModality::Text],
+                output_modalities: vec![InferenceModality::Text],
+            },
+            InferenceTaskId::Embedding => Self {
+                task_id: task_id.clone(),
+                input_kind: InferenceExecutionInputKind::Embedding,
+                result_kind: InferenceExecutionResultKind::Embedding,
+                execution_supported: true,
+                streaming_support: TaskStreamingSupport::Unsupported,
+                required_input_modalities: vec![InferenceModality::Text],
+                output_modalities: vec![InferenceModality::Embedding],
+            },
+            InferenceTaskId::Rerank => Self {
+                task_id: task_id.clone(),
+                input_kind: InferenceExecutionInputKind::Rerank,
+                result_kind: InferenceExecutionResultKind::Rerank,
+                execution_supported: true,
+                streaming_support: TaskStreamingSupport::Unsupported,
+                required_input_modalities: vec![InferenceModality::Text, InferenceModality::Json],
+                output_modalities: vec![InferenceModality::Json],
+            },
+            InferenceTaskId::ImageGeneration => Self {
+                task_id: task_id.clone(),
+                input_kind: InferenceExecutionInputKind::ImageGeneration,
+                result_kind: InferenceExecutionResultKind::ImageGeneration,
+                execution_supported: true,
+                streaming_support: TaskStreamingSupport::Unsupported,
+                required_input_modalities: vec![InferenceModality::Text],
+                output_modalities: vec![InferenceModality::Image],
+            },
+            InferenceTaskId::ImageUnderstanding => Self {
+                task_id: task_id.clone(),
+                input_kind: InferenceExecutionInputKind::ImageUnderstanding,
+                result_kind: InferenceExecutionResultKind::ImageUnderstanding,
+                execution_supported: false,
+                streaming_support: TaskStreamingSupport::BackendDependent,
+                required_input_modalities: vec![InferenceModality::Image, InferenceModality::Text],
+                output_modalities: vec![InferenceModality::Text],
+            },
+            InferenceTaskId::AudioTranscription => Self {
+                task_id: task_id.clone(),
+                input_kind: InferenceExecutionInputKind::AudioTranscription,
+                result_kind: InferenceExecutionResultKind::AudioTranscription,
+                execution_supported: false,
+                streaming_support: TaskStreamingSupport::BackendDependent,
+                required_input_modalities: vec![InferenceModality::Audio],
+                output_modalities: vec![InferenceModality::Text],
+            },
+            InferenceTaskId::VideoUnderstanding => Self {
+                task_id: task_id.clone(),
+                input_kind: InferenceExecutionInputKind::VideoUnderstanding,
+                result_kind: InferenceExecutionResultKind::VideoUnderstanding,
+                execution_supported: false,
+                streaming_support: TaskStreamingSupport::Unsupported,
+                required_input_modalities: vec![InferenceModality::Video, InferenceModality::Text],
+                output_modalities: vec![InferenceModality::Text],
+            },
+            InferenceTaskId::MultimodalGeneration => Self {
+                task_id: task_id.clone(),
+                input_kind: InferenceExecutionInputKind::MultimodalGeneration,
+                result_kind: InferenceExecutionResultKind::MultimodalGeneration,
+                execution_supported: false,
+                streaming_support: TaskStreamingSupport::BackendDependent,
+                required_input_modalities: vec![
+                    InferenceModality::Text,
+                    InferenceModality::Image,
+                    InferenceModality::Audio,
+                ],
+                output_modalities: vec![InferenceModality::Text],
+            },
+            InferenceTaskId::Unknown => return None,
+        };
+        Some(contract)
+    }
+}
+
 /// Task input/output shape independent of a concrete backend.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -296,6 +473,12 @@ impl TaskRegistryEntry {
     #[must_use]
     pub fn canonical_label(&self) -> &'static str {
         self.task_id.canonical_label()
+    }
+
+    /// Typed request/result payload contract for this registry entry.
+    #[must_use]
+    pub fn request_contract(&self) -> Option<TaskRequestContract> {
+        TaskRequestContract::for_task(&self.task_id)
     }
 
     /// Return true when an input task label matches this entry's canonical id
@@ -520,6 +703,25 @@ pub fn default_task_registry_entries() -> Vec<TaskRegistryEntry> {
             support_tier: SupportTier::Stable,
             required_components: vec![ProcessorComponentKind::Tokenizer],
             upstream_task_ids: vec!["text-ranking".to_string(), "reranking".to_string()],
+        },
+        TaskRegistryEntry {
+            task_id: InferenceTaskId::ImageGeneration,
+            aliases: vec![
+                "text-to-image".to_string(),
+                "image-generation".to_string(),
+                "image_generation".to_string(),
+            ],
+            task_family: TaskFamily::Generative,
+            modality_signature: TaskModalitySignature::new(
+                vec![InferenceModality::Text],
+                vec![InferenceModality::Image],
+            ),
+            result_family: "generated_image".to_string(),
+            execution_behavior: TaskExecutionBehavior::Generates,
+            streaming_support: TaskStreamingSupport::Unsupported,
+            support_tier: SupportTier::Experimental,
+            required_components: vec![ProcessorComponentKind::Processor],
+            upstream_task_ids: vec!["text-to-image".to_string()],
         },
         TaskRegistryEntry {
             task_id: InferenceTaskId::ImageUnderstanding,
@@ -1960,4 +2162,104 @@ pub struct ModelPackageFactsSummarySnapshotItem {
 pub struct ModelPackageFactsSummarySnapshot {
     pub cursor: String,
     pub items: Vec<ModelPackageFactsSummarySnapshotItem>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn registry_contract(task_id: InferenceTaskId) -> TaskRequestContract {
+        resolve_task_registry_entry(task_id.canonical_label())
+            .and_then(|entry| entry.request_contract())
+            .unwrap_or_else(|| panic!("missing request contract for {task_id:?}"))
+    }
+
+    #[test]
+    fn task_registry_entries_publish_typed_request_contracts() {
+        let text = registry_contract(InferenceTaskId::TextGeneration);
+        assert_eq!(text.input_kind, InferenceExecutionInputKind::TextGeneration);
+        assert_eq!(
+            text.result_kind,
+            InferenceExecutionResultKind::TextGeneration
+        );
+        assert!(text.execution_supported);
+
+        let chat = registry_contract(InferenceTaskId::ChatCompletion);
+        assert_eq!(chat.input_kind, InferenceExecutionInputKind::TextGeneration);
+        assert_eq!(
+            chat.result_kind,
+            InferenceExecutionResultKind::TextGeneration
+        );
+        assert!(chat.execution_supported);
+
+        let embedding = registry_contract(InferenceTaskId::Embedding);
+        assert_eq!(embedding.input_kind, InferenceExecutionInputKind::Embedding);
+        assert_eq!(
+            embedding.result_kind,
+            InferenceExecutionResultKind::Embedding
+        );
+        assert!(embedding.execution_supported);
+
+        let rerank = registry_contract(InferenceTaskId::Rerank);
+        assert_eq!(rerank.input_kind, InferenceExecutionInputKind::Rerank);
+        assert_eq!(rerank.result_kind, InferenceExecutionResultKind::Rerank);
+        assert!(rerank.execution_supported);
+
+        let image = registry_contract(InferenceTaskId::ImageGeneration);
+        assert_eq!(
+            image.input_kind,
+            InferenceExecutionInputKind::ImageGeneration
+        );
+        assert_eq!(
+            image.result_kind,
+            InferenceExecutionResultKind::ImageGeneration
+        );
+        assert!(image.execution_supported);
+    }
+
+    #[test]
+    fn roadmap_task_contracts_are_visible_but_not_executable() {
+        let audio = registry_contract(InferenceTaskId::AudioTranscription);
+
+        assert_eq!(
+            audio.input_kind,
+            InferenceExecutionInputKind::AudioTranscription
+        );
+        assert_eq!(
+            audio.result_kind,
+            InferenceExecutionResultKind::AudioTranscription
+        );
+        assert!(!audio.execution_supported);
+    }
+
+    #[test]
+    fn task_request_contract_serde_uses_stable_snake_case() {
+        let contract = registry_contract(InferenceTaskId::ImageGeneration);
+        let encoded = serde_json::to_value(&contract).unwrap();
+        let decoded: TaskRequestContract = serde_json::from_value(encoded.clone()).unwrap();
+
+        assert_eq!(encoded["task_id"], serde_json::json!("image_generation"));
+        assert_eq!(encoded["input_kind"], serde_json::json!("image_generation"));
+        assert_eq!(
+            encoded["result_kind"],
+            serde_json::json!("image_generation")
+        );
+        assert_eq!(decoded, contract);
+    }
+
+    #[test]
+    fn task_request_contracts_match_registry_modalities_and_streaming() {
+        for entry in default_task_registry_entries() {
+            let contract = entry
+                .request_contract()
+                .unwrap_or_else(|| panic!("missing request contract for {:?}", entry.task_id));
+            assert_eq!(contract.task_id, entry.task_id);
+            assert_eq!(contract.streaming_support, entry.streaming_support);
+            assert_eq!(
+                contract.required_input_modalities,
+                entry.modality_signature.inputs
+            );
+            assert_eq!(contract.output_modalities, entry.modality_signature.outputs);
+        }
+    }
 }

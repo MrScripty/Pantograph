@@ -4,8 +4,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::model_contracts::{
-    GenerationOptions, InferenceLifecyclePhase, InferenceTaskId, OptionCompatibilityDiagnostic,
-    PumasModelRef,
+    resolve_task_registry_entry, GenerationOptions, InferenceExecutionInputKind,
+    InferenceExecutionResultKind, InferenceLifecyclePhase, InferenceTaskId,
+    OptionCompatibilityDiagnostic, PumasModelRef,
 };
 
 /// Chat message with multimodal content support
@@ -125,30 +126,45 @@ impl InferenceExecutionRequest {
     /// input variant disagree, when required text/query/document payloads are
     /// empty, or when the task is not supported by the typed request contract.
     pub fn validate(&self) -> Result<(), InferenceExecutionRequestValidationError> {
-        match (&self.task_id, &self.input) {
-            (
-                InferenceTaskId::TextGeneration | InferenceTaskId::ChatCompletion,
-                InferenceExecutionInput::TextGeneration {
-                    prompt, messages, ..
+        let contract = resolve_task_registry_entry(self.task_id.canonical_label())
+            .and_then(|entry| entry.request_contract())
+            .ok_or_else(
+                || InferenceExecutionRequestValidationError::UnsupportedTask {
+                    task_id: self.task_id.clone(),
                 },
-            ) => {
+            )?;
+        if !contract.execution_supported {
+            return Err(InferenceExecutionRequestValidationError::UnsupportedTask {
+                task_id: self.task_id.clone(),
+            });
+        }
+        if contract.input_kind != self.input.input_kind() {
+            return Err(
+                InferenceExecutionRequestValidationError::TaskInputMismatch {
+                    task_id: self.task_id.clone(),
+                    input_type: self.input.input_type_label(),
+                },
+            );
+        }
+
+        match &self.input {
+            InferenceExecutionInput::TextGeneration {
+                prompt, messages, ..
+            } => {
                 if prompt.as_deref().is_none_or(str::is_empty) && messages.is_empty() {
                     return Err(InferenceExecutionRequestValidationError::MissingTextInput);
                 }
                 Ok(())
             }
-            (InferenceTaskId::Embedding, InferenceExecutionInput::Embedding { texts }) => {
+            InferenceExecutionInput::Embedding { texts } => {
                 if texts.is_empty() {
                     return Err(InferenceExecutionRequestValidationError::EmptyEmbeddingTexts);
                 }
                 Ok(())
             }
-            (
-                InferenceTaskId::Rerank,
-                InferenceExecutionInput::Rerank {
-                    query, documents, ..
-                },
-            ) => {
+            InferenceExecutionInput::Rerank {
+                query, documents, ..
+            } => {
                 if query.is_empty() {
                     return Err(InferenceExecutionRequestValidationError::EmptyRerankQuery);
                 }
@@ -157,25 +173,7 @@ impl InferenceExecutionRequest {
                 }
                 Ok(())
             }
-            (InferenceTaskId::ImageGeneration, InferenceExecutionInput::ImageGeneration { .. }) => {
-                Ok(())
-            }
-            (
-                InferenceTaskId::Unknown
-                | InferenceTaskId::ImageUnderstanding
-                | InferenceTaskId::AudioTranscription
-                | InferenceTaskId::VideoUnderstanding
-                | InferenceTaskId::MultimodalGeneration,
-                _,
-            ) => Err(InferenceExecutionRequestValidationError::UnsupportedTask {
-                task_id: self.task_id.clone(),
-            }),
-            _ => Err(
-                InferenceExecutionRequestValidationError::TaskInputMismatch {
-                    task_id: self.task_id.clone(),
-                    input_type: self.input.input_type_label(),
-                },
-            ),
+            InferenceExecutionInput::ImageGeneration { .. } => Ok(()),
         }
     }
 }
@@ -233,11 +231,16 @@ pub enum InferenceExecutionInput {
 impl InferenceExecutionInput {
     #[must_use]
     pub fn input_type_label(&self) -> &'static str {
+        self.input_kind().canonical_label()
+    }
+
+    #[must_use]
+    pub fn input_kind(&self) -> InferenceExecutionInputKind {
         match self {
-            Self::TextGeneration { .. } => "text_generation",
-            Self::Embedding { .. } => "embedding",
-            Self::Rerank { .. } => "rerank",
-            Self::ImageGeneration { .. } => "image_generation",
+            Self::TextGeneration { .. } => InferenceExecutionInputKind::TextGeneration,
+            Self::Embedding { .. } => InferenceExecutionInputKind::Embedding,
+            Self::Rerank { .. } => InferenceExecutionInputKind::Rerank,
+            Self::ImageGeneration { .. } => InferenceExecutionInputKind::ImageGeneration,
         }
     }
 }
@@ -266,6 +269,18 @@ pub enum InferenceExecutionResult {
     ImageGeneration {
         result: ImageGenerationResult,
     },
+}
+
+impl InferenceExecutionResult {
+    #[must_use]
+    pub fn result_kind(&self) -> InferenceExecutionResultKind {
+        match self {
+            Self::TextGeneration { .. } => InferenceExecutionResultKind::TextGeneration,
+            Self::Embedding { .. } => InferenceExecutionResultKind::Embedding,
+            Self::Rerank { .. } => InferenceExecutionResultKind::Rerank,
+            Self::ImageGeneration { .. } => InferenceExecutionResultKind::ImageGeneration,
+        }
+    }
 }
 
 /// Token or item usage attached to a typed execution result when available.
@@ -1012,6 +1027,32 @@ mod tests {
     }
 
     #[test]
+    fn typed_execution_request_validation_rejects_contract_only_tasks() {
+        let request = InferenceExecutionRequest {
+            request_id: Some("req-audio".to_string()),
+            task_id: InferenceTaskId::AudioTranscription,
+            model_ref: None,
+            model_name: Some("tiny-audio".to_string()),
+            runtime_hint: None,
+            input: InferenceExecutionInput::TextGeneration {
+                prompt: Some("transcribe".to_string()),
+                system_prompt: None,
+                messages: Vec::new(),
+                stream: false,
+            },
+            generation_options: None,
+            extra_options: Value::Null,
+        };
+
+        match request.validate() {
+            Err(InferenceExecutionRequestValidationError::UnsupportedTask { task_id }) => {
+                assert_eq!(task_id, InferenceTaskId::AudioTranscription);
+            }
+            other => panic!("expected unsupported task error, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn typed_execution_result_serde_keeps_diagnostics_and_usage() {
         let result = InferenceExecutionResult::TextGeneration {
             text: "Done".to_string(),
@@ -1037,6 +1078,10 @@ mod tests {
         assert_eq!(
             encoded["option_diagnostics"][0]["state"],
             serde_json::json!("honored")
+        );
+        assert_eq!(
+            decoded.result_kind(),
+            crate::model_contracts::InferenceExecutionResultKind::TextGeneration
         );
         assert_eq!(decoded, result);
     }
