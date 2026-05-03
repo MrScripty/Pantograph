@@ -907,6 +907,162 @@ fn canonicalize_workflow_graph_migrates_legacy_reranker_nodes() {
 }
 
 #[test]
+fn canonicalize_workflow_graph_preserves_mixed_inference_topology() {
+    let registry = NodeRegistry::new();
+    let graph = WorkflowGraph {
+        nodes: vec![
+            GraphNode {
+                id: "prompt".to_string(),
+                node_type: "text-input".to_string(),
+                position: super::super::types::Position { x: 0.0, y: 0.0 },
+                data: json!({ "text": "Summarize the candidates." }),
+            },
+            GraphNode {
+                id: "llama".to_string(),
+                node_type: "llamacpp-inference".to_string(),
+                position: super::super::types::Position { x: 100.0, y: 0.0 },
+                data: json!({
+                    "model_path": "/models/text.gguf",
+                    "max_tokens": 128,
+                }),
+            },
+            GraphNode {
+                id: "embedding".to_string(),
+                node_type: "embedding".to_string(),
+                position: super::super::types::Position { x: 100.0, y: 120.0 },
+                data: json!({
+                    "model": "bge-small",
+                }),
+            },
+            GraphNode {
+                id: "rerank".to_string(),
+                node_type: "reranker".to_string(),
+                position: super::super::types::Position { x: 220.0, y: 0.0 },
+                data: json!({
+                    "model_path": "/models/rerank.gguf",
+                    "top_k": 1,
+                }),
+            },
+            GraphNode {
+                id: "text-output".to_string(),
+                node_type: "text-output".to_string(),
+                position: super::super::types::Position { x: 340.0, y: 0.0 },
+                data: json!({}),
+            },
+            GraphNode {
+                id: "vector-output".to_string(),
+                node_type: "vector-output".to_string(),
+                position: super::super::types::Position { x: 340.0, y: 120.0 },
+                data: json!({}),
+            },
+        ],
+        edges: vec![
+            GraphEdge {
+                id: "prompt-llama-prompt".to_string(),
+                source: "prompt".to_string(),
+                source_handle: "text".to_string(),
+                target: "llama".to_string(),
+                target_handle: "prompt".to_string(),
+            },
+            GraphEdge {
+                id: "prompt-embedding-text".to_string(),
+                source: "prompt".to_string(),
+                source_handle: "text".to_string(),
+                target: "embedding".to_string(),
+                target_handle: "text".to_string(),
+            },
+            GraphEdge {
+                id: "llama-response-rerank-documents".to_string(),
+                source: "llama".to_string(),
+                source_handle: "response".to_string(),
+                target: "rerank".to_string(),
+                target_handle: "documents_json".to_string(),
+            },
+            GraphEdge {
+                id: "rerank-results-output-text".to_string(),
+                source: "rerank".to_string(),
+                source_handle: "results".to_string(),
+                target: "text-output".to_string(),
+                target_handle: "text".to_string(),
+            },
+            GraphEdge {
+                id: "embedding-vector-output-vector".to_string(),
+                source: "embedding".to_string(),
+                source_handle: "embedding".to_string(),
+                target: "vector-output".to_string(),
+                target_handle: "vector".to_string(),
+            },
+        ],
+        derived_graph: None,
+    };
+
+    let result = canonicalize_workflow_graph_with_migrations(graph, &registry);
+    let canonical = result.graph;
+
+    for node_id in ["llama", "embedding", "rerank"] {
+        let node = canonical
+            .nodes
+            .iter()
+            .find(|node| node.id == node_id)
+            .expect("migrated inference node");
+        assert_eq!(node.node_type, "llm-inference");
+    }
+    assert_eq!(
+        canonical
+            .nodes
+            .iter()
+            .find(|node| node.id == "llama")
+            .expect("migrated llama node")
+            .data["generation_options"]["length"]["max_new_tokens"],
+        json!(128)
+    );
+    assert_eq!(
+        canonical
+            .nodes
+            .iter()
+            .find(|node| node.id == "rerank")
+            .expect("migrated rerank node")
+            .data["task_options"]["top_k"],
+        json!(1)
+    );
+    assert!(canonical.edges.iter().any(|edge| {
+        edge.id == "llama-response-rerank-documents"
+            && edge.source == "llama"
+            && edge.source_handle == "response"
+            && edge.target == "rerank"
+            && edge.target_handle == "documents_json"
+    }));
+    assert!(canonical.edges.iter().any(|edge| {
+        edge.id == "rerank-results-output-text"
+            && edge.source == "rerank"
+            && edge.source_handle == "results"
+            && edge.target == "text-output"
+            && edge.target_handle == "text"
+    }));
+    assert!(canonical.edges.iter().any(|edge| {
+        edge.id == "embedding-vector-output-vector"
+            && edge.source == "embedding"
+            && edge.source_handle == "embedding"
+            && edge.target == "vector-output"
+            && edge.target_handle == "vector"
+    }));
+
+    let migrated_node_ids = result
+        .migration_records
+        .iter()
+        .flat_map(|record| record.changes.iter())
+        .filter_map(|change| match change {
+            ContractUpgradeChange::NodeTypeChanged { node_id, .. } => Some(node_id.as_str()),
+            _ => None,
+        })
+        .collect::<HashSet<_>>();
+    assert_eq!(
+        migrated_node_ids,
+        HashSet::from(["embedding", "llama", "rerank"])
+    );
+}
+
+#[test]
 fn canonicalize_workflow_graph_hydrates_expand_settings_and_passthrough_edges() {
     let registry = NodeRegistry::new();
     let graph = WorkflowGraph {

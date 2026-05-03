@@ -1895,6 +1895,10 @@ Pumas model references instead of the retired `embedding` node and `model` port.
 Workflow-service session graph hydration/sync now derives embedding metadata
 emission from canonical embedding inference nodes instead of the retired
 `embedding` node type.
+Workflow-service saved-workflow migration coverage now includes a mixed legacy
+inference graph fixture proving llama.cpp, embedding, and reranker nodes migrate
+to canonical `llm-inference` nodes while preserving cross-node topology and
+output bindings.
 Workflow-service graph memory-impact analysis now treats canonical
 `llm-inference` as the KV-capable node shape and keys model/runtime invalidation
 off canonical Pumas model-source and runtime-hint fields.
@@ -2466,6 +2470,9 @@ Update during implementation:
 - 2026-05-03: Updated the node-engine llama.cpp text execution path to honor
   grouped `generation_options.length.max_new_tokens` and
   `generation_options.sampling.temperature` before legacy flat fallbacks.
+- 2026-05-03: Added a mixed saved-workflow migration fixture that keeps legacy
+  llama.cpp, embedding, and reranker node topology and output bindings stable
+  after canonical `llm-inference` migration.
 
 ## Commit Cadence Notes
 
