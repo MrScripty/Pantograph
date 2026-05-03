@@ -1,4 +1,6 @@
 use super::super::*;
+#[cfg(feature = "inference-nodes")]
+use crate::engine::TaskExecutor;
 
 #[cfg(feature = "inference-nodes")]
 #[tokio::test]
@@ -8,6 +10,66 @@ async fn test_execute_embedding_fails_when_gateway_missing() {
     let err = execute_embedding(None, &inputs)
         .await
         .expect_err("embedding should fail fast without gateway");
+    match err {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("InferenceGateway not configured"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+#[tokio::test]
+async fn test_canonical_llm_embedding_dispatches_to_embedding_handler() {
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "_data".to_string(),
+        serde_json::json!({"node_type": "llm-inference"}),
+    );
+    inputs.insert("task_kind".to_string(), serde_json::json!("embedding"));
+    inputs.insert("text".to_string(), serde_json::json!("hello"));
+
+    let executor = CoreTaskExecutor::new();
+    let context = graph_flow::Context::new();
+    let extensions = ExecutorExtensions::new();
+    let err = executor
+        .execute_task("llm-inference-1", inputs, &context, &extensions)
+        .await
+        .expect_err("canonical embedding inference should route to embedding handler");
+    match err {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("InferenceGateway not configured"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+#[tokio::test]
+async fn test_canonical_llm_rerank_dispatches_to_reranker_handler() {
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "_data".to_string(),
+        serde_json::json!({"node_type": "llm-inference"}),
+    );
+    inputs.insert("task_kind".to_string(), serde_json::json!("rerank"));
+    inputs.insert("query".to_string(), serde_json::json!("search"));
+    inputs.insert("documents".to_string(), serde_json::json!(["a", "b"]));
+    inputs.insert(
+        "pumas_model_ref".to_string(),
+        serde_json::json!({
+            "model_path": "/tmp/reranker.gguf",
+            "recommended_backend": "llamacpp"
+        }),
+    );
+
+    let executor = CoreTaskExecutor::new();
+    let context = graph_flow::Context::new();
+    let extensions = ExecutorExtensions::new();
+    let err = executor
+        .execute_task("llm-inference-1", inputs, &context, &extensions)
+        .await
+        .expect_err("canonical rerank inference should route to reranker handler");
     match err {
         NodeEngineError::ExecutionFailed(message) => {
             assert!(message.contains("InferenceGateway not configured"));
@@ -89,6 +151,58 @@ fn test_build_model_dependency_request_uses_canonical_backend_key() {
 
     let request = build_model_dependency_request("pytorch-inference", "/tmp/model", &inputs);
     assert_eq!(request.backend_key.as_deref(), Some("onnx-runtime"));
+}
+
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+#[test]
+fn test_build_model_dependency_request_uses_canonical_llamacpp_hint() {
+    let mut inputs = HashMap::new();
+    inputs.insert("backend_key".to_string(), serde_json::json!("llama.cpp"));
+
+    let request = build_model_dependency_request("llm-inference", "/tmp/model.gguf", &inputs);
+    assert_eq!(request.backend_key.as_deref(), Some("llamacpp"));
+    assert_eq!(
+        request.task_type_primary.as_deref(),
+        Some("text-generation")
+    );
+}
+
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+#[test]
+fn test_build_model_dependency_request_uses_canonical_pytorch_hint() {
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "runtime_hint".to_string(),
+        serde_json::json!("transformers_pytorch"),
+    );
+
+    let request = build_model_dependency_request("llm-inference", "/tmp/model", &inputs);
+    assert_eq!(request.backend_key.as_deref(), Some("pytorch"));
+}
+
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+#[test]
+fn test_build_model_dependency_request_maps_canonical_embedding_task() {
+    let mut inputs = HashMap::new();
+    inputs.insert("task_kind".to_string(), serde_json::json!("embedding"));
+
+    let request = build_model_dependency_request("llm-inference", "/tmp/model.gguf", &inputs);
+    assert_eq!(request.backend_key.as_deref(), Some("llamacpp"));
+    assert_eq!(
+        request.task_type_primary.as_deref(),
+        Some("feature-extraction")
+    );
+}
+
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+#[test]
+fn test_build_model_dependency_request_maps_canonical_rerank_task() {
+    let mut inputs = HashMap::new();
+    inputs.insert("task_kind".to_string(), serde_json::json!("rerank"));
+
+    let request = build_model_dependency_request("llm-inference", "/tmp/model.gguf", &inputs);
+    assert_eq!(request.backend_key.as_deref(), Some("llamacpp"));
+    assert_eq!(request.task_type_primary.as_deref(), Some("reranking"));
 }
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]

@@ -253,15 +253,46 @@ impl TaskExecutor for CoreTaskExecutor {
             "reranker" => execute_reranker(self.gateway.as_ref(), &inputs).await,
             #[cfg(feature = "inference-nodes")]
             "llm-inference" => {
+                let canonical_inputs = inputs_with_model_path_from_ref(&inputs);
                 let exec_id = self.execution_id.as_deref().unwrap_or("unknown");
-                execute_llm_inference(
-                    self.gateway.as_ref(),
-                    &inputs,
-                    task_id,
-                    self.event_sink.as_ref(),
-                    exec_id,
-                )
-                .await
+                match canonical_inference_task_kind(&canonical_inputs).as_deref() {
+                    Some("embedding") => {
+                        execute_embedding(self.gateway.as_ref(), &canonical_inputs).await
+                    }
+                    Some("rerank" | "reranking") => {
+                        execute_reranker(self.gateway.as_ref(), &canonical_inputs).await
+                    }
+                    _ if preferred_backend_key("llm-inference", &canonical_inputs).as_deref()
+                        == Some("llamacpp") =>
+                    {
+                        let resolved_model_ref = enforce_dependency_preflight(
+                            "llm-inference",
+                            &canonical_inputs,
+                            extensions,
+                        )
+                        .await?;
+                        execute_llamacpp_inference(
+                            self.gateway.as_ref(),
+                            &canonical_inputs,
+                            task_id,
+                            self.event_sink.as_ref(),
+                            exec_id,
+                            resolved_model_ref,
+                            extensions,
+                        )
+                        .await
+                    }
+                    _ => {
+                        execute_llm_inference(
+                            self.gateway.as_ref(),
+                            &canonical_inputs,
+                            task_id,
+                            self.event_sink.as_ref(),
+                            exec_id,
+                        )
+                        .await
+                    }
+                }
             }
             #[cfg(feature = "inference-nodes")]
             "vision-analysis" => execute_vision_analysis(self.gateway.as_ref(), &inputs).await,

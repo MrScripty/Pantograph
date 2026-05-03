@@ -1691,6 +1691,12 @@ from canonical `llm-inference` nodes with llama.cpp runtime/backend evidence and
 resolves GGUF paths from canonical `pumas_model_ref` data or Puma-Lib source
 edges, so saved workflow load no longer depends on a retired
 `llamacpp-inference` node shape.
+Node-engine canonical `llm-inference` dispatch now routes `task_kind =
+embedding` through the embedding handler, `task_kind = rerank` through the
+reranker handler, and explicit llama.cpp backend hints through the llama.cpp
+handler. Dependency request inference now understands canonical task kinds,
+runtime hints, and Pumas model references while preserving diffusion
+`recommended_backend` precedence.
 
 ### Milestone 12: Prepare Native Candle Slice
 

@@ -54,6 +54,16 @@ pub(crate) fn infer_task_type_primary(
     node_type: &str,
     inputs: &HashMap<String, serde_json::Value>,
 ) -> String {
+    if let Some(task_kind) = canonical_inference_task_kind(inputs) {
+        return match task_kind.as_str() {
+            "embedding" => "feature-extraction".to_string(),
+            "rerank" | "reranking" => "reranking".to_string(),
+            "text-generation" => "text-generation".to_string(),
+            "audio-transcription" => "automatic-speech-recognition".to_string(),
+            other => other.to_string(),
+        };
+    }
+
     if let Some(task) =
         read_optional_input_string_aliases(inputs, &["task_type_primary", "taskTypePrimary"])
     {
@@ -90,6 +100,28 @@ pub(crate) fn infer_task_type_primary(
         "reranker" => "reranking".to_string(),
         _ => "text-generation".to_string(),
     }
+}
+
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+pub(crate) fn canonical_inference_task_kind(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Option<String> {
+    read_optional_input_string_aliases(inputs, &["task_kind", "taskKind"])
+        .or_else(|| {
+            inputs.get("pumas_model_ref").and_then(|model_ref| {
+                read_optional_string_aliases_from_value(
+                    model_ref,
+                    &[
+                        "task_kind",
+                        "taskKind",
+                        "task_type_primary",
+                        "taskTypePrimary",
+                    ],
+                )
+            })
+        })
+        .map(|value| value.trim().to_ascii_lowercase().replace('_', "-"))
+        .filter(|value| !value.is_empty())
 }
 
 pub(crate) fn build_model_ref_v2(
@@ -145,7 +177,10 @@ pub(crate) fn canonical_backend_key(value: Option<&str>) -> Option<String> {
 }
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
-pub(crate) fn infer_backend_key(node_type: &str) -> Option<String> {
+pub(crate) fn infer_backend_key(
+    node_type: &str,
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Option<String> {
     match node_type {
         "audio-generation" => Some("stable_audio".to_string()),
         "pytorch-inference" => Some("pytorch".to_string()),
@@ -155,6 +190,28 @@ pub(crate) fn infer_backend_key(node_type: &str) -> Option<String> {
         "diffusion-inference" => None,
         "llamacpp-inference" => Some("llamacpp".to_string()),
         "reranker" => Some("llamacpp".to_string()),
+        "llm-inference" => {
+            let task_kind = canonical_inference_task_kind(inputs);
+            let model_type =
+                read_optional_input_string_aliases(inputs, &["model_type", "modelType"])
+                    .or_else(|| {
+                        inputs.get("pumas_model_ref").and_then(|model_ref| {
+                            read_optional_string_aliases_from_value(
+                                model_ref,
+                                &["model_type", "modelType"],
+                            )
+                        })
+                    })
+                    .unwrap_or_default()
+                    .to_ascii_lowercase();
+            match task_kind.as_deref() {
+                Some("embedding" | "rerank" | "reranking") => Some("llamacpp".to_string()),
+                _ if model_type == "embedding" || model_type == "reranker" => {
+                    Some("llamacpp".to_string())
+                }
+                _ => Some("pytorch".to_string()),
+            }
+        }
         "ollama-inference" => None,
         "onnx-inference" => Some("onnx-runtime".to_string()),
         _ => Some("pytorch".to_string()),
@@ -171,14 +228,52 @@ pub(crate) fn preferred_backend_key(
             inputs,
             &["recommended_backend", "recommendedBackend"],
         )
+        .or_else(|| {
+            inputs.get("pumas_model_ref").and_then(|model_ref| {
+                read_optional_string_aliases_from_value(
+                    model_ref,
+                    &["recommended_backend", "recommendedBackend"],
+                )
+            })
+        })
         .and_then(|value| canonical_backend_key(Some(value.as_str())))
         {
             return Some(backend);
         }
     }
 
-    read_optional_input_string_aliases(inputs, &["backend_key", "backendKey"])
-        .and_then(|value| canonical_backend_key(Some(value.as_str())))
+    if let Some(backend) = read_optional_input_string_aliases(
+        inputs,
+        &[
+            "backend_key",
+            "backendKey",
+            "runtime_hint",
+            "runtimeHint",
+            "recommended_backend",
+            "recommendedBackend",
+        ],
+    )
+    .or_else(|| {
+        inputs.get("pumas_model_ref").and_then(|model_ref| {
+            read_optional_string_aliases_from_value(
+                model_ref,
+                &[
+                    "backend_key",
+                    "backendKey",
+                    "runtime_hint",
+                    "runtimeHint",
+                    "recommended_backend",
+                    "recommendedBackend",
+                ],
+            )
+        })
+    })
+    .and_then(|value| canonical_backend_key(Some(value.as_str())))
+    {
+        return Some(backend);
+    }
+
+    None
 }
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
@@ -188,7 +283,7 @@ pub(crate) fn build_model_dependency_request(
     inputs: &HashMap<String, serde_json::Value>,
 ) -> ModelDependencyRequest {
     let backend_key =
-        preferred_backend_key(node_type, inputs).or_else(|| infer_backend_key(node_type));
+        preferred_backend_key(node_type, inputs).or_else(|| infer_backend_key(node_type, inputs));
 
     let task_type_primary =
         read_optional_input_string_aliases(inputs, &["task_type_primary", "taskTypePrimary"])
@@ -212,15 +307,68 @@ pub(crate) fn build_model_dependency_request(
 }
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+pub(crate) fn inputs_with_model_path_from_ref(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> HashMap<String, serde_json::Value> {
+    let mut canonical_inputs = inputs.clone();
+    if canonical_inputs
+        .get("model_path")
+        .and_then(|value| value.as_str())
+        .is_none_or(|value| value.trim().is_empty())
+    {
+        if let Some(model_path) = read_model_path_from_inputs(inputs) {
+            canonical_inputs.insert("model_path".to_string(), serde_json::json!(model_path));
+        }
+    }
+    canonical_inputs
+}
+
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+fn read_model_path_from_inputs(inputs: &HashMap<String, serde_json::Value>) -> Option<String> {
+    read_optional_input_string_aliases(inputs, &["model_path", "modelPath"]).or_else(|| {
+        inputs.get("pumas_model_ref").and_then(|model_ref| {
+            read_optional_string_aliases_from_value(
+                model_ref,
+                &[
+                    "model_path",
+                    "modelPath",
+                    "selected_artifact_path",
+                    "selectedArtifactPath",
+                    "entry_path",
+                    "entryPath",
+                ],
+            )
+        })
+    })
+}
+
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+fn read_optional_string_aliases_from_value(
+    value: &serde_json::Value,
+    aliases: &[&str],
+) -> Option<String> {
+    aliases.iter().find_map(|key| {
+        value
+            .get(*key)
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
+    })
+}
+
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 pub(crate) async fn enforce_dependency_preflight(
     node_type: &str,
     inputs: &HashMap<String, serde_json::Value>,
     extensions: &ExecutorExtensions,
 ) -> Result<Option<ModelRefV2>> {
-    if node_type != "pytorch-inference"
-        && node_type != "diffusion-inference"
-        && node_type != "audio-generation"
-    {
+    let should_preflight = matches!(
+        node_type,
+        "pytorch-inference" | "diffusion-inference" | "audio-generation"
+    ) || (node_type == "llm-inference"
+        && preferred_backend_key(node_type, inputs).as_deref() == Some("pytorch"));
+    if !should_preflight {
         return Ok(None);
     }
 
@@ -233,16 +381,13 @@ pub(crate) async fn enforce_dependency_preflight(
         ));
     };
 
-    let model_path = inputs
-        .get("model_path")
-        .and_then(|m| m.as_str())
-        .ok_or_else(|| {
-            NodeEngineError::ExecutionFailed(
-                "Missing model_path input. Connect a Puma-Lib node.".to_string(),
-            )
-        })?;
+    let model_path = read_model_path_from_inputs(inputs).ok_or_else(|| {
+        NodeEngineError::ExecutionFailed(
+            "Missing model_path input. Connect a Puma-Lib node.".to_string(),
+        )
+    })?;
 
-    let request = build_model_dependency_request(node_type, model_path, inputs);
+    let request = build_model_dependency_request(node_type, &model_path, inputs);
     let requirements = resolver
         .resolve_model_dependency_requirements(request.clone())
         .await
