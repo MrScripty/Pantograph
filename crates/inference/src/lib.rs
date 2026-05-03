@@ -117,11 +117,15 @@ pub use model_contracts::{
     FeasibleExecutionCandidate, GenerationDefaultFacts, InferenceLifecyclePhase, InferenceModality,
     InferenceTaskId, LengthGenerationOptions, ModelArtifactKind, ModelComponentFacts,
     ModelExecutionDescriptor, ModelExecutionStorageKind, ModelExecutionValidationState,
-    ModelStorageKind, ModelValidationState, OptionCompatibilityDiagnostic, OptionSupportState,
-    OutputGenerationOptions, PumasModelLibraryChangeEvent, PumasModelLibraryChangeKind,
-    PumasModelRef, ResolvedModelPackageFacts, ResourceEstimate, SamplingGenerationOptions,
-    SearchGenerationOptions, SpecialTokenGenerationOptions, StoppingGenerationOptions, SupportTier,
-    TaskEvidence, TaskModalitySignature, TaskRegistryEntry, MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
+    ModelFactFamily, ModelLibraryChangeKind, ModelLibraryRefreshScope, ModelLibraryUpdateEvent,
+    ModelLibraryUpdateFeed, ModelPackageFactsSummaryResult, ModelPackageFactsSummarySnapshot,
+    ModelPackageFactsSummarySnapshotItem, ModelPackageFactsSummaryStatus,
+    ModelRefMigrationDiagnostic, ModelStorageKind, ModelValidationState,
+    OptionCompatibilityDiagnostic, OptionSupportState, OutputGenerationOptions, PackageFactStatus,
+    PumasModelRef, ResolvedModelPackageFacts, ResolvedModelPackageFactsSummary, ResourceEstimate,
+    SamplingGenerationOptions, SearchGenerationOptions, SpecialTokenGenerationOptions,
+    StoppingGenerationOptions, SupportTier, TaskEvidence, TaskModalitySignature, TaskRegistryEntry,
+    MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
 };
 pub use process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 pub use server::{LlamaServer, ServerMode, SharedLlamaServer};

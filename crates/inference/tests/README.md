@@ -11,7 +11,7 @@ runtime and managed media dependency boundaries.
 | ---- | ----------- |
 | `managed_media_dependencies.rs` | Conversion dependency lease and media-tool/native-library planning tests. |
 | `managed_redistributables.rs` | Managed redistributable catalog, status, activation, selection, and removal tests. |
-| `model_contracts.rs` | Public contract fixture tests for Pumas model refs, package facts, task evidence, generation defaults, option diagnostics, lifecycle phases, feasible candidates, and model-library cache invalidation events. |
+| `model_contracts.rs` | Public contract fixture tests for Pumas model refs, package facts, task evidence, generation defaults, option diagnostics, lifecycle phases, package-facts summary snapshots, and model-library update feeds. |
 | `fixtures/inference_package_facts/` | Named JSON fixtures matching the inference execution boundary plan. |
 
 ## Problem
@@ -115,6 +115,6 @@ cargo test -p inference --test model_contracts
 
 - Test fixtures are producer evidence for public status and lease DTOs.
 - Package-fact fixtures are producer evidence for public model/task/generation
-  contracts and advisory backend feasibility facts.
+  contracts, summary snapshots, and update-feed cache invalidation facts.
 - Any DTO shape changes require updating these integration tests and the
   workflow-service/frontend contract tests that consume the same facts.

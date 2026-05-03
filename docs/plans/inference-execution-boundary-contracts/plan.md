@@ -930,6 +930,10 @@ Detailed Pumas-side work is split into
   `ResolvedModelPackageFacts` temporary consumer contracts with adapters or DTOs
   that align to the canonical Pumas producer shape after the cross-repo
   fixture gate completes.
+- [x] Replace the temporary Pantograph cache-invalidation event shape with
+  canonical Pumas `ModelLibraryUpdateFeed`, `ModelLibraryUpdateEvent`,
+  `ModelPackageFactsSummaryResult`, and
+  `ModelPackageFactsSummarySnapshot` DTOs verified by inference contract tests.
 - [ ] Define Pantograph's model-list detail cache for Pumas model rows,
   package-fact summaries, Pantograph-derived technical-fit summaries where
   needed, and selected detail facts during application startup or library-page
@@ -970,8 +974,9 @@ Detailed Pumas-side work is split into
 contracts/fixtures and an embedded-runtime projection that converts
 Pantograph-derived local package-fact candidates into existing
 `pumas_feasible` technical-fit candidates. Remote MLX/vLLM search tags do not
-project into executable candidates. Model-list cache, canonical Pumas DTO
-alignment, and Pumas update-event consumption remain pending.
+project into executable candidates. Inference now exposes Pumas-aligned update
+feed and package-fact summary snapshot DTOs. Model-list cache, full-detail
+canonical Pumas DTO alignment, and update-event consumption remain pending.
 
 ### Milestone 3: Define Transformers-Aligned Rust Model Contracts
 
@@ -1640,6 +1645,18 @@ Update during implementation:
   `model_package_facts_summary_snapshot`, and
   `resolve_model_package_facts_summary`; Pantograph follow-up is consumption
   and DTO alignment rather than waiting for those producer APIs.
+- 2026-05-03: Implemented the first Pumas API consumption contract slice in
+  `crates/inference`. The temporary cache-invalidation event DTO was replaced
+  with Pumas-aligned update-feed and package-fact summary snapshot/result DTOs,
+  including cursor, stale-cursor, snapshot-required, refresh-scope, selected
+  artifact, and producer revision fields.
+- 2026-05-03: Cross-repo contract review found remaining full-detail package
+  fact drift to resolve next: Pantograph still uses `contract_version`, flat
+  artifact fields, aggregated component facts, normalized `task_evidence[]`,
+  per-backend hint objects, and parsed generation-default groups where Pumas
+  produces `package_facts_contract_version`, nested `artifact`, `components[]`,
+  single `task`, `backend_hints.accepted/raw/unsupported`, and raw
+  `generation_defaults`.
 
 ## Commit Cadence Notes
 
@@ -1836,6 +1853,10 @@ Update during implementation:
 - Continue Milestone 2 with the Pantograph model-list detail cache and
   consumption of Pumas' existing package-fact summary snapshot, single-summary,
   and update-feed APIs.
+- Continue Milestone 2 full-detail DTO alignment by replacing the temporary
+  flattened `ResolvedModelPackageFacts` fixture shape with Pumas' canonical
+  nested artifact, task, component, backend-hint, custom-code, diagnostics, and
+  generation-default producer shape.
 
 ### Verification Summary
 
@@ -1847,6 +1868,10 @@ Update during implementation:
 - `cargo build -p pumas-library` passed in the Pumas Rust workspace.
 - `cargo check -p pantograph-embedded-runtime --no-default-features` passed
   after the Pumas package-fact helper blocker was resolved upstream.
+- `cargo test -p inference --test model_contracts` passed after adding
+  Pumas-aligned update-feed and package-fact summary snapshot DTOs.
+- `cargo check -p inference --all-features` passed after adding Pumas-aligned
+  update-feed and package-fact summary snapshot DTOs.
 - `cargo test -p inference` failed in
   `managed_redistributables::install_from_staging_validates_expected_files_before_finalizing`
   due to the unrelated managed-dependency path mismatch recorded above.

@@ -60,12 +60,32 @@ pub enum ModelExecutionValidationState {
 pub struct PumasModelRef {
     /// Canonical model id assigned by Pumas or an equivalent model library.
     pub model_id: String,
-    /// Optional artifact id when a model exposes multiple executable artifacts.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub artifact_id: Option<String>,
     /// Optional source revision or immutable package revision.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub revision: Option<String>,
+    /// Optional selected artifact id when a model exposes multiple artifacts.
+    #[serde(
+        default,
+        alias = "artifact_id",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub selected_artifact_id: Option<String>,
+    /// Optional selected artifact path returned during legacy-reference migration.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_artifact_path: Option<String>,
+    /// Bounded diagnostics emitted while migrating legacy references to Pumas refs.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub migration_diagnostics: Vec<ModelRefMigrationDiagnostic>,
+}
+
+/// Diagnostic produced while converting a legacy model reference to a Pumas ref.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct ModelRefMigrationDiagnostic {
+    pub code: String,
+    pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input: Option<String>,
 }
 
 /// Model artifact kind exposed by the model library.
@@ -78,6 +98,7 @@ pub enum ModelArtifactKind {
     DiffusersBundle,
     Onnx,
     Adapter,
+    Shard,
     Unknown,
 }
 
@@ -241,9 +262,23 @@ pub enum ComponentState {
     Present,
     Missing,
     Invalid,
+    Unsupported,
+    Uninspected,
     NotRequired,
     #[default]
     Unknown,
+}
+
+/// Pumas package-fact status for summary rows and compact component evidence.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PackageFactStatus {
+    Present,
+    Missing,
+    Invalid,
+    Unsupported,
+    #[default]
+    Uninspected,
 }
 
 /// Model-provided generation defaults, separate from user request overrides.
@@ -465,31 +500,141 @@ pub enum InferenceLifecyclePhase {
     ResultProjection,
 }
 
-/// Host-agnostic Pumas model-library change event consumed by caches.
+/// Fact family that changed in the Pumas model library.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub struct PumasModelLibraryChangeEvent {
-    pub update_cursor: String,
-    pub kind: PumasModelLibraryChangeKind,
-    pub model_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub artifact_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub fact_family: Option<String>,
-    #[serde(default)]
-    pub refresh_summary: bool,
-    #[serde(default)]
-    pub refresh_details: bool,
+pub enum ModelFactFamily {
+    ModelRecord,
+    Metadata,
+    PackageFacts,
+    DependencyBindings,
+    Validation,
+    SearchIndex,
 }
 
-/// Kind of model-library change that invalidates consumer cache projections.
+/// Kind of Pumas model-library change that invalidates consumer projections.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum PumasModelLibraryChangeKind {
+pub enum ModelLibraryChangeKind {
     ModelAdded,
     ModelRemoved,
     MetadataModified,
     PackageFactsModified,
     StaleFactsInvalidated,
     DependencyBindingModified,
+}
+
+/// Consumer refresh scope implied by a Pumas model-library update event.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ModelLibraryRefreshScope {
+    Summary,
+    Detail,
+    SummaryAndDetail,
+}
+
+/// Host-agnostic Pumas model-library update event consumed by caches.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct ModelLibraryUpdateEvent {
+    pub cursor: String,
+    pub model_id: String,
+    pub change_kind: ModelLibraryChangeKind,
+    pub fact_family: ModelFactFamily,
+    pub refresh_scope: ModelLibraryRefreshScope,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_artifact_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub producer_revision: Option<String>,
+}
+
+impl ModelLibraryUpdateEvent {
+    #[must_use]
+    pub fn refreshes_summary(&self) -> bool {
+        matches!(
+            self.refresh_scope,
+            ModelLibraryRefreshScope::Summary | ModelLibraryRefreshScope::SummaryAndDetail
+        )
+    }
+
+    #[must_use]
+    pub fn refreshes_details(&self) -> bool {
+        matches!(
+            self.refresh_scope,
+            ModelLibraryRefreshScope::Detail | ModelLibraryRefreshScope::SummaryAndDetail
+        )
+    }
+}
+
+/// Ordered page of Pumas model-library updates after a consumer cursor.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct ModelLibraryUpdateFeed {
+    pub cursor: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub events: Vec<ModelLibraryUpdateEvent>,
+    pub stale_cursor: bool,
+    pub snapshot_required: bool,
+}
+
+/// Consumer-visible freshness/source state for a package-facts summary row.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ModelPackageFactsSummaryStatus {
+    Cached,
+    Missing,
+    Invalid,
+    Fresh,
+    DetailDerived,
+    Regenerated,
+}
+
+/// Compact package-fact summary intended for indexing, list views, and stale checks.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct ResolvedModelPackageFactsSummary {
+    pub package_facts_contract_version: u32,
+    pub model_ref: PumasModelRef,
+    pub artifact_kind: ModelArtifactKind,
+    pub entry_path: String,
+    pub storage_kind: ModelStorageKind,
+    pub validation_state: ModelValidationState,
+    pub task: TaskEvidence,
+    pub backend_hints: Vec<BackendHintFact>,
+    pub requires_custom_code: bool,
+    pub config_status: PackageFactStatus,
+    pub tokenizer_status: PackageFactStatus,
+    pub processor_status: PackageFactStatus,
+    pub generation_config_status: PackageFactStatus,
+    pub generation_defaults_status: PackageFactStatus,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostic_codes: Vec<String>,
+}
+
+/// Single model package-facts summary lookup result.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct ModelPackageFactsSummaryResult {
+    pub model_id: String,
+    pub status: ModelPackageFactsSummaryStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<ResolvedModelPackageFactsSummary>,
+}
+
+/// Startup/list snapshot item for host cache population.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct ModelPackageFactsSummarySnapshotItem {
+    pub model_id: String,
+    pub status: ModelPackageFactsSummaryStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<ResolvedModelPackageFactsSummary>,
+}
+
+/// Bounded startup snapshot of cached package-facts summaries plus update cursor.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct ModelPackageFactsSummarySnapshot {
+    pub cursor: String,
+    pub items: Vec<ModelPackageFactsSummarySnapshotItem>,
 }

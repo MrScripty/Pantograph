@@ -20,7 +20,7 @@ details.
 | `managed_runtime/` | Backend-owned managed binary contracts and orchestration for installable runtime sidecars such as `llama.cpp` and `Ollama`. |
 | `managed_media_dependencies.rs` | Managed media dependency activation checks, conversion dependency lease plans, holder validation, and attribution-ready lease records for ffmpeg/OIIO/OCIO tooling. |
 | `managed_redistributables/` | Shared managed redistributable catalog, state, install, activation, lease, and removal helpers for runtime sidecars and media dependencies. |
-| `model_contracts.rs` | Transformers-aligned model/package/task facts, generation defaults, advisory feasible execution candidates, and Pumas model-library update events consumed by inference without taking runtime-selection policy. |
+| `model_contracts.rs` | Transformers-aligned model/package/task facts, generation defaults, Pumas package-facts summary snapshots, and model-library update feeds consumed by inference without taking runtime-selection policy. |
 | `process.rs` | Sidecar process abstraction used by backends that need external runtimes, including the managed-binary launch error tag consumed before backend startup errors are classified. |
 | `types.rs` | Shared request/response contracts consumed across backend and host boundaries. |
 | `server.rs` | Legacy sidecar/server lifecycle helpers for llama.cpp-style backends. |
@@ -55,9 +55,10 @@ of application-level scheduler policy.
 - Pumas model/package facts consumed by this crate must be versioned DTO/API
   projections or fixtures, not Pumas SQLite, `metadata_json`, or search-cache
   internals.
-- Pumas feasible execution candidates are advisory durable facts. Live runtime
-  placement, admission, loaded-state interpretation, and final backend choice
-  remain outside this crate.
+- Pumas package facts are durable producer facts. Pantograph-owned
+  technical-fit candidate derivation, live runtime placement, admission,
+  loaded-state interpretation, and final backend choice remain outside this
+  crate.
 - Runtime-residency, admission, and eviction policy must stay outside this
   crate even when gateway lifecycle data becomes richer.
 - Media conversion dependency leases must carry stable holder attribution so
@@ -71,15 +72,15 @@ Backends implement a common interface, while the gateway owns lifecycle and
 routing. Shared payload types live in `types.rs` so chat, embedding, reranking,
 and image-generation contracts stay explicit and testable. Model-library and
 Transformers-aligned task/package facts live in `model_contracts.rs` so Pumas
-facts, generation defaults, lifecycle phases, and advisory backend feasibility
-can be tested before backend execution paths consume them. llama.cpp reranking
-is modeled as its own capability and sidecar mode rather than as a chat
-completion variant. The planned `RuntimeRegistry` sits above this crate as a
-Pantograph application-layer coordinator; `InferenceGateway` remains the
-execution facade and lifecycle fact source that the registry consumes rather
-than replaces. Managed media dependency planning stays in this crate because it
-owns managed redistributable activation and lease state, but real media
-conversion process execution stays in the neutral
+facts, generation defaults, lifecycle phases, package-facts summary snapshots,
+and update feeds can be tested before backend execution paths consume them.
+llama.cpp reranking is modeled as its own capability and sidecar mode rather
+than as a chat completion variant. The planned `RuntimeRegistry` sits above
+this crate as a Pantograph application-layer coordinator; `InferenceGateway`
+remains the execution facade and lifecycle fact source that the registry
+consumes rather than replaces. Managed media dependency planning stays in this
+crate because it owns managed redistributable activation and lease state, but
+real media conversion process execution stays in the neutral
 `pantograph-media-conversion` boundary and host adapters.
 
 ## Alternatives Rejected

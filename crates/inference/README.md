@@ -122,9 +122,9 @@ async fn start_gateway() -> Result<(), Box<dyn std::error::Error>> {
 - Managed binary facade payloads are structured producer outputs consumed by
   Settings, workflow admission, diagnostics, and process launch adapters.
 - `ResolvedModelPackageFacts`, task registry entries, generation defaults,
-  option compatibility diagnostics, lifecycle phases, and Pumas model-library
-  change events are structured producer/consumer contracts for later inference
-  slices.
+  option compatibility diagnostics, lifecycle phases, Pumas package-facts
+  summary snapshots, and model-library update feeds are structured
+  producer/consumer contracts for later inference slices.
 - Reason: these payloads describe install state, runtime readiness, reuse, and
   backend attachment facts.
 - Revisit trigger: payloads become externally versioned schemas or are consumed

@@ -1,8 +1,10 @@
 use inference::{
     BackendHintSource, InferenceLifecyclePhase, InferenceTaskId, ModelExecutionDescriptor,
-    ModelExecutionStorageKind, ModelExecutionValidationState, ModelValidationState,
-    OptionCompatibilityDiagnostic, OptionSupportState, PumasModelLibraryChangeEvent,
-    PumasModelLibraryChangeKind, ResolvedModelPackageFacts, MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
+    ModelExecutionStorageKind, ModelExecutionValidationState, ModelFactFamily,
+    ModelLibraryChangeKind, ModelLibraryRefreshScope, ModelLibraryUpdateEvent,
+    ModelLibraryUpdateFeed, ModelPackageFactsSummarySnapshot, ModelPackageFactsSummaryStatus,
+    ModelValidationState, OptionCompatibilityDiagnostic, OptionSupportState,
+    ResolvedModelPackageFacts, MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
 };
 
 const PACKAGE_FACT_FIXTURES: &[(&str, &str)] = &[
@@ -136,22 +138,91 @@ fn option_support_diagnostics_round_trip_state_without_policy() {
 
 #[test]
 fn model_library_change_events_carry_cache_invalidation_scope() {
-    let event = PumasModelLibraryChangeEvent {
-        update_cursor: "cursor-42".to_string(),
-        kind: PumasModelLibraryChangeKind::PackageFactsModified,
+    let event = ModelLibraryUpdateEvent {
+        cursor: "cursor-42".to_string(),
+        change_kind: ModelLibraryChangeKind::PackageFactsModified,
         model_id: "pumas://models/llama-3.1-8b-q4".to_string(),
-        artifact_id: Some("main-gguf".to_string()),
-        fact_family: Some("package_facts".to_string()),
-        refresh_summary: true,
-        refresh_details: true,
+        selected_artifact_id: Some("main-gguf".to_string()),
+        fact_family: ModelFactFamily::PackageFacts,
+        refresh_scope: ModelLibraryRefreshScope::SummaryAndDetail,
+        producer_revision: Some("revision-42".to_string()),
     };
 
     let json = serde_json::to_string(&event).expect("encode event");
-    let decoded: PumasModelLibraryChangeEvent = serde_json::from_str(&json).expect("decode event");
+    let decoded: ModelLibraryUpdateEvent = serde_json::from_str(&json).expect("decode event");
 
-    assert_eq!(decoded.update_cursor, "cursor-42");
-    assert!(decoded.refresh_summary);
-    assert!(decoded.refresh_details);
+    assert_eq!(decoded.cursor, "cursor-42");
+    assert_eq!(decoded.fact_family, ModelFactFamily::PackageFacts);
+    assert!(decoded.refreshes_summary());
+    assert!(decoded.refreshes_details());
+}
+
+#[test]
+fn model_library_update_feed_matches_pumas_cursor_contract() {
+    let raw = serde_json::json!({
+        "cursor": "model-library-updates:43",
+        "stale_cursor": false,
+        "snapshot_required": false,
+        "events": [
+            {
+                "cursor": "model-library-updates:43",
+                "model_id": "pumas://models/llama-3.1-8b-q4",
+                "change_kind": "package_facts_modified",
+                "fact_family": "package_facts",
+                "refresh_scope": "summary_and_detail",
+                "selected_artifact_id": "main-gguf",
+                "producer_revision": "revision-42"
+            }
+        ]
+    });
+
+    let feed: ModelLibraryUpdateFeed = serde_json::from_value(raw).expect("decode update feed");
+
+    assert_eq!(feed.cursor, "model-library-updates:43");
+    assert!(!feed.stale_cursor);
+    assert!(!feed.snapshot_required);
+    assert_eq!(feed.events.len(), 1);
+    assert_eq!(
+        feed.events[0].change_kind,
+        ModelLibraryChangeKind::PackageFactsModified
+    );
+    assert_eq!(
+        feed.events[0].selected_artifact_id.as_deref(),
+        Some("main-gguf")
+    );
+}
+
+#[test]
+fn model_package_summary_snapshot_matches_pumas_startup_shape() {
+    let raw = serde_json::json!({
+        "cursor": "model-library-updates:43",
+        "items": [
+            {
+                "model_id": "pumas://models/llama-3.1-8b-q4",
+                "status": "cached",
+                "summary": null
+            },
+            {
+                "model_id": "pumas://models/missing-summary",
+                "status": "missing"
+            }
+        ]
+    });
+
+    let snapshot: ModelPackageFactsSummarySnapshot =
+        serde_json::from_value(raw).expect("decode summary snapshot");
+
+    assert_eq!(snapshot.cursor, "model-library-updates:43");
+    assert_eq!(snapshot.items.len(), 2);
+    assert_eq!(
+        snapshot.items[0].status,
+        ModelPackageFactsSummaryStatus::Cached
+    );
+    assert_eq!(
+        snapshot.items[1].status,
+        ModelPackageFactsSummaryStatus::Missing
+    );
+    assert!(snapshot.items.iter().all(|item| item.summary.is_none()));
 }
 
 #[test]
