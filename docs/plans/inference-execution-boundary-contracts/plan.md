@@ -1517,6 +1517,11 @@ PyTorch/Transformers load envelopes also include a backend-local task profile
 derived from the canonical task registry, mapping validated text/chat tasks to
 the current causal-LM loader and rejecting registry-resolved tasks that do not
 yet have a PyTorch loader instead of matching raw task strings ad hoc.
+The Rust package-derived load envelope now reaches the PyTorch backend load
+edge through `load_transformers_package`: package facts build and validate the
+worker envelope, then the envelope payload adapts into the current embedded
+Python `load_model` call. Full Python-side envelope dispatch remains a later
+adapter-local step.
 
 ### Milestone 10: Introduce Typed Execution Contracts
 

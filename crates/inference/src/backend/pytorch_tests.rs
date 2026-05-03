@@ -449,6 +449,147 @@ fn test_pytorch_load_envelope_maps_pumas_package_facts() {
 }
 
 #[test]
+fn test_pytorch_transformers_load_args_use_worker_envelope_payload() {
+    let fixture = include_str!(
+        "../../tests/fixtures/inference_package_facts/hf_transformers_text_generation_package_facts.json"
+    );
+    let facts: ResolvedModelPackageFacts =
+        serde_json::from_str(fixture).expect("decode package facts fixture");
+    let envelope = PyTorchBackend::transformers_load_envelope_from_package(
+        "req-pumas-load",
+        &facts,
+        Some("cuda:0"),
+        PyTorchTransformersTrustPolicy::from(ModelLoadSecurityPolicy {
+            trust_remote_code: ModelRemoteCodePolicy::Allow,
+            network: ModelLoadNetworkPolicy::AllowNetwork,
+            cache: ModelLoadCachePolicy::BypassCache,
+            auth_token_source: ModelAuthTokenSource::Environment,
+            revision: Some("weights-rev".to_string()),
+            code_revision: Some("code-rev".to_string()),
+            decision_id: Some("trust-001".to_string()),
+            accepted_code_sources: vec!["configuration_tiny.py".to_string()],
+        }),
+    )
+    .expect("map package facts to worker envelope");
+
+    PyTorchBackend::validate_transformers_load_envelope(&envelope)
+        .expect("envelope should validate");
+    let args = PyTorchBackend::transformers_load_args_from_request(&envelope.payload);
+
+    assert_eq!(args.model_path, "llm/example/tiny-transformers");
+    assert_eq!(args.device, "cuda:0");
+    assert_eq!(args.model_type.as_deref(), Some("llama"));
+    assert!(args.trust_policy.allow_remote_code);
+    assert!(!args.trust_policy.local_files_only);
+    assert_eq!(
+        args.trust_policy.cache_policy,
+        ModelLoadCachePolicy::BypassCache
+    );
+    assert_eq!(
+        args.trust_policy.auth_token_source,
+        ModelAuthTokenSource::Environment
+    );
+    assert_eq!(args.trust_policy.revision.as_deref(), Some("weights-rev"));
+    assert_eq!(args.trust_policy.code_revision.as_deref(), Some("code-rev"));
+}
+
+#[test]
+fn test_pytorch_transformers_load_args_default_device_auto() {
+    let fixture = include_str!(
+        "../../tests/fixtures/inference_package_facts/hf_transformers_text_generation_package_facts.json"
+    );
+    let facts: ResolvedModelPackageFacts =
+        serde_json::from_str(fixture).expect("decode package facts fixture");
+    let envelope = PyTorchBackend::transformers_load_envelope_from_package(
+        "req-pumas-load",
+        &facts,
+        None,
+        PyTorchTransformersTrustPolicy {
+            allow_remote_code: true,
+            accepted_sources: vec!["configuration_tiny.py".to_string()],
+            decision_id: None,
+            local_files_only: true,
+            cache_policy: ModelLoadCachePolicy::BackendDefault,
+            auth_token_source: ModelAuthTokenSource::None,
+            revision: None,
+            code_revision: None,
+        },
+    )
+    .expect("map package facts to worker envelope");
+
+    let args = PyTorchBackend::transformers_load_args_from_request(&envelope.payload);
+
+    assert_eq!(args.device, "auto");
+}
+
+#[test]
+fn test_pytorch_transformers_load_envelope_validation_rejects_contract_version() {
+    let fixture = include_str!(
+        "../../tests/fixtures/inference_package_facts/hf_transformers_text_generation_package_facts.json"
+    );
+    let facts: ResolvedModelPackageFacts =
+        serde_json::from_str(fixture).expect("decode package facts fixture");
+    let mut envelope = PyTorchBackend::transformers_load_envelope_from_package(
+        "req-pumas-load",
+        &facts,
+        Some("cpu"),
+        PyTorchTransformersTrustPolicy {
+            allow_remote_code: true,
+            accepted_sources: vec!["configuration_tiny.py".to_string()],
+            decision_id: None,
+            local_files_only: true,
+            cache_policy: ModelLoadCachePolicy::BackendDefault,
+            auth_token_source: ModelAuthTokenSource::None,
+            revision: None,
+            code_revision: None,
+        },
+    )
+    .expect("map package facts to worker envelope");
+    envelope.contract_version = PYTORCH_WORKER_CONTRACT_VERSION + 1;
+
+    match PyTorchBackend::validate_transformers_load_envelope(&envelope) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("Unsupported PyTorch worker load envelope"));
+        }
+        other => panic!("expected contract-version config error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_transformers_load_envelope_validation_rejects_wrong_operation() {
+    let fixture = include_str!(
+        "../../tests/fixtures/inference_package_facts/hf_transformers_text_generation_package_facts.json"
+    );
+    let facts: ResolvedModelPackageFacts =
+        serde_json::from_str(fixture).expect("decode package facts fixture");
+    let mut envelope = PyTorchBackend::transformers_load_envelope_from_package(
+        "req-pumas-load",
+        &facts,
+        Some("cpu"),
+        PyTorchTransformersTrustPolicy {
+            allow_remote_code: true,
+            accepted_sources: vec!["configuration_tiny.py".to_string()],
+            decision_id: None,
+            local_files_only: true,
+            cache_policy: ModelLoadCachePolicy::BackendDefault,
+            auth_token_source: ModelAuthTokenSource::None,
+            revision: None,
+            code_revision: None,
+        },
+    )
+    .expect("map package facts to worker envelope");
+    envelope.operation = PyTorchWorkerOperation::InitWorker;
+
+    match PyTorchBackend::validate_transformers_load_envelope(&envelope) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("Unexpected PyTorch worker operation"));
+            assert!(message.contains("InitWorker"));
+        }
+        other => panic!("expected wrong-operation config error, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_pytorch_task_profile_uses_canonical_registry_aliases() {
     let profile = PyTorchBackend::transformers_task_profile_from_evidence(&TaskEvidence {
         pipeline_tag: Some("causal-lm".to_string()),

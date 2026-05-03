@@ -19,6 +19,7 @@ use serde_json::{Map, Value};
 use self::pytorch_worker_contract::{
     PyTorchTransformersLoadRequest, PyTorchTransformersModelLoader, PyTorchTransformersTaskProfile,
     PyTorchTransformersTrustPolicy, PyTorchWorkerEnvelope, PyTorchWorkerOperation,
+    PYTORCH_WORKER_CONTRACT_VERSION,
 };
 use super::{
     BackendCapabilities, BackendCapabilityFacts, BackendComponentCapability, BackendConfig,
@@ -29,8 +30,9 @@ use super::{
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::model_contracts::{
     resolve_task_registry_entry_from_evidence, GenerationOptions, InferenceModality,
-    InferenceTaskId, ModelValidationState, OptionCompatibilityDiagnostic, OptionSupportState,
-    ResolvedModelPackageFacts, ResolvedModelSource, TaskEvidence, TaskRegistryEntry,
+    InferenceTaskId, ModelLoadSecurityPolicy, ModelValidationState, OptionCompatibilityDiagnostic,
+    OptionSupportState, ResolvedModelPackageFacts, ResolvedModelSource, TaskEvidence,
+    TaskRegistryEntry,
 };
 use crate::process::ProcessSpawner;
 use crate::types::{RerankRequest, RerankResponse};
@@ -59,6 +61,14 @@ pub struct LoadedModelInfo {
     pub model_path: String,
     pub model_type: String,
     pub device: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PyTorchTransformersLoadArgs {
+    model_path: String,
+    device: String,
+    model_type: Option<String>,
+    trust_policy: PyTorchTransformersTrustPolicy,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -315,11 +325,28 @@ impl PyTorchBackend {
         .await
     }
 
+    /// Load a Pumas-resolved Transformers package through the worker envelope
+    /// contract before entering Python.
+    pub async fn load_transformers_package(
+        &mut self,
+        request_id: impl Into<String>,
+        package: &ResolvedModelPackageFacts,
+        device: Option<&str>,
+        security_policy: ModelLoadSecurityPolicy,
+    ) -> Result<LoadedModelInfo, BackendError> {
+        let envelope = Self::transformers_load_envelope_from_package(
+            request_id,
+            package,
+            device,
+            PyTorchTransformersTrustPolicy::from(security_policy),
+        )?;
+        self.load_transformers_envelope(envelope).await
+    }
+
     fn default_transformers_trust_policy() -> PyTorchTransformersTrustPolicy {
         PyTorchTransformersTrustPolicy::default()
     }
 
-    #[allow(dead_code)]
     fn transformers_load_envelope_from_package(
         request_id: impl Into<String>,
         package: &ResolvedModelPackageFacts,
@@ -381,6 +408,50 @@ impl PyTorchBackend {
                 generation_defaults,
             },
         ))
+    }
+
+    async fn load_transformers_envelope(
+        &mut self,
+        envelope: PyTorchWorkerEnvelope<PyTorchTransformersLoadRequest>,
+    ) -> Result<LoadedModelInfo, BackendError> {
+        Self::validate_transformers_load_envelope(&envelope)?;
+        let args = Self::transformers_load_args_from_request(&envelope.payload);
+        self.load_model_with_trust_policy(
+            &args.model_path,
+            &args.device,
+            args.model_type.as_deref(),
+            args.trust_policy,
+        )
+        .await
+    }
+
+    fn validate_transformers_load_envelope(
+        envelope: &PyTorchWorkerEnvelope<PyTorchTransformersLoadRequest>,
+    ) -> Result<(), BackendError> {
+        if envelope.contract_version != PYTORCH_WORKER_CONTRACT_VERSION {
+            return Err(BackendError::Config(format!(
+                "Unsupported PyTorch worker load envelope contract version {}",
+                envelope.contract_version
+            )));
+        }
+        if envelope.operation != PyTorchWorkerOperation::LoadTransformersModel {
+            return Err(BackendError::Config(format!(
+                "Unexpected PyTorch worker operation {:?} for Transformers load",
+                envelope.operation
+            )));
+        }
+        Ok(())
+    }
+
+    fn transformers_load_args_from_request(
+        request: &PyTorchTransformersLoadRequest,
+    ) -> PyTorchTransformersLoadArgs {
+        PyTorchTransformersLoadArgs {
+            model_path: request.entry_path.clone(),
+            device: request.device.clone().unwrap_or_else(|| "auto".to_string()),
+            model_type: request.model_type_hint.clone(),
+            trust_policy: request.trust_policy.clone(),
+        }
     }
 
     #[allow(dead_code)]
