@@ -89,7 +89,7 @@ pub(crate) fn infer_task_type_primary(
     if node_type == "diffusion-inference" {
         return "text-to-image".to_string();
     }
-    if node_type == "reranker" || model_type == "reranker" {
+    if model_type == "reranker" {
         return "reranking".to_string();
     }
 
@@ -183,13 +183,10 @@ pub(crate) fn infer_backend_key(
 ) -> Option<String> {
     match node_type {
         "audio-generation" => Some("stable_audio".to_string()),
-        "pytorch-inference" => Some("pytorch".to_string()),
         // Leave diffusion unspecified when the graph does not provide a
         // concrete backend so Pumas can apply the model's recommended
         // execution profile.
         "diffusion-inference" => None,
-        "llamacpp-inference" => Some("llamacpp".to_string()),
-        "reranker" => Some("llamacpp".to_string()),
         "llm-inference" => {
             let task_kind = canonical_inference_task_kind(inputs);
             let model_type =
@@ -212,8 +209,9 @@ pub(crate) fn infer_backend_key(
                 _ => Some("pytorch".to_string()),
             }
         }
-        "ollama-inference" => None,
         "onnx-inference" => Some("onnx-runtime".to_string()),
+        "embedding" | "reranker" | "llamacpp-inference" | "ollama-inference"
+        | "pytorch-inference" => None,
         _ => Some("pytorch".to_string()),
     }
 }
@@ -363,11 +361,9 @@ pub(crate) async fn enforce_dependency_preflight(
     inputs: &HashMap<String, serde_json::Value>,
     extensions: &ExecutorExtensions,
 ) -> Result<Option<ModelRefV2>> {
-    let should_preflight = matches!(
-        node_type,
-        "pytorch-inference" | "diffusion-inference" | "audio-generation"
-    ) || (node_type == "llm-inference"
-        && preferred_backend_key(node_type, inputs).as_deref() == Some("pytorch"));
+    let should_preflight = matches!(node_type, "diffusion-inference" | "audio-generation")
+        || (node_type == "llm-inference"
+            && preferred_backend_key(node_type, inputs).as_deref() == Some("pytorch"));
     if !should_preflight {
         return Ok(None);
     }

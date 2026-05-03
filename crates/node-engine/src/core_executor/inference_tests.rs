@@ -239,6 +239,15 @@ fn test_build_model_dependency_request_uses_canonical_pytorch_hint() {
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
 #[test]
+fn test_build_model_dependency_request_does_not_infer_retired_backend_node() {
+    let inputs = HashMap::new();
+
+    let request = build_model_dependency_request("llamacpp-inference", "/tmp/model.gguf", &inputs);
+    assert_eq!(request.backend_key, None);
+}
+
+#[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
+#[test]
 fn test_build_model_dependency_request_maps_canonical_embedding_task() {
     let mut inputs = HashMap::new();
     inputs.insert("task_kind".to_string(), serde_json::json!("embedding"));

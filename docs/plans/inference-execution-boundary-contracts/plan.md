@@ -1713,6 +1713,9 @@ node types.
 Embedded-runtime Python-sidecar tests and executor documentation now refer to
 canonical `llm-inference` with PyTorch/Transformers runtime evidence instead of
 the retired `pytorch-inference` node name.
+Node-engine dependency inference no longer treats retired backend-specific node
+types as backend selectors; canonical task/runtime evidence is now required for
+backend inference outside migration diagnostics.
 
 ### Milestone 12: Prepare Native Candle Slice
 
