@@ -158,6 +158,26 @@ pub enum InferenceTaskId {
     Unknown,
 }
 
+impl InferenceTaskId {
+    /// Stable snake_case label used across Rust, Python worker envelopes,
+    /// workflow node data, and diagnostics.
+    #[must_use]
+    pub fn canonical_label(&self) -> &'static str {
+        match self {
+            Self::TextGeneration => "text_generation",
+            Self::ChatCompletion => "chat_completion",
+            Self::Embedding => "embedding",
+            Self::Rerank => "rerank",
+            Self::ImageGeneration => "image_generation",
+            Self::ImageUnderstanding => "image_understanding",
+            Self::AudioTranscription => "audio_transcription",
+            Self::VideoUnderstanding => "video_understanding",
+            Self::MultimodalGeneration => "multimodal_generation",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
 /// Task input/output shape independent of a concrete backend.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -193,6 +213,43 @@ impl Default for SupportTier {
     }
 }
 
+/// Broad task family used for compatibility diagnostics without choosing a
+/// runtime or scheduler policy.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskFamily {
+    Generative,
+    Embedding,
+    Scoring,
+    Perception,
+    Multimodal,
+    #[default]
+    Unknown,
+}
+
+/// Execution behavior class exposed as a task fact.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskExecutionBehavior {
+    Generates,
+    Scores,
+    ExtractsFeatures,
+    ClassifiesOrDescribes,
+    #[default]
+    Unknown,
+}
+
+/// Whether a task can expose incremental result events.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskStreamingSupport {
+    Supported,
+    Unsupported,
+    BackendDependent,
+    #[default]
+    Unknown,
+}
+
 /// Registry entry for a canonical inference task.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -200,9 +257,251 @@ pub struct TaskRegistryEntry {
     pub task_id: InferenceTaskId,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub aliases: Vec<String>,
+    #[serde(default)]
+    pub task_family: TaskFamily,
     pub modality_signature: TaskModalitySignature,
     pub result_family: String,
+    #[serde(default)]
+    pub execution_behavior: TaskExecutionBehavior,
+    #[serde(default)]
+    pub streaming_support: TaskStreamingSupport,
     pub support_tier: SupportTier,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub required_components: Vec<ProcessorComponentKind>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub upstream_task_ids: Vec<String>,
+}
+
+impl TaskRegistryEntry {
+    /// Canonical label for this task entry.
+    #[must_use]
+    pub fn canonical_label(&self) -> &'static str {
+        self.task_id.canonical_label()
+    }
+
+    /// Return true when an input task label matches this entry's canonical id
+    /// or one of its normalized aliases.
+    #[must_use]
+    pub fn matches_label(&self, value: &str) -> bool {
+        let normalized = normalize_task_label(value);
+        if normalized.is_empty() {
+            return false;
+        }
+        normalized == self.canonical_label()
+            || self
+                .aliases
+                .iter()
+                .any(|alias| normalize_task_label(alias) == normalized)
+            || self
+                .upstream_task_ids
+                .iter()
+                .any(|alias| normalize_task_label(alias) == normalized)
+    }
+}
+
+/// Seeded canonical task registry entries for the first inference vertical
+/// slices. This is a contract fixture, not a runtime selection table.
+#[must_use]
+pub fn default_task_registry_entries() -> Vec<TaskRegistryEntry> {
+    vec![
+        TaskRegistryEntry {
+            task_id: InferenceTaskId::TextGeneration,
+            aliases: vec![
+                "text-generation".to_string(),
+                "text_generation".to_string(),
+                "generation".to_string(),
+                "causal-lm".to_string(),
+            ],
+            task_family: TaskFamily::Generative,
+            modality_signature: TaskModalitySignature::new(
+                vec![InferenceModality::Text],
+                vec![InferenceModality::Text],
+            ),
+            result_family: "generated_text".to_string(),
+            execution_behavior: TaskExecutionBehavior::Generates,
+            streaming_support: TaskStreamingSupport::BackendDependent,
+            support_tier: SupportTier::Stable,
+            required_components: vec![ProcessorComponentKind::Tokenizer],
+            upstream_task_ids: vec!["text-generation".to_string()],
+        },
+        TaskRegistryEntry {
+            task_id: InferenceTaskId::ChatCompletion,
+            aliases: vec![
+                "chat".to_string(),
+                "chat-completion".to_string(),
+                "conversational".to_string(),
+            ],
+            task_family: TaskFamily::Generative,
+            modality_signature: TaskModalitySignature::new(
+                vec![InferenceModality::Text],
+                vec![InferenceModality::Text],
+            ),
+            result_family: "chat_message".to_string(),
+            execution_behavior: TaskExecutionBehavior::Generates,
+            streaming_support: TaskStreamingSupport::BackendDependent,
+            support_tier: SupportTier::Stable,
+            required_components: vec![
+                ProcessorComponentKind::Tokenizer,
+                ProcessorComponentKind::ChatTemplate,
+            ],
+            upstream_task_ids: vec!["conversational".to_string()],
+        },
+        TaskRegistryEntry {
+            task_id: InferenceTaskId::Embedding,
+            aliases: vec![
+                "embedding".to_string(),
+                "embeddings".to_string(),
+                "feature-extraction".to_string(),
+                "sentence-similarity".to_string(),
+            ],
+            task_family: TaskFamily::Embedding,
+            modality_signature: TaskModalitySignature::new(
+                vec![InferenceModality::Text],
+                vec![InferenceModality::Embedding],
+            ),
+            result_family: "embedding_vector".to_string(),
+            execution_behavior: TaskExecutionBehavior::ExtractsFeatures,
+            streaming_support: TaskStreamingSupport::Unsupported,
+            support_tier: SupportTier::Stable,
+            required_components: vec![ProcessorComponentKind::Tokenizer],
+            upstream_task_ids: vec![
+                "feature-extraction".to_string(),
+                "sentence-similarity".to_string(),
+            ],
+        },
+        TaskRegistryEntry {
+            task_id: InferenceTaskId::Rerank,
+            aliases: vec![
+                "rerank".to_string(),
+                "reranking".to_string(),
+                "text-reranking".to_string(),
+            ],
+            task_family: TaskFamily::Scoring,
+            modality_signature: TaskModalitySignature::new(
+                vec![InferenceModality::Text, InferenceModality::Json],
+                vec![InferenceModality::Json],
+            ),
+            result_family: "ranked_documents".to_string(),
+            execution_behavior: TaskExecutionBehavior::Scores,
+            streaming_support: TaskStreamingSupport::Unsupported,
+            support_tier: SupportTier::Stable,
+            required_components: vec![ProcessorComponentKind::Tokenizer],
+            upstream_task_ids: vec!["text-ranking".to_string(), "reranking".to_string()],
+        },
+        TaskRegistryEntry {
+            task_id: InferenceTaskId::ImageUnderstanding,
+            aliases: vec![
+                "image-to-text".to_string(),
+                "visual-question-answering".to_string(),
+                "image-text-to-text".to_string(),
+            ],
+            task_family: TaskFamily::Perception,
+            modality_signature: TaskModalitySignature::new(
+                vec![InferenceModality::Image, InferenceModality::Text],
+                vec![InferenceModality::Text],
+            ),
+            result_family: "image_text".to_string(),
+            execution_behavior: TaskExecutionBehavior::ClassifiesOrDescribes,
+            streaming_support: TaskStreamingSupport::BackendDependent,
+            support_tier: SupportTier::Experimental,
+            required_components: vec![
+                ProcessorComponentKind::Tokenizer,
+                ProcessorComponentKind::ImageProcessor,
+            ],
+            upstream_task_ids: vec![
+                "image-to-text".to_string(),
+                "visual-question-answering".to_string(),
+                "image-text-to-text".to_string(),
+            ],
+        },
+        TaskRegistryEntry {
+            task_id: InferenceTaskId::AudioTranscription,
+            aliases: vec![
+                "audio-transcription".to_string(),
+                "automatic-speech-recognition".to_string(),
+                "speech-to-text".to_string(),
+            ],
+            task_family: TaskFamily::Perception,
+            modality_signature: TaskModalitySignature::new(
+                vec![InferenceModality::Audio],
+                vec![InferenceModality::Text],
+            ),
+            result_family: "transcript".to_string(),
+            execution_behavior: TaskExecutionBehavior::ClassifiesOrDescribes,
+            streaming_support: TaskStreamingSupport::BackendDependent,
+            support_tier: SupportTier::Experimental,
+            required_components: vec![ProcessorComponentKind::AudioFeatureExtractor],
+            upstream_task_ids: vec!["automatic-speech-recognition".to_string()],
+        },
+        TaskRegistryEntry {
+            task_id: InferenceTaskId::VideoUnderstanding,
+            aliases: vec![
+                "video-to-text".to_string(),
+                "video-text-to-text".to_string(),
+            ],
+            task_family: TaskFamily::Perception,
+            modality_signature: TaskModalitySignature::new(
+                vec![InferenceModality::Video, InferenceModality::Text],
+                vec![InferenceModality::Text],
+            ),
+            result_family: "video_text".to_string(),
+            execution_behavior: TaskExecutionBehavior::ClassifiesOrDescribes,
+            streaming_support: TaskStreamingSupport::Unsupported,
+            support_tier: SupportTier::Roadmap,
+            required_components: vec![ProcessorComponentKind::VideoProcessor],
+            upstream_task_ids: vec!["video-text-to-text".to_string()],
+        },
+        TaskRegistryEntry {
+            task_id: InferenceTaskId::MultimodalGeneration,
+            aliases: vec![
+                "multimodal-generation".to_string(),
+                "image-audio-text-to-text".to_string(),
+            ],
+            task_family: TaskFamily::Multimodal,
+            modality_signature: TaskModalitySignature::new(
+                vec![
+                    InferenceModality::Text,
+                    InferenceModality::Image,
+                    InferenceModality::Audio,
+                ],
+                vec![InferenceModality::Text],
+            ),
+            result_family: "multimodal_text".to_string(),
+            execution_behavior: TaskExecutionBehavior::Generates,
+            streaming_support: TaskStreamingSupport::BackendDependent,
+            support_tier: SupportTier::Roadmap,
+            required_components: vec![
+                ProcessorComponentKind::Tokenizer,
+                ProcessorComponentKind::Processor,
+            ],
+            upstream_task_ids: vec!["image-text-to-text".to_string()],
+        },
+    ]
+}
+
+/// Resolve a task label or upstream alias to a seeded registry entry.
+#[must_use]
+pub fn resolve_task_registry_entry(value: &str) -> Option<TaskRegistryEntry> {
+    default_task_registry_entries()
+        .into_iter()
+        .find(|entry| entry.matches_label(value))
+}
+
+/// Normalize a task label for registry alias matching.
+#[must_use]
+pub fn normalize_task_label(value: &str) -> String {
+    let mut normalized = String::new();
+    let mut last_was_separator = false;
+    for ch in value.trim().chars() {
+        if ch.is_ascii_alphanumeric() {
+            normalized.push(ch.to_ascii_lowercase());
+            last_was_separator = false;
+        } else if !last_was_separator {
+            normalized.push('_');
+            last_was_separator = true;
+        }
+    }
+    normalized.trim_matches('_').to_string()
 }
 
 /// Upstream task evidence discovered from a model package.

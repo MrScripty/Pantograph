@@ -1086,7 +1086,14 @@ and llama.cpp/GGUF without exposing a Python object as the shared abstraction.
   documented semantics.
 - `git diff --check`.
 
-**Status:** Not started.
+**Status:** In progress. The first task-registry slice added seeded
+Transformers-aligned registry entries for the current vertical slices and
+nearby roadmap diagnostics: text generation, chat completion, embeddings,
+rerank, image understanding, audio transcription, video understanding, and
+multimodal generation. The registry now exposes canonical task labels, alias
+normalization, modality signatures, task family, execution behavior, streaming
+support, component requirements, support tier, and upstream task ids as typed
+facts without making backend or scheduler decisions.
 
 ### Milestone 4: Define Neutral Managed-Dependency Boundary
 

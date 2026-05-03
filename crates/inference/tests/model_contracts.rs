@@ -1,12 +1,15 @@
 use std::collections::BTreeMap;
 
 use inference::{
+    default_task_registry_entries, normalize_task_label, resolve_task_registry_entry,
     BackendHintLabel, GenerationOptionSource, GenerationOptions, InferenceLifecyclePhase,
-    ModelExecutionDescriptor, ModelExecutionStorageKind, ModelExecutionValidationState,
-    ModelFactFamily, ModelLibraryChangeKind, ModelLibraryRefreshScope, ModelLibraryUpdateEvent,
-    ModelLibraryUpdateFeed, ModelPackageFactsSummarySnapshot, ModelPackageFactsSummaryStatus,
-    OptionCompatibilityDiagnostic, OptionSupportState, PackageFactStatus,
-    ResolvedModelPackageFacts, MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
+    InferenceModality, InferenceTaskId, ModelExecutionDescriptor, ModelExecutionStorageKind,
+    ModelExecutionValidationState, ModelFactFamily, ModelLibraryChangeKind,
+    ModelLibraryRefreshScope, ModelLibraryUpdateEvent, ModelLibraryUpdateFeed,
+    ModelPackageFactsSummarySnapshot, ModelPackageFactsSummaryStatus,
+    OptionCompatibilityDiagnostic, OptionSupportState, PackageFactStatus, ProcessorComponentKind,
+    ResolvedModelPackageFacts, SupportTier, TaskExecutionBehavior, TaskFamily, TaskRegistryEntry,
+    TaskStreamingSupport, MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
 };
 
 const PACKAGE_FACT_FIXTURES: &[(&str, &str)] = &[
@@ -164,6 +167,88 @@ fn package_facts_use_nested_pumas_artifact_task_and_backend_hint_shape() {
         component.status == PackageFactStatus::Present
             && component.relative_path.as_deref() == Some("tiny-Q4_K_M.gguf")
     }));
+}
+
+#[test]
+fn default_task_registry_seeds_transformers_aligned_vertical_slices() {
+    let entries = default_task_registry_entries();
+
+    let text_generation = entries
+        .iter()
+        .find(|entry| entry.task_id == InferenceTaskId::TextGeneration)
+        .expect("text generation task");
+    assert_eq!(text_generation.canonical_label(), "text_generation");
+    assert_eq!(text_generation.task_family, TaskFamily::Generative);
+    assert_eq!(text_generation.support_tier, SupportTier::Stable);
+    assert_eq!(
+        text_generation.execution_behavior,
+        TaskExecutionBehavior::Generates
+    );
+    assert_eq!(
+        text_generation.streaming_support,
+        TaskStreamingSupport::BackendDependent
+    );
+    assert!(text_generation
+        .required_components
+        .contains(&ProcessorComponentKind::Tokenizer));
+
+    let embedding =
+        resolve_task_registry_entry("feature-extraction").expect("embedding alias should resolve");
+    assert_eq!(embedding.task_id, InferenceTaskId::Embedding);
+    assert_eq!(embedding.task_family, TaskFamily::Embedding);
+    assert_eq!(
+        embedding.modality_signature.outputs,
+        vec![InferenceModality::Embedding]
+    );
+
+    let rerank =
+        resolve_task_registry_entry("text-reranking").expect("rerank alias should resolve");
+    assert_eq!(rerank.task_id, InferenceTaskId::Rerank);
+    assert_eq!(rerank.execution_behavior, TaskExecutionBehavior::Scores);
+}
+
+#[test]
+fn task_registry_labels_normalize_without_leaking_backend_policy() {
+    assert_eq!(normalize_task_label(" text-generation "), "text_generation");
+    assert_eq!(
+        normalize_task_label("Automatic Speech Recognition"),
+        "automatic_speech_recognition"
+    );
+
+    let audio = resolve_task_registry_entry("automatic-speech-recognition")
+        .expect("audio transcription alias");
+    assert_eq!(audio.task_id, InferenceTaskId::AudioTranscription);
+    assert_eq!(audio.task_family, TaskFamily::Perception);
+    assert_eq!(
+        audio.required_components,
+        vec![ProcessorComponentKind::AudioFeatureExtractor]
+    );
+
+    let video = resolve_task_registry_entry("video-text-to-text").expect("video roadmap task");
+    assert_eq!(video.task_id, InferenceTaskId::VideoUnderstanding);
+    assert_eq!(video.support_tier, SupportTier::Roadmap);
+}
+
+#[test]
+fn task_registry_entry_decodes_append_only_defaults() {
+    let raw = serde_json::json!({
+        "task_id": "embedding",
+        "aliases": ["feature-extraction"],
+        "modality_signature": {
+            "inputs": ["text"],
+            "outputs": ["embedding"]
+        },
+        "result_family": "embedding_vector",
+        "support_tier": "stable"
+    });
+
+    let entry: TaskRegistryEntry = serde_json::from_value(raw).expect("decode task entry");
+    assert_eq!(entry.task_id, InferenceTaskId::Embedding);
+    assert_eq!(entry.task_family, TaskFamily::Unknown);
+    assert_eq!(entry.execution_behavior, TaskExecutionBehavior::Unknown);
+    assert_eq!(entry.streaming_support, TaskStreamingSupport::Unknown);
+    assert!(entry.required_components.is_empty());
+    assert!(entry.matches_label("feature-extraction"));
 }
 
 #[test]

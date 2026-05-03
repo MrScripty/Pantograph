@@ -115,6 +115,7 @@ pub use managed_runtime::{
     ResolvedCommand,
 };
 pub use model_contracts::{
+    default_task_registry_entries, normalize_task_label, resolve_task_registry_entry,
     AssetValidationError, BackendHintFact, BackendHintFacts, BackendHintLabel, BackendHintSource,
     CacheGenerationOptions, ComponentState, CustomCodeFacts, GenerationDefaultFacts,
     GenerationOptionResolutionDiagnostic, GenerationOptionResolutionReport, GenerationOptionSource,
@@ -130,8 +131,8 @@ pub use model_contracts::{
     ProcessorComponentKind, PumasModelRef, ResolvedArtifactFacts, ResolvedModelPackageFacts,
     ResolvedModelPackageFactsSummary, SamplingGenerationOptions, SearchGenerationOptions,
     SpecialTokenGenerationOptions, StoppingGenerationOptions, SupportTier, TaskEvidence,
-    TaskModalitySignature, TaskRegistryEntry, TransformersPackageEvidence,
-    MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
+    TaskExecutionBehavior, TaskFamily, TaskModalitySignature, TaskRegistryEntry,
+    TaskStreamingSupport, TransformersPackageEvidence, MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
 };
 pub use process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 pub use server::{LlamaServer, ServerMode, SharedLlamaServer};
