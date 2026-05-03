@@ -1759,6 +1759,10 @@ the retired `pytorch-inference` node name.
 Node-engine dependency inference no longer treats retired backend-specific node
 types as backend selectors; canonical task/runtime evidence is now required for
 backend inference outside migration diagnostics.
+Node-engine canonical inference hydration now rejects unresolved
+`pumas_model_ref` or `resolved_model_source` migration evidence before deriving
+`model_path` or requiring an inference gateway, so legacy llama.cpp/PyTorch
+paths remain validation/preflight blockers until Pumas resolves them.
 Node-engine non-streaming canonical `llm-inference` text/chat execution now
 builds `InferenceExecutionRequest` from prompt, context, task kind, runtime
 hint, Pumas model reference, and grouped generation options, then executes
@@ -2180,6 +2184,10 @@ Update during implementation:
   for mapped chat fields and unsupported canonical generation options, then
   projected them through node-engine canonical non-streaming `llm-inference`
   outputs as bounded metadata.
+- 2026-05-03: Added node-engine execution guards that reject unresolved
+  migration model evidence (`pumas_model_ref.status = unresolved` or
+  `resolved_model_source.status = unresolved`) before canonical inference can
+  derive model paths or reach backend execution.
 - 2026-05-03: Added `InferenceGateway::execute_typed_with_lifecycle` so typed
   request validation and backend execution emit separate lifecycle phases for
   diagnostics-ledger adapters while preserving inference as a fact producer

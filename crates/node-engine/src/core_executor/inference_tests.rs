@@ -654,6 +654,46 @@ async fn test_retired_llamacpp_node_type_is_not_executable() {
 
 #[cfg(feature = "inference-nodes")]
 #[tokio::test]
+async fn test_canonical_llm_rejects_unresolved_migration_model_reference_before_gateway() {
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "_data".to_string(),
+        serde_json::json!({"node_type": "llm-inference"}),
+    );
+    inputs.insert("prompt".to_string(), serde_json::json!("hello"));
+    inputs.insert("runtime_hint".to_string(), serde_json::json!("llamacpp"));
+    inputs.insert(
+        "model_path".to_string(),
+        serde_json::json!("/tmp/legacy.gguf"),
+    );
+    inputs.insert(
+        "pumas_model_ref".to_string(),
+        serde_json::json!({
+            "status": "unresolved",
+            "source": "legacy_llamacpp",
+            "legacy_model_path": "/tmp/legacy.gguf"
+        }),
+    );
+
+    let executor = CoreTaskExecutor::new();
+    let context = graph_flow::Context::new();
+    let extensions = ExecutorExtensions::new();
+    let err = executor
+        .execute_task("llm-inference-1", inputs, &context, &extensions)
+        .await
+        .expect_err("unresolved migrated model evidence should block execution");
+    match err {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("model reference is unresolved"));
+            assert!(message.contains("legacy_llamacpp"));
+            assert!(!message.contains("InferenceGateway not configured"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+#[tokio::test]
 async fn test_unload_model_rejects_ollama_model_ref_without_network() {
     let mut inputs = HashMap::new();
     inputs.insert(
@@ -847,6 +887,62 @@ fn test_inputs_with_model_path_rejects_malformed_resolved_model_source() {
     match err {
         NodeEngineError::ExecutionFailed(message) => {
             assert!(message.contains("Invalid resolved_model_source input"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
+fn test_inputs_with_model_path_rejects_unresolved_pumas_model_ref() {
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "model_path".to_string(),
+        serde_json::json!("/tmp/legacy.gguf"),
+    );
+    inputs.insert(
+        "pumas_model_ref".to_string(),
+        serde_json::json!({
+            "status": "unresolved",
+            "source": "legacy_llamacpp",
+            "legacy_model_path": "/tmp/legacy.gguf"
+        }),
+    );
+
+    let err = inputs_with_model_path_from_ref(&inputs)
+        .expect_err("unresolved Pumas model reference should fail explicitly");
+
+    match err {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("pumas_model_ref"));
+            assert!(message.contains("legacy_llamacpp"));
+            assert!(message.contains("Resolve this model through Pumas"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
+fn test_inputs_with_model_path_rejects_unresolved_model_source() {
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "resolved_model_source".to_string(),
+        serde_json::json!({
+            "status": "unresolved",
+            "source": "legacy_pytorch",
+            "legacy_model_type": "causal_lm"
+        }),
+    );
+
+    let err = inputs_with_model_path_from_ref(&inputs)
+        .expect_err("unresolved model source should fail explicitly before serde parsing");
+
+    match err {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("resolved_model_source"));
+            assert!(message.contains("legacy_pytorch"));
+            assert!(message.contains("Resolve this model through Pumas"));
         }
         other => panic!("unexpected error variant: {other:?}"),
     }

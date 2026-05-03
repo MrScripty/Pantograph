@@ -348,6 +348,8 @@ pub(crate) fn build_model_dependency_request(
 pub(crate) fn inputs_with_model_path_from_ref(
     inputs: &HashMap<String, serde_json::Value>,
 ) -> Result<HashMap<String, serde_json::Value>> {
+    reject_unresolved_model_reference_inputs(inputs)?;
+
     let mut canonical_inputs = inputs.clone();
     let resolved_model_source_entry_path = read_resolved_model_source_entry_path_result(inputs)?;
     if canonical_inputs
@@ -362,6 +364,43 @@ pub(crate) fn inputs_with_model_path_from_ref(
         }
     }
     Ok(canonical_inputs)
+}
+
+#[cfg(feature = "inference-nodes")]
+fn reject_unresolved_model_reference_inputs(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<()> {
+    for (field_name, aliases) in [
+        ("pumas_model_ref", ["pumas_model_ref", "pumasModelRef"]),
+        (
+            "resolved_model_source",
+            ["resolved_model_source", "resolvedModelSource"],
+        ),
+    ] {
+        let Some(raw) = read_optional_input_value_aliases(inputs, &aliases) else {
+            continue;
+        };
+        if !model_reference_status_is_unresolved(&raw) {
+            continue;
+        }
+        let source = raw
+            .get("source")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("unknown");
+        return Err(NodeEngineError::ExecutionFailed(format!(
+            "Canonical inference model reference is unresolved in {field_name} from {source}. Resolve this model through Pumas before execution."
+        )));
+    }
+
+    Ok(())
+}
+
+#[cfg(feature = "inference-nodes")]
+fn model_reference_status_is_unresolved(value: &serde_json::Value) -> bool {
+    value
+        .get("status")
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|status| status.eq_ignore_ascii_case("unresolved"))
 }
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]
