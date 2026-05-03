@@ -210,6 +210,30 @@ pub struct RuntimeLifecycleSnapshot {
 }
 
 impl RuntimeLifecycleSnapshot {
+    pub fn runtime_fact_readiness(&self) -> RuntimeFactReadiness {
+        if self.active {
+            if self.warmup_started_at_ms.is_some() && self.warmup_completed_at_ms.is_none() {
+                return RuntimeFactReadiness::Warming;
+            }
+
+            return RuntimeFactReadiness::Ready;
+        }
+
+        if self.last_error.is_some() {
+            return RuntimeFactReadiness::Failed;
+        }
+
+        RuntimeFactReadiness::Stopped
+    }
+
+    pub fn runtime_fact_reuse_result(&self) -> RuntimeFactReuseResult {
+        match self.runtime_reused {
+            Some(true) => RuntimeFactReuseResult::Reused,
+            Some(false) => RuntimeFactReuseResult::Started,
+            None => RuntimeFactReuseResult::Unknown,
+        }
+    }
+
     pub fn default_lifecycle_decision_reason(&self) -> Option<&'static str> {
         match (self.last_error.as_ref(), self.runtime_reused, self.active) {
             (Some(_), _, _) => Some("runtime_start_failed"),
@@ -223,6 +247,144 @@ impl RuntimeLifecycleSnapshot {
         self.lifecycle_decision_reason
             .clone()
             .or_else(|| self.default_lifecycle_decision_reason().map(str::to_string))
+    }
+}
+
+/// Normalized runtime readiness fact reported by inference.
+///
+/// This is an observed backend lifecycle state, not a scheduler admission or
+/// runtime-selection conclusion.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeFactReadiness {
+    Ready,
+    Warming,
+    Failed,
+    Stopped,
+    Unsupported,
+    Unknown,
+}
+
+/// Normalized reuse result for the runtime that produced a fact snapshot.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeFactReuseResult {
+    Reused,
+    Started,
+    NotApplicable,
+    Unknown,
+}
+
+/// Reason inference has no loaded runtime fact for a backend/runtime slot.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeFactAbsenceReason {
+    Unloaded,
+    Failed,
+    Unsupported,
+}
+
+/// Inference-owned runtime fact snapshot exposed to host layers.
+///
+/// The DTO normalizes raw lifecycle fields into stable readiness/reuse/absence
+/// facts while keeping scheduler policy and runtime selection outside the
+/// inference crate.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct RuntimeFactSnapshot {
+    #[serde(default)]
+    pub backend_key: Option<String>,
+    #[serde(default)]
+    pub runtime_id: Option<String>,
+    #[serde(default)]
+    pub runtime_instance_id: Option<String>,
+    #[serde(default)]
+    pub active_model_target: Option<String>,
+    #[serde(default)]
+    pub resolved_device: Option<String>,
+    #[serde(default)]
+    pub warmup_started_at_ms: Option<u64>,
+    #[serde(default)]
+    pub warmup_completed_at_ms: Option<u64>,
+    #[serde(default)]
+    pub warmup_duration_ms: Option<u64>,
+    pub reuse_result: RuntimeFactReuseResult,
+    pub readiness: RuntimeFactReadiness,
+    #[serde(default)]
+    pub absence_reason: Option<RuntimeFactAbsenceReason>,
+    #[serde(default)]
+    pub lifecycle_decision_reason: Option<String>,
+    #[serde(default)]
+    pub last_backend_error: Option<String>,
+}
+
+impl RuntimeFactSnapshot {
+    pub fn from_lifecycle(
+        backend_key: Option<String>,
+        active_model_target: Option<String>,
+        resolved_device: Option<String>,
+        lifecycle: RuntimeLifecycleSnapshot,
+    ) -> Self {
+        let readiness = lifecycle.runtime_fact_readiness();
+        let reuse_result = lifecycle.runtime_fact_reuse_result();
+        let lifecycle_decision_reason = lifecycle.lifecycle_decision_reason.clone().or_else(|| {
+            if readiness == RuntimeFactReadiness::Warming {
+                Some("runtime_warming".to_string())
+            } else {
+                lifecycle
+                    .default_lifecycle_decision_reason()
+                    .map(str::to_string)
+            }
+        });
+        let absence_reason = match readiness {
+            RuntimeFactReadiness::Failed if !lifecycle.active => {
+                Some(RuntimeFactAbsenceReason::Failed)
+            }
+            _ => None,
+        };
+
+        Self {
+            backend_key,
+            runtime_id: lifecycle.runtime_id,
+            runtime_instance_id: lifecycle.runtime_instance_id,
+            active_model_target,
+            resolved_device,
+            warmup_started_at_ms: lifecycle.warmup_started_at_ms,
+            warmup_completed_at_ms: lifecycle.warmup_completed_at_ms,
+            warmup_duration_ms: lifecycle.warmup_duration_ms,
+            reuse_result,
+            readiness,
+            absence_reason,
+            lifecycle_decision_reason,
+            last_backend_error: lifecycle.last_error,
+        }
+    }
+
+    pub fn absent_backend(
+        backend_key: Option<String>,
+        absence_reason: RuntimeFactAbsenceReason,
+    ) -> Self {
+        let readiness = match absence_reason {
+            RuntimeFactAbsenceReason::Unloaded => RuntimeFactReadiness::Stopped,
+            RuntimeFactAbsenceReason::Failed => RuntimeFactReadiness::Failed,
+            RuntimeFactAbsenceReason::Unsupported => RuntimeFactReadiness::Unsupported,
+        };
+
+        Self {
+            backend_key,
+            runtime_id: None,
+            runtime_instance_id: None,
+            active_model_target: None,
+            resolved_device: None,
+            warmup_started_at_ms: None,
+            warmup_completed_at_ms: None,
+            warmup_duration_ms: None,
+            reuse_result: RuntimeFactReuseResult::NotApplicable,
+            readiness,
+            absence_reason: Some(absence_reason),
+            lifecycle_decision_reason: None,
+            last_backend_error: None,
+        }
     }
 }
 
@@ -257,6 +419,44 @@ pub struct ServerModeInfo {
     /// Backend-owned lifecycle snapshot for the dedicated embedding runtime.
     #[serde(default)]
     pub embedding_runtime: Option<RuntimeLifecycleSnapshot>,
+}
+
+impl ServerModeInfo {
+    pub fn runtime_fact_snapshots(&self) -> Vec<RuntimeFactSnapshot> {
+        let mut facts = Vec::new();
+
+        if let Some(active_runtime) = self.active_runtime.clone() {
+            facts.push(RuntimeFactSnapshot::from_lifecycle(
+                self.backend_key.clone(),
+                self.active_model_target
+                    .clone()
+                    .or_else(|| self.model_path.clone()),
+                None,
+                active_runtime,
+            ));
+        } else if self.ready {
+            facts.push(RuntimeFactSnapshot::absent_backend(
+                self.backend_key.clone(),
+                RuntimeFactAbsenceReason::Unsupported,
+            ));
+        } else {
+            facts.push(RuntimeFactSnapshot::absent_backend(
+                self.backend_key.clone(),
+                RuntimeFactAbsenceReason::Unloaded,
+            ));
+        }
+
+        if let Some(embedding_runtime) = self.embedding_runtime.clone() {
+            facts.push(RuntimeFactSnapshot::from_lifecycle(
+                self.backend_key.clone(),
+                self.embedding_model_target.clone(),
+                None,
+                embedding_runtime,
+            ));
+        }
+
+        facts
+    }
 }
 
 /// Type identifier for masked prompts in JSON context values
@@ -442,5 +642,206 @@ mod tests {
             snapshot.normalized_lifecycle_decision_reason().as_deref(),
             Some("runtime_start_failed")
         );
+    }
+
+    #[test]
+    fn runtime_fact_snapshot_normalizes_ready_reused_lifecycle() {
+        let fact = RuntimeFactSnapshot::from_lifecycle(
+            Some("llama_cpp".to_string()),
+            Some("/models/qwen.gguf".to_string()),
+            Some("cuda:0".to_string()),
+            RuntimeLifecycleSnapshot {
+                runtime_id: Some("llama.cpp".to_string()),
+                runtime_instance_id: Some("llama-main-1".to_string()),
+                warmup_started_at_ms: Some(10),
+                warmup_completed_at_ms: Some(20),
+                warmup_duration_ms: Some(10),
+                runtime_reused: Some(true),
+                lifecycle_decision_reason: None,
+                active: true,
+                last_error: None,
+            },
+        );
+
+        assert_eq!(fact.backend_key.as_deref(), Some("llama_cpp"));
+        assert_eq!(fact.runtime_id.as_deref(), Some("llama.cpp"));
+        assert_eq!(fact.runtime_instance_id.as_deref(), Some("llama-main-1"));
+        assert_eq!(
+            fact.active_model_target.as_deref(),
+            Some("/models/qwen.gguf")
+        );
+        assert_eq!(fact.resolved_device.as_deref(), Some("cuda:0"));
+        assert_eq!(fact.readiness, RuntimeFactReadiness::Ready);
+        assert_eq!(fact.reuse_result, RuntimeFactReuseResult::Reused);
+        assert_eq!(
+            fact.lifecycle_decision_reason.as_deref(),
+            Some("runtime_reused")
+        );
+        assert_eq!(fact.absence_reason, None);
+    }
+
+    #[test]
+    fn runtime_fact_snapshot_marks_active_warmup() {
+        let fact = RuntimeFactSnapshot::from_lifecycle(
+            Some("pytorch".to_string()),
+            Some("Qwen/Qwen3-8B".to_string()),
+            None,
+            RuntimeLifecycleSnapshot {
+                runtime_id: Some("PyTorch".to_string()),
+                warmup_started_at_ms: Some(10),
+                warmup_completed_at_ms: None,
+                runtime_reused: Some(false),
+                active: true,
+                ..RuntimeLifecycleSnapshot::default()
+            },
+        );
+
+        assert_eq!(fact.readiness, RuntimeFactReadiness::Warming);
+        assert_eq!(fact.reuse_result, RuntimeFactReuseResult::Started);
+        assert_eq!(
+            fact.lifecycle_decision_reason.as_deref(),
+            Some("runtime_warming")
+        );
+    }
+
+    #[test]
+    fn runtime_fact_snapshot_marks_failed_absence() {
+        let fact = RuntimeFactSnapshot::from_lifecycle(
+            Some("candle".to_string()),
+            Some("Qwen/Qwen3-8B".to_string()),
+            None,
+            RuntimeLifecycleSnapshot {
+                runtime_id: Some("candle".to_string()),
+                runtime_reused: None,
+                active: false,
+                last_error: Some("backend failed to start".to_string()),
+                ..RuntimeLifecycleSnapshot::default()
+            },
+        );
+
+        assert_eq!(fact.readiness, RuntimeFactReadiness::Failed);
+        assert_eq!(fact.reuse_result, RuntimeFactReuseResult::Unknown);
+        assert_eq!(fact.absence_reason, Some(RuntimeFactAbsenceReason::Failed));
+        assert_eq!(
+            fact.lifecycle_decision_reason.as_deref(),
+            Some("runtime_start_failed")
+        );
+        assert_eq!(
+            fact.last_backend_error.as_deref(),
+            Some("backend failed to start")
+        );
+    }
+
+    #[test]
+    fn runtime_fact_absent_backend_defines_unloaded_and_unsupported_semantics() {
+        let unloaded = RuntimeFactSnapshot::absent_backend(
+            Some("llama_cpp".to_string()),
+            RuntimeFactAbsenceReason::Unloaded,
+        );
+        let unsupported = RuntimeFactSnapshot::absent_backend(
+            Some("candle".to_string()),
+            RuntimeFactAbsenceReason::Unsupported,
+        );
+
+        assert_eq!(unloaded.readiness, RuntimeFactReadiness::Stopped);
+        assert_eq!(
+            unloaded.absence_reason,
+            Some(RuntimeFactAbsenceReason::Unloaded)
+        );
+        assert_eq!(unsupported.readiness, RuntimeFactReadiness::Unsupported);
+        assert_eq!(
+            unsupported.reuse_result,
+            RuntimeFactReuseResult::NotApplicable
+        );
+    }
+
+    #[test]
+    fn server_mode_info_projects_runtime_fact_snapshots() {
+        let mode_info = ServerModeInfo {
+            backend_name: Some("llama.cpp".to_string()),
+            backend_key: Some("llama_cpp".to_string()),
+            mode: "sidecar_inference".to_string(),
+            ready: true,
+            url: None,
+            model_path: Some("/models/from-mode.gguf".to_string()),
+            is_embedding_mode: false,
+            active_model_target: Some("/models/qwen.gguf".to_string()),
+            embedding_model_target: Some("/models/embed.gguf".to_string()),
+            active_runtime: Some(RuntimeLifecycleSnapshot {
+                runtime_id: Some("llama.cpp".to_string()),
+                runtime_instance_id: Some("llama-main-1".to_string()),
+                warmup_started_at_ms: Some(10),
+                warmup_completed_at_ms: Some(20),
+                warmup_duration_ms: Some(10),
+                runtime_reused: Some(false),
+                lifecycle_decision_reason: Some("runtime_ready".to_string()),
+                active: true,
+                last_error: None,
+            }),
+            embedding_runtime: Some(RuntimeLifecycleSnapshot {
+                runtime_id: Some("llama.cpp.embedding".to_string()),
+                runtime_instance_id: Some("llama-embed-1".to_string()),
+                runtime_reused: Some(true),
+                active: true,
+                ..RuntimeLifecycleSnapshot::default()
+            }),
+        };
+
+        let facts = mode_info.runtime_fact_snapshots();
+
+        assert_eq!(facts.len(), 2);
+        assert_eq!(facts[0].backend_key.as_deref(), Some("llama_cpp"));
+        assert_eq!(
+            facts[0].active_model_target.as_deref(),
+            Some("/models/qwen.gguf")
+        );
+        assert_eq!(facts[0].readiness, RuntimeFactReadiness::Ready);
+        assert_eq!(
+            facts[1].active_model_target.as_deref(),
+            Some("/models/embed.gguf")
+        );
+        assert_eq!(facts[1].reuse_result, RuntimeFactReuseResult::Reused);
+    }
+
+    #[test]
+    fn server_mode_info_projects_absent_runtime_when_backend_does_not_report_lifecycle() {
+        let mode_info = ServerModeInfo {
+            backend_name: Some("Candle".to_string()),
+            backend_key: Some("candle".to_string()),
+            mode: "sidecar_inference".to_string(),
+            ready: true,
+            url: None,
+            model_path: None,
+            is_embedding_mode: false,
+            active_model_target: None,
+            embedding_model_target: None,
+            active_runtime: None,
+            embedding_runtime: None,
+        };
+
+        let facts = mode_info.runtime_fact_snapshots();
+
+        assert_eq!(facts.len(), 1);
+        assert_eq!(facts[0].backend_key.as_deref(), Some("candle"));
+        assert_eq!(facts[0].readiness, RuntimeFactReadiness::Unsupported);
+        assert_eq!(
+            facts[0].absence_reason,
+            Some(RuntimeFactAbsenceReason::Unsupported)
+        );
+    }
+
+    #[test]
+    fn runtime_fact_snapshot_serde_uses_stable_snake_case_contract() {
+        let fact = RuntimeFactSnapshot::absent_backend(
+            Some("mlx".to_string()),
+            RuntimeFactAbsenceReason::Unsupported,
+        );
+
+        let encoded = serde_json::to_value(&fact).unwrap();
+
+        assert_eq!(encoded["backend_key"], serde_json::json!("mlx"));
+        assert_eq!(encoded["readiness"], serde_json::json!("unsupported"));
+        assert_eq!(encoded["reuse_result"], serde_json::json!("not_applicable"));
+        assert_eq!(encoded["absence_reason"], serde_json::json!("unsupported"));
     }
 }

@@ -1302,7 +1302,10 @@ depending on inference crate internals. The eighth slice added default
 unsupported-operation tests for image generation and KV-cache fingerprint
 requests at the backend trait boundary. Static capability facts, model/task
 compatibility reports, workflow capability projection, and explicit unsupported
-behavior are now covered; runtime observation facts continue in Milestone 8.
+behavior are now covered. The ninth slice added an inference-owned
+`RuntimeFactSnapshot` DTO plus readiness, reuse, and absence semantics on top of
+the existing `RuntimeLifecycleSnapshot`/`ServerModeInfo` flow, without changing
+runtime-registry scheduler policy.
 
 ### Milestone 8: Add Runtime Fact Snapshots
 
@@ -1310,18 +1313,18 @@ behavior are now covered; runtime observation facts continue in Milestone 8.
 publishing scheduler conclusions.
 
 **Tasks:**
-- [ ] Define a runtime fact DTO containing backend key, runtime id, runtime
+- [x] Define a runtime fact DTO containing backend key, runtime id, runtime
   instance id, active model target, resolved device, warmup timings, reuse
   result, readiness, and last backend error.
-- [ ] Define absence semantics for unloaded, failed, and unsupported backends.
+- [x] Define absence semantics for unloaded, failed, and unsupported backends.
 - [ ] Define cancellation and cleanup semantics for preprocessing, streaming,
   backend execution, postprocessing, process leases, and KV-cache handle
   publication.
-- [ ] Map llama.cpp, PyTorch, and placeholder Candle behavior into the
+- [x] Map llama.cpp, PyTorch, and placeholder Candle behavior into the
   DTO.
-- [ ] Reserve fact shape extension points for future vLLM and MLX candidates
+- [x] Reserve fact shape extension points for future vLLM and MLX candidates
   without adding implementation commitments.
-- [ ] Ensure facts are snapshots owned by inference and not mutable policy
+- [x] Ensure facts are snapshots owned by inference and not mutable policy
   state owned by consumers.
 - [ ] Add stale-start/restart tests where existing gateway fixtures support
   them.
@@ -1335,7 +1338,10 @@ publishing scheduler conclusions.
 - Cross-layer acceptance check from backend start to runtime registry or host
   projection if consumer DTOs change.
 
-**Status:** Not started.
+**Status:** In progress. Runtime fact DTO and normalization helpers are
+implemented in `crates/inference/src/types.rs`; remaining work covers
+cancellation/cleanup lifecycle semantics and gateway-supported stale-start or
+restart tests.
 
 ### Milestone 9: Bind PyTorch Through Transformers
 
