@@ -6,19 +6,12 @@
 //! workflow shapes.
 
 use async_trait::async_trait;
-use graph_flow::{Context, GraphError, NextAction, Task, TaskResult};
+use graph_flow::{Context, GraphError, Task, TaskResult};
 use node_engine::{
-    ContextKeys, ExecutionMode, NodeCategory, PortDataType, PortMetadata, TaskDescriptor,
-    TaskMetadata,
+    ExecutionMode, NodeCategory, PortDataType, PortMetadata, TaskDescriptor, TaskMetadata,
 };
-use serde::Deserialize;
 
-/// Response structure from Ollama API
-#[derive(Debug, Deserialize)]
-struct OllamaResponse {
-    model: String,
-    response: String,
-}
+const OLLAMA_RETIRED_MESSAGE: &str = "Ollama is no longer supported as a first-party Pantograph inference backend. Migrate this saved workflow node to the canonical inference node with a Pumas model reference.";
 
 /// Ollama Inference Task
 ///
@@ -126,114 +119,9 @@ impl Task for OllamaInferenceTask {
         &self.task_id
     }
 
-    async fn run(&self, context: Context) -> graph_flow::Result<TaskResult> {
-        // Get required inputs
-        let prompt_key = ContextKeys::input(&self.task_id, Self::PORT_PROMPT);
-        let prompt: String = context.get(&prompt_key).await.ok_or_else(|| {
-            GraphError::TaskExecutionFailed(format!(
-                "Missing required input 'prompt' at key '{}'",
-                prompt_key
-            ))
-        })?;
-
-        let model_key = ContextKeys::input(&self.task_id, Self::PORT_MODEL);
-        let model: String = context.get(&model_key).await.ok_or_else(|| {
-            GraphError::TaskExecutionFailed(format!(
-                "Missing required input 'model' at key '{}'. Connect a Model Provider node.",
-                model_key
-            ))
-        })?;
-
-        // Get optional inputs
-        let system_prompt_key = ContextKeys::input(&self.task_id, Self::PORT_SYSTEM_PROMPT);
-        let system_prompt: Option<String> = context.get(&system_prompt_key).await;
-
-        let temp_key = ContextKeys::input(&self.task_id, Self::PORT_TEMPERATURE);
-        let temperature: Option<f64> = context.get(&temp_key).await;
-
-        let max_tokens_key = ContextKeys::input(&self.task_id, Self::PORT_MAX_TOKENS);
-        let max_tokens: Option<i64> = context.get(&max_tokens_key).await;
-
-        // Build Ollama API request
-        let mut request_body = serde_json::json!({
-            "model": model,
-            "prompt": prompt,
-            "stream": false
-        });
-
-        if let Some(sys) = &system_prompt {
-            request_body["system"] = serde_json::json!(sys);
-        }
-
-        // Add options if provided
-        let mut options = serde_json::Map::new();
-        if let Some(temp) = temperature {
-            options.insert("temperature".to_string(), serde_json::json!(temp));
-        }
-        if let Some(max) = max_tokens {
-            options.insert("num_predict".to_string(), serde_json::json!(max));
-        }
-        if !options.is_empty() {
-            request_body["options"] = serde_json::Value::Object(options);
-        }
-
-        // Make the HTTP request to Ollama
-        let client = reqwest::Client::new();
-        let url = format!("{}/api/generate", self.base_url);
-
-        log::debug!(
-            "OllamaInferenceTask {}: sending request to {} with model '{}'",
-            self.task_id,
-            url,
-            model
-        );
-
-        let http_response = client
-            .post(&url)
-            .json(&request_body)
-            .send()
-            .await
-            .map_err(|e| {
-                GraphError::TaskExecutionFailed(format!(
-                    "Failed to connect to Ollama server at {}: {}. Is Ollama running?",
-                    self.base_url, e
-                ))
-            })?;
-
-        if !http_response.status().is_success() {
-            let status = http_response.status();
-            let error_body = http_response.text().await.unwrap_or_default();
-            return Err(GraphError::TaskExecutionFailed(format!(
-                "Ollama API error ({}): {}",
-                status, error_body
-            )));
-        }
-
-        let response_data: OllamaResponse = http_response.json().await.map_err(|e| {
-            GraphError::TaskExecutionFailed(format!("Failed to parse Ollama response: {}", e))
-        })?;
-
-        // Store outputs in context
-        let output_key = ContextKeys::output(&self.task_id, Self::PORT_RESPONSE);
-        context
-            .set(&output_key, response_data.response.clone())
-            .await;
-
-        let model_out_key = ContextKeys::output(&self.task_id, Self::PORT_MODEL_OUT);
-        context
-            .set(&model_out_key, response_data.model.clone())
-            .await;
-
-        log::debug!(
-            "OllamaInferenceTask {}: completed with {} chars response using model '{}'",
-            self.task_id,
-            response_data.response.len(),
-            response_data.model
-        );
-
-        Ok(TaskResult::new(
-            Some(response_data.response),
-            NextAction::Continue,
+    async fn run(&self, _context: Context) -> graph_flow::Result<TaskResult> {
+        Err(GraphError::TaskExecutionFailed(
+            OLLAMA_RETIRED_MESSAGE.to_string(),
         ))
     }
 }
@@ -271,5 +159,16 @@ mod tests {
 
         // Check for response output
         assert!(meta.outputs.iter().any(|p| p.id == "response"));
+    }
+
+    #[tokio::test]
+    async fn run_returns_retired_backend_error_without_http_execution() {
+        let task = OllamaInferenceTask::new("retired-ollama");
+        let error = task
+            .run(Context::new())
+            .await
+            .expect_err("retired task must not execute");
+
+        assert!(error.to_string().contains("Ollama is no longer supported"));
     }
 }

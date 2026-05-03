@@ -92,8 +92,9 @@ are resolved through `pantograph-node-contracts` projections.
   `core_executor/dependency_preflight.rs` so model-reference construction,
   backend-key normalization, and resolver readiness checks remain separate from
   dispatch and runtime request execution.
-- Standalone Ollama HTTP execution stays in `core_executor/ollama.rs` so direct
-  HTTP generation remains separate from gateway-backed inference adapters.
+- Retired Ollama-node handling stays in `core_executor/ollama.rs` only to
+  return a migration error for stale workflow nodes; it must not call an
+  Ollama daemon or preserve direct HTTP generation.
 - Gateway-backed inference execution stays in `core_executor/inference_nodes.rs`
   so OpenAI-compatible chat, vision, and unload-model handlers remain separate
   from Python-worker adapters.
