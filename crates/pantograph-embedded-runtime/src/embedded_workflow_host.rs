@@ -19,7 +19,7 @@ use crate::{
     apply_runtime_extensions_for_execution, python_runtime, runtime_capabilities, runtime_registry,
     runtime_registry_errors, task_executor, technical_fit, workflow_execution_session_execution,
     EmbeddedWorkflowHost, HostRuntimeModeSnapshot, InferenceLifecycleWorkflowLedgerSink,
-    RuntimeExtensionsSnapshot,
+    NodeExecutionWorkflowLedgerSink, RuntimeExtensionsSnapshot,
 };
 
 #[async_trait::async_trait]
@@ -277,10 +277,25 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         .await;
 
         let execution_id = Uuid::new_v4().to_string();
+        let node_execution_sink = NodeExecutionWorkflowLedgerSink::try_new(
+            self.workflow_service.clone(),
+            workflow_id.to_string(),
+            execution_id.clone(),
+            execution_id.clone(),
+            &graph,
+            None,
+        )
+        .ok()
+        .map(|sink| Arc::new(sink) as Arc<dyn node_engine::EventSink>);
         let core = Arc::new(
             CoreTaskExecutor::new()
                 .with_project_root(self.project_root.clone())
                 .with_gateway(self.gateway.clone())
+                .with_event_sink(
+                    node_execution_sink
+                        .clone()
+                        .unwrap_or_else(|| Arc::new(NullEventSink)),
+                )
                 .with_execution_id(execution_id.clone()),
         );
         let host = Arc::new(task_executor::TauriTaskExecutor::with_python_runtime(
@@ -295,8 +310,11 @@ impl WorkflowHost for EmbeddedWorkflowHost {
             Arc::new(task_executor::PythonRuntimeExecutionRecorder::default());
 
         let inference_lifecycle_graph = graph.clone();
-        let mut executor =
-            WorkflowExecutor::new(execution_id.clone(), graph, Arc::new(NullEventSink));
+        let mut executor = WorkflowExecutor::new(
+            execution_id.clone(),
+            graph,
+            node_execution_sink.unwrap_or_else(|| Arc::new(NullEventSink)),
+        );
         let inference_lifecycle_sink = InferenceLifecycleWorkflowLedgerSink::try_new(
             self.workflow_service.clone(),
             workflow_id.to_string(),

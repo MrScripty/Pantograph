@@ -6,12 +6,12 @@ use pantograph_diagnostics_ledger::{
     DiagnosticEventPrivacyClass, DiagnosticEventRetentionClass, DiagnosticEventSourceComponent,
     DiagnosticsLedgerError, DiagnosticsLedgerRepository, ExecutionGuaranteeLevel,
     InferenceCompatibilityIssueDiagnosticSummary, InferenceCompatibilityReportDiagnosticSummary,
-    InferenceExecutionDiagnosticObservedPayload, InferenceOptionDiagnosticSummary,
-    InferenceOptionSupportCounts, InferenceUsageDiagnosticSummary, LicenseSnapshot, ModelIdentity,
-    ModelLicenseUsageEvent, ModelOutputMeasurement, NodeExecutionProjectionStatus,
-    NodeExecutionStatusPayload, RetentionClass, UsageEventStatus, UsageLineage,
-    MAX_DIAGNOSTIC_ERROR_TEXT_LEN, MAX_INFERENCE_COMPATIBILITY_ISSUES,
-    MAX_INFERENCE_OPTION_DIAGNOSTICS,
+    InferenceExecutionDiagnosticObservedPayload, InferenceKvCacheDiagnosticSummary,
+    InferenceOptionDiagnosticSummary, InferenceOptionSupportCounts,
+    InferenceUsageDiagnosticSummary, LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent,
+    ModelOutputMeasurement, NodeExecutionProjectionStatus, NodeExecutionStatusPayload,
+    RetentionClass, UsageEventStatus, UsageLineage, MAX_DIAGNOSTIC_ERROR_TEXT_LEN,
+    MAX_INFERENCE_COMPATIBILITY_ISSUES, MAX_INFERENCE_OPTION_DIAGNOSTICS,
 };
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, UsageEventId, WorkflowId, WorkflowRunId,
@@ -112,6 +112,15 @@ pub struct InferenceLifecycleWorkflowLedgerSink {
     recorder: Mutex<InferenceLifecycleDurationRecorder>,
 }
 
+pub struct NodeExecutionWorkflowLedgerSink {
+    workflow_service: SharedWorkflowService,
+    workflow_id: WorkflowId,
+    workflow_run_id: WorkflowRunId,
+    execution_id: String,
+    contexts_by_node_id: BTreeMap<String, NodeExecutionWorkflowLedgerNodeContext>,
+    inner: Option<std::sync::Arc<dyn node_engine::EventSink>>,
+}
+
 impl InferenceLifecycleWorkflowLedgerSink {
     pub fn try_new(
         workflow_service: SharedWorkflowService,
@@ -186,6 +195,65 @@ impl InferenceLifecycleWorkflowLedgerSink {
     }
 }
 
+impl NodeExecutionWorkflowLedgerSink {
+    pub fn try_new(
+        workflow_service: SharedWorkflowService,
+        workflow_id: impl Into<String>,
+        workflow_run_id: impl Into<String>,
+        execution_id: impl Into<String>,
+        graph: &node_engine::WorkflowGraph,
+        inner: Option<std::sync::Arc<dyn node_engine::EventSink>>,
+    ) -> Result<Self, String> {
+        let workflow_id = WorkflowId::try_from(workflow_id.into()).map_err(|error| {
+            format!("invalid workflow id for node execution ledger sink: {error}")
+        })?;
+        let workflow_run_id = WorkflowRunId::try_from(workflow_run_id.into()).map_err(|error| {
+            format!("invalid workflow run id for node execution ledger sink: {error}")
+        })?;
+        let contexts_by_node_id = graph
+            .nodes
+            .iter()
+            .map(|node| {
+                (
+                    node.id.clone(),
+                    NodeExecutionWorkflowLedgerNodeContext {
+                        node_id: node.id.clone(),
+                        node_type: node.node_type.clone(),
+                    },
+                )
+            })
+            .collect();
+
+        Ok(Self {
+            workflow_service,
+            workflow_id,
+            workflow_run_id,
+            execution_id: execution_id.into(),
+            contexts_by_node_id,
+            inner,
+        })
+    }
+
+    fn record_kv_cache_diagnostic(&self, event: &node_engine::WorkflowEvent) {
+        let Some(request) = build_kv_cache_diagnostic_event_ledger_append_request(
+            &self.workflow_id,
+            &self.workflow_run_id,
+            &self.execution_id,
+            &self.contexts_by_node_id,
+            event,
+        ) else {
+            return;
+        };
+
+        if let Err(error) = self
+            .workflow_service
+            .workflow_diagnostic_event_record(request)
+        {
+            log::warn!("failed to record KV cache diagnostic event: {error}");
+        }
+    }
+}
+
 impl inference::InferenceRequestLifecycleEventSink for InferenceLifecycleWorkflowLedgerSink {
     fn record(&self, event: inference::InferenceRequestLifecycleEvent) {
         let Some(context) = self.context_for_event(&event) else {
@@ -221,10 +289,28 @@ impl inference::InferenceRequestLifecycleEventSink for InferenceLifecycleWorkflo
     }
 }
 
+impl node_engine::EventSink for NodeExecutionWorkflowLedgerSink {
+    fn send(&self, event: node_engine::WorkflowEvent) -> Result<(), node_engine::EventError> {
+        self.record_kv_cache_diagnostic(&event);
+
+        if let Some(inner) = &self.inner {
+            inner.send(event)?;
+        }
+
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone)]
 struct InferenceLifecycleWorkflowNodeContext {
     workflow_id: WorkflowId,
     workflow_run_id: WorkflowRunId,
+    node_id: String,
+    node_type: String,
+}
+
+#[derive(Debug, Clone)]
+struct NodeExecutionWorkflowLedgerNodeContext {
     node_id: String,
     node_type: String,
 }
@@ -446,6 +532,78 @@ fn inference_lifecycle_duration_ms_from_append_request(
     }
 }
 
+fn build_kv_cache_diagnostic_event_ledger_append_request(
+    workflow_id: &WorkflowId,
+    workflow_run_id: &WorkflowRunId,
+    execution_id: &str,
+    contexts_by_node_id: &BTreeMap<String, NodeExecutionWorkflowLedgerNodeContext>,
+    event: &node_engine::WorkflowEvent,
+) -> Option<DiagnosticEventAppendRequest> {
+    let node_engine::WorkflowEvent::TaskProgress {
+        task_id,
+        execution_id: event_execution_id,
+        detail: Some(node_engine::TaskProgressDetail::KvCache(detail)),
+        occurred_at_ms,
+        ..
+    } = event
+    else {
+        return None;
+    };
+    if event_execution_id != execution_id {
+        return None;
+    }
+    let context = contexts_by_node_id.get(task_id)?;
+    let occurred_at_ms = occurred_at_ms
+        .and_then(|value| i64::try_from(value).ok())
+        .unwrap_or_else(|| {
+            i64::try_from(crate::workflow_runtime::unix_timestamp_ms()).unwrap_or(i64::MAX)
+        });
+
+    Some(DiagnosticEventAppendRequest {
+        source_component: DiagnosticEventSourceComponent::NodeExecution,
+        source_instance_id: None,
+        occurred_at_ms,
+        workflow_run_id: Some(workflow_run_id.clone()),
+        workflow_id: Some(workflow_id.clone()),
+        workflow_version_id: None,
+        workflow_semantic_version: None,
+        node_id: Some(context.node_id.clone()),
+        node_type: Some(context.node_type.clone()),
+        node_version: None,
+        runtime_id: detail.backend_key.clone(),
+        runtime_version: None,
+        model_id: None,
+        model_version: None,
+        client_id: None,
+        client_session_id: None,
+        bucket_id: None,
+        scheduler_policy_id: None,
+        retention_policy_id: None,
+        privacy_class: DiagnosticEventPrivacyClass::SystemMetadata,
+        retention_class: DiagnosticEventRetentionClass::AuditMetadata,
+        payload_ref: None,
+        payload: DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(
+            InferenceExecutionDiagnosticObservedPayload {
+                request_id: format!("{task_id}:kv_cache"),
+                task_id: "kv_cache".to_string(),
+                lifecycle_phase: Some("kv_cache".to_string()),
+                lifecycle_event_kind: Some("progress".to_string()),
+                duration_ms: None,
+                selected_backend_key: detail.backend_key.clone(),
+                selected_backend_family: detail.backend_key.clone(),
+                usage: None,
+                cache_handle_id: None,
+                kv_cache: Some(kv_cache_diagnostic_summary(detail)),
+                compatibility_report: None,
+                compatibility_issue_count: 0,
+                compatibility_issues: Vec::new(),
+                option_support_counts: InferenceOptionSupportCounts::default(),
+                option_diagnostics: Vec::new(),
+            },
+        ),
+    })
+}
+
 fn build_inference_diagnostic_event_ledger_append_request(
     context: &InferenceLifecycleLedgerAppendContext<'_>,
     event: &inference::InferenceRequestLifecycleEvent,
@@ -509,6 +667,7 @@ fn build_inference_diagnostic_event_ledger_append_request(
                 selected_backend_family: event.backend_key.clone(),
                 usage: event.usage.as_ref().map(inference_usage_summary),
                 cache_handle_id: event.cache_handle_id.clone(),
+                kv_cache: None,
                 compatibility_report: event
                     .compatibility_report
                     .as_ref()
@@ -552,6 +711,41 @@ fn inference_usage_summary(usage: &inference::InferenceUsage) -> InferenceUsageD
         prompt_tokens: usage.prompt_tokens,
         completion_tokens: usage.completion_tokens,
         total_tokens: usage.total_tokens,
+    }
+}
+
+fn kv_cache_diagnostic_summary(
+    detail: &node_engine::KvCacheExecutionDiagnostics,
+) -> InferenceKvCacheDiagnosticSummary {
+    InferenceKvCacheDiagnosticSummary {
+        action: kv_cache_action_label(&detail.action).to_string(),
+        outcome: kv_cache_outcome_label(&detail.outcome).to_string(),
+        cache_id: detail.cache_id.clone(),
+        backend_key: detail.backend_key.clone(),
+        reuse_source: detail.reuse_source.clone(),
+        token_count: detail
+            .token_count
+            .and_then(|token_count| u64::try_from(token_count).ok()),
+        reason: detail.reason.clone(),
+    }
+}
+
+fn kv_cache_action_label(action: &node_engine::KvCacheEventAction) -> &'static str {
+    match action {
+        node_engine::KvCacheEventAction::RestoreInput => "restore_input",
+        node_engine::KvCacheEventAction::CaptureOutput => "capture_output",
+        node_engine::KvCacheEventAction::Truncate => "truncate",
+    }
+}
+
+fn kv_cache_outcome_label(outcome: &node_engine::KvCacheEventOutcome) -> &'static str {
+    match outcome {
+        node_engine::KvCacheEventOutcome::Hit => "hit",
+        node_engine::KvCacheEventOutcome::Miss => "miss",
+        node_engine::KvCacheEventOutcome::Saved => "saved",
+        node_engine::KvCacheEventOutcome::Invalidated => "invalidated",
+        node_engine::KvCacheEventOutcome::Unsupported => "unsupported",
+        node_engine::KvCacheEventOutcome::Truncated => "truncated",
     }
 }
 

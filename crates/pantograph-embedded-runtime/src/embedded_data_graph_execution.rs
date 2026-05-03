@@ -6,7 +6,8 @@ use uuid::Uuid;
 
 use crate::{
     apply_runtime_extensions_for_execution, task_executor, EmbeddedRuntime, EmbeddedWorkflowHost,
-    InferenceLifecycleWorkflowLedgerSink, RuntimeExtensionsSnapshot,
+    InferenceLifecycleWorkflowLedgerSink, NodeExecutionWorkflowLedgerSink,
+    RuntimeExtensionsSnapshot,
 };
 
 impl EmbeddedRuntime {
@@ -23,12 +24,22 @@ impl EmbeddedRuntime {
         )
         .await;
         let execution_id = format!("data-graph-{}-{}", graph_id, Uuid::new_v4());
-        let workflow_event_sink = event_sink.clone();
+        let workflow_event_sink = NodeExecutionWorkflowLedgerSink::try_new(
+            self.workflow_service.clone(),
+            graph_id.to_string(),
+            execution_id.clone(),
+            execution_id.clone(),
+            graph,
+            Some(event_sink.clone()),
+        )
+        .ok()
+        .map(|sink| Arc::new(sink) as Arc<dyn EventSink>)
+        .unwrap_or(event_sink);
         let core = Arc::new(
             CoreTaskExecutor::new()
                 .with_project_root(self.config.project_root.clone())
                 .with_gateway(self.gateway.clone())
-                .with_event_sink(event_sink.clone())
+                .with_event_sink(workflow_event_sink.clone())
                 .with_execution_id(execution_id.clone()),
         );
         let host = Arc::new(task_executor::TauriTaskExecutor::with_python_runtime(
@@ -46,7 +57,8 @@ impl EmbeddedRuntime {
         EmbeddedWorkflowHost::apply_data_graph_inputs(&mut graph, inputs);
 
         let inference_lifecycle_graph = graph.clone();
-        let mut executor = WorkflowExecutor::new(execution_id.clone(), graph, event_sink);
+        let mut executor =
+            WorkflowExecutor::new(execution_id.clone(), graph, workflow_event_sink.clone());
         let inference_lifecycle_sink = InferenceLifecycleWorkflowLedgerSink::try_new(
             self.workflow_service.clone(),
             graph_id.to_string(),

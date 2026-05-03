@@ -25,6 +25,7 @@ pub const MAX_DIAGNOSTIC_ERROR_CAUSE_COUNT: usize = 8;
 pub const MAX_DIAGNOSTIC_ERROR_CAUSE_LEN: usize = 1_024;
 pub const MAX_INFERENCE_OPTION_DIAGNOSTICS: usize = 64;
 pub const MAX_INFERENCE_COMPATIBILITY_ISSUES: usize = 32;
+pub const MAX_INFERENCE_KV_CACHE_REASON_LEN: usize = 1_024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -1324,6 +1325,8 @@ pub struct InferenceExecutionDiagnosticObservedPayload {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cache_handle_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kv_cache: Option<InferenceKvCacheDiagnosticSummary>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compatibility_report: Option<InferenceCompatibilityReportDiagnosticSummary>,
     #[serde(default)]
     pub compatibility_issue_count: u32,
@@ -1382,6 +1385,9 @@ impl InferenceExecutionDiagnosticObservedPayload {
         if let Some(usage) = self.usage.as_ref() {
             usage.validate()?;
         }
+        if let Some(kv_cache) = self.kv_cache.as_ref() {
+            kv_cache.validate()?;
+        }
         for issue in &self.compatibility_issues {
             issue.validate()?;
         }
@@ -1415,6 +1421,47 @@ impl InferenceUsageDiagnosticSummary {
         ) {
             return Err(DiagnosticsLedgerError::MissingField { field: "usage" });
         }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct InferenceKvCacheDiagnosticSummary {
+    pub action: String,
+    pub outcome: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backend_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reuse_source: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token_count: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+impl InferenceKvCacheDiagnosticSummary {
+    fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        validate_required_text("kv_cache.action", &self.action, MAX_ID_LEN)?;
+        validate_required_text("kv_cache.outcome", &self.outcome, MAX_ID_LEN)?;
+        validate_optional_text("kv_cache.cache_id", self.cache_id.as_deref(), MAX_ID_LEN)?;
+        validate_optional_text(
+            "kv_cache.backend_key",
+            self.backend_key.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "kv_cache.reuse_source",
+            self.reuse_source.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "kv_cache.reason",
+            self.reason.as_deref(),
+            MAX_INFERENCE_KV_CACHE_REASON_LEN,
+        )?;
         Ok(())
     }
 }

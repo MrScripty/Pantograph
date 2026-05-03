@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use pantograph_diagnostics_ledger::{
     DiagnosticEventPayload, DiagnosticsLedgerRepository, DiagnosticsQuery, ExecutionGuaranteeLevel,
     LicenseSnapshot, ModelIdentity, ModelOutputMeasurement, NodeExecutionProjectionStatus,
@@ -13,7 +15,11 @@ use pantograph_runtime_attribution::{
 };
 use pantograph_workflow_service::{WorkflowNodeStatusQueryRequest, WorkflowService};
 
-use crate::node_execution_ledger::inference_diagnostic_event_ledger_append_request_with_duration;
+use super::{
+    build_kv_cache_diagnostic_event_ledger_append_request,
+    inference_diagnostic_event_ledger_append_request_with_duration,
+    NodeExecutionWorkflowLedgerNodeContext,
+};
 use crate::{
     inference_diagnostic_event_ledger_append_request,
     inference_lifecycle_event_ledger_append_request, InferenceLifecycleLedgerRecorder,
@@ -479,6 +485,66 @@ fn inference_diagnostic_event_adapter_carries_known_lifecycle_duration() {
                 Some("backend_execution")
             );
             assert_eq!(payload.lifecycle_event_kind.as_deref(), Some("completed"));
+        }
+        other => panic!("expected inference execution diagnostic payload, got {other:?}"),
+    }
+}
+
+#[test]
+fn kv_cache_progress_detail_maps_to_bounded_inference_diagnostic_summary() {
+    let workflow_id = WorkflowId::try_from("workflow-a".to_string()).expect("workflow id");
+    let workflow_run_id = WorkflowRunId::try_from("run-a".to_string()).expect("run id");
+    let contexts_by_node_id = BTreeMap::from([(
+        "node-a".to_string(),
+        NodeExecutionWorkflowLedgerNodeContext {
+            node_id: "node-a".to_string(),
+            node_type: "llm-inference".to_string(),
+        },
+    )]);
+
+    let request = build_kv_cache_diagnostic_event_ledger_append_request(
+        &workflow_id,
+        &workflow_run_id,
+        "run-a",
+        &contexts_by_node_id,
+        &node_engine::WorkflowEvent::TaskProgress {
+            task_id: "node-a".to_string(),
+            execution_id: "run-a".to_string(),
+            progress: 0.4,
+            message: Some("cache restored".to_string()),
+            detail: Some(node_engine::TaskProgressDetail::KvCache(
+                node_engine::KvCacheExecutionDiagnostics {
+                    action: node_engine::KvCacheEventAction::RestoreInput,
+                    outcome: node_engine::KvCacheEventOutcome::Hit,
+                    cache_id: Some("cache-1".to_string()),
+                    backend_key: Some("llamacpp".to_string()),
+                    reuse_source: Some("llamacpp_slot".to_string()),
+                    token_count: Some(64),
+                    reason: Some("restored_input_handle".to_string()),
+                },
+            )),
+            occurred_at_ms: Some(175),
+        },
+    )
+    .expect("kv cache progress should map");
+
+    assert_eq!(request.node_id.as_deref(), Some("node-a"));
+    assert_eq!(request.runtime_id.as_deref(), Some("llamacpp"));
+    match request.payload {
+        DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) => {
+            assert_eq!(payload.request_id, "node-a:kv_cache");
+            assert_eq!(payload.task_id, "kv_cache");
+            assert_eq!(payload.lifecycle_phase.as_deref(), Some("kv_cache"));
+            assert_eq!(payload.lifecycle_event_kind.as_deref(), Some("progress"));
+            assert_eq!(payload.selected_backend_key.as_deref(), Some("llamacpp"));
+            let kv_cache = payload.kv_cache.expect("kv cache summary");
+            assert_eq!(kv_cache.action, "restore_input");
+            assert_eq!(kv_cache.outcome, "hit");
+            assert_eq!(kv_cache.cache_id.as_deref(), Some("cache-1"));
+            assert_eq!(kv_cache.backend_key.as_deref(), Some("llamacpp"));
+            assert_eq!(kv_cache.reuse_source.as_deref(), Some("llamacpp_slot"));
+            assert_eq!(kv_cache.token_count, Some(64));
+            assert_eq!(kv_cache.reason.as_deref(), Some("restored_input_handle"));
         }
         other => panic!("expected inference execution diagnostic payload, got {other:?}"),
     }

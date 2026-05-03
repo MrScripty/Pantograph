@@ -2195,8 +2195,10 @@ inference write ledger events directly.
   request usage counts, cache-handle ids, KV checkpoint ids, and artifact refs,
   without storing prompt/result payload bodies. Typed lifecycle events and
   durable inference diagnostic payloads now carry bounded usage counts and
-  cache-handle ids; KV checkpoint ids, artifact refs, and additional backend
-  producers remain open.
+  cache-handle ids. Host-owned workflow event sinks now persist structured
+  KV-cache progress references for action, outcome, cache id, backend key, reuse
+  source, token count, and reason without cache bytes/fingerprints/temp paths;
+  artifact refs and additional backend producers remain open.
 - [ ] Continue using `diagnostic.error_occurred` for canonical errors and add
   inference-specific phases only where existing runtime preflight, model
   dependency, runtime model load, runtime launch, node execution, or output
@@ -2702,6 +2704,14 @@ Update during implementation:
   inference lifecycle event with its matching start. The stateless adapter still
   emits summaries without synthetic timing, so duration remains an observed
   fact rather than an inferred one.
+- 2026-05-03: Added bounded KV-cache diagnostic references to durable
+  `inference.execution_diagnostic_observed` payloads and introduced a
+  host-owned workflow event sink that maps structured node-engine
+  `TaskProgressDetail::KvCache` facts into ledger events. The slice wires this
+  sink into request-scoped workflow, data-graph, and edit-session execution
+  paths while keeping cache bytes, fingerprints, and temp paths out of durable
+  diagnostics; warm workflow-session executor reuse remains a follow-up wiring
+  point.
 
 ## Commit Cadence Notes
 
