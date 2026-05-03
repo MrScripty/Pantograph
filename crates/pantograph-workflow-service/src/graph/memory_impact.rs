@@ -178,10 +178,7 @@ fn compatibility_snapshot_for_node(
 }
 
 fn kv_capable_node(node: Option<&GraphNode>) -> bool {
-    matches!(
-        node.map(|node| node.node_type.as_str()),
-        Some("llamacpp-inference" | "pytorch-inference" | "llm-inference")
-    )
+    node.is_some_and(|node| node.node_type == "llm-inference")
 }
 
 fn kv_capable_node_data_change_reason(
@@ -192,14 +189,19 @@ fn kv_capable_node_data_change_reason(
         return None;
     }
 
-    if tracked_value_changed(before_node, after_node, &["model_path"])
+    if tracked_value_changed(before_node, after_node, &["pumas_model_ref"])
+        || tracked_value_changed(before_node, after_node, &["resolved_model_source"])
+        || tracked_value_changed(before_node, after_node, &["model_path"])
         || tracked_value_changed(before_node, after_node, &["model"])
         || tracked_value_changed(before_node, after_node, &["model_id"])
     {
         return Some("model_changed".to_string());
     }
 
-    if tracked_value_changed(before_node, after_node, &["backend_key"])
+    if tracked_value_changed(before_node, after_node, &["runtime_hint"])
+        || tracked_value_changed(before_node, after_node, &["runtimeHint"])
+        || tracked_value_changed(before_node, after_node, &["runtime_hint_details"])
+        || tracked_value_changed(before_node, after_node, &["backend_key"])
         || tracked_value_changed(before_node, after_node, &["environment_ref"])
         || tracked_value_changed(before_node, after_node, &["device"])
     {
@@ -366,12 +368,16 @@ mod tests {
                 },
                 GraphNode {
                     id: "llm".to_string(),
-                    node_type: "llamacpp-inference".to_string(),
+                    node_type: "llm-inference".to_string(),
                     position: Position { x: 120.0, y: 0.0 },
                     data: serde_json::json!({
-                        "model_path": "/models/a.gguf",
-                        "backend_key": "llamacpp",
-                        "inference_settings": {
+                        "task_kind": "text_generation",
+                        "runtime_hint": "llamacpp",
+                        "pumas_model_ref": {
+                            "model_id": "llm/a",
+                            "selected_artifact_path": "/models/a.gguf"
+                        },
+                        "generation_options": {
                             "temperature": 0.2
                         },
                         "definition": { "schema_version": "v1" }
@@ -601,8 +607,10 @@ mod tests {
     fn kv_capable_model_change_uses_model_changed_reason() {
         let before = sample_kv_graph();
         let mut after = sample_kv_graph();
-        after.find_node_mut("llm").expect("llm").data["model_path"] =
-            serde_json::json!("/models/b.gguf");
+        after.find_node_mut("llm").expect("llm").data["pumas_model_ref"] = serde_json::json!({
+            "model_id": "llm/b",
+            "selected_artifact_path": "/models/b.gguf"
+        });
 
         let impact = graph_memory_impact_from_graph_change(
             &before,
@@ -629,7 +637,8 @@ mod tests {
     fn kv_capable_backend_change_uses_runtime_backend_changed_reason() {
         let before = sample_kv_graph();
         let mut after = sample_kv_graph();
-        after.find_node_mut("llm").expect("llm").data["backend_key"] = serde_json::json!("pytorch");
+        after.find_node_mut("llm").expect("llm").data["runtime_hint"] =
+            serde_json::json!("transformers_pytorch");
 
         let impact = graph_memory_impact_from_graph_change(&before, &after, &["llm".to_string()])
             .expect("impact");
@@ -644,7 +653,7 @@ mod tests {
     fn kv_capable_config_change_uses_tokenizer_or_config_changed_reason() {
         let before = sample_kv_graph();
         let mut after = sample_kv_graph();
-        after.find_node_mut("llm").expect("llm").data["inference_settings"]["temperature"] =
+        after.find_node_mut("llm").expect("llm").data["generation_options"]["temperature"] =
             serde_json::json!(0.8);
 
         let impact = graph_memory_impact_from_graph_change(&before, &after, &["llm".to_string()])

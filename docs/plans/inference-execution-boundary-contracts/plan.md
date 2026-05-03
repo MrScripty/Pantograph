@@ -1655,6 +1655,9 @@ Pumas model references instead of the retired `embedding` node and `model` port.
 Workflow-service session graph hydration/sync now derives embedding metadata
 emission from canonical embedding inference nodes instead of the retired
 `embedding` node type.
+Workflow-service graph memory-impact analysis now treats canonical
+`llm-inference` as the KV-capable node shape and keys model/runtime invalidation
+off canonical Pumas model-source and runtime-hint fields.
 
 ### Milestone 12: Prepare Native Candle Slice
 
