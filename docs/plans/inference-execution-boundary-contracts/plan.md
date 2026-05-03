@@ -2643,6 +2643,10 @@ Update during implementation:
   projection rows plus node projection state, exposing selected node task,
   backend, runtime, and model context without requiring API/UI consumers to
   parse raw ledger payload JSON.
+- 2026-05-03: Diagnostics run-list and run-detail projections now roll up
+  node-derived selected backend key, model id, and task id from
+  `node.execution_status` events while preserving scheduler-owned selected
+  runtime/device/network-node semantics.
 
 ## Commit Cadence Notes
 

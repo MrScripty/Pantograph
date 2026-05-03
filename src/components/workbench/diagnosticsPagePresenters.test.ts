@@ -51,6 +51,9 @@ function createRunDetail(): RunDetailProjectionRecord {
     scheduler_policy_id: 'policy-a',
     retention_policy_id: 'retention-a',
     selected_runtime_id: 'runtime-a',
+    selected_backend_key: 'llama_cpp',
+    selected_model_id: 'pumas://models/tiny-gguf',
+    selected_task_id: 'text_generation',
     selected_device_id: 'device-a',
     selected_network_node_id: 'network-a',
     scheduler_queue_position: 1,
@@ -95,6 +98,9 @@ function createRunListPeer(overrides: Partial<RunListProjectionRecord>): RunList
     scheduler_policy_id: 'policy-a',
     retention_policy_id: 'retention-a',
     selected_runtime_id: 'runtime-a',
+    selected_backend_key: 'llama_cpp',
+    selected_model_id: 'pumas://models/tiny-gguf',
+    selected_task_id: 'text_generation',
     selected_device_id: 'device-a',
     selected_network_node_id: 'network-a',
     accepted_at_ms: 86_400_000,
@@ -248,6 +254,12 @@ test('buildDiagnosticsFactRows uses projection fields without ledger parsing', (
   assert.equal(rows.find((row) => row.label === 'Queue Position')?.value, '1');
   assert.equal(rows.find((row) => row.label === 'Execution Session')?.value, 'exec-session-a');
   assert.equal(rows.find((row) => row.label === 'Selected Runtime')?.value, 'runtime-a');
+  assert.equal(rows.find((row) => row.label === 'Selected Backend')?.value, 'llama_cpp');
+  assert.equal(
+    rows.find((row) => row.label === 'Selected Model')?.value,
+    'pumas://models/tiny-gguf',
+  );
+  assert.equal(rows.find((row) => row.label === 'Selected Task')?.value, 'text_generation');
   assert.equal(rows.find((row) => row.label === 'Selected Device')?.value, 'device-a');
   assert.equal(rows.find((row) => row.label === 'Selected Network Node')?.value, 'network-a');
   assert.equal(rows.find((row) => row.label === 'Estimated Queue Wait')?.value, '1.5 s');

@@ -609,8 +609,14 @@ fn workflow_run_detail_query_drains_and_reads_projection() {
     assert_eq!(run.scheduler_priority, Some(7));
     assert_eq!(run.estimate_confidence.as_deref(), Some("low"));
     assert_eq!(run.scheduler_reason.as_deref(), Some("warm_session_reused"));
+    assert_eq!(run.selected_backend_key.as_deref(), Some("llama_cpp"));
+    assert_eq!(
+        run.selected_model_id.as_deref(),
+        Some("pumas://models/tiny-gguf")
+    );
+    assert_eq!(run.selected_task_id.as_deref(), Some("text_generation"));
     assert_eq!(run.timeline_event_count, 5);
-    assert_eq!(response.projection_state.last_applied_event_seq, 5);
+    assert_eq!(response.projection_state.last_applied_event_seq, 6);
     assert_eq!(response.node_statuses.len(), 1);
     assert_eq!(response.node_statuses[0].node_id, "node-inference");
     assert_eq!(

@@ -310,6 +310,9 @@ service.ensure_session_runtime_loaded(host, session_id).await?;
   `run_list_projection` rows for workflow version, status, scheduler policy,
   retention policy, selected runtime, selected device, and selected network
   node.
+- Run-list and run-detail projection records expose node-derived selected
+  backend, model, and task rollups. The scheduler-owned selected runtime,
+  device, and network-node fields keep their existing lifecycle semantics.
 - Scheduler estimate queries expose the selected run's hot run-detail
   projection estimate fields, including typed scheduler model-cache posture,
   without making frontend callers parse full run detail or raw ledger payload

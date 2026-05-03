@@ -11,9 +11,9 @@ pub const MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES: usize = 8_192;
 pub const SCHEDULER_TIMELINE_PROJECTION_NAME: &str = "scheduler_timeline";
 pub const SCHEDULER_TIMELINE_PROJECTION_VERSION: i64 = 4;
 pub const RUN_LIST_PROJECTION_NAME: &str = "run_list";
-pub const RUN_LIST_PROJECTION_VERSION: i64 = 6;
+pub const RUN_LIST_PROJECTION_VERSION: i64 = 7;
 pub const RUN_DETAIL_PROJECTION_NAME: &str = "run_detail";
-pub const RUN_DETAIL_PROJECTION_VERSION: i64 = 5;
+pub const RUN_DETAIL_PROJECTION_VERSION: i64 = 6;
 pub const IO_ARTIFACT_PROJECTION_NAME: &str = "io_artifact";
 pub const IO_ARTIFACT_PROJECTION_VERSION: i64 = 5;
 pub const LIBRARY_USAGE_PROJECTION_NAME: &str = "library_usage";
@@ -2043,6 +2043,9 @@ pub struct RunListProjectionRecord {
     pub scheduler_policy_id: Option<String>,
     pub retention_policy_id: Option<String>,
     pub selected_runtime_id: Option<String>,
+    pub selected_backend_key: Option<String>,
+    pub selected_model_id: Option<String>,
+    pub selected_task_id: Option<String>,
     pub selected_device_id: Option<String>,
     pub selected_network_node_id: Option<String>,
     pub client_id: Option<ClientId>,
@@ -2107,6 +2110,9 @@ pub struct RunDetailProjectionRecord {
     pub scheduler_policy_id: Option<String>,
     pub retention_policy_id: Option<String>,
     pub selected_runtime_id: Option<String>,
+    pub selected_backend_key: Option<String>,
+    pub selected_model_id: Option<String>,
+    pub selected_task_id: Option<String>,
     pub selected_device_id: Option<String>,
     pub selected_network_node_id: Option<String>,
     pub client_id: Option<ClientId>,

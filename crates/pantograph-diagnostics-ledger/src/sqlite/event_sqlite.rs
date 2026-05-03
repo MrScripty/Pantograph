@@ -451,7 +451,8 @@ pub(super) fn query_run_list_projection(
         "SELECT workflow_run_id, workflow_id, workflow_version_id,
                 workflow_semantic_version, status, accepted_at_ms, enqueued_at_ms,
                 started_at_ms, completed_at_ms, duration_ms, scheduler_policy_id,
-                retention_policy_id, selected_runtime_id, selected_device_id,
+                retention_policy_id, selected_runtime_id, selected_backend_key,
+                selected_model_id, selected_task_id, selected_device_id,
                 selected_network_node_id, client_id, client_session_id, bucket_id,
                 workflow_execution_session_id,
                 scheduler_queue_position, scheduler_priority,
@@ -718,7 +719,8 @@ pub(super) fn query_run_detail_projection(
         "SELECT workflow_run_id, workflow_id, workflow_version_id,
                 workflow_semantic_version, status, accepted_at_ms, enqueued_at_ms,
                 started_at_ms, completed_at_ms, duration_ms, scheduler_policy_id,
-                retention_policy_id, selected_runtime_id, selected_device_id,
+                retention_policy_id, selected_runtime_id, selected_backend_key,
+                selected_model_id, selected_task_id, selected_device_id,
                 selected_network_node_id, client_id, client_session_id, bucket_id,
                 workflow_run_snapshot_id, workflow_execution_session_id,
                 workflow_presentation_revision_id, latest_estimate_json,
@@ -1357,6 +1359,7 @@ fn diagnostic_projection_events_after(
                 'run.started',
                 'run.terminal',
                 'run.snapshot_accepted',
+                'node.execution_status',
                 'diagnostic.error_occurred'
            )
          ORDER BY event_seq
@@ -2074,6 +2077,9 @@ fn apply_run_list_projection_event(
         return Ok(());
     };
     let payload: DiagnosticEventPayload = serde_json::from_str(&event.payload_json)?;
+    if let DiagnosticEventPayload::NodeExecutionStatus(payload) = &payload {
+        return apply_run_list_projection_inference_facts(tx, event, payload);
+    }
     let status = match &payload {
         DiagnosticEventPayload::RunSnapshotAccepted(_) => RunListProjectionStatus::Accepted,
         DiagnosticEventPayload::SchedulerEstimateProduced(_) => RunListProjectionStatus::Accepted,
@@ -2132,7 +2138,8 @@ fn apply_run_list_projection_event(
              status, accepted_at_ms, enqueued_at_ms, started_at_ms, completed_at_ms,
              duration_ms, scheduler_policy_id, retention_policy_id, client_id,
              client_session_id, bucket_id, workflow_execution_session_id,
-             selected_runtime_id, selected_device_id, selected_network_node_id,
+             selected_runtime_id, selected_backend_key, selected_model_id,
+             selected_task_id, selected_device_id, selected_network_node_id,
              scheduler_queue_position, scheduler_priority, estimate_confidence,
              estimated_queue_wait_ms, estimated_duration_ms, model_cache_state,
              scheduler_reason, latest_error_event_id, latest_error_severity,
@@ -2141,7 +2148,7 @@ fn apply_run_list_projection_event(
              last_event_seq, last_updated_at_ms)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,
              ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27,
-             ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36)
+             ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38, ?39)
          ON CONFLICT(workflow_run_id) DO UPDATE SET
             workflow_id = excluded.workflow_id,
             workflow_version_id = COALESCE(excluded.workflow_version_id, workflow_version_id),
@@ -2159,6 +2166,9 @@ fn apply_run_list_projection_event(
             bucket_id = COALESCE(excluded.bucket_id, bucket_id),
             workflow_execution_session_id = COALESCE(excluded.workflow_execution_session_id, workflow_execution_session_id),
             selected_runtime_id = COALESCE(excluded.selected_runtime_id, selected_runtime_id),
+            selected_backend_key = COALESCE(excluded.selected_backend_key, selected_backend_key),
+            selected_model_id = COALESCE(excluded.selected_model_id, selected_model_id),
+            selected_task_id = COALESCE(excluded.selected_task_id, selected_task_id),
             selected_device_id = COALESCE(excluded.selected_device_id, selected_device_id),
             selected_network_node_id = COALESCE(excluded.selected_network_node_id, selected_network_node_id),
             scheduler_queue_position = COALESCE(excluded.scheduler_queue_position, scheduler_queue_position),
@@ -2199,6 +2209,9 @@ fn apply_run_list_projection_event(
             event.bucket_id.as_ref().map(|id| id.as_str()),
             workflow_execution_session_id,
             scheduler_facts.selected_runtime_id.as_deref(),
+            None::<&str>,
+            None::<&str>,
+            None::<&str>,
             scheduler_facts.selected_device_id.as_deref(),
             scheduler_facts.selected_network_node_id.as_deref(),
             scheduler_facts.queue_position.map(i64::from),
@@ -2220,6 +2233,34 @@ fn apply_run_list_projection_event(
             error_facts.warning_increment,
             event.event_seq,
             event.occurred_at_ms,
+        ],
+    )?;
+    Ok(())
+}
+
+fn apply_run_list_projection_inference_facts(
+    tx: &rusqlite::Transaction<'_>,
+    event: &DiagnosticEventRecord,
+    payload: &crate::event::NodeExecutionStatusPayload,
+) -> Result<(), DiagnosticsLedgerError> {
+    let Some(workflow_run_id) = event.workflow_run_id.as_ref() else {
+        return Ok(());
+    };
+    tx.execute(
+        "UPDATE run_list_projection
+         SET selected_backend_key = COALESCE(?1, selected_backend_key),
+             selected_model_id = COALESCE(?2, selected_model_id),
+             selected_task_id = COALESCE(?3, selected_task_id),
+             last_event_seq = ?4,
+             last_updated_at_ms = ?5
+         WHERE workflow_run_id = ?6",
+        params![
+            payload.selected_backend_key.as_deref(),
+            event.model_id.as_deref(),
+            payload.task_id.as_deref(),
+            event.event_seq,
+            event.occurred_at_ms,
+            workflow_run_id.as_str(),
         ],
     )?;
     Ok(())
@@ -2393,6 +2434,9 @@ fn apply_run_detail_projection_event(
         return Ok(());
     };
     let payload: DiagnosticEventPayload = serde_json::from_str(&event.payload_json)?;
+    if let DiagnosticEventPayload::NodeExecutionStatus(payload) = &payload {
+        return apply_run_detail_projection_inference_facts(tx, event, payload);
+    }
     let status = match &payload {
         DiagnosticEventPayload::RunSnapshotAccepted(_) => RunListProjectionStatus::Accepted,
         DiagnosticEventPayload::SchedulerEstimateProduced(_) => RunListProjectionStatus::Accepted,
@@ -2479,16 +2523,16 @@ fn apply_run_detail_projection_event(
              latest_queue_placement_json, started_payload_json, terminal_payload_json,
              terminal_error, scheduler_queue_position, scheduler_priority,
              estimate_confidence, estimated_queue_wait_ms, estimated_duration_ms,
-             model_cache_state, scheduler_reason, selected_runtime_id, selected_device_id,
-             selected_network_node_id, latest_error_event_id, latest_error_severity,
-             latest_error_phase, latest_error_code, latest_error_message,
-             fatal_error_event_id, error_count, warning_count, timeline_event_count,
-             last_event_seq, last_updated_at_ms)
+             model_cache_state, scheduler_reason, selected_runtime_id, selected_backend_key,
+             selected_model_id, selected_task_id, selected_device_id, selected_network_node_id,
+             latest_error_event_id, latest_error_severity, latest_error_phase,
+             latest_error_code, latest_error_message, fatal_error_event_id, error_count,
+             warning_count, timeline_event_count, last_event_seq, last_updated_at_ms)
          VALUES
             (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15,
              ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28,
              ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41,
-             ?42, ?43, ?44)
+             ?42, ?43, ?44, ?45, ?46, ?47)
          ON CONFLICT(workflow_run_id) DO UPDATE SET
             workflow_id = excluded.workflow_id,
             workflow_version_id = COALESCE(excluded.workflow_version_id, workflow_version_id),
@@ -2520,6 +2564,9 @@ fn apply_run_detail_projection_event(
             model_cache_state = COALESCE(excluded.model_cache_state, model_cache_state),
             scheduler_reason = COALESCE(excluded.scheduler_reason, scheduler_reason),
             selected_runtime_id = COALESCE(excluded.selected_runtime_id, selected_runtime_id),
+            selected_backend_key = COALESCE(excluded.selected_backend_key, selected_backend_key),
+            selected_model_id = COALESCE(excluded.selected_model_id, selected_model_id),
+            selected_task_id = COALESCE(excluded.selected_task_id, selected_task_id),
             selected_device_id = COALESCE(excluded.selected_device_id, selected_device_id),
             selected_network_node_id = COALESCE(excluded.selected_network_node_id, selected_network_node_id),
             latest_error_event_id = COALESCE(excluded.latest_error_event_id, latest_error_event_id),
@@ -2571,6 +2618,9 @@ fn apply_run_detail_projection_event(
             scheduler_facts.model_cache_state.map(|state| state.as_db()),
             scheduler_facts.reason.as_deref(),
             scheduler_facts.selected_runtime_id.as_deref(),
+            None::<&str>,
+            None::<&str>,
+            None::<&str>,
             scheduler_facts.selected_device_id.as_deref(),
             scheduler_facts.selected_network_node_id.as_deref(),
             error_facts.latest_error_event_id.as_deref(),
@@ -2586,6 +2636,34 @@ fn apply_run_detail_projection_event(
             1_i64,
             event.event_seq,
             event.occurred_at_ms,
+        ],
+    )?;
+    Ok(())
+}
+
+fn apply_run_detail_projection_inference_facts(
+    tx: &rusqlite::Transaction<'_>,
+    event: &DiagnosticEventRecord,
+    payload: &crate::event::NodeExecutionStatusPayload,
+) -> Result<(), DiagnosticsLedgerError> {
+    let Some(workflow_run_id) = event.workflow_run_id.as_ref() else {
+        return Ok(());
+    };
+    tx.execute(
+        "UPDATE run_detail_projection
+         SET selected_backend_key = COALESCE(?1, selected_backend_key),
+             selected_model_id = COALESCE(?2, selected_model_id),
+             selected_task_id = COALESCE(?3, selected_task_id),
+             last_event_seq = ?4,
+             last_updated_at_ms = ?5
+         WHERE workflow_run_id = ?6",
+        params![
+            payload.selected_backend_key.as_deref(),
+            event.model_id.as_deref(),
+            payload.task_id.as_deref(),
+            event.event_seq,
+            event.occurred_at_ms,
+            workflow_run_id.as_str(),
         ],
     )?;
     Ok(())
@@ -2870,51 +2948,54 @@ fn run_list_projection_from_row(row: &Row<'_>) -> rusqlite::Result<RunListProjec
         scheduler_policy_id: row.get(10)?,
         retention_policy_id: row.get(11)?,
         selected_runtime_id: row.get(12)?,
-        selected_device_id: row.get(13)?,
-        selected_network_node_id: row.get(14)?,
+        selected_backend_key: row.get(13)?,
+        selected_model_id: row.get(14)?,
+        selected_task_id: row.get(15)?,
+        selected_device_id: row.get(16)?,
+        selected_network_node_id: row.get(17)?,
         client_id: row
-            .get::<_, Option<String>>(15)?
+            .get::<_, Option<String>>(18)?
             .map(ClientId::try_from)
             .transpose()
             .map_err(sqlite_conversion_error)?,
         client_session_id: row
-            .get::<_, Option<String>>(16)?
+            .get::<_, Option<String>>(19)?
             .map(ClientSessionId::try_from)
             .transpose()
             .map_err(sqlite_conversion_error)?,
         bucket_id: row
-            .get::<_, Option<String>>(17)?
+            .get::<_, Option<String>>(20)?
             .map(BucketId::try_from)
             .transpose()
             .map_err(sqlite_conversion_error)?,
-        workflow_execution_session_id: row.get(18)?,
-        scheduler_queue_position: row.get::<_, Option<i64>>(19)?.map(i64_to_u32_saturating),
-        scheduler_priority: row.get::<_, Option<i64>>(20)?.map(i64_to_i32_saturating),
-        estimate_confidence: row.get(21)?,
-        estimated_queue_wait_ms: row.get::<_, Option<i64>>(22)?.map(i64_to_u64_saturating),
-        estimated_duration_ms: row.get::<_, Option<i64>>(23)?.map(i64_to_u64_saturating),
+        workflow_execution_session_id: row.get(21)?,
+        scheduler_queue_position: row.get::<_, Option<i64>>(22)?.map(i64_to_u32_saturating),
+        scheduler_priority: row.get::<_, Option<i64>>(23)?.map(i64_to_i32_saturating),
+        estimate_confidence: row.get(24)?,
+        estimated_queue_wait_ms: row.get::<_, Option<i64>>(25)?.map(i64_to_u64_saturating),
+        estimated_duration_ms: row.get::<_, Option<i64>>(26)?.map(i64_to_u64_saturating),
         model_cache_state: row
-            .get::<_, Option<String>>(24)?
+            .get::<_, Option<String>>(27)?
             .map(parse_scheduler_model_cache_state)
             .transpose()?,
-        scheduler_reason: row.get(25)?,
-        latest_error_event_id: row.get(26)?,
+        scheduler_reason: row.get(28)?,
+        latest_error_event_id: row.get(29)?,
         latest_error_severity: row
-            .get::<_, Option<String>>(27)?
+            .get::<_, Option<String>>(30)?
             .map(parse_diagnostic_error_severity)
             .transpose()?,
-        latest_error_phase: row.get(28)?,
-        latest_error_code: row.get(29)?,
-        latest_error_message: row.get(30)?,
-        fatal_error_event_id: row.get(31)?,
+        latest_error_phase: row.get(31)?,
+        latest_error_code: row.get(32)?,
+        latest_error_message: row.get(33)?,
+        fatal_error_event_id: row.get(34)?,
         error_count: row
-            .get::<_, i64>(32)
+            .get::<_, i64>(35)
             .map(|value| u64::try_from(value).unwrap_or(u64::MAX))?,
         warning_count: row
-            .get::<_, i64>(33)
+            .get::<_, i64>(36)
             .map(|value| u64::try_from(value).unwrap_or(u64::MAX))?,
-        last_event_seq: row.get(34)?,
-        last_updated_at_ms: row.get(35)?,
+        last_event_seq: row.get(37)?,
+        last_updated_at_ms: row.get(38)?,
     })
 }
 
@@ -2945,61 +3026,64 @@ fn run_detail_projection_from_row(row: &Row<'_>) -> rusqlite::Result<RunDetailPr
         scheduler_policy_id: row.get(10)?,
         retention_policy_id: row.get(11)?,
         selected_runtime_id: row.get(12)?,
-        selected_device_id: row.get(13)?,
-        selected_network_node_id: row.get(14)?,
+        selected_backend_key: row.get(13)?,
+        selected_model_id: row.get(14)?,
+        selected_task_id: row.get(15)?,
+        selected_device_id: row.get(16)?,
+        selected_network_node_id: row.get(17)?,
         client_id: row
-            .get::<_, Option<String>>(15)?
+            .get::<_, Option<String>>(18)?
             .map(ClientId::try_from)
             .transpose()
             .map_err(sqlite_conversion_error)?,
         client_session_id: row
-            .get::<_, Option<String>>(16)?
+            .get::<_, Option<String>>(19)?
             .map(ClientSessionId::try_from)
             .transpose()
             .map_err(sqlite_conversion_error)?,
         bucket_id: row
-            .get::<_, Option<String>>(17)?
+            .get::<_, Option<String>>(20)?
             .map(BucketId::try_from)
             .transpose()
             .map_err(sqlite_conversion_error)?,
-        workflow_run_snapshot_id: row.get(18)?,
-        workflow_execution_session_id: row.get(19)?,
-        workflow_presentation_revision_id: row.get(20)?,
-        latest_estimate_json: row.get(21)?,
-        latest_queue_placement_json: row.get(22)?,
-        started_payload_json: row.get(23)?,
-        terminal_payload_json: row.get(24)?,
-        terminal_error: row.get(25)?,
-        scheduler_queue_position: row.get::<_, Option<i64>>(26)?.map(i64_to_u32_saturating),
-        scheduler_priority: row.get::<_, Option<i64>>(27)?.map(i64_to_i32_saturating),
-        estimate_confidence: row.get(28)?,
-        estimated_queue_wait_ms: row.get::<_, Option<i64>>(29)?.map(i64_to_u64_saturating),
-        estimated_duration_ms: row.get::<_, Option<i64>>(30)?.map(i64_to_u64_saturating),
+        workflow_run_snapshot_id: row.get(21)?,
+        workflow_execution_session_id: row.get(22)?,
+        workflow_presentation_revision_id: row.get(23)?,
+        latest_estimate_json: row.get(24)?,
+        latest_queue_placement_json: row.get(25)?,
+        started_payload_json: row.get(26)?,
+        terminal_payload_json: row.get(27)?,
+        terminal_error: row.get(28)?,
+        scheduler_queue_position: row.get::<_, Option<i64>>(29)?.map(i64_to_u32_saturating),
+        scheduler_priority: row.get::<_, Option<i64>>(30)?.map(i64_to_i32_saturating),
+        estimate_confidence: row.get(31)?,
+        estimated_queue_wait_ms: row.get::<_, Option<i64>>(32)?.map(i64_to_u64_saturating),
+        estimated_duration_ms: row.get::<_, Option<i64>>(33)?.map(i64_to_u64_saturating),
         model_cache_state: row
-            .get::<_, Option<String>>(31)?
+            .get::<_, Option<String>>(34)?
             .map(parse_scheduler_model_cache_state)
             .transpose()?,
-        scheduler_reason: row.get(32)?,
-        latest_error_event_id: row.get(33)?,
+        scheduler_reason: row.get(35)?,
+        latest_error_event_id: row.get(36)?,
         latest_error_severity: row
-            .get::<_, Option<String>>(34)?
+            .get::<_, Option<String>>(37)?
             .map(parse_diagnostic_error_severity)
             .transpose()?,
-        latest_error_phase: row.get(35)?,
-        latest_error_code: row.get(36)?,
-        latest_error_message: row.get(37)?,
-        fatal_error_event_id: row.get(38)?,
+        latest_error_phase: row.get(38)?,
+        latest_error_code: row.get(39)?,
+        latest_error_message: row.get(40)?,
+        fatal_error_event_id: row.get(41)?,
         error_count: row
-            .get::<_, i64>(39)
+            .get::<_, i64>(42)
             .map(|value| u64::try_from(value).unwrap_or(u64::MAX))?,
         warning_count: row
-            .get::<_, i64>(40)
+            .get::<_, i64>(43)
             .map(|value| u64::try_from(value).unwrap_or(u64::MAX))?,
         timeline_event_count: row
-            .get::<_, i64>(41)
+            .get::<_, i64>(44)
             .map(|value| u64::try_from(value).unwrap_or(u64::MAX))?,
-        last_event_seq: row.get(42)?,
-        last_updated_at_ms: row.get(43)?,
+        last_event_seq: row.get(45)?,
+        last_updated_at_ms: row.get(46)?,
     })
 }
 

@@ -1408,16 +1408,31 @@ fn run_list_projection_drains_lifecycle_events_incrementally() {
     ledger
         .append_diagnostic_event(sample_run_started_event("workflow_run_alpha"))
         .expect("run started event appends");
-    let terminal_event = ledger
+    let _terminal_event = ledger
         .append_diagnostic_event(sample_run_terminal_event("workflow_run_alpha"))
         .expect("run terminal event appends");
+    let mut node_event = sample_node_status_event(
+        "workflow_run_alpha",
+        "llm-node",
+        NodeExecutionProjectionStatus::Completed,
+        1_120,
+    );
+    node_event.runtime_id = Some("pytorch.transformers".to_string());
+    node_event.model_id = Some("pumas://models/tiny-transformers".to_string());
+    if let DiagnosticEventPayload::NodeExecutionStatus(payload) = &mut node_event.payload {
+        payload.task_id = Some("text_generation".to_string());
+        payload.selected_backend_key = Some("pytorch".to_string());
+    }
+    let node_event = ledger
+        .append_diagnostic_event(node_event)
+        .expect("node status event appends");
 
     let state = ledger
         .drain_run_list_projection(10)
         .expect("run list projection drains");
     assert_eq!(state.projection_name, RUN_LIST_PROJECTION_NAME);
     assert_eq!(state.projection_version, RUN_LIST_PROJECTION_VERSION);
-    assert_eq!(state.last_applied_event_seq, terminal_event.event_seq);
+    assert_eq!(state.last_applied_event_seq, node_event.event_seq);
 
     let records = ledger
         .query_run_list_projection(RunListProjectionQuery::default())
@@ -1432,7 +1447,7 @@ fn run_list_projection_drains_lifecycle_events_incrementally() {
     assert_eq!(record.started_at_ms, Some(1_020));
     assert_eq!(record.completed_at_ms, Some(1_100));
     assert_eq!(record.duration_ms, Some(80));
-    assert_eq!(record.last_event_seq, terminal_event.event_seq);
+    assert_eq!(record.last_event_seq, node_event.event_seq);
     assert_eq!(
         record.scheduler_policy_id.as_deref(),
         Some("scheduler_default")
@@ -1442,6 +1457,12 @@ fn run_list_projection_drains_lifecycle_events_incrementally() {
         Some("retention_default")
     );
     assert_eq!(record.selected_runtime_id.as_deref(), Some("llama_cpp"));
+    assert_eq!(record.selected_backend_key.as_deref(), Some("pytorch"));
+    assert_eq!(
+        record.selected_model_id.as_deref(),
+        Some("pumas://models/tiny-transformers")
+    );
+    assert_eq!(record.selected_task_id.as_deref(), Some("text_generation"));
     assert_eq!(record.selected_device_id, None);
     assert_eq!(record.selected_network_node_id, None);
     assert_eq!(
@@ -1627,16 +1648,31 @@ fn run_detail_projection_drains_lifecycle_events_incrementally() {
     ledger
         .append_diagnostic_event(sample_run_started_event("workflow_run_alpha"))
         .expect("run started event appends");
-    let terminal_event = ledger
+    let _terminal_event = ledger
         .append_diagnostic_event(sample_run_terminal_event("workflow_run_alpha"))
         .expect("run terminal event appends");
+    let mut node_event = sample_node_status_event(
+        "workflow_run_alpha",
+        "llm-node",
+        NodeExecutionProjectionStatus::Completed,
+        1_120,
+    );
+    node_event.runtime_id = Some("pytorch.transformers".to_string());
+    node_event.model_id = Some("pumas://models/tiny-transformers".to_string());
+    if let DiagnosticEventPayload::NodeExecutionStatus(payload) = &mut node_event.payload {
+        payload.task_id = Some("text_generation".to_string());
+        payload.selected_backend_key = Some("pytorch".to_string());
+    }
+    let node_event = ledger
+        .append_diagnostic_event(node_event)
+        .expect("node status event appends");
 
     let state = ledger
         .drain_run_detail_projection(10)
         .expect("run detail projection drains");
     assert_eq!(state.projection_name, RUN_DETAIL_PROJECTION_NAME);
     assert_eq!(state.projection_version, RUN_DETAIL_PROJECTION_VERSION);
-    assert_eq!(state.last_applied_event_seq, terminal_event.event_seq);
+    assert_eq!(state.last_applied_event_seq, node_event.event_seq);
 
     let record = ledger
         .query_run_detail_projection(RunDetailProjectionQuery {
@@ -1694,18 +1730,21 @@ fn run_detail_projection_drains_lifecycle_events_incrementally() {
         Some("warm_session_reused")
     );
     assert_eq!(record.selected_runtime_id.as_deref(), Some("llama_cpp"));
+    assert_eq!(record.selected_backend_key.as_deref(), Some("pytorch"));
+    assert_eq!(
+        record.selected_model_id.as_deref(),
+        Some("pumas://models/tiny-transformers")
+    );
+    assert_eq!(record.selected_task_id.as_deref(), Some("text_generation"));
     assert_eq!(record.selected_device_id, None);
     assert_eq!(record.selected_network_node_id, None);
     assert_eq!(record.timeline_event_count, 6);
-    assert_eq!(record.last_event_seq, terminal_event.event_seq);
+    assert_eq!(record.last_event_seq, node_event.event_seq);
 
     let no_new_state = ledger
         .drain_run_detail_projection(10)
         .expect("run detail projection drains idempotently");
-    assert_eq!(
-        no_new_state.last_applied_event_seq,
-        terminal_event.event_seq
-    );
+    assert_eq!(no_new_state.last_applied_event_seq, node_event.event_seq);
     let after_idempotent = ledger
         .query_run_detail_projection(RunDetailProjectionQuery {
             workflow_run_id: WorkflowRunId::try_from("workflow_run_alpha".to_string()).unwrap(),
