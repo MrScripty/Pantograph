@@ -1668,6 +1668,10 @@ retired backend-specific inference or dedicated embedding node descriptors.
 Workflow-service capability fixtures now model inference and KV-cache extension
 requirements with canonical `llm-inference` node data instead of retired
 backend-specific inference node names.
+Embedded-runtime Python dependency preflight and host dispatch now route
+canonical `llm-inference` through the Python adapter only when canonical backend
+data resolves to PyTorch/Transformers, and the Python bridge accepts
+`llm-inference` as the canonical PyTorch execution node type.
 
 ### Milestone 12: Prepare Native Candle Slice
 

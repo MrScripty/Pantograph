@@ -111,7 +111,11 @@ impl TaskExecutor for TauriTaskExecutor {
                 self.execute_dependency_environment(&inputs, extensions)
                     .await
             }
-            "pytorch-inference" | "diffusion-inference" | "audio-generation" | "onnx-inference" => {
+            "diffusion-inference" | "audio-generation" | "onnx-inference" => {
+                self.execute_python_node(task_id, &node_type, &inputs, extensions)
+                    .await
+            }
+            "llm-inference" if Self::python_runtime_handles_node(&node_type, &inputs) => {
                 self.execute_python_node(task_id, &node_type, &inputs, extensions)
                     .await
             }

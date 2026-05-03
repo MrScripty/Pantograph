@@ -110,7 +110,6 @@ impl TauriTaskExecutor {
     pub(super) fn infer_backend_key(node_type: &str) -> Option<String> {
         match node_type {
             "audio-generation" => Some("stable_audio".to_string()),
-            "pytorch-inference" => Some("pytorch".to_string()),
             // Leave diffusion unspecified when the graph does not provide a
             // concrete backend so Pumas can apply the model's recommended
             // execution profile.
@@ -132,6 +131,14 @@ impl TauriTaskExecutor {
                     &["recommended_backend", "recommendedBackend"],
                 )
                 .as_deref(),
+            ) {
+                return Some(backend);
+            }
+        }
+        if node_type == "llm-inference" {
+            if let Some(backend) = Self::canonical_backend_key(
+                Self::read_optional_input_string_aliases(inputs, &["runtime_hint", "runtimeHint"])
+                    .as_deref(),
             ) {
                 return Some(backend);
             }
@@ -190,6 +197,19 @@ impl TauriTaskExecutor {
             platform_context,
             selected_binding_ids,
             dependency_override_patches: Self::read_input_dependency_override_patches(inputs),
+        }
+    }
+
+    pub(super) fn python_runtime_handles_node(
+        node_type: &str,
+        inputs: &HashMap<String, serde_json::Value>,
+    ) -> bool {
+        match node_type {
+            "diffusion-inference" | "audio-generation" | "onnx-inference" => true,
+            "llm-inference" => {
+                Self::preferred_backend_key(node_type, inputs, None).as_deref() == Some("pytorch")
+            }
+            _ => false,
         }
     }
 
@@ -520,11 +540,7 @@ impl TauriTaskExecutor {
         inputs: &HashMap<String, serde_json::Value>,
         extensions: &ExecutorExtensions,
     ) -> Result<Option<node_engine::ModelRefV2>> {
-        if node_type != "pytorch-inference"
-            && node_type != "diffusion-inference"
-            && node_type != "audio-generation"
-            && node_type != "onnx-inference"
-        {
+        if !Self::python_runtime_handles_node(node_type, inputs) {
             return Ok(None);
         }
 

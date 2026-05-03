@@ -14,7 +14,9 @@ pub fn canonical_runtime_backend_key(name: &str) -> String {
         "llamacpp" => "llama_cpp".to_string(),
         "ollama" => "ollama".to_string(),
         "candle" => "candle".to_string(),
-        "torch" | "pytorch" => "pytorch".to_string(),
+        "torch" | "pytorch" | "transformerspytorch" | "pytorchtransformers" => {
+            "pytorch".to_string()
+        }
         "onnxruntime" => "onnx-runtime".to_string(),
         "stableaudio" => "stable_audio".to_string(),
         "diffusers" => "diffusers".to_string(),
@@ -49,7 +51,12 @@ pub fn canonical_engine_backend_key(value: Option<&str>) -> Option<String> {
     match normalized.as_str() {
         "llama.cpp" | "llama-cpp" | "llama_cpp" | "llamacpp" => Some("llamacpp".to_string()),
         "onnxruntime" | "onnx-runtime" | "onnx_runtime" => Some("onnx-runtime".to_string()),
-        "torch" | "pytorch" => Some("pytorch".to_string()),
+        "torch"
+        | "pytorch"
+        | "transformers_pytorch"
+        | "transformers-pytorch"
+        | "pytorch_transformers"
+        | "pytorch-transformers" => Some("pytorch".to_string()),
         "stable-audio" | "stable_audio" => Some("stable_audio".to_string()),
         other => Some(other.to_string()),
     }
@@ -145,6 +152,10 @@ mod tests {
         assert_eq!(canonical_runtime_backend_key("llama_cpp"), "llama_cpp");
         assert_eq!(canonical_runtime_backend_key("PyTorch"), "pytorch");
         assert_eq!(canonical_runtime_backend_key("torch"), "pytorch");
+        assert_eq!(
+            canonical_runtime_backend_key("transformers_pytorch"),
+            "pytorch"
+        );
         assert_eq!(canonical_runtime_backend_key("onnxruntime"), "onnx-runtime");
         assert_eq!(
             canonical_runtime_backend_key("stable audio"),
@@ -169,6 +180,10 @@ mod tests {
         );
         assert_eq!(
             canonical_engine_backend_key(Some("torch")),
+            Some("pytorch".to_string())
+        );
+        assert_eq!(
+            canonical_engine_backend_key(Some("transformers_pytorch")),
             Some("pytorch".to_string())
         );
     }

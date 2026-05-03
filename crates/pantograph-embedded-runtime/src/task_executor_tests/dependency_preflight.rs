@@ -19,10 +19,14 @@ async fn python_nodes_block_when_dependency_preflight_is_not_ready() {
         "model_path".to_string(),
         serde_json::json!("/tmp/model-not-ready"),
     );
+    inputs.insert(
+        "runtime_hint".to_string(),
+        serde_json::json!("transformers_pytorch"),
+    );
     inputs.insert("prompt".to_string(), serde_json::json!("hello"));
 
     let err = executor
-        .execute_task("pytorch-inference-1", inputs, &Context::new(), &extensions)
+        .execute_task("llm-inference-1", inputs, &Context::new(), &extensions)
         .await
         .expect_err("preflight should block non-ready dependency state");
 
@@ -81,10 +85,14 @@ async fn python_nodes_receive_resolved_model_ref_and_env_ids_after_preflight() {
         "model_path".to_string(),
         serde_json::json!("/tmp/model-ready"),
     );
+    inputs.insert(
+        "runtime_hint".to_string(),
+        serde_json::json!("transformers_pytorch"),
+    );
     inputs.insert("prompt".to_string(), serde_json::json!("hello"));
 
     let outputs = executor
-        .execute_task("pytorch-inference-1", inputs, &Context::new(), &extensions)
+        .execute_task("llm-inference-1", inputs, &Context::new(), &extensions)
         .await
         .expect("ready preflight should allow adapter execution");
     assert_eq!(outputs.get("response"), Some(&serde_json::json!("ok")));
@@ -92,7 +100,7 @@ async fn python_nodes_receive_resolved_model_ref_and_env_ids_after_preflight() {
     let recorded = requests.lock().expect("recording lock");
     assert_eq!(recorded.len(), 1);
     let request = &recorded[0];
-    assert_eq!(request.node_type, "pytorch-inference");
+    assert_eq!(request.node_type, "llm-inference");
     assert_eq!(request.env_ids, vec!["venv:test".to_string()]);
     assert!(request.inputs.contains_key("model_ref"));
 }

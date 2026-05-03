@@ -490,7 +490,7 @@ def _main() -> int:
         audio_worker = _ensure_worker_path(worker_paths.get("audio_worker"), "audio")
         onnx_worker = _ensure_worker_path(worker_paths.get("onnx_worker"), "onnx")
 
-        if node_type == "pytorch-inference":
+        if node_type in ("llm-inference", "pytorch-inference"):
             outputs = _run_pytorch(inputs, torch_worker)
         elif node_type == "diffusion-inference":
             outputs = _run_diffusion(
