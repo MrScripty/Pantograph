@@ -221,7 +221,7 @@ pub(crate) fn build_text_generation_execution_request(
 
     Ok(inference::InferenceExecutionRequest {
         request_id: None,
-        task_id: text_generation_task_id(inputs),
+        task_id: text_generation_task_id(inputs)?,
         model_ref: parse_pumas_model_ref(inputs),
         model_name: read_optional_input_string_aliases(
             inputs,
@@ -242,18 +242,29 @@ pub(crate) fn build_text_generation_execution_request(
 #[cfg(feature = "inference-nodes")]
 fn text_generation_task_id(
     inputs: &HashMap<String, serde_json::Value>,
-) -> inference::InferenceTaskId {
-    read_optional_input_string_aliases(inputs, &["task_kind", "taskKind", "task_id", "taskId"])
-        .and_then(|task| inference::resolve_task_registry_entry(&task))
-        .map(|entry| entry.task_id)
-        .filter(|task_id| {
-            matches!(
-                task_id,
-                inference::InferenceTaskId::TextGeneration
-                    | inference::InferenceTaskId::ChatCompletion
-            )
-        })
-        .unwrap_or(inference::InferenceTaskId::TextGeneration)
+) -> Result<inference::InferenceTaskId> {
+    let Some(task_label) =
+        read_optional_input_string_aliases(inputs, &["task_kind", "taskKind", "task_id", "taskId"])
+    else {
+        return Ok(inference::InferenceTaskId::TextGeneration);
+    };
+
+    let Some(entry) = inference::resolve_task_registry_entry(&task_label) else {
+        return Err(NodeEngineError::ExecutionFailed(format!(
+            "Unsupported text generation task_kind '{task_label}'"
+        )));
+    };
+
+    match entry.task_id {
+        inference::InferenceTaskId::TextGeneration | inference::InferenceTaskId::ChatCompletion => {
+            Ok(entry.task_id)
+        }
+        task_id => Err(NodeEngineError::ExecutionFailed(format!(
+            "task_kind '{}' resolves to '{}' and cannot be executed by the text generation node",
+            task_label,
+            task_id.canonical_label()
+        ))),
+    }
 }
 
 #[cfg(feature = "inference-nodes")]

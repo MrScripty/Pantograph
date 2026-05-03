@@ -93,6 +93,18 @@ fn test_build_text_generation_execution_request_preserves_canonical_inputs() {
 
 #[cfg(feature = "inference-nodes")]
 #[test]
+fn test_build_text_generation_execution_request_defaults_missing_task_kind_to_text_generation() {
+    let mut inputs = HashMap::new();
+    inputs.insert("prompt".to_string(), serde_json::json!("hello"));
+
+    let request = build_text_generation_execution_request(&inputs)
+        .expect("missing task kind should preserve the existing text default");
+
+    assert_eq!(request.task_id, InferenceTaskId::TextGeneration);
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
 fn test_build_text_generation_execution_request_rejects_malformed_generation_options() {
     let mut inputs = HashMap::new();
     inputs.insert("prompt".to_string(), serde_json::json!("hello"));
@@ -107,6 +119,47 @@ fn test_build_text_generation_execution_request_rejects_malformed_generation_opt
     match error {
         NodeEngineError::ExecutionFailed(message) => {
             assert!(message.contains("Invalid generation_options input"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
+fn test_build_text_generation_execution_request_rejects_unknown_task_kind() {
+    let mut inputs = HashMap::new();
+    inputs.insert("prompt".to_string(), serde_json::json!("hello"));
+    inputs.insert(
+        "task_kind".to_string(),
+        serde_json::json!("object-detection"),
+    );
+
+    let error = build_text_generation_execution_request(&inputs)
+        .expect_err("unknown task kind should fail before backend execution");
+
+    match error {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("Unsupported text generation task_kind"));
+            assert!(message.contains("object-detection"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
+fn test_build_text_generation_execution_request_rejects_non_text_task_kind() {
+    let mut inputs = HashMap::new();
+    inputs.insert("prompt".to_string(), serde_json::json!("hello"));
+    inputs.insert("task_kind".to_string(), serde_json::json!("embedding"));
+
+    let error = build_text_generation_execution_request(&inputs)
+        .expect_err("non-text task kind should not silently become text generation");
+
+    match error {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("cannot be executed by the text generation node"));
+            assert!(message.contains("embedding"));
         }
         other => panic!("unexpected error variant: {other:?}"),
     }

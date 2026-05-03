@@ -758,6 +758,15 @@ host DTOs, migration steps, and feature-flag compatibility checks.
 - Reason: this warning is in the inference process helper surface and is
   unrelated to hiding the retired Ollama graph node or stale-node executor
   guard.
+- 2026-05-03: The node-engine text/chat request builder still treats `task_id`
+  and `taskId` as task-kind aliases for direct inference-node inputs. The
+  strict task-registry validation slice now rejects unknown supplied values, so
+  any saved/direct workflow input that used those fields as arbitrary node ids
+  may fail earlier than before.
+- Reason: the current slice preserves the existing alias list while preventing
+  unvalidated backend execution. A later workflow-shape migration slice should
+  decide whether `task_id` belongs in the public inference-node input contract
+  or should be removed from task-kind alias parsing.
 - 2026-05-03: Focused `pantograph-embedded-runtime puma_lib` validation for the
   canonical template slice compiled `pantograph-workflow-service` and surfaced
   dead-code warnings for the legacy inference migration inventory/spec helper
@@ -1115,6 +1124,11 @@ id, and accepted custom-code sources. PyTorch/Transformers adapts its
 backend-local trust envelope from this public policy and passes local-file,
 revision, code-revision, and cache-policy facts to the embedded worker without
 exposing secret token values.
+Node-engine text/chat request construction now validates supplied `task_kind`,
+`taskKind`, `task_id`, and `taskId` labels through the inference task registry.
+Missing task labels still default to text generation for existing text nodes,
+but unknown labels or labels that resolve to non-text tasks now fail before
+gateway/backend execution instead of silently collapsing to text generation.
 
 ### Milestone 4: Define Neutral Managed-Dependency Boundary
 
