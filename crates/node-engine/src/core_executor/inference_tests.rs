@@ -1,6 +1,23 @@
 use super::super::*;
 #[cfg(feature = "inference-nodes")]
 use crate::engine::TaskExecutor;
+#[cfg(feature = "inference-nodes")]
+use async_trait::async_trait;
+#[cfg(feature = "inference-nodes")]
+use futures_util::stream;
+#[cfg(feature = "inference-nodes")]
+use inference::backend::BackendStartOutcome;
+#[cfg(feature = "inference-nodes")]
+use inference::{
+    BackendCapabilities, BackendConfig, BackendError, ChatChunk, EmbeddingResult,
+    GenerationOptions, InferenceBackend, InferenceExecutionInput, InferenceTaskId,
+    LengthGenerationOptions, ProcessSpawner, PumasModelRef, RerankRequest, RerankResponse,
+    SamplingGenerationOptions,
+};
+#[cfg(feature = "inference-nodes")]
+use std::pin::Pin;
+#[cfg(feature = "inference-nodes")]
+use std::sync::{Arc, Mutex};
 
 #[cfg(feature = "inference-nodes")]
 #[tokio::test]
@@ -16,6 +33,136 @@ async fn test_execute_embedding_fails_when_gateway_missing() {
         }
         other => panic!("unexpected error variant: {other:?}"),
     }
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
+fn test_build_text_generation_execution_request_preserves_canonical_inputs() {
+    let mut inputs = HashMap::new();
+    inputs.insert("prompt".to_string(), serde_json::json!("hello"));
+    inputs.insert("system_prompt".to_string(), serde_json::json!("system"));
+    inputs.insert("context".to_string(), serde_json::json!("facts"));
+    inputs.insert(
+        "task_kind".to_string(),
+        serde_json::json!("chat-completion"),
+    );
+    inputs.insert("runtime_hint".to_string(), serde_json::json!("vllm"));
+    inputs.insert(
+        "pumas_model_ref".to_string(),
+        serde_json::json!({
+            "model_id": "pumas://models/tiny",
+            "revision": "abc"
+        }),
+    );
+    inputs.insert(
+        "generation_options".to_string(),
+        serde_json::json!({
+            "length": {"max_new_tokens": 32},
+            "sampling": {"temperature": 0.25}
+        }),
+    );
+
+    let request = build_text_generation_execution_request(&inputs)
+        .expect("canonical text generation request should build");
+
+    assert_eq!(request.task_id, InferenceTaskId::ChatCompletion);
+    assert_eq!(request.runtime_hint.as_deref(), Some("vllm"));
+    assert_eq!(
+        request.model_ref,
+        Some(PumasModelRef {
+            model_id: "pumas://models/tiny".to_string(),
+            revision: Some("abc".to_string()),
+            selected_artifact_id: None,
+            selected_artifact_path: None,
+            migration_diagnostics: Vec::new(),
+        })
+    );
+    assert_eq!(
+        request.generation_options,
+        Some(GenerationOptions {
+            length: LengthGenerationOptions {
+                max_new_tokens: Some(32),
+                ..LengthGenerationOptions::default()
+            },
+            sampling: SamplingGenerationOptions {
+                temperature: Some(0.25),
+                ..SamplingGenerationOptions::default()
+            },
+            ..GenerationOptions::default()
+        })
+    );
+    match request.input {
+        InferenceExecutionInput::TextGeneration {
+            prompt,
+            system_prompt,
+            stream,
+            ..
+        } => {
+            assert_eq!(prompt.as_deref(), Some("hello\n\nContext:\nfacts"));
+            assert_eq!(system_prompt.as_deref(), Some("system"));
+            assert!(!stream);
+        }
+        other => panic!("unexpected input variant: {other:?}"),
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
+fn test_build_text_generation_execution_request_rejects_malformed_generation_options() {
+    let mut inputs = HashMap::new();
+    inputs.insert("prompt".to_string(), serde_json::json!("hello"));
+    inputs.insert(
+        "generation_options".to_string(),
+        serde_json::json!({"length": "not-an-object"}),
+    );
+
+    let error = build_text_generation_execution_request(&inputs)
+        .expect_err("malformed generation options should fail");
+
+    match error {
+        NodeEngineError::ExecutionFailed(message) => {
+            assert!(message.contains("Invalid generation_options input"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+#[tokio::test]
+async fn test_execute_llm_inference_non_streaming_uses_typed_gateway_boundary() {
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let gateway = Arc::new(InferenceGateway::with_backend(
+        Box::new(MockTypedTextBackend {
+            requests: requests.clone(),
+        }),
+        "mock",
+    ));
+    let mut inputs = HashMap::new();
+    inputs.insert("prompt".to_string(), serde_json::json!("hello"));
+    inputs.insert("model_name".to_string(), serde_json::json!("typed-model"));
+    inputs.insert(
+        "generation_options".to_string(),
+        serde_json::json!({
+            "length": {"max_new_tokens": 16},
+            "sampling": {"temperature": 0.2}
+        }),
+    );
+
+    let outputs = execute_llm_inference(Some(&gateway), &inputs, "llm-inference-1", None, "exec-a")
+        .await
+        .expect("typed non-streaming inference should execute");
+
+    assert_eq!(
+        outputs.get("response").and_then(|value| value.as_str()),
+        Some("typed response")
+    );
+    assert!(outputs.get("stream").is_some_and(|value| value.is_null()));
+
+    let captured = requests.lock().expect("requests lock");
+    assert_eq!(captured.len(), 1);
+    assert_eq!(captured[0]["model"], serde_json::json!("typed-model"));
+    assert_eq!(captured[0]["max_tokens"], serde_json::json!(16));
+    assert_eq!(captured[0]["temperature"], serde_json::json!(0.2));
 }
 
 #[cfg(feature = "inference-nodes")]
@@ -565,4 +712,96 @@ fn resolved_model_source_value(model_id: &str, entry_path: &str) -> serde_json::
             "model_id": model_id
         }
     })
+}
+
+#[cfg(feature = "inference-nodes")]
+struct MockTypedTextBackend {
+    requests: Arc<Mutex<Vec<serde_json::Value>>>,
+}
+
+#[cfg(feature = "inference-nodes")]
+#[async_trait]
+impl InferenceBackend for MockTypedTextBackend {
+    fn name(&self) -> &'static str {
+        "mock-typed"
+    }
+
+    fn description(&self) -> &'static str {
+        "Mock typed text backend"
+    }
+
+    fn capabilities(&self) -> BackendCapabilities {
+        BackendCapabilities {
+            streaming: true,
+            ..BackendCapabilities::default()
+        }
+    }
+
+    async fn start(
+        &mut self,
+        _config: &BackendConfig,
+        _spawner: Arc<dyn ProcessSpawner>,
+    ) -> std::result::Result<BackendStartOutcome, BackendError> {
+        Ok(BackendStartOutcome::default())
+    }
+
+    fn stop(&mut self) {}
+
+    fn is_ready(&self) -> bool {
+        true
+    }
+
+    async fn health_check(&self) -> bool {
+        true
+    }
+
+    fn base_url(&self) -> Option<String> {
+        None
+    }
+
+    async fn chat_completion_stream(
+        &self,
+        request_json: String,
+    ) -> std::result::Result<
+        Pin<
+            Box<
+                dyn futures_util::Stream<Item = std::result::Result<ChatChunk, BackendError>>
+                    + Send,
+            >,
+        >,
+        BackendError,
+    > {
+        let request: serde_json::Value = serde_json::from_str(&request_json)
+            .map_err(|error| BackendError::Inference(error.to_string()))?;
+        self.requests.lock().expect("requests lock").push(request);
+        Ok(Box::pin(stream::iter([
+            Ok(ChatChunk {
+                content: Some("typed response".to_string()),
+                done: false,
+            }),
+            Ok(ChatChunk {
+                content: None,
+                done: true,
+            }),
+        ])))
+    }
+
+    async fn embeddings(
+        &self,
+        _texts: Vec<String>,
+        _model: &str,
+    ) -> std::result::Result<Vec<EmbeddingResult>, BackendError> {
+        Err(BackendError::Inference(
+            "embeddings not supported by mock".to_string(),
+        ))
+    }
+
+    async fn rerank(
+        &self,
+        _request: RerankRequest,
+    ) -> std::result::Result<RerankResponse, BackendError> {
+        Err(BackendError::Inference(
+            "rerank not supported by mock".to_string(),
+        ))
+    }
 }

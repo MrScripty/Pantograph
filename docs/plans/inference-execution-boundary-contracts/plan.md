@@ -1748,6 +1748,11 @@ the retired `pytorch-inference` node name.
 Node-engine dependency inference no longer treats retired backend-specific node
 types as backend selectors; canonical task/runtime evidence is now required for
 backend inference outside migration diagnostics.
+Node-engine non-streaming canonical `llm-inference` text/chat execution now
+builds `InferenceExecutionRequest` from prompt, context, task kind, runtime
+hint, Pumas model reference, and grouped generation options, then executes
+through `InferenceGateway::execute_typed`; the streaming SSE path remains
+unchanged until token-stream contracts migrate.
 The `unload-model` node no longer contains a live Ollama HTTP unload path:
 Ollama `model_ref` inputs now fail locally with a canonical/Pumas migration
 message, and supported-engine diagnostics no longer list Ollama.
@@ -1847,7 +1852,9 @@ drift back into inference.
   artifacts change.
 - Cross-layer acceptance check for any changed host-facing DTO projection.
 
-**Status:** Not started.
+**Status:** In progress. Node-engine now consumes the typed inference boundary
+for non-streaming canonical `llm-inference` text/chat execution, preserving
+streaming on the existing event path until token-stream contracts are migrated.
 
 ### Milestone 15: Diagnostics Ledger Integration
 

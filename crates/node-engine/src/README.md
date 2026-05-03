@@ -175,12 +175,19 @@ use node_engine::core_executor::CoreNodeExecutor;
 - Additive node inputs may be accepted for compatibility, but callers should
   prefer the canonical `pantograph-node-contracts` projections when
   constructing new graph-authoring workflows.
+- New non-streaming canonical `llm-inference` text/chat execution should pass
+  through `inference::InferenceExecutionRequest` rather than constructing
+  backend-native request JSON in node-engine. Streaming remains an event-shaping
+  path until token-stream contracts are migrated.
 
 ## Structured Producer Contract
 - Built-in node descriptors, canonical contract projection, and execution
   dispatch must evolve together.
 - Task metadata such as `taskTypePrimary` is machine-consumed by dependency
   selection and must remain stable once introduced.
+- Canonical text/chat generation inputs may provide grouped
+  `generation_options`; malformed grouped options are execution input errors,
+  not backend/runtime failures.
 - Reranker outputs are published as ordered result lists plus convenience fields
   such as top score/document; consumers should not infer ranking from raw input
   order.

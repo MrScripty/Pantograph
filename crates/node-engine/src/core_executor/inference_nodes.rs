@@ -7,7 +7,7 @@ use crate::error::{NodeEngineError, Result};
 use crate::events::EventSink;
 use crate::model_dependencies::ModelRefV2;
 
-use super::build_extra_settings;
+use super::{build_extra_settings, read_optional_input_string_aliases, read_optional_input_value};
 
 #[cfg(feature = "inference-nodes")]
 pub(crate) fn require_gateway(
@@ -83,6 +83,26 @@ pub(crate) async fn execute_llm_inference(
     use futures_util::StreamExt;
 
     let gw = require_gateway(gateway)?;
+
+    if event_sink.is_none() {
+        let request = build_text_generation_execution_request(inputs)?;
+        let result = gw.execute_typed(request).await.map_err(|error| {
+            NodeEngineError::ExecutionFailed(format!("Typed LLM inference failed: {error}"))
+        })?;
+        let response = match result {
+            inference::InferenceExecutionResult::TextGeneration { text, .. } => text,
+            other => {
+                return Err(NodeEngineError::ExecutionFailed(format!(
+                    "Typed LLM inference returned unexpected result: {other:?}"
+                )));
+            }
+        };
+
+        let mut outputs = HashMap::new();
+        outputs.insert("response".to_string(), serde_json::json!(response));
+        outputs.insert("stream".to_string(), serde_json::Value::Null);
+        return Ok(outputs);
+    }
 
     let prompt = inputs
         .get("prompt")
@@ -197,6 +217,79 @@ pub(crate) async fn execute_llm_inference(
     outputs.insert("response".to_string(), serde_json::json!(response));
     outputs.insert("stream".to_string(), serde_json::Value::Null);
     Ok(outputs)
+}
+
+#[cfg(feature = "inference-nodes")]
+pub(crate) fn build_text_generation_execution_request(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<inference::InferenceExecutionRequest> {
+    let prompt = inputs
+        .get("prompt")
+        .and_then(|p| p.as_str())
+        .ok_or_else(|| NodeEngineError::ExecutionFailed("Missing prompt input".to_string()))?;
+    let system_prompt = inputs
+        .get("system_prompt")
+        .and_then(|p| p.as_str())
+        .map(str::to_string);
+    let extra_context = inputs.get("context").and_then(|c| c.as_str());
+    let full_prompt = if let Some(ctx) = extra_context {
+        format!("{prompt}\n\nContext:\n{ctx}")
+    } else {
+        prompt.to_string()
+    };
+
+    let generation_options = read_optional_input_value(inputs, "generation_options")
+        .map(serde_json::from_value::<inference::GenerationOptions>)
+        .transpose()
+        .map_err(|error| {
+            NodeEngineError::ExecutionFailed(format!("Invalid generation_options input: {error}"))
+        })?;
+
+    Ok(inference::InferenceExecutionRequest {
+        request_id: None,
+        task_id: text_generation_task_id(inputs),
+        model_ref: parse_pumas_model_ref(inputs),
+        model_name: read_optional_input_string_aliases(
+            inputs,
+            &["model_name", "modelName", "model", "model_id", "modelId"],
+        ),
+        runtime_hint: read_optional_input_string_aliases(inputs, &["runtime_hint", "runtimeHint"]),
+        input: inference::InferenceExecutionInput::TextGeneration {
+            prompt: Some(full_prompt),
+            system_prompt,
+            messages: Vec::new(),
+            stream: false,
+        },
+        generation_options,
+        extra_options: serde_json::Value::Null,
+    })
+}
+
+#[cfg(feature = "inference-nodes")]
+fn text_generation_task_id(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> inference::InferenceTaskId {
+    read_optional_input_string_aliases(inputs, &["task_kind", "taskKind", "task_id", "taskId"])
+        .and_then(|task| inference::resolve_task_registry_entry(&task))
+        .map(|entry| entry.task_id)
+        .filter(|task_id| {
+            matches!(
+                task_id,
+                inference::InferenceTaskId::TextGeneration
+                    | inference::InferenceTaskId::ChatCompletion
+            )
+        })
+        .unwrap_or(inference::InferenceTaskId::TextGeneration)
+}
+
+#[cfg(feature = "inference-nodes")]
+fn parse_pumas_model_ref(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Option<inference::PumasModelRef> {
+    inputs
+        .get("pumas_model_ref")
+        .or_else(|| inputs.get("model_ref"))
+        .and_then(|value| serde_json::from_value(value.clone()).ok())
 }
 
 #[cfg(feature = "inference-nodes")]
