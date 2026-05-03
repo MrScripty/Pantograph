@@ -4,7 +4,7 @@ use super::pytorch_worker_contract::{
     PYTORCH_WORKER_CONTRACT_VERSION,
 };
 use super::*;
-use crate::model_contracts::{ModelArtifactKind, PumasModelRef};
+use crate::model_contracts::{ModelArtifactKind, PumasModelRef, ResolvedModelPackageFacts};
 
 #[test]
 fn test_backend_name() {
@@ -267,4 +267,103 @@ fn test_pytorch_worker_envelope_rejects_missing_required_fields() {
             .expect_err("missing request_id and payload fields should reject");
 
     assert!(error.to_string().contains("request_id"));
+}
+
+#[test]
+fn test_pytorch_load_envelope_maps_pumas_package_facts() {
+    let fixture = include_str!(
+        "../../tests/fixtures/inference_package_facts/hf_transformers_text_generation_package_facts.json"
+    );
+    let facts: ResolvedModelPackageFacts =
+        serde_json::from_str(fixture).expect("decode package facts fixture");
+    let trust_policy = PyTorchTransformersTrustPolicy {
+        allow_remote_code: true,
+        accepted_sources: vec!["configuration_tiny.py".to_string()],
+        decision_id: Some("trust-001".to_string()),
+    };
+
+    let envelope = PyTorchBackend::transformers_load_envelope_from_package(
+        "req-pumas-load",
+        &facts,
+        Some("cuda:0"),
+        trust_policy,
+    )
+    .expect("map package facts to worker envelope");
+
+    assert_eq!(envelope.request_id, "req-pumas-load");
+    assert_eq!(
+        envelope.operation,
+        PyTorchWorkerOperation::LoadTransformersModel
+    );
+    assert_eq!(
+        envelope.payload.model_ref.model_id,
+        "llm/example/tiny-transformers"
+    );
+    assert_eq!(
+        envelope.payload.artifact_kind,
+        ModelArtifactKind::HfCompatibleDirectory
+    );
+    assert_eq!(envelope.payload.entry_path, "llm/example/tiny-transformers");
+    assert_eq!(envelope.payload.task_id, InferenceTaskId::TextGeneration);
+    assert_eq!(envelope.payload.model_type_hint.as_deref(), Some("llama"));
+    assert_eq!(envelope.payload.device.as_deref(), Some("cuda:0"));
+    assert!(envelope.payload.trust_policy.allow_remote_code);
+    assert_eq!(
+        envelope.payload.trust_policy.decision_id.as_deref(),
+        Some("trust-001")
+    );
+    assert_eq!(
+        envelope
+            .payload
+            .generation_defaults
+            .as_ref()
+            .and_then(|defaults| {
+                defaults
+                    .get("max_new_tokens")
+                    .and_then(serde_json::Value::as_u64)
+            }),
+        Some(128)
+    );
+}
+
+#[test]
+fn test_pytorch_load_envelope_rejects_custom_code_without_trust_opt_in() {
+    let fixture = include_str!(
+        "../../tests/fixtures/inference_package_facts/hf_transformers_text_generation_package_facts.json"
+    );
+    let facts: ResolvedModelPackageFacts =
+        serde_json::from_str(fixture).expect("decode package facts fixture");
+
+    match PyTorchBackend::transformers_load_envelope_from_package(
+        "req-pumas-load",
+        &facts,
+        Some("cpu"),
+        PyTorchTransformersTrustPolicy::default(),
+    ) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("trust policy is closed"));
+        }
+        other => panic!("expected closed trust policy config error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_pytorch_load_envelope_rejects_unsupported_artifact_kind() {
+    let fixture = include_str!(
+        "../../tests/fixtures/inference_package_facts/gguf_text_generation_package_facts.json"
+    );
+    let facts: ResolvedModelPackageFacts =
+        serde_json::from_str(fixture).expect("decode package facts fixture");
+
+    match PyTorchBackend::transformers_load_envelope_from_package(
+        "req-gguf-load",
+        &facts,
+        Some("cpu"),
+        PyTorchTransformersTrustPolicy::default(),
+    ) {
+        Err(BackendError::Config(message)) => {
+            assert!(message.contains("cannot load Gguf artifacts"));
+        }
+        other => panic!("expected unsupported artifact config error, got {other:?}"),
+    }
 }

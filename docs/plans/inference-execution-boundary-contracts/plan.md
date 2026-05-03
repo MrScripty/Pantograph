@@ -1434,7 +1434,10 @@ defaults, response/error DTOs, and JSON fixtures for load and error envelopes.
 The PyTorch worker now defaults `trust_remote_code` closed and rejects
 Transformers packages that declare custom code unless Rust passes an explicit
 trust-policy opt-in. Worker behavior still needs to move from ad hoc Python
-method calls to the full envelope contract.
+method calls to the full envelope contract. Rust can now derive a
+Transformers load envelope from Pumas package facts with contract-version,
+artifact-kind, task-evidence, generation-default, and custom-code trust
+validation before invoking Python.
 
 ### Milestone 10: Introduce Typed Execution Contracts
 
@@ -1854,6 +1857,10 @@ Update during implementation:
   The Python worker now rejects packages declaring `auto_map` custom code until
   Rust passes a validated trust-policy opt-in, while leaving the public gateway
   config shape unchanged for this slice.
+- 2026-05-03: Added the Rust-side PyTorch load-envelope mapper from Pumas
+  package facts. The mapper validates contract version, artifact kind, artifact
+  validity, text/chat task evidence, generation defaults, and custom-code trust
+  before Python receives a Transformers load request.
 
 ## Commit Cadence Notes
 

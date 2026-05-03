@@ -15,7 +15,10 @@ use async_trait::async_trait;
 use futures_util::Stream;
 use pyo3::prelude::*;
 
-use self::pytorch_worker_contract::PyTorchTransformersTrustPolicy;
+use self::pytorch_worker_contract::{
+    PyTorchTransformersLoadRequest, PyTorchTransformersTrustPolicy, PyTorchWorkerEnvelope,
+    PyTorchWorkerOperation,
+};
 use super::{
     BackendCapabilities, BackendCapabilityFacts, BackendComponentCapability, BackendConfig,
     BackendError, BackendFeatureCapabilityFacts, BackendFeatureSupport,
@@ -23,7 +26,10 @@ use super::{
     EmbeddingResult, InferenceBackend,
 };
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
-use crate::model_contracts::{InferenceModality, InferenceTaskId};
+use crate::model_contracts::{
+    InferenceModality, InferenceTaskId, ModelValidationState, ResolvedModelPackageFacts,
+    TaskEvidence,
+};
 use crate::process::ProcessSpawner;
 use crate::types::{RerankRequest, RerankResponse};
 use crate::{BackendHintLabel, ModelArtifactKind};
@@ -293,6 +299,89 @@ impl PyTorchBackend {
 
     fn default_transformers_trust_policy() -> PyTorchTransformersTrustPolicy {
         PyTorchTransformersTrustPolicy::default()
+    }
+
+    #[allow(dead_code)]
+    fn transformers_load_envelope_from_package(
+        request_id: impl Into<String>,
+        package: &ResolvedModelPackageFacts,
+        device: Option<&str>,
+        trust_policy: PyTorchTransformersTrustPolicy,
+    ) -> Result<PyTorchWorkerEnvelope<PyTorchTransformersLoadRequest>, BackendError> {
+        if !package.uses_current_contract() {
+            return Err(BackendError::Config(format!(
+                "PyTorch/Transformers package facts contract version {} is unsupported",
+                package.package_facts_contract_version
+            )));
+        }
+        if matches!(
+            package.artifact.validation_state,
+            ModelValidationState::Invalid | ModelValidationState::Unknown
+        ) {
+            return Err(BackendError::Config(
+                "PyTorch/Transformers package artifact is not valid".to_string(),
+            ));
+        }
+        if !matches!(
+            package.artifact.artifact_kind,
+            ModelArtifactKind::HfCompatibleDirectory | ModelArtifactKind::Safetensors
+        ) {
+            return Err(BackendError::Config(format!(
+                "PyTorch/Transformers cannot load {:?} artifacts",
+                package.artifact.artifact_kind
+            )));
+        }
+
+        let task_id = Self::transformers_task_id_from_evidence(&package.task)?;
+        if package.custom_code.requires_custom_code && !trust_policy.allow_remote_code {
+            return Err(BackendError::Config(
+                "Model package requires custom Transformers code but trust policy is closed"
+                    .to_string(),
+            ));
+        }
+
+        let model_type_hint = package
+            .transformers
+            .as_ref()
+            .and_then(|facts| facts.config_model_type.clone());
+        let generation_defaults = package.generation_defaults.defaults.clone();
+
+        Ok(PyTorchWorkerEnvelope::new(
+            request_id,
+            PyTorchWorkerOperation::LoadTransformersModel,
+            PyTorchTransformersLoadRequest {
+                model_ref: package.model_ref.clone(),
+                artifact_kind: package.artifact.artifact_kind.clone(),
+                entry_path: package.artifact.entry_path.clone(),
+                task_id,
+                model_type_hint,
+                device: device.map(str::to_string),
+                trust_policy,
+                generation_defaults,
+            },
+        ))
+    }
+
+    #[allow(dead_code)]
+    fn transformers_task_id_from_evidence(
+        evidence: &TaskEvidence,
+    ) -> Result<InferenceTaskId, BackendError> {
+        let labels = [
+            evidence.task_type_primary.as_deref(),
+            evidence.pipeline_tag.as_deref(),
+        ];
+        for label in labels.into_iter().flatten() {
+            match label.replace('-', "_").as_str() {
+                "text_generation" => return Ok(InferenceTaskId::TextGeneration),
+                "chat_completion" | "conversational" => return Ok(InferenceTaskId::ChatCompletion),
+                other if !other.is_empty() => continue,
+                _ => {}
+            }
+        }
+
+        Err(BackendError::Config(
+            "PyTorch/Transformers load requires text-generation or chat task evidence".to_string(),
+        ))
     }
 
     async fn load_model_with_trust_policy(

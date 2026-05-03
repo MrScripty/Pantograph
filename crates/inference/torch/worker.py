@@ -262,9 +262,10 @@ def load_model(
     if _model is not None:
         unload_model()
 
-    path = Path(model_path)
-    if not path.exists():
-        raise FileNotFoundError(f"Model path does not exist: {path}")
+    raw_path = Path(model_path)
+    if not raw_path.exists():
+        raise FileNotFoundError(f"Model path does not exist: {raw_path}")
+    path = _resolve_model_directory(raw_path)
 
     resolved_device = _resolve_device(device)
     detected_type = model_type or _detect_model_type(path)
