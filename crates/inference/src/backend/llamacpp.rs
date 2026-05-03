@@ -11,10 +11,12 @@ use async_trait::async_trait;
 use futures_util::Stream;
 
 use super::{
-    BackendCapabilities, BackendConfig, BackendError, BackendStartOutcome, ChatChunk,
-    EmbeddingResult, InferenceBackend,
+    BackendCapabilities, BackendCapabilityFacts, BackendComponentCapability, BackendConfig,
+    BackendError, BackendStartOutcome, BackendTaskCapability, ChatChunk, EmbeddingResult,
+    InferenceBackend,
 };
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
+use crate::model_contracts::{InferenceModality, InferenceTaskId};
 use crate::process::ProcessSpawner;
 use crate::server::LlamaServer;
 use crate::types::{RerankRequest, RerankResponse};
@@ -59,6 +61,27 @@ impl LlamaCppBackend {
             streaming: true,        // SSE streaming
             tool_calling: true,     // Via OpenAI-compatible API
             external_connection: true,
+            facts: BackendCapabilityFacts {
+                tasks: vec![
+                    BackendTaskCapability::stable(
+                        InferenceTaskId::ChatCompletion,
+                        vec![InferenceModality::Text, InferenceModality::Image],
+                        vec![InferenceModality::Text],
+                    ),
+                    BackendTaskCapability::stable(
+                        InferenceTaskId::Embedding,
+                        vec![InferenceModality::Text],
+                        vec![InferenceModality::Embedding],
+                    ),
+                    BackendTaskCapability::stable(
+                        InferenceTaskId::Rerank,
+                        vec![InferenceModality::Text],
+                        vec![InferenceModality::Json],
+                    ),
+                ],
+                preprocessing: BackendComponentCapability::RequiresPackageComponent,
+                postprocessing: BackendComponentCapability::BackendManaged,
+            },
         }
     }
 }
@@ -504,6 +527,9 @@ mod tests {
         assert!(caps.device_selection);
         assert!(caps.streaming);
         assert!(caps.tool_calling);
+        assert!(caps.supports_task(InferenceTaskId::ChatCompletion));
+        assert!(caps.supports_task(InferenceTaskId::Embedding));
+        assert!(caps.supports_task(InferenceTaskId::Rerank));
     }
 
     #[test]

@@ -16,10 +16,12 @@ use futures_util::Stream;
 use pyo3::prelude::*;
 
 use super::{
-    BackendCapabilities, BackendConfig, BackendError, BackendStartOutcome, ChatChunk,
-    EmbeddingResult, InferenceBackend,
+    BackendCapabilities, BackendCapabilityFacts, BackendComponentCapability, BackendConfig,
+    BackendError, BackendStartOutcome, BackendTaskCapability, ChatChunk, EmbeddingResult,
+    InferenceBackend,
 };
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
+use crate::model_contracts::{InferenceModality, InferenceTaskId};
 use crate::process::ProcessSpawner;
 use crate::types::{RerankRequest, RerankResponse};
 use pantograph_runtime_identity::{canonical_runtime_backend_key, canonical_runtime_id};
@@ -181,6 +183,15 @@ impl PyTorchBackend {
             streaming: true,
             tool_calling: false,
             external_connection: false,
+            facts: BackendCapabilityFacts {
+                tasks: vec![BackendTaskCapability::stable(
+                    InferenceTaskId::TextGeneration,
+                    vec![InferenceModality::Text],
+                    vec![InferenceModality::Text],
+                )],
+                preprocessing: BackendComponentCapability::RequiresPackageComponent,
+                postprocessing: BackendComponentCapability::BackendManaged,
+            },
         }
     }
 

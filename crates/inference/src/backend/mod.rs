@@ -25,6 +25,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::kv_cache::{KvCacheRuntimeFingerprint, ModelFingerprint};
 use crate::managed_runtime::ManagedBinaryId;
+use crate::model_contracts::{
+    InferenceModality, InferenceTaskId, SupportTier, TaskModalitySignature,
+};
 use crate::process::ProcessSpawner;
 use crate::types::{ImageGenerationRequest, ImageGenerationResult, RerankRequest, RerankResponse};
 
@@ -91,6 +94,148 @@ pub struct BackendCapabilities {
     pub tool_calling: bool,
     /// Supports attaching to an already-running external inference host.
     pub external_connection: bool,
+    /// Structured task and modality facts that refine the legacy boolean flags.
+    #[serde(default)]
+    pub facts: BackendCapabilityFacts,
+}
+
+/// Structured backend capability facts aligned with canonical task semantics.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct BackendCapabilityFacts {
+    /// Canonical tasks this backend can execute without host-side policy
+    /// inference.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tasks: Vec<BackendTaskCapability>,
+    /// Whether preprocessing is handled inside the backend adapter, requires
+    /// resolved package components, is unsupported, or is not needed.
+    #[serde(default)]
+    pub preprocessing: BackendComponentCapability,
+    /// Whether postprocessing is handled inside the backend adapter, requires
+    /// resolved package components, is unsupported, or is not needed.
+    #[serde(default)]
+    pub postprocessing: BackendComponentCapability,
+}
+
+impl BackendCapabilityFacts {
+    /// Build structured facts from canonical task capabilities.
+    #[must_use]
+    pub fn from_tasks(tasks: Vec<BackendTaskCapability>) -> Self {
+        Self {
+            tasks,
+            preprocessing: BackendComponentCapability::Unknown,
+            postprocessing: BackendComponentCapability::Unknown,
+        }
+    }
+
+    /// Returns true when the backend declares support for the canonical task id
+    /// at a non-roadmap, non-unsupported tier.
+    #[must_use]
+    pub fn supports_task(&self, task_id: InferenceTaskId) -> bool {
+        self.tasks.iter().any(|task| {
+            task.task_id == task_id
+                && !matches!(
+                    task.support_tier,
+                    SupportTier::Roadmap | SupportTier::Unsupported | SupportTier::Unknown
+                )
+        })
+    }
+}
+
+/// One canonical task supported by a backend adapter.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct BackendTaskCapability {
+    pub task_id: InferenceTaskId,
+    #[serde(default)]
+    pub support_tier: SupportTier,
+    pub modality_signature: TaskModalitySignature,
+}
+
+impl BackendTaskCapability {
+    /// Construct a stable task capability.
+    #[must_use]
+    pub fn stable(
+        task_id: InferenceTaskId,
+        inputs: Vec<InferenceModality>,
+        outputs: Vec<InferenceModality>,
+    ) -> Self {
+        Self {
+            task_id,
+            support_tier: SupportTier::Stable,
+            modality_signature: TaskModalitySignature::new(inputs, outputs),
+        }
+    }
+}
+
+/// Backend-local component handling for pre/post process facts.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum BackendComponentCapability {
+    /// Capability has not yet been audited for this backend.
+    #[default]
+    Unknown,
+    /// The task does not need this lifecycle stage.
+    NotRequired,
+    /// The backend adapter owns this lifecycle stage.
+    BackendManaged,
+    /// The backend needs package components such as tokenizer, processor, or
+    /// chat template facts.
+    RequiresPackageComponent,
+    /// The backend cannot perform this lifecycle stage.
+    Unsupported,
+}
+
+impl BackendCapabilities {
+    /// Returns true when structured facts declare support for a canonical task.
+    ///
+    /// This helper intentionally does not consult scheduler/runtime state.
+    #[must_use]
+    pub fn supports_task(&self, task_id: InferenceTaskId) -> bool {
+        self.facts.supports_task(task_id)
+    }
+}
+
+#[cfg(test)]
+mod capability_tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn backend_capabilities_deserialize_without_structured_facts() {
+        let capabilities = serde_json::from_value::<BackendCapabilities>(json!({
+            "vision": true,
+            "image_generation": false,
+            "embeddings": true,
+            "reranking": false,
+            "gpu": true,
+            "device_selection": true,
+            "streaming": true,
+            "tool_calling": false,
+            "external_connection": false
+        }))
+        .expect("legacy capability payload should deserialize");
+
+        assert!(capabilities.vision);
+        assert!(capabilities.facts.tasks.is_empty());
+        assert!(!capabilities.supports_task(InferenceTaskId::Embedding));
+    }
+
+    #[test]
+    fn backend_capability_facts_report_supported_tasks() {
+        let capabilities = BackendCapabilities {
+            facts: BackendCapabilityFacts::from_tasks(vec![BackendTaskCapability::stable(
+                InferenceTaskId::Embedding,
+                vec![InferenceModality::Text],
+                vec![InferenceModality::Embedding],
+            )]),
+            ..BackendCapabilities::default()
+        };
+
+        assert!(capabilities.supports_task(InferenceTaskId::Embedding));
+        assert!(!capabilities.supports_task(InferenceTaskId::Rerank));
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

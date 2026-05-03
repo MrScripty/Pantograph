@@ -185,6 +185,12 @@ pub enum SupportTier {
     Unknown,
 }
 
+impl Default for SupportTier {
+    fn default() -> Self {
+        Self::Unknown
+    }
+}
+
 /// Registry entry for a canonical inference task.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]

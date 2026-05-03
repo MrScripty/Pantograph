@@ -32,6 +32,9 @@ text-adjacent workload that must not be collapsed into the chat contract.
 - Backends must remain swappable at runtime.
 - Capability flags must stay honest because upstream callers gate behavior on
   them.
+- Structured task/modality facts refine legacy capability flags; consumers
+  should prefer the structured facts when deciding whether a backend supports a
+  canonical task.
 - Backend configuration must remain generic enough to cover multiple engines.
 - New backend features must extend the trait additively where possible.
 - Sidecar-backed backends must expose mode-specific readiness when one process
@@ -56,6 +59,8 @@ the llama.cpp adapter can switch into a dedicated reranking mode when needed.
 
 - Unsupported backend features must return explicit errors.
 - `BackendCapabilities` fields describe actual runtime support.
+- `BackendCapabilityFacts` names canonical task ids and modality signatures; it
+  must not encode scheduler admission, runtime placement, or queue policy.
 - Registry entries and backend implementations must stay in sync.
 - If a backend needs a distinct process mode for reranking, that requirement
   must surface through config and readiness checks instead of hidden fallback.

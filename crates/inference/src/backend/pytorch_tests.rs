@@ -15,6 +15,8 @@ fn test_capabilities() {
     assert!(caps.device_selection);
     assert!(caps.streaming);
     assert!(!caps.tool_calling);
+    assert!(caps.supports_task(InferenceTaskId::TextGeneration));
+    assert!(!caps.supports_task(InferenceTaskId::Embedding));
 }
 
 #[test]

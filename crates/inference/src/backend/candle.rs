@@ -10,9 +10,11 @@ use async_trait::async_trait;
 use futures_util::Stream;
 
 use super::{
-    BackendCapabilities, BackendConfig, BackendError, BackendStartOutcome, ChatChunk,
-    EmbeddingResult, InferenceBackend,
+    BackendCapabilities, BackendCapabilityFacts, BackendComponentCapability, BackendConfig,
+    BackendError, BackendStartOutcome, BackendTaskCapability, ChatChunk, EmbeddingResult,
+    InferenceBackend,
 };
+use crate::model_contracts::{InferenceModality, InferenceTaskId};
 use crate::process::ProcessSpawner;
 use crate::types::{RerankRequest, RerankResponse};
 
@@ -51,6 +53,15 @@ impl CandleBackend {
             streaming: false,        // Not supported yet
             tool_calling: false,     // Not supported
             external_connection: false,
+            facts: BackendCapabilityFacts {
+                tasks: vec![BackendTaskCapability::stable(
+                    InferenceTaskId::Embedding,
+                    vec![InferenceModality::Text],
+                    vec![InferenceModality::Embedding],
+                )],
+                preprocessing: BackendComponentCapability::RequiresPackageComponent,
+                postprocessing: BackendComponentCapability::NotRequired,
+            },
         }
     }
 
@@ -232,6 +243,8 @@ mod tests {
         assert!(caps.embeddings);
         assert!(caps.gpu);
         assert!(!caps.streaming);
+        assert!(caps.supports_task(InferenceTaskId::Embedding));
+        assert!(!caps.supports_task(InferenceTaskId::TextGeneration));
     }
 
     #[test]

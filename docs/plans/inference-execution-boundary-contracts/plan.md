@@ -1214,12 +1214,15 @@ tests/fixtures, or historical documentation.
 to gate behavior without backend-name conditionals.
 
 **Tasks:**
-- [ ] Audit existing `BackendCapabilities` fields and consumers.
+- [x] Audit existing `BackendCapabilities` fields and consumers.
 - [ ] Split static backend capabilities from runtime/model-specific capability
   facts if one struct cannot honestly represent both.
 - [ ] Add typed capability enums or nested structs for modality, streaming,
   embeddings, reranking, image generation, external connection, device
   selection, and KV-cache support.
+  - [x] First slice added canonical task ids, modality signatures, and
+    component lifecycle facts; streaming, device, external-connection, and
+    KV-cache structured facts remain pending.
 - [ ] Add capability checks that answer whether each backend can consume a
   given Pumas-resolved model source, task request, and option set.
 - [ ] Make capability checks consume task registry entries and package facts
@@ -1235,7 +1238,15 @@ to gate behavior without backend-name conditionals.
 - `cargo check -p inference --all-features`.
 - README structured producer contract review for changed capability fields.
 
-**Status:** Not started.
+**Status:** Partially implemented. The first capability-facts slice audited the
+flat `BackendCapabilities` bool consumers in the inference gateway, backend
+registry/list commands, Tauri status commands, and frontend badges. It added
+additive structured `BackendCapabilityFacts` with canonical task ids, modality
+signatures, component lifecycle facts, and task-support helpers while preserving
+the legacy boolean fields for existing consumers. Llama.cpp, Candle, and PyTorch
+now populate initial task/modality facts. Model/package-specific compatibility
+checks, option-support reports, KV-cache capability facts, and consumer
+migration remain pending.
 
 ### Milestone 8: Add Runtime Fact Snapshots
 
