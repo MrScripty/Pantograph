@@ -82,9 +82,10 @@ pipeline/task tags, and explicit trust requirements for custom code.
 - Define host-agnostic backend-hint vocabulary for Pumas projections:
   `transformers`, `llama.cpp`, `vllm`, `mlx`, `candle`, `diffusers`, and
   `onnx-runtime`.
-- Preserve ecosystem hints such as `ollama` as facts without making them
-  executable selections. Individual consumers decide whether a hint is
-  supported, unsupported, or migration-only.
+- Preserve unknown or consumer-unsupported ecosystem hints as inert package
+  facts only when Pumas has already observed them. Pantograph does not require
+  Pumas to model, validate, migrate, or special-case `ollama`; Pantograph can
+  ignore that hint because it is not part of Pantograph's target backend set.
 - Keep GGUF, safetensors, diffusers bundles, ONNX, HF-compatible directories,
   and future formats as first-class Pumas artifact kinds.
 - Define unresolved behavior when a legacy path cannot resolve to Pumas:
@@ -94,6 +95,9 @@ pipeline/task tags, and explicit trust requirements for custom code.
   cursors for added models, removed models, modified metadata, modified package
   facts, stale fact invalidation, and dependency-binding changes so consumers
   can keep local caches current.
+- Expose package-fact summary APIs or equivalent cheap cached projections for
+  model-library list/search population so consumers do not need to resolve full
+  package facts for every row.
 
 ### Out of Scope
 
@@ -106,6 +110,13 @@ pipeline/task tags, and explicit trust requirements for custom code.
   expose the package facts above.
 - Writing diagnostics ledger events directly from Pumas.
 - Defining whether any particular consumer supports Ollama execution.
+- Adding Pantograph-specific labels, scheduler policy, or runtime registry
+  state to Pumas DTOs.
+- Deriving feasible execution candidates, runtime candidate rankings,
+  admission/exclusion decisions, RAM/VRAM admission estimates, or technical-fit
+  decisions. Pumas should expose durable package facts, dependency facts,
+  summaries, and update cursors; Pantograph owns candidate derivation from
+  those facts.
 
 ## Inputs
 
@@ -583,9 +594,10 @@ or equivalent schema-backed snapshots for:
 - `custom_code_required_package_facts.json`: package with `auto_map`, custom
   class evidence, dependency manifest evidence, and explicit trust/custom-code
   requirements.
-- `unsupported_ollama_hint_package_facts.json`: package preserving an `ollama`
-  ecosystem hint as evidence while making clear that executable support is a
-  consumer decision.
+- `unsupported_ollama_hint_package_facts.json`: package preserving an observed
+  unsupported ecosystem hint as inert evidence while making clear that
+  Pantograph ignores `ollama` and does not require Pumas to validate or route
+  it.
 - `stale_package_facts.json`: cached package-facts summary/detail with an
   outdated artifact signature or contract version and explicit stale-state
   semantics.
@@ -759,8 +771,9 @@ consumer runtime selections.
   `transformers`, `llama.cpp`, `vllm`, `mlx`, `candle`, `diffusers`, and
   `onnx-runtime`.
 - [x] Map existing ecosystem hints into accepted labels where safe.
-- [x] Preserve `ollama` and other ecosystem hints as facts while leaving support
-  or migration interpretation to consumers.
+- [x] Preserve unsupported ecosystem hints as inert raw facts when observed,
+  while leaving support or migration interpretation to consumers. Pantograph
+  does not require `ollama` handling beyond ignoring it.
 - [x] Ensure hints are advisory facts, not runtime selection decisions.
 
 **Verification:**
@@ -772,7 +785,7 @@ accepted backend hints without selecting a runtime. HF search-compatible
 engine derivation now includes `vllm` and `mlx` for HF-compatible
 Transformers weight formats so the frontend can render those search tags.
 Unsupported ecosystem hints such as `ollama` are preserved as raw/unsupported
-facts for consumers to interpret.
+facts only when observed; Pantograph treats them as ignored metadata.
 
 ### Milestone 4: Legacy Reference Resolution
 
@@ -1042,6 +1055,238 @@ on-demand bridge method consumed by the metadata modal, and frontend regression
 coverage now proves installed-library rows do not render backend compatibility
 badges or eagerly load package-fact detail.
 
+### Milestone 9: Cross-Repo Consumer Contract Alignment
+
+**Goal:** Remove temporary Pantograph/Pumas DTO drift and lock a reviewed
+producer-consumer fixture path before adding more consumer delivery APIs.
+
+**Affected contracts/artifacts:**
+- Canonical `ResolvedModelPackageFacts` JSON contract and fixture set.
+- Canonical `ResolvedModelPackageFactsSummary` JSON contract shape, even if the
+  public summary API is implemented in a later milestone.
+- Pantograph consumer fixture path and decode tests.
+- No Pumas SQLite schema, generated bindings, or runtime behavior should change
+  in this milestone unless the contract review finds an existing public DTO is
+  incorrectly documented.
+
+**Ownership/lifecycle:**
+- Pumas owns producer DTO definitions, fixture truth, versioning, omitted-field
+  defaults, and enum wire labels.
+- Pantograph owns consumer projection/adapters, diagnostics-ledger mapping, and
+  technical-fit candidate derivation from the facts.
+- Shared fixture handoff is a serial contract step. Do not let parallel
+  implementation work edit DTOs, fixtures, or generated binding shapes while
+  this gate is open.
+
+**Tasks:**
+- [x] Publish or document the exact canonical Pumas package-facts JSON shape as
+  the consumer contract, including `package_facts_contract_version`, nested
+  `artifact`, `model_ref.selected_artifact_id`, `backend_hints`, `task`,
+  component arrays, and generation/default diagnostics.
+- [x] Add a contract note that consumers should adapt to Pumas DTOs directly or
+  through explicit projection adapters, not invent a parallel
+  `ResolvedModelPackageFacts` shape with different field names.
+- [x] Provide a stable fixture handoff path for Pantograph tests to decode
+  Pumas producer fixtures or a generated copy of those fixtures.
+- [x] Add compatibility guidance for old compact `ModelExecutionDescriptor`
+  consumers: it remains an entry-path summary, while package facts, summaries,
+  and update events are separate richer Pumas contracts. Runtime candidate
+  derivation remains a host concern.
+- [x] Record that unsupported ecosystem hints such as `ollama` are inert
+  metadata for Pantograph. Pantograph should ignore them unless a future
+  Pantograph plan explicitly reintroduces that backend.
+- [x] Treat this milestone as the gate for Milestones 10-11. Pumas should not
+  add summary or update-feed APIs until the canonical DTO and fixture handoff
+  are reviewed against Pantograph's consumer needs.
+- [x] Record the exact fixture ownership and handoff path. If fixtures are
+  copied into Pantograph, document whether they are generated copies, vendored
+  test data, or manually synchronized snapshots.
+- [x] Record any required Pantograph adapter changes as Pantograph follow-up
+  work instead of encoding Pantograph-specific fields in Pumas DTOs.
+
+**Verification:**
+- Pumas fixture tests and Pantograph consumer tests decode the same canonical
+  package-facts fixtures without field-name forks.
+- Contract docs identify all intentionally omitted fields, default semantics,
+  enum casing, stale behavior, and volatile producer fields.
+- Cross-repo review confirms Pantograph can build model-list summaries,
+  inference preflight facts, technical-fit inputs, and diagnostics-ledger
+  context from the canonical Pumas contracts.
+- `git diff --check` passes in both repositories for contract/fixture changes.
+- Any changed Rust DTOs have serde round-trip tests; any changed frontend,
+  Electron, RPC, UniFFI, or other binding shape has matching boundary tests in
+  the same slice.
+
+**Status:** Complete. Pumas commit `fb1d8f9` documents the canonical
+`ResolvedModelPackageFacts`/summary producer contracts, fixture handoff rules,
+and consumer-owned responsibilities in
+`rust/crates/pumas-core/src/models/README.md` and
+`rust/crates/pumas-core/tests/fixtures/package_facts/README.md`.
+Verification: `git diff --check -- rust/crates/pumas-core/src/models/README.md
+rust/crates/pumas-core/tests/fixtures/package_facts/README.md`.
+
+### Milestone 10: Model-Library Change Feed API
+
+**Goal:** Turn the defined `ModelLibraryUpdateEvent` and producer-cursor
+semantics into a callable consumer API so Pantograph can maintain a local
+model-fact cache after startup.
+
+**Affected contracts/artifacts:**
+- `ModelLibraryUpdateEvent` wire contract and fixture set.
+- New producer-cursor DTO or cursor field semantics.
+- API/RPC/binding method for update polling or an equivalent watch mechanism.
+- Durable event/cursor storage if Pumas cannot derive cursor-safe events from
+  existing index state. Any new storage requires a focused migration/test slice.
+
+**Ownership/lifecycle:**
+- Pumas owns event production, cursor ordering, retention, and stale-cursor
+  recovery semantics.
+- Pantograph owns polling cadence, local cache mutation, reconnect behavior,
+  and UI/preflight refresh policy after consuming events.
+- Pumas must not push diagnostics-ledger events or assume Pantograph runtime
+  state. The feed describes model-library fact changes only.
+- Cursor generation and event reads must be race-safe under concurrent import,
+  metadata edit, package-fact regeneration, cleanup, and model removal.
+
+**Tasks:**
+- [x] Define the producer cursor contract used by both startup snapshots and
+  subsequent update polling.
+- [x] Expose a host-agnostic change-feed API such as
+  `list_model_library_updates_since(cursor)` or an equivalent watch/poll
+  mechanism.
+- [x] Ensure events identify `model_id`, optional selected artifact id, changed
+  fact family, refresh scope, producer revision or cursor, and change kind for
+  model added, model removed, metadata modified, package facts modified, stale
+  fact invalidated, and dependency binding modified cases.
+- [x] Define cursor durability and missed-update behavior, including what a
+  consumer should do when its cursor is too old or unknown.
+- [x] Ensure Pumas-owned package-fact cache writes and metadata projection
+  cleanup do not create ambiguous update loops.
+- [x] Define whether update events are produced for package-fact summary writes,
+  detail writes, metadata edits, dependency-binding edits, rebuilds, and
+  cleanup writes. Derived writes must not recursively emit noisy duplicate
+  events.
+- [x] Define event retention and compaction. If a cursor falls outside the
+  retained range, the API must return a typed stale-cursor response that tells
+  consumers to rebuild from a startup snapshot.
+- [x] Add API/RPC/binding tests and fixtures for added, removed, modified, and
+  stale/invalidated package-fact events.
+
+**Verification:**
+- Unit/integration tests cover event ordering, cursor advancement, stale
+  cursor recovery, and missing/unknown cursor behavior.
+- Concurrency tests or serialized race fixtures cover an update occurring while
+  another caller polls the feed.
+- Tests prove cursor ordering is deterministic and update payloads do not leak
+  SQLite internals or frontend-only fields.
+- Tests prove no event requires a host to understand Pumas import/index
+  internals to decide whether summary, detail, or both should refresh.
+- Tests prove callers can recover deterministically when a cursor is too old,
+  unknown, or otherwise outside the retained update range.
+- API/RPC/binding tests validate field casing, enum labels, required fields,
+  and error mapping for stale/invalid cursors.
+
+**Status:** Complete. Pumas commits `22decc2` and `a3677d2` add durable
+`model_library_update_events` storage, cursor helpers, event production for
+model record changes, removals, package-fact detail writes, and dependency
+binding changes, plus public `list_model_library_updates_since` API/RPC,
+Electron, and frontend bridge coverage. Derived summary writes are intentionally
+not emitted as feed events to avoid recursive/noisy update loops. Verification:
+`cargo test --manifest-path rust/Cargo.toml -p pumas-library
+index::model_index::tests::test_model_library_update_feed -- --nocapture`,
+`cargo test --manifest-path rust/Cargo.toml -p pumas-library
+test_model_library_update_feed_api_surface -- --nocapture`,
+`cargo check --manifest-path rust/Cargo.toml -p pumas-rpc`,
+`npm run -w electron validate`, `npm run -w frontend check:types`,
+`npm run -w electron test`, and `git diff --check`.
+
+### Milestone 11: Consumer Contract Delivery APIs
+
+**Goal:** Make the completed Pumas package-facts contract directly useful to
+Pantograph and other host consumers without requiring consumers to inspect
+Pumas storage, local frontend bridge internals, or full package-fact detail for
+ordinary list views.
+
+**Affected contracts/artifacts:**
+- Startup snapshot DTO containing package-fact summaries and the Milestone 10
+  producer cursor.
+- Public summary-list and single-summary API/RPC/binding methods.
+- Summary freshness/status fields if sparse, missing, stale, or regenerated
+  summaries are exposed.
+- Existing package-facts summary/detail cache rows. Any schema change must be a
+  separate storage slice with migration/recovery tests.
+
+**Ownership/lifecycle:**
+- Pumas owns snapshot consistency, summary freshness status, cache-miss
+  behavior, and summary/detail cache invariants.
+- Pantograph owns local cache persistence, UI refresh timing, and deciding when
+  to request full detail after seeing a summary status.
+- The startup snapshot must use the Milestone 10 cursor contract. Either every
+  update before the cursor is reflected in the snapshot, or every update after
+  snapshot materialization is returned by `list_model_library_updates_since`.
+- Summary queries must remain bounded. They must not accidentally deserialize
+  every detail blob or perform unbounded package scans on list/search paths.
+
+**Tasks:**
+- [x] Expose an atomic startup snapshot API, or equivalent paired API, that
+  returns package-fact summaries plus a producer cursor suitable for subsequent
+  `list_model_library_updates_since(cursor)` calls. Consumers must not be able
+  to miss updates between loading all summaries and starting update polling.
+- [x] Expose a public summary query that returns cached
+  `ResolvedModelPackageFactsSummary` rows, or equivalent summary DTOs, for
+  model-library list/search population.
+- [x] Expose a single-model package-fact summary query for consumers that need
+  cheap row refresh after a targeted model change.
+- [x] Document summary freshness semantics relative to
+  `resolve_model_package_facts`, including when a summary is missing, stale, or
+  regenerated from detail facts.
+- [x] Define cache-miss behavior for summary APIs. The API must explicitly
+  choose one of these behaviors, or a documented mix by query mode: return
+  missing/stale summary states, regenerate bounded summaries without full
+  detail, run import/index-time summary generation, or intentionally trigger
+  full detail resolution.
+- [x] Define performance and bounded-work expectations for list/search summary
+  queries, including whether they may touch the filesystem, regenerate detail
+  facts, or only read cache/index rows.
+- [x] Define snapshot pagination or size limits if a library can contain enough
+  models for one response to become too large.
+- [x] Add contract tests proving summary output uses the same enum labels,
+  model refs, artifact facts, task evidence, backend hints, component statuses,
+  custom-code state, and diagnostic-code semantics as full package facts.
+- [x] Add API/RPC/binding coverage for package-fact summary queries wherever
+  Pumas exposes `resolve_model_package_facts` to host applications.
+
+**Verification:**
+- Tests prove startup snapshot output includes, or can be paired atomically
+  with, a cursor that prevents missed updates before polling begins.
+- Tests prove updates occurring during startup snapshot creation are either
+  included in the snapshot or returned by the first update-feed call after the
+  snapshot cursor.
+- Rust API tests prove list/search callers can fetch package-fact summaries
+  without deserializing full detail cache blobs.
+- Tests prove sparse, missing, stale, and regenerated summary-cache cases have
+  explicit consumer-visible behavior.
+- RPC/bridge tests prove host consumers can call the summary APIs through the
+  same boundary they use for `resolve_model_package_facts`.
+- Fixture or snapshot tests prove summary DTOs decode independently of SQLite
+  layout and `models.metadata_json`.
+- Tests prove summary list/search paths do not deserialize full detail blobs
+  unless the selected cache-miss behavior explicitly says they may.
+- Tests cover empty library, removed model, missing summary, stale summary,
+  invalid summary JSON, and detail-present/summary-missing cases.
+
+**Status:** Complete. Pumas commit `ce6ac19` adds
+`resolve_model_package_facts_summary` for targeted row refresh and
+`model_package_facts_summary_snapshot` for bounded startup/list population.
+Snapshots return cached summaries only with explicit `cached`, `missing`, or
+`invalid` status and an update cursor; targeted single-model refresh can return
+`fresh`, `detail_derived`, or `regenerated` status. Verification:
+`cargo test --manifest-path rust/Cargo.toml -p pumas-library
+test_model_library_update_feed_api_surface -- --nocapture`,
+`cargo check --manifest-path rust/Cargo.toml -p pumas-rpc`,
+`npm run -w electron validate`, `npm run -w frontend check:types`,
+`npm run -w electron test`, and `git diff --check`.
+
 ## Definition of Done
 
 - Pumas exposes stable package facts sufficient for host inference
@@ -1061,8 +1306,10 @@ badges or eagerly load package-fact detail.
   custom-code/trust facts without loading Python objects.
 - Model-provided generation defaults are not conflated with Pumas
   `inference_settings`.
-- Ollama hints are retained as ecosystem evidence; individual consumers decide
-  whether they are supported, unsupported, or migration-only.
+- Unknown or consumer-unsupported ecosystem hints may be retained as inert
+  package evidence when Pumas observes them. Pantograph does not require Pumas
+  to validate or special-case `ollama`, and Pantograph should ignore that hint
+  unless a future backend plan explicitly reintroduces it.
 - Custom-code/security facts are explicit enough for inference to require trust
   policy before Python/Transformers execution.
 - Projection DTOs have decode/normalize or round-trip fixture tests.
@@ -1088,6 +1335,18 @@ badges or eagerly load package-fact detail.
 - Consumer-visible update events identify the model id, selected artifact id
   when applicable, changed fact family, producer revision or cursor, and
   whether consumers should refresh summary rows, detail facts, or both.
+- Pumas exposes a startup snapshot path that returns package-fact summaries
+  with, or atomically paired to, a producer cursor for subsequent update-feed
+  polling without missed updates.
+- Pumas exposes callable package-fact summary APIs or equivalent cheap cached
+  projections so host list/search views can populate from Pumas facts without
+  full detail resolution per row.
+- Summary APIs define explicit sparse-cache behavior for missing, stale,
+  regenerated, and detail-derived summaries.
+- Pumas exposes a callable model-library update feed or equivalent cursor API
+  that lets host applications refresh local model-fact caches after startup.
+- Pumas and Pantograph share a canonical producer/consumer fixture path so
+  Pantograph does not maintain a divergent package-facts DTO shape.
 - Required package-fact fixtures from `Required Fixture Set` exist and can be
   decoded by host consumers without Pumas SQLite layout, `models.metadata_json`,
   or search-cache internals.
@@ -1116,7 +1375,9 @@ badges or eagerly load package-fact detail.
 - Backend hints start acting as runtime selection policy.
 - Raw paths would need to remain canonical saved consumer identity.
 - A consumer requires Pumas to define runtime support policy for an ecosystem
-  hint such as Ollama.
+  hint instead of treating it as inert package metadata.
+- A consumer requires Pumas to special-case an ignored ecosystem hint rather
+  than treating it as inert package metadata.
 - Custom-code/trust evidence cannot be represented without unsafe defaults.
 - Transformers package facts would require executing Python or loading
   Transformers Auto classes inside Pumas.
@@ -1137,6 +1398,24 @@ badges or eagerly load package-fact detail.
   fields after ownership has been assigned to dedicated columns.
 - MLX or vLLM search tags require evidence that is too expensive or unreliable
   to compute within the HF search/cache path.
+- Host applications cannot populate startup model-fact caches without resolving
+  full package facts for every installed model.
+- Startup snapshot semantics cannot guarantee "no missed updates" without a
+  new persisted event log, cursor table, or stronger transaction boundary than
+  the current Pumas storage design provides.
+- Summary-list APIs cannot define bounded cache-miss behavior without either
+  sparse summary states, import/index-time summary generation, or intentional
+  detail regeneration.
+- Package-fact update events remain fixtures only and cannot be consumed
+  through a callable API, watch API, or equivalent cursor path.
+- Update events for derived package-fact summary/detail writes create recursive
+  or noisy update loops that cannot be filtered by event family/scope.
+- API/RPC/binding surfaces cannot preserve the same cursor, summary, and event
+  wire shapes without generated binding or bridge changes broader than the
+  milestone's planned write set.
+- A consumer requires Pumas to derive feasible execution candidates or
+  technical-fit exclusion decisions instead of deriving them in the consumer
+  from Pumas facts.
 
 ## Execution Notes
 
@@ -1149,10 +1428,10 @@ badges or eagerly load package-fact detail.
   verification, and commit separation for storage-addition versus
   projection-cleanup work.
 - 2026-05-02: Clarified that Pumas remains host-agnostic. It should expose
-  consumer-visible model facts, compact execution summaries, feasible execution
-  candidates, and model-library update events or cursors, while each consumer
-  owns final generation behavior, runtime selection, and cache projection
-  policy.
+  consumer-visible model facts, compact execution summaries, and
+  model-library update events or cursors, while each consumer owns final
+  generation behavior, runtime candidate derivation, runtime selection, and
+  cache projection policy.
 - 2026-05-02: Implementation-readiness standards pass added explicit worktree
   hygiene, tracked-plan, slice-scope, fixture ownership, expected verification,
   and conventional-commit gates before code work begins.
@@ -1516,6 +1795,32 @@ badges or eagerly load package-fact detail.
   `Execution Facts` tab is selected. Verification:
   `npm run -w frontend test:run -- LocalModelsList.test.tsx ModelMetadataModal.test.tsx`
   and `npm run -w frontend check:types`.
+- 2026-05-02: Pantograph post-implementation consumer review found that the
+  completed Pumas package-facts implementation is directionally correct but
+  needs follow-up consumer delivery APIs for Pantograph-scale use: canonical
+  cross-repo fixture/DTO alignment as the gate, cheap package-fact summaries
+  for startup/list views, an atomic summary snapshot plus update cursor, and a
+  callable update feed or equivalent cursor path. Follow-up review from Pumas
+  clarified that summary APIs need explicit sparse-cache behavior, the update
+  cursor must avoid missed changes between startup loading and polling, and
+  feasible-candidate derivation should move out of the Pumas plan because
+  Pantograph owns technical-fit candidate derivation from Pumas facts. The
+  review also clarified that `ollama`
+  compatibility metadata in Pumas is not a Pantograph requirement; Pantograph
+  should ignore that hint unless a future backend plan explicitly reintroduces
+  Ollama.
+- 2026-05-02: Standards pass over Milestones 9-11 added affected
+  contract/artifact lists, ownership and lifecycle notes, serial fixture-gate
+  requirements, cursor retention and stale-cursor behavior, startup snapshot
+  race guarantees, explicit summary cache-miss behavior, bounded-work
+  constraints, API/RPC/binding verification, and re-plan triggers for cursor,
+  snapshot, summary, and binding-surface risks.
+- 2026-05-02: Milestones 9-11 implemented in Pumas through commits `fb1d8f9`,
+  `22decc2`, `a3677d2`, and `ce6ac19`. During the API/RPC boundary slice,
+  implementation found that Electron/frontend already exposed
+  `resolve_model_package_facts` but `pumas-rpc` did not dispatch that method;
+  commit `a3677d2` fixed the missing RPC handler while adding the update-feed
+  API surface.
 - Implementation should start with Milestone 1 contract/fixture design before
   production extraction logic. This keeps producer semantics reviewable before
   code depends on them.
