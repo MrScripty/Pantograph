@@ -1215,8 +1215,11 @@ to gate behavior without backend-name conditionals.
 
 **Tasks:**
 - [x] Audit existing `BackendCapabilities` fields and consumers.
-- [ ] Split static backend capabilities from runtime/model-specific capability
+- [x] Split static backend capabilities from runtime/model-specific capability
   facts if one struct cannot honestly represent both.
+  - [x] Static backend support now lives in `BackendCapabilityFacts`,
+    Pumas/model/task fit lives in `BackendCompatibilityReport`, and observed
+    loaded-runtime facts remain reserved for Milestone 8 runtime snapshots.
 - [x] Add typed capability enums or nested structs for modality, streaming,
   embeddings, reranking, image generation, external connection, device
   selection, and KV-cache support.
@@ -1225,7 +1228,7 @@ to gate behavior without backend-name conditionals.
   - [x] Second slice added structured feature facts for streaming, device
     selection, external-connection, and KV-cache support while task ids cover
     embeddings, reranking, image generation, and other execution semantics.
-- [ ] Add capability checks that answer whether each backend can consume a
+- [x] Add capability checks that answer whether each backend can consume a
   given Pumas-resolved model source, task request, and option set.
   - [x] First slice added inference-local `BackendCompatibilityRequest` and
     `BackendCompatibilityReport` APIs that evaluate backend facts against a
@@ -1240,7 +1243,7 @@ to gate behavior without backend-name conditionals.
     - [x] Resolve/fetch package facts during the live host technical-fit path
       so `workflow_technical_fit_decision` can use the report-aware constructor
       without test-only fixture injection.
-- [ ] Make capability checks consume task registry entries and package facts
+- [x] Make capability checks consume task registry entries and package facts
   rather than backend names, raw task strings, or graph-node type names.
   - [x] The inference-local compatibility API consumes canonical task registry
     entries and resolved package facts; broader workflow/runtime consumers
@@ -1265,7 +1268,7 @@ to gate behavior without backend-name conditionals.
 - `cargo check -p inference --all-features`.
 - README structured producer contract review for changed capability fields.
 
-**Status:** Partially implemented. The first capability-facts slice audited the
+**Status:** Implemented. The first capability-facts slice audited the
 flat `BackendCapabilities` bool consumers in the inference gateway, backend
 registry/list commands, Tauri status commands, and frontend badges. It added
 additive structured `BackendCapabilityFacts` with canonical task ids, modality
@@ -1297,7 +1300,9 @@ runtime capability DTOs and TypeScript contracts so graph/preflight consumers
 can inspect artifact-kind, backend-hint, and custom-code support without
 depending on inference crate internals. The eighth slice added default
 unsupported-operation tests for image generation and KV-cache fingerprint
-requests at the backend trait boundary.
+requests at the backend trait boundary. Static capability facts, model/task
+compatibility reports, workflow capability projection, and explicit unsupported
+behavior are now covered; runtime observation facts continue in Milestone 8.
 
 ### Milestone 8: Add Runtime Fact Snapshots
 
