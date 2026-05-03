@@ -166,6 +166,79 @@ async fn test_execute_llm_inference_non_streaming_uses_typed_gateway_boundary() 
 
 #[cfg(feature = "inference-nodes")]
 #[tokio::test]
+async fn test_execute_llm_inference_streaming_uses_gateway_stream_boundary() {
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let gateway = Arc::new(InferenceGateway::with_backend(
+        Box::new(MockTypedTextBackend {
+            requests: requests.clone(),
+        }),
+        "mock",
+    ));
+    let event_sink = Arc::new(crate::events::VecEventSink::new());
+    let event_sink_trait: Arc<dyn crate::events::EventSink> = event_sink.clone();
+    let lifecycle_events = Arc::new(Mutex::new(Vec::new()));
+    let lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink> =
+        Arc::new(MockInferenceLifecycleSink {
+            events: lifecycle_events.clone(),
+        });
+    let mut extensions = ExecutorExtensions::new();
+    extensions.set(
+        crate::extensions::extension_keys::INFERENCE_LIFECYCLE_SINK,
+        lifecycle_sink,
+    );
+    let mut inputs = HashMap::new();
+    inputs.insert("prompt".to_string(), serde_json::json!("hello"));
+    inputs.insert("model_name".to_string(), serde_json::json!("typed-model"));
+
+    let outputs = execute_llm_inference(
+        Some(&gateway),
+        &inputs,
+        "llm-inference-1",
+        Some(&event_sink_trait),
+        "exec-a",
+        &extensions,
+    )
+    .await
+    .expect("streaming inference should execute through gateway stream");
+
+    assert_eq!(
+        outputs.get("response").and_then(|value| value.as_str()),
+        Some("typed response")
+    );
+    let captured = requests.lock().expect("requests lock");
+    assert_eq!(captured.len(), 1);
+    assert_eq!(captured[0]["model"], serde_json::json!("typed-model"));
+    assert_eq!(captured[0]["stream"], serde_json::json!(true));
+    let stream_events = event_sink.events();
+    assert_eq!(stream_events.len(), 1);
+    match &stream_events[0] {
+        crate::WorkflowEvent::TaskStream {
+            task_id,
+            execution_id,
+            port,
+            data,
+            ..
+        } => {
+            assert_eq!(task_id, "llm-inference-1");
+            assert_eq!(execution_id, "exec-a");
+            assert_eq!(port, "response");
+            assert_eq!(data, &serde_json::json!("typed response"));
+        }
+        other => panic!("expected task stream event, got {other:?}"),
+    }
+    let events = lifecycle_events.lock().expect("lifecycle events lock");
+    assert_eq!(events.len(), 3);
+    assert!(events
+        .iter()
+        .all(|event| event.phase == InferenceLifecyclePhase::BackendExecution));
+    assert_eq!(
+        events[0].request_id.as_deref(),
+        Some("exec-a:llm-inference-1:text_generation")
+    );
+}
+
+#[cfg(feature = "inference-nodes")]
+#[tokio::test]
 async fn test_canonical_llm_text_uses_typed_lifecycle_sink_extension() {
     let requests = Arc::new(Mutex::new(Vec::new()));
     let gateway = Arc::new(InferenceGateway::with_backend(

@@ -55,11 +55,17 @@ fn assign_typed_request_id(
     execution_id: &str,
 ) {
     if request.request_id.is_none() {
-        request.request_id = Some(format!(
-            "{execution_id}:{task_id}:{}",
-            request.task_id.canonical_label()
+        request.request_id = Some(inference_request_id(
+            task_id,
+            execution_id,
+            request.task_id.canonical_label(),
         ));
     }
+}
+
+#[cfg(feature = "inference-nodes")]
+fn inference_request_id(task_id: &str, execution_id: &str, task_label: &str) -> String {
+    format!("{execution_id}:{task_id}:{task_label}")
 }
 
 /// Resolve a model path that may be a directory to the actual `.gguf` file inside.
@@ -93,25 +99,6 @@ pub(crate) fn resolve_gguf_path(path: &str) -> Result<String> {
     } else {
         Ok(path.to_string())
     }
-}
-
-/// Parse an OpenAI-compatible `/v1/chat/completions` SSE data line into a content token.
-///
-/// Streams `data: {"choices": [{"delta": {"content": "token"}}]}` per line.
-#[cfg(feature = "inference-nodes")]
-pub(crate) fn parse_openai_sse_content(line: &str) -> Option<String> {
-    let data = line.strip_prefix("data: ")?;
-    if data == "[DONE]" {
-        return None;
-    }
-    let json: serde_json::Value = serde_json::from_str(data).ok()?;
-    json.get("choices")
-        .and_then(|c| c.get(0))
-        .and_then(|c| c.get("delta"))
-        .and_then(|d| d.get("content"))
-        .and_then(|c| c.as_str())
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
 }
 
 #[cfg(feature = "inference-nodes")]
@@ -158,16 +145,6 @@ pub(crate) async fn execute_llm_inference(
     let system_prompt = inputs.get("system_prompt").and_then(|p| p.as_str());
     let extra_context = inputs.get("context").and_then(|c| c.as_str());
 
-    if !gw.is_ready().await {
-        return Err(NodeEngineError::ExecutionFailed(
-            "LLM server is not ready".to_string(),
-        ));
-    }
-
-    let base_url = gw.base_url().await.ok_or_else(|| {
-        NodeEngineError::ExecutionFailed("No LLM server URL available".to_string())
-    })?;
-
     let full_prompt = if let Some(ctx) = extra_context {
         format!("{}\n\nContext:\n{}", prompt, ctx)
     } else {
@@ -179,10 +156,15 @@ pub(crate) async fn execute_llm_inference(
         messages.push(serde_json::json!({"role": "system", "content": sys}));
     }
     messages.push(serde_json::json!({"role": "user", "content": full_prompt}));
+    let model_name = read_optional_input_string_aliases(
+        inputs,
+        &["model_name", "modelName", "model", "model_id", "modelId"],
+    )
+    .unwrap_or_else(|| "gpt-4".to_string());
 
     let streaming = event_sink.is_some();
     let mut request_body = serde_json::json!({
-        "model": "gpt-4",
+        "model": model_name,
         "messages": messages,
         "stream": streaming
     });
@@ -193,70 +175,47 @@ pub(crate) async fn execute_llm_inference(
         request_body[key] = value.clone();
     }
 
-    let client = reqwest::Client::new();
-    let http_response = client
-        .post(format!("{}/v1/chat/completions", base_url))
-        .json(&request_body)
-        .send()
-        .await
-        .map_err(|e| NodeEngineError::ExecutionFailed(format!("LLM request failed: {}", e)))?;
-
-    if !http_response.status().is_success() {
-        let error = http_response.text().await.unwrap_or_default();
-        return Err(NodeEngineError::ExecutionFailed(format!(
-            "LLM error: {}",
-            error
-        )));
-    }
-
     let response = if let Some(sink) = event_sink {
-        // Streaming path: parse SSE and emit per-token events
-        let mut full_response = String::new();
-        let mut byte_stream = http_response.bytes_stream();
-        let mut buffer = String::new();
-
-        while let Some(chunk_result) = byte_stream.next().await {
-            let chunk = chunk_result.map_err(|e| {
-                NodeEngineError::ExecutionFailed(format!("Stream read error: {}", e))
-            })?;
-            buffer.push_str(&String::from_utf8_lossy(&chunk));
-
-            while let Some(newline_pos) = buffer.find('\n') {
-                let line = buffer[..newline_pos].trim().to_string();
-                buffer = buffer[newline_pos + 1..].to_string();
-
-                if let Some(token) = parse_openai_sse_content(&line) {
-                    full_response.push_str(&token);
-                    let _ = sink.send(crate::WorkflowEvent::task_stream(
-                        task_id,
-                        execution_id,
-                        "response",
-                        serde_json::json!(token),
-                    ));
-                }
-            }
+        let request_json = serde_json::to_string(&request_body).map_err(|error| {
+            NodeEngineError::ExecutionFailed(format!("Failed to encode LLM request: {error}"))
+        })?;
+        let request_id = Some(inference_request_id(
+            task_id,
+            execution_id,
+            inference::InferenceTaskId::TextGeneration.canonical_label(),
+        ));
+        let mut token_stream = if let Some(lifecycle_sink) = inference_lifecycle_sink(extensions) {
+            gw.chat_completion_stream_with_lifecycle(request_json, request_id, lifecycle_sink)
+                .await
+        } else {
+            gw.chat_completion_stream(request_json).await
         }
-        let line = buffer.trim().to_string();
-        if let Some(token) = parse_openai_sse_content(&line) {
-            full_response.push_str(&token);
-            let _ = sink.send(crate::WorkflowEvent::task_stream(
-                task_id,
-                execution_id,
-                "response",
-                serde_json::json!(token),
-            ));
+        .map_err(|error| {
+            NodeEngineError::ExecutionFailed(format!("LLM request failed: {error}"))
+        })?;
+
+        let mut full_response = String::new();
+        while let Some(chunk_result) = token_stream.next().await {
+            let chunk = chunk_result.map_err(|error| {
+                NodeEngineError::ExecutionFailed(format!("Stream read error: {error}"))
+            })?;
+            if let Some(token) = chunk.content.filter(|token| !token.is_empty()) {
+                full_response.push_str(&token);
+                let _ = sink.send(crate::WorkflowEvent::task_stream(
+                    task_id,
+                    execution_id,
+                    "response",
+                    serde_json::json!(token),
+                ));
+            }
+            if chunk.done {
+                break;
+            }
         }
 
         full_response
     } else {
-        // Non-streaming path: collect entire response
-        let json: serde_json::Value = http_response.json().await.map_err(|e| {
-            NodeEngineError::ExecutionFailed(format!("Failed to parse response: {}", e))
-        })?;
-        json["choices"][0]["message"]["content"]
-            .as_str()
-            .unwrap_or("")
-            .to_string()
+        unreachable!("non-streaming typed inference returns before streaming request construction")
     };
 
     let mut outputs = HashMap::new();

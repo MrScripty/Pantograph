@@ -1751,8 +1751,12 @@ backend inference outside migration diagnostics.
 Node-engine non-streaming canonical `llm-inference` text/chat execution now
 builds `InferenceExecutionRequest` from prompt, context, task kind, runtime
 hint, Pumas model reference, and grouped generation options, then executes
-through `InferenceGateway::execute_typed`; the streaming SSE path remains
-unchanged until token-stream contracts migrate.
+through `InferenceGateway::execute_typed`; typed token-stream request/result
+contracts remain deferred.
+Node-engine generic streaming text/chat execution now also routes through the
+gateway streaming facade instead of posting directly over HTTP from node-engine,
+preserving graph `TaskStream` event shape while making backend/lifecycle facts
+available through the gateway.
 Node-engine canonical `llm-inference` embedding execution now also builds an
 `InferenceExecutionRequest` from text, runtime hint, model alias, and Pumas
 model reference, then executes through `InferenceGateway::execute_typed` while
@@ -2156,6 +2160,9 @@ Update during implementation:
 - 2026-05-03: Removed the stale llama.cpp-only embedding and reranker execution
   helpers from node-engine after canonical embedding/rerank execution moved to
   typed gateway requests.
+- 2026-05-03: Routed generic `llm-inference` streaming text/chat execution
+  through the inference gateway stream facade instead of node-engine direct HTTP
+  transport while preserving `TaskStream` event output.
 
 ## Commit Cadence Notes
 
