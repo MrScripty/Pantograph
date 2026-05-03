@@ -1624,6 +1624,8 @@ fn record_inference_lifecycle_phase_event_with_option_diagnostics(
         runtime_instance_id,
         model_id,
         detail,
+        compatibility_report: None,
+        compatibility_issues: Vec::new(),
         option_diagnostics,
     });
 }

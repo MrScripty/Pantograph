@@ -5,10 +5,12 @@ use pantograph_diagnostics_ledger::{
     DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
     DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerError,
     DiagnosticsLedgerRepository, ExecutionGuaranteeLevel,
+    InferenceCompatibilityIssueDiagnosticSummary, InferenceCompatibilityReportDiagnosticSummary,
     InferenceExecutionDiagnosticObservedPayload, InferenceOptionDiagnosticSummary,
     InferenceOptionSupportCounts, LicenseSnapshot, ModelIdentity, ModelLicenseUsageEvent,
     ModelOutputMeasurement, NodeExecutionProjectionStatus, NodeExecutionStatusPayload,
-    RetentionClass, UsageEventStatus, UsageLineage, MAX_INFERENCE_OPTION_DIAGNOSTICS,
+    RetentionClass, UsageEventStatus, UsageLineage, MAX_INFERENCE_COMPATIBILITY_ISSUES,
+    MAX_INFERENCE_OPTION_DIAGNOSTICS,
 };
 use pantograph_runtime_attribution::{
     BucketId, ClientId, ClientSessionId, UsageEventId, WorkflowId, WorkflowRunId,
@@ -455,6 +457,18 @@ fn build_inference_diagnostic_event_ledger_append_request(
                     .unwrap_or_else(|| inference_lifecycle_phase_key(&event.phase).to_string()),
                 selected_backend_key: event.backend_key.clone(),
                 selected_backend_family: event.backend_key.clone(),
+                compatibility_report: event
+                    .compatibility_report
+                    .as_ref()
+                    .map(compatibility_report_summary),
+                compatibility_issue_count: event.compatibility_issues.len().min(u32::MAX as usize)
+                    as u32,
+                compatibility_issues: event
+                    .compatibility_issues
+                    .iter()
+                    .take(MAX_INFERENCE_COMPATIBILITY_ISSUES)
+                    .map(compatibility_issue_summary)
+                    .collect(),
                 option_support_counts: option_support_counts(&event.option_diagnostics),
                 option_diagnostics: event
                     .option_diagnostics
@@ -465,6 +479,31 @@ fn build_inference_diagnostic_event_ledger_append_request(
             },
         ),
     })
+}
+
+fn compatibility_report_summary(
+    report: &inference::InferenceCompatibilityReportSummary,
+) -> InferenceCompatibilityReportDiagnosticSummary {
+    InferenceCompatibilityReportDiagnosticSummary {
+        status: report.status.clone(),
+        compatible: report.compatible,
+        task: report.task.clone(),
+        model_source: report.model_source.clone(),
+        preprocessing: report.preprocessing.clone(),
+        postprocessing: report.postprocessing.clone(),
+    }
+}
+
+fn compatibility_issue_summary(
+    issue: &inference::InferenceCompatibilityIssueSummary,
+) -> InferenceCompatibilityIssueDiagnosticSummary {
+    InferenceCompatibilityIssueDiagnosticSummary {
+        kind: issue.kind.clone(),
+        phase: inference_lifecycle_phase_key(&issue.phase).to_string(),
+        message: issue.message.clone(),
+        model_id: issue.model_id.clone(),
+        path: issue.path.clone(),
+    }
 }
 
 fn option_support_counts(

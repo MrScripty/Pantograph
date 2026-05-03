@@ -476,6 +476,8 @@ fn record_task_validation_failure_lifecycle(
             runtime_instance_id: None,
             model_id: model_id.clone(),
             detail,
+            compatibility_report: None,
+            compatibility_issues: Vec::new(),
             option_diagnostics: Vec::new(),
         });
     }

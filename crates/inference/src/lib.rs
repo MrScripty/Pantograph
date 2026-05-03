@@ -157,7 +157,8 @@ pub use process::{ProcessEvent, ProcessHandle, ProcessSpawner};
 pub use server::{LlamaServer, ServerMode, SharedLlamaServer};
 pub use types::{
     ChatMessage, ChatRequest, ContentPart, Delta, EncodedImage, ImageGenerationRequest,
-    ImageGenerationResult, ImageUrlData, InferenceEmbeddingResult, InferenceExecutionInput,
+    ImageGenerationResult, ImageUrlData, InferenceCompatibilityIssueSummary,
+    InferenceCompatibilityReportSummary, InferenceEmbeddingResult, InferenceExecutionInput,
     InferenceExecutionRequest, InferenceExecutionRequestValidationError, InferenceExecutionResult,
     InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
     InferenceRequestLifecycleEventSink, InferenceUsage, MaskedPrompt, PromptSegment, RerankRequest,

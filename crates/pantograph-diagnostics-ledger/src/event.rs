@@ -24,6 +24,7 @@ pub const MAX_DIAGNOSTIC_ERROR_TEXT_LEN: usize = 4_096;
 pub const MAX_DIAGNOSTIC_ERROR_CAUSE_COUNT: usize = 8;
 pub const MAX_DIAGNOSTIC_ERROR_CAUSE_LEN: usize = 1_024;
 pub const MAX_INFERENCE_OPTION_DIAGNOSTICS: usize = 64;
+pub const MAX_INFERENCE_COMPATIBILITY_ISSUES: usize = 32;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -1312,6 +1313,12 @@ pub struct InferenceExecutionDiagnosticObservedPayload {
     pub selected_backend_key: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selected_backend_family: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compatibility_report: Option<InferenceCompatibilityReportDiagnosticSummary>,
+    #[serde(default)]
+    pub compatibility_issue_count: u32,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub compatibility_issues: Vec<InferenceCompatibilityIssueDiagnosticSummary>,
     #[serde(default)]
     pub option_support_counts: InferenceOptionSupportCounts,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -1338,10 +1345,81 @@ impl InferenceExecutionDiagnosticObservedPayload {
                 max_len: MAX_INFERENCE_OPTION_DIAGNOSTICS,
             });
         }
+        if self.compatibility_issues.len() > MAX_INFERENCE_COMPATIBILITY_ISSUES {
+            return Err(DiagnosticsLedgerError::FieldTooLong {
+                field: "compatibility_issues",
+                max_len: MAX_INFERENCE_COMPATIBILITY_ISSUES,
+            });
+        }
+        if let Some(report) = self.compatibility_report.as_ref() {
+            report.validate()?;
+        }
+        for issue in &self.compatibility_issues {
+            issue.validate()?;
+        }
         for diagnostic in &self.option_diagnostics {
             diagnostic.validate()?;
         }
         Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct InferenceCompatibilityReportDiagnosticSummary {
+    pub status: String,
+    pub compatible: bool,
+    pub task: String,
+    pub model_source: String,
+    pub preprocessing: String,
+    pub postprocessing: String,
+}
+
+impl InferenceCompatibilityReportDiagnosticSummary {
+    fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        validate_required_text("compatibility_status", &self.status, MAX_ID_LEN)?;
+        validate_required_text("compatibility_task", &self.task, MAX_ID_LEN)?;
+        validate_required_text("compatibility_model_source", &self.model_source, MAX_ID_LEN)?;
+        validate_required_text(
+            "compatibility_preprocessing",
+            &self.preprocessing,
+            MAX_ID_LEN,
+        )?;
+        validate_required_text(
+            "compatibility_postprocessing",
+            &self.postprocessing,
+            MAX_ID_LEN,
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct InferenceCompatibilityIssueDiagnosticSummary {
+    pub kind: String,
+    pub phase: String,
+    pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+}
+
+impl InferenceCompatibilityIssueDiagnosticSummary {
+    fn validate(&self) -> Result<(), DiagnosticsLedgerError> {
+        validate_required_text("compatibility_issue_kind", &self.kind, MAX_ID_LEN)?;
+        validate_required_text("compatibility_issue_phase", &self.phase, MAX_ID_LEN)?;
+        validate_required_text("compatibility_issue_message", &self.message, MAX_JSON_LEN)?;
+        validate_optional_text(
+            "compatibility_issue_model_id",
+            self.model_id.as_deref(),
+            MAX_ID_LEN,
+        )?;
+        validate_optional_text(
+            "compatibility_issue_path",
+            self.path.as_deref(),
+            MAX_JSON_LEN,
+        )
     }
 }
 

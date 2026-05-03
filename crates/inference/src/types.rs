@@ -465,6 +465,35 @@ pub enum InferenceRequestLifecycleEventKind {
     CleanupCompleted,
 }
 
+/// Bounded backend/model compatibility status summary for diagnostics.
+///
+/// This is ledger-neutral metadata. It describes factual compatibility checks
+/// that already happened at the inference boundary and must not be used as
+/// scheduler policy by itself.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct InferenceCompatibilityReportSummary {
+    pub status: String,
+    pub compatible: bool,
+    pub task: String,
+    pub model_source: String,
+    pub preprocessing: String,
+    pub postprocessing: String,
+}
+
+/// Bounded backend/model compatibility issue summary for diagnostics.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct InferenceCompatibilityIssueSummary {
+    pub kind: String,
+    pub phase: InferenceLifecyclePhase,
+    pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+}
+
 /// Request-scoped inference lifecycle event.
 ///
 /// Events are facts for diagnostics and auditing. They do not control runtime
@@ -489,6 +518,10 @@ pub struct InferenceRequestLifecycleEvent {
     pub model_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compatibility_report: Option<InferenceCompatibilityReportSummary>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub compatibility_issues: Vec<InferenceCompatibilityIssueSummary>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub option_diagnostics: Vec<OptionCompatibilityDiagnostic>,
 }
@@ -1103,6 +1136,21 @@ mod tests {
             runtime_instance_id: Some("llama-main-1".to_string()),
             model_id: Some("pumas://models/tiny-llama".to_string()),
             detail: Some("stream dropped by consumer".to_string()),
+            compatibility_report: Some(InferenceCompatibilityReportSummary {
+                status: "accepted".to_string(),
+                compatible: true,
+                task: "supported".to_string(),
+                model_source: "supported".to_string(),
+                preprocessing: "supported".to_string(),
+                postprocessing: "supported".to_string(),
+            }),
+            compatibility_issues: vec![InferenceCompatibilityIssueSummary {
+                kind: "unsupported_option".to_string(),
+                phase: InferenceLifecyclePhase::TaskValidation,
+                message: "sampling option was ignored".to_string(),
+                model_id: Some("pumas://models/tiny-llama".to_string()),
+                path: Some("sampling.temperature".to_string()),
+            }],
             option_diagnostics: Vec::new(),
         };
 
@@ -1118,6 +1166,14 @@ mod tests {
         );
         assert_eq!(encoded["runtime_id"], serde_json::json!("llama.cpp"));
         assert_eq!(encoded["task_id"], serde_json::json!("text_generation"));
+        assert_eq!(
+            encoded["compatibility_report"]["compatible"],
+            serde_json::json!(true)
+        );
+        assert_eq!(
+            encoded["compatibility_issues"][0]["kind"],
+            serde_json::json!("unsupported_option")
+        );
         assert_eq!(decoded, event);
     }
 

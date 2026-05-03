@@ -127,6 +127,8 @@ fn inference_lifecycle_event_adapter_builds_node_status_event_with_backend_conte
         runtime_instance_id: Some("python-runtime:pytorch:1".to_string()),
         model_id: Some("pumas://models/tiny-transformers".to_string()),
         detail: Some("backend failed".to_string()),
+        compatibility_report: None,
+        compatibility_issues: Vec::new(),
         option_diagnostics: Vec::new(),
     };
 
@@ -171,6 +173,8 @@ fn inference_lifecycle_cleanup_event_is_not_persisted_as_node_status() {
         runtime_instance_id: Some("python-runtime:pytorch:1".to_string()),
         model_id: Some("pumas://models/tiny-transformers".to_string()),
         detail: None,
+        compatibility_report: None,
+        compatibility_issues: Vec::new(),
         option_diagnostics: Vec::new(),
     };
 
@@ -198,6 +202,21 @@ fn inference_diagnostic_event_adapter_builds_option_support_summary() {
             message: Some("not mapped by this backend boundary".to_string()),
         },
     ];
+    event.compatibility_report = Some(inference::InferenceCompatibilityReportSummary {
+        status: "rejected".to_string(),
+        compatible: false,
+        task: "supported".to_string(),
+        model_source: "unsupported".to_string(),
+        preprocessing: "supported".to_string(),
+        postprocessing: "supported".to_string(),
+    });
+    event.compatibility_issues = vec![inference::InferenceCompatibilityIssueSummary {
+        kind: "unsupported_model_artifact".to_string(),
+        phase: inference::InferenceLifecyclePhase::ModelPackageResolution,
+        message: "backend does not declare support for this artifact".to_string(),
+        model_id: Some("pumas://models/tiny-transformers".to_string()),
+        path: Some("model.gguf".to_string()),
+    }];
 
     let request = inference_diagnostic_event_ledger_append_request(&context, &event)
         .expect("completed backend lifecycle with option diagnostics should map");
@@ -213,6 +232,18 @@ fn inference_diagnostic_event_adapter_builds_option_support_summary() {
             assert_eq!(payload.request_id, "req-a");
             assert_eq!(payload.task_id, "text_generation");
             assert_eq!(payload.selected_backend_key.as_deref(), Some("pytorch"));
+            assert_eq!(
+                payload
+                    .compatibility_report
+                    .as_ref()
+                    .map(|report| (report.status.as_str(), report.model_source.as_str())),
+                Some(("rejected", "unsupported"))
+            );
+            assert_eq!(payload.compatibility_issue_count, 1);
+            assert_eq!(
+                payload.compatibility_issues[0].phase,
+                "model_package_resolution"
+            );
             assert_eq!(payload.option_support_counts.mapped, 1);
             assert_eq!(payload.option_support_counts.unsupported, 1);
             assert_eq!(payload.option_diagnostics.len(), 2);
@@ -404,6 +435,8 @@ fn inference_lifecycle_event(
         runtime_instance_id: Some("python-runtime:pytorch:1".to_string()),
         model_id: Some("pumas://models/tiny-transformers".to_string()),
         detail,
+        compatibility_report: None,
+        compatibility_issues: Vec::new(),
         option_diagnostics: Vec::new(),
     }
 }

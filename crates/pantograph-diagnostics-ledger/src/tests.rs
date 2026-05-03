@@ -9,7 +9,8 @@ use crate::{
     DiagnosticErrorSeverity, DiagnosticEventAppendRequest, DiagnosticEventKind,
     DiagnosticEventPayload, DiagnosticEventPrivacyClass, DiagnosticEventRetentionClass,
     DiagnosticEventSourceComponent, DiagnosticsLedgerError, DiagnosticsLedgerRepository,
-    DiagnosticsQuery, ExecutionGuaranteeLevel, InferenceExecutionDiagnosticObservedPayload,
+    DiagnosticsQuery, ExecutionGuaranteeLevel, InferenceCompatibilityIssueDiagnosticSummary,
+    InferenceCompatibilityReportDiagnosticSummary, InferenceExecutionDiagnosticObservedPayload,
     InferenceOptionDiagnosticSummary, InferenceOptionSupportCounts, IoArtifactAccessMode,
     IoArtifactFormatMetadata, IoArtifactLifecycleState, IoArtifactObservedPayload,
     IoArtifactPayloadKind, IoArtifactProjectionQuery, IoArtifactRetentionState,
@@ -35,10 +36,10 @@ use crate::{
     WorkflowTimingObservationStatus, DEFAULT_STANDARD_RETENTION_DAYS, IO_ARTIFACT_PROJECTION_NAME,
     IO_ARTIFACT_PROJECTION_VERSION, LIBRARY_USAGE_PROJECTION_NAME,
     LIBRARY_USAGE_PROJECTION_VERSION, MAX_DIAGNOSTIC_EVENT_PAYLOAD_BYTES,
-    MAX_INFERENCE_OPTION_DIAGNOSTICS, MILLIS_PER_DAY, NODE_STATUS_PROJECTION_NAME,
-    NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME, RUN_DETAIL_PROJECTION_VERSION,
-    RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION, SCHEDULER_TIMELINE_PROJECTION_NAME,
-    SCHEDULER_TIMELINE_PROJECTION_VERSION,
+    MAX_INFERENCE_COMPATIBILITY_ISSUES, MAX_INFERENCE_OPTION_DIAGNOSTICS, MILLIS_PER_DAY,
+    NODE_STATUS_PROJECTION_NAME, NODE_STATUS_PROJECTION_VERSION, RUN_DETAIL_PROJECTION_NAME,
+    RUN_DETAIL_PROJECTION_VERSION, RUN_LIST_PROJECTION_NAME, RUN_LIST_PROJECTION_VERSION,
+    SCHEDULER_TIMELINE_PROJECTION_NAME, SCHEDULER_TIMELINE_PROJECTION_VERSION,
 };
 
 #[test]
@@ -862,6 +863,19 @@ fn diagnostic_event_ledger_appends_inference_execution_diagnostic_summary() {
             assert_eq!(payload.request_id, "req-a");
             assert_eq!(payload.task_id, "text_generation");
             assert_eq!(payload.selected_backend_key.as_deref(), Some("pytorch"));
+            assert_eq!(
+                payload
+                    .compatibility_report
+                    .as_ref()
+                    .map(|report| (report.status.as_str(), report.compatible)),
+                Some(("rejected", false))
+            );
+            assert_eq!(payload.compatibility_issue_count, 1);
+            assert_eq!(payload.compatibility_issues.len(), 1);
+            assert_eq!(
+                payload.compatibility_issues[0].kind,
+                "unsupported_model_artifact"
+            );
             assert_eq!(payload.option_support_counts.mapped, 1);
             assert_eq!(payload.option_support_counts.unsupported, 1);
             assert_eq!(payload.option_diagnostics.len(), 2);
@@ -904,6 +918,29 @@ fn diagnostic_event_ledger_validates_inference_execution_diagnostic_scope_and_bo
         result,
         Err(DiagnosticsLedgerError::FieldTooLong {
             field: "option_diagnostics",
+            ..
+        })
+    ));
+
+    let mut too_many_issues = sample_inference_execution_diagnostic_event();
+    if let DiagnosticEventPayload::InferenceExecutionDiagnosticObserved(payload) =
+        &mut too_many_issues.payload
+    {
+        payload.compatibility_issues = (0..=MAX_INFERENCE_COMPATIBILITY_ISSUES)
+            .map(|index| InferenceCompatibilityIssueDiagnosticSummary {
+                kind: format!("compatibility_issue_{index}"),
+                phase: "task_validation".to_string(),
+                message: "compatibility issue".to_string(),
+                model_id: None,
+                path: None,
+            })
+            .collect();
+    }
+    let result = ledger.append_diagnostic_event(too_many_issues);
+    assert!(matches!(
+        result,
+        Err(DiagnosticsLedgerError::FieldTooLong {
+            field: "compatibility_issues",
             ..
         })
     ));
@@ -4073,6 +4110,22 @@ fn sample_inference_execution_diagnostic_event() -> DiagnosticEventAppendRequest
                 task_id: "text_generation".to_string(),
                 selected_backend_key: Some("pytorch".to_string()),
                 selected_backend_family: Some("pytorch".to_string()),
+                compatibility_report: Some(InferenceCompatibilityReportDiagnosticSummary {
+                    status: "rejected".to_string(),
+                    compatible: false,
+                    task: "supported".to_string(),
+                    model_source: "unsupported".to_string(),
+                    preprocessing: "supported".to_string(),
+                    postprocessing: "supported".to_string(),
+                }),
+                compatibility_issue_count: 1,
+                compatibility_issues: vec![InferenceCompatibilityIssueDiagnosticSummary {
+                    kind: "unsupported_model_artifact".to_string(),
+                    phase: "model_package_resolution".to_string(),
+                    message: "backend does not declare support for gguf artifacts".to_string(),
+                    model_id: Some("pumas://models/tiny-transformers".to_string()),
+                    path: Some("model.gguf".to_string()),
+                }],
                 option_support_counts: InferenceOptionSupportCounts {
                     mapped: 1,
                     unsupported: 1,

@@ -10,6 +10,7 @@ use crate::model_contracts::{
     ModelValidationState, OptionCompatibilityDiagnostic, OptionSupportState, PackageFactStatus,
     ProcessorComponentKind, ResolvedModelPackageFacts, TaskRegistryEntry,
 };
+use crate::types::{InferenceCompatibilityIssueSummary, InferenceCompatibilityReportSummary};
 
 use super::{BackendCapabilities, BackendComponentCapability, BackendFeatureSupport};
 
@@ -98,6 +99,41 @@ pub enum BackendCompatibilityIssueKind {
     MissingPreprocessingComponent,
     MissingPostprocessingComponent,
     UnsupportedOption,
+}
+
+impl BackendCompatibilityReport {
+    /// Convert this backend-owned report into lifecycle-safe diagnostic
+    /// metadata without exposing backend internals or scheduler policy.
+    #[must_use]
+    pub fn to_inference_compatibility_report_summary(&self) -> InferenceCompatibilityReportSummary {
+        InferenceCompatibilityReportSummary {
+            status: compatibility_report_status_label(self).to_string(),
+            compatible: self.compatible,
+            task: compatibility_status_label(self.task).to_string(),
+            model_source: compatibility_status_label(self.model_source).to_string(),
+            preprocessing: compatibility_status_label(self.preprocessing).to_string(),
+            postprocessing: compatibility_status_label(self.postprocessing).to_string(),
+        }
+    }
+
+    /// Convert issue facts into bounded lifecycle-safe diagnostic metadata.
+    #[must_use]
+    pub fn to_inference_compatibility_issue_summaries(
+        &self,
+        limit: usize,
+    ) -> Vec<InferenceCompatibilityIssueSummary> {
+        self.issues
+            .iter()
+            .take(limit)
+            .map(|issue| InferenceCompatibilityIssueSummary {
+                kind: compatibility_issue_kind_label(&issue.kind).to_string(),
+                phase: issue.phase.clone(),
+                message: issue.message.clone(),
+                model_id: issue.model_id.clone(),
+                path: issue.path.clone(),
+            })
+            .collect()
+    }
 }
 
 impl BackendCapabilities {
@@ -379,6 +415,54 @@ impl BackendCapabilities {
     }
 }
 
+fn compatibility_status_label(status: BackendCompatibilityStatus) -> &'static str {
+    match status {
+        BackendCompatibilityStatus::Supported => "supported",
+        BackendCompatibilityStatus::Unsupported => "unsupported",
+        BackendCompatibilityStatus::Unknown => "unknown",
+    }
+}
+
+fn compatibility_report_status_label(report: &BackendCompatibilityReport) -> &'static str {
+    if report.compatible {
+        return "accepted";
+    }
+
+    let statuses = [
+        report.task,
+        report.model_source,
+        report.preprocessing,
+        report.postprocessing,
+    ];
+    if statuses
+        .iter()
+        .any(|status| *status == BackendCompatibilityStatus::Unsupported)
+    {
+        "rejected"
+    } else {
+        "degraded"
+    }
+}
+
+fn compatibility_issue_kind_label(kind: &BackendCompatibilityIssueKind) -> &'static str {
+    match kind {
+        BackendCompatibilityIssueKind::ContractVersionMismatch => "contract_version_mismatch",
+        BackendCompatibilityIssueKind::InvalidModelArtifact => "invalid_model_artifact",
+        BackendCompatibilityIssueKind::UnsupportedTask => "unsupported_task",
+        BackendCompatibilityIssueKind::TaskEvidenceMismatch => "task_evidence_mismatch",
+        BackendCompatibilityIssueKind::UnsupportedModelArtifact => "unsupported_model_artifact",
+        BackendCompatibilityIssueKind::UnsupportedBackendHint => "unsupported_backend_hint",
+        BackendCompatibilityIssueKind::CustomCodeUnsupported => "custom_code_unsupported",
+        BackendCompatibilityIssueKind::MissingPreprocessingComponent => {
+            "missing_preprocessing_component"
+        }
+        BackendCompatibilityIssueKind::MissingPostprocessingComponent => {
+            "missing_postprocessing_component"
+        }
+        BackendCompatibilityIssueKind::UnsupportedOption => "unsupported_option",
+    }
+}
+
 fn compatibility_issue(
     request: &BackendCompatibilityRequest<'_>,
     kind: BackendCompatibilityIssueKind,
@@ -648,5 +732,32 @@ mod tests {
             .issues
             .iter()
             .any(|issue| issue.kind == BackendCompatibilityIssueKind::UnsupportedOption));
+    }
+
+    #[test]
+    fn compatibility_report_projects_lifecycle_safe_summary() {
+        let package = fixture(include_str!(
+            "../../tests/fixtures/inference_package_facts/missing_tokenizer_package_facts.json"
+        ));
+        let task = text_generation_task();
+        let report = backend_for_text_generation().check_model_compatibility(
+            Some("transformers"),
+            BackendCompatibilityRequest::new(&task, &package),
+        );
+
+        let summary = report.to_inference_compatibility_report_summary();
+        let issues = report.to_inference_compatibility_issue_summaries(1);
+
+        assert!(!summary.compatible);
+        assert_eq!(summary.status, "rejected");
+        assert_eq!(summary.task, "supported");
+        assert_eq!(summary.preprocessing, "unsupported");
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].kind, "missing_preprocessing_component");
+        assert_eq!(issues[0].phase, InferenceLifecyclePhase::Preprocessing);
+        assert_eq!(
+            issues[0].model_id.as_deref(),
+            Some("llm/example/missing-tokenizer")
+        );
     }
 }

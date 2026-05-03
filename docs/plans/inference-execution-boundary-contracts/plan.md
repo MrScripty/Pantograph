@@ -2158,10 +2158,15 @@ inference write ledger events directly.
 - [ ] Map Pumas model id, resolved artifact kind, canonical task id, selected
   runtime id, selected backend key/family, selected device id, selected network
   node id, and scheduler policy id into durable run/node/runtime diagnostics.
-- [ ] Map inference compatibility summaries into durable bounded metadata:
-  accepted/rejected/degraded status, missing components, unsupported
-  backend/task pairs, custom-code/trust blockers, and model/backend unavailable
-  reasons.
+- [x] Map lifecycle-carried inference compatibility summaries into durable
+  bounded metadata: accepted/rejected/degraded status dimensions, missing
+  components, unsupported backend/task pairs, custom-code/trust blockers, and
+  model/backend unavailable reasons.
+- [ ] Emit `BackendCompatibilityReport` summaries from execution/preflight
+  producers wherever resolved model package facts and selected backend facts are
+  available. The durable lifecycle-to-ledger mapping is complete, but most
+  typed execution paths still only emit option diagnostics until their
+  preflight/package-facts checks attach the new compatibility summary fields.
 - [x] Map generation option support summaries into durable bounded
   metadata: honored, mapped, defaulted, ignored, rejected, unsupported,
   conflicts, requires-model-support, and requires-backend-support.
@@ -2272,6 +2277,16 @@ one-off conversions.
   `task_id` through backend-execution stream events as well as task-validation
   events. Raw chat lifecycle calls still record no task id unless a typed wrapper
   supplies one.
+- 2026-05-03: Compatibility diagnostics slice added ledger-neutral
+  `InferenceCompatibilityReportSummary` and
+  `InferenceCompatibilityIssueSummary` metadata to inference lifecycle events,
+  conversion helpers from backend-owned `BackendCompatibilityReport`, and
+  bounded diagnostics-ledger fields on `inference.execution_diagnostic_observed`
+  events. Embedded-runtime maps those lifecycle facts into durable metadata
+  without importing the diagnostics ledger into `crates/inference`. The open
+  follow-up is producer coverage: execution and preflight paths that already
+  have package facts must attach the compatibility summaries instead of only
+  option diagnostics.
 
 ## Execution Notes
 

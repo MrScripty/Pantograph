@@ -756,6 +756,8 @@ fn record_dependency_preflight_failure_lifecycle(
             runtime_instance_id: None,
             model_id: context.model_id.clone(),
             detail,
+            compatibility_report: None,
+            compatibility_issues: Vec::new(),
             option_diagnostics: Vec::new(),
         });
     }
