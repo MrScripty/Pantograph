@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
-description = "Multi-backend AI inference library supporting llama.cpp, Ollama, and Candle"
+description = "Multi-backend AI inference library supporting llama.cpp, Candle, and PyTorch"
 readme = "README.md"
 
 [lints]
@@ -17,7 +17,6 @@ default = ["backend-llamacpp"]
 
 # Inference backends - at least one should be enabled
 backend-llamacpp = []  # llama.cpp sidecar with GGUF support
-backend-ollama = []    # Ollama daemon integration
 backend-candle = [     # In-process Candle inference (CUDA required)
     "dep:candle-core",
     "dep:candle-nn",

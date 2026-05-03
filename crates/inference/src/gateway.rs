@@ -1,7 +1,7 @@
 //! Inference Gateway - Single entry point for all inference operations
 //!
-//! The gateway abstracts over different inference backends (llama.cpp, Ollama, Candle)
-//! providing a unified interface for the rest of the application. It manages backend
+//! The gateway abstracts over supported inference backends such as llama.cpp,
+//! Candle, PyTorch, and external-compatible runtimes. It manages backend
 //! lifecycle, switching, and forwards requests to the active backend.
 
 use std::path::PathBuf;
@@ -165,7 +165,7 @@ impl InferenceGateway {
     /// Set the process spawner
     ///
     /// This must be called before starting any backend that requires process spawning
-    /// (e.g., llama.cpp, Ollama).
+    /// (e.g., llama.cpp).
     pub async fn set_spawner(&self, spawner: Arc<dyn ProcessSpawner>) {
         let mut guard = self.spawner.write().await;
         *guard = Some(spawner);
@@ -276,18 +276,7 @@ impl InferenceGateway {
         }
 
         match backend_name.as_str() {
-            "Ollama" => {
-                let model_name = request.ollama_model_name.ok_or_else(|| {
-                    GatewayError::Backend(BackendError::Config(
-                        "Ollama VLM model not configured. Set a model like 'llava:13b' or 'qwen2-vl:7b' in Model Configuration.".to_string(),
-                    ))
-                })?;
-                Ok(BackendConfig {
-                    model_name: Some(model_name),
-                    embedding_mode: false,
-                    ..BackendConfig::default()
-                })
-            }
+            "Ollama" => Err(unsupported_ollama_gateway_error()),
             "PyTorch" => {
                 let model_path = request.file_model_path.ok_or_else(|| {
                     GatewayError::Backend(BackendError::Config(
@@ -336,16 +325,7 @@ impl InferenceGateway {
     ) -> Result<BackendConfig, GatewayError> {
         let backend_name = self.current_backend_name().await;
         match backend_name.as_str() {
-            "Ollama" => {
-                let model_name = request
-                    .ollama_model_name
-                    .unwrap_or_else(|| "nomic-embed-text".to_string());
-                Ok(BackendConfig {
-                    model_name: Some(model_name),
-                    embedding_mode: true,
-                    ..BackendConfig::default()
-                })
-            }
+            "Ollama" => Err(unsupported_ollama_gateway_error()),
             "Candle" => {
                 let model_path = request.candle_model_path.ok_or_else(|| {
                     GatewayError::Backend(BackendError::Config(
@@ -359,7 +339,8 @@ impl InferenceGateway {
                 })
             }
             "PyTorch" => Err(GatewayError::Backend(BackendError::Config(
-                "PyTorch does not support embedding mode. Use llama.cpp, Ollama, or Candle for embeddings.".to_string(),
+                "PyTorch does not support embedding mode. Use llama.cpp or Candle for embeddings."
+                    .to_string(),
             ))),
             _ => {
                 let model_path = request.gguf_model_path.ok_or_else(|| {
@@ -795,6 +776,12 @@ fn unix_timestamp_ms() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)
         .unwrap_or(0)
+}
+
+fn unsupported_ollama_gateway_error() -> GatewayError {
+    GatewayError::Backend(BackendError::Config(
+        "Ollama is no longer supported as a first-party Pantograph inference backend. Use a Pumas model reference with a supported runtime such as llama.cpp, PyTorch/Transformers, or Candle.".to_string(),
+    ))
 }
 
 #[cfg(feature = "backend-llamacpp")]

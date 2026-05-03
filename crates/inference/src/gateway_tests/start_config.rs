@@ -7,21 +7,24 @@ use super::super::{EmbeddingStartRequest, GatewayError, InferenceGateway, Infere
 use super::{MockHttpBackend, MockImageBackend, MockProcessSpawner, MockReusedBackend};
 
 #[tokio::test]
-async fn test_build_inference_start_config_for_ollama_uses_model_name() {
+async fn test_build_inference_start_config_rejects_retired_ollama_backend() {
     let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "Ollama");
 
-    let config = gateway
+    let error = gateway
         .build_inference_start_config(InferenceStartRequest {
             external_url: None,
             ollama_model_name: Some("llava:13b".to_string()),
             ..InferenceStartRequest::default()
         })
         .await
-        .expect("config should build");
+        .expect_err("ollama should be retired");
 
-    assert_eq!(config.model_name.as_deref(), Some("llava:13b"));
-    assert_eq!(config.model_path, None);
-    assert!(!config.embedding_mode);
+    assert!(matches!(
+        error,
+        GatewayError::Backend(BackendError::Config(message))
+        if message.contains("Ollama is no longer supported")
+            && message.contains("Pumas model reference")
+    ));
 }
 
 #[tokio::test]
@@ -151,11 +154,12 @@ async fn test_build_embedding_start_config_for_pytorch_rejects_embedding_mode() 
 
 #[tokio::test]
 async fn test_prepare_embedding_runtime_captures_restore_config_and_base_url() {
-    let gateway = InferenceGateway::with_backend(Box::new(MockHttpBackend), "Ollama");
+    let gateway = InferenceGateway::with_backend(Box::new(MockHttpBackend), "llama.cpp");
     gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
 
     let inference_config = BackendConfig {
-        model_name: Some("llava:13b".to_string()),
+        model_path: Some(PathBuf::from("/models/vision.gguf")),
+        mmproj_path: Some(PathBuf::from("/models/mmproj.gguf")),
         ..BackendConfig::default()
     };
     gateway
@@ -164,17 +168,21 @@ async fn test_prepare_embedding_runtime_captures_restore_config_and_base_url() {
         .expect("gateway should start in inference mode");
 
     let prepared = gateway
-        .prepare_embedding_runtime(EmbeddingStartRequest::default())
+        .prepare_embedding_runtime(EmbeddingStartRequest {
+            gguf_model_path: Some(PathBuf::from("/models/embed.gguf")),
+            ..EmbeddingStartRequest::default()
+        })
         .await
         .expect("embedding preparation should succeed");
 
-    assert_eq!(prepared.backend_name, "Ollama");
+    assert_eq!(prepared.backend_name, "llama.cpp");
     assert_eq!(
         prepared
             .restore_config
             .as_ref()
-            .and_then(|config| config.model_name.as_deref()),
-        Some("llava:13b")
+            .and_then(|config| config.model_path.as_ref())
+            .map(|path| path.to_string_lossy().to_string()),
+        Some("/models/vision.gguf".to_string())
     );
     assert_eq!(prepared.base_url.as_deref(), Some("http://127.0.0.1:11434"));
     assert!(gateway.is_embedding_mode().await);
@@ -182,12 +190,12 @@ async fn test_prepare_embedding_runtime_captures_restore_config_and_base_url() {
 
 #[tokio::test]
 async fn test_prepare_embedding_runtime_keeps_existing_embedding_runtime() {
-    let gateway = InferenceGateway::with_backend(Box::new(MockHttpBackend), "Ollama");
+    let gateway = InferenceGateway::with_backend(Box::new(MockHttpBackend), "llama.cpp");
     gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
 
     gateway
         .start(&BackendConfig {
-            model_name: Some("nomic-embed-text".to_string()),
+            model_path: Some(PathBuf::from("/models/embed.gguf")),
             embedding_mode: true,
             ..BackendConfig::default()
         })
@@ -201,7 +209,7 @@ async fn test_prepare_embedding_runtime_keeps_existing_embedding_runtime() {
         .expect("existing embedding runtime should be reused");
     let after = gateway.runtime_lifecycle_snapshot().await;
 
-    assert_eq!(prepared.backend_name, "Ollama");
+    assert_eq!(prepared.backend_name, "llama.cpp");
     assert!(prepared.restore_config.is_none());
     assert_eq!(prepared.base_url.as_deref(), Some("http://127.0.0.1:11434"));
     assert_eq!(after.runtime_instance_id, before.runtime_instance_id);
@@ -209,11 +217,12 @@ async fn test_prepare_embedding_runtime_keeps_existing_embedding_runtime() {
 
 #[tokio::test]
 async fn test_restart_runtime_config_reads_active_runtime_config_until_stop() {
-    let gateway = InferenceGateway::with_backend(Box::new(MockHttpBackend), "Ollama");
+    let gateway = InferenceGateway::with_backend(Box::new(MockHttpBackend), "llama.cpp");
     gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
 
     let config = BackendConfig {
-        model_name: Some("llava:13b".to_string()),
+        model_path: Some(PathBuf::from("/models/vision.gguf")),
+        mmproj_path: Some(PathBuf::from("/models/mmproj.gguf")),
         ..BackendConfig::default()
     };
     gateway
@@ -225,7 +234,13 @@ async fn test_restart_runtime_config_reads_active_runtime_config_until_stop() {
         .restart_runtime_config()
         .await
         .expect("active runtime config should be available");
-    assert_eq!(restart_config.model_name.as_deref(), Some("llava:13b"));
+    assert_eq!(
+        restart_config
+            .model_path
+            .as_ref()
+            .map(|path| path.to_string_lossy().to_string()),
+        Some("/models/vision.gguf".to_string())
+    );
 
     gateway.stop().await;
     assert!(gateway.restart_runtime_config().await.is_none());

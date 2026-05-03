@@ -819,12 +819,12 @@ async fn test_kv_gateway_methods_delegate_to_backend() {
 
 #[tokio::test]
 async fn test_mode_info_reports_active_model_target() {
-    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "Ollama");
+    let gateway = InferenceGateway::with_backend(Box::new(MockImageBackend), "llama.cpp");
     gateway.set_spawner(Arc::new(MockProcessSpawner)).await;
 
     gateway
         .start(&BackendConfig {
-            model_name: Some("llava:13b".to_string()),
+            model_path: Some(PathBuf::from("/models/vision.gguf")),
             ..BackendConfig::default()
         })
         .await
@@ -832,8 +832,11 @@ async fn test_mode_info_reports_active_model_target() {
 
     let mode = gateway.mode_info().await;
 
-    assert_eq!(mode.backend_name.as_deref(), Some("Ollama"));
-    assert_eq!(mode.backend_key.as_deref(), Some("ollama"));
-    assert_eq!(mode.active_model_target.as_deref(), Some("llava:13b"));
+    assert_eq!(mode.backend_name.as_deref(), Some("llama.cpp"));
+    assert_eq!(mode.backend_key.as_deref(), Some("llama_cpp"));
+    assert_eq!(
+        mode.active_model_target.as_deref(),
+        Some("/models/vision.gguf")
+    );
     assert_eq!(mode.embedding_model_target, None);
 }

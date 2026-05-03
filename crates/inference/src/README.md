@@ -12,12 +12,12 @@ details.
 
 | File/Folder | Description |
 | ----------- | ----------- |
-| `backend/` | Backend trait definitions and concrete engine adapters such as llama.cpp, Ollama, Candle, and PyTorch. |
+| `backend/` | Backend trait definitions and concrete supported engine adapters such as llama.cpp, Candle, and PyTorch. |
 | `embedding_runtime.rs` | Dedicated llama.cpp embedding runtime lifecycle plus backend-owned coordination for parallel embedding modes. |
 | `gateway.rs` | The single entry point that owns the active backend, temporary embedding-mode prepare/restore orchestration, and request forwarding through the frozen contracts. |
 | `gateway_tests.rs` | Gateway lifecycle, request forwarding, runtime reuse, embedding prepare/restore, and mock-backend tests extracted from the production gateway facade. |
 | `gateway_tests/` | Behavior-focused child modules for oversized gateway test families. |
-| `managed_runtime/` | Backend-owned managed binary contracts and orchestration for installable runtime sidecars such as `llama.cpp` and `Ollama`. |
+| `managed_runtime/` | Backend-owned managed binary contracts and orchestration for installable runtime sidecars such as `llama.cpp`; legacy Ollama state remains only until the managed-runtime cleanup slice. |
 | `managed_media_dependencies.rs` | Managed media dependency activation checks, conversion dependency lease plans, holder validation, and attribution-ready lease records for ffmpeg/OIIO/OCIO tooling. |
 | `managed_redistributables/` | Shared managed redistributable catalog, state, install, activation, lease, and removal helpers for runtime sidecars and media dependencies. |
 | `model_contracts.rs` | Transformers-aligned model/package/task facts, generation defaults, Pumas package-facts summary snapshots, and model-library update feeds consumed by inference without taking runtime-selection policy. |

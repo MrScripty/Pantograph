@@ -131,14 +131,13 @@ improvements and backend-owned grouping DTOs over local adapter exceptions.
 | Feature | Default | Contract |
 | ------- | ------- | -------- |
 | `backend-llamacpp` | Yes | Enables llama.cpp support in the desktop app and embedded runtime. |
-| `backend-ollama` | Yes | Enables Ollama support in the desktop app and embedded runtime. |
 | `backend-candle` | Yes | Enables local Candle support plus optional Candle/tokenizer/http streaming dependencies. |
 | `backend-pytorch` | No | Enables Python/PyTorch backend support and node-engine PyTorch nodes. Requires host Python dependencies. |
 | `backend-audio` | No | Enables Python-backed audio node support. Requires host audio Python dependencies. |
 
-Defaults match the current desktop local-backend product set. Python-backed
-families remain explicit because they require host interpreter packages and
-larger runtime setup.
+Defaults match the supported desktop local-backend product set. Ollama is
+retired as a first-party backend, and Python-backed families remain explicit
+because they require host interpreter packages and larger runtime setup.
 
 ## Revisit Triggers
 - `main.rs` composition extraction changes module ownership.

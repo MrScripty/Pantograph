@@ -756,6 +756,14 @@ host DTOs, migration steps, and feature-flag compatibility checks.
 - Revisit trigger: address in the backend feature cleanup slice or the next
   inference warning-baseline cleanup before requiring warning-free all-feature
   dependency checks.
+- 2026-05-03: `cargo check -p pantograph-uniffi --all-features` exposed a
+  missed `WorkflowErrorEnvelope.diagnostics` initializer in the optional
+  frontend HTTP UniFFI adapter. The initializer was updated to preserve the
+  canonical workflow error envelope shape under all features.
+- Reason: this was a binding feature-matrix drift issue discovered while
+  validating the Ollama backend feature-surface removal slice.
+- Revisit trigger: add focused all-feature binding coverage when workflow error
+  envelope fields change again.
 
 ## Definition of Done
 
@@ -1154,7 +1162,7 @@ entry points.
 - [x] Remove graph-visible `ollama-inference` entry points from the
   workflow-node inventory and frontend node maps while preserving a stale-node
   migration guard.
-- [ ] Remove Ollama backend registration and public backend feature surface.
+- [x] Remove Ollama backend registration and public backend feature surface.
 - [ ] Remove or quarantine managed Ollama runtime/platform code so it cannot be
   selected as an active backend.
 - [ ] Update user-facing and developer documentation to explain that Pantograph
@@ -1177,9 +1185,11 @@ entry points.
 the graph-visible `ollama-inference` registration from Rust workflow-node
 inventory and frontend node maps, changed node-engine stale `ollama-inference`
 execution to return a migration-focused error without contacting Ollama, and
-updated touched source READMEs. Broader backend feature removal, managed
-runtime cleanup, user-setting migration, and saved-workflow structural
-migration remain pending.
+updated touched source READMEs. The second slice removed public/default
+`backend-ollama` feature surfaces from inference, embedded runtime, UniFFI, and
+Tauri; stopped registering Ollama in the inference backend registry; and added
+registry/gateway checks for retired Ollama behavior. Managed runtime cleanup,
+user-setting migration, and saved-workflow structural migration remain pending.
 
 ### Milestone 7: Strengthen Capability Facts
 

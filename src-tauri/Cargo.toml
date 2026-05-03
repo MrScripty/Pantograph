@@ -14,11 +14,10 @@ default-run = "pantograph"
 workspace = true
 
 [features]
-default = ["backend-llamacpp", "backend-ollama", "backend-candle"]
+default = ["backend-llamacpp", "backend-candle"]
 
 # Inference backends - at least one must be enabled
 backend-llamacpp = ["inference/backend-llamacpp", "pantograph-embedded-runtime/backend-llamacpp"]
-backend-ollama = ["inference/backend-ollama", "pantograph-embedded-runtime/backend-ollama"]
 backend-pytorch = ["inference/backend-pytorch", "node-engine/pytorch-nodes", "pantograph-embedded-runtime/backend-pytorch"]
 backend-audio = ["node-engine/audio-nodes", "pantograph-embedded-runtime/backend-audio"]
 backend-candle = [
@@ -41,7 +40,7 @@ inference = { path = "../crates/inference", default-features = false }
 node-engine = { path = "../crates/node-engine", features = ["inference-nodes"] }
 workflow-nodes = { path = "../crates/workflow-nodes", features = ["model-library"] }
 pantograph-workflow-service = { path = "../crates/pantograph-workflow-service" }
-pantograph-embedded-runtime = { path = "../crates/pantograph-embedded-runtime", default-features = false, features = ["backend-llamacpp", "backend-ollama", "backend-candle"] }
+pantograph-embedded-runtime = { path = "../crates/pantograph-embedded-runtime", default-features = false, features = ["backend-llamacpp", "backend-candle"] }
 pantograph-media-conversion = { path = "../crates/pantograph-media-conversion" }
 pantograph-runtime-identity = { path = "../crates/pantograph-runtime-identity" }
 pantograph-runtime-registry = { path = "../crates/pantograph-runtime-registry" }

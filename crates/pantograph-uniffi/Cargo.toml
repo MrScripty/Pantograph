@@ -55,7 +55,7 @@ uniffi = { version = "0.28", features = ["build"] }
 uniffi = { version = "0.28", features = ["bindgen-tests"] }
 
 [features]
-default = ["embedded-runtime", "backend-ollama", "backend-candle"]
+default = ["embedded-runtime", "backend-candle"]
 cli = ["uniffi/cli"]
 runtime-deps = ["dep:pantograph-embedded-runtime", "dep:inference"]
 embedded-runtime = ["backend-llamacpp"]
@@ -63,11 +63,6 @@ backend-llamacpp = [
     "runtime-deps",
     "pantograph-embedded-runtime/backend-llamacpp",
     "inference/backend-llamacpp",
-]
-backend-ollama = [
-    "embedded-runtime",
-    "pantograph-embedded-runtime/backend-ollama",
-    "inference/backend-ollama",
 ]
 backend-pytorch = [
     "embedded-runtime",

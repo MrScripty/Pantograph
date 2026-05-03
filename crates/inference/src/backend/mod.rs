@@ -1,16 +1,13 @@
 //! Pluggable inference backend abstraction
 //!
 //! This module provides a trait-based abstraction for different inference engines
-//! (llama.cpp, Ollama, Candle, external APIs). All backends implement the same
+//! (llama.cpp, Candle, PyTorch, external APIs). All backends implement the same
 //! interface, allowing runtime switching between engines.
 
 pub mod registry;
 
 #[cfg(feature = "backend-llamacpp")]
 pub mod llamacpp;
-
-#[cfg(feature = "backend-ollama")]
-pub mod ollama;
 
 #[cfg(feature = "backend-candle")]
 pub mod candle;
@@ -33,9 +30,6 @@ use crate::types::{ImageGenerationRequest, ImageGenerationResult, RerankRequest,
 
 #[cfg(feature = "backend-llamacpp")]
 pub use llamacpp::LlamaCppBackend;
-
-#[cfg(feature = "backend-ollama")]
-pub use ollama::OllamaBackend;
 
 #[cfg(feature = "backend-candle")]
 pub use candle::CandleBackend;
@@ -109,7 +103,7 @@ pub enum BackendDefaultStartMode {
 /// Backend information for UI display
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BackendInfo {
-    /// Backend identifier (e.g., "llama.cpp", "Ollama", "Candle")
+    /// Backend identifier (e.g., "llama.cpp", "Candle", "PyTorch")
     pub name: String,
     /// Stable backend key for contracts and selection state.
     pub backend_key: String,
@@ -147,7 +141,8 @@ pub struct BackendConfig {
     pub model_path: Option<std::path::PathBuf>,
     /// Vision projection file path (for llama.cpp mmproj)
     pub mmproj_path: Option<std::path::PathBuf>,
-    /// Model name (for Ollama, e.g., "llava:13b")
+    /// Model name for external or compatibility backends that identify models
+    /// by name instead of local path.
     pub model_name: Option<String>,
     /// HuggingFace model ID (for Candle)
     pub model_id: Option<String>,
@@ -201,7 +196,7 @@ pub type ImageResult = ImageGenerationResult;
 
 /// The core trait that all inference backends must implement.
 ///
-/// Backends can be HTTP-based (llama.cpp, Ollama, External) or in-process (Candle).
+/// Backends can be HTTP-based (llama.cpp, External) or in-process (Candle).
 /// All use a common interface that application code can call without knowing
 /// which backend is active.
 #[async_trait]

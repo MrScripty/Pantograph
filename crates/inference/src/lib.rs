@@ -2,7 +2,6 @@
 //!
 //! This library provides a unified interface for different AI inference backends:
 //! - **llama.cpp**: Local inference via GGUF models (default)
-//! - **Ollama**: Integration with Ollama daemon
 //! - **Candle**: In-process inference using Hugging Face Candle
 //! - **PyTorch**: In-process PyO3 inference for dLLM, Sherry, and HuggingFace models
 //!
@@ -48,9 +47,6 @@ pub use backend::{
 
 #[cfg(feature = "backend-llamacpp")]
 pub use backend::LlamaCppBackend;
-
-#[cfg(feature = "backend-ollama")]
-pub use backend::OllamaBackend;
 
 #[cfg(feature = "backend-candle")]
 pub use backend::CandleBackend;

@@ -57,14 +57,14 @@ binding behavior.
 | Feature | Default | Contract |
 | ------- | ------- | -------- |
 | `backend-llamacpp` | Yes | Enables llama.cpp runtime support through `inference/backend-llamacpp`. |
-| `backend-ollama` | Yes | Enables Ollama runtime support through `inference/backend-ollama`. |
 | `backend-candle` | Yes | Enables local Candle support and its optional CUDA/tokenizer/http streaming dependencies. |
 | `backend-pytorch` | No | Enables PyTorch/PyO3 runtime and node-engine PyTorch nodes. Requires Python/PyTorch runtime availability. |
 | `backend-audio` | No | Enables Python-backed audio generation nodes. Requires audio Python dependencies. |
 | `standalone` | No | Enables the standard process spawner path for non-Tauri embedding. |
 
-Defaults mirror the current desktop-local runtime set. Python-backed families
-remain explicit because they carry host interpreter and package requirements.
+Defaults mirror the supported desktop-local runtime set. Ollama is retired as
+a first-party backend, and Python-backed families remain explicit because they
+carry host interpreter and package requirements.
 
 ## Revisit Triggers
 - Runtime lifecycle supervision requires a new dedicated crate.

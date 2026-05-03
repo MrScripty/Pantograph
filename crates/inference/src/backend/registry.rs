@@ -12,20 +12,16 @@ use super::{BackendError, BackendInfo, InferenceBackend};
 
 #[cfg(any(
     feature = "backend-llamacpp",
-    feature = "backend-ollama",
     feature = "backend-candle",
     feature = "backend-pytorch",
 ))]
 use super::BackendDefaultStartMode;
 
-#[cfg(any(feature = "backend-llamacpp", feature = "backend-ollama"))]
+#[cfg(feature = "backend-llamacpp")]
 use crate::managed_runtime::ManagedBinaryId;
 
 #[cfg(feature = "backend-llamacpp")]
 use super::LlamaCppBackend;
-
-#[cfg(feature = "backend-ollama")]
-use super::OllamaBackend;
 
 #[cfg(feature = "backend-candle")]
 use super::CandleBackend;
@@ -64,33 +60,6 @@ impl BackendFactory for LlamaCppFactory {
             unavailable_reason: None,
             can_install: true, // Binaries can be downloaded from GitHub releases
             runtime_binary_id: Some(ManagedBinaryId::LlamaCpp),
-        }
-    }
-}
-
-/// Factory for Ollama backend
-#[cfg(feature = "backend-ollama")]
-pub struct OllamaFactory;
-
-#[cfg(feature = "backend-ollama")]
-impl BackendFactory for OllamaFactory {
-    fn create(&self) -> Result<Box<dyn InferenceBackend>, BackendError> {
-        Ok(Box::new(OllamaBackend::new()))
-    }
-
-    fn info(&self) -> BackendInfo {
-        let (available, unavailable_reason) = OllamaBackend::check_availability();
-        BackendInfo {
-            name: "Ollama".to_string(),
-            backend_key: "ollama".to_string(),
-            description: "Ollama daemon with automatic model management".to_string(),
-            capabilities: OllamaBackend::static_capabilities(),
-            default_start_mode: BackendDefaultStartMode::Inference,
-            active: false,
-            available,
-            unavailable_reason,
-            can_install: OllamaBackend::can_auto_install(),
-            runtime_binary_id: Some(ManagedBinaryId::Ollama),
         }
     }
 }
@@ -175,7 +144,6 @@ impl BackendRegistry {
         };
         #[cfg(any(
             feature = "backend-llamacpp",
-            feature = "backend-ollama",
             feature = "backend-candle",
             feature = "backend-pytorch",
         ))]
@@ -184,10 +152,6 @@ impl BackendRegistry {
         // Always register llama.cpp (default backend)
         #[cfg(feature = "backend-llamacpp")]
         registry.register("llama.cpp", Box::new(LlamaCppFactory));
-
-        // Register Ollama backend if feature is enabled
-        #[cfg(feature = "backend-ollama")]
-        registry.register("Ollama", Box::new(OllamaFactory));
 
         // Register Candle backend if feature is enabled
         #[cfg(feature = "backend-candle")]
@@ -261,6 +225,18 @@ mod tests {
         assert!(registry.is_available("llama.cpp"));
         assert!(registry.is_available("llama_cpp"));
         assert!(registry.is_available("llama-cpp"));
+    }
+
+    #[test]
+    fn test_registry_does_not_expose_ollama() {
+        let registry = BackendRegistry::new();
+
+        assert!(!registry.is_available("Ollama"));
+        assert!(!registry.is_available("ollama"));
+        assert!(matches!(
+            registry.create("ollama"),
+            Err(BackendError::Config(message)) if message.contains("Unknown backend")
+        ));
     }
 
     #[cfg(feature = "backend-pytorch")]

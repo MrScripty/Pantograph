@@ -16,7 +16,7 @@ capability and lifecycle behavior stay here.
 | `audio/`, `depth/`, `onnx/`, `torch/` | Python/runtime helper assets used by optional backend families. |
 
 ## Problem
-Pantograph supports llama.cpp, Ollama, Candle, and PyTorch-style execution
+Pantograph supports llama.cpp, Candle, and PyTorch-style execution
 paths. Without one infrastructure crate, runtime startup, backend capabilities,
 process spawning, managed downloads, and reuse diagnostics drift into adapters
 and workflow business logic.
@@ -99,10 +99,13 @@ async fn start_gateway() -> Result<(), Box<dyn std::error::Error>> {
 | Feature | Default | Contract |
 | ------- | ------- | -------- |
 | `backend-llamacpp` | Yes | llama.cpp sidecar and GGUF support. |
-| `backend-ollama` | No | Ollama daemon integration. |
 | `backend-candle` | No | In-process Candle inference; pulls CUDA-oriented dependencies. |
 | `backend-pytorch` | No | In-process PyTorch/PyO3 backend support. |
 | `std-process` | No | Standard-library process spawner for non-Tauri hosts. |
+
+Ollama is retired as a first-party Pantograph backend. Legacy managed-runtime
+state may still be ignored or migrated by later cleanup slices, but new backend
+selection must use supported runtimes through Pumas model references.
 
 ## API Consumer Contract
 - Inputs: backend configuration, process spawner implementations, managed
