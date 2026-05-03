@@ -21,22 +21,6 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
 #[cfg(feature = "inference-nodes")]
-#[tokio::test]
-async fn test_execute_embedding_fails_when_gateway_missing() {
-    let mut inputs = HashMap::new();
-    inputs.insert("text".to_string(), serde_json::json!("hello"));
-    let err = execute_embedding(None, &inputs)
-        .await
-        .expect_err("embedding should fail fast without gateway");
-    match err {
-        NodeEngineError::ExecutionFailed(message) => {
-            assert!(message.contains("InferenceGateway not configured"));
-        }
-        other => panic!("unexpected error variant: {other:?}"),
-    }
-}
-
-#[cfg(feature = "inference-nodes")]
 #[test]
 fn test_build_text_generation_execution_request_preserves_canonical_inputs() {
     let mut inputs = HashMap::new();
@@ -685,15 +669,6 @@ fn test_canonical_backend_key_normalizes_common_aliases() {
         canonical_backend_key(Some("stable-audio")),
         Some("stable_audio".to_string())
     );
-}
-
-#[cfg(feature = "inference-nodes")]
-#[test]
-fn test_is_llamacpp_backend_name_accepts_aliases() {
-    assert!(is_llamacpp_backend_name("llama.cpp"));
-    assert!(is_llamacpp_backend_name("llama_cpp"));
-    assert!(is_llamacpp_backend_name("llamacpp"));
-    assert!(!is_llamacpp_backend_name("pytorch"));
 }
 
 #[cfg(any(feature = "inference-nodes", feature = "audio-nodes"))]

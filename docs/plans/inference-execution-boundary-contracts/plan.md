@@ -1757,16 +1757,15 @@ Node-engine canonical `llm-inference` embedding execution now also builds an
 `InferenceExecutionRequest` from text, runtime hint, model alias, and Pumas
 model reference, then executes through `InferenceGateway::execute_typed` while
 preserving the graph-visible embedding output shape.
-The old llama.cpp-only embedding helper is now retained only as a compatibility
-surface and should be removed or folded into typed gateway execution once no
-direct tests or stale callers depend on it.
 Node-engine canonical `llm-inference` rerank execution now builds an
 `InferenceExecutionRequest` from query, documents, top-N options, return-document
 policy, runtime hint, and Pumas/model path identity, then executes through
 `InferenceGateway::execute_typed` while preserving the graph-visible rerank
-outputs. The old llama.cpp-only reranker helper is now retained only as a
-compatibility surface and should be removed or folded into typed gateway
-execution once no direct tests or stale callers depend on it.
+outputs.
+The old llama.cpp-only embedding and reranker helpers have been removed from
+node-engine after canonical embedding and rerank moved to the typed gateway
+boundary; stale tests that preserved direct helper callers were removed with
+them.
 The `unload-model` node no longer contains a live Ollama HTTP unload path:
 Ollama `model_ref` inputs now fail locally with a canonical/Pumas migration
 message, and supported-engine diagnostics no longer list Ollama.
@@ -2154,6 +2153,9 @@ Update during implementation:
 - 2026-05-03: Added a node-engine `INFERENCE_LIFECYCLE_SINK` extension so hosts
   can opt canonical non-streaming typed inference nodes into lifecycle emission
   without introducing a diagnostics-ledger dependency into node-engine.
+- 2026-05-03: Removed the stale llama.cpp-only embedding and reranker execution
+  helpers from node-engine after canonical embedding/rerank execution moved to
+  typed gateway requests.
 
 ## Commit Cadence Notes
 
