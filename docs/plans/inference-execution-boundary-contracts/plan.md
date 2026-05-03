@@ -1649,6 +1649,9 @@ The legacy migration inventory/spec helpers are now scoped to test builds, and
 runtime migration task-kind literals use the canonical task-kind enum so focused
 embedded-runtime validation no longer surfaces the workflow-service dead-code
 warning set.
+Embedded-runtime embedding preparation now detects canonical `llm-inference`
+nodes with `task_kind = embedding` and reads model identity from canonical
+Pumas model references instead of the retired `embedding` node and `model` port.
 
 ### Milestone 12: Prepare Native Candle Slice
 
