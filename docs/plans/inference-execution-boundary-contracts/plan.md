@@ -1201,6 +1201,9 @@ Node-engine canonical `llm-inference` dispatch now rejects contract-only task
 registry entries such as `audio_transcription` before gateway or backend
 preflight execution, returning a task-contract error that cites
 `execution_supported=false` instead of falling through to text/prompt handling.
+The canonical llama.cpp execution path now derives request generation
+parameters from grouped `generation_options` first, while retaining legacy
+top-level `max_tokens` and `temperature` inputs as fallback compatibility.
 
 ### Milestone 4: Define Neutral Managed-Dependency Boundary
 
@@ -2460,6 +2463,9 @@ Update during implementation:
 - 2026-05-03: Added a node-engine guard for contract-only canonical inference
   tasks, so descriptor-visible but non-executable tasks reject with a
   task-contract diagnostic before gateway, backend, or prompt validation.
+- 2026-05-03: Updated the node-engine llama.cpp text execution path to honor
+  grouped `generation_options.length.max_new_tokens` and
+  `generation_options.sampling.temperature` before legacy flat fallbacks.
 
 ## Commit Cadence Notes
 

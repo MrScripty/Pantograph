@@ -243,7 +243,9 @@ pub(crate) fn build_text_generation_execution_request(
 }
 
 #[cfg(feature = "inference-nodes")]
-fn normalize_generation_options_value(mut value: serde_json::Value) -> serde_json::Value {
+pub(crate) fn normalize_generation_options_value(
+    mut value: serde_json::Value,
+) -> serde_json::Value {
     let Some(options) = value.as_object_mut() else {
         return value;
     };

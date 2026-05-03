@@ -10,8 +10,8 @@ use crate::extensions::ExecutorExtensions;
 use crate::model_dependencies::ModelRefV2;
 
 use super::{
-    build_extra_settings, build_model_ref_v2, infer_task_type_primary, kv_cache, require_gateway,
-    resolve_gguf_path,
+    build_extra_settings, build_model_ref_v2, infer_task_type_primary, kv_cache,
+    normalize_generation_options_value, require_gateway, resolve_gguf_path,
 };
 
 pub(crate) async fn execute_llamacpp_inference(
@@ -43,14 +43,7 @@ pub(crate) async fn execute_llamacpp_inference(
 
     let model_path = resolve_gguf_path(model_path_raw)?;
     let system_prompt = inputs.get("system_prompt").and_then(|s| s.as_str());
-    let temperature = inputs
-        .get("temperature")
-        .and_then(|t| t.as_f64())
-        .unwrap_or(0.7);
-    let max_tokens = inputs
-        .get("max_tokens")
-        .and_then(|m| m.as_i64())
-        .unwrap_or(512);
+    let generation_parameters = llama_cpp_request_generation_parameters(inputs)?;
 
     // Read model-specific inference settings
     let extra_settings = build_extra_settings(inputs);
@@ -122,8 +115,8 @@ pub(crate) async fn execute_llamacpp_inference(
     let streaming = event_sink.is_some();
     let mut request_body = serde_json::json!({
         "prompt": full_prompt,
-        "n_predict": max_tokens,
-        "temperature": temperature,
+        "n_predict": generation_parameters.max_tokens,
+        "temperature": generation_parameters.temperature,
         "stop": ["</s>", "<|im_end|>", "<|end|>"],
         "stream": streaming
     });
@@ -256,6 +249,46 @@ pub(crate) async fn execute_llamacpp_inference(
     };
     outputs.insert("kv_cache_out".to_string(), kv_cache_output);
     Ok(outputs)
+}
+
+#[derive(Debug, PartialEq)]
+struct LlamaCppRequestGenerationParameters {
+    max_tokens: i64,
+    temperature: f64,
+}
+
+fn llama_cpp_request_generation_parameters(
+    inputs: &HashMap<String, serde_json::Value>,
+) -> Result<LlamaCppRequestGenerationParameters> {
+    let mut parameters = LlamaCppRequestGenerationParameters {
+        max_tokens: inputs
+            .get("max_tokens")
+            .and_then(|m| m.as_i64())
+            .unwrap_or(512),
+        temperature: inputs
+            .get("temperature")
+            .and_then(|t| t.as_f64())
+            .unwrap_or(0.7),
+    };
+
+    let Some(options_value) = inputs.get("generation_options") else {
+        return Ok(parameters);
+    };
+    let options = serde_json::from_value::<inference::GenerationOptions>(
+        normalize_generation_options_value(options_value.clone()),
+    )
+    .map_err(|error| {
+        NodeEngineError::ExecutionFailed(format!("Invalid generation_options input: {error}"))
+    })?;
+
+    if let Some(max_new_tokens) = options.length.max_new_tokens {
+        parameters.max_tokens = i64::from(max_new_tokens);
+    }
+    if let Some(temperature) = options.sampling.temperature {
+        parameters.temperature = f64::from(temperature);
+    }
+
+    Ok(parameters)
 }
 
 async fn llamacpp_gateway_matches_requested_model(gw: &InferenceGateway, model_path: &str) -> bool {
@@ -439,6 +472,57 @@ mod tests {
         ));
         std::fs::write(&path, b"gguf").expect("write mock model");
         path
+    }
+
+    #[test]
+    fn generation_parameters_prefer_canonical_generation_options() {
+        let mut inputs = HashMap::new();
+        inputs.insert("max_tokens".to_string(), serde_json::json!(12));
+        inputs.insert("temperature".to_string(), serde_json::json!(1.2));
+        inputs.insert(
+            "generation_options".to_string(),
+            serde_json::json!({
+                "length": {"max_new_tokens": 34},
+                "sampling": {"temperature": 0.3}
+            }),
+        );
+
+        let parameters = llama_cpp_request_generation_parameters(&inputs)
+            .expect("canonical generation options should parse");
+
+        assert_eq!(parameters.max_tokens, 34);
+        assert!((parameters.temperature - 0.3).abs() < 0.000_001);
+    }
+
+    #[test]
+    fn generation_parameters_accept_legacy_flat_generation_options() {
+        let mut inputs = HashMap::new();
+        inputs.insert(
+            "generation_options".to_string(),
+            serde_json::json!({
+                "max_new_tokens": 55,
+                "temperature": 0.45
+            }),
+        );
+
+        let parameters = llama_cpp_request_generation_parameters(&inputs)
+            .expect("flat generation options should normalize");
+
+        assert_eq!(parameters.max_tokens, 55);
+        assert!((parameters.temperature - 0.45).abs() < 0.000_001);
+    }
+
+    #[test]
+    fn generation_parameters_keep_top_level_fallbacks() {
+        let mut inputs = HashMap::new();
+        inputs.insert("max_tokens".to_string(), serde_json::json!(21));
+        inputs.insert("temperature".to_string(), serde_json::json!(0.9));
+
+        let parameters = llama_cpp_request_generation_parameters(&inputs)
+            .expect("top-level fallback generation parameters should parse");
+
+        assert_eq!(parameters.max_tokens, 21);
+        assert!((parameters.temperature - 0.9).abs() < f64::EPSILON);
     }
 
     #[tokio::test]
