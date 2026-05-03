@@ -251,10 +251,24 @@ impl TaskExecutor for CoreTaskExecutor {
                 let preferred_backend = preferred_backend_key("llm-inference", &canonical_inputs);
                 match canonical_inference_task_id(&canonical_inputs).as_ref() {
                     Some(InferenceTaskId::Embedding) => {
-                        execute_embedding_inference(self.gateway.as_ref(), &canonical_inputs).await
+                        execute_embedding_inference(
+                            self.gateway.as_ref(),
+                            &canonical_inputs,
+                            extensions,
+                            task_id,
+                            exec_id,
+                        )
+                        .await
                     }
                     Some(InferenceTaskId::Rerank) => {
-                        execute_rerank_inference(self.gateway.as_ref(), &canonical_inputs).await
+                        execute_rerank_inference(
+                            self.gateway.as_ref(),
+                            &canonical_inputs,
+                            extensions,
+                            task_id,
+                            exec_id,
+                        )
+                        .await
                     }
                     _ if preferred_backend.as_deref() == Some("llamacpp") => {
                         let resolved_model_ref = enforce_dependency_preflight(
@@ -301,6 +315,7 @@ impl TaskExecutor for CoreTaskExecutor {
                                 task_id,
                                 self.event_sink.as_ref(),
                                 exec_id,
+                                extensions,
                             )
                             .await
                         }
@@ -312,6 +327,7 @@ impl TaskExecutor for CoreTaskExecutor {
                             task_id,
                             self.event_sink.as_ref(),
                             exec_id,
+                            extensions,
                         )
                         .await
                     }

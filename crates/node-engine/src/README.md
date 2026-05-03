@@ -180,6 +180,9 @@ use node_engine::core_executor::CoreNodeExecutor;
   than constructing backend-native request JSON or calling backend-specific
   gateway helpers in node-engine. Streaming remains an event-shaping path until
   token-stream contracts are migrated.
+- Hosts that need durable typed inference diagnostics may provide
+  `extension_keys::INFERENCE_LIFECYCLE_SINK`; node-engine only forwards bounded
+  lifecycle facts and does not import or write the diagnostics ledger.
 
 ## Structured Producer Contract
 - Built-in node descriptors, canonical contract projection, and execution

@@ -1958,6 +1958,12 @@ one-off conversions.
   gives host ledger adapters bounded request id, backend, runtime, model, phase,
   terminal status, and cleanup facts without making `crates/inference` import or
   write the diagnostics ledger.
+- 2026-05-03: Node-engine diagnostics bridge follow-up added the
+  `INFERENCE_LIFECYCLE_SINK` executor extension and routes non-streaming typed
+  `llm-inference` text/chat, embedding, and rerank calls through
+  `execute_typed_with_lifecycle` when a host provides that sink. Node-engine
+  assigns stable request ids for correlation but still leaves diagnostics-ledger
+  writes to host/runtime adapters.
 
 ## Execution Notes
 
@@ -2145,6 +2151,9 @@ Update during implementation:
   request validation and backend execution emit separate lifecycle phases for
   diagnostics-ledger adapters while preserving inference as a fact producer
   rather than a ledger writer.
+- 2026-05-03: Added a node-engine `INFERENCE_LIFECYCLE_SINK` extension so hosts
+  can opt canonical non-streaming typed inference nodes into lifecycle emission
+  without introducing a diagnostics-ledger dependency into node-engine.
 
 ## Commit Cadence Notes
 

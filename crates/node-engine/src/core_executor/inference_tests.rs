@@ -10,9 +10,10 @@ use inference::backend::BackendStartOutcome;
 #[cfg(feature = "inference-nodes")]
 use inference::{
     BackendCapabilities, BackendConfig, BackendError, ChatChunk, EmbeddingResult,
-    GenerationOptions, InferenceBackend, InferenceExecutionInput, InferenceTaskId,
-    LengthGenerationOptions, ProcessSpawner, PumasModelRef, RerankRequest, RerankResponse,
-    RerankResult, SamplingGenerationOptions,
+    GenerationOptions, InferenceBackend, InferenceExecutionInput, InferenceLifecyclePhase,
+    InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
+    InferenceRequestLifecycleEventSink, InferenceTaskId, LengthGenerationOptions, ProcessSpawner,
+    PumasModelRef, RerankRequest, RerankResponse, RerankResult, SamplingGenerationOptions,
 };
 #[cfg(feature = "inference-nodes")]
 use std::pin::Pin;
@@ -152,9 +153,17 @@ async fn test_execute_llm_inference_non_streaming_uses_typed_gateway_boundary() 
         }),
     );
 
-    let outputs = execute_llm_inference(Some(&gateway), &inputs, "llm-inference-1", None, "exec-a")
-        .await
-        .expect("typed non-streaming inference should execute");
+    let extensions = ExecutorExtensions::new();
+    let outputs = execute_llm_inference(
+        Some(&gateway),
+        &inputs,
+        "llm-inference-1",
+        None,
+        "exec-a",
+        &extensions,
+    )
+    .await
+    .expect("typed non-streaming inference should execute");
 
     assert_eq!(
         outputs.get("response").and_then(|value| value.as_str()),
@@ -169,6 +178,74 @@ async fn test_execute_llm_inference_non_streaming_uses_typed_gateway_boundary() 
     assert_eq!(captured[0]["temperature"], serde_json::json!(0.2));
     assert_eq!(captured[0]["top_p"], serde_json::json!(0.8));
     assert_eq!(captured[0]["top_k"], serde_json::json!(40));
+}
+
+#[cfg(feature = "inference-nodes")]
+#[tokio::test]
+async fn test_canonical_llm_text_uses_typed_lifecycle_sink_extension() {
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let gateway = Arc::new(InferenceGateway::with_backend(
+        Box::new(MockTypedTextBackend {
+            requests: requests.clone(),
+        }),
+        "mock",
+    ));
+    let lifecycle_events = Arc::new(Mutex::new(Vec::new()));
+    let lifecycle_sink: Arc<dyn InferenceRequestLifecycleEventSink> =
+        Arc::new(MockInferenceLifecycleSink {
+            events: lifecycle_events.clone(),
+        });
+    let mut extensions = ExecutorExtensions::new();
+    extensions.set(
+        crate::extensions::extension_keys::INFERENCE_LIFECYCLE_SINK,
+        lifecycle_sink,
+    );
+    let mut inputs = HashMap::new();
+    inputs.insert(
+        "_data".to_string(),
+        serde_json::json!({"node_type": "llm-inference"}),
+    );
+    inputs.insert("prompt".to_string(), serde_json::json!("hello"));
+    inputs.insert("model_name".to_string(), serde_json::json!("typed-model"));
+
+    let executor = CoreTaskExecutor::new()
+        .with_gateway(gateway)
+        .with_execution_id("exec-a".to_string());
+    let outputs = executor
+        .execute_task(
+            "llm-inference-1",
+            inputs,
+            &graph_flow::Context::new(),
+            &extensions,
+        )
+        .await
+        .expect("typed non-streaming inference should execute with lifecycle sink");
+
+    assert_eq!(
+        outputs.get("response").and_then(|value| value.as_str()),
+        Some("typed response")
+    );
+    let events = lifecycle_events.lock().expect("lifecycle events lock");
+    assert_eq!(events.len(), 6);
+    assert_eq!(events[0].phase, InferenceLifecyclePhase::TaskValidation);
+    assert_eq!(events[0].kind, InferenceRequestLifecycleEventKind::Started);
+    assert_eq!(events[1].phase, InferenceLifecyclePhase::TaskValidation);
+    assert_eq!(
+        events[1].kind,
+        InferenceRequestLifecycleEventKind::Completed
+    );
+    assert_eq!(events[3].phase, InferenceLifecyclePhase::BackendExecution);
+    assert_eq!(events[3].kind, InferenceRequestLifecycleEventKind::Started);
+    assert_eq!(events[4].phase, InferenceLifecyclePhase::BackendExecution);
+    assert_eq!(
+        events[4].kind,
+        InferenceRequestLifecycleEventKind::Completed
+    );
+    assert!(events.iter().all(|event| {
+        event.request_id.as_deref() == Some("exec-a:llm-inference-1:text_generation")
+            && event.backend_key.as_deref() == Some("mock")
+            && event.model_id.as_deref() == Some("typed-model")
+    }));
 }
 
 #[cfg(feature = "inference-nodes")]
@@ -1167,5 +1244,20 @@ impl InferenceBackend for MockTypedRerankBackend {
                 .collect(),
             metadata: serde_json::Value::Null,
         })
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+struct MockInferenceLifecycleSink {
+    events: Arc<Mutex<Vec<InferenceRequestLifecycleEvent>>>,
+}
+
+#[cfg(feature = "inference-nodes")]
+impl InferenceRequestLifecycleEventSink for MockInferenceLifecycleSink {
+    fn record(&self, event: InferenceRequestLifecycleEvent) {
+        self.events
+            .lock()
+            .expect("lifecycle events lock")
+            .push(event);
     }
 }

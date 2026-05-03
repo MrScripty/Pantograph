@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use inference::InferenceGateway;
+use inference::{InferenceGateway, InferenceRequestLifecycleEventSink};
 
 use crate::error::{NodeEngineError, Result};
 use crate::events::EventSink;
+use crate::extensions::{extension_keys, ExecutorExtensions};
 use crate::model_dependencies::ModelRefV2;
 
 use super::{
@@ -21,6 +22,44 @@ pub(crate) fn require_gateway(
             "InferenceGateway not configured: requires host-specific executor".to_string(),
         )
     })
+}
+
+#[cfg(feature = "inference-nodes")]
+async fn execute_typed_gateway(
+    gateway: &InferenceGateway,
+    request: inference::InferenceExecutionRequest,
+    extensions: &ExecutorExtensions,
+) -> std::result::Result<inference::InferenceExecutionResult, inference::GatewayError> {
+    if let Some(sink) = inference_lifecycle_sink(extensions) {
+        gateway.execute_typed_with_lifecycle(request, sink).await
+    } else {
+        gateway.execute_typed(request).await
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+fn inference_lifecycle_sink(
+    extensions: &ExecutorExtensions,
+) -> Option<Arc<dyn InferenceRequestLifecycleEventSink>> {
+    extensions
+        .get::<Arc<dyn InferenceRequestLifecycleEventSink>>(
+            extension_keys::INFERENCE_LIFECYCLE_SINK,
+        )
+        .cloned()
+}
+
+#[cfg(feature = "inference-nodes")]
+fn assign_typed_request_id(
+    request: &mut inference::InferenceExecutionRequest,
+    task_id: &str,
+    execution_id: &str,
+) {
+    if request.request_id.is_none() {
+        request.request_id = Some(format!(
+            "{execution_id}:{task_id}:{}",
+            request.task_id.canonical_label()
+        ));
+    }
 }
 
 /// Resolve a model path that may be a directory to the actual `.gguf` file inside.
@@ -82,16 +121,20 @@ pub(crate) async fn execute_llm_inference(
     task_id: &str,
     event_sink: Option<&Arc<dyn EventSink>>,
     execution_id: &str,
+    extensions: &ExecutorExtensions,
 ) -> Result<HashMap<String, serde_json::Value>> {
     use futures_util::StreamExt;
 
     let gw = require_gateway(gateway)?;
 
     if event_sink.is_none() {
-        let request = build_text_generation_execution_request(inputs)?;
-        let result = gw.execute_typed(request).await.map_err(|error| {
-            NodeEngineError::ExecutionFailed(format!("Typed LLM inference failed: {error}"))
-        })?;
+        let mut request = build_text_generation_execution_request(inputs)?;
+        assign_typed_request_id(&mut request, task_id, execution_id);
+        let result = execute_typed_gateway(gw, request, extensions)
+            .await
+            .map_err(|error| {
+                NodeEngineError::ExecutionFailed(format!("Typed LLM inference failed: {error}"))
+            })?;
         let response = match result {
             inference::InferenceExecutionResult::TextGeneration { text, .. } => text,
             other => {
@@ -299,14 +342,20 @@ fn parse_pumas_model_ref(
 pub(crate) async fn execute_embedding_inference(
     gateway: Option<&Arc<InferenceGateway>>,
     inputs: &HashMap<String, serde_json::Value>,
+    extensions: &ExecutorExtensions,
+    task_id: &str,
+    execution_id: &str,
 ) -> Result<HashMap<String, serde_json::Value>> {
     let gw = require_gateway(gateway)?;
-    let request = build_embedding_execution_request(inputs)?;
+    let mut request = build_embedding_execution_request(inputs)?;
+    assign_typed_request_id(&mut request, task_id, execution_id);
     let model_name = request.model_name.clone();
     let start = std::time::Instant::now();
-    let result = gw.execute_typed(request).await.map_err(|error| {
-        NodeEngineError::ExecutionFailed(format!("Typed embedding inference failed: {error}"))
-    })?;
+    let result = execute_typed_gateway(gw, request, extensions)
+        .await
+        .map_err(|error| {
+            NodeEngineError::ExecutionFailed(format!("Typed embedding inference failed: {error}"))
+        })?;
     let embeddings = match result {
         inference::InferenceExecutionResult::Embedding { embeddings, .. } => embeddings,
         other => {
@@ -386,9 +435,13 @@ pub(crate) fn build_embedding_execution_request(
 pub(crate) async fn execute_rerank_inference(
     gateway: Option<&Arc<InferenceGateway>>,
     inputs: &HashMap<String, serde_json::Value>,
+    extensions: &ExecutorExtensions,
+    task_id: &str,
+    execution_id: &str,
 ) -> Result<HashMap<String, serde_json::Value>> {
     let gw = require_gateway(gateway)?;
-    let request = build_rerank_execution_request(inputs)?;
+    let mut request = build_rerank_execution_request(inputs)?;
+    assign_typed_request_id(&mut request, task_id, execution_id);
     let output_model_ref = request.model_ref.clone();
     let output_model = request
         .model_name
@@ -399,9 +452,11 @@ pub(crate) async fn execute_rerank_inference(
                 .map(|model_ref| model_ref.model_id.clone())
         })
         .unwrap_or_default();
-    let result = gw.execute_typed(request).await.map_err(|error| {
-        NodeEngineError::ExecutionFailed(format!("Typed rerank inference failed: {error}"))
-    })?;
+    let result = execute_typed_gateway(gw, request, extensions)
+        .await
+        .map_err(|error| {
+            NodeEngineError::ExecutionFailed(format!("Typed rerank inference failed: {error}"))
+        })?;
     let response = match result {
         inference::InferenceExecutionResult::Rerank { response } => response,
         other => {
