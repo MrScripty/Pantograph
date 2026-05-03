@@ -1204,11 +1204,11 @@ runtime launch behavior and media conversion readiness facts.
 - [ ] Move or adapt ffmpeg, oiiotool, ocioconvert, and OpenColorIO dependency
   status/lease behavior out of inference and into the neutral
   managed-dependency/media-conversion boundary.
-- [ ] Update `pantograph-media-conversion` and workflow artifact conversion
+- [x] Update `pantograph-media-conversion` and workflow artifact conversion
   consumers so conversion dependency facts do not come from inference exports.
-- [ ] Keep `pantograph-media-conversion` responsible for command planning and
+- [x] Keep `pantograph-media-conversion` responsible for command planning and
   eventual conversion execution contracts.
-- [ ] Add temporary compatibility shims only where needed, and document their
+- [x] Add temporary compatibility shims only where needed, and document their
   removal trigger.
 - [x] Update READMEs so inference is not described as the owner of media
   dependencies.
@@ -1266,6 +1266,13 @@ execution into inference.
 The legacy managed-binary facade now resolves llama.cpp launch commands through
 the neutral `resolve_managed_dependency_command` path and converts the result
 back to its existing `ResolvedCommand` compatibility shape.
+Temporary compatibility shims are limited to the legacy UniFFI
+managed-media action/status methods that still return redistributable-shaped
+JSON and the legacy managed-binary facade that still returns `ResolvedCommand`.
+Removal trigger: delete those shims after UniFFI/frontend callers consume
+neutral `ManagedDependencyStatus`/`ResolvedManagedDependencyCommand` DTOs and
+media install, activation, and lease operations move behind the neutral
+managed-dependency/media-conversion owner.
 
 **Implementation findings:** Do not move media conversion DTOs by type alias
 without a JSON compatibility decision: inference `MediaConversionJobKind::ThreeD`
