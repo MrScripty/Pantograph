@@ -1018,6 +1018,7 @@ fn workflow_error_json(code: WorkflowErrorCode, message: impl Into<String>) -> S
         code,
         message: message.into(),
         details: None,
+        diagnostics: None,
     };
     serde_json::to_string(&envelope).unwrap_or_else(|_| {
         r#"{"code":"internal_error","message":"failed to serialize workflow error envelope"}"#
