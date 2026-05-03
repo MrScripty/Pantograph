@@ -93,6 +93,39 @@ fn test_build_text_generation_execution_request_preserves_canonical_inputs() {
 
 #[cfg(feature = "inference-nodes")]
 #[test]
+fn test_build_text_generation_execution_request_accepts_legacy_flat_generation_options() {
+    let mut inputs = HashMap::new();
+    inputs.insert("prompt".to_string(), serde_json::json!("hello"));
+    inputs.insert(
+        "generation_options".to_string(),
+        serde_json::json!({
+            "temperature": 0.5,
+            "max_new_tokens": 24,
+            "sampling": {"temperature": 0.25}
+        }),
+    );
+
+    let request = build_text_generation_execution_request(&inputs)
+        .expect("legacy flat generation options should normalize");
+
+    assert_eq!(
+        request.generation_options,
+        Some(GenerationOptions {
+            length: LengthGenerationOptions {
+                max_new_tokens: Some(24),
+                ..LengthGenerationOptions::default()
+            },
+            sampling: SamplingGenerationOptions {
+                temperature: Some(0.25),
+                ..SamplingGenerationOptions::default()
+            },
+            ..GenerationOptions::default()
+        })
+    );
+}
+
+#[cfg(feature = "inference-nodes")]
+#[test]
 fn test_build_text_generation_execution_request_defaults_missing_task_kind_to_text_generation() {
     let mut inputs = HashMap::new();
     inputs.insert("prompt".to_string(), serde_json::json!("hello"));

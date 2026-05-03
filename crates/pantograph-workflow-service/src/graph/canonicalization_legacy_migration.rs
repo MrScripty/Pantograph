@@ -112,8 +112,8 @@ const OLLAMA_PORTS: &[LegacyInferencePortMigration] = &[
     legacy_input_preserve("prompt"),
     legacy_input_preserve("system_prompt"),
     legacy_input_data("model", "pumas_model_ref"),
-    legacy_input_data("temperature", "generation_options.temperature"),
-    legacy_input_data("max_tokens", "generation_options.max_new_tokens"),
+    legacy_input_data("temperature", "generation_options.sampling.temperature"),
+    legacy_input_data("max_tokens", "generation_options.length.max_new_tokens"),
     legacy_input_data("inference_settings", "generation_options"),
     legacy_output_preserve("response"),
     legacy_output_remove("model_used"),
@@ -126,8 +126,8 @@ const LLAMACPP_PORTS: &[LegacyInferencePortMigration] = &[
     legacy_input_data("model_path", "pumas_model_ref"),
     legacy_input_preserve("prompt"),
     legacy_input_preserve("system_prompt"),
-    legacy_input_data("temperature", "generation_options.temperature"),
-    legacy_input_data("max_tokens", "generation_options.max_new_tokens"),
+    legacy_input_data("temperature", "generation_options.sampling.temperature"),
+    legacy_input_data("max_tokens", "generation_options.length.max_new_tokens"),
     legacy_input_preserve("tools"),
     legacy_input_preserve("kv_cache_in"),
     legacy_input_data("inference_settings", "generation_options"),
@@ -146,8 +146,8 @@ const PYTORCH_PORTS: &[LegacyInferencePortMigration] = &[
     legacy_input_preserve("prompt"),
     legacy_input_preserve("audio"),
     legacy_input_preserve("system_prompt"),
-    legacy_input_data("temperature", "generation_options.temperature"),
-    legacy_input_data("max_tokens", "generation_options.max_new_tokens"),
+    legacy_input_data("temperature", "generation_options.sampling.temperature"),
+    legacy_input_data("max_tokens", "generation_options.length.max_new_tokens"),
     legacy_input_data("device", "runtime_hint.device"),
     legacy_input_data("model_type", "resolved_model_source.model_type"),
     legacy_input_preserve("kv_cache_in"),
@@ -547,10 +547,10 @@ fn migrate_llamacpp_node_data(data: &mut serde_json::Value) {
         .or_insert_with(|| json!({}));
     if let Some(options) = generation_options.as_object_mut() {
         if let Some(value) = legacy_temperature.clone() {
-            options.entry("temperature".to_string()).or_insert(value);
+            insert_nested_option_if_missing(options, &["sampling", "temperature"], value);
         }
         if let Some(value) = legacy_max_tokens.clone() {
-            options.entry("max_new_tokens".to_string()).or_insert(value);
+            insert_nested_option_if_missing(options, &["length", "max_new_tokens"], value);
         }
     }
 
@@ -600,10 +600,10 @@ fn migrate_pytorch_node_data(data: &mut serde_json::Value) {
         .or_insert_with(|| json!({}));
     if let Some(options) = generation_options.as_object_mut() {
         if let Some(value) = legacy_temperature.clone() {
-            options.entry("temperature".to_string()).or_insert(value);
+            insert_nested_option_if_missing(options, &["sampling", "temperature"], value);
         }
         if let Some(value) = legacy_max_tokens.clone() {
-            options.entry("max_new_tokens".to_string()).or_insert(value);
+            insert_nested_option_if_missing(options, &["length", "max_new_tokens"], value);
         }
     }
 
@@ -749,6 +749,25 @@ fn ensure_json_object(value: &mut Value) -> &mut Map<String, Value> {
     value
         .as_object_mut()
         .expect("value should be an object after normalization")
+}
+
+fn insert_nested_option_if_missing(root: &mut Map<String, Value>, path: &[&str], value: Value) {
+    let Some((field, parents)) = path.split_last() else {
+        return;
+    };
+    let mut current = root;
+    for parent in parents {
+        let next = current
+            .entry((*parent).to_string())
+            .or_insert_with(|| json!({}));
+        if !next.is_object() {
+            return;
+        }
+        current = next
+            .as_object_mut()
+            .expect("value should be an object after normalization");
+    }
+    current.entry((*field).to_string()).or_insert(value);
 }
 
 fn legacy_system_prompt_migration_record(node_id: &str) -> Option<ContractUpgradeRecord> {

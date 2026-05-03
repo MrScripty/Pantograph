@@ -1180,6 +1180,11 @@ collection defaults, and additive unknown-field behavior for task contracts.
 `crates/inference/src/README.md` also records that Python Transformers is a
 backend implementation target for the Rust-owned contracts rather than the
 public contract source of truth.
+Legacy llama.cpp and PyTorch migration now writes generation options into the
+canonical grouped `GenerationOptions` shape (`sampling.temperature` and
+`length.max_new_tokens`) instead of flat fields. Node-engine text-generation
+request construction still accepts the older flat migrated shape for
+compatibility, with grouped fields taking precedence.
 
 ### Milestone 4: Define Neutral Managed-Dependency Boundary
 
@@ -2422,6 +2427,9 @@ Update during implementation:
 - 2026-05-03: Added task-request contract serde coverage for omitted defaults
   and additive unknown fields, and documented Python Transformers as an
   implementation target rather than the public contract source of truth.
+- 2026-05-03: Canonicalized legacy llama.cpp/PyTorch migration output for
+  generation options into grouped `GenerationOptions` fields and kept
+  node-engine tolerant of already-migrated flat option objects.
 
 ## Commit Cadence Notes
 

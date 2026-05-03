@@ -215,6 +215,7 @@ pub(crate) fn build_text_generation_execution_request(
     };
 
     let generation_options = read_optional_input_value(inputs, "generation_options")
+        .map(normalize_generation_options_value)
         .map(serde_json::from_value::<inference::GenerationOptions>)
         .transpose()
         .map_err(|error| {
@@ -239,6 +240,36 @@ pub(crate) fn build_text_generation_execution_request(
         generation_options,
         extra_options: serde_json::Value::Null,
     })
+}
+
+#[cfg(feature = "inference-nodes")]
+fn normalize_generation_options_value(mut value: serde_json::Value) -> serde_json::Value {
+    let Some(options) = value.as_object_mut() else {
+        return value;
+    };
+
+    if let Some(temperature) = options.get("temperature").cloned() {
+        insert_nested_generation_option(options, "sampling", "temperature", temperature);
+    }
+    if let Some(max_new_tokens) = options.get("max_new_tokens").cloned() {
+        insert_nested_generation_option(options, "length", "max_new_tokens", max_new_tokens);
+    }
+    value
+}
+
+#[cfg(feature = "inference-nodes")]
+fn insert_nested_generation_option(
+    options: &mut serde_json::Map<String, serde_json::Value>,
+    group: &str,
+    field: &str,
+    value: serde_json::Value,
+) {
+    let group_value = options
+        .entry(group.to_string())
+        .or_insert_with(|| serde_json::json!({}));
+    if let Some(group_options) = group_value.as_object_mut() {
+        group_options.entry(field.to_string()).or_insert(value);
+    }
 }
 
 #[cfg(feature = "inference-nodes")]

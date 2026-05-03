@@ -493,11 +493,11 @@ fn canonicalize_workflow_graph_migrates_legacy_llamacpp_nodes() {
         json!("/models/example.gguf")
     );
     assert_eq!(
-        migrated.data["generation_options"]["temperature"],
+        migrated.data["generation_options"]["sampling"]["temperature"],
         json!(0.4)
     );
     assert_eq!(
-        migrated.data["generation_options"]["max_new_tokens"],
+        migrated.data["generation_options"]["length"]["max_new_tokens"],
         json!(96)
     );
     assert_eq!(
@@ -566,6 +566,8 @@ fn canonicalize_workflow_graph_migrates_legacy_pytorch_nodes() {
                     "model_path": "/models/whisper",
                     "model_type": "asr",
                     "device": "cuda",
+                    "temperature": 0.2,
+                    "max_tokens": 64,
                 }),
             },
             GraphNode {
@@ -623,6 +625,14 @@ fn canonicalize_workflow_graph_migrates_legacy_pytorch_nodes() {
     assert_eq!(
         migrated.data["runtime_hint_details"]["device"],
         json!("cuda")
+    );
+    assert_eq!(
+        migrated.data["generation_options"]["sampling"]["temperature"],
+        json!(0.2)
+    );
+    assert_eq!(
+        migrated.data["generation_options"]["length"]["max_new_tokens"],
+        json!(64)
     );
     assert!(canonical.edges.iter().any(|edge| {
         edge.id == "model-path-pytorch-model-path"
