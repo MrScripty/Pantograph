@@ -1208,6 +1208,10 @@ Node-engine dependency preflight coverage now includes a positive
 HF-compatible Transformers/PyTorch fixture proving Pumas-resolved model-source
 identity, entry path, task semantics, and the canonical PyTorch backend key
 reach the host dependency resolver before execution.
+Node-engine task-contract validation failures now project bounded
+task-validation lifecycle events through the existing host-owned inference
+lifecycle sink when available, including request id, backend key, runtime id,
+model id, and the contract failure detail.
 
 ### Milestone 4: Define Neutral Managed-Dependency Boundary
 
@@ -2480,6 +2484,9 @@ Update during implementation:
 - 2026-05-03: Added a positive node-engine dependency preflight fixture for
   HF-compatible Transformers/PyTorch model sources, proving canonical runtime
   hints and Pumas model-source identity reach the host resolver.
+- 2026-05-03: Routed contract-only canonical inference task failures through
+  the existing host-owned lifecycle diagnostics sink as bounded
+  task-validation failed facts when a sink is installed.
 
 ## Commit Cadence Notes
 

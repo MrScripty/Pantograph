@@ -7,14 +7,22 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+#[cfg(feature = "inference-nodes")]
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 #[cfg(feature = "inference-nodes")]
-use inference::{InferenceExecutionInputKind, InferenceGateway};
+use inference::{
+    InferenceExecutionInputKind, InferenceGateway, InferenceLifecyclePhase,
+    InferenceRequestLifecycleEvent, InferenceRequestLifecycleEventKind,
+    InferenceRequestLifecycleEventSink,
+};
 
 use crate::engine::TaskExecutor;
 use crate::error::{NodeEngineError, Result};
 use crate::events::EventSink;
+#[cfg(feature = "inference-nodes")]
+use crate::extensions::extension_keys;
 use crate::extensions::ExecutorExtensions;
 
 #[cfg(feature = "audio-nodes")]
@@ -249,7 +257,13 @@ impl TaskExecutor for CoreTaskExecutor {
                 let canonical_inputs = inputs_with_model_path_from_ref(&inputs)?;
                 let exec_id = self.execution_id.as_deref().unwrap_or("unknown");
                 let preferred_backend = preferred_backend_key("llm-inference", &canonical_inputs);
-                reject_contract_only_inference_task(&canonical_inputs)?;
+                reject_contract_only_inference_task(
+                    &canonical_inputs,
+                    extensions,
+                    task_id,
+                    exec_id,
+                    preferred_backend.as_deref(),
+                )?;
                 match canonical_inference_input_kind(&canonical_inputs) {
                     Some(InferenceExecutionInputKind::Embedding) => {
                         execute_embedding_inference(
@@ -382,7 +396,13 @@ impl TaskExecutor for CoreTaskExecutor {
 }
 
 #[cfg(feature = "inference-nodes")]
-fn reject_contract_only_inference_task(inputs: &HashMap<String, serde_json::Value>) -> Result<()> {
+fn reject_contract_only_inference_task(
+    inputs: &HashMap<String, serde_json::Value>,
+    extensions: &ExecutorExtensions,
+    task_id: &str,
+    execution_id: &str,
+    backend_key: Option<&str>,
+) -> Result<()> {
     let Some(entry) = canonical_inference_task_entry(inputs) else {
         return Ok(());
     };
@@ -393,11 +413,111 @@ fn reject_contract_only_inference_task(inputs: &HashMap<String, serde_json::Valu
         return Ok(());
     }
 
-    Err(NodeEngineError::ExecutionFailed(format!(
+    let message = format!(
         "Canonical inference task '{}' is contract-only at this execution boundary: task request contract has execution_supported=false for input kind '{}'.",
         entry.canonical_label(),
         contract.input_kind.canonical_label()
-    )))
+    );
+    record_task_validation_failure_lifecycle(
+        extensions,
+        task_id,
+        execution_id,
+        entry.canonical_label(),
+        backend_key,
+        inference_model_id_from_inputs(inputs),
+        message.clone(),
+    );
+
+    Err(NodeEngineError::ExecutionFailed(message))
+}
+
+#[cfg(feature = "inference-nodes")]
+fn record_task_validation_failure_lifecycle(
+    extensions: &ExecutorExtensions,
+    task_id: &str,
+    execution_id: &str,
+    task_label: &str,
+    backend_key: Option<&str>,
+    model_id: Option<String>,
+    detail: String,
+) {
+    let Some(sink) = extensions
+        .get::<Arc<dyn InferenceRequestLifecycleEventSink>>(
+            extension_keys::INFERENCE_LIFECYCLE_SINK,
+        )
+        .cloned()
+    else {
+        return;
+    };
+
+    let request_id = Some(format!("{execution_id}:{task_id}:{task_label}"));
+    let backend_key = backend_key.map(ToOwned::to_owned);
+    let runtime_id = backend_key.clone();
+    for (kind, detail) in [
+        (InferenceRequestLifecycleEventKind::Started, None),
+        (InferenceRequestLifecycleEventKind::Failed, Some(detail)),
+        (InferenceRequestLifecycleEventKind::CleanupCompleted, None),
+    ] {
+        sink.record(InferenceRequestLifecycleEvent {
+            request_id: request_id.clone(),
+            phase: InferenceLifecyclePhase::TaskValidation,
+            kind,
+            occurred_at_ms: unix_timestamp_ms(),
+            backend_key: backend_key.clone(),
+            runtime_id: runtime_id.clone(),
+            runtime_instance_id: None,
+            model_id: model_id.clone(),
+            detail,
+        });
+    }
+}
+
+#[cfg(feature = "inference-nodes")]
+fn inference_model_id_from_inputs(inputs: &HashMap<String, serde_json::Value>) -> Option<String> {
+    inputs
+        .get("model_name")
+        .or_else(|| inputs.get("model"))
+        .or_else(|| inputs.get("model_id"))
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .or_else(|| {
+            inputs
+                .get("pumas_model_ref")
+                .or_else(|| inputs.get("model_ref"))
+                .and_then(|value| {
+                    value
+                        .get("model_id")
+                        .or_else(|| value.get("modelId"))
+                        .and_then(serde_json::Value::as_str)
+                })
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned)
+        })
+        .or_else(|| {
+            inputs
+                .get("resolved_model_source")
+                .and_then(|value| value.get("model_ref").or_else(|| value.get("modelRef")))
+                .and_then(|value| {
+                    value
+                        .get("model_id")
+                        .or_else(|| value.get("modelId"))
+                        .and_then(serde_json::Value::as_str)
+                })
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned)
+        })
+}
+
+#[cfg(feature = "inference-nodes")]
+fn unix_timestamp_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or_default()
 }
 
 // ---------------------------------------------------------------------------
