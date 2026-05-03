@@ -1919,7 +1919,12 @@ a new ledger event type or persisting prompt/result payload bodies. The next
 slice populated gateway-produced lifecycle events with bounded model identity
 from chat, embeddings, rerank, and image-generation request contracts so
 started, terminal, cancellation, and cleanup facts carry the same selected
-model context before they reach the ledger adapter.
+model context before they reach the ledger adapter. The following
+embedded-runtime slice added a stateful inference lifecycle ledger recorder that
+correlates request-scoped started and terminal events to populate bounded
+`duration_ms` node execution status facts when a matching start is known, while
+leaving cleanup non-persisted and preserving the existing stateless adapter for
+one-off conversions.
 
 ## Execution Notes
 

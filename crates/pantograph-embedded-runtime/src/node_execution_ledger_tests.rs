@@ -13,10 +13,11 @@ use pantograph_runtime_attribution::{
 };
 
 use crate::{
-    inference_lifecycle_event_ledger_append_request, ManagedCapabilityKind, ManagedCapabilityRoute,
-    ManagedModelUsageSubmission, ModelExecutionCapability, NodeCancellationToken,
-    NodeExecutionContext, NodeExecutionContextInput, NodeExecutionGuaranteeEvidence,
-    NodeLineageContext, NodeManagedCapabilities, NodeProgressHandle, RuntimeLedgerSubmissionError,
+    inference_lifecycle_event_ledger_append_request, InferenceLifecycleLedgerRecorder,
+    ManagedCapabilityKind, ManagedCapabilityRoute, ManagedModelUsageSubmission,
+    ModelExecutionCapability, NodeCancellationToken, NodeExecutionContext,
+    NodeExecutionContextInput, NodeExecutionGuaranteeEvidence, NodeLineageContext,
+    NodeManagedCapabilities, NodeProgressHandle, RuntimeLedgerSubmissionError,
 };
 
 #[test]
@@ -164,6 +165,122 @@ fn inference_lifecycle_cleanup_event_is_not_persisted_as_node_status() {
     };
 
     assert!(inference_lifecycle_event_ledger_append_request(&context, &event).is_none());
+}
+
+#[test]
+fn inference_lifecycle_recorder_projects_terminal_duration_after_started() {
+    let context = context();
+    let mut recorder = InferenceLifecycleLedgerRecorder::new();
+
+    let started =
+        inference_lifecycle_event(inference::InferenceRequestLifecycleEventKind::Started, 100);
+    let started_request = recorder
+        .append_request(&context, &started)
+        .expect("started event should map");
+    match started_request.payload {
+        DiagnosticEventPayload::NodeExecutionStatus(payload) => {
+            assert_eq!(payload.status, NodeExecutionProjectionStatus::Running);
+            assert_eq!(payload.started_at_ms, Some(100));
+            assert_eq!(payload.duration_ms, None);
+        }
+        other => panic!("expected node execution status payload, got {other:?}"),
+    }
+
+    let completed = inference_lifecycle_event(
+        inference::InferenceRequestLifecycleEventKind::Completed,
+        175,
+    );
+    let completed_request = recorder
+        .append_request(&context, &completed)
+        .expect("completed event should map");
+    match completed_request.payload {
+        DiagnosticEventPayload::NodeExecutionStatus(payload) => {
+            assert_eq!(payload.status, NodeExecutionProjectionStatus::Completed);
+            assert_eq!(payload.completed_at_ms, Some(175));
+            assert_eq!(payload.duration_ms, Some(75));
+        }
+        other => panic!("expected node execution status payload, got {other:?}"),
+    }
+}
+
+#[test]
+fn inference_lifecycle_recorder_leaves_duration_empty_without_matching_started() {
+    let context = context();
+    let mut recorder = InferenceLifecycleLedgerRecorder::new();
+
+    let failed =
+        inference_lifecycle_event(inference::InferenceRequestLifecycleEventKind::Failed, 175);
+    let request = recorder
+        .append_request(&context, &failed)
+        .expect("failed event should map");
+
+    assert_eq!(request.runtime_id.as_deref(), Some("pytorch"));
+    assert_eq!(
+        request.model_id.as_deref(),
+        Some("pumas://models/tiny-transformers")
+    );
+    match request.payload {
+        DiagnosticEventPayload::NodeExecutionStatus(payload) => {
+            assert_eq!(payload.status, NodeExecutionProjectionStatus::Failed);
+            assert_eq!(payload.completed_at_ms, Some(175));
+            assert_eq!(payload.duration_ms, None);
+            assert_eq!(payload.error.as_deref(), Some("backend failed"));
+        }
+        other => panic!("expected node execution status payload, got {other:?}"),
+    }
+}
+
+#[test]
+fn inference_lifecycle_recorder_cleanup_clears_tracked_start_without_persisting() {
+    let context = context();
+    let mut recorder = InferenceLifecycleLedgerRecorder::new();
+
+    let started =
+        inference_lifecycle_event(inference::InferenceRequestLifecycleEventKind::Started, 100);
+    assert!(recorder.append_request(&context, &started).is_some());
+
+    let cleanup = inference_lifecycle_event(
+        inference::InferenceRequestLifecycleEventKind::CleanupCompleted,
+        125,
+    );
+    assert!(recorder.append_request(&context, &cleanup).is_none());
+
+    let completed = inference_lifecycle_event(
+        inference::InferenceRequestLifecycleEventKind::Completed,
+        175,
+    );
+    let request = recorder
+        .append_request(&context, &completed)
+        .expect("completed event should map");
+    match request.payload {
+        DiagnosticEventPayload::NodeExecutionStatus(payload) => {
+            assert_eq!(payload.status, NodeExecutionProjectionStatus::Completed);
+            assert_eq!(payload.duration_ms, None);
+        }
+        other => panic!("expected node execution status payload, got {other:?}"),
+    }
+}
+
+fn inference_lifecycle_event(
+    kind: inference::InferenceRequestLifecycleEventKind,
+    occurred_at_ms: u64,
+) -> inference::InferenceRequestLifecycleEvent {
+    let detail = if kind == inference::InferenceRequestLifecycleEventKind::Failed {
+        Some("backend failed".to_string())
+    } else {
+        None
+    };
+
+    inference::InferenceRequestLifecycleEvent {
+        request_id: Some("req-a".to_string()),
+        phase: inference::InferenceLifecyclePhase::BackendExecution,
+        kind,
+        occurred_at_ms,
+        backend_key: Some("pytorch".to_string()),
+        runtime_instance_id: Some("python-runtime:pytorch:1".to_string()),
+        model_id: Some("pumas://models/tiny-transformers".to_string()),
+        detail,
+    }
 }
 
 fn context() -> NodeExecutionContext {

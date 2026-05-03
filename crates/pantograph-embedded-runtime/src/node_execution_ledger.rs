@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use pantograph_diagnostics_ledger::{
     DiagnosticEventAppendRequest, DiagnosticEventPayload, DiagnosticEventPrivacyClass,
     DiagnosticEventRetentionClass, DiagnosticEventSourceComponent, DiagnosticsLedgerError,
@@ -45,6 +47,91 @@ pub struct SubmittedModelUsageEvent {
 pub fn inference_lifecycle_event_ledger_append_request(
     context: &NodeExecutionContext,
     event: &inference::InferenceRequestLifecycleEvent,
+) -> Option<DiagnosticEventAppendRequest> {
+    build_inference_lifecycle_event_ledger_append_request(context, event, None)
+}
+
+#[derive(Debug, Default)]
+pub struct InferenceLifecycleLedgerRecorder {
+    started_at_ms_by_key: HashMap<InferenceLifecycleDurationKey, i64>,
+}
+
+impl InferenceLifecycleLedgerRecorder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn append_request(
+        &mut self,
+        context: &NodeExecutionContext,
+        event: &inference::InferenceRequestLifecycleEvent,
+    ) -> Option<DiagnosticEventAppendRequest> {
+        let occurred_at_ms = i64::try_from(event.occurred_at_ms).unwrap_or(i64::MAX);
+        let duration_key = InferenceLifecycleDurationKey::from_event(context, event);
+        let duration_ms = match event.kind {
+            inference::InferenceRequestLifecycleEventKind::Started => {
+                if let Some(key) = duration_key {
+                    self.started_at_ms_by_key.insert(key, occurred_at_ms);
+                }
+                None
+            }
+            inference::InferenceRequestLifecycleEventKind::Completed
+            | inference::InferenceRequestLifecycleEventKind::Failed
+            | inference::InferenceRequestLifecycleEventKind::Cancelled => duration_key
+                .and_then(|key| self.started_at_ms_by_key.remove(&key))
+                .and_then(|started_at_ms| occurred_at_ms.checked_sub(started_at_ms))
+                .map(|duration_ms| duration_ms as u64),
+            inference::InferenceRequestLifecycleEventKind::CleanupCompleted => {
+                if let Some(key) = duration_key {
+                    self.started_at_ms_by_key.remove(&key);
+                }
+                None
+            }
+        };
+
+        build_inference_lifecycle_event_ledger_append_request(context, event, duration_ms)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct InferenceLifecycleDurationKey {
+    node_id: String,
+    request_id: String,
+    phase: &'static str,
+    backend_key: Option<String>,
+    runtime_instance_id: Option<String>,
+}
+
+impl InferenceLifecycleDurationKey {
+    fn from_event(
+        context: &NodeExecutionContext,
+        event: &inference::InferenceRequestLifecycleEvent,
+    ) -> Option<Self> {
+        Some(Self {
+            node_id: context.node_id().as_str().to_string(),
+            request_id: event.request_id.clone()?,
+            phase: inference_lifecycle_phase_key(&event.phase),
+            backend_key: event.backend_key.clone(),
+            runtime_instance_id: event.runtime_instance_id.clone(),
+        })
+    }
+}
+
+fn inference_lifecycle_phase_key(phase: &inference::InferenceLifecyclePhase) -> &'static str {
+    match phase {
+        inference::InferenceLifecyclePhase::ModelPackageResolution => "model_package_resolution",
+        inference::InferenceLifecyclePhase::TaskValidation => "task_validation",
+        inference::InferenceLifecyclePhase::Preprocessing => "preprocessing",
+        inference::InferenceLifecyclePhase::BackendExecution => "backend_execution",
+        inference::InferenceLifecyclePhase::Postprocessing => "postprocessing",
+        inference::InferenceLifecyclePhase::ResultProjection => "result_projection",
+    }
+}
+
+fn build_inference_lifecycle_event_ledger_append_request(
+    context: &NodeExecutionContext,
+    event: &inference::InferenceRequestLifecycleEvent,
+    duration_ms: Option<u64>,
 ) -> Option<DiagnosticEventAppendRequest> {
     let status = match event.kind {
         inference::InferenceRequestLifecycleEventKind::Started => {
@@ -104,7 +191,7 @@ pub fn inference_lifecycle_event_ledger_append_request(
                 None
             },
             completed_at_ms: if terminal { Some(occurred_at_ms) } else { None },
-            duration_ms: None,
+            duration_ms,
             error: event.detail.clone(),
         }),
     })
